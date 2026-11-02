@@ -23,7 +23,6 @@ from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
     QDialog,
-    QLabel,
     QPushButton,
     QSpinBox,
     QWidget,
@@ -449,18 +448,6 @@ def _menu_labels(menu: QWidget) -> list[str]:
     return labels
 
 
-def _action(menu: QWidget, prefix: str):
-    for action in menu.actions():
-        if action.text().startswith(prefix):
-            return action
-        inner = action.menu()
-        if inner is not None:
-            found = _action(inner, prefix)
-            if found is not None:
-                return found
-    return None
-
-
 def _drop_material(window: NativeWindow, qapp: QApplication) -> None:
     """Remove the Material page, including one whose constructor died before it was stored."""
     doomed: list[QWidget] = []
@@ -765,26 +752,30 @@ def test_the_material_clock_and_now_line_advance(qapp: QApplication, window: Nat
         window._use_widgets_styles()
 
 
-def test_material_more_hides_actions_that_need_the_widgets_panels(
+def test_material_more_lists_the_planning_actions_and_leaves_the_widgets_menu_alone(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     _show_material(qapp, window)
-    window._material_page.bridge.openMore()
+    bridge = window._material_page.bridge
+    bridge.openMore()
     _pump(qapp)
-    popup = QApplication.activePopupWidget()
     try:
-        assert popup is not None
-        labels = _menu_labels(popup)
-        assert "Unfinished" not in labels
-        assert WEEK_LIST_NAME not in labels
-        assert "Help" in labels
-        undo = _action(popup, "Undo")
-        assert undo is not None
-        undo.trigger()
-        _pump(qapp)
-        assert window.unfinished_panel.isHidden()
-        assert window.findChild(QPushButton, "weekListRow").isVisible() is False
-        popup.close()
+        assert QApplication.activePopupWidget() is None
+        assert bridge.sheets.moreOpen is True
+        labels = [row["label"] for row in bridge.sheets.moreEntries if row["id"]]
+        assert labels == [
+            "Running late",
+            "Unfinished",
+            "Week as a list",
+            "Routines",
+            "Quick focus",
+            "Replan all my homework",
+            "Save this week now",
+            "Help",
+            "About FlexWeek",
+            "Sign out",
+        ]
+        bridge.sheets.closeMore()
         window._use_widgets_styles()
         _pump(qapp)
         window.more_menu.popup(window.more_button.mapToGlobal(window.more_button.rect().bottomLeft()))
@@ -792,9 +783,6 @@ def test_material_more_hides_actions_that_need_the_widgets_panels(
         assert "Unfinished" in _menu_labels(window.more_menu)
         assert WEEK_LIST_NAME in _menu_labels(window.more_menu)
     finally:
-        current = QApplication.activePopupWidget()
-        if current is not None:
-            current.close()
         window.more_menu.close()
         window._surface = "widgets"
         window._material_gave_up = False
@@ -806,19 +794,7 @@ def test_the_add_button_opens_homework_from_the_keyboard(qapp: QApplication, win
     fab = _qml(root, "materialFab")
     assert "Rectangle" not in fab.metaObject().className()
     assert fab.property("activeFocusOnTab") is True
-    opened: list[QDialog] = []
-    original = window._run_sheet
-
-    def run_sheet(dialog: QDialog) -> bool:
-        dialog.show()
-        qapp.processEvents()
-        opened.append(dialog)
-        words = [label.text() for label in dialog.findChildren(QLabel)]
-        assert "Add homework" in words
-        dialog.reject()
-        return False
-
-    window._run_sheet = run_sheet
+    sheets = window._material_page.bridge.sheets
     try:
         window.activateWindow()
         quick = window._material_page._quick
@@ -827,16 +803,18 @@ def test_the_add_button_opens_homework_from_the_keyboard(qapp: QApplication, win
         _pump(qapp)
         QTest.keyClick(quick, Qt.Key.Key_Space)
         _pump(qapp)
-        if not opened:
+        if sheets.kind != "homework":
             QTest.keyClick(quick, Qt.Key.Key_Return)
             _pump(qapp)
-        assert opened
+        assert sheets.kind == "homework"
+        assert _named(root, "sheetTitle")[0].property("text") == "Add homework"
         assert QApplication.activeModalWidget() is None
+        QTest.keyClick(quick, Qt.Key.Key_Escape)
+        _pump(qapp)
+        assert sheets.kind == ""
+        assert quick.quickWindow().activeFocusItem() is fab
     finally:
-        window._run_sheet = original
-        dialog = QApplication.activeModalWidget()
-        if isinstance(dialog, QDialog):
-            dialog.reject()
+        sheets.forceClose()
         window._use_widgets_styles()
 
 
@@ -910,12 +888,9 @@ def test_sign_out_keeps_an_unsent_settings_change_on_both_surfaces(
         assert window._settings_unsent() is True
         window._material_page.bridge.openMore()
         _pump(qapp)
-        popup = QApplication.activePopupWidget()
-        assert popup is not None
-        sign_out = _action(popup, "Sign out")
-        assert sign_out is not None
+        assert window._material_page.bridge.sheets.moreOpen is True
         _accept_sign_out()
-        sign_out.trigger()
+        window._material_page.bridge.sheets.moreAction("signOut")
         QTest.qWait(700)
         assert logged_out == []
         assert window.session.account is not None

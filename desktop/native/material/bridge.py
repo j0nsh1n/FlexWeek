@@ -23,6 +23,7 @@ from desktop.native.material.bridge_focus import FocusBridge
 from desktop.native.material.bridge_month import MonthBridge
 from desktop.native.material.bridge_myday import MyDayBridge
 from desktop.native.material.bridge_settings import SettingsBridge
+from desktop.native.material.bridge_sheets import SheetsBridge
 from desktop.native.material.bridge_week import WeekBridge
 from desktop.native.material.theme import (
     DEFAULT_CONTRAST,
@@ -63,11 +64,7 @@ class _Window(Protocol):
     session: _Session
     _motion: str
 
-    def _add_homework(self) -> None: ...
-
     def _look_path(self) -> Path: ...
-
-    def open_material_more(self) -> None: ...
 
 
 class MaterialBridge(QObject):
@@ -99,6 +96,7 @@ class MaterialBridge(QObject):
         self._account = AccountBridge(window)
         self._account.setParent(self)
         self._focus = FocusBridge(window, self)
+        self._sheets = SheetsBridge(window, self)
         self._following = False
         # Save finishes on this signal. The day lists and the Undo button read it then,
         # rather than waiting for the 20s clock tick.
@@ -137,6 +135,7 @@ class MaterialBridge(QObject):
         self._day.reload(self._mode)
         self._month.reload()
         self._myday.reload(self._mode)
+        self._sheets.refresh()
         self.blocksChanged.emit()
         self.homeworkChanged.emit()
         self.changed.emit()
@@ -300,6 +299,10 @@ class MaterialBridge(QObject):
         return self._account
 
     @Property(QObject, constant=True)
+    def sheets(self) -> QObject:
+        return self._sheets
+
+    @Property(QObject, constant=True)
     def settingsBridge(self) -> QObject:
         return self._settings_bridge
 
@@ -372,11 +375,11 @@ class MaterialBridge(QObject):
 
     @Slot()
     def openMore(self) -> None:
-        self._window.open_material_more()
+        self._sheets.openMore()
 
     @Slot()
     def addHomework(self) -> None:
-        self._window._add_homework()
+        self._sheets.openHomework()
 
     @Slot()
     def useWidgets(self) -> None:

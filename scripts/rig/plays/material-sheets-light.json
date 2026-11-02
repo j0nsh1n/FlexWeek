@@ -1,0 +1,148 @@
+{
+  "setup": {
+    "seed": "rig",
+    "look": "light-frost",
+    "size": [
+      1280,
+      800
+    ],
+    "clock_24h": false
+  },
+  "steps": [
+    {
+      "click": "settingsGear"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "click": "chooseMaterial"
+    },
+    {
+      "wait": 1000
+    },
+    {
+      "see": "materialRail"
+    },
+    {
+      "click": "materialFab"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "see": "homeworkSheet"
+    },
+    {
+      "see": "What is it?"
+    },
+    {
+      "shot": "sheets-light-add-what"
+    },
+    {
+      "click": "homeworkNext"
+    },
+    {
+      "wait": 200
+    },
+    {
+      "see": "Give the homework a title."
+    },
+    {
+      "shot": "sheets-light-add-problem"
+    },
+    {
+      "click": "homeworkTitle"
+    },
+    {
+      "type": "Chemistry lab"
+    },
+    {
+      "shot": "sheets-light-add-typed"
+    },
+    {
+      "click": "homeworkNext"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "see": "When is it due?"
+    },
+    {
+      "shot": "sheets-light-add-when"
+    },
+    {
+      "click": "homeworkNext"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "see": "How long will it take?"
+    },
+    {
+      "shot": "sheets-light-add-how-long"
+    },
+    {
+      "click": "homeworkNext"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "see": "Added Chemistry lab"
+    },
+    {
+      "shot": "sheets-light-added"
+    },
+    {
+      "click": "materialMore"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "see": "more_runningLate"
+    },
+    {
+      "shot": "sheets-light-more"
+    },
+    {
+      "click": "more_runningLate"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "see": "lateSheet"
+    },
+    {
+      "see": "Say how late you are and preview what moves. Nothing changes until you accept it."
+    },
+    {
+      "shot": "sheets-light-late"
+    },
+    {
+      "click": "latePreview"
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "shot": "sheets-light-late-preview"
+    },
+    {
+      "click": "lateAccept"
+    },
+    {
+      "wait": 1200
+    },
+    {
+      "shot": "sheets-light-late-done"
+    },
+    {
+      "key": "Escape"
+    }
+  ]
+}
