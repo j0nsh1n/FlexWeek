@@ -1,435 +1,458 @@
 import QtQuick
-import QtQuick.Controls
-import QtQuick.Controls.Material
 import QtQuick.Layouts
+import components 1.0
+import "views"
 
 Item {
     id: root
     objectName: "materialShell"
     // Set before the shell is created. A context property was null by the time these bindings ran.
     property var bridge
-    Material.theme: bridge.dark ? Material.Dark : Material.Light
-    Material.primary: bridge.primary
-    Material.accent: bridge.primary
-    Material.background: bridge.surface
-    Material.foreground: bridge.onSurface
+    readonly property bool phone: width < 768
+    readonly property var theme: bridge ? bridge.theme : ({})
+    readonly property string density: bridge ? bridge.density : "comfortable"
+    readonly property bool reduceMotion: bridge ? bridge.reduceMotion : false
+    readonly property bool highContrast: bridge ? bridge.highContrast : false
+    readonly property int enterMs: reduceMotion ? 0 : 300
+    readonly property bool typing: _field(Window.activeFocusItem)
+
+    function _field(item) {
+        while (item) {
+            if (item instanceof TextInput || item instanceof TextEdit)
+                return true
+            item = item.parent
+        }
+        return false
+    }
+
+    function focusDestination() {
+        var item = navWeekRail
+        if (bridge.screen === "day")
+            item = phone ? navDayBar : navDayRail
+        else if (bridge.screen === "week")
+            item = phone ? navWeekBar : navWeekRail
+        else if (bridge.screen === "month")
+            item = phone ? navMonthPhone : navMonthRail
+        else if (bridge.screen === "myday")
+            item = phone ? navMyDayBar : navMyDayRail
+        else
+            item = phone ? navSettingsBar : navSettingsRail
+        item.forceActiveFocus()
+    }
+
+    function takeKey(event) {
+        if (typing)
+            return
+        var key = event.key
+        if (key === Qt.Key_1)
+            bridge.showPage("day")
+        else if (key === Qt.Key_2)
+            bridge.showPage("week")
+        else if (key === Qt.Key_3)
+            bridge.showPage("month")
+        else if (key === Qt.Key_4)
+            bridge.showPage("myday")
+        else if (key === Qt.Key_5)
+            bridge.showPage("settings")
+        else if (key === Qt.Key_Z && !(event.modifiers & (Qt.ControlModifier | Qt.MetaModifier)))
+            bridge.undo()
+        else if (key === Qt.Key_Escape)
+            focusDestination()
+        else
+            return
+        event.accepted = true
+    }
+
+    focus: true
+    Keys.onPressed: (event) => takeKey(event)
 
     Rectangle {
         anchors.fill: parent
-        color: bridge.surface
+        color: root.theme.surface
     }
 
-    // An 80-wide rail cannot use a Material button's default padding: "Week" vanishes and
-    // "Settings" collapses to an ellipsis.
-    component RailButton: Button {
-        padding: 2
-        leftPadding: 2
-        rightPadding: 2
-        topPadding: 8
-        bottomPadding: 8
-        font.pixelSize: 12
-        font.capitalization: Font.MixedCase
-    }
-
-    RowLayout {
+    Row {
         anchors.fill: parent
         spacing: 0
 
-        Rectangle {
+        NavRail {
             id: rail
-            objectName: "materialRail"
-            Layout.preferredWidth: 80
-            Layout.minimumWidth: 80
-            Layout.maximumWidth: 80
-            Layout.fillHeight: true
-            color: bridge.surfaceContainer
-            border.width: bridge.stroke
-            border.color: bridge.outline
-            clip: true
+            objectName: root.phone ? "" : "materialRail"
+            visible: !root.phone
+            width: root.phone ? 0 : 80
+            height: parent.height
+            theme: root.theme
+            density: root.density
+            reduceMotion: root.reduceMotion
+            highContrast: root.highContrast
 
-            Column {
-                anchors.top: parent.top
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.margins: 12
-                spacing: 8
-
-                Button {
-                    id: addHomework
-                    objectName: "materialFab"
-                    text: "+"
-                    font.pixelSize: 28
-                    width: 56
-                    height: 56
-                    padding: 0
-                    leftPadding: 0
-                    rightPadding: 0
-                    topPadding: 0
-                    bottomPadding: 0
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    Accessible.name: "Add homework"
-                    Accessible.role: Accessible.Button
-                    onClicked: bridge.addHomework()
-
-                    background: Rectangle {
-                        radius: 16
-                        color: bridge.primary
-                    }
-
-                    contentItem: Label {
-                        text: addHomework.text
-                        color: bridge.onPrimary
-                        font.pixelSize: 28
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                }
-
-                RailButton {
-                    objectName: "navWeek"
-                    text: "Week"
-                    width: parent.width
-                    checkable: true
-                    checked: bridge.pageIndex === 0
-                    onClicked: bridge.showWeek()
-                }
-
-                RailButton {
-                    objectName: "navDay"
-                    text: "Day"
-                    visible: bridge.later
-                    width: parent.width
-                    onClicked: bridge.showPage("day")
-                }
-
-                RailButton {
-                    objectName: "navMonth"
-                    text: "Month"
-                    visible: bridge.later
-                    width: parent.width
-                    onClicked: bridge.showPage("month")
-                }
-
-                RailButton {
-                    objectName: "navMyDay"
-                    text: "My day"
-                    visible: bridge.later
-                    width: parent.width
-                    onClicked: bridge.showPage("myday")
-                }
+            Fab {
+                id: railFab
+                objectName: root.phone ? "" : "materialFab"
+                visible: !root.phone
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                icon: "add"
+                accessName: "Add homework"
+                onClicked: bridge.addHomework()
             }
 
-            RailButton {
-                objectName: "navSettings"
-                text: "Settings"
-                anchors.bottom: parent.bottom
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.margins: 8
-                checkable: true
-                checked: bridge.pageIndex === 1
-                onClicked: bridge.showSettings()
+            NavDestination {
+                id: navDayRail
+                objectName: root.phone ? "" : "navDay"
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                icon: "calendar_view_day"
+                label: "Day"
+                accessName: "Day"
+                selected: bridge.screen === "day"
+                onActivated: bridge.showPage("day")
+            }
+
+            NavDestination {
+                id: navWeekRail
+                objectName: root.phone ? "" : "navWeek"
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                icon: "calendar_view_week"
+                label: "Week"
+                accessName: "Week"
+                selected: bridge.screen === "week"
+                onActivated: bridge.showPage("week")
+            }
+
+            NavDestination {
+                id: navMonthRail
+                objectName: root.phone ? "" : "navMonth"
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                icon: "calendar_month"
+                label: "Month"
+                accessName: "Month"
+                selected: bridge.screen === "month"
+                onActivated: bridge.showPage("month")
+            }
+
+            NavDestination {
+                id: navMyDayRail
+                objectName: root.phone ? "" : "navMyDay"
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                icon: "task_alt"
+                label: "My day"
+                accessName: "My day"
+                selected: bridge.screen === "myday"
+                onActivated: bridge.showPage("myday")
+            }
+
+            NavDestination {
+                id: navSettingsRail
+                objectName: root.phone ? "" : "navSettings"
+                pinned: true
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                icon: "settings"
+                label: "Settings"
+                accessName: "Settings"
+                selected: bridge.screen === "settings"
+                onActivated: bridge.showPage("settings")
             }
         }
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            spacing: 0
+        Item {
+            id: body
+            width: parent.width - (root.phone ? 0 : rail.width)
+            height: parent.height
 
             Rectangle {
+                id: topBar
                 objectName: "materialTop"
-                Layout.fillWidth: true
-                Layout.preferredHeight: 64
-                color: bridge.surface
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                height: 64
+                color: root.theme.surface
 
-                RowLayout {
-                    anchors.fill: parent
+                Text {
+                    id: title
+                    objectName: "materialTitle"
+                    anchors.left: parent.left
                     anchors.leftMargin: 20
-                    anchors.rightMargin: 12
-                    spacing: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.right: tools.left
+                    text: bridge.title
+                    color: root.theme.onSurface
+                    font.family: "Roboto Flex"
+                    font.pixelSize: 22
+                    font.weight: 500
+                    elide: Text.ElideRight
+                    verticalAlignment: Text.AlignVCenter
+                }
 
-                    Label {
-                        objectName: "materialTitle"
-                        text: bridge.title
-                        color: bridge.onSurface
-                        font.pixelSize: 22
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
+                Row {
+                    id: tools
+                    anchors.right: parent.right
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 4
 
-                    Label {
+                    Text {
                         objectName: "materialClock"
+                        height: 48
+                        verticalAlignment: Text.AlignVCenter
                         text: bridge.clockText
-                        color: bridge.onSurface
+                        color: root.theme.onSurface
+                        font.family: "Roboto Flex"
                         font.pixelSize: 16
+                        font.weight: 500
                     }
 
-                    Button {
+                    IconButton {
+                        id: navMonthPhone
+                        objectName: root.phone ? "navMonth" : ""
+                        visible: root.phone
+                        theme: root.theme
+                        density: root.density
+                        reduceMotion: root.reduceMotion
+                        highContrast: root.highContrast
+                        icon: "calendar_month"
+                        accessName: "Month"
+                        onClicked: bridge.showPage("month")
+                    }
+
+                    IconButton {
                         objectName: "materialUndo"
-                        text: "Undo"
+                        theme: root.theme
+                        density: root.density
+                        reduceMotion: root.reduceMotion
+                        highContrast: root.highContrast
+                        icon: "undo"
+                        accessName: "Undo"
                         enabled: bridge.canUndo
                         onClicked: bridge.undo()
                     }
 
-                    Button {
+                    IconButton {
                         objectName: "materialRedo"
-                        text: "Redo"
+                        theme: root.theme
+                        density: root.density
+                        reduceMotion: root.reduceMotion
+                        highContrast: root.highContrast
+                        icon: "redo"
+                        accessName: "Redo"
                         enabled: bridge.canRedo
                         onClicked: bridge.redo()
                     }
 
-                    Button {
+                    IconButton {
                         objectName: "materialMore"
-                        text: "More"
+                        theme: root.theme
+                        density: root.density
+                        reduceMotion: root.reduceMotion
+                        highContrast: root.highContrast
+                        icon: "more_vert"
+                        accessName: "More"
                         onClicked: bridge.openMore()
                     }
                 }
             }
 
-            StackLayout {
-                objectName: "materialPages"
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                currentIndex: bridge.pageIndex
+            Item {
+                id: stage
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: topBar.bottom
+                anchors.bottom: root.phone ? bar.top : parent.bottom
+                opacity: 1
 
-                Item {
-                    id: weekPane
-                    objectName: "materialWeek"
-                    property real dayWidth: Math.max(48, (width - 64) / 7)
+                StackLayout {
+                    id: pages
+                    anchors.fill: parent
+                    currentIndex: bridge.pageIndex
 
-                    ColumnLayout {
-                        anchors.fill: parent
-                        spacing: 0
-
-                        Row {
-                            Layout.fillWidth: true
-                            Layout.leftMargin: 64
-                            Layout.preferredHeight: 36
-                            spacing: 0
-
-                            Repeater {
-                                id: dayHeaders
-                                objectName: "dayHeaders"
-                                model: bridge.days
-
-                                Label {
-                                    objectName: "dayHeader"
-                                    text: model.label
-                                    width: weekPane.dayWidth
-                                    height: 36
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                    color: bridge.onSurface
-                                }
-                            }
-                        }
-
-                        Flickable {
-                            id: scroller
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            contentWidth: width
-                            contentHeight: 24 * bridge.hourRow
-                            clip: true
-                            boundsBehavior: Flickable.StopAtBounds
-
-                            // Keep the now line on screen, and the earliest block with it when both fit.
-                            function revealNow() {
-                                var view = height
-                                if (view < 40 || bridge.nowDay < 0)
-                                    return
-                                var row = bridge.hourRow
-                                var nowY = bridge.nowMinute / 60 * row
-                                var earliest = nowY
-                                var rows = bridge.blockRows
-                                for (var i = 0; i < rows.length; i++) {
-                                    var top = rows[i].start / 60 * row
-                                    if (top < earliest)
-                                        earliest = top
-                                }
-                                var contentY = (nowY - earliest + 48 < view)
-                                        ? Math.max(0, earliest - 24)
-                                        : Math.max(0, nowY - view * 0.65)
-                                var limit = Math.max(0, contentHeight - view)
-                                scroller.contentY = Math.min(Math.max(0, contentY), limit)
-                            }
-
-                            onHeightChanged: revealNow()
-
-                            Connections {
-                                target: bridge
-                                function onBlocksChanged() { scroller.revealNow() }
-                                function onChanged() { scroller.revealNow() }
-                            }
-
-                            Item {
-                                width: scroller.width
-                                height: 24 * bridge.hourRow
-
-                                Repeater {
-                                    model: 24
-
-                                    Rectangle {
-                                        y: index * bridge.hourRow
-                                        width: parent.width
-                                        height: 1
-                                        color: bridge.outlineVariant
-                                    }
-                                }
-
-                                Repeater {
-                                    id: hourLabels
-                                    objectName: "hourLabels"
-                                    model: bridge.hours
-
-                                    Label {
-                                        objectName: "hourLabel"
-                                        x: 4
-                                        y: index * bridge.hourRow + 2
-                                        width: 56
-                                        text: model.label
-                                        color: bridge.onSurface
-                                        font.pixelSize: 11
-                                    }
-                                }
-
-                                Repeater {
-                                    id: weekBlocks
-                                    objectName: "weekBlocks"
-                                    model: bridge.blocks
-
-                                    Rectangle {
-                                        objectName: "weekBlock"
-                                        x: 64 + model.day * weekPane.dayWidth + 3
-                                        y: model.start / 60 * bridge.hourRow
-                                        width: Math.max(8, weekPane.dayWidth - 8)
-                                        height: Math.max(36, (model.end - model.start) / 60 * bridge.hourRow - 2)
-                                        radius: 12
-                                        color: model.fill
-                                        border.width: bridge.stroke
-                                        border.color: bridge.outline
-
-                                        Label {
-                                            objectName: "weekBlockTitle"
-                                            text: model.title
-                                            color: model.ink
-                                            anchors.fill: parent
-                                            anchors.leftMargin: 8
-                                            anchors.rightMargin: 8
-                                            anchors.topMargin: 6
-                                            anchors.bottomMargin: 6
-                                            wrapMode: Text.WordWrap
-                                            maximumLineCount: 2
-                                            elide: Text.ElideRight
-                                        }
-                                    }
-                                }
-
-                                Rectangle {
-                                    objectName: "nowLine"
-                                    visible: bridge.nowDay >= 0
-                                    x: 64
-                                    y: bridge.nowMinute / 60 * bridge.hourRow
-                                    width: parent.width - 64
-                                    height: Math.max(2, bridge.stroke)
-                                    color: bridge.primary
-                                    z: 3
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            objectName: "homeworkDrawer"
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: Math.min(168, 36 + Math.max(bridge.homeworkCount, 1) * 22)
-                            color: bridge.surfaceContainer
-
-                            Column {
-                                anchors.fill: parent
-                                anchors.margins: 8
-                                spacing: 2
-
-                                Label {
-                                    objectName: "homeworkCount"
-                                    text: bridge.homeworkCount === 1
-                                          ? "1 still needs a time"
-                                          : bridge.homeworkCount + " still need a time"
-                                    color: bridge.onSurface
-                                }
-
-                                Repeater {
-                                    id: homeworkRows
-                                    objectName: "homeworkRows"
-                                    model: bridge.homework
-
-                                    Label {
-                                        objectName: "homeworkTitle"
-                                        text: model.title
-                                        color: bridge.onSurface
-                                    }
-                                }
-                            }
-                        }
+                    DayView { Layout.fillWidth: true; Layout.fillHeight: true; bridge: root.bridge }
+                    WeekView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        bridge: root.bridge
+                        phone: root.phone
+                        theme: root.theme
+                        density: root.density
+                        reduceMotion: root.reduceMotion
+                        highContrast: root.highContrast
                     }
+                    MonthView { Layout.fillWidth: true; Layout.fillHeight: true; bridge: root.bridge }
+                    MyDayView { Layout.fillWidth: true; Layout.fillHeight: true; bridge: root.bridge }
+                    SettingsView { Layout.fillWidth: true; Layout.fillHeight: true; bridge: root.bridge }
                 }
 
-                Item {
-                    objectName: "materialSettings"
+                NumberAnimation {
+                    id: enter
+                    target: stage
+                    property: "opacity"
+                    from: 0
+                    to: 1
+                    duration: root.enterMs
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: [0.2, 0, 0, 1, 1, 1]
+                }
+            }
 
-                    Column {
-                        anchors.centerIn: parent
-                        spacing: 16
-                        width: 360
+            NavBar {
+                id: bar
+                objectName: root.phone ? "materialBar" : ""
+                visible: root.phone
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                width: parent.width
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
 
-                        Label {
-                            text: "Material 3"
-                            color: bridge.onSurface
-                            font.pixelSize: 22
-                        }
-
-                        Label {
-                            width: parent.width
-                            wrapMode: Text.WordWrap
-                            text: "The week is the same data as the other styles."
-                            color: bridge.onSurface
-                        }
-
-                        Button {
-                            objectName: "useWidgets"
-                            text: "Widgets styles"
-                            onClicked: bridge.useWidgets()
-                        }
-                    }
+                NavDestination {
+                    id: navDayBar
+                    objectName: root.phone ? "navDay" : ""
+                    theme: root.theme
+                    density: root.density
+                    reduceMotion: root.reduceMotion
+                    highContrast: root.highContrast
+                    icon: "calendar_view_day"
+                    label: "Today"
+                    accessName: "Day"
+                    selected: bridge.screen === "day"
+                    onActivated: bridge.showPage("day")
                 }
 
-                Item {
-                    Label {
-                        anchors.centerIn: parent
-                        visible: bridge.later
-                        text: "Day comes in a later slice."
-                        color: bridge.onSurface
-                    }
+                NavDestination {
+                    id: navWeekBar
+                    objectName: root.phone ? "navWeek" : ""
+                    theme: root.theme
+                    density: root.density
+                    reduceMotion: root.reduceMotion
+                    highContrast: root.highContrast
+                    icon: "calendar_view_week"
+                    label: "Week"
+                    accessName: "Week"
+                    selected: bridge.screen === "week"
+                    onActivated: bridge.showPage("week")
                 }
 
-                Item {
-                    Label {
-                        anchors.centerIn: parent
-                        visible: bridge.later
-                        text: "Month comes in a later slice."
-                        color: bridge.onSurface
-                    }
+                NavDestination {
+                    id: navMyDayBar
+                    objectName: root.phone ? "navMyDay" : ""
+                    theme: root.theme
+                    density: root.density
+                    reduceMotion: root.reduceMotion
+                    highContrast: root.highContrast
+                    icon: "task_alt"
+                    label: "My day"
+                    accessName: "My day"
+                    selected: bridge.screen === "myday"
+                    onActivated: bridge.showPage("myday")
                 }
 
-                Item {
-                    Label {
-                        anchors.centerIn: parent
-                        visible: bridge.later
-                        text: "My day comes in a later slice."
-                        color: bridge.onSurface
-                    }
+                NavDestination {
+                    id: navSettingsBar
+                    objectName: root.phone ? "navSettings" : ""
+                    theme: root.theme
+                    density: root.density
+                    reduceMotion: root.reduceMotion
+                    highContrast: root.highContrast
+                    icon: "settings"
+                    label: "Settings"
+                    accessName: "Settings"
+                    selected: bridge.screen === "settings"
+                    onActivated: bridge.showPage("settings")
                 }
+            }
+
+            Fab {
+                id: phoneFab
+                objectName: root.phone ? "materialFab" : ""
+                visible: root.phone
+                z: 2
+                anchors.right: parent.right
+                anchors.rightMargin: 16
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 96
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                icon: "add"
+                accessName: "Add homework"
+                onClicked: bridge.addHomework()
+            }
+
+            Snackbar {
+                objectName: "materialSnackbar"
+                visible: bridge.snackText !== ""
+                z: 3
+                message: bridge.snackText
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: root.phone ? 96 : 24
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
             }
         }
     }
+
+    // A clock tick also emits changed. The enter animation follows the screen only.
+    property string shownScreen: bridge.screen
+    onShownScreenChanged: enter.restart()
+
+    Shortcut {
+        sequence: "1"
+        context: Qt.WindowShortcut
+        enabled: !typing
+        onActivated: bridge.showPage("day")
+    }
+    Shortcut {
+        sequence: "2"
+        context: Qt.WindowShortcut
+        enabled: !typing
+        onActivated: bridge.showPage("week")
+    }
+    Shortcut {
+        sequence: "3"
+        context: Qt.WindowShortcut
+        enabled: !typing
+        onActivated: bridge.showPage("month")
+    }
+    Shortcut {
+        sequence: "4"
+        context: Qt.WindowShortcut
+        enabled: !typing
+        onActivated: bridge.showPage("myday")
+    }
+    Shortcut {
+        sequence: "5"
+        context: Qt.WindowShortcut
+        enabled: !typing
+        onActivated: bridge.showPage("settings")
+    }
+    Shortcut {
+        sequence: "Z"
+        context: Qt.WindowShortcut
+        enabled: !typing
+        onActivated: bridge.undo()
+    }
+    Shortcut { sequence: "Escape"; context: Qt.WindowShortcut; onActivated: focusDestination() }
 }

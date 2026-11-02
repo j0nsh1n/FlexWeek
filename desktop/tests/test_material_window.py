@@ -36,7 +36,7 @@ from desktop.native.look import sanitize_look  # noqa: E402
 from desktop.native.remind import reminder_lead_min  # noqa: E402
 from desktop.native.version import VERSION  # noqa: E402
 from desktop.native.weekmodel import clock_label  # noqa: E402
-from desktop.native.window import WEEK_LIST_NAME, NativeWindow  # noqa: E402
+from desktop.native.window import WEEK_LIST_NAME, WINDOW_MIN_WIDTH, NativeWindow  # noqa: E402
 from desktop.server import LocalServer  # noqa: E402
 from desktop.tests.logic_support import past_setup  # noqa: E402
 from desktop.tests.test_layouts_window import (  # noqa: E402
@@ -48,9 +48,7 @@ from desktop.tests.test_layouts_window import (  # noqa: E402
 
 SCHOOL_LIGHT = "#EAE6FA"
 HOUR_ROW = 56
-FALLBACK = (
-    "Material 3 could not open, so FlexWeek is showing the other styles. Your week is unchanged."
-)
+FALLBACK = "Material 3 could not open, so FlexWeek is showing the other styles. Your week is unchanged."
 NIGHT = {
     "name": "Night study",
     "base": "paper",
@@ -253,25 +251,30 @@ def test_choosing_material_shows_the_week_and_swapping_back_keeps_it(
         assert int(_qml(root, "materialRail").property("width")) == 80
         assert int(_qml(root, "materialFab").property("width")) == 56
         assert int(_qml(root, "materialFab").property("height")) == 56
-        assert _qml(root, "navDay").property("visible") is False
-        assert _qml(root, "navMonth").property("visible") is False
-        assert _qml(root, "navMyDay").property("visible") is False
+        assert _qml(root, "navDay").property("visible") is True
+        assert _qml(root, "navMonth").property("visible") is True
+        assert _qml(root, "navMyDay").property("visible") is True
         assert _qml(root, "materialClock").property("text") == "7:00 PM"
-        titles = _repeater_texts(root, "weekBlocks", "weekBlockTitle")
+        titles = _repeater_texts(root, "weekBlocks", "title")
         assert "School" in titles, titles
         assert "History essay" in titles, titles
         school = next(
             block
             for block in _named(root, "weekBlock")
-            if any(str(label.property("text")) == "School" for label in _named(block, "weekBlockTitle"))
+            if any(str(label.property("text")) == "School" for label in _named(block, "title"))
         )
         assert int(school.property("y")) == 8 * HOUR_ROW
-        colour = school.property("color")
+        shape = _named(school, "shape")[0]
+        colour = shape.property("color")
         name = colour.name() if hasattr(colour, "name") else str(colour)
         assert name.lower() == SCHOOL_LIGHT.lower()
-        assert int(school.property("radius")) == 12
-        title = _named(school, "weekBlockTitle")[0]
+        assert int(shape.property("radius")) == 12
+        title = _named(school, "title")[0]
         assert int(title.property("maximumLineCount")) == 2
+        drawer = _qml(root, "homeworkDrawer")
+        week = _qml(root, "materialWeek")
+        assert int(drawer.property("width")) == 320
+        assert int(drawer.property("x")) == int(week.property("width")) - 320
         start = date.fromisoformat(session.week_start)
         assert f"Thu {(start + timedelta(days=3)).day}" in _repeater_texts(root, "dayHeaders", "dayHeader")
         assert _qml(root, "nowLine").property("visible") is True
@@ -290,9 +293,7 @@ def test_choosing_material_shows_the_week_and_swapping_back_keeps_it(
     window._use_widgets_styles()
 
 
-def test_an_unsent_settings_change_survives_the_swap(
-    qapp: QApplication, window: NativeWindow
-) -> None:
+def test_an_unsent_settings_change_survives_the_swap(qapp: QApplication, window: NativeWindow) -> None:
     window._surface = "widgets"
     window._material_gave_up = False
     window._on_week()
@@ -483,9 +484,7 @@ def _drop_material(window: NativeWindow, qapp: QApplication) -> None:
     _pump(qapp)
 
 
-def test_an_unsent_reminder_lead_survives_the_swap_back(
-    qapp: QApplication, window: NativeWindow
-) -> None:
+def test_an_unsent_reminder_lead_survives_the_swap_back(qapp: QApplication, window: NativeWindow) -> None:
     """A refused preference save must still be on the lead control after Material and after reopening."""
     window._surface = "widgets"
     window._material_gave_up = False
@@ -580,9 +579,7 @@ def test_a_missing_token_file_falls_back_and_leaves_no_material_page(
         window._save_look()
 
 
-def test_a_publish_failure_falls_back_to_the_widgets_week(
-    qapp: QApplication, window: NativeWindow
-) -> None:
+def test_a_publish_failure_falls_back_to_the_widgets_week(qapp: QApplication, window: NativeWindow) -> None:
     window._surface = "widgets"
     window._material_gave_up = False
     window._material_failed = ""
@@ -703,9 +700,7 @@ def test_a_refresh_with_focus_open_keeps_focus_and_the_plan_prompt(
         window._on_week()
 
 
-def test_a_refresh_with_settings_open_keeps_settings(
-    qapp: QApplication, window: NativeWindow
-) -> None:
+def test_a_refresh_with_settings_open_keeps_settings(qapp: QApplication, window: NativeWindow) -> None:
     trace = {"placed": [], "kept": "settings"}
     window.session.trace = trace
     window.session._fresh_plan = True
@@ -745,9 +740,7 @@ def test_closing_settings_returns_to_material(qapp: QApplication, window: Native
         window._on_week()
 
 
-def test_the_material_clock_and_now_line_advance(
-    qapp: QApplication, window: NativeWindow
-) -> None:
+def test_the_material_clock_and_now_line_advance(qapp: QApplication, window: NativeWindow) -> None:
     root = _show_material(qapp, window)
     original = window.session.now_ms
     thursday = datetime.fromisoformat(window.session.week_start) + timedelta(days=3, hours=19)
@@ -801,9 +794,7 @@ def test_material_more_hides_actions_that_need_the_widgets_panels(
         window._on_week()
 
 
-def test_the_add_button_opens_homework_from_the_keyboard(
-    qapp: QApplication, window: NativeWindow
-) -> None:
+def test_the_add_button_opens_homework_from_the_keyboard(qapp: QApplication, window: NativeWindow) -> None:
     root = _show_material(qapp, window)
     fab = _qml(root, "materialFab")
     assert "Rectangle" not in fab.metaObject().className()
@@ -842,9 +833,7 @@ def test_the_add_button_opens_homework_from_the_keyboard(
         window._use_widgets_styles()
 
 
-def test_the_material_week_comes_from_the_session(
-    qapp: QApplication, window: NativeWindow
-) -> None:
+def test_the_material_week_comes_from_the_session(qapp: QApplication, window: NativeWindow) -> None:
     root = _show_material(qapp, window)
     assert _named(root, "weekBlock")
 
@@ -862,15 +851,123 @@ def test_the_material_week_comes_from_the_session(
         window._use_widgets_styles()
 
 
+def _accept_sign_out() -> None:
+    """Press Sign out on the sheet that is about to open. Esc and Cancel leave the account signed in."""
+
+    def press() -> None:
+        sheet = QApplication.activeModalWidget()
+        if sheet is not None and hasattr(sheet, "buttons"):
+            sheet.buttons["yes"].click()
+
+    QTimer.singleShot(200, press)
+
+
+def test_sign_out_keeps_an_unsent_settings_change_on_both_surfaces(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """A refused preference save is still the lead after Sign out is confirmed.
+
+    Material's More and the Widgets button both reach the same sign-out. Signing out
+    used to drop the draft and leave the saved lead at 5.
+    """
+    window._surface = "widgets"
+    window._material_gave_up = False
+    window._on_week()
+    window._open_settings()
+    page = window._settings
+    assert page is not None
+    lead = page.findChild(QSpinBox, "prefLead")
+    assert lead.value() == 5
+    assert lead.value() == reminder_lead_min(window.session.preferences)
+    offered: list[object] = []
+    logged_out: list[int] = []
+
+    def refuse(wanted: dict, _done: object) -> bool:
+        offered.append(wanted.get("reminder_lead_min"))
+        return False
+
+    original_save = window.session.save_preferences
+    original_logout = window.session.logout
+
+    def watch_logout() -> None:
+        logged_out.append(reminder_lead_min(window.session.preferences))
+        original_logout()
+
+    window.session.save_preferences = refuse
+    window.session.logout = watch_logout
+    try:
+        lead.setValue(17)
+        for timer in page.findChildren(QTimer):
+            timer.stop()
+        root = _show_material(qapp, window)
+        assert window._settings_unsent() is True
+        window._material_page.bridge.openMore()
+        _pump(qapp)
+        popup = QApplication.activePopupWidget()
+        assert popup is not None
+        sign_out = _action(popup, "Sign out")
+        assert sign_out is not None
+        _accept_sign_out()
+        sign_out.trigger()
+        QTest.qWait(700)
+        assert logged_out == []
+        assert window.session.account is not None
+        assert reminder_lead_min(window.session.preferences) == 5
+        assert lead.value() == 17
+        assert 17 in offered
+        assert window.session.message == (
+            "Couldn't save, so FlexWeek stayed open. Your changes are still on screen. "
+            "Choose Retry save, then sign out again."
+        )
+        assert root.objectName() == "materialShell"
+
+        offered.clear()
+        window._use_widgets_styles()
+        _pump(qapp)
+        assert window._stack.currentWidget().objectName() == "weekPage"
+        assert window._settings_unsent() is True
+        _accept_sign_out()
+        window.findChild(QPushButton, "signOut").click()
+        QTest.qWait(700)
+        assert logged_out == []
+        assert window.session.account is not None
+        assert reminder_lead_min(window.session.preferences) == 5
+        assert lead.value() == 17
+        assert 17 in offered
+        assert "sign out again." in window.session.message
+    finally:
+        leaving = window._leaving
+        if leaving is not None:
+            leaving.stop()
+            leaving.deleteLater()
+            window._leaving = None
+        window.session.logout = original_logout
+        window.session.save_preferences = original_save
+        if window.session.account is not None and page.findChild(QSpinBox, "prefLead") is not None:
+            lead.setValue(reminder_lead_min(window.session.preferences))
+            for timer in page.findChildren(QTimer):
+                timer.stop()
+        current = QApplication.activePopupWidget()
+        if current is not None:
+            current.close()
+        sheet = QApplication.activeModalWidget()
+        if isinstance(sheet, QDialog):
+            sheet.reject()
+        if window._stack.currentWidget() is page:
+            window._close_settings()
+        window._surface = "widgets"
+        window._material_gave_up = False
+        if window.session.account is not None:
+            window._on_week()
+
+
 def test_setup_writes_material_beside_the_layout(window: NativeWindow) -> None:
     window._surface = "material"
     window._material_failed = ""
     window._material_gave_up = False
     answer = {
         "look": sanitize_look(window._look),
-        "layout": sanitize_layout(
-            {"main": "classic", "day": "one", "options": {"one": {"daybar": "hide"}}}
-        ),
+        "layout": sanitize_layout({"main": "classic", "day": "one", "options": {"one": {"daybar": "hide"}}}),
         "pack": "system",
     }
     window._setup_step_left(0, 1, answer)
@@ -885,3 +982,156 @@ def test_setup_writes_material_beside_the_layout(window: NativeWindow) -> None:
     assert window._layout["options"]["one"]["daybar"] == "hide"
     window._surface = "widgets"
     window._save_look()
+
+
+def test_number_keys_open_each_screen_and_escape_returns_focus(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """1–5 leave the week for Day, Month, My day, and Settings, and Esc focuses that destination."""
+    root = _show_material(qapp, window)
+    bridge = window._material_page.bridge
+    quick = window._material_page._quick
+    try:
+        assert bridge.property("screen") == "week"
+        root.forceActiveFocus()
+        _pump(qapp)
+        for key, screen, page_name, title in (
+            (Qt.Key.Key_1, "day", "materialDay", "Day"),
+            (Qt.Key.Key_3, "month", "materialMonth", "Month"),
+            (Qt.Key.Key_4, "myday", "materialMyDay", "My day"),
+            (Qt.Key.Key_5, "settings", "materialSettings", "Settings"),
+            (Qt.Key.Key_2, "week", "materialWeek", None),
+        ):
+            QTest.keyClick(quick, key)
+            _pump(qapp)
+            assert bridge.property("screen") == screen
+            page = _qml(root, page_name)
+            assert page.property("visible") is True
+            if title is not None:
+                assert _named(page, "screenTitle")[0].property("text") == title
+        assert _qml(root, "materialSettings").property("visible") is False
+        bridge.showPage("settings")
+        _pump(qapp)
+        settings = _qml(root, "materialSettings")
+        assert settings.property("visible") is True
+        assert _named(settings, "useWidgets")[0].property("text") == "Widgets styles"
+        QTest.keyClick(quick, Qt.Key.Key_Escape)
+        _pump(qapp)
+        assert _qml(root, "navSettings").property("activeFocus") is True
+        bridge.showPage("nope")
+        assert bridge.property("screen") == "settings"
+        bridge.showPage("week")
+        _pump(qapp)
+        assert bridge.property("screen") == "week"
+        assert _named(root, "weekBlock")
+    finally:
+        window._use_widgets_styles()
+
+
+def test_a_narrow_shell_uses_the_bar_and_parks_the_add_button(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Under 768 the rail is gone, Month sits in the top bar, and Add is 16px in and 96px up."""
+    root = _show_material(qapp, window)
+    window.setMinimumWidth(360)
+    window.resize(700, 800)
+    _pump(qapp)
+    try:
+        assert int(root.property("width")) < 768
+        assert root.findChild(QObject, "materialRail") is None
+        assert _qml(root, "materialBar").property("visible") is True
+        assert int(_qml(root, "materialBar").property("height")) == 80
+        fab = _qml(root, "materialFab")
+        parent = fab.parent()
+        assert int(fab.property("width")) == 56
+        assert int(fab.property("height")) == 56
+        assert int(fab.property("x")) == int(parent.property("width")) - 16 - 56
+        assert int(fab.property("y")) == int(parent.property("height")) - 96 - 56
+        assert _qml(root, "navMonth").property("visible") is True
+        assert _qml(root, "navDay").property("visible") is True
+        week = _qml(root, "materialWeek")
+        drawer = _qml(root, "homeworkDrawer")
+        assert int(week.property("scrollClearance")) == 96
+        assert int(drawer.property("width")) == int(week.property("width"))
+        assert int(root.property("enterMs")) == 300
+    finally:
+        window.setMinimumWidth(WINDOW_MIN_WIDTH)
+        window.resize(1280, 800)
+        _pump(qapp)
+        window._use_widgets_styles()
+
+
+def test_reduce_motion_runs_the_page_change_in_no_time(qapp: QApplication, window: NativeWindow) -> None:
+    root = _show_material(qapp, window)
+    bridge = window._material_page.bridge
+    original = window._motion
+    try:
+        assert bridge.property("reduceMotion") is False
+        assert int(root.property("enterMs")) == 300
+        window._motion = "off"
+        window._material_page.publish()
+        _pump(qapp)
+        assert bridge.property("reduceMotion") is True
+        assert int(root.property("enterMs")) == 0
+    finally:
+        window._motion = original
+        if window._material_page is not None:
+            window._material_page.publish()
+        window._use_widgets_styles()
+
+
+def test_the_open_shell_publishes_the_theme_object(qapp: QApplication, window: NativeWindow) -> None:
+    """The shell's theme map is the Blue light scheme plus the ink aliases and the three flags."""
+    _show_material(qapp, window)
+    theme = window._material_page.bridge.property("theme")
+    try:
+        assert theme["primary"] == "#425e91"
+        assert theme["onSurface"] == "#1a1c20"
+        assert theme["inkSurface"] == "#1a1c20"
+        assert theme["inkMuted"] == "#44474e"
+        assert theme["inverseOnSurface"] == "#f0f0f7"
+        assert theme["density"] == "comfortable"
+        assert theme["reduceMotion"] is False
+        assert theme["highContrast"] is False
+    finally:
+        window._use_widgets_styles()
+
+
+def test_register_fonts_returns_the_three_roboto_flex_faces(qapp: QApplication) -> None:
+    from PySide6.QtGui import QFontDatabase
+
+    from desktop.native.material.theme import ROBOTO_FLEX, register_fonts
+
+    ids = register_fonts()
+    assert len(ids) == 3
+    families: list[str] = []
+    for ident in ids:
+        assert ident >= 0
+        families.extend(QFontDatabase.applicationFontFamilies(ident))
+    assert ROBOTO_FLEX in families
+
+
+def test_opening_material_registers_those_faces(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from desktop.native.material import host as host_mod
+
+    seen: list[tuple[int, ...]] = []
+    real = host_mod.register_fonts
+
+    def wrapped() -> tuple[int, ...]:
+        found = real()
+        seen.append(found)
+        return found
+
+    monkeypatch.setattr(host_mod, "register_fonts", wrapped)
+    page = window._ensure_material()
+    assert page is not None
+    page._ready = False
+    try:
+        _show_material(qapp, window)
+        assert seen
+        assert len(seen[-1]) == 3
+        assert all(ident >= 0 for ident in seen[-1])
+    finally:
+        window._use_widgets_styles()

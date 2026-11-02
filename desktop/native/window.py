@@ -5403,7 +5403,10 @@ class NativeWindow(QMainWindow):
             if (self.session.storage_info or {}).get("mode") == "hosted"
             else "this computer"
         )
-        if confirm(self, "Sign out", SIGN_OUT_QUESTION.format(where=where), "Sign out", danger=False):
+        # Same wait as closing: an unsent Settings change has to reach the server, or stay on screen.
+        if confirm(
+            self, "Sign out", SIGN_OUT_QUESTION.format(where=where), "Sign out", danger=False
+        ) and self._save_before_leaving(self.session.logout, again="sign out again"):
             self.session.logout()
 
     def _open_help(self) -> None:
@@ -5748,10 +5751,14 @@ class NativeWindow(QMainWindow):
             return False
         return bool(self._settings_unsaved())
 
-    def _save_before_leaving(self, leave: Callable[[], None]) -> bool:
+    def _save_before_leaving(self, leave: Callable[[], None], *, again: str = "close FlexWeek again") -> bool:
         """Leave once what is unsaved has reached the server. Returns True when there was nothing to
         wait for and `leave` has not been called; otherwise it saves in the background and calls
-        `leave` when done, or stays open and says so when the save fails or takes too long."""
+        `leave` when done, or stays open and says so when the save fails or takes too long.
+
+        `again` is the action named in that sentence. Closing says to close again. Signing out says
+        to sign out again, so the two paths do not tell the student to do the other one.
+        """
         session = self.session
         if self._leaving is not None:
             return False
@@ -5774,7 +5781,7 @@ class NativeWindow(QMainWindow):
             stop()
             session._say(
                 "Couldn't save, so FlexWeek stayed open. Your changes are still on screen. "
-                "Choose Retry save, then close FlexWeek again."
+                f"Choose Retry save, then {again}."
             )
             self.restore_window()
 

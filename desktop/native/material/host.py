@@ -17,7 +17,7 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 from desktop.native.look import design_look
 from desktop.native.material.bridge import MaterialBridge
-from desktop.native.material.theme import qml_path
+from desktop.native.material.theme import qml_dir, qml_path, register_fonts
 
 log = logging.getLogger("flexweek.material")
 
@@ -81,6 +81,9 @@ class MaterialPage(QWidget):
             self.failure = f"Material 3 could not load {page}"
             log.warning("%s", self.failure)
             return False
+        # Faces and the component import have to be in place before the shell is created.
+        register_fonts()
+        self._quick.engine().addImportPath(str(qml_dir()))
         # The root property has to exist before the shell is created, or every binding reads null.
         self._quick.setInitialProperties({"bridge": self.bridge})
         self._quick.setSource(QUrl.fromLocalFile(str(page)))

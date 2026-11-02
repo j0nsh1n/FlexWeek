@@ -21,9 +21,13 @@ from desktop.native.material.theme import (
     DENSITY,
     HIGH_CONTRAST_STROKE,
     category_paint,
+    event_category,
     paint_for_category,
+    read_material_choice,
+    resolved_mode,
     scheme,
     stroke_for,
+    theme_object,
     tokens_path,
 )
 from desktop.native.tokens import contrast
@@ -108,6 +112,89 @@ def test_blue_light_standard_is_the_shipped_scheme() -> None:
     assert colours["primary"] == "#425e91"
     assert colours["surface"] == "#f9f9ff"
     assert colours["onSurface"] == "#1a1c20"
+
+
+# The component README's roles, written out here so a dropped key is not also dropped from the check.
+THEME_KEYS = (
+    "primary",
+    "onPrimary",
+    "primaryContainer",
+    "onPrimaryContainer",
+    "secondary",
+    "onSecondary",
+    "secondaryContainer",
+    "onSecondaryContainer",
+    "tertiary",
+    "onTertiary",
+    "tertiaryContainer",
+    "onTertiaryContainer",
+    "error",
+    "onError",
+    "errorContainer",
+    "onErrorContainer",
+    "surface",
+    "onSurface",
+    "onSurfaceVariant",
+    "surfaceContainerLowest",
+    "surfaceContainerLow",
+    "surfaceContainer",
+    "surfaceContainerHigh",
+    "surfaceContainerHighest",
+    "surfaceVariant",
+    "outline",
+    "outlineVariant",
+    "inverseSurface",
+    "inverseOnSurface",
+    "inversePrimary",
+)
+
+
+def test_the_theme_object_carries_every_role_and_the_ink_aliases() -> None:
+    theme = theme_object(scheme("Blue", "light", "std"), "comfortable", False, False)
+    for key in THEME_KEYS:
+        assert theme[key] == scheme("Blue", "light", "std")[key]
+    assert theme["primary"] == "#425e91"
+    assert theme["onSurface"] == "#1a1c20"
+    assert theme["inkSurface"] == "#1a1c20"
+    assert theme["inkPrimary"] == "#ffffff"
+    assert theme["inkMuted"] == "#44474e"
+    assert theme["inverseOnSurface"] == "#f0f0f7"
+    assert "inkInverseSurface" not in theme
+    assert theme["density"] == "comfortable"
+    assert theme["reduceMotion"] is False
+    assert theme["highContrast"] is False
+
+
+def test_a_missing_or_unknown_material_choice_is_blue_system_standard_comfortable() -> None:
+    blank = {"preset": "Blue", "mode": "system", "contrast": "std", "density": "comfortable"}
+    assert read_material_choice(None) == blank
+    assert read_material_choice({}) == blank
+    assert read_material_choice({"material": "nope"}) == blank
+    assert read_material_choice({"preset": "Sea"}) == blank
+    chosen = read_material_choice(
+        {"material": {"preset": "Sea", "mode": "dark", "contrast": "high", "density": "compact"}}
+    )
+    assert chosen == {"preset": "Sea", "mode": "dark", "contrast": "high", "density": "compact"}
+    unknown = read_material_choice(
+        {"material": {"preset": "Mauve", "mode": "dim", "contrast": "max", "density": "roomy"}}
+    )
+    assert unknown == blank
+
+
+def test_system_mode_follows_the_worn_axis_and_an_explicit_mode_wins() -> None:
+    assert resolved_mode("system", True) == "dark"
+    assert resolved_mode("system", False) == "light"
+    assert resolved_mode("light", True) == "light"
+    assert resolved_mode("dark", False) == "dark"
+
+
+def test_event_block_categories_use_the_blocks_own_names() -> None:
+    assert event_category("class") == "school"
+    assert event_category("exercise") == "sports"
+    assert event_category("extra") == "sports"
+    assert event_category("study") == "study"
+    assert event_category("assignments") == "homework"
+    assert event_category("meal") == "homework"
 
 
 def test_an_unknown_preset_mode_or_contrast_is_refused() -> None:

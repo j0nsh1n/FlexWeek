@@ -3,38 +3,47 @@
 QML calls the slots. It does not touch HTTP, SQL, or the engine. Prompts that
 belong to the Widgets week (the one-shot plan review and the unfinished list)
 are not taken here. A refresh of this surface must not consume them.
+
+Each screen has its own bridge module. This file is the core: navigation, the
+theme object, and the slots every screen shares. Week rows live in bridge_week.
 """
 
 from __future__ import annotations
 
-import os
-from datetime import date, datetime, timedelta
+import json
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Protocol, cast
 
-from PySide6.QtCore import (
-    Property,
-    QAbstractListModel,
-    QByteArray,
-    QModelIndex,
-    QObject,
-    QPersistentModelIndex,
-    Qt,
-    Signal,
-    Slot,
-)
+from PySide6.QtCore import Property, QObject, Signal, Slot
 
-from desktop.native.material.theme import DENSITY, paint_for_category, scheme, stroke_for
+from desktop.native.material.bridge_day import DayBridge
+from desktop.native.material.bridge_month import MonthBridge
+from desktop.native.material.bridge_myday import MyDayBridge
+from desktop.native.material.bridge_settings import SettingsBridge
+from desktop.native.material.bridge_week import WeekBridge
+from desktop.native.material.theme import (
+    DEFAULT_CONTRAST,
+    DEFAULT_DENSITY,
+    DEFAULT_PRESET,
+    DENSITY,
+    read_material_choice,
+    resolved_mode,
+    scheme,
+    stroke_for,
+    theme_object,
+)
 from desktop.native.reuse import planner_title
-from desktop.native.weekmodel import clock_label, set_clock_24h
+from desktop.native.weekmodel import clock_label
+
+# Keys 1–5, and the StackLayout order. Week is the screen a new shell opens on.
+SCREENS = ("day", "week", "month", "myday", "settings")
 
 
 class _Session(Protocol):
     account: dict | None
     preferences: dict | None
     week_start: str
-    blocks: list
-    assignments: Any
-    trace: Any
 
     def now_ms(self) -> int: ...
 
@@ -46,94 +55,20 @@ class _Session(Protocol):
 
     def redo(self) -> None: ...
 
-    def homework_time_needed(self) -> list: ...
-
-    def built_week(self) -> Any: ...
-
 
 class _Window(Protocol):
     session: _Session
+    _motion: str
 
     def _add_homework(self) -> None: ...
 
-    def _look_inputs(self) -> tuple: ...
-
-    def _worn_look(self) -> dict: ...
+    def _look_path(self) -> Path: ...
 
     def open_material_more(self) -> None: ...
 
 
-DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-_LATER_PAGES = {"day": 2, "month": 3, "myday": 4}
-_BLOCK_ROLES = ("title", "day", "start", "end", "fill", "ink")
-_HOMEWORK_ROLES = ("title", "minutes")
-
-
-class _Rows(QAbstractListModel):
-    """Rows the shell's repeaters can read. A Python list of dicts is not a model Qt Quick will build."""
-
-    def __init__(self, roles: tuple[str, ...], parent: QObject) -> None:
-        super().__init__(parent)
-        self._names = {
-            Qt.ItemDataRole.UserRole + 1 + index: name for index, name in enumerate(roles)
-        }
-        self._roles = {role: QByteArray(name.encode("ascii")) for role, name in self._names.items()}
-        self._rows: list[dict] = []
-
-    def set_rows(self, rows: list[dict]) -> None:
-        self.beginResetModel()
-        self._rows = rows
-        self.endResetModel()
-
-    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:  # noqa: B008
-        if parent.isValid():
-            return 0
-        return len(self._rows)
-
-    def data(
-        self, index: QModelIndex | QPersistentModelIndex, role: int = Qt.ItemDataRole.DisplayRole
-    ) -> object:
-        name = self._names.get(role)
-        if name is None or not index.isValid() or not 0 <= index.row() < len(self._rows):
-            return None
-        return self._rows[index.row()].get(name)
-
-    def roleNames(self) -> dict[int, QByteArray]:
-        return self._roles
-
-
-class _Labels(QAbstractListModel):
-    """One string a row, as the role `label`."""
-
-    def __init__(self, parent: QObject) -> None:
-        super().__init__(parent)
-        self._rows: list[str] = []
-
-    def set_rows(self, rows: list[str]) -> None:
-        self.beginResetModel()
-        self._rows = list(rows)
-        self.endResetModel()
-
-    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:  # noqa: B008
-        if parent.isValid():
-            return 0
-        return len(self._rows)
-
-    def data(
-        self, index: QModelIndex | QPersistentModelIndex, role: int = Qt.ItemDataRole.DisplayRole
-    ) -> object:
-        if role != Qt.ItemDataRole.UserRole + 1 or not index.isValid():
-            return None
-        if not 0 <= index.row() < len(self._rows):
-            return None
-        return self._rows[index.row()]
-
-    def roleNames(self) -> dict[int, QByteArray]:
-        return {Qt.ItemDataRole.UserRole + 1: QByteArray(b"label")}
-
-
 class MaterialBridge(QObject):
-    """Week rows, the clock, and the few actions the shell can take."""
+    """Navigation, the theme object, and the few actions the shell can take."""
 
     changed = Signal()
     blocksChanged = Signal()
@@ -144,78 +79,74 @@ class MaterialBridge(QObject):
         super().__init__(window)
         self.setObjectName("materialBridge")
         self._window = cast(_Window, window)
+        self._screen = "week"
+        self._snack = ""
+        self._preset = DEFAULT_PRESET
         self._mode = "light"
-        self._contrast = "std"
-        self._colours: dict[str, str] = scheme("Blue", "light", "std")
-        self._page = 0
-        self._block_rows: list[dict] = []
-        self._homework_rows: list[dict] = []
-        self._day_headers: list[str] = []
-        self._hour_labels: list[str] = [clock_label(hour * 60) for hour in range(24)]
-        self._blocks = _Rows(_BLOCK_ROLES, self)
-        self._homework = _Rows(_HOMEWORK_ROLES, self)
-        self._days = _Labels(self)
-        self._hours = _Labels(self)
-        self._hours.set_rows(self._hour_labels)
-        self._now_day = -1
-        self._now_minute = 0
-        self._later = os.environ.get("FLEXWEEK_MATERIAL_LATER") == "1"
+        self._contrast = DEFAULT_CONTRAST
+        self._density = DEFAULT_DENSITY
+        self._reduce_motion = False
+        self._colours = scheme(DEFAULT_PRESET, "light", DEFAULT_CONTRAST)
+        self._theme = theme_object(self._colours, self._density, False, False)
+        self._week = WeekBridge(window, self)
+        self._day = DayBridge(self)
+        self._month = MonthBridge(self)
+        self._myday = MyDayBridge(self)
+        self._settings_bridge = SettingsBridge(self)
 
-    def set_appearance(self, mode: str, contrast_name: str) -> None:
-        self._mode = mode if mode in ("light", "dark") else "light"
-        self._contrast = contrast_name if contrast_name in ("std", "high") else "std"
-        self._colours = scheme("Blue", self._mode, self._contrast)
+    def set_appearance(self, mode: str, _worn_contrast: str) -> None:
+        """Apply the saved Material look. `mode` is the worn light or dark axis.
+
+        Follow system uses that axis. An explicit saved light or dark wins. The worn
+        contrast is not Material's contrast: this shell stays standard unless its own
+        saved contrast says high.
+        """
+        choice = read_material_choice(self._stored_look())
+        worn_dark = mode == "dark"
+        resolved = resolved_mode(choice["mode"], worn_dark)
+        try:
+            colours = scheme(choice["preset"], resolved, choice["contrast"])
+        except KeyError:
+            resolved = "light"
+            choice["preset"] = DEFAULT_PRESET
+            choice["contrast"] = DEFAULT_CONTRAST
+            colours = scheme(DEFAULT_PRESET, "light", DEFAULT_CONTRAST)
+        self._preset = choice["preset"]
+        self._mode = resolved
+        self._contrast = choice["contrast"]
+        self._density = choice["density"]
+        self._colours = colours
+        self._publish_theme()
 
     def refresh(self) -> None:
         """Read the session again. Does not consume a Widgets prompt."""
-        session = self._window.session
-        prefs = session.preferences or {}
-        set_clock_24h(bool(prefs.get("clock_24h")))
-        self._hour_labels = [clock_label(hour * 60) for hour in range(24)]
-        self._block_rows = []
-        self._homework_rows = []
-        self._day_headers = []
-        self._now_day = -1
-        self._now_minute = 0
-        if session.account is None or not session.week_start:
-            self._publish_rows()
-            return
-        start = date.fromisoformat(session.week_start)
-        self._day_headers = [
-            f"{DAYS[index]} {(start + timedelta(days=index)).day}" for index in range(7)
-        ]
-        model = session.built_week()
-        for item in model.occurrences:
-            fill, ink = paint_for_category(item.category, self._mode)
-            self._block_rows.append(
-                {
-                    "title": item.title,
-                    "day": int(item.day),
-                    "start": int(item.start),
-                    "end": int(item.end),
-                    "fill": fill,
-                    "ink": ink,
-                }
-            )
-        for item in session.homework_time_needed():
-            title = item.get("title")
-            if isinstance(title, str) and title:
-                self._homework_rows.append({"title": title, "minutes": int(item.get("minutes") or 0)})
-        moment = datetime.fromtimestamp(session.now_ms() / 1000)
-        today = moment.date()
-        if start <= today <= start + timedelta(days=6):
-            self._now_day = (today - start).days
-            self._now_minute = moment.hour * 60 + moment.minute
-        self._publish_rows()
-
-    def _publish_rows(self) -> None:
-        self._blocks.set_rows(self._block_rows)
-        self._homework.set_rows(self._homework_rows)
-        self._days.set_rows(self._day_headers)
-        self._hours.set_rows(self._hour_labels)
+        self._publish_theme()
+        self._week.reload(self._mode)
         self.blocksChanged.emit()
         self.homeworkChanged.emit()
         self.changed.emit()
+
+    def _publish_theme(self) -> None:
+        self._reduce_motion = self._motion_reduced()
+        self._theme = theme_object(
+            self._colours, self._density, self._reduce_motion, self._contrast == "high"
+        )
+
+    def _motion_reduced(self) -> bool:
+        prefs = self._window.session.preferences or {}
+        chosen = prefs.get("motion")
+        level = getattr(self._window, "_motion", "normal")
+        return chosen in ("reduce", "off") or level in ("reduce", "off")
+
+    def _stored_look(self) -> object:
+        try:
+            text = self._window._look_path().read_text(encoding="utf-8")
+        except OSError:
+            return None
+        try:
+            return json.loads(text)
+        except ValueError:
+            return None
 
     def _colour(self, role: str) -> str:
         return self._colours[role]
@@ -256,24 +187,54 @@ class MaterialBridge(QObject):
     def stroke(self) -> float:
         return stroke_for(self._contrast)
 
-    @Property(int, constant=True)
+    @Property(int, notify=changed)
     def hourRow(self) -> int:
-        return int(DENSITY["comfortable"]["hour_row"])
+        return int(DENSITY[self._density]["hour_row"])
 
     @Property(bool, constant=True)
     def later(self) -> bool:
-        return self._later
+        """Day, Month, and My day are part of this shell. The flag stays for older readers."""
+        return True
+
+    @Property(str, notify=changed)
+    def screen(self) -> str:
+        return self._screen
 
     @Property(int, notify=changed)
     def pageIndex(self) -> int:
-        return self._page
+        return SCREENS.index(self._screen)
+
+    @Property(str, notify=changed)
+    def density(self) -> str:
+        return self._density
+
+    @Property(bool, notify=changed)
+    def reduceMotion(self) -> bool:
+        return self._reduce_motion
+
+    @Property(bool, notify=changed)
+    def highContrast(self) -> bool:
+        return self._contrast == "high"
+
+    @Property("QVariantMap", notify=changed)  # type: ignore[arg-type]
+    def theme(self) -> dict[str, Any]:
+        return self._theme
+
+    @Property(str, notify=changed)
+    def snackText(self) -> str:
+        return self._snack
 
     @Property(str, notify=changed)
     def title(self) -> str:
+        if self._screen == "myday":
+            return "My day"
+        if self._screen == "settings":
+            return "Settings"
         session = self._window.session
-        if session.account is None:
+        if session.account is None or not session.week_start:
             return "FlexWeek"
-        return planner_title(session, "week")
+        view = self._screen if self._screen in ("day", "week", "month") else "week"
+        return planner_title(session, view)
 
     @Property(str, notify=changed)
     def clockText(self) -> str:
@@ -291,47 +252,67 @@ class MaterialBridge(QObject):
 
     @Property(int, notify=homeworkChanged)
     def homeworkCount(self) -> int:
-        return len(self._homework_rows)
+        return self._week.homeworkCount
+
+    @Property(QObject, constant=True)
+    def week(self) -> QObject:
+        return self._week
+
+    @Property(QObject, constant=True)
+    def day(self) -> QObject:
+        return self._day
+
+    @Property(QObject, constant=True)
+    def month(self) -> QObject:
+        return self._month
+
+    @Property(QObject, constant=True)
+    def myday(self) -> QObject:
+        return self._myday
+
+    @Property(QObject, constant=True)
+    def settingsBridge(self) -> QObject:
+        return self._settings_bridge
 
     @Property(QObject, constant=True)
     def blocks(self) -> QObject:
-        return self._blocks
+        return self._week.blocks
 
     @Property(QObject, constant=True)
     def homework(self) -> QObject:
-        return self._homework
+        return self._week.homework
 
     @Property(QObject, constant=True)
     def days(self) -> QObject:
-        return self._days
+        return self._week.days
 
     @Property(QObject, constant=True)
     def hours(self) -> QObject:
-        return self._hours
+        return self._week.hours
 
     @Property("QVariantList", notify=blocksChanged)  # type: ignore[arg-type]
     def blockRows(self) -> list:
-        return self._block_rows
+        return self._week.blockRows
 
     @Property("QVariantList", notify=homeworkChanged)  # type: ignore[arg-type]
     def homeworkRows(self) -> list:
-        return self._homework_rows
+        return self._week.homeworkRows
 
     @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
     def dayHeaders(self) -> list:
-        return self._day_headers
+        return self._week.dayHeaders
 
     @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
     def hourLabels(self) -> list:
-        return self._hour_labels
+        return self._week.hourLabels
 
     @Property(int, notify=changed)
     def nowDay(self) -> int:
-        return self._now_day
+        return self._week.nowDay
 
     @Property(int, notify=changed)
     def nowMinute(self) -> int:
-        return self._now_minute
+        return self._week.nowMinute
 
     @Slot()
     def undo(self) -> None:
@@ -355,21 +336,15 @@ class MaterialBridge(QObject):
 
     @Slot()
     def showWeek(self) -> None:
-        self._page = 0
-        self.changed.emit()
+        self.showPage("week")
 
     @Slot()
     def showSettings(self) -> None:
-        self._page = 1
-        self.changed.emit()
+        self.showPage("settings")
 
     @Slot(str)
     def showPage(self, name: str) -> None:
-        """Day, Month and My day stay unreachable unless FLEXWEEK_MATERIAL_LATER=1."""
-        if not self._later:
+        if name not in SCREENS or name == self._screen:
             return
-        page = _LATER_PAGES.get(name)
-        if page is None:
-            return
-        self._page = page
+        self._screen = name
         self.changed.emit()
