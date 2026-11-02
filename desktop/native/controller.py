@@ -2379,10 +2379,17 @@ class NativeSession(QObject):
         """Turn each placed homework block into focus chunks and breaks, when the student asked for
         it. The solver was given room for the breaks before it ran, so the chunks fit where it put
         the block rather than landing on whatever came next. `sources` is the week as planned (work
-        minutes), not the inflated duration the solver reserved for breaks."""
-        split, count = split_solved(
-            sources if sources is not None else self.blocks, trace, self.preferences
-        )
+        minutes), not the inflated duration the solver reserved for breaks. Starts, pins, days and
+        overdue rewrites stay the week after apply_plan."""
+        planned = sources if sources is not None else self.blocks
+        work_minutes = {block["id"]: block.get("duration_min") for block in planned}
+        week = [
+            {**block, "duration_min": work_minutes[block["id"]]}
+            if block["id"] in work_minutes
+            else dict(block)
+            for block in self.blocks
+        ]
+        split, count = split_solved(week, trace, self.preferences)
         if not count:
             return ""
         self.blocks = split
