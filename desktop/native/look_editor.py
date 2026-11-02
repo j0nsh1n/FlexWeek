@@ -28,7 +28,6 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSlider,
-    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -82,6 +81,7 @@ from desktop.native.look_preview import SAVED_PREFIX, look_choice, look_preview
 from desktop.native.motion import switch_page
 from desktop.native.previews import CANVAS, system_dark
 from desktop.native.previews import render as render_preview
+from desktop.native.style_preview import ACTUAL_NOTE, FIT_NOTE, PreviewStage
 from desktop.native.tokens import MARK, SPACING, fit_lightness, mix, oklch, oklch_of
 from desktop.native.widgets import (
     CARD_WIDTH_PAD,
@@ -126,8 +126,6 @@ BLOCK_ROWS = "Text on {count} block colours is {ratio}:1 at worst"
 RESET, RESET_ALL = "Reset", "Reset all"
 EXPORT, IMPORT = "Export", "Import"
 SAVE_AS_NEW, DONE = "Save as new", "Done"
-FIT_NOTE = "The whole window, fitted to this space."
-ACTUAL_NOTE = "The whole window, at its real size: scroll to see all of it."
 ANY_COLOUR, YOUR_COLOUR = "Any colour", "Your colour"
 EXACT = "Exact colour"
 COLOURS_NOTE = "The paler text and the other shades follow from these four."
@@ -865,47 +863,6 @@ class GroupCard(QFrame):
         self.reset.setEnabled(changed)
 
 
-class Picture(QScrollArea):
-    """The window as a picture: fitted to the room, or at its real size and scrolled."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.setObjectName("lookPicture")
-        self.setFrameShape(QFrame.Shape.NoFrame)
-        self.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
-        self.image = QLabel()
-        self.image.setObjectName("lookPreviewImage")
-        self.setWidget(self.image)
-        overlay_scroll_bars(self)
-        self.source = QPixmap()
-        self.fit = True
-
-    def show_picture(self, picture: QPixmap, fit: bool) -> None:
-        self.source, self.fit = picture, fit
-        self._lay_out()
-
-    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
-        super().resizeEvent(event)
-        self._lay_out()
-
-    def _lay_out(self) -> None:
-        policy = Qt.ScrollBarPolicy.ScrollBarAlwaysOff if self.fit else Qt.ScrollBarPolicy.ScrollBarAsNeeded
-        self.setHorizontalScrollBarPolicy(policy)
-        self.setVerticalScrollBarPolicy(policy)
-        if self.source.isNull():
-            return
-        shown = self.source
-        if self.fit:
-            ratio = self.source.devicePixelRatio()
-            room = self.viewport().size()
-            shown = self.source.scaled(
-                room * ratio, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
-            )
-            shown.setDevicePixelRatio(ratio)
-        self.image.setPixmap(shown)
-        self.image.resize(shown.deviceIndependentSize().toSize())
-
-
 class LookEditor(QWidget):
     """The look editor. It says what to wear with `worn` (the device look and the saved looks) every
     time either changes, and `closed` when the student leaves it."""
@@ -1191,32 +1148,25 @@ class LookEditor(QWidget):
         fields.addWidget(play, 0, Qt.AlignmentFlag.AlignLeft)
 
     def _build_preview(self) -> QWidget:
-        right = bare(QWidget())
-        box = QVBoxLayout(right)
-        box.setContentsMargins(0, 0, 0, 0)
-        box.setSpacing(0)
-        self.stage = QStackedWidget()
-        self.stage.setObjectName("lookPreview")
-        self.stage.setAccessibleName("Your week in this look")
-        self.pictures = (Picture(), Picture())
-        for picture in self.pictures:
-            self.stage.addWidget(picture)
-        box.addWidget(self.stage, 1)
-        zoom = QWidget()
-        zoom.setObjectName("lookEditorZoom")
-        zoom.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        zoom.setFixedHeight(44)
-        line = QHBoxLayout(zoom)
-        line.setContentsMargins(SPACING[3], 0, SPACING[3], 0)
-        self.zoom_note = _label(FIT_NOTE, "lookNote")
-        line.addWidget(self.zoom_note)
-        line.addStretch(1)
-        self.zoom = Segmented((("Fit", True), ("Actual size", False)), "lookPreviewSize")
-        self.zoom.setAccessibleName("Preview size")
+        stage = PreviewStage(
+            stage_name="lookPreview",
+            stage_accessible="Your week in this look",
+            picture_name="lookPicture",
+            image_name="lookPreviewImage",
+            zoom_name="lookPreviewSize",
+            bar_name="lookEditorZoom",
+            zoom_accessible="Preview size",
+            fit_note=FIT_NOTE,
+            actual_note=ACTUAL_NOTE,
+            note_name="lookNote",
+            wire_zoom=False,
+        )
+        self.stage = stage.stack
+        self.pictures = stage.pictures
+        self.zoom = stage.zoom
+        self.zoom_note = stage.note
         self.zoom.currentIndexChanged.connect(self._zoomed)
-        line.addWidget(self.zoom)
-        box.addWidget(zoom)
-        return right
+        return stage
 
     def _build_foot(self) -> QWidget:
         foot = QWidget()
