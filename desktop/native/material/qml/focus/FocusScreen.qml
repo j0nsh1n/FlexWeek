@@ -32,7 +32,12 @@ Item {
 
     M3Palette { id: palette; theme: root.theme }
 
-    onShownChanged: if (shown) Qt.callLater(function() { actions.takeFocus() })
+    onShownChanged: {
+        if (shown)
+            Qt.callLater(function() { actions.takeFocus() })
+        else
+            endDialog.open = false
+    }
 
     Rectangle {
         anchors.fill: parent
