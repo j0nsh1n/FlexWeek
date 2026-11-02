@@ -6,7 +6,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
-- Material 3 is a style choice beside the existing ones. Choosing it opens a Material window on the real week, and choosing a Widgets style swaps back, with no restart. Today's app stays the default.
+- Material 3 is a style choice beside the existing ones. Choosing it opens a Material window on the real week, and choosing a Widgets style swaps back, with no restart. Today's app stays the default. The Material window has Day, Week, Month, My day, and Settings, and the week's homework list sits on the right.
 
 ### Changed
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
@@ -14,6 +14,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Fixed
 - Overdue count announcements use the visible More control, with a window fallback while Settings is open.
 - Material keeps an unsent Settings change across a swap back, shows a visible fallback when it cannot open, and does not retry that version at start-up until the student chooses Material again or the app version changes. Its clock keeps moving, More lists only actions that work on Material, and Add homework works from the keyboard.
+- Signing out waits for an unsent Settings change. When that save does not land, FlexWeek stays open and the change stays on screen.
 
 ## [1.2.0] - 2026-10-26
 
