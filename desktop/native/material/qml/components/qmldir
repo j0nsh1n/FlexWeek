@@ -1,0 +1,28 @@
+module components
+singleton M3Font 1.0 M3Font.qml
+M3Palette 1.0 M3Palette.qml
+M3Icon 1.0 M3Icon.qml
+M3StateLayer 1.0 M3StateLayer.qml
+M3FocusRing 1.0 M3FocusRing.qml
+Fab 1.0 Fab.qml
+ExtendedFab 1.0 ExtendedFab.qml
+Button 1.0 Button.qml
+IconButton 1.0 IconButton.qml
+Switch 1.0 Switch.qml
+NavDestination 1.0 NavDestination.qml
+NavRail 1.0 NavRail.qml
+NavBar 1.0 NavBar.qml
+SegmentedButton 1.0 SegmentedButton.qml
+PresetSwatch 1.0 PresetSwatch.qml
+SettingsRow 1.0 SettingsRow.qml
+SettingsGroup 1.0 SettingsGroup.qml
+ListRow 1.0 ListRow.qml
+Tag 1.0 Tag.qml
+EventBlock 1.0 EventBlock.qml
+OutlinedField 1.0 OutlinedField.qml
+Dialog 1.0 Dialog.qml
+BottomSheet 1.0 BottomSheet.qml
+Menu 1.0 Menu.qml
+Snackbar 1.0 Snackbar.qml
+MiniMonth 1.0 MiniMonth.qml
+Gallery 1.0 Gallery.qml
