@@ -22,6 +22,7 @@ def lift(widget: QWidget, shadow: Shadow, dark: bool = False) -> QGraphicsDropSh
         current.setOffset(0, shadow.y)
         current.setBlurRadius(shadow.blur)
         current.setColor(colour)
+        current.setEnabled(True)
         return current
     effect = QGraphicsDropShadowEffect(widget)
     effect.setOffset(0, shadow.y)
@@ -29,3 +30,18 @@ def lift(widget: QWidget, shadow: Shadow, dark: bool = False) -> QGraphicsDropSh
     effect.setColor(colour)
     widget.setGraphicsEffect(effect)
     return effect
+
+
+def flatten(widget: QWidget) -> None:
+    """Hide a drop shadow already on `widget` without deleting it.
+
+    setGraphicsEffect(None) deletes the C++ effect. Shiboken then aborts in that destructor, the
+    same way replacing the effect did, once a second window has already lifted a menu.
+    """
+    current = widget.graphicsEffect()
+    if not isinstance(current, QGraphicsDropShadowEffect):
+        return
+    current.setEnabled(False)
+    current.setOffset(0, 0)
+    current.setBlurRadius(0)
+    current.setColor(QColor(0, 0, 0, 0))

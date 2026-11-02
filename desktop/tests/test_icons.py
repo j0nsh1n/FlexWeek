@@ -19,7 +19,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QApplication, QWidget
 
     from desktop.native import icons
-    from desktop.native.elevation import lift
+    from desktop.native.elevation import flatten, lift
     from desktop.native.tokens import SHADOW_LARGE, SHADOW_SMALL, type_pt
 
 
@@ -104,6 +104,14 @@ def test_a_lifted_card_casts_the_small_shadow_and_stronger_on_a_dark_look(qapp: 
     dark = lift(card, SHADOW_LARGE, dark=True)
     assert card.graphicsEffect() is dark
     assert (dark.offset().y(), dark.blurRadius(), dark.color().alpha()) == (12, 32, 128)
+    flatten(card)
+    assert card.graphicsEffect() is dark
+    assert not dark.isEnabled()
+    assert (dark.blurRadius(), dark.color().alpha()) == (0, 0)
+    again = lift(card, SHADOW_SMALL)
+    assert again is dark
+    assert dark.isEnabled()
+    assert (dark.offset().y(), dark.blurRadius()) == (1, 4)
 
 
 def test_replan_has_its_own_icon_and_it_ships(qapp: QApplication) -> None:

@@ -93,7 +93,7 @@ from desktop.native.command_bar import Command, CommandBar
 from desktop.native.controller import ROUTINE_STATUS, NativeSession, _late_summary
 from desktop.native.custom_look import sanitize_saved
 from desktop.native.devices import SyncDot, SyncHost, live_phones, run_off_ui, sync_state
-from desktop.native.elevation import lift
+from desktop.native.elevation import flatten, lift
 from desktop.native.feel import Context, apply_feel, context_for, current, extra_stylesheet, set_current
 from desktop.native.fields import ProblemLine, announce
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
@@ -5826,7 +5826,7 @@ class NativeWindow(QMainWindow):
             if soft:
                 lift(card, SHADOW_LARGE, palette["axis"] == "dark")
             else:
-                card.setGraphicsEffect(None)
+                flatten(card)
         self._pin_auth_height()
 
     def _dress_overlays(self, palette: dict) -> None:
