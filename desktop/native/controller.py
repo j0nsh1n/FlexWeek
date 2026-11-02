@@ -2320,7 +2320,7 @@ class NativeSession(QObject):
             waiting = len(self.homework_time_needed())
             self.plan_counts = (placed, waiting)
             self.plan_first = first_placed(data, targets)
-            split_note = self._apply_auto_split(data)
+            split_note = self._apply_auto_split(data, week)
             changed = self._dump_blocks() != before
             if not changed:
                 self.blocks = original_blocks
@@ -2375,11 +2375,14 @@ class NativeSession(QObject):
             err,
         )
 
-    def _apply_auto_split(self, trace: dict) -> str:
+    def _apply_auto_split(self, trace: dict, sources: list[dict] | None = None) -> str:
         """Turn each placed homework block into focus chunks and breaks, when the student asked for
         it. The solver was given room for the breaks before it ran, so the chunks fit where it put
-        the block rather than landing on whatever came next."""
-        split, count = split_solved(self.blocks, trace, self.preferences)
+        the block rather than landing on whatever came next. `sources` is the week as planned (work
+        minutes), not the inflated duration the solver reserved for breaks."""
+        split, count = split_solved(
+            sources if sources is not None else self.blocks, trace, self.preferences
+        )
         if not count:
             return ""
         self.blocks = split
