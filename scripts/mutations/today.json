@@ -60,7 +60,7 @@
   "name": "dismissing a block's song stops it",
   "old": "            self._bell.stop()\n            self._spotify.stop()\n",
   "new": "            self._bell.stop()\n",
-  "test": "desktop/tests/test_reminders_window.py::test_a_block_with_a_spotify_link_plays_it_at_its_start_and_dismiss_stops_it"
+  "test": "desktop/tests/test_reminders_window.py::test_a_block_without_a_link_plays_the_settings_link_when_the_sound_is_spotify"
  },
  {
   "file": "desktop/native/controller.py",

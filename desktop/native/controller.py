@@ -3452,7 +3452,22 @@ class NativeSession(QObject):
         self._pending_focus = None
         self._persist_focus()
         self.focus_changed.emit()
+        self._open_focus_spotify()
         return True
+
+    def _open_focus_spotify(self) -> None:
+        """Spotify, when that is the focus sound: open the Settings link. Anything else stays quiet.
+        A missing link or an app that will not open is said once, and focus carries on."""
+        if (self.preferences or {}).get("focus_audio") != "spotify":
+            return
+        link = self.spotify_url()
+        if not link:
+            self._say("Add a Spotify link in Settings, under Alerts. Focus has started.")
+            return
+        from desktop.native.spotify import open_in_app
+
+        if not open_in_app(link):
+            self._say("Spotify didn't open. Focus has started.")
 
     def confirm_replace_focus(self) -> bool:
         pending = self._pending_focus
@@ -3662,9 +3677,28 @@ class NativeSession(QObject):
     def _due_block_alerts(
         self, blocks: list[dict], trace: dict | None, clock: dict, prefs: dict
     ) -> tuple[list[dict], list[dict]]:
-        """Today's reminders, and the songs of blocks that are starting."""
+        """Today's reminders, and the song for blocks that are starting.
+
+        A link stored on a block is left in the week. The copies handed to the engine have that field
+        cleared, so a block start uses the Settings link. It plays only when the alarm sound is
+        Spotify. A link saved for Focus does not start a song on its own.
+        """
         notices: list[dict] = []
         lead = reminder_lead_min(prefs)
+
+        def quiet(item: dict) -> dict:
+            if item.get("spotify_url"):
+                return {**item, "spotify_url": None}
+            return item
+
+        blocks = [quiet(block) for block in blocks]
+        if isinstance(trace, dict):
+            placed = trace.get("placed")
+            if isinstance(placed, list):
+                trace = {
+                    **trace,
+                    "placed": [quiet(item) if isinstance(item, dict) else item for item in placed],
+                }
         # A bad saved link is left out here, as it is when the alarm rings.
         default_link = self.spotify_url(prefs.get("default_spotify_url") or "") or None
         sound_is_spotify = prefs.get("alarm_tone") == "spotify"
@@ -3793,12 +3827,14 @@ class NativeSession(QObject):
         self.alarm_due.emit(nxt)
 
     def spotify_url(self, value: str | None = None) -> str:
+        """A link handed in, checked, or the Settings link when nothing was handed in.
+
+        Alarms pass their own link. More and a block start pass nothing and get the Settings link.
+        A link stored on a block is not read.
+        """
         from backend.models import valid_spotify_url
 
-        raw = value
-        if raw is None:
-            block = next((item for item in self.blocks if item["id"] == self.selected_block_id), None)
-            raw = (block or {}).get("spotify_url") or (self.preferences or {}).get("default_spotify_url")
+        raw = (self.preferences or {}).get("default_spotify_url") if value is None else value
         try:
             return valid_spotify_url(raw) or ""
         except ValueError:

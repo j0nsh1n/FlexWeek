@@ -196,7 +196,6 @@ def test_a_sheets_labels_sit_above_their_fields_at_one_edge(qapp: QApplication) 
     Beside them, the labels made a column of their own and each sheet's fields began somewhere else."""
     parent, _palette = styled(qapp)
     block = shown(qapp, BlockDialog(parent, soccer(), occurrence_day=3))
-    block.more_details.setChecked(True)
     qapp.processEvents()
     edge = left_x(block.title, block)
     fields = {
@@ -206,7 +205,6 @@ def test_a_sheets_labels_sit_above_their_fields_at_one_edge(qapp: QApplication) 
         "Start": block.start,
         "End": block.end,
         "Category": block.category,
-        "Spotify link": block.spotify,
     }
     for words, field in fields.items():
         label = next(label for label in block.findChildren(QLabel) if label.text() == words)

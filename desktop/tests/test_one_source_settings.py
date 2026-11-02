@@ -31,7 +31,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.widgets import AvailabilityDialog
 
 ALERTS = 3
-HINT = "Used by alarms and by blocks that start without a link of their own."
+HINT = "Plays when a block starts if the alarm sound is Spotify, and when focus is set to Spotify."
 TRACK = "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"
 TRACK_ADDRESS = "spotify:track:4cOdK2wGLETKBW3PvgPWqT"
 NO_HOMEWORK_AFTER = ["No limit", "20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00"]
@@ -79,17 +79,19 @@ def texts(box: QComboBox) -> list[tuple[str, object]]:
 # The Spotify link
 
 
-def test_settings_names_the_link_as_the_default_and_says_who_uses_it(qapp: QApplication) -> None:
-    dialog = settings(qapp, alarm_tone="spotify")
+def test_settings_names_the_link_spotify_and_says_who_uses_it(qapp: QApplication) -> None:
+    dialog = settings(qapp, alarm_tone="chime")
     label = dialog._alerts_form.labelForField(dialog.spotify)
-    assert isinstance(label, QLabel) and label.text() == "Default Spotify link"
-    assert HINT in dialog.tone_note.text()
-    assert dialog.tone_note.isVisible()
+    hint = dialog.findChild(QLabel, "prefSpotifyHint")
+    assert isinstance(label, QLabel) and label.text() == "Spotify link"
+    assert isinstance(hint, QLabel) and hint.text() == HINT
+    assert dialog.spotify.isHidden() is False
     dialog.close()
 
 
 def test_the_link_note_does_not_say_a_block_without_a_link_plays_nothing(qapp: QApplication) -> None:
     assert SPOTIFY_TONE_NOTE.startswith(HINT)
+    assert "without a link" not in SPOTIFY_TONE_NOTE
     assert "Reminders before a block and the end of a focus session play Chime." in SPOTIFY_TONE_NOTE
 
 
@@ -97,8 +99,8 @@ def test_setup_says_the_same_about_the_link_as_settings(qapp: QApplication) -> N
     page = setup_page(qapp)
     page._show(REMINDERS)
     page.tone_buttons["spotify"].setChecked(True)
-    assert page.spotify_label.text() == "Default Spotify link"
-    assert page.spotify.accessibleName() == "Default Spotify link"
+    assert page.spotify_label.text() == "Spotify link"
+    assert page.spotify.accessibleName() == "Spotify link"
     assert page.spotify_note.text() == SPOTIFY_TONE_NOTE
     assert page.spotify_note.isVisible() and page.spotify_label.isVisible()
     page.tone_buttons["bright"].setChecked(True)
@@ -109,7 +111,7 @@ def test_setup_says_the_same_about_the_link_as_settings(qapp: QApplication) -> N
 def test_setup_does_not_say_one_sound_covers_everything(qapp: QApplication) -> None:
     words = NOTES[REMINDERS]
     assert "One sound" not in words
-    assert "alarms and when a block starts" in words
+    assert "A block starts with the Spotify link from Settings" in words
     assert "Chime" in words
 
 
@@ -125,7 +127,7 @@ def test_play_previews_the_default_link_when_the_sound_is_spotify(qapp: QApplica
 
 
 def test_play_chimes_when_the_sound_is_spotify_and_there_is_no_link(qapp: QApplication) -> None:
-    # A block start rings Chime then, so that is what Play lets the student hear.
+    # Play previews the alarm sound. With no link, Spotify falls back to Chime.
     dialog = settings(qapp, alarm_tone="spotify")
     rung: list[str] = []
     dialog._tone_bell.once = lambda tone, _volume: rung.append(tone) or True
@@ -134,9 +136,10 @@ def test_play_chimes_when_the_sound_is_spotify_and_there_is_no_link(qapp: QAppli
     dialog.close()
 
 
-def test_play_says_it_previews_a_block_start(qapp: QApplication) -> None:
+def test_play_says_it_previews_the_chosen_sound(qapp: QApplication) -> None:
+    """Play hears the alarm sound. A block start uses the Settings link, not this button."""
     dialog = settings(qapp)
-    assert dialog.play_tone.toolTip() == "Hear what plays when a block starts"
+    assert dialog.play_tone.toolTip() == "Hear this sound"
     dialog.close()
 
 

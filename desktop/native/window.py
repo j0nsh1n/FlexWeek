@@ -360,7 +360,7 @@ MORE_TIPS = {
     "unfinishedOpen": "Overdue and earlier-week homework that still needs time. Plan it into this week.",
     "weekListRow": "Every block this week, day by day, in time order. Ctrl+Shift+L",
     "routinesButton": "Save this week's fixed times as a routine, or add a saved routine to a week.",
-    "openSpotify": "Open the selected block's Spotify link in Spotify.",
+    "openSpotify": "Open the Spotify link from Settings in the Spotify app.",
     "replanAll": REPLAN_TIP,
     "undoButton": "Undo your last change. Ctrl+Z",
     "redoButton": "Redo the change you just undid. Ctrl+Y",
@@ -5045,7 +5045,7 @@ class NativeWindow(QMainWindow):
     def _open_spotify(self) -> None:
         url = self.session.spotify_url()
         if not url:
-            self.session._say("This item has no Spotify share link.")
+            self.session._say("Add a Spotify link in Settings, under Alerts.")
             return
         open_in_app(url)
 
