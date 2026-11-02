@@ -447,6 +447,12 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
     # Setup
 
     def prepare() -> None:
+        # The window floor is 800. A play that asks for a phone width (under 768) has to
+        # drop that floor first, or resize is a no-op and the month still shows chips.
+        if setup.size[0] < window.minimumWidth():
+            window.setMinimumWidth(setup.size[0])
+        if setup.size[1] < window.minimumHeight():
+            window.setMinimumHeight(setup.size[1])
         window.resize(*setup.size)
         window.move(0, 0)
         if setup.seed == "empty":

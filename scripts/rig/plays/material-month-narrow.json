@@ -4,7 +4,7 @@
     "look": "light-frost",
     "clock": "2026-11-05T15:40",
     "size": [
-      800,
+      700,
       800
     ],
     "clock_24h": false
@@ -23,7 +23,7 @@
       "wait": 1000
     },
     {
-      "see": "materialRail"
+      "see": "materialBar"
     },
     {
       "click": "navMonth"
@@ -33,6 +33,9 @@
     },
     {
       "see": "monthDate-2026-11-05"
+    },
+    {
+      "see": "monthDot"
     },
     {
       "wait": 400
