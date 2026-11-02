@@ -293,7 +293,12 @@ Item {
                         reduceMotion: root.reduceMotion
                         highContrast: root.highContrast
                     }
-                    MonthView { Layout.fillWidth: true; Layout.fillHeight: true; bridge: root.bridge }
+                    MonthView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        bridge: root.bridge
+                        phone: root.phone
+                    }
                     MyDayView { Layout.fillWidth: true; Layout.fillHeight: true; bridge: root.bridge }
                     SettingsView { Layout.fillWidth: true; Layout.fillHeight: true; bridge: root.bridge }
                 }
