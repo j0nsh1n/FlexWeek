@@ -6,7 +6,6 @@ scrolls. The style picker also switches that picture between the main view and t
 
 from __future__ import annotations
 
-import copy
 from collections.abc import Callable
 
 from PySide6.QtCore import QObject, QSize, Qt, QTimer, Signal
@@ -251,38 +250,19 @@ class Redraw(QObject):
             self._show(picture)
 
 
-class StyleChoice:
-    """The style being tried. Editing changes the draft. Applying is what saves it."""
-
-    def __init__(self, committed: dict, on_apply: Callable[[dict], None] | None = None) -> None:
-        self.committed = copy.deepcopy(committed)
-        self.draft = copy.deepcopy(committed)
-        self._on_apply = on_apply
-
-    def edit(self, draft: dict) -> None:
-        self.draft = copy.deepcopy(draft)
-
-    def apply(self) -> dict:
-        self.committed = copy.deepcopy(self.draft)
-        saved = copy.deepcopy(self.committed)
-        if self._on_apply is not None:
-            self._on_apply(saved)
-        return saved
-
-    def discard(self) -> dict:
-        self.draft = copy.deepcopy(self.committed)
-        return copy.deepcopy(self.draft)
-
-
 class StylePreview(QWidget):
-    """A live picture of the style the sections are set to. Refresh does not save it."""
+    """A live picture of the style the sections are set to.
+
+    Changing a control asks for a new picture. Settings saves the choice itself, as it does for
+    every other control on the page.
+    """
 
     def __init__(
         self,
         sections: list,
         pack: Callable[[], str],
         look: Callable[[], dict | None],
-        on_apply: Callable[[dict], None] | None = None,
+        accent: Callable[[], object] | None = None,
         delay_ms: int = PREVIEW_DELAY_MS,
         parent: QWidget | None = None,
     ) -> None:
@@ -291,7 +271,7 @@ class StylePreview(QWidget):
         self.sections = list(sections)
         self._pack = pack
         self._look = look
-        self.choice = StyleChoice(self.snapshot(), on_apply)
+        self._accent = accent if accent is not None else lambda: "default"
         self.stage = PreviewStage(
             stage_name="stylePreview",
             stage_accessible="Style preview",
@@ -317,22 +297,9 @@ class StylePreview(QWidget):
             section.changed.connect(self.refresh)
         self.stage.surface_changed.connect(self.refresh)
 
-    def snapshot(self) -> dict:
-        return {
-            section.slot: {"id": section.chosen(), "options": section.values()}
-            for section in self.sections
-        }
-
     def refresh(self, *_args: object) -> None:
-        self.choice.edit(self.snapshot())
         if self.isVisible():
             self.redraw.ask()
-
-    def apply(self) -> dict:
-        return self.choice.apply()
-
-    def discard(self) -> dict:
-        return self.choice.discard()
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
@@ -365,4 +332,5 @@ class StylePreview(QWidget):
             CANVAS.width(),
             CANVAS,
             options=values,
+            accent=self._accent(),
         )

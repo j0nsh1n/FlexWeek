@@ -1,4 +1,4 @@
-"""The style picker draws the real view while a style or an option changes, and does not save it."""
+"""The style picker draws the real view while a style, an option, or the accent changes."""
 
 from __future__ import annotations
 
@@ -19,11 +19,11 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import Qt
     from PySide6.QtGui import QImage, QPixmap
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QRadioButton, QWidget
+    from PySide6.QtWidgets import QApplication, QComboBox, QRadioButton, QWidget
 
     from desktop.native.layouts.dialog import LayoutSection
     from desktop.native.settings import SettingsPage
-    from desktop.native.style_preview import ACTUAL_NOTE, PREVIEW_DELAY_MS, Redraw, StylePreview
+    from desktop.native.style_preview import ACTUAL_NOTE, Redraw, StylePreview
 
 
 OPEN = {"main": "timeline", "day": "dial", "options": {}}
@@ -42,15 +42,9 @@ def _sections() -> tuple[LayoutSection, LayoutSection]:
     return main, day
 
 
-def _preview(sections: tuple[LayoutSection, LayoutSection], saved: list[dict]) -> StylePreview:
+def _preview(sections: tuple[LayoutSection, LayoutSection]) -> StylePreview:
     main, day = sections
-    preview = StylePreview(
-        [main, day],
-        pack=lambda: "system",
-        look=lambda: None,
-        on_apply=saved.append,
-        delay_ms=PREVIEW_DELAY_MS,
-    )
+    preview = StylePreview([main, day], pack=lambda: "system", look=lambda: None)
     preview.resize(360, 320)
     return preview
 
@@ -77,10 +71,8 @@ def _child[T: QWidget](parent: QWidget, kind: type[T], name: str) -> T:
 def test_an_option_change_redraws_after_a_short_delay_and_keeps_focus(qapp: QApplication) -> None:
     """Spacing is part of the picture. The draw waits, so a drag is not a draw on every tick, and the
     control the student is on keeps the keyboard."""
-    assert PREVIEW_DELAY_MS >= 40
-    saved: list[dict] = []
     main, _day = sections = _sections()
-    preview = _preview(sections, saved)
+    preview = _preview(sections)
     preview.show()
     _wait(lambda: not preview.stage.pictures[0].source.isNull())
     before = _image(preview)
@@ -91,13 +83,11 @@ def test_an_option_change_redraws_after_a_short_delay_and_keeps_focus(qapp: QApp
         qapp.processEvents()
     assert preview.redraw.waiting()
     assert _image(preview) == before
-    assert saved == []
     fit = _child(preview, QRadioButton, "stylePreviewSize-True")
     fit.setFocus(Qt.FocusReason.TabFocusReason)
     _wait(lambda: _image(preview) != before)
     assert qapp.focusWidget() is fit
-    assert preview.choice.draft["main"]["options"]["density"] == "compact"
-    assert preview.choice.committed["main"]["options"]["density"] == "comfortable"
+    assert main.values()["density"] == "compact"
     preview.stage.zoom.buttons()[1].click()
     shown = preview.stage.pictures[0].image
     assert shown.width() == preview.stage.pictures[0].source.deviceIndependentSize().width()
@@ -141,31 +131,95 @@ def test_a_redraw_superseded_while_painting_is_dropped(qapp: QApplication) -> No
     qapp.processEvents()
 
 
-def test_an_option_change_is_not_saved_before_apply(qapp: QApplication) -> None:
-    """Trying a spacing updates the draft. The saved choice stays until Apply, and leaving puts the
-    draft back."""
-    saved: list[dict] = []
-    main, _day = sections = _sections()
-    preview = _preview(sections, saved)
-    main.show()
-    compact = _child(main, QRadioButton, "layoutMain-density-compact")
-    compact.click()
-    qapp.processEvents()
-    assert saved == []
-    assert preview.choice.draft["main"]["options"]["density"] == "compact"
-    assert preview.choice.committed["main"]["options"]["density"] == "comfortable"
-    restored = preview.discard()
-    assert saved == []
-    assert restored["main"]["options"]["density"] == "comfortable"
-    assert preview.choice.draft["main"]["options"]["density"] == "comfortable"
-    preview.refresh()
-    assert saved == []
-    assert preview.choice.draft["main"]["options"]["density"] == "compact"
-    preview.apply()
-    assert len(saved) == 1
-    assert saved[0]["main"]["options"]["density"] == "compact"
-    assert preview.choice.committed["main"]["options"]["density"] == "compact"
-    main.close()
+def test_quick_look_changes_draw_once_as_the_last_choice(qapp: QApplication) -> None:
+    """Several look changes in a row draw one picture, and it is the last choice. Settings already
+    holds that choice, which is what the window saves."""
+    page = SettingsPage(None, {}, {}, {})
+    page.resize(1024, 640)
+    page.show()
+    preview = page.style_preview
+    _wait(lambda: not preview.stage.pictures[0].source.isNull())
+    before = _image(preview)
+    box = _child(page, QComboBox, "layoutMain-look")
+    shown: list[QImage] = []
+    reveal = preview.redraw._show
+
+    def spy(picture: QPixmap) -> None:
+        shown.append(picture.toImage())
+        reveal(picture)
+
+    preview.redraw._show = spy
+    for token in ("preset:high-contrast", "preset:paper", "pack:dark-frost"):
+        index = box.findData(token)
+        assert index >= 0, token
+        box.setCurrentIndex(index)
+        for _ in range(4):
+            qapp.processEvents()
+    assert page.layout_choice()["options"]["classic"]["look"] == "pack:dark-frost"
+    assert shown == []
+    assert _image(preview) == before
+    _wait(lambda: len(shown) == 1)
+    assert shown == [_image(preview)]
+    burst = _image(preview)
+    assert burst != before
+    box.setCurrentIndex(box.findData("preset:high-contrast"))
+    _wait(lambda: _image(preview) != burst and len(shown) == 2)
+    contrast = _image(preview)
+    box.setCurrentIndex(box.findData("pack:dark-frost"))
+    _wait(lambda: _image(preview) != contrast and len(shown) == 3)
+    assert _image(preview) == burst
+    assert contrast != burst
+    page.close()
+
+
+def _classic_as_settings_applies_it(pack: str, look: dict, accent: str) -> QImage:
+    """The week Settings would show for this pack, look and accent, drawn without the preview."""
+    from desktop.native.hours.classic import ClassicWeek
+    from desktop.native.hours.hand import Hand, Verdict
+    from desktop.native.look import design_look, pack_stylesheet
+    from desktop.native.previews import CANVAS, SAMPLE_DAY, SAMPLE_MINUTE, sample_week, system_dark
+    from desktop.native.weekmodel import build_week
+
+    dark = system_dark()
+    palette, applied = design_look("your", pack, dark, look, accent)
+    host = QWidget()
+    week = ClassicWeek(Hand(lambda _block, _day, _span: Verdict(False, ""), host))
+    week.setStyleSheet(pack_stylesheet(pack, dark, applied, accent, palette))
+    week.set_look(applied, palette)
+    monday, blocks, homework = sample_week()
+    week.set_week(build_week(monday, blocks, homework, None), SAMPLE_DAY, SAMPLE_MINUTE)
+    week.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
+    week.resize(CANVAS)
+    week.show()
+    QTest.qWait(100)
+    picture = week.grab().scaledToWidth(CANVAS.width(), Qt.TransformationMode.SmoothTransformation)
+    image = picture.toImage()
+    week.close()
+    week.deleteLater()
+    host.deleteLater()
+    QApplication.sendPostedEvents(None, 0)
+    return image
+
+
+def test_the_preview_uses_the_accent_settings_applies(qapp: QApplication) -> None:
+    """Choosing Sky changes the preview to the same picture the applied look draws."""
+    page = SettingsPage(None, {}, {}, {})
+    page.resize(1024, 640)
+    page.show()
+    preview = page.style_preview
+    _wait(lambda: not preview.stage.pictures[0].source.isNull())
+    pack = page._pack
+    look = page.look_choice()
+    before = _image(preview)
+    assert before == _classic_as_settings_applies_it(pack, look, "default")
+    page.accent.setCurrentIndex(page.accent.findData("sky"))
+    assert page.updates()["accent"] == "sky"
+    for _ in range(4):
+        qapp.processEvents()
+    assert _image(preview) == before
+    _wait(lambda: _image(preview) != before)
+    assert _image(preview) == _classic_as_settings_applies_it(pack, look, "sky")
+    page.close()
 
 
 def test_the_preview_fits_a_short_window_at_large_text_with_motion_off(qapp: QApplication) -> None:

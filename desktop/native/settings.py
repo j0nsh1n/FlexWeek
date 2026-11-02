@@ -1266,6 +1266,7 @@ class SettingsPage(QWidget):
             self.layout_sections,
             pack=lambda: self._pack,
             look=self.look_choice,
+            accent=lambda: self._accent_chosen,
         )
         self.style_preview.setMaximumHeight(260)
         stage_grid.addWidget(self.style_preview, 0, 0)

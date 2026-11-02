@@ -110,11 +110,13 @@ def render(
     size: QSize = PICTURE,
     *,
     options: dict[str, str] | None = None,
+    accent: object = "default",
 ) -> QPixmap:
     """A picture of `main` in `colour` (or, for Today's app, in `pack`), `width` pixels wide.
 
     `options` are that design's own choices (spacing, what is shown). Without them the picture is the
-    design as it ships, which is what the setup cards show.
+    design as it ships, which is what the setup cards show. `accent` is the swatch Settings applies
+    with the look; the picture wears it the same way the window does.
     """
     dark = system_dark()
     chosen = colour
@@ -122,7 +124,7 @@ def render(
         candidate = options.get("look")
         if candidate not in (None, "your"):
             chosen = candidate
-    palette, applied_look = design_look(chosen or "your", pack, dark, look)
+    palette, applied_look = design_look(chosen or "your", pack, dark, look, accent)
     monday, blocks, homework = sample_week()
     host: QWidget | None = None
     if main in VIEW_CLASSES:
@@ -153,7 +155,7 @@ def render(
         widget = ClassicWeek(Hand(lambda block_id, from_day, span: Verdict(False, ""), host))
         # The day names and other widgets take their colours from the window's sheet, which a picture
         # drawn on its own lacks: High contrast's preview had a pale row of names over a black week.
-        widget.setStyleSheet(pack_stylesheet(pack, dark, applied_look, palette=palette))
+        widget.setStyleSheet(pack_stylesheet(pack, dark, applied_look, accent, palette))
         widget.set_look(applied_look, palette)
         widget.set_week(build_week(monday, blocks, homework, None), SAMPLE_DAY, SAMPLE_MINUTE)
     _settle(widget, size)
