@@ -21,6 +21,7 @@ from desktop.native.material.bridge_day import DayBridge
 from desktop.native.material.bridge_month import MonthBridge
 from desktop.native.material.bridge_myday import MyDayBridge
 from desktop.native.material.bridge_settings import SettingsBridge
+from desktop.native.material.bridge_sheets import SheetsBridge
 from desktop.native.material.bridge_week import WeekBridge
 from desktop.native.material.theme import (
     DEFAULT_CONTRAST,
@@ -60,11 +61,7 @@ class _Window(Protocol):
     session: _Session
     _motion: str
 
-    def _add_homework(self) -> None: ...
-
     def _look_path(self) -> Path: ...
-
-    def open_material_more(self) -> None: ...
 
 
 class MaterialBridge(QObject):
@@ -93,6 +90,7 @@ class MaterialBridge(QObject):
         self._month = MonthBridge(self)
         self._myday = MyDayBridge(self)
         self._settings_bridge = SettingsBridge(self)
+        self._sheets = SheetsBridge(window, self)
 
     def set_appearance(self, mode: str, _worn_contrast: str) -> None:
         """Apply the saved Material look. `mode` is the worn light or dark axis.
@@ -122,6 +120,7 @@ class MaterialBridge(QObject):
         """Read the session again. Does not consume a Widgets prompt."""
         self._publish_theme()
         self._week.reload(self._mode)
+        self._sheets.refresh()
         self.blocksChanged.emit()
         self.homeworkChanged.emit()
         self.changed.emit()
@@ -271,6 +270,10 @@ class MaterialBridge(QObject):
         return self._myday
 
     @Property(QObject, constant=True)
+    def sheets(self) -> QObject:
+        return self._sheets
+
+    @Property(QObject, constant=True)
     def settingsBridge(self) -> QObject:
         return self._settings_bridge
 
@@ -324,11 +327,11 @@ class MaterialBridge(QObject):
 
     @Slot()
     def openMore(self) -> None:
-        self._window.open_material_more()
+        self._sheets.openMore()
 
     @Slot()
     def addHomework(self) -> None:
-        self._window._add_homework()
+        self._sheets.openHomework()
 
     @Slot()
     def useWidgets(self) -> None:

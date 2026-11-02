@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import components 1.0
 import "views"
+import "sheets"
 
 Item {
     id: root
@@ -14,7 +15,7 @@ Item {
     readonly property bool reduceMotion: bridge ? bridge.reduceMotion : false
     readonly property bool highContrast: bridge ? bridge.highContrast : false
     readonly property int enterMs: reduceMotion ? 0 : 300
-    readonly property bool typing: _field(Window.activeFocusItem)
+    readonly property bool typing: sheetHost.active || _field(Window.activeFocusItem)
 
     function _field(item) {
         while (item) {
@@ -414,6 +415,18 @@ Item {
         }
     }
 
+    SheetHost {
+        id: sheetHost
+        z: 30
+        bridge: root.bridge
+        theme: root.theme
+        density: root.density
+        reduceMotion: root.reduceMotion
+        highContrast: root.highContrast
+        phone: root.phone
+        onRestoreFocus: root.focusDestination()
+    }
+
     // A clock tick also emits changed. The enter animation follows the screen only.
     property string shownScreen: bridge.screen
     onShownScreenChanged: enter.restart()
@@ -454,5 +467,5 @@ Item {
         enabled: !typing
         onActivated: bridge.undo()
     }
-    Shortcut { sequence: "Escape"; context: Qt.WindowShortcut; onActivated: focusDestination() }
+    Shortcut { sequence: "Escape"; context: Qt.WindowShortcut; enabled: !sheetHost.active; onActivated: focusDestination() }
 }
