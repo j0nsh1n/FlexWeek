@@ -674,19 +674,9 @@ class SheetsBridge(QObject):
     def findTime(self, assignment_id: str) -> None:
         """Find a time for one homework: the Widgets row's own two paths."""
         session = self._session
-        item = session.assignments.get(assignment_id)
-        if item is None:
+        if session is None or session.assignments.get(assignment_id) is None:
             return
-        if assignment_id in session._overdue_assignment_ids():
-            session.plan_left([assignment_id])
-        else:
-            rows = session.plan_unfinished(assignment_id)
-            if rows:
-                key = (
-                    f"unfinished|{session.account['id']}|{session.week_start}|"
-                    f"{assignment_id}|{session.remaining_for(assignment_id)}"
-                )
-                session.confirm_preview(rows, label="homework", attempt_key=key)
+        self._window._plan_unfinished(assignment_id)
         self._publish()
 
     @Slot(str)

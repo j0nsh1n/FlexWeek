@@ -13,6 +13,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- Material Find a time for homework that is not overdue shows the same preview Widgets uses. Nothing is saved until Accept; Cancel leaves the week unchanged.
 - Material Routines and discard prompts use the same words as the Widgets sheets.
 - Opening another window in the same session no longer crashes while menus take their shadow.
 - Overdue count announcements use the visible More control, with a window fallback while Settings is open.

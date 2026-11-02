@@ -18,8 +18,9 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QPushButton  # noqa: E402
+from PySide6.QtWidgets import QApplication, QDialog, QPushButton  # noqa: E402
 
+from desktop.native.widgets import PreviewDialog  # noqa: E402
 from desktop.native.window import WINDOW_MIN_WIDTH, NativeWindow  # noqa: E402
 from desktop.tests.logic_support import past_setup  # noqa: E402,F401
 from desktop.tests.test_layouts_window import wait_until  # noqa: E402
@@ -554,6 +555,81 @@ def test_unfinished_find_a_time_plans_overdue_homework_through_the_session(
         qapp,
         lambda: any(item.get("assignment_id") == "overdue-quiz" for item in session.blocks),
     )
+    _settle(qapp, shell)
+
+
+def _add_open_essay(qapp: QApplication, session) -> str:
+    """Left from last week, due after the held Thursday clock, so Find a time still has minutes."""
+    current = session.week_start
+    previous = (date.fromisoformat(current) - timedelta(days=7)).isoformat()
+    sunday = (date.fromisoformat(current) + timedelta(days=6)).isoformat()
+    session.load_week(previous)
+    wait_until(qapp, lambda: session.week_start == previous and not session.busy)
+    session.add_homework(
+        {
+            "id": "open-essay",
+            "title": "Open essay",
+            "due": f"{sunday}T21:00",
+            "estimate_min": 45,
+            "revision": 0,
+        }
+    )
+    session.save()
+    wait_until(qapp, lambda: not session.busy)
+    session.load_week(current)
+    wait_until(qapp, lambda: session.week_start == current and not session.busy)
+    return "open-essay"
+
+
+def _block_ids(session) -> set[str]:
+    return {item["id"] for item in session.blocks}
+
+
+def test_unfinished_find_a_time_leaves_non_overdue_blocks_unchanged_until_accept(
+    qapp: QApplication, shell: NativeWindow, sheets, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Homework that still has a deadline must wait for the Widgets preview's Accept."""
+    session = shell.session
+    current = session.week_start
+    try:
+        assignment_id = _add_open_essay(qapp, session)
+    finally:
+        if session.week_start != current:
+            session.load_week(current)
+            wait_until(qapp, lambda: session.week_start == current and not session.busy)
+    before = _block_ids(session)
+    opened: list[str] = []
+    assert assignment_id not in session._overdue_assignment_ids()
+    assert session.remaining_for(assignment_id) >= 15, session.assignments.get(assignment_id)
+    assert session.plan_unfinished(assignment_id)
+
+    def cancel(dialog: PreviewDialog) -> int:
+        opened.append(dialog.objectName())
+        assert _block_ids(session) == before
+        assert not any(item.get("assignment_id") == assignment_id for item in session.blocks)
+        return QDialog.DialogCode.Rejected
+
+    monkeypatch.setattr(PreviewDialog, "exec", cancel)
+    sheets.openUnfinished()
+    found = next(row for row in sheets.form["rows"] if row["id"] == assignment_id)
+    assert found["overdue"] is False
+    sheets.findTime(assignment_id)
+    assert opened == ["stage3PreviewDialog"]
+    assert _block_ids(session) == before
+    assert not any(item.get("assignment_id") == assignment_id for item in session.blocks)
+
+    def accept(dialog: PreviewDialog) -> int:
+        opened.append(dialog.objectName())
+        assert not any(item.get("assignment_id") == assignment_id for item in session.blocks)
+        return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(PreviewDialog, "exec", accept)
+    sheets.findTime(assignment_id)
+    wait_until(
+        qapp,
+        lambda: any(item.get("assignment_id") == assignment_id for item in session.blocks),
+    )
+    assert opened == ["stage3PreviewDialog", "stage3PreviewDialog"]
     _settle(qapp, shell)
 
 
