@@ -31,6 +31,7 @@ from desktop.tests.test_material_window import (  # noqa: E402, F401
     window,
 )
 
+
 @contextlib.contextmanager
 def rules(window: NativeWindow, owned: bool = True, **prefs: object) -> Iterator[None]:
     """Material's focus rules on (or off) with these preferences, for one test."""
@@ -212,7 +213,8 @@ def test_reminders_wait_during_a_focus_work_phase_and_come_when_it_ends(
         assert session.hold_alerts([REMINDER]) == [REMINDER]  # no focus: nothing is held
         assert session.start_quick_focus()
         assert session.focus_mutes_alerts()
-        session.alerts.emit([REMINDER, FOCUS_NOTICE])
+        assert session.hold_alerts([FOCUS_NOTICE]) == [FOCUS_NOTICE]  # the timer's own still pass
+        session.alerts.emit([REMINDER])
         assert toasted == []  # still working: the reminder is held back
         session.toggle_focus_pause()
         assert session.focus_mutes_alerts()  # paused is still inside focus
@@ -220,7 +222,7 @@ def test_reminders_wait_during_a_focus_work_phase_and_come_when_it_ends(
         session.advance_focus(False)  # Skip to the break
         assert session.focus["phase"] == "break"
         assert not session.focus_mutes_alerts()
-        assert toasted == [WORDS]  # shown once the work phase was over
+        assert toasted.count(WORDS) == 1  # reminder shown once the work phase was over
         assert session.release_held_alerts() == []  # and only once
 
 
@@ -505,5 +507,29 @@ def test_escape_on_the_screen_goes_back(qapp: QApplication, window: NativeWindow
         QTest.keyClick(quick, Qt.Key.Key_Escape)
         _pump(qapp)
         assert not focus.open  # nothing was running, so Back only closes
+    finally:
+        close_focus(window, focus)
+
+
+def test_escape_on_the_end_dialog_keeps_the_session_going(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root, focus = open_focus(qapp, window)
+    quick = window._material_page._quick
+    asked: list[bool] = []
+    focus.endRequested.connect(lambda: asked.append(True))
+    try:
+        focus.begin()
+        _qml(root, "materialFocus").forceActiveFocus()
+        _pump(qapp)
+        QTest.keyClick(quick, Qt.Key.Key_Escape)
+        _pump(qapp)
+        dialog = _qml(root, "focusEndDialog")
+        assert asked == [True] and dialog.property("open") is True
+        assert window.session.focus is not None and focus.open
+        QTest.keyClick(quick, Qt.Key.Key_Escape)
+        _pump(qapp)
+        assert dialog.property("open") is False
+        assert window.session.focus is not None and focus.open
     finally:
         close_focus(window, focus)

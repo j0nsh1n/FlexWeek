@@ -420,6 +420,7 @@ Item {
     }
 
     FocusScreen {
+        id: focusOverlay
         anchors.fill: parent
         bridge: root.bridge
         theme: root.theme
@@ -474,5 +475,15 @@ Item {
         enabled: !typing && !focusOpen
         onActivated: bridge.focus.show()
     }
-    Shortcut { sequence: "Escape"; context: Qt.WindowShortcut; enabled: !focusOpen; onActivated: focusDestination() }
+    Shortcut {
+        sequence: "Escape"
+        context: Qt.WindowShortcut
+        enabled: !focusOverlay.ending
+        onActivated: {
+            if (focusOpen)
+                bridge.focus.back()
+            else
+                focusDestination()
+        }
+    }
 }

@@ -14,6 +14,7 @@ Item {
     // The shell clears `bridge` while the page is torn down. These stay readable then.
     readonly property var focusBridge: bridge ? bridge.focus : null
     readonly property bool shown: focusBridge ? focusBridge.open : false
+    readonly property bool ending: endDialog.open
     readonly property real scale: Math.max(0.5, Math.min(1, width / 700))
 
     visible: shown
@@ -45,14 +46,6 @@ Item {
         hoverEnabled: true
     }
 
-    // Keys that belong to this screen only. The shell's number keys and Z are off while it is open.
-    Keys.onEscapePressed: (event) => {
-        if (endDialog.open)
-            endDialog.close()
-        else if (focusBridge)
-            focusBridge.back()
-        event.accepted = true
-    }
     focus: shown
 
     IconButton {
