@@ -62,7 +62,7 @@ Item {
                 density: root.density
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
-                scope: "myday"
+                scope: "myDay"
                 title: root.board ? root.board.nowTitle : ""
                 line: root.board ? root.board.nowLine : ""
                 onStartFocus: if (root.board) root.board.startFocus()
@@ -74,7 +74,7 @@ Item {
                 density: root.density
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
-                scope: "myday"
+                scope: "myDay"
                 upModel: root.board ? root.board.upNext : null
                 doneModel: root.board ? root.board.doneRows : null
                 onFinish: (assignmentId) => {

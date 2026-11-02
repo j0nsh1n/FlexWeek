@@ -343,3 +343,14 @@ def test_picking_a_date_shows_that_day_and_my_day_stays_on_today(
     day.pickDay(thursday.day)
     settled(qapp, window)
     window._use_widgets_styles()
+
+
+def test_a_snackbar_line_clears_itself_but_not_a_newer_one(qapp: QApplication, window: NativeWindow) -> None:
+    bridge = _bridge(_show_material(qapp, window))
+    bridge.note("First line")
+    bridge.note("Second line")
+    bridge._clear_snack("First line")
+    assert bridge.property("snackText") == "Second line"
+    bridge._clear_snack("Second line")
+    assert bridge.property("snackText") == ""
+    window._use_widgets_styles()

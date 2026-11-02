@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, cast
 
-from PySide6.QtCore import Property, QObject, Signal, Slot
+from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from desktop.native.material.bridge_day import DayBridge
 from desktop.native.material.bridge_month import MonthBridge
@@ -38,6 +38,7 @@ from desktop.native.weekmodel import clock_label
 
 # Keys 1–5, and the StackLayout order. Week is the screen a new shell opens on.
 SCREENS = ("day", "week", "month", "myday", "settings")
+SNACK_MS = 6000
 
 
 class _Session(Protocol):
@@ -336,6 +337,13 @@ class MaterialBridge(QObject):
         """One snackbar line. Day uses it after a homework check."""
         self._snack = text
         self.changed.emit()
+        QTimer.singleShot(SNACK_MS, self, lambda: self._clear_snack(text))
+
+    def _clear_snack(self, text: str) -> None:
+        # A newer line, or Undo, has already replaced this one.
+        if self._snack == text:
+            self._snack = ""
+            self.changed.emit()
 
     @Slot()
     def undo(self) -> None:
