@@ -174,6 +174,13 @@ fn flag(value: &Value) -> Value {
     Value::Bool(stored::truthy(Some(value)))
 }
 
+fn stored_flag(row: &Map<String, Value>, key: &str, default: bool) -> Value {
+    match row.get(key) {
+        None | Some(Value::Null) => Value::Bool(default),
+        Some(value) => flag(value),
+    }
+}
+
 fn whole(value: &Value) -> EngineResult<Value> {
     Ok(json!(stored::py_int(value)?))
 }
@@ -231,6 +238,32 @@ pub fn preferences_fields(row: &Value) -> StoreResult<Value> {
             .get("day_cutoff")
             .cloned()
             .unwrap_or(Value::Null),
+    );
+    // A row saved before these columns existed has none of the keys. The defaults are the
+    // planner as it was: weekends open, no gap, urgent first, no split, weekends shown.
+    fields.insert(
+        "weekend_homework_free".into(),
+        stored_flag(row, "weekend_homework_free", false),
+    );
+    fields.insert(
+        "buffer_min".into(),
+        match row.get("buffer_min").and_then(Value::as_i64) {
+            Some(15) => json!(15),
+            Some(30) => json!(30),
+            _ => json!(0),
+        },
+    );
+    fields.insert(
+        "urgent_first".into(),
+        stored_flag(row, "urgent_first", true),
+    );
+    fields.insert(
+        "split_long_tasks".into(),
+        stored_flag(row, "split_long_tasks", false),
+    );
+    fields.insert(
+        "show_weekends".into(),
+        stored_flag(row, "show_weekends", true),
     );
     let comfort = stored::dict(&comfort)?;
     let kept = |name: &str, default: Value| comfort.get(name).cloned().unwrap_or(default);
@@ -619,6 +652,8 @@ mod tests {
                 r#""timer_break_min":5,"timer_long_break_min":15,"timer_long_break_every":4,"#,
                 r#""auto_split_pomodoro":true,"default_spotify_url":null,"alarms":[],"#,
                 r#""protected":[],"work_windows":[],"day_cutoff":null,"#,
+                r#""weekend_homework_free":false,"buffer_min":0,"urgent_first":true,"#,
+                r#""split_long_tasks":false,"show_weekends":true,"#,
                 r#""alert_volume":80,"end_chime":false,"tray_notifications":true,"#,
                 r#""start_at_login":false,"preferred_view":null,"sidebar_collapsed":false,"#,
                 r#""sidebar_width_px":null,"theme_pack":"system","accent":"default","#,

@@ -548,6 +548,14 @@ class Preferences(BaseModel):
         default_factory=list, max_length=21, exclude_if=lambda value: not value
     )
     day_cutoff: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    # Planner switches. Omitted at the default so an account saved before these columns
+    # still reads as the planner it has today: weekends open, no gap, urgent first, no split.
+    weekend_homework_free: bool = Field(default=False, exclude_if=lambda value: value is False)
+    buffer_min: Literal[0, 15, 30] = Field(default=0, exclude_if=lambda value: value == 0)
+    urgent_first: bool = Field(default=True, exclude_if=lambda value: value is True)
+    split_long_tasks: bool = Field(default=False, exclude_if=lambda value: value is False)
+    # The week grid reads this. The planner does not.
+    show_weekends: bool = Field(default=True, exclude_if=lambda value: value is True)
     alert_volume: int = Field(default=80, ge=0, le=100, exclude_if=lambda value: value == 80)
     end_chime: bool = Field(default=False, exclude_if=lambda value: value is False)
     tray_notifications: bool = Field(default=True, exclude_if=lambda value: value is True)
@@ -918,6 +926,11 @@ def write_preferences(db: Connection, user_id: int, preferences: Preferences) ->
                 "timer_long_break_min": preferences.timer_long_break_min,
                 "timer_long_break_every": preferences.timer_long_break_every,
                 "auto_split_pomodoro": int(preferences.auto_split_pomodoro),
+                "weekend_homework_free": int(preferences.weekend_homework_free),
+                "buffer_min": preferences.buffer_min,
+                "urgent_first": int(preferences.urgent_first),
+                "split_long_tasks": int(preferences.split_long_tasks),
+                "show_weekends": int(preferences.show_weekends),
                 "default_spotify_url": preferences.default_spotify_url,
                 "alarms_json": json.dumps(
                     [alarm.model_dump() for alarm in preferences.alarms], separators=(",", ":")
@@ -1592,6 +1605,8 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         with connect(path) as db:
             owned = require_own_assignments(db, account["id"], ids) if ids else {}
             availability = db.availability_json(account["id"])
+            stored_prefs = db.preference_row(account["id"])
+        plan_rules = json.loads(stored_prefs) if stored_prefs else None
         extra_occ, work_windows = solve_availability(availability)
         blocks = week.blocks
         extra_deadlines = None
@@ -1610,6 +1625,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 slack_deadlines=extra_slack,
                 extra_occ=extra_occ,
                 work_windows=work_windows,
+                plan_rules=plan_rules,
             ).model_dump()
         if week.running_late is not None:
             return reschedule_running_late(
@@ -1623,6 +1639,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 extra_occ=extra_occ,
                 work_windows=work_windows,
                 now_floor=week.running_late.now_floor,
+                plan_rules=plan_rules,
             ).model_dump()
         return solve(
             blocks,
@@ -1631,6 +1648,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             extra_occ=extra_occ,
             work_windows=work_windows,
             now_floor=week.now_floor,
+            plan_rules=plan_rules,
         ).model_dump()
 
     @app.get("/api/health")

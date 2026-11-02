@@ -91,6 +91,7 @@ pub(crate) fn running_late(
     let avail = availability(&db, user_id)?;
     let windows = work_windows(&avail.work)?;
     let elapsed = clock(week, elapsed_ms);
+    let rules = crate::plan_week::plan_rules(&db, user_id)?;
     let trace = flexweek_engine::solver::reschedule_running_late(
         &typed,
         day,
@@ -103,6 +104,7 @@ pub(crate) fn running_late(
         Some((day, from_min)),
         BUDGET_MS,
         &elapsed,
+        rules,
     )
     .map_err(engine_failure)?;
     let trace_value = flexweek_engine::solver::trace_to_value(&trace);

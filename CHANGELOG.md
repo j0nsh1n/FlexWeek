@@ -8,6 +8,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Added
 - Material 3 is a style choice beside the existing ones. Choosing it opens a Material window on the real week, and choosing a Widgets style swaps back, with no restart. Today's app stays the default. The Material window has Day, Week, Month, My day, and Settings, and the week's homework list sits on the right.
 - Settings → Look shows a live preview of the main view and the day screen as you change a style, its options, or the look, including the accent, with Fit and Actual size as in My Look.
+- Planner settings are stored and used: weekends homework-free, a 15- or 30-minute buffer, urgent deadlines first, splitting a task longer than an hour, and showing weekends. The study cutoff stays the existing day cutoff. Defaults leave an existing week where it is.
 
 ### Changed
 - Spotify for blocks is one link in Settings. Add and edit no longer ask for a link on a block or on homework. Open Spotify link and Focus set to Spotify use that link. A block starts with it only when the alarm sound is Spotify. A link already saved on a block stays in your data.
@@ -18,6 +19,8 @@ All notable changes to FlexWeek are documented here. Format follows
 - Overdue count announcements use the visible More control, with a window fallback while Settings is open.
 - Material keeps an unsent Settings change across a swap back, shows a visible fallback when it cannot open, and does not retry that version at start-up until the student chooses Material again or the app version changes. Its clock keeps moving, More lists only actions that work on Material, and Add homework works from the keyboard.
 - Signing out waits for an unsent Settings change. When that save does not land, FlexWeek stays open and the change stays on screen.
+- A split task is saved as both halves, and the second half keeps the original deadline. A buffer no longer pulls the study cutoff earlier. Splitting the same task again, or into an id that is already used, does not happen. Opening a paired phone that is still on the migration defaults does not erase planner settings chosen on the desktop.
+- Saving planner settings back to the defaults before the first sync keeps that choice when an older device still has other values. The phone plan review shows every half of a split task, including one that is still waiting.
 
 ## [1.2.0] - 2026-10-26
 
