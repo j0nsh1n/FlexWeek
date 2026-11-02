@@ -1547,7 +1547,7 @@ def auth_rules(palette: dict, knobs: dict, radius: int, card_radius: int) -> str
     # Only a look that draws soft hairlines: a flat look draws none, and a bold one its own heavy ones.
     field_rules = (
         f"QWidget#authCard QLineEdit {{ border: 1px solid {readable_edge(palette)}; }}"
-        f"QWidget#authCard QLineEdit:focus {{ border: 2px solid {palette['accent']}; }}"
+        f"QWidget#authCard QLineEdit:focus {{ border: 2px solid {readable_focus_edge(palette)}; }}"
         if knobs["depth"] == "soft"
         else ""
     )
@@ -1657,9 +1657,11 @@ def readable_focus_edge(palette: dict) -> str:
     grounds = (palette["field"], palette["panel"])
     accent = palette["accent"]
     resting = readable_edge(palette)
-    target = max(AA_GRAPHIC, *(contrast(resting, ground) + 0.2 for ground in grounds))
-    if min(contrast(accent, ground) for ground in grounds) >= target:
+    accent_ratio = min(contrast(accent, ground) for ground in grounds)
+    resting_ratio = min(contrast(resting, ground) for ground in grounds)
+    if accent_ratio >= AA_GRAPHIC and accent_ratio > resting_ratio:
         return accent
+    target = max(AA_GRAPHIC, *(contrast(resting, ground) + 0.2 for ground in grounds))
     return fit_lightness(accent, grounds, target)
 
 

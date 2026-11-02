@@ -32,6 +32,7 @@ from desktop.native.look import (
     LOOK_PRESETS,
     PACKS,
     STANDARD_LOOKS,
+    accent_words,
     auth_rules,
     block_paint,
     block_time_colour,
@@ -116,6 +117,32 @@ def test_control_edges_have_three_to_one_contrast(preset: str, system_dark: bool
     assert f"border: 2px solid {focus}" in controls
     switch_grounds = (palette["field"], palette["panel"], palette["window"])
     assert min(contrast(switch_edge, ground) for ground in switch_grounds) >= 3
+
+
+def test_the_default_focus_edge_stays_the_accent_that_already_reads() -> None:
+    palette = resolved_palette("system", False, None)
+    assert palette["accent"] == "#3d6fc4"
+    assert accent_words(palette) == palette["accent"]
+    assert readable_focus_edge(palette) == palette["accent"]
+    auth = auth_rules(palette, {**LOOK_DEFAULTS, "depth": "soft"}, 6, 10)
+    assert f"QWidget#authCard QLineEdit:focus {{ border: 2px solid {palette['accent']}; }}" in auth
+
+
+def test_a_pale_typed_accent_focus_ring_is_fitted_not_raw() -> None:
+    look = {"custom": {"name": "Lime", "base": "light", "accent": "#dfff00"}}
+    palette = resolved_palette("system", False, look)
+    assert palette["accent"] == "#dfff00"
+    words = accent_words(palette)
+    focus = readable_focus_edge(palette)
+    assert words != palette["accent"]
+    assert focus != palette["accent"]
+    for ground in ("window", "panel", "grid"):
+        assert contrast(words, palette[ground]) >= AA_TEXT, (words, ground)
+    grounds = (palette["field"], palette["panel"])
+    assert min(contrast(focus, ground) for ground in grounds) >= AA_GRAPHIC
+    auth = auth_rules(palette, {**LOOK_DEFAULTS, "depth": "soft"}, 6, 10)
+    assert f"QWidget#authCard QLineEdit:focus {{ border: 2px solid {focus}; }}" in auth
+    assert f"QWidget#authCard QLineEdit:focus {{ border: 2px solid {palette['accent']}; }}" not in auth
 
 
 def test_control_edges_hold_for_every_pack_preset_system_mode_and_design(qapp) -> None:  # noqa: F811
