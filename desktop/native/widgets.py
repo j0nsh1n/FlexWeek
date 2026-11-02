@@ -5493,8 +5493,8 @@ class UnfinishedPanel(QWidget):
         self.setObjectName("unfinishedReview")
         layout = QVBoxLayout(self)
         # Month at 1024x640 with this card open and the 28 px status strip above it needs the card's
-        # height trimmed (#28): 7 px above the heading and below Hide, and no padding above or below a row.
-        layout.setContentsMargins(11, 7, 11, 7)
+        # height trimmed (#28): 3 px above the heading and below Hide, and no padding above or below a row.
+        layout.setContentsMargins(11, 3, 11, 3)
         heading = QLabel("Overdue and left from last week")
         heading.setObjectName("unfinishedHeading")
         layout.addWidget(heading)
