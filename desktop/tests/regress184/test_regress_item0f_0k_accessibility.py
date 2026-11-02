@@ -108,7 +108,6 @@ def open_block_editor(qapp, made) -> QWidget:
     dialog = BlockDialog(host, day=2, start="16:00", duration_min=60)
     made.insert(0, dialog)
     _up(qapp, dialog)
-    dialog.more_details.setChecked(True)
     qapp.processEvents()
     return dialog
 
@@ -122,8 +121,15 @@ def open_setup_week(qapp, made) -> QWidget:
 SHEETS = {"add-homework": open_add_homework, "block-editor": open_block_editor, "setup-week": open_setup_week}
 
 
-@pytest.mark.parametrize("sheet", list(SHEETS))
-@pytest.mark.xfail(strict=True, reason=KNOWN_0F)
+@pytest.mark.parametrize(
+    "sheet",
+    [
+        pytest.param("add-homework", marks=pytest.mark.xfail(strict=True, reason=KNOWN_0F)),
+        # A fixed time no longer asks for a Spotify link, so this sheet's fields are named.
+        "block-editor",
+        pytest.param("setup-week", marks=pytest.mark.xfail(strict=True, reason=KNOWN_0F)),
+    ],
+)
 def test_0f_every_field_has_a_name_that_is_not_its_value_and_combos_have_a_buddy(qapp, made, sheet) -> None:
     root = SHEETS[sheet](qapp, made)
     assert fields_of(root), "found no fields"
