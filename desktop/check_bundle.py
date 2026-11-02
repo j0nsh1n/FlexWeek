@@ -312,6 +312,19 @@ def files(root: Path) -> Iterable[Path]:
     return (path for path in sorted(root.rglob("*")) if path.is_file() and not path.is_symlink())
 
 
+MATERIAL_FILES = ("tokens.json", "qml/Main.qml")
+
+
+def material_problems(root: Path) -> list[str]:
+    """The shell and its schemes must sit at desktop/native/material, where a frozen app looks."""
+    base = root / "desktop" / "native" / "material"
+    return [
+        f"desktop/native/material/{name} is missing, so Material 3 cannot open"
+        for name in MATERIAL_FILES
+        if not (base / name).is_file()
+    ]
+
+
 def asset_problems(assets: Path, root: Path) -> list[str]:
     """Every file under `assets` must sit at desktop/assets in the bundle, where the app looks for it."""
     return [
@@ -333,7 +346,8 @@ def check_linux(root: Path, max_glibc: tuple[int, int]) -> list[str]:
         )
         binaries[str(path.relative_to(root))] = parse_readelf(dynamic, versions)
     bundled = {path.name for path in root.rglob("*")}
-    return linux_problems(binaries, bundled, max_glibc) + asset_problems(ASSETS, root)
+    problems = linux_problems(binaries, bundled, max_glibc)
+    return problems + asset_problems(ASSETS, root) + material_problems(root)
 
 
 def check_windows(root: Path) -> list[str]:
@@ -343,7 +357,7 @@ def check_windows(root: Path) -> list[str]:
         if path.suffix.lower() in {".dll", ".exe", ".pyd"}
     }
     bundled = {path.name.lower() for path in root.rglob("*")}
-    return windows_problems(binaries, bundled) + asset_problems(ASSETS, root)
+    return windows_problems(binaries, bundled) + asset_problems(ASSETS, root) + material_problems(root)
 
 
 def main(argv: list[str] | None = None) -> int:

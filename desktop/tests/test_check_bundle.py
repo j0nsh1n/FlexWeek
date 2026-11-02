@@ -3,7 +3,14 @@ from __future__ import annotations
 import struct
 from pathlib import Path
 
-from desktop.check_bundle import asset_problems, linux_problems, parse_readelf, pe_imports, windows_problems
+from desktop.check_bundle import (
+    asset_problems,
+    linux_problems,
+    material_problems,
+    parse_readelf,
+    pe_imports,
+    windows_problems,
+)
 
 READELF_DYNAMIC = """
 Dynamic section at offset 0x1d8 contains 30 entries:
@@ -160,3 +167,18 @@ def test_a_bundle_without_an_asset_fails_and_names_it(tmp_path: Path) -> None:
     (bundle / "desktop" / "assets" / "fonts").mkdir()
     (bundle / "desktop" / "assets" / "fonts" / "Inter-Bold.ttf").write_bytes(b"ttf")
     assert asset_problems(assets, bundle) == []
+
+
+def test_a_bundle_without_the_material_shell_names_the_missing_files(tmp_path: Path) -> None:
+    """A frozen app looks beside the executable for the shell and the schemes."""
+    bundle = tmp_path / "bundle"
+    (bundle / "desktop" / "native" / "material" / "qml").mkdir(parents=True)
+    assert material_problems(bundle) == [
+        "desktop/native/material/tokens.json is missing, so Material 3 cannot open",
+        "desktop/native/material/qml/Main.qml is missing, so Material 3 cannot open",
+    ]
+    (bundle / "desktop" / "native" / "material" / "tokens.json").write_text("{}", encoding="utf-8")
+    (bundle / "desktop" / "native" / "material" / "qml" / "Main.qml").write_text(
+        "import QtQuick\n", encoding="utf-8"
+    )
+    assert material_problems(bundle) == []

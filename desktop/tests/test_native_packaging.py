@@ -93,6 +93,19 @@ def test_both_builds_ship_the_icon_and_the_fonts_where_the_app_looks_for_them() 
     before 0.16 for that reason, and the bundled Inter would not have either."""
     assert '--include-data-dir="$ROOT/desktop/assets=desktop/assets"' in LINUX
     assert "--include-data-dir=$(Join-Path $Root 'desktop\\assets')=desktop/assets" in WINDOWS
+    assert (
+        '--include-data-files="$ROOT/desktop/native/material/tokens.json=desktop/native/material/tokens.json"'
+        in LINUX
+    )
+    assert '--include-data-dir="$ROOT/desktop/native/material/qml=desktop/native/material/qml"' in LINUX
+    assert (
+        "--include-data-files=$(Join-Path $Root 'desktop\\native\\material\\tokens.json')"
+        "=desktop/native/material/tokens.json" in WINDOWS
+    )
+    assert (
+        "--include-data-dir=$(Join-Path $Root 'desktop\\native\\material\\qml')=desktop/native/material/qml"
+        in WINDOWS
+    )
     fonts = ROOT / "desktop/assets/fonts"
     for family in ("Inter", "Newsreader", "JetBrainsMono", "PixelifySans"):
         for face in ("Regular", "Medium", "SemiBold", "Bold"):
