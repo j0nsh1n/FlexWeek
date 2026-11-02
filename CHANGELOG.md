@@ -5,6 +5,9 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- Settings → Look shows a live preview of the main view and the day screen as you change a style or its options, with Fit and Actual size as in My Look.
+
 ### Changed
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 

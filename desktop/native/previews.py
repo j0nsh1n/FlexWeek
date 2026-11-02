@@ -102,25 +102,45 @@ def _settle(widget: QWidget, size: QSize) -> None:
 
 
 def render(
-    main: str, colour: str | None, pack: str, look: dict | None, width: int, size: QSize = PICTURE
+    main: str,
+    colour: str | None,
+    pack: str,
+    look: dict | None,
+    width: int,
+    size: QSize = PICTURE,
+    *,
+    options: dict[str, str] | None = None,
 ) -> QPixmap:
-    """A picture of `main` in `colour` (or, for Today's app, in `pack`), `width` pixels wide."""
+    """A picture of `main` in `colour` (or, for Today's app, in `pack`), `width` pixels wide.
+
+    `options` are that design's own choices (spacing, what is shown). Without them the picture is the
+    design as it ships, which is what the setup cards show.
+    """
     dark = system_dark()
-    palette, applied_look = design_look(colour or "your", pack, dark, look)
+    chosen = colour
+    if colour is None and options:
+        candidate = options.get("look")
+        if candidate not in (None, "your"):
+            chosen = candidate
+    palette, applied_look = design_look(chosen or "your", pack, dark, look)
     monday, blocks, homework = sample_week()
     host: QWidget | None = None
     if main in VIEW_CLASSES:
         view = VIEW_CLASSES[main]()
         # Render in the picture's width, so showing it does not rebuild a narrow first layout.
         view.resize(size)
-        options = {**options_for(None, main), **({"look": colour} if colour else {})}
+        view_options = {**options_for(None, main), **(options or {})}
+        if colour:
+            view_options["look"] = colour
+        elif chosen not in (None, "your"):
+            view_options["look"] = str(chosen)
         view.show_week(
             Scene(
                 week=build_week(monday, blocks, homework, None),
                 today=SAMPLE_DAY,
                 minute=SAMPLE_MINUTE,
-                options=options,
-                tokens=tokens_for(main, options["look"], palette),
+                options=view_options,
+                tokens=tokens_for(main, view_options["look"], palette),
                 scale=text_scale(applied_look),
                 iso_day=(date.fromisoformat(monday) + timedelta(days=SAMPLE_DAY)).isoformat(),
             )
