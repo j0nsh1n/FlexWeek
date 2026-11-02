@@ -15,7 +15,7 @@ Column {
     property bool phone: false
     spacing: 12
 
-    M3Palette { id: palette; theme: page.theme }
+    M3Palette { id: m3Palette; theme: page.theme }
 
     SectionTitle { theme: page.theme; text: "Clock" }
     ChipRow {
@@ -68,7 +68,7 @@ Column {
             density: page.density
             reduceMotion: page.reduceMotion
             highContrast: page.highContrast
-            ground: palette.surface
+            ground: m3Palette.surface
             label: "Starts"
             accessName: "School starts"
             text: bridge ? bridge.schoolStart : ""
@@ -81,7 +81,7 @@ Column {
             density: page.density
             reduceMotion: page.reduceMotion
             highContrast: page.highContrast
-            ground: palette.surface
+            ground: m3Palette.surface
             label: "Ends"
             accessName: "School ends"
             text: bridge ? bridge.schoolEnd : ""
@@ -107,9 +107,9 @@ Column {
             implicitHeight: inner.implicitHeight + 32
             height: implicitHeight
             radius: 16
-            color: palette.surfaceContainerLow
+            color: m3Palette.surfaceContainerLow
             border.width: page.highContrast ? 1.5 : 1
-            border.color: palette.outlineVariant
+            border.color: m3Palette.outlineVariant
             Column {
                 id: inner
                 x: 16

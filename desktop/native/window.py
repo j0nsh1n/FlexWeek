@@ -1135,6 +1135,7 @@ class NativeWindow(QMainWindow):
                 loaded = page.load()
                 if loaded:
                     page.publish()
+                    page._quick.setFocus(Qt.FocusReason.OtherFocusReason)
             except Exception as error:
                 logging.getLogger("flexweek.material").warning("Material 3 could not load: %s", error)
                 loaded = False
@@ -1222,6 +1223,10 @@ class NativeWindow(QMainWindow):
         elif phase in ("sign-in", "create", "reset") or self.session.account is None:
             self._show_page("authPage")
         elif phase == "setup" or self._setup_active:
+            self.setup_page.motion = self._motion
+            state = self._setup_state(self.session.new_account)
+            step = STYLE if bridge is None else bridge.setup_step
+            self.setup_page.open(state, step)
             self._show_page("setupPage")
         # Stay on Settings when that is what is open and Material never appeared. A graphics
         # failure while Material is up, or a load that was meant to replace the week, shows the week.
@@ -2588,13 +2593,15 @@ class NativeWindow(QMainWindow):
     def _open_setup(self, step: int, *, first_run: bool) -> None:
         self._close_settings(show_week=False)
         self._setup_active = True
-        self.setup_page.motion = self._motion
         state = self._setup_state(first_run)
-        self.setup_page.open(state, step)
         if self._surface == "material" and not self._material_gave_up:
             page = self._ensure_material(quiet=True)
             if page is not None:
                 page.bridge.account.open_setup(state, step)
+                self._show_page("setupPage")
+                return
+        self.setup_page.motion = self._motion
+        self.setup_page.open(state, step)
         self._show_page("setupPage")
 
     def _run_setup_again(self) -> None:

@@ -16,7 +16,7 @@ FocusScope {
     readonly property int step: bridge ? bridge.setupStep : 0
     readonly property int railWidth: phone ? 0 : 248
 
-    M3Palette { id: palette; theme: root.theme }
+    M3Palette { id: m3Palette; theme: root.theme }
 
     function pageFor(step) {
         return [stylePage, lookPage, coloursPage, weekPage, homeworkPage, remindersPage, firstPage, donePage][step]
@@ -29,7 +29,7 @@ FocusScope {
         visible: !root.phone
         width: root.railWidth
         height: parent.height
-        color: palette.surfaceContainerLow
+        color: m3Palette.surfaceContainerLow
 
         Column {
             x: 16
@@ -38,7 +38,7 @@ FocusScope {
             spacing: 4
             Text {
                 text: "Set up FlexWeek"
-                color: palette.inkSurface
+                color: m3Palette.inkSurface
                 font.family: M3Font.family
                 font.pixelSize: 22
                 font.weight: 500
@@ -60,12 +60,12 @@ FocusScope {
                     Rectangle {
                         anchors.fill: parent
                         radius: 24
-                        color: railRow.current ? palette.secondaryContainer : "transparent"
+                        color: railRow.current ? m3Palette.secondaryContainer : "transparent"
                     }
                     M3StateLayer {
                         anchors.fill: parent
                         radius: 24
-                        color: palette.inkSurface
+                        color: m3Palette.inkSurface
                         hovered: railHover.hovered
                         down: railTap.pressed || railRow.keyDown
                         reduceMotion: root.reduceMotion
@@ -74,7 +74,7 @@ FocusScope {
                         anchors.fill: parent
                         anchors.margins: -3
                         shown: railRow.activeFocus
-                        ring: palette.primary
+                        ring: m3Palette.primary
                         ringRadius: 27
                     }
                     Rectangle {
@@ -84,22 +84,22 @@ FocusScope {
                         width: 24
                         height: 24
                         radius: 12
-                        color: railRow.finished ? palette.primary : "transparent"
+                        color: railRow.finished ? m3Palette.primary : "transparent"
                         border.width: railRow.finished ? 0 : 2
-                        border.color: railRow.current ? palette.primary : palette.outline
+                        border.color: railRow.current ? m3Palette.primary : m3Palette.outline
                         M3Icon {
                             visible: railRow.finished
                             anchors.centerIn: parent
                             width: 16
                             height: 16
                             name: "check"
-                            color: palette.inkPrimary
+                            color: m3Palette.inkPrimary
                         }
                         Text {
                             visible: !railRow.finished
                             anchors.centerIn: parent
                             text: String(railRow.index + 1)
-                            color: railRow.current ? palette.primary : palette.inkMuted
+                            color: railRow.current ? m3Palette.primary : m3Palette.inkMuted
                             font.family: M3Font.family
                             font.pixelSize: 12
                             font.weight: 500
@@ -113,7 +113,7 @@ FocusScope {
                         anchors.verticalCenter: parent.verticalCenter
                         text: railRow.row.name
                         elide: Text.ElideRight
-                        color: railRow.current ? palette.inkSecondaryContainer : palette.inkSurface
+                        color: railRow.current ? m3Palette.inkSecondaryContainer : m3Palette.inkSurface
                         font.family: M3Font.family
                         font.pixelSize: 14
                         font.weight: 500
@@ -164,7 +164,7 @@ FocusScope {
                 Text {
                     visible: root.phone
                     text: "Step " + Math.min(root.step + 1, 6) + " of 6"
-                    color: palette.inkMuted
+                    color: m3Palette.inkMuted
                     font.family: M3Font.family
                     font.pixelSize: 12
                     font.weight: 500
@@ -174,7 +174,7 @@ FocusScope {
                     width: parent.width
                     text: bridge ? bridge.heading : ""
                     wrapMode: Text.WordWrap
-                    color: palette.inkSurface
+                    color: m3Palette.inkSurface
                     font.family: M3Font.family
                     font.pixelSize: root.phone ? 24 : 28
                     font.weight: 400
@@ -186,7 +186,7 @@ FocusScope {
                     width: parent.width
                     text: bridge ? bridge.note : ""
                     wrapMode: Text.WordWrap
-                    color: palette.inkMuted
+                    color: m3Palette.inkMuted
                     font.family: M3Font.family
                     font.pixelSize: 14
                 }
@@ -231,7 +231,7 @@ FocusScope {
                     visible: text !== ""
                     text: bridge ? bridge.setupProblem : ""
                     wrapMode: Text.WordWrap
-                    color: palette.error
+                    color: m3Palette.error
                     font.family: M3Font.family
                     font.pixelSize: 14
                     Accessible.role: Accessible.StaticText

@@ -19,7 +19,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QObject, QStandardPaths  # noqa: E402
+from PySide6.QtCore import QEvent, QObject, QStandardPaths, Qt  # noqa: E402
+from PySide6.QtGui import QKeyEvent  # noqa: E402
+from PySide6.QtQuickWidgets import QQuickWidget  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.kept import KeptSession  # noqa: E402
@@ -571,3 +573,57 @@ def test_a_bad_load_falls_back_to_the_widgets_sign_in(
     window.password.setText(PASSWORD)
     window.create_button.click()
     wait_until(qapp, lambda: page(window) == "recoveryPage")
+
+
+def test_setup_focus_and_tab_ownership_stays_on_visible_material_controls(
+    qapp: QApplication, launches: Launches
+) -> None:
+    window = launches.launch()
+    bridge = account(window)
+    create(qapp, window, "focus_student")
+    through_recovery(qapp, window)
+
+    # Surface and phase
+    assert page(window) == "materialPage"
+    assert bridge.phase == "setup"
+    assert shown(window, "setupFlow")
+    assert bridge.setupStep == STYLE
+
+    # Widgets setup must NOT be opened underneath Material setup
+    assert window.setup_page.carousel.hasFocus() is False
+    assert window.setup_page.isVisible() is False
+
+    # Window focus ownership: Material quick surface owns keyboard focus; Widgets setup is not opened
+    quick = window.findChild(QQuickWidget, "materialQuick")
+    assert quick is not None
+    assert window.focusWidget() is quick
+
+    # Active focus item in Quick scene belongs to Material setup
+    qw = quick.quickWindow()
+    assert qw is not None
+    assert qw.activeFocusItem() is not None
+
+    # Tab navigation visits visible Material setup controls in order and remains inside Material quick surface
+    tabbed_names: list[str] = []
+    for _ in range(16):
+        ev = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Tab, Qt.KeyboardModifier.NoModifier)
+        qapp.sendEvent(quick, ev)
+        item = qw.activeFocusItem()
+        assert item is not None
+        assert window.focusWidget() is quick
+        assert window.setup_page.carousel.hasFocus() is False
+        tabbed_names.append(item.property("objectName") or "")
+
+    # Visible step rail, choice cards, and footer buttons are in the tab sequence
+    assert "setupStep0" in tabbed_names
+    assert "setupStyle-material" in tabbed_names
+    assert "setupNext" in tabbed_names
+
+    # Shift+Tab reverses focus and never escapes to hidden Widgets setup
+    for _ in range(16):
+        ev = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Backtab, Qt.KeyboardModifier.ShiftModifier)
+        qapp.sendEvent(quick, ev)
+        item = qw.activeFocusItem()
+        assert item is not None
+        assert window.focusWidget() is quick
+        assert window.setup_page.carousel.hasFocus() is False

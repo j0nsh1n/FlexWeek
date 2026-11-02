@@ -15,7 +15,7 @@ Column {
     property bool phone: false
     spacing: 12
 
-    M3Palette { id: palette; theme: page.theme }
+    M3Palette { id: m3Palette; theme: page.theme }
 
     Repeater {
         model: bridge ? bridge.homeworkModel : null
@@ -27,9 +27,9 @@ Column {
             implicitHeight: inner.implicitHeight + 32
             height: implicitHeight
             radius: 16
-            color: palette.surfaceContainerLow
+            color: m3Palette.surfaceContainerLow
             border.width: page.highContrast ? 1.5 : 1
-            border.color: palette.outlineVariant
+            border.color: m3Palette.outlineVariant
             Column {
                 id: inner
                 x: 16
@@ -107,7 +107,7 @@ Column {
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         text: "Due by a time of day"
-                        color: palette.inkSurface
+                        color: m3Palette.inkSurface
                         font.family: M3Font.family
                         font.pixelSize: 14
                         font.weight: 500

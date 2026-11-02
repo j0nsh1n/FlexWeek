@@ -15,7 +15,7 @@ Flow {
     signal toggled(int day)
     spacing: 8
 
-    M3Palette { id: palette; theme: root.theme }
+    M3Palette { id: m3Palette; theme: root.theme }
 
     Repeater {
         model: root.names
@@ -32,14 +32,14 @@ Flow {
             Rectangle {
                 anchors.fill: parent
                 radius: 8
-                color: chip.on ? palette.secondaryContainer : "transparent"
+                color: chip.on ? m3Palette.secondaryContainer : "transparent"
                 border.width: chip.on ? 0 : (root.highContrast ? 1.5 : 1)
-                border.color: palette.outline
+                border.color: m3Palette.outline
             }
             M3StateLayer {
                 anchors.fill: parent
                 radius: 8
-                color: chip.on ? palette.inkSecondaryContainer : palette.inkSurface
+                color: chip.on ? m3Palette.inkSecondaryContainer : m3Palette.inkSurface
                 hovered: hover.hovered
                 down: tap.pressed || chip.keyDown
                 reduceMotion: root.reduceMotion
@@ -48,7 +48,7 @@ Flow {
                 anchors.fill: parent
                 anchors.margins: -3
                 shown: chip.activeFocus
-                ring: palette.primary
+                ring: m3Palette.primary
                 ringRadius: 11
             }
             Row {
@@ -59,11 +59,11 @@ Flow {
                     name: "check"
                     width: 16
                     height: 16
-                    color: palette.inkSecondaryContainer
+                    color: m3Palette.inkSecondaryContainer
                 }
                 Text {
                     text: chip.modelData.short
-                    color: chip.on ? palette.inkSecondaryContainer : palette.inkSurface
+                    color: chip.on ? m3Palette.inkSecondaryContainer : m3Palette.inkSurface
                     font.family: M3Font.family
                     font.pixelSize: 14
                     font.weight: 500
