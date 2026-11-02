@@ -2,7 +2,7 @@ import QtQuick
 import components 1.0
 
 // A dialog with up to three buttons, an optional one-line field, and an optional read-only text area.
-Item {
+FocusScope {
     id: root
     property var theme
     property string density: "comfortable"
@@ -22,6 +22,7 @@ Item {
 
     anchors.fill: parent
     visible: open
+    focus: open
     z: 30
 
     M3Palette { id: palette; theme: root.theme }
@@ -30,6 +31,19 @@ Item {
         shownArea.selectAll()
         shownArea.copy()
         shownArea.deselect()
+    }
+
+    function cycle(step) {
+        var item = FocusCycle.nextItem([card], step, Window.activeFocusItem)
+        if (item)
+            item.forceActiveFocus(step > 0 ? Qt.TabFocusReason : Qt.BacktabFocusReason)
+    }
+
+    function focusFirst() {
+        if (field.visible)
+            field.forceActiveFocus()
+        else
+            root.forceActiveFocus()
     }
 
     Rectangle {
@@ -148,12 +162,19 @@ Item {
             }
         }
     }
-    activeFocusOnTab: open
     Accessible.role: Accessible.Dialog
     Accessible.name: root.title
-    onOpenChanged: if (open) forceActiveFocus()
+    onOpenChanged: if (open) Qt.callLater(root.focusFirst)
     Keys.onEscapePressed: (event) => {
         root.dismissed()
+        event.accepted = true
+    }
+    Keys.onTabPressed: (event) => {
+        root.cycle(1)
+        event.accepted = true
+    }
+    Keys.onBacktabPressed: (event) => {
+        root.cycle(-1)
         event.accepted = true
     }
 }

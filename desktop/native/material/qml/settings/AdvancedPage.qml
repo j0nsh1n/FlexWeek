@@ -8,8 +8,8 @@ Item {
     objectName: "advancedPage"
     readonly property var st: Ui.st
     readonly property var panel: Ui.settings
-    property bool exportOpen: false
     readonly property bool wide: !Ui.phone && width >= 900
+    readonly property bool prompting: !!root.st.prompt
 
     M3Palette { id: palette; theme: Ui.theme }
 
@@ -24,6 +24,7 @@ Item {
 
     Item {
         id: top
+        enabled: !root.prompting
         width: parent.width
         height: 64
         IconButton {
@@ -51,6 +52,7 @@ Item {
 
     Item {
         id: body
+        enabled: !root.prompting
         anchors.top: top.bottom
         anchors.bottom: foot.top
         anchors.left: parent.left
@@ -263,6 +265,7 @@ Item {
     Rectangle {
         id: foot
         objectName: "advancedFoot"
+        enabled: !root.prompting
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -290,7 +293,7 @@ Item {
                 objectName: "exportLook"
                 theme: Ui.theme; density: Ui.density; reduceMotion: Ui.reduceMotion; highContrast: Ui.highContrast
                 kind: "outlined"; text: "Export"; accessName: "Export this look"
-                onClicked: { root.panel.exportLook(); root.exportOpen = true }
+                onClicked: root.panel.beginExport()
             }
             Button {
                 objectName: "saveLook"
@@ -359,7 +362,7 @@ Item {
         id: exportPrompt
         objectName: "exportPrompt"
         theme: Ui.theme; density: Ui.density; reduceMotion: Ui.reduceMotion; highContrast: Ui.highContrast
-        open: root.exportOpen
+        open: root.st.prompt === "export"
         title: "Export this look"
         body: "Copy this text to keep or share the look."
         shownText: root.st.exportText || ""
@@ -368,8 +371,8 @@ Item {
             if (value === "copy")
                 exportPrompt.copyShown()
             else
-                root.exportOpen = false
+                root.panel.dismissPrompt()
         }
-        onDismissed: root.exportOpen = false
+        onDismissed: root.panel.dismissPrompt()
     }
 }

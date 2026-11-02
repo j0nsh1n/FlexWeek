@@ -110,10 +110,11 @@ Item {
     }
     Keys.onReleased: (event) => {
         if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            if (root.keyDown && root.enabled)
-                root.clicked()
+            var fire = root.keyDown && root.enabled
             root.keyDown = false
             event.accepted = true
+            if (fire)
+                Qt.callLater(function() { root.clicked() })
         }
     }
 }

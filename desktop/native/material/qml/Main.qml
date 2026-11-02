@@ -20,6 +20,9 @@ Item {
     readonly property bool typing: sheetHost.active || _field(Window.activeFocusItem)
     // The Focus screen covers the window. The number keys, Z and Esc belong to it while it is open.
     readonly property bool focusOpen: bridge ? bridge.focus.open : false
+    readonly property bool settingsPromptOpen: bridge && bridge.settingsBridge
+        ? bridge.settingsBridge.promptOpen : false
+    readonly property bool modalActive: typing || focusOpen || accountLayer.active || settingsPromptOpen
 
     function _field(item) {
         while (item) {
@@ -46,7 +49,7 @@ Item {
     }
 
     function takeKey(event) {
-        if (typing || focusOpen || accountLayer.active || bridge.shortcuts === false)
+        if (modalActive || bridge.shortcuts === false)
             return
         var key = event.key
         var plain = !(event.modifiers & (Qt.ControlModifier | Qt.MetaModifier | Qt.AltModifier))
@@ -81,15 +84,34 @@ Item {
         color: root.theme.surface
     }
 
+    onFocusOpenChanged: {
+        if (focusOpen)
+            return
+        if (!insideShellRow(Window.activeFocusItem))
+            focusDestination()
+    }
+
+    function insideShellRow(item) {
+        while (item) {
+            if (item === shellRow)
+                return true
+            item = item.parent
+        }
+        return false
+    }
+
     Row {
+        id: shellRow
         anchors.fill: parent
         spacing: 0
         visible: !accountLayer.active
+        enabled: !root.focusOpen
 
         NavRail {
             id: rail
             objectName: root.phone ? "" : "materialRail"
             visible: !root.phone
+            enabled: !root.settingsPromptOpen
             width: root.phone ? 0 : 80
             height: parent.height
             theme: root.theme
@@ -378,6 +400,7 @@ Item {
                 id: bar
                 objectName: root.phone ? "materialBar" : ""
                 visible: root.phone
+                enabled: !root.settingsPromptOpen
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
@@ -448,6 +471,7 @@ Item {
                 id: phoneFab
                 objectName: root.phone ? "materialFab" : ""
                 visible: root.phone
+                enabled: !root.settingsPromptOpen
                 z: 2
                 anchors.right: parent.right
                 anchors.rightMargin: 16
@@ -509,55 +533,55 @@ Item {
     Shortcut {
         sequence: "1"
         context: Qt.WindowShortcut
-        enabled: !typing && !accountLayer.active && !focusOpen && bridge.shortcuts !== false
+        enabled: !modalActive && bridge.shortcuts !== false
         onActivated: bridge.showPage("day")
     }
     Shortcut {
         sequence: "2"
         context: Qt.WindowShortcut
-        enabled: !typing && !accountLayer.active && !focusOpen && bridge.shortcuts !== false
+        enabled: !modalActive && bridge.shortcuts !== false
         onActivated: bridge.showPage("week")
     }
     Shortcut {
         sequence: "3"
         context: Qt.WindowShortcut
-        enabled: !typing && !accountLayer.active && !focusOpen && bridge.shortcuts !== false
+        enabled: !modalActive && bridge.shortcuts !== false
         onActivated: bridge.showPage("month")
     }
     Shortcut {
         sequence: "4"
         context: Qt.WindowShortcut
-        enabled: !typing && !accountLayer.active && !focusOpen && bridge.shortcuts !== false
+        enabled: !modalActive && bridge.shortcuts !== false
         onActivated: bridge.showPage("myday")
     }
     Shortcut {
         sequence: "5"
         context: Qt.WindowShortcut
-        enabled: !typing && !accountLayer.active && !focusOpen && bridge.shortcuts !== false
+        enabled: !modalActive && bridge.shortcuts !== false
         onActivated: bridge.showPage("settings")
     }
     Shortcut {
         sequence: "Z"
         context: Qt.WindowShortcut
-        enabled: !typing && !accountLayer.active && !focusOpen && bridge.shortcuts !== false
+        enabled: !modalActive && bridge.shortcuts !== false
         onActivated: bridge.undo()
     }
     Shortcut {
         sequence: "F"
         context: Qt.WindowShortcut
-        enabled: !typing && !accountLayer.active && !focusOpen && bridge.shortcuts !== false
+        enabled: !modalActive && bridge.shortcuts !== false
         onActivated: bridge.focus.show()
     }
     Shortcut {
         sequence: "P"
         context: Qt.WindowShortcut
-        enabled: !typing && !accountLayer.active && !focusOpen && bridge.shortcuts !== false
+        enabled: !modalActive && bridge.shortcuts !== false
         onActivated: bridge.plan()
     }
     Shortcut {
         sequence: "Escape"
         context: Qt.WindowShortcut
-        enabled: !accountLayer.active && !focusOverlay.ending && !sheetHost.active
+        enabled: !accountLayer.active && !focusOverlay.ending && !sheetHost.active && !settingsPromptOpen
         onActivated: {
             if (focusOpen)
                 bridge.focus.back()

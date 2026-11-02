@@ -25,35 +25,10 @@ FocusScope {
 
     M3Palette { id: pal; theme: root.theme }
 
-    function focusables(item, out) {
-        for (var i = 0; i < item.children.length; i++) {
-            var child = item.children[i]
-            if (!child.visible || !child.enabled)
-                continue
-            if (child.activeFocusOnTab)
-                out.push(child)
-            focusables(child.contentItem !== undefined && child.contentItem ? child.contentItem : child, out)
-        }
-        return out
-    }
-
     function cycle(step) {
-        var all = focusables(body, [])
-        all = all.concat(focusables(footer, []))
-        if (all.length === 0)
-            return
-        var at = -1
-        var held = Window.activeFocusItem
-        for (var i = 0; i < all.length && at < 0; i++) {
-            var walk = held
-            while (walk && at < 0) {
-                if (walk === all[i])
-                    at = i
-                walk = walk.parent
-            }
-        }
-        var next = at < 0 ? (step > 0 ? 0 : all.length - 1) : (at + step + all.length) % all.length
-        all[next].forceActiveFocus(step > 0 ? Qt.TabFocusReason : Qt.BacktabFocusReason)
+        var item = FocusCycle.nextItem([body, footer], step, Window.activeFocusItem)
+        if (item)
+            item.forceActiveFocus(step > 0 ? Qt.TabFocusReason : Qt.BacktabFocusReason)
     }
 
     function focusTarget(item) {
@@ -73,7 +48,7 @@ FocusScope {
             start.forceActiveFocus()
             return
         }
-        var all = focusables(body, [])
+        var all = FocusCycle.focusables(body, [])
         if (all.length > 0)
             focusTarget(all[0]).forceActiveFocus()
         else

@@ -430,6 +430,10 @@ class SettingsBridge(QObject):
     def state(self) -> dict[str, Any]:
         return self._state
 
+    @Property(bool, notify=changed)
+    def promptOpen(self) -> bool:
+        return bool(self._prompt) or self._ask_preset
+
     @Property("QVariantMap", notify=changed)  # type: ignore[arg-type]
     def draftTheme(self) -> dict[str, Any]:
         return self._draft_theme
@@ -745,6 +749,12 @@ class SettingsBridge(QObject):
     @Slot()
     def exportLook(self) -> None:
         self._export_text = export_document(self._draft_choice, self._draft)
+        self._publish()
+
+    @Slot()
+    def beginExport(self) -> None:
+        self._export_text = export_document(self._draft_choice, self._draft)
+        self._prompt = "export"
         self._publish()
 
     @Slot(str)

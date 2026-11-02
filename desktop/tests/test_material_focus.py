@@ -16,7 +16,8 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QObject, Qt  # noqa: E402
+from PySide6.QtCore import QEvent, QObject, Qt  # noqa: E402
+from PySide6.QtGui import QKeyEvent  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -531,5 +532,111 @@ def test_escape_on_the_end_dialog_keeps_the_session_going(
         _pump(qapp)
         assert dialog.property("open") is False
         assert window.session.focus is not None and focus.open
+    finally:
+        close_focus(window, focus)
+
+
+def _lineage(item: QObject | None) -> list[str]:
+    out: list[str] = []
+    while item is not None:
+        out.append(item.objectName() or type(item).__name__)
+        item = item.parentItem() if hasattr(item, "parentItem") else None
+    return out
+
+
+def _tab_leaks(qapp: QApplication, quick, extra: str | None = None) -> list[tuple[int, list[str]]]:
+    scene = quick.quickWindow()
+    leaks: list[tuple[int, list[str]]] = []
+    for index in range(12):
+        QTest.keyClick(quick, Qt.Key.Key_Tab)
+        _pump(qapp, 3)
+        chain = _lineage(scene.activeFocusItem())
+        if "materialFocus" not in chain or (extra and extra not in chain):
+            leaks.append((index + 1, chain))
+        if "materialFab" in chain or "navWeek" in chain or "materialRail" in chain:
+            leaks.append((index + 1, chain))
+    return leaks
+
+
+def test_focus_keeps_tab_inside_ready_running_paused_and_end(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root, focus = open_focus(qapp, window)
+    quick = window._material_page._quick
+    scene = quick.quickWindow()
+    try:
+        _qml(root, "materialFocus").forceActiveFocus()
+        _pump(qapp)
+        assert not _tab_leaks(qapp, quick)
+        focus.begin()
+        _pump(qapp)
+        _qml(root, "focusPause").forceActiveFocus()
+        _pump(qapp)
+        assert not _tab_leaks(qapp, quick)
+        focus.togglePause()
+        _pump(qapp)
+        _qml(root, "focusPause").forceActiveFocus()
+        _pump(qapp)
+        assert not _tab_leaks(qapp, quick)
+        focus.togglePause()
+        focus.finish()
+        _pump(qapp)
+        dialog = _qml(root, "focusEndDialog")
+        assert dialog.property("open") is True
+        _qml(root, "dialogDismiss").forceActiveFocus()
+        _pump(qapp)
+        assert not _tab_leaks(qapp, quick, extra="focusEndDialog")
+        QTest.keyClick(quick, Qt.Key.Key_Space)
+        _pump(qapp)
+        assert dialog.property("open") is False
+        assert focus.open
+        QTest.keyClick(quick, Qt.Key.Key_Escape)
+        _pump(qapp)
+        assert dialog.property("open") is True
+        QTest.keyClick(quick, Qt.Key.Key_Escape)
+        _pump(qapp)
+        assert dialog.property("open") is False
+        focus.confirmEnd()
+        _pump(qapp)
+        assert not focus.open
+        _qml(root, "navWeek").forceActiveFocus()
+        _pump(qapp)
+        assert "navWeek" in _lineage(scene.activeFocusItem())
+    finally:
+        close_focus(window, focus)
+
+
+def _send_key(qapp: QApplication, item: QObject, key: Qt.Key) -> None:
+    press = QKeyEvent(QEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier)
+    release = QKeyEvent(QEvent.Type.KeyRelease, key, Qt.KeyboardModifier.NoModifier)
+    qapp.sendEvent(item, press)
+    qapp.sendEvent(item, release)
+    _pump(qapp)
+
+
+def test_enter_and_space_on_focus_act_on_the_visible_layer(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root, focus = open_focus(qapp, window)
+    bridge = window._material_page.bridge
+    start = _qml(root, "focusStart")
+    try:
+        bridge.showPage("week")
+        start.forceActiveFocus()
+        _pump(qapp)
+        assert start.property("activeFocus") is True
+        _send_key(qapp, start, Qt.Key.Key_Space)
+        assert focus.open
+        assert window.session.focus is not None
+        assert window.session.focus["running"] is True
+        assert bridge.property("screen") == "week"
+        assert window._material_page.bridge.sheets.kind == ""
+        pause = _qml(root, "focusPause")
+        pause.forceActiveFocus()
+        _pump(qapp)
+        _send_key(qapp, pause, Qt.Key.Key_Return)
+        assert window.session.focus["running"] is False
+        assert bridge.property("screen") == "week"
+        assert window._material_page.bridge.sheets.kind == ""
     finally:
         close_focus(window, focus)

@@ -35,6 +35,7 @@ Item {
         objectName: "settingsSections"
         anchors.fill: parent
         visible: root.st.page !== "advanced"
+        enabled: !root.st.askPreset && !root.st.prompt
 
         SectionNav {
             id: nav

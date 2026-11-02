@@ -676,3 +676,117 @@ def test_the_look_file_keeps_the_material_object_when_the_widgets_look_saves(
         assert _material_file()["density"] == "compact"
     finally:
         _reset(window)
+
+
+def _lineage(item: QObject | None) -> list[str]:
+    out: list[str] = []
+    while item is not None:
+        out.append(str(item.objectName() or type(item).__name__))
+        item = item.parentItem() if hasattr(item, "parentItem") else None
+    return out
+
+
+def _assert_shortcuts_blocked(qapp: QApplication, window: NativeWindow, root: QObject) -> None:
+    bridge = _bridge(window)
+    quick = window._material_page._quick
+    before = bridge.property("screen")
+    for key in (
+        Qt.Key.Key_1,
+        Qt.Key.Key_2,
+        Qt.Key.Key_3,
+        Qt.Key.Key_4,
+        Qt.Key.Key_5,
+        Qt.Key.Key_Z,
+        Qt.Key.Key_F,
+        Qt.Key.Key_P,
+    ):
+        QTest.keyClick(quick, key)
+        _pump(qapp)
+        assert bridge.property("screen") == before
+        assert not window._material_page.bridge.focus.open
+    for _ in range(8):
+        QTest.keyClick(quick, Qt.Key.Key_Tab)
+        _pump(qapp, 3)
+        chain = _lineage(quick.quickWindow().activeFocusItem())
+        assert "navWeek" not in chain
+        assert "materialFab" not in chain
+        names = (
+            "savePrompt",
+            "importPrompt",
+            "exportPrompt",
+            "presetPrompt",
+            "promptCard",
+            "promptField",
+        )
+        assert any(name in chain for name in names)
+
+
+def test_settings_prompts_block_shell_shortcuts_and_keep_tab(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _open_settings(qapp, window)
+    panel = _panel(window)
+    bridge = _bridge(window)
+    quick = window._material_page._quick
+    try:
+        panel.openAdvanced()
+        _pump(qapp)
+        panel.beginSave()
+        _pump(qapp)
+        prompt = _named(root, "savePrompt")[0]
+        assert prompt.property("open")
+        assert panel.property("promptOpen") is True
+        prompt.forceActiveFocus()
+        _pump(qapp)
+        QTest.keyClick(quick, Qt.Key.Key_2)
+        _pump(qapp)
+        assert bridge.property("screen") == "settings"
+        assert prompt.property("open")
+        _assert_shortcuts_blocked(qapp, window, root)
+        field = _named(root, "promptField")[0]
+        field.forceActiveFocus()
+        _pump(qapp)
+        QTest.keyClick(quick, Qt.Key.Key_2)
+        _pump(qapp)
+        assert bridge.property("screen") == "settings"
+        panel.dismissPrompt()
+        _pump(qapp)
+        panel.beginImport()
+        _pump(qapp)
+        assert _named(root, "importPrompt")[0].property("open")
+        _named(root, "importPrompt")[0].forceActiveFocus()
+        QTest.keyClick(quick, Qt.Key.Key_3)
+        _pump(qapp)
+        assert bridge.property("screen") == "settings"
+        panel.dismissPrompt()
+        panel.beginExport()
+        _pump(qapp)
+        assert _named(root, "exportPrompt")[0].property("open")
+        _named(root, "exportPrompt")[0].forceActiveFocus()
+        QTest.keyClick(quick, Qt.Key.Key_4)
+        _pump(qapp)
+        assert bridge.property("screen") == "settings"
+        panel.dismissPrompt()
+        panel.setCorner(4)
+        panel.done()
+        _pump(qapp)
+        panel.setPreset("Sea")
+        _pump(qapp)
+        assert panel.property("state")["askPreset"] is True
+        _named(root, "presetPrompt")[0].forceActiveFocus()
+        QTest.keyClick(quick, Qt.Key.Key_2)
+        _pump(qapp)
+        assert bridge.property("screen") == "settings"
+        panel.answerPreset("cancel")
+        _pump(qapp)
+        assert panel.property("promptOpen") is False
+        root.forceActiveFocus()
+        _pump(qapp)
+        QTest.keyClick(quick, Qt.Key.Key_2)
+        _pump(qapp)
+        assert bridge.property("screen") == "week"
+    finally:
+        panel.answerPreset("cancel")
+        panel.dismissPrompt()
+        panel.closeAdvanced()
+        _reset(window)

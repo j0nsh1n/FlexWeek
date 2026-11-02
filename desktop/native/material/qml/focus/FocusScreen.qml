@@ -3,7 +3,7 @@ import components 1.0
 
 // The focus timer as the whole window, as in the mockup's `?do=startFocus`. It only draws the
 // session's timer (bridge.focus) and says what was pressed; the session does the rest.
-Item {
+FocusScope {
     id: root
     objectName: "materialFocus"
     property var bridge
@@ -32,6 +32,12 @@ Item {
 
     M3Palette { id: palette; theme: root.theme }
 
+    function cycle(step) {
+        var item = FocusCycle.nextItem([root], step, Window.activeFocusItem)
+        if (item)
+            item.forceActiveFocus(step > 0 ? Qt.TabFocusReason : Qt.BacktabFocusReason)
+    }
+
     onShownChanged: {
         if (shown)
             Qt.callLater(function() { actions.takeFocus() })
@@ -52,12 +58,28 @@ Item {
     }
 
     focus: shown
+    Keys.onTabPressed: (event) => {
+        if (!root.ending)
+            root.cycle(1)
+        event.accepted = true
+    }
+    Keys.onBacktabPressed: (event) => {
+        if (!root.ending)
+            root.cycle(-1)
+        event.accepted = true
+    }
+    Keys.onPressed: (event) => {
+        if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            event.accepted = true
+        }
+    }
 
     IconButton {
         id: backButton
         objectName: "focusBack"
         x: 12
         y: 12
+        enabled: !root.ending
         theme: root.theme
         density: root.density
         reduceMotion: root.reduceMotion
@@ -69,6 +91,7 @@ Item {
 
     Column {
         id: content
+        enabled: !root.ending
         anchors.centerIn: parent
         width: Math.min(parent.width - 48, 640)
         spacing: 12
@@ -248,6 +271,7 @@ Item {
         confirmText: "End session"
         dismissText: "Keep going"
         onConfirmed: root.focusBridge.confirmEnd()
+        onDismissed: if (root.shown) Qt.callLater(function() { actions.takeFocus() })
     }
 
     Connections {
