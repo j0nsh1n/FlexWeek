@@ -10,6 +10,7 @@ import contextlib
 import os
 from collections.abc import Iterator
 from datetime import date, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -21,13 +22,14 @@ from PySide6.QtCore import QObject, QStandardPaths  # noqa: E402
 from PySide6.QtWidgets import QApplication, QPushButton  # noqa: E402
 
 from desktop.native.calendar import sunday_due  # noqa: E402
+from desktop.native.material.bridge_day import DayBridge  # noqa: E402
 from desktop.native.material.day_board import board_for, read_flag  # noqa: E402
 from desktop.native.weekmodel import Occurrence, set_clock_24h  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.server import LocalServer  # noqa: E402
 from desktop.tests.logic_support import past_setup  # noqa: E402
 from desktop.tests.test_layouts_window import PASSWORD, look_file, settled, wait_until  # noqa: E402
-from desktop.tests.test_material_window import _pump, _show_material  # noqa: E402
+from desktop.tests.test_material_window import _pump, _show_material, _visuals  # noqa: E402
 
 TODAY = date(2026, 11, 5)
 
@@ -44,6 +46,7 @@ def _block(
     category: str = "class",
     pinned: bool = False,
     due: str | None = None,
+    slack: str | None = None,
 ) -> Occurrence:
     return Occurrence(
         block_id=title.lower().replace(" ", "-"),
@@ -57,7 +60,7 @@ def _block(
         missed=missed,
         assignment_id=assignment,
         due=due,
-        slack=None,
+        slack=slack,
         pinned=pinned,
     )
 
@@ -114,6 +117,23 @@ def test_pinned_shows_in_the_row_note() -> None:
     assert board.up_next[0].subtitle == "16:00–17:30 · Pinned"
 
 
+def test_status_tags_use_the_slack_words() -> None:
+    """The three slack labels the week model already uses, plus none."""
+    tight = _block("Essay", *ESSAY, work=True, assignment="a1", slack="tight")
+    plenty = _block("Poster", 20 * 60, 21 * 60, work=True, assignment="a2", slack="ok")
+    cutting = _block("Quiz", 21 * 60, 22 * 60, work=True, assignment="a3", slack="danger")
+    board = _board([tight, plenty, cutting], 9 * 60)
+    assert [(row.tag, row.tag_kind) for row in board.up_next] == [
+        ("Tight", "tight"),
+        ("Plenty of time", "plenty"),
+        ("Cutting it close", "cutting"),
+    ]
+    finished = _block("Essay", *ESSAY, work=True, assignment="a1", done=True, slack="tight")
+    done = _board([finished], 9 * 60)
+    assert done.done[0].tag == ""
+    assert done.done[0].tag_kind == ""
+
+
 def test_the_now_card_is_the_gap_to_the_next_block() -> None:
     day = [_block("School", *SCHOOL), _block("Soccer", *SOCCER)]
     board = _board(day, 15 * 60 + 40)
@@ -160,6 +180,41 @@ def test_start_focus_picks_the_next_homework_block() -> None:
     board = _board([_block("Soccer", *SOCCER), essay], 9 * 60)
     assert board.focus_block_id == "essay"
     assert board.focus_day == 3
+
+
+def test_start_focus_uses_the_material_hook_when_the_window_has_one(qapp: QApplication) -> None:
+    heard: list[tuple] = []
+
+    class Window:
+        session = SimpleNamespace()
+
+        def start_material_focus(self, block_id: str, day: int) -> None:
+            heard.append(("hook", block_id, day))
+
+        def _start_focus(self, block_id: str, day: object) -> None:
+            heard.append(("widgets", block_id, day))
+
+    parent = QObject()
+    bridge = DayBridge(Window(), parent)  # type: ignore[arg-type]
+    bridge._publish(_board([_block("Essay", *ESSAY, work=True, assignment="a1")], 9 * 60))
+    bridge.startFocus()
+    assert heard == [("hook", "essay", 3)]
+
+
+def test_start_focus_falls_back_to_the_widgets_start(qapp: QApplication) -> None:
+    heard: list[tuple] = []
+
+    class Window:
+        session = SimpleNamespace(start_focus=lambda *args: heard.append(("session", args)))
+
+        def _start_focus(self, block_id: str, day: object) -> None:
+            heard.append(("widgets", block_id, day))
+
+    parent = QObject()
+    bridge = DayBridge(Window(), parent)  # type: ignore[arg-type]
+    bridge._publish(_board([_block("Essay", *ESSAY, work=True, assignment="a1")], 9 * 60))
+    bridge.startFocus()
+    assert heard == [("widgets", "essay", 3)]
 
 
 @pytest.fixture(scope="module")
@@ -358,6 +413,33 @@ def test_picking_a_date_shows_that_day_and_my_day_stays_on_today(
     assert myday.property("leftLine") == "1 thing left today"
     day.pickDay(thursday.day)
     settled(qapp, window)
+    window._use_widgets_styles()
+
+
+def test_the_day_screen_has_the_named_controls(qapp: QApplication, window: NativeWindow) -> None:
+    root = _show_material(qapp, window)
+    _bridge(root).showPage("day")
+    _pump(qapp)
+    names = {str(item.objectName()) for item in _visuals(root)}
+    for name in (
+        "materialDay",
+        "dayPrevious",
+        "dayNext",
+        "dayLeftLine",
+        "dayNow",
+        "dayNowTitle",
+        "dayStartFocus",
+        "dayFinish",
+        "dayMonthToggle",
+        "dayUpNext",
+        "dayDone",
+    ):
+        assert name in names, name
+    _bridge(root).showPage("myday")
+    _pump(qapp)
+    names = {str(item.objectName()) for item in _visuals(root)}
+    for name in ("materialMyDay", "myDayRing", "myDayNow", "myDayStartFocus", "myDayCount"):
+        assert name in names, name
     window._use_widgets_styles()
 
 

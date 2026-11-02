@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Layouts
 import components 1.0
 
 Column {
@@ -75,8 +74,9 @@ Column {
 
     Component {
         id: rowDelegate
-        RowLayout {
+        Item {
             id: line
+            required property int index
             required property string title
             required property string subtitle
             required property string icon
@@ -90,11 +90,14 @@ Column {
             required property bool dim
 
             width: root.width
-            spacing: 4
+            implicitHeight: card.height
+            height: implicitHeight
             opacity: line.dim ? 0.65 : 1
 
             ListRow {
-                Layout.fillWidth: true
+                id: card
+                objectName: root.scope + "Row" + line.index
+                width: parent.width
                 theme: root.theme
                 density: root.density
                 reduceMotion: root.reduceMotion
@@ -106,27 +109,36 @@ Column {
                 showBar: line.bar !== ""
                 fill: line.fill
                 ink: line.ink
+                trail: extras.width
                 accessName: line.title
             }
-            Tag {
-                visible: line.tag !== ""
-                theme: root.theme
-                density: root.density
-                reduceMotion: root.reduceMotion
-                highContrast: root.highContrast
-                kind: line.tagKind !== "" ? line.tagKind : "plain"
-                text: line.tag
-            }
-            IconButton {
-                objectName: line.canFinish ? root.scope + "Finish" : ""
-                visible: line.canFinish
-                theme: root.theme
-                density: root.density
-                reduceMotion: root.reduceMotion
-                highContrast: root.highContrast
-                icon: "check"
-                accessName: "Mark " + line.title + " finished"
-                onClicked: root.finish(line.assignmentId)
+            Row {
+                id: extras
+                anchors.right: parent.right
+                anchors.rightMargin: 4
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 0
+                Tag {
+                    objectName: line.tag !== "" ? root.scope + "Tag" + line.index : ""
+                    visible: line.tag !== ""
+                    theme: root.theme
+                    density: root.density
+                    reduceMotion: root.reduceMotion
+                    highContrast: root.highContrast
+                    kind: line.tagKind !== "" ? line.tagKind : "plain"
+                    text: line.tag
+                }
+                IconButton {
+                    objectName: line.canFinish ? root.scope + "Finish" : ""
+                    visible: line.canFinish
+                    theme: root.theme
+                    density: root.density
+                    reduceMotion: root.reduceMotion
+                    highContrast: root.highContrast
+                    icon: "check"
+                    accessName: "Mark " + line.title + " finished"
+                    onClicked: root.finish(line.assignmentId)
+                }
             }
         }
     }

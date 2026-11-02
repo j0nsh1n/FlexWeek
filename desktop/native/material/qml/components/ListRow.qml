@@ -16,6 +16,8 @@ Item {
     property color ink: "transparent"
     readonly property bool tinted: ink.a > 0
     property string accessName: ""
+    // Room on the right for a tag or a check that sits on the row.
+    property int trail: 0
     signal clicked()
 
     implicitHeight: Math.max(56, words.implicitHeight + 16)
@@ -54,7 +56,7 @@ Item {
         id: words
         x: root.icon !== "" ? 48 : 12
         y: Math.max(8, (root.height - implicitHeight) / 2)
-        width: Math.max(0, root.width - x - 12)
+        width: Math.max(0, root.width - x - 12 - root.trail)
         spacing: 0
         Text {
             objectName: "title"
