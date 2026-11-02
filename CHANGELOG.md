@@ -21,6 +21,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - If Material setup cannot open, finishing from the Widgets pages keeps the Widgets step and does not apply the abandoned Material style.
 - Material Find a time for homework that is not overdue shows the same preview Widgets uses. Nothing is saved until Accept; Cancel leaves the week unchanged.
 - Material Routines and discard prompts use the same words as the Widgets sheets.
+- Material Settings shows a saved reminder lead that is not Off, 5, 10 or 15 minutes, and does not change it just by opening Settings.
 - Opening another window in the same session no longer crashes while menus take their shadow.
 - Overdue count announcements use the visible More control, with a window fallback while Settings is open.
 - Material keeps an unsent Settings change across a swap back, shows a visible fallback when it cannot open, and does not retry that version at start-up until the student chooses Material again or the app version changes. Its clock keeps moving, More lists only actions that work on Material, and Add homework works from the keyboard.

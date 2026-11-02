@@ -1,0 +1,178 @@
+{
+  "setup": {
+    "seed": "rig",
+    "look": "light-frost",
+    "size": [
+      1280,
+      800
+    ],
+    "clock_24h": false
+  },
+  "steps": [
+    {
+      "click": "settingsGear"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "click": "chooseMaterial"
+    },
+    {
+      "wait": 1000
+    },
+    {
+      "see": "materialRail"
+    },
+    {
+      "click": "navSettings"
+    },
+    {
+      "see": "materialSettings"
+    },
+    {
+      "click": {
+        "text": "High"
+      }
+    },
+    {
+      "wait": 400
+    },
+    {
+      "shot": "settings-high-look"
+    },
+    {
+      "click": "preset_Sea"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "shot": "settings-high-sea"
+    },
+    {
+      "click": "preset_Blue"
+    },
+    {
+      "click": "section_planning"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "shot": "settings-high-planning"
+    },
+    {
+      "click": "section_focus"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "shot": "settings-high-focus"
+    },
+    {
+      "click": "section_alerts"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "shot": "settings-high-alerts"
+    },
+    {
+      "click": "section_computer"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "shot": "settings-high-computer"
+    },
+    {
+      "click": "section_look"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "click": "openAdvanced"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "see": "advancedPage"
+    },
+    {
+      "shot": "settings-high-advanced"
+    },
+    {
+      "click": {
+        "text": "Month"
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "settings-high-advanced-month"
+    },
+    {
+      "click": {
+        "text": "Day"
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "settings-high-advanced-day"
+    },
+    {
+      "click": {
+        "text": "Week"
+      }
+    },
+    {
+      "wait": 300
+    },
+    {
+      "click": {
+        "text": "Actual size"
+      }
+    },
+    {
+      "wait": 400
+    },
+    {
+      "shot": "settings-high-advanced-actual"
+    },
+    {
+      "click": {
+        "text": "Fit"
+      }
+    },
+    {
+      "wait": 300
+    },
+    {
+      "click": "advancedBack"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "see": "useWidgets"
+    },
+    {
+      "click": "useWidgets"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "see": "Math worksheet"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+module settings
+singleton Ui 1.0 Ui.qml
+SectionPage 1.0 SectionPage.qml
+Group 1.0 Group.qml
+ToggleRow 1.0 ToggleRow.qml
+ChoiceRow 1.0 ChoiceRow.qml
+LinkRow 1.0 LinkRow.qml
+FieldRow 1.0 FieldRow.qml
+PresetRow 1.0 PresetRow.qml
+SliderRow 1.0 SliderRow.qml
+ColorRow 1.0 ColorRow.qml
+GroupHeader 1.0 GroupHeader.qml
+Prompt 1.0 Prompt.qml
+SectionNav 1.0 SectionNav.qml
+LookSection 1.0 LookSection.qml
+PlanningSection 1.0 PlanningSection.qml
+FocusSection 1.0 FocusSection.qml
+AlertsSection 1.0 AlertsSection.qml
+ComputerSection 1.0 ComputerSection.qml
+AdvancedPage 1.0 AdvancedPage.qml
+PreviewStage 1.0 PreviewStage.qml

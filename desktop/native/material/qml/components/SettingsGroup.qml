@@ -20,7 +20,7 @@ Item {
         for (var i = 0; i < column.children.length; i++) {
             var row = column.children[i]
             row.width = width
-            if (row.showDivider === undefined)
+            if (row.showDivider === undefined || !row.visible)
                 continue
             row.showDivider = seen > 0
             if (!row.theme)
@@ -49,6 +49,7 @@ Item {
     }
 
     onWidthChanged: mark()
+    onVisibleChanged: mark()
     onDensityChanged: mark()
     onHighContrastChanged: mark()
     Component.onCompleted: mark()

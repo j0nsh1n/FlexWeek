@@ -1,0 +1,170 @@
+{
+  "setup": {
+    "seed": "rig",
+    "look": "light-frost",
+    "size": [
+      1280,
+      800
+    ],
+    "clock_24h": false
+  },
+  "steps": [
+    {
+      "click": "settingsGear"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "click": "chooseMaterial"
+    },
+    {
+      "wait": 1000
+    },
+    {
+      "see": "materialRail"
+    },
+    {
+      "click": "navSettings"
+    },
+    {
+      "see": "materialSettings"
+    },
+    {
+      "shot": "settings-light-look"
+    },
+    {
+      "click": "preset_Sea"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "shot": "settings-light-sea"
+    },
+    {
+      "click": "preset_Blue"
+    },
+    {
+      "click": "section_planning"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "shot": "settings-light-planning"
+    },
+    {
+      "click": "section_focus"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "shot": "settings-light-focus"
+    },
+    {
+      "click": "section_alerts"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "shot": "settings-light-alerts"
+    },
+    {
+      "click": "section_computer"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "shot": "settings-light-computer"
+    },
+    {
+      "click": "section_look"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "click": "openAdvanced"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "see": "advancedPage"
+    },
+    {
+      "shot": "settings-light-advanced"
+    },
+    {
+      "click": {
+        "text": "Month"
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "settings-light-advanced-month"
+    },
+    {
+      "click": {
+        "text": "Day"
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "settings-light-advanced-day"
+    },
+    {
+      "click": {
+        "text": "Week"
+      }
+    },
+    {
+      "wait": 300
+    },
+    {
+      "click": {
+        "text": "Actual size"
+      }
+    },
+    {
+      "wait": 400
+    },
+    {
+      "shot": "settings-light-advanced-actual"
+    },
+    {
+      "click": {
+        "text": "Fit"
+      }
+    },
+    {
+      "wait": 300
+    },
+    {
+      "click": "advancedBack"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "see": "useWidgets"
+    },
+    {
+      "click": "useWidgets"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "see": "Math worksheet"
+    }
+  ]
+}
