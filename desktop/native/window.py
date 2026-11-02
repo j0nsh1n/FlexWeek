@@ -550,6 +550,7 @@ class NativeWindow(QMainWindow):
         # main() has loaded them already; a window made anywhere else, as in the tests, is drawn alike.
         load_fonts()
         self.session = NativeSession(origin, self, kept)
+        self.session.use_sync_host(sync)
         self._instance_server: QLocalServer | None = None
         self.setWindowTitle("FlexWeek")
         # This computer's sync host, and the running service once it has started (None until then). The
@@ -5001,23 +5002,13 @@ class NativeWindow(QMainWindow):
             return
         self.sync_dot.show_state(sync_state(self._sync.status(), bool(self._linked_phones())))
 
-    def _sync_arrived(self, service: SyncService) -> bool:
+    def _sync_arrived(self, _service: SyncService) -> bool:
         """Loads the week again after a phone's edits land. With unsaved edits here, it marks the week
         as changed instead, so the existing Reload and Keep mine choice is offered. False while a
         request is in flight; the next tick asks again."""
-        session = self.session
-        if session.account is None:
-            return True
-        if session.busy:
-            return False
-        if session.dirty or session.dirty_assignments or session.pending_save is not None:
-            session.conflict = True
-            session.week_changed.emit()
-            return True
         names = [row["name"] for row in self._linked_phones()]
         who = names[0] if len(names) == 1 else "a linked phone"
-        session.load_week(session.week_start, discard=True, said=f"Updated from {who}.")
-        return True
+        return self.session.accept_remote_week(who)
 
     def _attach_settings_page(self, page: SettingsPage) -> None:
         if self._settings is not None:

@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import date, datetime, timedelta
+from typing import Any
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -330,6 +331,9 @@ class NativeSession(QObject):
         self.setup_prefs: dict = {}
         self.setup_work_windows: list[dict] | None = None
         self.setup_week = False
+        # The app's one sync host. Pairing, removal and Sync now use it; this session does not start
+        # another.
+        self._sync_host: QObject | None = None
         self.busy_changed.connect(self._resume_pending)
         self._reminder_ticket = 0
         self._reminder_fetching: str | None = None
@@ -914,6 +918,76 @@ class NativeSession(QObject):
         self.conflict = False
         self.dirty_assignments.clear()
         self.load_week(self.week_start, discard=True, said="Reloaded this week.")
+
+    def use_sync_host(self, host: QObject | None) -> None:
+        """Use the sync host the app already started. This session does not start a second one."""
+        self._sync_host = host
+
+    def _sync_service(self) -> tuple[QObject, Any, int] | None:
+        host = self._sync_host
+        account = self.account
+        service = getattr(host, "service", None) if host is not None else None
+        if host is None or service is None or account is None:
+            return None
+        return host, service, int(account["id"])
+
+    def begin_pairing(self, done: Callable[[Any, Exception | None], None]) -> bool:
+        """Ask for a pairing code on the app's sync host. False with no host, service or account."""
+        found = self._sync_service()
+        if found is None:
+            return False
+        host, service, user_id = found
+        from desktop.native.devices import begin_pairing
+
+        begin_pairing(host, service, user_id, done)
+        return True
+
+    def end_pairing(self, done: Callable[[Any, Exception | None], None]) -> bool:
+        """Close the open pairing code. False with no host, service or account."""
+        found = self._sync_service()
+        if found is None:
+            return False
+        host, service, _user_id = found
+        from desktop.native.devices import end_pairing
+
+        end_pairing(host, service, done)
+        return True
+
+    def unlink_phone(self, device_id: str, done: Callable[[Any, Exception | None], None]) -> bool:
+        """Remove a linked phone. False with no host, service or account."""
+        found = self._sync_service()
+        if found is None:
+            return False
+        host, service, user_id = found
+        from desktop.native.devices import unlink_phone
+
+        unlink_phone(host, service, user_id, device_id, done)
+        return True
+
+    def sync_linked_phones(self, done: Callable[[Any, Exception | None], None]) -> bool:
+        """Sync every linked phone. False with no host, service or account."""
+        found = self._sync_service()
+        if found is None:
+            return False
+        host, service, _user_id = found
+        from desktop.native.devices import sync_linked_phones
+
+        sync_linked_phones(host, service, done)
+        return True
+
+    def accept_remote_week(self, who: str) -> bool:
+        """A linked phone's edits arrived. Unsaved edits here are kept and marked as a conflict, and
+        the week is not reloaded. False while a request is in flight, so the caller can ask again."""
+        if self.account is None:
+            return True
+        if self.busy:
+            return False
+        if self.dirty or self.dirty_assignments or self.pending_save is not None:
+            self.conflict = True
+            self.week_changed.emit()
+            return True
+        self.load_week(self.week_start, discard=True, said=f"Updated from {who}.")
+        return True
 
     def _touch(self, label: str | None = None, keep: set[str] | frozenset[str] = frozenset()) -> None:
         if label:
