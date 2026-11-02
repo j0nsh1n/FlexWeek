@@ -15,15 +15,21 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QCoreApplication, QObject, Signal  # noqa: E402
+from PySide6.QtCore import QObject, Signal  # noqa: E402
+from PySide6.QtWidgets import QApplication, QLabel, QWidget  # noqa: E402
 
 from desktop.native.material import bridge_month  # noqa: E402
 from desktop.native.material.bridge_month import MonthBridge, read_cells  # noqa: E402
 
 
 @pytest.fixture(scope="module")
-def app() -> QCoreApplication:
-    return QCoreApplication.instance() or QCoreApplication(["flexweek-material-month"])
+def app() -> QApplication:
+    existing = QApplication.instance()
+    if existing is None:
+        return QApplication(["flexweek-material-month"])
+    if not isinstance(existing, QApplication):
+        pytest.fail("Month tests need QApplication; a different Qt application is already running")
+    return existing
 
 
 class Shell(QObject):
@@ -97,6 +103,20 @@ def week_start(monkeypatch: pytest.MonkeyPatch):
 
     choose("monday")
     return choose
+
+
+def test_the_month_app_fixture_can_build_a_widget(app: QApplication) -> None:
+    """QWidget tests that share this process need QApplication, not QCoreApplication."""
+    assert isinstance(app, QApplication)
+    widget = QWidget()
+    label = QLabel("month fixture", widget)
+    try:
+        widget.show()
+        assert widget.isVisible()
+        assert label.text() == "month fixture"
+    finally:
+        widget.close()
+        widget.deleteLater()
 
 
 @pytest.mark.parametrize(
