@@ -24,9 +24,8 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 from desktop.native.calendar import sunday_due  # noqa: E402
 from desktop.native.hours.month import LOAD_WORDS  # noqa: E402
 from desktop.native.window import WINDOW_MIN_WIDTH, NativeWindow  # noqa: E402
-from desktop.tests.test_layouts_window import wait_until  # noqa: E402
+from desktop.tests.test_layouts_window import settled, wait_until  # noqa: E402
 from desktop.tests.test_material_window import (  # noqa: E402
-    _named,
     _pump,
     _qml,
     _show_material,
@@ -162,7 +161,18 @@ def test_a_date_shows_its_chips_in_the_account_clock(qapp: QApplication, window:
         chips = _texts(_cell(root, today), "monthChipText")
         assert chips == ["8:00 AM School", "6:45 PM History essay"]
         # 23:59 is the old end-of-day stamp, so Widgets month writes "Due" with no clock.
+        # Sunday can sit in the next month when this month ends on Saturday.
+        shown = [str(item.objectName())[len("monthDate-") :] for item in _cells(root)]
+        if sunday not in shown:
+            _click(window._material_page._quick, _qml(root, "monthNext"), 20, 20)
+            wait_until(
+                qapp,
+                lambda: f"monthDate-{sunday}" in [str(item.objectName()) for item in _cells(root)],
+            )
         assert _texts(_cell(root, sunday), "monthChipText") == ["Due History essay"]
+        if sunday[:7] != today[:7]:
+            window.session.open_month(today[:7])
+            wait_until(qapp, lambda: (window.session.month_data or {}).get("month") == today[:7])
         assert _named_on(_cell(root, today), "monthDot") == []
     finally:
         window._use_widgets_styles()
@@ -184,7 +194,9 @@ def test_an_overdue_deadline_uses_the_overdue_chip(qapp: QApplication, window: N
             }
         )
         window.session.save()
+        settled(qapp, window)
         window.session.open_month(window.session.today_iso()[:7])
+        settled(qapp, window)
         wait_until(qapp, lambda: "Overdue Reading" in _texts(_cell(root, gone), "monthChipText"))
         assert "Overdue Reading" in _texts(_cell(root, gone), "monthChipText")
     finally:
@@ -199,19 +211,29 @@ def test_picking_a_date_opens_a_bar_that_closes_and_opens_the_day(
     try:
         today = window.session.today_iso()
         bar = _qml(root, "monthDateBar")
+        month.closeDate()
+        _pump(qapp)
         assert bar.property("visible") is False
-        _click(quick, _cell(root, today))
-        assert bar.property("visible") is True
+        cell = _cell(root, today)
+        _click(quick, cell, float(cell.property("width")) / 2, float(cell.property("height")) / 2)
+        wait_until(qapp, lambda: bar.property("visible") is True)
         assert _texts(bar, "monthDateHeading") == [_heading(today)]
         assert _texts(bar, "monthDateItem")[:2] == [
             "8:00 AM School · 6 h 30 min",
             "6:45 PM History essay · 1 h",
         ]
-        _click(quick, _named(bar, "monthClose")[0], 20, 10)
+        closer = _qml(root, "monthClose")
+        assert closer.property("visible") is True
+        closer.clicked.emit()
+        _pump(qapp)
+        wait_until(qapp, lambda: month.property("barOpen") is False)
         wait_until(qapp, lambda: bar.property("visible") is False)
-        _click(quick, _cell(root, today))
+        cell = _cell(root, today)
+        _click(quick, cell, float(cell.property("width")) / 2, float(cell.property("height")) / 2)
         wait_until(qapp, lambda: bar.property("visible") is True)
-        _click(quick, _named(bar, "monthOpenDay")[0], 20, 10)
+        opener = _qml(root, "monthOpenDay")
+        opener.clicked.emit()
+        _pump(qapp)
         wait_until(qapp, lambda: window._material_page.bridge.property("screen") == "day")
         assert window.session.planner_view == "day"
         assert window.session.selected_day == today
