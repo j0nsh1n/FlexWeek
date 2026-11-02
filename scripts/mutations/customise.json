@@ -18,7 +18,7 @@
   "name": "Poster on 0.16's yellow",
   "old": "        window=\"#fff8e7\",\n",
   "new": "        window=\"#ffd60a\",\n",
-  "test": "desktop/tests/test_look.py::test_the_seven_looks_wear_looks_css_colours"
+  "test": "desktop/tests/test_look.py::test_the_seven_looks_keep_their_pages_and_separate_their_surfaces"
  },
  {
   "file": "desktop/native/look.py",
