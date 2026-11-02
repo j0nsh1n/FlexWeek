@@ -72,6 +72,7 @@ Item {
         horizontalAlignment: Text.AlignHCenter
         elide: Text.ElideRight
         text: root.label
+        visible: !(root.theme && root.theme.railLabels === false)
         color: root.selected ? palette.inkSurface : palette.inkMuted
         font.family: M3Font.family
         font.pixelSize: 12
