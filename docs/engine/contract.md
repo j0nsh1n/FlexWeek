@@ -105,7 +105,11 @@ whose values are Python's own types, as `sqlite3` did.
   (it adds indexmap), so dicts keep the key order Python gave them. Approved on 2026-10-02:
   serde_json's `unbounded_depth`, used only where the binding reads text Python has already
   parsed, so a file nested past 128 levels reads as the original read it. Any other crate is
-  asked for first.
+  asked for first. The Material scheme is not a new crate: it is a port of
+  `@material/material-color-utilities` 0.3.0 (Apache-2.0) in `engine::material`, with the licence
+  notice in `engine/engine/src/material/NOTICE`. `desktop/native/material/dynamic_color.py` calls
+  that one function and reads Qt's palette accent. The accent stays in Python because the core
+  does not import Qt. When the platform has not set the accent, the wrapper returns nothing.
 
 ## Slices
 
