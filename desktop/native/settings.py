@@ -273,7 +273,17 @@ BLOCK_SONG_NOTE = (
     "When a block starts and the alarm sound is Spotify, the Spotify link in Settings plays. Dismiss or"
     " snooze it as you would an alarm."
 )
-FOCUS_AUDIO_NOTE = "Off stays quiet. Spotify opens the link from Alerts when focus starts."
+FOCUS_AUDIO_NOTE = (
+    "Rain, Lo-Fi and White noise play inside FlexWeek and pause with the timer. Spotify opens the link"
+    " from Alerts when focus starts."
+)
+FOCUS_AUDIO_CHOICES = (
+    ("Off", "off"),
+    ("Rain", "rain"),
+    ("Lo-Fi", "lo-fi"),
+    ("White noise", "white-noise"),
+    ("Spotify", "spotify"),
+)
 ALARM_NOTE = "An alarm rings at its time on the days you pick, until you dismiss or snooze it."
 # A checkbox's words do not wrap, so what needs more than a few words says it underneath.
 DND_NOTE = "Each one stays in the window until you press Got it."
@@ -1075,10 +1085,8 @@ class SettingsPage(QWidget):
         boxes = (self.work, self.break_min, self.long_break, self.long_every)
         self.focus_steppers = [Stepper(box) for box in boxes]
         work, rest, long_rest, every = self.focus_steppers
-        stored_audio = preferences.get("focus_audio") or "off"
-        self._focus_audio_kept = stored_audio if stored_audio not in {"off", "spotify"} else None
-        shown_audio = "off" if self._focus_audio_kept else stored_audio
-        self.focus_audio = Segmented((("Off", "off"), ("Spotify", "spotify")), "prefFocusAudio")
+        self.focus_audio = Segmented(FOCUS_AUDIO_CHOICES, "prefFocusAudio")
+        shown_audio = preferences.get("focus_audio") or "off"
         self.focus_audio.setCurrentIndex(max(0, self.focus_audio.findData(shown_audio)))
         focus_form.addRow("While you focus", self.focus_audio)
         focus_form.addRow(_note(FOCUS_AUDIO_NOTE, "prefFocusAudioNote"))
@@ -1290,9 +1298,6 @@ class SettingsPage(QWidget):
         for box in (self.work, self.break_min, self.long_break):
             box.editingFinished.connect(self._round_if_splitting)
         self.spotify.editingFinished.connect(self._check_spotify)
-        # Connected before the announce loop, so a change drops a stored sound the control cannot show
-        # before the page says it changed.
-        self.focus_audio.currentIndexChanged.connect(self._drop_focus_audio_kept)
         # Every choice says it changed. Connected last, so building the page says nothing, and after
         # the handlers above, so a look or a timer preset has filled in its knobs by then.
         choices = (
@@ -1695,15 +1700,8 @@ class SettingsPage(QWidget):
         }
 
     def _focus_audio_value(self) -> str:
-        """Off or Spotify from the control. A stored rain, lo-fi or white-noise value stays until the
-        student moves the control, which only offers the sounds this version can play."""
-        if self._focus_audio_kept:
-            return self._focus_audio_kept
         chosen = self.focus_audio.currentData()
         return chosen if isinstance(chosen, str) else "off"
-
-    def _drop_focus_audio_kept(self, _index: int) -> None:
-        self._focus_audio_kept = None
 
     def _show_motion(self, look: dict) -> None:
         shown = self._motion_chosen or look_motion(look)
