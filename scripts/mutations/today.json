@@ -156,8 +156,8 @@
  {
   "file": "desktop/native/window.py",
   "name": "the sign-out sheet drawn in red",
-  "old": "        if confirm(self, \"Sign out\", SIGN_OUT_QUESTION.format(where=where), \"Sign out\", danger=False):\n",
-  "new": "        if confirm(self, \"Sign out\", SIGN_OUT_QUESTION.format(where=where), \"Sign out\"):\n",
+  "old": "        if confirm(\n            self, \"Sign out\", SIGN_OUT_QUESTION.format(where=where), \"Sign out\", danger=False\n        ) and self._save_before_leaving(self.session.logout, again=\"sign out again\"):\n",
+  "new": "        if confirm(\n            self, \"Sign out\", SIGN_OUT_QUESTION.format(where=where), \"Sign out\"\n        ) and self._save_before_leaving(self.session.logout, again=\"sign out again\"):\n",
   "test": "desktop/tests/test_sheets.py::test_the_sign_out_sheet_says_where_the_week_lives_and_does_not_draw_sign_out_red"
  },
  {

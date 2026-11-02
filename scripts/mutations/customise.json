@@ -30,7 +30,7 @@
  {
   "file": "desktop/native/look.py",
   "name": "Paper's fills at the family's chroma",
-  "old": "        fill=(0.92, 0.035),\n",
+  "old": "        fill=(0.915, 0.040),\n",
   "new": "",
   "test": "desktop/tests/test_look.py::test_paper_draws_the_family_quieter_and_poster_bolder"
  },
