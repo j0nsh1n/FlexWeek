@@ -170,7 +170,9 @@ def test_a_date_shows_its_chips_in_the_account_clock(qapp: QApplication, window:
 
 def test_an_overdue_deadline_uses_the_overdue_chip(qapp: QApplication, window: NativeWindow) -> None:
     root, _month = _open_month(qapp, window)
-    gone = (date.fromisoformat(window.session.today_iso()) - timedelta(days=1)).isoformat()
+    today = date.fromisoformat(window.session.today_iso())
+    shown = [iso for iso in _grid(today.replace(day=1)) if iso < today.isoformat()]
+    gone = shown[-1]
     try:
         window.session.add_homework(
             {
@@ -242,18 +244,53 @@ def test_previous_and_next_move_the_month(qapp: QApplication, window: NativeWind
         window._use_widgets_styles()
 
 
-def test_a_narrow_month_shows_dots_instead_of_chips(qapp: QApplication, window: NativeWindow) -> None:
+def test_the_minimum_desktop_width_still_shows_chips(qapp: QApplication, window: NativeWindow) -> None:
+    """800px is the product floor; the rail is still up, so this is not a phone and chips stay."""
+    root, _month = _open_month(qapp, window)
+    window.resize(WINDOW_MIN_WIDTH, 800)
+    _pump(qapp)
+    try:
+        today = window.session.today_iso()
+        wait_until(qapp, lambda: _qml(root, "materialMonth").property("phone") is False)
+        wait_until(qapp, lambda: _texts(_cell(root, today), "monthChipText") == [
+            "8:00 AM School",
+            "6:45 PM History essay",
+        ])
+        assert _named_on(_cell(root, today), "monthDot") == []
+    finally:
+        window.resize(1280, 800)
+        _pump(qapp)
+        window._use_widgets_styles()
+
+
+def test_a_phone_month_shows_dots_instead_of_chips(qapp: QApplication, window: NativeWindow) -> None:
     root, _month = _open_month(qapp, window)
     window.setMinimumWidth(360)
     window.resize(700, 800)
     _pump(qapp)
     try:
         today = window.session.today_iso()
-        wait_until(qapp, lambda: float(_qml(root, "materialMonth").property("width")) < 768)
+        wait_until(qapp, lambda: _qml(root, "materialMonth").property("phone") is True)
         wait_until(qapp, lambda: len(_named_on(_cell(root, today), "monthDot")) == 2)
         assert _texts(_cell(root, today), "monthChipText") == []
     finally:
         window.setMinimumWidth(WINDOW_MIN_WIDTH)
+        window.resize(1280, 800)
+        _pump(qapp)
+        window._use_widgets_styles()
+
+
+def test_a_short_date_keeps_one_chip_and_counts_the_rest(qapp: QApplication, window: NativeWindow) -> None:
+    root, _month = _open_month(qapp, window)
+    window.resize(1280, 400)
+    _pump(qapp)
+    try:
+        today = window.session.today_iso()
+        cell = _cell(root, today)
+        wait_until(qapp, lambda: int(_cell(root, today).property("rowsFit")) == 1)
+        assert _texts(cell, "monthChipText") == ["8:00 AM School"]
+        assert _texts(cell, "monthMore") == ["and 1 more"]
+    finally:
         window.resize(1280, 800)
         _pump(qapp)
         window._use_widgets_styles()
@@ -270,6 +307,9 @@ def test_the_study_time_switch_shows_the_load_bar(qapp: QApplication, window: Na
         wait_until(qapp, lambda: month.property("showStudyTime") is True)
         wait_until(qapp, lambda: _named_on(_cell(root, today), "monthStudyBar") != [])
         assert _cell(root, today).property("plannedShare") == pytest.approx(60 / 180)
+        month.setShowStudyTime(False)
+        wait_until(qapp, lambda: _qml(root, "monthStudyTime").property("checked") is False)
+        wait_until(qapp, lambda: _named_on(_cell(root, today), "monthStudyBar") == [])
     finally:
         month.setShowStudyTime(False)
         window._use_widgets_styles()
