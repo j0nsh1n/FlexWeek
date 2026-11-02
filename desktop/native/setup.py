@@ -161,8 +161,8 @@ NOTES = {
     WEEK: "FlexWeek works around fixed times. Skip anything you don't have.",
     HOMEWORK: "You can change this any time in Settings, under Planning.",
     REMINDERS: (
-        "Pick the sound for reminders, alarms and the end of a focus session. A Spotify song plays for"
-        " alarms and when a block starts; the rest play Chime."
+        "Pick the sound for reminders, alarms and the end of a focus session. Spotify plays for an alarm."
+        " A block starts with the Spotify link from Settings. The rest play Chime."
     ),
     FIRST: "Add up to three. You can add the rest any time.",
     DONE: "Everything here is also in Settings. Run setup again from Settings, under This computer.",
@@ -1681,12 +1681,12 @@ class SetupPage(QWidget):
         self.tones.addButton(spotify)
         self.tone_buttons["spotify"] = spotify
         box.addWidget(spotify)
-        self.spotify_label = _label("Default Spotify link", "setupFieldLabel", wrap=False)
+        self.spotify_label = _label("Spotify link", "setupFieldLabel", wrap=False)
         box.addWidget(self.spotify_label)
         self.spotify = QLineEdit()
         self.spotify.setObjectName("setupSpotify")
         self.spotify.setPlaceholderText("Paste a link from Spotify: open.spotify.com/track/… or /playlist/…")
-        self.spotify.setAccessibleName("Default Spotify link")
+        self.spotify.setAccessibleName("Spotify link")
         self.spotify_note = _label(SPOTIFY_TONE_NOTE, "setupHint")
         box.addWidget(self.spotify)
         box.addWidget(self.spotify_note)

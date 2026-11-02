@@ -6,6 +6,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Changed
+- Spotify for blocks is one link in Settings. Add and edit no longer ask for a link on a block or on homework. Open Spotify link, a block starting, and Focus set to Spotify all use that link. A link already saved on a block stays in your data.
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed

@@ -139,8 +139,8 @@ def test_the_words_say_what_each_setting_does(qapp: QApplication) -> None:
     dnd_note = dialog.findChild(QLabel, "prefDndNote").text()
     assert dnd_note == "Each one stays in the window until you press Got it."
     assert dialog.block_song_note.text() == (
-        "When a block starts, its own Spotify link plays. With none, the default link plays if the"
-        " sound is Spotify. Dismiss or snooze it as you would an alarm."
+        "When a block starts, the Spotify link in Settings plays. Dismiss or snooze it as you would"
+        " an alarm."
     )
     dialog.close()
 

@@ -7,7 +7,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 
 import flexweek_engine  # type: ignore[import-untyped]
@@ -582,6 +582,12 @@ class Preferences(BaseModel):
     # new account; an account from before 0.18.5 that never chose is stamped 24-hour when the store
     # opens.
     clock_24h: bool = Field(default=False, exclude_if=lambda value: value is False)
+    # What plays when focus starts. Rain, lo-fi and white noise are stored for a later lane.
+    # Off is omitted, as the other comfort defaults are. Kept in comfort_json, on this computer:
+    # a synced column would make an older phone update a column it does not have.
+    focus_audio: Literal["off", "rain", "lo-fi", "white-noise", "spotify"] = Field(
+        default="off", exclude_if=lambda value: value == "off"
+    )
     setup: SetupProgress | None = Field(default=None, exclude_if=lambda value: value is None)
 
     _spotify_url = field_validator("default_spotify_url")(valid_spotify_url)
@@ -832,31 +838,55 @@ def encode_availability(preferences: Preferences) -> str:
 
 
 def encode_comfort(preferences: Preferences) -> str:
-    return json.dumps(
-        {
-            "alert_volume": preferences.alert_volume,
-            "end_chime": preferences.end_chime,
-            "tray_notifications": preferences.tray_notifications,
-            "start_at_login": preferences.start_at_login,
-            "preferred_view": preferences.preferred_view,
-            "sidebar_collapsed": preferences.sidebar_collapsed,
-            "sidebar_width_px": preferences.sidebar_width_px,
-            "theme_pack": preferences.theme_pack,
-            "accent": preferences.accent,
-            "accent_chips": preferences.accent_chips,
-            "motion": preferences.motion,
-            "alarm_tone": preferences.alarm_tone,
-            "planning_style": preferences.planning_style,
-            "drag_step_min": preferences.drag_step_min,
-            "clock_24h": preferences.clock_24h,
-            "setup": preferences.setup.model_dump() if preferences.setup is not None else None,
-        },
-        separators=(",", ":"),
-    )
+    comfort: dict[str, Any] = {
+        "alert_volume": preferences.alert_volume,
+        "end_chime": preferences.end_chime,
+        "tray_notifications": preferences.tray_notifications,
+        "start_at_login": preferences.start_at_login,
+        "preferred_view": preferences.preferred_view,
+        "sidebar_collapsed": preferences.sidebar_collapsed,
+        "sidebar_width_px": preferences.sidebar_width_px,
+        "theme_pack": preferences.theme_pack,
+        "accent": preferences.accent,
+        "accent_chips": preferences.accent_chips,
+        "motion": preferences.motion,
+        "alarm_tone": preferences.alarm_tone,
+        "planning_style": preferences.planning_style,
+        "drag_step_min": preferences.drag_step_min,
+        "clock_24h": preferences.clock_24h,
+        "setup": preferences.setup.model_dump() if preferences.setup is not None else None,
+    }
+    if preferences.focus_audio != "off":
+        comfort["focus_audio"] = preferences.focus_audio
+    return json.dumps(comfort, separators=(",", ":"))
+
+
+_FOCUS_AUDIO = frozenset({"off", "rain", "lo-fi", "white-noise", "spotify"})
+
+
+def _stored_focus_audio(row: Row) -> str | None:
+    """The engine's preference reader drops comfort keys it does not know. Focus audio is one of
+    those, so it is put back here. Off is the default and is not stored."""
+    raw = dict(row).get("comfort_json")
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        comfort = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(comfort, dict):
+        return None
+    audio = comfort.get("focus_audio")
+    if audio in _FOCUS_AUDIO and audio != "off":
+        return str(audio)
+    return None
 
 
 def preferences_from_row(row: Row) -> dict:
     fields = json.loads(flexweek_engine.preferences_fields(json.dumps(dict(row))))
+    audio = _stored_focus_audio(row)
+    if audio is not None:
+        fields["focus_audio"] = audio
     return Preferences(**fields).model_dump()
 
 

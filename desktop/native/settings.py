@@ -213,12 +213,12 @@ PLANNING_STYLES = (
     ),
     ("manual", "I'll drag it onto the calendar myself", "The planning button becomes Suggest times."),
 )
-SPOTIFY_LINK_HINT = "Used by alarms and by blocks that start without a link of their own."
-SPOTIFY_TONE_NOTE = (
-    f"{SPOTIFY_LINK_HINT} It plays in your Spotify app, and stopping the alarm stops it. Reminders before"
-    " a block and the end of a focus session play Chime. Without the Spotify app, the link opens and"
-    " Chime rings too."
+SPOTIFY_LINK_HINT = "Plays when a block starts, and when focus is set to Spotify."
+SPOTIFY_TONE_REST = (
+    "It plays in your Spotify app, and stopping the alarm stops it. Reminders before a block and the"
+    " end of a focus session play Chime. Without the Spotify app, the link opens and Chime rings too."
 )
+SPOTIFY_TONE_NOTE = f"{SPOTIFY_LINK_HINT} {SPOTIFY_TONE_REST}"
 # What only Today's app reads. Every other design has its own colours and shapes, so these changed
 # nothing there (measured 2026-09-21: not the view, not the top bar, apart from Corners on the bar).
 TODAYS_APP_KNOBS = ("surface", "corners", "blocks")
@@ -268,9 +268,9 @@ HELP_KEYS = (
 FOCUS_RUNNING_NOTE = "Work on this until the timer ends. Pause if something interrupts you."
 FOCUS_ENDED_NOTE = "Time is up. Mark it finished, take a break, or give it more time."
 BLOCK_SONG_NOTE = (
-    "When a block starts, its own Spotify link plays. With none, the default link plays if the sound is"
-    " Spotify. Dismiss or snooze it as you would an alarm."
+    "When a block starts, the Spotify link in Settings plays. Dismiss or snooze it as you would an alarm."
 )
+FOCUS_AUDIO_NOTE = "Off stays quiet. Spotify opens the link from Alerts when focus starts."
 ALARM_NOTE = "An alarm rings at its time on the days you pick, until you dismiss or snooze it."
 # A checkbox's words do not wrap, so what needs more than a few words says it underneath.
 DND_NOTE = "Each one stays in the window until you press Got it."
@@ -973,8 +973,9 @@ class SettingsPage(QWidget):
         self.spotify.setObjectName("prefSpotify")
         self.spotify.setPlaceholderText("Paste a Spotify link")
         self.spotify.setCursorPosition(0)
-        # The tone for reminders, the end of a focus session and new alarms. Spotify plays for alarms and
-        # block starts only.
+        self.spotify.setAccessibleDescription(SPOTIFY_LINK_HINT)
+        # The tone for reminders, the end of a focus session and new alarms. An alarm set to Spotify
+        # plays the link above. A block start plays that link either way.
         self.alarm_tone = QComboBox()
         self.alarm_tone.setObjectName("prefAlarmTone")
         for name in SOUNDS:
@@ -984,9 +985,9 @@ class SettingsPage(QWidget):
         self.play_tone = QPushButton("Play")
         self.play_tone.setObjectName("prefPlayTone")
         self.play_tone.setProperty("quiet", True)
-        self.play_tone.setToolTip("Hear what plays when a block starts")
+        self.play_tone.setToolTip("Hear this sound")
         self.play_tone.clicked.connect(self._play_tone)
-        self.tone_note = QLabel(SPOTIFY_TONE_NOTE)
+        self.tone_note = QLabel(SPOTIFY_TONE_REST)
         self.tone_note.setObjectName("prefToneNote")
         self.tone_note.setWordWrap(True)
         self._tone_bell = Bell(self)
@@ -1071,7 +1072,14 @@ class SettingsPage(QWidget):
         boxes = (self.work, self.break_min, self.long_break, self.long_every)
         self.focus_steppers = [Stepper(box) for box in boxes]
         work, rest, long_rest, every = self.focus_steppers
-        # The preset first: it sets the three lengths under it.
+        stored_audio = preferences.get("focus_audio") or "off"
+        self._focus_audio_kept = stored_audio if stored_audio not in {"off", "spotify"} else None
+        shown_audio = "off" if self._focus_audio_kept else stored_audio
+        self.focus_audio = Segmented((("Off", "off"), ("Spotify", "spotify")), "prefFocusAudio")
+        self.focus_audio.setCurrentIndex(max(0, self.focus_audio.findData(shown_audio)))
+        focus_form.addRow("While you focus", self.focus_audio)
+        focus_form.addRow(_note(FOCUS_AUDIO_NOTE, "prefFocusAudioNote"))
+        # The preset first among the lengths: it sets the three lengths under it.
         focus_form.addRow("Timer preset", self.preset_timer)
         focus_form.addRow("Focus minutes", work)
         focus_form.addRow("Break minutes", rest)
@@ -1096,7 +1104,8 @@ class SettingsPage(QWidget):
         tone_row.addWidget(self.play_tone)
         tone_row.addStretch(1)
         reminder_form.addRow("Sound", tone_row)
-        reminder_form.addRow("Default Spotify link", self.spotify)
+        reminder_form.addRow("Spotify link", self.spotify)
+        reminder_form.addRow(_note(SPOTIFY_LINK_HINT, "prefSpotifyHint"))
         reminder_form.addRow(self.tone_note)
         reminder_form.addRow(self.dnd_override)
         reminder_form.addRow(_note(DND_NOTE, "prefDndNote"))
@@ -1278,11 +1287,14 @@ class SettingsPage(QWidget):
         for box in (self.work, self.break_min, self.long_break):
             box.editingFinished.connect(self._round_if_splitting)
         self.spotify.editingFinished.connect(self._check_spotify)
+        # Connected before the announce loop, so a change drops a stored sound the control cannot show
+        # before the page says it changed.
+        self.focus_audio.currentIndexChanged.connect(self._drop_focus_audio_kept)
         # Every choice says it changed. Connected last, so building the page says nothing, and after
         # the handlers above, so a look or a timer preset has filled in its knobs by then.
         choices = (
             self.look, self.accent, self.preferred_view, self.clock, self.motion, self.alarm_tone,
-            self.drag_step,
+            self.focus_audio, self.drag_step,
         )
         for box in (*choices, *self.knobs.values()):
             box.currentIndexChanged.connect(self._announce)
@@ -1316,8 +1328,7 @@ class SettingsPage(QWidget):
     def _follow_tone(self, *_index: object) -> None:
         """New alarms start with the chosen sound, and the note says what Spotify means for the rest."""
         tone = self.alarm_tone.currentData()
-        for row in (self.spotify, self.tone_note):
-            self._alerts_form.setRowVisible(row, tone == "spotify")
+        self._alerts_form.setRowVisible(self.tone_note, tone == "spotify")
         index = self.alarm_sound.findData(tone)
         if index >= 0:
             self.alarm_sound.setCurrentIndex(index)
@@ -1673,11 +1684,23 @@ class SettingsPage(QWidget):
             "start_at_login": self.start_at_login.isChecked(),
             "preferred_view": self.preferred_view.currentData(),
             "clock_24h": bool(self.clock.currentData()),
+            "focus_audio": self._focus_audio_value(),
             "motion": self._motion_chosen,
             "alarm_tone": self.alarm_tone.currentData(),
             "planning_style": self._planning_style(),
             "drag_step_min": drag_step(self.drag_step.currentData()),
         }
+
+    def _focus_audio_value(self) -> str:
+        """Off or Spotify from the control. A stored rain, lo-fi or white-noise value stays until the
+        student moves the control, which only offers the sounds this version can play."""
+        if self._focus_audio_kept:
+            return self._focus_audio_kept
+        chosen = self.focus_audio.currentData()
+        return chosen if isinstance(chosen, str) else "off"
+
+    def _drop_focus_audio_kept(self, _index: int) -> None:
+        self._focus_audio_kept = None
 
     def _show_motion(self, look: dict) -> None:
         shown = self._motion_chosen or look_motion(look)
