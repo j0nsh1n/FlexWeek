@@ -20,6 +20,7 @@ from PySide6.QtGui import (
     QCloseEvent,
     QColor,
     QContextMenuEvent,
+    QCursor,
     QDesktopServices,
     QFont,
     QFontMetrics,
@@ -589,6 +590,10 @@ class NativeWindow(QMainWindow):
         self._surface = sanitize_surface(None)
         self._material_page = None
         self._material_gave_up = False
+        # The app version that last failed to open Material, or "" when the student may try it.
+        self._material_failed = ""
+        # Built with the week. Appearance can run before that menu exists.
+        self.material_more = None
         self._day_mode = False
         self._opened_on_preference = False
         self._views: dict[str, LayoutView] = {}
@@ -723,6 +728,7 @@ class NativeWindow(QMainWindow):
         self._layout_tick.setInterval(LAYOUT_TICK_MS)
         self._layout_tick.timeout.connect(self._refresh_layout)
         self._layout_tick.timeout.connect(self._count_down)
+        self._layout_tick.timeout.connect(self._tick_material_clock)
         self._layout_tick.start()
         self._deadline_tick = QTimer(self)
         self._deadline_tick.setSingleShot(True)
@@ -1095,37 +1101,84 @@ class NativeWindow(QMainWindow):
         if shortcut is not None:
             shortcut.setEnabled(enabled)
 
+    def _material_owns(self) -> bool:
+        """Material is the saved surface and this version has not given up on it.
+
+        Focus and Settings can cover it. They do not hand the window to the Widgets week.
+        """
+        return self._surface == "material" and not self._setup_active and not self._material_gave_up
+
+    def _cover_holds(self) -> bool:
+        """Setup, Focus, or Settings is the page the student is looking at."""
+        current = self._stack.currentWidget()
+        on_settings = self._settings is not None and current is self._settings
+        return self._setup_active or current is self.focus_screen or on_settings
+
+    def _show_surface(self) -> bool:
+        """Show the surface that owns the window. True when Material is on screen."""
+        if self._material_owns():
+            return self._present_material()
+        self._show_page("weekPage")
+        return False
+
     def _ensure_material(self):
-        """The Material page, or None when Qt Quick itself cannot be imported."""
+        """The Material page, or None when it cannot be built."""
         if self._material_page is not None:
             return self._material_page
         try:
             from desktop.native.material.host import MaterialPage
-        except ImportError as error:
-            logging.getLogger("flexweek.material").warning("Material 3 could not be imported: %s", error)
+
+            page = MaterialPage(self)
+        except Exception as error:
+            logging.getLogger("flexweek.material").warning("Material 3 could not be built: %s", error)
+            self._drop_partial_material()
             self._give_up_material()
             return None
-        page = MaterialPage(self)
         page.failed.connect(self._on_material_failed)
         page.widgets_requested.connect(self._use_widgets_styles)
         self._material_page = page
         self._stack.addWidget(page)
         return page
 
+    def _drop_partial_material(self) -> None:
+        """A failed build must not leave a half-made page in the stack or as a child."""
+        page = self._material_page
+        self._material_page = None
+        doomed: list[QObject] = []
+        if page is not None:
+            doomed.append(page)
+        doomed.extend(self.findChildren(QWidget, "materialPage"))
+        doomed.extend(self.findChildren(QObject, "materialBridge"))
+        seen: set[int] = set()
+        for item in doomed:
+            if id(item) in seen:
+                continue
+            seen.add(id(item))
+            if isinstance(item, QWidget) and self._stack.indexOf(item) >= 0:
+                self._stack.removeWidget(item)
+            item.setParent(None)
+            item.deleteLater()
+
     def _give_up_material(self) -> None:
-        """Show the Widgets week. The saved surface stays Material so the next open can try again."""
+        """Show the Widgets week and say so once that week is visible.
+
+        The saved choice stays Material. This version does not try again at start-up until the
+        student chooses Material, or a newer app version is installed.
+        """
         self._material_gave_up = True
+        self._material_failed = VERSION
         self._week_keys(True)
-        if self.session.account is not None:
-            self.session._say(
-                "Material 3 could not open, so FlexWeek is showing the other styles. "
-                "Your week is unchanged."
-            )
         current = self._stack.currentWidget()
         # Stay on Settings when that is what is open and Material never appeared. A graphics
         # failure while Material is up, or a load that was meant to replace the week, shows the week.
         if current is None or current.objectName() != "settingsPage":
             self._show_page("weekPage")
+        self._save_look()
+        if self.session.account is not None:
+            self.session._say(
+                "Material 3 could not open, so FlexWeek is showing the other styles. "
+                "Your week is unchanged."
+            )
 
     def _on_material_failed(self, _message: str) -> None:
         if not self._material_gave_up:
@@ -1141,18 +1194,45 @@ class NativeWindow(QMainWindow):
         # Show first. The quick widget builds its scene when it is shown, and a bridge installed
         # earlier is not the one that scene reads.
         self._show_page("materialPage")
-        if not page.load():
+        try:
+            loaded = page.load()
+        except Exception as error:
+            logging.getLogger("flexweek.material").warning("Material 3 could not load: %s", error)
+            loaded = False
+        if not loaded:
             if not self._material_gave_up:
                 self._give_up_material()
             return False
         self._week_keys(False)
-        page.publish()
+        try:
+            page.publish()
+        except Exception as error:
+            logging.getLogger("flexweek.material").warning("Material 3 could not be shown: %s", error)
+            # Show the week before the failed page is removed. Removing the current page first
+            # makes the stack land on whatever is underneath, often Settings.
+            if not self._material_gave_up:
+                self._give_up_material()
+            self._drop_partial_material()
+            return False
+        if self._material_failed:
+            self._material_failed = ""
+            self._save_look()
         return True
+
+    def _tick_material_clock(self) -> None:
+        """Move Material's clock and now line. A tick must not redraw the Widgets week or take a prompt."""
+        page = self._material_page
+        if page is None or not page._ready or not self._material_owns():
+            return
+        if self._stack.currentWidget() is not page:
+            return
+        page.bridge.refresh()
 
     def _use_widgets_styles(self) -> None:
         """The Material settings stub's way back. The settings draft, if one is open, stays."""
         self._surface = "widgets"
         self._material_gave_up = False
+        self._material_failed = ""
         settings = self._settings
         if settings is not None and settings.layout_sections:
             settings.layout_sections[0].show_surface("widgets")
@@ -1708,6 +1788,8 @@ class NativeWindow(QMainWindow):
         more_menu.aboutToShow.connect(self._sync_more_menu)
         more.setMenu(more_menu)
         self.more_menu = more_menu
+        # The week page is not in the window yet, so findChild cannot see these buttons.
+        self._build_material_more((undo, redo, save, help_button, about, sign_out))
         gear = QPushButton()
         gear.setObjectName("settingsGear")
         gear.setProperty("quiet", True)
@@ -2726,22 +2808,10 @@ class NativeWindow(QMainWindow):
             # The account's preferences may only now have arrived, and what setup kept before they did,
             # a skip included, is written with them.
             QTimer.singleShot(0, self, self._flush_setup)
-        on_focus = self._stack.currentWidget() is self.focus_screen
-        # Settings stays built between opens, so whether it is on screen is the question, not whether
-        # it exists.
-        on_settings = self._settings is not None and self._stack.currentWidget() is self._settings
-        # Material is the whole window. A refresh must not put the Widgets week back on top, and it
-        # must not be tried again after a load or graphics failure until the student chooses it.
-        material_up = False
-        if (
-            self._surface == "material"
-            and not self._setup_active
-            and not on_focus
-            and not self._material_gave_up
-        ):
-            material_up = self._present_material()
-        if not material_up and not self._setup_active and not on_focus and not on_settings:
-            self._show_page("weekPage")
+        # Focus, Settings and Setup stay where they are. Anything else shows the surface that owns
+        # the window. A failed Material open falls through to the Widgets week inside _show_surface.
+        if not self._cover_holds():
+            self._show_surface()
         self._maybe_prepare_settings()
         self._maybe_prepare_block_spare()
         if self.plan_review.isVisible():
@@ -2787,9 +2857,9 @@ class NativeWindow(QMainWindow):
         self.more_button.set_count(0)
         self.solve_button.set_count(len(needed))
         self._announce_overdue()
-        # These one-shot prompts belong to the Widgets week. Material must not consume them, or a
-        # swap back would find them already gone.
-        if not material_up:
+        # These one-shot prompts belong to the Widgets week, including while its Settings is open.
+        # Material keeps them even when Focus or Settings covers it, or a swap back would find them gone.
+        if not self._material_owns():
             prompt = self._unfinished_items(self.session.consume_unfinished())
             if prompt:
                 self._fill_unfinished(prompt)
@@ -2803,7 +2873,7 @@ class NativeWindow(QMainWindow):
             titles = {block["id"]: block["title"] for block in self.session.blocks}
             self._late_dialog.show_trace(self.session.late_preview["trace"], titles)
         self.focus_panel.set_state(self.session)
-        if not material_up:
+        if not self._material_owns():
             fresh = self.session.consume_plan_review()
             if fresh is not None:
                 titles = {block["id"]: block["title"] for block in self.session.blocks}
@@ -2954,6 +3024,28 @@ class NativeWindow(QMainWindow):
         undo = self.findChild(QPushButton, "undoButton")
         if undo is not None:
             undo.setEnabled(not self.session.busy and (self.session.can_undo() or self._toast_offers_undo()))
+
+    def _build_material_more(self, buttons: tuple[QPushButton, ...]) -> None:
+        """The More menu Material can act on. Widgets-only rows stay on the Widgets menu."""
+        menu = Menu(self)
+        menu.setObjectName("materialMoreMenu")
+        self._material_more_pairs = []
+        for button in buttons:
+            name = button.objectName()
+            action = menu.add(button.text(), MORE_ICONS[name], name=name)
+            action.triggered.connect(button.click)
+            self._material_more_pairs.append((action, button))
+        menu.aboutToShow.connect(self._sync_material_more)
+        self.material_more = menu
+
+    def _sync_material_more(self) -> None:
+        self._sync_undo_enabled()
+        for action, button in self._material_more_pairs:
+            action.setEnabled(button.isEnabled())
+            action.setText(button.text())
+
+    def open_material_more(self) -> None:
+        self.material_more.popup(QCursor.pos())
 
     def _sync_more_menu(self) -> None:
         self._sync_undo_enabled()
@@ -4730,7 +4822,7 @@ class NativeWindow(QMainWindow):
 
     def _close_focus_screen(self) -> None:
         if self._stack.currentWidget() is self.focus_screen:
-            self._show_page("weekPage")
+            self._show_surface()
             self._focus_week()
 
     def _stop_focus(self) -> None:
@@ -5178,11 +5270,18 @@ class NativeWindow(QMainWindow):
             nonlocal login
             look, layout = page.look_choice(), page.layout_choice()
             surface = page.layout_sections[0].surface() if page.layout_sections else "widgets"
+            surface_changed = surface != self._surface
+            # A failed open leaves Material saved and the control unchecked. Checking it is the
+            # retry. A refresh must not do this while Settings is still the page on screen.
+            choosing_material_again = surface == "material" and (
+                self._material_gave_up or bool(self._material_failed)
+            )
             if (
                 look != self._look
                 or layout != self._layout
                 or page.saved_looks != self._saved_looks
-                or surface != self._surface
+                or surface_changed
+                or choosing_material_again
             ):
                 self._look = look
                 self.session.look = look
@@ -5191,7 +5290,10 @@ class NativeWindow(QMainWindow):
                 self._surface = sanitize_surface(surface)
                 if self._surface == "material":
                     self._material_gave_up = False
+                    self._material_failed = ""
                 self._save_look()
+                if surface_changed or choosing_material_again:
+                    self._show_surface()
                 self._on_week()
             wanted = page.updates()
             if self.session.preferences is not None:
@@ -5255,6 +5357,9 @@ class NativeWindow(QMainWindow):
             self._attach_settings_page(self._build_settings_page())
             page = self._settings
             assert page is not None
+        if self._settings_unsaved is not None and self._settings_unsaved():
+            page.motion_level = self._motion
+            return
         page.sync_open(
             self.session.preferences,
             self._look,
@@ -5304,7 +5409,7 @@ class NativeWindow(QMainWindow):
             return
         finish(save and self.session.account is not None)
         if show_week and self.session.account is not None:
-            self._show_page("weekPage")
+            self._show_surface()
 
     def _apply_start_at_login(self, wanted: bool) -> None:
         """The setting used to be stored on the account and obeyed by nothing. It is applied to this
@@ -5462,6 +5567,8 @@ class NativeWindow(QMainWindow):
         self._has_saved_design_look = False
         path = self._look_path()
         if not path.is_file():
+            self._material_failed = ""
+            self._material_gave_up = False
             return
         try:
             stored = json.loads(path.read_text())
@@ -5472,6 +5579,10 @@ class NativeWindow(QMainWindow):
         self._has_saved_design_look = self._layout_has_saved_look(raw_layout)
         self._layout = sanitize_layout(raw_layout)
         self._surface = sanitize_surface(stored)
+        failed = stored.get("material_failed") if isinstance(stored, dict) else None
+        self._material_failed = failed if isinstance(failed, str) else ""
+        # Same app version as the failure: do not build Material again until the student chooses it.
+        self._material_gave_up = self._surface == "material" and self._material_failed == VERSION
         self._updates = sanitize_updates(stored.get("updates") if isinstance(stored, dict) else None)
         self._zoom = sanitize_zoom(stored.get("zoom") if isinstance(stored, dict) else None)
         self._saved_looks = sanitize_saved(stored.get("saved_looks") if isinstance(stored, dict) else None)
@@ -5512,6 +5623,8 @@ class NativeWindow(QMainWindow):
                 "new_look_notice_seen": sorted(self._new_look_notice_seen),
                 "new_look_notice_exempt": sorted(self._new_look_notice_exempt),
             }
+            if self._material_failed:
+                body["material_failed"] = self._material_failed
             path.write_text(json.dumps(body) + "\n")
             self._has_saved_design_look = self._layout_has_saved_look(body["layout"])
         except OSError:
@@ -5630,7 +5743,10 @@ class NativeWindow(QMainWindow):
         self.toast.set_look(toast_colours(palette)["action"], SHADOW_SMALL if lifted else None, dark)
         self.command_bar.set_look(palette, SHADOW_LARGE if lifted else None, dark)
         colours = menu_colours(palette, lifted=lifted, corner=corner)
-        for menu in (self.more_menu, self.add_menu):
+        menus = [self.more_menu, self.add_menu]
+        if self.material_more is not None:
+            menus.append(self.material_more)
+        for menu in menus:
             menu.set_colours(colours)
 
     def _install_tray(self) -> None:
@@ -5666,16 +5782,13 @@ class NativeWindow(QMainWindow):
         QApplication.quit()
 
     def _settings_unsent(self) -> bool:
-        """Settings are open with a change the server does not have yet.
+        """A Settings change the server does not have yet, on whatever page is showing.
 
-        A swap to Material keeps that draft. Closing from the Material page still has to ask.
+        Swapping to Material and back keeps that draft. Closing still has to send it.
         """
-        page = self._settings
-        current = self._stack.currentWidget()
-        on_material = current is not None and current.objectName() == "materialPage"
-        if page is None or self._settings_unsaved is None or not (current is page or on_material):
+        if self._settings is None or self._settings_unsaved is None:
             return False
-        return self._settings_unsaved()
+        return bool(self._settings_unsaved())
 
     def _save_before_leaving(self, leave: Callable[[], None]) -> bool:
         """Leave once what is unsaved has reached the server. Returns True when there was nothing to
