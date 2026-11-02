@@ -2292,6 +2292,10 @@ class NativeSession(QObject):
     def homework_time_needed(self) -> list[dict]:
         return time_still_needed(self.assignments, self.blocks, self.week_start)
 
+    def built_week(self) -> WeekModel:
+        """The week Material draws. The shell asks the session, not the builder."""
+        return build_week(self.week_start, self.blocks, self.assignments, self.trace)
+
     def paste_destination(self, today: date | None = None) -> tuple[int, str | None] | None:
         if self.selected_block_id and self.selected_occurrence_day is not None:
             source = next((item for item in self.blocks if item["id"] == self.selected_block_id), None)

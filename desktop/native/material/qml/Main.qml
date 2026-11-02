@@ -54,24 +54,34 @@ Item {
                 anchors.margins: 12
                 spacing: 8
 
-                Rectangle {
+                Button {
+                    id: addHomework
                     objectName: "materialFab"
+                    text: "+"
+                    font.pixelSize: 28
                     width: 56
                     height: 56
-                    radius: 16
-                    color: bridge.primary
+                    padding: 0
+                    leftPadding: 0
+                    rightPadding: 0
+                    topPadding: 0
+                    bottomPadding: 0
                     anchors.horizontalCenter: parent.horizontalCenter
+                    Accessible.name: "Add homework"
+                    Accessible.role: Accessible.Button
+                    onClicked: bridge.addHomework()
 
-                    Label {
-                        anchors.centerIn: parent
-                        text: "+"
-                        color: bridge.onPrimary
-                        font.pixelSize: 28
+                    background: Rectangle {
+                        radius: 16
+                        color: bridge.primary
                     }
 
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: bridge.addHomework()
+                    contentItem: Label {
+                        text: addHomework.text
+                        color: bridge.onPrimary
+                        font.pixelSize: 28
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
                 }
 

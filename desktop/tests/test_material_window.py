@@ -18,14 +18,25 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QObject, QStandardPaths, QTimer  # noqa: E402
-from PySide6.QtWidgets import QApplication, QPushButton, QWidget  # noqa: E402
+from PySide6.QtCore import QObject, QStandardPaths, Qt, QTimer  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
+from PySide6.QtWidgets import (  # noqa: E402
+    QApplication,
+    QDialog,
+    QLabel,
+    QPushButton,
+    QSpinBox,
+    QWidget,
+)
 
 from desktop.native.calendar import sunday_due  # noqa: E402
 from desktop.native.custom_look import save_look  # noqa: E402
 from desktop.native.layouts.registry import sanitize_layout  # noqa: E402
 from desktop.native.look import sanitize_look  # noqa: E402
-from desktop.native.window import NativeWindow  # noqa: E402
+from desktop.native.remind import reminder_lead_min  # noqa: E402
+from desktop.native.version import VERSION  # noqa: E402
+from desktop.native.weekmodel import clock_label  # noqa: E402
+from desktop.native.window import WEEK_LIST_NAME, NativeWindow  # noqa: E402
 from desktop.server import LocalServer  # noqa: E402
 from desktop.tests.logic_support import past_setup  # noqa: E402
 from desktop.tests.test_layouts_window import (  # noqa: E402
@@ -37,6 +48,9 @@ from desktop.tests.test_layouts_window import (  # noqa: E402
 
 SCHOOL_LIGHT = "#EAE6FA"
 HOUR_ROW = 56
+FALLBACK = (
+    "Material 3 could not open, so FlexWeek is showing the other styles. Your week is unchanged."
+)
 NIGHT = {
     "name": "Night study",
     "base": "paper",
@@ -120,8 +134,12 @@ def _pump(qapp: QApplication, count: int = 30) -> None:
 
 
 def _show_material(qapp: QApplication, window: NativeWindow) -> QObject:
+    """Put Material on screen. A refresh must not do this while Settings is open, so leave Settings first."""
     window._surface = "material"
     window._material_gave_up = False
+    window._material_failed = ""
+    if window._settings is not None and window._stack.currentWidget() is window._settings:
+        window._close_settings(save=False)
     window.resize(1280, 800)
     window._on_week()
     _pump(qapp)
@@ -312,6 +330,10 @@ def test_an_unsent_settings_change_survives_the_swap(
         window.session.save_preferences = original
         for timer in page.findChildren(QTimer):
             timer.stop()
+        if window._settings is not None and window._stack.currentWidget() is page:
+            window._surface = "widgets"
+            window._material_gave_up = False
+            window._close_settings(save=False)
 
 
 def test_a_refresh_stays_on_material_and_does_not_take_the_plan_prompt(
@@ -349,6 +371,8 @@ def test_a_load_or_graphics_failure_keeps_the_session_and_the_choice(
         window._on_week()
         _pump(qapp)
         assert window._stack.currentWidget().objectName() == "weekPage"
+        assert window.toast.isVisible()
+        assert window.toast.text() == FALLBACK
         assert [(block["id"], block["title"]) for block in window.session.blocks] == before
         assert json.loads(look_file().read_text())["surface"] == "material"
         assert window._surface == "material"
@@ -410,3 +434,454 @@ def test_saved_looks_round_trip_with_surface(window: NativeWindow) -> None:
     assert "surface" not in window._layout
     assert window._saved_looks == [NIGHT]
     assert window._layout["options"]["one"]["daybar"] == "hide"
+
+
+def _menu_labels(menu: QWidget) -> list[str]:
+    labels: list[str] = []
+    for action in menu.actions():
+        if action.isSeparator() or not action.isVisible():
+            continue
+        labels.append(action.text().split("\t", 1)[0])
+        inner = action.menu()
+        if inner is not None:
+            labels.extend(_menu_labels(inner))
+    return labels
+
+
+def _action(menu: QWidget, prefix: str):
+    for action in menu.actions():
+        if action.text().startswith(prefix):
+            return action
+        inner = action.menu()
+        if inner is not None:
+            found = _action(inner, prefix)
+            if found is not None:
+                return found
+    return None
+
+
+def _drop_material(window: NativeWindow, qapp: QApplication) -> None:
+    """Remove the Material page, including one whose constructor died before it was stored."""
+    doomed: list[QWidget] = []
+    page = window._material_page
+    window._material_page = None
+    if page is not None:
+        doomed.append(page)
+    doomed.extend(window.findChildren(QWidget, "materialPage"))
+    seen: set[int] = set()
+    for item in doomed:
+        if id(item) in seen:
+            continue
+        seen.add(id(item))
+        if window._stack.indexOf(item) >= 0:
+            window._stack.removeWidget(item)
+        item.setParent(None)
+        item.deleteLater()
+    for bridge in window.findChildren(QObject, "materialBridge"):
+        bridge.setParent(None)
+        bridge.deleteLater()
+    _pump(qapp)
+
+
+def test_an_unsent_reminder_lead_survives_the_swap_back(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """A refused preference save must still be on the lead control after Material and after reopening."""
+    window._surface = "widgets"
+    window._material_gave_up = False
+    window._on_week()
+    window._open_settings()
+    page = window._settings
+    assert page is not None
+    lead = page.findChild(QSpinBox, "prefLead")
+    assert lead.value() == 5
+    assert lead.value() == reminder_lead_min(window.session.preferences)
+    saved: list[object] = []
+
+    def refuse(wanted: dict, _done: object) -> bool:
+        saved.append(wanted.get("reminder_lead_min"))
+        return False
+
+    original = window.session.save_preferences
+    window.session.save_preferences = refuse
+    try:
+        lead.setValue(17)
+        for timer in page.findChildren(QTimer):
+            timer.stop()
+        page.findChild(QPushButton, "chooseMaterial").click()
+        _pump(qapp)
+        assert window._stack.currentWidget().objectName() == "materialPage"
+        window._use_widgets_styles()
+        _pump(qapp)
+        assert window._stack.currentWidget().objectName() == "weekPage"
+        assert window._settings_unsent() is True
+        assert lead.value() == 17
+        assert window._save_before_leaving(lambda: None) is False
+        QTest.qWait(200)
+        assert 17 in saved
+        window._open_settings()
+        _pump(qapp)
+        assert window._stack.currentWidget().objectName() == "settingsPage"
+        assert page.findChild(QSpinBox, "prefLead").value() == 17
+    finally:
+        leaving = window._leaving
+        if leaving is not None:
+            leaving.stop()
+            leaving.deleteLater()
+            window._leaving = None
+        window.session.save_preferences = original
+        lead.setValue(reminder_lead_min(window.session.preferences))
+        for timer in page.findChildren(QTimer):
+            timer.stop()
+        if window._stack.currentWidget() is page:
+            window._close_settings()
+        window._surface = "widgets"
+        window._material_gave_up = False
+
+
+def test_a_missing_token_file_falls_back_and_leaves_no_material_page(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    from desktop.native.material import theme
+
+    _drop_material(window, qapp)
+    theme._schemes.cache_clear()
+    missing = tmp_path / "tokens.json"
+    monkeypatch.setattr(theme, "tokens_path", lambda: missing)
+    window._surface = "material"
+    window._material_gave_up = False
+    window.toast.hide()
+    try:
+        window._on_week()
+        _pump(qapp)
+        assert window._stack.currentWidget().objectName() == "weekPage"
+        assert window.toast.isVisible()
+        assert window.toast.text() == FALLBACK
+        assert window._surface == "material"
+        assert window.findChild(QWidget, "materialPage") is None
+        broken = tmp_path / "broken.json"
+        broken.write_text("{", encoding="utf-8")
+        monkeypatch.setattr(theme, "tokens_path", lambda: broken)
+        theme._schemes.cache_clear()
+        window._material_gave_up = False
+        window._material_failed = ""
+        window.toast.hide()
+        window._on_week()
+        _pump(qapp)
+        assert window._stack.currentWidget().objectName() == "weekPage"
+        assert window.toast.text() == FALLBACK
+        assert window.findChild(QWidget, "materialPage") is None
+    finally:
+        theme._schemes.cache_clear()
+        _drop_material(window, qapp)
+        window._material_gave_up = False
+        window._material_failed = ""
+        window._surface = "widgets"
+        window._save_look()
+
+
+def test_a_publish_failure_falls_back_to_the_widgets_week(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    window._surface = "widgets"
+    window._material_gave_up = False
+    window._material_failed = ""
+    page = window._ensure_material()
+    assert page is not None
+    original = page.publish
+
+    def boom() -> None:
+        raise RuntimeError("publication failed")
+
+    page.publish = boom
+    window._surface = "material"
+    window.toast.hide()
+    try:
+        window._on_week()
+        _pump(qapp)
+        assert window._stack.currentWidget().objectName() == "weekPage"
+        assert window.toast.isVisible()
+        assert window.toast.text() == FALLBACK
+        assert window._surface == "material"
+        assert [(block["id"], block["title"]) for block in window.session.blocks]
+    finally:
+        if window._material_page is page:
+            page.publish = original
+        window._material_gave_up = False
+        window._material_failed = ""
+        window._surface = "widgets"
+        window._save_look()
+
+
+def test_a_failed_material_is_not_tried_again_until_the_version_or_a_new_choice(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    window.toast.hide()
+    window._surface = "material"
+    window._material_failed = VERSION
+    window._material_gave_up = False
+    window._save_look()
+    window._material_gave_up = False
+    window._load_look()
+    window._on_week()
+    _pump(qapp)
+    try:
+        assert window._material_gave_up is True
+        assert window._stack.currentWidget().objectName() == "weekPage"
+        assert window.toast.isHidden()
+        assert json.loads(look_file().read_text())["surface"] == "material"
+        stored = json.loads(look_file().read_text())
+        stored["material_failed"] = "0.0.0"
+        look_file().write_text(json.dumps(stored))
+        window._load_look()
+        assert window._material_gave_up is False
+        window._on_week()
+        _pump(qapp)
+        assert window._stack.currentWidget().objectName() == "materialPage"
+        window._use_widgets_styles()
+        _pump(qapp)
+        assert "material_failed" not in json.loads(look_file().read_text())
+        window._surface = "material"
+        window._material_failed = VERSION
+        window._material_gave_up = True
+        window._save_look()
+        window._open_settings()
+        window._settings.findChild(QPushButton, "chooseMaterial").click()
+        _pump(qapp)
+        assert window._stack.currentWidget().objectName() == "materialPage"
+        assert "material_failed" not in json.loads(look_file().read_text())
+    finally:
+        window._material_gave_up = False
+        window._material_failed = ""
+        window._surface = "widgets"
+        if window._settings is not None and window._stack.currentWidget() is window._settings:
+            window._close_settings()
+        window._save_look()
+
+
+def test_focus_back_returns_to_material(qapp: QApplication, window: NativeWindow) -> None:
+    _show_material(qapp, window)
+    window._open_focus_screen()
+    assert window._stack.currentWidget() is window.focus_screen
+    window.findChild(QPushButton, "focusScreenBack").click()
+    _pump(qapp)
+    try:
+        assert window._stack.currentWidget().objectName() == "materialPage"
+    finally:
+        window._surface = "widgets"
+        window._material_gave_up = False
+        window._on_week()
+
+
+def test_a_refresh_with_focus_open_keeps_focus_and_the_plan_prompt(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    trace = {"placed": [], "kept": "focus"}
+    window.session.trace = trace
+    window.session._fresh_plan = True
+    _show_material(qapp, window)
+    window._open_focus_screen()
+    window.session.week_changed.emit()
+    _pump(qapp)
+    try:
+        assert window._stack.currentWidget() is window.focus_screen
+        assert window.plan_review.isHidden()
+        assert window.session._fresh_plan is True
+        window.findChild(QPushButton, "focusScreenBack").click()
+        _pump(qapp)
+        assert window._stack.currentWidget().objectName() == "materialPage"
+        assert window.session.consume_plan_review() == trace
+    finally:
+        window.session.trace = None
+        window.session._fresh_plan = False
+        window.plan_review.hide()
+        if window._stack.currentWidget() is window.focus_screen:
+            window._surface = "widgets"
+            window._close_focus_screen()
+        window._surface = "widgets"
+        window._material_gave_up = False
+        window._on_week()
+
+
+def test_a_refresh_with_settings_open_keeps_settings(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    trace = {"placed": [], "kept": "settings"}
+    window.session.trace = trace
+    window.session._fresh_plan = True
+    _show_material(qapp, window)
+    window._open_settings()
+    assert window._stack.currentWidget().objectName() == "settingsPage"
+    window.session.week_changed.emit()
+    _pump(qapp)
+    try:
+        assert window._stack.currentWidget().objectName() == "settingsPage"
+        assert window.plan_review.isHidden()
+        assert window.session._fresh_plan is True
+    finally:
+        window.session.trace = None
+        window.session._fresh_plan = False
+        window.plan_review.hide()
+        if window._settings is not None and window._stack.currentWidget() is window._settings:
+            window._surface = "widgets"
+            window._close_settings()
+        window._surface = "widgets"
+        window._material_gave_up = False
+        window._on_week()
+
+
+def test_closing_settings_returns_to_material(qapp: QApplication, window: NativeWindow) -> None:
+    _show_material(qapp, window)
+    window._open_settings()
+    window._settings.findChild(QPushButton, "settingsDone").click()
+    _pump(qapp)
+    try:
+        assert window._stack.currentWidget().objectName() == "materialPage"
+    finally:
+        window._surface = "widgets"
+        window._material_gave_up = False
+        if window._settings is not None and window._stack.currentWidget() is window._settings:
+            window._close_settings()
+        window._on_week()
+
+
+def test_the_material_clock_and_now_line_advance(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _show_material(qapp, window)
+    original = window.session.now_ms
+    thursday = datetime.fromisoformat(window.session.week_start) + timedelta(days=3, hours=19)
+    later = thursday + timedelta(hours=1)
+    window.session.now_ms = lambda: int(later.timestamp() * 1000)
+    try:
+        window._layout_tick.timeout.emit()
+        _pump(qapp)
+        assert _qml(root, "materialClock").property("text") == clock_label(20 * 60)
+        assert int(_qml(root, "nowLine").property("y")) == 20 * HOUR_ROW
+    finally:
+        window.session.now_ms = original
+        if window._material_page is not None and window._stack.currentWidget() is window._material_page:
+            window._material_page.bridge.refresh()
+        window._use_widgets_styles()
+
+
+def test_material_more_hides_actions_that_need_the_widgets_panels(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    _show_material(qapp, window)
+    window._material_page.bridge.openMore()
+    _pump(qapp)
+    popup = QApplication.activePopupWidget()
+    try:
+        assert popup is not None
+        labels = _menu_labels(popup)
+        assert "Unfinished" not in labels
+        assert WEEK_LIST_NAME not in labels
+        assert "Help" in labels
+        undo = _action(popup, "Undo")
+        assert undo is not None
+        undo.trigger()
+        _pump(qapp)
+        assert window.unfinished_panel.isHidden()
+        assert window.findChild(QPushButton, "weekListRow").isVisible() is False
+        popup.close()
+        window._use_widgets_styles()
+        _pump(qapp)
+        window.more_menu.popup(window.more_button.mapToGlobal(window.more_button.rect().bottomLeft()))
+        _pump(qapp)
+        assert "Unfinished" in _menu_labels(window.more_menu)
+        assert WEEK_LIST_NAME in _menu_labels(window.more_menu)
+    finally:
+        current = QApplication.activePopupWidget()
+        if current is not None:
+            current.close()
+        window.more_menu.close()
+        window._surface = "widgets"
+        window._material_gave_up = False
+        window._on_week()
+
+
+def test_the_add_button_opens_homework_from_the_keyboard(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _show_material(qapp, window)
+    fab = _qml(root, "materialFab")
+    assert "Rectangle" not in fab.metaObject().className()
+    assert fab.property("activeFocusOnTab") is True
+    opened: list[QDialog] = []
+    original = window._run_sheet
+
+    def run_sheet(dialog: QDialog) -> bool:
+        dialog.show()
+        qapp.processEvents()
+        opened.append(dialog)
+        words = [label.text() for label in dialog.findChildren(QLabel)]
+        assert "Add homework" in words
+        dialog.reject()
+        return False
+
+    window._run_sheet = run_sheet
+    try:
+        window.activateWindow()
+        quick = window._material_page._quick
+        quick.setFocus()
+        fab.forceActiveFocus()
+        _pump(qapp)
+        QTest.keyClick(quick, Qt.Key.Key_Space)
+        _pump(qapp)
+        if not opened:
+            QTest.keyClick(quick, Qt.Key.Key_Return)
+            _pump(qapp)
+        assert opened
+        assert QApplication.activeModalWidget() is None
+    finally:
+        window._run_sheet = original
+        dialog = QApplication.activeModalWidget()
+        if isinstance(dialog, QDialog):
+            dialog.reject()
+        window._use_widgets_styles()
+
+
+def test_the_material_week_comes_from_the_session(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _show_material(qapp, window)
+    assert _named(root, "weekBlock")
+
+    class Empty:
+        occurrences: tuple = ()
+
+    window.session.built_week = lambda: Empty()
+    try:
+        window._material_page.bridge.refresh()
+        _pump(qapp)
+        assert _named(root, "weekBlock") == []
+    finally:
+        del window.session.built_week
+        window._material_page.bridge.refresh()
+        window._use_widgets_styles()
+
+
+def test_setup_writes_material_beside_the_layout(window: NativeWindow) -> None:
+    window._surface = "material"
+    window._material_failed = ""
+    window._material_gave_up = False
+    answer = {
+        "look": sanitize_look(window._look),
+        "layout": sanitize_layout(
+            {"main": "classic", "day": "one", "options": {"one": {"daybar": "hide"}}}
+        ),
+        "pack": "system",
+    }
+    window._setup_step_left(0, 1, answer)
+    stored = json.loads(look_file().read_text())
+    assert stored["surface"] == "material"
+    assert stored["layout"]["main"] == "classic"
+    assert stored["layout"]["options"]["one"]["daybar"] == "hide"
+    assert "surface" not in stored["layout"]
+    window._surface = "widgets"
+    window._load_look()
+    assert window._surface == "material"
+    assert window._layout["options"]["one"]["daybar"] == "hide"
+    window._surface = "widgets"
+    window._save_look()
