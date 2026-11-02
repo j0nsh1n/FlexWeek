@@ -8,7 +8,6 @@ import logging
 import time
 import weakref
 from collections.abc import Callable
-from copy import deepcopy
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -182,7 +181,6 @@ from desktop.native.weekmodel import (
     dated_words,
     hhmm_text,
     homework_time_sentence,
-    moved_words,
     set_clock_24h,
 )
 from desktop.native.widgets import (
@@ -554,6 +552,7 @@ class NativeWindow(QMainWindow):
         # main() has loaded them already; a window made anywhere else, as in the tests, is drawn alike.
         load_fonts()
         self.session = NativeSession(origin, self, kept)
+        self.session.use_sync_host(sync)
         self._instance_server: QLocalServer | None = None
         self.setWindowTitle("FlexWeek")
         # This computer's sync host, and the running service once it has started (None until then). The
@@ -622,13 +621,10 @@ class NativeWindow(QMainWindow):
         self._updater.progress.connect(self._on_update_progress)
         self._updater.failed.connect(self._on_update_problem)
         self._updater.ready.connect(self._on_update_ready)
-        # Setup is on screen; this sign-in has decided whether it should be; and what setup has kept
-        # that is still to be written, one request at a time.
+        # Setup is on screen, and this sign-in has decided whether it should be. What setup has kept
+        # to write lives on the session.
         self._setup_active = False
         self._setup_checked = False
-        self._setup_prefs: dict = {}
-        self._setup_work_windows: list[dict] | None = None
-        self._setup_week = False
         # Settings while it is on screen, and what closing it has to save.
         self._settings: SettingsPage | None = None
         self._settings_finish: Callable[[bool], None] | None = None
@@ -641,9 +637,7 @@ class NativeWindow(QMainWindow):
         self._block_prepare_scheduled = False
         self._leaving: QTimer | None = None
         self._saved_to_leave = False
-        # A block let go while a save is under way, moved once it is done: the save's reply replaces
-        # the week, so a move made before it arrived would be lost.
-        self._move_waiting: tuple[str, int, int, int, int] | None = None
+        # A chip let go on another date while a save is under way, moved once that save has landed.
         self._date_waiting: MoveDate | None = None
         # What a drag changed, said with Undo once its save lands: the words for the save on its way,
         # and words waiting for the pointer to let go, since nothing new appears under a held block.
@@ -686,6 +680,7 @@ class NativeWindow(QMainWindow):
         self._busy_look.timeout.connect(self._grey_while_busy)
         self.session.busy_changed.connect(self._on_busy)
         self.session.save_finished.connect(self._on_save_finished)
+        self.session.hand_placed.connect(self._say_when_saved)
         self.session.plan_conflicts.connect(self._on_plan_conflicts)
         self.session.planned.connect(self._on_planned)
         self._late_dialog: LateDialog | None = None
@@ -2552,9 +2547,35 @@ class NativeWindow(QMainWindow):
         self.setup_page.motion = self._motion
         fade_away(picture, self._motion)
 
+    @property
+    def _setup_prefs(self) -> dict:
+        return self.session.setup_prefs
+
+    @_setup_prefs.setter
+    def _setup_prefs(self, value: dict) -> None:
+        self.session.setup_prefs = value
+
+    @property
+    def _setup_work_windows(self) -> list[dict] | None:
+        return self.session.setup_work_windows
+
+    @_setup_work_windows.setter
+    def _setup_work_windows(self, value: list[dict] | None) -> None:
+        self.session.setup_work_windows = value
+
+    @property
+    def _setup_week(self) -> bool:
+        return self.session.setup_week
+
+    @_setup_week.setter
+    def _setup_week(self, value: bool) -> None:
+        self.session.setup_week = value
+
     def _setup_step_left(self, _step: int, destination: int, answer: object) -> None:
         """Keep what a page answered, and where the student went, so a quit resumes there."""
         updates: dict = {"setup": {"version": SETUP_VERSION, "step": destination}}
+        work_windows = None
+        save_week = False
         if isinstance(answer, dict):
             if "layout" in answer:
                 self._look = answer["look"]
@@ -2565,14 +2586,14 @@ class NativeWindow(QMainWindow):
             if "blocks" in answer:
                 self.session.set_setup_blocks(answer["blocks"])
                 updates["day_cutoff"] = answer["day_cutoff"]
-                self._setup_week = True
+                save_week = True
             if "homework" in answer:
                 auto = (self.session.preferences or {}).get("planning_style") == "auto"
                 for item in answer["homework"]:
                     self.session.add_homework(item)
                     if auto:
                         self.session.plan_after_save(item["id"])
-                self._setup_week = True
+                save_week = True
             for key in (
                 "planning_style",
                 "drag_step_min",
@@ -2585,44 +2606,20 @@ class NativeWindow(QMainWindow):
                 if key in answer:
                     updates[key] = answer[key]
             if "work_windows" in answer:
-                self._setup_work_windows = deepcopy(answer["work_windows"])
-        self._setup_prefs.update(updates)
-        if self.session.preferences is not None:
-            # Seen at once, as Settings does: the save that follows stores them.
-            self.session.preferences = {**self.session.preferences, **self._setup_prefs}
-        self._flush_setup()
+                work_windows = answer["work_windows"]
+        self.session.keep_setup(updates, work_windows=work_windows, save_week=save_week)
 
     def _flush_setup(self) -> None:
-        """Write what setup kept, one request at a time. A second request replaces the first on the
-        session, so two at once would drop the first one's reply, and an answer typed a moment
-        before a quit would be lost. The preferences go first: the week's save can start a plan."""
-        session = self.session
-        if session.account is None or session.busy:
-            return
-        if self._setup_prefs and session.preferences is not None:
-            updates, self._setup_prefs = self._setup_prefs, {}
-            session.save_preferences(updates)
-            return
-        if self._setup_work_windows is not None and session.preferences is not None:
-            windows, self._setup_work_windows = self._setup_work_windows, None
-            prefs = session.preferences
-            session.save_availability(prefs.get("protected") or [], prefs.get("day_cutoff"), windows)
-            return
-        if self._setup_week:
-            self._setup_week = False
-            session.save()
+        self.session.flush_setup()
 
     def _finish_setup(self) -> None:
         stamp = datetime.now().strftime("%Y-%m-%dT%H:%M")
         progress = {"version": SETUP_VERSION, "step": self.setup_page.step, "finished_at": stamp}
-        self._setup_prefs["setup"] = progress
         if self.session.new_account and self.session.account is not None:
             self._new_look_notice_exempt.add(str(self.session.account["id"]))
             self._save_look()
-        if self.session.preferences is not None:
-            self.session.preferences = {**self.session.preferences, **self._setup_prefs}
         self._setup_active = False
-        self._flush_setup()
+        self.session.keep_setup({"setup": progress})
         self._sync_chrome()
         self._on_week()
 
@@ -3117,9 +3114,6 @@ class NativeWindow(QMainWindow):
         on_recovery = self.findChild(QWidget, "recoveryPage") is self._stack.currentWidget()
         if not busy and self.session.account is not None and on_recovery:
             self.recovery_continue.setEnabled(self.recovery_ack.isChecked())
-        if not busy and self._move_waiting is not None:
-            waiting, self._move_waiting = self._move_waiting, None
-            QTimer.singleShot(0, lambda: self._move_block(*waiting))
         if not busy and self._date_waiting is not None:
             dated, self._date_waiting = self._date_waiting, None
             QTimer.singleShot(0, lambda: self._move_to_date(dated))
@@ -4172,25 +4166,9 @@ class NativeWindow(QMainWindow):
         return HandVerdict(True, words)
 
     def _move_block(self, block_id: str, from_day: int, day: int, start: int, end: int) -> None:
-        """A block let go at a time, on the calendar or in a design. Homework that needed a time gets
-        this one; a block that repeats moves only the day it was dragged from; anything else moves.
-        Homework moved by hand is pinned, so no plan moves it back."""
-        if self.session.busy:
-            self._move_waiting = (block_id, from_day, day, start, end)
-            return
-        block = next((item for item in self.session.blocks if item["id"] == block_id), None)
-        if block is None:
-            return
-        verdict = self._judge_span(block_id, from_day, day, start, end)
-        if not verdict.ok:
-            if verdict.words:
-                self.session._say(verdict.words)
-            return
-        origin = from_day if from_day in block["days"] else day
-        if not self.session.hand_move(block_id, from_day, day, start, end):
-            return
-        self.session.save()
-        self._say_when_saved(moved_words(block, origin, day, start, end))
+        """A block let go at a time, on the calendar or in a design. The session applies it, or keeps
+        it when a save is already on its way."""
+        self.session.place_block(block_id, from_day, day, start, end)
 
     def _edit_block(self, block_id: str) -> None:
         if QApplication.activeModalWidget() is not None:
@@ -4429,17 +4407,7 @@ class NativeWindow(QMainWindow):
                     destination=dest,
                 )
 
-            if dest == self.session.week_start:
-                show(self.session.blocks)
-                return
-
-            def ok(data: dict) -> None:
-                show(list(data.get("blocks") or []))
-
-            def err(error: object) -> None:
-                self.session._say(getattr(error, "message", str(error)))
-
-            self.session.client.request("GET", f"/api/week?week_start={dest}", None, ok, err)
+            self.session.week_blocks(dest, show)
             return
 
     def _collapse_unfinished(self) -> None:
@@ -5219,23 +5187,13 @@ class NativeWindow(QMainWindow):
             return
         self.sync_dot.show_state(sync_state(self._sync.status(), bool(self._linked_phones())))
 
-    def _sync_arrived(self, service: SyncService) -> bool:
+    def _sync_arrived(self, _service: SyncService) -> bool:
         """Loads the week again after a phone's edits land. With unsaved edits here, it marks the week
         as changed instead, so the existing Reload and Keep mine choice is offered. False while a
         request is in flight; the next tick asks again."""
-        session = self.session
-        if session.account is None:
-            return True
-        if session.busy:
-            return False
-        if session.dirty or session.dirty_assignments or session.pending_save is not None:
-            session.conflict = True
-            session.week_changed.emit()
-            return True
         names = [row["name"] for row in self._linked_phones()]
         who = names[0] if len(names) == 1 else "a linked phone"
-        session.load_week(session.week_start, discard=True, said=f"Updated from {who}.")
-        return True
+        return self.session.accept_remote_week(who)
 
     def _attach_settings_page(self, page: SettingsPage) -> None:
         if self._settings is not None:
