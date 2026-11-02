@@ -590,12 +590,17 @@ class Preferences(BaseModel):
     # new account; an account from before 0.18.5 that never chose is stamped 24-hour when the store
     # opens.
     clock_24h: bool = Field(default=False, exclude_if=lambda value: value is False)
-    # What plays when focus starts. Rain, lo-fi and white noise are stored for a later lane.
-    # Off is omitted, as the other comfort defaults are. Kept in comfort_json, on this computer:
-    # a synced column would make an older phone update a column it does not have.
+    # What plays when focus starts. Off is omitted, as the other comfort defaults are. Kept in
+    # comfort_json, on this computer: a synced column would make an older phone update a column it
+    # does not have.
     focus_audio: Literal["off", "rain", "lo-fi", "white-noise", "spotify"] = Field(
         default="off", exclude_if=lambda value: value == "off"
     )
+    # Material 3's focus rules. Auto-mute holds reminders until the focus work phase is over;
+    # auto-complete moves the finished session's block to Done. Both are comfort values like the
+    # audio choice, each omitted at its default.
+    focus_auto_mute: bool = Field(default=True, exclude_if=lambda value: value is True)
+    focus_auto_complete: bool = Field(default=False, exclude_if=lambda value: value is False)
     setup: SetupProgress | None = Field(default=None, exclude_if=lambda value: value is None)
 
     _spotify_url = field_validator("default_spotify_url")(valid_spotify_url)
@@ -866,35 +871,42 @@ def encode_comfort(preferences: Preferences) -> str:
     }
     if preferences.focus_audio != "off":
         comfort["focus_audio"] = preferences.focus_audio
+    if not preferences.focus_auto_mute:
+        comfort["focus_auto_mute"] = False
+    if preferences.focus_auto_complete:
+        comfort["focus_auto_complete"] = True
     return json.dumps(comfort, separators=(",", ":"))
 
 
 _FOCUS_AUDIO = frozenset({"off", "rain", "lo-fi", "white-noise", "spotify"})
+_FOCUS_FLAGS = ("focus_auto_mute", "focus_auto_complete")
 
 
-def _stored_focus_audio(row: Row) -> str | None:
-    """The engine's preference reader drops comfort keys it does not know. Focus audio is one of
-    those, so it is put back here. Off is the default and is not stored."""
+def _stored_focus_extras(row: Row) -> dict[str, Any]:
+    """The engine's preference reader drops comfort keys it does not know. The focus audio choice
+    and the two focus rules are those, so they are put back here. Defaults are not stored."""
     raw = dict(row).get("comfort_json")
     if not isinstance(raw, str) or not raw:
-        return None
+        return {}
     try:
         comfort = json.loads(raw)
     except json.JSONDecodeError:
-        return None
+        return {}
     if not isinstance(comfort, dict):
-        return None
+        return {}
+    extras: dict[str, Any] = {}
     audio = comfort.get("focus_audio")
     if audio in _FOCUS_AUDIO and audio != "off":
-        return str(audio)
-    return None
+        extras["focus_audio"] = str(audio)
+    for name in _FOCUS_FLAGS:
+        if isinstance(comfort.get(name), bool):
+            extras[name] = comfort[name]
+    return extras
 
 
 def preferences_from_row(row: Row) -> dict:
     fields = json.loads(flexweek_engine.preferences_fields(json.dumps(dict(row))))
-    audio = _stored_focus_audio(row)
-    if audio is not None:
-        fields["focus_audio"] = audio
+    fields.update(_stored_focus_extras(row))
     return Preferences(**fields).model_dump()
 
 

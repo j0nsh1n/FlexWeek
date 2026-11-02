@@ -9,6 +9,7 @@ from desktop.check_bundle import (
     material_problems,
     parse_readelf,
     pe_imports,
+    sound_problems,
     windows_problems,
 )
 
@@ -182,3 +183,18 @@ def test_a_bundle_without_the_material_shell_names_the_missing_files(tmp_path: P
         "import QtQuick\n", encoding="utf-8"
     )
     assert material_problems(bundle) == []
+
+
+def test_a_bundle_without_focus_sounds_names_the_missing_files(tmp_path: Path) -> None:
+    bundle = tmp_path / "bundle"
+    (bundle / "desktop" / "assets" / "sounds").mkdir(parents=True)
+    assert sound_problems(bundle) == [
+        "desktop/assets/sounds/LICENSE.txt is missing, so ambient focus audio cannot play",
+        "desktop/assets/sounds/soft-rain-loop.mp3 is missing, so ambient focus audio cannot play",
+        "desktop/assets/sounds/lofi-hip-hop-loop.ogg is missing, so ambient focus audio cannot play",
+    ]
+    folder = bundle / "desktop" / "assets" / "sounds"
+    (folder / "LICENSE.txt").write_text("CC0 1.0\n", encoding="utf-8")
+    (folder / "soft-rain-loop.mp3").write_bytes(b"mp3")
+    (folder / "lofi-hip-hop-loop.ogg").write_bytes(b"ogg")
+    assert sound_problems(bundle) == []

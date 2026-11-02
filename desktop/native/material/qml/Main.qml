@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import components 1.0
 import "views"
 import "account"
+import "focus"
 
 Item {
     id: root
@@ -16,6 +17,8 @@ Item {
     readonly property bool highContrast: bridge ? bridge.highContrast : false
     readonly property int enterMs: reduceMotion ? 0 : 300
     readonly property bool typing: _field(Window.activeFocusItem)
+    // The Focus screen covers the window. The number keys, Z and Esc belong to it while it is open.
+    readonly property bool focusOpen: bridge ? bridge.focus.open : false
 
     function _field(item) {
         while (item) {
@@ -42,7 +45,7 @@ Item {
     }
 
     function takeKey(event) {
-        if (typing)
+        if (typing || focusOpen || accountLayer.active)
             return
         var key = event.key
         if (key === Qt.Key_1)
@@ -57,6 +60,8 @@ Item {
             bridge.showPage("settings")
         else if (key === Qt.Key_Z && !(event.modifiers & (Qt.ControlModifier | Qt.MetaModifier)))
             bridge.undo()
+        else if (key === Qt.Key_F)
+            bridge.focus.show()
         else if (key === Qt.Key_Escape)
             focusDestination()
         else
@@ -416,6 +421,16 @@ Item {
         }
     }
 
+    FocusScreen {
+        id: focusOverlay
+        anchors.fill: parent
+        bridge: root.bridge
+        theme: root.theme
+        density: root.density
+        reduceMotion: root.reduceMotion
+        highContrast: root.highContrast
+    }
+
     // A clock tick also emits changed. The enter animation follows the screen only.
     property string shownScreen: bridge.screen
     onShownScreenChanged: enter.restart()
@@ -423,44 +438,55 @@ Item {
     Shortcut {
         sequence: "1"
         context: Qt.WindowShortcut
-        enabled: !typing && !accountLayer.active
+        enabled: !typing && !accountLayer.active && !focusOpen
         onActivated: bridge.showPage("day")
     }
     Shortcut {
         sequence: "2"
         context: Qt.WindowShortcut
-        enabled: !typing && !accountLayer.active
+        enabled: !typing && !accountLayer.active && !focusOpen
         onActivated: bridge.showPage("week")
     }
     Shortcut {
         sequence: "3"
         context: Qt.WindowShortcut
-        enabled: !typing && !accountLayer.active
+        enabled: !typing && !accountLayer.active && !focusOpen
         onActivated: bridge.showPage("month")
     }
     Shortcut {
         sequence: "4"
         context: Qt.WindowShortcut
-        enabled: !typing && !accountLayer.active
+        enabled: !typing && !accountLayer.active && !focusOpen
         onActivated: bridge.showPage("myday")
     }
     Shortcut {
         sequence: "5"
         context: Qt.WindowShortcut
-        enabled: !typing && !accountLayer.active
+        enabled: !typing && !accountLayer.active && !focusOpen
         onActivated: bridge.showPage("settings")
     }
     Shortcut {
         sequence: "Z"
         context: Qt.WindowShortcut
-        enabled: !typing && !accountLayer.active
+        enabled: !typing && !accountLayer.active && !focusOpen
         onActivated: bridge.undo()
+    }
+    Shortcut {
+        sequence: "F"
+        context: Qt.WindowShortcut
+        enabled: !typing && !accountLayer.active && !focusOpen
+        onActivated: bridge.focus.show()
     }
     Shortcut {
         sequence: "Escape"
         context: Qt.WindowShortcut
-        enabled: !accountLayer.active
-        onActivated: focusDestination()
+        enabled: !accountLayer.active && !focusOverlay.ending
+        onActivated: {
+            if (focusOpen)
+                bridge.focus.back()
+            else
+                focusDestination()
+        }
     }
 
     // Sign in, recovery codes and first-run setup cover the shell until the student is in.

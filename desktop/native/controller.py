@@ -298,6 +298,10 @@ class NativeSession(QObject):
         self.now_ms = lambda: int(time.time() * 1000)
         self._focus_busy = False
         self._pending_focus: dict | None = None
+        # Material 3's focus rules (mute reminders, finish the block) apply only while Material is the
+        # surface in use. The window hands in the question; the Widgets styles never set it.
+        self.material_owns: Callable[[], bool] | None = None
+        self._held_alerts: list[dict] = []
         # Finished focus sessions, with their length, not yet added to their homework.
         self._credits_waiting: list[tuple[dict, int]] = []
         self._record_history = True
@@ -443,6 +447,7 @@ class NativeSession(QObject):
         self._history_label = "editing the week"
         self.needs_time = {}
         self._reset_focus(persist=False)
+        self._held_alerts.clear()
         self.fired_reminders.clear()
         self.fired_alarms.clear()
         self.snoozed_alarms.clear()
@@ -3603,9 +3608,71 @@ class NativeSession(QObject):
             if updated is None:
                 return
             self.blocks = [updated if item["id"] == updated["id"] else item for item in self.blocks]
+        self._auto_complete_session(state)
         self.dirty = True
         self.pending_save = None
         self.save(record_history=False)
+
+    def _material_focus_rules(self) -> bool:
+        return self.material_owns is not None and bool(self.material_owns())
+
+    def focus_mutes_alerts(self) -> bool:
+        """Auto-mute: reminders wait while a focus work phase is under way, running or paused."""
+        state = self.focus
+        return (
+            self._material_focus_rules()
+            and bool((self.preferences or {}).get("focus_auto_mute", True))
+            and state is not None
+            and state.get("phase") == "work"
+        )
+
+    def hold_alerts(self, notices: list[dict]) -> list[dict]:
+        """The notices to show now. Focus's own are always shown; reminders are kept until focus
+        leaves its work phase. Alarms the student set do not come through here and still ring."""
+        if not self.focus_mutes_alerts():
+            return notices
+        self._held_alerts.extend(item for item in notices if item.get("kind") != "focus")
+        return [item for item in notices if item.get("kind") == "focus"]
+
+    def release_held_alerts(self) -> list[dict]:
+        if not self._held_alerts or self.focus_mutes_alerts():
+            return []
+        held, self._held_alerts = self._held_alerts, []
+        return held
+
+    def _auto_complete_session(self, state: dict) -> None:
+        """Auto-complete: the block this session worked on goes to Done and nothing else does. Its
+        homework is finished too only when that was its last session; with sessions left it stays open."""
+        if not self._material_focus_rules() or not (self.preferences or {}).get("focus_auto_complete"):
+            return
+        block = None
+        if state.get("blockId") and state.get("weekStart") == self.week_start:
+            block = next((item for item in self.blocks if item["id"] == state["blockId"]), None)
+        day = state.get("day")
+        if (
+            block is not None
+            and not block.get("completed")
+            and block.get("kind") == "flexible"
+            and state.get("start")
+            and isinstance(day, int)
+            and day in (block.get("days") or [])
+        ):
+            block["start"] = state["start"]
+            block["completed"] = True
+            block["completed_day"] = day
+        assignment_id = state.get("assignmentId") or (block or {}).get("assignment_id")
+        assignment = self.assignments.get(assignment_id) if assignment_id else None
+        if assignment is None or assignment.get("completed"):
+            return
+        left = [
+            item
+            for item in self.blocks
+            if item.get("assignment_id") == assignment_id
+            and not item.get("completed")
+            and item.get("pomodoro_role") != "break"
+        ]
+        if not left:
+            self.complete_homework(assignment_id, True)
 
     def finish_focused_homework(self) -> bool:
         state = self.focus

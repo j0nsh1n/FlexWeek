@@ -50,19 +50,17 @@ def opened(qapp: QApplication) -> Iterator[list]:
     qapp.processEvents()
 
 
-def test_focus_offers_off_and_spotify_and_keeps_a_sound_it_cannot_play_yet(qapp: QApplication) -> None:
+def test_focus_offers_every_sound_and_saves_the_one_chosen(qapp: QApplication) -> None:
     page = SettingsPage(None, {"alarms": [], "focus_audio": "rain"}, {}, {})
     try:
-        assert page.focus_audio.findData("off") >= 0
-        assert page.focus_audio.findData("spotify") >= 0
-        assert page.focus_audio.findData("rain") < 0
+        offered = [page.focus_audio.itemData(index) for index in range(page.focus_audio.count())]
+        assert offered == ["off", "rain", "lo-fi", "white-noise", "spotify"]
         note = page.findChild(QLabel, "prefFocusAudioNote")
         assert isinstance(note, QLabel) and note.text() == FOCUS_AUDIO_NOTE
         assert page.updates()["focus_audio"] == "rain"
-        page.focus_audio.setCurrentIndex(page.focus_audio.findData("spotify"))
-        assert page.updates()["focus_audio"] == "spotify"
-        page.focus_audio.setCurrentIndex(page.focus_audio.findData("off"))
-        assert page.updates()["focus_audio"] == "off"
+        for choice in ("lo-fi", "white-noise", "spotify", "off"):
+            page.focus_audio.setCurrentIndex(page.focus_audio.findData(choice))
+            assert page.updates()["focus_audio"] == choice
     finally:
         page.close()
 

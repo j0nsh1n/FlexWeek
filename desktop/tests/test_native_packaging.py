@@ -106,6 +106,10 @@ def test_both_builds_ship_the_icon_and_the_fonts_where_the_app_looks_for_them() 
         "--include-data-dir=$(Join-Path $Root 'desktop\\native\\material\\qml')=desktop/native/material/qml"
         in WINDOWS
     )
+    sounds = ROOT / "desktop/assets/sounds"
+    assert (sounds / "LICENSE.txt").is_file()
+    assert (sounds / "soft-rain-loop.mp3").is_file()
+    assert (sounds / "lofi-hip-hop-loop.ogg").is_file()
     fonts = ROOT / "desktop/assets/fonts"
     for family in ("Inter", "Newsreader", "JetBrainsMono", "PixelifySans"):
         for face in ("Regular", "Medium", "SemiBold", "Bold"):

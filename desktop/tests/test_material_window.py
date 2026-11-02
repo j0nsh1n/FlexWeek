@@ -657,14 +657,21 @@ def test_a_failed_material_is_not_tried_again_until_the_version_or_a_new_choice(
 
 
 def test_focus_back_returns_to_material(qapp: QApplication, window: NativeWindow) -> None:
-    _show_material(qapp, window)
+    """Focus is a screen inside Material now: the page stays Material's, and Back closes the screen."""
+    root = _show_material(qapp, window)
     window._open_focus_screen()
-    assert window._stack.currentWidget() is window.focus_screen
-    window.findChild(QPushButton, "focusScreenBack").click()
     _pump(qapp)
+    focus = window._material_page.bridge.focus
     try:
         assert window._stack.currentWidget().objectName() == "materialPage"
+        assert focus.open
+        assert _qml(root, "materialFocus").property("visible") is True
+        focus.back()
+        _pump(qapp)
+        assert not focus.open
+        assert window._stack.currentWidget().objectName() == "materialPage"
     finally:
+        focus.hide()
         window._surface = "widgets"
         window._material_gave_up = False
         window._on_week()
@@ -680,21 +687,21 @@ def test_a_refresh_with_focus_open_keeps_focus_and_the_plan_prompt(
     window._open_focus_screen()
     window.session.week_changed.emit()
     _pump(qapp)
+    focus = window._material_page.bridge.focus
     try:
-        assert window._stack.currentWidget() is window.focus_screen
+        assert window._stack.currentWidget().objectName() == "materialPage"
+        assert focus.open
         assert window.plan_review.isHidden()
         assert window.session._fresh_plan is True
-        window.findChild(QPushButton, "focusScreenBack").click()
+        focus.back()
         _pump(qapp)
-        assert window._stack.currentWidget().objectName() == "materialPage"
+        assert not focus.open
         assert window.session.consume_plan_review() == trace
     finally:
         window.session.trace = None
         window.session._fresh_plan = False
         window.plan_review.hide()
-        if window._stack.currentWidget() is window.focus_screen:
-            window._surface = "widgets"
-            window._close_focus_screen()
+        focus.hide()
         window._surface = "widgets"
         window._material_gave_up = False
         window._on_week()

@@ -63,6 +63,7 @@ from shiboken6 import isValid
 
 from backend.slots import DAY_END_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
 from desktop.native import autostart, icons
+from desktop.native.ambient import FocusAudio
 from desktop.native.calendar import (
     CATEGORIES,
     DAY_FULL,
@@ -1183,6 +1184,8 @@ class NativeWindow(QMainWindow):
         page.failed.connect(self._on_material_failed)
         page.widgets_requested.connect(self._use_widgets_styles)
         self._material_page = page
+        # Material's focus rules (hold reminders, finish the block) ask whether Material is in use.
+        self.session.material_owns = self._material_owns
         self._stack.addWidget(page)
         return page
 
@@ -4837,6 +4840,10 @@ class NativeWindow(QMainWindow):
             return short_password_needed(12 - len(password))
         return ""
 
+    def start_material_focus(self, block_id: str | None, day: object) -> None:
+        """Day and My day's Start focus: the session's timer, then Material's Focus screen."""
+        self._start_focus(block_id or "", day)
+
     def _start_focus(self, block_id: str, day: object) -> None:
         if self.session.start_focus(block_id or None, day if isinstance(day, int) else None):
             self._open_focus_screen()
@@ -4872,15 +4879,34 @@ class NativeWindow(QMainWindow):
         screen.finished_requested.connect(self._finish_focus_homework)
         screen.break_requested.connect(self.session.take_focus_break)
         self._stack.addWidget(screen)
+        # Rain, lo-fi or white noise while the focus timer works; the timer's own phases drive it.
+        self._focus_audio = FocusAudio(self.session, self)
+
+    def _material_focus(self):
+        """Material's Focus screen when Material owns the window and is built, else None."""
+        page = self._material_page
+        if page is None or not self._material_owns() or not page._ready:
+            return None
+        return page.bridge.focus
 
     def _open_focus_screen(self) -> None:
         if self.session.account is None:
             return
+        if self._material_owns():
+            if self._stack.currentWidget() is not self._material_page and not self._show_surface():
+                return
+            material = self._material_focus()
+            if material is not None:
+                material.show()
+                return
         self.focus_screen.set_state(self.session)
         self._show_page("focusPage")
         self.focus_screen.setFocus()
 
     def _close_focus_screen(self) -> None:
+        material = self._material_focus()
+        if material is not None:
+            material.hide()
         if self._stack.currentWidget() is self.focus_screen:
             self._show_surface()
             self._focus_week()
@@ -4989,8 +5015,14 @@ class NativeWindow(QMainWindow):
         self.focus_screen.set_state(self.session)
         self._sync_chrome()
         self._refresh_layout()
+        released = self.session.release_held_alerts()
+        if released:
+            self._present_alerts(released)
 
     def _present_alerts(self, notices: list) -> None:
+        notices = self.session.hold_alerts(notices)
+        if not notices:
+            return
         prefs = self.session.preferences or {}
         if notices and prefs.get("reminder_sound", True) is not False:
             # Reminders ring the chosen alarm sound. A focus notice keeps its own two tones until the

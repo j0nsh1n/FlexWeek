@@ -1,0 +1,43 @@
+{
+  "setup": {
+    "seed": "rig",
+    "look": "light-frost",
+    "size": [1280, 800],
+    "clock_24h": false
+  },
+  "steps": [
+    {"click": "settingsGear"},
+    {"wait": 600},
+    {"click": "chooseMaterial"},
+    {"wait": 1000},
+    {"see": "materialRail"},
+    {"click": "navDay"},
+    {"see": "materialDay"},
+    {"key": "F"},
+    {"wait": 400},
+    {"see": "materialFocus"},
+    {"see": "focusStart"},
+    {"click": "focusStart"},
+    {"wait": 400},
+    {"see": "focusPause"},
+    {"see": "Pause"},
+    {"shot": "focus-running-light"},
+    {"click": "focusPause"},
+    {"wait": 300},
+    {"see": "Resume"},
+    {"shot": "focus-paused-light"},
+    {"click": "focusPause"},
+    {"wait": 200},
+    {"click": "focusSkip"},
+    {"wait": 400},
+    {"see": "Break"},
+    {"shot": "focus-break-light"},
+    {"click": "focusFinish"},
+    {"wait": 400},
+    {"see": "End this session?"},
+    {"click": {"text": "End session"}},
+    {"wait": 400},
+    {"see": "materialDay"},
+    {"shot": "focus-after-light"}
+  ]
+}
