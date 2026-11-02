@@ -32,7 +32,7 @@ NOTICE_MS = 6000
 DISCARD = {
     "id": "discard",
     "title": "Discard what you typed?",
-    "body": "What you typed will be lost.",
+    "body": "Discard what you typed?",
     "answers": [
         {"id": "keep", "label": "Keep editing", "kind": "text"},
         {"id": "discard", "label": "Discard", "kind": "tonal"},
@@ -774,7 +774,7 @@ class SheetsBridge(QObject):
                 {
                     "id": item["id"],
                     "name": item["name"],
-                    "detail": f"{count} fixed time{'s' if count != 1 else ''}",
+                    "detail": f"{count} fixed times",
                     "on": item["id"] == self._routine_id,
                 }
             )
@@ -790,9 +790,9 @@ class SheetsBridge(QObject):
         return {
             "kind": "routines",
             "heading": "Routines",
-            "intro": "Add a saved routine's fixed times to this week.",
+            "intro": "Pick a routine, the week to copy it into and the days to copy.",
             "rows": rows,
-            "empty": "No saved routines yet." if not rows else "",
+            "empty": "No routines saved yet." if not rows else "",
             "days": days,
             "selected": self._routine_id,
             "error": self._routine_error,
@@ -833,7 +833,7 @@ class SheetsBridge(QObject):
         session = self._session
         routine = session.routines.get(self._routine_id)
         if routine is None:
-            self._routine_error = "Choose a routine first."
+            self._routine_error = "Choose a saved routine."
             self._publish()
             return
         if not self._routine_days:

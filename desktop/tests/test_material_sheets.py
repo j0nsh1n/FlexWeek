@@ -180,6 +180,7 @@ def test_the_discard_prompt_keeps_typed_work_until_the_student_says_discard(shee
     sheets.closeSheet()
     assert sheets.kind == "homework"
     assert sheets.ask["title"] == DISCARD
+    assert sheets.ask["body"] == DISCARD
     assert [item["label"] for item in sheets.ask["answers"]] == ["Keep editing", "Discard"]
     sheets.answer("keep")
     assert sheets.kind == "homework"
@@ -479,7 +480,7 @@ def test_more_rows_and_what_each_opens(qapp: QApplication, shell: NativeWindow, 
     sheets.openMore()
     sheets.moreAction("routinesButton")
     assert sheets.kind == "routines"
-    assert sheets.form["empty"] == "No saved routines yet."
+    assert sheets.form["empty"] == "No routines saved yet."
     sheets.forceClose()
 
     sheets.openMore()
@@ -603,9 +604,13 @@ def test_routines_apply_to_the_open_week_through_the_session(
     }
     try:
         sheets.openRoutines()
+        _pump(qapp)
+        assert sheets.form["intro"] == "Pick a routine, the week to copy it into and the days to copy."
         assert sheets.form["rows"][0]["name"] == "Weekend"
+        assert sheets.form["rows"][0]["detail"] == "1 fixed times"
+        assert _find(shell._material_page.root, "routinesApply").property("text") == "Apply"
         sheets.applyRoutine()
-        assert sheets.form["error"] == "Choose a routine first."
+        assert sheets.form["error"] == "Choose a saved routine."
         sheets.selectRoutine("r-1")
         assert [day["on"] for day in sheets.form["days"]] == [False] * 5 + [True, False]
         sheets.toggleRoutineDay(5)
