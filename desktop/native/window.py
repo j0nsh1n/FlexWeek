@@ -414,6 +414,8 @@ TITLE_SWITCHER_GAP = 16
 AUTH_CARD_WIDTH = 420
 # The pages that wear the look carried over from the last student (_worn_look), not the account's own.
 ENTRY_PAGES = ("authPage", "recoveryPage", "forgotPage")
+# The pages Material 3 answers for, as its own screens, while it is the saved surface.
+MATERIAL_ACCOUNT_PAGES = ("authPage", "recoveryPage", "setupPage")
 # The room a card's large shadow needs above and below it, which its holder keeps (a widget clips what
 # it holds, shadow included).
 AUTH_SHADOW_ABOVE = SHADOW_LARGE.blur - SHADOW_LARGE.y
@@ -588,6 +590,7 @@ class NativeWindow(QMainWindow):
         # Widgets until a look file names Material. The QML page is built the first time it is shown.
         self._surface = sanitize_surface(None)
         self._material_page = None
+        self._account_showing = False
         self._material_gave_up = False
         # The app version that last failed to open Material, or "" when the student may try it.
         self._material_failed = ""
@@ -1065,6 +1068,9 @@ class NativeWindow(QMainWindow):
         self.activateWindow()
 
     def _show_page(self, name: str) -> None:
+        # S7: Material sign-in, recovery and setup cover these widgets pages while Material is the surface.
+        if self._material_account_page(name):
+            return
         for index in range(self._stack.count()):
             page = self._stack.widget(index)
             if page.objectName() == name:
@@ -1096,6 +1102,50 @@ class NativeWindow(QMainWindow):
         if shortcut is not None:
             shortcut.setEnabled(enabled)
 
+    def _account_bridge(self):
+        """The Material sign-in and setup bridge, or None before Material has been built."""
+        page = self._material_page
+        return None if page is None else page.bridge.account
+
+    def _material_account_page(self, name: str, codes: list | None = None) -> bool:
+        """Show sign-in, the recovery codes or setup as Material screens. True when they are on screen.
+
+        False leaves the Widgets page to show: Material is not the saved surface, this version gave up
+        on it, or it could not load. A page that is not an account page takes Material back to the week.
+        """
+        bridge = self._account_bridge()
+        if name not in MATERIAL_ACCOUNT_PAGES:
+            if bridge is not None and bridge.phase != "app" and not self._account_showing:
+                bridge.show_app()
+            return False
+        if self._surface != "material" or self._material_gave_up:
+            return False
+        page = self._ensure_material(quiet=True)
+        if page is None:
+            return False
+        bridge = page.bridge.account
+        if name == "authPage":
+            bridge.show_sign_in(clear=True)
+        elif name == "recoveryPage":
+            bridge.show_recovery(codes or [])
+        self._account_showing = True
+        try:
+            self._show_page("materialPage")
+            try:
+                loaded = page.load()
+                if loaded:
+                    page.publish()
+            except Exception as error:
+                logging.getLogger("flexweek.material").warning("Material 3 could not load: %s", error)
+                loaded = False
+        finally:
+            self._account_showing = False
+        if not loaded:
+            self._give_up_material(show_week=False)
+            self._drop_partial_material()
+            return False
+        return True
+
     def _material_owns(self) -> bool:
         """Material is the saved surface and this version has not given up on it.
 
@@ -1116,8 +1166,8 @@ class NativeWindow(QMainWindow):
         self._show_page("weekPage")
         return False
 
-    def _ensure_material(self):
-        """The Material page, or None when it cannot be built."""
+    def _ensure_material(self, *, quiet: bool = False):
+        """The Material page, or None when it cannot be built. `quiet`: there is no week to fall back to."""
         if self._material_page is not None:
             return self._material_page
         try:
@@ -1127,7 +1177,7 @@ class NativeWindow(QMainWindow):
         except Exception as error:
             logging.getLogger("flexweek.material").warning("Material 3 could not be built: %s", error)
             self._drop_partial_material()
-            self._give_up_material()
+            self._give_up_material(show_week=not quiet)
             return None
         page.failed.connect(self._on_material_failed)
         page.widgets_requested.connect(self._use_widgets_styles)
@@ -1154,7 +1204,7 @@ class NativeWindow(QMainWindow):
             item.setParent(None)
             item.deleteLater()
 
-    def _give_up_material(self) -> None:
+    def _give_up_material(self, *, show_week: bool = True) -> None:
         """Show the Widgets week and say so once that week is visible.
 
         The saved choice stays Material. This version does not try again at start-up until the
@@ -1164,9 +1214,18 @@ class NativeWindow(QMainWindow):
         self._material_failed = VERSION
         self._week_keys(True)
         current = self._stack.currentWidget()
+        bridge = self._account_bridge()
+        phase = "app" if bridge is None else bridge.phase
+        if phase == "recovery" and bridge is not None:
+            # The codes are on Material's screen; they have to reach the Widgets one before it goes.
+            self._show_recovery_widgets(bridge.codes)
+        elif phase in ("sign-in", "create", "reset") or self.session.account is None:
+            self._show_page("authPage")
+        elif phase == "setup" or self._setup_active:
+            self._show_page("setupPage")
         # Stay on Settings when that is what is open and Material never appeared. A graphics
         # failure while Material is up, or a load that was meant to replace the week, shows the week.
-        if current is None or current.objectName() != "settingsPage":
+        elif show_week and (current is None or current.objectName() != "settingsPage"):
             self._show_page("weekPage")
         self._save_look()
         if self.session.account is not None:
@@ -2453,6 +2512,9 @@ class NativeWindow(QMainWindow):
         self.account_name.setText(account["username"])
 
     def _on_recovery(self) -> bool:
+        bridge = self._account_bridge()
+        if bridge is not None and bridge.phase == "recovery":
+            return True
         return self.findChild(QWidget, "recoveryPage") is self._stack.currentWidget()
 
     def _finish_recovery(self) -> None:
@@ -2527,7 +2589,12 @@ class NativeWindow(QMainWindow):
         self._close_settings(show_week=False)
         self._setup_active = True
         self.setup_page.motion = self._motion
-        self.setup_page.open(self._setup_state(first_run), step)
+        state = self._setup_state(first_run)
+        self.setup_page.open(state, step)
+        if self._surface == "material" and not self._material_gave_up:
+            page = self._ensure_material(quiet=True)
+            if page is not None:
+                page.bridge.account.open_setup(state, step)
         self._show_page("setupPage")
 
     def _run_setup_again(self) -> None:
@@ -2614,7 +2681,12 @@ class NativeWindow(QMainWindow):
 
     def _finish_setup(self) -> None:
         stamp = datetime.now().strftime("%Y-%m-%dT%H:%M")
-        progress = {"version": SETUP_VERSION, "step": self.setup_page.step, "finished_at": stamp}
+        bridge = self._account_bridge()
+        on_material = bridge is not None and bridge.phase == "setup"
+        step = bridge.setup_step if on_material else self.setup_page.step
+        progress = {"version": SETUP_VERSION, "step": step, "finished_at": stamp}
+        if on_material:
+            bridge.apply_surface()
         if self.session.new_account and self.session.account is not None:
             self._new_look_notice_exempt.add(str(self.session.account["id"]))
             self._save_look()
@@ -2657,6 +2729,11 @@ class NativeWindow(QMainWindow):
         page.deleteLater()
 
     def _show_recovery(self, codes: list) -> None:
+        self._allow_week_page = False
+        if not self._material_account_page("recoveryPage", codes):
+            self._show_recovery_widgets(codes)
+
+    def _show_recovery_widgets(self, codes: list) -> None:
         self._allow_week_page = False
         if self.findChild(QWidget, "recoveryPage") is None:
             self._build_recovery()
@@ -5586,6 +5663,14 @@ class NativeWindow(QMainWindow):
             }
             if self._material_failed:
                 body["material_failed"] = self._material_failed
+            # S7: Material's own settings live in this file and must survive a widgets look save.
+            if "material" not in body:
+                try:
+                    previous = json.loads(path.read_text())
+                except (OSError, ValueError):
+                    previous = None
+                if isinstance(previous, dict) and isinstance(previous.get("material"), dict):
+                    body["material"] = previous["material"]
             path.write_text(json.dumps(body) + "\n")
             self._has_saved_design_look = self._layout_has_saved_look(body["layout"])
         except OSError:

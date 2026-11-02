@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import components 1.0
 import "views"
+import "account"
 
 Item {
     id: root
@@ -74,6 +75,7 @@ Item {
     Row {
         anchors.fill: parent
         spacing: 0
+        visible: !accountLayer.active
 
         NavRail {
             id: rail
@@ -421,38 +423,59 @@ Item {
     Shortcut {
         sequence: "1"
         context: Qt.WindowShortcut
-        enabled: !typing
+        enabled: !typing && !accountLayer.active
         onActivated: bridge.showPage("day")
     }
     Shortcut {
         sequence: "2"
         context: Qt.WindowShortcut
-        enabled: !typing
+        enabled: !typing && !accountLayer.active
         onActivated: bridge.showPage("week")
     }
     Shortcut {
         sequence: "3"
         context: Qt.WindowShortcut
-        enabled: !typing
+        enabled: !typing && !accountLayer.active
         onActivated: bridge.showPage("month")
     }
     Shortcut {
         sequence: "4"
         context: Qt.WindowShortcut
-        enabled: !typing
+        enabled: !typing && !accountLayer.active
         onActivated: bridge.showPage("myday")
     }
     Shortcut {
         sequence: "5"
         context: Qt.WindowShortcut
-        enabled: !typing
+        enabled: !typing && !accountLayer.active
         onActivated: bridge.showPage("settings")
     }
     Shortcut {
         sequence: "Z"
         context: Qt.WindowShortcut
-        enabled: !typing
+        enabled: !typing && !accountLayer.active
         onActivated: bridge.undo()
     }
-    Shortcut { sequence: "Escape"; context: Qt.WindowShortcut; onActivated: focusDestination() }
+    Shortcut {
+        sequence: "Escape"
+        context: Qt.WindowShortcut
+        enabled: !accountLayer.active
+        onActivated: focusDestination()
+    }
+
+    // Sign in, recovery codes and first-run setup cover the shell until the student is in.
+    Loader {
+        id: accountLayer
+        objectName: "accountLayer"
+        anchors.fill: parent
+        z: 100
+        active: root.bridge ? root.bridge.account.phase !== "app" : false
+        sourceComponent: AccountFlow {
+            bridge: root.bridge.account
+            theme: root.theme
+            density: root.density
+            reduceMotion: root.reduceMotion
+            highContrast: root.highContrast
+        }
+    }
 }
