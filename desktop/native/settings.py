@@ -1086,7 +1086,7 @@ class SettingsPage(QWidget):
         boxes = (self.work, self.break_min, self.long_break, self.long_every)
         self.focus_steppers = [Stepper(box) for box in boxes]
         work, rest, long_rest, every = self.focus_steppers
-        self.focus_audio = Segmented(FOCUS_AUDIO_CHOICES, "prefFocusAudio")
+        self.focus_audio = Segmented(FOCUS_AUDIO_CHOICES, "prefFocusAudio", stacked=True)
         shown_audio = preferences.get("focus_audio") or "off"
         self.focus_audio.setCurrentIndex(max(0, self.focus_audio.findData(shown_audio)))
         focus_form.addRow("While you focus", self.focus_audio)
