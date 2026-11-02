@@ -9,8 +9,12 @@ instead of being shown as an empty week.
 from __future__ import annotations
 
 import importlib.util
+import re
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
+
+import pytest
 
 from desktop.tests import logic_support
 
@@ -19,13 +23,22 @@ qapp = logic_support.qapp
 server = logic_support.server
 
 if importlib.util.find_spec("PySide6") is not None:
+    from flexweek_engine import SyncService  # type: ignore[import-untyped]
     from PySide6.QtCore import QObject
     from PySide6.QtWidgets import QApplication
 
     from desktop.native.client import ApiError
-    from desktop.native.devices import SYNC_DEADLINE_MS
+    from desktop.native.devices import SYNC_DEADLINE_MS, SyncHost
     from desktop.server import LocalServer
-    from desktop.tests.logic_support import fail_once, fixed, settled, signed_in, wait_until, week_after
+    from desktop.tests.logic_support import (
+        PASSWORD,
+        fail_once,
+        fixed,
+        settled,
+        signed_in,
+        wait_until,
+        week_after,
+    )
 
 
 def _monday_morning(session: object) -> None:
@@ -154,11 +167,13 @@ def test_setup_writes_stay_in_order(qapp: QApplication, server: LocalServer) -> 
     )
     wait_until(
         qapp,
-        lambda: not session.setup_prefs
-        and session.setup_work_windows is None
-        and not session.setup_week
-        and not session.busy
-        and inflight == 0,
+        lambda: (
+            not session.setup_prefs
+            and session.setup_work_windows is None
+            and not session.setup_week
+            and not session.busy
+            and inflight == 0
+        ),
     )
     settled(qapp, session)
     assert peak == 1, order
@@ -291,9 +306,7 @@ def test_a_remote_change_does_not_reload_a_dirty_week(qapp: QApplication, server
     heard: list[bool] = []
     session.week_changed.connect(lambda: heard.append(True))
 
-    def load_week(
-        week_start: str | None = None, *, discard: bool = False, said: str = "This week."
-    ) -> None:
+    def load_week(week_start: str | None = None, *, discard: bool = False, said: str = "This week.") -> None:
         loads.append((week_start, discard, said))
 
     session.load_week = load_week  # type: ignore[method-assign, assignment]
@@ -333,3 +346,154 @@ def test_a_remote_change_does_not_reload_a_dirty_week(qapp: QApplication, server
     assert heard, "a held week did not tell the window there was a conflict"
     assert session.accept_remote_week("Ada's phone") is True
     assert loads == [(session.week_start, True, "Updated from Ada's phone.")]
+
+
+def _hold_the_save(session: object) -> None:
+    """Start a save and keep its reply. The session stays busy, and the reply is never delivered."""
+    real = session.client.request  # type: ignore[attr-defined]
+
+    def request(
+        method: str,
+        path: str,
+        payload: dict | None,
+        on_success: Callable[[dict], None],
+        on_error: Callable[[ApiError], None],
+    ) -> None:
+        if method == "POST" and path.startswith("/api/changes"):
+            return
+        real(method, path, payload, on_success, on_error)
+
+    session.client.request = request  # type: ignore[attr-defined, method-assign, assignment]
+    session.save()  # type: ignore[attr-defined]
+    assert session.busy  # type: ignore[attr-defined]
+    session.client.request = real  # type: ignore[attr-defined, method-assign]
+
+
+def _preference_puts(session: object) -> list[dict]:
+    puts: list[dict] = []
+    real = session.client.request  # type: ignore[attr-defined]
+
+    def request(
+        method: str,
+        path: str,
+        payload: dict | None,
+        on_success: Callable[[dict], None],
+        on_error: Callable[[ApiError], None],
+    ) -> None:
+        if method == "PUT" and path.startswith("/api/preferences"):
+            puts.append(dict(payload or {}))
+        real(method, path, payload, on_success, on_error)
+
+    session.client.request = request  # type: ignore[attr-defined, method-assign, assignment]
+    return puts
+
+
+def test_setup_answers_do_not_cross_a_sign_out(qapp: QApplication, server: LocalServer) -> None:
+    """Answers kept while a save is in flight belong to that account. Signing out drops them, and so
+    does signing a different account in, so the next flush cannot store them there."""
+    session = signed_in(qapp, server.origin, "alice_cross", create=True)
+    _hold_the_save(session)
+    session.keep_setup({"planning_style": "manual", "clock_24h": True})
+    assert session.setup_prefs == {"planning_style": "manual", "clock_24h": True}
+
+    session.logout()
+    wait_until(qapp, lambda: session.account is None and not session.busy)
+    left_at_sign_out = dict(session.setup_prefs)
+
+    session.register("bob_cross", PASSWORD)
+    wait_until(qapp, lambda: session.account is not None and not session.busy)
+    session.finish_recovery()
+    wait_until(qapp, lambda: session.preferences is not None and not session.busy)
+    settled(qapp, session)
+    puts = _preference_puts(session)
+    session.flush_setup()
+    settled(qapp, session)
+    assert puts == []
+    assert left_at_sign_out == {}
+    assert session.setup_work_windows is None
+    assert session.setup_week is False
+    bob = session.preferences
+    assert bob is not None
+    assert bob.get("planning_style", "suggest") == "suggest"
+    assert bob.get("clock_24h", False) is False
+
+    _hold_the_save(session)
+    session.keep_setup({"planning_style": "manual", "clock_24h": True})
+    puts = _preference_puts(session)
+    session.register("carol_cross", PASSWORD)
+    wait_until(
+        qapp,
+        lambda: (
+            session.account is not None and session.account["username"] == "carol_cross" and not session.busy
+        ),
+    )
+    assert session.setup_prefs == {}
+    assert puts == []
+    # The held save would keep this week on screen. Discard it and read the new account's own
+    # preferences back: the queued answers must not have been stored for them.
+    session.load_week(session.week_start, discard=True)
+    wait_until(qapp, lambda: not session.busy)
+    settled(qapp, session)
+    carol = session.preferences
+    assert carol is not None
+    assert carol.get("planning_style", "suggest") == "suggest"
+    assert carol.get("clock_24h", False) is False
+
+
+def test_pairing_starts_a_fresh_host(
+    qapp: QApplication,
+    server: LocalServer,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The first phone has no service running. Pairing starts that host, then asks it for a code."""
+    session = signed_in(qapp, server.origin, "pair_fresh", create=True)
+    account = session.account
+    assert account is not None
+    database = tmp_path / "flexweek.db"
+    started: list[Path] = []
+
+    def loopback_start(path: Path) -> SyncService:
+        started.append(path)
+        (path.parent / "sync").mkdir(parents=True, exist_ok=True)
+        return SyncService.start(
+            str(path),
+            str(path.parent / "sync" / "device.key"),
+            "Desk",
+            True,
+            "127.0.0.1:0",
+            1000,
+        )
+
+    monkeypatch.setattr("desktop.native.devices.start_service", loopback_start)
+    host = SyncHost(database)
+    assert host.service is None
+    session.use_sync_host(host)
+    heard: list[tuple[object, Exception | None]] = []
+    try:
+        assert session.begin_pairing(lambda result, problem: heard.append((result, problem))) is True
+        wait_until(qapp, lambda: len(heard) == 1)
+        result, problem = heard[0]
+        assert problem is None
+        assert started == [database]
+        assert isinstance(result, dict)
+        assert re.fullmatch(r"\d{4} \d{4}", str(result["display_code"]))
+    finally:
+        host.stop()
+
+
+def test_setup_answers_are_saved_when_preferences_arrive(qapp: QApplication, server: LocalServer) -> None:
+    """Answers kept while preferences are still absent go out once that load finishes."""
+    session = signed_in(qapp, server.origin, "prefs_late", create=True)
+    assert session.preferences is not None
+    session.preferences = None
+    puts = _preference_puts(session)
+    session.keep_setup({"planning_style": "manual", "clock_24h": True})
+    assert session.setup_prefs == {"planning_style": "manual", "clock_24h": True}
+    assert puts == []
+    session._fetch_preferences()
+    wait_until(qapp, lambda: session.preferences is not None)
+    settled(qapp, session)
+    assert [item["planning_style"] for item in puts] == ["manual"]
+    assert [item["clock_24h"] for item in puts] == [True]
+    assert session.setup_prefs == {}

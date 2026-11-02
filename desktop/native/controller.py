@@ -382,11 +382,23 @@ class NativeSession(QObject):
             else:
                 self._say(error.message)
 
+    def _drop_setup(self) -> None:
+        """Unsent setup answers belong to the account that gave them."""
+        self.setup_prefs = {}
+        self.setup_work_windows = None
+        self.setup_week = False
+
+    def _drop_other_setup(self, account_id: object) -> None:
+        """A different account does not keep the previous one's unsent setup answers."""
+        if self.account is None or self.account["id"] != account_id:
+            self._drop_setup()
+
     def _clear_local(self) -> None:
         if self.account is not None:
             self.focus_store.pop(self.account["id"], None)
         self._credits_waiting.clear()
         self.account = None
+        self._drop_setup()
         self.week_start = current_week_start()
         self.blocks = []
         self.revision = 0
@@ -701,6 +713,9 @@ class NativeSession(QObject):
         self.client.adopt_session(token)
 
         def ok(data: dict) -> None:
+            if not self._alive(ticket):
+                return
+            self._drop_other_setup(data["id"])
             if not self._idle(ticket):
                 return
             self.client.set_account(data)
@@ -735,6 +750,7 @@ class NativeSession(QObject):
         def ok(data: dict) -> None:
             if not self._alive(ticket):
                 return
+            self._drop_other_setup(data["id"])
             self.client.set_account(data)
             self.account = {"id": data["id"], "username": data["username"]}
             self.new_account = True
@@ -757,6 +773,9 @@ class NativeSession(QObject):
         self._say("Signing in…")
 
         def ok(data: dict) -> None:
+            if not self._alive(ticket):
+                return
+            self._drop_other_setup(data["id"])
             if not self._idle(ticket):
                 return
             self.client.set_account(data)
@@ -932,14 +951,36 @@ class NativeSession(QObject):
         return host, service, int(account["id"])
 
     def begin_pairing(self, done: Callable[[Any, Exception | None], None]) -> bool:
-        """Ask for a pairing code on the app's sync host. False with no host, service or account."""
-        found = self._sync_service()
-        if found is None:
+        """Ask for a pairing code on the app's sync host. A host that is not running yet is started
+        first, as Pair a phone does. False with no host or account, and then `done` is not called."""
+        host = self._sync_host
+        account = self.account
+        if host is None or account is None:
             return False
-        host, service, user_id = found
-        from desktop.native.devices import begin_pairing
+        user_id = int(account["id"])
 
-        begin_pairing(host, service, user_id, done)
+        def pair(service: Any) -> None:
+            from desktop.native.devices import begin_pairing as start
+
+            start(host, service, user_id, done)
+
+        service = getattr(host, "service", None)
+        if service is not None:
+            pair(service)
+            return True
+        ensure = getattr(host, "ensure", None)
+        if not callable(ensure):
+            return False
+
+        def ready(started: Any) -> None:
+            if started is None:
+                from desktop.native.devices import NO_SYNC_WORDS
+
+                done(None, RuntimeError(NO_SYNC_WORDS))
+                return
+            pair(started)
+
+        ensure(ready)
         return True
 
     def end_pairing(self, done: Callable[[Any, Exception | None], None]) -> bool:
@@ -2391,6 +2432,9 @@ class NativeSession(QObject):
                 return
             self.preferences = data
             self.week_changed.emit()
+            # The window resumes a setup queue from week_changed. A surface with no window cannot,
+            # so the answers kept while preferences were absent go out from here.
+            self.flush_setup()
             self._fetch_timer_tools()
 
         self.client.request("GET", "/api/preferences", None, ok, lambda _error: None)
@@ -3843,6 +3887,9 @@ class NativeSession(QObject):
         self._say("Recovering account…")
 
         def ok(data: dict) -> None:
+            if not self._alive(ticket):
+                return
+            self._drop_other_setup(data["id"])
             if not self._idle(ticket):
                 return
             self.client.set_account(data)
