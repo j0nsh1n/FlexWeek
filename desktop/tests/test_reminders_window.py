@@ -430,7 +430,7 @@ def test_a_snoozed_block_song_plays_again_five_minutes_later(
 ) -> None:
     window = launch(qapp, serve(database, opened), "snoozer", opened, create=True)
     clock = hold(window, 18, 44)
-    choose(qapp, window, default_spotify_url=OTHER)
+    choose(qapp, window, alarm_tone="spotify", default_spotify_url=OTHER)
     add_practice(qapp, window, spotify_url=TRACK)
     tick(qapp, window, clock, 44)
     heard: list = []
@@ -480,6 +480,7 @@ def test_a_block_without_a_link_plays_the_settings_link_when_the_sound_is_spotif
     tick(qapp, window, clock, 45)
     assert heard and heard[0][:2] == ["Guitar practice", "6:45 PM · Starting now"]
     assert spotify_app.asked == [TRACK_ADDRESS]
+    assert spotify_app.paused == 1, "dismissing stops the song"
     assert window._tray_icon.shown == [("Guitar practice starts soon", "6:45 PM · Thu")], "one notice"
 
 
@@ -495,17 +496,20 @@ def test_a_block_link_does_not_beat_the_settings_link(
     assert spotify_app.asked == [OTHER_ADDRESS]
 
 
-def test_a_block_plays_the_settings_link_even_when_the_sound_is_a_tone(
+def test_a_soft_sound_and_focus_off_do_not_play_a_saved_link_when_a_block_starts(
     qapp: QApplication, database: Path, opened: list, spotify_app: SpotifyApp
 ) -> None:
+    """A link saved for Focus stays quiet at a block start when the alarm sound is Soft and focus is Off."""
     window = launch(qapp, serve(database, opened), "tone_only", opened, create=True)
     clock = hold(window, 18, 44)
     choose(qapp, window, alarm_tone="soft", default_spotify_url=TRACK)
+    assert (window.session.preferences or {}).get("focus_audio", "off") == "off"
     add_practice(qapp, window, spotify_url=OTHER)
     heard: list = []
     answer_alarm(qapp, window, "alarmDismiss", heard)
-    tick(qapp, window, clock, 45)
-    assert heard and spotify_app.asked == [TRACK_ADDRESS]
+    for minute in range(44, 55):
+        tick(qapp, window, clock, minute)
+    assert heard == [] and spotify_app.asked == []
 
 
 def test_a_start_the_poll_reaches_a_few_minutes_late_still_plays_its_song(
@@ -513,7 +517,7 @@ def test_a_start_the_poll_reaches_a_few_minutes_late_still_plays_its_song(
 ) -> None:
     window = launch(qapp, serve(database, opened), "late_song", opened, create=True)
     clock = hold(window, 18, 51)
-    choose(qapp, window, reminder_lead_min=10, default_spotify_url=TRACK)
+    choose(qapp, window, reminder_lead_min=10, alarm_tone="spotify", default_spotify_url=TRACK)
     add_practice(qapp, window, spotify_url=OTHER)
     heard: list = []
     answer_alarm(qapp, window, "alarmDismiss", heard)

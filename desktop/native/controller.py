@@ -3468,8 +3468,9 @@ class NativeSession(QObject):
     ) -> tuple[list[dict], list[dict]]:
         """Today's reminders, and the song for blocks that are starting.
 
-        A link stored on a block is left in the week. Playback uses only the Settings link, so the
-        copies handed to the engine have that field cleared. The engine would otherwise prefer it.
+        A link stored on a block is left in the week. The copies handed to the engine have that field
+        cleared, so a block start uses the Settings link. It plays only when the alarm sound is
+        Spotify. A link saved for Focus does not start a song on its own.
         """
         notices: list[dict] = []
         lead = reminder_lead_min(prefs)
@@ -3489,7 +3490,7 @@ class NativeSession(QObject):
                 }
         # A bad saved link is left out here, as it is when the alarm rings.
         default_link = self.spotify_url(prefs.get("default_spotify_url") or "") or None
-        plays = bool(default_link)
+        sound_is_spotify = prefs.get("alarm_tone") == "spotify"
         due = due_reminders(
             blocks=blocks,
             trace=trace,
@@ -3498,7 +3499,7 @@ class NativeSession(QObject):
             lead_min=lead,
             fired=self.fired_reminders,
             default_link=default_link,
-            sound_is_spotify=plays,
+            sound_is_spotify=sound_is_spotify,
         )
         for item in due:
             self.fired_reminders.add(item["key"])
@@ -3511,7 +3512,7 @@ class NativeSession(QObject):
             lead_min=lead,
             played=self.played_songs,
             default_link=default_link,
-            sound_is_spotify=plays,
+            sound_is_spotify=sound_is_spotify,
         )
         self.played_songs.update(song["id"] for song in songs)
         return notices, songs

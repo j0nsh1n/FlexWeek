@@ -213,7 +213,9 @@ PLANNING_STYLES = (
     ),
     ("manual", "I'll drag it onto the calendar myself", "The planning button becomes Suggest times."),
 )
-SPOTIFY_LINK_HINT = "Plays when a block starts, and when focus is set to Spotify."
+SPOTIFY_LINK_HINT = (
+    "Plays when a block starts if the alarm sound is Spotify, and when focus is set to Spotify."
+)
 SPOTIFY_TONE_REST = (
     "It plays in your Spotify app, and stopping the alarm stops it. Reminders before a block and the"
     " end of a focus session play Chime. Without the Spotify app, the link opens and Chime rings too."
@@ -268,7 +270,8 @@ HELP_KEYS = (
 FOCUS_RUNNING_NOTE = "Work on this until the timer ends. Pause if something interrupts you."
 FOCUS_ENDED_NOTE = "Time is up. Mark it finished, take a break, or give it more time."
 BLOCK_SONG_NOTE = (
-    "When a block starts, the Spotify link in Settings plays. Dismiss or snooze it as you would an alarm."
+    "When a block starts and the alarm sound is Spotify, the Spotify link in Settings plays. Dismiss or"
+    " snooze it as you would an alarm."
 )
 FOCUS_AUDIO_NOTE = "Off stays quiet. Spotify opens the link from Alerts when focus starts."
 ALARM_NOTE = "An alarm rings at its time on the days you pick, until you dismiss or snooze it."

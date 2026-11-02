@@ -162,7 +162,8 @@ NOTES = {
     HOMEWORK: "You can change this any time in Settings, under Planning.",
     REMINDERS: (
         "Pick the sound for reminders, alarms and the end of a focus session. Spotify plays for an alarm."
-        " A block starts with the Spotify link from Settings. The rest play Chime."
+        " A block starts with the Spotify link from Settings when the alarm sound is Spotify. The rest"
+        " play Chime."
     ),
     FIRST: "Add up to three. You can add the rest any time.",
     DONE: "Everything here is also in Settings. Run setup again from Settings, under This computer.",

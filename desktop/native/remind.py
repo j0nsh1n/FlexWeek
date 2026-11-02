@@ -84,9 +84,9 @@ def due_songs(
 ) -> list[dict]:
     """Blocks that are starting with a song to play, as alarms.
 
-    The desktop passes blocks with no link of their own and sets `sound_is_spotify` when Settings has
-    a link, so the song is that link. The engine still prefers a block link when one is present; phones
-    keep that. This desktop does not send one.
+    The desktop passes blocks with no link of their own and sets `sound_is_spotify` when the alarm
+    sound is Spotify, so the song is the Settings link. The engine still prefers a block link when one
+    is present; phones keep that. This desktop does not send one.
     """
     return json.loads(
         flexweek_engine.remind_songs(

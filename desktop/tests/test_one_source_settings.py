@@ -31,7 +31,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.widgets import AvailabilityDialog
 
 ALERTS = 3
-HINT = "Plays when a block starts, and when focus is set to Spotify."
+HINT = "Plays when a block starts if the alarm sound is Spotify, and when focus is set to Spotify."
 TRACK = "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"
 TRACK_ADDRESS = "spotify:track:4cOdK2wGLETKBW3PvgPWqT"
 NO_HOMEWORK_AFTER = ["No limit", "20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00"]
