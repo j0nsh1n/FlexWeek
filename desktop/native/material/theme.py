@@ -239,8 +239,8 @@ def register_fonts() -> tuple[int, ...]:
 
 
 # Advanced settings sit on the preset. None means "the component's own value", so an untouched
-# Done does not restyle the week. Seed colour and palette style are not here: they wait for the
-# palette generator.
+# Done does not restyle the week. Seed colour, palette style, per-role colour overrides, the
+# contrast dial, font, heading weight and surface separation wait for the palette generator.
 CORNER_RANGE = (0, 28)
 SCALE_RANGE = (0.9, 1.3)
 HOUR_RANGE = (36, 90)

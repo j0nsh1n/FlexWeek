@@ -69,7 +69,8 @@ _WEEKEND_FREE = next(
 )
 _BUFFER = next((name for name in ("buffer_min", "smart_buffer_min") if name in _FIELDS), None)
 _URGENT = next((name for name in ("urgent_first", "prioritize_urgent") if name in _FIELDS), None)
-_SPLIT = next((name for name in ("split_long_tasks", "auto_split_pomodoro") if name in _FIELDS), None)
+# auto_split_pomodoro is the focus-timer split, not this planner row.
+_SPLIT = "split_long_tasks" if "split_long_tasks" in _FIELDS else None
 _SHOW_WEEKENDS = "show_weekends" if "show_weekends" in _FIELDS else None
 _GROUPS = {
     "shape": ("corner",),
@@ -432,11 +433,14 @@ class SettingsBridge(QObject):
 
     @Slot()
     def closeAdvanced(self) -> None:
+        dropped = self._dirty
         self._page = "sections"
         self._dirty = False
         self._prompt = ""
         self._draft_choice = dict(self._choice)
         self._draft = copy.deepcopy(self._advanced)
+        if dropped:
+            self._notice = "Advanced changes were not applied. Done applies them."
         self._publish()
 
     @Slot(str)
@@ -533,15 +537,7 @@ class SettingsBridge(QObject):
     def setSplit(self, on: bool) -> None:
         if _SPLIT is None:
             return
-        updates: dict[str, Any] = {_SPLIT: bool(on)}
-        if on and _SPLIT == "auto_split_pomodoro":
-            prefs = _prefs_of(self._window)
-            work = int(prefs.get("timer_work_min") or 30)
-            rest = int(prefs.get("timer_break_min") or 15)
-            if work % 15 or rest % 15:
-                updates["timer_work_min"] = 30
-                updates["timer_break_min"] = 15
-        self._write(updates)
+        self._write({_SPLIT: bool(on)})
 
     @Slot(str)
     def setCutoff(self, value: str) -> None:
@@ -722,7 +718,6 @@ class SettingsBridge(QObject):
     @Slot()
     def exportLook(self) -> None:
         self._export_text = export_document(self._draft_choice, self._draft)
-        self._notice = "Exported."
         self._publish()
 
     @Slot(str)
@@ -751,11 +746,11 @@ class SettingsBridge(QObject):
             *self._saved,
             {
                 "name": clean,
-                "preset": self._choice["preset"],
-                "mode": self._choice["mode"],
-                "contrast": self._choice["contrast"],
-                "density": self._choice["density"],
-                "advanced": copy.deepcopy(self._advanced),
+                "preset": self._draft_choice["preset"],
+                "mode": self._draft_choice["mode"],
+                "contrast": self._draft_choice["contrast"],
+                "density": self._draft_choice["density"],
+                "advanced": copy.deepcopy(self._draft),
             },
         ]
         self._save_error = ""
@@ -776,6 +771,15 @@ class SettingsBridge(QObject):
             self._notice = f"Wearing {name}."
             self._commit()
             return
+
+    @Slot(str)
+    def forgetSaved(self, name: str) -> None:
+        kept = [item for item in self._saved if item["name"] != name]
+        if len(kept) == len(self._saved):
+            return
+        self._saved = kept
+        self._notice = "Deleted."
+        self._commit()
 
     @Slot()
     def beginImport(self) -> None:
