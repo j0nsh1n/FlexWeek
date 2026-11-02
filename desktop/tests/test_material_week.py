@@ -362,6 +362,7 @@ def test_dragging_a_card_onto_the_grid_gives_it_that_hour(qapp: QApplication, wi
     # The active Material snackbar is the only presenter; the Widgets toast stays hidden.
     assert "Math worksheet" in _snack(window)
     assert window.toast.isHidden()
+    assert _qml(root, "materialSnackbar").property("actionText") == "UNDO"
 
 
 def test_a_drop_off_the_grid_changes_nothing(qapp: QApplication, window: NativeWindow) -> None:
@@ -675,6 +676,18 @@ def test_the_weekend_choice_survives_a_preferences_refresh_and_a_failed_save_res
         assert session.preferences["show_weekends"] is False
         assert len(_named(root, "dayHeader")) == 5
         assert _snack(window) == "Couldn't save the weekend setting. Try again."
+        snackbar = _qml(root, "materialSnackbar")
+        assert snackbar.property("actionText") == ""
+        assert snackbar.property("activeFocusOnTab") is False
+        undo_calls = []
+        undo = session.undo
+        session.undo = lambda: undo_calls.append(True)
+        try:
+            snackbar.actionClicked.emit()
+            _pump(qapp)
+            assert undo_calls == [], "A failed preference save cannot undo a schedule change"
+        finally:
+            session.undo = undo
     finally:
         session.save_preferences = original
         session.save_preferences({"show_weekends": True})

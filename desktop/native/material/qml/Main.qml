@@ -441,7 +441,8 @@ Item {
                 visible: bridge.snackText !== ""
                 z: 3
                 message: bridge.snackText
-                onActionClicked: bridge.undo()
+                actionText: bridge.snackAction
+                onActionClicked: if (bridge.snackAction !== "") bridge.undo()
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: root.phone ? 96 : 24

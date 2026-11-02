@@ -270,11 +270,11 @@ class WeekBridge(QObject):
 
     # -- the snackbar ----------------------------------------------------
 
-    def _note(self, text: str) -> None:
+    def _note(self, text: str, *, action: str = "UNDO") -> None:
         shell = self.parent()
         if shell is None or not hasattr(shell, "note"):
             return
-        shell.note(text)
+        shell.note(text, action=action)
         self._noted = text
         if text:
             self._snack_timer.start()
@@ -388,7 +388,7 @@ class WeekBridge(QObject):
                 latest.pop("show_weekends", None)
             session.preferences = latest
             self._window._material_page.publish()  # type: ignore[attr-defined]
-            self._note("Couldn't save the weekend setting. Try again.")
+            self._note("Couldn't save the weekend setting. Try again.", action="")
 
         if not session.save_preferences({"show_weekends": wanted}, kept):
             kept(False)

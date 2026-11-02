@@ -38,6 +38,7 @@ Item {
     }
     Item {
         id: action
+        visible: root.actionText !== ""
         anchors.right: parent.right
         anchors.rightMargin: 8
         anchors.verticalCenter: parent.verticalCenter
@@ -72,10 +73,11 @@ Item {
     }
 
     property bool keyDown: false
-    activeFocusOnTab: true
-    Accessible.role: Accessible.Button
-    Accessible.name: (accessName !== "" ? accessName : message) + ", " + actionText
-    Accessible.onPressAction: root.actionClicked()
+    activeFocusOnTab: actionText !== ""
+    Accessible.role: actionText !== "" ? Accessible.Button : Accessible.StaticText
+    Accessible.name: (accessName !== "" ? accessName : message) + (actionText !== "" ? ", " + actionText : "")
+    Accessible.onPressAction: if (actionText !== "") root.actionClicked()
+    Keys.enabled: actionText !== ""
     Keys.onPressed: (event) => {
         if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
             root.keyDown = true
