@@ -79,6 +79,7 @@ Column {
                 highContrast: root.highContrast
                 kind: "filled"
                 text: "Start focus"
+                icon: "play_arrow"
                 accessName: "Start focus"
                 onClicked: root.startFocus()
             }

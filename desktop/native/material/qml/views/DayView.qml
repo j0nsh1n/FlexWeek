@@ -40,7 +40,7 @@ Item {
         board: root.board
         year: root.board ? root.board.year : 2026
         month: root.board ? root.board.month : 1
-        today: root.board ? root.board.miniToday : 0
+        today: root.board ? root.board.miniDay : 0
     }
 
     Flickable {

@@ -81,6 +81,8 @@ Column {
             required property string subtitle
             required property string icon
             required property string bar
+            required property string fill
+            required property string ink
             required property string tag
             required property string tagKind
             required property bool canFinish
@@ -102,6 +104,8 @@ Column {
                 icon: line.icon
                 bar: line.bar !== "" ? line.bar : "transparent"
                 showBar: line.bar !== ""
+                fill: line.fill
+                ink: line.ink
                 accessName: line.title
             }
             Tag {

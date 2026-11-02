@@ -73,7 +73,7 @@ SOCCER = (16 * 60, 17 * 60 + 30)
 
 
 def test_the_count_line_says_things_left_today() -> None:
-    day = [_block("School", *SCHOOL), _block("Soccer", *SOCCER, category="sport"), _block("Essay", *ESSAY)]
+    day = [_block("School", *SCHOOL), _block("Soccer", *SOCCER, category="exercise"), _block("Essay", *ESSAY)]
     assert _board(day, 15 * 60).left_line == "2 things left today"
     assert _board(day, 17 * 60 + 40).left_line == "1 thing left today"
     assert _board(day, 20 * 60).left_line == "Nothing left today"
@@ -92,6 +92,21 @@ def test_lists_split_by_the_clock_and_by_finishing() -> None:
     assert board.done[0].can_finish is False
     assert "Due" in board.up_next[0].subtitle
     assert board.up_next[0].subtitle.startswith("18:45–19:45")
+
+
+def test_rows_wear_the_spec_category_colours() -> None:
+    day = [
+        _block("School", *SCHOOL),
+        _block("Soccer", *SOCCER, category="exercise"),
+        _block("Essay", *ESSAY, work=True, assignment="a1", category="assignments"),
+    ]
+    set_clock_24h(True)
+    light = board_for(day, minute=9 * 60, when="future", nudges=True, dim=True, mode="light", on=TODAY)
+    assert [row.fill for row in light.up_next] == ["#EAE6FA", "#E2F5EA", "#F7EBD9"]
+    assert [row.bar for row in light.up_next] == ["#7C6CD6", "#2E9E63", "#C98A2B"]
+    dark = board_for(day, minute=9 * 60, when="future", nudges=True, dim=True, mode="dark", on=TODAY)
+    assert [row.fill for row in dark.up_next] == ["#2A244D", "#1B3B2B", "#4A3219"]
+    assert [row.bar for row in dark.up_next] == ["#9B8CF0", "#5CCB8F", "#E8B268"]
 
 
 def test_pinned_shows_in_the_row_note() -> None:
@@ -321,11 +336,12 @@ def test_picking_a_date_shows_that_day_and_my_day_stays_on_today(
     day = bridge.property("day")
     thursday = date.fromisoformat(session.selected_day)
     friday = thursday + timedelta(days=1)
-    assert day.property("miniToday") == thursday.day
+    assert day.property("miniDay") == thursday.day
     day.pickDay(friday.day)
     settled(qapp, window)
     _pump(qapp)
     assert session.selected_day == friday.isoformat()
+    assert day.property("miniDay") == friday.day
     assert day.property("leftLine") == "1 thing left"
     assert [row["title"] for row in _rows(day.property("upNext"))] == ["School"]
     assert day.property("showNow") is False

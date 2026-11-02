@@ -18,7 +18,19 @@ from desktop.native.material.day_board import (
 )
 from desktop.native.weekmodel import set_clock_24h
 
-ROW_ROLES = ("title", "subtitle", "icon", "bar", "tag", "tagKind", "canFinish", "assignmentId", "dim")
+ROW_ROLES = (
+    "title",
+    "subtitle",
+    "icon",
+    "bar",
+    "fill",
+    "ink",
+    "tag",
+    "tagKind",
+    "canFinish",
+    "assignmentId",
+    "dim",
+)
 
 
 class _Session(Protocol):
@@ -65,7 +77,7 @@ class DayBridge(QObject):
         self._iso = ""
         self._year = 2026
         self._month = 1
-        self._mini_today = 0
+        self._mini_day = 0
         self._publish(self._board)
 
     def reload(self, mode: str) -> None:
@@ -80,7 +92,7 @@ class DayBridge(QObject):
         self._iso = viewed.isoformat()
         self._year = viewed.year
         self._month = viewed.month
-        self._mini_today = today.day if (today.year, today.month) == (viewed.year, viewed.month) else 0
+        self._mini_day = viewed.day
         items: tuple = ()
         week_start = getattr(session, "week_start", "") or ""
         account = getattr(session, "account", None)
@@ -232,8 +244,8 @@ class DayBridge(QObject):
         return self._month
 
     @Property(int, notify=changed)
-    def miniToday(self) -> int:
-        return self._mini_today
+    def miniDay(self) -> int:
+        return self._mini_day
 
     @Property(str, notify=changed)
     def focusBlockId(self) -> str:
@@ -256,6 +268,8 @@ def _qml_row(row: DayRow) -> dict:
         "subtitle": row.subtitle,
         "icon": row.icon,
         "bar": row.bar,
+        "fill": row.fill,
+        "ink": row.ink,
         "tag": row.tag,
         "tagKind": row.tag_kind,
         "canFinish": row.can_finish,
