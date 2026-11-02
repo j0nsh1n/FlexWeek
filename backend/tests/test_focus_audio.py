@@ -81,8 +81,36 @@ def test_off_is_omitted_and_a_choice_comes_back(alice: TestClient, database: Pat
     assert "focus_audio" not in alice.get("/api/preferences").json()
 
 
-def test_a_later_sound_is_stored_until_it_can_play(alice: TestClient) -> None:
-    saved = alice.put("/api/preferences", json={**defaults(), "focus_audio": "rain"}, headers=WRITE)
+@pytest.mark.parametrize("sound", ["rain", "lo-fi", "white-noise"])
+def test_each_ambient_sound_round_trips(alice: TestClient, sound: str) -> None:
+    saved = alice.put("/api/preferences", json={**defaults(), "focus_audio": sound}, headers=WRITE)
     assert saved.status_code == 200, saved.text
-    assert saved.json()["focus_audio"] == "rain"
-    assert alice.get("/api/preferences").json()["focus_audio"] == "rain"
+    assert saved.json()["focus_audio"] == sound
+    assert alice.get("/api/preferences").json()["focus_audio"] == sound
+
+
+def test_the_two_focus_rules_default_to_mute_on_and_complete_off_and_round_trip(
+    alice: TestClient, database: Path
+) -> None:
+    fresh = alice.get("/api/preferences").json()
+    assert "focus_auto_mute" not in fresh and "focus_auto_complete" not in fresh  # defaults are omitted
+
+    saved = alice.put(
+        "/api/preferences",
+        json={**defaults(), "focus_auto_mute": False, "focus_auto_complete": True},
+        headers=WRITE,
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["focus_auto_mute"] is False
+    assert saved.json()["focus_auto_complete"] is True
+    again = alice.get("/api/preferences").json()
+    assert again["focus_auto_mute"] is False and again["focus_auto_complete"] is True
+    comfort = sqlite3.connect(database).execute("SELECT comfort_json FROM preferences").fetchone()
+    assert comfort is not None
+    assert '"focus_auto_mute":false' in comfort[0] and '"focus_auto_complete":true' in comfort[0]
+
+    back = alice.put("/api/preferences", json={**defaults()}, headers=WRITE)
+    assert back.status_code == 200, back.text
+    assert "focus_auto_mute" not in back.json() and "focus_auto_complete" not in back.json()
+    refused = alice.put("/api/preferences", json={**defaults(), "focus_auto_mute": "maybe"}, headers=WRITE)
+    assert refused.status_code == 422
