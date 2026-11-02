@@ -2677,6 +2677,21 @@ class NativeSession(QObject):
 
         self.client.request("DELETE", path, None, ok, lambda error: self._fail(ticket, error))
 
+    def week_blocks(self, week_start: str, then: Callable[[list[dict]], None]) -> None:
+        """The blocks on screen for this week, or the saved blocks of another week. A failed load is
+        said here, and `then` is not called, so a preview cannot treat that week as empty."""
+        if week_start == self.week_start:
+            then(self.blocks)
+            return
+
+        def ok(data: dict) -> None:
+            then(list(data.get("blocks") or []))
+
+        def err(error: ApiError) -> None:
+            self._say(error.message)
+
+        self.client.request("GET", f"/api/week?week_start={week_start}", None, ok, err)
+
     def apply_routine_rows(self, routine_id: str, week_start: str, days: list[int]) -> list[dict] | None:
         routine = self.routines.get(routine_id)
         if routine is None or not days:

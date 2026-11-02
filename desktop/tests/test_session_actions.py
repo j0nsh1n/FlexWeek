@@ -2,7 +2,8 @@
 
 A move let go while a save is in flight has to survive that save's reply, which replaces the week
 with what was already on its way. Setup's answers leave one write at a time: preferences, then
-study hours, then the week.
+study hours, then the week. Another week's blocks come from that week, and a failed load is said
+instead of being shown as an empty week.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ if importlib.util.find_spec("PySide6") is not None:
 
     from desktop.native.client import ApiError
     from desktop.server import LocalServer
-    from desktop.tests.logic_support import fixed, settled, signed_in, wait_until
+    from desktop.tests.logic_support import fail_once, fixed, settled, signed_in, wait_until, week_after
 
 
 def _monday_morning(session: object) -> None:
@@ -163,3 +164,66 @@ def test_setup_writes_stay_in_order(qapp: QApplication, server: LocalServer) -> 
     assert availability == [window]
     assert session.preferences["planning_style"] == "auto"
     assert session.preferences["clock_24h"] is True
+
+
+def _saved_soccer(qapp: QApplication, server: LocalServer, name: str):
+    session = signed_in(qapp, server.origin, name, create=True)
+    _monday_morning(session)
+    session.add_block(fixed("soccer", "Soccer", 0, "16:00"))
+    session.save()
+    settled(qapp, session)
+    return session
+
+
+def _watch_weeks(session: object) -> list[str]:
+    gets: list[str] = []
+    real = session.client.request  # type: ignore[attr-defined]
+
+    def request(
+        method: str,
+        path: str,
+        payload: dict | None,
+        on_success: Callable[[dict], None],
+        on_error: Callable[[ApiError], None],
+    ) -> None:
+        if method == "GET" and path.startswith("/api/week?"):
+            gets.append(path)
+        real(method, path, payload, on_success, on_error)
+
+    session.client.request = request  # type: ignore[attr-defined, method-assign, assignment]
+    return gets
+
+
+def test_week_blocks_uses_this_week_without_a_request(qapp: QApplication, server: LocalServer) -> None:
+    session = _saved_soccer(qapp, server, "week_here")
+    gets = _watch_weeks(session)
+    got: list[list[dict]] = []
+    session.week_blocks(session.week_start, got.append)
+    assert len(got) == 1
+    assert any(block["id"] == "soccer" for block in got[0])
+    assert gets == []
+
+
+def test_week_blocks_loads_another_week(qapp: QApplication, server: LocalServer) -> None:
+    session = _saved_soccer(qapp, server, "week_there")
+    gets = _watch_weeks(session)
+    dest = week_after(session.week_start)
+    got: list[list[dict]] = []
+    session.week_blocks(dest, got.append)
+    wait_until(qapp, lambda: len(got) == 1)
+    settled(qapp, session)
+    assert gets == [f"/api/week?week_start={dest}"]
+    assert all(block["id"] != "soccer" for block in got[0])
+
+
+def test_a_failed_week_load_is_said_and_not_applied(qapp: QApplication, server: LocalServer) -> None:
+    session = signed_in(qapp, server.origin, "week_down", create=True)
+    dest = week_after(session.week_start)
+    fail_once(session, "GET", "/api/week")
+    got: list[list[dict]] = []
+    session.week_blocks(dest, got.append)
+    wait_until(
+        qapp,
+        lambda: session.message == "Storage is unavailable. Keep your changes and try again shortly.",
+    )
+    assert got == []

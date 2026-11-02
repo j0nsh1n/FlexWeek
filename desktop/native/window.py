@@ -4225,17 +4225,7 @@ class NativeWindow(QMainWindow):
                     destination=dest,
                 )
 
-            if dest == self.session.week_start:
-                show(self.session.blocks)
-                return
-
-            def ok(data: dict) -> None:
-                show(list(data.get("blocks") or []))
-
-            def err(error: object) -> None:
-                self.session._say(getattr(error, "message", str(error)))
-
-            self.session.client.request("GET", f"/api/week?week_start={dest}", None, ok, err)
+            self.session.week_blocks(dest, show)
             return
 
     def _collapse_unfinished(self) -> None:
