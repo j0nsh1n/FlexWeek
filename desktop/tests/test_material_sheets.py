@@ -16,7 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import Qt  # noqa: E402
+from PySide6.QtCore import QObject, Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication, QDialog, QPushButton  # noqa: E402
 
@@ -31,6 +31,7 @@ from desktop.tests.test_material_window import (  # noqa: E402,F401
     _pump,
     _qml,
     _show_material,
+    _visuals,
 )
 from desktop.tests.test_material_window import qapp as base_qapp  # noqa: E402,F401
 from desktop.tests.test_material_window import window as base_window  # noqa: E402,F401
@@ -910,3 +911,229 @@ def test_a_block_save_and_delete_wait_while_a_save_is_pending(
         _settle(qapp, shell)
         sheets.forceClose()
         _restore_essay(qapp, shell, sheets)
+
+
+GENERIC_FOCUS = {
+    "",
+    "fieldInput",
+    "shape",
+    "label",
+    "pickerValue",
+    "pickerList",
+    "sheetBody",
+    "sheetCard",
+    "sheetHost",
+    "sheetTitle",
+    "homeworkSheet",
+    "blockSheet",
+    "lateSheet",
+    "homeworkDetails",
+    "homeworkPrompt",
+    "blockPrompt",
+    "materialShell",
+    "promptCard",
+    "savePrompt",
+    "importPrompt",
+    "exportPrompt",
+    "presetPrompt",
+    "sheetPrompt",
+}
+SHEET_OWNERS = (
+    "sheetHost",
+    "homeworkSheet",
+    "blockSheet",
+    "lateSheet",
+    "sheetCard",
+    "sheetPrompt",
+    "pickerList",
+)
+UNDERLAY = (
+    "weekBlock",
+    "homeworkCard",
+    "navWeek",
+    "navDay",
+    "navMonth",
+    "navMyDay",
+    "navSettings",
+    "materialFab",
+    "materialSnackbar",
+    "materialRail",
+    "materialUndo",
+    "materialRedo",
+    "materialMore",
+    "weekPrevious",
+    "weekNext",
+)
+HIDDEN_ON_HOMEWORK_EDIT = (
+    "homeworkBack",
+    "homeworkDueTimePhone",
+    "homeworkCourse",
+    "homeworkNotes",
+    "homeworkCrumb0",
+)
+
+
+def _lineage(item: QObject | None) -> list[str]:
+    names: list[str] = []
+    while item is not None:
+        names.append(str(item.objectName() or type(item).__name__))
+        item = item.parentItem() if hasattr(item, "parentItem") else None
+    return names
+
+
+def _focused(shell: NativeWindow) -> QObject | None:
+    return shell._material_page._quick.quickWindow().activeFocusItem()
+
+
+def _semantic(chain: list[str]) -> str:
+    for name in chain:
+        if name.startswith("QQuick"):
+            continue
+        if name in GENERIC_FOCUS:
+            continue
+        return name
+    return chain[0] if chain else "(none)"
+
+
+def _press(qapp: QApplication, shell: NativeWindow, key: Qt.Key) -> list[str]:
+    QTest.keyClick(shell._material_page._quick, key)
+    _pump(qapp, 3)
+    return _lineage(_focused(shell))
+
+
+def _item_enabled(item: QObject | None) -> bool:
+    while item is not None:
+        value = item.property("enabled") if hasattr(item, "property") else None
+        if value is False:
+            return False
+        item = item.parentItem() if hasattr(item, "parentItem") else None
+    return True
+
+
+def _week_marks(shell: NativeWindow) -> tuple:
+    return tuple(
+        (
+            str(block.get("id")),
+            block.get("start"),
+            tuple(block.get("days") or []),
+            bool(block.get("completed")),
+        )
+        for block in shell.session.blocks
+    )
+
+
+def _cycle_names(
+    qapp: QApplication, shell: NativeWindow, start: str, key: Qt.Key, owners: tuple[str, ...]
+) -> list[str]:
+    names: list[str] = []
+    for _ in range(24):
+        chain = _press(qapp, shell, key)
+        name = _semantic(chain)
+        assert any(owner in chain for owner in owners), f"{key} left the overlay at {name}: {chain}"
+        assert not any(leak in chain for leak in UNDERLAY), f"{key} reached the underlay: {chain}"
+        assert _item_enabled(_focused(shell)), f"{name} was not enabled: {chain}"
+        if not names:
+            assert name != start, f"{key} did not leave {start}: {chain}"
+        if name == start:
+            return names
+        names.append(name)
+    raise AssertionError(f"{key} never wrapped back to {start}; visited {names}")
+
+
+def test_homework_sheet_tab_cycles_enabled_controls_and_wraps_both_ways(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    root = shell._material_page.root
+    nav = _qml(root, "navWeek")
+    nav.forceActiveFocus()
+    _pump(qapp)
+    marks = _week_marks(shell)
+    done = bool(shell.session.assignments["essay"].get("completed"))
+    screen = shell._material_page.bridge.property("screen")
+    sheets.editHomework("essay")
+    _pump(qapp)
+    assert sheets.kind == "homework"
+    start_chain = _lineage(_focused(shell))
+    start = _semantic(start_chain)
+    assert start == "homeworkTitle", f"initial focus was {start}: {start_chain}"
+    assert "homeworkSheet" in start_chain
+    essay = next(block for block in _named(root, "weekBlock") if block.property("title") == "History essay")
+    assert essay.property("enabled") is False
+    assert _qml(root, "materialFab").property("enabled") is False
+
+    forward = _cycle_names(qapp, shell, start, Qt.Key.Key_Tab, SHEET_OWNERS)
+    assert len(forward) == len(set(forward)), f"Tab repeated a control: {forward}"
+    assert len(forward) >= 8, f"Tab visited too few controls: {forward}"
+    for name in (
+        "homeworkDue",
+        "homeworkDueTime",
+        "homeworkWhen",
+        "homeworkQuick",
+        "homeworkCompleted",
+        "homeworkMoreDetails",
+        "deleteHomework",
+        "homeworkCancel",
+        "homeworkNext",
+    ):
+        assert name in forward, f"{name} missing from {forward}"
+    for name in HIDDEN_ON_HOMEWORK_EDIT:
+        assert name not in forward, f"hidden {name} was in {forward}"
+
+    backward = _cycle_names(qapp, shell, start, Qt.Key.Key_Backtab, SHEET_OWNERS)
+    assert backward == list(reversed(forward)), f"Backtab {backward} was not the reverse of {forward}"
+    assert _semantic(_lineage(_focused(shell))) == start
+    assert _week_marks(shell) == marks
+    assert bool(shell.session.assignments["essay"].get("completed")) is done
+    assert shell._material_page.bridge.property("screen") == screen
+
+    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Escape)
+    _pump(qapp, 8)
+    assert sheets.kind == ""
+    restored = _lineage(_focused(shell))
+    assert "navWeek" in restored
+    assert essay.property("enabled") is True
+    assert _qml(root, "materialFab").property("enabled") is True
+    assert _week_marks(shell) == marks
+
+    sheets.editHomework("essay")
+    _pump(qapp)
+    due = _find(root, "homeworkDue")
+    due.forceActiveFocus()
+    _pump(qapp)
+    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Space)
+    _pump(qapp, 8)
+    scene = shell._material_page._quick.quickWindow().contentItem()
+    lists = [item for item in _visuals(scene) if str(item.objectName()) == "pickerList"]
+    assert lists, f"due picker did not open; focus={_lineage(_focused(shell))}"
+    for index in range(4):
+        chain = _press(qapp, shell, Qt.Key.Key_Tab)
+        assert "pickerList" in chain or "Popup" in chain, f"picker Tab {index} left the list: {chain}"
+        assert "weekBlock" not in chain
+        assert "homeworkNext" not in chain
+        assert "navWeek" not in chain
+    sheets.forceClose()
+    _pump(qapp, 5)
+
+
+def test_fixed_time_sheet_tab_wraps_inside_and_skips_hidden_controls(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    marks = _week_marks(shell)
+    sheets.editBlock("school", 0)
+    _pump(qapp)
+    assert sheets.kind == "block"
+    start_chain = _lineage(_focused(shell))
+    start = _semantic(start_chain)
+    assert start == "blockTitle", f"initial focus was {start}: {start_chain}"
+    forward = _cycle_names(qapp, shell, start, Qt.Key.Key_Tab, SHEET_OWNERS)
+    assert len(forward) == len(set(forward)), f"Tab repeated a control: {forward}"
+    assert len(forward) >= 5, f"Tab visited too few controls: {forward}"
+    for name in ("blockCancel", "blockNext"):
+        assert name in forward, f"{name} missing from {forward}"
+    assert "blockBack" not in forward
+    backward = _cycle_names(qapp, shell, start, Qt.Key.Key_Backtab, SHEET_OWNERS)
+    assert backward == list(reversed(forward)), f"Backtab {backward} was not the reverse of {forward}"
+    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Escape)
+    _pump(qapp, 5)
+    assert sheets.kind == ""
+    assert _week_marks(shell) == marks

@@ -33,9 +33,7 @@ FocusScope {
     M3Palette { id: palette; theme: root.theme }
 
     function cycle(step) {
-        var item = FocusCycle.nextItem([root], step, Window.activeFocusItem)
-        if (item)
-            item.forceActiveFocus(step > 0 ? Qt.TabFocusReason : Qt.BacktabFocusReason)
+        FocusCycle.take(FocusCycle.nextItem([root], step, Window.activeFocusItem), step)
     }
 
     onShownChanged: {

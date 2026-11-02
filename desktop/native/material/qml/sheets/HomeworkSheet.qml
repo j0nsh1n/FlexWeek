@@ -390,8 +390,6 @@ SheetFrame {
                 onTextChanged: if (text !== (root.f.notes ? root.f.notes : "")) root.sheets.setText("notes", text)
                 Accessible.role: Accessible.EditableText
                 Accessible.name: "Notes"
-                Keys.onTabPressed: (event) => { root.cycle(1); event.accepted = true }
-                Keys.onBacktabPressed: (event) => { root.cycle(-1); event.accepted = true }
             }
         }
         Row {

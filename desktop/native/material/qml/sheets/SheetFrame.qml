@@ -26,9 +26,7 @@ FocusScope {
     M3Palette { id: pal; theme: root.theme }
 
     function cycle(step) {
-        var item = FocusCycle.nextItem([body, footer], step, Window.activeFocusItem)
-        if (item)
-            item.forceActiveFocus(step > 0 ? Qt.TabFocusReason : Qt.BacktabFocusReason)
+        FocusCycle.take(FocusCycle.nextItem([body, footer], step, Window.activeFocusItem), step)
     }
 
     function focusTarget(item) {
@@ -140,6 +138,8 @@ FocusScope {
 
     Accessible.role: Accessible.Dialog
     Accessible.name: accessName !== "" ? accessName : heading
+    // BeforeItem: TextInput swallows Tab, and the window's tab chain leaves the sheet on Backtab.
+    Keys.priority: Keys.BeforeItem
     Keys.onTabPressed: (event) => {
         root.cycle(1)
         event.accepted = true

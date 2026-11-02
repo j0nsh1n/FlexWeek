@@ -954,3 +954,86 @@ def test_settings_prompts_block_shell_shortcuts_and_keep_tab(
         panel.dismissPrompt()
         panel.closeAdvanced()
         _reset(window)
+
+
+PROMPT_OWNERS = (
+    "savePrompt",
+    "promptCard",
+    "promptField",
+    "prompt_cancel",
+    "prompt_save",
+    "fieldInput",
+)
+PROMPT_GENERIC = {"", "fieldInput", "shape", "label", "promptCard", "savePrompt", "materialShell"}
+
+
+def _prompt_semantic(chain: list[str]) -> str:
+    for name in chain:
+        if name.startswith("QQuick") or name in PROMPT_GENERIC:
+            continue
+        return name
+    return chain[0] if chain else "(none)"
+
+
+def test_settings_save_prompt_tab_advances_from_the_field_and_wraps(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _open_settings(qapp, window)
+    panel = _panel(window)
+    quick = window._material_page._quick
+    try:
+        panel.openAdvanced()
+        _pump(qapp)
+        panel.beginSave()
+        _pump(qapp)
+        prompt = _named(root, "savePrompt")[0]
+        assert prompt.property("open") is True
+        start_chain = _lineage(quick.quickWindow().activeFocusItem())
+        start = _prompt_semantic(start_chain)
+        assert start == "promptField", f"initial focus was {start}: {start_chain}"
+        forward: list[str] = []
+        for _ in range(8):
+            QTest.keyClick(quick, Qt.Key.Key_Tab)
+            _pump(qapp, 3)
+            chain = _lineage(quick.quickWindow().activeFocusItem())
+            name = _prompt_semantic(chain)
+            assert any(owner in chain for owner in PROMPT_OWNERS), f"Tab left the prompt: {chain}"
+            assert "navWeek" not in chain and "materialFab" not in chain
+            if not forward:
+                assert name != start, f"Tab did not leave {start}: {chain}"
+            if name == start:
+                break
+            forward.append(name)
+        else:
+            raise AssertionError(f"Tab never wrapped back to {start}; visited {forward}")
+        assert len(forward) == len(set(forward)), f"Tab repeated a control: {forward}"
+        assert len(forward) >= 2, f"Tab stayed on one control: {forward}"
+        for name in ("prompt_cancel", "prompt_save"):
+            assert name in forward, f"{name} missing from {forward}"
+        backward: list[str] = []
+        for _ in range(8):
+            QTest.keyClick(quick, Qt.Key.Key_Backtab)
+            _pump(qapp, 3)
+            chain = _lineage(quick.quickWindow().activeFocusItem())
+            name = _prompt_semantic(chain)
+            assert any(owner in chain for owner in PROMPT_OWNERS), f"Backtab left the prompt: {chain}"
+            if not backward:
+                assert name != start, f"Backtab did not leave {start}: {chain}"
+            if name == start:
+                break
+            backward.append(name)
+        else:
+            raise AssertionError(f"Backtab never wrapped back to {start}; visited {backward}")
+        assert backward == list(reversed(forward)), f"Backtab {backward} was not the reverse of {forward}"
+        field = _prompt_child(prompt, "fieldInput")
+        assert field is not None
+        field.forceActiveFocus()
+        _pump(qapp)
+        before = str(field.property("text") or "")
+        QTest.keyClick(quick, Qt.Key.Key_A)
+        _pump(qapp)
+        assert str(field.property("text") or "") == before + "a"
+    finally:
+        panel.dismissPrompt()
+        panel.closeAdvanced()
+        _reset(window)

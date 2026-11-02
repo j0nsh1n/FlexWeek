@@ -171,6 +171,9 @@ Item {
             boundsBehavior: Flickable.StopAtBounds
             keyNavigationEnabled: true
             highlightMoveDuration: 0
+            Keys.priority: Keys.BeforeItem
+            Keys.onTabPressed: (event) => { event.accepted = true }
+            Keys.onBacktabPressed: (event) => { event.accepted = true }
             delegate: Item {
                 id: row
                 width: list.width

@@ -42,12 +42,15 @@ Item {
     }
 
     function returnFocus() {
-        if (before && before.visible && before.enabled) {
-            before.forceActiveFocus()
-        } else {
-            restoreFocus(null)
-        }
+        var held = before
         before = null
+        Qt.callLater(function () {
+            if (held && held.visible && held.enabled) {
+                held.forceActiveFocus()
+            } else {
+                restoreFocus(null)
+            }
+        })
     }
 
     onActiveChanged: {

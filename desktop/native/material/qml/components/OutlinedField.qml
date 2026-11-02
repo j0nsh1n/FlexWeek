@@ -1,6 +1,6 @@
 import QtQuick
 
-Item {
+FocusScope {
     id: root
     property var theme
     property string density: "comfortable"
@@ -15,6 +15,11 @@ Item {
     implicitHeight: 56
     height: 56
     implicitWidth: 280
+    activeFocusOnTab: true
+    onActiveFocusChanged: {
+        if (activeFocus && !input.activeFocus)
+            input.forceActiveFocus()
+    }
 
     M3Palette { id: palette; theme: root.theme }
     readonly property color line: input.activeFocus ? palette.primary : palette.outline
@@ -62,6 +67,7 @@ Item {
         enabled: root.enabled
         clip: true
         selectByMouse: true
+        activeFocusOnTab: false
         onTextEdited: {
             root.text = text
             root.textEdited(text)
@@ -82,9 +88,7 @@ Item {
         ringRadius: 8
     }
 
-    activeFocusOnTab: false
     Accessible.role: Accessible.EditableText
     Accessible.name: accessName !== "" ? accessName : label
     Accessible.editable: true
-    KeyNavigation.tab: input
 }

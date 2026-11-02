@@ -91,6 +91,18 @@ Item {
             focusDestination()
     }
 
+    readonly property bool sheetOpen: sheetHost.active
+    onSheetOpenChanged: {
+        if (sheetOpen)
+            return
+        Qt.callLater(function () {
+            if (sheetHost.active || root.focusOpen)
+                return
+            if (!insideShellRow(Window.activeFocusItem))
+                focusDestination()
+        })
+    }
+
     function insideShellRow(item) {
         while (item) {
             if (item === shellRow)
@@ -105,7 +117,7 @@ Item {
         anchors.fill: parent
         spacing: 0
         visible: !accountLayer.active
-        enabled: !root.focusOpen
+        enabled: !root.focusOpen && !sheetHost.active
 
         NavRail {
             id: rail

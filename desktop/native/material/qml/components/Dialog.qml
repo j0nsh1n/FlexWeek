@@ -33,9 +33,7 @@ FocusScope {
     }
 
     function cycle(step) {
-        var item = FocusCycle.nextItem([card], step, Window.activeFocusItem)
-        if (item)
-            item.forceActiveFocus(step > 0 ? Qt.TabFocusReason : Qt.BacktabFocusReason)
+        FocusCycle.take(FocusCycle.nextItem([card], step, Window.activeFocusItem), step)
     }
 
     function focusFirst() {
@@ -130,6 +128,7 @@ FocusScope {
         root.close()
         event.accepted = true
     }
+    Keys.priority: Keys.BeforeItem
     Keys.onTabPressed: (event) => {
         root.cycle(1)
         event.accepted = true

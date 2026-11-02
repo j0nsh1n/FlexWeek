@@ -401,8 +401,10 @@ def qml_tree_entries(quick: object, window: object, depth: int) -> list[dict]:
                     int(visible.width()),
                     int(visible.height()),
                 ],
-                "enabled": True,
-                "hasFocus": bool(item.hasFocus()) if hasattr(item, "hasFocus") else False,
+                "enabled": bool(item.isEnabled()) if hasattr(item, "isEnabled") else True,
+                "hasFocus": bool(item.hasActiveFocus()) if hasattr(item, "hasActiveFocus") else (
+                    bool(item.hasFocus()) if hasattr(item, "hasFocus") else False
+                ),
                 "checked": None,
                 "depth": depth,
             }
