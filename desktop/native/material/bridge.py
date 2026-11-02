@@ -440,4 +440,6 @@ class MaterialBridge(QObject):
             # has already set the day, so this branch does not run for it.
             session.set_view(name)
         self._screen = name
+        if name == "myday":
+            self._myday.ensure_today()
         self.changed.emit()

@@ -455,3 +455,102 @@ def test_a_snackbar_line_clears_itself_but_not_a_newer_one(qapp: QApplication, w
     bridge._clear_snack("Second line")
     assert bridge.property("snackText") == ""
     window._use_widgets_styles()
+
+
+def _hold_changes(session, monkeypatch: pytest.MonkeyPatch) -> tuple[list, object]:
+    original = session.client.request
+    held: list = []
+
+    def delay(method, path, body, ok, fail):
+        if method == "POST" and path == "/api/changes":
+            held.append((method, path, body, ok, fail))
+        else:
+            original(method, path, body, ok, fail)
+
+    monkeypatch.setattr(session.client, "request", delay)
+    return held, original
+
+
+def test_finishing_homework_waits_while_a_save_is_pending(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = window.session
+    root = _show_material(qapp, window)
+    day = _bridge(root).property("day")
+    held, original = _hold_changes(session, monkeypatch)
+    try:
+        session.add_homework(
+            {
+                "id": "busy-check",
+                "title": "Busy check",
+                "due": sunday_due(session.week_start),
+                "estimate_min": 30,
+                "revision": 0,
+            }
+        )
+        session.save()
+        assert session.busy and held
+        day.finishHomework("essay")
+        assert session.assignments["essay"].get("completed") is not True
+        assert _bridge(root).property("snackText") == (
+            "Saving your last change… That check will work in a moment."
+        )
+    finally:
+        monkeypatch.setattr(session.client, "request", original)
+        while held:
+            original(*held.pop(0))
+        settled(qapp, window)
+        if "busy-check" in session.assignments:
+            session.delete_homework("busy-check")
+            settled(qapp, window)
+        window._use_widgets_styles()
+
+
+def test_myday_keeps_today_after_browsing_another_week(qapp: QApplication, window: NativeWindow) -> None:
+    root = _show_material(qapp, window)
+    bridge = _bridge(root)
+    session = window.session
+    current = session.week_start
+    next_week = (date.fromisoformat(current) + timedelta(days=7)).isoformat()
+    past_week = (date.fromisoformat(current) + timedelta(days=-7)).isoformat()
+    try:
+        bridge.showPage("myday")
+        settled(qapp, window)
+        _pump(qapp)
+        myday = bridge.property("myday")
+        initial = myday.property("upNext").rowCount()
+        assert initial > 0
+        assert myday.property("waiting") is False
+        bridge.showPage("week")
+        session.load_week(next_week)
+        settled(qapp, window)
+        bridge.showPage("myday")
+        settled(qapp, window)
+        _pump(qapp)
+        assert myday.property("waiting") is False
+        assert myday.property("loadError") == ""
+        assert myday.property("upNext").rowCount() == initial
+        session.load_week(past_week)
+        settled(qapp, window)
+        settled(qapp, window)
+        _pump(qapp)
+        assert myday.property("upNext").rowCount() == initial
+        future = (date.fromisoformat(current) + timedelta(days=21)).isoformat()
+        session.open_day(future)
+        settled(qapp, window)
+        bridge.showPage("myday")
+        settled(qapp, window)
+        _pump(qapp)
+        assert myday.property("upNext").rowCount() == initial
+        bridge.showPage("month")
+        settled(qapp, window)
+        session.shift_month(1)
+        settled(qapp, window)
+        bridge.showPage("myday")
+        settled(qapp, window)
+        _pump(qapp)
+        assert myday.property("upNext").rowCount() == initial
+    finally:
+        session.load_week(current)
+        settled(qapp, window)
+        window._use_widgets_styles()

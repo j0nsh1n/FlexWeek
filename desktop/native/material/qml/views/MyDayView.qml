@@ -14,6 +14,8 @@ Item {
     readonly property bool reduceMotion: bridge ? bridge.reduceMotion : false
     readonly property bool highContrast: bridge ? bridge.highContrast : false
 
+    M3Palette { id: palette; theme: root.theme }
+
     // The page's heading for screen readers. The top bar already shows the title.
     Text {
         objectName: "screenTitle"
@@ -42,9 +44,24 @@ Item {
             y: root.phone ? 16 : 24
             spacing: 12
 
+            Text {
+                objectName: "myDayStatus"
+                width: column.width
+                visible: root.board && (root.board.waiting || root.board.loadError)
+                text: root.board && root.board.waiting ? "Loading…" : (root.board ? root.board.loadError : "")
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                color: palette.inkMuted
+                font.family: M3Font.family
+                font.pixelSize: 16
+                Accessible.role: Accessible.StaticText
+                Accessible.name: text
+            }
+
             Item {
                 width: column.width
                 height: ring.height
+                visible: !(root.board && (root.board.waiting || root.board.loadError))
                 ProgressRing {
                     id: ring
                     anchors.horizontalCenter: parent.horizontalCenter

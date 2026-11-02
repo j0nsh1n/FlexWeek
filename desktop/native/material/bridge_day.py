@@ -7,6 +7,7 @@ from typing import Any, Protocol
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
+from desktop.native.calendar import monday_of
 from desktop.native.material.bridge_rows import Rows
 from desktop.native.material.day_board import (
     DIM_KEYS,
@@ -78,9 +79,17 @@ class DayBridge(QObject):
         self._year = 2026
         self._month = 1
         self._mini_day = 0
+        self._waiting = False
+        self._load_error = ""
+        self._asked_week = ""
+        self._load_started = False
+        session = getattr(window, "session", None)
+        busy = getattr(session, "busy_changed", None)
+        if today_only and busy is not None:
+            busy.connect(self._on_busy)
         self._publish(self._board)
 
-    def reload(self, mode: str) -> None:
+    def reload(self, mode: str, *, fetch: bool = False) -> None:
         """Read the session again. Does not consume a Widgets prompt."""
         self._mode = mode if mode in ("light", "dark") else "light"
         session = self._window.session  # type: ignore[attr-defined]
@@ -96,6 +105,34 @@ class DayBridge(QObject):
         items: tuple = ()
         week_start = getattr(session, "week_start", "") or ""
         account = getattr(session, "account", None)
+        if self._today_only and account is not None:
+            needed = monday_of(viewed.isoformat())
+            if week_start != needed:
+                self._iso = viewed.isoformat()
+                self._year = viewed.year
+                self._month = viewed.month
+                self._mini_day = viewed.day
+                idle = not getattr(session, "busy", False)
+                if self._load_started and self._asked_week == needed and idle:
+                    self._waiting = False
+                    self._load_error = getattr(session, "message", "") or "Couldn't load today."
+                    self.changed.emit()
+                    return
+                self._waiting = True
+                self._load_error = ""
+                self._asked_week = needed
+                want = fetch or self._showing() or self._load_started
+                self._load_started = False
+                loader = getattr(session, "load_week", None)
+                if want and callable(loader) and idle:
+                    loader(needed)
+                    self._load_started = True
+                self.changed.emit()
+                return
+            self._waiting = False
+            self._load_error = ""
+            self._asked_week = ""
+            self._load_started = False
         if account is not None and week_start:
             start = date.fromisoformat(week_start)
             if start <= viewed <= start + timedelta(days=6):
@@ -104,6 +141,8 @@ class DayBridge(QObject):
                     items = on_day((viewed - start).days)
         when = "today" if viewed == today else ("past" if viewed < today else "future")
         minute = moment.hour * 60 + moment.minute if when == "today" else 0
+        self._waiting = False
+        self._load_error = ""
         self._publish(
             board_for(
                 items,
@@ -133,6 +172,9 @@ class DayBridge(QObject):
         if not assignment_id:
             return
         session = self._window.session  # type: ignore[attr-defined]
+        if getattr(session, "busy", False) or getattr(session, "pending_save", None) is not None:
+            self._say("Saving your last change… That check will work in a moment.")
+            return
         item = (getattr(session, "assignments", None) or {}).get(assignment_id) or {}
         title = item.get("title") or "Homework"
         session.complete_homework(assignment_id, True)
@@ -141,6 +183,22 @@ class DayBridge(QObject):
             save()
         self._say(f"Finished {title}")
         self.reload(self._mode)
+
+    def ensure_today(self) -> None:
+        """Load today's week if My day is looking at a different one."""
+        self._asked_week = ""
+        self._load_started = False
+        self._load_error = ""
+        self.reload(self._mode, fetch=True)
+
+    def _showing(self) -> bool:
+        return getattr(self.parent(), "_screen", "") == "myday"
+
+    def _on_busy(self, busy: bool) -> None:
+        if busy or not self._today_only:
+            return
+        if self._load_started or (self._waiting and self._showing()):
+            self.reload(self._mode)
 
     @Slot()
     def previousDay(self) -> None:
@@ -193,7 +251,19 @@ class DayBridge(QObject):
 
     @Property(str, notify=changed)
     def leftLine(self) -> str:
+        if self._waiting:
+            return "Loading…"
+        if self._load_error:
+            return self._load_error
         return self._board.left_line
+
+    @Property(bool, notify=changed)
+    def waiting(self) -> bool:
+        return self._waiting
+
+    @Property(str, notify=changed)
+    def loadError(self) -> str:
+        return self._load_error
 
     @Property(int, notify=changed)
     def leftCount(self) -> int:
