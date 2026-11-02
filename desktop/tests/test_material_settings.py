@@ -229,13 +229,16 @@ def test_a_planner_row_exists_exactly_when_its_preference_does(
             ),
             "buffer": any(n in FIELDS for n in ("buffer_min", "smart_buffer_min")),
             "urgent": any(n in FIELDS for n in ("urgent_first", "prioritize_urgent")),
-            "split": any(n in FIELDS for n in ("split_long_tasks", "auto_split_pomodoro")),
+            "split": "split_long_tasks" in FIELDS,
             "cutoff": "day_cutoff" in FIELDS,
         }
         for key, expected in has.items():
             shown = [item for item in _named(root, "row_" + key) if item.property("visible")]
             assert bool(shown) is expected, key
             assert bool(state["show" + key[0].upper() + key[1:]]) is expected, key
+        assert "auto_split_pomodoro" in FIELDS
+        assert "split_long_tasks" not in FIELDS
+        assert state["showSplit"] is False
     finally:
         _reset(window)
 
@@ -409,6 +412,7 @@ def test_advanced_is_a_draft_until_done_and_back_drops_it(qapp: QApplication, wi
         _click(qapp, window, _named(root, "advancedBack")[0])
         wait_until(qapp, lambda: panel.property("state")["page"] == "sections")
         assert int(bridge.property("hourRow")) == 56
+        assert panel.property("state")["notice"] == "Advanced changes were not applied. Done applies them."
         _click(qapp, window, _named(root, "openAdvanced")[0])
         wait_until(qapp, lambda: panel.property("state")["page"] == "advanced")
         assert panel.property("state")["hour"] == 56
@@ -504,18 +508,22 @@ def test_the_import_and_save_prompts_open_and_report_a_bad_answer(
         assert panel.property("state")["saveError"] == "Name the look first."
         assert panel.property("state")["prompt"] == "save"
         panel.setBlock("Outline")
-        panel.done()
-        panel.openAdvanced()
         panel.beginSave()
         panel.confirmPrompt("Study look")
         assert panel.property("state")["savedNames"] == ["Study look"]
         assert _material_file()["saved"][0]["advanced"]["block"] == "Outline"
+        assert _material_file().get("advanced", {}).get("block") != "Outline"
+        panel.done()
+        panel.openAdvanced()
         panel.setBlock("Filled")
         panel.done()
         assert panel.property("state")["block"] == "Filled"
         panel.useSaved("Study look")
         assert panel.property("state")["block"] == "Outline"
         assert _material_file()["advanced"]["block"] == "Outline"
+        _click(qapp, window, _named(root, "forgetSaved_0")[0])
+        wait_until(qapp, lambda: panel.property("state")["savedNames"] == [])
+        assert _material_file().get("saved") in (None, [])
     finally:
         _reset(window)
 
