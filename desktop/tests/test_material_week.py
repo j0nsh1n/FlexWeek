@@ -209,7 +209,9 @@ def _snack(window: NativeWindow) -> str:
 def _reset(window: NativeWindow, qapp: QApplication) -> QObject:
     """Material on screen on the account's week: standard density, weekends on, clock 24-hour."""
     set_clock_24h(True)
-    _pref(window, show_weekends=True, dim_completed=True, clock_24h=True)
+    if window.session.preferences and "dim_completed" in window.session.preferences:
+        window.session.preferences.pop("dim_completed", None)
+    _pref(window, show_weekends=True, clock_24h=True)
     session = window.session
     if session.week_start != window.home_week:
         session.load_week(window.home_week)
@@ -322,8 +324,10 @@ def test_status_tags_say_how_much_room_the_homework_has(qapp: QApplication, wind
     sunday = monday + timedelta(days=6)
     assert details == sorted(
         [
-            f"Due Thu {(monday + timedelta(days=NOW_DAY)).day} Nov, 21:00 · 1 h",
-            f"Due Thu {(monday + timedelta(days=NOW_DAY)).day} Nov, 22:00 · 30 min",
+            f"Due Thu {(monday + timedelta(days=NOW_DAY)).day} "
+            f"{(monday + timedelta(days=NOW_DAY)).strftime('%b')}, 21:00 · 1 h",
+            f"Due Thu {(monday + timedelta(days=NOW_DAY)).day} "
+            f"{(monday + timedelta(days=NOW_DAY)).strftime('%b')}, 22:00 · 30 min",
             f"Due Sun {sunday.day} {sunday.strftime('%b')} · 30 min",
         ]
     )
@@ -355,8 +359,9 @@ def test_dragging_a_card_onto_the_grid_gives_it_that_hour(qapp: QApplication, wi
     assert _qml(root, "homeworkCount").property("text") == "0"
     block = _block_named(root, "Math worksheet")
     assert int(block.property("y")) == 16 * row
-    # The change is said, with Undo, once its save has landed.
+    # The active Material snackbar is the only presenter; the Widgets toast stays hidden.
     assert "Math worksheet" in _snack(window)
+    assert window.toast.isHidden()
 
 
 def test_a_drop_off_the_grid_changes_nothing(qapp: QApplication, window: NativeWindow) -> None:
@@ -422,11 +427,16 @@ def test_past_blocks_are_dimmed_by_the_clock(qapp: QApplication, window: NativeW
     essay = _block_named(root, "History essay")
     assert essay.property("past") is False
 
-    _pref(window, dim_completed=False)
-    window._material_page.publish()
-    _pump(qapp)
-    for block in _named(root, "weekBlock"):
-        assert block.property("past") is False
+    try:
+        _pref(window, dim_completed=False)
+        window._material_page.publish()
+        _pump(qapp)
+        for block in _named(root, "weekBlock"):
+            assert block.property("past") is False
+    finally:
+        if window.session.preferences:
+            window.session.preferences.pop("dim_completed", None)
+        window._material_page.publish()
 
 
 def test_a_week_that_is_over_is_all_past_and_one_ahead_is_not(
@@ -636,3 +646,114 @@ def test_clicking_toggle_weekends_swaps_between_seven_and_five_columns(
     settled(qapp, window)
     _pump(qapp)
     assert len(_named(root, "dayHeader")) == 7
+
+
+def test_the_weekend_choice_survives_a_preferences_refresh_and_a_failed_save_restores_it(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    session = window.session
+    _click(window, _qml(root, "toggleWeekends"))
+    settled(qapp, window)
+    assert session.preferences["show_weekends"] is False
+    session._fetch_preferences()
+    settled(qapp, window)
+    _pump(qapp)
+    assert session.preferences["show_weekends"] is False
+    assert len(_named(root, "dayHeader")) == 5
+
+    original = session.save_preferences
+
+    def refuse(_updates: dict, then) -> bool:
+        then(False)
+        return True
+
+    session.save_preferences = refuse
+    try:
+        _click(window, _qml(root, "toggleWeekends"))
+        _pump(qapp)
+        assert session.preferences["show_weekends"] is False
+        assert len(_named(root, "dayHeader")) == 5
+        assert _snack(window) == "Couldn't save the weekend setting. Try again."
+    finally:
+        session.save_preferences = original
+        session.save_preferences({"show_weekends": True})
+        settled(qapp, window)
+        _bridge(window).note("")
+
+
+def test_a_failed_week_load_is_not_retried_and_an_account_change_cancels_a_pending_one(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    _reset(window, qapp)
+    session = window.session
+    home = session.week_start
+    target = (date.fromisoformat(home) + timedelta(days=7)).isoformat()
+    original = session.load_week
+    calls = []
+
+    def fail(start=None, **_kwargs) -> None:
+        calls.append(start)
+        session.busy = True
+        session.busy_changed.emit(True)
+
+    session.load_week = fail
+    try:
+        week = _bridge(window).property("week")
+        week.next()
+        session.busy = False
+        session.busy_changed.emit(False)
+        session.week_changed.emit()
+        _pump(qapp, 12)
+        assert calls == [target]
+        assert session.week_start == home
+
+        def pending(start=None, **_kwargs) -> None:
+            calls.append(start)
+            session.busy = True
+            session.busy_changed.emit(True)
+
+        session.load_week = pending
+        week.next()
+        week.next()
+        session.busy = False
+        session.busy_changed.emit(False)
+        session.week_changed.emit()
+        _pump(qapp, 12)
+        later = (date.fromisoformat(home) + timedelta(days=14)).isoformat()
+        assert calls == [target, target, later]
+
+        week.next()
+        session.account_changed.emit(None)
+        session.busy = False
+        session.busy_changed.emit(False)
+        _pump(qapp, 12)
+        assert calls == [target, target, later]
+    finally:
+        session.load_week = original
+
+
+def test_tabbing_through_homework_cards_keeps_the_focused_card_visible(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    due = (_week_monday(window) + timedelta(days=6)).isoformat()
+    for index in range(18):
+        _homework(window, f"card-{index}", f"Card {index:02}", 30, due)
+    _pump(qapp)
+    cards = _named(root, "homeworkCard")
+    assert len(cards) == 18
+    scroller = _qml(root, "homeworkScroller")
+    quick = window._material_page._quick
+    cards[0].forceActiveFocus()
+    _pump(qapp)
+    for card in cards:
+        assert card.property("activeFocus") is True
+        top = card.mapToScene(QPointF(0, 0)).y()
+        bottom = card.mapToScene(QPointF(0, card.property("height"))).y()
+        view_top = scroller.mapToScene(QPointF(0, 0)).y()
+        view_bottom = scroller.mapToScene(QPointF(0, scroller.property("height"))).y()
+        assert top >= view_top - 1, (card.property("title"), top, view_top)
+        assert bottom <= view_bottom + 1, (card.property("title"), bottom, view_bottom)
+        QTest.keyClick(quick, Qt.Key.Key_Tab)
+        _pump(qapp)

@@ -80,6 +80,7 @@ Rectangle {
 
     Flickable {
         id: scroller
+        objectName: "homeworkScroller"
         visible: drawer.count > 0
         anchors.left: parent.left
         anchors.right: parent.right
@@ -90,6 +91,13 @@ Rectangle {
         contentHeight: list.contentHeight
         clip: true
         boundsBehavior: Flickable.StopAtBounds
+
+        function reveal(itemY, itemHeight) {
+            if (itemY < contentY)
+                contentY = itemY
+            else if (itemY + itemHeight > contentY + height)
+                contentY = itemY + itemHeight - height
+        }
 
         Column {
             id: list
@@ -119,6 +127,7 @@ Rectangle {
                     onDragMoved: (scene) => drawer.cardMoved(scene)
                     onDropped: (scene) => drawer.cardDropped(model.blockId, scene)
                     onActivated: drawer.bridge.week.planOne(model.assignmentId)
+                    onActiveFocusChanged: if (activeFocus) scroller.reveal(y, height)
                 }
             }
         }

@@ -548,6 +548,8 @@ class Preferences(BaseModel):
         default_factory=list, max_length=21, exclude_if=lambda value: not value
     )
     day_cutoff: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    # The week grid reads this. The planner does not.
+    show_weekends: bool = Field(default=True, exclude_if=lambda value: value is True)
     alert_volume: int = Field(default=80, ge=0, le=100, exclude_if=lambda value: value == 80)
     end_chime: bool = Field(default=False, exclude_if=lambda value: value is False)
     tray_notifications: bool = Field(default=True, exclude_if=lambda value: value is True)
@@ -858,35 +860,37 @@ def encode_comfort(preferences: Preferences) -> str:
     }
     if preferences.focus_audio != "off":
         comfort["focus_audio"] = preferences.focus_audio
+    if not preferences.show_weekends:
+        comfort["show_weekends"] = False
     return json.dumps(comfort, separators=(",", ":"))
 
 
 _FOCUS_AUDIO = frozenset({"off", "rain", "lo-fi", "white-noise", "spotify"})
 
 
-def _stored_focus_audio(row: Row) -> str | None:
-    """The engine's preference reader drops comfort keys it does not know. Focus audio is one of
-    those, so it is put back here. Off is the default and is not stored."""
+def _stored_comfort(row: Row) -> dict:
+    """Recover comfort keys the engine's preference reader does not yet know."""
     raw = dict(row).get("comfort_json")
     if not isinstance(raw, str) or not raw:
-        return None
+        return {}
     try:
         comfort = json.loads(raw)
     except json.JSONDecodeError:
-        return None
+        return {}
     if not isinstance(comfort, dict):
-        return None
-    audio = comfort.get("focus_audio")
-    if audio in _FOCUS_AUDIO and audio != "off":
-        return str(audio)
-    return None
+        return {}
+    return comfort
 
 
 def preferences_from_row(row: Row) -> dict:
     fields = json.loads(flexweek_engine.preferences_fields(json.dumps(dict(row))))
-    audio = _stored_focus_audio(row)
-    if audio is not None:
+    comfort = _stored_comfort(row)
+    audio = comfort.get("focus_audio")
+    if isinstance(audio, str) and audio in _FOCUS_AUDIO and audio != "off":
         fields["focus_audio"] = audio
+    weekends = comfort.get("show_weekends")
+    if isinstance(weekends, bool):
+        fields["show_weekends"] = weekends
     return Preferences(**fields).model_dump()
 
 

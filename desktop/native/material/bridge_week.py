@@ -110,7 +110,7 @@ class WeekBridge(QObject):
         self._week_key = ""
         self._seen: set[tuple[str, int]] = set()
         self._fresh_until: dict[tuple[str, int], float] = {}
-        self._say_after_save = ""
+        self._done_after_save = ""
         self._said_plan = 0.0
         self._noted = ""
         self._published: dict[str, object] = {}
@@ -119,17 +119,19 @@ class WeekBridge(QObject):
         self._snack_timer.setInterval(SNACK_MS)
         self._snack_timer.timeout.connect(self._clear_snack)
         self._target_week: str | None = None
+        self._loading_week: str | None = None
+        self._weekend_save = 0
         self._connect_session()
 
     def _connect_session(self) -> None:
         session = getattr(self._window, "session", None)
         for name, slot in (
             ("planned", self._on_planned),
-            ("hand_placed", self._on_hand_placed),
             ("save_finished", self._on_save_finished),
             ("status", self._on_status),
             ("busy_changed", self._on_busy_changed),
             ("week_changed", self._on_week_changed),
+            ("account_changed", self._on_account_changed),
         ):
             signal = getattr(session, name, None)
             if signal is not None and hasattr(signal, "connect"):
@@ -297,19 +299,11 @@ class WeekBridge(QObject):
 
     @Slot(str)
     def _on_planned(self, _said: str) -> None:
-        """A plan changed the week and saved it: say how many it placed, with Undo."""
         self._said_plan = 0.0
-        placed, waiting = self._window.session.plan_counts  # type: ignore[attr-defined]
-        self._note(f"Placed {placed} of {placed + waiting}")
-
-    @Slot(str)
-    def _on_hand_placed(self, words: str) -> None:
-        # A move that started no save will never say it landed.
-        self._say_after_save = words if self._window.session.busy else ""  # type: ignore[attr-defined]
 
     @Slot(bool, str)
     def _on_save_finished(self, ok: bool, _message: str) -> None:
-        words, self._say_after_save = self._say_after_save, ""
+        words, self._done_after_save = self._done_after_save, ""
         if ok and words:
             self._note(words)
 
@@ -363,7 +357,7 @@ class WeekBridge(QObject):
         session.complete_homework(assignment_id, finished)
         session.save()
         if session.busy:
-            self._say_after_save = f"Finished {title}." if finished else f"{title} is back."
+            self._done_after_save = f"Finished {title}." if finished else f"{title} is back."
 
     @Slot()
     def previous(self) -> None:
@@ -376,13 +370,28 @@ class WeekBridge(QObject):
     @Slot()
     def toggleWeekends(self) -> None:
         session = self._window.session  # type: ignore[attr-defined]
-        prefs = dict(session.preferences or {})
-        current = _bool_pref(prefs, "show_weekends", True)
-        prefs["show_weekends"] = not current
-        session.preferences = prefs
-        session.save()
-        if hasattr(self._window, "_material_page"):
-            self._window._material_page.publish()
+        previous = dict(session.preferences or {})
+        current = _bool_pref(previous, "show_weekends", True)
+        wanted = not current
+        self._weekend_save += 1
+        ticket = self._weekend_save
+        session.preferences = {**previous, "show_weekends": wanted}
+        self._window._material_page.publish()  # type: ignore[attr-defined]
+
+        def kept(ok: bool) -> None:
+            if ok or ticket != self._weekend_save:
+                return
+            latest = dict(session.preferences or {})
+            if "show_weekends" in previous:
+                latest["show_weekends"] = previous["show_weekends"]
+            else:
+                latest.pop("show_weekends", None)
+            session.preferences = latest
+            self._window._material_page.publish()  # type: ignore[attr-defined]
+            self._note("Couldn't save the weekend setting. Try again.")
+
+        if not session.save_preferences({"show_weekends": wanted}, kept):
+            kept(False)
 
     @Slot()
     def today(self) -> None:
@@ -412,20 +421,36 @@ class WeekBridge(QObject):
             if target == session.week_start:
                 self._target_week = None
                 return
+            self._loading_week = target
             session.load_week(target)
+            if not session.busy:
+                self._loading_week = None
+                self._target_week = None
+
+    def _settle_navigation(self) -> None:
+        session = self._window.session  # type: ignore[attr-defined]
+        finished, self._loading_week = self._loading_week, None
+        if finished is not None and self._target_week == finished:
+            self._target_week = None
+        if self._target_week == session.week_start:
+            self._target_week = None
+        if self._target_week and not session.busy:
+            QTimer.singleShot(0, self._flush_target)
 
     @Slot(bool)
     def _on_busy_changed(self, busy: bool) -> None:
-        if not busy and self._target_week:
-            QTimer.singleShot(0, self._flush_target)
+        if not busy:
+            self._settle_navigation()
 
     @Slot()
     def _on_week_changed(self) -> None:
-        session = self._window.session  # type: ignore[attr-defined]
-        if self._target_week == session.week_start:
-            self._target_week = None
-        elif self._target_week and not session.busy:
-            QTimer.singleShot(0, self._flush_target)
+        if not self._window.session.busy:  # type: ignore[attr-defined]
+            self._settle_navigation()
+
+    @Slot(object)
+    def _on_account_changed(self, _account: object) -> None:
+        self._target_week = None
+        self._loading_week = None
 
     # -- what QML reads --------------------------------------------------
 
