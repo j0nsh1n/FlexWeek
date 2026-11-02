@@ -308,9 +308,9 @@
   "test": "desktop/tests/test_drag_results.py::test_a_block_made_by_dragging_guesses_its_category_from_when_it_starts"
  },
  {
-  "file": "desktop/native/window.py",
+  "file": "desktop/native/controller.py",
   "name": "a drag saves with no sign",
-  "old": "        self._say_when_saved(moved_words(block, origin, day, start, end))\n",
+  "old": "        self.hand_placed.emit(words)\n",
   "new": "",
   "test": "desktop/tests/test_drag_results.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
  },

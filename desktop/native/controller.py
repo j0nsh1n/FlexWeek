@@ -113,6 +113,7 @@ from desktop.native.weekmodel import (
     homework_time_sentence,
     length_label,
     minute_of,
+    moved_words,
 )
 
 WEEK_OVER = "This week is over, so nothing was planned. Plan this week or a later one."
@@ -207,6 +208,8 @@ class NativeSession(QObject):
     status = Signal(str)
     # Each save's outcome, for words that must wait for it: (stored, what the status line says).
     save_finished = Signal(bool, str)
+    # Toast words for a hand move that has just been saved, including one that waited out a save.
+    hand_placed = Signal(str)
     plan_conflicts = Signal(list)
     planned = Signal(str)
     focus_changed = Signal()
@@ -319,6 +322,10 @@ class NativeSession(QObject):
         self.plan_asked_week: str | None = None
         # School and activities to stand in every week from a week on, sent with that week's next save.
         self._standing: dict | None = None
+        # One block let go while a save is in flight. The save's reply replaces the week, so the move
+        # is applied on the next turn after that reply, not during it. A later let-go replaces it.
+        self._hand_waiting: tuple[str, int, int, int, int] | None = None
+        self.busy_changed.connect(self._resume_pending)
         self._reminder_ticket = 0
         self._reminder_fetching: str | None = None
         self._reminder_week: str | None = None
@@ -1072,6 +1079,28 @@ class NativeSession(QObject):
         self.needs_time.pop(block_id, None)
         self._touch(label, keep={answer["block_id"]})
         return True
+
+    def place_block(self, block_id: str, from_day: int, day: int, start: int, end: int) -> None:
+        """Let a block go at a time. A save already on its way keeps this move and applies it once
+        that save has landed, so the reply cannot put the block back where it was."""
+        if self.busy:
+            self._hand_waiting = (block_id, from_day, day, start, end)
+            return
+        block = next((item for item in self.blocks if item["id"] == block_id), None)
+        if block is None:
+            return
+        if not self.hand_move(block_id, from_day, day, start, end):
+            return
+        origin = from_day if from_day in block["days"] else day
+        words = moved_words(block, origin, day, start, end)
+        self.save()
+        self.hand_placed.emit(words)
+
+    def _resume_pending(self, busy: bool) -> None:
+        if busy or self._hand_waiting is None:
+            return
+        waiting, self._hand_waiting = self._hand_waiting, None
+        QTimer.singleShot(0, lambda waiting=waiting: self.place_block(*waiting))
 
     def set_setup_blocks(self, blocks: list[dict]) -> None:
         """Replace the school and activities setup made with `blocks`, as one Undo step. Anything the

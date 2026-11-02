@@ -180,7 +180,6 @@ from desktop.native.weekmodel import (
     dated_words,
     hhmm_text,
     homework_time_sentence,
-    moved_words,
     set_clock_24h,
 )
 from desktop.native.widgets import (
@@ -631,9 +630,7 @@ class NativeWindow(QMainWindow):
         self._block_prepare_scheduled = False
         self._leaving: QTimer | None = None
         self._saved_to_leave = False
-        # A block let go while a save is under way, moved once it is done: the save's reply replaces
-        # the week, so a move made before it arrived would be lost.
-        self._move_waiting: tuple[str, int, int, int, int] | None = None
+        # A chip let go on another date while a save is under way, moved once that save has landed.
         self._date_waiting: MoveDate | None = None
         # What a drag changed, said with Undo once its save lands: the words for the save on its way,
         # and words waiting for the pointer to let go, since nothing new appears under a held block.
@@ -676,6 +673,7 @@ class NativeWindow(QMainWindow):
         self._busy_look.timeout.connect(self._grey_while_busy)
         self.session.busy_changed.connect(self._on_busy)
         self.session.save_finished.connect(self._on_save_finished)
+        self.session.hand_placed.connect(self._say_when_saved)
         self.session.plan_conflicts.connect(self._on_plan_conflicts)
         self.session.planned.connect(self._on_planned)
         self._late_dialog: LateDialog | None = None
@@ -2936,9 +2934,6 @@ class NativeWindow(QMainWindow):
         on_recovery = self.findChild(QWidget, "recoveryPage") is self._stack.currentWidget()
         if not busy and self.session.account is not None and on_recovery:
             self.recovery_continue.setEnabled(self.recovery_ack.isChecked())
-        if not busy and self._move_waiting is not None:
-            waiting, self._move_waiting = self._move_waiting, None
-            QTimer.singleShot(0, lambda: self._move_block(*waiting))
         if not busy and self._date_waiting is not None:
             dated, self._date_waiting = self._date_waiting, None
             QTimer.singleShot(0, lambda: self._move_to_date(dated))
@@ -3991,25 +3986,9 @@ class NativeWindow(QMainWindow):
         return HandVerdict(True, words)
 
     def _move_block(self, block_id: str, from_day: int, day: int, start: int, end: int) -> None:
-        """A block let go at a time, on the calendar or in a design. Homework that needed a time gets
-        this one; a block that repeats moves only the day it was dragged from; anything else moves.
-        Homework moved by hand is pinned, so no plan moves it back."""
-        if self.session.busy:
-            self._move_waiting = (block_id, from_day, day, start, end)
-            return
-        block = next((item for item in self.session.blocks if item["id"] == block_id), None)
-        if block is None:
-            return
-        verdict = self._judge_span(block_id, from_day, day, start, end)
-        if not verdict.ok:
-            if verdict.words:
-                self.session._say(verdict.words)
-            return
-        origin = from_day if from_day in block["days"] else day
-        if not self.session.hand_move(block_id, from_day, day, start, end):
-            return
-        self.session.save()
-        self._say_when_saved(moved_words(block, origin, day, start, end))
+        """A block let go at a time, on the calendar or in a design. The session applies it, or keeps
+        it when a save is already on its way."""
+        self.session.place_block(block_id, from_day, day, start, end)
 
     def _edit_block(self, block_id: str) -> None:
         if QApplication.activeModalWidget() is not None:
