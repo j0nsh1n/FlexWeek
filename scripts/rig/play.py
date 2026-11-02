@@ -33,8 +33,10 @@ ACTIONS = (
     "say",
     "see",
 )
-SETUP_KEYS = ("clock", "seed", "size", "design", "clock_24h", "text", "look")
-SEEDS = ("rig", "empty", "setup-done")
+SETUP_KEYS = ("clock", "seed", "size", "design", "clock_24h", "text", "look", "mode")
+# material-new: Material is the saved surface and nobody is signed in, so the play starts on the sign-in card.
+SEEDS = ("rig", "empty", "setup-done", "material-new")
+MODES = ("light", "dark")
 TEXT_SIZES = ("normal", "large")
 KEY_NAME = re.compile(r"[A-Za-z0-9_]+(\+[A-Za-z0-9_]+)*")
 LABEL = re.compile(r"[A-Za-z0-9_.-]+")
@@ -56,6 +58,7 @@ class Setup:
     clock_24h: bool = False
     text: str = "normal"
     look: str | None = None
+    mode: str = "light"
 
 
 @dataclass(frozen=True)
@@ -127,6 +130,8 @@ def _setup_value(key: str, value: object, designs: tuple[str, ...], looks: tuple
         return _one_of(value, TEXT_SIZES, key)
     if key == "look":
         return _one_of(value, looks, key)
+    if key == "mode":
+        return _one_of(value, MODES, key)
     if key == "clock_24h":
         if not isinstance(value, bool):
             raise ValueError("true or false")
@@ -449,6 +454,14 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
     def prepare() -> None:
         window.resize(*setup.size)
         window.move(0, 0)
+        if setup.seed == "material-new":
+            if setup.clock is not None:
+                held["now"] = setup.clock
+            window.raise_()
+            window.activateWindow()
+            wait_until(app, window.isActiveWindow, 5)
+            wait_until(app, lambda: True, 0.6)
+            return
         if setup.seed == "empty":
             wait_until(app, lambda: window._stack.currentWidget().objectName() == "setupPage", 20)
         else:

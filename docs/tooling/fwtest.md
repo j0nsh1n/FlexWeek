@@ -137,12 +137,13 @@ Setup:
 | Key | Meaning | Default |
 |---|---|---|
 | `clock` | Local time the clock is held at, `YYYY-MM-DDTHH:MM`. The week shown is that date's week. | Thursday 15:40 of the current week, as the scenarios use |
-| `seed` | `rig`: the scenarios' week (School, Soccer, three homework items). `setup-done`: a new account that skipped Setup, so an empty week with the defaults. `empty`: a new account on the first Setup page. | `rig` |
+| `seed` | `rig`: the scenarios' week (School, Soccer, three homework items). `setup-done`: a new account that skipped Setup, so an empty week with the defaults. `empty`: a new account on the first Setup page. `material-new`: Material is the saved surface and nobody is signed in, so the play starts on the Material sign-in card. | `rig` |
 | `size` | Window size in pixels, 640x480 up to 3840x2160 | `[1280, 800]` |
 | `design` | Any rig design (`classic`, `timeline`, `mission`, `bento`, `retro`, `clay`) or a My day screen (`one`, `dial`; shown on the My day tab) | `classic` |
 | `clock_24h` | The 24-hour clock. Ignored for `empty`, where Setup asks. | `false` |
 | `text` | `normal` or `large` text | `normal` |
 | `look` | A look preset (`high-contrast`, `paper`, `ink`, `terminal`, `poster`, `pastel`) or a theme pack (`system`, `light-frost`, `dark-frost`, `nocturne`, `slate`). Ignored for the pack when `seed` is `empty`. | the pack's own |
+| `mode` | `light` or `dark`. Used with `material-new` for Material's own light/dark. | `light` |
 
 Steps, each an object with one action:
 
