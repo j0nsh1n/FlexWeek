@@ -97,6 +97,23 @@ fn place_map(trace: &Value, key: &str) -> EngineResult<Vec<Value>> {
     iterate(&listed)
 }
 
+fn write_duration(fields: &mut serde_json::Map<String, Value>, source: &Value) -> EngineResult<()> {
+    if let Some(duration) = get(source, "duration_min")?
+        && !duration.is_null()
+    {
+        fields.insert("duration_min".into(), duration.clone());
+    }
+    Ok(())
+}
+
+fn split_parent_id(id: &Value) -> Option<Value> {
+    let parent = id.as_str()?.strip_suffix("~2")?;
+    if parent.is_empty() {
+        return None;
+    }
+    Some(Value::String(parent.to_string()))
+}
+
 pub fn apply_plan(
     blocks: &Value,
     trace: &Value,
@@ -104,19 +121,28 @@ pub fn apply_plan(
     assignments: Option<&Value>,
     week_start: Option<&str>,
 ) -> EngineResult<Vec<Value>> {
+    let placed_items = place_map(trace, "placed")?;
+    let unplaced_items = place_map(trace, "unplaced")?;
     let mut placed = PyDict::new();
-    for item in place_map(trace, "placed")? {
-        placed.set(subscript(&item, "id")?.clone(), item.clone())?;
+    for item in &placed_items {
+        placed.set(subscript(item, "id")?.clone(), item.clone())?;
     }
     let mut unplaced_ids: Vec<Value> = Vec::new();
-    for item in place_map(trace, "unplaced")? {
-        let id = subscript(&item, "id")?.clone();
+    let mut unplaced_body = PyDict::new();
+    for item in &unplaced_items {
+        let id = subscript(item, "id")?.clone();
         hashable(&id, "set element")?;
-        unplaced_ids.push(id);
+        unplaced_ids.push(id.clone());
+        unplaced_body.set(id, item.clone())?;
     }
+    let input = iterate(blocks)?;
+    let mut seen: Vec<Value> = Vec::new();
     let mut out = Vec::new();
-    for block in iterate(blocks)? {
-        let mut copy = Value::Object(py_dict(&block)?);
+    for block in &input {
+        let mut copy = Value::Object(py_dict(block)?);
+        if let Ok(id) = subscript(&copy, "id") {
+            seen.push(id.clone());
+        }
         let unplanned = eq(get(&copy, "kind")?.unwrap_or(null()), &json!("flexible"))
             && !truthy(get(&copy, "completed")?);
         let skip = !unplanned
@@ -145,7 +171,11 @@ pub fn apply_plan(
                     Value::Array(list_of(subscript(winner, "days")?)?),
                 );
             }
+            write_duration(fields, winner)?;
         } else if in_set(&unplaced_ids, &id)? {
+            if let Some(missed) = unplaced_body.get(&id)? {
+                write_duration(fields, missed)?;
+            }
             fields.shift_remove("pinned");
             let had_start = fields.shift_remove("start");
             if had_start.as_ref().is_some_and(|value| truthy(Some(value)))
@@ -158,6 +188,48 @@ pub fn apply_plan(
             }
         }
         out.push(copy);
+    }
+    for item in placed_items.iter().chain(&unplaced_items) {
+        let id = subscript(item, "id")?.clone();
+        if seen.iter().any(|held| eq(held, &id)) {
+            continue;
+        }
+        let Some(parent_id) = split_parent_id(&id) else {
+            continue;
+        };
+        let Some(parent) = input.iter().find(|block| {
+            subscript(block, "id")
+                .ok()
+                .is_some_and(|held| eq(held, &parent_id))
+        }) else {
+            continue;
+        };
+        let parent_open = eq(get(parent, "kind")?.unwrap_or(null()), &json!("flexible"))
+            && !truthy(get(parent, "completed")?)
+            && match targets {
+                Some(set) => in_set(&iterate(set)?, subscript(parent, "id")?)?,
+                None => true,
+            };
+        if !parent_open {
+            continue;
+        }
+        let mut fields = py_dict(parent)?;
+        fields.insert("id".into(), id.clone());
+        write_duration(&mut fields, item)?;
+        if placed.contains(&id)? && truthy(get(item, "start")?) {
+            fields.insert("start".into(), subscript(item, "start")?.clone());
+            if truthy(get(item, "days")?) {
+                fields.insert(
+                    "days".into(),
+                    Value::Array(list_of(subscript(item, "days")?)?),
+                );
+            }
+        } else {
+            fields.shift_remove("start");
+            fields.shift_remove("pinned");
+        }
+        out.push(Value::Object(fields));
+        seen.push(id);
     }
     Ok(out)
 }
