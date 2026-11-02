@@ -46,6 +46,17 @@ pub(crate) fn slack_json(map: &BTreeMap<String, (i64, i64)>) -> Value {
     Value::Object(out)
 }
 
+pub(crate) fn plan_rules(
+    db: &rusqlite::Connection,
+    user_id: i64,
+) -> Result<flexweek_engine::solver::PlanRules, FfiError> {
+    let raw = flexweek_store::preference_row(db, user_id)
+        .map_err(failure)?
+        .unwrap_or_else(|| "{}".to_string());
+    let prefs: Value = serde_json::from_str(&raw).map_err(failure)?;
+    Ok(flexweek_engine::solver::plan_rules_from_value(&prefs))
+}
+
 pub(crate) fn run_plan(
     week: &FlexWeek,
     week_start: &str,
@@ -211,7 +222,8 @@ pub(crate) fn run_plan(
         Some(&slack_json(&slack)),
     );
     let elapsed = clock(week, elapsed_ms);
-    let trace = flexweek_engine::solver::solve(
+    let rules = plan_rules(&db, user_id)?;
+    let trace = flexweek_engine::solver::solve_with_rules(
         &typed,
         Some(&avail.occupancy),
         Some(&windows),
@@ -219,6 +231,7 @@ pub(crate) fn run_plan(
         start,
         BUDGET_MS,
         &elapsed,
+        rules,
     )
     .map_err(engine_failure)?;
     let trace_value = flexweek_engine::solver::trace_to_value(&trace);

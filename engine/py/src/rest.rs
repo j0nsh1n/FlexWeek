@@ -25,6 +25,13 @@ fn value_error(message: String) -> PyErr {
     PyValueError::new_err(message)
 }
 
+fn rules_of(text: Option<&str>) -> PyResult<solver::PlanRules> {
+    let Some(text) = text else {
+        return Ok(solver::PlanRules::default());
+    };
+    Ok(solver::plan_rules_from_value(&parse(text)?))
+}
+
 fn blocks_of(text: &str) -> PyResult<Vec<TimeBlock>> {
     parse(text)?
         .as_array()
@@ -187,7 +194,7 @@ fn spread_sessions(
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-#[pyo3(signature = (blocks, deadlines, slack_deadlines, extra_occ, work_windows, clock, now_floor=None))]
+#[pyo3(signature = (blocks, deadlines, slack_deadlines, extra_occ, work_windows, clock, now_floor=None, plan_rules=None))]
 fn solve(
     py: Python<'_>,
     blocks: &str,
@@ -197,13 +204,15 @@ fn solve(
     work_windows: Option<&str>,
     clock: Py<PyAny>,
     now_floor: Option<(i64, i64)>,
+    plan_rules: Option<&str>,
 ) -> PyResult<String> {
     guard(|| {
         let blocks = blocks_of(blocks)?;
         let work = work_windows_of(work_windows)?;
         let overrides = overrides_of(deadlines, slack_deadlines)?;
+        let rules = rules_of(plan_rules)?;
         let trace = search(py, &clock, |elapsed| {
-            solver::solve(
+            solver::solve_with_rules(
                 &blocks,
                 extra_occ.as_deref(),
                 work.as_deref(),
@@ -211,6 +220,7 @@ fn solve(
                 now_floor,
                 solver::SOLVE_BUDGET_MS,
                 elapsed,
+                rules,
             )
             .map_err(|error| error.message)
         })?;
@@ -220,6 +230,7 @@ fn solve(
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (blocks, missed_block_id, missed_day, previous_placed, deadlines, slack_deadlines, extra_occ, work_windows, clock, plan_rules=None))]
 fn reschedule_after_miss(
     py: Python<'_>,
     blocks: &str,
@@ -231,6 +242,7 @@ fn reschedule_after_miss(
     extra_occ: Option<Vec<u128>>,
     work_windows: Option<&str>,
     clock: Py<PyAny>,
+    plan_rules: Option<&str>,
 ) -> PyResult<String> {
     guard(|| {
         let blocks = blocks_of(blocks)?;
@@ -238,6 +250,7 @@ fn reschedule_after_miss(
         let work = work_windows_of(work_windows)?;
         let overrides = overrides_of(deadlines, slack_deadlines)?;
         let missed = missed_block_id.to_string();
+        let rules = rules_of(plan_rules)?;
         let trace = search(py, &clock, |elapsed| {
             solver::reschedule_after_miss(
                 &blocks,
@@ -249,6 +262,7 @@ fn reschedule_after_miss(
                 Some(&overrides),
                 solver::SOLVE_BUDGET_MS,
                 elapsed,
+                rules,
             )
             .map_err(|error| error.message)
         })?;
@@ -258,7 +272,7 @@ fn reschedule_after_miss(
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-#[pyo3(signature = (blocks, day, minutes, from_start, previous_placed, deadlines, slack_deadlines, extra_occ, work_windows, clock, now_floor=None))]
+#[pyo3(signature = (blocks, day, minutes, from_start, previous_placed, deadlines, slack_deadlines, extra_occ, work_windows, clock, now_floor=None, plan_rules=None))]
 fn reschedule_running_late(
     py: Python<'_>,
     blocks: &str,
@@ -272,6 +286,7 @@ fn reschedule_running_late(
     work_windows: Option<&str>,
     clock: Py<PyAny>,
     now_floor: Option<(i64, i64)>,
+    plan_rules: Option<&str>,
 ) -> PyResult<String> {
     guard(|| {
         let blocks = blocks_of(blocks)?;
@@ -279,6 +294,7 @@ fn reschedule_running_late(
         let work = work_windows_of(work_windows)?;
         let overrides = overrides_of(deadlines, slack_deadlines)?;
         let from_start = from_start.to_string();
+        let rules = rules_of(plan_rules)?;
         let trace = search(py, &clock, |elapsed| {
             solver::reschedule_running_late(
                 &blocks,
@@ -292,6 +308,7 @@ fn reschedule_running_late(
                 now_floor,
                 solver::SOLVE_BUDGET_MS,
                 elapsed,
+                rules,
             )
             .map_err(|error| error.message)
         })?;

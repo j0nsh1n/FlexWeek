@@ -200,7 +200,7 @@ fn migration_is_additive_and_idempotent() {
 #[test]
 fn scan_stamps_new_changed_deleted_once() {
     let mut conn = db("a", true);
-    assert_eq!(scan(&mut conn, 1, 1_000).unwrap(), 12); // account and 11 account-wide preferences
+    assert_eq!(scan(&mut conn, 1, 1_000).unwrap(), 17); // account and 16 account-wide preferences
     assert_eq!(scan(&mut conn, 1, 1_000).unwrap(), 0);
     put_assignment(&conn, "a1", "Read");
     assert_eq!(scan(&mut conn, 1, 1_001).unwrap(), 1);
@@ -348,17 +348,17 @@ fn duplicate_and_echo_are_noops_and_remote_scan_does_not_restamp() {
     scan(&mut a, 1, 1_000).unwrap();
     let first = batch(&a, 0, "b");
     let report = apply_batch(&mut b, &first, 1_000).unwrap();
-    assert_eq!(report.applied, 13);
+    assert_eq!(report.applied, 18);
     let before = state(&b);
     assert_eq!(apply_batch(&mut b, &first, 1_001).unwrap().applied, 0);
     assert_eq!(state(&b), before);
     assert_eq!(scan(&mut b, 1, 1_002).unwrap(), 0);
-    // B holds 13 records, all of them stamped by A (account + 11 preferences + 1 assignment),
-    // numbered 1..=13 locally; sending them back to A must skip all and still advance the cursor.
+    // B holds 18 records, all of them stamped by A (account + 16 preferences + 1 assignment),
+    // numbered 1..=18 locally; sending them back to A must skip all and still advance the cursor.
     let back = batch(&b, 0, "a");
     assert_eq!(
         (back.records.len(), back.next_since, back.more),
-        (0, 13, false)
+        (0, 18, false)
     );
     let echo = batch(&b, 0, "x");
     assert_eq!(apply_batch(&mut a, &echo, 1_003).unwrap().applied, 0);
@@ -433,7 +433,7 @@ fn relay_reaches_a_third_database() {
     apply_batch(&mut b, &first, 1_000).unwrap();
     let second = batch(&b, 0, "c");
     let report = apply_batch(&mut c, &second, 1_000).unwrap();
-    assert_eq!(report.applied, 13);
+    assert_eq!(report.applied, 18);
     assert_eq!(get_assignment(&c, "x"), Some(assignment("x", "Relayed")));
     assert_eq!(state(&a), state(&c));
 }
@@ -675,11 +675,11 @@ fn first_batch_leads_with_the_account_even_when_its_seq_is_late() {
     for index in 0..5 {
         put_assignment(&a, &format!("a{index}"), "Work");
     }
-    // Scan order is by key: account 1, a0..a4 2..6, the 11 preferences 7..17.
+    // Scan order is by key: account 1, a0..a4 2..6, the 16 preferences 7..22.
     scan(&mut a, 1, 1_000).unwrap();
     a.execute("UPDATE users SET password_hash='changed'", [])
         .unwrap();
-    scan(&mut a, 1, 2_000).unwrap(); // the account record is now seq 18
+    scan(&mut a, 1, 2_000).unwrap(); // the account record is now seq 23
     let first = export_since(&a, 1, 0, "phone", 3).unwrap();
     let names: Vec<_> = first
         .records
@@ -689,7 +689,7 @@ fn first_batch_leads_with_the_account_even_when_its_seq_is_late() {
     assert_eq!(
         names,
         [
-            ("account", "-", 18),
+            ("account", "-", 23),
             ("assignment", "a0", 2),
             ("assignment", "a1", 3)
         ]
@@ -705,7 +705,7 @@ fn first_batch_leads_with_the_account_even_when_its_seq_is_late() {
             break;
         }
     }
-    assert_eq!(since, 18);
+    assert_eq!(since, 23);
     assert_eq!(
         flexweek_store::find_user(&phone, "student")
             .unwrap()
@@ -1043,4 +1043,87 @@ fn a_hand_move_saved_on_an_old_revision_is_refused() {
         json!([0]),
         "the refused move changed nothing"
     );
+}
+
+fn planner_prefs(conn: &Connection) -> (i64, i64, i64, i64, i64) {
+    conn.query_row(
+        "SELECT weekend_homework_free, buffer_min, urgent_first, split_long_tasks, show_weekends
+         FROM preferences",
+        [],
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        },
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_new_account_keeps_the_old_planner_until_a_setting_changes() {
+    let conn = db("a", true);
+    assert_eq!(planner_prefs(&conn), (0, 0, 1, 0, 1));
+}
+
+#[test]
+fn planner_settings_round_trip_and_an_unknown_pref_does_not_stop_the_batch() {
+    let mut a = db("a", true);
+    let mut b = db("b", true);
+    // Both sides already hold the default row. Apply scans that row first and keeps
+    // it when its stamp is not older, so the edit has to be scanned after a baseline.
+    scan(&mut a, 1, 1_000).unwrap();
+    scan(&mut b, 1, 1_000).unwrap();
+    a.execute(
+        "UPDATE preferences SET weekend_homework_free=1, buffer_min=15, urgent_first=0,
+         split_long_tasks=1, show_weekends=0",
+        [],
+    )
+    .unwrap();
+    scan(&mut a, 1, 2_000).unwrap();
+    let sent = batch(&a, 0, "b");
+    for (key, value) in [
+        ("weekend_homework_free", 1),
+        ("buffer_min", 15),
+        ("urgent_first", 0),
+        ("split_long_tasks", 1),
+        ("show_weekends", 0),
+    ] {
+        let record = sent
+            .records
+            .iter()
+            .find(|record| record.entity == "pref" && record.key == key)
+            .unwrap_or_else(|| panic!("{key} was not exported"));
+        assert_eq!(record.body, Some(json!(value)));
+    }
+    apply_batch(&mut b, &sent, 3_000).unwrap();
+    assert_eq!(planner_prefs(&b), (1, 15, 0, 1, 0));
+
+    let mut sent = batch(&a, 0, "b");
+    sent.records.push(Record {
+        entity: "pref".into(),
+        key: "planner_magic".into(),
+        body: Some(json!(1)),
+        hlc: 1_100 << 16,
+        device_id: "a".into(),
+        seq: 100,
+    });
+    sent.records.push(Record {
+        entity: "assignment".into(),
+        key: "still-good".into(),
+        body: Some(assignment("still-good", "Still good")),
+        hlc: 1_101 << 16,
+        device_id: "a".into(),
+        seq: 101,
+    });
+    let report = apply_batch(&mut b, &sent, 4_000).unwrap();
+    assert_eq!(report.quarantined, 1);
+    assert_eq!(
+        get_assignment(&b, "still-good"),
+        Some(assignment("still-good", "Still good"))
+    );
+    assert_eq!(planner_prefs(&b), (1, 15, 0, 1, 0));
 }

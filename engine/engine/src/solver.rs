@@ -13,6 +13,68 @@ use crate::time::{
 
 pub const SOLVE_BUDGET_MS: f64 = 150.0;
 
+/// Settings that change where homework lands. The defaults are today's planner:
+/// weekends stay available, tasks may touch, sooner deadlines go first, and a
+/// long task stays one block.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PlanRules {
+    pub weekend_homework_free: bool,
+    pub buffer_min: i64,
+    pub urgent_first: bool,
+    pub split_long_tasks: bool,
+}
+
+impl Default for PlanRules {
+    fn default() -> Self {
+        Self {
+            weekend_homework_free: false,
+            buffer_min: 0,
+            urgent_first: true,
+            split_long_tasks: false,
+        }
+    }
+}
+
+impl PlanRules {
+    /// Empty slots kept between two scheduled tasks. Anything other than 15 or
+    /// 30 is no gap, so a stored value the settings never offered cannot move a week.
+    pub fn buffer_slots(self) -> i64 {
+        match self.buffer_min {
+            15 => 1,
+            30 => 2,
+            _ => 0,
+        }
+    }
+}
+
+/// Reads the planner switches off a preferences row. A missing key is the default,
+/// which is also what an account stored before these columns existed resolves to.
+pub fn plan_rules_from_value(value: &Value) -> PlanRules {
+    let obj = value.as_object();
+    let flag = |key: &str, default: bool| -> bool {
+        match obj.and_then(|fields| fields.get(key)) {
+            None | Some(Value::Null) => default,
+            Some(Value::Bool(bit)) => *bit,
+            Some(Value::Number(number)) => number.as_i64().unwrap_or(0) != 0,
+            Some(_) => default,
+        }
+    };
+    let buffer_min = match obj
+        .and_then(|fields| fields.get("buffer_min"))
+        .and_then(Value::as_i64)
+    {
+        Some(15) => 15,
+        Some(30) => 30,
+        _ => 0,
+    };
+    PlanRules {
+        weekend_homework_free: flag("weekend_homework_free", false),
+        buffer_min,
+        urgent_first: flag("urgent_first", true),
+        split_long_tasks: flag("split_long_tasks", false),
+    }
+}
+
 const TIGHT_SLACK_MIN: i64 = 3 * 60;
 const DANGER_SLACK_MIN: i64 = 60;
 
@@ -46,6 +108,8 @@ pub struct TimeBlock {
     pub missed_days: Vec<i64>,
     pub pinned: bool,
     pub prefer_earliest: bool,
+    /// The other half of a task split for planning. Not stored or returned.
+    pub split_peer: Option<String>,
     /// Fields the planner does not read. Copied through so a round trip keeps them.
     pub rest: Map<String, Value>,
 }
@@ -69,6 +133,7 @@ impl Default for TimeBlock {
             missed_days: vec![],
             pinned: false,
             prefer_earliest: false,
+            split_peer: None,
             rest: Map::new(),
         }
     }
@@ -403,6 +468,8 @@ struct SearchCtx<'a> {
     best_score: (i64, i64, i64, i64),
     best: Vec<(String, (i64, i64))>,
     timed_out: bool,
+    urgent_first: bool,
+    buffer_slots: i64,
 }
 
 impl<'a> SearchCtx<'a> {
@@ -447,8 +514,16 @@ impl<'a> SearchCtx<'a> {
                 let db = domains[b].len();
                 let pa = self.flex[a].priority;
                 let pb = self.flex[b].priority;
-                let ka = deadline_key(self.parsed_deadlines[a]);
-                let kb = deadline_key(self.parsed_deadlines[b]);
+                // Urgent-first is the existing slack order. Off, both keys are
+                // equal, so the id breaks the tie and a later deadline can go first.
+                let (ka, kb) = if self.urgent_first {
+                    (
+                        deadline_key(self.parsed_deadlines[a]),
+                        deadline_key(self.parsed_deadlines[b]),
+                    )
+                } else {
+                    ((0, 0), (0, 0))
+                };
                 (da, pa, ka, id_a.as_str())
                     .partial_cmp(&(db, pb, kb, id_b.as_str()))
                     .unwrap()
@@ -462,7 +537,8 @@ impl<'a> SearchCtx<'a> {
                 self.timed_out = true;
                 return Ok(());
             }
-            let mask = occupancy_mask(slot, n)?;
+            let raw = occupancy_mask(slot, n)?;
+            let mask = dilate_mask(raw, self.buffer_slots);
             let mut new_occ = occ.to_vec();
             new_occ[day as usize] |= mask;
             let mut new_domains: Vec<Vec<(i64, i64)>> = domains.to_vec();
@@ -472,6 +548,28 @@ impl<'a> SearchCtx<'a> {
                     continue;
                 }
                 let other_n = self.lengths[other_idx];
+                let peer = self.flex[other_idx].split_peer.as_deref() == Some(var.as_str());
+                if peer {
+                    let mut elsewhere = Vec::new();
+                    let mut same_day = Vec::new();
+                    for &(other_day, other_slot) in vals.iter() {
+                        if other_day != day {
+                            elsewhere.push((other_day, other_slot));
+                            continue;
+                        }
+                        if occupancy_mask(other_slot, other_n)? & mask == 0 {
+                            same_day.push((other_day, other_slot));
+                        }
+                    }
+                    // The other half keeps another day when one is still open.
+                    // If that day is gone, it may sit later the same day.
+                    *vals = if elsewhere.is_empty() {
+                        same_day
+                    } else {
+                        elsewhere
+                    };
+                    continue;
+                }
                 let mut filtered = Vec::new();
                 for &(other_day, other_slot) in vals.iter() {
                     if other_day != day {
@@ -627,6 +725,70 @@ fn apply_slack_overrides(
     }
 }
 
+/// Bits of one day. Slot 0 is 00:00 and the last slot is 23:45.
+const DAY_SLOT_BITS: u128 = (1u128 << (SLOTS_PER_DAY as u32)) - 1;
+
+fn dilate_mask(mask: u128, radius: i64) -> u128 {
+    if radius <= 0 {
+        return mask;
+    }
+    let mut acc = mask & DAY_SLOT_BITS;
+    for _ in 0..radius {
+        acc |= ((acc << 1) | (acc >> 1)) & DAY_SLOT_BITS;
+    }
+    acc
+}
+
+fn dilate_occupancy(occ: &[u128], radius: i64) -> Vec<u128> {
+    occ.iter()
+        .copied()
+        .map(|day| dilate_mask(day, radius))
+        .collect()
+}
+
+/// One cut of a task longer than an hour. Both pieces stay on the 15-minute
+/// grid and add up to the original. 120 becomes 60 and 60. A length that is
+/// not a multiple of 15 stays whole, because rounding it would change the work.
+fn split_lengths(duration_min: i64) -> Option<(i64, i64)> {
+    if duration_min <= 60 || duration_min % SLOT_MIN != 0 {
+        return None;
+    }
+    let half = (duration_min / 2 / SLOT_MIN) * SLOT_MIN;
+    let rest = duration_min - half;
+    if half < SLOT_MIN || rest % SLOT_MIN != 0 {
+        return None;
+    }
+    Some((half, rest))
+}
+
+fn split_long_tasks(flexible: &[TimeBlock]) -> Vec<TimeBlock> {
+    let mut out = Vec::with_capacity(flexible.len());
+    for block in flexible {
+        let Some((left_len, right_len)) = split_lengths(block.duration_min) else {
+            out.push(block.clone());
+            continue;
+        };
+        let peer_id = format!("{}~2", block.id);
+        let too_long = peer_id.chars().count() > 80;
+        let taken = flexible.iter().any(|other| other.id == peer_id)
+            || out.iter().any(|other| other.id == peer_id);
+        if too_long || taken {
+            out.push(block.clone());
+            continue;
+        }
+        let mut left = block.clone();
+        let mut right = block.clone();
+        left.duration_min = left_len;
+        right.duration_min = right_len;
+        right.id = peer_id.clone();
+        left.split_peer = Some(peer_id);
+        right.split_peer = Some(block.id.clone());
+        out.push(left);
+        out.push(right);
+    }
+    out
+}
+
 pub fn solve(
     blocks: &[TimeBlock],
     extra_occ: Option<&[u128]>,
@@ -635,6 +797,28 @@ pub fn solve(
     now_floor: Option<(i64, i64)>,
     budget_ms: f64,
     elapsed_ms: &dyn Fn() -> f64,
+) -> EngineResult<SolveTrace> {
+    solve_with_rules(
+        blocks,
+        extra_occ,
+        work_windows,
+        overrides,
+        now_floor,
+        budget_ms,
+        elapsed_ms,
+        PlanRules::default(),
+    )
+}
+
+pub fn solve_with_rules(
+    blocks: &[TimeBlock],
+    extra_occ: Option<&[u128]>,
+    work_windows: Option<&[WorkWindow]>,
+    overrides: Option<&DeadlineOverrides>,
+    now_floor: Option<(i64, i64)>,
+    budget_ms: f64,
+    elapsed_ms: &dyn Fn() -> f64,
+    rules: PlanRules,
 ) -> EngineResult<SolveTrace> {
     let locked = active_locked(blocks);
     let every_flexible: Vec<TimeBlock> = blocks
@@ -671,6 +855,19 @@ pub fn solve(
         .filter(|b| !b.completed && !b.pinned)
         .cloned()
         .collect();
+    // Returned unplaced blocks keep the caller's days. The search copy may
+    // drop Saturday and Sunday, and a split replaces one block with two.
+    let output_blocks = if rules.split_long_tasks {
+        split_long_tasks(&flexible)
+    } else {
+        flexible
+    };
+    let mut search_blocks = output_blocks.clone();
+    if rules.weekend_homework_free {
+        for block in &mut search_blocks {
+            block.days.retain(|day| *day <= 4);
+        }
+    }
 
     let mut occ_sources = locked.clone();
     occ_sources.extend(spent.clone());
@@ -679,13 +876,15 @@ pub fn solve(
     if let Some(extra) = extra_occ {
         occ_locked = merge_occupancy(&occ_locked, extra)?;
     }
+    let buffer_slots = rules.buffer_slots();
+    let occ_for_search = dilate_occupancy(&occ_locked, buffer_slots);
 
     let (planning_windows, work_windows_defaulted) = resolve_work_windows(work_windows);
     // One list bounds the search and orders it: a subject's own hours come first (J7).
     let windows: Vec<Value> = planning_windows.iter().map(work_value).collect();
 
-    let ids: Vec<String> = flexible.iter().map(|b| b.id.clone()).collect();
-    let mut parsed_deadlines: Vec<Option<(i64, i64)>> = flexible
+    let ids: Vec<String> = search_blocks.iter().map(|b| b.id.clone()).collect();
+    let mut parsed_deadlines: Vec<Option<(i64, i64)>> = search_blocks
         .iter()
         .map(|b| parse_deadline(b.latest.as_deref(), &b.days))
         .collect::<EngineResult<Vec<_>>>()?;
@@ -694,23 +893,23 @@ pub fn solve(
     let mut slack_points = parsed_deadlines.clone();
     apply_slack_overrides(&mut slack_points, &ids, overrides);
 
-    let earliest: Vec<Option<(i64, i64)>> = flexible
+    let earliest: Vec<Option<(i64, i64)>> = search_blocks
         .iter()
         .map(|b| parse_deadline(b.earliest.as_deref(), &b.days))
         .collect::<EngineResult<Vec<_>>>()?;
 
-    let lengths: Vec<i64> = flexible
+    let lengths: Vec<i64> = search_blocks
         .iter()
         .map(|b| duration_to_slots(b.duration_min))
         .collect::<EngineResult<Vec<_>>>()?;
 
-    let domains0: Vec<Vec<(i64, i64)>> = flexible
+    let domains0: Vec<Vec<(i64, i64)>> = search_blocks
         .iter()
         .enumerate()
         .map(|(idx, block)| {
             let mut choices = domain(
                 block,
-                &occ_locked,
+                &occ_for_search,
                 parsed_deadlines[idx],
                 earliest[idx],
                 &planning_windows,
@@ -724,7 +923,7 @@ pub fn solve(
 
     let mut ctx = SearchCtx {
         ids: &ids,
-        flex: &flexible,
+        flex: &search_blocks,
         lengths: &lengths,
         parsed_deadlines: &parsed_deadlines,
         windows: &windows,
@@ -733,22 +932,25 @@ pub fn solve(
         best_score: (-1, -1, -1, -1),
         best: vec![],
         timed_out: false,
+        urgent_first: rules.urgent_first,
+        buffer_slots,
     };
 
     let domains_copy: Vec<Vec<(i64, i64)>> = domains0.to_vec();
-    ctx.search(&occ_locked, &domains_copy, &[], false)?;
+    ctx.search(&occ_for_search, &domains_copy, &[], false)?;
     if ctx.best.len() != ids.len() && !ctx.timed_out {
         let domains_copy: Vec<Vec<(i64, i64)>> = domains0.to_vec();
-        ctx.search(&occ_locked, &domains_copy, &[], true)?;
+        ctx.search(&occ_for_search, &domains_copy, &[], true)?;
     }
 
     let mut placed_flex = Vec::new();
     let mut occ_final = occ_locked.clone();
     for (block_id, (day, slot)) in &ctx.best {
         let idx = ids.iter().position(|id| id == block_id).unwrap();
-        let mut placed = flexible[idx].clone();
+        let mut placed = search_blocks[idx].clone();
         placed.start = Some(slot_to_hhmm(*slot)?);
         placed.days = vec![*day];
+        placed.split_peer = None;
         placed_flex.push(placed);
         occ_final[*day as usize] |= occupancy_mask(*slot, lengths[idx])?;
     }
@@ -757,22 +959,24 @@ pub fn solve(
     let mut moves = Vec::new();
     let mut explanations = Vec::new();
     let mut failed: Vec<String> = Vec::new();
-    for (idx, block) in flexible.iter().enumerate() {
+    for (idx, block) in search_blocks.iter().enumerate() {
         if ctx.best.iter().any(|(id, _)| id == &block.id) {
             continue;
         }
         let reason = reason_for(
             block,
             idx,
-            &occ_locked,
+            &occ_for_search,
             &ctx.best,
-            &flexible,
+            &search_blocks,
             &ids,
             &parsed_deadlines,
             &earliest,
             &planning_windows,
         )?;
-        unplaced.push(block.clone());
+        let mut returned = output_blocks[idx].clone();
+        returned.split_peer = None;
+        unplaced.push(returned);
         moves.push(Move {
             block_id: block.id.clone(),
             reason: reason.clone(),
@@ -935,6 +1139,7 @@ pub fn reschedule_after_miss(
     overrides: Option<&DeadlineOverrides>,
     budget_ms: f64,
     elapsed_ms: &dyn Fn() -> f64,
+    rules: PlanRules,
 ) -> EngineResult<SolveTrace> {
     let mut updated: Vec<TimeBlock> = Vec::new();
     let mut found = false;
@@ -954,7 +1159,7 @@ pub fn reschedule_after_miss(
             "missed occurrence must identify a locked block on that day",
         ));
     }
-    let trace = solve(
+    let trace = solve_with_rules(
         &updated,
         extra_occ,
         work_windows,
@@ -962,6 +1167,7 @@ pub fn reschedule_after_miss(
         None,
         budget_ms,
         elapsed_ms,
+        rules,
     )?;
     Ok(reshape_moves(
         trace,
@@ -984,6 +1190,7 @@ pub fn reschedule_running_late(
     now_floor: Option<(i64, i64)>,
     budget_ms: f64,
     elapsed_ms: &dyn Fn() -> f64,
+    rules: PlanRules,
 ) -> EngineResult<SolveTrace> {
     let late = lateness_occupancy(day, from_start, minutes)?;
     let base = extra_occ
@@ -1019,7 +1226,7 @@ pub fn reschedule_running_late(
                 .is_some_and(|b| b.pinned),
         ));
     }
-    let mut trace = solve(
+    let mut trace = solve_with_rules(
         &shifted_blocks,
         Some(&combined),
         work_windows,
@@ -1027,6 +1234,7 @@ pub fn reschedule_running_late(
         now_floor,
         budget_ms,
         elapsed_ms,
+        rules,
     )?;
     if let Some((id, pinned)) = was_pinned
         && let Some(block) = trace.placed.iter_mut().find(|block| block.id == id)
@@ -1121,6 +1329,7 @@ pub fn block_from_value(value: &Value) -> EngineResult<TimeBlock> {
             .get("prefer_earliest")
             .and_then(Value::as_bool)
             .unwrap_or(false),
+        split_peer: None,
         rest,
     })
 }
@@ -1408,6 +1617,7 @@ mod tests {
             Some((0, 17 * 60)),
             SOLVE_BUDGET_MS,
             &noop_elapsed(),
+            PlanRules::default(),
         )
         .unwrap();
         let placed = trace
@@ -1437,6 +1647,7 @@ mod tests {
             Some((0, 17 * 60)),
             SOLVE_BUDGET_MS,
             &noop_elapsed(),
+            PlanRules::default(),
         )
         .unwrap();
         let placed = trace
@@ -1465,6 +1676,7 @@ mod tests {
             Some((0, 17 * 60)),
             SOLVE_BUDGET_MS,
             &noop_elapsed(),
+            PlanRules::default(),
         )
         .unwrap();
         let placed = trace

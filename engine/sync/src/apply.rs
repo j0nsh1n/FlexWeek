@@ -164,7 +164,12 @@ fn valid_pref(key: &str, body: &Value) -> bool {
         "reminders_enabled"
         | "reminder_sound"
         | "reminder_dnd_override"
-        | "auto_split_pomodoro" => body.as_i64().is_some_and(|n| n == 0 || n == 1),
+        | "auto_split_pomodoro"
+        | "weekend_homework_free"
+        | "urgent_first"
+        | "split_long_tasks"
+        | "show_weekends" => body.as_i64().is_some_and(|n| n == 0 || n == 1),
+        "buffer_min" => body.as_i64().is_some_and(|n| n == 0 || n == 15 || n == 30),
         _ => body.as_i64().is_some_and(|n| n > 0 && n <= 1_440),
     }
 }

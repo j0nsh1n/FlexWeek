@@ -99,9 +99,16 @@ const PREFS: &[&str] = &[
     "timer_long_break_min",
     "timer_long_break_every",
     "auto_split_pomodoro",
+    "weekend_homework_free",
+    "buffer_min",
+    "urgent_first",
+    "split_long_tasks",
+    "show_weekends",
     "alarms_json",
     "availability_json",
 ];
+
+const PREF_TEXT: &[&str] = &["alarms_json", "availability_json"];
 
 pub(crate) fn allowed_pref(key: &str) -> bool {
     PREFS.contains(&key)
@@ -181,15 +188,15 @@ pub(crate) fn live(conn: &Connection, user_id: i64) -> SyncResult<Live> {
         let (id, name, body, created_at, updated_at) = row?;
         out.insert(("routine".into(), id), json!({"name": name, "body": serde_json::from_str::<Value>(&body)?, "created_at": created_at, "updated_at": updated_at}));
     }
-    let mut stmt = conn.prepare("SELECT reminders_enabled, reminder_lead_min, reminder_sound, reminder_dnd_override, timer_work_min, timer_break_min, timer_long_break_min, timer_long_break_every, auto_split_pomodoro, alarms_json, availability_json FROM preferences WHERE user_id = ?1")?;
+    let mut stmt = conn.prepare("SELECT reminders_enabled, reminder_lead_min, reminder_sound, reminder_dnd_override, timer_work_min, timer_break_min, timer_long_break_min, timer_long_break_every, auto_split_pomodoro, weekend_homework_free, buffer_min, urgent_first, split_long_tasks, show_weekends, alarms_json, availability_json FROM preferences WHERE user_id = ?1")?;
     let values: Option<Vec<Value>> = stmt
         .query_row([user_id], |row| {
             (0..PREFS.len())
                 .map(|index| {
-                    if index < 9 {
-                        row.get::<_, i64>(index).map(Value::from)
-                    } else {
+                    if PREF_TEXT.contains(&PREFS[index]) {
                         row.get::<_, String>(index).map(Value::from)
+                    } else {
+                        row.get::<_, i64>(index).map(Value::from)
                     }
                 })
                 .collect()
