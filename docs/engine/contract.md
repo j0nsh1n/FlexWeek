@@ -186,10 +186,13 @@ today's planner, so an account saved before these columns plans the same week it
 | Study window cutoff | `day_cutoff`, already in availability | unset | 20:00, 21:00 and 22:00 are the settings choices. The field still accepts the wider 15-minute grid. |
 
 Each is its own preferences column and its own sync record, after `auto_split_pomodoro` and before
-the two JSON preference records. A row still at the migration default is not published until someone
-sets that preference, including setting it back to the default later. A phone that does not know a
-preference key quarantines that one record and keeps applying the rest of the batch. Saving a split
-writes each half: its length, its start, and its day. A half that did not fit is kept, with no start.
+the two JSON preference records. A planner column still at the migration default stays unpublished
+while the account has never saved settings. Saving settings sets `planner_settings_chosen`, so a
+save back to the default is published even when it happens before the first sync. A later save back
+to the default is published too. A phone that does not know a preference key quarantines that one
+record and keeps applying the rest of the batch. Saving a split writes each half: its length, its
+start, and its day. A half that did not fit is kept, with no start. The phone plan lists every half,
+placed or waiting, under the original task's title, and accepting the plan keeps each half.
 Python encodes the row, calls the engine, and decodes the trace. It does not decide where a block goes.
 
 ## Not in scope

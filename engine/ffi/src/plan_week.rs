@@ -253,25 +253,24 @@ pub(crate) fn run_plan(
     .map_err(engine_failure)?;
     drop(db);
     let target_set: HashSet<&str> = targets.iter().filter_map(Value::as_str).collect();
-    let placed: Vec<Value> = settled
-        .as_array()
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
+    let settled_blocks = settled.as_array().cloned().unwrap_or_default();
+    let placed: Vec<Value> = settled_blocks
+        .iter()
         .filter(|block| {
             let id = block.get("id").and_then(Value::as_str).unwrap_or("");
-            target_set.contains(id) && block.get("start").and_then(Value::as_str).is_some()
+            reports_planned(id, &target_set) && block.get("start").and_then(Value::as_str).is_some()
         })
+        .cloned()
+        .map(|block| with_parent_title(block, &settled_blocks))
         .collect();
-    let mut not_placed: Vec<Value> = settled
-        .as_array()
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
+    let mut not_placed: Vec<Value> = settled_blocks
+        .iter()
         .filter(|block| {
             let id = block.get("id").and_then(Value::as_str).unwrap_or("");
-            target_set.contains(id) && block.get("start").and_then(Value::as_str).is_none()
+            reports_planned(id, &target_set) && block.get("start").and_then(Value::as_str).is_none()
         })
+        .cloned()
+        .map(|block| with_parent_title(block, &settled_blocks))
         .collect();
     for block in &mut not_placed {
         let id = block.get("id").and_then(Value::as_str).unwrap_or("");
@@ -298,6 +297,40 @@ pub(crate) fn run_plan(
         "complete": trace_value.get("complete").cloned().unwrap_or(json!(false)),
     });
     Ok((result, earlier_updates, vec![], settled))
+}
+
+fn split_parent_id(id: &str) -> Option<&str> {
+    let parent = id.strip_suffix("~2")?;
+    if parent.is_empty() {
+        None
+    } else {
+        Some(parent)
+    }
+}
+
+fn reports_planned(id: &str, targets: &HashSet<&str>) -> bool {
+    targets.contains(id) || split_parent_id(id).is_some_and(|parent| targets.contains(parent))
+}
+
+fn with_parent_title(mut block: Value, settled: &[Value]) -> Value {
+    let Some(id) = block.get("id").and_then(Value::as_str) else {
+        return block;
+    };
+    let Some(parent_id) = split_parent_id(id) else {
+        return block;
+    };
+    let Some(title) = settled
+        .iter()
+        .find(|item| item.get("id").and_then(Value::as_str) == Some(parent_id))
+        .and_then(|parent| parent.get("title"))
+        .cloned()
+    else {
+        return block;
+    };
+    if let Some(object) = block.as_object_mut() {
+        object.insert("title".into(), title);
+    }
+    block
 }
 
 pub(crate) fn plan_week(
@@ -593,5 +626,110 @@ mod tests {
         let row = &result["not_placed"][0];
         assert!(row["reason"].is_string());
         assert!(row["why"].is_string());
+    }
+
+    fn plan_split(name: &str, window_end: &str) -> (std::sync::Arc<FlexWeek>, Value) {
+        let (week, _) = open_at(name, "2026-10-05T08:00:00");
+        let db = week.db.lock().unwrap();
+        let availability =
+            format!(r#"{{"work_windows":[{{"days":[0],"start":"16:00","end":"{window_end}"}}]}}"#);
+        db.execute(
+            "UPDATE preferences SET split_long_tasks=1, availability_json=?1 WHERE user_id=?2",
+            (availability, week.user_id.unwrap()),
+        )
+        .unwrap();
+        drop(db);
+        save_week(
+            &week,
+            "2026-10-05",
+            &json!([{
+                "id": "essay",
+                "title": "English essay",
+                "kind": "flexible",
+                "days": [0],
+                "duration_min": 120,
+                "priority": 3,
+                "energy": "medium"
+            }]),
+        );
+        let result: Value =
+            serde_json::from_str(&week.plan_week("2026-10-05".into(), 0.0).unwrap()).unwrap();
+        (week, result)
+    }
+
+    fn titles(rows: &[Value]) -> Vec<&str> {
+        rows.iter()
+            .map(|row| row["title"].as_str().unwrap_or(""))
+            .collect()
+    }
+
+    #[test]
+    fn a_split_with_one_free_hour_reports_the_waiting_half() {
+        // Monday 16:00–17:00 holds one hour of a 120-minute essay. The review shows the
+        // placed hour and the hour still waiting, both under the essay's title. Accept
+        // keeps that waiting hour.
+        let (week, result) = plan_split("split-one-hour", "17:00");
+        let placed = result["placed"].as_array().unwrap();
+        let waiting = result["not_placed"].as_array().unwrap();
+        assert_eq!(
+            (
+                placed
+                    .iter()
+                    .map(|row| row["id"].as_str().unwrap())
+                    .collect::<Vec<_>>(),
+                waiting
+                    .iter()
+                    .map(|row| row["id"].as_str().unwrap())
+                    .collect::<Vec<_>>(),
+            ),
+            (vec!["essay"], vec!["essay~2"]),
+            "placed {placed:?} waiting {waiting:?}"
+        );
+        assert_eq!(placed[0]["duration_min"], 60);
+        assert_eq!(placed[0]["start"], "16:00");
+        assert!(waiting[0].get("start").is_none());
+        assert_eq!(waiting[0]["duration_min"], 60);
+        assert_eq!(titles(placed), vec!["English essay"]);
+        assert_eq!(titles(waiting), vec!["English essay"]);
+        let preview = result["applied_preview"].as_str().unwrap().to_string();
+        week.accept_plan(preview).unwrap();
+        let db = week.db.lock().unwrap();
+        let raw = flexweek_store::week_blocks(&db, week.user_id.unwrap(), "2026-10-05")
+            .unwrap()
+            .unwrap();
+        let blocks: Value = serde_json::from_str(&raw).unwrap();
+        let half = blocks
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|block| block["id"] == "essay~2")
+            .unwrap();
+        assert_eq!(half["title"], "English essay");
+        assert_eq!(half["duration_min"], 60);
+        assert!(half.get("start").is_none());
+    }
+
+    #[test]
+    fn a_split_that_fits_reports_both_halves() {
+        // Monday 16:00–18:00 holds both hours. The preview and the accepted ids name
+        // each half, under the essay's title.
+        let (week, result) = plan_split("split-both-hours", "18:00");
+        let placed = result["placed"].as_array().unwrap();
+        let mut ids: Vec<&str> = placed
+            .iter()
+            .map(|row| row["id"].as_str().unwrap())
+            .collect();
+        ids.sort_unstable();
+        assert_eq!(ids, vec!["essay", "essay~2"], "placed {placed:?}");
+        assert!(result["not_placed"].as_array().unwrap().is_empty());
+        assert_eq!(titles(placed), vec!["English essay", "English essay"]);
+        for row in placed {
+            assert_eq!(row["duration_min"], 60);
+        }
+        let preview = result["applied_preview"].as_str().unwrap().to_string();
+        let accepted: Value = serde_json::from_str(&week.accept_plan(preview).unwrap()).unwrap();
+        let mut accepted_ids = accepted["placed_ids"].as_array().unwrap().clone();
+        accepted_ids.sort_by_key(|id| id.as_str().unwrap().to_string());
+        assert_eq!(accepted_ids, vec![json!("essay"), json!("essay~2")]);
     }
 }

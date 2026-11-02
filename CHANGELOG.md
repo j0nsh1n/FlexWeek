@@ -14,6 +14,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Fixed
 - Overdue count announcements use the visible More control, with a window fallback while Settings is open.
 - A split task is saved as both halves, and the second half keeps the original deadline. A buffer no longer pulls the study cutoff earlier. Splitting the same task again, or into an id that is already used, does not happen. Opening a paired phone that is still on the migration defaults does not erase planner settings chosen on the desktop.
+- Saving planner settings back to the defaults before the first sync keeps that choice when an older device still has other values. The phone plan review shows every half of a split task, including one that is still waiting.
 
 ## [1.2.0] - 2026-10-26
 
