@@ -126,7 +126,8 @@ A play file is JSON, with `setup` (all of it optional) and `steps`:
     {"advance_clock": 30},
     {"shot": "label"},
     {"tree": "label"},
-    {"say": "a note for the log"}
+    {"say": "a note for the log"},
+    {"see": "School"}
   ]
 }
 ```
@@ -161,10 +162,13 @@ Steps, each an object with one action:
   text, geometry in window pixels, enabled, has focus, checked; menu rows too. It also names the focused
   widget and the open dialog. Password boxes show `(hidden)`.
 - `say`: a note in the log.
+- `see`: the words or an `objectName` that must be on screen, including a QML item. The rig finds QML
+  by walking visual children and uses the item's real position. A miss is `NOT DONE`.
 
 Every step writes one line to `DIR/log.txt`: what it did, where the pointer went, the widget with focus,
 the open dialog and the open menu. A step that cannot be done (no such widget or text, a dialog in the
-way, xdotool failing) logs `NOT DONE` and why, and the play goes on. A final shot and tree are always
+way, xdotool failing) logs `NOT DONE` and why, and the play goes on. The play exits 1 when any step was
+not done. A final shot and tree are always
 taken. The play file is checked before the session starts, and every mistake in it is named with its step
 number. Files are numbered by step (`04-after-tab.png`, `04-after-tab.json`); a dialog or menu gets the
 class name added to the shot's name. `DIR` is `~/.flexweek-ui-harness/scratch/plays/<time>-<play name>/`
