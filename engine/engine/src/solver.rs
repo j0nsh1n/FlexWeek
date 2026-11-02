@@ -725,6 +725,52 @@ fn apply_slack_overrides(
     }
 }
 
+fn copy_peer_deadlines(
+    parsed: &mut [Option<(i64, i64)>],
+    blocks: &[TimeBlock],
+    overrides: Option<&DeadlineOverrides>,
+) {
+    let Some(overrides) = overrides else {
+        return;
+    };
+    for (idx, block) in blocks.iter().enumerate() {
+        if overrides.deadlines.iter().any(|(id, _)| id == &block.id) {
+            continue;
+        }
+        let Some(peer) = block.split_peer.as_deref() else {
+            continue;
+        };
+        if let Some((_, value)) = overrides.deadlines.iter().find(|(id, _)| id == peer) {
+            parsed[idx] = *value;
+        }
+    }
+}
+
+fn copy_peer_slack(
+    slack: &mut [Option<(i64, i64)>],
+    blocks: &[TimeBlock],
+    overrides: Option<&DeadlineOverrides>,
+) {
+    let Some(overrides) = overrides else {
+        return;
+    };
+    for (idx, block) in blocks.iter().enumerate() {
+        if overrides
+            .slack_deadlines
+            .iter()
+            .any(|(id, _)| id == &block.id)
+        {
+            continue;
+        }
+        let Some(peer) = block.split_peer.as_deref() else {
+            continue;
+        };
+        if let Some((_, value)) = overrides.slack_deadlines.iter().find(|(id, _)| id == peer) {
+            slack[idx] = Some(*value);
+        }
+    }
+}
+
 /// Bits of one day. Slot 0 is 00:00 and the last slot is 23:45.
 const DAY_SLOT_BITS: u128 = (1u128 << (SLOTS_PER_DAY as u32)) - 1;
 
@@ -746,22 +792,24 @@ fn dilate_occupancy(occ: &[u128], radius: i64) -> Vec<u128> {
         .collect()
 }
 
-/// One cut of a task longer than an hour. Both pieces stay on the 15-minute
-/// grid and add up to the original. 120 becomes 60 and 60. A length that is
-/// not a multiple of 15 stays whole, because rounding it would change the work.
+/// One cut of a task longer than an hour. The pieces add up to the original.
+/// The first is the largest multiple of 15 minutes that does not pass half:
+/// 120 becomes 60 and 60, and 61 becomes 30 and 31. An hour stays whole.
 fn split_lengths(duration_min: i64) -> Option<(i64, i64)> {
-    if duration_min <= 60 || duration_min % SLOT_MIN != 0 {
+    if duration_min <= 60 {
         return None;
     }
     let half = (duration_min / 2 / SLOT_MIN) * SLOT_MIN;
     let rest = duration_min - half;
-    if half < SLOT_MIN || rest % SLOT_MIN != 0 {
+    if half < SLOT_MIN || rest < 1 {
         return None;
     }
     Some((half, rest))
 }
 
-fn split_long_tasks(flexible: &[TimeBlock]) -> Vec<TimeBlock> {
+fn split_long_tasks(flexible: &[TimeBlock], blocks: &[TimeBlock]) -> Vec<TimeBlock> {
+    let mut taken: std::collections::HashSet<String> =
+        blocks.iter().map(|block| block.id.clone()).collect();
     let mut out = Vec::with_capacity(flexible.len());
     for block in flexible {
         let Some((left_len, right_len)) = split_lengths(block.duration_min) else {
@@ -769,13 +817,16 @@ fn split_long_tasks(flexible: &[TimeBlock]) -> Vec<TimeBlock> {
             continue;
         };
         let peer_id = format!("{}~2", block.id);
+        // A `~2` id, or a sibling that already has that id, was split already.
+        // Cutting it again would make a third piece. A locked, completed, or
+        // pinned block with that id would share it with the new half.
         let too_long = peer_id.chars().count() > 80;
-        let taken = flexible.iter().any(|other| other.id == peer_id)
-            || out.iter().any(|other| other.id == peer_id);
-        if too_long || taken {
+        let already = block.id.ends_with("~2") || taken.contains(&peer_id);
+        if too_long || already {
             out.push(block.clone());
             continue;
         }
+        taken.insert(peer_id.clone());
         let mut left = block.clone();
         let mut right = block.clone();
         left.duration_min = left_len;
@@ -858,7 +909,7 @@ pub fn solve_with_rules(
     // Returned unplaced blocks keep the caller's days. The search copy may
     // drop Saturday and Sunday, and a split replaces one block with two.
     let output_blocks = if rules.split_long_tasks {
-        split_long_tasks(&flexible)
+        split_long_tasks(&flexible, blocks)
     } else {
         flexible
     };
@@ -872,12 +923,16 @@ pub fn solve_with_rules(
     let mut occ_sources = locked.clone();
     occ_sources.extend(spent.clone());
     occ_sources.extend(held.clone());
-    let mut occ_locked = locked_occupancy(&occ_sources)?;
+    let block_occ = locked_occupancy(&occ_sources)?;
+    let buffer_slots = rules.buffer_slots();
+    // The buffer is a gap after a task. The cutoff and protected windows stay
+    // where they were written, so a 15-minute buffer does not eat the last hour.
+    let mut occ_for_search = dilate_occupancy(&block_occ, buffer_slots);
+    let mut occ_locked = block_occ;
     if let Some(extra) = extra_occ {
         occ_locked = merge_occupancy(&occ_locked, extra)?;
+        occ_for_search = merge_occupancy(&occ_for_search, extra)?;
     }
-    let buffer_slots = rules.buffer_slots();
-    let occ_for_search = dilate_occupancy(&occ_locked, buffer_slots);
 
     let (planning_windows, work_windows_defaulted) = resolve_work_windows(work_windows);
     // One list bounds the search and orders it: a subject's own hours come first (J7).
@@ -889,9 +944,11 @@ pub fn solve_with_rules(
         .map(|b| parse_deadline(b.latest.as_deref(), &b.days))
         .collect::<EngineResult<Vec<_>>>()?;
     apply_deadline_overrides(&mut parsed_deadlines, &ids, overrides);
+    copy_peer_deadlines(&mut parsed_deadlines, &search_blocks, overrides);
 
     let mut slack_points = parsed_deadlines.clone();
     apply_slack_overrides(&mut slack_points, &ids, overrides);
+    copy_peer_slack(&mut slack_points, &search_blocks, overrides);
 
     let earliest: Vec<Option<(i64, i64)>> = search_blocks
         .iter()

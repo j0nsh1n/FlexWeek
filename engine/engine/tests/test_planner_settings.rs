@@ -5,8 +5,8 @@ mod common;
 use common::{Dump, by_id, real_clock, work_span};
 use flexweek_engine::plan::occupancy_from_windows;
 use flexweek_engine::solver::{
-    PlanRules, SOLVE_BUDGET_MS, SolveTrace, TimeBlock, WorkWindow, plan_rules_from_value, solve,
-    solve_with_rules,
+    DeadlineOverrides, PlanRules, SOLVE_BUDGET_MS, SolveTrace, TimeBlock, WorkWindow,
+    plan_rules_from_value, solve, solve_with_rules,
 };
 use serde_json::json;
 
@@ -54,15 +54,127 @@ fn expect(day: i64, start: &str, minutes: i64) -> (i64, String, i64) {
     (day, start.to_string(), minutes)
 }
 
+fn rows(trace: &SolveTrace) -> Vec<(String, i64, String, i64)> {
+    let mut rows: Vec<_> = trace
+        .placed
+        .iter()
+        .map(|block| {
+            (
+                block.id.clone(),
+                block.days.first().copied().unwrap_or(-1),
+                block.start.clone().unwrap_or_default(),
+                block.duration_min,
+            )
+        })
+        .collect();
+    rows.sort();
+    rows
+}
+
+fn plan_deadlines(
+    blocks: &[TimeBlock],
+    windows: &[WorkWindow],
+    overrides: &DeadlineOverrides,
+    rules: PlanRules,
+) -> SolveTrace {
+    solve_with_rules(
+        blocks,
+        None,
+        Some(windows),
+        Some(overrides),
+        None,
+        SOLVE_BUDGET_MS,
+        &real_clock(),
+        rules,
+    )
+    .expect("plan")
+}
+
 fn rules() -> PlanRules {
     PlanRules::default()
 }
 
 #[test]
 fn missing_keys_are_todays_planner() {
+    // These placements were printed by 129f891e's planner (`solve`, before plan rules).
+    // Missing keys have to land on the same times.
     let parsed = plan_rules_from_value(&json!({}));
-    assert_eq!(parsed, PlanRules::default());
-    assert_eq!(parsed.buffer_slots(), 0);
+    assert_eq!(
+        (
+            parsed.weekend_homework_free,
+            parsed.buffer_min,
+            parsed.urgent_first,
+            parsed.split_long_tasks,
+            parsed.buffer_slots(),
+        ),
+        (false, 0, true, false, 0)
+    );
+    let afternoon = [work_span(&[4], "16:00", "20:00", None)];
+    let both = [
+        work_span(&[4], "16:00", "20:00", None),
+        work_span(&[5], "10:00", "12:00", None),
+    ];
+    let touched = plan(
+        &[
+            locked("class", "15:00", 60, &[4]),
+            flex("hw", 60, &[4], "medium", None),
+        ],
+        &afternoon,
+        None,
+        parsed,
+    );
+    assert_eq!(start_of(&touched, "hw"), expect(4, "16:00", 60));
+    let open = plan(
+        &[
+            flex("science", 60, &[4], "medium", Some("Friday 18:00")),
+            flex("math", 60, &[4, 5], "high", None),
+        ],
+        &both,
+        None,
+        parsed,
+    );
+    assert_eq!(start_of(&open, "science"), expect(4, "16:00", 60));
+    assert_eq!(start_of(&open, "math"), expect(5, "10:00", 60));
+    let urgent = plan(
+        &[
+            flex("a-math", 60, &[4], "medium", Some("Sunday 20:00")),
+            flex("b-science", 60, &[4], "medium", Some("Friday 20:00")),
+        ],
+        &[work_span(&[4], "16:00", "18:00", None)],
+        None,
+        parsed,
+    );
+    assert_eq!(start_of(&urgent, "b-science"), expect(4, "16:00", 60));
+    assert_eq!(start_of(&urgent, "a-math"), expect(4, "17:00", 60));
+    let whole = plan(
+        std::slice::from_ref(&flex("essay", 120, &[4, 5], "medium", None)),
+        &both,
+        None,
+        parsed,
+    );
+    assert_eq!(start_of(&whole, "essay"), expect(4, "16:00", 120));
+    assert!(by_id_missing(&whole, "essay~2"));
+    let kept = plan(
+        std::slice::from_ref(&flex("odd", 61, &[4], "medium", None)),
+        &afternoon,
+        None,
+        parsed,
+    );
+    assert_eq!(start_of(&kept, "odd"), expect(4, "16:00", 61));
+    let night = [flex("hw", 60, &[4], "low", None)];
+    let late = [work_span(&[4], "21:00", "23:00", None)];
+    let until_ten = occupancy_from_windows(&[], Some("22:00")).unwrap();
+    assert_eq!(
+        start_of(&plan(&night, &late, Some(&until_ten), parsed), "hw"),
+        expect(4, "21:00", 60)
+    );
+    let until_nine = occupancy_from_windows(&[], Some("21:00")).unwrap();
+    assert!(
+        plan(&night, &late, Some(&until_nine), parsed)
+            .unplaced
+            .iter()
+            .any(|block| block.id == "hw")
+    );
     let set = plan_rules_from_value(&json!({
         "weekend_homework_free": 1,
         "buffer_min": 15,
@@ -176,7 +288,8 @@ fn a_long_task_splits_once_onto_another_day() {
 }
 
 #[test]
-fn an_hour_or_an_off_grid_length_stays_one_block() {
+fn an_hour_stays_one_block() {
+    // 60 minutes is not over 60, so it stays one block.
     let windows = [
         work_span(&[4], "16:00", "20:00", None),
         work_span(&[5], "10:00", "12:00", None),
@@ -187,10 +300,171 @@ fn an_hour_or_an_off_grid_length_stays_one_block() {
     let one = plan(std::slice::from_ref(&hour), &windows, None, split);
     assert_eq!(start_of(&one, "hour"), expect(4, "16:00", 60));
     assert!(by_id_missing(&one, "hour~2"));
+}
+
+#[test]
+fn sixty_one_minutes_is_over_an_hour_and_splits() {
+    // Over 60 splits. 61 is over 60, so it becomes 30 and 31, which add up to 61.
+    // 31 minutes occupies three grid slots and 30 occupies two: five slots, the same
+    // as one 61-minute block. The stored lengths stay 30 and 31.
+    let windows = [work_span(&[4], "16:00", "20:00", None)];
+    let mut split = rules();
+    split.split_long_tasks = true;
     let odd = flex("odd", 61, &[4], "medium", None);
-    let kept = plan(std::slice::from_ref(&odd), &windows, None, split);
-    assert_eq!(start_of(&kept, "odd"), expect(4, "16:00", 61));
-    assert!(by_id_missing(&kept, "odd~2"));
+    let parts = plan(std::slice::from_ref(&odd), &windows, None, split);
+    assert_eq!(
+        rows(&parts),
+        vec![
+            ("odd".into(), 4, "16:45".into(), 30),
+            ("odd~2".into(), 4, "16:00".into(), 31),
+        ]
+    );
+}
+
+#[test]
+fn a_split_half_keeps_the_original_deadline() {
+    // Due Friday 17:00. Friday 16:00–17:00 holds one hour and ends on the deadline.
+    // Saturday 10:00–11:00 is later, so the second half is unplaced.
+    let essay = flex("essay", 120, &[4, 5], "medium", None);
+    let windows = [
+        work_span(&[4], "16:00", "17:00", None),
+        work_span(&[5], "10:00", "11:00", None),
+    ];
+    let mut split = rules();
+    split.split_long_tasks = true;
+    let overrides = DeadlineOverrides {
+        deadlines: vec![("essay".into(), Some((4, 17 * 60)))],
+        slack_deadlines: vec![],
+    };
+    let trace = plan_deadlines(std::slice::from_ref(&essay), &windows, &overrides, split);
+    assert_eq!(rows(&trace), vec![("essay".into(), 4, "16:00".into(), 60)]);
+    assert_eq!(
+        trace
+            .unplaced
+            .iter()
+            .map(|block| (block.id.clone(), block.duration_min))
+            .collect::<Vec<_>>(),
+        vec![("essay~2".into(), 60)]
+    );
+}
+
+#[test]
+fn a_split_half_keeps_the_original_slack_deadline() {
+    let essay = flex("essay", 120, &[4, 5], "medium", None);
+    let windows = [
+        work_span(&[4], "16:00", "20:00", None),
+        work_span(&[5], "10:00", "12:00", None),
+    ];
+    let mut split = rules();
+    split.split_long_tasks = true;
+    let overrides = DeadlineOverrides {
+        deadlines: vec![],
+        slack_deadlines: vec![("essay".into(), (4, 20 * 60))],
+    };
+    let trace = plan_deadlines(std::slice::from_ref(&essay), &windows, &overrides, split);
+    assert_eq!(
+        rows(&trace),
+        vec![
+            ("essay".into(), 4, "16:00".into(), 60),
+            ("essay~2".into(), 5, "10:00".into(), 60),
+        ]
+    );
+    let status = |id: &str| {
+        trace
+            .explanations
+            .iter()
+            .find(|item| item.block_id == id && item.slack_status.is_some())
+            .and_then(|item| item.slack_status.clone())
+    };
+    assert_eq!(status("essay").as_deref(), Some("tight"));
+    assert_eq!(status("essay~2").as_deref(), Some("danger"));
+}
+
+#[test]
+fn buffer_does_not_pull_the_cutoff_earlier() {
+    // Friday 21:00–22:00, cutoff 22:00. A 60-minute block ends on the cutoff.
+    // The buffer is only a gap between tasks, so 15 and 30 still leave 21:00 open.
+    let homework = flex("hw", 60, &[4], "low", None);
+    let windows = [work_span(&[4], "21:00", "22:00", None)];
+    let occ = occupancy_from_windows(&[], Some("22:00")).unwrap();
+    for buffer in [0, 15, 30] {
+        let mut spaced = rules();
+        spaced.buffer_min = buffer;
+        let trace = plan(
+            std::slice::from_ref(&homework),
+            &windows,
+            Some(&occ),
+            spaced,
+        );
+        assert_eq!(
+            rows(&trace),
+            vec![("hw".into(), 4, "21:00".into(), 60)],
+            "buffer {buffer}"
+        );
+    }
+}
+
+#[test]
+fn a_taken_half_id_keeps_the_task_whole() {
+    // Rule: when `{id}~2` is already the id of any block, the flexible task stays one piece.
+    let windows = [
+        work_span(&[4], "16:00", "20:00", None),
+        work_span(&[5], "10:00", "12:00", None),
+    ];
+    let mut split = rules();
+    split.split_long_tasks = true;
+    let essay = flex("essay", 120, &[4, 5], "medium", None);
+    let mut pinned = flex("essay~2", 60, &[5], "medium", None);
+    pinned.pinned = true;
+    pinned.start = Some("10:00".into());
+    let mut done = flex("essay~2", 60, &[5], "medium", None);
+    done.completed = true;
+    done.completed_day = Some(5);
+    done.start = Some("10:00".into());
+    let siblings = [
+        ("locked", locked("essay~2", "10:00", 60, &[5])),
+        ("pinned", pinned),
+        ("completed", done),
+    ];
+    for (label, sibling) in siblings {
+        let trace = plan(&[essay.clone(), sibling], &windows, None, split);
+        let mut ids: Vec<_> = trace
+            .placed
+            .iter()
+            .chain(&trace.unplaced)
+            .map(|block| block.id.clone())
+            .collect();
+        ids.sort();
+        assert_eq!(
+            ids,
+            vec!["essay".to_string(), "essay~2".to_string()],
+            "{label}"
+        );
+        assert_eq!(
+            start_of(&trace, "essay"),
+            expect(4, "16:00", 120),
+            "{label}"
+        );
+    }
+}
+
+#[test]
+fn splitting_a_task_again_leaves_the_halves_whole() {
+    // 240 minutes is cut once into 120 and 120. Planning those halves again must not cut them.
+    let windows = [
+        work_span(&[4], "16:00", "20:00", None),
+        work_span(&[5], "10:00", "12:00", None),
+    ];
+    let mut split = rules();
+    split.split_long_tasks = true;
+    let essay = flex("essay", 240, &[4, 5], "medium", None);
+    let first = plan(std::slice::from_ref(&essay), &windows, None, split);
+    assert_eq!(start_of(&first, "essay"), expect(4, "16:00", 120));
+    assert_eq!(start_of(&first, "essay~2"), expect(5, "10:00", 120));
+    let again = plan(&first.placed, &windows, None, split);
+    assert_eq!(start_of(&again, "essay"), expect(4, "16:00", 120));
+    assert_eq!(start_of(&again, "essay~2"), expect(5, "10:00", 120));
+    assert!(by_id_missing(&again, "essay~2~2"));
 }
 
 #[test]
