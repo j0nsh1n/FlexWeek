@@ -54,6 +54,12 @@ _FIELDS = frozenset(Preferences.model_fields)
 SECTIONS = ("look", "planning", "focus", "alerts", "computer")
 CUTOFFS = ("20:00", "21:00", "22:00")
 REMINDERS = ("off", "5", "10", "15")
+REMINDER_CHIPS = (
+    {"label": "Off", "value": "off"},
+    {"label": "5m", "value": "5"},
+    {"label": "10m", "value": "10"},
+    {"label": "15m", "value": "15"},
+)
 AUDIO = (
     ("Off", "off"),
     ("Rain", "rain"),
@@ -85,6 +91,23 @@ _GROUPS = {
 def _prefs_of(window: QObject) -> dict[str, Any]:
     raw = getattr(getattr(window, "session", None), "preferences", None)
     return raw if isinstance(raw, dict) else {}
+
+
+def _reminder_state(prefs: dict[str, Any]) -> tuple[str, list[dict[str, str]]]:
+    """Off/5/10/15 for a new pick. A legal saved lead that is not one of those stays visible."""
+    chips = [dict(row) for row in REMINDER_CHIPS]
+    try:
+        lead = int(prefs["reminder_lead_min"]) if prefs.get("reminder_lead_min") is not None else None
+    except (TypeError, ValueError):
+        lead = None
+    if prefs.get("reminders_enabled", True) is False:
+        return "off", chips
+    if lead in (5, 10, 15):
+        return str(lead), chips
+    if lead is not None and 0 <= lead <= 120:
+        chips.append({"label": f"{lead}m", "value": str(lead)})
+        return str(lead), chips
+    return "", chips
 
 
 class PreviewBridge(QObject):
@@ -258,13 +281,7 @@ class SettingsBridge(QObject):
                     "primaryContainer": colours["primaryContainer"],
                 }
             )
-        lead = prefs.get("reminder_lead_min")
-        if prefs.get("reminders_enabled", True) is False:
-            reminder = "off"
-        elif lead in (5, 10, 15):
-            reminder = str(lead)
-        else:
-            reminder = ""
+        reminder, reminder_choices = _reminder_state(prefs)
         work = int(prefs.get("timer_work_min") or 30)
         rest = int(prefs.get("timer_break_min") or 15)
         audio = prefs.get("focus_audio") or "off"
@@ -289,6 +306,7 @@ class SettingsBridge(QObject):
             "spotify": prefs.get("default_spotify_url") or "",
             "spotifyError": self._spotify_error,
             "reminder": reminder,
+            "reminderChoices": reminder_choices,
             "pomodoro": work == 25 and rest == 5,
             "split": bool(prefs.get(_SPLIT)) if _SPLIT else False,
             "cutoff": cutoff if cutoff in CUTOFFS else "",

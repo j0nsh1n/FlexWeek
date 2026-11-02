@@ -23,7 +23,9 @@ SectionPage {
             key: "reminder"
             title: "Upcoming block reminders"
             subtitle: "How long before a block starts."
-            choices: [{ label: "Off", value: "off" }, { label: "5m", value: "5" }, { label: "10m", value: "10" }, { label: "15m", value: "15" }]
+            choices: page.st.reminderChoices && page.st.reminderChoices.length
+                ? page.st.reminderChoices
+                : [{ label: "Off", value: "off" }, { label: "5m", value: "5" }, { label: "10m", value: "10" }, { label: "15m", value: "15" }]
             current: page.st.reminder || ""
             onChosen: (value) => page.panel.setReminder(value)
         }

@@ -322,6 +322,42 @@ def test_the_alerts_section_writes_the_reminder_lead(qapp: QApplication, window:
         _reset(window)
 
 
+def test_a_custom_saved_reminder_lead_stays_visible_and_is_not_rewritten_on_open(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = window.session
+    session.save_preferences({"reminders_enabled": True, "reminder_lead_min": 17})
+    wait_until(qapp, lambda: _prefs(window).get("reminder_lead_min") == 17)
+    writes: list[dict] = []
+    real = session.save_preferences
+
+    def wrapped(updates: dict, then=None) -> bool:
+        writes.append(dict(updates))
+        return real(updates, then)
+
+    monkeypatch.setattr(session, "save_preferences", wrapped)
+    root = _open_settings(qapp, window, "alerts")
+    try:
+        assert _panel(window).property("state")["reminder"] == "17"
+        assert _prefs(window).get("reminder_lead_min") == 17
+        assert writes == []
+        labels = [str(item.property("text")) for item in _texts(_named(root, "reminder")[0])]
+        assert "17m" in labels
+        assert "Off" in labels and "5m" in labels and "10m" in labels and "15m" in labels
+
+        _click_segment(qapp, window, _named(root, "reminder")[0], "Off")
+        wait_until(qapp, lambda: _prefs(window).get("reminders_enabled") is False)
+        assert _prefs(window).get("reminder_lead_min") == 17
+
+        _click_segment(qapp, window, _named(root, "reminder")[0], "10m")
+        wait_until(qapp, lambda: _prefs(window).get("reminder_lead_min") == 10)
+        assert _prefs(window).get("reminders_enabled") is True
+    finally:
+        session.save_preferences({"reminders_enabled": True, "reminder_lead_min": 5})
+        wait_until(qapp, lambda: _prefs(window).get("reminder_lead_min") == 5)
+        _reset(window)
+
+
 def test_this_computer_login_motion_and_shortcuts(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
