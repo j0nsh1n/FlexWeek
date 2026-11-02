@@ -5586,6 +5586,12 @@ class NativeWindow(QMainWindow):
             }
             if self._material_failed:
                 body["material_failed"] = self._material_failed
+            # Settings writes the material object into this file. Keep it when the widgets look saves.
+            from desktop.native.material.theme import kept_material
+
+            material = kept_material(path)
+            if material is not None:
+                body["material"] = material
             path.write_text(json.dumps(body) + "\n")
             self._has_saved_design_look = self._layout_has_saved_look(body["layout"])
         except OSError:

@@ -26,8 +26,12 @@ from desktop.native.material.theme import (
     DEFAULT_CONTRAST,
     DEFAULT_DENSITY,
     DEFAULT_PRESET,
-    DENSITY,
+    advanced_default,
+    dress_theme,
+    hour_row_px,
+    read_advanced,
     read_material_choice,
+    read_shortcuts,
     resolved_mode,
     scheme,
     stroke_for,
@@ -86,6 +90,8 @@ class MaterialBridge(QObject):
         self._contrast = DEFAULT_CONTRAST
         self._density = DEFAULT_DENSITY
         self._reduce_motion = False
+        self._advanced = advanced_default()
+        self._shortcuts = True
         self._colours = scheme(DEFAULT_PRESET, "light", DEFAULT_CONTRAST)
         self._theme = theme_object(self._colours, self._density, False, False)
         self._week = WeekBridge(window, self)
@@ -101,7 +107,10 @@ class MaterialBridge(QObject):
         contrast is not Material's contrast: this shell stays standard unless its own
         saved contrast says high.
         """
-        choice = read_material_choice(self._stored_look())
+        stored = self._stored_look()
+        choice = read_material_choice(stored)
+        self._advanced = read_advanced(stored)
+        self._shortcuts = read_shortcuts(stored)
         worn_dark = mode == "dark"
         resolved = resolved_mode(choice["mode"], worn_dark)
         try:
@@ -117,6 +126,7 @@ class MaterialBridge(QObject):
         self._density = choice["density"]
         self._colours = colours
         self._publish_theme()
+        self._settings_bridge.note_applied()
 
     def refresh(self) -> None:
         """Read the session again. Does not consume a Widgets prompt."""
@@ -127,9 +137,10 @@ class MaterialBridge(QObject):
         self.changed.emit()
 
     def _publish_theme(self) -> None:
-        self._reduce_motion = self._motion_reduced()
-        self._theme = theme_object(
-            self._colours, self._density, self._reduce_motion, self._contrast == "high"
+        self._reduce_motion = self._motion_reduced() or self._advanced.get("motion") == "Off"
+        self._theme = dress_theme(
+            theme_object(self._colours, self._density, self._reduce_motion, self._contrast == "high"),
+            self._advanced,
         )
 
     def _motion_reduced(self) -> bool:
@@ -189,7 +200,12 @@ class MaterialBridge(QObject):
 
     @Property(int, notify=changed)
     def hourRow(self) -> int:
-        return int(DENSITY[self._density]["hour_row"])
+        return hour_row_px(self._density, self._advanced)
+
+    @Property(bool, notify=changed)
+    def shortcuts(self) -> bool:
+        """P plans, Z undoes, and 1–5 switch screens, unless Settings turned that off."""
+        return self._shortcuts
 
     @Property(bool, constant=True)
     def later(self) -> bool:
@@ -317,6 +333,19 @@ class MaterialBridge(QObject):
     @Slot()
     def undo(self) -> None:
         self._window.session.undo()
+
+    @Slot()
+    def plan(self) -> None:
+        """P in the shell. The same plan the week button runs."""
+        self._window._plan_with_left_over()
+
+    def reload_material(self) -> None:
+        """Read the look file again and publish it. Settings calls this after it writes."""
+        from desktop.native.material.host import appearance_of
+
+        mode, contrast_name = appearance_of(self._window)
+        self.set_appearance(mode, contrast_name)
+        self.refresh()
 
     @Slot()
     def redo(self) -> None:

@@ -41,9 +41,10 @@ Item {
     }
 
     function takeKey(event) {
-        if (typing)
+        if (typing || bridge.shortcuts === false)
             return
         var key = event.key
+        var plain = !(event.modifiers & (Qt.ControlModifier | Qt.MetaModifier | Qt.AltModifier))
         if (key === Qt.Key_1)
             bridge.showPage("day")
         else if (key === Qt.Key_2)
@@ -54,8 +55,10 @@ Item {
             bridge.showPage("myday")
         else if (key === Qt.Key_5)
             bridge.showPage("settings")
-        else if (key === Qt.Key_Z && !(event.modifiers & (Qt.ControlModifier | Qt.MetaModifier)))
+        else if (key === Qt.Key_Z && plain)
             bridge.undo()
+        else if (key === Qt.Key_P && plain)
+            bridge.plan()
         else if (key === Qt.Key_Escape)
             focusDestination()
         else
@@ -421,38 +424,44 @@ Item {
     Shortcut {
         sequence: "1"
         context: Qt.WindowShortcut
-        enabled: !typing
+        enabled: !typing && bridge.shortcuts !== false
         onActivated: bridge.showPage("day")
     }
     Shortcut {
         sequence: "2"
         context: Qt.WindowShortcut
-        enabled: !typing
+        enabled: !typing && bridge.shortcuts !== false
         onActivated: bridge.showPage("week")
     }
     Shortcut {
         sequence: "3"
         context: Qt.WindowShortcut
-        enabled: !typing
+        enabled: !typing && bridge.shortcuts !== false
         onActivated: bridge.showPage("month")
     }
     Shortcut {
         sequence: "4"
         context: Qt.WindowShortcut
-        enabled: !typing
+        enabled: !typing && bridge.shortcuts !== false
         onActivated: bridge.showPage("myday")
     }
     Shortcut {
         sequence: "5"
         context: Qt.WindowShortcut
-        enabled: !typing
+        enabled: !typing && bridge.shortcuts !== false
         onActivated: bridge.showPage("settings")
     }
     Shortcut {
         sequence: "Z"
         context: Qt.WindowShortcut
-        enabled: !typing
+        enabled: !typing && bridge.shortcuts !== false
         onActivated: bridge.undo()
+    }
+    Shortcut {
+        sequence: "P"
+        context: Qt.WindowShortcut
+        enabled: !typing && bridge.shortcuts !== false
+        onActivated: bridge.plan()
     }
     Shortcut { sequence: "Escape"; context: Qt.WindowShortcut; onActivated: focusDestination() }
 }
