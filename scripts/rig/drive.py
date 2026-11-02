@@ -113,6 +113,22 @@ def clean_look_file() -> Path:
     return look_path
 
 
+def write_material_new_look(mode: str) -> Path:
+    """Material is the saved surface, and nobody is signed in.
+
+    An earlier rig run's kept token would 401 against this empty database and write
+    "Please sign in again" on the card, so that file is removed too.
+    """
+    from PySide6.QtCore import QStandardPaths
+
+    kept_session_path().unlink(missing_ok=True)
+    root = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))
+    root.mkdir(parents=True, exist_ok=True)
+    look_path = root / "flexweek-look.json"
+    look_path.write_text(json.dumps({"surface": "material", "material": {"mode": mode}}) + "\n")
+    return look_path
+
+
 def check_play(args: argparse.Namespace) -> None:
     """Refuse a play that cannot run, with every mistake named, before a session is started for it."""
     if not args.play:
@@ -302,18 +318,23 @@ def child_main(args: argparse.Namespace) -> int:
     out = Path(args.out)
     server = LocalServer(Path(tempfile.mkdtemp()) / "rig.db")
     server.start()
+    play = load_play(Path(args.play), (*DESIGNS, *MY_DAY), play_looks()) if args.play else None
+    material_new = play is not None and play.setup.seed == "material-new"
+    if material_new:
+        write_material_new_look(play.setup.mode)
     window = NativeWindow(server.origin, kept=KeptSession(kept_session_path()))
     window.resize(1280, 820)
     window.move(0, 0)
     window.show()
+    if material_new:
+        return run_play(app, window, window.session, server, out, play, seed_rig_week, python_errors)
     window.username.setText("rig_student")
     window.password.setText(PASSWORD)
     window.findChild(QPushButton, "createAccount").click()
     wait_until(app, lambda: window._stack.currentWidget().objectName() == "recoveryPage", 20)
     window.recovery_ack.setChecked(True)
     window.recovery_continue.click()
-    if args.play:
-        play = load_play(Path(args.play), (*DESIGNS, *MY_DAY), play_looks())
+    if play is not None:
         return run_play(app, window, window.session, server, out, play, seed_rig_week, python_errors)
     past_setup(app, window)
     session = window.session

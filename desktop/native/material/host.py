@@ -50,6 +50,7 @@ class MaterialPage(QWidget):
         box = QVBoxLayout(self)
         box.setContentsMargins(0, 0, 0, 0)
         box.addWidget(self._quick)
+        self.setFocusProxy(self._quick)
 
     @property
     def root(self):
