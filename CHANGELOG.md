@@ -5,6 +5,9 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- Planner settings are stored and used: weekends homework-free, a 15- or 30-minute buffer, urgent deadlines first, splitting a task longer than an hour, and showing weekends. The study cutoff stays the existing day cutoff. Defaults leave an existing week where it is.
+
 ### Changed
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
