@@ -18,6 +18,7 @@ from typing import Any, Protocol, cast
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from desktop.native.material.bridge_day import DayBridge
+from desktop.native.material.bridge_focus import FocusBridge
 from desktop.native.material.bridge_month import MonthBridge
 from desktop.native.material.bridge_myday import MyDayBridge
 from desktop.native.material.bridge_settings import SettingsBridge
@@ -93,6 +94,7 @@ class MaterialBridge(QObject):
         self._month = MonthBridge(self)
         self._myday = MyDayBridge(self)
         self._settings_bridge = SettingsBridge(self)
+        self._focus = FocusBridge(window, self)
 
     def set_appearance(self, mode: str, _worn_contrast: str) -> None:
         """Apply the saved Material look. `mode` is the worn light or dark axis.
@@ -273,6 +275,10 @@ class MaterialBridge(QObject):
     @Property(QObject, constant=True)
     def settingsBridge(self) -> QObject:
         return self._settings_bridge
+
+    @Property(QObject, constant=True)
+    def focus(self) -> QObject:
+        return self._focus
 
     @Property(QObject, constant=True)
     def blocks(self) -> QObject:

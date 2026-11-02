@@ -313,6 +313,11 @@ def files(root: Path) -> Iterable[Path]:
 
 
 MATERIAL_FILES = ("tokens.json", "qml/Main.qml")
+SOUND_FILES = (
+    "sounds/LICENSE.txt",
+    "sounds/soft-rain-loop.mp3",
+    "sounds/lofi-hip-hop-loop.ogg",
+)
 
 
 def material_problems(root: Path) -> list[str]:
@@ -321,6 +326,16 @@ def material_problems(root: Path) -> list[str]:
     return [
         f"desktop/native/material/{name} is missing, so Material 3 cannot open"
         for name in MATERIAL_FILES
+        if not (base / name).is_file()
+    ]
+
+
+def sound_problems(root: Path) -> list[str]:
+    """Rain and lo-fi must sit at desktop/assets/sounds, where the ambient player looks."""
+    base = root / "desktop" / "assets"
+    return [
+        f"desktop/assets/{name} is missing, so ambient focus audio cannot play"
+        for name in SOUND_FILES
         if not (base / name).is_file()
     ]
 
@@ -347,7 +362,7 @@ def check_linux(root: Path, max_glibc: tuple[int, int]) -> list[str]:
         binaries[str(path.relative_to(root))] = parse_readelf(dynamic, versions)
     bundled = {path.name for path in root.rglob("*")}
     problems = linux_problems(binaries, bundled, max_glibc)
-    return problems + asset_problems(ASSETS, root) + material_problems(root)
+    return problems + asset_problems(ASSETS, root) + material_problems(root) + sound_problems(root)
 
 
 def check_windows(root: Path) -> list[str]:
@@ -357,7 +372,7 @@ def check_windows(root: Path) -> list[str]:
         if path.suffix.lower() in {".dll", ".exe", ".pyd"}
     }
     bundled = {path.name.lower() for path in root.rglob("*")}
-    return windows_problems(binaries, bundled) + asset_problems(ASSETS, root) + material_problems(root)
+    return windows_problems(binaries, bundled) + asset_problems(ASSETS, root) + material_problems(root) + sound_problems(root)
 
 
 def main(argv: list[str] | None = None) -> int:
