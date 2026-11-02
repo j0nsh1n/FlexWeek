@@ -179,16 +179,18 @@ today's planner, so an account saved before these columns plans the same week it
 | Control | Stored as | Default | What the planner does |
 |---|---|---|---|
 | Keep weekends homework-free | `weekend_homework_free` | off | Flexible homework is searched on Monday–Friday only. A locked weekend block stays. |
-| Smart buffer | `buffer_min`, one of 0, 15, 30 | 0 | Empty minutes between scheduled tasks. Locked events already closer than the buffer are not moved. |
+| Smart buffer | `buffer_min`, one of 0, 15, 30 | 0 | Empty minutes between scheduled tasks. The study cutoff and protected windows are not widened. Locked events already closer than the buffer are not moved. |
 | Prioritize urgent deadlines first | `urgent_first` | on | On keeps the existing sooner-deadline order. Off, two tasks with the same room and priority are ordered by id. |
-| Split long tasks | `split_long_tasks` | off | One cut of a flexible task longer than 60 minutes, on the 15-minute grid, into two sessions that add up to it. This is not the focus timer: 25/5 can be saved with the split on. |
+| Split long tasks | `split_long_tasks` | off | One cut of a flexible task longer than 60 minutes into two sessions that add up to it. The first session is the largest multiple of 15 minutes that does not exceed half, so 61 minutes becomes 30 and 31. A task that is already split, and a half whose id is already used, stays whole. This is not the focus timer: 25/5 can be saved with the split on. |
 | Show weekends | `show_weekends` | on | Stored and synced. The planner does not read it. |
 | Study window cutoff | `day_cutoff`, already in availability | unset | 20:00, 21:00 and 22:00 are the settings choices. The field still accepts the wider 15-minute grid. |
 
 Each is its own preferences column and its own sync record, after `auto_split_pomodoro` and before
-the two JSON preference records. A phone that does not know a preference key quarantines that one
-record and keeps applying the rest of the batch. Python encodes the row, calls the engine, and
-decodes the trace. It does not decide where a block goes.
+the two JSON preference records. A row still at the migration default is not published until someone
+sets that preference, including setting it back to the default later. A phone that does not know a
+preference key quarantines that one record and keeps applying the rest of the batch. Saving a split
+writes each half: its length, its start, and its day. A half that did not fit is kept, with no start.
+Python encodes the row, calls the engine, and decodes the trace. It does not decide where a block goes.
 
 ## Not in scope
 
