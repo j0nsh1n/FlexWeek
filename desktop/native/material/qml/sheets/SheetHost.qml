@@ -19,6 +19,7 @@ Item {
     readonly property bool menu: sheets ? sheets.moreOpen : false
     readonly property bool active: sheets ? sheets.active : false
     property Item before: null
+    readonly property Item focused: Window.activeFocusItem
     signal restoreFocus(Item item)
 
     anchors.fill: parent
@@ -36,16 +37,21 @@ Item {
     }
 
     function remember() {
-        var held = Window.activeFocusItem
+        var held = focused
         if (held && !inside(held))
             before = held
+    }
+
+    onFocusedChanged: {
+        if (!active && focused && !inside(focused))
+            before = focused
     }
 
     function returnFocus() {
         var held = before
         before = null
         Qt.callLater(function () {
-            if (held && held.visible && held.enabled) {
+            if (held && held.visible) {
                 held.forceActiveFocus()
             } else {
                 restoreFocus(null)
