@@ -83,11 +83,35 @@ SectionPage {
         GroupHeader { title: "Saved looks" }
         Repeater {
             model: page.st.savedNames || []
-            delegate: LinkRow {
-                key: "saved_" + index
+            delegate: SettingsRow {
                 title: modelData
                 subtitle: "Wear this look."
-                onClicked: page.panel.useSaved(modelData)
+                objectName: "row_saved_" + index
+                Row {
+                    spacing: 8
+                    Button {
+                        objectName: "wearSaved_" + index
+                        theme: Ui.theme
+                        density: Ui.density
+                        reduceMotion: Ui.reduceMotion
+                        highContrast: Ui.highContrast
+                        kind: "tonal"
+                        text: "Apply"
+                        accessName: "Apply " + modelData
+                        onClicked: page.panel.useSaved(modelData)
+                    }
+                    Button {
+                        objectName: "forgetSaved_" + index
+                        theme: Ui.theme
+                        density: Ui.density
+                        reduceMotion: Ui.reduceMotion
+                        highContrast: Ui.highContrast
+                        kind: "text"
+                        text: "Delete"
+                        accessName: "Delete " + modelData
+                        onClicked: page.panel.forgetSaved(modelData)
+                    }
+                }
             }
         }
     }

@@ -113,8 +113,8 @@ Item {
 
     Snackbar {
         objectName: "settingsNotice"
-        visible: root.shownNotice !== ""
-        z: 40
+        visible: root.shownNotice !== "" && !root.st.prompt && !root.st.askPreset
+        z: 10
         message: root.shownNotice
         actionText: ""
         anchors.horizontalCenter: parent.horizontalCenter

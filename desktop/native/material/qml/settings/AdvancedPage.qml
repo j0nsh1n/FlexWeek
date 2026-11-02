@@ -185,7 +185,7 @@ Item {
                     onEdited: (v) => root.panel.setCategory("school", v)
                 }
                 ColorRow {
-                    key: "catSports"; title: "Sports"; value: root.st.catSports || ""
+                    key: "catSports"; title: "Soccer and sports"; value: root.st.catSports || ""
                     onEdited: (v) => root.panel.setCategory("sports", v)
                 }
                 ColorRow {
@@ -342,7 +342,7 @@ Item {
         theme: Ui.theme; density: Ui.density; reduceMotion: Ui.reduceMotion; highContrast: Ui.highContrast
         open: root.st.prompt === "save"
         title: "Save as a new look"
-        body: "Keeps the applied look under a name, beside Done."
+        body: "Keeps the values in the preview. It appears under Saved looks."
         showField: true
         fieldLabel: "Name"
         error: root.st.saveError || ""
