@@ -113,6 +113,22 @@ def clean_look_file() -> Path:
     return look_path
 
 
+def write_material_new_look(mode: str) -> Path:
+    """Material is the saved surface, and nobody is signed in.
+
+    An earlier rig run's kept token would 401 against this empty database and write
+    "Please sign in again" on the card, so that file is removed too.
+    """
+    from PySide6.QtCore import QStandardPaths
+
+    kept_session_path().unlink(missing_ok=True)
+    root = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))
+    root.mkdir(parents=True, exist_ok=True)
+    look_path = root / "flexweek-look.json"
+    look_path.write_text(json.dumps({"surface": "material", "material": {"mode": mode}}) + "\n")
+    return look_path
+
+
 def check_play(args: argparse.Namespace) -> None:
     """Refuse a play that cannot run, with every mistake named, before a session is started for it."""
     if not args.play:
@@ -305,12 +321,7 @@ def child_main(args: argparse.Namespace) -> int:
     play = load_play(Path(args.play), (*DESIGNS, *MY_DAY), play_looks()) if args.play else None
     material_new = play is not None and play.setup.seed == "material-new"
     if material_new:
-        # Material is the saved surface before the window exists, as on a computer that chose it.
-        look_path = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
-        Path(look_path).mkdir(parents=True, exist_ok=True)
-        (Path(look_path) / "flexweek-look.json").write_text(
-            json.dumps({"surface": "material", "material": {"mode": play.setup.mode}}) + "\n"
-        )
+        write_material_new_look(play.setup.mode)
     window = NativeWindow(server.origin, kept=KeptSession(kept_session_path()))
     window.resize(1280, 820)
     window.move(0, 0)

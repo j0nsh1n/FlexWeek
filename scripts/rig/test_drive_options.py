@@ -208,6 +208,20 @@ def test_the_rig_forgets_the_look_an_earlier_run_left_behind():
     assert not left.exists()
 
 
+def test_material_new_forgets_an_earlier_kept_session_and_saves_the_surface():
+    import json
+
+    from PySide6.QtCore import QStandardPaths
+
+    QStandardPaths.setTestModeEnabled(True)
+    kept = drive.kept_session_path()
+    kept.parent.mkdir(parents=True, exist_ok=True)
+    kept.write_text('{"token": "stale"}')
+    look = drive.write_material_new_look("dark")
+    assert not kept.exists()
+    assert json.loads(look.read_text()) == {"surface": "material", "material": {"mode": "dark"}}
+
+
 def test_the_rig_forgets_the_carried_look_an_earlier_run_left_behind():
     from PySide6.QtCore import QStandardPaths
 

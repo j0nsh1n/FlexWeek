@@ -1826,14 +1826,19 @@ class AccountBridge(QObject):
         if self._state is None:
             return []
         state = self._state
-        main = state.layout["main"]
-        spec = LAYOUTS[main]
-        selected = options_for(state.layout, main).get("look")
-        colour_name = next((label for value, label in DESIGN_LOOKS[main] if value == selected), "Your look")
-        text = effective_look(state.look)["text"]
-        look = f"{spec.label} in {colour_name}"
-        if text != "normal":
-            look += f", {text} text"
+        if self._style_key == MATERIAL_STYLE.key and not self._own_look:
+            look = MATERIAL_STYLE.name
+        else:
+            main = state.layout["main"]
+            spec = LAYOUTS[main]
+            selected = options_for(state.layout, main).get("look")
+            colour_name = next(
+                (label for value, label in DESIGN_LOOKS[main] if value == selected), "Your look"
+            )
+            text = effective_look(state.look)["text"]
+            look = f"{spec.label} in {colour_name}"
+            if text != "normal":
+                look += f", {text} text"
         week_parts = []
         for block in state.blocks:
             if is_setup_block(block) and block.get("start"):

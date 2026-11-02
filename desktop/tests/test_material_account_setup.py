@@ -219,6 +219,7 @@ def test_material_surface_opens_on_the_material_sign_in(qapp: QApplication, laun
     for name in ("username", "password", "keepSignedIn", "signIn", "forgotPassword", "authSwitch"):
         assert shown(window, name), name
     assert qml(window, "authSwitch").property("text") == "New here? Create an account"
+    assert bridge.statusLine == ""
     # The week behind the card is not on screen.
     assert not shown(window, "materialRail")
 
@@ -439,6 +440,7 @@ def test_setup_keeps_each_step_in_order_and_what_was_answered(
     assert seen == [STYLE, WEEK, HOMEWORK, REMINDERS, FIRST, DONE]
     assert any(item["title"] == "Chemistry lab" for item in session.assignments.values())
     assert "Chemistry lab" in " ".join(row["value"] for row in bridge.summaryRows)
+    assert bridge.summaryRows[0]["value"] == "Material 3"
     assert bridge.nextLabel == "Open my week"
     # Finish: the Material week opens.
     bridge.setupNext()
