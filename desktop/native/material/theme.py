@@ -11,8 +11,9 @@ import json
 import sys
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
-from desktop.native.tokens import contrast
+from desktop.native.tokens import contrast, fit_lightness
 
 PRESETS = ("Blue", "Sea", "Forest", "Gold", "Rose", "Plum")
 MODES = ("light", "dark")
@@ -235,3 +236,325 @@ def register_fonts() -> tuple[int, ...]:
         if ident >= 0:
             ids.append(ident)
     return tuple(ids)
+
+
+# Advanced settings sit on the preset. None means "the component's own value", so an untouched
+# Done does not restyle the week. Seed colour and palette style are not here: they wait for the
+# palette generator.
+CORNER_RANGE = (0, 28)
+SCALE_RANGE = (0.9, 1.3)
+HOUR_RANGE = (36, 90)
+PAD_RANGE = (4, 24)
+SHADOW_RANGE = (0, 3)
+MOTION_SPEEDS = ("Slower", "Normal", "Faster", "Off")
+BLOCK_STYLES = ("Edge", "Filled", "Outline")
+HOUR_LINES = ("None", "Faint", "Clear")
+CATEGORY_KEYS = ("school", "sports", "study", "homework")
+LOOK_KIND = "FlexWeek material look"
+LOOK_VERSION = 1
+_CATEGORY_ROLE = {"school": "school", "sports": "soccer", "study": "reading", "homework": "homework"}
+
+
+def advanced_default() -> dict[str, Any]:
+    """The advanced draft before anyone moves a dial."""
+    return {
+        "corner": None,
+        "hour": None,
+        "padding": None,
+        "rail": True,
+        "scale": 1.0,
+        "motion": "Normal",
+        "shadow": None,
+        "block": "Edge",
+        "lines": "Faint",
+        "today": True,
+        "times": True,
+        "lengths": False,
+        "now": None,
+        "cat": {key: None for key in CATEGORY_KEYS},
+    }
+
+
+def _hex(value: object) -> str | None:
+    if not isinstance(value, str) or len(value) != 7 or not value.startswith("#"):
+        return None
+    try:
+        int(value[1:], 16)
+    except ValueError:
+        return None
+    return value.lower()
+
+
+def _int_in(value: object, bounds: tuple[int, int]) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    low, high = bounds
+    if low <= value <= high:
+        return value
+    return None
+
+
+def _float_in(value: object, bounds: tuple[float, float]) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = round(float(value), 2)
+    low, high = bounds
+    if low - 1e-9 <= number <= high + 1e-9:
+        return number
+    return None
+
+
+def read_advanced(stored: object) -> dict[str, Any]:
+    """Advanced dials from the look file. A missing or unknown value stays at the default."""
+    found = advanced_default()
+    material = stored.get("material") if isinstance(stored, dict) else None
+    raw = material.get("advanced") if isinstance(material, dict) else None
+    if not isinstance(raw, dict):
+        return found
+    corner = _int_in(raw.get("corner"), CORNER_RANGE)
+    if corner is not None:
+        found["corner"] = corner
+    hour = _int_in(raw.get("hour"), HOUR_RANGE)
+    if hour is not None:
+        found["hour"] = hour
+    padding = _int_in(raw.get("padding"), PAD_RANGE)
+    if padding is not None:
+        found["padding"] = padding
+    if isinstance(raw.get("rail"), bool):
+        found["rail"] = raw["rail"]
+    scale = _float_in(raw.get("scale"), SCALE_RANGE)
+    if scale is not None:
+        found["scale"] = scale
+    if raw.get("motion") in MOTION_SPEEDS:
+        found["motion"] = raw["motion"]
+    shadow = _int_in(raw.get("shadow"), SHADOW_RANGE)
+    if shadow is not None:
+        found["shadow"] = shadow
+    if raw.get("block") in BLOCK_STYLES:
+        found["block"] = raw["block"]
+    if raw.get("lines") in HOUR_LINES:
+        found["lines"] = raw["lines"]
+    if isinstance(raw.get("today"), bool):
+        found["today"] = raw["today"]
+    if isinstance(raw.get("times"), bool):
+        found["times"] = raw["times"]
+    if isinstance(raw.get("lengths"), bool):
+        found["lengths"] = raw["lengths"]
+    now = _hex(raw.get("now"))
+    if now is not None:
+        found["now"] = now
+    cats = raw.get("cat")
+    if isinstance(cats, dict):
+        for key in CATEGORY_KEYS:
+            colour = _hex(cats.get(key))
+            if colour is not None:
+                found["cat"][key] = colour
+    return found
+
+
+def read_shortcuts(stored: object) -> bool:
+    """Keyboard shortcuts stay on unless the look file turns them off."""
+    material = stored.get("material") if isinstance(stored, dict) else None
+    if isinstance(material, dict) and isinstance(material.get("shortcuts"), bool):
+        return bool(material["shortcuts"])
+    return True
+
+
+def read_saved_material(stored: object) -> list[dict[str, Any]]:
+    """Named material looks kept beside the preset. A broken entry is left out."""
+    material = stored.get("material") if isinstance(stored, dict) else None
+    raw = material.get("saved") if isinstance(material, dict) else None
+    if not isinstance(raw, list):
+        return []
+    kept: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict) or not isinstance(item.get("name"), str) or not item["name"].strip():
+            continue
+        choice = read_material_choice({"material": item})
+        kept.append(
+            {
+                "name": item["name"].strip(),
+                "preset": choice["preset"],
+                "mode": choice["mode"],
+                "contrast": choice["contrast"],
+                "density": choice["density"],
+                "advanced": read_advanced({"material": {"advanced": item.get("advanced")}}),
+            }
+        )
+    return kept
+
+
+def advanced_overrides(advanced: dict[str, Any]) -> dict[str, Any]:
+    """Only the dials that differ from the default, so a preset can stay in charge of the rest."""
+    default = advanced_default()
+    changed: dict[str, Any] = {}
+    for key, value in advanced.items():
+        if key == "cat":
+            colours = {
+                name: colour for name, colour in (value or {}).items() if name in CATEGORY_KEYS and colour
+            }
+            if colours:
+                changed["cat"] = colours
+        elif value != default.get(key):
+            changed[key] = value
+    return changed
+
+
+def pack_material(
+    choice: dict[str, str],
+    advanced: dict[str, Any],
+    shortcuts: bool,
+    saved: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """The `material` object written into the look file."""
+    body: dict[str, Any] = {
+        "preset": choice["preset"],
+        "mode": choice["mode"],
+        "contrast": choice["contrast"],
+        "density": choice["density"],
+        "shortcuts": bool(shortcuts),
+        "advanced": advanced,
+    }
+    if saved:
+        body["saved"] = saved
+    return body
+
+
+def store_material(path: Path, material: dict[str, Any]) -> None:
+    """Put `material` on the look file and leave every other key where it was."""
+    try:
+        stored = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        stored = {}
+    if not isinstance(stored, dict):
+        stored = {}
+    stored["material"] = material
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(stored) + "\n", encoding="utf-8")
+
+
+def kept_material(path: Path) -> dict[str, Any] | None:
+    """The material object already in the look file, so a later save of the widgets look keeps it."""
+    try:
+        stored = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    material = stored.get("material") if isinstance(stored, dict) else None
+    return material if isinstance(material, dict) else None
+
+
+def hour_row_px(density: str, advanced: dict[str, Any]) -> int:
+    """The week row. An advanced hour replaces the density's row; anything else uses the density."""
+    hour = advanced.get("hour")
+    if isinstance(hour, int):
+        return hour
+    return int(DENSITY[density if density in DENSITY else DEFAULT_DENSITY]["hour_row"])
+
+
+def dress_theme(theme: dict[str, Any], advanced: dict[str, Any]) -> dict[str, Any]:
+    """The theme object plus the advanced dials that actually differ from the components' own values."""
+    dressed = dict(theme)
+    over = advanced_overrides(advanced)
+    if "corner" in over:
+        dressed["corner"] = over["corner"]
+    if "scale" in over:
+        dressed["typeScale"] = over["scale"]
+    if "shadow" in over:
+        dressed["shadow"] = over["shadow"]
+    if "block" in over:
+        dressed["blockStyle"] = over["block"]
+    if "lines" in over:
+        dressed["hourLines"] = over["lines"]
+    if "today" in over:
+        dressed["todayHighlight"] = over["today"]
+    if "times" in over:
+        dressed["showTimes"] = over["times"]
+    if "lengths" in over:
+        dressed["showLengths"] = over["lengths"]
+    if "rail" in over:
+        dressed["railLabels"] = over["rail"]
+    if "padding" in over:
+        dressed["cardPad"] = over["padding"]
+    if "now" in over:
+        dressed["nowLine"] = over["now"]
+    if advanced.get("motion") == "Off":
+        dressed["reduceMotion"] = True
+    # Normal is the components' own speed. Naming it on every theme would change the object a
+    # student has not touched.
+    if advanced.get("motion") not in (None, "Normal"):
+        dressed["motionSpeed"] = advanced["motion"]
+    for name, colour in (over.get("cat") or {}).items():
+        dressed["cat" + name[0].upper() + name[1:]] = colour
+    return dressed
+
+
+def export_document(choice: dict[str, str], advanced: dict[str, Any]) -> str:
+    """The advanced page's export: the basic look and the draft, for a later import."""
+    return json.dumps(
+        {
+            "kind": LOOK_KIND,
+            "version": LOOK_VERSION,
+            "preset": choice["preset"],
+            "mode": choice["mode"],
+            "contrast": choice["contrast"],
+            "density": choice["density"],
+            "advanced": advanced,
+        },
+        indent=2,
+    )
+
+
+def import_document(text: str) -> tuple[dict[str, Any] | None, str]:
+    """A document from `export_document`, or a sentence saying why it was refused."""
+    try:
+        raw = json.loads(text)
+    except ValueError:
+        return None, "That file is not a FlexWeek material look."
+    if not isinstance(raw, dict) or raw.get("kind") != LOOK_KIND or raw.get("version") != LOOK_VERSION:
+        return None, "That file is not a FlexWeek material look."
+    choice = read_material_choice({"material": raw})
+    advanced = read_advanced({"material": {"advanced": raw.get("advanced")}})
+    return {"choice": choice, "advanced": advanced}, ""
+
+
+def reading_problems(mode: str, advanced: dict[str, Any]) -> list[dict[str, Any]]:
+    """Category colours the student set that read under 4.5 to 1 against that category's ink.
+
+    Seed colours are not checked here. They belong to the palette generator, which is not in yet.
+    """
+    problems: list[dict[str, Any]] = []
+    cats = advanced.get("cat") or {}
+    for key in CATEGORY_KEYS:
+        fill = cats.get(key)
+        if not isinstance(fill, str):
+            continue
+        _ground, ink = category_paint(_CATEGORY_ROLE[key], mode)
+        ratio = contrast(ink, fill)
+        if ratio >= 4.5:
+            continue
+        problems.append(
+            {
+                "words": f"{key} colour on its ink",
+                "role": key,
+                "ink": ink,
+                "ground": fill,
+                "ratio": round(ratio, 2),
+                "fixed": fit_lightness(fill, (ink,), 4.5),
+            }
+        )
+    now = advanced.get("now")
+    if isinstance(now, str):
+        surface = "#1a1c20" if mode == "dark" else "#ffffff"
+        ratio = contrast(now, surface)
+        if ratio < 3.0:
+            problems.append(
+                {
+                    "words": "now line on the page",
+                    "role": "now",
+                    "ink": now,
+                    "ground": surface,
+                    "ratio": round(ratio, 2),
+                    "fixed": fit_lightness(now, (surface,), 3.0),
+                }
+            )
+    return problems
