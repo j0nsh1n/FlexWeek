@@ -276,8 +276,8 @@ def child_main(args: argparse.Namespace) -> int:
     )
 
     QStandardPaths.setTestModeEnabled(True)
-    clean_look_file()
     app = QApplication(["flexweek-rig"])
+    clean_look_file()
     python_errors: list[str] = []
 
     def on_error(kind: type, value: BaseException, tb: object) -> None:
@@ -1006,9 +1006,7 @@ def child_main(args: argparse.Namespace) -> int:
             window._on_week()
             yield ("wait", 200)
 
-        yield from r.drag(
-            middle(box), r.carried(middle(box), 19 * 60, 4, 18 * 60), held=meanwhile, rest=100
-        )
+        yield from r.drag(middle(box), r.carried(middle(box), 19 * 60, 4, 18 * 60), held=meanwhile, rest=100)
         yield from r.settled()
         essays = [b for b in session.blocks if b.get("assignment_id") == "essay"]
         expect(

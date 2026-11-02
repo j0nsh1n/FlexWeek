@@ -71,10 +71,12 @@ def past_setup(qapp: QApplication, window: object) -> None:
     window.setup_page.skip_all.click()  # type: ignore[attr-defined]
     wait_until(
         qapp,
-        lambda: on("weekPage")
-        and window.session.preferences is not None  # type: ignore[attr-defined]
-        and not window._setup_prefs  # type: ignore[attr-defined]
-        and not window.session.busy,  # type: ignore[attr-defined]
+        lambda: (
+            (on("weekPage") or on("materialPage"))
+            and window.session.preferences is not None  # type: ignore[attr-defined]
+            and not window._setup_prefs  # type: ignore[attr-defined]
+            and not window.session.busy
+        ),  # type: ignore[attr-defined]
     )
 
 
