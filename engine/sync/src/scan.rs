@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
 use crate::{SyncResult, clock::next_hlc, digest, records::live};
@@ -38,6 +38,7 @@ pub(crate) fn scan_in(tx: &Connection, user_id: i64, now_ms: i64) -> SyncResult<
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     )?;
     let (device_id, mut hlc, mut seq) = device;
+    let chosen = planner_settings_chosen(tx, user_id)?;
     let mut count = 0;
     for ((entity, key), body) in &current {
         let hash = digest(body);
@@ -49,10 +50,11 @@ pub(crate) fn scan_in(tx: &Connection, user_id: i64, now_ms: i64) -> SyncResult<
             continue;
         }
         // A column added by migration still holds its schema default. Publishing
-        // that as a new edit lets a phone that has never been opened overwrite a
-        // desktop that already chose something else. Once a record exists, a
-        // later edit back to the default is a real choice and is stamped.
-        if !known.contains_key(&name) && untouched_migration_default(entity, key, body) {
+        // that as a new edit lets a phone that has never saved settings overwrite
+        // a desktop that already chose something else. Saving settings, even back
+        // to the default, sets planner_settings_chosen, and that choice is stamped.
+        // Once a record exists, a later edit back to the default is stamped too.
+        if !chosen && !known.contains_key(&name) && untouched_migration_default(entity, key, body) {
             continue;
         }
         hlc = next_hlc(hlc, now_ms)?;
@@ -74,6 +76,17 @@ pub(crate) fn scan_in(tx: &Connection, user_id: i64, now_ms: i64) -> SyncResult<
         params![hlc, seq],
     )?;
     Ok(count)
+}
+
+fn planner_settings_chosen(tx: &Connection, user_id: i64) -> SyncResult<bool> {
+    let chosen: Option<i64> = tx
+        .query_row(
+            "SELECT planner_settings_chosen FROM preferences WHERE user_id = ?1",
+            [user_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(chosen.is_some_and(|value| value != 0))
 }
 
 fn untouched_migration_default(entity: &str, key: &str, body: &Value) -> bool {

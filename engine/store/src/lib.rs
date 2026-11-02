@@ -39,6 +39,8 @@ const PREFERENCES_TABLE: &str = r#"
             CHECK(split_long_tasks IN (0, 1)),
         show_weekends INTEGER NOT NULL DEFAULT 1
             CHECK(show_weekends IN (0, 1)),
+        planner_settings_chosen INTEGER NOT NULL DEFAULT 0
+            CHECK(planner_settings_chosen IN (0, 1)),
         default_spotify_url TEXT,
         alarms_json TEXT NOT NULL DEFAULT '[]',
         availability_json TEXT NOT NULL DEFAULT '{}',
@@ -416,6 +418,7 @@ pub fn migrate_preferences(db: &Connection) -> StoreResult<()> {
         ("urgent_first", "INTEGER NOT NULL DEFAULT 1"),
         ("split_long_tasks", "INTEGER NOT NULL DEFAULT 0"),
         ("show_weekends", "INTEGER NOT NULL DEFAULT 1"),
+        ("planner_settings_chosen", "INTEGER NOT NULL DEFAULT 0"),
         ("default_spotify_url", "TEXT"),
         ("alarms_json", "TEXT NOT NULL DEFAULT '[]'"),
         ("availability_json", "TEXT NOT NULL DEFAULT '{}'"),

@@ -1144,3 +1144,36 @@ fn planner_settings_round_trip_and_an_unknown_pref_does_not_stop_the_batch() {
     assert_eq!(planner_prefs(&phone), (0, 0, 1, 0, 1));
     assert_eq!(planner_prefs(&desktop), (0, 0, 1, 0, 1));
 }
+
+fn save_planner(conn: &Connection, chosen: (i64, i64, i64, i64, i64)) {
+    let raw = flexweek_store::preference_row(conn, 1).unwrap().unwrap();
+    let mut fields: Value = serde_json::from_str(&raw).unwrap();
+    let (weekend, buffer, urgent, split, show) = chosen;
+    fields["weekend_homework_free"] = json!(weekend);
+    fields["buffer_min"] = json!(buffer);
+    fields["urgent_first"] = json!(urgent);
+    fields["split_long_tasks"] = json!(split);
+    fields["show_weekends"] = json!(show);
+    flexweek_store::write_preferences(conn, 1, &fields.to_string()).unwrap();
+    conn.execute_batch("COMMIT").unwrap();
+}
+
+#[test]
+fn an_explicit_return_to_the_defaults_beats_older_remote_choices() {
+    // Saved away from the defaults, then saved back, and nothing has been scanned yet.
+    // Those defaults are a choice. An older remote batch must not replace them.
+    let mut local = db("a", true);
+    save_planner(&local, (1, 15, 0, 1, 0));
+    save_planner(&local, (0, 0, 1, 0, 1));
+    let mut remote = db("b", true);
+    remote
+        .execute(
+            "UPDATE preferences SET weekend_homework_free=1, buffer_min=15, urgent_first=0,
+             split_long_tasks=1, show_weekends=0",
+            [],
+        )
+        .unwrap();
+    scan(&mut remote, 1, 1_000).unwrap();
+    apply_batch(&mut local, &batch(&remote, 0, "a"), 2_000).unwrap();
+    assert_eq!(planner_prefs(&local), (0, 0, 1, 0, 1));
+}

@@ -70,7 +70,8 @@ pub fn write_preferences(conn: &Connection, user_id: i64, fields_json: &str) -> 
             timer_long_break_min = ?8, timer_long_break_every = ?9, auto_split_pomodoro = ?10,
             default_spotify_url = ?11, alarms_json = ?12, availability_json = ?13, comfort_json = ?14,
             weekend_homework_free = ?15, buffer_min = ?16, urgent_first = ?17,
-            split_long_tasks = ?18, show_weekends = ?19
+            split_long_tasks = ?18, show_weekends = ?19,
+            planner_settings_chosen = 1
         WHERE user_id = ?20",
         params![
             crate::json_str(&fields, "theme")?,
