@@ -25,7 +25,7 @@ from PySide6.QtCore import (
 
 from desktop.native.material.theme import DENSITY, paint_for_category, scheme, stroke_for
 from desktop.native.reuse import planner_title
-from desktop.native.weekmodel import build_week, clock_label, set_clock_24h
+from desktop.native.weekmodel import clock_label, set_clock_24h
 
 
 class _Session(Protocol):
@@ -48,17 +48,19 @@ class _Session(Protocol):
 
     def homework_time_needed(self) -> list: ...
 
+    def built_week(self) -> Any: ...
+
 
 class _Window(Protocol):
     session: _Session
-    more_button: Any
-    more_menu: Any
 
     def _add_homework(self) -> None: ...
 
     def _look_inputs(self) -> tuple: ...
 
     def _worn_look(self) -> dict: ...
+
+    def open_material_more(self) -> None: ...
 
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -140,6 +142,7 @@ class MaterialBridge(QObject):
 
     def __init__(self, window: QObject) -> None:
         super().__init__(window)
+        self.setObjectName("materialBridge")
         self._window = cast(_Window, window)
         self._mode = "light"
         self._contrast = "std"
@@ -181,12 +184,7 @@ class MaterialBridge(QObject):
         self._day_headers = [
             f"{DAYS[index]} {(start + timedelta(days=index)).day}" for index in range(7)
         ]
-        model = build_week(
-            session.week_start,
-            session.blocks,
-            session.assignments,
-            session.trace,
-        )
+        model = session.built_week()
         for item in model.occurrences:
             fill, ink = paint_for_category(item.category, self._mode)
             self._block_rows.append(
@@ -345,8 +343,7 @@ class MaterialBridge(QObject):
 
     @Slot()
     def openMore(self) -> None:
-        button = self._window.more_button
-        self._window.more_menu.popup(button.mapToGlobal(button.rect().bottomLeft()))
+        self._window.open_material_more()
 
     @Slot()
     def addHomework(self) -> None:
