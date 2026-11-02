@@ -13,6 +13,7 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ### Fixed
 - Overdue count announcements use the visible More control, with a window fallback while Settings is open.
+- Material keeps an unsent Settings change across a swap back, shows a visible fallback when it cannot open, and does not retry that version at start-up until the student chooses Material again or the app version changes. Its clock keeps moving, More lists only actions that work on Material, and Add homework works from the keyboard.
 
 ## [1.2.0] - 2026-10-26
 

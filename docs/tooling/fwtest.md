@@ -163,7 +163,8 @@ Steps, each an object with one action:
   widget and the open dialog. Password boxes show `(hidden)`.
 - `say`: a note in the log.
 - `see`: the words or an `objectName` that must be on screen, including a QML item. The rig finds QML
-  by walking visual children and uses the item's real position. A miss is `NOT DONE`.
+  by walking visual children and uses the item's real position. A QML item clipped away by a parent
+  or the window is not seen or clicked, and a click lands in the visible part. A miss is `NOT DONE`.
 
 Every step writes one line to `DIR/log.txt`: what it did, where the pointer went, the widget with focus,
 the open dialog and the open menu. A step that cannot be done (no such widget or text, a dialog in the
