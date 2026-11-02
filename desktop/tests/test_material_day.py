@@ -431,6 +431,9 @@ def test_the_day_screen_has_the_named_controls(qapp: QApplication, window: Nativ
         "dayStartFocus",
         "dayFinish",
         "dayMonthToggle",
+        "dayMonthSide",
+        "dayMiniMonth",
+        "dayNowLabel",
         "dayUpNext",
         "dayDone",
     ):

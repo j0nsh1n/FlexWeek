@@ -18,6 +18,7 @@ Column {
     M3Palette { id: palette; theme: root.theme }
 
     Text {
+        objectName: root.scope + "NowLabel"
         text: "Now"
         color: palette.inkMuted
         font.family: M3Font.family

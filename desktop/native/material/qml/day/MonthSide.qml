@@ -3,6 +3,7 @@ import components 1.0
 
 Item {
     id: root
+    objectName: "dayMonthSide"
     property var theme
     property string density: "comfortable"
     property bool reduceMotion: false
@@ -49,6 +50,7 @@ Item {
     }
 
     MiniMonth {
+        objectName: "dayMiniMonth"
         x: 16
         y: 64
         visible: root.open
