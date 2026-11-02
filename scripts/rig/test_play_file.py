@@ -19,6 +19,17 @@ def _parse(raw: object, name: str = "p") -> play.Play:
     return play.parse_play(raw, name, DESIGNS, LOOKS)
 
 
+def test_see_names_what_should_be_on_screen():
+    got = _parse({"steps": [{"see": "School"}, {"see": "materialWeek"}]})
+    assert [step.action for step in got.steps] == ["see", "see"]
+    assert got.steps[0].value == "School"
+
+
+def test_see_without_words_is_refused():
+    with pytest.raises(play.PlayError, match="see needs the words"):
+        _parse({"steps": [{"see": "  "}]})
+
+
 def test_a_full_play_reads_as_written():
     got = _parse(
         {

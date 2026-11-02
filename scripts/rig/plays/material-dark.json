@@ -1,0 +1,21 @@
+{
+  "setup": {
+    "seed": "rig",
+    "look": "dark-frost",
+    "size": [1280, 800],
+    "clock_24h": false
+  },
+  "steps": [
+    {"click": "settingsGear"},
+    {"wait": 600},
+    {"click": "chooseMaterial"},
+    {"wait": 1000},
+    {"see": "School"},
+    {"see": "materialRail"},
+    {"shot": "material-dark"},
+    {"click": "navSettings"},
+    {"click": "useWidgets"},
+    {"wait": 800},
+    {"see": "Math worksheet"}
+  ]
+}

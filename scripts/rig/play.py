@@ -31,6 +31,7 @@ ACTIONS = (
     "shot",
     "tree",
     "say",
+    "see",
 )
 SETUP_KEYS = ("clock", "seed", "size", "design", "clock_24h", "text", "look")
 SEEDS = ("rig", "empty", "setup-done")
@@ -182,6 +183,10 @@ def _parse_step(raw: object) -> Step:
         if not isinstance(value, str) or not value.strip():
             raise ValueError("say needs a note")
         return Step(action, value)
+    if action == "see":
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("see needs the words or objectName that should be on screen")
+        return Step(action, value)
     raise ValueError(f"{action!r} is not an action. Actions: {', '.join(ACTIONS)}")
 
 
@@ -283,6 +288,89 @@ def apply_play_look(window, session, setup: Setup) -> str | None:
     window._carry_look()
     window._carried = window._read_carried()
     return pack
+
+
+def visual_items(root: object) -> list:
+    """The item and every visual child. Repeater rows are visual children, not QObject children,
+    and Repeater.itemAt returns None through PySide."""
+    found = [root]
+    children = getattr(root, "childItems", None)
+    if children is None:
+        return found
+    for child in children():
+        found.extend(visual_items(child))
+    return found
+
+
+def qml_click_targets(widgets: object, kind: str, wanted: str) -> list:
+    """Global points on visible QML items, so a play can click one by objectName or by its words."""
+    from PySide6.QtCore import QPoint, QPointF
+    from PySide6.QtQuickWidgets import QQuickWidget
+
+    found = []
+    for widget in widgets:  # type: ignore[union-attr]
+        if not isinstance(widget, QQuickWidget) or not widget.isVisible():
+            continue
+        root = widget.rootObject()
+        if root is None:
+            continue
+        host = widget.window()
+        for item in visual_items(root):
+            if not item.isVisible() or item.width() < 1 or item.height() < 1:
+                continue
+            name = str(item.objectName() or "")
+            text = item.property("text")
+            shown = text if isinstance(text, str) else ""
+            if kind == "name":
+                score = 2 if name == wanted else 0
+            else:
+                score = max(matches_words(wanted, shown), matches_words(wanted, name))
+            if not score:
+                continue
+            # Through the widget. A QQuickItem's own mapToGlobal is not the screen point.
+            centre = item.mapToItem(root, QPointF(item.width() / 2, item.height() / 2))
+            spot = widget.mapToGlobal(QPoint(int(centre.x()), int(centre.y())))
+            label = f'qml {name or "item"} "{shown[:40]}"' if shown else f"qml {name or 'item'}"
+            found.append((score, spot, label, host))
+    return found
+
+
+def qml_tree_entries(quick: object, window: object, depth: int) -> list[dict]:
+    """QML rows for a play's tree, in window pixels."""
+    from PySide6.QtCore import QPoint, QPointF
+
+    root = quick.rootObject()  # type: ignore[attr-defined]
+    if root is None:
+        return []
+    rows = []
+    for item in visual_items(root):
+        if not item.isVisible():
+            continue
+        corner = item.mapToItem(root, QPointF(0, 0))
+        in_window = quick.mapTo(  # type: ignore[attr-defined]
+            window, QPoint(int(corner.x()), int(corner.y()))
+        )
+        text = item.property("text")
+        rows.append(
+            {
+                "class": item.metaObject().className(),
+                "objectName": str(item.objectName() or ""),
+                "accessibleName": "",
+                "accessibleDescription": "",
+                "text": text if isinstance(text, str) else "",
+                "geometry": [
+                    in_window.x(),
+                    in_window.y(),
+                    int(item.width()),
+                    int(item.height()),
+                ],
+                "enabled": True,
+                "hasFocus": bool(item.hasFocus()) if hasattr(item, "hasFocus") else False,
+                "checked": None,
+                "depth": depth,
+            }
+        )
+    return rows
 
 
 class CannotDo(Exception):
@@ -457,6 +545,7 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
             if kind == "text":
                 for score, spot, label in list_item_targets(widget, wanted):
                     found.append((score, spot, label, widget.window()))
+        found.extend(qml_click_targets(list(everything), kind, wanted))
         return sorted(found, key=lambda item: (-item[0], item[1].y(), item[1].x()))
 
     def locate(target: tuple[str, object]) -> tuple[QPoint, str]:
@@ -578,6 +667,8 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
             for action in widget.actions():
                 if action.isVisible() and not action.isSeparator():
                     into.append(menu_entry(widget, action, depth + 1))
+        if type(widget).__name__ == "QQuickWidget":
+            into.extend(qml_tree_entries(widget, window, depth + 1))
         for child in widget.children():
             if isinstance(child, QWidget) and not child.isWindow() and is_shown(child):
                 walk(child, depth + 1, into)
@@ -646,6 +737,11 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
             return "wrote " + ", ".join(save_shots(str(value), number))
         if action == "tree":
             return "wrote " + save_tree(str(value), number)
+        if action == "see":
+            found = candidates("name", str(value)) or candidates("text", str(value))
+            if not found:
+                raise CannotDo(f"cannot see {value!r}")
+            return f"saw {found[0][2]}"
         return str(value)
 
     results = {"done": 0, "not_done": 0}
@@ -730,4 +826,6 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
         f"Log, shots and trees in {out}"
     )
     log_file.close()
-    return 0 if finished else 1
+    if not finished or results["not_done"]:
+        return 1
+    return 0
