@@ -5445,10 +5445,11 @@ class NativeWindow(QMainWindow):
             if (self.session.storage_info or {}).get("mode") == "hosted"
             else "this computer"
         )
-        if confirm(self, "Sign out", SIGN_OUT_QUESTION.format(where=where), "Sign out", danger=False):
-            # Same wait as closing: an unsent Settings change has to reach the server, or stay on screen.
-            if self._save_before_leaving(self.session.logout, again="sign out again"):
-                self.session.logout()
+        # Same wait as closing: an unsent Settings change has to reach the server, or stay on screen.
+        if confirm(
+            self, "Sign out", SIGN_OUT_QUESTION.format(where=where), "Sign out", danger=False
+        ) and self._save_before_leaving(self.session.logout, again="sign out again"):
+            self.session.logout()
 
     def _open_help(self) -> None:
         HelpDialog(self).exec()
