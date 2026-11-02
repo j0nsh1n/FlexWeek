@@ -721,6 +721,170 @@ def _assert_shortcuts_blocked(qapp: QApplication, window: NativeWindow, root: QO
         assert any(name in chain for name in names)
 
 
+def _week_marks(window: NativeWindow) -> tuple:
+    return tuple(
+        (
+            str(block.get("id")),
+            block.get("start"),
+            tuple(block.get("days") or []),
+            bool(block.get("completed")),
+        )
+        for block in window.session.blocks
+    )
+
+
+def _tools(root: QObject) -> QObject:
+    return _qml(root, "materialUndo").parentItem()
+
+
+def _prompt_child(prompt: QObject, *names: str) -> QObject | None:
+    for name in names:
+        for item in _named(prompt, name):
+            return item
+    return None
+
+
+def _assert_prompt_owns_keys(
+    qapp: QApplication, window: NativeWindow, root: QObject, prompt: QObject
+) -> None:
+    prompt.forceActiveFocus()
+    _pump(qapp)
+    _assert_shortcuts_blocked(qapp, window, root)
+    cancel = _prompt_child(prompt, "prompt_cancel", "prompt_close")
+    if cancel is not None:
+        cancel.forceActiveFocus()
+        _pump(qapp)
+        _assert_shortcuts_blocked(qapp, window, root)
+        QTest.keyClick(window._material_page._quick, Qt.Key.Key_Backtab)
+        _pump(qapp, 3)
+        chain = _lineage(window._material_page._quick.quickWindow().activeFocusItem())
+        assert any(
+            name in chain
+            for name in (
+                "savePrompt",
+                "importPrompt",
+                "exportPrompt",
+                "presetPrompt",
+                "promptCard",
+                "promptField",
+                "prompt_cancel",
+                "prompt_close",
+                "prompt_save",
+                "prompt_import",
+                "prompt_copy",
+                "prompt_keep",
+                "prompt_discard",
+            )
+        )
+
+
+def _assert_top_bar_idle(qapp: QApplication, window: NativeWindow, root: QObject) -> None:
+    bridge = _bridge(window)
+    marks = _week_marks(window)
+    undoable = window.session.can_undo()
+    redoable = window.session.can_redo()
+    tools = _tools(root)
+    undo = _qml(root, "materialUndo")
+    redo = _qml(root, "materialRedo")
+    more = _qml(root, "materialMore")
+    assert tools.property("enabled") is False
+    assert undo.property("enabled") is False
+    assert redo.property("enabled") is False
+    assert more.property("enabled") is False
+    _click(qapp, window, undo)
+    assert _week_marks(window) == marks
+    assert window.session.can_undo() is undoable
+    _click(qapp, window, redo)
+    assert _week_marks(window) == marks
+    assert window.session.can_redo() is redoable
+    _click(qapp, window, more)
+    assert bridge.sheets.moreOpen is False
+    assert bridge.property("screen") == "settings"
+
+
+def test_settings_prompts_block_the_top_bar_pointer(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Undo, Redo and More must not act while a Settings prompt is open."""
+    root = _open_settings(qapp, window)
+    panel = _panel(window)
+    bridge = _bridge(window)
+    try:
+        if not window.session.can_undo():
+            window.session.complete_homework("essay")
+            window.session.save()
+            wait_until(qapp, lambda: not window.session.busy and window.session.can_undo())
+        marks_before = _week_marks(window)
+        assert window.session.can_undo()
+        panel.openAdvanced()
+        _pump(qapp)
+        for open_prompt, name, has_field in (
+            (panel.beginSave, "savePrompt", True),
+            (panel.beginImport, "importPrompt", True),
+            (panel.beginExport, "exportPrompt", False),
+        ):
+            open_prompt()
+            _pump(qapp)
+            prompt = _named(root, name)[0]
+            assert prompt.property("open")
+            _assert_top_bar_idle(qapp, window, root)
+            _assert_prompt_owns_keys(qapp, window, root, prompt)
+            if has_field:
+                field = _prompt_child(prompt, "fieldInput")
+                assert field is not None
+                field.forceActiveFocus()
+                _pump(qapp)
+                before = str(field.property("text") or "")
+                QTest.keyClick(window._material_page._quick, Qt.Key.Key_2)
+                _pump(qapp)
+                assert str(field.property("text") or "") == before + "2"
+                assert bridge.property("screen") == "settings"
+            cancel = _prompt_child(prompt, "prompt_cancel", "prompt_close")
+            assert cancel is not None
+            assert cancel.property("enabled") is True
+            _click(qapp, window, cancel)
+            _pump(qapp)
+            assert prompt.property("open") is False
+        panel.setCorner(4)
+        panel.done()
+        _pump(qapp)
+        panel.setPreset("Sea")
+        _pump(qapp)
+        prompt = _named(root, "presetPrompt")[0]
+        assert prompt.property("open")
+        _assert_top_bar_idle(qapp, window, root)
+        _assert_prompt_owns_keys(qapp, window, root, prompt)
+        keep = _named(root, "prompt_keep")[0]
+        assert keep.property("enabled") is True
+        panel.answerPreset("cancel")
+        _pump(qapp)
+        assert panel.property("promptOpen") is False
+        tools = _tools(root)
+        undo = _qml(root, "materialUndo")
+        more = _qml(root, "materialMore")
+        assert tools.property("enabled") is True
+        assert undo.property("enabled") is True
+        assert more.property("enabled") is True
+        _click(qapp, window, more)
+        assert bridge.sheets.moreOpen is True
+        bridge.sheets.closeMore()
+        _pump(qapp)
+        _click(qapp, window, undo)
+        wait_until(qapp, lambda: not window.session.busy)
+        assert _week_marks(window) != marks_before
+        root.forceActiveFocus()
+        _pump(qapp)
+        QTest.keyClick(window._material_page._quick, Qt.Key.Key_2)
+        _pump(qapp)
+        assert bridge.property("screen") == "week"
+    finally:
+        bridge.sheets.closeMore()
+        panel.answerPreset("cancel")
+        panel.dismissPrompt()
+        panel.closeAdvanced()
+        _reset(window)
+
+
 def test_settings_prompts_block_shell_shortcuts_and_keep_tab(
     qapp: QApplication, window: NativeWindow
 ) -> None:

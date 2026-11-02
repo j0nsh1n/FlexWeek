@@ -240,6 +240,7 @@ Item {
                     anchors.rightMargin: 8
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 4
+                    enabled: !root.settingsPromptOpen
 
                     IconButton {
                         objectName: "weekPrevious"
@@ -311,7 +312,7 @@ Item {
                         highContrast: root.highContrast
                         icon: "undo"
                         accessName: "Undo"
-                        enabled: bridge.canUndo
+                        enabled: bridge.canUndo && !root.settingsPromptOpen
                         onClicked: bridge.undo()
                     }
 
@@ -323,7 +324,7 @@ Item {
                         highContrast: root.highContrast
                         icon: "redo"
                         accessName: "Redo"
-                        enabled: bridge.canRedo
+                        enabled: bridge.canRedo && !root.settingsPromptOpen
                         onClicked: bridge.redo()
                     }
 
@@ -335,6 +336,7 @@ Item {
                         highContrast: root.highContrast
                         icon: "more_vert"
                         accessName: "More"
+                        enabled: !root.settingsPromptOpen
                         onClicked: bridge.openMore()
                     }
                 }
