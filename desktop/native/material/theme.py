@@ -100,3 +100,138 @@ def category_paint(role: str, mode: str) -> tuple[str, str]:
 def paint_for_category(category: str, mode: str) -> tuple[str, str]:
     """A week block's category key (`class`, `assignments`, …) as a Material fill and ink."""
     return category_paint(ROLE_FOR_CATEGORY.get(category, "neutral"), mode)
+
+
+# EventBlock's own names. Soccer and reading use different words there than the fill table.
+EVENT_CATEGORY = {
+    "class": "school",
+    "exercise": "sports",
+    "extra": "sports",
+    "study": "study",
+    "assignments": "homework",
+}
+# Every camelCase role the component README lists, in that order.
+THEME_ROLES = (
+    "primary",
+    "onPrimary",
+    "primaryContainer",
+    "onPrimaryContainer",
+    "secondary",
+    "onSecondary",
+    "secondaryContainer",
+    "onSecondaryContainer",
+    "tertiary",
+    "onTertiary",
+    "tertiaryContainer",
+    "onTertiaryContainer",
+    "error",
+    "onError",
+    "errorContainer",
+    "onErrorContainer",
+    "surface",
+    "onSurface",
+    "onSurfaceVariant",
+    "surfaceContainerLowest",
+    "surfaceContainerLow",
+    "surfaceContainer",
+    "surfaceContainerHigh",
+    "surfaceContainerHighest",
+    "surfaceVariant",
+    "outline",
+    "outlineVariant",
+    "inverseSurface",
+    "inverseOnSurface",
+    "inversePrimary",
+)
+# QML treats a name starting with "on" as a signal handler. The same object carries both.
+INK_ALIASES = {
+    "onPrimary": "inkPrimary",
+    "onPrimaryContainer": "inkPrimaryContainer",
+    "onSecondary": "inkSecondary",
+    "onSecondaryContainer": "inkSecondaryContainer",
+    "onTertiary": "inkTertiary",
+    "onTertiaryContainer": "inkTertiaryContainer",
+    "onError": "inkError",
+    "onErrorContainer": "inkErrorContainer",
+    "onSurface": "inkSurface",
+    "onSurfaceVariant": "inkMuted",
+}
+SAVED_MODES = ("system", "light", "dark")
+DEFAULT_PRESET = "Blue"
+DEFAULT_MODE = "system"
+DEFAULT_CONTRAST = "std"
+DEFAULT_DENSITY = "comfortable"
+FONT_FILES = (
+    "RobotoFlex-Regular.ttf",
+    "RobotoFlex-Medium.ttf",
+    "RobotoFlex-SemiBold.ttf",
+)
+ROBOTO_FLEX = "Roboto Flex"
+
+
+def qml_dir() -> Path:
+    """The directory `import components 1.0` is added from. Main.qml lives in it."""
+    return qml_path().parent
+
+
+def event_category(category: str) -> str:
+    """The EventBlock category for a week block. One the block does not know reads as homework."""
+    return EVENT_CATEGORY.get(category, "homework")
+
+
+def read_material_choice(stored: object) -> dict[str, str]:
+    """Preset, mode, contrast, and density from a look file's top-level `material` object.
+
+    A missing file, a missing object, or a value this build does not know falls back to Blue,
+    follow system, standard contrast, and comfortable. Nothing here raises.
+    """
+    material = stored.get("material") if isinstance(stored, dict) else None
+    raw = material if isinstance(material, dict) else {}
+    preset = raw.get("preset")
+    mode = raw.get("mode")
+    contrast_name = raw.get("contrast")
+    density = raw.get("density")
+    return {
+        "preset": preset if isinstance(preset, str) and preset in PRESETS else DEFAULT_PRESET,
+        "mode": mode if isinstance(mode, str) and mode in SAVED_MODES else DEFAULT_MODE,
+        "contrast": (
+            contrast_name
+            if isinstance(contrast_name, str) and contrast_name in CONTRASTS
+            else DEFAULT_CONTRAST
+        ),
+        "density": density if isinstance(density, str) and density in DENSITY else DEFAULT_DENSITY,
+    }
+
+
+def resolved_mode(mode: str, worn_dark: bool) -> str:
+    """`system` follows the worn look's light or dark axis. An explicit light or dark wins."""
+    if mode in MODES:
+        return mode
+    return "dark" if worn_dark else "light"
+
+
+def theme_object(
+    colours: dict[str, str], density: str, reduce_motion: bool, high_contrast: bool
+) -> dict[str, object]:
+    """One map for every control: the Material roles, the ink aliases, and the three shell flags."""
+    theme: dict[str, object] = {role: colours[role] for role in THEME_ROLES}
+    for source, alias in INK_ALIASES.items():
+        theme[alias] = colours[source]
+    theme["density"] = density
+    theme["reduceMotion"] = reduce_motion
+    theme["highContrast"] = high_contrast
+    return theme
+
+
+def register_fonts() -> tuple[int, ...]:
+    """Register the three Roboto Flex faces. The ids Qt returned, skipping a file it refused."""
+    from PySide6.QtGui import QFontDatabase
+
+    from desktop.native.fonts import FONT_DIR
+
+    ids: list[int] = []
+    for name in FONT_FILES:
+        ident = QFontDatabase.addApplicationFont(str(FONT_DIR / name))
+        if ident >= 0:
+            ids.append(ident)
+    return tuple(ids)
