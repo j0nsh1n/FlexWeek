@@ -18,6 +18,10 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- Material Settings Look labels and choices update legibly when switching between light and dark.
+- Pressing Return in Material setup commits and formats School times consistently.
+- Keyboard and accessibility actions inside Material settings previews leave live planner navigation and homework unchanged.
+- Bento's drag instruction stays above the floating Undo notice.
 - Tab and Backtab on a Material sheet or Settings prompt move between the open controls and wrap both ways, including from the last button back to the title field. The week, rail and Add button behind a sheet do not take the keyboard until the sheet closes.
 - Saving a second Material homework edit while the first save is still going no longer throws the second edit away. Save stays off and the draft stays until that save finishes. A fixed-time save or delete, and ticking homework finished on Day, wait the same way.
 - Tab stays on the Focus screen and its End dialog, not on the Add button or the rail underneath.

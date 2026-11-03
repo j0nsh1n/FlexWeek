@@ -1,6 +1,20 @@
 # context.md — FlexWeek
 
 ## Current State
+- 2026-11-03: Local static UI audit follow-ups reviewed through `92230b43`.
+  Material Look now propagates light/dark colours to its rows; School times commit and
+  format on Return. Day/Week/Month preview actions use passive projections, including
+  keyboard and Qt accessibility paths. Bento's drag instruction sits below its card
+  heading so the settled Undo toast does not cover it. Codex independently checked the
+  Gemini bundle (86 focused tests plus bounded probes); Gemini passed the small Codex
+  completion-slot/clipping follow-up, rerunning 17 tests (18.27s, 329 MB, zero job swap).
+  This does NOT complete the overhaul: cold Advanced Month preview still has no data,
+  and Bento's 1024px/Large/Saturday-Today headers drift up to 49px. Both repairs are
+  paused at Debugging Limits pending Jonathan's direction. The latest full gate failed
+  two clipping cases before subsequent repairs; no newer full-gate pass is claimed.
+  Capture filenames are not reached-state proof; several captures are mislabeled.
+  Source and focused evidence: `~/.flexweek-ui-harness/scratch/static-ui-audit-20261103/`.
+  No overhaul changes have been pushed or released; animation review remains deferred.
 - 2026-11-02: Material desktop overhaul lanes are integrated locally on
   `fix/visual-artifacts-20261026`, reviewed through `fdf0ed1c`. The wide Codex review's
   five blockers and subsequent modal-pointer and sheet-focus findings have fixes with
@@ -177,11 +191,13 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
-- Material integration: focused independent reviews complete through `fdf0ed1c`.
-  Next is one capped `fwtest gate` after Jonathan approves the whole-suite run
-  (AGENTS.md:175–177); use 10 GiB / 800% CPU, nice 19, default eight workers and
-  resource watcher. Do not substitute earlier release gates or lane tests for it.
-  Preserve every lane checkout. No push, PR, release, or further cleanup authorized.
+- Static audit: reviewed local source `92230b43`; no running repair at the latest handoff.
+  Await direction for F1 cold Month and W3 Bento header drift; no retries under AFK
+  authorization alone. Preserve two untracked weak audit tests without counting them
+  as acceptance evidence. Remaining independent static checks may continue read-only.
+  Once blockers are resolved and independently reviewed, run the capped `fwtest gate`
+  (10 GiB/800%, nice 19/default eight workers/watcher); AFK gate authorization exists.
+  Never use old release gates as current overhaul proof. No remote actions or cleanup.
 - 2026-10-27: Local overdue-accessibility and Plan paint-test follow-ups are complete on
   `fix/visual-artifacts-20261026`, reused with Jonathan's approval. Test-first commit `6ecf2123`
   records both intentionally failing page-specific announcement cases. The fix passes all four
