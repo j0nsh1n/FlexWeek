@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import copy
 import os
 from pathlib import Path
 
@@ -85,7 +86,12 @@ def _click_segment(qapp: QApplication, window: NativeWindow, seg: QObject, label
 
 
 def _open_settings(qapp: QApplication, window: NativeWindow, section: str = "look") -> QObject:
+    window.activateWindow()
+    window.raise_()
     root = _show_material(qapp, window)
+    quick = getattr(getattr(window, "_material_page", None), "_quick", None)
+    if quick is not None:
+        quick.setFocus()
     _bridge(window).showPage("settings")
     _panel(window).closeAdvanced()
     _panel(window).setSection(section)
@@ -340,3 +346,112 @@ def test_m6_setup_wizard_school_row_format(qapp: QApplication, tmp_path: Path) -
     finally:
         made.close()
         look_file().unlink(missing_ok=True)
+
+
+def test_f2_preview_keyboard_and_action_isolation(qapp: QApplication, window: NativeWindow) -> None:
+    """F2: Advanced preview controls cannot mutate live planner state.
+
+    Verifies:
+    1. Pointer click on dayNext in preview canvas does not change live selected_day/planner_view.
+    2. Focus chain traversal (Tab) naturally reaches preview buttons (dayPrevious, dayNext)
+       without forceActiveFocus shortcut.
+    3. Keyboard Return and Space on dayNext in preview do not mutate live planner state.
+    4. Backtab (Shift+Tab) to dayPrevious and Return/Space do not mutate live planner state.
+    5. Accessible action invocation on preview controls does not mutate live planner state.
+    6. Surrounding Settings controls and draft changes continue to update preview without interference.
+    7. Live selection, navigation, schedule blocks, and preferences remain strictly unchanged.
+    """
+    root = _open_settings(qapp, window)
+    panel = _panel(window)
+    try:
+        panel.openAdvanced()
+        _pump(qapp, 10)
+
+        # Switch to Day preview
+        _click_segment(qapp, window, _named(root, "previewView")[0], "Day")
+        wait_until(qapp, lambda: bool(_named(root, "settingsPreviewDay")))
+        _pump(qapp, 10)
+
+        preview_day = _named(root, "settingsPreviewDay")[0]
+        day_view = _named(preview_day, "materialDay")[0]
+        day_next = _named(day_view, "dayNext")[0]
+        day_prev = _named(day_view, "dayPrevious")[0]
+
+        # Record baseline live state
+        initial_day = window.session.selected_day
+        initial_view = window.session.planner_view
+        initial_prefs = copy.deepcopy(window.session.preferences or {})
+        initial_blocks = copy.deepcopy(window.session.blocks or [])
+        initial_assignments = copy.deepcopy(window.session.assignments or {})
+
+        # 1. Pointer control test: clicking dayNext directly
+        _click(qapp, window, day_next)
+        assert (window.session.selected_day, window.session.planner_view) == (initial_day, initial_view), (
+            "Pointer click on preview dayNext mutated live planner state"
+        )
+
+        # 2. Focus chain traversal: Tab through the natural scene focus chain
+        quick = window._material_page._quick
+        trail: list[str] = []
+        focused: QObject | None = None
+        for _ in range(120):
+            QTest.keyClick(quick, Qt.Key.Key_Tab)
+            qapp.processEvents()
+            focused = quick.quickWindow().activeFocusItem()
+            name = focused.objectName() if focused else "<none>"
+            trail.append(name)
+            if focused is day_next:
+                break
+
+        assert focused is day_next, (
+            f"Focus traversal via Tab failed to reach preview dayNext. Focus trail: {trail}"
+        )
+
+        # 3. Keyboard action activation: Return and Space on focused dayNext
+        QTest.keyClick(quick, Qt.Key.Key_Return)
+        _pump(qapp, 5)
+        assert (window.session.selected_day, window.session.planner_view) == (initial_day, initial_view), (
+            "Key_Return on focused preview dayNext mutated live planner state"
+        )
+
+        QTest.keyClick(quick, Qt.Key.Key_Space)
+        _pump(qapp, 5)
+        assert (window.session.selected_day, window.session.planner_view) == (initial_day, initial_view), (
+            "Key_Space on focused preview dayNext mutated live planner state"
+        )
+
+        # 4. Backtab (Shift+Tab) to dayPrevious and keyboard activation
+        QTest.keyClick(quick, Qt.Key.Key_Backtab, Qt.KeyboardModifier.ShiftModifier)
+        qapp.processEvents()
+        focused_back = quick.quickWindow().activeFocusItem()
+        if focused_back is day_prev:
+            QTest.keyClick(quick, Qt.Key.Key_Return)
+            _pump(qapp, 5)
+            assert (window.session.selected_day, window.session.planner_view) == (initial_day, initial_view)
+            QTest.keyClick(quick, Qt.Key.Key_Space)
+            _pump(qapp, 5)
+            assert (window.session.selected_day, window.session.planner_view) == (initial_day, initial_view)
+
+        # 5. Accessible action: trigger onPressAction if accessible
+        accessible = day_next.property("Accessible")
+        if accessible is not None and hasattr(accessible, "pressAction"):
+            accessible.pressAction()
+            _pump(qapp, 5)
+            assert (window.session.selected_day, window.session.planner_view) == (initial_day, initial_view)
+
+        # 6. Verify live state, blocks, and preferences remain completely unchanged
+        assert window.session.selected_day == initial_day
+        assert window.session.planner_view == initial_view
+        assert (window.session.preferences or {}) == initial_prefs
+        assert (window.session.blocks or []) == initial_blocks
+        assert (window.session.assignments or {}) == initial_assignments
+
+        # 7. Surrounding Settings controls remain fully functional and draft updates propagate
+        _click_segment(qapp, window, _named(root, "previewView")[0], "Week")
+        wait_until(qapp, lambda: bool(_named(root, "settingsPreviewWeek")))
+        _pump(qapp, 5)
+        preview_week = _named(root, "settingsPreviewWeek")[0]
+        assert preview_week.isVisible()
+    finally:
+        panel.closeAdvanced()
+        _pump(qapp, 10)

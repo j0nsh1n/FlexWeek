@@ -190,6 +190,7 @@ Item {
                 MouseArea {
                     anchors.fill: parent
                     z: 100
+                    acceptedButtons: Qt.AllButtons
                     onPressed: (mouse) => mouse.accepted = true
                 }
             }

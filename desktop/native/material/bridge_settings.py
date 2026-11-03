@@ -119,6 +119,225 @@ def _reminder_state(prefs: dict[str, Any]) -> tuple[str, list[dict[str, str]]]:
     return "", chips
 
 
+class PassiveWeekBridge(QObject):
+    """Passive read-only week projection for the settings preview."""
+
+    changed = Signal()
+    homeworkChanged = Signal()
+
+    def __init__(self, live: QObject, parent: QObject) -> None:
+        super().__init__(parent)
+        self.setObjectName("passiveWeekBridge")
+        self._live = live
+        live.changed.connect(self.changed)
+        live.homeworkChanged.connect(self.homeworkChanged)
+
+    @Property(int, notify=changed)
+    def columns(self) -> int:
+        return int(self._live.columns)  # type: ignore[attr-defined]
+
+    @Property(int, notify=homeworkChanged)
+    def homeworkCount(self) -> int:
+        return int(self._live.homeworkCount)  # type: ignore[attr-defined]
+
+    @Property(QObject, constant=True)
+    def homework(self) -> QObject:
+        return self._live.homework  # type: ignore[attr-defined]
+
+    @Slot()
+    def toggleWeekends(self) -> None:
+        pass
+
+    @Slot(str, int, int)
+    def placeHomework(self, block_id: str, day: int, minute: int) -> None:
+        pass
+
+    @Slot()
+    def plan(self) -> None:
+        pass
+
+    @Slot(str)
+    def planOne(self, assignment_id: str) -> None:
+        pass
+
+
+class PassiveDayBridge(QObject):
+    """Passive read-only day board projection for the settings preview.
+
+    Forwards read-only presentation properties and models from the day screen
+    while isolating all action slots (navigation, focus, homework completion)
+    so preview interaction cannot mutate live session or planner state.
+    """
+
+    changed = Signal()
+
+    def __init__(self, live: QObject, parent: QObject) -> None:
+        super().__init__(parent)
+        self.setObjectName("passiveDayBridge")
+        self._live = live
+        live.changed.connect(self.changed)
+
+    @Property(str, notify=changed)
+    def leftLine(self) -> str:
+        return str(self._live.leftLine)  # type: ignore[attr-defined]
+
+    @Property(bool, notify=changed)
+    def waiting(self) -> bool:
+        return bool(self._live.waiting)  # type: ignore[attr-defined]
+
+    @Property(str, notify=changed)
+    def loadError(self) -> str:
+        return str(self._live.loadError)  # type: ignore[attr-defined]
+
+    @Property(int, notify=changed)
+    def leftCount(self) -> int:
+        return int(self._live.leftCount)  # type: ignore[attr-defined]
+
+    @Property(bool, notify=changed)
+    def showNow(self) -> bool:
+        return bool(self._live.showNow)  # type: ignore[attr-defined]
+
+    @Property(str, notify=changed)
+    def nowTitle(self) -> str:
+        return str(self._live.nowTitle)  # type: ignore[attr-defined]
+
+    @Property(int, notify=changed)
+    def nowMinutes(self) -> int:
+        return int(self._live.nowMinutes)  # type: ignore[attr-defined]
+
+    @Property(str, notify=changed)
+    def nowLine(self) -> str:
+        return str(self._live.nowLine)  # type: ignore[attr-defined]
+
+    @Property(int, notify=changed)
+    def ringCount(self) -> int:
+        return int(self._live.ringCount)  # type: ignore[attr-defined]
+
+    @Property(str, notify=changed)
+    def ringCaption(self) -> str:
+        return str(self._live.ringCaption)  # type: ignore[attr-defined]
+
+    @Property(float, notify=changed)
+    def ringShare(self) -> float:
+        return float(self._live.ringShare)  # type: ignore[attr-defined]
+
+    @Property(QObject, constant=True)
+    def upNext(self) -> QObject:
+        return self._live.upNext  # type: ignore[attr-defined]
+
+    @Property(QObject, constant=True)
+    def doneRows(self) -> QObject:
+        return self._live.doneRows  # type: ignore[attr-defined]
+
+    @Property(int, notify=changed)
+    def year(self) -> int:
+        return int(self._live.year)  # type: ignore[attr-defined]
+
+    @Property(int, notify=changed)
+    def month(self) -> int:
+        return int(self._live.month)  # type: ignore[attr-defined]
+
+    @Property(int, notify=changed)
+    def miniDay(self) -> int:
+        return int(self._live.miniDay)  # type: ignore[attr-defined]
+
+    @Slot()
+    def previousDay(self) -> None:
+        pass
+
+    @Slot()
+    def nextDay(self) -> None:
+        pass
+
+    @Slot(int)
+    def pickDay(self, day: int) -> None:
+        pass
+
+    @Slot()
+    def startFocus(self) -> None:
+        pass
+
+    @Slot(str)
+    def finishHomework(self, assignment_id: str) -> None:
+        pass
+
+
+class PassiveMonthBridge(QObject):
+    """Passive read-only month projection for the settings preview.
+
+    Forwards read-only calendar models and presentation properties from the month
+    screen while isolating navigation and date-change actions.
+    """
+
+    changed = Signal()
+
+    def __init__(self, live: QObject, parent: QObject) -> None:
+        super().__init__(parent)
+        self.setObjectName("passiveMonthBridge")
+        self._live = live
+        live.changed.connect(self.changed)
+
+    @Property(QObject, constant=True)
+    def dates(self) -> QObject:
+        return self._live.dates  # type: ignore[attr-defined]
+
+    @Property(QObject, constant=True)
+    def weekdays(self) -> QObject:
+        return self._live.weekdays  # type: ignore[attr-defined]
+
+    @Property(QObject, constant=True)
+    def lines(self) -> QObject:
+        return self._live.lines  # type: ignore[attr-defined]
+
+    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
+    def cellRows(self) -> list:
+        return list(self._live.cellRows)  # type: ignore[attr-defined]
+
+    @Property(str, notify=changed)
+    def selectedIso(self) -> str:
+        return str(self._live.selectedIso)  # type: ignore[attr-defined]
+
+    @Property(str, notify=changed)
+    def heading(self) -> str:
+        return str(self._live.heading)  # type: ignore[attr-defined]
+
+    @Property(bool, notify=changed)
+    def barOpen(self) -> bool:
+        return bool(self._live.barOpen)  # type: ignore[attr-defined]
+
+    @Property(bool, notify=changed)
+    def showStudyTime(self) -> bool:
+        return bool(self._live.showStudyTime)  # type: ignore[attr-defined]
+
+    @Property(str, constant=True)
+    def studyLabel(self) -> str:
+        return str(self._live.studyLabel)  # type: ignore[attr-defined]
+
+    @Slot(str)
+    def selectDate(self, iso: str) -> None:
+        pass
+
+    @Slot()
+    def closeDate(self) -> None:
+        pass
+
+    @Slot()
+    def openDay(self) -> None:
+        pass
+
+    @Slot()
+    def previousMonth(self) -> None:
+        pass
+
+    @Slot()
+    def nextMonth(self) -> None:
+        pass
+
+    @Slot(bool)
+    def setShowStudyTime(self, on: bool) -> None:
+        pass
+
+
 class PreviewBridge(QObject):
     """The live week, with the draft's row height and colours, for the advanced page only."""
 
@@ -135,6 +354,9 @@ class PreviewBridge(QObject):
         week.changed.connect(self.changed)
         week.blocksChanged.connect(self.blocksChanged)
         week.homeworkChanged.connect(self.homeworkChanged)
+        self._passive_week = PassiveWeekBridge(week, self)
+        self._passive_day = PassiveDayBridge(material.day, self)  # type: ignore[attr-defined]
+        self._passive_month = PassiveMonthBridge(material.month, self)  # type: ignore[attr-defined]
 
     def _week(self) -> QObject:
         return self._material._week  # type: ignore[attr-defined]
@@ -147,6 +369,10 @@ class PreviewBridge(QObject):
     @Property("QVariantMap", notify=changed)  # type: ignore[arg-type]
     def theme(self) -> dict[str, Any]:
         return self._settings._draft_theme
+
+    @Property(QObject, constant=True)
+    def week(self) -> QObject:
+        return self._passive_week
 
     @Property(QObject, constant=True)
     def days(self) -> QObject:
@@ -182,11 +408,11 @@ class PreviewBridge(QObject):
 
     @Property(QObject, constant=True)
     def day(self) -> QObject:
-        return self._material.day  # type: ignore[attr-defined]
+        return self._passive_day
 
     @Property(QObject, constant=True)
     def month(self) -> QObject:
-        return self._material.month  # type: ignore[attr-defined]
+        return self._passive_month
 
     @Property(str, notify=changed)
     def density(self) -> str:
