@@ -3001,11 +3001,32 @@ SHEET_LIST = 600
 SHEET_PREVIEW = 720
 
 
+class _FocusWhenShown(QObject):
+    """Sheet close can land while Bento has taken the hours out of the window to re-lay them."""
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.Show and isValid(watched) and isinstance(watched, QWidget):
+            watched.removeEventFilter(self)
+            if hasattr(watched, "_fw_focus_when_shown"):
+                delattr(watched, "_fw_focus_when_shown")
+            self.deleteLater()
+            if watched.isVisible():
+                watched.window().activateWindow()
+                watched.setFocus(Qt.FocusReason.OtherFocusReason)
+        return False
+
+
 def _give_focus_back(widget: QWidget) -> None:
     """Put the keyboard back on `widget` once the sheet over it has closed, if it is still there."""
-    if isValid(widget) and widget.isVisible():
+    if not isValid(widget):
+        return
+    if widget.isVisible():
         widget.window().activateWindow()
         widget.setFocus(Qt.FocusReason.OtherFocusReason)
+        return
+    watcher = _FocusWhenShown(widget)
+    widget.installEventFilter(watcher)
+    widget._fw_focus_when_shown = watcher
 
 
 class SheetShade(QWidget):

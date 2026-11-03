@@ -36,6 +36,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Saving planner settings back to the defaults before the first sync keeps that choice when an older device still has other values. The phone plan review shows every half of a split task, including one that is still waiting.
 - Planning that splits a long task into focus chunks keeps the times just chosen for other homework, and does not put a pin back on homework the planner left unplaced.
 - The sign-in field's focus ring stays readable on a pale accent, and still uses the default blue when that blue already reads.
+- After you save a new block in Bento, the keyboard stays on that block even if the week refreshed while the editor was closing.
 
 ## [1.2.0] - 2026-10-26
 

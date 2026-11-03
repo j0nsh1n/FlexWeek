@@ -15,11 +15,13 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QWidget
 
 from desktop.native.hours.canvas import HoursCanvas
 from desktop.native.hours.geometry import Axis
 from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.weekmodel import clock_text
+from desktop.native.widgets import _give_focus_back
 from desktop.tests.grid_support import (  # noqa: F401
     grid,
     key,
@@ -91,6 +93,32 @@ def test_a_saved_new_block_gets_the_keyboard(qapp, window, design) -> None:
     shown = window.planner.currentWidget().hours_surfaces()
     spot = [s.focus_block() for s in shown if s.hasFocus()]
     assert spot == [(club["id"], THURSDAY)], spot
+
+
+def test_hours_get_the_keyboard_back_if_they_were_hidden_while_the_sheet_closed(qapp) -> None:
+    """Bento takes reused hours out of the grid and hides them while it re-lays tiles. The sheet's
+    return can land in that gap, after the hours have left the window."""
+    window = QWidget()
+    hours = QWidget(window)
+    hours.setObjectName("hoursCanvas")
+    hours.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    window.resize(200, 120)
+    window.show()
+    hours.setFocus()
+    qapp.processEvents()
+    assert hours.hasFocus()
+    holder = QWidget()
+    hours.hide()
+    hours.setParent(holder)
+    qapp.processEvents()
+    _give_focus_back(hours)
+    hours.setParent(window)
+    hours.show()
+    qapp.processEvents()
+    assert hours.hasFocus()
+    holder.deleteLater()
+    window.deleteLater()
+    qapp.processEvents()
 
 
 def test_a_background_refresh_keeps_bentos_keyboard_spot_when_the_app_returns(qapp, window, host) -> None:
