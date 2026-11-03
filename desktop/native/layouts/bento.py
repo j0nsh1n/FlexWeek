@@ -1861,14 +1861,14 @@ class BentoView(LayoutView):
         waiting = scene.week.waiting
         count = _say(str(len(waiting)), "bentoWaitingCount", "count") if waiting else None
         tile, box = self._tile(scene, "bentoWaiting", "list", "Not placed yet", count)
+        if waiting:
+            hint = "Drag one onto your day." if is_day else "Drag one onto the week."
+            box.addWidget(_say(hint, "bentoWaitingHint", "muted", wrap=True))
         for index, item in enumerate(waiting):
             box.addWidget(self._chip(scene, item, index))
         if not waiting:
             box.addWidget(_say("Everything you added has a time.", "bentoWaitingEmpty", "muted", wrap=True))
         box.addStretch(1)
-        if waiting:
-            hint = "Drag one onto your day." if is_day else "Drag one onto the week."
-            box.addWidget(_say(hint, "bentoWaitingHint", "muted", wrap=True))
         return tile
 
     def _chip(self, scene: Scene, item: Waiting, index: int) -> Chip:
