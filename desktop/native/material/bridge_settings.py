@@ -15,6 +15,8 @@ from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from backend.app import Preferences
 from backend.models import valid_spotify_url
+from desktop.native.material.bridge_month import _ROLES, read_cells
+from desktop.native.material.bridge_rows import Labels, Rows
 from desktop.native.material.theme import (
     BLOCK_STYLES,
     CATEGORY_KEYS,
@@ -269,8 +271,11 @@ class PassiveDayBridge(QObject):
 class PassiveMonthBridge(QObject):
     """Passive read-only month projection for the settings preview.
 
-    Forwards read-only calendar models and presentation properties from the month
-    screen while isolating navigation and date-change actions.
+    Forwards read-only calendar models and presentation properties while isolating
+    all action slots from mutating the live planner or session navigation.
+    On cold entry where no live month has been opened, initializes a passive
+    calendar projection so populated dates and headers render without altering
+    live session state.
     """
 
     changed = Signal()
@@ -279,43 +284,116 @@ class PassiveMonthBridge(QObject):
         super().__init__(parent)
         self.setObjectName("passiveMonthBridge")
         self._live = live
-        live.changed.connect(self.changed)
+        self._cell_rows: list[dict[str, Any]] = []
+        self._weekday_names: list[str] = []
+        self._dates = Rows(_ROLES, self)
+        self._weekdays = Labels(self)
+        self._lines = Labels(self)
+        self._selected = ""
+        self._heading = ""
+        self._preview_snapshot: dict | None = None
+        self._asked_month = ""
+        self._load_error = ""
+
+        live.changed.connect(self.reload)
+        session = self._session()
+        changed = getattr(session, "week_changed", None)
+        if changed is not None and hasattr(changed, "connect"):
+            changed.connect(self.reload)
+        self.reload()
+
+    def _session(self) -> Any:
+        return getattr(self._live, "_session", lambda: None)()
+
+    def reload(self) -> None:
+        session = self._session()
+        if session is None:
+            return
+        account = getattr(session, "account", None)
+        if account is None:
+            return
+
+        target_month = getattr(session, "selected_month", None)
+        if not target_month:
+            today_iso = getattr(session, "today_iso", lambda: "")()
+            target_month = today_iso[:7] if today_iso else ""
+
+        if not target_month:
+            return
+
+        snapshot = self._preview_snapshot
+        if snapshot is None and getattr(session, "selected_month", None) == target_month:
+            snapshot = getattr(session, "month_data", None)
+        if snapshot is None:
+            cache = getattr(session, "_month_cache", None)
+            if isinstance(cache, dict):
+                snapshot = cache.get((str(account.get("id")), target_month))
+
+        client = getattr(session, "client", None)
+        if (
+            snapshot is None
+            and client is not None
+            and hasattr(client, "request")
+            and self._asked_month != target_month
+        ):
+            self._asked_month = target_month
+
+            def ok(data: dict) -> None:
+                if self._asked_month == target_month and isinstance(data, dict):
+                    self._preview_snapshot = data
+                    self._load_error = ""
+                    self.reload()
+
+            def err(error: Any) -> None:
+                self._load_error = getattr(error, "message", "Couldn't load month preview.")
+                self.changed.emit()
+
+            client.request("GET", f"/api/month?month={target_month}", None, ok, err)
+
+        rows, names = read_cells(session, month=target_month, snapshot=snapshot)
+        if rows != self._cell_rows:
+            self._cell_rows = rows
+            self._dates.set_rows([{key: row[key] for key in _ROLES} for row in rows])
+        if names != self._weekday_names:
+            self._weekday_names = names
+            self._weekdays.set_rows(names)
+        self.changed.emit()
 
     @Property(QObject, constant=True)
     def dates(self) -> QObject:
-        return self._live.dates  # type: ignore[attr-defined]
+        return self._dates
 
     @Property(QObject, constant=True)
     def weekdays(self) -> QObject:
-        return self._live.weekdays  # type: ignore[attr-defined]
+        return self._weekdays
 
     @Property(QObject, constant=True)
     def lines(self) -> QObject:
-        return self._live.lines  # type: ignore[attr-defined]
+        return self._lines
 
     @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
     def cellRows(self) -> list:
-        return list(self._live.cellRows)  # type: ignore[attr-defined]
+        return list(self._cell_rows)
 
     @Property(str, notify=changed)
     def selectedIso(self) -> str:
-        return str(self._live.selectedIso)  # type: ignore[attr-defined]
+        return self._selected
 
     @Property(str, notify=changed)
     def heading(self) -> str:
-        return str(self._live.heading)  # type: ignore[attr-defined]
+        return self._heading
 
     @Property(bool, notify=changed)
     def barOpen(self) -> bool:
-        return bool(self._live.barOpen)  # type: ignore[attr-defined]
+        return bool(self._selected)
 
     @Property(bool, notify=changed)
     def showStudyTime(self) -> bool:
-        return bool(self._live.showStudyTime)  # type: ignore[attr-defined]
+        return bool(getattr(self._live, "showStudyTime", False))
 
     @Property(str, constant=True)
     def studyLabel(self) -> str:
-        return str(self._live.studyLabel)  # type: ignore[attr-defined]
+        return str(getattr(self._live, "studyLabel", "Study time"))
 
     @Slot(str)
     def selectDate(self, iso: str) -> None:
@@ -1114,6 +1192,10 @@ class SettingsBridge(QObject):
     def setPreviewView(self, name: str) -> None:
         if name in ("week", "day", "month"):
             self._preview_view = name
+            if name == "month" and hasattr(self, "_preview"):
+                month_bridge = getattr(self._preview, "_passive_month", None)
+                if month_bridge is not None and hasattr(month_bridge, "reload"):
+                    month_bridge.reload()
             self._publish()
 
     @Slot(str)

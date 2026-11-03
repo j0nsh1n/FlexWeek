@@ -165,17 +165,20 @@ def test_m3_advanced_preview_month_bridge(qapp: QApplication, window: NativeWind
         panel.openAdvanced()
         _pump(qapp, 10)
 
-        # Ensure session has month loaded for live preview
-        here = window.session.today_iso()[:7]
-        if window.session.selected_month != here:
-            window.session.open_month(here)
-        wait_until(qapp, lambda: (window.session.month_data or {}).get("month") == here)
-        _pump(qapp, 10)
+        # Cold entry verification: fresh live session is on week, no month history
+        assert window.session.planner_view == "week"
+        assert window.session.selected_month is None
+        assert window.session.month_data is None
 
-        # 1. Month preview verification
+        # 1. Month preview verification (cold path)
         _click_segment(qapp, window, _named(root, "previewView")[0], "Month")
         wait_until(qapp, lambda: bool(_named(root, "settingsPreviewMonth")))
         _pump(qapp, 10)
+
+        # Ensure live planner state was untouched by previewing month
+        assert window.session.planner_view == "week"
+        assert window.session.selected_month is None
+        assert window.session.month_data is None
 
         preview_month = _named(root, "settingsPreviewMonth")[0]
         month_view = _named(preview_month, "materialMonth")[0]

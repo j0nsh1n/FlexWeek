@@ -127,21 +127,25 @@ def _row(cell: MonthCell) -> dict[str, Any]:
     }
 
 
-def read_cells(session: _Session) -> tuple[list[dict[str, Any]], list[str]]:
+def read_cells(
+    session: _Session,
+    month: str | None = None,
+    snapshot: dict | None = None,
+) -> tuple[list[dict[str, Any]], list[str]]:
     """The dates to draw, and the weekday headings. Empty until a month is open."""
     names = weekday_names()
     if session.account is None:
         return [], names
     set_clock_24h(bool((session.preferences or {}).get("clock_24h")))
-    month = session.selected_month
-    snapshot = session.month_data
-    if snapshot is None and not month:
+    chosen_month = month or session.selected_month
+    chosen_snapshot = snapshot if snapshot is not None else session.month_data
+    if chosen_snapshot is None and not chosen_month:
         return [], names
     weeks: dict[str, Any] = {}
     weeks.update(session.unsaved_weeks())
     if session.week_start:
         weeks[session.week_start] = session.built_week()
-    cells = month_cells(snapshot, weeks, session.today_iso(), month)
+    cells = month_cells(chosen_snapshot, weeks, session.today_iso(), chosen_month)
     return [_row(cell) for cell in cells], names
 
 
