@@ -160,6 +160,10 @@ class PassiveWeekBridge(QObject):
     def planOne(self, assignment_id: str) -> None:
         pass
 
+    @Slot(str)
+    def toggleDone(self, assignment_id: str) -> None:
+        pass
+
 
 class PassiveDayBridge(QObject):
     """Passive read-only day board projection for the settings preview.

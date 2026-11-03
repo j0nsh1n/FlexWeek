@@ -195,8 +195,9 @@ def test_m3_advanced_preview_month_bridge(qapp: QApplication, window: NativeWind
 
         wait_until(
             qapp,
-            lambda: len([i for i in _every(month_view) if str(i.objectName()).startswith("monthDate-")])
-            >= 28,
+            lambda: (
+                len([i for i in _every(month_view) if str(i.objectName()).startswith("monthDate-")]) >= 28
+            ),
             timeout=5.0,
         )
         month_cells = [item for item in _every(month_view) if str(item.objectName()).startswith("monthDate-")]
@@ -455,3 +456,58 @@ def test_f2_preview_keyboard_and_action_isolation(qapp: QApplication, window: Na
     finally:
         panel.closeAdvanced()
         _pump(qapp, 10)
+
+
+def test_week_preview_completion_is_inert_and_has_no_qml_error(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    from copy import deepcopy
+
+    from PySide6.QtCore import qInstallMessageHandler
+    from PySide6.QtGui import QAccessible
+
+    root = _open_settings(qapp, window)
+    panel = _panel(window)
+    messages: list[str] = []
+    previous_handler = None
+    installed = False
+
+    def state():
+        session = window.session
+        return deepcopy(
+            (
+                session.selected_day,
+                session.planner_view,
+                session.preferences,
+                session.blocks,
+                session.assignments,
+            )
+        )
+
+    try:
+        panel.openAdvanced()
+        panel.setPreviewView("week")
+        _pump(qapp)
+        preview = _named(root, "settingsPreviewWeek")[0]
+        blocks = [item for item in _named(preview, "weekBlock") if item.property("homework")]
+        assert blocks, "The preview must contain an actual homework block"
+        item = blocks[0]
+        before = state()
+        previous_handler = qInstallMessageHandler(lambda _kind, _context, text: messages.append(text))
+        installed = True
+        item.forceActiveFocus()
+        QTest.keyClick(window._material_page._quick, Qt.Key.Key_Return)
+        _pump(qapp)
+        interface = QAccessible.queryAccessibleInterface(item)
+        assert interface is not None
+        action = interface.actionInterface()
+        assert action is not None and "Press" in action.actionNames()
+        action.doAction("Press")
+        _pump(qapp)
+        assert not any("TypeError" in text for text in messages), messages
+        assert state() == before
+    finally:
+        if installed:
+            qInstallMessageHandler(previous_handler)
+        panel.closeAdvanced()
+        _pump(qapp)

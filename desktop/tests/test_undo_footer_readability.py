@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import QPoint, QRectF, Qt
+from PySide6.QtGui import QRegion
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLabel, QScrollArea, QVBoxLayout, QWidget
 
@@ -40,6 +41,51 @@ def _toast_card_in_host(toast: Toast, host: QWidget) -> QRectF:
     return QRectF(toast.card.mapTo(host, QPoint(0, 0)), toast.card.size())
 
 
+def _visible_text_ink_in_host(label: QLabel, host: QWidget) -> QRegion:
+    """Clip ink to its ancestors, without hiding a collision behind the toast."""
+    if not label.isVisible():
+        return QRegion()
+    ink = QRegion(_text_ink_in_host(label, host).toAlignedRect())
+    ancestor: QWidget | None = label
+    while ancestor is not None:
+        bounds = ancestor.rect().translated(ancestor.mapTo(host, QPoint()))
+        ink &= QRegion(bounds)
+        if ancestor is host:
+            return ink
+        ancestor = ancestor.parentWidget()
+    raise AssertionError("The label must belong to the inspected host")
+
+
+def test_partial_clipping_does_not_report_invisible_text_as_a_collision(qapp: QApplication) -> None:
+    host = QWidget()
+    try:
+        host.resize(240, 240)
+        scroll = QScrollArea(host)
+        scroll.setGeometry(10, 10, 180, 50)
+        body = QWidget()
+        body.resize(160, 220)
+        label = QLabel("Drag one onto the week. " * 5, body)
+        label.setWordWrap(True)
+        label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        label.setGeometry(0, 0, 140, 180)
+        scroll.setWidget(body)
+        host.show()
+        qapp.processEvents()
+        ink = _text_ink_in_host(label, host)
+        viewport = QRectF(scroll.viewport().mapTo(host, QPoint()), scroll.viewport().size())
+        outside_card = QRectF(ink.left(), viewport.bottom() + 3, ink.width(), 20)
+        visible = _visible_text_ink_in_host(label, host)
+        assert not visible.isEmpty(), "The control must be partially visible"
+        assert outside_card.intersects(ink), "The old oracle must report a false collision"
+        assert not visible.intersects(outside_card.toAlignedRect())
+        inside_card = QRectF(ink.left(), viewport.top(), ink.width(), 15)
+        assert visible.intersects(inside_card.toAlignedRect()), "Real visible overlap must still fail"
+    finally:
+        host.close()
+        host.deleteLater()
+        qapp.processEvents()
+
+
 def test_settled_undo_toast_does_not_obscure_bento_waiting_instruction(qapp: QApplication) -> None:
     """W5: Settled Undo toast at 1280x820 must not obscure bentoWaitingHint ink.
 
@@ -70,7 +116,7 @@ def test_settled_undo_toast_does_not_obscure_bento_waiting_instruction(qapp: QAp
         ink = _text_ink_in_host(hint, host)
 
         # Prove footer text paint bounds are unobscured while settled toast visible
-        assert not card.intersects(ink), (
+        assert not _visible_text_ink_in_host(hint, host).intersects(card.toAlignedRect()), (
             f"Settled toast card {card.getRect()} collides with bentoWaitingHint ink {ink.getRect()}"
         )
         # Hint must sit clearly above the toast card
@@ -109,7 +155,7 @@ def test_undo_toast_readability_across_sizes_and_scales(
         card = _toast_card_in_host(toast, host)
         ink = _text_ink_in_host(hint, host)
 
-        assert not card.intersects(ink), (
+        assert not _visible_text_ink_in_host(hint, host).intersects(card.toAlignedRect()), (
             f"size={size} scale={scale}: card {card.getRect()} collides with hint {ink.getRect()}"
         )
     finally:
@@ -141,22 +187,12 @@ def test_cramped_1024x740_scroll_bottom_reach_unobscured(qapp: QApplication) -> 
         qapp.processEvents()
 
         card = _toast_card_in_host(toast, host)
-        host_rect = QRectF(0, 0, host.width(), host.height())
-        vp = scroll.viewport()
-        vp_in_host = QRectF(vp.mapTo(host, QPoint(0, 0)), vp.size())
-
         for label in view.findChildren(QLabel):
             if not label.isVisible() or not label.text():
                 continue
-            # Labels naturally scrolled outside the viewport have an empty visibleRegion
-            if label.visibleRegion().isEmpty():
-                continue
-            ink = _text_ink_in_host(label, host)
-            # Account for actual host viewport clipping: naturally scrolled-off labels are not visible
-            if not host_rect.intersects(ink) or not vp_in_host.intersects(ink):
-                continue
-            assert not card.intersects(ink), (
-                f"Label {label.objectName()} '{label.text()}' at {ink.getRect()} "
+            ink = _visible_text_ink_in_host(label, host)
+            assert not ink.intersects(card.toAlignedRect()), (
+                f"Label {label.objectName()} '{label.text()}' at {ink.boundingRect().getRect()} "
                 f"collides with card {card.getRect()}"
             )
     finally:
