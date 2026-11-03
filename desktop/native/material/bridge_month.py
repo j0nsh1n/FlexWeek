@@ -139,6 +139,8 @@ def read_cells(
     set_clock_24h(bool((session.preferences or {}).get("clock_24h")))
     chosen_month = month or session.selected_month
     chosen_snapshot = snapshot if snapshot is not None else session.month_data
+    if chosen_snapshot is not None and chosen_month and chosen_snapshot.get("month") != chosen_month:
+        chosen_snapshot = None
     if chosen_snapshot is None and not chosen_month:
         return [], names
     weeks: dict[str, Any] = {}

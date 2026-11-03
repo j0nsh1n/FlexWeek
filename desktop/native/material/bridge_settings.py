@@ -291,61 +291,211 @@ class PassiveMonthBridge(QObject):
         self._lines = Labels(self)
         self._selected = ""
         self._heading = ""
+
+        # Lifecycle, account ownership, and request tracking
+        self._account_id: str | None = None
+        self._snapshot_month: str | None = None
         self._preview_snapshot: dict | None = None
         self._asked_month = ""
+        self._failed_month: str | None = None
         self._load_error = ""
+        self._loading = False
+        self._request_token = 0
 
-        live.changed.connect(self.reload)
+        live.changed.connect(self._on_live_changed)
         session = self._session()
         changed = getattr(session, "week_changed", None)
         if changed is not None and hasattr(changed, "connect"):
-            changed.connect(self.reload)
-        self.reload()
+            changed.connect(self._on_week_changed)
+        acct_changed = getattr(session, "account_changed", None)
+        if acct_changed is not None and hasattr(acct_changed, "connect"):
+            acct_changed.connect(self._on_account_changed)
+
+        if self._is_preview_active():
+            self.reload(fetch=True)
+        else:
+            self.reload(fetch=False)
 
     def _session(self) -> Any:
         return getattr(self._live, "_session", lambda: None)()
 
-    def reload(self) -> None:
+    def _is_preview_active(self) -> bool:
+        parent = self.parent()
+        settings = getattr(parent, "_settings", None)
+        if settings is None:
+            return True
+        page = getattr(settings, "_page", "")
+        view = getattr(settings, "_preview_view", "")
+        # print("IS_ACTIVE_CHECK", "page=", page, "view=", view)
+        return bool(page == "advanced" and view == "month")
+
+    def _target_month(self) -> str:
         session = self._session()
         if session is None:
+            return ""
+        target = getattr(session, "selected_month", None)
+        if not target:
+            today_iso = getattr(session, "today_iso", lambda: "")()
+            target = today_iso[:7] if today_iso else ""
+        return target or ""
+
+    def clear(self) -> None:
+        """Immediately clear all preview content, snapshots, and in-flight requests."""
+        self._account_id = None
+        self._snapshot_month = None
+        self._preview_snapshot = None
+        self._request_token += 1
+        self._loading = False
+        self._load_error = ""
+        self._failed_month = None
+        self._asked_month = ""
+        self._selected = ""
+        self._heading = ""
+        if self._cell_rows:
+            self._cell_rows = []
+            self._dates.set_rows([])
+        if self._weekday_names:
+            self._weekday_names = []
+            self._weekdays.set_rows([])
+        self.changed.emit()
+
+    def _on_live_changed(self) -> None:
+        session = self._session()
+        if session is None or getattr(session, "account", None) is None:
+            self.clear()
             return
+        self.reload(fetch=self._is_preview_active())
+
+    def _on_week_changed(self) -> None:
+        session = self._session()
+        if session is None or getattr(session, "account", None) is None:
+            self.clear()
+            return
+        if not self._is_preview_active():
+            self._preview_snapshot = None
+            self._asked_month = ""
+        self.reload(fetch=self._is_preview_active())
+
+    def _on_account_changed(self, account: Any = None) -> None:
+        if account is None:
+            self.clear()
+            return
+        new_id = str(account.get("id") if isinstance(account, dict) else getattr(account, "id", ""))
+        if self._account_id is not None and self._account_id != new_id:
+            self.clear()
+        self.reload(fetch=self._is_preview_active())
+
+    def activate_preview(self) -> None:
+        """Called when Settings opens Advanced Month preview. Resets failed state for bounded retry."""
+        self._failed_month = None
+        self._load_error = ""
+        self._asked_month = ""
+        self.reload(fetch=True)
+
+    @Slot()
+    def retry(self) -> None:
+        """Explicit user retry for failed month load."""
+        self.activate_preview()
+
+    def reload(self, fetch: bool = True) -> None:
+        session = self._session()
+        if session is None:
+            self.clear()
+            return
+
         account = getattr(session, "account", None)
         if account is None:
+            self.clear()
             return
 
-        target_month = getattr(session, "selected_month", None)
-        if not target_month:
-            today_iso = getattr(session, "today_iso", lambda: "")()
-            target_month = today_iso[:7] if today_iso else ""
+        account_id = str(account.get("id"))
+        if self._account_id is not None and self._account_id != account_id:
+            self.clear()
+        self._account_id = account_id
 
+        target_month = self._target_month()
         if not target_month:
+            self.clear()
             return
+
+        # Drop snapshot if month does not match
+        if self._snapshot_month is not None and self._snapshot_month != target_month:
+            self._preview_snapshot = None
+            self._snapshot_month = None
+            self._asked_month = ""
+            self._failed_month = None
 
         snapshot = self._preview_snapshot
         if snapshot is None and getattr(session, "selected_month", None) == target_month:
-            snapshot = getattr(session, "month_data", None)
+            live_snapshot = getattr(session, "month_data", None)
+            if isinstance(live_snapshot, dict) and live_snapshot.get("month") == target_month:
+                snapshot = live_snapshot
+                self._preview_snapshot = snapshot
+                self._snapshot_month = target_month
+                self._load_error = ""
+                self._failed_month = None
+
         if snapshot is None:
             cache = getattr(session, "_month_cache", None)
             if isinstance(cache, dict):
-                snapshot = cache.get((str(account.get("id")), target_month))
+                cached = cache.get((account_id, target_month))
+                if isinstance(cached, dict) and cached.get("month") == target_month:
+                    snapshot = cached
+                    self._preview_snapshot = snapshot
+                    self._snapshot_month = target_month
+                    self._load_error = ""
+                    self._failed_month = None
 
         client = getattr(session, "client", None)
-        if (
-            snapshot is None
+        can_fetch = (
+            fetch
+            and snapshot is None
             and client is not None
             and hasattr(client, "request")
+            and self._is_preview_active()
             and self._asked_month != target_month
-        ):
+            and self._failed_month != target_month
+        )
+
+        if can_fetch:
             self._asked_month = target_month
+            self._request_token += 1
+            token = self._request_token
+            self._loading = True
+            self._load_error = ""
 
             def ok(data: dict) -> None:
-                if self._asked_month == target_month and isinstance(data, dict):
-                    self._preview_snapshot = data
-                    self._load_error = ""
-                    self.reload()
+                if token != self._request_token:
+                    return
+                current_session = self._session()
+                if current_session is None:
+                    return
+                current_account = getattr(current_session, "account", None)
+                if current_account is None or str(current_account.get("id")) != account_id:
+                    return
+                if not isinstance(data, dict) or data.get("month") != target_month:
+                    return
+                self._preview_snapshot = data
+                self._snapshot_month = target_month
+                self._loading = False
+                self._load_error = ""
+                self._failed_month = None
+                self.reload(fetch=False)
 
             def err(error: Any) -> None:
+                if token != self._request_token:
+                    return
+                current_session = self._session()
+                if current_session is None:
+                    return
+                current_account = getattr(current_session, "account", None)
+                if current_account is None or str(current_account.get("id")) != account_id:
+                    return
+                if self._target_month() != target_month:
+                    return
+                self._loading = False
                 self._load_error = getattr(error, "message", "Couldn't load month preview.")
+                self._failed_month = target_month
                 self.changed.emit()
 
             client.request("GET", f"/api/month?month={target_month}", None, ok, err)
@@ -395,6 +545,22 @@ class PassiveMonthBridge(QObject):
     def studyLabel(self) -> str:
         return str(getattr(self._live, "studyLabel", "Study time"))
 
+    @Property(bool, notify=changed)
+    def loading(self) -> bool:
+        return self._loading
+
+    @Property(str, notify=changed)
+    def loadError(self) -> str:
+        return self._load_error
+
+    @Property(str, notify=changed)
+    def error(self) -> str:
+        return self._load_error
+
+    @Property(bool, notify=changed)
+    def ready(self) -> bool:
+        return self._preview_snapshot is not None
+
     @Slot(str)
     def selectDate(self, iso: str) -> None:
         pass
@@ -417,6 +583,10 @@ class PassiveMonthBridge(QObject):
 
     @Slot(bool)
     def setShowStudyTime(self, on: bool) -> None:
+        pass
+
+    @Slot(str)
+    def toggleDone(self, block_id: str) -> None:
         pass
 
 
@@ -796,6 +966,10 @@ class SettingsBridge(QObject):
         self._prompt = ""
         self._import_error = ""
         self._save_error = ""
+        if self._preview_view == "month" and hasattr(self, "_preview"):
+            month_bridge = getattr(self._preview, "_passive_month", None)
+            if month_bridge is not None and hasattr(month_bridge, "activate_preview"):
+                month_bridge.activate_preview()
         self._publish()
 
     @Slot()
@@ -1194,8 +1368,8 @@ class SettingsBridge(QObject):
             self._preview_view = name
             if name == "month" and hasattr(self, "_preview"):
                 month_bridge = getattr(self._preview, "_passive_month", None)
-                if month_bridge is not None and hasattr(month_bridge, "reload"):
-                    month_bridge.reload()
+                if month_bridge is not None and hasattr(month_bridge, "activate_preview"):
+                    month_bridge.activate_preview()
             self._publish()
 
     @Slot(str)

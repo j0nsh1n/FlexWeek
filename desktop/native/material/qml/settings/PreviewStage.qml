@@ -184,6 +184,48 @@ Item {
                                 anchors.fill: parent
                                 bridge: root.settings.preview
                             }
+                            Rectangle {
+                                id: statusBanner
+                                objectName: "monthPreviewStatus"
+                                anchors.top: parent.top
+                                anchors.topMargin: 8
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                height: 32
+                                width: statusRow.width + 24
+                                radius: 16
+                                M3Palette { id: bannerPalette; theme: root.draft }
+                                color: root.settings && root.settings.preview && root.settings.preview.month && root.settings.preview.month.loadError ? bannerPalette.errorContainer : bannerPalette.surfaceContainerHigh
+                                visible: root.settings && root.settings.preview && root.settings.preview.month && (root.settings.preview.month.loading || root.settings.preview.month.loadError !== "")
+                                z: 50
+                                Row {
+                                    id: statusRow
+                                    anchors.centerIn: parent
+                                    spacing: 8
+                                    Text {
+                                        objectName: "monthPreviewStatusText"
+                                        text: root.settings && root.settings.preview && root.settings.preview.month && root.settings.preview.month.loading ? "Loading month…" : (root.settings && root.settings.preview && root.settings.preview.month ? root.settings.preview.month.loadError : "")
+                                        color: root.settings && root.settings.preview && root.settings.preview.month && root.settings.preview.month.loadError ? bannerPalette.inkErrorContainer : bannerPalette.inkSurface
+                                        font.family: M3Font.family
+                                        font.pixelSize: 12
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Text {
+                                        objectName: "monthPreviewRetry"
+                                        text: "Retry"
+                                        visible: root.settings && root.settings.preview && root.settings.preview.month && !!root.settings.preview.month.loadError
+                                        color: bannerPalette.primary
+                                        font.family: M3Font.family
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: if (root.settings && root.settings.preview && root.settings.preview.month) root.settings.preview.month.retry()
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
