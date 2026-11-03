@@ -348,6 +348,60 @@ def test_a_remote_change_does_not_reload_a_dirty_week(qapp: QApplication, server
     assert loads == [(session.week_start, True, "Updated from Ada's phone.")]
 
 
+def test_retry_save_after_a_held_failure_posts_the_same_payload_once(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    """A 503 keeps the first payload. retry_save posts that same body; the next account is empty."""
+    session = signed_in(qapp, server.origin, "retry_held", create=True)
+    other = signed_in(qapp, server.origin, "retry_neighbor", create=True)
+    trace: list[str] = []
+    held: list = []
+    original = session.client.request
+
+    def delay(method, path, body, ok, fail):
+        if method == "POST" and path == "/api/changes":
+            trace.append("post")
+
+            def tracked_ok(data):
+                trace.append("ok")
+                ok(data)
+
+            def tracked_fail(error):
+                trace.append("fail")
+                fail(error)
+
+            held.append((method, path, body, tracked_ok, tracked_fail))
+        else:
+            original(method, path, body, ok, fail)
+
+    session.client.request = delay  # type: ignore[method-assign]
+    try:
+        session.add_block(fixed("soccer", "Soccer", 0, "16:00"))
+        session.save()
+        assert session.busy and len(held) == 1
+        first_body = held[0][2]
+        _method, _path, _body, _ok, fail = held.pop(0)
+        fail(ApiError(503, "The planner is unavailable."))
+        qapp.processEvents()
+        assert trace == ["post", "fail"]
+        assert session.pending_save is not None
+        assert session.busy is False
+        session.retry_save()
+        wait_until(qapp, lambda: len(held) >= 1)
+        assert held[0][2]["operation_id"] == first_body["operation_id"]
+        original(*held.pop(0))
+        wait_until(qapp, lambda: not session.busy and session.pending_save is None and not session.dirty)
+        assert trace == ["post", "fail", "post", "ok"]
+        assert [block["title"] for block in session.blocks] == ["Soccer"]
+        assert other.blocks == []
+        assert other.pending_save is None
+    finally:
+        session.client.request = original  # type: ignore[method-assign]
+        while held:
+            original(*held.pop(0))
+        settled(qapp, session)
+
+
 def _hold_the_save(session: object) -> None:
     """Start a save and keep its reply. The session stays busy, and the reply is never delivered."""
     real = session.client.request  # type: ignore[attr-defined]

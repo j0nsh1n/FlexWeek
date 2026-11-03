@@ -778,18 +778,40 @@ def test_the_discard_prompt_shows_in_qml_and_esc_keeps_editing(
     assert sheets.kind == "homework"
 
 
-def _hold_changes(session, monkeypatch: pytest.MonkeyPatch) -> tuple[list, object]:
+def _hold_changes(
+    session, monkeypatch: pytest.MonkeyPatch, trace: list[str] | None = None
+) -> tuple[list, object]:
     original = session.client.request
     held: list = []
 
     def delay(method, path, body, ok, fail):
         if method == "POST" and path == "/api/changes":
-            held.append((method, path, body, ok, fail))
+            if trace is not None:
+                trace.append("post")
+
+            def tracked_ok(data):
+                if trace is not None:
+                    trace.append("ok")
+                ok(data)
+
+            def tracked_fail(error):
+                if trace is not None:
+                    trace.append("fail")
+                fail(error)
+
+            held.append((method, path, body, tracked_ok, tracked_fail))
         else:
             original(method, path, body, ok, fail)
 
     monkeypatch.setattr(session.client, "request", delay)
     return held, original
+
+
+def _deliver_held_change(qapp: QApplication, shell: NativeWindow, held: list, original) -> None:
+    """Send one held POST through the real client, then wait for that retry to finish."""
+    assert held, "the held POST never left"
+    original(*held.pop(0))
+    wait_until(qapp, lambda: not shell.session.busy and not shell.session.dirty)
 
 
 def _restore_essay(qapp: QApplication, shell: NativeWindow, sheets) -> None:
@@ -846,7 +868,8 @@ def test_a_failed_first_save_leaves_the_second_draft_and_pending_first(
     qapp: QApplication, shell: NativeWindow, sheets, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     session = shell.session
-    held, original = _hold_changes(session, monkeypatch)
+    trace: list[str] = []
+    held, original = _hold_changes(session, monkeypatch, trace)
     try:
         sheets.editHomework("essay")
         sheets.setText("title", "First saved title")
@@ -855,23 +878,31 @@ def test_a_failed_first_save_leaves_the_second_draft_and_pending_first(
         sheets.setText("title", "Second saved title")
         sheets.save()
         assert sheets.form["title"] == "Second saved title"
-        _method, _path, _body, _ok, fail = held.pop()
+        assert trace == ["post"]
+        _method, _path, _body, _ok, fail = held.pop(0)
         fail(ApiError(503, "The planner is unavailable."))
         _pump(qapp)
+        # Window autosave (500 ms) can post the same pending payload during _pump. That is
+        # the retry; unpatching and waiting 8s on retry_save() left it held and busy.
+        assert trace[:2] == ["post", "fail"]
         assert session.assignments["essay"]["title"] == "First saved title"
         assert session.pending_save is not None
         assert session.can_undo() is False
         assert sheets.kind == "homework"
         assert sheets.form["title"] == "Second saved title"
         assert sheets.canSave is False
-        monkeypatch.setattr(session.client, "request", original)
         session.retry_save()
-        _settle(qapp, shell)
+        wait_until(qapp, lambda: len(held) >= 1)
+        assert session.pending_save is not None
+        assert sheets.form["title"] == "Second saved title"
+        _deliver_held_change(qapp, shell, held, original)
+        assert trace == ["post", "fail", "post", "ok"]
         assert session.assignments["essay"]["title"] == "First saved title"
         assert session.pending_save is None
         sheets.save()
-        _settle(qapp, shell)
+        _deliver_held_change(qapp, shell, held, original)
         assert session.assignments["essay"]["title"] == "Second saved title"
+        assert trace == ["post", "fail", "post", "ok", "post", "ok"]
     finally:
         monkeypatch.setattr(session.client, "request", original)
         while held:
