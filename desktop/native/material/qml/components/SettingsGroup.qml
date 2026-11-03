@@ -15,20 +15,34 @@ Item {
 
     M3Palette { id: palette; theme: root.theme }
 
+    function _applyRow(item) {
+        if (!item)
+            return
+        if ("theme" in item)
+            item.theme = root.theme
+        if ("density" in item)
+            item.density = root.density
+        if ("highContrast" in item)
+            item.highContrast = root.highContrast
+        if ("reduceMotion" in item)
+            item.reduceMotion = root.reduceMotion
+    }
+
     function mark() {
         var seen = 0
         for (var i = 0; i < column.children.length; i++) {
             var row = column.children[i]
             row.width = width
-            if (row.showDivider === undefined || !row.visible)
-                continue
-            row.showDivider = seen > 0
-            if (!row.theme)
-                row.theme = root.theme
-            row.density = root.density
-            row.highContrast = root.highContrast
-            row.reduceMotion = root.reduceMotion
-            seen += 1
+            if (row.showDivider !== undefined && row.visible) {
+                row.showDivider = seen > 0
+                seen += 1
+            }
+            _applyRow(row)
+            if (row.children) {
+                for (var j = 0; j < row.children.length; j++) {
+                    _applyRow(row.children[j])
+                }
+            }
         }
     }
 
@@ -50,7 +64,9 @@ Item {
 
     onWidthChanged: mark()
     onVisibleChanged: mark()
+    onThemeChanged: mark()
     onDensityChanged: mark()
     onHighContrastChanged: mark()
+    onReduceMotionChanged: mark()
     Component.onCompleted: mark()
 }

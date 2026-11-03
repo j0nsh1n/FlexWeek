@@ -98,7 +98,11 @@ FocusScope {
             // A value the bridge refused goes back to what it holds.
             text = Qt.binding(function () { return root.text })
         }
-        onAccepted: root.submitted()
+        onAccepted: {
+            root.committed(text)
+            text = Qt.binding(function () { return root.text })
+            root.submitted()
+        }
         Accessible.role: Accessible.EditableText
         Accessible.name: root.accessName !== "" ? root.accessName : root.label
         Accessible.description: root.bad ? root.problem : root.hint

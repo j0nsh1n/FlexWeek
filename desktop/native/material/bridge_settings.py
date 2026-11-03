@@ -180,6 +180,26 @@ class PreviewBridge(QObject):
     def homeworkCount(self) -> int:
         return int(self._week().homeworkCount)  # type: ignore[attr-defined]
 
+    @Property(QObject, constant=True)
+    def day(self) -> QObject:
+        return self._material.day  # type: ignore[attr-defined]
+
+    @Property(QObject, constant=True)
+    def month(self) -> QObject:
+        return self._material.month  # type: ignore[attr-defined]
+
+    @Property(str, notify=changed)
+    def density(self) -> str:
+        return str(self._settings._draft_choice.get("density", "comfortable"))
+
+    @Property(bool, notify=changed)
+    def highContrast(self) -> bool:
+        return self._settings._draft_choice.get("contrast") == "high"
+
+    @Property(bool, notify=changed)
+    def reduceMotion(self) -> bool:
+        return True
+
 
 class SettingsBridge(QObject):
     """The five sections, and the advanced page that stays a draft until Done."""

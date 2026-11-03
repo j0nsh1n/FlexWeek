@@ -1566,6 +1566,7 @@ class AccountBridge(QObject):
     def _load_fields(self) -> None:
         prefs = dict(self._state.preferences)
         self._clock_24h = prefs.get("clock_24h") is True
+        self._apply_clock()
         self._week_start = week_starts_on()
         blocks = list(self._state.blocks)
         school = next((block for block in blocks if block.get("id") == SETUP_SCHOOL_ID), None)
