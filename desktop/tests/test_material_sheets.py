@@ -879,7 +879,7 @@ def test_a_failed_first_save_leaves_the_second_draft_and_pending_first(
         sheets.save()
         assert sheets.form["title"] == "Second saved title"
         assert trace == ["post"]
-        _method, _path, _body, _ok, fail = held.pop(0)
+        _method, _path, first_body, _ok, fail = held.pop(0)
         fail(ApiError(503, "The planner is unavailable."))
         _pump(qapp)
         # Window autosave (500 ms) can post the same pending payload during _pump. That is
@@ -895,14 +895,19 @@ def test_a_failed_first_save_leaves_the_second_draft_and_pending_first(
         wait_until(qapp, lambda: len(held) >= 1)
         assert session.pending_save is not None
         assert sheets.form["title"] == "Second saved title"
+        assert held[0][2]["operation_id"] == first_body["operation_id"]
         _deliver_held_change(qapp, shell, held, original)
         assert trace == ["post", "fail", "post", "ok"]
         assert session.assignments["essay"]["title"] == "First saved title"
         assert session.pending_save is None
         sheets.save()
+        assert held[0][2]["operation_id"] != first_body["operation_id"]
         _deliver_held_change(qapp, shell, held, original)
         assert session.assignments["essay"]["title"] == "Second saved title"
         assert trace == ["post", "fail", "post", "ok", "post", "ok"]
+        session.reload()
+        _settle(qapp, shell)
+        assert session.assignments["essay"]["title"] == "Second saved title"
     finally:
         monkeypatch.setattr(session.client, "request", original)
         while held:

@@ -3029,7 +3029,16 @@ def _give_focus_back(widget: QWidget) -> None:
     if not isValid(widget):
         return
     if widget.isVisible():
-        widget.window().activateWindow()
+        window = widget.window()
+        active = QApplication.activeWindow()
+        focused = QApplication.focusWidget()
+        if (
+            QApplication.activeModalWidget() is not None
+            or (active is not None and active is not window and active.isVisible())
+            or (focused is not None and focused is not widget and focused.isVisible())
+        ):
+            return
+        window.activateWindow()
         widget.setFocus(Qt.FocusReason.OtherFocusReason)
         return
     watcher = _FocusWhenShown(widget)
