@@ -3010,8 +3010,16 @@ class _FocusWhenShown(QObject):
             if hasattr(watched, "_fw_focus_when_shown"):
                 delattr(watched, "_fw_focus_when_shown")
             self.deleteLater()
-            if watched.isVisible():
-                watched.window().activateWindow()
+            window = watched.window()
+            focused = QApplication.focusWidget()
+            remembered = window.focusWidget()
+            if (
+                watched.isVisible()
+                and QApplication.activeWindow() is window
+                and QApplication.activeModalWidget() is None
+                and (focused is None or focused is watched or not focused.isVisible())
+                and (remembered is None or remembered is watched or not remembered.isVisible())
+            ):
                 watched.setFocus(Qt.FocusReason.OtherFocusReason)
         return False
 

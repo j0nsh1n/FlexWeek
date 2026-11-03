@@ -15,7 +15,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QWidget
 
 from desktop.native.hours.canvas import HoursCanvas
 from desktop.native.hours.geometry import Axis
@@ -95,15 +95,12 @@ def test_a_saved_new_block_gets_the_keyboard(qapp, window, design) -> None:
     assert spot == [(club["id"], THURSDAY)], spot
 
 
-def test_hours_get_the_keyboard_back_if_they_were_hidden_while_the_sheet_closed(qapp) -> None:
-    """Bento takes reused hours out of the grid and hides them while it re-lays tiles. The sheet's
-    return can land in that gap, after the hours have left the window."""
-    window = QWidget()
-    hours = QWidget(window)
+def _hours_waiting_to_be_shown(qapp, host: QWidget) -> tuple[QWidget, QWidget]:
+    """Hours that owned the keyboard, then left the window the way Bento re-lays tiles."""
+    hours = QWidget(host)
     hours.setObjectName("hoursCanvas")
     hours.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-    window.resize(200, 120)
-    window.show()
+    hours.show()
     hours.setFocus()
     qapp.processEvents()
     assert hours.hasFocus()
@@ -112,12 +109,111 @@ def test_hours_get_the_keyboard_back_if_they_were_hidden_while_the_sheet_closed(
     hours.setParent(holder)
     qapp.processEvents()
     _give_focus_back(hours)
+    return hours, holder
+
+
+def test_hours_get_the_keyboard_back_if_they_were_hidden_while_the_sheet_closed(qapp) -> None:
+    """Bento takes reused hours out of the grid and hides them while it re-lays tiles. The sheet's
+    return can land in that gap, after the hours have left the window."""
+    window = QWidget()
+    window.resize(200, 120)
+    window.show()
+    window.activateWindow()
+    qapp.processEvents()
+    hours, holder = _hours_waiting_to_be_shown(qapp, window)
     hours.setParent(window)
     hours.show()
     qapp.processEvents()
     assert hours.hasFocus()
     holder.deleteLater()
     window.deleteLater()
+    qapp.processEvents()
+
+
+def test_hidden_hours_do_not_take_the_keyboard_from_another_active_window(qapp, monkeypatch) -> None:
+    window = QWidget()
+    window.resize(200, 120)
+    window.show()
+    window.activateWindow()
+    qapp.processEvents()
+    hours, holder = _hours_waiting_to_be_shown(qapp, window)
+    other = QWidget()
+    other.resize(160, 80)
+    other.show()
+    box = QWidget(other)
+    box.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    other.activateWindow()
+    box.setFocus()
+    qapp.processEvents()
+    assert QApplication.activeWindow() is other
+    activations = []
+    monkeypatch.setattr(window, "activateWindow", lambda: activations.append(True))
+    hours.setParent(window)
+    hours.show()
+    qapp.processEvents()
+    assert QApplication.activeWindow() is other
+    assert activations == []
+    assert not hours.hasFocus()
+    holder.deleteLater()
+    other.deleteLater()
+    window.deleteLater()
+    qapp.processEvents()
+
+
+def test_hidden_hours_do_not_take_the_keyboard_from_another_field_or_page(qapp) -> None:
+    host = QWidget()
+    host.resize(320, 200)
+    host.show()
+    host.activateWindow()
+    week = QWidget(host)
+    page = QWidget(host)
+    week.setGeometry(0, 0, 320, 90)
+    page.setGeometry(0, 100, 320, 90)
+    week.show()
+    page.show()
+    qapp.processEvents()
+    hours, holder = _hours_waiting_to_be_shown(qapp, week)
+    field = QLineEdit(page)
+    field.show()
+    host.activateWindow()
+    field.setFocus()
+    qapp.processEvents()
+    assert field.hasFocus()
+    hours.setParent(week)
+    hours.show()
+    qapp.processEvents()
+    assert field.hasFocus()
+    assert not hours.hasFocus()
+    holder.deleteLater()
+    host.deleteLater()
+    qapp.processEvents()
+
+
+def test_hidden_hours_do_not_take_the_keyboard_from_an_open_modal(qapp) -> None:
+    host = QWidget()
+    host.resize(320, 180)
+    host.show()
+    host.activateWindow()
+    qapp.processEvents()
+    hours, holder = _hours_waiting_to_be_shown(qapp, host)
+    dialog = QDialog(host)
+    dialog.setModal(True)
+    edit = QLineEdit(dialog)
+    dialog.resize(200, 80)
+    dialog.show()
+    edit.setFocus()
+    qapp.processEvents()
+    assert QApplication.activeModalWidget() is dialog
+    assert edit.hasFocus()
+    hours.setParent(host)
+    hours.show()
+    qapp.processEvents()
+    assert QApplication.activeModalWidget() is dialog
+    assert edit.hasFocus()
+    assert not hours.hasFocus()
+    dialog.close()
+    holder.deleteLater()
+    host.deleteLater()
     qapp.processEvents()
 
 
