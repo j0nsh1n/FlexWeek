@@ -741,7 +741,9 @@ class DayHead(QPushButton):
         return QSize(0, round(36 * self.scale))
 
     def minimumSizeHint(self) -> QSize:  # noqa: N802
-        return self.sizeHint()
+        lines = self.text().replace("&", "").split("\n")
+        need = max((self.fontMetrics().horizontalAdvance(line) for line in lines), default=0)
+        return QSize(need + 4, round(36 * self.scale))
 
     def paintEvent(self, event: object) -> None:  # noqa: N802
         painter = QPainter(self)
@@ -1219,8 +1221,34 @@ class BentoCanvas(HoursCanvas):
         self.empty: frozenset[int] = frozenset()
         self.names_row: QHBoxLayout | None = None
 
+    def _fit_header_totals(self, widths: list[float], total: float) -> list[float]:
+        """Widen a day whose header button would be cut, taking the extra from days that have slack."""
+        mins = [
+            float(self.day_buttons[i].minimumSizeHint().width())
+            if i in self.day_buttons
+            else 0.0
+            for i in range(len(widths))
+        ]
+        short = [max(0.0, mins[i] - widths[i]) for i in range(len(widths))]
+        need = sum(short)
+        if need <= 0:
+            return widths
+        slack = [max(0.0, widths[i] - mins[i]) for i in range(len(widths))]
+        pool = sum(slack)
+        if pool <= 0:
+            return widths
+        scale = min(1.0, pool / need)
+        out = [
+            widths[i] + short[i] * scale - (slack[i] / pool * need * scale)
+            for i in range(len(widths))
+        ]
+        out[-1] += total - sum(out)
+        return out
+
     def _seven(self, area: QRectF) -> list[LinearTrack]:
-        widths = column_widths(area.width(), self.empty, floor=EMPTY_MIN_NARROW_PX)
+        widths = self._fit_header_totals(
+            column_widths(area.width(), self.empty, floor=EMPTY_MIN_NARROW_PX), area.width()
+        )
         left, tracks = area.left(), []
         for day, wide in enumerate(widths):
             tracks.append(
@@ -2077,6 +2105,13 @@ class BentoView(LayoutView):
                 "#bentoScroll, #bentoBoard": css(background=tokens["bg"]),
                 # Plain widgets on the tiles, which the window's stylesheet would paint its page colour.
                 "#bentoWeekHeader, #bentoDayHeader, #bentoWeekZoom, #bentoDayZoom, #bentoWeekHeads": clear,
+                "#bentoWeekHeads QPushButton": css(
+                    background="transparent",
+                    border="none",
+                    padding="0",
+                    min_height="0",
+                    min_width="0",
+                ),
                 "#bentoLegend, #bentoNextTagRow": clear,
                 # Qt's holders of the scroll bars, which lie over the hours' right edge.
                 "#qt_scrollarea_vcontainer, #qt_scrollarea_hcontainer": clear,

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from math import ceil
 
 from PySide6.QtCore import (
     QEvent,
@@ -1334,8 +1335,10 @@ def paint_icon(
 
 def icon_size(widget: QWidget, words: str) -> QSize:
     metrics = QFontMetricsF(widget.font())
-    lines = max(len(fit_lines(words, widget.font(), ICONS_WIDE, metrics.lineSpacing() * 2)), 1)
-    return QSize(ICONS_WIDE, ICON_PX + 6 + round(metrics.lineSpacing() * lines))
+    word_wide = max((ceil(metrics.horizontalAdvance(line)) for line in words.split("\n")), default=0)
+    wide = max(ICONS_WIDE, word_wide + 4)
+    lines = max(len(fit_lines(words, widget.font(), wide, metrics.lineSpacing() * 2)), 1)
+    return QSize(wide, ICON_PX + 6 + round(metrics.lineSpacing() * lines))
 
 
 class DeskIcon(QWidget):
@@ -1366,6 +1369,9 @@ class DeskShortcut(QPushButton):
 
     def sizeHint(self) -> QSize:  # noqa: N802
         return icon_size(self, self.drawn[0])
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        return self.sizeHint()
 
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
         paint_icon(self, QPainter(self), self.drawn, self.scheme, self.chosen or self.hasFocus())
@@ -1693,7 +1699,12 @@ class RetroView(LayoutView):
                     font_size=sizes["caption"]
                 ),
                 '#retroSurface QWidget[role="icon"], #retroSurface QPushButton[role="icon"]': css(
-                    font_size=sizes["caption"]
+                    font_size=sizes["caption"],
+                    background="transparent",
+                    border="none",
+                    padding="0",
+                    min_height="0",
+                    min_width="0",
                 ),
                 '#retroSurface QLabel[role="strong"]': css(font_weight=600),
                 '#retroSurface QLabel[role="heading"]': css(font_size=sizes["heading"], font_weight=600),
