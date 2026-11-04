@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QTimer, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
@@ -229,8 +229,11 @@ class LayoutSection(QFrame):
         if slot == "main":
             self._material = QPushButton("Material 3")
             self._material.setObjectName("chooseMaterial")
+            self._material.setAccessibleName("Back to Material")
+            self._material.setToolTip("Back to Material")
             self._material.setCheckable(True)
             self._material.setProperty("outline", True)
+            self._material.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
             self._material.toggled.connect(self._material_toggled)
             for card in self.pick.cards:
                 card.chosen.connect(self._style_card_chosen)

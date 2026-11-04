@@ -185,7 +185,16 @@ class DayBridge(QObject):
         self.reload(self._mode)
 
     def ensure_today(self) -> None:
-        """Load today's week if My day is looking at a different one."""
+        """Load today's week if looking at a different one, and reset Day to today."""
+        session = getattr(self._window, "session", None)
+        if session is not None and not self._today_only:
+            moment = datetime.fromtimestamp(session.now_ms() / 1000)
+            today_iso = moment.date().isoformat()
+            opener = getattr(session, "open_day", None)
+            if callable(opener):
+                opener(today_iso)
+            else:
+                session.selected_day = today_iso
         self._asked_week = ""
         self._load_started = False
         self._load_error = ""
@@ -248,6 +257,10 @@ class DayBridge(QObject):
         else:
             session.selected_day = iso
         self.reload(self._mode)
+
+    @Property(str, notify=changed)
+    def iso(self) -> str:
+        return self._iso
 
     @Property(str, notify=changed)
     def leftLine(self) -> str:

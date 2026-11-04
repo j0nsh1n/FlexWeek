@@ -442,4 +442,9 @@ class MaterialBridge(QObject):
         self._screen = name
         if name == "myday":
             self._myday.ensure_today()
+        elif name == "day":
+            if getattr(self._day, "_opened_from_month", False):
+                self._day._opened_from_month = False
+            else:
+                self._day.ensure_today()
         self.changed.emit()

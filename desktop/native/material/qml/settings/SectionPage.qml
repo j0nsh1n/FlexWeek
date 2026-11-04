@@ -13,6 +13,18 @@ Flickable {
     boundsBehavior: Flickable.StopAtBounds
     flickableDirection: Flickable.VerticalFlick
 
+    function ensureVisible(item) {
+        if (!item)
+            return
+        var spot = item.mapToItem(page.contentItem, 0, 0)
+        var itemY = spot.y
+        var itemH = item.height
+        if (itemY < page.contentY)
+            page.contentY = Math.max(0, itemY)
+        else if (itemY + itemH > page.contentY + page.height)
+            page.contentY = Math.min(Math.max(0, page.contentHeight - page.height), itemY + itemH - page.height)
+    }
+
     Column {
         id: column
         x: page.pad

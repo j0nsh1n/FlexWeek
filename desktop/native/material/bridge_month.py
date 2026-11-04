@@ -278,6 +278,9 @@ class MonthBridge(QObject):
         iso = self._selected
         if not iso:
             return
+        day_bridge = getattr(self.parent(), "_day", None)
+        if day_bridge is not None:
+            day_bridge._opened_from_month = True
         self._session().open_day(iso)
         show = getattr(self.parent(), "showPage", None)
         if show is not None:

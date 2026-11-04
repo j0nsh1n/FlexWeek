@@ -42,6 +42,7 @@ from PySide6.QtGui import (
     QHideEvent,
     QIcon,
     QKeyEvent,
+    QKeySequence,
     QMouseEvent,
     QMoveEvent,
     QPainter,
@@ -51,6 +52,7 @@ from PySide6.QtGui import (
     QPen,
     QPixmap,
     QResizeEvent,
+    QShortcut,
     QShowEvent,
 )
 from PySide6.QtWidgets import (
@@ -3728,7 +3730,8 @@ class BlockDialog(Dialog):
             buttons.accepted.connect(self.accept)
         else:
             buttons.accepted.connect(self._add_primary)
-        buttons.rejected.connect(self.reject)
+        buttons.rejected.connect(self._close_asked)
+        QShortcut(QKeySequence(Qt.Key.Key_Escape), self, self._close_asked)
         row.addWidget(buttons)
         layout.addLayout(row)
         self._sync_scope()
@@ -3861,6 +3864,42 @@ class BlockDialog(Dialog):
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
         self.title.setFocus(Qt.FocusReason.OtherFocusReason)
+        if not hasattr(self, "_opened_as"):
+            self._opened_as = self._typed_picture()
+
+    def _typed_picture(self) -> tuple:
+        return (
+            self.title.text() if hasattr(self, "title") else "",
+            tuple(check.isChecked() for check in self.days) if hasattr(self, "days") else (),
+            self.start.time().toString("HH:mm") if hasattr(self, "start") else "",
+            self.end.time().toString("HH:mm") if hasattr(self, "end") else "",
+            self.category.currentData() if hasattr(self, "category") else None,
+            self.missed.isChecked() if hasattr(self, "missed") else False,
+            self.scope_choice.currentIndex() if hasattr(self, "scope_choice") else 0,
+        )
+
+    def _close_asked(self) -> None:
+        """Esc, Cancel and the close button ask before dropping typed words; an untouched sheet closes
+        at once. Closing from code (reject, close) never asks: nothing is there to answer it."""
+        if getattr(self, "_opened_as", None) is not None and self._typed_picture() != self._opened_as:
+            sheet = ConfirmSheet(
+                self,
+                "Discard what you typed?",
+                "Discard what you typed?",
+                (("stay", "Keep editing", "quiet"), ("discard", "Discard", "outlined danger")),
+                default="stay",
+            )
+            sheet.exec()
+            if sheet.answer != "discard":
+                return
+        self.reject()
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        if event.key() == Qt.Key.Key_Escape:
+            event.accept()
+            self._close_asked()
+            return
+        super().keyPressEvent(event)
 
     def _chose_category(self, *_index: object) -> None:
         if self._applying_guess:

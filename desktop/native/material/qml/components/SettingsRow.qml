@@ -81,11 +81,12 @@ Item {
         reduceMotion: root.reduceMotion
     }
     M3FocusRing {
+        objectName: "focusRing"
         anchors.fill: parent
         anchors.margins: -2
         shown: root.interactive && root.activeFocus
         ring: palette.primary
-        ringRadius: 4
+        ringRadius: 16
     }
 
     HoverHandler { id: hover; enabled: root.enabled && root.interactive }

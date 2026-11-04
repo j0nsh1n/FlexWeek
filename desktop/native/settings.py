@@ -15,12 +15,14 @@ from PySide6.QtGui import (
     QGuiApplication,
     QIcon,
     QKeyEvent,
+    QKeySequence,
     QLinearGradient,
     QPainter,
     QPaintEvent,
     QPalette,
     QPen,
     QPixmap,
+    QShortcut,
     QShowEvent,
 )
 from PySide6.QtWidgets import (
@@ -2075,6 +2077,7 @@ class AccountDialog(Dialog):
         close = sheet_button("Close", "outlined", "accountClose")
         close.clicked.connect(self.reject)
         sheet_footer(layout, close, divided=True)
+        QShortcut(QKeySequence(Qt.Key.Key_Escape), self, self.reject)
 
     def _action(self, words: str, name: str, action: str, outlined: bool = True) -> QPushButton:
         button = QPushButton(words)
@@ -2087,6 +2090,13 @@ class AccountDialog(Dialog):
     def _set(self) -> None:
         self.action = self.sender().property("action")
         self.accept()
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        if event.key() == Qt.Key.Key_Escape:
+            event.accept()
+            self.reject()
+            return
+        super().keyPressEvent(event)
 
 
 class AlarmRingDialog(QDialog):
