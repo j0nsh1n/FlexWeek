@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import stat
 import sys
@@ -50,6 +51,9 @@ CHECK_TIMEOUT_MS = 15_000
 DOWNLOAD_STALL_MS = 30_000
 CHECK_FAILED = "FlexWeek could not check for updates right now. Try again later, or open the release page."
 DOWNLOAD_STOPPED = "The download stopped before it finished. Try again, or open the release page."
+
+
+DEV_TITLE = re.compile(r"Developer build (\d+(?:\.\d+){1,3})")
 
 
 class Updater(QObject):
@@ -178,7 +182,14 @@ class Updater(QObject):
         if not isinstance(payload, dict):
             self._finish_with_latest()
             return
+        # The `dev` release is always tagged `dev`, so its version lives in the title the developer-build
+        # workflow writes. A title in any other shape is not offered.
+        title = DEV_TITLE.fullmatch(str(payload.get("name") or ""))
+        if title is None:
+            self._finish_with_latest()
+            return
         asked = dict(payload)
+        asked["tag_name"] = title.group(1)
         # The engine skips pre-releases, which is right for /latest, but this one was asked for on purpose.
         asked["prerelease"] = False
         dev = available(asked, self.kind)

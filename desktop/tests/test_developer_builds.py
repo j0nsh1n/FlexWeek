@@ -35,6 +35,11 @@ def test_the_switch_is_off_by_default_and_survives_a_save() -> None:
     assert sanitize_updates({"developer_builds": "yes"})["developer_builds"] is False
 
 
+def _dev_release(version: str) -> dict:
+    """The `dev` pre-release as GitHub returns it: the tag is always `dev`, the version is in the title."""
+    return {**_release("dev", prerelease=True), "name": f"Developer build {version}"}
+
+
 def _release(tag: str, *, prerelease: bool = False) -> dict:
     return {
         "tag_name": tag,
@@ -90,7 +95,7 @@ def github(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     GitHub.latest_status = 200
     GitHub.dev_status = 200
     GitHub.latest_body = json.dumps(_release("v1.2.0")).encode()
-    GitHub.dev_body = json.dumps(_release("1.2.0.202611040300", prerelease=True)).encode()
+    GitHub.dev_body = json.dumps(_dev_release("1.2.0.202611040300")).encode()
     server = ThreadingHTTPServer(("127.0.0.1", 0), GitHub)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -152,7 +157,7 @@ def test_a_newer_official_release_beats_an_older_dev_build(
     qapp: QApplication, github: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     GitHub.latest_body = json.dumps(_release("v1.2.1")).encode()
-    GitHub.dev_body = json.dumps(_release("1.2.0.202611050300", prerelease=True)).encode()
+    GitHub.dev_body = json.dumps(_dev_release("1.2.0.202611050300")).encode()
     real = updater_module.available
     monkeypatch.setattr(
         updater_module,
@@ -225,3 +230,10 @@ def test_a_dev_build_says_developer_build_in_settings(
         assert "developer build" in words
     finally:
         _reset(window)
+
+
+def test_a_dev_release_without_a_version_in_its_title_is_not_offered(qapp: QApplication, github: str) -> None:
+    GitHub.dev_body = json.dumps({**_dev_release("1.2.0.202611040300"), "name": "Developer build"}).encode()
+    updater = made()
+    kind, _update = outcome(qapp, updater, developer=True)
+    assert kind == "none"
