@@ -18,6 +18,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- Linux tarball updates replace the whole FlexWeek folder instead of nesting it inside `app/`, refuse a folder that holds your data, and AppImage login entries point at the AppImage.
 - Material Settings Look labels and choices update legibly when switching between light and dark.
 - Pressing Return in Material setup commits and formats School times consistently.
 - Keyboard and accessibility actions inside Material settings previews leave live planner navigation and homework unchanged.

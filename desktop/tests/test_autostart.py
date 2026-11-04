@@ -73,3 +73,27 @@ def test_a_path_with_a_space_in_it_is_quoted() -> None:
         argv=["/home/s/My Files/desktop/main.py"], executable="/usr/bin/python3"
     )
     assert '"/home/s/My Files/desktop/main.py"' in command
+
+
+def test_an_appimage_login_entry_names_the_appimage_not_its_mount(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(autostart, "frozen", lambda: True)
+    command = autostart.launch_command(
+        executable="/tmp/.mount_abc/usr/lib/FlexWeek/FlexWeek",
+        appimage="/home/s/Apps/FlexWeek.AppImage",
+        kind="appimage",
+    )
+    assert command == "/home/s/Apps/FlexWeek.AppImage"
+
+
+def test_a_tarball_login_entry_still_names_the_program(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(autostart, "frozen", lambda: True)
+    command = autostart.launch_command(
+        executable="/home/s/FlexWeek/app/FlexWeek",
+        appimage="/home/s/Apps/FlexWeek.AppImage",
+        kind="tarball",
+    )
+    assert command == "/home/s/FlexWeek/app/FlexWeek"

@@ -25,6 +25,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QUrl, Signal
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 
+from desktop.native.autostart import frozen
 from desktop.native.update import (
     RELEASE_PAGE,
     RELEASES_URL,
@@ -185,9 +186,13 @@ class Updater(QObject):
         self.ready.emit(str(target))
 
 
-def bundle_root() -> Path:
-    """The directory that would be replaced by a tarball update."""
-    return Path(sys.executable).resolve().parent
+def bundle_root(executable: str | None = None) -> Path:
+    """The top folder of the install that would be replaced by a tarball update."""
+    binary = Path(sys.executable if executable is None else executable).resolve()
+    parent = binary.parent
+    if parent.name == "app" and (parent.parent / "FlexWeek").is_file():
+        return parent.parent
+    return parent
 
 
 def writable(path: Path) -> bool:
@@ -238,6 +243,8 @@ def apply_update(downloaded: str, kind: str | None = None) -> str | None:
             if not current:
                 return "This copy doesn't know where its AppImage is."
             return _swap_file(source, Path(current))
+        if not frozen():
+            return "This copy runs from source, so it can't replace itself. Update it with git instead."
         return _swap_tree(source)
     finally:
         folder = _own_download_folder(source)
@@ -265,6 +272,8 @@ def _swap_tree(source: Path) -> str | None:
     Writing into the live directory would leave a half-updated app if anything failed part way.
     """
     root = bundle_root()
+    if (root / "flexweek.db").exists():
+        return f"{root} also holds FlexWeek's data, so the update was not applied."
     if not writable(root.parent):
         return f"{root.parent} can't be written, so the update was not applied."
     staging = root.parent / (root.name + ".update")

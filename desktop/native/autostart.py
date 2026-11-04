@@ -28,11 +28,22 @@ def frozen() -> bool:
     return bool(getattr(sys, "frozen", False) or globals().get("__compiled__"))
 
 
-def launch_command(argv: list[str] | None = None, executable: str | None = None) -> str:
+def launch_command(
+    argv: list[str] | None = None,
+    executable: str | None = None,
+    appimage: str | None = None,
+    kind: str | None = None,
+) -> str:
     """What to run at login. In a bundle that is the executable; from a source checkout it is this
     interpreter and the entry script, so a developer's autostart does not point at bare python."""
     binary = executable if executable is not None else sys.executable
     if frozen():
+        from desktop.native.update import install_kind
+
+        resolved_kind = install_kind() if kind is None else kind
+        resolved_appimage = os.environ.get("APPIMAGE") if appimage is None else appimage
+        if resolved_kind == "appimage" and resolved_appimage:
+            return _quote(resolved_appimage)
         return _quote(binary)
     args = list(sys.argv if argv is None else argv)
     script = Path(args[0]).resolve() if args and args[0] else Path("desktop/main.py").resolve()
