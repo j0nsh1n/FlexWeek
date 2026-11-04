@@ -6,6 +6,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Settings → Computer has Get developer builds: this copy also gets developer test builds, and still moves to each official release when it is newer.
 - Developer builds: `scripts/dev-release.sh` starts a GitHub build of main that replaces the `dev` pre-release with a Linux tarball (never marked latest).
 - A seed colour can build a Material scheme: six palette styles, light or dark, and a contrast from low to high. Dynamic color uses the desktop's accent when the platform supplies one.
 - Material 3 is a style choice beside the existing ones. Choosing it opens a Material window on the real week, and choosing a Widgets style swaps back, with no restart. Today's app stays the default. The Material window has Day, Week, Month, My day, and Settings, and the week's homework list sits on the right.
@@ -14,6 +15,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Material's Focus screen covers the window: phase, task, timer, Pause or Resume, Skip, Finish and Back, on the same timer Widgets uses. Rain, Lo-Fi and White noise play while you focus and pause with the timer; Spotify still opens the Settings link. Auto-mute holds reminders during a focus work phase. Auto-complete, off by default, finishes only that session's block.
 
 ### Changed
+- In the Material style, clicking a homework block, a homework card or a Day row opens it for editing; marking it finished has its own round button, and right-click or Shift+F10 opens Edit, Mark finished and Delete.
 - Material Day and My day show leftover counts, the free-time Now card, Up next and Done, and a homework check with Undo.
 - Spotify for blocks is one link in Settings. Add and edit no longer ask for a link on a block or on homework. Open Spotify link and Focus set to Spotify use that link. A block starts with it only when the alarm sound is Spotify. A link already saved on a block stays in your data.
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.

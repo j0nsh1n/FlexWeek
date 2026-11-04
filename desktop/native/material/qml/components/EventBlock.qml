@@ -12,6 +12,8 @@ Item {
     property string detail: ""
     property bool past: false
     property string accessName: ""
+    property int rightInset: 0
+    property alias trailingInset: root.rightInset
 
     // Absent keys keep the block the gallery measures: radius 12, pad 6, no shadow, an edge bar.
     readonly property int pad: (theme && theme.cardPad !== undefined) ? theme.cardPad : 6
@@ -97,7 +99,7 @@ Item {
             spacing: 0
             Text {
                 objectName: "title"
-                width: parent.width
+                width: Math.max(0, parent.width - root.rightInset)
                 text: root.title
                 color: root.tones()[1]
                 wrapMode: Text.WordWrap

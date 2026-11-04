@@ -16,8 +16,9 @@ Rectangle {
     signal dragMoved(point scene)
     signal dropped(point scene)
     signal dragStarted()
-    // Space or Return: the keyboard's way to give it a time.
     signal activated()
+    signal opened()
+    signal menuAsked(real x, real y)
 
     readonly property int pad: density === "compact" ? 8 : 12
     readonly property bool dragging: drag.active
@@ -107,16 +108,34 @@ Rectangle {
         }
     }
 
-    HoverHandler { id: hover; cursorShape: Qt.OpenHandCursor }
+    property bool wasDragged: false
+
+    HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor }
+    TapHandler {
+        id: tap
+        onTapped: {
+            if (!card.wasDragged)
+                card.opened()
+            card.wasDragged = false
+        }
+    }
+    TapHandler {
+        acceptedButtons: Qt.RightButton
+        onTapped: (point) => card.menuAsked(point.position.x, point.position.y)
+    }
     DragHandler {
         id: drag
         target: null
+        dragThreshold: 4
         cursorShape: Qt.ClosedHandCursor
         onActiveChanged: {
-            if (active)
+            if (active) {
+                card.wasDragged = true
                 card.dragStarted()
-            else
+            } else {
                 card.dropped(centroid.scenePosition)
+                Qt.callLater(function() { card.wasDragged = false })
+            }
         }
         onCentroidChanged: if (active) card.dragMoved(centroid.scenePosition)
     }
@@ -131,11 +150,14 @@ Rectangle {
 
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
-    Accessible.name: title + ", no time yet. Press Space to find a time."
-    Accessible.onPressAction: card.activated()
+    Accessible.name: "Edit " + title
+    Accessible.onPressAction: card.opened()
     Keys.onPressed: (event) => {
         if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            card.activated()
+            card.opened()
+            event.accepted = true
+        } else if ((event.key === Qt.Key_F10 && (event.modifiers & Qt.ShiftModifier)) || event.key === Qt.Key_Menu) {
+            card.menuAsked(width / 2, height / 2)
             event.accepted = true
         }
     }
