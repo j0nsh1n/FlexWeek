@@ -6,6 +6,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Dragging across empty time on the Material Week grid draws a snapped range and opens Add homework pinned to that day and time.
 - Settings → Computer has Get developer builds: this copy also gets developer test builds, and still moves to each official release when it is newer.
 - Developer builds: `scripts/dev-release.sh` starts a GitHub build of main that replaces the `dev` pre-release with a Linux tarball (never marked latest).
 - A seed colour can build a Material scheme: six palette styles, light or dark, and a contrast from low to high. Dynamic color uses the desktop's accent when the platform supplies one.
