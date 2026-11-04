@@ -160,16 +160,22 @@ def test_a_drag_shorter_than_a_quarter_hour_opens_nothing(qapp: QApplication, wi
     grid = _qml(root, "weekScroller")
     grid.setProperty("contentY", 0.0)
     _pump(qapp)
+    week = _qml(root, "materialWeek")
+    quick = window._material_page._quick
+    # Sideways inside the Saturday column: past the drag threshold, but both ends snap to 09:00.
+    start = hours_item.mapToScene(QPointF(gutter + saturday * day_width + 8, 9 * row + 2)).toPoint()
+    QTest.mousePress(quick, Qt.MouseButton.LeftButton, pos=start)
+    _pump(qapp, 4)
+    seen_active = False
+    for step in range(1, 13):
+        QTest.mouseMove(quick, start + QPoint(step * 3, 0))
+        _pump(qapp, 2)
+        seen_active = seen_active or bool(week.property("dragRangeActive"))
+    QTest.mouseRelease(quick, Qt.MouseButton.LeftButton, pos=start + QPoint(36, 0))
+    _pump(qapp, 6)
 
-    p1 = hours_item.mapToScene(QPointF(gutter + saturday * day_width + day_width / 2, 9 * row))
-    # 5 minutes down: (5 / 60) * row px
-    p2 = hours_item.mapToScene(
-        QPointF(gutter + saturday * day_width + day_width / 2, 9 * row + int(5 / 60 * row))
-    )
-    _drag_pos(window, QPoint(int(p1.x()), int(p1.y())), QPoint(int(p2.x()), int(p2.y())))
-
-    sheets = window._material_page.bridge.sheets
-    assert sheets.kind == ""
+    assert seen_active, "the drag never started, so this test would prove nothing"
+    assert window._material_page.bridge.sheets.kind == ""
 
 
 def test_a_plain_click_on_empty_time_opens_nothing(qapp: QApplication, window: NativeWindow) -> None:
@@ -199,11 +205,20 @@ def test_dragging_an_existing_block_or_card_does_not_open_add(
 
     # 1. Drag an existing block on the grid
     essay_block = _block_named(root, "History essay")
+    essay_block.forceActiveFocus()
+    _pump(qapp)
     start_pt = _centre(root, essay_block)
     _drag_pos(window, start_pt, start_pt + QPoint(0, 100))
     _pump(qapp, 4)
     sheets = window._material_page.bridge.sheets
     assert sheets.kind == ""
+    # The rejected creation drag leaves the block its keyboard focus, so Enter still opens it.
+    assert essay_block.property("activeFocus") is True
+    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Return)
+    _pump(qapp, 6)
+    assert sheets.kind == "homework"
+    sheets.forceClose()
+    _pump(qapp, 4)
 
     # 2. Drag a card from the drawer onto the grid
     due = (_week_monday(window) + timedelta(days=6)).isoformat()

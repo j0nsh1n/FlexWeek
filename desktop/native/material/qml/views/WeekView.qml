@@ -285,7 +285,6 @@ Item {
                 grabPermissions: PointerHandler.CanTakeOverFromItems | PointerHandler.CanTakeOverFromHandlersOfDifferentType
                 onActiveChanged: {
                     if (active) {
-                        hours.forceActiveFocus()
                         var px = centroid.pressPosition.x
                         var py = centroid.pressPosition.y
                         if (!root.emptyGridTimeAt(px, py)) {
@@ -293,6 +292,8 @@ Item {
                             root.dragRangeActive = false
                             return
                         }
+                        // Only a drag on empty time takes focus, so Escape can cancel it; a block keeps its own.
+                        hours.forceActiveFocus()
                         root.dragRangeValid = true
                         root.dragRangeCanceled = false
                         root.dragRangeDay = Math.floor((px - root.gutter) / root.dayWidth)
