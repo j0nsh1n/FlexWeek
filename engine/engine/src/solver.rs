@@ -453,6 +453,17 @@ fn homework_id(block: &TimeBlock) -> Option<&str> {
         .filter(|id| !id.is_empty())
 }
 
+fn spread_group_key(block: &TimeBlock) -> String {
+    if let Some(id) = homework_id(block) {
+        return id.to_string();
+    }
+    match block.split_peer.as_deref() {
+        Some(peer) if peer < block.id.as_str() => peer.to_string(),
+        Some(_) => block.id.clone(),
+        None => block.id.clone(),
+    }
+}
+
 fn spread_mates(left: &TimeBlock, right: &TimeBlock) -> bool {
     if left.id == right.id {
         return false;
@@ -485,10 +496,10 @@ fn same_day_spread_notes(placed: &[TimeBlock], held: &[TimeBlock]) -> Vec<Notice
         if block.kind != "flexible" {
             continue;
         }
-        let key = homework_id(block)
-            .map(str::to_string)
-            .unwrap_or_else(|| block.id.clone());
-        groups.entry(key).or_default().push(block);
+        groups
+            .entry(spread_group_key(block))
+            .or_default()
+            .push(block);
     }
     let mut notes = Vec::new();
     for members in groups.values() {
@@ -1128,7 +1139,6 @@ pub fn solve_with_rules(
         let mut placed = search_blocks[idx].clone();
         placed.start = Some(slot_to_hhmm(*slot)?);
         placed.days = vec![*day];
-        placed.split_peer = None;
         placed_flex.push(placed);
         occ_final[*day as usize] |= occupancy_mask(*slot, lengths[idx])?;
     }
@@ -1224,6 +1234,9 @@ pub fn solve_with_rules(
         });
     }
     let notices = same_day_spread_notes(&placed_flex, &held);
+    for block in &mut placed_flex {
+        block.split_peer = None;
+    }
 
     let complete = unplaced.is_empty();
     Ok(SolveTrace {

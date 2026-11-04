@@ -379,3 +379,27 @@ fn a_new_piece_that_must_share_a_held_pieces_day_says_so() {
         trace.notices
     );
 }
+
+#[test]
+fn a_split_standalone_block_on_one_day_says_so() {
+    let windows = [work_span(&[2], "16:00", "20:00", None)];
+    let long = flex("long", "Essay", 90, &[2], "medium", None, None);
+    let mut rules = plan_rules_from_value(&json!({}));
+    rules.split_long_tasks = true;
+    let trace = plan(&[long], &windows, rules);
+    assert_eq!(placed_day(&trace, "long"), 2);
+    assert_eq!(placed_day(&trace, "long~2"), 2);
+    assert!(
+        by_id(&trace.placed, "long").split_peer.is_none(),
+        "split_peer is planning-only and must not be returned"
+    );
+    assert!(
+        trace.notices.iter().any(|item| {
+            item.kind == "spread_same_day"
+                && item.message
+                    == "Couldn't spread Essay over separate days, so two parts share Wednesday."
+        }),
+        "expected a same-day spread notice, got {:?}",
+        trace.notices
+    );
+}
