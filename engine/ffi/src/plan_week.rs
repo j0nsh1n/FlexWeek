@@ -711,9 +711,9 @@ mod tests {
 
     #[test]
     fn a_split_that_fits_reports_both_halves() {
-        // Monday 16:00–18:00 holds both hours. The preview and the accepted ids name
-        // each half, under the essay's title.
-        let (week, result) = plan_split("split-both-hours", "18:00");
+        // Monday 16:00–18:15 holds both hours and the default 15-minute gap between them.
+        // The preview and the accepted ids name each half, under the essay's title.
+        let (week, result) = plan_split("split-both-hours", "18:15");
         let placed = result["placed"].as_array().unwrap();
         let mut ids: Vec<&str> = placed
             .iter()
