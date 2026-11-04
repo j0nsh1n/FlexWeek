@@ -81,10 +81,6 @@ def placed(client: TestClient, blocks: list[dict]) -> dict[str, tuple[int, str, 
 def test_a_fresh_account_omits_planner_settings(alice: TestClient) -> None:
     body = alice.get("/api/preferences").json()
     for key in PLANNER_KEYS:
-        if key == "buffer_min":
-            # The store row still defaults to 0, so a new account sends explicit None.
-            assert body.get(key) == 0
-            continue
         assert key not in body
     saved = alice.put("/api/preferences", json=body, headers=WRITE)
     assert saved.status_code == 200, saved.text
@@ -128,9 +124,9 @@ def test_each_planner_setting_moves_the_week(alice: TestClient) -> None:
         block("class", 60, [4], kind="locked", start="15:00", energy="medium"),
         block("hw", 60, [4]),
     ]
-    assert placed(alice, homework)["hw"] == (4, "16:00", 60)
-    save(alice, buffer_min=15)
     assert placed(alice, homework)["hw"] == (4, "16:15", 60)
+    save(alice, buffer_min=0)
+    assert placed(alice, homework)["hw"] == (4, "16:00", 60)
     save(alice, buffer_min=30)
     assert placed(alice, homework)["hw"] == (4, "16:30", 60)
     save(alice, buffer_min=0)
@@ -184,10 +180,16 @@ def test_each_planner_setting_moves_the_week(alice: TestClient) -> None:
     assert alice.get("/api/preferences").json()["show_weekends"] is False
 
 
-def test_a_new_account_has_a_15_minute_buffer() -> None:
-    from backend.app import Preferences
-
-    assert Preferences.model_fields["buffer_min"].default == 15
+def test_a_new_account_plans_with_a_15_minute_buffer(alice: TestClient) -> None:
+    body = alice.get("/api/preferences").json()
+    # The dump omits the 15-minute default the way other planner defaults are omitted.
+    assert body.get("buffer_min", 15) == 15
+    save(alice, work_windows=[{"days": [4], "start": "16:00", "end": "20:00"}])
+    homework = [
+        block("class", 60, [4], kind="locked", start="15:00", energy="medium"),
+        block("hw", 60, [4]),
+    ]
+    assert placed(alice, homework)["hw"] == (4, "16:15", 60)
 
 
 def test_choosing_no_buffer_is_saved_and_kept(alice: TestClient) -> None:

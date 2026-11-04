@@ -1067,7 +1067,7 @@ fn planner_prefs(conn: &Connection) -> (i64, i64, i64, i64, i64) {
 #[test]
 fn a_new_account_keeps_the_old_planner_until_a_setting_changes() {
     let conn = db("a", true);
-    assert_eq!(planner_prefs(&conn), (0, 0, 1, 0, 1));
+    assert_eq!(planner_prefs(&conn), (0, 15, 1, 0, 1));
 }
 
 #[test]
@@ -1089,9 +1089,10 @@ fn planner_settings_round_trip_and_an_unknown_pref_does_not_stop_the_batch() {
     assert_eq!(planner_prefs(&desktop), (1, 15, 0, 1, 0));
 
     let sent = batch(&desktop, 0, "b");
+    // buffer_min 15 is the unpublished default, so it is not on the wire; both
+    // sides already hold 15 from the schema.
     for (key, value) in [
         ("weekend_homework_free", 1),
-        ("buffer_min", 15),
         ("urgent_first", 0),
         ("split_long_tasks", 1),
         ("show_weekends", 0),
@@ -1103,6 +1104,12 @@ fn planner_settings_round_trip_and_an_unknown_pref_does_not_stop_the_batch() {
             .unwrap_or_else(|| panic!("{key} was not exported"));
         assert_eq!(record.body, Some(json!(value)));
     }
+    assert!(
+        sent.records
+            .iter()
+            .all(|record| record.entity != "pref" || record.key != "buffer_min"),
+        "untouched buffer_min 15 must not be exported"
+    );
     apply_batch(&mut phone, &sent, 4_000).unwrap();
     assert_eq!(planner_prefs(&phone), (1, 15, 0, 1, 0));
 
@@ -1176,4 +1183,69 @@ fn an_explicit_return_to_the_defaults_beats_older_remote_choices() {
     scan(&mut remote, 1, 1_000).unwrap();
     apply_batch(&mut local, &batch(&remote, 0, "a"), 2_000).unwrap();
     assert_eq!(planner_prefs(&local), (0, 0, 1, 0, 1));
+}
+
+fn pref_record(conn: &Connection, key: &str) -> Option<(bool, String)> {
+    conn.query_row(
+        "SELECT deleted, hash FROM sync_record WHERE user_id=1 AND entity='pref' AND key=?1",
+        [key],
+        |row| Ok((row.get::<_, i64>(0)? != 0, row.get(1)?)),
+    )
+    .optional()
+    .unwrap()
+}
+
+#[test]
+fn a_fresh_phone_at_the_fifteen_minute_default_does_not_overwrite_a_desktop_that_chose_thirty() {
+    let mut desktop = db("a", true);
+    desktop
+        .execute(
+            "UPDATE preferences SET buffer_min=30, planner_settings_chosen=1",
+            [],
+        )
+        .unwrap();
+    scan(&mut desktop, 1, 1_000).unwrap();
+    let mut phone = db("b", true);
+    assert_eq!(planner_prefs(&phone).1, 15);
+    scan(&mut phone, 1, 2_000).unwrap();
+    apply_batch(&mut desktop, &batch(&phone, 0, "a"), 3_000).unwrap();
+    assert_eq!(planner_prefs(&desktop).1, 30);
+}
+
+#[test]
+fn moving_a_stored_zero_buffer_to_fifteen_is_not_a_sync_edit() {
+    let path = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "sync-buffer-move-{}-{}.db",
+        std::process::id(),
+        NEXT_DB.fetch_add(1, Ordering::Relaxed)
+    ));
+    let _ = std::fs::remove_file(&path);
+    flexweek_store::initialize(&path, "2026-10-12").unwrap();
+    {
+        let conn = flexweek_store::open_connection(&path).unwrap();
+        migrate(&conn).unwrap();
+        set_device(&conn, "a", "a").unwrap();
+        conn.execute(
+            "INSERT INTO users(id, username, password_hash) VALUES (1, 'student', 'hash')",
+            [],
+        )
+        .unwrap();
+        conn.execute("INSERT INTO preferences(user_id) VALUES (1)", [])
+            .unwrap();
+        set_account(&conn, 1, UUID).unwrap();
+        conn.execute(
+            "UPDATE preferences SET buffer_min=0, prefs_version=3, planner_settings_chosen=0",
+            [],
+        )
+        .unwrap();
+    }
+    flexweek_store::initialize(&path, "2026-10-12").unwrap();
+    let mut conn = flexweek_store::open_connection(&path).unwrap();
+    assert_eq!(planner_prefs(&conn).1, 15);
+    scan(&mut conn, 1, 1_000).unwrap();
+    assert_eq!(
+        pref_record(&conn, "buffer_min"),
+        None,
+        "the one-time move must not stamp buffer_min"
+    );
 }
