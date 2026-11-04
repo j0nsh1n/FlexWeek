@@ -177,3 +177,15 @@ def test_each_planner_setting_moves_the_week(alice: TestClient) -> None:
     save(alice, work_windows=morning, show_weekends=False)
     assert placed(alice, [block("math", 60, [5], energy="high")])["math"] == (5, "10:00", 60)
     assert alice.get("/api/preferences").json()["show_weekends"] is False
+
+
+def test_a_new_account_has_a_15_minute_buffer() -> None:
+    from backend.app import Preferences
+
+    assert Preferences.model_fields["buffer_min"].default == 15
+
+
+def test_choosing_no_buffer_is_saved_and_kept(alice: TestClient) -> None:
+    saved = save(alice, buffer_min=0)
+    assert saved["buffer_min"] == 0
+    assert alice.get("/api/preferences").json()["buffer_min"] == 0
