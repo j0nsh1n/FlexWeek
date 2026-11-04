@@ -213,6 +213,9 @@ def test_editing_the_title_from_a_block_saves_and_undo_reverts_it(
         for item in (_named(root, "sheetNotice") + _named(root, "materialSnackbar"))
         if item.property("visible") and item.property("actionText") == "UNDO"
     )
+    # A notice alone must not hold the sheet layer: that would disable the app until it timed out.
+    assert sheets.active is False
+    assert root.property("sheetOpen") is False
     undo_btn = next(c for c in _visuals(notice) if str(c.property("text")) == "UNDO")
     _click(window, undo_btn)
     _settle(qapp, window)

@@ -122,7 +122,7 @@ class SheetsBridge(QObject):
 
     @Property(bool, notify=changed)
     def active(self) -> bool:
-        return bool(self._kind) or self._more or bool(self._ask) or bool(self._notice)
+        return bool(self._kind) or self._more or bool(self._ask)
 
     @Property(bool, notify=changed)
     def canSave(self) -> bool:
