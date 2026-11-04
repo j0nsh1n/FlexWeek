@@ -434,6 +434,79 @@ fn assigned_contains(assigned: &[(String, (i64, i64))], id: &str) -> bool {
     assigned.iter().any(|(key, _)| key == id)
 }
 
+fn homework_id(block: &TimeBlock) -> Option<&str> {
+    block
+        .rest
+        .get("assignment_id")
+        .and_then(Value::as_str)
+        .filter(|id| !id.is_empty())
+}
+
+fn spread_mates(left: &TimeBlock, right: &TimeBlock) -> bool {
+    if left.id == right.id {
+        return false;
+    }
+    if left.split_peer.as_deref() == Some(right.id.as_str())
+        || right.split_peer.as_deref() == Some(left.id.as_str())
+    {
+        return true;
+    }
+    match (homework_id(left), homework_id(right)) {
+        (Some(a), Some(b)) => a == b,
+        _ => false,
+    }
+}
+
+const DAY_NAME: [&str; 7] = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+];
+
+fn same_day_spread_notes(placed: &[TimeBlock]) -> Vec<Explanation> {
+    use std::collections::HashMap;
+    let mut groups: HashMap<String, Vec<&TimeBlock>> = HashMap::new();
+    for block in placed {
+        if block.kind != "flexible" {
+            continue;
+        }
+        let key = homework_id(block)
+            .map(str::to_string)
+            .unwrap_or_else(|| block.id.clone());
+        groups.entry(key).or_default().push(block);
+    }
+    let mut notes = Vec::new();
+    for members in groups.values() {
+        if members.len() < 2 {
+            continue;
+        }
+        let mut counts: HashMap<i64, usize> = HashMap::new();
+        for block in members {
+            if let Some(day) = block.days.first() {
+                *counts.entry(*day).or_default() += 1;
+            }
+        }
+        if let Some((day, _)) = counts.into_iter().find(|(_, count)| *count >= 2) {
+            let title = members[0].title.as_str();
+            let name = DAY_NAME.get(day as usize).copied().unwrap_or("that day");
+            notes.push(Explanation {
+                block_id: members[0].id.clone(),
+                message: format!(
+                    "Couldn't spread {title} over separate days, so two parts share {name}."
+                ),
+                reason: Some("SPREAD_SAME_DAY".into()),
+                slack_min: None,
+                slack_status: None,
+            });
+        }
+    }
+    notes
+}
+
 fn score_assigned(
     assigned: &[(String, (i64, i64))],
     flex: &[TimeBlock],
@@ -550,12 +623,14 @@ impl<'a> SearchCtx<'a> {
             new_occ[day as usize] |= mask;
             let mut new_domains: Vec<Vec<(i64, i64)>> = domains.to_vec();
             new_domains[var_idx] = vec![];
+            let placed_block = self.flex.iter().find(|block| block.id == var);
             for (other_idx, vals) in new_domains.iter_mut().enumerate() {
                 if other_idx == var_idx || assigned_contains(assigned, &self.ids[other_idx]) {
                     continue;
                 }
                 let other_n = self.lengths[other_idx];
-                let peer = self.flex[other_idx].split_peer.as_deref() == Some(var.as_str());
+                let peer = placed_block
+                    .is_some_and(|placed| spread_mates(placed, &self.flex[other_idx]));
                 if peer {
                     let mut elsewhere = Vec::new();
                     let mut same_day = Vec::new();
@@ -1109,6 +1184,7 @@ pub fn solve_with_rules(
             slack_status: None,
         });
     }
+    explanations.extend(same_day_spread_notes(&placed_flex));
 
     let complete = unplaced.is_empty();
     Ok(SolveTrace {

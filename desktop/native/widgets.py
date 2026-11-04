@@ -5972,6 +5972,9 @@ class PlanReview(QFrame):
         for item in trace.get("explanations") or []:
             if item.get("slack_status") in {"tight", "danger"} and item.get("message"):
                 said.append(f"{titles.get(item['block_id'], 'Homework')}: {item['message']}")
+        for item in trace.get("explanations") or []:
+            if item.get("reason") == "SPREAD_SAME_DAY" and item.get("message"):
+                said.append(item["message"])
         for day, total in overfull_days(trace):
             said.append(f"{DAY_FULL[day]} has {length_label(total)} of homework.")
         shares = trace.get("shares") or []
