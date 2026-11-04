@@ -61,7 +61,7 @@ FocusScope {
         TapHandler {
             onTapped: (eventPoint) => {
                 var p = scrim.mapToItem(card, eventPoint.position.x, eventPoint.position.y)
-                if (p.x < 0 || p.x > card.width || p.y < 0 || p.y > card.height)
+                if (p.x < 0 || p.x >= card.width || p.y < 0 || p.y >= card.height)
                     root.closeRequested()
             }
         }

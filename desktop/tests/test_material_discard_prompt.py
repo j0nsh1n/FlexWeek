@@ -114,6 +114,25 @@ def test_clicking_the_scrim_with_text_typed_asks_to_discard(
     assert sheets.ask.get("title") == "Discard what you typed?"
 
 
+def test_a_click_on_the_first_pixel_past_the_sheets_edge_asks_to_discard(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    root = _show_material(qapp, shell)
+    quick = shell._material_page._quick
+    shell.activateWindow()
+    quick.setFocus()
+    sheets.openHomework()
+    _type_homework(sheets, "History essay")
+    _pump(qapp, 60)
+    card = _find(root, "sheetCard")
+    # A Qt Quick item's hit area ends before x == width, so that pixel belongs to the scrim.
+    edge = card.mapToScene(QPointF(card.width(), card.height() / 2)).toPoint()
+    assert edge.x() < quick.width(), "the wide sheet leaves scrim to its right"
+    QTest.mouseClick(quick, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, edge)
+    _pump(qapp, 40)
+    assert sheets.ask.get("id") == "discard"
+
+
 def test_escape_with_text_typed_asks_to_discard(qapp: QApplication, shell: NativeWindow, sheets) -> None:
     _show_material(qapp, shell)
     quick = shell._material_page._quick
@@ -186,11 +205,12 @@ def test_enter_after_keep_editing_does_not_change_the_step(
     keep_btn = _find(sheet_prompt, "prompt_keep")
     _click(quick, keep_btn, qapp)
     assert sheets.ask == {}
+    assert due_field.property("activeFocus") is True, "Keep editing returns focus to the Due picker"
 
-    # Enter must not jump back to step 0 / crumb 0 ("1. What")
+    # Enter must not jump back to step 0 / crumb 0 ("1. What"), nor move on.
     QTest.keyClick(quick, Qt.Key.Key_Return)
     _pump(qapp, 40)
-    assert sheets.form["step"] >= step_before
+    assert sheets.form["step"] == step_before
 
 
 def test_a_click_on_the_prompt_backdrop_does_not_reach_the_sheet_underneath(
