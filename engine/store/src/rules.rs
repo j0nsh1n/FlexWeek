@@ -239,18 +239,22 @@ pub fn preferences_fields(row: &Value) -> StoreResult<Value> {
             .cloned()
             .unwrap_or(Value::Null),
     );
-    // A row saved before these columns existed has none of the keys. The defaults are the
-    // planner as it was: weekends open, no gap, urgent first, no split, weekends shown.
+    // A row saved before these columns existed has none of the keys. The flags still match
+    // today's planner: weekends open, urgent first, no split, weekends shown. A missing
+    // buffer_min is 15 minutes, matching plan_rules_from_value; a stored 0 is None.
     fields.insert(
         "weekend_homework_free".into(),
         stored_flag(row, "weekend_homework_free", false),
     );
     fields.insert(
         "buffer_min".into(),
-        match row.get("buffer_min").and_then(Value::as_i64) {
-            Some(15) => json!(15),
-            Some(30) => json!(30),
-            _ => json!(0),
+        match row.get("buffer_min") {
+            None | Some(Value::Null) => json!(15),
+            Some(value) => match value.as_i64() {
+                Some(15) => json!(15),
+                Some(30) => json!(30),
+                _ => json!(0),
+            },
         },
     );
     fields.insert(
@@ -652,7 +656,7 @@ mod tests {
                 r#""timer_break_min":5,"timer_long_break_min":15,"timer_long_break_every":4,"#,
                 r#""auto_split_pomodoro":true,"default_spotify_url":null,"alarms":[],"#,
                 r#""protected":[],"work_windows":[],"day_cutoff":null,"#,
-                r#""weekend_homework_free":false,"buffer_min":0,"urgent_first":true,"#,
+                r#""weekend_homework_free":false,"buffer_min":15,"urgent_first":true,"#,
                 r#""split_long_tasks":false,"show_weekends":true,"#,
                 r#""alert_volume":80,"end_chime":false,"tray_notifications":true,"#,
                 r#""start_at_login":false,"preferred_view":null,"sidebar_collapsed":false,"#,
@@ -679,6 +683,17 @@ mod tests {
         assert_eq!(fields["tray_notifications"], json!(false));
         assert_eq!(fields["drag_step_min"], json!(10));
         assert_eq!(fields["setup"], json!({"x": 1}));
+    }
+
+    #[test]
+    fn a_stored_none_buffer_stays_none_and_a_missing_key_is_fifteen() {
+        let mut held = row("", "{}");
+        held["buffer_min"] = json!(0);
+        assert_eq!(preferences_fields(&held).unwrap()["buffer_min"], json!(0));
+        assert_eq!(
+            preferences_fields(&row("", "{}")).unwrap()["buffer_min"],
+            json!(15)
+        );
     }
 
     #[test]

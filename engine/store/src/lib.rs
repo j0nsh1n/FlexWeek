@@ -31,7 +31,7 @@ const PREFERENCES_TABLE: &str = r#"
             CHECK(auto_split_pomodoro IN (0, 1)),
         weekend_homework_free INTEGER NOT NULL DEFAULT 0
             CHECK(weekend_homework_free IN (0, 1)),
-        buffer_min INTEGER NOT NULL DEFAULT 0
+        buffer_min INTEGER NOT NULL DEFAULT 15
             CHECK(buffer_min IN (0, 15, 30)),
         urgent_first INTEGER NOT NULL DEFAULT 1
             CHECK(urgent_first IN (0, 1)),
@@ -414,7 +414,7 @@ pub fn migrate_preferences(db: &Connection) -> StoreResult<()> {
         ("timer_long_break_every", "INTEGER NOT NULL DEFAULT 4"),
         ("auto_split_pomodoro", "INTEGER NOT NULL DEFAULT 0"),
         ("weekend_homework_free", "INTEGER NOT NULL DEFAULT 0"),
-        ("buffer_min", "INTEGER NOT NULL DEFAULT 0"),
+        ("buffer_min", "INTEGER NOT NULL DEFAULT 15"),
         ("urgent_first", "INTEGER NOT NULL DEFAULT 1"),
         ("split_long_tasks", "INTEGER NOT NULL DEFAULT 0"),
         ("show_weekends", "INTEGER NOT NULL DEFAULT 1"),
@@ -482,6 +482,7 @@ pub fn upgrade_preferences(db: &Connection) -> StoreResult<()> {
     )?;
     keep_24_hour_clock(db)?;
     adopt_standing_weeks(db)?;
+    adopt_fifteen_minute_buffer(db)?;
     db.execute_batch("COMMIT")?;
     Ok(())
 }
@@ -534,6 +535,21 @@ fn adopt_standing_weeks(db: &Connection) -> StoreResult<()> {
     }
     db.execute(
         "UPDATE preferences SET prefs_version = 3 WHERE prefs_version < 3",
+        [],
+    )?;
+    Ok(())
+}
+
+/// Version 4: the planner gap is 15 minutes. Until then the column defaulted to 0, so every
+/// stored 0 becomes 15 once. After this, saving None (0) is kept. The UPDATE is not a settings
+/// save, so `planner_settings_chosen` stays off and sync does not publish it as an edit.
+fn adopt_fifteen_minute_buffer(db: &Connection) -> StoreResult<()> {
+    db.execute(
+        "UPDATE preferences SET buffer_min = 15 WHERE buffer_min = 0 AND prefs_version < 4",
+        [],
+    )?;
+    db.execute(
+        "UPDATE preferences SET prefs_version = 4 WHERE prefs_version < 4",
         [],
     )?;
     Ok(())
