@@ -25,6 +25,7 @@ from desktop.native.calendar import (
     monday_of,
     past_problem,
     span_problem,
+    sunday_due,
 )
 from desktop.native.fields import QUICK_LENGTHS
 from desktop.native.reuse import due_point
@@ -69,6 +70,13 @@ class HomeworkDraft:
         *,
         category: str | None = None,
         due: str | None = None,
+        when: str | None = None,
+        when_day: int | None = None,
+        when_time: str | None = None,
+        day: int | None = None,
+        start_min: int | None = None,
+        end_min: int | None = None,
+        estimate_min: int | None = None,
     ) -> None:
         self.session = session
         self.now = datetime.fromtimestamp(session.now_ms() / 1000)
@@ -77,6 +85,23 @@ class HomeworkDraft:
         if category not in FLEX_CATEGORIES:
             category = "assignments"
         info = CATEGORIES.get(category, {})
+
+        if day is not None and when_day is None:
+            when_day = day
+        if start_min is not None and when_time is None:
+            when_time = f"{start_min // 60:02d}:{start_min % 60:02d}"
+        if end_min is not None and start_min is not None and estimate_min is None:
+            estimate_min = end_min - start_min
+        if when is None and (when_day is not None or when_time is not None or start_min is not None):
+            when = "fixed"
+        if (
+            due is None
+            and (when_day is not None or day is not None)
+            and session is not None
+            and getattr(session, "week_start", None)
+        ):
+            due = sunday_due(session.week_start)
+
         if assignment is not None:
             self.original = deepcopy(assignment)
         else:
@@ -85,7 +110,9 @@ class HomeworkDraft:
                 "id": str(uuid4()),
                 "title": "",
                 "due": due or f"{tomorrow}T23:59",
-                "estimate_min": info.get("preset", {}).get("duration_min") or 60,
+                "estimate_min": estimate_min
+                if estimate_min is not None
+                else (info.get("preset", {}).get("duration_min") or 60),
                 "category": category,
                 "revision": 0,
                 "notes": "",
@@ -118,12 +145,14 @@ class HomeworkDraft:
         placed = next((item for item in sessions if item.get("pinned") and item.get("start")), None)
         self.placed: tuple[int, str] | None = (placed["days"][0], placed["start"]) if placed else None
         self.spread_out = len(sessions) > 1
-        day, start = self._default_placement()
+        default_day, default_start = self._default_placement()
         if self.placed:
-            day, start = self.placed[0], hhmm_to_minutes(self.placed[1])
-        self.when = "fixed" if self.placed else "plan"
-        self.when_day = day
-        self.when_time = f"{start // 60:02d}:{start % 60:02d}"
+            default_day, default_start = self.placed[0], hhmm_to_minutes(self.placed[1])
+        self.when = when if when is not None else ("fixed" if self.placed else "plan")
+        self.when_day = when_day if when_day is not None else default_day
+        self.when_time = (
+            when_time if when_time is not None else f"{default_start // 60:02d}:{default_start % 60:02d}"
+        )
         self.pinned_session = placed is not None
         self.title_problem = ""
         self.due_problem = ""

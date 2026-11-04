@@ -14,7 +14,7 @@ from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 from PySide6.QtWidgets import QAbstractButton
 
 from backend.slots import DAY_END_MIN, SLOT_MIN, hhmm_to_minutes
-from desktop.native.calendar import DAY_FULL, DAYS, FLEX_CATEGORIES, monday_of
+from desktop.native.calendar import DAY_FULL, DAYS, FLEX_CATEGORIES, monday_of, sunday_due
 from desktop.native.hours.geometry import next_slot
 from desktop.native.material.sheet_block import BlockDraft
 from desktop.native.material.sheet_homework import HomeworkDraft
@@ -63,6 +63,7 @@ class SheetsBridge(QObject):
     """The sheet that is open, if any, and the notice a finished sheet leaves behind."""
 
     changed = Signal()
+    dragRangeCanceled = Signal()
 
     def __init__(self, window: QObject, parent: QObject) -> None:
         super().__init__(parent)
@@ -72,6 +73,7 @@ class SheetsBridge(QObject):
         self._form: dict = {}
         self._ask: dict = {}
         self._more = False
+        self._drag_range_active = False
         self._notice = ""
         self._notice_undo = False
         self._homework: HomeworkDraft | None = None
@@ -122,7 +124,13 @@ class SheetsBridge(QObject):
 
     @Property(bool, notify=changed)
     def active(self) -> bool:
-        return bool(self._kind) or self._more or bool(self._ask)
+        return bool(self._kind) or self._more or bool(self._ask) or self._drag_range_active
+
+    @Slot(bool)
+    def setDragRangeActive(self, active: bool) -> None:
+        if self._drag_range_active != active:
+            self._drag_range_active = active
+            self.changed.emit()
 
     @Property(bool, notify=changed)
     def canSave(self) -> bool:
@@ -163,6 +171,7 @@ class SheetsBridge(QObject):
         late = self._kind == "late"
         self._kind = ""
         self._ask = {}
+        self._drag_range_active = False
         self._homework = None
         self._block = None
         session = self._session
@@ -180,6 +189,32 @@ class SheetsBridge(QObject):
         if category not in FLEX_CATEGORIES:
             category = "assignments"
         self._homework = HomeworkDraft(session, category=category)
+        self._open("homework")
+
+    @Slot(int, int, int)
+    def openHomeworkAt(self, day: int, start_min: int, end_min: int) -> None:
+        session = self._session
+        if session is None or session.account is None:
+            return
+        if start_min > end_min:
+            start_min, end_min = end_min, start_min
+        duration = end_min - start_min
+        if duration < 15:
+            return
+        category = session.armed_category
+        if category not in FLEX_CATEGORIES:
+            category = "assignments"
+        due = sunday_due(session.week_start) if session.week_start else None
+        start_hhmm = f"{start_min // 60:02d}:{start_min % 60:02d}"
+        self._homework = HomeworkDraft(
+            session,
+            category=category,
+            due=due,
+            when="fixed",
+            when_day=day,
+            when_time=start_hhmm,
+            estimate_min=duration,
+        )
         self._open("homework")
 
     @Slot(str)
@@ -233,6 +268,11 @@ class SheetsBridge(QObject):
     @Slot()
     def closeSheet(self) -> None:
         """Esc, Cancel and a tap on the scrim. A sheet with typed work asks before dropping it."""
+        if self._drag_range_active:
+            self._drag_range_active = False
+            self.dragRangeCanceled.emit()
+            self.changed.emit()
+            return
         if self._ask:
             self._ask = {}
             self._publish()
