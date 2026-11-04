@@ -403,7 +403,7 @@ Item {
     }
 
     function closeBlockMenu() {
-        if (!blockMenu.open && !menuDim.visible)
+        if (!blockMenu.open && !menuOriginItem && !menuTargetModel)
             return
         blockMenu.open = false
         var origin = menuOriginItem

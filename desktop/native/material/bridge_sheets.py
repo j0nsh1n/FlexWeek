@@ -122,16 +122,13 @@ class SheetsBridge(QObject):
 
     @Property(bool, notify=changed)
     def active(self) -> bool:
-        return bool(self._kind) or self._more or bool(self._ask)
+        return bool(self._kind) or self._more or bool(self._ask) or bool(self._notice)
 
     @Property(bool, notify=changed)
     def canSave(self) -> bool:
         session = self._session
         return (
-            session is not None
-            and not session.busy
-            and session.pending_save is None
-            and not session.conflict
+            session is not None and not session.busy and session.pending_save is None and not session.conflict
         )
 
     def _hold_for_save(self, words: str = WAIT_SAVE) -> bool:

@@ -46,6 +46,15 @@ Item {
             Repeater {
                 model: root.entries
                 delegate: Item {
+            Accessible.role: Accessible.MenuItem
+            Accessible.name: modelData.label
+            Accessible.focused: row.hot
+            Accessible.selectable: true
+            Accessible.selected: row.hot
+            Accessible.onPressAction: {
+                root.cursor = index
+                root.chosen(index, modelData.label)
+            }
                     id: row
                     width: 260
                     height: 44

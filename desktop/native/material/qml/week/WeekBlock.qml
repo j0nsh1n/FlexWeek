@@ -34,6 +34,7 @@ Item {
         detail: cell.detail
         past: cell.past
         accessName: cell.title
+        rightInset: cell.homework ? 28 : 0
     }
 
     function findTitle(item) {

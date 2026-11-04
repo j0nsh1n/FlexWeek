@@ -190,7 +190,7 @@ Rectangle {
     }
 
     function closeCardMenu() {
-        if (!cardMenu.open && !cardMenuDim.visible)
+        if (!cardMenu.open && !menuOriginItem && !menuTargetModel)
             return
         cardMenu.open = false
         var origin = menuOriginItem
