@@ -20,10 +20,10 @@ from desktop.tests.test_material_account_setup import (
     qapp,  # noqa: F401
     skip_setup,
     through_recovery,
+    wait_until,
 )
 from desktop.tests.test_material_month_lifecycle import snap, totals
 from desktop.tests.test_material_static_audit import _bridge, _named, _panel
-from desktop.tests.test_material_window import _visuals
 
 _lives: list[QObject] = []
 
@@ -86,101 +86,337 @@ def rig(qapp: Any) -> tuple[Any, Held, Live, PassiveMonthBridge]:
     return session, held, live, preview
 
 
-def test_after_undo_the_preview_shows_the_new_counts_without_reopening(qapp: Any) -> None:
-    session, held, live, preview = rig(qapp)
-    # Preview active, initial November snapshot
-    held.calls[0][3](snap("2026-11", "Initial homework"))
-    assert totals(preview) == (75, 75)
-    assert len(held.calls) == 1
+def test_real_session_move_between_weeks_refetches_month_preview_for_both_weeks_and_undo(
+    qapp: Any, launches: Any
+) -> None:
+    win = launches.launch()
+    s = win.session
+    create(qapp, win, "move_undo_user")
+    through_recovery(qapp, win)
+    skip_setup(qapp, win)
+    pump(qapp)
 
-    # Simulate undo occurring on session:
-    # undo() calls save() which clears _month_cache, increments _month_gen, and emits week_changed
-    session._month_cache.clear()
-    session._month_gen = getattr(session, "_month_gen", 0) + 1
-    session.week_changed.emit()
-
-    # The preview should ask again without needing to close or reopen
-    assert len(held.calls) == 2, "Preview did not re-fetch after undo"
-    # Settle second request with updated counts
-    held.calls[1][3](
+    # Add homework with fixed time on Tuesday of week 1 (2026-11-03)
+    s.add_homework(
         {
-            "month": "2026-11",
-            "days": [
-                {
-                    "date": "2026-11-23",
-                    "in_month": True,
-                    "blocks": [
-                        {
-                            "id": "b1",
-                            "title": "Undone HW",
-                            "category": "homework",
-                            "start": "17:00",
-                            "duration_min": 30,
-                            "completed": False,
-                        },
-                        {
-                            "id": "b2",
-                            "title": "Done HW",
-                            "category": "homework",
-                            "start": "18:00",
-                            "duration_min": 45,
-                            "completed": True,
-                        },
-                    ],
-                }
-            ],
+            "id": "essay_id",
+            "title": "November HW",
+            "due": "2026-11-22T23:59",
+            "estimate_min": 60,
+            "fixed_at": {"day": 1, "start": "17:00"},
         }
     )
-    assert totals(preview) == (75, 45)
+    hw_block = next(b for b in s.blocks if b.get("assignment_id") == "essay_id")
+    block_id = hw_block["id"]
+    s.save()
+    wait_until(qapp, lambda: not s.busy and s.pending_save is None)
+
+    # Load November on the real Month screen
+    s.open_month("2026-11")
+    wait_until(qapp, lambda: s.month_data is not None and not s.busy)
+    print("MONTH_DATA DAYS:")
+    for d in s.month_data.get("days", []):
+        if d.get("blocks"):
+            print("  ", d.get("date"), d.get("blocks"))
+    has_block = any(
+        b["id"] == block_id
+        for d in s.month_data.get("days", [])
+        if d.get("date") == "2026-11-03"
+        for b in d.get("blocks", [])
+    )
+    assert has_block, "Initial block not loaded in real month_data"
+
+    # Move block from 2026-11-03 to 2026-11-10 through real session call
+    ok = s.move_to_date(block_id, "2026-11-03", "2026-11-10")
+    assert ok is True
+    wait_until(qapp, lambda: not s.busy and s.pending_save is None)
+
+    # Open Settings Month preview
+    _bridge(win).showPage("settings")
+    panel = _panel(win)
+    panel.openAdvanced()
+    panel.setPreviewView("month")
+    preview = panel._preview._passive_month
+    wait_until(qapp, lambda: not preview.loading and len(preview.cellRows) > 0)
+
+    # Shows the moved block new week and count for BOTH weeks
+    nov_03 = next(r for r in preview.cellRows if r["iso"] == "2026-11-03")
+    nov_10 = next(r for r in preview.cellRows if r["iso"] == "2026-11-10")
+    assert nov_03["plannedMin"] == 0 and len(nov_03["chipTexts"]) == 0, (
+        f"Week 1 should have 0 min after move, got {nov_03['plannedMin']}"
+    )
+    assert nov_10["plannedMin"] == 60 and len(nov_10["chipTexts"]) == 1, (
+        f"Week 2 should have 60 min after move, got {nov_10['plannedMin']}"
+    )
+
+    # Undo through real session call
+    s.undo()
+    wait_until(qapp, lambda: not s.busy and s.pending_save is None)
+    wait_until(qapp, lambda: not preview.loading)
+
+    # Shows counts restored for BOTH weeks
+    nov_03_undo = next(r for r in preview.cellRows if r["iso"] == "2026-11-03")
+    nov_10_undo = next(r for r in preview.cellRows if r["iso"] == "2026-11-10")
+    assert nov_03_undo["plannedMin"] == 60 and len(nov_03_undo["chipTexts"]) == 1, (
+        f"Week 1 should have 60 min after undo, got {nov_03_undo['plannedMin']}"
+    )
+    assert nov_10_undo["plannedMin"] == 0 and len(nov_10_undo["chipTexts"]) == 0, (
+        f"Week 2 should have 0 min after undo, got {nov_10_undo['plannedMin']}"
+    )
 
 
-def test_after_a_save_the_preview_asks_again(qapp: Any) -> None:
-    session, held, live, preview = rig(qapp)
-    held.calls[0][3](snap("2026-11"))
-    assert preview._preview_snapshot is not None
+def test_failed_request_clears_on_new_generation_and_asks_again_after_save(qapp: Any, launches: Any) -> None:
+    win = launches.launch()
+    s = win.session
+    held: list[Any] = []
+    original = s.client.request
+
+    def request(method: str, path: str, payload: Any, ok: Any, err: Any) -> Any:
+        if path.startswith("/api/month"):
+            held.append((method, path, payload, ok, err))
+            return None
+        return original(method, path, payload, ok, err)
+
+    s.client.request = request
+    create(qapp, win, "fail_refetch_user")
+    through_recovery(qapp, win)
+    skip_setup(qapp, win)
+    pump(qapp)
+
+    preview = _panel(win)._preview._passive_month
+    _bridge(win).showPage("settings")
+    panel = _panel(win)
+    panel.openAdvanced()
+    panel.setPreviewView("month")
+    QTest.qWait(180)
+
+    assert len(held) >= 1
+    # Preview GET fails with 503
+    held[-1][4](ApiError(503, "Service unavailable"))
+    QTest.qWait(100)
+
     assert not preview.loading
-    assert len(held.calls) == 1
+    assert preview.loadError == "Service unavailable"
+    initial_requests = len(held)
 
-    # Simulate a save on session
-    session._month_cache.clear()
-    session._month_gen = getattr(session, "_month_gen", 0) + 1
-    session.week_changed.emit()
+    # Real save completes
+    s.add_block(
+        {
+            "id": "new_block",
+            "title": "Math HW",
+            "kind": "flexible",
+            "category": "homework",
+            "start": "16:00",
+            "duration_min": 45,
+            "days": [2],
+        }
+    )
+    s.save()
+    wait_until(qapp, lambda: not s.busy and s.pending_save is None)
+    QTest.qWait(100)
 
-    # Preview snapshot cleared, asks again, loading is True
-    assert preview._preview_snapshot is None
-    assert len(held.calls) == 2, "Preview did not ask again after save"
+    # Preview asks again without pressing Retry
+    assert len(held) > initial_requests, "Preview did not ask again after save cleared failed state"
     assert preview.loading
+    # Successful month response
+    held[-1][3](snap("2026-11", "Math HW"))
+    wait_until(qapp, lambda: not preview.loading)
+    assert preview.loadError == ""
+    assert totals(preview) == (120, 75)
 
 
-def test_a_late_reply_after_a_save_does_not_land_in_the_cache(qapp: Any) -> None:
-    session, held, live, preview = rig(qapp)
-    old_call = held.calls[0]
-    # Request 0 is in flight for November
+def test_after_undo_the_preview_shows_the_new_counts_without_reopening(qapp: Any, launches: Any) -> None:
+    win = launches.launch()
+    s = win.session
+    create(qapp, win, "real_undo_user")
+    through_recovery(qapp, win)
+    skip_setup(qapp, win)
+    pump(qapp)
 
-    # Save happens while request 0 is in flight
-    session._month_cache.clear()
-    session._month_gen = getattr(session, "_month_gen", 0) + 1
-    session.week_changed.emit()
+    # Add block and save
+    s.add_block(
+        {
+            "id": "hw_undo",
+            "title": "Physics HW",
+            "kind": "flexible",
+            "category": "homework",
+            "start": "17:00",
+            "duration_min": 45,
+            "days": [1],
+        }
+    )
+    s.save()
+    wait_until(qapp, lambda: not s.busy and s.pending_save is None)
 
-    # New request is dispatched (call 1)
-    assert len(held.calls) == 2
-    new_call = held.calls[1]
+    # Open Settings Month preview
+    _bridge(win).showPage("settings")
+    panel = _panel(win)
+    panel.openAdvanced()
+    panel.setPreviewView("month")
+    preview = panel._preview._passive_month
+    wait_until(qapp, lambda: not preview.loading and len(preview.cellRows) > 0)
+    assert totals(preview) == (45, 0)
 
-    # Stale reply from old request 0 arrives
-    stale_payload = snap("2026-11", "Stale homework from old generation")
-    old_call[3](stale_payload)
+    # Drive real Undo
+    s.undo()
+    wait_until(qapp, lambda: not s.busy and s.pending_save is None)
+    wait_until(qapp, lambda: not preview.loading)
 
-    # Stale reply must NOT land in cache, must NOT set _preview_snapshot,
-    # and must NOT clear loading for newer request
-    assert ("A", "2026-11") not in session._month_cache
-    assert preview._preview_snapshot is None
-    assert preview.loading, "Stale reply cleared loading for newer request"
+    # Shows new counts (0, 0) without reopening
+    assert totals(preview) == (0, 0)
 
-    # New request reply arrives
-    fresh_payload = snap("2026-11", "Fresh homework from new generation")
-    new_call[3](fresh_payload)
-    assert preview._preview_snapshot == fresh_payload
-    assert not preview.loading
+
+def test_after_a_save_and_plan_the_preview_asks_again(qapp: Any, launches: Any) -> None:
+    win = launches.launch()
+    s = win.session
+    held: list[Any] = []
+    original = s.client.request
+
+    def request(method: str, path: str, payload: Any, ok: Any, err: Any) -> Any:
+        if path.startswith("/api/month"):
+            held.append((method, path, payload, ok, err))
+            return None
+        return original(method, path, payload, ok, err)
+
+    s.client.request = request
+    create(qapp, win, "real_save_plan_user")
+    through_recovery(qapp, win)
+    skip_setup(qapp, win)
+    pump(qapp)
+
+    _bridge(win).showPage("settings")
+    panel = _panel(win)
+    panel.openAdvanced()
+    panel.setPreviewView("month")
+    preview = panel._preview._passive_month
+    QTest.qWait(180)
+
+    assert len(held) >= 1
+    held[-1][3](snap("2026-11"))
+    wait_until(qapp, lambda: not preview.loading)
+    assert preview._preview_snapshot is not None
+    count_before = len(held)
+
+    # Drive real save action
+    s.add_block(
+        {
+            "id": "save_blk",
+            "title": "Art",
+            "kind": "flexible",
+            "category": "homework",
+            "start": "15:00",
+            "duration_min": 30,
+            "days": [3],
+        }
+    )
+    s.save()
+    wait_until(qapp, lambda: not s.busy and s.pending_save is None)
+
+    # Preview asks again after real save
+    assert len(held) > count_before, "Preview did not ask again after real save"
+    assert preview.loading
+    held[-1][3](snap("2026-11", "Art"))
+    wait_until(qapp, lambda: not preview.loading)
+
+    # Drive real plan action
+    count_before = len(held)
+    s.add_homework(
+        {
+            "id": "hw_plan",
+            "title": "Bio report",
+            "due": "2026-11-08T23:59",
+            "estimate_min": 45,
+            "revision": 0,
+        }
+    )
+    s.save()
+    wait_until(qapp, lambda: not s.busy and s.pending_save is None)
+    s.solve(everything=True)
+    wait_until(qapp, lambda: not s.busy and s.pending_save is None)
+
+    # Preview asks again after real plan
+    assert len(held) > count_before, "Preview did not ask again after real plan"
+
+
+def test_a_late_reply_after_a_save_does_not_land_in_the_cache(qapp: Any, launches: Any) -> None:
+    win = launches.launch()
+    s = win.session
+    held: list[Any] = []
+    original = s.client.request
+
+    def request(method: str, path: str, payload: Any, ok: Any, err: Any) -> Any:
+        if path.startswith("/api/month"):
+            held.append((method, path, payload, ok, err))
+            return None
+        return original(method, path, payload, ok, err)
+
+    s.client.request = request
+    create(qapp, win, "late_reply_user")
+    through_recovery(qapp, win)
+    skip_setup(qapp, win)
+    pump(qapp)
+
+    key = (str(s.account["id"]), "2026-11")
+
+    # 1. Controller path: _fetch_month
+    held.clear()
+    s.selected_month = "2026-11"
+    s.planner_view = "month"
+    s._fetch_month()
+    assert len(held) == 1
+    fetch_call = held[0]
+
+    # Real save runs, bumping _month_gen and clearing _month_cache
+    s.add_block(
+        {
+            "id": "b1",
+            "title": "Block 1",
+            "kind": "flexible",
+            "category": "homework",
+            "start": "17:00",
+            "duration_min": 60,
+            "days": [1],
+        }
+    )
+    s.save()
+    wait_until(qapp, lambda: not s.busy and s.pending_save is None)
+
+    # Late reply from pre-save _fetch_month arrives
+    stale_data = snap("2026-11", "Stale fetch homework")
+    fetch_call[3](stale_data)
+
+    # Must NOT land in session._month_cache
+    assert key not in s._month_cache, "Late _fetch_month reply landed in session._month_cache after save"
+
+    # 2. Controller path: _prefetch_open_week_month
+    held.clear()
+    s._month_prefetching.clear()
+    s._prefetch_open_week_month()
+    assert len(held) == 1
+    prefetch_call = held[0]
+
+    # Another real save runs
+    s.add_block(
+        {
+            "id": "b2",
+            "title": "Block 2",
+            "kind": "flexible",
+            "category": "homework",
+            "start": "18:00",
+            "duration_min": 60,
+            "days": [2],
+        }
+    )
+    s.save()
+    wait_until(qapp, lambda: not s.busy and s.pending_save is None)
+
+    # Late reply from prefetch arrives
+    prefetch_call[3](stale_data)
+
+    # Must NOT land in session._month_cache
+    assert key not in s._month_cache, (
+        "Late _prefetch_open_week_month reply landed in session._month_cache after save"
+    )
 
 
 def test_a_late_error_after_a_month_switch_clears_loading_for_the_new_month_only(qapp: Any) -> None:
@@ -216,47 +452,65 @@ def test_every_early_return_of_the_current_request_clears_loading(qapp: Any) -> 
     call = held.calls[0]
     assert preview.loading
     live.session = None
+    emitted: list[bool] = []
+    preview.changed.connect(lambda: emitted.append(True))
     call[3](snap())
     assert not preview.loading
+    assert len(emitted) > 0, "Early return 1 did not emit changed"
 
     # 2. ok: current_account is None or mismatched
     session, held, live, preview = rig(qapp)
     call = held.calls[0]
     assert preview.loading
     session.account = {"id": "OTHER"}
+    emitted.clear()
+    preview.changed.connect(lambda: emitted.append(True))
     call[3](snap())
     assert not preview.loading
+    assert len(emitted) > 0, "Early return 2 did not emit changed"
 
     # 3. ok: invalid payload or mismatched month
     session, held, live, preview = rig(qapp)
     call = held.calls[0]
     assert preview.loading
-    call[3]({"month": "2026-12", "days": []})  # Mismatched month for November request
+    emitted.clear()
+    preview.changed.connect(lambda: emitted.append(True))
+    call[3]({"month": "2026-12", "days": []})
     assert not preview.loading
+    assert len(emitted) > 0, "Early return 3 did not emit changed"
 
     # 4. err: current_session is None
     session, held, live, preview = rig(qapp)
     call = held.calls[0]
     assert preview.loading
     live.session = None
+    emitted.clear()
+    preview.changed.connect(lambda: emitted.append(True))
     call[4](ApiError(500, "error"))
     assert not preview.loading
+    assert len(emitted) > 0, "Early return 4 did not emit changed"
 
     # 5. err: current_account is None or mismatched
     session, held, live, preview = rig(qapp)
     call = held.calls[0]
     assert preview.loading
     session.account = None
+    emitted.clear()
+    preview.changed.connect(lambda: emitted.append(True))
     call[4](ApiError(500, "error"))
     assert not preview.loading
+    assert len(emitted) > 0, "Early return 5 did not emit changed"
 
     # 6. err: self._target_month() != target_month
     session, held, live, preview = rig(qapp)
     call = held.calls[0]
     assert preview.loading
     session.selected_month = "2026-12"
+    emitted.clear()
+    preview.changed.connect(lambda: emitted.append(True))
     call[4](ApiError(500, "error"))
     assert not preview.loading
+    assert len(emitted) > 0, "Early return 6 did not emit changed"
 
 
 def test_retry_works_by_click_through_the_shield(qapp: Any, launches: Any) -> None:
@@ -347,12 +601,22 @@ def test_retry_works_by_tab_and_space(qapp: Any, launches: Any) -> None:
     acc_name = retry_btn.property("Accessible.name") or retry_btn.property("accessName")
     assert acc_name == "Retry loading the month preview"
 
-    retry_btn.forceActiveFocus()
+    quick = win._material_page._quick
+    preview_view = _named(root, "previewView")[0]
+    preview_view.forceActiveFocus()
     pump(qapp)
-    assert retry_btn.property("activeFocus") is True
+    assert preview_view.property("activeFocus") is True
+
+    # Reach Retry by Tab presses (no forceActiveFocus on Retry)
+    for _ in range(10):
+        if quick.quickWindow().activeFocusItem() is retry_btn:
+            break
+        QTest.keyClick(quick, Qt.Key.Key_Tab)
+        pump(qapp)
+
+    assert quick.quickWindow().activeFocusItem() is retry_btn, "Retry button could not be reached via Tab"
 
     initial_requests = len(held)
-    quick = win._material_page._quick
     QTest.keyClick(quick, Qt.Key.Key_Space)
     pump(qapp)
     QTest.qWait(100)
@@ -363,37 +627,109 @@ def test_retry_works_by_tab_and_space(qapp: Any, launches: Any) -> None:
 
 def test_tab_passes_the_preview_in_three_stops_or_fewer(qapp: Any, launches: Any) -> None:
     win = launches.launch()
+    s = win.session
+    held: list[Any] = []
+    original = s.client.request
+
+    def request(method: str, path: str, payload: Any, ok: Any, err: Any) -> Any:
+        if path.startswith("/api/month"):
+            held.append((method, path, payload, ok, err))
+            return None
+        return original(method, path, payload, ok, err)
+
+    s.client.request = request
     create(qapp, win, "tab_stops_user")
     through_recovery(qapp, win)
     skip_setup(qapp, win)
     pump(qapp)
 
+    # Populate week and day with homework
+    s.add_homework(
+        {
+            "id": "essay",
+            "title": "History essay",
+            "due": "2026-11-08T23:59",
+            "estimate_min": 60,
+            "revision": 0,
+        }
+    )
+    s.add_block(
+        {
+            "id": "hw_block",
+            "title": "Study French",
+            "kind": "flexible",
+            "category": "homework",
+            "start": "17:00",
+            "duration_min": 45,
+            "days": [1],
+        }
+    )
+    s.save()
+    wait_until(qapp, lambda: not s.busy and s.pending_save is None)
+
     _bridge(win).showPage("settings")
     panel = _panel(win)
     panel.openAdvanced()
-    panel.setPreviewView("month")
-    QTest.qWait(180)
+    quick = win._material_page._quick
 
     root = win._material_page.root
-    preview_stage = _named(root, "previewStage")[0]
+    stage = _named(root, "previewStage")[0]
 
-    def find_tab_stops(item: Any) -> list[Any]:
-        stops = []
-        for child in item.childItems():
-            if child.property("activeFocusOnTab") and child.property("visible"):
-                stops.append(child)
-            stops.extend(find_tab_stops(child))
-        return stops
+    def is_descendant(item: Any, ancestor: Any) -> bool:
+        curr = item
+        while curr is not None:
+            if curr is ancestor:
+                return True
+            curr = curr.parentItem() if hasattr(curr, "parentItem") else None
+        return False
 
-    stops = find_tab_stops(preview_stage)
-    assert len(stops) <= 3, f"Expected 3 stops or fewer, got {len(stops)}: {[s.objectName() for s in stops]}"
+    def traverse_stops() -> list[str]:
+        preview_view = _named(stage, "previewView")[0]
+        preview_view.forceActiveFocus()
+        pump(qapp)
+        seen_items: list[Any] = [preview_view]
+        for _ in range(25):
+            QTest.keyClick(quick, Qt.Key.Key_Tab)
+            pump(qapp)
+            focused = quick.quickWindow().activeFocusItem()
+            if focused is not None and is_descendant(focused, stage) and focused not in seen_items:
+                seen_items.append(focused)
+        return [item.objectName() for item in seen_items]
 
-    month_view = _named(preview_stage, "materialMonth")[0]
-    cells = [c for c in _visuals(month_view) if str(c.objectName()).startswith("monthDate-")]
-    assert all(not c.property("activeFocusOnTab") for c in cells)
-    prev_btn = _named(month_view, "monthPrev")[0]
-    next_btn = _named(month_view, "monthNext")[0]
-    assert not prev_btn.property("visible")
-    assert not next_btn.property("visible")
-    assert not prev_btn.property("activeFocusOnTab")
-    assert not next_btn.property("activeFocusOnTab")
+    # Test Week and Day previews
+    for view in ("week", "day"):
+        panel.setPreviewView(view)
+        QTest.qWait(180)
+        stops = traverse_stops()
+        assert len(stops) <= 3, f"Expected <= 3 stops for {view}, got {len(stops)}: {stops}"
+        assert "previewView" in stops, f"previewView missing from {view} stops: {stops}"
+        assert "previewFit" in stops, f"previewFit missing from {view} stops: {stops}"
+
+    # Test Month preview in success state
+    panel.setPreviewView("month")
+    QTest.qWait(180)
+    if held:
+        held[-1][3](snap("2026-11"))
+        QTest.qWait(100)
+    month_stops = traverse_stops()
+    assert len(month_stops) <= 3, f"Expected <= 3 stops for month, got {len(month_stops)}: {month_stops}"
+    assert "previewView" in month_stops
+    assert "previewFit" in month_stops
+
+    # Test Month preview in error state: Retry is one of the stops
+    preview = panel._preview._passive_month
+    preview._preview_snapshot = None
+    preview._snapshot_month = None
+    held.clear()
+    preview.retry()
+    QTest.qWait(100)
+    assert len(held) >= 1
+    held[-1][4](ApiError(503, "Failed to load month"))
+    QTest.qWait(100)
+    assert preview.loadError != ""
+
+    err_stops = traverse_stops()
+    assert len(err_stops) <= 3, f"Expected <= 3 stops in error state, got {len(err_stops)}: {err_stops}"
+    assert "previewView" in err_stops
+    assert "previewFit" in err_stops
+    assert "monthPreviewRetry" in err_stops

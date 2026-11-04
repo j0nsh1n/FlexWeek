@@ -380,6 +380,8 @@ class PassiveMonthBridge(QObject):
             self._preview_snapshot = None
             self._snapshot_month = None
             self._asked_month = ""
+            self._failed_month = None
+            self._load_error = ""
             self._request_counter += 1
             self._request_token = (
                 self._account_id or "",
@@ -444,7 +446,12 @@ class PassiveMonthBridge(QObject):
         snapshot = self._preview_snapshot
         if snapshot is None and getattr(session, "selected_month", None) == target_month:
             live_snapshot = getattr(session, "month_data", None)
-            if isinstance(live_snapshot, dict) and live_snapshot.get("month") == target_month:
+            current_gen = getattr(session, "_month_gen", 0)
+            live_gen = getattr(session, "_month_data_gen", None)
+            if live_gen is None and isinstance(live_snapshot, dict):
+                live_gen = live_snapshot.get("_gen")
+            gen_ok = live_gen is None or live_gen == current_gen
+            if gen_ok and isinstance(live_snapshot, dict) and live_snapshot.get("month") == target_month:
                 snapshot = live_snapshot
                 self._preview_snapshot = snapshot
                 self._snapshot_month = target_month

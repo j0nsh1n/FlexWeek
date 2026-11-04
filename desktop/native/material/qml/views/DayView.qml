@@ -7,6 +7,7 @@ Item {
     objectName: "materialDay"
     property var bridge
     property bool phone: false
+    property bool passive: false
 
     readonly property var board: bridge && bridge.day ? bridge.day : null
     readonly property var theme: bridge && bridge.theme ? bridge.theme : ({})
@@ -29,6 +30,7 @@ Item {
 
     MonthSide {
         id: side
+        passive: root.passive
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -71,6 +73,7 @@ Item {
                     highContrast: root.highContrast
                     icon: "chevron_left"
                     accessName: "Previous day"
+                    activeFocusOnTab: !root.passive
                     onClicked: if (root.board) root.board.previousDay()
                 }
                 IconButton {
@@ -81,6 +84,7 @@ Item {
                     highContrast: root.highContrast
                     icon: "chevron_right"
                     accessName: "Next day"
+                    activeFocusOnTab: !root.passive
                     onClicked: if (root.board) root.board.nextDay()
                 }
             }
@@ -100,6 +104,7 @@ Item {
 
             NowCard {
                 width: column.width
+                passive: root.passive
                 visible: root.board && root.board.showNow
                 theme: root.theme
                 density: root.density
@@ -113,6 +118,7 @@ Item {
 
             DayLists {
                 width: column.width
+                passive: root.passive
                 theme: root.theme
                 density: root.density
                 reduceMotion: root.reduceMotion

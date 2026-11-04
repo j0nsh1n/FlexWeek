@@ -165,6 +165,7 @@ Item {
                                 density: st.draftDensity || "comfortable"
                                 reduceMotion: true
                                 highContrast: st.draftContrast === "high"
+                                passive: true
                             }
                         }
                     }
@@ -177,6 +178,7 @@ Item {
                             DayView {
                                 anchors.fill: parent
                                 bridge: root.settings.preview
+                                passive: true
                             }
                         }
                     }

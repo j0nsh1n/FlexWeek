@@ -7,6 +7,7 @@ Column {
     property string density: "comfortable"
     property bool reduceMotion: false
     property bool highContrast: false
+    property bool passive: false
     property string scope: "day"
     property string title: ""
     property string line: ""
@@ -82,6 +83,7 @@ Column {
                 text: "Start focus"
                 icon: "play_arrow"
                 accessName: "Start focus"
+                activeFocusOnTab: !root.passive
                 onClicked: root.startFocus()
             }
         }

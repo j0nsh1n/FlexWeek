@@ -10,6 +10,7 @@ Rectangle {
     property bool reduceMotion: false
     property bool highContrast: false
     property bool phone: false
+    property bool passive: false
     signal cardMoved(point scene)
     signal cardDropped(string blockId, point scene)
     signal cardDragStarted(string title)
@@ -74,6 +75,7 @@ Rectangle {
             icon: "schedule"
             text: "Plan my homework"
             enabled: drawer.count > 0
+            activeFocusOnTab: !drawer.passive
             onClicked: drawer.bridge.week.plan()
         }
     }
@@ -222,6 +224,7 @@ Rectangle {
             objectName: "cardMenu"
             open: false
             focus: true
+            activeFocusOnTab: open && !drawer.passive
             onActiveFocusChanged: {
                 if (!activeFocus && open)
                     drawer.closeCardMenu()
