@@ -52,7 +52,7 @@ Item {
         anchors.fill: parent
         radius: 16
         color: palette.surfaceContainerLow
-        clip: true
+        clip: false
         Column {
             id: column
             width: parent.width

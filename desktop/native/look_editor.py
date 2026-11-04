@@ -15,7 +15,18 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from PySide6.QtCore import QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QKeyEvent, QPainter, QPalette, QPen, QPixmap, QResizeEvent, QShowEvent
+from PySide6.QtGui import (
+    QColor,
+    QKeyEvent,
+    QKeySequence,
+    QPainter,
+    QPalette,
+    QPen,
+    QPixmap,
+    QResizeEvent,
+    QShortcut,
+    QShowEvent,
+)
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -909,6 +920,14 @@ class LookEditor(QWidget):
         body.addWidget(self._build_preview(), 1)
         outer.addLayout(body, 1)
         outer.addWidget(self._build_foot())
+        QWidget.setTabOrder(self.back, self.start_from)
+        QWidget.setTabOrder(self.start_from, self.name)
+        QWidget.setTabOrder(self.name, self.duplicate)
+        QWidget.setTabOrder(self.duplicate, self.delete)
+        QWidget.setTabOrder(self.delete, self.done)
+        QWidget.setTabOrder(self.done, self.save_new)
+        QWidget.setTabOrder(self.save_new, self.reset_all)
+        QShortcut(QKeySequence(Qt.Key.Key_Escape), self, self.leave)
         self._change(self._draft, wear_it=False)
         self._refresh()
 

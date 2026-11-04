@@ -344,6 +344,7 @@ MORE_ICONS = {
     "reloadWeek": "rotate-ccw",
     "helpButton": "circle-question-mark",
     "aboutButton": "info",
+    "backToMaterial": "sparkles",
     "signOut": "log-out",
 }
 # Hover words for More and its submenu, by the object name of the button each action presses.
@@ -377,6 +378,7 @@ MORE_TIPS = {
     "reloadWeek": "Load this week again as it's saved. Use it if something looks out of date.",
     "helpButton": "What each screen is for, and the keyboard shortcuts.",
     "aboutButton": "The version, and where your plans are saved.",
+    "backToMaterial": "Switch back to the Material 3 style. Your week and homework stay the same.",
     "signOut": "Sign out on this computer. Your plans stay saved in your account.",
 }
 # Why an action is greyed, when the reason is not simply that FlexWeek is busy.
@@ -1304,6 +1306,17 @@ class NativeWindow(QMainWindow):
         self._week_keys(True)
         self._on_week()
 
+    def _back_to_material(self) -> None:
+        """Switch back to Material 3 styles."""
+        self._surface = "material"
+        self._material_gave_up = False
+        self._material_failed = ""
+        settings = self._settings
+        if settings is not None and settings.layout_sections:
+            settings.layout_sections[0].show_surface("material")
+        self._save_look()
+        self._show_surface()
+
     def _entry_card(self, name: str, pinned: bool = False) -> QVBoxLayout:
         """A page for signing in or for the recovery codes: the wordmark on the page, and under it the
         page's card in the middle of the window. The layout inside the card is returned to fill.
@@ -1836,6 +1849,16 @@ class NativeWindow(QMainWindow):
         about = QPushButton("About FlexWeek")
         about.setObjectName("aboutButton")
         about.clicked.connect(self._open_about)
+        back_material = QPushButton("Back to Material")
+        back_material.setObjectName("backToMaterial")
+        back_material.clicked.connect(self._back_to_material)
+        # Its own line, so Help and About stay together and Sign out stays apart (Decision 22).
+        more_menu.addSeparator()
+        back_material.setParent(overflow)
+        back_material.hide()
+        action = mark(more_menu.addAction(back_material.text()), MORE_ICONS["backToMaterial"])
+        action.triggered.connect(back_material.click)
+        self._more_pairs.append((action, back_material))
         more_menu.addSeparator()
         add_heading(more_menu, HELP_HEADING)
         for button in (help_button, about, sign_out):
@@ -5551,77 +5574,89 @@ class NativeWindow(QMainWindow):
         AboutDialog(self, self.session.storage_info, str(self._look_path().parent)).exec()
 
     def _open_account(self) -> None:
+        qml_focus_item = None
+        if hasattr(self, "_material_page") and self._material_page is not None:
+            quick = getattr(self._material_page, "_quick", None)
+            if quick is not None and quick.quickWindow() is not None:
+                qml_focus_item = quick.quickWindow().activeFocusItem()
+        origin = QApplication.focusWidget()
         dialog = AccountDialog(self, self.session.recovery_remaining, self.session.storage_info)
         pack, dark, accent = self._look_inputs()
         eye = resolved_palette(pack, dark, self._look, accent)["muted"]
         for field in (dialog.current_password, dialog.new_password):
             field.set_colour(eye)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        password = dialog.current_password.text()
-        if dialog.action == "password":
-            self.session.change_password(password, dialog.new_password.text())
-        elif dialog.action == "codes":
-            self.session.replace_recovery_codes(password)
-        elif dialog.action == "delete":
-            name = (self.session.account or {}).get("username") or "this account"
-            where = (
-                "your FlexWeek server"
-                if (self.session.storage_info or {}).get("mode") == "hosted"
-                else "this computer"
-            )
-            question = (
-                f"Delete the account {name}? Every week, all your homework and your settings are removed "
-                f"from {where}. This can't be undone."
-            )
-            if confirm(self, "Delete account", question, f"Delete {name}"):
-                self.session.delete_account(password)
-        elif dialog.action == "export":
-            self.session.export_account(password, self._write_account_file)
-        elif dialog.action == "import":
-            path, _ = QFileDialog.getOpenFileName(self, "Import backup file", "", "JSON (*.json)")
-            if not path:
+        try:
+            if dialog.exec() != QDialog.DialogCode.Accepted:
                 return
-            try:
-                snapshot = json.loads(Path(path).read_text())
-            except (OSError, UnicodeDecodeError, ValueError):
-                self.session._say(READ_FAILED)
-                return
-            if not isinstance(snapshot, dict):
-                self.session._say(READ_FAILED)
-                return
-            self.session.preview_account_import(snapshot, self._confirm_transfer)
-        elif dialog.action == "week":
-            self._write_json("flexweek-" + self.session.week_start + ".json", self.session.week_file())
-        elif dialog.action == "day":
-            destination = self.session.paste_destination()
-            if destination is None:
-                self.session._say("Select a day first.")
-                return
-            day = destination[0]
-            self._write_json("flexweek-day.json", self.session.day_file(day))
-        elif dialog.action == "import-week":
-            path, _ = QFileDialog.getOpenFileName(self, "Import week or day", "", "JSON (*.json)")
-            if not path:
-                return
-            try:
-                raw = Path(path).read_text()
-            except (OSError, UnicodeDecodeError):
-                self.session._say(READ_WEEK_FAILED)
-                return
-            parsed = parse_import_payload(raw)
-            if parsed.get("error"):
-                self.session._say(parsed["error"])
-                return
-            if parsed.get("format") == EXPORT_FORMAT and self.session.blocks:
-                question = REPLACE_WEEK_QUESTION.format(
-                    week=week_label(self.session.week_start, self._today())
+            password = dialog.current_password.text()
+            if dialog.action == "password":
+                self.session.change_password(password, dialog.new_password.text())
+            elif dialog.action == "codes":
+                self.session.replace_recovery_codes(password)
+            elif dialog.action == "delete":
+                name = (self.session.account or {}).get("username") or "this account"
+                where = (
+                    "your FlexWeek server"
+                    if (self.session.storage_info or {}).get("mode") == "hosted"
+                    else "this computer"
                 )
-                if not confirm(self, "Replace week", question, "Replace week"):
+                question = (
+                    f"Delete the account {name}? Every week, all your homework and your settings are removed "
+                    f"from {where}. This can't be undone."
+                )
+                if confirm(self, "Delete account", question, f"Delete {name}"):
+                    self.session.delete_account(password)
+            elif dialog.action == "export":
+                self.session.export_account(password, self._write_account_file)
+            elif dialog.action == "import":
+                path, _ = QFileDialog.getOpenFileName(self, "Import backup file", "", "JSON (*.json)")
+                if not path:
                     return
-                self.session.import_week_file(raw, replace=True)
-            else:
-                self.session.import_week_file(raw)
+                try:
+                    snapshot = json.loads(Path(path).read_text())
+                except (OSError, UnicodeDecodeError, ValueError):
+                    self.session._say(READ_FAILED)
+                    return
+                if not isinstance(snapshot, dict):
+                    self.session._say(READ_FAILED)
+                    return
+                self.session.preview_account_import(snapshot, self._confirm_transfer)
+            elif dialog.action == "week":
+                self._write_json("flexweek-" + self.session.week_start + ".json", self.session.week_file())
+            elif dialog.action == "day":
+                destination = self.session.paste_destination()
+                if destination is None:
+                    self.session._say("Select a day first.")
+                    return
+                day = destination[0]
+                self._write_json("flexweek-day.json", self.session.day_file(day))
+            elif dialog.action == "import-week":
+                path, _ = QFileDialog.getOpenFileName(self, "Import week or day", "", "JSON (*.json)")
+                if not path:
+                    return
+                try:
+                    raw = Path(path).read_text()
+                except (OSError, UnicodeDecodeError):
+                    self.session._say(READ_WEEK_FAILED)
+                    return
+                parsed = parse_import_payload(raw)
+                if parsed.get("error"):
+                    self.session._say(parsed["error"])
+                    return
+                if parsed.get("format") == EXPORT_FORMAT and self.session.blocks:
+                    question = REPLACE_WEEK_QUESTION.format(
+                        week=week_label(self.session.week_start, self._today())
+                    )
+                    if not confirm(self, "Replace week", question, "Replace week"):
+                        return
+                    self.session.import_week_file(raw, replace=True)
+                else:
+                    self.session.import_week_file(raw)
+        finally:
+            if qml_focus_item is not None:
+                qml_focus_item.forceActiveFocus()
+            elif origin is not None:
+                origin.setFocus()
 
     def _confirm_transfer(self) -> None:
         preview = self.session.transfer_preview

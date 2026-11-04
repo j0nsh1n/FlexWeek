@@ -9,6 +9,7 @@ SettingsRow {
     interactive: true
     objectName: "row_" + key
     accessName: title
+    theme: Ui.theme
 
     M3Icon {
         visible: row.trailing === "chevron"

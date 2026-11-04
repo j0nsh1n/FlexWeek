@@ -279,9 +279,9 @@ class MonthBridge(QObject):
         if not iso:
             return
         self._session().open_day(iso)
-        show = getattr(self.parent(), "showPage", None)
+        show = getattr(self.parent(), "open_page", None)
         if show is not None:
-            show("day")
+            show("day", today=False)
 
     @Slot()
     def previousMonth(self) -> None:

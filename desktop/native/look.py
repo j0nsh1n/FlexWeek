@@ -1802,6 +1802,12 @@ def button_rules(
         f'QPushButton[quiet="true"]:pressed {{ background: {_veil(text, 0.10)}; }}',
         f'QPushButton[quiet="true"]:disabled {{ background: transparent; color: {mix(text, page, 0.4)}; }}',
         f'QPushButton[keyfocus="true"]:focus {{ border-color: {ring}; }}',
+        (
+            f'QPushButton[danger="true"][keyfocus="true"]:focus, '
+            f'QPushButton[outlined="true"][keyfocus="true"]:focus, '
+            f'QPushButton[outlined="true"][danger="true"][keyfocus="true"]:focus '
+            f'{{ border: 2px solid {ring}; padding: {pad}px {pad * 2}px; }}'
+        ),
     ]
     return "".join(rules)
 
