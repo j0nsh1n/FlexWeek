@@ -276,11 +276,15 @@ pub fn sanitize_updates(raw: &serde_json::Value) -> serde_json::Map<String, serd
     clean.insert("check".into(), json!(true));
     clean.insert("last_ms".into(), json!(0));
     clean.insert("skip".into(), json!(""));
+    clean.insert("developer_builds".into(), json!(false));
     let Value::Object(raw) = raw else {
         return clean;
     };
     if raw.get("check") == Some(&json!(false)) {
         clean.insert("check".into(), json!(false));
+    }
+    if raw.get("developer_builds") == Some(&json!(true)) {
+        clean.insert("developer_builds".into(), json!(true));
     }
     if let Some(last) = raw.get("last_ms")
         && is_int(last)
@@ -385,7 +389,8 @@ mod sha256 {
 
 #[cfg(test)]
 mod tests {
-    use super::{expected_digest, install_kind, is_newer, parse_version};
+    use super::{expected_digest, install_kind, is_newer, parse_version, sanitize_updates};
+    use serde_json::json;
 
     #[test]
     fn checksum_lines_and_lengths_follow_python_text_rules() {
@@ -464,6 +469,22 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         assert_eq!(linked, "tarball");
         assert_eq!(direct, "appimage");
+    }
+
+    #[test]
+    fn developer_builds_is_off_unless_the_value_is_exactly_true() {
+        assert_eq!(
+            sanitize_updates(&json!({}))["developer_builds"],
+            json!(false)
+        );
+        assert_eq!(
+            sanitize_updates(&json!({"developer_builds": true}))["developer_builds"],
+            json!(true)
+        );
+        assert_eq!(
+            sanitize_updates(&json!({"developer_builds": "yes"}))["developer_builds"],
+            json!(false)
+        );
     }
 
     #[test]

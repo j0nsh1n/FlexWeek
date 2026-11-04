@@ -5121,7 +5121,7 @@ class NativeWindow(QMainWindow):
         self._save_look()
         if asked:
             self.session._say("Checking for updates…")
-        self._updater.check()
+        self._updater.check(developer=bool(self._updates.get("developer_builds")))
 
     def _on_update_found(self, update: object) -> None:
         if not isinstance(update, dict):
