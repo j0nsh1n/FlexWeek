@@ -100,6 +100,7 @@ SheetFrame {
             width: parent.width
             spacing: 12
             PickerField {
+                id: dueField
                 objectName: "homeworkDue"
                 width: root.phone ? parent.width : (parent.width - 12) * 0.6
                 theme: root.theme
