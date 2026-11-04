@@ -174,11 +174,19 @@ pub struct Explanation {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct Notice {
+    pub kind: String,
+    pub block_id: String,
+    pub message: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct SolveTrace {
     pub placed: Vec<TimeBlock>,
     pub unplaced: Vec<TimeBlock>,
     pub moves: Vec<Move>,
     pub explanations: Vec<Explanation>,
+    pub notices: Vec<Notice>,
     pub failed_constraints: Vec<String>,
     pub solve_ms: f64,
     pub complete: bool,
@@ -469,7 +477,7 @@ const DAY_NAME: [&str; 7] = [
     "Sunday",
 ];
 
-fn same_day_spread_notes(placed: &[TimeBlock]) -> Vec<Explanation> {
+fn same_day_spread_notes(placed: &[TimeBlock]) -> Vec<Notice> {
     use std::collections::HashMap;
     let mut groups: HashMap<String, Vec<&TimeBlock>> = HashMap::new();
     for block in placed {
@@ -495,14 +503,12 @@ fn same_day_spread_notes(placed: &[TimeBlock]) -> Vec<Explanation> {
         if let Some((day, _)) = counts.into_iter().find(|(_, count)| *count >= 2) {
             let title = members[0].title.as_str();
             let name = DAY_NAME.get(day as usize).copied().unwrap_or("that day");
-            notes.push(Explanation {
+            notes.push(Notice {
+                kind: "spread_same_day".into(),
                 block_id: members[0].id.clone(),
                 message: format!(
                     "Couldn't spread {title} over separate days, so two parts share {name}."
                 ),
-                reason: Some("SPREAD_SAME_DAY".into()),
-                slack_min: None,
-                slack_status: None,
             });
         }
     }
@@ -631,8 +637,8 @@ impl<'a> SearchCtx<'a> {
                     continue;
                 }
                 let other_n = self.lengths[other_idx];
-                let peer = placed_block
-                    .is_some_and(|placed| spread_mates(placed, &self.flex[other_idx]));
+                let peer =
+                    placed_block.is_some_and(|placed| spread_mates(placed, &self.flex[other_idx]));
                 if peer {
                     let mut elsewhere = Vec::new();
                     let mut same_day = Vec::new();
@@ -1186,7 +1192,7 @@ pub fn solve_with_rules(
             slack_status: None,
         });
     }
-    explanations.extend(same_day_spread_notes(&placed_flex));
+    let notices = same_day_spread_notes(&placed_flex);
 
     let complete = unplaced.is_empty();
     Ok(SolveTrace {
@@ -1199,6 +1205,7 @@ pub fn solve_with_rules(
         unplaced,
         moves,
         explanations,
+        notices,
         failed_constraints: failed,
         solve_ms: elapsed_ms(),
         complete,
@@ -1600,11 +1607,23 @@ pub fn trace_to_value(trace: &SolveTrace) -> Value {
             })
         })
         .collect();
+    let notices: Vec<Value> = trace
+        .notices
+        .iter()
+        .map(|item| {
+            serde_json::json!({
+                "kind": item.kind,
+                "block_id": item.block_id,
+                "message": item.message,
+            })
+        })
+        .collect();
     serde_json::json!({
         "placed": trace.placed.iter().map(block_to_value).collect::<Vec<_>>(),
         "unplaced": trace.unplaced.iter().map(block_to_value).collect::<Vec<_>>(),
         "moves": moves,
         "explanations": explanations,
+        "notices": notices,
         "failed_constraints": trace.failed_constraints,
         "solve_ms": trace.solve_ms,
         "complete": trace.complete,

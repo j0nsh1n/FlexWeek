@@ -298,6 +298,43 @@ def test_the_top_bar_undo_also_restores_a_plan(qapp: QApplication, window: Nativ
     assert _qml(root, "planHomework").property("enabled") is True
 
 
+def test_a_same_day_spread_says_so_in_the_snackbar(qapp: QApplication, window: NativeWindow) -> None:
+    root = _reset(window, qapp)
+    due = (_week_monday(window) + timedelta(days=6)).isoformat()
+    window.session.add_homework(
+        {
+            "id": "spread-essay",
+            "title": "History essay",
+            "due": due,
+            "estimate_min": 90,
+            "revision": 0,
+        },
+        spread=True,
+    )
+    for key, minutes in (("spread-a", 60), ("spread-b", 30)):
+        window.session.add_block(
+            {
+                "id": key,
+                "title": "History essay",
+                "kind": "flexible",
+                "duration_min": minutes,
+                "days": [4],
+                "priority": 3,
+                "energy": "medium",
+                "assignment_id": "spread-essay",
+            }
+        )
+    window.session.save()
+    settled(qapp, window)
+    _pump(qapp)
+    window._material_page.publish()
+    _pump(qapp)
+    _click(window, _qml(root, "planHomework"))
+    note = "Couldn't spread History essay over separate days, so two parts share Friday."
+    wait_until(qapp, lambda: note in _snack(window) and not window.session.busy)
+    assert note in _snack(window)
+
+
 def test_plan_is_disabled_when_nothing_needs_a_time(qapp: QApplication, window: NativeWindow) -> None:
     root = _reset(window, qapp)
     assert _qml(root, "homeworkCount").property("text") == "0"

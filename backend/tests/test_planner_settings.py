@@ -196,3 +196,55 @@ def test_choosing_no_buffer_is_saved_and_kept(alice: TestClient) -> None:
     saved = save(alice, buffer_min=0)
     assert saved["buffer_min"] == 0
     assert alice.get("/api/preferences").json()["buffer_min"] == 0
+
+
+def test_planning_a_spread_that_must_share_a_day_succeeds_and_returns_the_notice(
+    alice: TestClient,
+) -> None:
+    week_start = "2026-09-07"
+    body = {
+        "id": "essay",
+        "title": "History essay",
+        "course": None,
+        "category": None,
+        "priority": 3,
+        "energy": "medium",
+        "spotify_url": None,
+        "due": "2026-09-11T21:00",
+        "estimate_min": 90,
+        "focus_minutes": 0,
+        "focus_sessions": 0,
+        "completed": False,
+        "completed_at": None,
+        "revision": 0,
+    }
+    saved = alice.put("/api/assignments/essay", json=body, headers=WRITE)
+    assert saved.status_code == 200, saved.text
+    save(alice, work_windows=[{"days": [2], "start": "16:00", "end": "21:00"}])
+    pieces = [
+        block(
+            "essay-a",
+            60,
+            [2],
+            title="History essay",
+            assignment_id="essay",
+        ),
+        block(
+            "essay-b",
+            30,
+            [2],
+            title="History essay",
+            assignment_id="essay",
+        ),
+    ]
+    solved = alice.post(
+        "/api/solve",
+        json={"blocks": pieces, "week_start": week_start},
+        headers=WRITE,
+    )
+    assert solved.status_code == 200, solved.text
+    notice = "Couldn't spread History essay over separate days, so two parts share Wednesday."
+    notices = solved.json().get("notices") or []
+    assert any(item.get("kind") == "spread_same_day" and item.get("message") == notice for item in notices), (
+        notices
+    )

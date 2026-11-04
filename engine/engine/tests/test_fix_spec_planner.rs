@@ -190,16 +190,37 @@ fn a_spread_task_with_room_on_only_one_day_shares_it_and_says_so() {
     let trace = plan(&pieces, &windows, PlanRules::default());
     assert_eq!(placed_day(&trace, "essay-a"), 2);
     assert_eq!(placed_day(&trace, "essay-b"), 2);
+    const SPEC_REASONS: &[&str] = &[
+        "LOCKED_OVERLAP",
+        "DEADLINE_MISS",
+        "DEADLINE_PASSED",
+        "NO_SLOT_LEFT",
+        "PRIORITY_PREEMPT",
+        "ENERGY_MISMATCH",
+        "SLEEP_GUARD",
+        "WORK_WINDOW_MISS",
+        "NO_STUDY_TIME_TODAY",
+        "RESHUFFLE_AFTER_MISS",
+    ];
     assert!(
-        trace.explanations.iter().any(|item| {
-            item.message.contains("Couldn't spread History essay over separate days")
-                && item.message.contains("Wednesday")
-        }),
-        "expected a same-day spread note, got {:?}",
+        trace.explanations.iter().all(|item| item
+            .reason
+            .as_deref()
+            .is_none_or(|reason| SPEC_REASONS.contains(&reason))),
+        "explanations must use spec reason codes, got {:?}",
         trace
             .explanations
             .iter()
-            .map(|item| &item.message)
+            .map(|item| item.reason.as_deref())
             .collect::<Vec<_>>()
+    );
+    assert!(
+        trace.notices.iter().any(|item| {
+            item.kind == "spread_same_day"
+                && item.message
+                    == "Couldn't spread History essay over separate days, so two parts share Wednesday."
+        }),
+        "expected a same-day spread notice, got {:?}",
+        trace.notices
     );
 }

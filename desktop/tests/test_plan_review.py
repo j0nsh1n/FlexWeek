@@ -380,10 +380,11 @@ def test_a_same_day_spread_says_so_in_the_toast(qapp: QApplication) -> None:
         "placed": [{"id": "essay-a"}, {"id": "essay-b"}],
         "unplaced": [],
         "moves": [],
-        "explanations": [
+        "explanations": [],
+        "notices": [
             {
+                "kind": "spread_same_day",
                 "block_id": "essay-a",
-                "reason": "SPREAD_SAME_DAY",
                 "message": "Couldn't spread History essay over separate days, so two parts share Wednesday.",
             }
         ],
