@@ -25,7 +25,8 @@ Item {
     anchors.fill: parent
     // Clicks and keys go to the sheet while it is open, not to the screen behind it.
     enabled: true
-    visible: active || notice.visible
+    // The notice's own visible is false while this host is hidden, so the host reads the text instead.
+    visible: active || (sheets !== null && sheets.notice !== "")
 
     function inside(item) {
         while (item) {
