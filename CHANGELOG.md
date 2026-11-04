@@ -48,6 +48,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Planning that splits a long task into focus chunks keeps the times just chosen for other homework, and does not put a pin back on homework the planner left unplaced.
 - The sign-in field's focus ring stays readable on a pale accent, and still uses the default blue when that blue already reads.
 - After you save a new block in Bento, the keyboard stays on that block even if the week refreshed while the editor was closing.
+- Settings Month preview stays current after save, Undo, and Plan, clears loading on every early return of the current request, rejects late replies, places Retry above the input shield as a focusable button, and reduces passive preview Tab stops to 3 or fewer.
 
 ## [1.2.0] - 2026-10-26
 

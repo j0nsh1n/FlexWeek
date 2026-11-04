@@ -254,6 +254,7 @@ class NativeSession(QObject):
         self._day_ticket = 0
         self._month_ticket = 0
         self._month_cache: dict[tuple[str, str], dict] = {}
+        self._month_gen = 0
         self._month_prefetching: set[tuple[str, str]] = set()
         self._undo: list[dict] = []
         self._join_step = False
@@ -419,6 +420,7 @@ class NativeSession(QObject):
         self.selected_month = None
         self.month_data = None
         self._month_cache.clear()
+        self._month_gen += 1
         self._month_prefetching.clear()
         self.armed_category = None
         self.selected_block_id = None
@@ -650,6 +652,7 @@ class NativeSession(QObject):
         asked = self.selected_month
         self._month_ticket += 1
         token = self._month_ticket
+        gen = self._month_gen
         key = (str(self.account["id"]), asked)
         cached = None if self._held() or self.parked_unsaved_week() else self._month_cache.get(key)
         if cached is not None:
@@ -658,14 +661,19 @@ class NativeSession(QObject):
             self.week_changed.emit()
 
         def ok(data: dict) -> None:
-            if token != self._month_ticket or self.planner_view != "month" or self.selected_month != asked:
+            if (
+                token != self._month_ticket
+                or self.planner_view != "month"
+                or self.selected_month != asked
+                or gen != self._month_gen
+            ):
                 return
             self.month_data = data
             self._month_cache[key] = data
             self.week_changed.emit()
 
         def err(error: ApiError) -> None:
-            if token != self._month_ticket:
+            if token != self._month_ticket or gen != self._month_gen:
                 return
             self._say(error.message)
             self.week_changed.emit()
@@ -682,10 +690,16 @@ class NativeSession(QObject):
         if key in self._month_cache or key in self._month_prefetching:
             return
         self._month_prefetching.add(key)
+        gen = self._month_gen
 
         def ok(data: dict) -> None:
             self._month_prefetching.discard(key)
-            if self.account is not None and str(self.account["id"]) == owner and data.get("month") == asked:
+            if (
+                self.account is not None
+                and str(self.account["id"]) == owner
+                and data.get("month") == asked
+                and gen == self._month_gen
+            ):
                 self._month_cache[key] = data
 
         def err(_error: ApiError) -> None:
@@ -2026,6 +2040,7 @@ class NativeSession(QObject):
             self.pending_save = None
             self._save_status = None
             self._month_cache.clear()
+            self._month_gen += 1
             spread_next, self._spread_after_save = self._spread_after_save, None
             if spread_next is not None:
                 QTimer.singleShot(0, lambda: self.preview_spread(*spread_next, then=self.confirm_spread))

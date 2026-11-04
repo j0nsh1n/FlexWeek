@@ -7,6 +7,7 @@ Item {
     objectName: "materialMonth"
     property var bridge
     property bool phone: false
+    property bool passive: false
     readonly property var theme: bridge && bridge.theme ? bridge.theme : ({})
     readonly property string density: bridge ? bridge.density : "comfortable"
     readonly property bool reduceMotion: bridge ? bridge.reduceMotion : false
@@ -50,6 +51,8 @@ Item {
                 highContrast: root.highContrast
                 icon: "chevron_left"
                 accessName: "Previous month"
+                visible: !root.passive
+                activeFocusOnTab: !root.passive
                 onClicked: if (root.month) root.month.previousMonth()
             }
 
@@ -65,6 +68,8 @@ Item {
                 highContrast: root.highContrast
                 icon: "chevron_right"
                 accessName: "Next month"
+                visible: !root.passive
+                activeFocusOnTab: !root.passive
                 onClicked: if (root.month) root.month.nextMonth()
             }
 
@@ -79,6 +84,8 @@ Item {
                 highContrast: root.highContrast
                 checked: root.month ? root.month.showStudyTime : false
                 accessName: root.month ? root.month.studyLabel : "Show study time per date"
+                visible: !root.passive
+                activeFocusOnTab: !root.passive
                 onToggled: (on) => {
                     if (root.month)
                         root.month.setShowStudyTime(on)
@@ -102,6 +109,7 @@ Item {
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignRight
                 verticalAlignment: Text.AlignVCenter
+                visible: !root.passive
             }
         }
 
@@ -190,6 +198,7 @@ Item {
                     plannedShare: model.plannedShare
                     completedShare: model.completedShare
                     accessName: model.accessName
+                    passive: root.passive
                     onChosen: (dayIso) => { if (root.month) root.month.selectDate(dayIso) }
                     onStep: (delta) => board.focusDate(index + delta)
                 }

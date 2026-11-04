@@ -300,10 +300,12 @@ class PassiveMonthBridge(QObject):
         self._failed_month: str | None = None
         self._load_error = ""
         self._loading = False
-        self._request_token = 0
+        self._request_counter = 0
+        self._request_token: tuple[str, str, int, int] | None = None
 
         live.changed.connect(self._on_live_changed)
         session = self._session()
+        self._month_gen = getattr(session, "_month_gen", 0) if session is not None else 0
         changed = getattr(session, "week_changed", None)
         if changed is not None and hasattr(changed, "connect"):
             changed.connect(self._on_week_changed)
@@ -344,7 +346,8 @@ class PassiveMonthBridge(QObject):
         self._account_id = None
         self._snapshot_month = None
         self._preview_snapshot = None
-        self._request_token += 1
+        self._request_counter += 1
+        self._request_token = None
         self._loading = False
         self._load_error = ""
         self._failed_month = None
@@ -371,7 +374,20 @@ class PassiveMonthBridge(QObject):
         if session is None or getattr(session, "account", None) is None:
             self.clear()
             return
-        if not self._is_preview_active():
+        current_gen = getattr(session, "_month_gen", 0)
+        if current_gen != self._month_gen:
+            self._month_gen = current_gen
+            self._preview_snapshot = None
+            self._snapshot_month = None
+            self._asked_month = ""
+            self._request_counter += 1
+            self._request_token = (
+                self._account_id or "",
+                self._target_month(),
+                self._request_counter,
+                current_gen,
+            )
+        elif not self._is_preview_active():
             self._preview_snapshot = None
             self._asked_month = ""
         self.reload(fetch=self._is_preview_active())
@@ -459,21 +475,36 @@ class PassiveMonthBridge(QObject):
 
         if can_fetch:
             self._asked_month = target_month
-            self._request_token += 1
-            token = self._request_token
+            self._request_counter += 1
+            gen = getattr(session, "_month_gen", 0)
+            token = (account_id, target_month, self._request_counter, gen)
+            self._request_token = token
             self._loading = True
             self._load_error = ""
 
-            def ok(data: dict) -> None:
+            def is_stale(current_session: Any) -> bool:
                 if token != self._request_token:
-                    return
+                    return True
+                return bool(
+                    current_session is not None and getattr(current_session, "_month_gen", 0) != token[3]
+                )
+
+            def ok(data: dict) -> None:
                 current_session = self._session()
+                if is_stale(current_session):
+                    return
                 if current_session is None:
+                    self._loading = False
+                    self.changed.emit()
                     return
                 current_account = getattr(current_session, "account", None)
                 if current_account is None or str(current_account.get("id")) != account_id:
+                    self._loading = False
+                    self.changed.emit()
                     return
                 if not isinstance(data, dict) or data.get("month") != target_month:
+                    self._loading = False
+                    self.changed.emit()
                     return
                 self._preview_snapshot = data
                 self._snapshot_month = target_month
@@ -483,15 +514,21 @@ class PassiveMonthBridge(QObject):
                 self.reload(fetch=False)
 
             def err(error: Any) -> None:
-                if token != self._request_token:
-                    return
                 current_session = self._session()
+                if is_stale(current_session):
+                    return
                 if current_session is None:
+                    self._loading = False
+                    self.changed.emit()
                     return
                 current_account = getattr(current_session, "account", None)
                 if current_account is None or str(current_account.get("id")) != account_id:
+                    self._loading = False
+                    self.changed.emit()
                     return
                 if self._target_month() != target_month:
+                    self._loading = False
+                    self.changed.emit()
                     return
                 self._loading = False
                 self._load_error = getattr(error, "message", "Couldn't load month preview.")
