@@ -126,6 +126,8 @@ Rectangle {
                     onDragStarted: drawer.cardDragStarted(model.title)
                     onDragMoved: (scene) => drawer.cardMoved(scene)
                     onDropped: (scene) => drawer.cardDropped(model.blockId, scene)
+                    onOpened: if (drawer.bridge && drawer.bridge.sheets) drawer.bridge.sheets.editHomework(model.assignmentId)
+                    onMenuAsked: (mx, my) => drawer.openCardMenu(homeworkCard, model, mx, my)
                     onActivated: drawer.bridge.week.planOne(model.assignmentId)
                     onActiveFocusChanged: if (activeFocus) scroller.reveal(y, height)
                 }
@@ -159,6 +161,97 @@ Rectangle {
             font.family: M3Font.family
             font.pixelSize: 14
             font.weight: 400
+        }
+    }
+
+    property Item menuOriginItem: null
+    property var menuTargetModel: null
+
+    function openCardMenu(item, cardModel, mx, my) {
+        menuOriginItem = item
+        menuTargetModel = {
+            blockId: cardModel.blockId,
+            assignmentId: cardModel.assignmentId
+        }
+        var mapped = item.mapToItem(drawer, mx, my)
+        var menuX = Math.max(8, Math.min(mapped.x, drawer.width - cardMenu.width - 8))
+        var menuY = Math.max(8, Math.min(mapped.y, drawer.height - cardMenu.height - 8))
+        cardMenu.x = menuX
+        cardMenu.y = menuY
+        cardMenu.entries = [
+            { label: "Edit", icon: "edit_note" },
+            { label: "Place now", icon: "schedule" },
+            { label: "Mark finished", icon: "check" },
+            { label: "Delete", icon: "close" }
+        ]
+        cardMenu.cursor = 0
+        cardMenu.open = true
+        cardMenu.forceActiveFocus()
+    }
+
+    function closeCardMenu() {
+        if (!cardMenu.open && !menuOriginItem && !menuTargetModel)
+            return
+        cardMenu.open = false
+        var origin = menuOriginItem
+        menuOriginItem = null
+        menuTargetModel = null
+        if (origin && origin.visible)
+            origin.forceActiveFocus()
+    }
+
+    FocusScope {
+        id: cardMenuOverlay
+        anchors.fill: parent
+        z: 50
+        visible: cardMenu.open
+        enabled: cardMenu.open
+
+        Rectangle {
+            id: cardMenuDim
+            anchors.fill: parent
+            color: "transparent"
+            TapHandler {
+                enabled: cardMenu.open
+                onTapped: drawer.closeCardMenu()
+            }
+        }
+
+        Menu {
+            id: cardMenu
+            objectName: "cardMenu"
+            open: false
+            focus: true
+            onActiveFocusChanged: {
+                if (!activeFocus && open)
+                    drawer.closeCardMenu()
+            }
+            theme: drawer.theme
+            density: drawer.density
+            reduceMotion: drawer.reduceMotion
+            highContrast: drawer.highContrast
+            onChosen: (index, label) => {
+                var target = drawer.menuTargetModel
+                drawer.closeCardMenu()
+                if (!drawer.bridge || !target)
+                    return
+                if (label === "Edit") {
+                    if (drawer.bridge.sheets)
+                        drawer.bridge.sheets.editHomework(target.assignmentId)
+                } else if (label === "Place now") {
+                    drawer.bridge.week.planOne(target.assignmentId)
+                } else if (label === "Mark finished") {
+                    drawer.bridge.week.toggleDone(target.assignmentId)
+                } else if (label === "Delete") {
+                    if (drawer.bridge.sheets) {
+                        if (drawer.bridge.sheets.askDeleteHomework)
+                            drawer.bridge.sheets.askDeleteHomework(target.assignmentId)
+                        else
+                            drawer.bridge.sheets.askDeleteUnfinished(target.assignmentId)
+                    }
+                }
+            }
+            onDismissed: drawer.closeCardMenu()
         }
     }
 }

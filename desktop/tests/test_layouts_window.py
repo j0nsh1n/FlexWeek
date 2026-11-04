@@ -387,7 +387,7 @@ def test_the_choice_is_saved_on_this_device_beside_the_look(qapp: QApplication, 
     }
     # Whether this computer checks for updates lives beside the look, because it is a property of
     # the computer rather than the account.
-    assert set(stored["updates"]) == {"check", "last_ms", "skip"}
+    assert set(stored["updates"]) == {"check", "last_ms", "skip", "developer_builds"}
     window._look, window._layout = {}, {}
     window._load_look()
     assert window._look == {"preset": "paper", "knobs": {"corners": "rounded"}}
@@ -2064,8 +2064,9 @@ class FakeUpdater:
         self.downloads: list[dict] = []
         self.busy = False
 
-    def check(self) -> None:
+    def check(self, *, developer: bool = False) -> None:
         self.checks += 1
+        self.developer = developer
 
     def download(self, update: dict) -> None:
         self.downloads.append(update)

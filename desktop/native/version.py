@@ -11,6 +11,8 @@ from __future__ import annotations
 import flexweek_engine  # type: ignore[import-untyped]
 
 VERSION = "1.2.0"
+# The developer-build stamps both lines in its build.
+CHANNEL = "release"
 
 
 def parse(value: str) -> tuple[int, ...] | None:

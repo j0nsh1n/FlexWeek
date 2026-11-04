@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import stat
 import sys
@@ -25,7 +26,9 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QUrl, Signal
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 
+from desktop.native.autostart import frozen
 from desktop.native.update import (
+    DEV_URL,
     RELEASE_PAGE,
     RELEASES_URL,
     Update,
@@ -35,6 +38,7 @@ from desktop.native.update import (
     release_from_page,
     verified,
 )
+from desktop.native.version import is_newer
 
 USER_AGENT = b"FlexWeek-Updater"
 DOWNLOAD_FOLDER_PREFIX = "flexweek-update-"
@@ -48,6 +52,9 @@ CHECK_TIMEOUT_MS = 15_000
 DOWNLOAD_STALL_MS = 30_000
 CHECK_FAILED = "FlexWeek could not check for updates right now. Try again later, or open the release page."
 DOWNLOAD_STOPPED = "The download stopped before it finished. Try again, or open the release page."
+
+
+DEV_TITLE = re.compile(r"Developer build (\d+(?:\.\d+){1,3})")
 
 
 class Updater(QObject):
@@ -65,16 +72,20 @@ class Updater(QObject):
         super().__init__(parent)
         self._manager = QNetworkAccessManager(self)
         self._busy = False
+        self._want_developer = False
+        self._latest_update: Update | None = None
         self.kind = install_kind()
 
     @property
     def busy(self) -> bool:
         return self._busy
 
-    def check(self) -> None:
+    def check(self, *, developer: bool = False) -> None:
         if self._busy:
             return
         self._busy = True
+        self._want_developer = developer
+        self._latest_update = None
         self._get(RELEASES_URL, self._on_release, fallback=self._check_page)
 
     def download(self, update: Update) -> None:
@@ -154,6 +165,42 @@ class Updater(QObject):
 
     def _decide(self, payload: object) -> None:
         update = available(payload, self.kind)
+        if not self._want_developer:
+            self._offer(update)
+            return
+        self._latest_update = update
+        self._get(DEV_URL, self._on_dev, fallback=self._finish_with_latest)
+
+    def _finish_with_latest(self) -> None:
+        self._offer(self._latest_update)
+
+    def _on_dev(self, text: str) -> None:
+        try:
+            payload = json.loads(text)
+        except ValueError:
+            self._finish_with_latest()
+            return
+        if not isinstance(payload, dict):
+            self._finish_with_latest()
+            return
+        # The `dev` release is always tagged `dev`, so its version lives in the title the developer-build
+        # workflow writes. A title in any other shape is not offered.
+        title = DEV_TITLE.fullmatch(str(payload.get("name") or ""))
+        if title is None:
+            self._finish_with_latest()
+            return
+        asked = dict(payload)
+        asked["tag_name"] = title.group(1)
+        # The engine skips pre-releases, which is right for /latest, but this one was asked for on purpose.
+        asked["prerelease"] = False
+        dev = available(asked, self.kind)
+        latest = self._latest_update
+        if dev is not None and (latest is None or is_newer(dev["version"], latest["version"])):
+            self._offer(dev)
+            return
+        self._offer(latest)
+
+    def _offer(self, update: Update | None) -> None:
         self._busy = False
         if update is None:
             self.none_found.emit()
@@ -185,9 +232,13 @@ class Updater(QObject):
         self.ready.emit(str(target))
 
 
-def bundle_root() -> Path:
-    """The directory that would be replaced by a tarball update."""
-    return Path(sys.executable).resolve().parent
+def bundle_root(executable: str | None = None) -> Path:
+    """The top folder of the install that would be replaced by a tarball update."""
+    binary = Path(sys.executable if executable is None else executable).resolve()
+    parent = binary.parent
+    if parent.name == "app" and (parent.parent / "FlexWeek").is_file():
+        return parent.parent
+    return parent
 
 
 def writable(path: Path) -> bool:
@@ -238,6 +289,8 @@ def apply_update(downloaded: str, kind: str | None = None) -> str | None:
             if not current:
                 return "This copy doesn't know where its AppImage is."
             return _swap_file(source, Path(current))
+        if not frozen():
+            return "This copy runs from source, so it can't replace itself. Update it with git instead."
         return _swap_tree(source)
     finally:
         folder = _own_download_folder(source)
@@ -265,6 +318,8 @@ def _swap_tree(source: Path) -> str | None:
     Writing into the live directory would leave a half-updated app if anything failed part way.
     """
     root = bundle_root()
+    if (root / "flexweek.db").exists():
+        return f"{root} also holds FlexWeek's data, so the update was not applied."
     if not writable(root.parent):
         return f"{root.parent} can't be written, so the update was not applied."
     staging = root.parent / (root.name + ".update")

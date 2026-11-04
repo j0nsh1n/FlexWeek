@@ -50,7 +50,7 @@ from desktop.native.material.theme import (
     store_material,
     theme_object,
 )
-from desktop.native.version import VERSION
+from desktop.native.version import CHANNEL, VERSION
 
 _FIELDS = frozenset(Preferences.model_fields)
 SECTIONS = ("look", "planning", "focus", "alerts", "computer")
@@ -109,7 +109,7 @@ def _reminder_state(prefs: dict[str, Any]) -> tuple[str, list[dict[str, str]]]:
     chips = [dict(row) for row in REMINDER_CHIPS]
     try:
         lead = int(prefs["reminder_lead_min"]) if prefs.get("reminder_lead_min") is not None else None
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         lead = None
     if prefs.get("reminders_enabled", True) is False:
         return "off", chips
@@ -738,7 +738,7 @@ class SettingsBridge(QObject):
     def _on_session(self) -> None:
         try:
             self._publish()
-        except (OSError, KeyError, ValueError):
+        except OSError, KeyError, ValueError:
             return
 
     def _worn_dark(self) -> bool:
@@ -751,10 +751,10 @@ class SettingsBridge(QObject):
         mode = resolved_mode(choice["mode"], self._worn_dark())
         try:
             return scheme(choice["preset"], mode, choice["contrast"])
-        except (KeyError, ValueError, OSError):
+        except KeyError, ValueError, OSError:
             try:
                 return scheme(DEFAULT_PRESET, "light", DEFAULT_CONTRAST)
-            except (KeyError, ValueError, OSError):
+            except KeyError, ValueError, OSError:
                 return {}
 
     def _mark_draft(self) -> None:
@@ -832,7 +832,10 @@ class SettingsBridge(QObject):
             "startAtLogin": prefs.get("start_at_login") is True,
             "reduceMotion": motion in ("reduce", "off"),
             "shortcuts": self._shortcuts,
-            "version": f"FlexWeek {VERSION}",
+            "developerBuilds": self._window._updates.get("developer_builds") is True,
+            "version": (
+                f"FlexWeek {VERSION} (developer build)" if CHANNEL == "dev" else f"FlexWeek {VERSION}"
+            ),
             "pairCode": self._pair_code,
             "pairError": self._pair_error,
             "phones": phones,
@@ -1424,6 +1427,12 @@ class SettingsBridge(QObject):
     @Slot()
     def runSetup(self) -> None:
         self._window._run_setup_again()
+
+    @Slot(bool)
+    def setDeveloperBuilds(self, on: bool) -> None:
+        self._window._updates["developer_builds"] = bool(on)
+        self._window._save_look()
+        self._publish()
 
     @Slot()
     def checkUpdates(self) -> None:

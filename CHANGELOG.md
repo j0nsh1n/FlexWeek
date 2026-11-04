@@ -6,6 +6,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Settings → Computer has Get developer builds: this copy also gets developer test builds, and still moves to each official release when it is newer.
 - A seed colour can build a Material scheme: six palette styles, light or dark, and a contrast from low to high. Dynamic color uses the desktop's accent when the platform supplies one.
 - Material 3 is a style choice beside the existing ones. Choosing it opens a Material window on the real week, and choosing a Widgets style swaps back, with no restart. Today's app stays the default. The Material window has Day, Week, Month, My day, and Settings, and the week's homework list sits on the right.
 - Settings → Look shows a live preview of the main view and the day screen as you change a style, its options, or the look, including the accent, with Fit and Actual size as in My Look.
@@ -13,6 +14,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Material's Focus screen covers the window: phase, task, timer, Pause or Resume, Skip, Finish and Back, on the same timer Widgets uses. Rain, Lo-Fi and White noise play while you focus and pause with the timer; Spotify still opens the Settings link. Auto-mute holds reminders during a focus work phase. Auto-complete, off by default, finishes only that session's block.
 
 ### Changed
+- In the Material style, clicking a homework block, a homework card or a Day row opens it for editing; marking it finished has its own round button, and right-click or Shift+F10 opens Edit, Mark finished and Delete.
 - Spread-over-days homework sits on different days when it can, and the plan toast says so when two parts have to share a day.
 - The planner uses earlier free days before the due date instead of stacking everything on that last day.
 - A new or unset account leaves 15 minutes after events and between tasks. Choosing None keeps no gap.
@@ -21,6 +23,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- Linux tarball updates replace the whole FlexWeek folder instead of nesting it inside `app/`, refuse a folder that holds your data, and AppImage login entries point at the AppImage.
 - Material Settings Look labels and choices update legibly when switching between light and dark.
 - Pressing Return in Material setup commits and formats School times consistently.
 - Keyboard and accessibility actions inside Material settings previews leave live planner navigation and homework unchanged.

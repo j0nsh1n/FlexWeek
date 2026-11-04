@@ -124,6 +124,10 @@ Item {
                     if (root.board)
                         root.board.finishHomework(assignmentId)
                 }
+                onEdit: (assignmentId) => {
+                    if (root.bridge && root.bridge.sheets)
+                        root.bridge.sheets.editHomework(assignmentId)
+                }
             }
         }
     }

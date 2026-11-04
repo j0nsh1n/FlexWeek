@@ -219,6 +219,8 @@ def _reset(window: NativeWindow, qapp: QApplication) -> QObject:
     _clean(window, qapp)
     look_file().unlink(missing_ok=True)
     root = _show_material(qapp, window)
+    if hasattr(window._material_page.bridge, "sheets"):
+        window._material_page.bridge.sheets.forceClose()
     window._material_page.publish()
     _pump(qapp)
     return root
@@ -423,7 +425,8 @@ def test_clicking_homework_finishes_it_and_undo_opens_it_again(
     essay = _block_named(root, "History essay")
     assert essay.property("homework") is True
     assert window.session.assignments["essay"].get("completed") in (None, False)
-    _click(window, essay)
+    finish = _named(essay, "weekBlockFinish")[0]
+    _click(window, finish)
     wait_until(
         qapp, lambda: not window.session.busy and bool(window.session.assignments["essay"].get("completed"))
     )
@@ -650,7 +653,13 @@ def test_a_card_can_be_given_a_time_from_the_keyboard(qapp: QApplication, window
     assert card.property("activeFocusOnTab") is True
     card.forceActiveFocus()
     _pump(qapp)
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Space)
+    QTest.keyClick(window._material_page._quick, Qt.Key.Key_F10, Qt.KeyboardModifier.ShiftModifier)
+    _pump(qapp)
+    menu = _named(root, "cardMenu")[0]
+    assert menu.property("open") is True
+    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Down)
+    _pump(qapp)
+    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Return)
     wait_until(qapp, lambda: not window.session.busy and _qml(root, "homeworkCount").property("text") == "0")
     placed = next(block for block in window.session.blocks if block.get("assignment_id") == "sheet")
     assert placed.get("start")
