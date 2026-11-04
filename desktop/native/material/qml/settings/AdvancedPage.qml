@@ -127,7 +127,7 @@ Item {
                 GroupHeader { title: "Type"; resetKey: "type"; onReset: root.panel.resetGroup("type") }
                 SliderRow {
                     key: "scale"; title: "Text scale"; unit: "×"; decimals: 2
-                    from: 0.9; to: 1.3; step: 0.05; value: root.st.scale === undefined ? 1 : root.st.scale
+                    from: 0.9; to: 1.8; step: 0.05; value: root.st.scale === undefined ? 1 : root.st.scale
                     onMoved: (v) => root.panel.setScale(v)
                 }
             }

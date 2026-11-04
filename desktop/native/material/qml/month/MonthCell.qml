@@ -92,10 +92,10 @@ Item {
 
     M3FocusRing {
         anchors.fill: parent
-        anchors.margins: -4
+        anchors.margins: -2
         shown: root.activeFocus
         ring: tones.primary
-        ringRadius: 16
+        ringRadius: 14
     }
 
     Rectangle {

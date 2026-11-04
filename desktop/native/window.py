@@ -4910,6 +4910,7 @@ class NativeWindow(QMainWindow):
             if material is not None:
                 material.show()
                 return
+        self._focus_origin_widget = QApplication.focusWidget()
         self.focus_screen.set_state(self.session)
         self._show_page("focusPage")
         self.focus_screen.setFocus()
@@ -4920,7 +4921,17 @@ class NativeWindow(QMainWindow):
             material.hide()
         if self._stack.currentWidget() is self.focus_screen:
             self._show_surface()
-            self._focus_week()
+            origin = getattr(self, "_focus_origin_widget", None)
+            self._focus_origin_widget = None
+            if (
+                origin is not None
+                and origin not in (self.prev_nav, self.next_nav)
+                and origin.isVisible()
+                and origin.isEnabled()
+            ):
+                origin.setFocus(Qt.FocusReason.OtherFocusReason)
+            else:
+                self._focus_week()
 
     def _stop_focus(self) -> None:
         state = self.session.focus

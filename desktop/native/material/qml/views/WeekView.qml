@@ -19,6 +19,7 @@ Item {
     readonly property int gutter: 68
     readonly property int drawerWidth: 320
     readonly property real gridWidth: phone ? width : Math.max(0, width - drawerWidth)
+    property alias drawer: drawer
     // Five columns with weekends off, seven otherwise. Weekday columns widen by the freed space.
     readonly property int columns: bridge && bridge.week ? Math.max(1, bridge.week.columns) : 7
     readonly property real dayWidth: Math.max(48, (gridWidth - gutter) / columns)
@@ -230,6 +231,13 @@ Item {
         boundsBehavior: Flickable.StopAtBounds
 
         property string revealedKey: ""
+
+        function reveal(itemY, itemHeight) {
+            if (itemY < contentY)
+                contentY = Math.max(0, itemY - 8)
+            else if (itemY + itemHeight > contentY + height)
+                contentY = Math.min(Math.max(0, contentHeight - height), itemY + itemHeight - height + 8)
+        }
 
         function revealNow() {
             if (scroller.moving || scroller.dragging || root.holding)
@@ -460,6 +468,8 @@ Item {
                     onToggled: if (root.bridge) root.bridge.week.toggleDone(model.assignmentId)
                     onOpened: if (root.bridge && root.bridge.sheets) root.bridge.sheets.editBlock(model.blockId, model.day)
                     onMenuAsked: (mx, my) => root.openBlockMenu(blockCell, model, mx, my)
+                    onActiveFocusChanged: if (activeFocus) scroller.reveal(y, height)
+                    onFocused: scroller.reveal(y, height)
                 }
             }
 

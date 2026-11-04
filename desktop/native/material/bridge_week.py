@@ -51,7 +51,7 @@ SLACK_TAGS = {
     "tight": ("Tight", "tight"),
     "ok": ("Plenty of time", "plenty"),
 }
-SNACK_MS = 8000
+SNACK_MS = 10000
 DAY_MIN = 24 * 60
 # A status line after Plan my homework counts as its answer for this long.
 PLAN_WINDOW_S = 30.0
@@ -90,6 +90,7 @@ class WeekBridge(QObject):
     changed = Signal()
     blocksChanged = Signal()
     homeworkChanged = Signal()
+    planFinished = Signal()
 
     def __init__(self, window: QObject, parent: QObject) -> None:
         super().__init__(parent)
@@ -296,10 +297,12 @@ class WeekBridge(QObject):
         asked, self._said_plan = self._said_plan, 0.0
         if time.monotonic() - asked < PLAN_WINDOW_S:
             self._note(message)
+            self.planFinished.emit()
 
     @Slot(str)
     def _on_planned(self, _said: str) -> None:
         self._said_plan = 0.0
+        self.planFinished.emit()
 
     @Slot(bool, str)
     def _on_save_finished(self, ok: bool, _message: str) -> None:

@@ -899,6 +899,19 @@ class SettingsBridge(QObject):
             "padding": 6 if draft["padding"] is None else draft["padding"],
             "shadow": 0 if draft["shadow"] is None else draft["shadow"],
             "scale": draft["scale"],
+            "textSize": (
+                "larger"
+                if (draft.get("scale") or self._advanced.get("scale") or 1.0) >= 1.5
+                else (
+                    "large"
+                    if (draft.get("scale") or self._advanced.get("scale") or 1.0) >= 1.2
+                    else (
+                        "small"
+                        if (draft.get("scale") or self._advanced.get("scale") or 1.0) <= 0.92
+                        else "normal"
+                    )
+                )
+            ),
             "draftMotion": draft["motion"],
             "block": draft["block"],
             "lines": draft["lines"],
@@ -1073,6 +1086,27 @@ class SettingsBridge(QObject):
     def setDensity(self, density: str) -> None:
         if density in ("comfortable", "compact"):
             self._set_choice(density=density)
+
+    @Slot(str)
+    def setTextSize(self, size: str) -> None:
+        scales = {
+            "small": 0.9,
+            "normal": 1.0,
+            "large": 1.3,
+            "larger": 1.6,
+        }
+        val = scales.get(size)
+        if val is None:
+            try:
+                val = float(size)
+            except ValueError:
+                return
+        number = _float_in(val, SCALE_RANGE)
+        if number is None:
+            return
+        self._advanced["scale"] = number
+        self._draft["scale"] = number
+        self._commit()
 
     @Slot(bool)
     def setClock(self, on: bool) -> None:

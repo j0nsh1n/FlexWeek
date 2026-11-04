@@ -57,6 +57,7 @@ def _flick_to(item: QObject) -> None:
 
 
 def _click(qapp: QApplication, window: NativeWindow, item: QObject) -> None:
+    _pump(qapp, 5)
     _flick_to(item)
     _pump(qapp, 5)
     centre = item.mapToScene(QPointF(item.width() / 2, item.height() / 2))

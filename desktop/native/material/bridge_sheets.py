@@ -28,7 +28,7 @@ from desktop.native.weekmodel import added_words, hhmm_text, length_label, range
 from desktop.native.widgets import LATE_WAIT, _late_move, _late_summary
 
 NOTHING_UNFINISHED = "None left"
-NOTICE_MS = 6000
+NOTICE_MS = 10000
 WAIT_SAVE = "Saving your last change… Save will work in a moment."
 WAIT_DELETE = "Saving your last change… Delete will work in a moment."
 DISCARD = {
@@ -1014,14 +1014,32 @@ class SheetsBridge(QObject):
     def _say(self, text: str, *, undo: bool = False) -> None:
         self._notice = text
         self._notice_undo = undo
+        self._paused = False
+        self._remaining_ms = NOTICE_MS
         self._timer.start()
         self.changed.emit()
+
+    @Slot()
+    def pauseNotice(self) -> None:
+        if self._timer.isActive():
+            self._remaining_ms = max(0, self._timer.remainingTime())
+            self._timer.stop()
+            self._paused = True
+
+    @Slot()
+    def resumeNotice(self) -> None:
+        if self._paused:
+            self._paused = False
+            if self._notice:
+                self._timer.start(max(1000, getattr(self, "_remaining_ms", NOTICE_MS)))
 
     @Slot()
     def dismissNotice(self) -> None:
         if self._notice:
             self._notice = ""
             self._notice_undo = False
+            self._timer.stop()
+            self._paused = False
             self.changed.emit()
 
     @Slot()
