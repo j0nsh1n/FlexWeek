@@ -41,6 +41,10 @@ rm -f "$BUNDLE/qtwebengine_devtools_resources.pak"
 rm -rf "$BUNDLE/PySide6/qml/QtWayland/Compositor"
 rm -f "$BUNDLE"/libQt6WaylandCompositor*.so*
 
+# The same copy brings Qt's web modules, which pull in Chromium (WebEngine). FlexWeek's QML
+# imports none of them, and the packaged smoke test refuses any WebEngine file.
+find "$BUNDLE" \( -iname '*webengine*' -o -iname '*webview*' \) -prune -exec rm -rf {} +
+
 # Upstream COPYING texts live in desktop/linux/licenses, because distro
 # packages do not all ship them (Fedora's xcb-util-keysyms has none).
 mkdir -p "$BUNDLE/licenses"
