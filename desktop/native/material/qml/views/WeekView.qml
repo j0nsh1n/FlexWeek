@@ -281,6 +281,7 @@ Item {
                 model: bridge ? bridge.blocks : 0
 
                 WeekBlock {
+                    id: blockCell
                     objectName: "weekBlock"
                     x: root.gutter + model.day * root.dayWidth + 3
                     y: model.start / 60 * root.row
@@ -303,6 +304,8 @@ Item {
                     fresh: model.fresh
                     homework: model.homework
                     onToggled: if (root.bridge) root.bridge.week.toggleDone(model.assignmentId)
+                    onOpened: if (root.bridge && root.bridge.sheets) root.bridge.sheets.editBlock(model.blockId, model.day)
+                    onMenuAsked: (mx, my) => root.openBlockMenu(blockCell, model, mx, my)
                 }
             }
 
@@ -370,6 +373,96 @@ Item {
             font.family: "Roboto Flex"
             font.pixelSize: 13
             font.weight: 500
+        }
+    }
+
+    property Item menuOriginItem: null
+    property var menuTargetModel: null
+
+    function openBlockMenu(item, blockModel, mx, my) {
+        menuOriginItem = item
+        menuTargetModel = {
+            blockId: blockModel.blockId,
+            assignmentId: blockModel.assignmentId,
+            day: blockModel.day,
+            done: blockModel.done
+        }
+        var mapped = item.mapToItem(root, mx, my)
+        var menuX = Math.max(8, Math.min(mapped.x, root.width - blockMenu.width - 8))
+        var menuY = Math.max(8, Math.min(mapped.y, root.height - blockMenu.height - 8))
+        blockMenu.x = menuX
+        blockMenu.y = menuY
+        blockMenu.entries = [
+            { label: "Edit", icon: "edit_note" },
+            { label: blockModel.done ? "Open again" : "Mark finished", icon: "check" },
+            { label: "Delete", icon: "close" }
+        ]
+        blockMenu.cursor = 0
+        blockMenu.open = true
+        blockMenu.forceActiveFocus()
+    }
+
+    function closeBlockMenu() {
+        if (!blockMenu.open && !menuDim.visible)
+            return
+        blockMenu.open = false
+        var origin = menuOriginItem
+        menuOriginItem = null
+        menuTargetModel = null
+        if (origin && origin.visible)
+            origin.forceActiveFocus()
+    }
+
+    FocusScope {
+        id: menuOverlay
+        anchors.fill: parent
+        z: 50
+        visible: blockMenu.open
+        enabled: blockMenu.open
+
+        Rectangle {
+            id: menuDim
+            anchors.fill: parent
+            color: "transparent"
+            TapHandler {
+                enabled: blockMenu.open
+                onTapped: root.closeBlockMenu()
+            }
+        }
+
+        Menu {
+            id: blockMenu
+            objectName: "blockMenu"
+            open: false
+            focus: true
+            onActiveFocusChanged: {
+                if (!activeFocus && open)
+                    root.closeBlockMenu()
+            }
+            theme: root.theme
+            density: root.density
+            reduceMotion: root.reduceMotion
+            highContrast: root.highContrast
+            onChosen: (index, label) => {
+                var target = root.menuTargetModel
+                root.closeBlockMenu()
+                if (!root.bridge || !target)
+                    return
+                if (label === "Edit") {
+                    if (root.bridge.sheets)
+                        root.bridge.sheets.editBlock(target.blockId, target.day)
+                } else if (label === "Mark finished" || label === "Open again") {
+                    root.bridge.week.toggleDone(target.assignmentId)
+                } else if (label === "Delete") {
+                    if (root.bridge.sheets) {
+                        if (root.bridge.sheets.askDeleteHomework)
+                            root.bridge.sheets.askDeleteHomework(target.assignmentId)
+                        else
+                            root.bridge.sheets.askDeleteUnfinished(target.assignmentId)
+                    }
+                }
+            }
+            onDismissed: root.closeBlockMenu()
         }
     }
 }

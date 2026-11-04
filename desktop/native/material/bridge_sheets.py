@@ -122,7 +122,7 @@ class SheetsBridge(QObject):
 
     @Property(bool, notify=changed)
     def active(self) -> bool:
-        return bool(self._kind) or self._more
+        return bool(self._kind) or self._more or bool(self._ask)
 
     @Property(bool, notify=changed)
     def canSave(self) -> bool:
@@ -735,6 +735,11 @@ class SheetsBridge(QObject):
             ],
         }
         self.changed.emit()
+
+    @Slot(str)
+    def askDeleteHomework(self, assignment_id: str) -> None:
+        """Ask whether to delete homework when triggered outside a sheet (e.g. from Week or Day)."""
+        self.askDeleteUnfinished(assignment_id)
 
     def _delete_unfinished(self, assignment_id: str) -> None:
         session = self._session

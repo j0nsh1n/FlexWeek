@@ -507,6 +507,11 @@ def test_week_preview_completion_is_inert_and_has_no_qml_error(
         assert action is not None and "Press" in action.actionNames()
         action.doAction("Press")
         _pump(qapp)
+        finishes = _named(item, "weekBlockFinish")
+        if finishes:
+            finishes[0].forceActiveFocus()
+            QTest.keyClick(window._material_page._quick, Qt.Key.Key_Return)
+            _pump(qapp)
         assert not any("TypeError" in text for text in messages), messages
         assert state() == before
     finally:

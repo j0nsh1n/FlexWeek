@@ -11,6 +11,7 @@ Column {
     property var upModel
     property var doneModel
     signal finish(string assignmentId)
+    signal edit(string assignmentId)
 
     width: parent ? parent.width : implicitWidth
     spacing: 8
@@ -111,6 +112,7 @@ Column {
                 ink: line.ink
                 trail: extras.width
                 accessName: line.title
+                onClicked: if (line.assignmentId !== "") root.edit(line.assignmentId)
             }
             Row {
                 id: extras
