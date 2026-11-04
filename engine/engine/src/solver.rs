@@ -478,10 +478,10 @@ const DAY_NAME: [&str; 7] = [
     "Sunday",
 ];
 
-fn same_day_spread_notes(placed: &[TimeBlock]) -> Vec<Notice> {
+fn same_day_spread_notes(placed: &[TimeBlock], held: &[TimeBlock]) -> Vec<Notice> {
     use std::collections::HashMap;
     let mut groups: HashMap<String, Vec<&TimeBlock>> = HashMap::new();
-    for block in placed {
+    for block in placed.iter().chain(held.iter()) {
         if block.kind != "flexible" {
             continue;
         }
@@ -1056,7 +1056,7 @@ pub fn solve_with_rules(
         .map(|b| duration_to_slots(b.duration_min))
         .collect::<EngineResult<Vec<_>>>()?;
 
-    let domains0: Vec<Vec<(i64, i64)>> = search_blocks
+    let mut domains0: Vec<Vec<(i64, i64)>> = search_blocks
         .iter()
         .enumerate()
         .map(|(idx, block)| {
@@ -1073,6 +1073,31 @@ pub fn solve_with_rules(
             Ok(choices)
         })
         .collect::<EngineResult<Vec<_>>>()?;
+
+    for (idx, block) in search_blocks.iter().enumerate() {
+        let taken: Vec<i64> = held
+            .iter()
+            .filter(|mate| spread_mates(block, mate))
+            .flat_map(|mate| mate.days.iter().copied())
+            .collect();
+        if taken.is_empty() {
+            continue;
+        }
+        let mut elsewhere = Vec::new();
+        let mut same_day = Vec::new();
+        for &(day, slot) in &domains0[idx] {
+            if taken.contains(&day) {
+                same_day.push((day, slot));
+            } else {
+                elsewhere.push((day, slot));
+            }
+        }
+        domains0[idx] = if elsewhere.is_empty() {
+            same_day
+        } else {
+            elsewhere
+        };
+    }
 
     let mut ctx = SearchCtx {
         ids: &ids,
@@ -1198,7 +1223,7 @@ pub fn solve_with_rules(
             slack_status: None,
         });
     }
-    let notices = same_day_spread_notes(&placed_flex);
+    let notices = same_day_spread_notes(&placed_flex, &held);
 
     let complete = unplaced.is_empty();
     Ok(SolveTrace {
