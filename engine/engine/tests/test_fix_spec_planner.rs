@@ -314,73 +314,6 @@ fn a_spread_task_with_room_on_only_one_day_shares_it_and_says_so() {
 }
 
 #[test]
-fn a_new_piece_avoids_the_day_of_a_held_piece() {
-    let windows = [work_span(&[0, 1], "12:00", "21:00", None)];
-    let held = Dump::flex("essay-a", "Essay", 60, &[0])
-        .energy("medium")
-        .latest("Friday 21:00")
-        .assignment_id("essay")
-        .start("12:00")
-        .pinned()
-        .into_block();
-    let free = flex(
-        "essay-b",
-        "Essay",
-        30,
-        &[0, 1],
-        "medium",
-        Some("Friday 21:00"),
-        Some("essay"),
-    );
-    let trace = plan(&[held, free], &windows, plan_rules_from_value(&json!({})));
-    assert_eq!(placed_day(&trace, "essay-a"), 0);
-    assert_eq!(placed_start(&trace, "essay-a"), "12:00");
-    assert_eq!(placed_day(&trace, "essay-b"), 1);
-    assert!(
-        trace
-            .notices
-            .iter()
-            .all(|item| item.kind != "spread_same_day"),
-        "spread across Monday and Tuesday must not notice, got {:?}",
-        trace.notices
-    );
-}
-
-#[test]
-fn a_new_piece_that_must_share_a_held_pieces_day_says_so() {
-    let windows = [work_span(&[0], "12:00", "21:00", None)];
-    let held = Dump::flex("essay-a", "Essay", 60, &[0])
-        .energy("medium")
-        .latest("Friday 21:00")
-        .assignment_id("essay")
-        .start("12:00")
-        .pinned()
-        .into_block();
-    let free = flex(
-        "essay-b",
-        "Essay",
-        30,
-        &[0],
-        "medium",
-        Some("Friday 21:00"),
-        Some("essay"),
-    );
-    let trace = plan(&[held, free], &windows, plan_rules_from_value(&json!({})));
-    assert_eq!(placed_day(&trace, "essay-a"), 0);
-    assert_eq!(placed_start(&trace, "essay-a"), "12:00");
-    assert_eq!(placed_day(&trace, "essay-b"), 0);
-    assert!(
-        trace.notices.iter().any(|item| {
-            item.kind == "spread_same_day"
-                && item.message
-                    == "Couldn't spread Essay over separate days, so two parts share Monday."
-        }),
-        "expected a same-day spread notice, got {:?}",
-        trace.notices
-    );
-}
-
-#[test]
 fn a_split_standalone_block_on_one_day_says_so() {
     let windows = [work_span(&[2], "16:00", "20:00", None)];
     let long = flex("long", "Essay", 90, &[2], "medium", None, None);
@@ -402,4 +335,47 @@ fn a_split_standalone_block_on_one_day_says_so() {
         "expected a same-day spread notice, got {:?}",
         trace.notices
     );
+}
+
+#[test]
+fn a_held_piece_never_costs_unrelated_homework_its_only_time() {
+    // Review regression: keeping a new piece off its held mate's day must not take the
+    // only Tuesday hour another task needs when Monday still has room.
+    let windows = [
+        work_span(&[0], "12:00", "16:00", None),
+        work_span(&[1], "13:00", "14:00", None),
+    ];
+    let held = Dump::flex("essay-a", "Essay", 60, &[0])
+        .energy("medium")
+        .latest("Friday 21:00")
+        .assignment_id("essay")
+        .start("12:00")
+        .pinned()
+        .into_block();
+    let mate = flex(
+        "a-mate",
+        "Essay",
+        60,
+        &[0, 1],
+        "medium",
+        Some("Friday 21:00"),
+        Some("essay"),
+    );
+    let other = flex(
+        "z-other",
+        "Reading",
+        60,
+        &[1],
+        "medium",
+        Some("Friday 21:00"),
+        None,
+    );
+    let trace = plan(
+        &[held, mate, other],
+        &windows,
+        plan_rules_from_value(&json!({})),
+    );
+    assert!(trace.complete, "everything fits, got {:?}", trace.unplaced);
+    assert_eq!(placed_day(&trace, "z-other"), 1);
+    assert_eq!(placed_day(&trace, "a-mate"), 0);
 }
