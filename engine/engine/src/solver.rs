@@ -404,6 +404,7 @@ fn order_values(
     block: &TimeBlock,
     values: &[(i64, i64)],
     windows: &[Value],
+    deadline: Option<(i64, i64)>,
 ) -> EngineResult<Vec<(i64, i64)>> {
     if block.prefer_earliest {
         let mut ordered = values.to_vec();
@@ -411,7 +412,7 @@ fn order_values(
         return Ok(ordered);
     }
     let (low, high) = energy_window(&block.energy);
-    let due_day = parse_deadline(block.latest.as_deref(), &block.days)?.map(|(day, _)| day);
+    let due_day = deadline.map(|(day, _)| day);
     let mut keyed: Vec<(i64, i64, i64, i64, i64, i64)> = Vec::with_capacity(values.len());
     for &(day, slot) in values {
         let start_min = DAY_START_MIN + slot * SLOT_MIN;
@@ -619,7 +620,12 @@ impl<'a> SearchCtx<'a> {
             .unwrap();
         let var = self.ids[var_idx].clone();
         let n = self.lengths[var_idx];
-        let ordered = order_values(&self.flex[var_idx], &domains[var_idx], self.windows)?;
+        let ordered = order_values(
+            &self.flex[var_idx],
+            &domains[var_idx],
+            self.windows,
+            self.parsed_deadlines[var_idx],
+        )?;
         for (day, slot) in ordered {
             if self.remaining_ms() <= 0.0 {
                 self.timed_out = true;

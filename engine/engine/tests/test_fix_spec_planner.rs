@@ -2,12 +2,15 @@
 
 mod common;
 
+use std::collections::BTreeMap;
+
 use common::{Dump, by_id, real_clock, work_span};
+use flexweek_engine::plan::prepare_solve;
 use flexweek_engine::solver::{
-    PlanRules, SOLVE_BUDGET_MS, SolveTrace, TimeBlock, WorkWindow, plan_rules_from_value,
-    solve_with_rules,
+    DeadlineOverrides, PlanRules, SOLVE_BUDGET_MS, SolveTrace, TimeBlock, WorkWindow,
+    block_from_value, plan_rules_from_value, solve_with_rules,
 };
-use serde_json::json;
+use serde_json::{Value, json};
 
 fn flex(
     id: &str,
@@ -66,6 +69,43 @@ fn homework_days(trace: &SolveTrace) -> Vec<(String, i64)> {
         .collect();
     rows.sort();
     rows
+}
+
+fn assignment(id: &str, title: &str, due: &str) -> Value {
+    json!({"id": id, "title": title, "due": due, "completed": false, "course": null})
+}
+
+/// Real Plan: assignment sessions carry no `latest`; due dates arrive as overrides.
+fn plan_assignments(
+    school: TimeBlock,
+    sessions: &[Value],
+    assignments: &BTreeMap<String, Value>,
+    week_start: &str,
+    windows: &[WorkWindow],
+    rules: PlanRules,
+) -> SolveTrace {
+    let (keep, deadlines, slack) =
+        prepare_solve(sessions, week_start, assignments).expect("prepare");
+    let mut blocks: Vec<TimeBlock> = keep
+        .iter()
+        .map(|block| block_from_value(block).expect("session"))
+        .collect();
+    blocks.push(school);
+    let overrides = DeadlineOverrides {
+        deadlines: deadlines.into_iter().collect(),
+        slack_deadlines: slack.into_iter().collect(),
+    };
+    solve_with_rules(
+        &blocks,
+        None,
+        Some(windows),
+        Some(&overrides),
+        None,
+        SOLVE_BUDGET_MS,
+        &real_clock(),
+        rules,
+    )
+    .expect("plan")
 }
 
 #[test]
@@ -142,6 +182,54 @@ fn three_tasks_due_friday_are_not_all_placed_on_friday() {
     assert!(
         days.iter().any(|(_, day)| *day < 4),
         "at least one task must land before Friday, got {days:?}"
+    );
+}
+
+#[test]
+fn three_assignment_sessions_due_friday_use_earlier_free_evenings() {
+    // School fills Mon–Thu until 17:00. Evenings and Friday afternoon are free.
+    // Real homework has no `latest`; Plan supplies Friday 21:00 through overrides.
+    const WEEK: &str = "2026-09-14";
+    const DUE: &str = "2026-09-18T21:00";
+    let school = locked("school", "08:00", 9 * 60, &[0, 1, 2, 3]);
+    let windows = [work_span(&[0, 1, 2, 3, 4], "12:00", "21:00", None)];
+    let sessions = [
+        Dump::flex("math", "Math", 60, &[0, 1, 2, 3, 4])
+            .energy("medium")
+            .assignment_id("hw-math")
+            .into_value(),
+        Dump::flex("science", "Science", 60, &[0, 1, 2, 3, 4])
+            .energy("medium")
+            .assignment_id("hw-science")
+            .into_value(),
+        Dump::flex("history", "History", 60, &[0, 1, 2, 3, 4])
+            .energy("medium")
+            .assignment_id("hw-history")
+            .into_value(),
+    ];
+    let mut assignments = BTreeMap::new();
+    assignments.insert("hw-math".into(), assignment("hw-math", "Math", DUE));
+    assignments.insert(
+        "hw-science".into(),
+        assignment("hw-science", "Science", DUE),
+    );
+    assignments.insert(
+        "hw-history".into(),
+        assignment("hw-history", "History", DUE),
+    );
+    let trace = plan_assignments(
+        school,
+        &sessions,
+        &assignments,
+        WEEK,
+        &windows,
+        plan_rules_from_value(&json!({})),
+    );
+    let days = homework_days(&trace);
+    assert_eq!(days.len(), 3, "all three sessions are placed: {days:?}");
+    assert!(
+        days.iter().any(|(_, day)| *day < 4),
+        "at least one session must land before Friday, got {days:?}"
     );
 }
 
