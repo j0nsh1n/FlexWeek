@@ -1249,3 +1249,99 @@ fn moving_a_stored_zero_buffer_to_fifteen_is_not_a_sync_edit() {
         "the one-time move must not stamp buffer_min"
     );
 }
+
+fn old_zero_buffer_path(chosen: i64) -> std::path::PathBuf {
+    let path = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "sync-buffer-old-{}-{}-{}.db",
+        chosen,
+        std::process::id(),
+        NEXT_DB.fetch_add(1, Ordering::Relaxed)
+    ));
+    let _ = std::fs::remove_file(&path);
+    flexweek_store::initialize(&path, "2026-10-12").unwrap();
+    {
+        let conn = flexweek_store::open_connection(&path).unwrap();
+        migrate(&conn).unwrap();
+        set_device(&conn, "a", "a").unwrap();
+        conn.execute(
+            "INSERT INTO users(id, username, password_hash) VALUES (1, 'student', 'hash')",
+            [],
+        )
+        .unwrap();
+        conn.execute("INSERT INTO preferences(user_id) VALUES (1)", [])
+            .unwrap();
+        set_account(&conn, 1, UUID).unwrap();
+        conn.execute(
+            "UPDATE preferences SET buffer_min=0, prefs_version=3, planner_settings_chosen=?1",
+            [chosen],
+        )
+        .unwrap();
+    }
+    path
+}
+
+fn pref_stamp(conn: &Connection, key: &str) -> Option<(String, i64, i64)> {
+    conn.query_row(
+        "SELECT hash, hlc, seq FROM sync_record WHERE user_id=1 AND entity='pref' AND key=?1",
+        [key],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )
+    .optional()
+    .unwrap()
+}
+
+fn exported_buffer(conn: &Connection) -> Option<Value> {
+    batch(conn, 0, "b")
+        .records
+        .into_iter()
+        .find(|record| record.entity == "pref" && record.key == "buffer_min")
+        .and_then(|record| record.body)
+}
+
+#[test]
+fn the_buffer_move_is_not_published_when_a_record_already_exists() {
+    let path = old_zero_buffer_path(0);
+    let before = {
+        let mut conn = flexweek_store::open_connection(&path).unwrap();
+        scan(&mut conn, 1, 1_000).unwrap();
+        let stamp = pref_stamp(&conn, "buffer_min").expect("zero was stamped");
+        assert_eq!(planner_prefs(&conn).1, 0);
+        stamp
+    };
+    flexweek_store::initialize(&path, "2026-10-12").unwrap();
+    let mut conn = flexweek_store::open_connection(&path).unwrap();
+    assert_eq!(planner_prefs(&conn).1, 15);
+    assert_eq!(scan(&mut conn, 1, 2_000).unwrap(), 0);
+    let after = pref_stamp(&conn, "buffer_min").expect("baseline remains");
+    assert_eq!(after.1, before.1, "hlc must stay the stamp of the old zero");
+    assert_eq!(after.2, before.2, "seq must stay the stamp of the old zero");
+    assert_ne!(
+        after.0, before.0,
+        "the baseline hash must match the moved 15"
+    );
+}
+
+#[test]
+fn the_buffer_move_is_not_published_when_settings_were_chosen_before() {
+    let path = old_zero_buffer_path(1);
+    flexweek_store::initialize(&path, "2026-10-12").unwrap();
+    let mut conn = flexweek_store::open_connection(&path).unwrap();
+    assert_eq!(planner_prefs(&conn).1, 15);
+    scan(&mut conn, 1, 1_000).unwrap();
+    assert_eq!(
+        exported_buffer(&conn),
+        None,
+        "the one-time move must not go on the wire after a prior settings save"
+    );
+}
+
+#[test]
+fn a_deliberate_edit_after_the_move_is_published() {
+    let path = old_zero_buffer_path(0);
+    flexweek_store::initialize(&path, "2026-10-12").unwrap();
+    let mut conn = flexweek_store::open_connection(&path).unwrap();
+    assert_eq!(planner_prefs(&conn).1, 15);
+    save_planner(&conn, (0, 30, 1, 0, 1));
+    scan(&mut conn, 1, 1_000).unwrap();
+    assert_eq!(exported_buffer(&conn), Some(json!(30)));
+}

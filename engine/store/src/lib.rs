@@ -544,6 +544,10 @@ fn adopt_standing_weeks(db: &Connection) -> StoreResult<()> {
 /// stored 0 becomes 15 once. After this, saving None (0) is kept. The UPDATE is not a settings
 /// save, so `planner_settings_chosen` stays off and sync does not publish it as an edit.
 fn adopt_fifteen_minute_buffer(db: &Connection) -> StoreResult<()> {
+    let moved: Vec<i64> = db
+        .prepare("SELECT user_id FROM preferences WHERE buffer_min = 0 AND prefs_version < 4")?
+        .query_map([], |row| row.get(0))?
+        .collect::<Result<Vec<_>, _>>()?;
     db.execute(
         "UPDATE preferences SET buffer_min = 15 WHERE buffer_min = 0 AND prefs_version < 4",
         [],
@@ -552,6 +556,64 @@ fn adopt_fifteen_minute_buffer(db: &Connection) -> StoreResult<()> {
         "UPDATE preferences SET prefs_version = 4 WHERE prefs_version < 4",
         [],
     )?;
+    restamp_buffer_sync_baseline(db, &moved)?;
+    Ok(())
+}
+
+fn restamp_buffer_sync_baseline(db: &Connection, moved: &[i64]) -> StoreResult<()> {
+    if moved.is_empty() {
+        return Ok(());
+    }
+    let tables: i64 = db.query_row(
+        "SELECT COUNT(*) FROM sqlite_master
+         WHERE type = 'table' AND name IN ('sync_record', 'sync_device')",
+        [],
+        |row| row.get(0),
+    )?;
+    if tables < 2 {
+        return Ok(());
+    }
+    let hash = digest(&canonical(&json!(15)));
+    let device_id: Option<String> = db
+        .query_row(
+            "SELECT device_id FROM sync_device WHERE singleton = 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+    for user_id in moved {
+        let known: Option<i64> = db
+            .query_row(
+                "SELECT 1 FROM sync_record WHERE user_id = ?1 AND entity = 'pref' AND key = 'buffer_min'",
+                [user_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if known.is_some() {
+            db.execute(
+                "UPDATE sync_record SET hash = ?1
+                 WHERE user_id = ?2 AND entity = 'pref' AND key = 'buffer_min' AND deleted = 0",
+                params![hash, user_id],
+            )?;
+            continue;
+        }
+        let chosen: i64 = db.query_row(
+            "SELECT planner_settings_chosen FROM preferences WHERE user_id = ?1",
+            [user_id],
+            |row| row.get(0),
+        )?;
+        // seq 0 is never exported (export is seq > since, since starts at 0), so
+        // scan sees a matching hash and does not stamp 15 as a new edit.
+        if chosen != 0 {
+            if let Some(device_id) = device_id.as_deref() {
+                db.execute(
+                    "INSERT INTO sync_record(user_id, entity, key, hlc, device_id, deleted, hash, seq)
+                     VALUES (?1, 'pref', 'buffer_min', 0, ?2, 0, ?3, 0)",
+                    params![user_id, device_id, hash],
+                )?;
+            }
+        }
+    }
     Ok(())
 }
 
