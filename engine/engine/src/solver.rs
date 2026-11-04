@@ -403,7 +403,8 @@ fn order_values(
         return Ok(ordered);
     }
     let (low, high) = energy_window(&block.energy);
-    let mut keyed: Vec<(i64, i64, i64, i64, i64)> = Vec::with_capacity(values.len());
+    let due_day = parse_deadline(block.latest.as_deref(), &block.days)?.map(|(day, _)| day);
+    let mut keyed: Vec<(i64, i64, i64, i64, i64, i64)> = Vec::with_capacity(values.len());
     for &(day, slot) in values {
         let start_min = DAY_START_MIN + slot * SLOT_MIN;
         let end_min = start_min + block.duration_min;
@@ -419,15 +420,16 @@ fn order_values(
             start_min,
             block.duration_min,
         )?;
+        let last_day = i64::from(due_day == Some(day));
         let match_energy = if low <= start_min && start_min < high {
             0
         } else {
             1
         };
-        keyed.push((night, study, match_energy, day, slot));
+        keyed.push((night, study, last_day, match_energy, day, slot));
     }
     keyed.sort();
-    Ok(keyed.into_iter().map(|k| (k.3, k.4)).collect())
+    Ok(keyed.into_iter().map(|k| (k.4, k.5)).collect())
 }
 
 fn assigned_contains(assigned: &[(String, (i64, i64))], id: &str) -> bool {
