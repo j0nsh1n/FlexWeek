@@ -614,7 +614,9 @@ Item {
         context: Qt.WindowShortcut
         enabled: !accountLayer.active && !focusOverlay.ending && !sheetHost.active && !settingsPromptOpen
         onActivated: {
-            if (focusOpen)
+            if (bridge && bridge.settingsBridge && bridge.settingsBridge.page === "advanced")
+                bridge.settingsBridge.closeAdvanced()
+            else if (focusOpen)
                 bridge.focus.back()
             else
                 focusDestination()

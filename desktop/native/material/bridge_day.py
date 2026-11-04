@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from typing import Any, Protocol
 
-from PySide6.QtCore import Property, QObject, Signal, Slot
+from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from desktop.native.calendar import monday_of
 from desktop.native.material.bridge_rows import Rows
@@ -83,10 +83,15 @@ class DayBridge(QObject):
         self._load_error = ""
         self._asked_week = ""
         self._load_started = False
+        # Day asked for today while another week was loading; that load lands later and moves the day.
+        self._want_today = False
         session = getattr(window, "session", None)
         busy = getattr(session, "busy_changed", None)
         if today_only and busy is not None:
             busy.connect(self._on_busy)
+        landed = getattr(session, "week_changed", None)
+        if not today_only and landed is not None and hasattr(landed, "connect"):
+            landed.connect(self._after_week)
         self._publish(self._board)
 
     def reload(self, mode: str, *, fetch: bool = False) -> None:
@@ -185,11 +190,38 @@ class DayBridge(QObject):
         self.reload(self._mode)
 
     def ensure_today(self) -> None:
-        """Load today's week if My day is looking at a different one."""
+        """Load today's week if looking at a different one, and reset Day to today."""
+        session = getattr(self._window, "session", None)
+        if session is not None and not self._today_only:
+            moment = datetime.fromtimestamp(session.now_ms() / 1000)
+            today_iso = moment.date().isoformat()
+            opener = getattr(session, "open_day", None)
+            if callable(opener):
+                opener(today_iso)
+            else:
+                session.selected_day = today_iso
+            self._want_today = bool(getattr(session, "busy", False))
         self._asked_week = ""
         self._load_started = False
         self._load_error = ""
         self.reload(self._mode, fetch=True)
+
+    def _after_week(self) -> None:
+        """Open today again once a week load that was already running when Day asked has landed.
+
+        week_changed comes after the week is installed; busy_changed(False) comes before, so it is
+        too early. The reopen waits a turn so the landing load finishes its own follow-up requests.
+        """
+        session = getattr(self._window, "session", None)
+        if not self._want_today or session is None or getattr(session, "busy", False):
+            return
+        self._want_today = False
+        if getattr(self.parent(), "_screen", "") != "day":
+            return
+        today_iso = datetime.fromtimestamp(session.now_ms() / 1000).date().isoformat()
+        landed_today = getattr(session, "week_start", "") == monday_of(today_iso)
+        if getattr(session, "selected_day", "") != today_iso or not landed_today:
+            QTimer.singleShot(0, self, self.ensure_today)
 
     def _showing(self) -> bool:
         return getattr(self.parent(), "_screen", "") == "myday"
@@ -241,6 +273,7 @@ class DayBridge(QObject):
         self._open((date.fromisoformat(self._iso) + timedelta(days=days)).isoformat())
 
     def _open(self, iso: str) -> None:
+        self._want_today = False
         session = self._window.session  # type: ignore[attr-defined]
         opener = getattr(session, "open_day", None)
         if callable(opener):
@@ -248,6 +281,10 @@ class DayBridge(QObject):
         else:
             session.selected_day = iso
         self.reload(self._mode)
+
+    @Property(str, notify=changed)
+    def iso(self) -> str:
+        return self._iso
 
     @Property(str, notify=changed)
     def leftLine(self) -> str:

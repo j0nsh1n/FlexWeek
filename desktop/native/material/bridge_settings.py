@@ -994,6 +994,10 @@ class SettingsBridge(QObject):
     def state(self) -> dict[str, Any]:
         return self._state
 
+    @Property(str, notify=changed)
+    def page(self) -> str:
+        return self._page
+
     @Property(bool, notify=changed)
     def promptOpen(self) -> bool:
         return bool(self._prompt) or self._ask_preset

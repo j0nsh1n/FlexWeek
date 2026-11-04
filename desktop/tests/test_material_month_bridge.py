@@ -41,8 +41,8 @@ class Shell(QObject):
         super().__init__()
         self.pages: list[str] = []
 
-    def showPage(self, name: str) -> None:  # noqa: N802 - the name QML calls
-        self.pages.append(name)
+    def open_page(self, name: str, today: bool = True) -> None:
+        self.pages.append(name if today else name + " keeping the date")
 
 
 class FakeSession:
@@ -311,7 +311,7 @@ def test_open_day_goes_to_that_date_through_the_shell(app, week_start) -> None:
     month.selectDate("2026-11-05")
     month.openDay()
     assert session.calls == [("open_day", "2026-11-05")]
-    assert shell.pages == ["day"]
+    assert shell.pages == ["day keeping the date"]
 
 
 def test_a_date_that_leaves_the_grid_closes_its_bar(app, week_start) -> None:

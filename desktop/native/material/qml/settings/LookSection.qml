@@ -133,13 +133,31 @@ SectionPage {
             }
         }
     }
+    property bool _wasAdvanced: false
+    Connections {
+        target: page.panel
+        function onChanged() {
+            if (page._wasAdvanced && page.st.page !== "advanced") {
+                page._wasAdvanced = false
+                openAdvanced.forceActiveFocus()
+            } else if (page.st.page === "advanced") {
+                page._wasAdvanced = true
+            }
+        }
+    }
+
     Group {
         LinkRow {
+            id: openAdvanced
             key: "advanced"
             objectName: "openAdvanced"
             title: "Advanced settings"
             subtitle: "Corners, density, type, motion, depth and calendar dials, with a live preview."
             onClicked: page.panel.openAdvanced()
+            onActiveFocusChanged: {
+                if (activeFocus)
+                    page.ensureVisible(this)
+            }
         }
     }
 }
