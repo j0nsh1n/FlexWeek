@@ -1345,3 +1345,39 @@ fn a_deliberate_edit_after_the_move_is_published() {
     scan(&mut conn, 1, 1_000).unwrap();
     assert_eq!(exported_buffer(&conn), Some(json!(30)));
 }
+
+#[test]
+fn a_paired_account_keeps_none_after_reopening_twice() {
+    let mut phone = db("b", true);
+    save_planner(&phone, (0, 0, 1, 0, 1));
+    scan(&mut phone, 1, 1_000).unwrap();
+    let path = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "sync-paired-none-{}-{}.db",
+        std::process::id(),
+        NEXT_DB.fetch_add(1, Ordering::Relaxed)
+    ));
+    let _ = std::fs::remove_file(&path);
+    flexweek_store::initialize(&path, "2026-10-12").unwrap();
+    {
+        let conn = flexweek_store::open_connection(&path).unwrap();
+        migrate(&conn).unwrap();
+        set_device(&conn, "a", "a").unwrap();
+    }
+    {
+        let mut desktop = flexweek_store::open_connection(&path).unwrap();
+        apply_batch(&mut desktop, &batch(&phone, 0, "a"), 2_000).unwrap();
+        assert_eq!(planner_prefs(&desktop).1, 0);
+        let version: i64 = desktop
+            .query_row(
+                "SELECT prefs_version FROM preferences WHERE user_id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(version, 4);
+    }
+    flexweek_store::initialize(&path, "2026-10-12").unwrap();
+    flexweek_store::initialize(&path, "2026-10-12").unwrap();
+    let desktop = flexweek_store::open_connection(&path).unwrap();
+    assert_eq!(planner_prefs(&desktop).1, 0);
+}
