@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
+from shiboken6 import isValid
 
 from desktop.native.focus import format_countdown, phase_duration_ms, remaining_ms
 
@@ -168,9 +169,20 @@ class FocusBridge(QObject):
             if self._origin_item is not None:
                 item = self._origin_item
                 self._origin_item = None
-                QTimer.singleShot(
-                    0, lambda: item.forceActiveFocus() if hasattr(item, "forceActiveFocus") else None
-                )
+
+                def _restore() -> None:
+                    if not isValid(item):
+                        return
+                    has_vis = (
+                        item.isVisible() if hasattr(item, "isVisible") else bool(item.property("visible"))
+                    )
+                    has_en = (
+                        item.isEnabled() if hasattr(item, "isEnabled") else bool(item.property("enabled"))
+                    )
+                    if has_vis and has_en and hasattr(item, "forceActiveFocus"):
+                        item.forceActiveFocus()
+
+                QTimer.singleShot(0, _restore)
 
     @Slot()
     def begin(self) -> None:

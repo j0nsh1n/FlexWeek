@@ -115,10 +115,6 @@ class WeekBridge(QObject):
         self._said_plan = 0.0
         self._noted = ""
         self._published: dict[str, object] = {}
-        self._snack_timer = QTimer(self)
-        self._snack_timer.setSingleShot(True)
-        self._snack_timer.setInterval(SNACK_MS)
-        self._snack_timer.timeout.connect(self._clear_snack)
         self._target_week: str | None = None
         self._loading_week: str | None = None
         self._weekend_save = 0
@@ -277,10 +273,6 @@ class WeekBridge(QObject):
             return
         shell.note(text, action=action)
         self._noted = text
-        if text:
-            self._snack_timer.start()
-        else:
-            self._snack_timer.stop()
 
     @Slot()
     def _clear_snack(self) -> None:

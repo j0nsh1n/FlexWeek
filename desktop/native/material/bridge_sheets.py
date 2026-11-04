@@ -88,6 +88,9 @@ class SheetsBridge(QObject):
         self._routine_id = ""
         self._routine_days: list[int] = []
         self._routine_error = ""
+        self._paused = False
+        self._held = False
+        self._remaining_ms = NOTICE_MS
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.setInterval(NOTICE_MS)
@@ -1014,20 +1017,30 @@ class SheetsBridge(QObject):
     def _say(self, text: str, *, undo: bool = False) -> None:
         self._notice = text
         self._notice_undo = undo
-        self._paused = False
         self._remaining_ms = NOTICE_MS
-        self._timer.start()
+        if not text:
+            self._timer.stop()
+            self._paused = False
+        else:
+            if getattr(self, "_held", False):
+                self._paused = True
+                self._timer.stop()
+            else:
+                self._paused = False
+                self._timer.start(NOTICE_MS)
         self.changed.emit()
 
     @Slot()
     def pauseNotice(self) -> None:
+        self._held = True
+        self._paused = True
         if self._timer.isActive():
             self._remaining_ms = max(0, self._timer.remainingTime())
             self._timer.stop()
-            self._paused = True
 
     @Slot()
     def resumeNotice(self) -> None:
+        self._held = False
         if self._paused:
             self._paused = False
             if self._notice:
@@ -1040,6 +1053,7 @@ class SheetsBridge(QObject):
             self._notice_undo = False
             self._timer.stop()
             self._paused = False
+            self._held = False
             self.changed.emit()
 
     @Slot()

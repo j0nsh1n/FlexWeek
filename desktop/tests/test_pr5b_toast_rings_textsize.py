@@ -12,9 +12,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QObject, Qt
+from PySide6.QtCore import QObject, Qt, QTimer
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton
+from PySide6.QtWidgets import QApplication, QPushButton
 
 from desktop.native.material import bridge as bridge_module
 from desktop.native.material import bridge_sheets as bridge_sheets_module
@@ -38,6 +38,8 @@ def _reset_material(window: NativeWindow, qapp: QApplication) -> QObject:
     root = _show_material(qapp, window)
     if hasattr(window._material_page.bridge, "sheets"):
         window._material_page.bridge.sheets.forceClose()
+        window._material_page.bridge.sheets.dismissNotice()
+    window._material_page.bridge.note("")
     window._material_page.bridge.showPage("week")
     window._material_page.publish()
     _pump(qapp, 10)
@@ -151,40 +153,41 @@ def test_the_undo_toast_pauses_while_hovered_and_while_focused(
 
 
 def test_undo_toasts_show_the_ctrl_z_hint(qapp: QApplication, window: NativeWindow) -> None:
-    # Material snackbar & sheet notice
+    # Material snackbar
     root = _reset_material(window, qapp)
     bridge = window._material_page.bridge
     bridge.note("Placed 1 homework block.", action="UNDO")
     _pump(qapp)
     snackbar = _qml(root, "materialSnackbar")
-    texts = [str(c.property("text")) for c in _visuals(snackbar) if c.property("text") is not None]
-    acc_names = [str(c.property("Accessible.name") or "") for c in _visuals(snackbar)]
-    has_ctrl_z = (
-        any("Ctrl+Z" in t for t in texts)
-        or any("Ctrl+Z" in a for a in acc_names)
-        or "Ctrl+Z" in str(snackbar.property("Accessible.name") or "")
-    )
-    assert has_ctrl_z
+    assert snackbar.property("visible") is True
+    hint = _qml(snackbar, "shortcutHint")
+    assert hint is not None
+    assert hint.property("visible") is True
+    assert (hint.property("opacity") or 1.0) > 0
+    assert "Ctrl+Z" in str(hint.property("text"))
 
     # Material sheet notice
     bridge.sheets._say("Deleted task", undo=True)
     _pump(qapp)
     notice = _qml(root, "sheetNotice")
-    notice_texts = [str(c.property("text")) for c in _visuals(notice) if c.property("text") is not None]
-    notice_acc = [str(c.property("Accessible.name") or "") for c in _visuals(notice)]
-    has_sheet_ctrl_z = (
-        any("Ctrl+Z" in t for t in notice_texts)
-        or any("Ctrl+Z" in a for a in notice_acc)
-        or "Ctrl+Z" in str(notice.property("Accessible.name") or "")
-    )
-    assert has_sheet_ctrl_z
+    assert notice.property("visible") is True
+    sheet_hint = _qml(notice, "shortcutHint")
+    assert sheet_hint is not None
+    assert sheet_hint.property("visible") is True
+    assert (sheet_hint.property("opacity") or 1.0) > 0
+    assert "Ctrl+Z" in str(sheet_hint.property("text"))
     bridge.sheets.dismissNotice()
 
     # Widgets toast
+    window._surface = "widgets"
     window._use_widgets_styles()
+    window._show_surface()
     window.toast.show_message("Placed 1 homework block.", "Undo")
-    labels = [lbl.text() for lbl in window.toast.findChildren(QLabel)]
-    assert any("Ctrl+Z" in lbl for lbl in labels) or hasattr(window.toast, "shortcut_hint")
+    _pump(qapp)
+    widget_hint = getattr(window.toast, "shortcut_hint", None)
+    assert widget_hint is not None
+    assert widget_hint.isVisible() is True
+    assert "Ctrl+Z" in widget_hint.text()
     window.toast.hide()
 
 
@@ -195,12 +198,36 @@ def test_every_week_tab_stop_has_a_visible_ring_and_is_on_screen(
     quick = window._material_page._quick
     scene = quick.quickWindow()
     scroller = _qml(root, "weekScroller")
+    bridge = window._material_page.bridge
 
-    # Start at toggleWeekends
-    toggle = _qml(root, "toggleWeekends")
-    toggle.forceActiveFocus()
+    # Put a homework block out of view first (late evening, 21:00) so Tab must scroll to it
+    from datetime import date, timedelta
+
+    due = (date.fromisoformat(window.session.week_start) + timedelta(days=6)).isoformat()
+    window.session.add_homework(
+        {"id": "late_hw", "title": "Late essay", "due": due, "estimate_min": 60, "revision": 0}
+    )
+    window.session.add_block(
+        {
+            "id": "late_block",
+            "title": "Late essay",
+            "kind": "flexible",
+            "start": "21:00",
+            "duration_min": 60,
+            "days": [2],
+            "assignment_id": "late_hw",
+        }
+    )
+    window.session.save()
+    settled(qapp, window)
+    bridge.refresh()
+    _pump(qapp, 10)
+
+    # Start from the first Week control
+    first = _qml(root, "toggleWeekends")
+    first.forceActiveFocus()
     _pump(qapp)
-    assert scene.activeFocusItem() is toggle
+    assert scene.activeFocusItem() is first
 
     # Verify disabled buttons are NOT tab stops
     plan_btn = _qml(root, "planHomework")
@@ -209,35 +236,67 @@ def test_every_week_tab_stop_has_a_visible_ring_and_is_on_screen(
         assert plan_btn.property("enabled") is False
         assert plan_btn.property("activeFocusOnTab") is False
 
-    # Walk Tab through stops
-    for _ in range(8):
+    visited = []
+    prev_item = first
+    wrapped = False
+
+    # Walk Tab stops
+    for step in range(20):
         QTest.keyClick(quick, Qt.Key.Key_Tab)
-        _pump(qapp, 3)
+        _pump(qapp, 5)
         current = scene.activeFocusItem()
-        if current is None or current is scene:
-            continue
-        # Verify disabled button is never focused
-        assert current.property("enabled") is not False
 
-        # If inside scroller, verify it scrolled into view
-        if scroller.isAncestorOf(current):
-            pt = current.mapToItem(scroller.property("contentItem"), 0, 0)
-            item_y = pt.y()
-            h = current.property("height") or 0
-            content_y = float(scroller.property("contentY"))
-            scroller_h = float(scroller.property("height"))
-            # Item should be visible inside scroller viewport
-            assert float(item_y) + float(h) >= content_y - 20
-            assert float(item_y) <= content_y + scroller_h + 20
+        # At EVERY press require a non-null focus item that is not the window
+        assert current is not None, f"focus was None at step {step}"
+        assert current is not scene, f"focus fell back to window at step {step}"
 
-        # Verify a focus ring is shown/visible
+        # A changed objectName or item from the press before (until the cycle wraps)
+        assert current is not prev_item, f"focus did not advance at step {step}: stayed on {current}"
+        if current is first:
+            wrapped = True
+            break
+        prev_item = current
+        visited.append(current)
+
+        # A ring that is shown
         rings = [
             c
             for c in _visuals(current)
-            if "FocusRing" in type(c).__name__ or c.property("ringRadius") is not None
+            if "FocusRing" in type(c).__name__
+            or (hasattr(c, "property") and c.property("ringRadius") is not None)
         ]
-        if rings:
-            assert any(r.property("shown") is True or r.property("visible") is True for r in rings)
+        if not rings and hasattr(current, "property") and current.property("ringRadius") is not None:
+            rings = [current]
+        assert len(rings) > 0, f"no ring found on focused item {current} ({current.objectName()})"
+        ring_active = any(
+            r.property("shown") is True
+            or (r.property("visible") is True and (r.property("opacity") or 1.0) > 0)
+            for r in rings
+        )
+        assert ring_active, f"ring not shown on {current} ({current.objectName()})"
+
+        # Focused item whole rectangle inside Week scroller viewport (or inside window if outside scroller)
+        if scroller.isAncestorOf(current):
+            pt = current.mapToItem(scroller.property("contentItem"), 0, 0)
+            item_y = float(pt.y())
+            h = float(current.property("height") or 0)
+            content_y = float(scroller.property("contentY"))
+            scroller_h = float(scroller.property("height"))
+            name = current.objectName()
+            assert item_y >= content_y - 2, f"item {name} top {item_y} above scroller viewport {content_y}"
+            assert item_y + h <= content_y + scroller_h + 2, (
+                f"item {name} bottom {item_y + h} below viewport {content_y + scroller_h}"
+            )
+        else:
+            pt = current.mapToItem(root, 0, 0)
+            item_y = float(pt.y())
+            h = float(current.property("height") or 0)
+            root_h = float(root.property("height"))
+            assert item_y >= -2, f"item {current.objectName()} top {item_y} above window"
+            assert item_y + h <= root_h + 2, f"item {current.objectName()} bottom {item_y + h} below window"
+
+    assert wrapped is True, "Tab cycle did not wrap back to the first control"
+    assert len(visited) >= 2, f"Expected at least 2 controls traversed, got {len(visited)}"
 
 
 def test_month_date_cells_use_the_shared_ring(qapp: QApplication, window: NativeWindow) -> None:
@@ -389,3 +448,248 @@ def test_after_focus_mode_ends_focus_returns_to_the_control_that_started_it(
     window._close_focus_screen()
     _pump(qapp)
     assert window.focusWidget() is btn
+
+
+def test_undo_toast_expiry_solely_owned_by_shell_and_held_toast_survives(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset_material(window, qapp)
+    bridge = window._material_page.bridge
+
+    from datetime import date, timedelta
+
+    due = (date.fromisoformat(window.session.week_start) + timedelta(days=6)).isoformat()
+    window.session.add_homework(
+        {"id": "hw_done_task", "title": "History essay", "due": due, "estimate_min": 60, "revision": 0}
+    )
+    window.session.save()
+    settled(qapp, window)
+    bridge.showPage("week")
+    _pump(qapp, 10)
+
+    # Mark homework finished on the real Week screen
+    bridge.week.toggleDone("hw_done_task")
+    wait_until(qapp, lambda: not window.session.busy and bridge.property("snackText").startswith("Finished"))
+    _pump(qapp, 5)
+
+    # Hold the toast with keyboard focus
+    snackbar = _qml(root, "materialSnackbar")
+    snackbar.forceActiveFocus()
+    _pump(qapp, 5)
+
+    # Fire every expiry timer the bridges own
+    all_timers = bridge.findChildren(QTimer) + bridge.week.findChildren(QTimer)
+    for timer in all_timers:
+        if timer.isActive():
+            timer.timeout.emit()
+    _pump(qapp, 5)
+
+    # The toast text must still be there
+    assert bridge.property("snackText") != ""
+    assert bridge.property("snackText").startswith("Finished")
+
+    # Also the _on_status path (a plan answer that places nothing)
+    import time
+
+    bridge.week._said_plan = time.monotonic()
+    bridge.week._on_status("Nothing to place")
+    _pump(qapp, 5)
+    assert bridge.property("snackText") == "Nothing to place"
+
+    snackbar.forceActiveFocus()
+    _pump(qapp, 5)
+    all_timers = bridge.findChildren(QTimer) + bridge.week.findChildren(QTimer)
+    for timer in all_timers:
+        if timer.isActive():
+            timer.timeout.emit()
+    _pump(qapp, 5)
+    assert bridge.property("snackText") == "Nothing to place"
+
+
+def test_new_notice_starts_with_full_duration_after_shortened_interval(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    _reset_material(window, qapp)
+    bridge = window._material_page.bridge
+
+    # Sheet notice
+    bridge.sheets._say("First notice", undo=True)
+    _pump(qapp)
+    # Simulate a notice resumed late with shortened interval
+    bridge.sheets._timer.start(2400)
+    bridge.sheets.pauseNotice()
+    bridge.sheets.resumeNotice()
+    assert bridge.sheets._timer.interval() <= 3000
+
+    # Show a second notice - must start with full NOTICE_MS (10000)
+    bridge.sheets._say("Second notice", undo=True)
+    _pump(qapp)
+    assert bridge.sheets._timer.interval() == bridge_sheets_module.NOTICE_MS
+
+    # Shell snackbar
+    bridge.note("First snack", action="UNDO")
+    _pump(qapp)
+    bridge._snack_timer.start(2400)
+    bridge.pauseSnack()
+    bridge.resumeSnack()
+    assert bridge._snack_timer.interval() <= 3000
+
+    bridge.note("Second snack", action="UNDO")
+    _pump(qapp)
+    assert bridge._snack_timer.interval() == bridge_module.SNACK_MS
+
+
+def test_replacing_held_toast_keeps_timer_paused_until_resumed(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset_material(window, qapp)
+    bridge = window._material_page.bridge
+
+    # Shell snackbar: focus it
+    bridge.note("First snack", action="UNDO")
+    _pump(qapp)
+    snackbar = _qml(root, "materialSnackbar")
+    snackbar.forceActiveFocus()
+    _pump(qapp)
+    assert not bridge._snack_timer.isActive()
+
+    # Replace while held: timer must NOT be active
+    bridge.note("Second snack", action="UNDO")
+    _pump(qapp)
+    assert not bridge._snack_timer.isActive()
+
+    # Move focus away: timer resumes with full time
+    root.forceActiveFocus()
+    _pump(qapp)
+    assert bridge._snack_timer.isActive()
+    assert bridge._snack_timer.remainingTime() > 8000
+
+    # Sheet notice: focus it
+    bridge.sheets._say("First sheet notice", undo=True)
+    _pump(qapp)
+    notice = _qml(root, "sheetNotice")
+    notice.forceActiveFocus()
+    _pump(qapp)
+    assert not bridge.sheets._timer.isActive()
+
+    # Replace while held: timer must NOT be active
+    bridge.sheets._say("Second sheet notice", undo=True)
+    _pump(qapp)
+    assert not bridge.sheets._timer.isActive()
+
+    # Move focus away: timer resumes with full time
+    root.forceActiveFocus()
+    _pump(qapp)
+    assert bridge.sheets._timer.isActive()
+    assert bridge.sheets._timer.remainingTime() > 8000
+    bridge.sheets.dismissNotice()
+
+
+def test_focus_mode_return_when_origin_is_deleted_falls_back_without_error(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    from PySide6.QtCore import QEvent
+
+    # 1. Material test
+    root = _reset_material(window, qapp)
+    bridge = window._material_page.bridge
+    quick = window._material_page._quick
+    scene = quick.quickWindow()
+
+    from PySide6.QtQuick import QQuickItem
+
+    temp_item = QQuickItem(root)
+    temp_item.setObjectName("tempFocusTarget")
+    temp_item.setEnabled(True)
+    temp_item.setVisible(True)
+    temp_item.forceActiveFocus()
+    _pump(qapp)
+    assert scene.activeFocusItem() is temp_item
+
+    bridge.focus.show()
+    _pump(qapp, 5)
+    assert bridge.focus.open is True
+
+    # Delete origin while Focus is open
+    temp_item.deleteLater()
+    qapp.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    _pump(qapp, 5)
+
+    # Close Focus: must not raise exception
+    bridge.focus.hide()
+    _pump(qapp, 10)
+    assert bridge.focus.open is False
+
+    # 2. Widgets test
+    window._surface = "widgets"
+    window._show_surface()
+    temp_btn = QPushButton("Temp Button", window)
+    temp_btn.show()
+    temp_btn.setFocus(Qt.FocusReason.TabFocusReason)
+    _pump(qapp)
+    assert window.focusWidget() is temp_btn
+
+    window._open_focus_screen()
+    _pump(qapp)
+    temp_btn.deleteLater()
+    qapp.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    _pump(qapp, 5)
+
+    window._close_focus_screen()
+    _pump(qapp, 5)
+    hours = window._week_surfaces()[0]
+    assert window.focusWidget() is hours
+
+
+def test_text_size_preserved_when_preset_changes_or_saved_look_applied(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    _reset_material(window, qapp)
+    bridge = window._material_page.bridge
+    settings_bridge = bridge._settings_bridge
+
+    bridge.showPage("settings")
+    _pump(qapp, 5)
+    settings_bridge.setTextSize("larger")
+    _pump(qapp, 5)
+    assert settings_bridge.state["textSize"] == "larger"
+
+    # Change preset and discard advanced overrides
+    other_preset = "Forest" if settings_bridge.state["preset"] != "Forest" else "Rose"
+    settings_bridge.setPreset(other_preset)
+    _pump(qapp, 5)
+    assert settings_bridge.property("promptOpen") is True
+    settings_bridge.answerPreset("discard")
+    _pump(qapp, 10)
+
+    # Text size is still larger and Week hour row is still the larger height
+    assert settings_bridge.state["textSize"] == "larger"
+    bridge.showPage("week")
+    _pump(qapp, 10)
+    assert int(bridge.property("hourRow")) >= 80
+
+    # Also test saved look: save a look (with standard scale 1.0)
+    bridge.showPage("settings")
+    _pump(qapp, 5)
+    settings_bridge.setTextSize("normal")
+    _pump(qapp, 5)
+    settings_bridge.saveAs("NormalLook")
+    _pump(qapp, 5)
+
+    # Set text size to larger
+    settings_bridge.setTextSize("larger")
+    _pump(qapp, 5)
+    assert settings_bridge.state["textSize"] == "larger"
+
+    # Apply saved look (which had normal scale in its advanced dict)
+    settings_bridge.useSaved("NormalLook")
+    _pump(qapp, 10)
+    # The student text size setting must be kept!
+    assert settings_bridge.state["textSize"] == "larger"
+    bridge.showPage("week")
+    _pump(qapp, 10)
+    assert int(bridge.property("hourRow")) >= 80
+
+    # Reset text size back to normal
+    settings_bridge.setTextSize("normal")
+    _pump(qapp, 5)

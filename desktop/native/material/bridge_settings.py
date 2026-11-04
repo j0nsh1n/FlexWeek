@@ -1067,8 +1067,12 @@ class SettingsBridge(QObject):
         self._choice["preset"] = name
         self._draft_choice["preset"] = name
         if not keep:
+            scale = self._advanced.get("scale")
             self._advanced = advanced_default()
             self._draft = advanced_default()
+            if scale is not None:
+                self._advanced["scale"] = scale
+                self._draft["scale"] = scale
             self._dirty = False
         self._commit()
 
@@ -1389,8 +1393,11 @@ class SettingsBridge(QObject):
         for item in self._saved:
             if item["name"] != name:
                 continue
+            scale = self._advanced.get("scale")
             self._choice = {key: item[key] for key in ("preset", "mode", "contrast", "density")}
             self._advanced = copy.deepcopy(item["advanced"])
+            if scale is not None:
+                self._advanced["scale"] = scale
             self._draft_choice = dict(self._choice)
             self._draft = copy.deepcopy(self._advanced)
             self._dirty = False

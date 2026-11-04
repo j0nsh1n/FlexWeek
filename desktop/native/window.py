@@ -4925,6 +4925,7 @@ class NativeWindow(QMainWindow):
             self._focus_origin_widget = None
             if (
                 origin is not None
+                and isValid(origin)
                 and origin not in (self.prev_nav, self.next_nav)
                 and origin.isVisible()
                 and origin.isEnabled()
