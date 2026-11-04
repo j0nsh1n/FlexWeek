@@ -23,6 +23,7 @@ import flexweek_engine  # type: ignore[import-untyped]
 from desktop.native.version import VERSION
 
 RELEASES_URL = "https://api.github.com/repos/j0nsh1n/FlexWeek/releases/latest"
+DEV_URL = "https://api.github.com/repos/j0nsh1n/FlexWeek/releases/tags/dev"
 RELEASE_PAGE = "https://github.com/j0nsh1n/FlexWeek/releases/latest"
 RELEASE_TAG_PAGE = "https://github.com/j0nsh1n/FlexWeek/releases/tag/"
 RELEASE_DOWNLOAD = "https://github.com/j0nsh1n/FlexWeek/releases/download/"

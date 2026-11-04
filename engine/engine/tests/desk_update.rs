@@ -504,7 +504,7 @@ fn test_a_clock_that_went_backwards_does_not_stop_checking_forever() {
 fn test_the_settings_file_survives_nonsense() {
     assert_eq!(
         sanitize_updates(&Value::Null),
-        object(json!({"check": true, "last_ms": 0, "skip": ""}))
+        object(json!({"check": true, "last_ms": 0, "skip": "", "developer_builds": false}))
     );
     assert_eq!(sanitize_updates(&json!("not a dict"))["check"], json!(true));
     assert_eq!(

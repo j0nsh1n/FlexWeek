@@ -26,6 +26,7 @@ from PySide6.QtCore import QObject, QUrl, Signal
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 
 from desktop.native.update import (
+    DEV_URL,
     RELEASE_PAGE,
     RELEASES_URL,
     Update,
@@ -35,6 +36,7 @@ from desktop.native.update import (
     release_from_page,
     verified,
 )
+from desktop.native.version import is_newer
 
 USER_AGENT = b"FlexWeek-Updater"
 DOWNLOAD_FOLDER_PREFIX = "flexweek-update-"
@@ -65,16 +67,20 @@ class Updater(QObject):
         super().__init__(parent)
         self._manager = QNetworkAccessManager(self)
         self._busy = False
+        self._want_developer = False
+        self._latest_update: Update | None = None
         self.kind = install_kind()
 
     @property
     def busy(self) -> bool:
         return self._busy
 
-    def check(self) -> None:
+    def check(self, *, developer: bool = False) -> None:
         if self._busy:
             return
         self._busy = True
+        self._want_developer = developer
+        self._latest_update = None
         self._get(RELEASES_URL, self._on_release, fallback=self._check_page)
 
     def download(self, update: Update) -> None:
@@ -154,6 +160,35 @@ class Updater(QObject):
 
     def _decide(self, payload: object) -> None:
         update = available(payload, self.kind)
+        if not self._want_developer:
+            self._offer(update)
+            return
+        self._latest_update = update
+        self._get(DEV_URL, self._on_dev, fallback=self._finish_with_latest)
+
+    def _finish_with_latest(self) -> None:
+        self._offer(self._latest_update)
+
+    def _on_dev(self, text: str) -> None:
+        try:
+            payload = json.loads(text)
+        except ValueError:
+            self._finish_with_latest()
+            return
+        if not isinstance(payload, dict):
+            self._finish_with_latest()
+            return
+        asked = dict(payload)
+        # The engine skips pre-releases, which is right for /latest, but this one was asked for on purpose.
+        asked["prerelease"] = False
+        dev = available(asked, self.kind)
+        latest = self._latest_update
+        if dev is not None and (latest is None or is_newer(dev["version"], latest["version"])):
+            self._offer(dev)
+            return
+        self._offer(latest)
+
+    def _offer(self, update: Update | None) -> None:
         self._busy = False
         if update is None:
             self.none_found.emit()

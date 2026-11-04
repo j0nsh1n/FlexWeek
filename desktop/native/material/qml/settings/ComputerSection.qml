@@ -45,6 +45,14 @@ SectionPage {
             subtitle: "Go through the first-run questions."
             onClicked: page.panel.runSetup()
         }
+        ToggleRow {
+            objectName: "developerBuildsRow"
+            key: "developerBuilds"
+            title: "Get developer builds"
+            subtitle: "Test builds with the newest fixes. They can have bugs."
+            isOn: !!page.st.developerBuilds
+            onFlipped: (value) => page.panel.setDeveloperBuilds(value)
+        }
         LinkRow {
             key: "updates"
             title: "Check for updates"
