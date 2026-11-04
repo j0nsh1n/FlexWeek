@@ -1288,12 +1288,20 @@ class SettingsPage(QWidget):
             look=self.look_choice,
             accent=lambda: self._accent_chosen,
         )
-        self.style_preview.setMaximumHeight(260)
+        # The preview grows with the window: the row stretches split the stage about 40/60 with the
+        # cards, and 240 keeps Fit readable on the smallest window.
+        self.style_preview.setMinimumHeight(240)
+        preview_policy = self.style_preview.sizePolicy()
+        preview_policy.setVerticalPolicy(QSizePolicy.Policy.Expanding)
+        self.style_preview.setSizePolicy(preview_policy)
+        self.stage_grid = stage_grid
         stage_grid.addWidget(self.style_preview, 0, 0)
         stage_grid.addWidget(self.stack, 1, 0)
         stage_grid.addWidget(footer, 1, 0, Qt.AlignmentFlag.AlignBottom)
-        stage_grid.setRowStretch(1, 1)
-        self.style_preview.setVisible(self.nav.currentRow() == 0)
+        stage_grid.setRowStretch(0, 2)
+        stage_grid.setRowStretch(1, 3)
+        # Look is the opening section; keep the row-stretch rule beside the visibility one.
+        self._show_preview_row(self.nav.currentRow())
         for box in (self.look, self.accent, *self.knobs.values()):
             box.currentIndexChanged.connect(self.style_preview.refresh)
         QApplication.instance().focusChanged.connect(self._follow_focus)
@@ -1510,6 +1518,12 @@ class SettingsPage(QWidget):
             return
         super().keyPressEvent(event)
 
+    def _show_preview_row(self, row: int) -> None:
+        """The preview rides above the Look section only. A stretched grid row keeps its share even
+        when its widget is hidden, so the row also gives the space back when the preview goes."""
+        self.style_preview.setVisible(row == 0)
+        self.stage_grid.setRowStretch(0, 2 if row == 0 else 0)
+
     def _show_section(self, row: int) -> None:
         """The section picked, sliding in from the side the student moved toward in the list."""
         page = self.stack.widget(row)
@@ -1517,7 +1531,7 @@ class SettingsPage(QWidget):
             return
         preview = getattr(self, "style_preview", None)
         if preview is not None:
-            preview.setVisible(row == 0)
+            self._show_preview_row(row)
         switch_page(self.stack, page, self.motion_level, 1 if row > self.stack.currentIndex() else -1)
 
     def _announce(self, *_value: object) -> None:
