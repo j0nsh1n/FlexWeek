@@ -71,11 +71,22 @@ Item {
         else
             returnFocus()
     }
+    property Item lastFocusItem: null
+
     onAskingChanged: {
-        if (asking)
+        if (asking) {
+            lastFocusItem = Window.activeFocusItem
             Qt.callLater(function () { if (prompt.item) prompt.item.focusFirst() })
-        else if (active && loader.item)
-            Qt.callLater(function () { if (loader.item) loader.item.focusFirst() })
+        } else if (active && loader.item) {
+            var target = lastFocusItem
+            lastFocusItem = null
+            Qt.callLater(function () {
+                if (target && target.visible && target.enabled)
+                    target.forceActiveFocus()
+                else if (loader.item)
+                    loader.item.focusFirst()
+            })
+        }
     }
     onKindChanged: {
         if (kind !== "" && loader.item)

@@ -12,6 +12,15 @@ SheetFrame {
     onCloseRequested: sheets.closeSheet()
     M3Palette { id: pal; theme: root.theme }
 
+    // Modal input catcher under the dialog card: absorbs clicks across the screen
+    MouseArea {
+        parent: root
+        anchors.fill: parent
+        z: 0
+        preventStealing: true
+        onClicked: root.closeRequested()
+    }
+
     Text {
         width: parent.width
         text: root.ask.body ? root.ask.body : ""

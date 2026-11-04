@@ -54,14 +54,22 @@ FocusScope {
     }
 
     Rectangle {
+        id: scrim
         anchors.fill: parent
         color: "#000000"
         opacity: 0.32
-        TapHandler { onTapped: root.closeRequested() }
+        TapHandler {
+            onTapped: (eventPoint) => {
+                var p = scrim.mapToItem(card, eventPoint.position.x, eventPoint.position.y)
+                if (p.x < 0 || p.x > card.width || p.y < 0 || p.y > card.height)
+                    root.closeRequested()
+            }
+        }
     }
     Rectangle {
         id: card
         objectName: "sheetCard"
+        z: 1
         width: root.cardWidth
         height: Math.min(root.height - (root.phone ? 24 : 48), root.chrome + body.implicitHeight)
         anchors.horizontalCenter: parent.horizontalCenter

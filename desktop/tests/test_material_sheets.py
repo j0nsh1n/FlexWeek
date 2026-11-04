@@ -184,7 +184,7 @@ def test_the_discard_prompt_keeps_typed_work_until_the_student_says_discard(shee
     sheets.closeSheet()
     assert sheets.kind == "homework"
     assert sheets.ask["title"] == DISCARD
-    assert sheets.ask["body"] == DISCARD
+    assert sheets.ask["body"] == "Your changes will be lost."
     assert [item["label"] for item in sheets.ask["answers"]] == ["Keep editing", "Discard"]
     sheets.answer("keep")
     assert sheets.kind == "homework"

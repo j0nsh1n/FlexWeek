@@ -34,7 +34,7 @@ WAIT_DELETE = "Saving your last change… Delete will work in a moment."
 DISCARD = {
     "id": "discard",
     "title": "Discard what you typed?",
-    "body": "Discard what you typed?",
+    "body": "Your changes will be lost.",
     "answers": [
         {"id": "keep", "label": "Keep editing", "kind": "text"},
         {"id": "discard", "label": "Discard", "kind": "tonal"},
