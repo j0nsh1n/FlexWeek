@@ -68,6 +68,75 @@ Item {
             bridge.week.placeHomework(blockId, slot.day, slot.hour * 60)
     }
 
+    // Drag across empty grid time to add homework.
+    property int dragRangeDay: -1
+    property int dragRangeStartMin: 0
+    property int dragRangeEndMin: 0
+    property bool dragRangeActive: false
+    property bool dragRangeValid: false
+    property bool dragRangeCanceled: false
+    property real dragRangePressY: 0
+
+    function snapToQuarter(y) {
+        var rawMin = (y / root.row) * 60
+        var snapped = Math.round(rawMin / 15) * 15
+        return Math.max(0, Math.min(24 * 60, snapped))
+    }
+
+    function emptyGridTimeAt(x, y) {
+        if (x < root.gutter || x >= root.gutter + root.columns * root.dayWidth)
+            return false
+        if (y < 0 || y >= 24 * root.row)
+            return false
+        var day = Math.floor((x - root.gutter) / root.dayWidth)
+        if (day < 0 || day >= root.columns)
+            return false
+        if (!bridge || !bridge.blockRows)
+            return true
+        var rows = bridge.blockRows
+        for (var i = 0; i < rows.length; i++) {
+            var b = rows[i]
+            if (b.day !== day)
+                continue
+            var by = b.start / 60 * root.row
+            var bh = Math.max(36, (b.end - b.start) / 60 * root.row - 2)
+            if (y >= by && y <= by + bh)
+                return false
+        }
+        return true
+    }
+
+    function cancelDragRange() {
+        dragRangeCanceled = true
+        dragRangeActive = false
+        dragRangeStartMin = 0
+        dragRangeEndMin = 0
+        dragRangeDay = -1
+        if (root.bridge && root.bridge.sheets)
+            root.bridge.sheets.setDragRangeActive(false)
+    }
+
+    Connections {
+        target: root.bridge && root.bridge.sheets ? root.bridge.sheets : null
+        function onDragRangeCanceled() {
+            root.cancelDragRange()
+        }
+    }
+
+    Keys.onEscapePressed: (event) => {
+        if (root.dragRangeActive) {
+            root.cancelDragRange()
+            event.accepted = true
+        }
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        context: Qt.ApplicationShortcut
+        enabled: root.dragRangeActive
+        onActivated: root.cancelDragRange()
+    }
+
     Item {
         id: headerRow
         anchors.left: parent.left
@@ -200,6 +269,88 @@ Item {
             id: hours
             width: scroller.width
             height: 24 * root.row
+            focus: true
+            Keys.onEscapePressed: (event) => {
+                if (root.dragRangeActive) {
+                    root.cancelDragRange()
+                    event.accepted = true
+                }
+            }
+
+            DragHandler {
+                id: gridDrag
+                target: null
+                dragThreshold: 4
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                grabPermissions: PointerHandler.CanTakeOverFromItems | PointerHandler.CanTakeOverFromHandlersOfDifferentType
+                onActiveChanged: {
+                    if (active) {
+                        var px = centroid.pressPosition.x
+                        var py = centroid.pressPosition.y
+                        if (!root.emptyGridTimeAt(px, py)) {
+                            root.dragRangeValid = false
+                            root.dragRangeActive = false
+                            return
+                        }
+                        // Only a drag on empty time takes focus, so Escape can cancel it; a block keeps its own.
+                        hours.forceActiveFocus()
+                        root.dragRangeValid = true
+                        root.dragRangeCanceled = false
+                        root.dragRangeDay = Math.floor((px - root.gutter) / root.dayWidth)
+                        root.dragRangePressY = py
+                        var m1 = root.snapToQuarter(py)
+                        var m2 = root.snapToQuarter(centroid.position.y)
+                        root.dragRangeStartMin = Math.min(m1, m2)
+                        root.dragRangeEndMin = Math.max(m1, m2)
+                        root.dragRangeActive = true
+                        if (root.bridge && root.bridge.sheets)
+                            root.bridge.sheets.setDragRangeActive(true)
+                    } else {
+                        if (root.bridge && root.bridge.sheets)
+                            root.bridge.sheets.setDragRangeActive(false)
+                        if (root.dragRangeActive && root.dragRangeValid && !root.dragRangeCanceled) {
+                            var start = root.dragRangeStartMin
+                            var end = root.dragRangeEndMin
+                            var day = root.dragRangeDay
+                            root.dragRangeActive = false
+                            root.dragRangeValid = false
+                            if (end - start >= 15 && root.bridge && root.bridge.sheets) {
+                                root.bridge.sheets.openHomeworkAt(day, start, end)
+                            }
+                        }
+                        root.dragRangeActive = false
+                        root.dragRangeValid = false
+                        root.dragRangeCanceled = false
+                        root.dragRangeStartMin = 0
+                        root.dragRangeEndMin = 0
+                        root.dragRangeDay = -1
+                    }
+                }
+                onCentroidChanged: {
+                    if (active && root.dragRangeActive && root.dragRangeValid && !root.dragRangeCanceled) {
+                        var m1 = root.snapToQuarter(root.dragRangePressY)
+                        var m2 = root.snapToQuarter(centroid.position.y)
+                        root.dragRangeStartMin = Math.min(m1, m2)
+                        root.dragRangeEndMin = Math.max(m1, m2)
+                    }
+                }
+            }
+
+            Rectangle {
+                id: rangeGhost
+                objectName: "rangeGhost"
+                visible: root.dragRangeActive && (root.dragRangeEndMin > root.dragRangeStartMin) && !root.dragRangeCanceled
+                x: root.gutter + root.dragRangeDay * root.dayWidth + 3
+                y: (root.dragRangeStartMin / 60) * root.row
+                width: Math.max(8, root.dayWidth - 6)
+                height: Math.max(4, ((root.dragRangeEndMin - root.dragRangeStartMin) / 60) * root.row - 2)
+                radius: 12
+                color: m3.primaryContainer
+                opacity: 0.7
+                border.width: 2
+                border.color: m3.primary
+                z: 10
+            }
 
             // Today's column is a step above the page, as in the mockup.
             Rectangle {
