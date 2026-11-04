@@ -13,16 +13,19 @@ Flickable {
     boundsBehavior: Flickable.StopAtBounds
     flickableDirection: Flickable.VerticalFlick
 
+    // Room kept around a focused row so its 2px ring, drawn 2px outside the row, is not clipped.
+    readonly property int focusMargin: 6
+
     function ensureVisible(item) {
         if (!item)
             return
-        var spot = item.mapToItem(page.contentItem, 0, 0)
-        var itemY = spot.y
-        var itemH = item.height
-        if (itemY < page.contentY)
-            page.contentY = Math.max(0, itemY)
-        else if (itemY + itemH > page.contentY + page.height)
-            page.contentY = Math.min(Math.max(0, page.contentHeight - page.height), itemY + itemH - page.height)
+        var top = item.mapToItem(page.contentItem, 0, 0).y - focusMargin
+        var bottom = top + item.height + focusMargin * 2
+        var limit = Math.max(0, page.contentHeight - page.height)
+        if (top < page.contentY)
+            page.contentY = Math.max(0, top)
+        else if (bottom > page.contentY + page.height)
+            page.contentY = Math.min(limit, bottom - page.height)
     }
 
     Column {

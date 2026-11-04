@@ -5574,13 +5574,9 @@ class NativeWindow(QMainWindow):
         origin = QApplication.focusWidget()
         dialog = AccountDialog(self, self.session.recovery_remaining, self.session.storage_info)
         pack, dark, accent = self._look_inputs()
-        palette = resolved_palette(pack, dark, self._look, accent)
-        eye = palette["muted"]
+        eye = resolved_palette(pack, dark, self._look, accent)["muted"]
         for field in (dialog.current_password, dialog.new_password):
             field.set_colour(eye)
-        if not dialog.styleSheet():
-            sheet = pack_stylesheet(pack, dark, self._look, accent, palette, control_art(palette))
-            dialog.setStyleSheet(sheet)
         try:
             if dialog.exec() != QDialog.DialogCode.Accepted:
                 return

@@ -430,21 +430,23 @@ class MaterialBridge(QObject):
 
     @Slot(str)
     def showPage(self, name: str) -> None:
+        self.open_page(name)
+
+    def open_page(self, name: str, today: bool = True) -> None:
+        """Change screen. Day from the rail opens on today; Month's Open Day passes today=False."""
         if name not in SCREENS or name == self._screen:
             return
         session = self._window.session
+        to_today = today and name == "day"
         if name == "month":
             self._month.activate()
-        elif getattr(session, "planner_view", None) == "month" and name in {"day", "week"}:
-            # The rail's Day and Week leave the month through the session. Open Day
-            # has already set the day, so this branch does not run for it.
+        elif not to_today and getattr(session, "planner_view", None) == "month" and name == "week":
+            # Week leaves the month through the session. Day opens today's week itself: leaving
+            # through the month anchor first would load that month's week and win the race.
             session.set_view(name)
         self._screen = name
         if name == "myday":
             self._myday.ensure_today()
-        elif name == "day":
-            if getattr(self._day, "_opened_from_month", False):
-                self._day._opened_from_month = False
-            else:
-                self._day.ensure_today()
+        elif to_today:
+            self._day.ensure_today()
         self.changed.emit()

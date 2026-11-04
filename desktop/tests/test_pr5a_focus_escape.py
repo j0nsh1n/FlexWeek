@@ -78,12 +78,13 @@ def test_advanced_settings_row_shows_the_ring_and_scrolls_into_view_on_tab(
     assert ring.property("shown") is True
 
     # Verify ensureVisible scrolled it into view
-    top = advanced_row.mapToScene(QPointF(0, 0)).y()
-    bottom = advanced_row.mapToScene(QPointF(0, advanced_row.property("height"))).y()
+    # The whole ring, not just the row, sits inside the clipped scroller.
+    top = ring.mapToScene(QPointF(0, 0)).y()
+    bottom = ring.mapToScene(QPointF(0, ring.property("height"))).y()
     view_top = scroller.mapToScene(QPointF(0, 0)).y()
     view_bottom = scroller.mapToScene(QPointF(0, scroller.property("height"))).y()
-    assert top >= view_top - 1, f"top {top} < view_top {view_top}"
-    assert bottom <= view_bottom + 1, f"bottom {bottom} > view_bottom {view_bottom}"
+    assert top >= view_top, f"ring top {top} < view_top {view_top}"
+    assert bottom <= view_bottom, f"ring bottom {bottom} > view_bottom {view_bottom}"
 
     window._use_widgets_styles()
 
@@ -114,7 +115,8 @@ def test_escape_closes_manage_account_and_returns_focus(qapp: QApplication, wind
             assert close_btn is not None
             assert delete_btn.property("danger") is True
             assert delete_btn.property("outlined") is True
-            dialog_css = dialog.styleSheet()
+            # The dialog inherits the window's sheet, which carries the selected design's colours.
+            dialog_css = window.styleSheet()
             assert 'QPushButton[danger="true"][keyfocus="true"]:focus' in dialog_css
             assert 'QPushButton[outlined="true"][keyfocus="true"]:focus' in dialog_css
             # Press Escape on dialog via keyPressEvent
