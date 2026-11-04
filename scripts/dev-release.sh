@@ -15,9 +15,5 @@ fi
 echo "Triggering Developer build workflow from main..."
 gh workflow run dev-build.yml --ref main
 
-echo "Waiting for the workflow run to register..."
-sleep 3
-
-RUN_URL=$(gh run list --workflow dev-build.yml --limit 1 --json url --jq '.[0].url')
-echo "Workflow run started: $RUN_URL"
-echo "The build takes about 20 minutes and lands on the dev pre-release."
+echo "Started. The build takes about 20 minutes and replaces the dev pre-release."
+echo "Follow it at https://github.com/j0nsh1n/FlexWeek/actions/workflows/dev-build.yml"

@@ -52,19 +52,33 @@ def test_the_dev_build_stamps_its_version_and_channel_and_checks_them() -> None:
     assert "grep -q 'CHANNEL = \"dev\"' desktop/native/version.py" in WORKFLOW
 
 
-def test_the_dev_build_ships_only_the_tarball() -> None:
+def _step(name: str) -> str:
+    """The text of one workflow step, from its `- name:` line to the next step."""
+    start = WORKFLOW.index(f"- name: {name}")
+    end = WORKFLOW.find("\n      - ", start + 1)
+    return WORKFLOW[start:] if end == -1 else WORKFLOW[start:end]
+
+
+def test_the_dev_build_ships_only_the_tarball_and_its_checksum() -> None:
     assert "AppImage" not in WORKFLOW
     assert "packaging/make-appimage.sh" not in WORKFLOW
-    assert "dist/release/FlexWeek-Linux-x86_64.tar.gz" in WORKFLOW
-    assert "dist/release/FlexWeek-Linux-x86_64.tar.gz.sha256" in WORKFLOW
+    create = _step("Publish developer release")
+    create = create[create.index("gh release create dev") :]
+    assert "dist/release/FlexWeek-Linux-x86_64.tar.gz \\" in create
+    assert "dist/release/FlexWeek-Linux-x86_64.tar.gz.sha256" in create
+    assert create.count("dist/release/") == 2, "only the tarball and its checksum are uploaded"
 
 
 def test_the_dev_build_smokes_the_tarball_before_publishing() -> None:
-    smoke_idx = WORKFLOW.index("Smoke the packaged archive")
-    smoke_mcp_idx = WORKFLOW.index("Smoke the packaged helper in the archive")
-    publish_idx = WORKFLOW.index("Publish developer release")
-    assert smoke_idx < publish_idx
-    assert smoke_mcp_idx < publish_idx
+    archive = _step("Smoke the packaged archive")
+    assert "tar -xzf dist/release/FlexWeek-Linux-x86_64.tar.gz" in archive
+    assert "dist/stage/FlexWeek/FlexWeek --smoke-test dist/packaged-smoke.json" in archive
+    assert 'r.get("stage") == "week shown after setup Solve"' in archive
+    helper = _step("Smoke the packaged helper in the archive")
+    assert "python desktop/smoke_mcp.py dist/stage/FlexWeek/FlexWeek" in helper
+    publish_idx = WORKFLOW.index("- name: Publish developer release")
+    assert WORKFLOW.index("- name: Smoke the packaged archive") < publish_idx
+    assert WORKFLOW.index("- name: Smoke the packaged helper in the archive") < publish_idx
 
 
 def test_the_dev_release_script_starts_the_workflow_on_main() -> None:
@@ -73,3 +87,5 @@ def test_the_dev_release_script_starts_the_workflow_on_main() -> None:
     assert "set -euo pipefail" in SCRIPT
     assert "gh workflow run dev-build.yml --ref main" in SCRIPT
     assert "gh release create" not in SCRIPT
+    # It must not claim another run's link: a run listed right after dispatch may not be this one.
+    assert "gh run list" not in SCRIPT
