@@ -83,7 +83,10 @@ def test_running_late_preview_does_not_write_the_week(alice: TestClient) -> None
     prefs = defaults(alice)
     windows = [{"days": [0, 1, 2, 3, 4, 5, 6], "start": "06:00", "end": "23:00"}]
     assert (
-        alice.put("/api/preferences", json={**prefs, "work_windows": windows}, headers=WRITE).status_code
+        # The homework fills the one free hour before a fixed event, so this account chose no gap.
+        alice.put(
+            "/api/preferences", json={**prefs, "work_windows": windows, "buffer_min": 0}, headers=WRITE
+        ).status_code
         == 200
     )
     wind = {
