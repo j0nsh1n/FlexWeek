@@ -370,7 +370,8 @@ def test_1br_plan_overdue_reuses_the_session_and_keeps_other_blocks(qapp, window
     settled(qapp, window)
     bio = [item for item in session.blocks if item.get("assignment_id") == "bio"]
     assert len(bio) == 1
-    assert (bio[0]["id"], bio[0]["days"], bio[0]["start"]) == (session_id, [SATURDAY], "11:00")
+    # The class ends at 11:00 and the default leaves 15 minutes after it.
+    assert (bio[0]["id"], bio[0]["days"], bio[0]["start"]) == (session_id, [SATURDAY], "11:15")
     assert session.message == "Placed 1 homework block."
     assert session.assignments["bio"]["due"] == due
     assert next(item for item in session.blocks if item["id"] == "class") == before_class
@@ -384,12 +385,12 @@ def test_1br_plan_overdue_reuses_the_session_and_keeps_other_blocks(qapp, window
     session.reload()
     settled(qapp, window)
     bio = next(item for item in session.blocks if item["id"] == session_id)
-    assert (bio["days"], bio["start"]) == ([SATURDAY], "11:00")
+    assert (bio["days"], bio["start"]) == ([SATURDAY], "11:15")
     session.add_homework({**session.assignments["bio"], "title": "Biology reading"})
     session.save()
     settled(qapp, window)
     bio = next(item for item in session.blocks if item["id"] == session_id)
-    assert (bio["title"], bio["days"], bio["start"]) == ("Biology reading", [SATURDAY], "11:00")
+    assert (bio["title"], bio["days"], bio["start"]) == ("Biology reading", [SATURDAY], "11:15")
 
 
 def test_1br_overdue_plan_with_no_room_does_not_add_an_unplaced_block(qapp, window) -> None:
@@ -477,7 +478,8 @@ def test_1br_plan_overdue_moves_a_future_session(qapp, window) -> None:
     session.plan_left(["bio"])
     settled(qapp, window)
     bio = next(item for item in session.blocks if item["id"] == session_id)
-    assert (bio["days"], bio["start"]) == ([SATURDAY], "11:00")
+    # The class ends at 11:00 and the default leaves 15 minutes after it.
+    assert (bio["days"], bio["start"]) == ([SATURDAY], "11:15")
     assert session.message == "Placed 1 homework block."
     assert "prefer_earliest" not in bio
 
@@ -498,7 +500,8 @@ def test_1br_overdue_plan_survives_the_next_edit(qapp, window) -> None:
     session.save()
     settled(qapp, window)
     bio = next(item for item in session.blocks if item["id"] == session_id)
-    assert (bio["days"], bio["start"]) == ([SATURDAY], "11:00")
+    # The class ends at 11:00 and the default leaves 15 minutes after it.
+    assert (bio["days"], bio["start"]) == ([SATURDAY], "11:15")
 
 
 def test_1br_failed_overdue_request_does_not_leave_a_new_block(qapp, window, monkeypatch) -> None:
