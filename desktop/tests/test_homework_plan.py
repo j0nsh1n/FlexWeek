@@ -686,7 +686,6 @@ def test_plan_waits_for_a_failed_save_before_offering_undo(
     [
         ("title", "", "Give the homework a title."),
         ("title", "x" * 81, "Keep the homework title under 80 characters."),
-        ("spotify", "https://example.com/song", "Paste a Spotify share link from open.spotify.com."),
         ("notes", "x" * 4001, "Keep notes under 4,000 characters."),
         ("link", "not-a-link", "A link needs an http:// or https:// address."),
         ("checklist", "x" * 81, "Keep each checklist step under 80 characters."),
@@ -704,8 +703,6 @@ def test_homework_editor_refuses_each_field_in_its_own_words(
             if len(value) > 80:
                 dialog.title.setMaxLength(len(value))
             dialog.title.setText(value)
-        elif field == "spotify":
-            dialog.spotify.setText(value)
         elif field == "notes":
             dialog.notes.setPlainText(value)
         elif field == "link":

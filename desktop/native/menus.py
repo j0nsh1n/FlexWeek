@@ -27,7 +27,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QMenu, QWidget, QWidgetAction
 
 from desktop.native import icons
-from desktop.native.elevation import lift
+from desktop.native.elevation import flatten, lift
 from desktop.native.fonts import caption
 from desktop.native.look import MENU_EDGE, hover_tint
 from desktop.native.tokens import RADIUS_CARD, RADIUS_CONTROL, SHADOW_LARGE
@@ -116,7 +116,7 @@ class Menu(QMenu):
         if colours.lifted:
             lift(self, SHADOW_LARGE, colours.dark)
         else:
-            self.setGraphicsEffect(None)
+            flatten(self)
         for action in self.actions():
             inner = action.menu()
             if isinstance(inner, Menu):

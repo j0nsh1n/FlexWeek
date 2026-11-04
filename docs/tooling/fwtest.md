@@ -126,7 +126,8 @@ A play file is JSON, with `setup` (all of it optional) and `steps`:
     {"advance_clock": 30},
     {"shot": "label"},
     {"tree": "label"},
-    {"say": "a note for the log"}
+    {"say": "a note for the log"},
+    {"see": "School"}
   ]
 }
 ```
@@ -136,12 +137,13 @@ Setup:
 | Key | Meaning | Default |
 |---|---|---|
 | `clock` | Local time the clock is held at, `YYYY-MM-DDTHH:MM`. The week shown is that date's week. | Thursday 15:40 of the current week, as the scenarios use |
-| `seed` | `rig`: the scenarios' week (School, Soccer, three homework items). `setup-done`: a new account that skipped Setup, so an empty week with the defaults. `empty`: a new account on the first Setup page. | `rig` |
+| `seed` | `rig`: the scenarios' week (School, Soccer, three homework items). `setup-done`: a new account that skipped Setup, so an empty week with the defaults. `empty`: a new account on the first Setup page. `material-new`: Material is the saved surface and nobody is signed in, so the play starts on the Material sign-in card. | `rig` |
 | `size` | Window size in pixels, 640x480 up to 3840x2160 | `[1280, 800]` |
 | `design` | Any rig design (`classic`, `timeline`, `mission`, `bento`, `retro`, `clay`) or a My day screen (`one`, `dial`; shown on the My day tab) | `classic` |
 | `clock_24h` | The 24-hour clock. Ignored for `empty`, where Setup asks. | `false` |
 | `text` | `normal` or `large` text | `normal` |
 | `look` | A look preset (`high-contrast`, `paper`, `ink`, `terminal`, `poster`, `pastel`) or a theme pack (`system`, `light-frost`, `dark-frost`, `nocturne`, `slate`). Ignored for the pack when `seed` is `empty`. | the pack's own |
+| `mode` | `light` or `dark`. Used with `material-new` for Material's own light/dark. | `light` |
 
 Steps, each an object with one action:
 
@@ -161,10 +163,14 @@ Steps, each an object with one action:
   text, geometry in window pixels, enabled, has focus, checked; menu rows too. It also names the focused
   widget and the open dialog. Password boxes show `(hidden)`.
 - `say`: a note in the log.
+- `see`: the words or an `objectName` that must be on screen, including a QML item. The rig finds QML
+  by walking visual children and uses the item's real position. A QML item clipped away by a parent
+  or the window is not seen or clicked, and a click lands in the visible part. A miss is `NOT DONE`.
 
 Every step writes one line to `DIR/log.txt`: what it did, where the pointer went, the widget with focus,
 the open dialog and the open menu. A step that cannot be done (no such widget or text, a dialog in the
-way, xdotool failing) logs `NOT DONE` and why, and the play goes on. A final shot and tree are always
+way, xdotool failing) logs `NOT DONE` and why, and the play goes on. The play exits 1 when any step was
+not done. A final shot and tree are always
 taken. The play file is checked before the session starts, and every mistake in it is named with its step
 number. Files are numbered by step (`04-after-tab.png`, `04-after-tab.json`); a dialog or menu gets the
 class name added to the shot's name. `DIR` is `~/.flexweek-ui-harness/scratch/plays/<time>-<play name>/`

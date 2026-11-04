@@ -19,6 +19,17 @@ def _parse(raw: object, name: str = "p") -> play.Play:
     return play.parse_play(raw, name, DESIGNS, LOOKS)
 
 
+def test_see_names_what_should_be_on_screen():
+    got = _parse({"steps": [{"see": "School"}, {"see": "materialWeek"}]})
+    assert [step.action for step in got.steps] == ["see", "see"]
+    assert got.steps[0].value == "School"
+
+
+def test_see_without_words_is_refused():
+    with pytest.raises(play.PlayError, match="see needs the words"):
+        _parse({"steps": [{"see": "  "}]})
+
+
 def test_a_full_play_reads_as_written():
     got = _parse(
         {
@@ -78,6 +89,13 @@ def test_a_full_play_reads_as_written():
     assert got.steps[4].value == (("name", "chip"), ("point", (300, 400)))
 
 
+def test_material_new_seed_starts_unsigned_on_the_saved_surface():
+    got = _parse({"setup": {"seed": "material-new", "mode": "dark"}, "steps": [{"see": "authCard"}]})
+    assert got.setup.seed == "material-new"
+    assert got.setup.mode == "dark"
+    assert got.steps[0].value == "authCard"
+
+
 def test_a_play_with_no_setup_gets_the_rigs_own_defaults():
     got = _parse({"steps": []})
     assert got.setup == play.Setup()
@@ -125,14 +143,15 @@ def test_a_bad_step_is_named_with_its_number(step, says):
     [
         ({"clock": "tomorrow"}, "setup clock"),
         ({"clock": 5}, "setup clock"),
-        ({"seed": "full"}, "rig, empty, setup-done"),
+        ({"seed": "full"}, "rig, empty, setup-done, material-new"),
         ({"design": "mission"}, "classic, bento, one"),
         ({"text": "huge"}, "normal, large"),
         ({"look": "default"}, "terminal, dark-frost"),
         ({"clock_24h": "yes"}, "true or false"),
+        ({"mode": "sepia"}, "light, dark"),
         ({"size": [1280]}, "[width, height]"),
         ({"size": [100, 100]}, "between 640x480 and 3840x2160"),
-        ({"zoom": 2}, "Setup keys: clock, seed, size, design, clock_24h, text, look"),
+        ({"zoom": 2}, "Setup keys: clock, seed, size, design, clock_24h, text, look, mode"),
     ],
 )
 def test_a_bad_setup_value_is_named(setup, says):

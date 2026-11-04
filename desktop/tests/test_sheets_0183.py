@@ -1,8 +1,8 @@
 """Sheets for 0.18.3 batch B: #43, #51, #52, #53, #55.
 
 Expected values are from the roadmap Done-when lines, mockup board 7, and Jonathan's three
-calls: Accept late start filled (greyed until a preview), Preview outlined, Cancel bare; the
-Spotify link under More details; New event renamed to Add fixed time, not a second entry.
+calls: Accept late start filled (greyed until a preview), Preview outlined, Cancel bare;
+New event renamed to Add fixed time, not a second entry. A fixed time has no Spotify field.
 """
 
 from __future__ import annotations
@@ -171,16 +171,13 @@ def test_add_fixed_time_is_titled_that_and_guesses_category_from_the_start(
     added.start.setTime(added.start.time().addSecs(-6 * 3600))
     qapp.processEvents()
     assert added.category.currentData() == "extra", "a choice the student made is kept"
-    assert added.findChild(QLineEdit, "blockSpotify") is None or not added.findChild(
-        QLineEdit, "blockSpotify"
-    ).isVisibleTo(added)
-    assert not added.more_details.isVisibleTo(added), "Add fixed time has no More details on the three steps"
+    assert added.findChild(QLineEdit, "blockSpotify") is None
+    assert added.findChild(QPushButton, "blockMoreDetails") is None
     free(added)
     edited = shown(qapp, BlockDialog(parent, soccer(), occurrence_day=3))
     assert edited.windowTitle() == "Edit fixed time"
-    edited.more_details.setChecked(True)
-    qapp.processEvents()
-    assert edited.spotify.isVisibleTo(edited)
+    assert edited.findChild(QLineEdit, "blockSpotify") is None
+    assert edited.findChild(QPushButton, "blockMoreDetails") is None
     free(edited)
     free(parent)
 

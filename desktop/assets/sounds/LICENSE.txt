@@ -1,0 +1,19 @@
+Ambient focus sounds used by FlexWeek. Both files are dedicated to the public domain
+under CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/). No attribution is
+required; it is given here anyway.
+
+soft-rain-loop.mp3
+  Title:   Soft Rain Loop
+  Author:  _lynks
+  Page:    https://freesound.org/people/_lynks/sounds/595717/
+  Licence: CC0 1.0
+  Length:  22.5 seconds, MP3, 44.1 kHz stereo.
+
+lofi-hip-hop-loop.ogg
+  Title:   Lofi Hip Hop Loop
+  Author:  omfgdude
+  Page:    https://opengameart.org/content/lofi-hip-hop-loop
+  Licence: CC0 1.0
+  Length:  2 minutes 8 seconds, Ogg Vorbis, 22.05 kHz mono.
+
+White noise is generated in code (desktop/native/ambient.py). It has no file and no licence.

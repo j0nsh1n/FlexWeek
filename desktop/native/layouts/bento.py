@@ -17,6 +17,7 @@ import html
 from dataclasses import dataclass
 from datetime import date
 from functools import cached_property
+from math import ceil
 
 from PySide6.QtCore import (
     QEvent,
@@ -59,6 +60,7 @@ from desktop.native.hours.canvas import (
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.classic import (
     EMPTY_MIN_NARROW_PX,
+    WEEKEND,
     ClassicPainter,
     Share,
     column_widths,
@@ -714,6 +716,25 @@ class Legend(QWidget):
         painter.end()
 
 
+def day_head_paint_geometry(
+    font: QFont,
+    day: int,
+    number: str,
+    today: bool,
+    scale: float,
+) -> tuple[float, float, float, float]:
+    """Return (words_advance, gap, date_wide, min_widget_width) for DayHead's painter layout."""
+    name = at_scale(font, "body", scale, WEIGHT_STRONG if today else WEIGHT_REGULAR)
+    figure = at_scale(font, "body", scale, WEIGHT_STRONG)
+    words, num = QFontMetricsF(name), QFontMetricsF(figure)
+    gap = 6.0 * scale
+    chip = max(26.0 * scale, num.horizontalAdvance(number) + 10.0 * scale) if today else 0.0
+    date_wide = chip or num.horizontalAdvance(number)
+    words_advance = words.horizontalAdvance(DAYS[day])
+    min_widget_width = words_advance + gap + date_wide + 6.0
+    return words_advance, gap, date_wide, min_widget_width
+
+
 class DayHead(QPushButton):
     """A day's name over its column on the week's hero, "Mon 21", today's date in an accent chip. A
     click opens the day."""
@@ -740,8 +761,12 @@ class DayHead(QPushButton):
     def sizeHint(self) -> QSize:  # noqa: N802
         return QSize(0, round(36 * self.scale))
 
+    def needed_width(self) -> float:
+        num = self.number or (self.text().split()[-1] if self.text() else "")
+        return day_head_paint_geometry(self.font(), self.day, num, self.today, self.scale)[3]
+
     def minimumSizeHint(self) -> QSize:  # noqa: N802
-        return self.sizeHint()
+        return QSize(ceil(self.needed_width()), round(36 * self.scale))
 
     def paintEvent(self, event: object) -> None:  # noqa: N802
         painter = QPainter(self)
@@ -758,11 +783,12 @@ class DayHead(QPushButton):
         name = at_scale(self.font(), "body", self.scale, WEIGHT_STRONG if self.today else WEIGHT_REGULAR)
         figure = at_scale(self.font(), "body", self.scale, WEIGHT_STRONG)
         words, number = QFontMetricsF(name), QFontMetricsF(figure)
-        gap = 6 * self.scale
+        words_advance, gap, date_wide, _ = day_head_paint_geometry(
+            self.font(), self.day, self.number, self.today, self.scale
+        )
         chip = (
             max(26 * self.scale, number.horizontalAdvance(self.number) + 10 * self.scale) if self.today else 0
         )
-        date_wide = chip or number.horizontalAdvance(self.number)
         # "Mon 21" where it fits, "M 21" where it does not, and the date alone below that.
         said = next(
             (
@@ -1219,8 +1245,42 @@ class BentoCanvas(HoursCanvas):
         self.empty: frozenset[int] = frozenset()
         self.names_row: QHBoxLayout | None = None
 
+    def _fit_header_totals(self, widths: list[float], total: float) -> list[float]:
+        """Preserve equal-width weekday and quiet weekend groups while ensuring day headers fit."""
+        if not widths:
+            return widths
+        quiet = [day for day in WEEKEND if day in self.empty and day < len(widths)]
+        active = [day for day in range(len(widths)) if day not in quiet]
+        if not quiet or not active:
+            share = total / len(widths)
+            return [share] * len(widths)
+
+        mins = [
+            float(self.day_buttons[i].minimumSizeHint().width())
+            if i in self.day_buttons
+            else 0.0
+            for i in range(len(widths))
+        ]
+        min_quiet = max([float(EMPTY_MIN_NARROW_PX)] + [mins[i] for i in quiet])
+        base_quiet = widths[quiet[0]]
+        candidate_quiet = max(base_quiet, min_quiet)
+        candidate_rem = total - candidate_quiet * len(quiet)
+        candidate_active = candidate_rem / len(active)
+        # Empty-weekend narrowing keeps quiet days strictly narrower than weekdays (< 0.8 * weekday).
+        # When room permits, allocate candidate_quiet to fit headers; otherwise keep base_quiet.
+        if candidate_quiet < 0.8 * candidate_active:
+            alloc_quiet = candidate_quiet
+            alloc_active = candidate_active
+        else:
+            alloc_quiet = base_quiet
+            alloc_active = (total - alloc_quiet * len(quiet)) / len(active)
+
+        return [alloc_quiet if day in quiet else alloc_active for day in range(len(widths))]
+
     def _seven(self, area: QRectF) -> list[LinearTrack]:
-        widths = column_widths(area.width(), self.empty, floor=EMPTY_MIN_NARROW_PX)
+        widths = self._fit_header_totals(
+            column_widths(area.width(), self.empty, floor=EMPTY_MIN_NARROW_PX), area.width()
+        )
         left, tracks = area.left(), []
         for day, wide in enumerate(widths):
             tracks.append(
@@ -1551,17 +1611,17 @@ class BentoView(LayoutView):
         canvas.set_painter(BentoPainter(scene.tokens, wide=not week))
         if week:
             empty = empty_days(scene.week)
-            if empty != canvas.empty:
-                # Laid out for the new widths before the blocks arrive, so none slides for a change of width.
-                canvas.empty = empty
-                canvas.relayout()
-            canvas.set_week(scene.week.occurrences, scene.today, scene.minute)
             ink = card_ink(scene.tokens)
             for target, head in canvas.day_buttons.items():
                 assert isinstance(head, DayHead)
                 head.show_date(
                     scene.week.date_of(target).day, target == scene.today, ink, scene.tokens, scene.scale
                 )
+            if empty != canvas.empty:
+                # Laid out for the new widths before the blocks arrive, so none slides for a change of width.
+                canvas.empty = empty
+                canvas.relayout()
+            canvas.set_week(scene.week.occurrences, scene.today, scene.minute)
             assert isinstance(scroll, BentoHours)
             scroll.first = min((item.start for item in scene.week.occurrences if item.live), default=None)
             open_hours(scroll, scene.week.week_start, scene.week, scene.today, scene.minute)
@@ -1801,14 +1861,14 @@ class BentoView(LayoutView):
         waiting = scene.week.waiting
         count = _say(str(len(waiting)), "bentoWaitingCount", "count") if waiting else None
         tile, box = self._tile(scene, "bentoWaiting", "list", "Not placed yet", count)
+        if waiting:
+            hint = "Drag one onto your day." if is_day else "Drag one onto the week."
+            box.addWidget(_say(hint, "bentoWaitingHint", "muted", wrap=True))
         for index, item in enumerate(waiting):
             box.addWidget(self._chip(scene, item, index))
         if not waiting:
             box.addWidget(_say("Everything you added has a time.", "bentoWaitingEmpty", "muted", wrap=True))
         box.addStretch(1)
-        if waiting:
-            hint = "Drag one onto your day." if is_day else "Drag one onto the week."
-            box.addWidget(_say(hint, "bentoWaitingHint", "muted", wrap=True))
         return tile
 
     def _chip(self, scene: Scene, item: Waiting, index: int) -> Chip:
@@ -2077,6 +2137,13 @@ class BentoView(LayoutView):
                 "#bentoScroll, #bentoBoard": css(background=tokens["bg"]),
                 # Plain widgets on the tiles, which the window's stylesheet would paint its page colour.
                 "#bentoWeekHeader, #bentoDayHeader, #bentoWeekZoom, #bentoDayZoom, #bentoWeekHeads": clear,
+                "#bentoWeekHeads QPushButton": css(
+                    background="transparent",
+                    border="none",
+                    padding="0",
+                    min_height="0",
+                    min_width="0",
+                ),
                 "#bentoLegend, #bentoNextTagRow": clear,
                 # Qt's holders of the scroll bars, which lie over the hours' right edge.
                 "#qt_scrollarea_vcontainer, #qt_scrollarea_hcontainer": clear,

@@ -13,10 +13,16 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QPoint, QSize
 from PySide6.QtGui import QColor, QGuiApplication, QPalette
-from PySide6.QtWidgets import QApplication, QFrame, QLabel, QToolButton, QWidget
+from PySide6.QtWidgets import QApplication, QFrame, QLabel, QLineEdit, QToolButton, QWidget
 
 from desktop.native.client import TOO_MANY_TRIES
-from desktop.native.look import resolved_palette, sanitize_look
+from desktop.native.look import (
+    auth_rules,
+    effective_look,
+    readable_focus_edge,
+    resolved_palette,
+    sanitize_look,
+)
 from desktop.native.tokens import contrast
 from desktop.native.window import NativeWindow
 from desktop.tests.test_auth_words import kept, launched, on_recovery_page, page  # noqa: F401
@@ -285,6 +291,30 @@ def test_the_focused_sign_in_field_still_shows_the_accent(qapp, signed_out) -> N
     palette = resolved_palette("system", False, sanitize_look(None))
     edge = image.pixelColor(0, image.height() // 2)
     assert near(edge, palette["accent"], slack=8), edge.name()
+
+
+def test_the_focused_sign_in_field_with_a_pale_accent_uses_the_readable_edge(qapp) -> None:
+    # Sign-in keeps the device look, so a typed pale accent is painted through the same
+    # auth field rule the window uses, not by swapping the signed-out page.
+    look = sanitize_look({"custom": {"name": "Lime", "base": "light", "accent": "#dfff00"}})
+    palette = resolved_palette("system", False, look)
+    knobs = effective_look(look)
+    card = QWidget()
+    card.setObjectName("authCard")
+    field = QLineEdit(card)
+    field.setObjectName("username")
+    field.setGeometry(8, 8, 200, 36)
+    card.setStyleSheet(auth_rules(palette, knobs, 6, 10))
+    card.resize(220, 52)
+    card.show()
+    field.setFocus()
+    pump()
+    image = field.grab().toImage()
+    edge = image.pixelColor(0, image.height() // 2)
+    fitted = readable_focus_edge(palette)
+    assert palette["accent"] == "#dfff00"
+    assert near(edge, fitted, slack=8), (edge.name(), fitted)
+    assert not near(edge, palette["accent"], slack=8), edge.name()
 
 
 def test_the_cards_shadow_is_not_cut_off_by_its_holder(signed_out) -> None:

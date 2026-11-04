@@ -3001,11 +3001,49 @@ SHEET_LIST = 600
 SHEET_PREVIEW = 720
 
 
+class _FocusWhenShown(QObject):
+    """Sheet close can land while Bento has taken the hours out of the window to re-lay them."""
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.Show and isValid(watched) and isinstance(watched, QWidget):
+            watched.removeEventFilter(self)
+            if hasattr(watched, "_fw_focus_when_shown"):
+                delattr(watched, "_fw_focus_when_shown")
+            self.deleteLater()
+            window = watched.window()
+            focused = QApplication.focusWidget()
+            remembered = window.focusWidget()
+            if (
+                watched.isVisible()
+                and QApplication.activeWindow() is window
+                and QApplication.activeModalWidget() is None
+                and (focused is None or focused is watched or not focused.isVisible())
+                and (remembered is None or remembered is watched or not remembered.isVisible())
+            ):
+                watched.setFocus(Qt.FocusReason.OtherFocusReason)
+        return False
+
+
 def _give_focus_back(widget: QWidget) -> None:
     """Put the keyboard back on `widget` once the sheet over it has closed, if it is still there."""
-    if isValid(widget) and widget.isVisible():
-        widget.window().activateWindow()
+    if not isValid(widget):
+        return
+    if widget.isVisible():
+        window = widget.window()
+        active = QApplication.activeWindow()
+        focused = QApplication.focusWidget()
+        if (
+            QApplication.activeModalWidget() is not None
+            or (active is not None and active is not window and active.isVisible())
+            or (focused is not None and focused is not widget and focused.isVisible())
+        ):
+            return
+        window.activateWindow()
         widget.setFocus(Qt.FocusReason.OtherFocusReason)
+        return
+    watcher = _FocusWhenShown(widget)
+    widget.installEventFilter(watcher)
+    widget._fw_focus_when_shown = watcher
 
 
 class SheetShade(QWidget):
@@ -3656,29 +3694,6 @@ class BlockDialog(Dialog):
         form.addRow("Category", self.category)
         self.category.currentIndexChanged.connect(self._chose_category)
         self.start.timeChanged.connect(self._maybe_guess)
-        self.more_details = QPushButton()
-        self.more_details.setObjectName("blockMoreDetails")
-        self.more_details.setProperty("outline", True)
-        self.more_details.setCheckable(True)
-        self.more_details.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        form.addRow("", self.more_details)
-        details = bare(QWidget())
-        details.setObjectName("blockDetails")
-        extra = Form(details, stacked=True)
-        extra.setContentsMargins(0, 0, 0, 0)
-        # The link is under More details: on the main card it read as a second thing to fill in.
-        self.spotify = _line("blockSpotify", self._original.get("spotify_url") or "", 500)
-        self.spotify.setPlaceholderText("https://open.spotify.com/…")
-        extra.addRow("Spotify link", self.spotify)
-        form.addRow("", details)
-        self._details = details
-        self.more_details.toggled.connect(details.setVisible)
-        open_details = bool(self._original.get("spotify_url"))
-        self.more_details.setChecked(open_details)
-        self._name_block_toggle(open_details)
-        self.more_details.toggled.connect(self._name_block_toggle)
-        details.setVisible(open_details)
-        self.more_details.toggled.connect(self.refit)
         self.missed = QCheckBox(
             "I missed it" if occurrence_day is None else f"I missed it on {DAY_FULL[occurrence_day]}"
         )
@@ -3752,8 +3767,6 @@ class BlockDialog(Dialog):
         self._applying_guess = True
         self.category.setCurrentIndex(max(0, self.category.findData(chosen)))
         self._applying_guess = False
-        self.spotify.clear()
-        self.more_details.setChecked(False)
         self.missed.setChecked(False)
         self._show_length()
         self.error.clear()
@@ -3836,7 +3849,7 @@ class BlockDialog(Dialog):
         title_label = self._form.labelForField(self.title)
         if title_label is not None:
             title_label.setVisible(False)
-        for extra in (self.more_details, self._details, self.missed, self._series_note):
+        for extra in (self.missed, self._series_note):
             self._form.setRowVisible(extra, False)
         self._form.setRowVisible(self.scope_choice, False)
         self.back_button.setVisible(step > 0)
@@ -3848,9 +3861,6 @@ class BlockDialog(Dialog):
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
         self.title.setFocus(Qt.FocusReason.OtherFocusReason)
-
-    def _name_block_toggle(self, open_: bool) -> None:
-        self.more_details.setText("Fewer details" if open_ else "More details")
 
     def _chose_category(self, *_index: object) -> None:
         if self._applying_guess:
@@ -4132,7 +4142,6 @@ class BlockDialog(Dialog):
             start=self.start.time().toString("HH:mm"),
             duration_min=self._span(),
             category=self.category.currentData(),
-            spotify_url=self.spotify.text().strip() or None,
         )
         # Unticking a day that was missed restores it, as the web's "Restore Wed" button does.
         unticked = not self.missed.isHidden() and not self.missed.isChecked()
@@ -4590,9 +4599,6 @@ class HomeworkDialog(Dialog):
             self.energy.addItem(label, value)
         self.energy.setCurrentIndex(self.energy.findData(self._original.get("energy", "medium")))
         extra.addRow("Energy preference", self.energy)
-        self.spotify = _line("homeworkSpotify", self._original.get("spotify_url") or "", 500)
-        self.spotify.setPlaceholderText("https://open.spotify.com/…")
-        extra.addRow("Spotify link", self.spotify)
         self.notes = QPlainTextEdit(self._original.get("notes") or "")
         self.notes.setObjectName("homeworkNotes")
         # Tab leaves the note; a keyboard student must not type a tab character into it.
@@ -4658,7 +4664,6 @@ class HomeworkDialog(Dialog):
             or self._original.get("notes")
             or self._original.get("links")
             or self._original.get("checklist")
-            or self._original.get("spotify_url")
         )
         self.more_details.setChecked(open_details)
         self._name_toggle(open_details)
@@ -5293,7 +5298,6 @@ class HomeworkDialog(Dialog):
             course=self.course.text() or None,
             priority=self.priority.currentData(),
             energy=self.energy.currentData(),
-            spotify_url=self.spotify.text().strip() or None,
             notes=self.notes.toPlainText(),
             links=links,
             checklist=checklist,
@@ -5527,8 +5531,8 @@ class UnfinishedPanel(QWidget):
         self.setObjectName("unfinishedReview")
         layout = QVBoxLayout(self)
         # Month at 1024x640 with this card open and the 28 px status strip above it needs the card's
-        # height trimmed (#28): 7 px above the heading and below Hide, and no padding above or below a row.
-        layout.setContentsMargins(11, 7, 11, 7)
+        # height trimmed (#28): 3 px above the heading and below Hide, and no padding above or below a row.
+        layout.setContentsMargins(11, 3, 11, 3)
         heading = QLabel("Overdue and left from last week")
         heading.setObjectName("unfinishedHeading")
         layout.addWidget(heading)

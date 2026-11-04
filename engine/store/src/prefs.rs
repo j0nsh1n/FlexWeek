@@ -23,7 +23,9 @@ pub fn preference_row(conn: &Connection, user_id: i64) -> StoreResult<Option<Str
             "SELECT theme, reminders_enabled, reminder_lead_min, reminder_sound,
                 reminder_dnd_override, timer_work_min, timer_break_min,
                 timer_long_break_min, timer_long_break_every, auto_split_pomodoro,
-                default_spotify_url, alarms_json, availability_json, comfort_json
+                default_spotify_url, alarms_json, availability_json, comfort_json,
+                weekend_homework_free, buffer_min, urgent_first, split_long_tasks,
+                show_weekends
             FROM preferences WHERE user_id = ?1",
             params![user_id],
             |row| {
@@ -43,6 +45,11 @@ pub fn preference_row(conn: &Connection, user_id: i64) -> StoreResult<Option<Str
                     "alarms_json": row.get::<_, String>(11)?,
                     "availability_json": row.get::<_, String>(12)?,
                     "comfort_json": row.get::<_, String>(13)?,
+                    "weekend_homework_free": row.get::<_, i64>(14)?,
+                    "buffer_min": row.get::<_, i64>(15)?,
+                    "urgent_first": row.get::<_, i64>(16)?,
+                    "split_long_tasks": row.get::<_, i64>(17)?,
+                    "show_weekends": row.get::<_, i64>(18)?,
                 }))
             },
         )
@@ -61,8 +68,11 @@ pub fn write_preferences(conn: &Connection, user_id: i64, fields_json: &str) -> 
         SET theme = ?1, reminders_enabled = ?2, reminder_lead_min = ?3, reminder_sound = ?4,
             reminder_dnd_override = ?5, timer_work_min = ?6, timer_break_min = ?7,
             timer_long_break_min = ?8, timer_long_break_every = ?9, auto_split_pomodoro = ?10,
-            default_spotify_url = ?11, alarms_json = ?12, availability_json = ?13, comfort_json = ?14
-        WHERE user_id = ?15",
+            default_spotify_url = ?11, alarms_json = ?12, availability_json = ?13, comfort_json = ?14,
+            weekend_homework_free = ?15, buffer_min = ?16, urgent_first = ?17,
+            split_long_tasks = ?18, show_weekends = ?19,
+            planner_settings_chosen = 1
+        WHERE user_id = ?20",
         params![
             crate::json_str(&fields, "theme")?,
             crate::json_i64(&fields, "reminders_enabled")?,
@@ -78,6 +88,11 @@ pub fn write_preferences(conn: &Connection, user_id: i64, fields_json: &str) -> 
             crate::json_str(&fields, "alarms_json")?,
             crate::json_str(&fields, "availability_json")?,
             crate::json_str(&fields, "comfort_json")?,
+            crate::json_i64(&fields, "weekend_homework_free")?,
+            crate::json_i64(&fields, "buffer_min")?,
+            crate::json_i64(&fields, "urgent_first")?,
+            crate::json_i64(&fields, "split_long_tasks")?,
+            crate::json_i64(&fields, "show_weekends")?,
             user_id,
         ],
     )?;

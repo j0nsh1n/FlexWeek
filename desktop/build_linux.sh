@@ -39,6 +39,8 @@ trap 'echo "Build staging retained at $STAGING" >&2' ERR
     --include-package=backend \
     --include-module=flexweek_engine \
     --include-data-dir="$ROOT/desktop/assets=desktop/assets" \
+    --include-data-files="$ROOT/desktop/native/material/tokens.json=desktop/native/material/tokens.json" \
+    --include-data-dir="$ROOT/desktop/native/material/qml=desktop/native/material/qml" \
     --nofollow-import-to=desktop.tests,backend.tests \
     --nofollow-import-to=PySide6.QtWebEngineCore,PySide6.QtWebEngineWidgets,PySide6.QtWebEngineQuick \
     --nofollow-import-to=mypy,pydantic.mypy,uvloop,httptools,watchfiles,websockets,yaml \

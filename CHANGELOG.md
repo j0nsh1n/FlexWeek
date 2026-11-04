@@ -3,6 +3,45 @@
 All notable changes to FlexWeek are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- A seed colour can build a Material scheme: six palette styles, light or dark, and a contrast from low to high. Dynamic color uses the desktop's accent when the platform supplies one.
+- Material 3 is a style choice beside the existing ones. Choosing it opens a Material window on the real week, and choosing a Widgets style swaps back, with no restart. Today's app stays the default. The Material window has Day, Week, Month, My day, and Settings, and the week's homework list sits on the right.
+- Settings → Look shows a live preview of the main view and the day screen as you change a style, its options, or the look, including the accent, with Fit and Actual size as in My Look.
+- Planner settings are stored and used: weekends homework-free, a 15- or 30-minute buffer, urgent deadlines first, splitting a task longer than an hour, and showing weekends. The study cutoff stays the existing day cutoff. Defaults leave an existing week where it is.
+- Material's Focus screen covers the window: phase, task, timer, Pause or Resume, Skip, Finish and Back, on the same timer Widgets uses. Rain, Lo-Fi and White noise play while you focus and pause with the timer; Spotify still opens the Settings link. Auto-mute holds reminders during a focus work phase. Auto-complete, off by default, finishes only that session's block.
+
+### Changed
+- Material Day and My day show leftover counts, the free-time Now card, Up next and Done, and a homework check with Undo.
+- Spotify for blocks is one link in Settings. Add and edit no longer ask for a link on a block or on homework. Open Spotify link and Focus set to Spotify use that link. A block starts with it only when the alarm sound is Spotify. A link already saved on a block stays in your data.
+- Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
+
+### Fixed
+- Material Settings Look labels and choices update legibly when switching between light and dark.
+- Pressing Return in Material setup commits and formats School times consistently.
+- Keyboard and accessibility actions inside Material settings previews leave live planner navigation and homework unchanged.
+- Bento's drag instruction stays above the floating Undo notice.
+- Tab and Backtab on a Material sheet or Settings prompt move between the open controls and wrap both ways, including from the last button back to the title field. The week, rail and Add button behind a sheet do not take the keyboard until the sheet closes.
+- Saving a second Material homework edit while the first save is still going no longer throws the second edit away. Save stays off and the draft stays until that save finishes. A fixed-time save or delete, and ticking homework finished on Day, wait the same way.
+- Tab stays on the Focus screen and its End dialog, not on the Add button or the rail underneath.
+- Number keys, Z, F and P do not change the page while a Settings look prompt is open, and Undo, Redo and More in the top bar do not act. Digits still type in the prompt's field.
+- My day still shows today's work after you browse another week or a month date.
+- If Material setup cannot open, finishing from the Widgets pages keeps the Widgets step and does not apply the abandoned Material style.
+- Material Find a time for homework that is not overdue shows the same preview Widgets uses. Nothing is saved until Accept; Cancel leaves the week unchanged.
+- Material Routines and discard prompts use the same words as the Widgets sheets.
+- Material Settings shows a saved reminder lead that is not Off, 5, 10 or 15 minutes, and does not change it just by opening Settings.
+- A failed Material weekend-setting save shows an actionless error, so it cannot undo an earlier schedule change.
+- Opening another window in the same session no longer crashes while menus take or drop their shadow.
+- Overdue count announcements use the visible More control, with a window fallback while Settings is open.
+- Material keeps an unsent Settings change across a swap back, shows a visible fallback when it cannot open, and does not retry that version at start-up until the student chooses Material again or the app version changes. Its clock keeps moving, More lists only actions that work on Material, and Add homework works from the keyboard.
+- Signing out waits for an unsent Settings change. When that save does not land, FlexWeek stays open and the change stays on screen.
+- A split task is saved as both halves, and the second half keeps the original deadline. A buffer no longer pulls the study cutoff earlier. Splitting the same task again, or into an id that is already used, does not happen. Opening a paired phone that is still on the migration defaults does not erase planner settings chosen on the desktop.
+- Saving planner settings back to the defaults before the first sync keeps that choice when an older device still has other values. The phone plan review shows every half of a split task, including one that is still waiting.
+- Planning that splits a long task into focus chunks keeps the times just chosen for other homework, and does not put a pin back on homework the planner left unplaced.
+- The sign-in field's focus ring stays readable on a pale accent, and still uses the default blue when that blue already reads.
+- After you save a new block in Bento, the keyboard stays on that block even if the week refreshed while the editor was closing.
+
 ## [1.2.0] - 2026-10-26
 
 ### Changed

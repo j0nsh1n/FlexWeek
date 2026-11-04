@@ -6,8 +6,9 @@
 pub mod desk;
 
 use flexweek_engine::solver::{
-    DeadlineOverrides, SOLVE_BUDGET_MS, SolveTrace, TimeBlock, WorkWindow, block_from_value,
-    reschedule_after_miss, reschedule_running_late, solve, work_window_from_value,
+    DeadlineOverrides, PlanRules, SOLVE_BUDGET_MS, SolveTrace, TimeBlock, WorkWindow,
+    block_from_value, reschedule_after_miss, reschedule_running_late, solve,
+    work_window_from_value,
 };
 use flexweek_engine::time::{hhmm_to_minutes, overlaps};
 use serde_json::{Map, Value, json};
@@ -186,6 +187,7 @@ pub fn miss_legacy(
         Some(&DeadlineOverrides::default()),
         SOLVE_BUDGET_MS,
         &real_clock(),
+        PlanRules::default(),
     )
     .expect("reschedule after miss")
 }
@@ -207,6 +209,7 @@ pub fn miss_open(
         Some(&DeadlineOverrides::default()),
         SOLVE_BUDGET_MS,
         &real_clock(),
+        PlanRules::default(),
     )
     .expect("reschedule after miss")
 }
@@ -231,6 +234,7 @@ pub fn late_legacy(
         None,
         SOLVE_BUDGET_MS,
         &real_clock(),
+        PlanRules::default(),
     )
     .expect("reschedule running late")
 }

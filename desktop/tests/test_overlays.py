@@ -91,6 +91,13 @@ def qapp() -> Iterator[QApplication]:
     yield QApplication.instance() or QApplication(["flexweek-overlays-test"])
 
 
+def _shadow_drawn(widget: QWidget) -> bool:
+    effect = widget.graphicsEffect()
+    if not isinstance(effect, QGraphicsDropShadowEffect):
+        return False
+    return bool(effect.isEnabled() and effect.blurRadius() > 0 and effect.color().alpha() > 0)
+
+
 def test_a_menu_casts_the_large_shadow_only_in_a_look_with_depth(qapp: QApplication) -> None:
     light = resolved_palette("light-frost", False, None)
     menu = Menu()
@@ -101,7 +108,52 @@ def test_a_menu_casts_the_large_shadow_only_in_a_look_with_depth(qapp: QApplicat
     inner = menu.add_menu("Undo, copy and save", "pencil")
     assert isinstance(inner.graphicsEffect(), QGraphicsDropShadowEffect), "a submenu too"
     menu.set_colours(menu_colours(light, lifted=False))
-    assert menu.graphicsEffect() is None and inner.graphicsEffect() is None
+    assert not _shadow_drawn(menu) and not _shadow_drawn(inner)
+
+
+def test_clearing_a_menu_shadow_keeps_the_effect_across_windows_and_palettes(
+    qapp: QApplication,
+) -> None:
+    """Deleting a drop shadow aborts in Shiboken when another window already lifted a menu."""
+    looks = (
+        resolved_palette("light-frost", False, None),
+        resolved_palette("dark-frost", True, None),
+        resolved_palette("light-frost", False, {"preset": "high-contrast"}),
+    )
+    first = QWidget()
+    second = QWidget()
+    first.resize(240, 160)
+    second.resize(240, 160)
+    first.show()
+    second.show()
+    qapp.processEvents()
+    menus = [Menu(first), Menu(second)]
+    try:
+        for palette in looks:
+            lifted = menu_colours(palette, lifted=True)
+            flat = menu_colours(palette, lifted=False)
+            for menu in menus:
+                menu.set_colours(lifted)
+                held = menu.graphicsEffect()
+                assert isinstance(held, QGraphicsDropShadowEffect)
+                assert _shadow_drawn(menu)
+                inner = next((action.menu() for action in menu.actions() if action.menu()), None)
+                if inner is None:
+                    inner = menu.add_menu("Undo, copy and save", "pencil")
+                inner_held = inner.graphicsEffect()
+                menu.set_colours(flat)
+                assert menu.graphicsEffect() is held
+                assert inner.graphicsEffect() is inner_held
+                assert not _shadow_drawn(menu)
+                assert not _shadow_drawn(inner)
+                menu.set_colours(lifted)
+                assert menu.graphicsEffect() is held
+                assert inner.graphicsEffect() is inner_held
+                assert _shadow_drawn(menu)
+                assert _shadow_drawn(inner)
+    finally:
+        first.hide()
+        second.hide()
 
 
 def test_a_menus_panel_opens_where_qt_put_the_menu_with_its_shadow_round_it(qapp: QApplication) -> None:

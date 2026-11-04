@@ -1,0 +1,5 @@
+module day
+NowCard 1.0 NowCard.qml
+DayLists 1.0 DayLists.qml
+ProgressRing 1.0 ProgressRing.qml
+MonthSide 1.0 MonthSide.qml

@@ -113,6 +113,22 @@ def clean_look_file() -> Path:
     return look_path
 
 
+def write_material_new_look(mode: str) -> Path:
+    """Material is the saved surface, and nobody is signed in.
+
+    An earlier rig run's kept token would 401 against this empty database and write
+    "Please sign in again" on the card, so that file is removed too.
+    """
+    from PySide6.QtCore import QStandardPaths
+
+    kept_session_path().unlink(missing_ok=True)
+    root = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))
+    root.mkdir(parents=True, exist_ok=True)
+    look_path = root / "flexweek-look.json"
+    look_path.write_text(json.dumps({"surface": "material", "material": {"mode": mode}}) + "\n")
+    return look_path
+
+
 def check_play(args: argparse.Namespace) -> None:
     """Refuse a play that cannot run, with every mistake named, before a session is started for it."""
     if not args.play:
@@ -263,7 +279,7 @@ def report_run(
 
 
 def child_main(args: argparse.Namespace) -> int:
-    from PySide6.QtCore import QObject, QPoint, QPointF, QRect, QSize, QStandardPaths, Qt, QTimer
+    from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QRect, QSize, QStandardPaths, Qt, QTimer
     from PySide6.QtGui import QColor, QCursor, QPainter, QPen
     from PySide6.QtWidgets import (
         QAbstractButton,
@@ -276,8 +292,8 @@ def child_main(args: argparse.Namespace) -> int:
     )
 
     QStandardPaths.setTestModeEnabled(True)
-    clean_look_file()
     app = QApplication(["flexweek-rig"])
+    clean_look_file()
     python_errors: list[str] = []
 
     def on_error(kind: type, value: BaseException, tb: object) -> None:
@@ -295,6 +311,7 @@ def child_main(args: argparse.Namespace) -> int:
     from desktop.native.kept import KeptSession
     from desktop.native.layouts.registry import options_for, sanitize_layout
     from desktop.native.look import sanitize_look
+    from desktop.native.widgets import BlockDialog, _give_focus_back
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
     from desktop.tests.logic_support import past_setup, wait_until
@@ -302,18 +319,23 @@ def child_main(args: argparse.Namespace) -> int:
     out = Path(args.out)
     server = LocalServer(Path(tempfile.mkdtemp()) / "rig.db")
     server.start()
+    play = load_play(Path(args.play), (*DESIGNS, *MY_DAY), play_looks()) if args.play else None
+    material_new = play is not None and play.setup.seed == "material-new"
+    if material_new:
+        write_material_new_look(play.setup.mode)
     window = NativeWindow(server.origin, kept=KeptSession(kept_session_path()))
     window.resize(1280, 820)
     window.move(0, 0)
     window.show()
+    if material_new:
+        return run_play(app, window, window.session, server, out, play, seed_rig_week, python_errors)
     window.username.setText("rig_student")
     window.password.setText(PASSWORD)
     window.findChild(QPushButton, "createAccount").click()
     wait_until(app, lambda: window._stack.currentWidget().objectName() == "recoveryPage", 20)
     window.recovery_ack.setChecked(True)
     window.recovery_continue.click()
-    if args.play:
-        play = load_play(Path(args.play), (*DESIGNS, *MY_DAY), play_looks())
+    if play is not None:
         return run_play(app, window, window.session, server, out, play, seed_rig_week, python_errors)
     past_setup(app, window)
     session = window.session
@@ -902,6 +924,76 @@ def child_main(args: argparse.Namespace) -> int:
         yield from r.tab("week")
         yield from click_create(r, 5, 10 * 60)
 
+    def deferred_focus(r: Rig, modal: bool) -> Step:
+        class ShowObserver(QObject):
+            seen = False
+
+            def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+                if event.type() == QEvent.Type.Show:
+                    self.seen = True
+                return False
+
+        owner = QWidget()
+        target = QLineEdit(owner)
+        other = QDialog(owner) if modal else QWidget()
+        focus = QLineEdit(other)
+        observer = ShowObserver(target)
+        target.installEventFilter(observer)
+        try:
+            owner.show()
+            target.hide()
+            _give_focus_back(target)
+            if modal:
+                other.setWindowModality(Qt.WindowModality.ApplicationModal)
+            other.show()
+            other.activateWindow()
+            focus.setFocus()
+            yield ("until", lambda: QApplication.activeWindow() is other and focus.hasFocus(), 3000,
+                   "the other private window to own focus")
+            if modal:
+                expect(QApplication.activeModalWidget() is other, "private modal is not active")
+            target.show()
+            yield ("wait", 150)
+            expect(observer.seen, "the deferred target did not receive Show")
+            expect(not hasattr(target, "_fw_focus_when_shown"), "the deferred watcher did not run")
+            expect(QApplication.activeWindow() is other and focus.hasFocus(), "focus was stolen")
+            print(f"deferred Show observed; watcher consumed; other active and focused; modal={modal}",
+                  flush=True)
+            other.grab().save(str(r.shots / f"{r.design}-{r.scenario}-owner.png"))
+        finally:
+            other.close()
+            owner.close()
+            other.deleteLater()
+            owner.deleteLater()
+
+    def focus_other_window(r: Rig) -> Step:
+        yield from deferred_focus(r, False)
+
+    def focus_modal(r: Rig) -> Step:
+        yield from deferred_focus(r, True)
+
+    def week_create_keyboard(r: Rig) -> Step:
+        yield from r.tab("week")
+        yield from r.reveal(5, 9 * 60, 12 * 60)
+        yield from r.click(r.at(5, 10 * 60))
+        yield from r.accept_dialog("Keyboard Club")
+        yield ("until", lambda: not session.busy and not session.dirty, 8000, "the new block to save")
+        made = [b for b in session.blocks if b["title"] == "Keyboard Club"]
+        expect(len(made) == 1, f"expected one new block, got {made}")
+        block_id = made[0]["id"]
+        yield from r.key("Return")
+        yield ("until", lambda: isinstance(QApplication.activeModalWidget(), BlockDialog), 3000,
+               "Return to open the saved block")
+        dialog = QApplication.activeModalWidget()
+        expect(dialog._original["id"] == block_id, "Return opened a different block")
+        print(f"Return opened saved block id={block_id}", flush=True)
+        r.shot("keyboard-open")
+        dialog.reject()
+        yield from r.settled()
+        expect([b["id"] for b in session.blocks if b["title"] == "Keyboard Club"] == [block_id],
+               "the saved block identity changed on reload")
+        print(f"Reload retained block id={block_id}", flush=True)
+
     def day_past_due(r: Rig) -> Step:
         """The poster is due Friday. Given Saturday on Day, it stays in the tray and says why."""
         yield from r.tab("week")
@@ -1006,9 +1098,7 @@ def child_main(args: argparse.Namespace) -> int:
             window._on_week()
             yield ("wait", 200)
 
-        yield from r.drag(
-            middle(box), r.carried(middle(box), 19 * 60, 4, 18 * 60), held=meanwhile, rest=100
-        )
+        yield from r.drag(middle(box), r.carried(middle(box), 19 * 60, 4, 18 * 60), held=meanwhile, rest=100)
         yield from r.settled()
         essays = [b for b in session.blocks if b.get("assignment_id") == "essay"]
         expect(
@@ -1745,6 +1835,9 @@ def child_main(args: argparse.Namespace) -> int:
         Scenario("week-move-day", "week", week_move_day),
         Scenario("week-resize-top", "week", week_resize_top),
         Scenario("week-create", "week", week_create),
+        Scenario("focus-other-window", "week", focus_other_window, only=("bento",)),
+        Scenario("focus-modal", "week", focus_modal, only=("bento",)),
+        Scenario("week-create-keyboard", "week", week_create_keyboard, only=("bento",)),
         Scenario("week-series-one-day", "week", week_series),
         Scenario("week-beside", "week", week_beside),
         Scenario("week-narrow-waiting", "week", week_narrow_waiting, only=("classic",)),

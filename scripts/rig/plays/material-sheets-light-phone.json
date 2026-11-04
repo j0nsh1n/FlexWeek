@@ -1,0 +1,148 @@
+{
+  "setup": {
+    "seed": "rig",
+    "look": "light-frost",
+    "size": [
+      700,
+      900
+    ],
+    "clock_24h": false
+  },
+  "steps": [
+    {
+      "click": "settingsGear"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "click": "chooseMaterial"
+    },
+    {
+      "wait": 1000
+    },
+    {
+      "see": "materialBar"
+    },
+    {
+      "click": "materialFab"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "see": "homeworkSheet"
+    },
+    {
+      "see": "What is it?"
+    },
+    {
+      "shot": "sheets-lightphone-add-what"
+    },
+    {
+      "click": "homeworkNext"
+    },
+    {
+      "wait": 200
+    },
+    {
+      "see": "Give the homework a title."
+    },
+    {
+      "shot": "sheets-lightphone-add-problem"
+    },
+    {
+      "click": "homeworkTitle"
+    },
+    {
+      "type": "Chemistry lab"
+    },
+    {
+      "shot": "sheets-lightphone-add-typed"
+    },
+    {
+      "click": "homeworkNext"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "see": "When is it due?"
+    },
+    {
+      "shot": "sheets-lightphone-add-when"
+    },
+    {
+      "click": "homeworkNext"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "see": "How long will it take?"
+    },
+    {
+      "shot": "sheets-lightphone-add-how-long"
+    },
+    {
+      "click": "homeworkNext"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "see": "Added Chemistry lab"
+    },
+    {
+      "shot": "sheets-lightphone-added"
+    },
+    {
+      "click": "materialMore"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "see": "more_runningLate"
+    },
+    {
+      "shot": "sheets-lightphone-more"
+    },
+    {
+      "click": "more_runningLate"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "see": "lateSheet"
+    },
+    {
+      "see": "Say how late you are and preview what moves. Nothing changes until you accept it."
+    },
+    {
+      "shot": "sheets-lightphone-late"
+    },
+    {
+      "click": "latePreview"
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "shot": "sheets-lightphone-late-preview"
+    },
+    {
+      "click": "lateAccept"
+    },
+    {
+      "wait": 1200
+    },
+    {
+      "shot": "sheets-lightphone-late-done"
+    },
+    {
+      "key": "Escape"
+    }
+  ]
+}

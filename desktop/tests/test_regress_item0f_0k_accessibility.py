@@ -107,7 +107,6 @@ def open_block_editor(qapp, made) -> QWidget:
     dialog = BlockDialog(host, day=2, start="16:00", duration_min=60)
     made.insert(0, dialog)
     _up(qapp, dialog)
-    dialog.more_details.setChecked(True)
     qapp.processEvents()
     return dialog
 

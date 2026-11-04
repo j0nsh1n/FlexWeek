@@ -105,7 +105,11 @@ whose values are Python's own types, as `sqlite3` did.
   (it adds indexmap), so dicts keep the key order Python gave them. Approved on 2026-10-02:
   serde_json's `unbounded_depth`, used only where the binding reads text Python has already
   parsed, so a file nested past 128 levels reads as the original read it. Any other crate is
-  asked for first.
+  asked for first. The Material scheme is not a new crate: it is a port of
+  `@material/material-color-utilities` 0.3.0 (Apache-2.0) in `engine::material`, with the licence
+  notice in `engine/engine/src/material/NOTICE`. `desktop/native/material/dynamic_color.py` calls
+  that one function and reads Qt's palette accent. The accent stays in Python because the core
+  does not import Qt. When the platform has not set the accent, the wrapper returns nothing.
 
 ## Slices
 
@@ -170,6 +174,30 @@ tests runs in the engine, so at no point are the code and its check rewritten to
   the ported tests pass, catch every fault their Python versions caught, and the rig's counts match.
   Then shared helpers are merged, overlapping and slow tests cut, and the known flaky tests fixed
   (Sign in's pointer-hover case in `test_sign_in_card.py`). The interface's mutation specs stay.
+
+## Planner settings
+
+Amendment A4 adds five stored preferences and uses the existing study cutoff. The defaults are
+today's planner, so an account saved before these columns plans the same week it did then.
+
+| Control | Stored as | Default | What the planner does |
+|---|---|---|---|
+| Keep weekends homework-free | `weekend_homework_free` | off | Flexible homework is searched on Monday–Friday only. A locked weekend block stays. |
+| Smart buffer | `buffer_min`, one of 0, 15, 30 | 0 | Empty minutes between scheduled tasks. The study cutoff and protected windows are not widened. Locked events already closer than the buffer are not moved. |
+| Prioritize urgent deadlines first | `urgent_first` | on | On keeps the existing sooner-deadline order. Off, two tasks with the same room and priority are ordered by id. |
+| Split long tasks | `split_long_tasks` | off | One cut of a flexible task longer than 60 minutes into two sessions that add up to it. The first session is the largest multiple of 15 minutes that does not exceed half, so 61 minutes becomes 30 and 31. A task that is already split, and a half whose id is already used, stays whole. This is not the focus timer: 25/5 can be saved with the split on. |
+| Show weekends | `show_weekends` | on | Stored and synced. The planner does not read it. |
+| Study window cutoff | `day_cutoff`, already in availability | unset | 20:00, 21:00 and 22:00 are the settings choices. The field still accepts the wider 15-minute grid. |
+
+Each is its own preferences column and its own sync record, after `auto_split_pomodoro` and before
+the two JSON preference records. A planner column still at the migration default stays unpublished
+while the account has never saved settings. Saving settings sets `planner_settings_chosen`, so a
+save back to the default is published even when it happens before the first sync. A later save back
+to the default is published too. A phone that does not know a preference key quarantines that one
+record and keeps applying the rest of the batch. Saving a split writes each half: its length, its
+start, and its day. A half that did not fit is kept, with no start. The phone plan lists every half,
+placed or waiting, under the original task's title, and accepting the plan keeps each half.
+Python encodes the row, calls the engine, and decodes the trace. It does not decide where a block goes.
 
 ## Not in scope
 

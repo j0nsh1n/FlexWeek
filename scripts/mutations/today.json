@@ -60,7 +60,7 @@
   "name": "dismissing a block's song stops it",
   "old": "            self._bell.stop()\n            self._spotify.stop()\n",
   "new": "            self._bell.stop()\n",
-  "test": "desktop/tests/test_reminders_window.py::test_a_block_with_a_spotify_link_plays_it_at_its_start_and_dismiss_stops_it"
+  "test": "desktop/tests/test_reminders_window.py::test_a_block_without_a_link_plays_the_settings_link_when_the_sound_is_spotify"
  },
  {
   "file": "desktop/native/controller.py",
@@ -156,8 +156,8 @@
  {
   "file": "desktop/native/window.py",
   "name": "the sign-out sheet drawn in red",
-  "old": "        if confirm(self, \"Sign out\", SIGN_OUT_QUESTION.format(where=where), \"Sign out\", danger=False):\n",
-  "new": "        if confirm(self, \"Sign out\", SIGN_OUT_QUESTION.format(where=where), \"Sign out\"):\n",
+  "old": "        if confirm(\n            self, \"Sign out\", SIGN_OUT_QUESTION.format(where=where), \"Sign out\", danger=False\n        ) and self._save_before_leaving(self.session.logout, again=\"sign out again\"):\n",
+  "new": "        if confirm(\n            self, \"Sign out\", SIGN_OUT_QUESTION.format(where=where), \"Sign out\"\n        ) and self._save_before_leaving(self.session.logout, again=\"sign out again\"):\n",
   "test": "desktop/tests/test_sheets.py::test_the_sign_out_sheet_says_where_the_week_lives_and_does_not_draw_sign_out_red"
  },
  {
@@ -308,9 +308,9 @@
   "test": "desktop/tests/test_drag_results.py::test_a_block_made_by_dragging_guesses_its_category_from_when_it_starts"
  },
  {
-  "file": "desktop/native/window.py",
+  "file": "desktop/native/controller.py",
   "name": "a drag saves with no sign",
-  "old": "        self._say_when_saved(moved_words(block, origin, day, start, end))\n",
+  "old": "        self.hand_placed.emit(words)\n",
   "new": "",
   "test": "desktop/tests/test_drag_results.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
  },

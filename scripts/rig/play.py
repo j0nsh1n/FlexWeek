@@ -31,9 +31,12 @@ ACTIONS = (
     "shot",
     "tree",
     "say",
+    "see",
 )
-SETUP_KEYS = ("clock", "seed", "size", "design", "clock_24h", "text", "look")
-SEEDS = ("rig", "empty", "setup-done")
+SETUP_KEYS = ("clock", "seed", "size", "design", "clock_24h", "text", "look", "mode")
+# material-new: Material is the saved surface and nobody is signed in, so the play starts on the sign-in card.
+SEEDS = ("rig", "empty", "setup-done", "material-new")
+MODES = ("light", "dark")
 TEXT_SIZES = ("normal", "large")
 KEY_NAME = re.compile(r"[A-Za-z0-9_]+(\+[A-Za-z0-9_]+)*")
 LABEL = re.compile(r"[A-Za-z0-9_.-]+")
@@ -55,6 +58,7 @@ class Setup:
     clock_24h: bool = False
     text: str = "normal"
     look: str | None = None
+    mode: str = "light"
 
 
 @dataclass(frozen=True)
@@ -126,6 +130,8 @@ def _setup_value(key: str, value: object, designs: tuple[str, ...], looks: tuple
         return _one_of(value, TEXT_SIZES, key)
     if key == "look":
         return _one_of(value, looks, key)
+    if key == "mode":
+        return _one_of(value, MODES, key)
     if key == "clock_24h":
         if not isinstance(value, bool):
             raise ValueError("true or false")
@@ -181,6 +187,10 @@ def _parse_step(raw: object) -> Step:
     if action == "say":
         if not isinstance(value, str) or not value.strip():
             raise ValueError("say needs a note")
+        return Step(action, value)
+    if action == "see":
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("see needs the words or objectName that should be on screen")
         return Step(action, value)
     raise ValueError(f"{action!r} is not an action. Actions: {', '.join(ACTIONS)}")
 
@@ -285,6 +295,123 @@ def apply_play_look(window, session, setup: Setup) -> str | None:
     return pack
 
 
+def visual_items(root: object) -> list:
+    """The item and every visual child. Repeater rows are visual children, not QObject children,
+    and Repeater.itemAt returns None through PySide."""
+    found = [root]
+    children = getattr(root, "childItems", None)
+    if children is None:
+        return found
+    for child in children():
+        found.extend(visual_items(child))
+    return found
+
+
+def qml_visible_rect(item: object, root: object, host_width: float, host_height: float):
+    """The part of `item` that the host and every clipping ancestor leave on screen, in root pixels.
+
+    A Flickable keeps `isVisible()` true for a row it has scrolled away. An empty intersection is
+    not something a play can see or click. The walk includes every clip between the item and the
+    root, and stops there.
+    """
+    from PySide6.QtCore import QPointF, QRectF
+
+    origin = item.mapToItem(root, QPointF(0, 0))  # type: ignore[attr-defined]
+    visible = QRectF(origin.x(), origin.y(), item.width(), item.height())  # type: ignore[attr-defined]
+    visible = visible.intersected(QRectF(0, 0, host_width, host_height))
+    parent = item.parentItem()  # type: ignore[attr-defined]
+    while parent is not None:
+        if parent.clip():
+            corner = parent.mapToItem(root, QPointF(0, 0))
+            bounds = QRectF(corner.x(), corner.y(), parent.width(), parent.height())
+            visible = visible.intersected(bounds)
+        if parent is root:
+            break
+        parent = parent.parentItem()
+    if visible.width() < 1 or visible.height() < 1:
+        return None
+    return visible
+
+
+def qml_click_targets(widgets: object, kind: str, wanted: str) -> list:
+    """Global points on visible QML items, so a play can click one by objectName or by its words."""
+    from PySide6.QtCore import QPoint
+    from PySide6.QtQuickWidgets import QQuickWidget
+
+    found = []
+    for widget in widgets:  # type: ignore[union-attr]
+        if not isinstance(widget, QQuickWidget) or not widget.isVisible():
+            continue
+        root = widget.rootObject()
+        if root is None:
+            continue
+        host = widget.window()
+        for item in visual_items(root):
+            if not item.isVisible():
+                continue
+            visible = qml_visible_rect(item, root, widget.width(), widget.height())
+            if visible is None:
+                continue
+            name = str(item.objectName() or "")
+            text = item.property("text")
+            shown = text if isinstance(text, str) else ""
+            if kind == "name":
+                score = 2 if name == wanted else 0
+            else:
+                score = max(matches_words(wanted, shown), matches_words(wanted, name))
+            if not score:
+                continue
+            # The center of what is actually on screen, through the widget. A QQuickItem's own
+            # mapToGlobal is not the screen point.
+            centre = visible.center()
+            spot = widget.mapToGlobal(QPoint(int(centre.x()), int(centre.y())))
+            label = f'qml {name or "item"} "{shown[:40]}"' if shown else f"qml {name or 'item'}"
+            found.append((score, spot, label, host))
+    return found
+
+
+def qml_tree_entries(quick: object, window: object, depth: int) -> list[dict]:
+    """QML rows for a play's tree, in window pixels. A fully clipped item is left out."""
+    from PySide6.QtCore import QPoint
+
+    root = quick.rootObject()  # type: ignore[attr-defined]
+    if root is None:
+        return []
+    rows = []
+    for item in visual_items(root):
+        if not item.isVisible():
+            continue
+        visible = qml_visible_rect(item, root, quick.width(), quick.height())  # type: ignore[attr-defined]
+        if visible is None:
+            continue
+        in_window = quick.mapTo(  # type: ignore[attr-defined]
+            window, QPoint(int(visible.x()), int(visible.y()))
+        )
+        text = item.property("text")
+        rows.append(
+            {
+                "class": item.metaObject().className(),
+                "objectName": str(item.objectName() or ""),
+                "accessibleName": "",
+                "accessibleDescription": "",
+                "text": text if isinstance(text, str) else "",
+                "geometry": [
+                    in_window.x(),
+                    in_window.y(),
+                    int(visible.width()),
+                    int(visible.height()),
+                ],
+                "enabled": bool(item.isEnabled()) if hasattr(item, "isEnabled") else True,
+                "hasFocus": bool(item.hasActiveFocus()) if hasattr(item, "hasActiveFocus") else (
+                    bool(item.hasFocus()) if hasattr(item, "hasFocus") else False
+                ),
+                "checked": None,
+                "depth": depth,
+            }
+        )
+    return rows
+
+
 class CannotDo(Exception):
     """The step cannot be done now (no such widget, a dialog in the way). Logged, and the play goes on."""
 
@@ -327,8 +454,22 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
     # Setup
 
     def prepare() -> None:
+        # The window floor is 800. A play that asks for a phone width (under 768) has to
+        # drop that floor first, or resize is a no-op and the month still shows chips.
+        if setup.size[0] < window.minimumWidth():
+            window.setMinimumWidth(setup.size[0])
+        if setup.size[1] < window.minimumHeight():
+            window.setMinimumHeight(setup.size[1])
         window.resize(*setup.size)
         window.move(0, 0)
+        if setup.seed == "material-new":
+            if setup.clock is not None:
+                held["now"] = setup.clock
+            window.raise_()
+            window.activateWindow()
+            wait_until(app, window.isActiveWindow, 5)
+            wait_until(app, lambda: True, 0.6)
+            return
         if setup.seed == "empty":
             wait_until(app, lambda: window._stack.currentWidget().objectName() == "setupPage", 20)
         else:
@@ -457,6 +598,7 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
             if kind == "text":
                 for score, spot, label in list_item_targets(widget, wanted):
                     found.append((score, spot, label, widget.window()))
+        found.extend(qml_click_targets(list(everything), kind, wanted))
         return sorted(found, key=lambda item: (-item[0], item[1].y(), item[1].x()))
 
     def locate(target: tuple[str, object]) -> tuple[QPoint, str]:
@@ -578,6 +720,8 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
             for action in widget.actions():
                 if action.isVisible() and not action.isSeparator():
                     into.append(menu_entry(widget, action, depth + 1))
+        if type(widget).__name__ == "QQuickWidget":
+            into.extend(qml_tree_entries(widget, window, depth + 1))
         for child in widget.children():
             if isinstance(child, QWidget) and not child.isWindow() and is_shown(child):
                 walk(child, depth + 1, into)
@@ -646,6 +790,11 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
             return "wrote " + ", ".join(save_shots(str(value), number))
         if action == "tree":
             return "wrote " + save_tree(str(value), number)
+        if action == "see":
+            found = candidates("name", str(value)) or candidates("text", str(value))
+            if not found:
+                raise CannotDo(f"cannot see {value!r}")
+            return f"saw {found[0][2]}"
         return str(value)
 
     results = {"done": 0, "not_done": 0}
@@ -730,4 +879,6 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
         f"Log, shots and trees in {out}"
     )
     log_file.close()
-    return 0 if finished else 1
+    if not finished or results["not_done"]:
+        return 1
+    return 0

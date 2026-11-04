@@ -127,39 +127,66 @@ def test_going_back_keeps_a_day_the_student_had_already_unticked(qapp: QApplicat
 TRACK = "https://open.spotify.com/playlist/37i9dQZF1DX0XUsuxWHRQd"
 
 
-def test_a_fixed_commitment_keeps_the_spotify_link_that_was_typed(qapp: QApplication) -> None:
-    """The Spotify button already opened a block's link, but nothing here could put one there."""
-    dialog = BlockDialog(None, school())
-    dialog.spotify.setText(TRACK)
-    dialog.accept()
-    assert dialog.block()["spotify_url"] == TRACK
+def test_add_and_edit_sheets_have_no_spotify_field(qapp: QApplication) -> None:
+    """The link lives in Settings. A block or a piece of homework does not ask for one."""
+    from PySide6.QtWidgets import QLineEdit, QPushButton
 
-
-def test_an_existing_link_is_shown_so_it_can_be_changed_or_cleared(qapp: QApplication) -> None:
-    dialog = BlockDialog(None, school(spotify_url=TRACK))
-    assert dialog.spotify.text() == TRACK
-    dialog.spotify.clear()
-    dialog.accept()
-    assert dialog.block()["spotify_url"] is None
-
-
-def test_a_link_that_is_not_spotify_is_refused_with_a_message(qapp: QApplication) -> None:
-    dialog = BlockDialog(None, school())
-    dialog.spotify.setText("https://example.com/rickroll")
-    dialog.accept()
-    assert dialog.isVisible() is False  # never shown, so it cannot be visible either way
-    assert dialog.result() != dialog.DialogCode.Accepted
-    assert "spotify" in dialog.error.text().lower()
-
-
-def test_homework_keeps_its_spotify_link_too(qapp: QApplication) -> None:
     from desktop.native.widgets import HomeworkDialog
 
-    dialog = HomeworkDialog(None, None, "2026-09-14")
-    dialog.title.setText("Essay")
-    dialog.spotify.setText(TRACK)
+    added = BlockDialog(None, day=0, start="16:00")
+    edited = BlockDialog(None, school(spotify_url=TRACK))
+    new_homework = HomeworkDialog(None, None, "2026-09-14")
+    old_homework = HomeworkDialog(
+        None,
+        {
+            "id": "math",
+            "title": "Math worksheet",
+            "due": "2026-09-14T21:00",
+            "estimate_min": 45,
+            "revision": 0,
+            "spotify_url": TRACK,
+        },
+        "2026-09-14",
+    )
+    for dialog in (added, edited, new_homework, old_homework):
+        assert dialog.findChild(QLineEdit, "blockSpotify") is None
+        assert dialog.findChild(QLineEdit, "homeworkSpotify") is None
+    assert edited.findChild(QPushButton, "blockMoreDetails") is None
+
+
+def test_editing_a_fixed_time_keeps_the_spotify_link_already_stored(qapp: QApplication) -> None:
+    dialog = BlockDialog(None, school(spotify_url=TRACK))
+    dialog.title.setText("School day")
     dialog.accept()
-    assert dialog.assignment()["spotify_url"] == TRACK
+    saved = dialog.block()
+    assert saved["title"] == "School day"
+    assert saved["spotify_url"] == TRACK
+
+
+def test_editing_homework_keeps_the_spotify_link_already_stored(qapp: QApplication) -> None:
+    from desktop.native.widgets import HomeworkDialog
+
+    dialog = HomeworkDialog(
+        None,
+        {
+            "id": "math",
+            "title": "Math worksheet",
+            "due": "2026-09-14T21:00",
+            "estimate_min": 45,
+            "revision": 0,
+            "notes": "",
+            "links": [],
+            "checklist": [],
+            "spotify_url": TRACK,
+        },
+        "2026-09-14",
+    )
+    assert dialog.more_details.isChecked() is False
+    dialog.title.setText("Math worksheet, revised")
+    dialog.accept()
+    saved = dialog.assignment()
+    assert saved["title"] == "Math worksheet, revised"
+    assert saved["spotify_url"] == TRACK
 
 
 def test_the_homework_editor_is_wide_enough_to_read_after_it_was_made_to_scroll(
@@ -268,18 +295,15 @@ def test_a_fixed_activity_that_ends_before_it_starts_is_refused_beside_the_times
 
 
 def test_a_fixed_activity_the_editor_cannot_save_is_explained_in_the_apps_words(qapp: QApplication) -> None:
-    """The editor checks a block with the server's own rules. Their words ("Value error, spotify_url
-    must be an open.spotify.com share link") are not a student's."""
+    """The editor checks a block with the server's own rules, and says the problem in the app's words."""
     said = {}
-    for field, fill in (("title", "   "), ("days", None), ("spotify", "https://example.com/song")):
+    for field, fill in (("title", "   "), ("days", None)):
         dialog = BlockDialog(None, school())
         if field == "title":
             dialog.title.setText(fill)
-        elif field == "days":
+        else:
             for check in dialog.days:
                 check.setChecked(False)
-        else:
-            dialog.spotify.setText(fill)
         dialog.accept()
         assert dialog.result() != dialog.DialogCode.Accepted
         said[field] = dialog.error.text()
@@ -287,8 +311,6 @@ def test_a_fixed_activity_the_editor_cannot_save_is_explained_in_the_apps_words(
     assert said == {
         "title": "Give it a title.",
         "days": "Tick at least one day.",
-        "spotify": "That's not a Spotify share link. Paste one that starts with https://open.spotify.com, "
-        "or leave it empty.",
     }
 
 

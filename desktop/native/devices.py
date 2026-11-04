@@ -234,6 +234,41 @@ def run_off_ui(
     worker.start()
 
 
+def begin_pairing(
+    owner: QObject,
+    service: SyncService,
+    user_id: int,
+    done: Callable[[Any, Exception | None], None],
+) -> None:
+    """Ask for a pairing code off the UI thread. `owner` is who the answer goes back to."""
+    run_off_ui(owner, lambda: service.pair_start(user_id), done)
+
+
+def end_pairing(
+    owner: QObject, service: SyncService, done: Callable[[Any, Exception | None], None]
+) -> None:
+    """Close the open pairing code."""
+    run_off_ui(owner, service.pair_cancel, done)
+
+
+def unlink_phone(
+    owner: QObject,
+    service: SyncService,
+    user_id: int,
+    device_id: str,
+    done: Callable[[Any, Exception | None], None],
+) -> None:
+    """Remove a linked phone. The phone keeps what it already has."""
+    run_off_ui(owner, lambda: service.unlink(user_id, device_id, True), done)
+
+
+def sync_linked_phones(
+    owner: QObject, service: SyncService, done: Callable[[Any, Exception | None], None]
+) -> None:
+    """Sync every linked phone, with the same deadline Sync now already uses."""
+    run_off_ui(owner, lambda: service.sync_all(SYNC_DEADLINE_MS), done)
+
+
 class SyncDot(QWidget):
     """A small filled dot in the status strip. Its colour says the state; its words are the tooltip
     and the accessible name."""
@@ -325,13 +360,13 @@ class PairDialog(Dialog):
         self.code.setText("Making a code…")
         self._qr_payload = ""
         self.status.setText("")
-        run_off_ui(self, lambda: self.sync.pair_start(self.user_id), self._made)
+        begin_pairing(self, self.sync, self.user_id, self._made)
 
     def _made(self, offer: dict | None, problem: Exception | None) -> None:
         if not isValid(self) or self.closed:
             # Cancel came while the code was being made: end the code rather than leave it open.
             if offer is not None:
-                run_off_ui(self, self.sync.pair_cancel, lambda _result, _problem: None)
+                end_pairing(self, self.sync, lambda _result, _problem: None)
             return
         if problem is not None or offer is None:
             self.code.setText("")
@@ -366,7 +401,7 @@ class PairDialog(Dialog):
         self.closed = True
         self.timer.stop()
         super().reject()
-        run_off_ui(self, self.sync.pair_cancel, lambda _result, _problem: None)
+        end_pairing(self, self.sync, lambda _result, _problem: None)
 
 
 class RemoveDialog(Dialog):
@@ -542,7 +577,7 @@ class DevicesPanel(QWidget):
         def confirmed(result: int) -> None:
             if not isValid(self) or result != 1:
                 return
-            run_off_ui(self, lambda: service.unlink(user_id, phone["device_id"], True), gone)
+            unlink_phone(self, service, user_id, phone["device_id"], gone)
 
         dialog.finished.connect(confirmed)
         self._open_sheet(dialog)
@@ -565,7 +600,7 @@ class DevicesPanel(QWidget):
         if service is None:
             return
         self.sync_button.setEnabled(False)
-        run_off_ui(self, lambda: service.sync_all(SYNC_DEADLINE_MS), self._synced)
+        sync_linked_phones(self, service, self._synced)
 
     def _synced(self, rows: list | None, problem: Exception | None) -> None:
         if not isValid(self):

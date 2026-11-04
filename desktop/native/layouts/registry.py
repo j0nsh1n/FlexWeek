@@ -312,6 +312,24 @@ def sanitize_layout(raw: object) -> dict:
     return clean
 
 
+SURFACES = ("widgets", "material")
+SURFACE_DEFAULT = "widgets"
+
+
+def sanitize_surface(raw: object) -> str:
+    """The whole-window surface named by a look file.
+
+    `surface` is a top-level key, never one of the layout's main, day or options.
+    A missing key, an old file, or a name this build does not know means the
+    Widgets styles. The saved choice is not rewritten.
+    """
+    if isinstance(raw, dict):
+        raw = raw.get("surface", SURFACE_DEFAULT)
+    if isinstance(raw, str) and raw in SURFACES:
+        return raw
+    return SURFACE_DEFAULT
+
+
 def options_for(choice: dict | None, layout_id: str) -> dict[str, str]:
     """Every option of a layout, as the student set it or as the design ships."""
     stored = sanitize_layout(choice)["options"].get(layout_id, {})

@@ -57,8 +57,10 @@ from desktop.native.look import (
     block_time_colour,
     category_paint,
     class_outline,
+    effective_look,
     look_measures,
     readable_ink,
+    sanitize_look,
     text_scale,
 )
 from desktop.native.motion import EASE_MS, OUT, Clock, between, duration, moves
@@ -70,6 +72,10 @@ EDGE_PX = 7
 # Decision 14 of 0.17: a 3-pixel category edge, and the words kept this far inside a block.
 EDGE_WIDTH = 3
 RADIUS_BLOCK = RADIUS_CONTROL
+# Painted depth under a block. One pixel is inside the gap geometry already leaves between
+# blocks. Bold is darker at that same offset, so a stronger cast does not grow the block.
+BLOCK_SHADOW_OFFSET = 1.0
+BLOCK_SHADOW_ALPHA = {"soft": (0.08, 0.22), "bold": (0.14, 0.32)}
 INNER_PAD = 4
 TEXT_LEFT, TEXT_RIGHT, TEXT_TOP = 8, INNER_PAD, INNER_PAD
 # Blocks that share a time are half a column or less, so their words keep this much less at each side.
@@ -422,11 +428,48 @@ class BlockPainter:
         self.now(painter, track, minute)
         painter.restore()
 
+    def _block_shadow(self) -> tuple[float, float] | None:
+        """The cast under a block, as (offset, alpha), or nothing.
+
+        High contrast keeps its bold depth knob and still draws no shadow. Paper's depth is none,
+        so it stays flat. A painter with no look is left alone: layout painters that do not receive
+        the look cannot be told from High contrast here.
+        """
+        if self.colours.get("family") == "contrast" or self.look is None:
+            return None
+        if sanitize_look(self.look).get("preset") == "high-contrast":
+            return None
+        depth = effective_look(self.look)["depth"]
+        if depth not in BLOCK_SHADOW_ALPHA:
+            return None
+        light, dark = BLOCK_SHADOW_ALPHA[depth]
+        alpha = dark if self.colours.get("axis") == "dark" else light
+        return BLOCK_SHADOW_OFFSET, alpha
+
+    def _cast_shadow(self, painter: QPainter, shape: QPainterPath, rect: QRectF) -> None:
+        """The block's own rounded shape, one pixel down, before the fill covers it."""
+        cast = self._block_shadow()
+        if cast is None:
+            return
+        offset, alpha = cast
+        shade = QColor(0, 0, 0)
+        shade.setAlphaF(alpha)
+        painter.save()
+        painter.setPen(Qt.PenStyle.NoPen)
+        # Same width as the block, plus the one pixel under it. A clip already set stays in force.
+        band = QPainterPath()
+        band.addRect(QRectF(rect.left(), rect.top(), rect.width(), rect.height() + offset))
+        operation = Qt.ClipOperation.IntersectClip if painter.hasClipping() else Qt.ClipOperation.ReplaceClip
+        painter.setClipPath(band, operation)
+        painter.fillPath(shape.translated(0, offset), shade)
+        painter.restore()
+
     def body(self, painter: QPainter, rect: QRectF, drawn: Drawn) -> None:
         """A block's colour, outline, edge and marks: all of it but its words."""
         fill, _ink, outline, edge = self.fills(drawn)
         shape = QPainterPath()
         shape.addRoundedRect(rect, RADIUS_BLOCK, RADIUS_BLOCK)
+        self._cast_shadow(painter, shape, rect)
         painter.fillPath(shape, fill)
         homework = drawn.work and not drawn.done
         if outline is not None or homework and (drawn.pinned or drawn.held):

@@ -39,6 +39,13 @@ def test_linux_trim_survives_a_bundle_with_no_chromium_locales() -> None:
     assert '[[ -d "$BUNDLE/qtwebengine_locales" ]]' in FINISH
 
 
+def test_linux_bundle_drops_the_wayland_compositor_modules() -> None:
+    # The bundle check rejects them: they need libwayland-server, which desktops need not have.
+    trim = FINISH.index('rm -rf "$BUNDLE/PySide6/qml/QtWayland/Compositor"')
+    assert FINISH.index('rm -f "$BUNDLE"/libQt6WaylandCompositor*.so*') > 0
+    assert trim < FINISH.index("desktop.check_bundle"), "trim before the bundle check"
+
+
 def test_release_jobs_fail_if_chromium_lands_in_the_package() -> None:
     assert "Native package must not ship WebEngine" in WORKFLOW
     assert WORKFLOW.count("Native package must not ship WebEngine") == 2
@@ -93,6 +100,23 @@ def test_both_builds_ship_the_icon_and_the_fonts_where_the_app_looks_for_them() 
     before 0.16 for that reason, and the bundled Inter would not have either."""
     assert '--include-data-dir="$ROOT/desktop/assets=desktop/assets"' in LINUX
     assert "--include-data-dir=$(Join-Path $Root 'desktop\\assets')=desktop/assets" in WINDOWS
+    assert (
+        '--include-data-files="$ROOT/desktop/native/material/tokens.json=desktop/native/material/tokens.json"'
+        in LINUX
+    )
+    assert '--include-data-dir="$ROOT/desktop/native/material/qml=desktop/native/material/qml"' in LINUX
+    assert (
+        "--include-data-files=$(Join-Path $Root 'desktop\\native\\material\\tokens.json')"
+        "=desktop/native/material/tokens.json" in WINDOWS
+    )
+    assert (
+        "--include-data-dir=$(Join-Path $Root 'desktop\\native\\material\\qml')=desktop/native/material/qml"
+        in WINDOWS
+    )
+    sounds = ROOT / "desktop/assets/sounds"
+    assert (sounds / "LICENSE.txt").is_file()
+    assert (sounds / "soft-rain-loop.mp3").is_file()
+    assert (sounds / "lofi-hip-hop-loop.ogg").is_file()
     fonts = ROOT / "desktop/assets/fonts"
     for family in ("Inter", "Newsreader", "JetBrainsMono", "PixelifySans"):
         for face in ("Regular", "Medium", "SemiBold", "Bold"):

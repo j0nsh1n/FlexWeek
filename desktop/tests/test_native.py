@@ -9,6 +9,7 @@ import os
 import sys
 import time
 from collections.abc import Iterator
+from copy import deepcopy
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -30,6 +31,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.calendar import sunday_due
     from desktop.native.client import NativeClient
     from desktop.native.controller import NativeSession, session_days
+    from desktop.native.reuse import apply_plan
     from desktop.native.weekmodel import due_label
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
@@ -1574,6 +1576,184 @@ def test_a_chunk_of_a_tracked_assignment_takes_the_assignment_title_back(
     assert {b["title"] for b in chunks} == {"History essay"}
     # What the split is actually for still holds: the chunks are real placed blocks on one day.
     assert all(b["kind"] == "locked" and len(b["days"]) == 1 for b in chunks)
+
+
+def _auto_split_prefs() -> dict:
+    return {
+        "auto_split_pomodoro": True,
+        "timer_work_min": 30,
+        "timer_break_min": 15,
+        "timer_long_break_min": 30,
+        "timer_long_break_every": 4,
+    }
+
+
+def _mixed_split_week(session: NativeSession) -> tuple[dict, dict, dict]:
+    session.add_block(
+        {
+            "id": "school",
+            "title": "School",
+            "kind": "locked",
+            "duration_min": 360,
+            "days": [0],
+            "start": "08:00",
+            "category": "school",
+        }
+    )
+    session.add_homework(
+        {
+            "id": "essay",
+            "title": "Essay",
+            "due": sunday_due(session.week_start),
+            "estimate_min": 90,
+            "revision": 0,
+        }
+    )
+    session.add_homework(
+        {
+            "id": "quiz",
+            "title": "Quiz",
+            "due": sunday_due(session.week_start),
+            "estimate_min": 30,
+            "revision": 0,
+        }
+    )
+    school = next(block for block in session.blocks if block["id"] == "school")
+    essay = next(block for block in session.blocks if block.get("assignment_id") == "essay")
+    quiz = next(block for block in session.blocks if block.get("assignment_id") == "quiz")
+    return school, essay, quiz
+
+
+def _save_week_payload(qapp: QApplication, session: NativeSession) -> dict:
+    sent: list[dict] = []
+    original = session.client.request
+
+    def spy(method: str, path: str, body: object, *args: object, **kwargs: object) -> object:
+        if path == "/api/changes" and isinstance(body, dict):
+            sent.append(deepcopy(body))
+        return original(method, path, body, *args, **kwargs)
+
+    session.client.request = spy  # type: ignore[method-assign]
+    session.save()
+    wait_until(qapp, lambda: not session.busy)
+    session.client.request = original  # type: ignore[method-assign]
+    assert sent, "the split week was not saved"
+    weeks = sent[0].get("weeks") or []
+    assert weeks, sent[0]
+    return weeks[0]
+
+
+def test_auto_split_keeps_a_sibling_sessions_solver_start_and_cleared_pin(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    """A 90-minute essay that splits must not throw away apply_plan's start on a newly placed
+    30-minute quiz, or restore a pin the solver dropped on an unplaced one. The three
+    single-session chunk tests never have a sibling, so they stay green on the pre-plan week."""
+    session = signed_in(qapp, server.origin, "mixedsplit", create=True)
+    wait_until(qapp, lambda: session.preferences is not None)
+    session.save_preferences(_auto_split_prefs())
+    wait_until(qapp, lambda: bool((session.preferences or {}).get("auto_split_pomodoro")))
+    school, essay, quiz = _mixed_split_week(session)
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+
+    planned = deepcopy(session.blocks)
+    placed_trace = {
+        "placed": [
+            {**school, "start": "08:00", "days": [0], "duration_min": 360},
+            {**quiz, "start": "15:30", "days": [1], "duration_min": 30},
+            {**essay, "start": "16:00", "days": [1], "duration_min": 120},
+        ],
+        "unplaced": [],
+    }
+    applied = apply_plan(
+        planned,
+        placed_trace,
+        targets={essay["id"], quiz["id"]},
+        assignments=session.assignments,
+        week_start=session.week_start,
+    )
+    session.blocks = [{**block, "days": [2]} if block["id"] == "school" else block for block in applied]
+    session._apply_auto_split(placed_trace, planned)
+
+    placed_quiz = next(block for block in session.blocks if block.get("assignment_id") == "quiz")
+    assert placed_quiz.get("start") == "15:30", placed_quiz
+    assert placed_quiz.get("days") == [1], placed_quiz
+    assert not placed_quiz.get("pinned")
+    work = [block for block in session.blocks if block.get("pomodoro_role") == "work"]
+    assert [block["duration_min"] for block in work] == [30, 30, 30]
+    assert [block["title"] for block in work] == [
+        "Essay · focus 1/3",
+        "Essay · focus 2/3",
+        "Essay · focus 3/3",
+    ]
+    assert {block.get("assignment_id") for block in work} == {"essay"}
+    assert len([block for block in session.blocks if block.get("assignment_id") == "quiz"]) == 1
+    assert len(session.assignments) == 2
+    kept_school = next(block for block in session.blocks if block["id"] == "school")
+    assert kept_school.get("days") == [2], kept_school
+
+    payload = _save_week_payload(qapp, session)
+    saved = payload["blocks"]
+    saved_quiz = next(block for block in saved if block.get("assignment_id") == "quiz")
+    assert saved_quiz.get("start") == "15:30"
+    assert saved_quiz.get("days") == [1]
+    assert not saved_quiz.get("pinned")
+    saved_work = [block for block in saved if block.get("pomodoro_role") == "work"]
+    assert [block["duration_min"] for block in saved_work] == [30, 30, 30]
+    assert [block["title"] for block in saved_work] == [
+        "Essay · focus 1/3",
+        "Essay · focus 2/3",
+        "Essay · focus 3/3",
+    ]
+    assert len([block for block in saved if block.get("assignment_id") == "essay"]) == 3
+    assert len([block for block in saved if block.get("assignment_id") == "quiz"]) == 1
+
+    pinned_week = deepcopy(planned)
+    for block in pinned_week:
+        if block.get("assignment_id") == "quiz":
+            block["start"] = "15:00"
+            block["days"] = [0]
+            block["pinned"] = True
+    unplaced_trace = {
+        "placed": [
+            {**school, "start": "08:00", "days": [0], "duration_min": 360},
+            {**essay, "start": "16:00", "days": [1], "duration_min": 120},
+        ],
+        "unplaced": [{**quiz, "duration_min": 30, "days": [0, 1, 2, 3, 4]}],
+    }
+    applied_unplaced = apply_plan(
+        pinned_week,
+        unplaced_trace,
+        targets={essay["id"], quiz["id"]},
+        assignments=session.assignments,
+        week_start=session.week_start,
+    )
+    session.blocks = applied_unplaced
+    session._apply_auto_split(unplaced_trace, pinned_week)
+
+    leftover = next(block for block in session.blocks if block.get("assignment_id") == "quiz")
+    assert leftover.get("start") in (None, ""), leftover
+    assert not leftover.get("pinned"), leftover
+    leftover_work = [block for block in session.blocks if block.get("pomodoro_role") == "work"]
+    assert [block["duration_min"] for block in leftover_work] == [30, 30, 30]
+    assert [block["title"] for block in leftover_work] == [
+        "Essay · focus 1/3",
+        "Essay · focus 2/3",
+        "Essay · focus 3/3",
+    ]
+    assert len([block for block in session.blocks if block.get("assignment_id") == "essay"]) == 3
+    assert len([block for block in session.blocks if block.get("assignment_id") == "quiz"]) == 1
+
+    leftover_payload = _save_week_payload(qapp, session)
+    leftover_saved = leftover_payload["blocks"]
+    leftover_quiz = next(block for block in leftover_saved if block.get("assignment_id") == "quiz")
+    assert leftover_quiz.get("start") in (None, "")
+    assert not leftover_quiz.get("pinned")
+    leftover_saved_work = [block for block in leftover_saved if block.get("pomodoro_role") == "work"]
+    assert [block["duration_min"] for block in leftover_saved_work] == [30, 30, 30]
+    assert len([block for block in leftover_saved if block.get("assignment_id") == "essay"]) == 3
+    assert len([block for block in leftover_saved if block.get("assignment_id") == "quiz"]) == 1
 
 
 def _two_assignments(session: NativeSession) -> None:

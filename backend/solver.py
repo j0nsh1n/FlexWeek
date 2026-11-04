@@ -39,6 +39,12 @@ def _blocks(blocks: list[TimeBlock]) -> str:
     return json.dumps([block.model_dump() for block in blocks])
 
 
+def _rules(plan_rules: dict | None) -> str | None:
+    if plan_rules is None:
+        return None
+    return json.dumps(plan_rules)
+
+
 def solve(
     blocks: list[TimeBlock],
     *,
@@ -47,6 +53,7 @@ def solve(
     extra_occ: list[int] | None = None,
     work_windows: list[WorkWindow] | None = None,
     now_floor: tuple[int, int] | None = None,
+    plan_rules: dict | None = None,
 ) -> SolveTrace:
     """Place flexible blocks around locked ones. Pure and synchronous."""
     raw = flexweek_engine.solve(
@@ -57,6 +64,7 @@ def solve(
         _windows(work_windows),
         _clock(),
         now_floor,
+        _rules(plan_rules),
     )
     return SolveTrace.model_validate(json.loads(raw))
 
@@ -71,6 +79,7 @@ def reschedule_after_miss(
     slack_deadlines: dict[str, tuple[int, int]] | None = None,
     extra_occ: list[int] | None = None,
     work_windows: list[WorkWindow] | None = None,
+    plan_rules: dict | None = None,
 ) -> SolveTrace:
     """Mark one locked occurrence missed, solve again, and describe changed flexible placements."""
     raw = flexweek_engine.reschedule_after_miss(
@@ -83,6 +92,7 @@ def reschedule_after_miss(
         extra_occ,
         _windows(work_windows),
         _clock(),
+        _rules(plan_rules),
     )
     return SolveTrace.model_validate(json.loads(raw))
 
@@ -99,6 +109,7 @@ def reschedule_running_late(
     extra_occ: list[int] | None = None,
     work_windows: list[WorkWindow] | None = None,
     now_floor: tuple[int, int] | None = None,
+    plan_rules: dict | None = None,
 ) -> SolveTrace:
     """Occupy a late window on one day, solve again, and describe changed flexible placements."""
     raw = flexweek_engine.reschedule_running_late(
@@ -113,5 +124,6 @@ def reschedule_running_late(
         _windows(work_windows),
         _clock(),
         now_floor,
+        _rules(plan_rules),
     )
     return SolveTrace.model_validate(json.loads(raw))

@@ -792,6 +792,103 @@ fn test_apply_plan_writes_solver_starts_onto_the_week() {
 }
 
 #[test]
+fn test_apply_plan_saves_both_halves_of_a_split() {
+    let blocks = [json!({
+        "id": "essay",
+        "title": "Essay",
+        "kind": "flexible",
+        "days": [4, 5],
+        "duration_min": 120,
+        "course": "English",
+    })];
+    let trace = json!({
+        "placed": [
+            {"id": "essay", "days": [4], "start": "16:00", "duration_min": 60},
+            {"id": "essay~2", "days": [5], "start": "10:00", "duration_min": 60},
+        ],
+        "unplaced": [],
+    });
+    let planned = apply_plan(&blocks, Some(&trace), None, None, None);
+    let saved: Vec<_> = planned
+        .iter()
+        .map(|item| {
+            (
+                item["id"].as_str().unwrap().to_string(),
+                item["duration_min"].as_i64().unwrap(),
+                item.get("start")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                item["days"].clone(),
+                item["course"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        saved,
+        vec![
+            (
+                "essay".into(),
+                60,
+                Some("16:00".into()),
+                json!([4]),
+                "English".into()
+            ),
+            (
+                "essay~2".into(),
+                60,
+                Some("10:00".into()),
+                json!([5]),
+                "English".into()
+            ),
+        ]
+    );
+}
+
+#[test]
+fn test_apply_plan_does_not_store_the_full_task_in_a_one_hour_gap() {
+    // Friday 16:00–17:00 is free and school occupies 17:00–18:00. Only one 60-minute
+    // half fits. Saving the original 120 there overlaps school.
+    let blocks = [
+        json!({
+            "id": "school", "title": "School", "kind": "locked", "days": [4],
+            "start": "17:00", "duration_min": 60,
+        }),
+        json!({
+            "id": "essay", "title": "Essay", "kind": "flexible", "days": [4, 5],
+            "duration_min": 120, "course": "English",
+        }),
+    ];
+    let trace = json!({
+        "placed": [
+            {"id": "school", "kind": "locked", "days": [4], "start": "17:00", "duration_min": 60},
+            {"id": "essay", "days": [4], "start": "16:00", "duration_min": 60},
+        ],
+        "unplaced": [{"id": "essay~2", "days": [4, 5], "duration_min": 60}],
+    });
+    let planned = apply_plan(&blocks, Some(&trace), None, None, None);
+    let (settled, lost) = settle_placements(&planned, &Map::new(), PLAN_WEEK, &[]);
+    let essay = settled
+        .iter()
+        .find(|item| item["id"] == "essay")
+        .expect("essay");
+    assert_eq!(
+        (
+            essay["duration_min"].as_i64(),
+            essay.get("start").and_then(Value::as_str)
+        ),
+        (Some(60), Some("16:00"))
+    );
+    let half = settled
+        .iter()
+        .find(|item| item["id"] == "essay~2")
+        .expect("unplaced half");
+    assert_eq!(half["duration_min"], 60);
+    assert!(half.get("start").is_none());
+    assert_eq!(half["course"], "English");
+    assert!(lost.is_empty());
+}
+
+#[test]
 fn test_apply_plan_clears_a_start_the_solver_could_not_keep() {
     let blocks = [
         json!({"id": "essay", "kind": "flexible", "days": [0], "start": "16:00", "duration_min": 60}),

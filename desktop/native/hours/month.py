@@ -467,11 +467,19 @@ class MonthCanvas(QWidget):
     def _squeezed(self, heights: list[float]) -> list[float] | None:
         """Every row between its tight size and its own, so together they are exactly the view; None when
         even the tight rows do not fit, and the month scrolls as it does with nothing open."""
+        n = len(heights)
         low = self.tight_row()
-        if self._room < low * len(heights):
+        if n == 0 or self._room < low * n:
             return None
-        share = (self._room - low * len(heights)) / sum(height - low for height in heights)
-        return [math.floor(low + (height - low) * share) for height in heights]
+        spare = sum(height - low for height in heights)
+        if spare <= 0:
+            return [float(low)] * n
+        share = (self._room - low * n) / spare
+        fitted = [math.floor(low + (height - low) * share) for height in heights]
+        gap = self._room - int(sum(fitted))
+        if gap > 0:
+            fitted[-1] += gap
+        return fitted
 
     def base_row(self, row: int) -> float:
         """A week's row at its own size: its busiest date's chips, from LEAST_CHIPS to MOST_CHIPS,
@@ -941,6 +949,13 @@ class MonthGrid(QWidget):
     def set_tight(self, tight: bool) -> None:
         """Panels above the month are open: its rows shrink to fit the view rather than scroll."""
         self.canvas.set_tight(tight)
+        self.canvas.set_room(self.scroll.viewport().height())
+        QTimer.singleShot(0, self._sync_room)
+
+    def _sync_room(self) -> None:
+        if not isValid(self):
+            return
+        self.canvas.set_room(self.scroll.viewport().height())
 
     def set_palette(self, palette: dict) -> None:
         self._palette = palette

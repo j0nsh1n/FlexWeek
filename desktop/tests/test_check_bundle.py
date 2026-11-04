@@ -3,7 +3,15 @@ from __future__ import annotations
 import struct
 from pathlib import Path
 
-from desktop.check_bundle import asset_problems, linux_problems, parse_readelf, pe_imports, windows_problems
+from desktop.check_bundle import (
+    asset_problems,
+    linux_problems,
+    material_problems,
+    parse_readelf,
+    pe_imports,
+    sound_problems,
+    windows_problems,
+)
 
 READELF_DYNAMIC = """
 Dynamic section at offset 0x1d8 contains 30 entries:
@@ -160,3 +168,33 @@ def test_a_bundle_without_an_asset_fails_and_names_it(tmp_path: Path) -> None:
     (bundle / "desktop" / "assets" / "fonts").mkdir()
     (bundle / "desktop" / "assets" / "fonts" / "Inter-Bold.ttf").write_bytes(b"ttf")
     assert asset_problems(assets, bundle) == []
+
+
+def test_a_bundle_without_the_material_shell_names_the_missing_files(tmp_path: Path) -> None:
+    """A frozen app looks beside the executable for the shell and the schemes."""
+    bundle = tmp_path / "bundle"
+    (bundle / "desktop" / "native" / "material" / "qml").mkdir(parents=True)
+    assert material_problems(bundle) == [
+        "desktop/native/material/tokens.json is missing, so Material 3 cannot open",
+        "desktop/native/material/qml/Main.qml is missing, so Material 3 cannot open",
+    ]
+    (bundle / "desktop" / "native" / "material" / "tokens.json").write_text("{}", encoding="utf-8")
+    (bundle / "desktop" / "native" / "material" / "qml" / "Main.qml").write_text(
+        "import QtQuick\n", encoding="utf-8"
+    )
+    assert material_problems(bundle) == []
+
+
+def test_a_bundle_without_focus_sounds_names_the_missing_files(tmp_path: Path) -> None:
+    bundle = tmp_path / "bundle"
+    (bundle / "desktop" / "assets" / "sounds").mkdir(parents=True)
+    assert sound_problems(bundle) == [
+        "desktop/assets/sounds/LICENSE.txt is missing, so ambient focus audio cannot play",
+        "desktop/assets/sounds/soft-rain-loop.mp3 is missing, so ambient focus audio cannot play",
+        "desktop/assets/sounds/lofi-hip-hop-loop.ogg is missing, so ambient focus audio cannot play",
+    ]
+    folder = bundle / "desktop" / "assets" / "sounds"
+    (folder / "LICENSE.txt").write_text("CC0 1.0\n", encoding="utf-8")
+    (folder / "soft-rain-loop.mp3").write_bytes(b"mp3")
+    (folder / "lofi-hip-hop-loop.ogg").write_bytes(b"ogg")
+    assert sound_problems(bundle) == []

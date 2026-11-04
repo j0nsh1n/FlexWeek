@@ -1,0 +1,137 @@
+{
+  "setup": {
+    "seed": "rig",
+    "look": "light-frost",
+    "clock": "2026-11-05T15:40",
+    "size": [
+      1280,
+      800
+    ],
+    "clock_24h": false
+  },
+  "steps": [
+    {
+      "click": "settingsGear"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "click": "chooseMaterial"
+    },
+    {
+      "wait": 1000
+    },
+    {
+      "see": "materialRail"
+    },
+    {
+      "click": "navMonth"
+    },
+    {
+      "see": "materialMonth"
+    },
+    {
+      "see": "monthDate-2026-11-05"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "shot": "material-month-light-grid"
+    },
+    {
+      "click": "monthDate-2026-11-05"
+    },
+    {
+      "see": "monthDateBar"
+    },
+    {
+      "see": "Open Day"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "shot": "material-month-light-picked"
+    },
+    {
+      "click": "monthClose"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "click": "monthNext"
+    },
+    {
+      "see": "monthDate-2026-12-01"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "material-month-light-december"
+    },
+    {
+      "click": "monthPrev"
+    },
+    {
+      "see": "monthDate-2026-11-05"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "click": "monthPrev"
+    },
+    {
+      "see": "monthDate-2026-10-01"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "material-month-light-october"
+    },
+    {
+      "click": "monthNext"
+    },
+    {
+      "see": "monthDate-2026-11-05"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "click": "monthDate-2026-11-05"
+    },
+    {
+      "see": "monthDateBar"
+    },
+    {
+      "click": "monthOpenDay"
+    },
+    {
+      "see": "materialDay"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "material-month-light-day"
+    },
+    {
+      "click": "navSettings"
+    },
+    {
+      "click": "useWidgets"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "see": "Math worksheet"
+    }
+  ]
+}

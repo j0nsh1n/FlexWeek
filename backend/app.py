@@ -7,7 +7,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 
 import flexweek_engine  # type: ignore[import-untyped]
@@ -548,6 +548,14 @@ class Preferences(BaseModel):
         default_factory=list, max_length=21, exclude_if=lambda value: not value
     )
     day_cutoff: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    # Planner switches. Omitted at the default so an account saved before these columns
+    # still reads as the planner it has today: weekends open, no gap, urgent first, no split.
+    weekend_homework_free: bool = Field(default=False, exclude_if=lambda value: value is False)
+    buffer_min: Literal[0, 15, 30] = Field(default=0, exclude_if=lambda value: value == 0)
+    urgent_first: bool = Field(default=True, exclude_if=lambda value: value is True)
+    split_long_tasks: bool = Field(default=False, exclude_if=lambda value: value is False)
+    # The week grid reads this. The planner does not.
+    show_weekends: bool = Field(default=True, exclude_if=lambda value: value is True)
     alert_volume: int = Field(default=80, ge=0, le=100, exclude_if=lambda value: value == 80)
     end_chime: bool = Field(default=False, exclude_if=lambda value: value is False)
     tray_notifications: bool = Field(default=True, exclude_if=lambda value: value is True)
@@ -582,6 +590,17 @@ class Preferences(BaseModel):
     # new account; an account from before 0.18.5 that never chose is stamped 24-hour when the store
     # opens.
     clock_24h: bool = Field(default=False, exclude_if=lambda value: value is False)
+    # What plays when focus starts. Off is omitted, as the other comfort defaults are. Kept in
+    # comfort_json, on this computer: a synced column would make an older phone update a column it
+    # does not have.
+    focus_audio: Literal["off", "rain", "lo-fi", "white-noise", "spotify"] = Field(
+        default="off", exclude_if=lambda value: value == "off"
+    )
+    # Material 3's focus rules. Auto-mute holds reminders until the focus work phase is over;
+    # auto-complete moves the finished session's block to Done. Both are comfort values like the
+    # audio choice, each omitted at its default.
+    focus_auto_mute: bool = Field(default=True, exclude_if=lambda value: value is True)
+    focus_auto_complete: bool = Field(default=False, exclude_if=lambda value: value is False)
     setup: SetupProgress | None = Field(default=None, exclude_if=lambda value: value is None)
 
     _spotify_url = field_validator("default_spotify_url")(valid_spotify_url)
@@ -832,31 +851,62 @@ def encode_availability(preferences: Preferences) -> str:
 
 
 def encode_comfort(preferences: Preferences) -> str:
-    return json.dumps(
-        {
-            "alert_volume": preferences.alert_volume,
-            "end_chime": preferences.end_chime,
-            "tray_notifications": preferences.tray_notifications,
-            "start_at_login": preferences.start_at_login,
-            "preferred_view": preferences.preferred_view,
-            "sidebar_collapsed": preferences.sidebar_collapsed,
-            "sidebar_width_px": preferences.sidebar_width_px,
-            "theme_pack": preferences.theme_pack,
-            "accent": preferences.accent,
-            "accent_chips": preferences.accent_chips,
-            "motion": preferences.motion,
-            "alarm_tone": preferences.alarm_tone,
-            "planning_style": preferences.planning_style,
-            "drag_step_min": preferences.drag_step_min,
-            "clock_24h": preferences.clock_24h,
-            "setup": preferences.setup.model_dump() if preferences.setup is not None else None,
-        },
-        separators=(",", ":"),
-    )
+    comfort: dict[str, Any] = {
+        "alert_volume": preferences.alert_volume,
+        "end_chime": preferences.end_chime,
+        "tray_notifications": preferences.tray_notifications,
+        "start_at_login": preferences.start_at_login,
+        "preferred_view": preferences.preferred_view,
+        "sidebar_collapsed": preferences.sidebar_collapsed,
+        "sidebar_width_px": preferences.sidebar_width_px,
+        "theme_pack": preferences.theme_pack,
+        "accent": preferences.accent,
+        "accent_chips": preferences.accent_chips,
+        "motion": preferences.motion,
+        "alarm_tone": preferences.alarm_tone,
+        "planning_style": preferences.planning_style,
+        "drag_step_min": preferences.drag_step_min,
+        "clock_24h": preferences.clock_24h,
+        "setup": preferences.setup.model_dump() if preferences.setup is not None else None,
+    }
+    if preferences.focus_audio != "off":
+        comfort["focus_audio"] = preferences.focus_audio
+    if not preferences.focus_auto_mute:
+        comfort["focus_auto_mute"] = False
+    if preferences.focus_auto_complete:
+        comfort["focus_auto_complete"] = True
+    return json.dumps(comfort, separators=(",", ":"))
+
+
+_FOCUS_AUDIO = frozenset({"off", "rain", "lo-fi", "white-noise", "spotify"})
+_FOCUS_FLAGS = ("focus_auto_mute", "focus_auto_complete")
+
+
+def _stored_focus_extras(row: Row) -> dict[str, Any]:
+    """The engine's preference reader drops comfort keys it does not know. The focus audio choice
+    and the two focus rules are those, so they are put back here. Defaults are not stored."""
+    raw = dict(row).get("comfort_json")
+    if not isinstance(raw, str) or not raw:
+        return {}
+    try:
+        comfort = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(comfort, dict):
+        return {}
+    extras: dict[str, Any] = {}
+    audio = comfort.get("focus_audio")
+    if audio in _FOCUS_AUDIO and audio != "off":
+        extras["focus_audio"] = str(audio)
+    for name in _FOCUS_FLAGS:
+        if isinstance(comfort.get(name), bool):
+            extras[name] = comfort[name]
+    return extras
 
 
 def preferences_from_row(row: Row) -> dict:
     fields = json.loads(flexweek_engine.preferences_fields(json.dumps(dict(row))))
+    fields.update(_stored_focus_extras(row))
     return Preferences(**fields).model_dump()
 
 
@@ -888,6 +938,11 @@ def write_preferences(db: Connection, user_id: int, preferences: Preferences) ->
                 "timer_long_break_min": preferences.timer_long_break_min,
                 "timer_long_break_every": preferences.timer_long_break_every,
                 "auto_split_pomodoro": int(preferences.auto_split_pomodoro),
+                "weekend_homework_free": int(preferences.weekend_homework_free),
+                "buffer_min": preferences.buffer_min,
+                "urgent_first": int(preferences.urgent_first),
+                "split_long_tasks": int(preferences.split_long_tasks),
+                "show_weekends": int(preferences.show_weekends),
                 "default_spotify_url": preferences.default_spotify_url,
                 "alarms_json": json.dumps(
                     [alarm.model_dump() for alarm in preferences.alarms], separators=(",", ":")
@@ -1562,6 +1617,8 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         with connect(path) as db:
             owned = require_own_assignments(db, account["id"], ids) if ids else {}
             availability = db.availability_json(account["id"])
+            stored_prefs = db.preference_row(account["id"])
+        plan_rules = json.loads(stored_prefs) if stored_prefs else None
         extra_occ, work_windows = solve_availability(availability)
         blocks = week.blocks
         extra_deadlines = None
@@ -1580,6 +1637,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 slack_deadlines=extra_slack,
                 extra_occ=extra_occ,
                 work_windows=work_windows,
+                plan_rules=plan_rules,
             ).model_dump()
         if week.running_late is not None:
             return reschedule_running_late(
@@ -1593,6 +1651,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 extra_occ=extra_occ,
                 work_windows=work_windows,
                 now_floor=week.running_late.now_floor,
+                plan_rules=plan_rules,
             ).model_dump()
         return solve(
             blocks,
@@ -1601,6 +1660,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             extra_occ=extra_occ,
             work_windows=work_windows,
             now_floor=week.now_floor,
+            plan_rules=plan_rules,
         ).model_dump()
 
     @app.get("/api/health")

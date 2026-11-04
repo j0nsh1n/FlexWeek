@@ -200,7 +200,7 @@ fn migration_is_additive_and_idempotent() {
 #[test]
 fn scan_stamps_new_changed_deleted_once() {
     let mut conn = db("a", true);
-    assert_eq!(scan(&mut conn, 1, 1_000).unwrap(), 12); // account and 11 account-wide preferences
+    assert_eq!(scan(&mut conn, 1, 1_000).unwrap(), 12); // account and 11 preferences; the five planner defaults are not a choice yet
     assert_eq!(scan(&mut conn, 1, 1_000).unwrap(), 0);
     put_assignment(&conn, "a1", "Read");
     assert_eq!(scan(&mut conn, 1, 1_001).unwrap(), 1);
@@ -353,8 +353,9 @@ fn duplicate_and_echo_are_noops_and_remote_scan_does_not_restamp() {
     assert_eq!(apply_batch(&mut b, &first, 1_001).unwrap().applied, 0);
     assert_eq!(state(&b), before);
     assert_eq!(scan(&mut b, 1, 1_002).unwrap(), 0);
-    // B holds 13 records, all of them stamped by A (account + 11 preferences + 1 assignment),
-    // numbered 1..=13 locally; sending them back to A must skip all and still advance the cursor.
+    // B holds 13 records, all of them stamped by A (account + 11 preferences + 1 assignment).
+    // The five planner defaults were never published. Sending the 13 back to A must skip
+    // all of them and still advance the cursor.
     let back = batch(&b, 0, "a");
     assert_eq!(
         (back.records.len(), back.next_since, back.more),
@@ -1043,4 +1044,136 @@ fn a_hand_move_saved_on_an_old_revision_is_refused() {
         json!([0]),
         "the refused move changed nothing"
     );
+}
+
+fn planner_prefs(conn: &Connection) -> (i64, i64, i64, i64, i64) {
+    conn.query_row(
+        "SELECT weekend_homework_free, buffer_min, urgent_first, split_long_tasks, show_weekends
+         FROM preferences",
+        [],
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        },
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_new_account_keeps_the_old_planner_until_a_setting_changes() {
+    let conn = db("a", true);
+    assert_eq!(planner_prefs(&conn), (0, 0, 1, 0, 1));
+}
+
+#[test]
+fn planner_settings_round_trip_and_an_unknown_pref_does_not_stop_the_batch() {
+    // Desktop chose the five settings and scanned. The phone was upgraded onto the
+    // migration defaults and scans later. That scan must not reset the desktop.
+    let mut desktop = db("a", true);
+    let mut phone = db("b", true);
+    desktop
+        .execute(
+            "UPDATE preferences SET weekend_homework_free=1, buffer_min=15, urgent_first=0,
+             split_long_tasks=1, show_weekends=0",
+            [],
+        )
+        .unwrap();
+    scan(&mut desktop, 1, 1_000).unwrap();
+    scan(&mut phone, 1, 2_000).unwrap();
+    apply_batch(&mut desktop, &batch(&phone, 0, "a"), 3_000).unwrap();
+    assert_eq!(planner_prefs(&desktop), (1, 15, 0, 1, 0));
+
+    let sent = batch(&desktop, 0, "b");
+    for (key, value) in [
+        ("weekend_homework_free", 1),
+        ("buffer_min", 15),
+        ("urgent_first", 0),
+        ("split_long_tasks", 1),
+        ("show_weekends", 0),
+    ] {
+        let record = sent
+            .records
+            .iter()
+            .find(|record| record.entity == "pref" && record.key == key)
+            .unwrap_or_else(|| panic!("{key} was not exported"));
+        assert_eq!(record.body, Some(json!(value)));
+    }
+    apply_batch(&mut phone, &sent, 4_000).unwrap();
+    assert_eq!(planner_prefs(&phone), (1, 15, 0, 1, 0));
+
+    let mut sent = batch(&desktop, 0, "b");
+    sent.records.push(Record {
+        entity: "pref".into(),
+        key: "planner_magic".into(),
+        body: Some(json!(1)),
+        hlc: 1_100 << 16,
+        device_id: "a".into(),
+        seq: 100,
+    });
+    sent.records.push(Record {
+        entity: "assignment".into(),
+        key: "still-good".into(),
+        body: Some(assignment("still-good", "Still good")),
+        hlc: 1_101 << 16,
+        device_id: "a".into(),
+        seq: 101,
+    });
+    let report = apply_batch(&mut phone, &sent, 5_000).unwrap();
+    assert_eq!(report.quarantined, 1);
+    assert_eq!(
+        get_assignment(&phone, "still-good"),
+        Some(assignment("still-good", "Still good"))
+    );
+    assert_eq!(planner_prefs(&phone), (1, 15, 0, 1, 0));
+
+    // Choosing the schema default later is a real edit and still syncs.
+    desktop
+        .execute(
+            "UPDATE preferences SET weekend_homework_free=0, buffer_min=0, urgent_first=1,
+             split_long_tasks=0, show_weekends=1",
+            [],
+        )
+        .unwrap();
+    scan(&mut desktop, 1, 6_000).unwrap();
+    apply_batch(&mut phone, &batch(&desktop, 0, "b"), 7_000).unwrap();
+    assert_eq!(planner_prefs(&phone), (0, 0, 1, 0, 1));
+    assert_eq!(planner_prefs(&desktop), (0, 0, 1, 0, 1));
+}
+
+fn save_planner(conn: &Connection, chosen: (i64, i64, i64, i64, i64)) {
+    let raw = flexweek_store::preference_row(conn, 1).unwrap().unwrap();
+    let mut fields: Value = serde_json::from_str(&raw).unwrap();
+    let (weekend, buffer, urgent, split, show) = chosen;
+    fields["weekend_homework_free"] = json!(weekend);
+    fields["buffer_min"] = json!(buffer);
+    fields["urgent_first"] = json!(urgent);
+    fields["split_long_tasks"] = json!(split);
+    fields["show_weekends"] = json!(show);
+    flexweek_store::write_preferences(conn, 1, &fields.to_string()).unwrap();
+    conn.execute_batch("COMMIT").unwrap();
+}
+
+#[test]
+fn an_explicit_return_to_the_defaults_beats_older_remote_choices() {
+    // Saved away from the defaults, then saved back, and nothing has been scanned yet.
+    // Those defaults are a choice. An older remote batch must not replace them.
+    let mut local = db("a", true);
+    save_planner(&local, (1, 15, 0, 1, 0));
+    save_planner(&local, (0, 0, 1, 0, 1));
+    let mut remote = db("b", true);
+    remote
+        .execute(
+            "UPDATE preferences SET weekend_homework_free=1, buffer_min=15, urgent_first=0,
+             split_long_tasks=1, show_weekends=0",
+            [],
+        )
+        .unwrap();
+    scan(&mut remote, 1, 1_000).unwrap();
+    apply_batch(&mut local, &batch(&remote, 0, "a"), 2_000).unwrap();
+    assert_eq!(planner_prefs(&local), (0, 0, 1, 0, 1));
 }

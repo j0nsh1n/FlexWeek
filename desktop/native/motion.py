@@ -42,7 +42,7 @@ class Level:
 
 # The stored ids (look.MOTION_LEVELS), which saved preferences and custom looks use. "extra" is
 # shown as More. Reduce keeps the fades and nothing travels: no slide, rise, drift, zoom or lift.
-# More is 2.5 times as slow, so the standard ease of 180 ms is 450 ms: at 1.45 it was only 260 ms and
+# More is 2.5 times as slow, so the standard planning ease of 220 ms is 550 ms. At 1.45 it was
 # hard to tell from Normal.
 LEVELS = {
     "normal": Level(1.0, 1.0),
@@ -64,7 +64,7 @@ DRIFT_PX = 16
 RISE_PX = 8
 # Notices, dialogs, blocks settling after a plan: long enough to see where things went, short
 # enough never to feel like waiting.
-EASE_MS = 180
+EASE_MS = 220
 # Settings sliding in over the week, and how much the week behind it dims (decision 30).
 OVER_MS, OVER_DIM = 200, 0.2
 # The segmented control's selection sliding to the segment chosen (decision 32).

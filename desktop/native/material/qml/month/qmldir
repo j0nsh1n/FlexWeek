@@ -1,0 +1,3 @@
+module month
+MonthCell 1.0 MonthCell.qml
+DateBar 1.0 DateBar.qml

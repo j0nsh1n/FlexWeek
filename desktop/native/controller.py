@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import date, datetime, timedelta
+from typing import Any
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -113,6 +114,7 @@ from desktop.native.weekmodel import (
     homework_time_sentence,
     length_label,
     minute_of,
+    moved_words,
 )
 
 WEEK_OVER = "This week is over, so nothing was planned. Plan this week or a later one."
@@ -207,6 +209,8 @@ class NativeSession(QObject):
     status = Signal(str)
     # Each save's outcome, for words that must wait for it: (stored, what the status line says).
     save_finished = Signal(bool, str)
+    # Toast words for a hand move that has just been saved, including one that waited out a save.
+    hand_placed = Signal(str)
     plan_conflicts = Signal(list)
     planned = Signal(str)
     focus_changed = Signal()
@@ -294,6 +298,10 @@ class NativeSession(QObject):
         self.now_ms = lambda: int(time.time() * 1000)
         self._focus_busy = False
         self._pending_focus: dict | None = None
+        # Material 3's focus rules (mute reminders, finish the block) apply only while Material is the
+        # surface in use. The window hands in the question; the Widgets styles never set it.
+        self.material_owns: Callable[[], bool] | None = None
+        self._held_alerts: list[dict] = []
         # Finished focus sessions, with their length, not yet added to their homework.
         self._credits_waiting: list[tuple[dict, int]] = []
         self._record_history = True
@@ -319,6 +327,18 @@ class NativeSession(QObject):
         self.plan_asked_week: str | None = None
         # School and activities to stand in every week from a week on, sent with that week's next save.
         self._standing: dict | None = None
+        # One block let go while a save is in flight. The save's reply replaces the week, so the move
+        # is applied on the next turn after that reply, not during it. A later let-go replaces it.
+        self._hand_waiting: tuple[str, int, int, int, int] | None = None
+        # What setup has kept and not yet written, one request at a time: preferences, then study
+        # hours, then the week. A second request would replace the first on this session.
+        self.setup_prefs: dict = {}
+        self.setup_work_windows: list[dict] | None = None
+        self.setup_week = False
+        # The app's one sync host. Pairing, removal and Sync now use it; this session does not start
+        # another.
+        self._sync_host: QObject | None = None
+        self.busy_changed.connect(self._resume_pending)
         self._reminder_ticket = 0
         self._reminder_fetching: str | None = None
         self._reminder_week: str | None = None
@@ -366,11 +386,23 @@ class NativeSession(QObject):
             else:
                 self._say(error.message)
 
+    def _drop_setup(self) -> None:
+        """Unsent setup answers belong to the account that gave them."""
+        self.setup_prefs = {}
+        self.setup_work_windows = None
+        self.setup_week = False
+
+    def _drop_other_setup(self, account_id: object) -> None:
+        """A different account does not keep the previous one's unsent setup answers."""
+        if self.account is None or self.account["id"] != account_id:
+            self._drop_setup()
+
     def _clear_local(self) -> None:
         if self.account is not None:
             self.focus_store.pop(self.account["id"], None)
         self._credits_waiting.clear()
         self.account = None
+        self._drop_setup()
         self.week_start = current_week_start()
         self.blocks = []
         self.revision = 0
@@ -415,6 +447,7 @@ class NativeSession(QObject):
         self._history_label = "editing the week"
         self.needs_time = {}
         self._reset_focus(persist=False)
+        self._held_alerts.clear()
         self.fired_reminders.clear()
         self.fired_alarms.clear()
         self.snoozed_alarms.clear()
@@ -685,6 +718,9 @@ class NativeSession(QObject):
         self.client.adopt_session(token)
 
         def ok(data: dict) -> None:
+            if not self._alive(ticket):
+                return
+            self._drop_other_setup(data["id"])
             if not self._idle(ticket):
                 return
             self.client.set_account(data)
@@ -719,6 +755,7 @@ class NativeSession(QObject):
         def ok(data: dict) -> None:
             if not self._alive(ticket):
                 return
+            self._drop_other_setup(data["id"])
             self.client.set_account(data)
             self.account = {"id": data["id"], "username": data["username"]}
             self.new_account = True
@@ -741,6 +778,9 @@ class NativeSession(QObject):
         self._say("Signing in…")
 
         def ok(data: dict) -> None:
+            if not self._alive(ticket):
+                return
+            self._drop_other_setup(data["id"])
             if not self._idle(ticket):
                 return
             self.client.set_account(data)
@@ -902,6 +942,98 @@ class NativeSession(QObject):
         self.conflict = False
         self.dirty_assignments.clear()
         self.load_week(self.week_start, discard=True, said="Reloaded this week.")
+
+    def use_sync_host(self, host: QObject | None) -> None:
+        """Use the sync host the app already started. This session does not start a second one."""
+        self._sync_host = host
+
+    def _sync_service(self) -> tuple[QObject, Any, int] | None:
+        host = self._sync_host
+        account = self.account
+        service = getattr(host, "service", None) if host is not None else None
+        if host is None or service is None or account is None:
+            return None
+        return host, service, int(account["id"])
+
+    def begin_pairing(self, done: Callable[[Any, Exception | None], None]) -> bool:
+        """Ask for a pairing code on the app's sync host. A host that is not running yet is started
+        first, as Pair a phone does. False with no host or account, and then `done` is not called."""
+        host = self._sync_host
+        account = self.account
+        if host is None or account is None:
+            return False
+        user_id = int(account["id"])
+
+        def pair(service: Any) -> None:
+            from desktop.native.devices import begin_pairing as start
+
+            start(host, service, user_id, done)
+
+        service = getattr(host, "service", None)
+        if service is not None:
+            pair(service)
+            return True
+        ensure = getattr(host, "ensure", None)
+        if not callable(ensure):
+            return False
+
+        def ready(started: Any) -> None:
+            if started is None:
+                from desktop.native.devices import NO_SYNC_WORDS
+
+                done(None, RuntimeError(NO_SYNC_WORDS))
+                return
+            pair(started)
+
+        ensure(ready)
+        return True
+
+    def end_pairing(self, done: Callable[[Any, Exception | None], None]) -> bool:
+        """Close the open pairing code. False with no host, service or account."""
+        found = self._sync_service()
+        if found is None:
+            return False
+        host, service, _user_id = found
+        from desktop.native.devices import end_pairing
+
+        end_pairing(host, service, done)
+        return True
+
+    def unlink_phone(self, device_id: str, done: Callable[[Any, Exception | None], None]) -> bool:
+        """Remove a linked phone. False with no host, service or account."""
+        found = self._sync_service()
+        if found is None:
+            return False
+        host, service, user_id = found
+        from desktop.native.devices import unlink_phone
+
+        unlink_phone(host, service, user_id, device_id, done)
+        return True
+
+    def sync_linked_phones(self, done: Callable[[Any, Exception | None], None]) -> bool:
+        """Sync every linked phone. False with no host, service or account."""
+        found = self._sync_service()
+        if found is None:
+            return False
+        host, service, _user_id = found
+        from desktop.native.devices import sync_linked_phones
+
+        sync_linked_phones(host, service, done)
+        return True
+
+    def accept_remote_week(self, who: str) -> bool:
+        """A linked phone's edits arrived. Unsaved edits here are kept and marked as a conflict, and
+        the week is not reloaded. False while a request is in flight, so the caller can ask again."""
+        if self.account is None:
+            return True
+        if self.busy:
+            return False
+        if self.dirty or self.dirty_assignments or self.pending_save is not None:
+            self.conflict = True
+            self.week_changed.emit()
+            return True
+        self.load_week(self.week_start, discard=True, said=f"Updated from {who}.")
+        return True
 
     def _touch(self, label: str | None = None, keep: set[str] | frozenset[str] = frozenset()) -> None:
         if label:
@@ -1072,6 +1204,68 @@ class NativeSession(QObject):
         self.needs_time.pop(block_id, None)
         self._touch(label, keep={answer["block_id"]})
         return True
+
+    def place_block(self, block_id: str, from_day: int, day: int, start: int, end: int) -> None:
+        """Let a block go at a time. A save already on its way keeps this move and applies it once
+        that save has landed, so the reply cannot put the block back where it was."""
+        if self.busy:
+            self._hand_waiting = (block_id, from_day, day, start, end)
+            return
+        block = next((item for item in self.blocks if item["id"] == block_id), None)
+        if block is None:
+            return
+        if not self.hand_move(block_id, from_day, day, start, end):
+            return
+        origin = from_day if from_day in block["days"] else day
+        words = moved_words(block, origin, day, start, end)
+        self.save()
+        self.hand_placed.emit(words)
+
+    def _resume_pending(self, busy: bool) -> None:
+        if busy:
+            return
+        if self._hand_waiting is not None:
+            waiting, self._hand_waiting = self._hand_waiting, None
+            QTimer.singleShot(0, lambda waiting=waiting: self.place_block(*waiting))
+        if self.setup_prefs or self.setup_work_windows is not None or self.setup_week:
+            # After this turn, so a save that just landed finishes putting its week in place first.
+            QTimer.singleShot(0, self, self.flush_setup)
+
+    def keep_setup(
+        self,
+        updates: dict,
+        *,
+        work_windows: list[dict] | None = None,
+        save_week: bool = False,
+    ) -> None:
+        """Remember what a setup page answered. The write goes out one request at a time."""
+        self.setup_prefs.update(updates)
+        if work_windows is not None:
+            self.setup_work_windows = deepcopy(work_windows)
+        if save_week:
+            self.setup_week = True
+        if self.preferences is not None:
+            # Seen at once, as Settings does: the save that follows stores them.
+            self.preferences = {**self.preferences, **self.setup_prefs}
+        self.flush_setup()
+
+    def flush_setup(self) -> None:
+        """Write what setup kept. Preferences go first: the week's save can start a plan. While a
+        request is out, this waits, and the next idle turn sends whatever is still kept."""
+        if self.account is None or self.busy:
+            return
+        if self.setup_prefs and self.preferences is not None:
+            updates, self.setup_prefs = self.setup_prefs, {}
+            self.save_preferences(updates)
+            return
+        if self.setup_work_windows is not None and self.preferences is not None:
+            windows, self.setup_work_windows = self.setup_work_windows, None
+            prefs = self.preferences
+            self.save_availability(prefs.get("protected") or [], prefs.get("day_cutoff"), windows)
+            return
+        if self.setup_week:
+            self.setup_week = False
+            self.save()
 
     def set_setup_blocks(self, blocks: list[dict]) -> None:
         """Replace the school and activities setup made with `blocks`, as one Undo step. Anything the
@@ -2126,7 +2320,7 @@ class NativeSession(QObject):
             waiting = len(self.homework_time_needed())
             self.plan_counts = (placed, waiting)
             self.plan_first = first_placed(data, targets)
-            split_note = self._apply_auto_split(data)
+            split_note = self._apply_auto_split(data, week)
             changed = self._dump_blocks() != before
             if not changed:
                 self.blocks = original_blocks
@@ -2181,11 +2375,21 @@ class NativeSession(QObject):
             err,
         )
 
-    def _apply_auto_split(self, trace: dict) -> str:
+    def _apply_auto_split(self, trace: dict, sources: list[dict] | None = None) -> str:
         """Turn each placed homework block into focus chunks and breaks, when the student asked for
         it. The solver was given room for the breaks before it ran, so the chunks fit where it put
-        the block rather than landing on whatever came next."""
-        split, count = split_solved(self.blocks, trace, self.preferences)
+        the block rather than landing on whatever came next. `sources` is the week as planned (work
+        minutes), not the inflated duration the solver reserved for breaks. Starts, pins, days and
+        overdue rewrites stay the week after apply_plan."""
+        planned = sources if sources is not None else self.blocks
+        work_minutes = {block["id"]: block.get("duration_min") for block in planned}
+        week = [
+            {**block, "duration_min": work_minutes[block["id"]]}
+            if block["id"] in work_minutes
+            else dict(block)
+            for block in self.blocks
+        ]
+        split, count = split_solved(week, trace, self.preferences)
         if not count:
             return ""
         self.blocks = split
@@ -2243,6 +2447,9 @@ class NativeSession(QObject):
                 return
             self.preferences = data
             self.week_changed.emit()
+            # The window resumes a setup queue from week_changed. A surface with no window cannot,
+            # so the answers kept while preferences were absent go out from here.
+            self.flush_setup()
             self._fetch_timer_tools()
 
         self.client.request("GET", "/api/preferences", None, ok, lambda _error: None)
@@ -2291,6 +2498,10 @@ class NativeSession(QObject):
 
     def homework_time_needed(self) -> list[dict]:
         return time_still_needed(self.assignments, self.blocks, self.week_start)
+
+    def built_week(self) -> WeekModel:
+        """The week Material draws. The shell asks the session, not the builder."""
+        return build_week(self.week_start, self.blocks, self.assignments, self.trace)
 
     def paste_destination(self, today: date | None = None) -> tuple[int, str | None] | None:
         if self.selected_block_id and self.selected_occurrence_day is not None:
@@ -2602,6 +2813,21 @@ class NativeSession(QObject):
             self.week_changed.emit()
 
         self.client.request("DELETE", path, None, ok, lambda error: self._fail(ticket, error))
+
+    def week_blocks(self, week_start: str, then: Callable[[list[dict]], None]) -> None:
+        """The blocks on screen for this week, or the saved blocks of another week. A failed load is
+        said here, and `then` is not called, so a preview cannot treat that week as empty."""
+        if week_start == self.week_start:
+            then(self.blocks)
+            return
+
+        def ok(data: dict) -> None:
+            then(list(data.get("blocks") or []))
+
+        def err(error: ApiError) -> None:
+            self._say(error.message)
+
+        self.client.request("GET", f"/api/week?week_start={week_start}", None, ok, err)
 
     def apply_routine_rows(self, routine_id: str, week_start: str, days: list[int]) -> list[dict] | None:
         routine = self.routines.get(routine_id)
@@ -3241,7 +3467,22 @@ class NativeSession(QObject):
         self._pending_focus = None
         self._persist_focus()
         self.focus_changed.emit()
+        self._open_focus_spotify()
         return True
+
+    def _open_focus_spotify(self) -> None:
+        """Spotify, when that is the focus sound: open the Settings link. Anything else stays quiet.
+        A missing link or an app that will not open is said once, and focus carries on."""
+        if (self.preferences or {}).get("focus_audio") != "spotify":
+            return
+        link = self.spotify_url()
+        if not link:
+            self._say("Add a Spotify link in Settings, under Alerts. Focus has started.")
+            return
+        from desktop.native.spotify import open_in_app
+
+        if not open_in_app(link):
+            self._say("Spotify didn't open. Focus has started.")
 
     def confirm_replace_focus(self) -> bool:
         pending = self._pending_focus
@@ -3377,9 +3618,71 @@ class NativeSession(QObject):
             if updated is None:
                 return
             self.blocks = [updated if item["id"] == updated["id"] else item for item in self.blocks]
+        self._auto_complete_session(state)
         self.dirty = True
         self.pending_save = None
         self.save(record_history=False)
+
+    def _material_focus_rules(self) -> bool:
+        return self.material_owns is not None and bool(self.material_owns())
+
+    def focus_mutes_alerts(self) -> bool:
+        """Auto-mute: reminders wait while a focus work phase is under way, running or paused."""
+        state = self.focus
+        return (
+            self._material_focus_rules()
+            and bool((self.preferences or {}).get("focus_auto_mute", True))
+            and state is not None
+            and state.get("phase") == "work"
+        )
+
+    def hold_alerts(self, notices: list[dict]) -> list[dict]:
+        """The notices to show now. Focus's own are always shown; reminders are kept until focus
+        leaves its work phase. Alarms the student set do not come through here and still ring."""
+        if not self.focus_mutes_alerts():
+            return notices
+        self._held_alerts.extend(item for item in notices if item.get("kind") != "focus")
+        return [item for item in notices if item.get("kind") == "focus"]
+
+    def release_held_alerts(self) -> list[dict]:
+        if not self._held_alerts or self.focus_mutes_alerts():
+            return []
+        held, self._held_alerts = self._held_alerts, []
+        return held
+
+    def _auto_complete_session(self, state: dict) -> None:
+        """Auto-complete: the block this session worked on goes to Done and nothing else does. Its
+        homework is finished too only when that was its last session; with sessions left it stays open."""
+        if not self._material_focus_rules() or not (self.preferences or {}).get("focus_auto_complete"):
+            return
+        block = None
+        if state.get("blockId") and state.get("weekStart") == self.week_start:
+            block = next((item for item in self.blocks if item["id"] == state["blockId"]), None)
+        day = state.get("day")
+        if (
+            block is not None
+            and not block.get("completed")
+            and block.get("kind") == "flexible"
+            and state.get("start")
+            and isinstance(day, int)
+            and day in (block.get("days") or [])
+        ):
+            block["start"] = state["start"]
+            block["completed"] = True
+            block["completed_day"] = day
+        assignment_id = state.get("assignmentId") or (block or {}).get("assignment_id")
+        assignment = self.assignments.get(assignment_id) if assignment_id else None
+        if assignment is None or assignment.get("completed"):
+            return
+        left = [
+            item
+            for item in self.blocks
+            if item.get("assignment_id") == assignment_id
+            and not item.get("completed")
+            and item.get("pomodoro_role") != "break"
+        ]
+        if not left:
+            self.complete_homework(assignment_id, True)
 
     def finish_focused_homework(self) -> bool:
         state = self.focus
@@ -3451,9 +3754,28 @@ class NativeSession(QObject):
     def _due_block_alerts(
         self, blocks: list[dict], trace: dict | None, clock: dict, prefs: dict
     ) -> tuple[list[dict], list[dict]]:
-        """Today's reminders, and the songs of blocks that are starting."""
+        """Today's reminders, and the song for blocks that are starting.
+
+        A link stored on a block is left in the week. The copies handed to the engine have that field
+        cleared, so a block start uses the Settings link. It plays only when the alarm sound is
+        Spotify. A link saved for Focus does not start a song on its own.
+        """
         notices: list[dict] = []
         lead = reminder_lead_min(prefs)
+
+        def quiet(item: dict) -> dict:
+            if item.get("spotify_url"):
+                return {**item, "spotify_url": None}
+            return item
+
+        blocks = [quiet(block) for block in blocks]
+        if isinstance(trace, dict):
+            placed = trace.get("placed")
+            if isinstance(placed, list):
+                trace = {
+                    **trace,
+                    "placed": [quiet(item) if isinstance(item, dict) else item for item in placed],
+                }
         # A bad saved link is left out here, as it is when the alarm rings.
         default_link = self.spotify_url(prefs.get("default_spotify_url") or "") or None
         sound_is_spotify = prefs.get("alarm_tone") == "spotify"
@@ -3582,12 +3904,14 @@ class NativeSession(QObject):
         self.alarm_due.emit(nxt)
 
     def spotify_url(self, value: str | None = None) -> str:
+        """A link handed in, checked, or the Settings link when nothing was handed in.
+
+        Alarms pass their own link. More and a block start pass nothing and get the Settings link.
+        A link stored on a block is not read.
+        """
         from backend.models import valid_spotify_url
 
-        raw = value
-        if raw is None:
-            block = next((item for item in self.blocks if item["id"] == self.selected_block_id), None)
-            raw = (block or {}).get("spotify_url") or (self.preferences or {}).get("default_spotify_url")
+        raw = (self.preferences or {}).get("default_spotify_url") if value is None else value
         try:
             return valid_spotify_url(raw) or ""
         except ValueError:
@@ -3680,6 +4004,9 @@ class NativeSession(QObject):
         self._say("Recovering account…")
 
         def ok(data: dict) -> None:
+            if not self._alive(ticket):
+                return
+            self._drop_other_setup(data["id"])
             if not self._idle(ticket):
                 return
             self.client.set_account(data)

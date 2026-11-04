@@ -1,10 +1,51 @@
 # context.md — FlexWeek
 
 ## Current State
-- 2026-10-26: Preparing 1.2.0 on `fix/visual-artifacts-20261026`. Jonathan selected Quiet split
-  plus the Settings and Unfinished fixes, with the earlier renovation kept separate. Desktop and
-  Android report 1.2.0; Android versionCode is 4. Release notes are `docs/release-notes-v1.2.0.md`.
-  PR #54 is open with the reviewed source; no 1.2.0 tag or release exists yet.
+- 2026-11-03 (Step 0 of the FIX-SPEC v1.3 plan): at `ea5eacf4` plus the two static audit test files, the
+  full gate (3 workers) passes 5788 tests, ruff and mypy. Two runs with 8 workers on a busy machine each
+  failed one different timing test (`test_week_hour_labels.py`, `test_layout_clay.py`); both pass alone.
+  The Roboto Flex licence had Windows line endings, which failed the committed-range whitespace check;
+  it is now LF with the same text. Plan: `~/.flexweek-ui-harness/scratch/fix-spec-1.3/plan.md`.
+- 2026-11-03: Local static UI audit follow-ups reviewed through `92230b43`.
+  Material Look now propagates light/dark colours to its rows; School times commit and
+  format on Return. Day/Week/Month preview actions use passive projections, including
+  keyboard and Qt accessibility paths. Bento's drag instruction sits below its card
+  heading so the settled Undo toast does not cover it. Codex independently checked the
+  Gemini bundle (86 focused tests plus bounded probes); Gemini passed the small Codex
+  completion-slot/clipping follow-up, rerunning 17 tests (18.27s, 329 MB, zero job swap).
+  This does NOT complete the overhaul: cold Advanced Month preview still has no data,
+  and Bento's 1024px/Large/Saturday-Today headers drift up to 49px. Both repairs are
+  paused at Debugging Limits pending Jonathan's direction. The latest full gate failed
+  two clipping cases before subsequent repairs; no newer full-gate pass is claimed.
+  Capture filenames are not reached-state proof; several captures are mislabeled.
+  Source and focused evidence: `~/.flexweek-ui-harness/scratch/static-ui-audit-20261103/`.
+  No overhaul changes have been pushed or released; animation review remains deferred.
+- 2026-11-02: Material desktop overhaul lanes are integrated locally on
+  `fix/visual-artifacts-20261026`, reviewed through `fdf0ed1c`. The wide Codex review's
+  five blockers and subsequent modal-pointer and sheet-focus findings have fixes with
+  independent Grok 4.7 verification. Sheet Tab/Backtab full cycles and picker Escape
+  passed on hidden KWin. Canonical SQL weekend preferences and local focus extras remain.
+  Menu/card shadows now flatten and re-lift the same effect; combined historical-path
+  tests pass, but the timing-dependent process abort itself was not reproduced.
+  This is focused verification, not a full-gate pass. Graphics fallback remains
+  offscreen-only; packaging, audible checks, Android redesign and final visual review
+  remain pending. Nothing from the overhaul has been pushed or released.
+  Evidence: `~/.flexweek-ui-harness/scratch/material-week-review-grok/`.
+- 2026-10-27: **1.2.0 released as Latest**, PR #54 merged into `main` at
+  `a71e4d91f09873b5c6ef1daeafac2f7d0319d433`, tag `v1.2.0`.
+  https://github.com/j0nsh1n/FlexWeek/releases/tag/v1.2.0 has all ten assets; five checksum pairs
+  and all ten public asset digests match the downloaded files. Desktop and Android report 1.2.0;
+  Android versionCode is 4. Release notes are `docs/release-notes-v1.2.0.md`.
+- Local follow-ups on the reused task branch route overdue announcements through visible More
+  or the window while Settings is open. Plan tests inspect painted accent text in Light/Dark,
+  excluding the count pill. Both regressions have mutation proof; 49 related tests pass.
+  The capped full gate passes 5425 tests, lint, types, mutation anchors and whitespace
+  (558.12s, service peak 4 GiB). Grok 4.6 independently passed `5ebe583d`, rerunning all 49
+  related tests in 64.27s with scoped Ruff and whitespace checks. Nothing new has been pushed.
+  Native AT-SPI delivery remains unverified: the isolated registry failed to start. Jonathan
+  accepted Qt accessibility-tree/KWin proof and this reported gap.
+  The four approved clean, merged worktrees and local branches were removed after usage checks,
+  totaling 117 MiB of listed files. All other checkouts, including Windows records, were kept.
 - Quiet split removes the repeated status row, moves Week as a list into More, keeps Ctrl+Shift+L
   and focus return, quiets Plan, and separates the rail with type and spacing. Light, Dark at
   1024x640 Large, and High contrast each passed all 15 real-KWin pointer and shortcut steps.
@@ -13,25 +54,32 @@
   fixture now has a visible deadline; ten slide tests pass and the repaint mutation is caught.
   Bento's background-refresh focus loss reproduced before preserving the window's remembered
   focus; 20 related tests and both real-KWin focus checks pass after the fix.
-- The rebuilt fwtest runner's final gate passed: 5423 tests, Ruff, mypy, mutation anchors and
+- The 1.2.0 release's rebuilt-fwtest gate passed: 5423 tests, Ruff, mypy, mutation anchors and
   whitespace checks (547.98s, service peak 4.2 GiB). The Plan mutation catches loss of accent text. Harness and engine
   fmt, clippy and tests pass. Cartographer's launcher cannot import the traceworks module.
 - Android unit tests and the release build pass. The signed 1.2.0 APK retains 1.1.1's certificate.
   Release artifacts and verification logs are in integrated scratch. Independent Grok 4.6 review
-  passed on `007ba1ff`, with 47 focused tests. Windows/Linux CI packages remain pending.
-  Its overdue announcement finding remains unverified with a screen reader: the event targets
-  the hidden Unfinished control. No release blocker was found.
+  passed on `007ba1ff`, with 47 focused tests. Windows/Linux packaging and installer checks pass
+  in run `40469595259`, attempt 2. The first Windows Rust setup failed; a fresh-runner retry
+  resolved it without source changes. Both downloaded Linux MCP launchers pass with fresh
+  HOME/data, and the downloaded Android APK's certificate matches 1.1.1.
+  Its overdue announcement finding affected the hidden Unfinished control in published 1.2.0;
+  the local follow-up corrects the target. Screen-reader delivery is still unverified.
 - PR #54's Classic Week rig exposed a fixed-height Unfinished list forcing Large text above
   640 px. The list now keeps one whole row visible and scrolls when height is short. The exact
   1024x640 real-KWin scenario and 26 related tests pass. Restoring fixed height makes the new
   regression fail at 1024x776. The final gate and all 19 Classic Week scenarios pass;
   Grok 4.6 independently passed the correction on `096dedcd`, reran four targeted tests,
   and caught the fixed-height mutation before restoring its clean checkout.
+- Requested post-release Grok 4.6 follow-up passed on `3cab7f65`: 64 Retro/Setup tests in
+  64.71s, scoped Ruff and diff checks pass. The empty Retro fixture explained the old failure;
+  no remaining snapshot defect was found. Its Plan paint-coverage finding is addressed by the
+  local follow-up. The review checkout is clean.
 - `feat/refined-look-renovation` remains separate at `4f1b9f97`, with its previously recorded
   772 focused tests and ten-look captures under `scratch/theme-renovation-2026-10-26/`.
   Its uncommitted spec/changelog drafts were preserved as patches under the integrated scratch
   folder before removing those changes from the 1.2.0 documents.
-- Latest published release is 1.1.1. The source trial was launched earlier from this task branch;
+- Latest published release is 1.2.0; 1.1.1 is the previous release. The source trial ran from this task branch;
   its log is `~/.flexweek-ui-harness/scratch/manual-trial-20261026/desktop.log`.
 - Since 0.18.5: new accounts start on a 12-hour clock (the desktop conftest sets 24-hour per test
   unless a test chooses); tests fail on any error inside a Qt slot (`no_error_is_lost_inside_a_qt_slot`).
@@ -148,18 +196,38 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
-- 2026-10-26, Quiet split / 1.2.0: Grok 4.6 built the chrome and rail; Codex reviewed the source,
-  integrated the chrome, migrated accessibility/menu tests, corrected two test fixtures, and
-  fixed background calendar focus loss. Jonathan authorized choosing recommended steps through
-  release. Target: `j0nsh1n/FlexWeek`, PR into `main`, tag `v1.2.0`. The rebuilt runner's full gate
-  passed 5422 tests plus lint, types, mutation anchors and whitespace. Rust fmt, clippy and tests
-  pass; Android is built and signed. Grok 4.6 independently reviewed `007ba1ff`: PASS, 47 tests.
-  PR #54 is open. Its fixed-height Unfinished failure is corrected: 26 related tests, sizing
-  checks and all 19 real-KWin Classic Week scenarios pass; the new regression catches the old
-  fixed height. Grok 4.6 passed `096dedcd` with four targeted tests and its own mutation proof.
-  Next: update PR #54,
-  finish CI and packaging, verify all ten assets/checksums and packaged Linux MCP, then publish.
-  No 1.2.0 tag or release exists yet. The earlier renovation remains separate.
+- 2026-11-03: Step 0 merges `fix/visual-artifacts-20261026` into `main` by PR (Jonathan's word). Next,
+  in the plan's order: the updater fixes and Linux nightly tarballs (plan section 3b), then PRs 1-7.
+  Writers are Gemini 3.8 Flash (T3 `antigravity`) and Grok 4.6 medium; Codex `gpt-6.1-sol` high reviews.
+  Jonathan's desktop now runs the 1.2.0 tarball install at `~/.local/opt/FlexWeek`.
+- Static audit: reviewed local source `92230b43`; no running repair at the latest handoff.
+  Await direction for F1 cold Month and W3 Bento header drift; no retries under AFK
+  authorization alone. Preserve two untracked weak audit tests without counting them
+  as acceptance evidence. Remaining independent static checks may continue read-only.
+  Once blockers are resolved and independently reviewed, run the capped `fwtest gate`
+  (10 GiB/800%, nice 19/default eight workers/watcher); AFK gate authorization exists.
+  Never use old release gates as current overhaul proof. No remote actions or cleanup.
+- 2026-10-27: Local overdue-accessibility and Plan paint-test follow-ups are complete on
+  `fix/visual-artifacts-20261026`, reused with Jonathan's approval. Test-first commit `6ecf2123`
+  records both intentionally failing page-specific announcement cases. The fix passes all four
+  focused cases and 49 related tests; both mutation regressions are caught. Four specifically
+  approved old checkouts/local branches were removed; other work was preserved. The full gate
+  passes 5425 tests plus lint/types/mutation anchors. Grok 4.6 passed `5ebe583d` and independently
+  reran the 49 related tests. The clean review checkout `t3-0cbd52a3` is retained. Native AT-SPI
+  proof is unavailable in the isolated session and accepted as a reported gap. The local fix is
+  committed; published 1.2.0 is unchanged. No push/PR/release requested.
+- 2026-10-27: **1.2.0 released**, PR #54 / `main` `a71e4d91`, tag `v1.2.0`, Latest.
+  Quiet split, Settings footer, Unfinished wrapping/scrolling and calendar focus fixes shipped.
+  Final gate: 5423 tests, lint, types, mutation anchors and whitespace pass. Rust checks pass.
+  Grok 4.6 independently passed the source and final short-window correction; mutation proofs
+  catch both old failures. All 19 Classic Week rig scenarios pass on real KWin.
+  Windows/Linux CI and Windows installer checks pass; all ten downloads/public digests and
+  five checksum pairs verified, both Linux MCP launchers smoked, Android certificate unchanged.
+  The publication-triggered redundant build `40476977696` was cancelled; the release schedule
+  was deleted. Final handoff is local on `fix/visual-artifacts-20261026`; release source is on main.
+  Earlier renovation and other checkouts remain separate; storage cleanup remains deferred.
+  The requested read-only Retro/integration/test-clock/release follow-up also passed, with
+  64 targeted tests; its temporary checkout was retained and no release change resulted.
 - 2026-10-21, `main` fff4d064: **1.1.1 released** (PR #53, tag `v1.1.1`, Latest; all ten assets attached, every checksum verified). Linux packages carry `flexweek-mcp` (`--mcp` from the AppImage, the tar.gz launcher and the app); the release workflow smokes both, and the published AppImage and tar.gz were smoked again locally. spec.md's Releases section now names the Linux packages; Windows and Android do not carry the helper. Next: Bori moves to `<package> --mcp --read-only` (Bori agent, `.handoff/bori-calendar-mcp.md` section 12); release cleanup awaiting Jonathan's approval of the list; MCP track C (plan, running late, routines, restore) and the phone screens remain.
 - Next (Jonathan's pick: MCP first): track C, Plan / Running late / explain tools, routines, restore, then the app switching to the Rust views, write door and restore so nothing is written twice. Duplicates until then: Python validators and homework-edit rules in `backend/` and `desktop/`, and the desktop's focus phase advance (`controller.py` `advance_focus`) beside the phone's in `engine/ffi/src/focus.rs`.
 - Phone screens not built yet: full-screen focus with breaks (8 A), Month (6 B), Day (7 A), Week C with drag. Their plans are in `~/.flexweek-ui-harness/scratch/android-1.1/` (`rebuild-test-plan.md`, `wave4-test-plan.md`).

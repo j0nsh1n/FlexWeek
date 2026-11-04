@@ -247,3 +247,32 @@ def test_the_running_late_buttons_are_never_squeezed_before_or_after_preview(qap
     finally:
         dialog.hide()
         free(dialog)
+
+
+def test_retro_and_bento_button_labels_fit_across_window_and_text_sizes(qapp, window) -> None:
+    """Verify retro shortcuts and bento day headers do not clip words at 1280 or 1024,
+    across normal and large text sizes.
+    """
+    from desktop.native.window import NARROW_WIDTH
+
+    cases = [
+        ("retro", "poster", "retroIcon1"),
+        ("bento", "ink", "bentoDayName5"),
+        ("bento", "ink", "bentoDayName6"),
+    ]
+    for width in (1280, NARROW_WIDTH):
+        for size in ("normal", "large"):
+            for design, preset, target_id in cases:
+                dress(qapp, window, design, preset, size)
+                window._on_week()
+                window.resize(width, 860)
+                settled(qapp, window)
+                qapp.processEvents()
+                target = window.findChild(QPushButton, target_id)
+                assert target is not None, f"{target_id} not found in {design}"
+                if target.isVisible():
+                    room, need = words_room(target)
+                    assert room >= need, (
+                        f"{design}/{preset}/{size} at {width}px: {target.text()!r} ({target_id}) "
+                        f"needs {need}px words in {room}px room"
+                    )
