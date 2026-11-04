@@ -1,0 +1,116 @@
+name: Developer build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dev-build
+  cancel-in-progress: false
+
+jobs:
+  dev-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Stamp developer version and channel
+        run: |
+          BASE=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' desktop/native/version.py)
+          if [[ -z "$BASE" ]]; then
+            echo "Could not extract base version from desktop/native/version.py" >&2
+            exit 1
+          fi
+          DEVVERSION="${BASE}.$(date -u +%Y%m%d%H%M)"
+          sed -i "s/^VERSION = \".*\"/VERSION = \"$DEVVERSION\"/" desktop/native/version.py
+          sed -i 's/^CHANNEL = "release"/CHANNEL = "dev"/' desktop/native/version.py
+          grep -q "VERSION = \"$DEVVERSION\"" desktop/native/version.py
+          grep -q 'CHANNEL = "dev"' desktop/native/version.py
+          echo "DEVVERSION=$DEVVERSION" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install bundle tools and xcb helpers to vendor
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            patchelf binutils libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-render-util0 libxcb-util1 \
+            libxkbcommon0 libxkbcommon-x11-0 xvfb \
+            libegl1 libgl1 libopengl0 libglx0 libgles2 libgl1-mesa-dri
+
+      - name: Create venv and install build + runtime deps
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -r requirements.txt -r requirements-desktop.txt -r requirements-dev.txt
+
+      - name: Install Rust and build the engine module
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          .venv/bin/python -m maturin develop --release --manifest-path engine/py/Cargo.toml
+
+      - name: Build and package Linux onedir
+        run: |
+          ./desktop/build_linux.sh
+          ./desktop/package_linux.sh dist/FlexWeek dist/release
+
+      - name: Smoke the packaged archive
+        # Prove the download itself starts: extract the tarball a user gets and
+        # run the root launcher, not the raw onedir. --smoke-test walks a new
+        # account through setup to its first Solve and fails on a blank window.
+        env:
+          QT_QPA_PLATFORM: offscreen
+          LD_LIBRARY_PATH: ""
+        run: |
+          mkdir dist/stage
+          tar -xzf dist/release/FlexWeek-Linux-x86_64.tar.gz -C dist/stage
+          if find dist/stage/FlexWeek dist/FlexWeek -name '*WebEngineCore*' | grep -q .; then
+            echo "Native package must not ship WebEngine" >&2
+            exit 1
+          fi
+          xvfb-run -a -s "-screen 0 1280x800x24" dist/stage/FlexWeek/FlexWeek --smoke-test dist/packaged-smoke.json
+          python -c 'import json,sys; r=json.load(open("dist/packaged-smoke.json")); print(r); sys.exit(0 if r.get("ok") and r.get("stage") == "week shown after setup Solve" else 1)'
+
+      - name: Smoke the packaged helper in the archive
+        # The download must carry the assistant helper and answer a read-only
+        # request from it: the extracted launcher's --mcp dispatch, the seven
+        # read tools and the sign-in refusal. A release is not done without it
+        # (spec.md, Releases).
+        run: |
+          python desktop/smoke_mcp.py dist/stage/FlexWeek/FlexWeek --timeout 60
+
+      - name: Check the checksum files
+        # Each .sha256 names only its file, so `sha256sum -c` works in whatever
+        # folder the user downloaded to.
+        working-directory: dist/release
+        run: |
+          cat FlexWeek-Linux-x86_64.tar.gz.sha256
+          if grep -q "/" FlexWeek-Linux-x86_64.tar.gz.sha256; then
+            echo "A checksum file names a directory (such as /home/runner), not just the file." >&2
+            exit 1
+          fi
+          sha256sum -c FlexWeek-Linux-x86_64.tar.gz.sha256
+
+      - name: Publish developer release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete dev --cleanup-tag --yes || true
+          gh release create dev \
+            dist/release/FlexWeek-Linux-x86_64.tar.gz \
+            dist/release/FlexWeek-Linux-x86_64.tar.gz.sha256 \
+            --prerelease \
+            --latest=false \
+            --target "$(git rev-parse HEAD)" \
+            --title "Developer build $DEVVERSION" \
+            --notes "Developer build $DEVVERSION from main $(git rev-parse --short HEAD). It can have bugs. Turn on Settings → Computer → Get developer builds to get these."
