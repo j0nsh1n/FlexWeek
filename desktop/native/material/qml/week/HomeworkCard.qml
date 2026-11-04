@@ -13,6 +13,7 @@ Rectangle {
     property string tag: ""
     property string tagKind: "plain"
     property string reason: ""
+    property bool passive: false
     signal dragMoved(point scene)
     signal dropped(point scene)
     signal dragStarted()
@@ -148,7 +149,7 @@ Rectangle {
         ringRadius: 14
     }
 
-    activeFocusOnTab: true
+    activeFocusOnTab: !card.passive
     Accessible.role: Accessible.Button
     Accessible.name: "Edit " + title
     Accessible.onPressAction: card.opened()

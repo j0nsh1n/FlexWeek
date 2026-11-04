@@ -394,47 +394,32 @@ def test_f2_preview_keyboard_and_action_isolation(qapp: QApplication, window: Na
             "Pointer click on preview dayNext mutated live planner state"
         )
 
-        # 2. Focus chain traversal: Tab through the natural scene focus chain
+        # 2. Focus chain traversal. FIX-SPEC v1.3 PR 3 (A2) takes every control inside the passive
+        # preview out of the Tab order, leaving only the Week/Day/Month and Fit/Actual switches, so a
+        # full Tab cycle never lands on the preview's day arrows.
         quick = window._material_page._quick
         trail: list[str] = []
-        focused: QObject | None = None
         for _ in range(120):
             QTest.keyClick(quick, Qt.Key.Key_Tab)
             qapp.processEvents()
             focused = quick.quickWindow().activeFocusItem()
-            name = focused.objectName() if focused else "<none>"
-            trail.append(name)
-            if focused is day_next:
-                break
+            trail.append(focused.objectName() if focused else "<none>")
+            assert focused is not day_next and focused is not day_prev, (
+                f"Tab reached a preview day arrow, which must not be a Tab stop. Focus trail: {trail}"
+            )
+        assert "previewView" in trail and "previewFit" in trail, f"Preview switches not in Tab order: {trail}"
 
-        assert focused is day_next, (
-            f"Focus traversal via Tab failed to reach preview dayNext. Focus trail: {trail}"
-        )
-
-        # 3. Keyboard action activation: Return and Space on focused dayNext
-        QTest.keyClick(quick, Qt.Key.Key_Return)
-        _pump(qapp, 5)
-        assert (window.session.selected_day, window.session.planner_view) == (initial_day, initial_view), (
-            "Key_Return on focused preview dayNext mutated live planner state"
-        )
-
-        QTest.keyClick(quick, Qt.Key.Key_Space)
-        _pump(qapp, 5)
-        assert (window.session.selected_day, window.session.planner_view) == (initial_day, initial_view), (
-            "Key_Space on focused preview dayNext mutated live planner state"
-        )
-
-        # 4. Backtab (Shift+Tab) to dayPrevious and keyboard activation
-        QTest.keyClick(quick, Qt.Key.Key_Backtab, Qt.KeyboardModifier.ShiftModifier)
-        qapp.processEvents()
-        focused_back = quick.quickWindow().activeFocusItem()
-        if focused_back is day_prev:
-            QTest.keyClick(quick, Qt.Key.Key_Return)
-            _pump(qapp, 5)
-            assert (window.session.selected_day, window.session.planner_view) == (initial_day, initial_view)
-            QTest.keyClick(quick, Qt.Key.Key_Space)
-            _pump(qapp, 5)
-            assert (window.session.selected_day, window.session.planner_view) == (initial_day, initial_view)
+        # 3. Keys on the arrows still cannot mutate live state, even with focus forced onto them.
+        for arrow in (day_next, day_prev):
+            arrow.forceActiveFocus()
+            qapp.processEvents()
+            for key in (Qt.Key.Key_Return, Qt.Key.Key_Space):
+                QTest.keyClick(quick, key)
+                _pump(qapp, 5)
+                live = (window.session.selected_day, window.session.planner_view)
+                assert live == (initial_day, initial_view), (
+                    f"{key} on preview {arrow.objectName()} mutated live planner state"
+                )
 
         # 5. Accessible action: trigger onPressAction if accessible
         accessible = day_next.property("Accessible")

@@ -13,6 +13,7 @@ Item {
     property string density: "comfortable"
     property bool reduceMotion: false
     property bool highContrast: false
+    property bool passive: false
     // The floating add button sits 96px up on a phone. The grid can scroll clear of it.
     readonly property int scrollClearance: phone ? 96 : 0
     readonly property int gutter: 68
@@ -92,6 +93,7 @@ Item {
             highContrast: root.highContrast
             icon: "calendar_view_week"
             accessName: root.columns === 7 ? "Hide weekends" : "Show weekends"
+            activeFocusOnTab: !root.passive
             onClicked: if (root.bridge) root.bridge.week.toggleWeekends()
         }
 
@@ -283,6 +285,7 @@ Item {
                 WeekBlock {
                     id: blockCell
                     objectName: "weekBlock"
+                    passive: root.passive
                     x: root.gutter + model.day * root.dayWidth + 3
                     y: model.start / 60 * root.row
                     width: Math.max(8, root.dayWidth - 6)
@@ -334,6 +337,7 @@ Item {
     HomeworkDrawer {
         id: drawer
         objectName: "homeworkDrawer"
+        passive: root.passive
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         width: root.phone ? parent.width : root.drawerWidth
@@ -435,6 +439,7 @@ Item {
             objectName: "blockMenu"
             open: false
             focus: true
+            activeFocusOnTab: open && !root.passive
             onActiveFocusChanged: {
                 if (!activeFocus && open)
                     root.closeBlockMenu()

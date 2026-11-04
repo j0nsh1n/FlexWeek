@@ -18,12 +18,13 @@ Item {
     property real plannedShare: 0
     property real completedShare: 0
     property string accessName: ""
+    property bool passive: false
     signal chosen(string iso)
     signal step(int delta)
 
     objectName: "monthDate-" + iso
     opacity: inMonth ? 1 : 0.45
-    activeFocusOnTab: true
+    activeFocusOnTab: !passive
     Accessible.role: Accessible.Button
     Accessible.name: accessName
     Accessible.onPressAction: root.chosen(root.iso)

@@ -109,24 +109,29 @@ Item {
                         theme: root.draft; reduceMotion: true; icon: "calendar_view_day"; label: "Day"
                         highContrast: st.draftContrast === "high"
                         selected: root.shown === "day"
+                        activeFocusOnTab: false
                     }
                     NavDestination {
                         theme: root.draft; reduceMotion: true; icon: "calendar_view_week"; label: "Week"
                         highContrast: st.draftContrast === "high"
                         selected: root.shown === "week"
+                        activeFocusOnTab: false
                     }
                     NavDestination {
                         theme: root.draft; reduceMotion: true; icon: "calendar_month"; label: "Month"
                         highContrast: st.draftContrast === "high"
                         selected: root.shown === "month"
+                        activeFocusOnTab: false
                     }
                     NavDestination {
                         theme: root.draft; reduceMotion: true; icon: "task_alt"; label: "My day"
                         highContrast: st.draftContrast === "high"
+                        activeFocusOnTab: false
                     }
                     NavDestination {
                         theme: root.draft; reduceMotion: true; icon: "settings"; label: "Settings"; pinned: true
                         highContrast: st.draftContrast === "high"
+                        activeFocusOnTab: false
                     }
                 }
                 Text {
@@ -141,6 +146,7 @@ Item {
                     font.weight: 500
                 }
                 Item {
+                    id: previewViews
                     x: 80
                     y: 56
                     width: root.canvasWidth - 80
@@ -159,6 +165,7 @@ Item {
                                 density: st.draftDensity || "comfortable"
                                 reduceMotion: true
                                 highContrast: st.draftContrast === "high"
+                                passive: true
                             }
                         }
                     }
@@ -171,6 +178,7 @@ Item {
                             DayView {
                                 anchors.fill: parent
                                 bridge: root.settings.preview
+                                passive: true
                             }
                         }
                     }
@@ -183,48 +191,7 @@ Item {
                             MonthView {
                                 anchors.fill: parent
                                 bridge: root.settings.preview
-                            }
-                            Rectangle {
-                                id: statusBanner
-                                objectName: "monthPreviewStatus"
-                                anchors.top: parent.top
-                                anchors.topMargin: 8
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                height: 32
-                                width: statusRow.width + 24
-                                radius: 16
-                                M3Palette { id: bannerPalette; theme: root.draft }
-                                color: root.settings && root.settings.preview && root.settings.preview.month && root.settings.preview.month.loadError ? bannerPalette.errorContainer : bannerPalette.surfaceContainerHigh
-                                visible: root.settings && root.settings.preview && root.settings.preview.month && (root.settings.preview.month.loading || root.settings.preview.month.loadError !== "")
-                                z: 50
-                                Row {
-                                    id: statusRow
-                                    anchors.centerIn: parent
-                                    spacing: 8
-                                    Text {
-                                        objectName: "monthPreviewStatusText"
-                                        text: root.settings && root.settings.preview && root.settings.preview.month && root.settings.preview.month.loading ? "Loading month…" : (root.settings && root.settings.preview && root.settings.preview.month ? root.settings.preview.month.loadError : "")
-                                        color: root.settings && root.settings.preview && root.settings.preview.month && root.settings.preview.month.loadError ? bannerPalette.inkErrorContainer : bannerPalette.inkSurface
-                                        font.family: M3Font.family
-                                        font.pixelSize: 12
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
-                                    Text {
-                                        objectName: "monthPreviewRetry"
-                                        text: "Retry"
-                                        visible: root.settings && root.settings.preview && root.settings.preview.month && !!root.settings.preview.month.loadError
-                                        color: bannerPalette.primary
-                                        font.family: M3Font.family
-                                        font.pixelSize: 12
-                                        font.bold: true
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: if (root.settings && root.settings.preview && root.settings.preview.month) root.settings.preview.month.retry()
-                                        }
-                                    }
-                                }
+                                passive: true
                             }
                         }
                     }
@@ -234,6 +201,47 @@ Item {
                     z: 100
                     acceptedButtons: Qt.AllButtons
                     onPressed: (mouse) => mouse.accepted = true
+                }
+                Rectangle {
+                    id: statusBanner
+                    objectName: "monthPreviewStatus"
+                    anchors.top: previewViews.top
+                    anchors.topMargin: 8
+                    anchors.horizontalCenter: previewViews.horizontalCenter
+                    height: 36
+                    width: statusRow.width + 24
+                    radius: 18
+                    M3Palette { id: bannerPalette; theme: root.draft }
+                    color: root.settings && root.settings.preview && root.settings.preview.month && root.settings.preview.month.loadError ? bannerPalette.errorContainer : bannerPalette.surfaceContainerHigh
+                    visible: root.shown === "month" && root.settings && root.settings.preview && root.settings.preview.month && (root.settings.preview.month.loading || root.settings.preview.month.loadError !== "")
+                    z: 150
+                    Row {
+                        id: statusRow
+                        anchors.centerIn: parent
+                        spacing: 8
+                        Text {
+                            objectName: "monthPreviewStatusText"
+                            text: root.settings && root.settings.preview && root.settings.preview.month && root.settings.preview.month.loading ? "Loading month…" : (root.settings && root.settings.preview && root.settings.preview.month ? root.settings.preview.month.loadError : "")
+                            color: root.settings && root.settings.preview && root.settings.preview.month && root.settings.preview.month.loadError ? bannerPalette.inkErrorContainer : bannerPalette.inkSurface
+                            font.family: M3Font.family
+                            font.pixelSize: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Button {
+                            objectName: "monthPreviewRetry"
+                            text: "Retry"
+                            accessName: "Retry loading the month preview"
+                            Accessible.name: "Retry loading the month preview"
+                            visible: root.settings && root.settings.preview && root.settings.preview.month && !!root.settings.preview.month.loadError
+                            kind: "text"
+                            height: 28
+                            implicitHeight: 28
+                            anchors.verticalCenter: parent.verticalCenter
+                            theme: root.draft
+                            activeFocusOnTab: true
+                            onClicked: if (root.settings && root.settings.preview && root.settings.preview.month) root.settings.preview.month.retry()
+                        }
+                    }
                 }
             }
         }

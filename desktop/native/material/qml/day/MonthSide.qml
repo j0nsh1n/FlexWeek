@@ -9,6 +9,7 @@ Item {
     property bool reduceMotion: false
     property bool highContrast: false
     property bool phone: false
+    property bool passive: false
     property bool open: true
     property int year: 2026
     property int month: 11
@@ -46,6 +47,7 @@ Item {
         highContrast: root.highContrast
         icon: root.open ? "chevron_left" : "calendar_month"
         accessName: root.open ? "Hide the month" : "Show the month"
+        activeFocusOnTab: !root.passive
         onClicked: root.open = !root.open
     }
 
@@ -62,6 +64,7 @@ Item {
         month: root.month
         today: root.today
         accessName: "Month"
+        activeFocusOnTab: !root.passive
         onDayActivated: (day) => {
             if (root.board)
                 root.board.pickDay(day)

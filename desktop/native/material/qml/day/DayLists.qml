@@ -7,6 +7,7 @@ Column {
     property string density: "comfortable"
     property bool reduceMotion: false
     property bool highContrast: false
+    property bool passive: false
     property string scope: "day"
     property var upModel
     property var doneModel
@@ -112,6 +113,7 @@ Column {
                 ink: line.ink
                 trail: extras.width
                 accessName: line.title
+                activeFocusOnTab: !root.passive
                 onClicked: if (line.assignmentId !== "") root.edit(line.assignmentId)
             }
             Row {
@@ -139,6 +141,7 @@ Column {
                     highContrast: root.highContrast
                     icon: "check"
                     accessName: "Mark " + line.title + " finished"
+                    activeFocusOnTab: !root.passive
                     onClicked: root.finish(line.assignmentId)
                 }
             }

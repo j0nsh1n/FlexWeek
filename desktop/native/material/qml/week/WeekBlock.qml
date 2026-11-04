@@ -15,6 +15,7 @@ Item {
     property bool done: false
     property bool fresh: false
     property bool homework: false
+    property bool passive: false
     signal toggled()
     signal opened()
     signal menuAsked(real x, real y)
@@ -68,7 +69,7 @@ Item {
         anchors.top: parent.top
         anchors.right: parent.right
         anchors.margins: 4
-        activeFocusOnTab: cell.homework
+        activeFocusOnTab: !cell.passive && cell.homework
         Accessible.role: Accessible.Button
         Accessible.name: cell.done ? "Open " + cell.title + " again" : "Mark " + cell.title + " finished"
         Accessible.onPressAction: cell.toggled()
@@ -131,7 +132,7 @@ Item {
         onTapped: (point) => cell.menuAsked(point.position.x, point.position.y)
     }
 
-    activeFocusOnTab: homework
+    activeFocusOnTab: !passive && homework
     Accessible.role: homework ? Accessible.Button : Accessible.StaticText
     Accessible.name: homework
                      ? ("Edit " + title)
