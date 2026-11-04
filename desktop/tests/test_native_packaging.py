@@ -130,3 +130,9 @@ def test_both_builds_ship_the_icon_and_the_fonts_where_the_app_looks_for_them() 
         "VT323-OFL.txt",
     ):
         assert "SIL Open Font License" in (fonts / licence).read_text(encoding="utf-8"), licence
+
+
+def test_linux_bundle_drops_qts_web_modules_before_the_check() -> None:
+    # The packaged smoke refuses WebEngine; the QML copy would otherwise ship QtWebEngine and QtWebView.
+    trim = FINISH.index("-iname '*webengine*' -o -iname '*webview*'")
+    assert trim < FINISH.index("desktop.check_bundle"), "trim before the bundle check"
