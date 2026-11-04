@@ -71,6 +71,8 @@ def test_a_tree_update_leaves_no_download_behind(
     with tarfile.open(archive, "w:gz") as tar:
         tar.add(build, arcname="FlexWeek")
     monkeypatch.setattr("desktop.native.updater.bundle_root", lambda: root)
+    # A packaged copy: one run from source refuses to replace itself.
+    monkeypatch.setattr("desktop.native.updater.frozen", lambda: True)
     assert apply_update(str(archive), "tree") is None
     assert (root / "FlexWeek").read_text() == "new"
     assert not folder.exists()
