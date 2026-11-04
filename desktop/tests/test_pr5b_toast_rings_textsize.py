@@ -161,7 +161,7 @@ def test_undo_toasts_show_the_ctrl_z_hint(qapp: QApplication, window: NativeWind
     hint = _qml(snackbar, "shortcutHint")
     assert hint is not None
     assert hint.property("visible") is True
-    assert (hint.property("opacity") or 1.0) > 0
+    assert float(hint.property("opacity")) > 0
     assert "Ctrl+Z" in str(hint.property("text"))
 
     # Material sheet notice
@@ -172,7 +172,7 @@ def test_undo_toasts_show_the_ctrl_z_hint(qapp: QApplication, window: NativeWind
     sheet_hint = _qml(notice, "shortcutHint")
     assert sheet_hint is not None
     assert sheet_hint.property("visible") is True
-    assert (sheet_hint.property("opacity") or 1.0) > 0
+    assert float(sheet_hint.property("opacity")) > 0
     assert "Ctrl+Z" in str(sheet_hint.property("text"))
     bridge.sheets.dismissNotice()
 
@@ -239,7 +239,7 @@ def test_every_week_tab_stop_has_a_visible_ring_and_is_on_screen(
     wrapped = False
 
     # Walk Tab stops
-    for step in range(20):
+    for step in range(60):
         QTest.keyClick(quick, Qt.Key.Key_Tab)
         _pump(qapp, 5)
         current = scene.activeFocusItem()
@@ -268,7 +268,7 @@ def test_every_week_tab_stop_has_a_visible_ring_and_is_on_screen(
         assert len(rings) > 0, f"no ring found on focused item {current} ({current.objectName()})"
         ring_active = any(
             r.property("shown") is True
-            or (r.property("visible") is True and (r.property("opacity") or 1.0) > 0)
+            or (r.property("visible") is True and float(r.property("opacity")) > 0)
             for r in rings
         )
         assert ring_active, f"ring not shown on {current} ({current.objectName()})"
@@ -294,7 +294,20 @@ def test_every_week_tab_stop_has_a_visible_ring_and_is_on_screen(
             assert item_y + h <= root_h + 2, f"item {current.objectName()} bottom {item_y + h} below window"
 
     assert wrapped is True, "Tab cycle did not wrap back to the first control"
-    assert len(visited) >= 2, f"Expected at least 2 controls traversed, got {len(visited)}"
+
+    def late(item) -> bool:
+        while item is not None:
+            if item.property("title") == "Late essay":
+                return True
+            item = item.parentItem()
+        return False
+
+    names = [item.objectName() for item in visited]
+    # The late block sits below the first screenful, so reaching it whole proves the reveal.
+    assert any(item.objectName() == "weekBlock" and late(item) for item in visited), names
+    assert any(item.objectName() == "weekBlockFinish" and late(item) for item in visited), names
+    for expected in ("weekPrevious", "weekToday", "weekNext", "navWeek", "materialFab"):
+        assert expected in names, (expected, names)
 
 
 def test_month_date_cells_use_the_shared_ring(qapp: QApplication, window: NativeWindow) -> None:
@@ -691,3 +704,31 @@ def test_text_size_preserved_when_preset_changes_or_saved_look_applied(
     # Reset text size back to normal
     settings_bridge.setTextSize("normal")
     _pump(qapp, 5)
+
+
+def test_a_notice_shown_again_under_a_still_pointer_waits(qapp: QApplication, window: NativeWindow) -> None:
+    """Hover a notice, dismiss it, show the next without moving the pointer: it must not count down."""
+    from PySide6.QtCore import QPoint, QPointF
+
+    root = _reset_material(window, qapp)
+    quick = window._material_page._quick
+    sheets = window._material_page.bridge.sheets
+    sheets._say("Hover old", undo=True)
+    _pump(qapp, 10)
+    notice = _qml(root, "sheetNotice")
+    centre = notice.mapToScene(QPointF(notice.property("width") / 2, notice.property("height") / 2))
+    QTest.mouseMove(quick, QPoint(int(centre.x()), int(centre.y())))
+    _pump(qapp, 10)
+    assert notice.property("pointerHovered") is True
+    assert not sheets._timer.isActive()
+    sheets.dismissNotice()
+    _pump(qapp, 10)
+    sheets._say("New without moving the pointer", undo=True)
+    _pump(qapp, 10)
+    assert notice.property("visible") is True
+    assert not sheets._timer.isActive(), "a hovered notice is counting down"
+    QTest.mouseMove(quick, QPoint(2, 2))
+    _pump(qapp, 10)
+    assert sheets._timer.isActive()
+    assert sheets._timer.remainingTime() > bridge_sheets_module.NOTICE_MS - 1000
+    sheets.dismissNotice()

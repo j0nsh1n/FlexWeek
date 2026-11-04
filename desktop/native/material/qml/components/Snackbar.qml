@@ -16,7 +16,9 @@ Item {
     HoverHandler { id: toastHover }
     readonly property bool pointerHovered: toastHover.hovered
     readonly property bool keyboardFocused: root.activeFocus || (action && action.activeFocus)
-    readonly property bool held: pointerHovered || keyboardFocused
+    // Visibility is part of the hold: a notice shown again under a pointer that never moved
+    // still sends a pause, and hiding one always sends a resume.
+    readonly property bool held: visible && (pointerHovered || keyboardFocused)
 
     onHeldChanged: {
         if (held)
