@@ -19,7 +19,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import Qt
     from PySide6.QtGui import QImage, QPixmap
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QComboBox, QRadioButton, QWidget
+    from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QRadioButton, QScrollArea, QWidget
 
     from desktop.native.layouts.dialog import LayoutSection
     from desktop.native.settings import SettingsPage
@@ -263,4 +263,60 @@ def test_the_preview_fits_a_short_window_at_large_text_with_motion_off(qapp: QAp
     page.nav.setCurrentRow(0)
     qapp.processEvents()
     assert preview.isVisible() is True
+    page.close()
+
+
+def test_the_look_preview_takes_a_real_share_of_a_large_window(qapp: QApplication) -> None:
+    """A wide window gives the preview about 40% of the stage, so Fit fills the room instead of
+    squeezing the window picture into a thin strip between empty bars."""
+    page = SettingsPage(None, {}, {}, {})
+    page.resize(1600, 1000)
+    page.show()
+    preview = page.style_preview
+    _wait(lambda: preview.isVisible() and not preview.stage.pictures[0].source.isNull())
+    for _ in range(4):
+        qapp.processEvents()
+    stage = preview.parentWidget()
+    assert stage is not None
+    assert preview.height() >= stage.height() * 0.35
+    shown = _child(preview, QLabel, "stylePreviewImage").pixmap()
+    assert shown is not None and not shown.isNull()
+    assert shown.deviceIndependentSize().height() >= 240
+    page.close()
+
+
+def test_the_look_preview_keeps_its_minimum_on_a_small_window(qapp: QApplication) -> None:
+    """At the smallest Settings window the preview still holds its 240, and the Look cards keep
+    enough room to scroll under it."""
+    page = SettingsPage(None, {}, {}, {})
+    page.resize(1024, 640)
+    page.show()
+    preview = page.style_preview
+    _wait(lambda: preview.isVisible() and not preview.stage.pictures[0].source.isNull())
+    for _ in range(4):
+        qapp.processEvents()
+    assert preview.height() >= 240
+    cards = page.stack.currentWidget()
+    assert isinstance(cards, QScrollArea)
+    assert cards.height() >= 200
+    page.close()
+
+
+def test_other_settings_pages_do_not_keep_room_for_the_preview(qapp: QApplication) -> None:
+    """Another page takes the whole stage: the preview hides and its row hands the space back, so
+    the cards start at the top."""
+    page = SettingsPage(None, {}, {}, {})
+    page.resize(1600, 1000)
+    page.show()
+    preview = page.style_preview
+    _wait(lambda: preview.isVisible() and not preview.stage.pictures[0].source.isNull())
+    stage = preview.parentWidget()
+    assert stage is not None
+    page.nav.setCurrentRow(1)
+    for _ in range(4):
+        qapp.processEvents()
+    assert preview.isVisible() is False
+    cards = page.stack.currentWidget()
+    assert isinstance(cards, QScrollArea)
+    assert cards.mapTo(stage, cards.rect().topLeft()).y() == 0
     page.close()
