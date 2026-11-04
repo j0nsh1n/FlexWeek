@@ -448,8 +448,6 @@ class PassiveMonthBridge(QObject):
             live_snapshot = getattr(session, "month_data", None)
             current_gen = getattr(session, "_month_gen", 0)
             live_gen = getattr(session, "_month_data_gen", None)
-            if live_gen is None and isinstance(live_snapshot, dict):
-                live_gen = live_snapshot.get("_gen")
             gen_ok = live_gen is None or live_gen == current_gen
             if gen_ok and isinstance(live_snapshot, dict) and live_snapshot.get("month") == target_month:
                 snapshot = live_snapshot

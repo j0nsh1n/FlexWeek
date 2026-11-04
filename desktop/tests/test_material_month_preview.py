@@ -318,8 +318,7 @@ def test_after_a_save_and_plan_the_preview_asks_again(qapp: Any, launches: Any) 
     held[-1][3](snap("2026-11", "Art"))
     wait_until(qapp, lambda: not preview.loading)
 
-    # Drive real plan action
-    count_before = len(held)
+    # Drive real plan action. The homework's own save asks once; answer it, so only Plan can ask again.
     s.add_homework(
         {
             "id": "hw_plan",
@@ -331,11 +330,17 @@ def test_after_a_save_and_plan_the_preview_asks_again(qapp: Any, launches: Any) 
     )
     s.save()
     wait_until(qapp, lambda: not s.busy and s.pending_save is None)
+    if preview.loading and held:
+        held[-1][3](snap("2026-11", "Art"))
+        wait_until(qapp, lambda: not preview.loading)
+    count_before = len(held)
     s.solve(everything=True)
     wait_until(qapp, lambda: not s.busy and s.pending_save is None)
 
-    # Preview asks again after real plan
+    assert any(block.get("assignment_id") == "hw_plan" for block in s.blocks), "Plan placed the homework"
     assert len(held) > count_before, "Preview did not ask again after real plan"
+    held[-1][3](snap("2026-11", "Bio report"))
+    wait_until(qapp, lambda: not preview.loading)
 
 
 def test_a_late_reply_after_a_save_does_not_land_in_the_cache(qapp: Any, launches: Any) -> None:
@@ -662,8 +667,20 @@ def test_tab_passes_the_preview_in_three_stops_or_fewer(qapp: Any, launches: Any
             "start": "17:00",
             "duration_min": 45,
             "days": [1],
+            "assignment_id": "essay",
         }
     )
+    # Two more waiting with no time, so the drawer holds several cards.
+    for extra in ("lab", "reading"):
+        s.add_homework(
+            {
+                "id": extra,
+                "title": extra.title(),
+                "due": "2026-11-08T23:59",
+                "estimate_min": 30,
+                "revision": 0,
+            }
+        )
     s.save()
     wait_until(qapp, lambda: not s.busy and s.pending_save is None)
 
@@ -704,6 +721,11 @@ def test_tab_passes_the_preview_in_three_stops_or_fewer(qapp: Any, launches: Any
         assert len(stops) <= 3, f"Expected <= 3 stops for {view}, got {len(stops)}: {stops}"
         assert "previewView" in stops, f"previewView missing from {view} stops: {stops}"
         assert "previewFit" in stops, f"previewFit missing from {view} stops: {stops}"
+        if view == "week":
+            assert _named(stage, "weekBlock"), "the Week preview draws the scheduled homework block"
+            assert len(_named(stage, "homeworkCard")) >= 2, "the Week preview draws the waiting cards"
+        for name in ("weekBlock", "weekBlockFinish", "homeworkCard", "planHomework"):
+            assert name not in stops, f"{name} took a Tab stop in the {view} preview: {stops}"
 
     # Test Month preview in success state
     panel.setPreviewView("month")

@@ -665,8 +665,6 @@ class NativeSession(QObject):
             # Shown at once, then asked for again: another week may have changed since it was kept.
             self.month_data = cached
             self._month_data_gen = gen
-            if isinstance(cached, dict):
-                cached["_gen"] = gen
             self.week_changed.emit()
 
         def ok(data: dict) -> None:
@@ -677,8 +675,6 @@ class NativeSession(QObject):
                 or gen != self._month_gen
             ):
                 return
-            if isinstance(data, dict):
-                data["_gen"] = gen
             self.month_data = data
             self._month_data_gen = gen
             self._month_cache[key] = data

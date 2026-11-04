@@ -285,6 +285,7 @@ Item {
                 WeekBlock {
                     id: blockCell
                     objectName: "weekBlock"
+                    passive: root.passive
                     x: root.gutter + model.day * root.dayWidth + 3
                     y: model.start / 60 * root.row
                     width: Math.max(8, root.dayWidth - 6)

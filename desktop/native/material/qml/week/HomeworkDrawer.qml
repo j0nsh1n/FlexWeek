@@ -115,6 +115,7 @@ Rectangle {
                 HomeworkCard {
                     id: homeworkCard
                     objectName: "homeworkCard"
+                    passive: drawer.passive
                     width: list.width
                     theme: drawer.theme
                     density: drawer.density
