@@ -35,6 +35,12 @@ if [[ -d "$BUNDLE/qtwebengine_locales" ]]; then
 fi
 rm -f "$BUNDLE/qtwebengine_devtools_resources.pak"
 
+# The pyside6 plugin copies every QML module once the Material shell uses QML.
+# FlexWeek is a Wayland client, never a compositor, and the compositor modules
+# need libwayland-server and compositor libraries that no desktop is promised to have.
+rm -rf "$BUNDLE/PySide6/qml/QtWayland/Compositor"
+rm -f "$BUNDLE"/libQt6WaylandCompositor*.so*
+
 # Upstream COPYING texts live in desktop/linux/licenses, because distro
 # packages do not all ship them (Fedora's xcb-util-keysyms has none).
 mkdir -p "$BUNDLE/licenses"

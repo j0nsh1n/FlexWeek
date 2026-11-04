@@ -39,6 +39,13 @@ def test_linux_trim_survives_a_bundle_with_no_chromium_locales() -> None:
     assert '[[ -d "$BUNDLE/qtwebengine_locales" ]]' in FINISH
 
 
+def test_linux_bundle_drops_the_wayland_compositor_modules() -> None:
+    # The bundle check rejects them: they need libwayland-server, which desktops need not have.
+    trim = FINISH.index('rm -rf "$BUNDLE/PySide6/qml/QtWayland/Compositor"')
+    assert FINISH.index('rm -f "$BUNDLE"/libQt6WaylandCompositor*.so*') > 0
+    assert trim < FINISH.index("desktop.check_bundle"), "trim before the bundle check"
+
+
 def test_release_jobs_fail_if_chromium_lands_in_the_package() -> None:
     assert "Native package must not ship WebEngine" in WORKFLOW
     assert WORKFLOW.count("Native package must not ship WebEngine") == 2
