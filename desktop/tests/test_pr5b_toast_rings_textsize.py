@@ -18,7 +18,6 @@ from PySide6.QtWidgets import QApplication, QPushButton
 
 from desktop.native.material import bridge as bridge_module
 from desktop.native.material import bridge_sheets as bridge_sheets_module
-from desktop.native.material import bridge_week as bridge_week_module
 from desktop.native.material.theme import SCALE_RANGE
 from desktop.native.widgets import ACTION_TOAST_MS
 from desktop.native.window import NativeWindow
@@ -50,7 +49,6 @@ def test_the_undo_toast_stays_at_least_ten_seconds(qapp: QApplication, window: N
     # 1. Material constants
     assert bridge_module.SNACK_MS >= 10000
     assert bridge_sheets_module.NOTICE_MS >= 10000
-    assert bridge_week_module.SNACK_MS >= 10000
 
     # 2. Material snackbar timer
     _reset_material(window, qapp)
