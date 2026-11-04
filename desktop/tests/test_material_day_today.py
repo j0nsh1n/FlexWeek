@@ -129,6 +129,36 @@ def test_day_from_the_rail_after_browsing_another_month_opens_on_today(
         window._use_widgets_styles()
 
 
+def test_day_clicked_while_a_month_week_is_still_loading_opens_on_today(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Month, next month, Week, then Day before Week's load lands: that load must not move Day off today."""
+    root = _show_material(qapp, window)
+    bridge = _bridge(root)
+    session = window.session
+    current = session.week_start
+    today_iso = datetime.fromtimestamp(session.now_ms() / 1000).date().isoformat()
+    try:
+        bridge.showPage("month")
+        settled(qapp, window)
+        bridge.property("month").nextMonth()
+        settled(qapp, window)
+        _pump(qapp)
+        bridge.showPage("week")
+        assert session.busy, "Week must still be loading the other month's week, or this tests nothing"
+        bridge.showPage("day")
+        settled(qapp, window)
+        _pump(qapp)
+        settled(qapp, window)
+        assert bridge.property("screen") == "day"
+        assert bridge.property("day").property("iso") == today_iso
+        assert session.week_start == current
+    finally:
+        session.load_week(current)
+        settled(qapp, window)
+        window._use_widgets_styles()
+
+
 def test_a_4pm_to_530pm_block_is_coming_up_at_340pm_not_done() -> None:
     # Soccer is 16:00 to 17:30 (4:00 PM to 5:30 PM)
     soccer = _block("Soccer", *SOCCER, category="exercise")
