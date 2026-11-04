@@ -825,7 +825,7 @@ class SettingsBridge(QObject):
             "pomodoro": work == 25 and rest == 5,
             "split": bool(prefs.get(_SPLIT)) if _SPLIT else False,
             "cutoff": cutoff if cutoff in CUTOFFS else "",
-            "buffer": int(prefs.get(_BUFFER) or 0) if _BUFFER else 0,
+            "buffer": (0 if prefs.get(_BUFFER) == 0 else int(prefs.get(_BUFFER) or 15)) if _BUFFER else 15,
             "urgent": bool(prefs.get(_URGENT, True)) if _URGENT else False,
             "weekendFree": bool(prefs.get(_WEEKEND_FREE)) if _WEEKEND_FREE else False,
             "showWeekends": bool(prefs.get(_SHOW_WEEKENDS, True)) if _SHOW_WEEKENDS else True,

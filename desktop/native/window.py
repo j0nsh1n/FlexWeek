@@ -4090,6 +4090,10 @@ class NativeWindow(QMainWindow):
         if self._material_owns():
             placed, waiting = self.session.plan_counts
             said = f"Placed {placed} of {placed + waiting}"
+            for item in (self.session.trace or {}).get("notices") or []:
+                if item.get("kind") == "spread_same_day" and item.get("message"):
+                    said = f"{said}. {item['message']}"
+                    break
         self._set_notice(said, "Undo", self._undo_from_notice)
         # Plan caused this Undo, even when the click has already moved the keyboard.
         self._undo_button = "solveButton"

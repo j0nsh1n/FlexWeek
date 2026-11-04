@@ -465,11 +465,18 @@ class Explanation(BaseModel):
     slack_status: SlackStatus | None = None
 
 
+class Notice(BaseModel):
+    kind: Literal["spread_same_day"]
+    block_id: str
+    message: str
+
+
 class SolveTrace(BaseModel):
     placed: list[TimeBlock]
     unplaced: list[TimeBlock]
     moves: list[Move]
     explanations: list[Explanation]
+    notices: list[Notice] = Field(default_factory=list)
     failed_constraints: list[ReasonCode]
     solve_ms: float
     complete: bool

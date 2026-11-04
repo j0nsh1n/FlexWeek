@@ -13,9 +13,14 @@ use crate::time::{
 
 pub const SOLVE_BUDGET_MS: f64 = 150.0;
 
-/// Settings that change where homework lands. The defaults are today's planner:
-/// weekends stay available, tasks may touch, sooner deadlines go first, and a
-/// long task stays one block.
+/// Gap a new or unset account leaves after events and between tasks. The planner
+/// steps in 15-minute slots, so this is one slot. `PlanRules::default()` stays 0
+/// so a rules-off solve still lets tasks touch.
+pub const DEFAULT_BUFFER_MIN: i64 = 15;
+
+/// Settings that change where homework lands. `Default` is rules-off: weekends
+/// stay available, tasks may touch, sooner deadlines go first, and a long task
+/// stays one block. A missing preferences key is not this: see `plan_rules_from_value`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PlanRules {
     pub weekend_homework_free: bool,
@@ -47,8 +52,10 @@ impl PlanRules {
     }
 }
 
-/// Reads the planner switches off a preferences row. A missing key is the default,
-/// which is also what an account stored before these columns existed resolves to.
+/// Reads the planner switches off a preferences row. A missing or null
+/// `buffer_min` is `DEFAULT_BUFFER_MIN` (15). An explicit 0 stays 0 (None).
+/// 15 and 30 stay. Any other number is 0, as before. The other flags still
+/// match `PlanRules::default()` when the key is missing.
 pub fn plan_rules_from_value(value: &Value) -> PlanRules {
     let obj = value.as_object();
     let flag = |key: &str, default: bool| -> bool {
@@ -59,13 +66,13 @@ pub fn plan_rules_from_value(value: &Value) -> PlanRules {
             Some(_) => default,
         }
     };
-    let buffer_min = match obj
-        .and_then(|fields| fields.get("buffer_min"))
-        .and_then(Value::as_i64)
-    {
-        Some(15) => 15,
-        Some(30) => 30,
-        _ => 0,
+    let buffer_min = match obj.and_then(|fields| fields.get("buffer_min")) {
+        None | Some(Value::Null) => DEFAULT_BUFFER_MIN,
+        Some(value) => match value.as_i64() {
+            Some(15) => 15,
+            Some(30) => 30,
+            _ => 0,
+        },
     };
     PlanRules {
         weekend_homework_free: flag("weekend_homework_free", false),
@@ -167,11 +174,19 @@ pub struct Explanation {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct Notice {
+    pub kind: String,
+    pub block_id: String,
+    pub message: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct SolveTrace {
     pub placed: Vec<TimeBlock>,
     pub unplaced: Vec<TimeBlock>,
     pub moves: Vec<Move>,
     pub explanations: Vec<Explanation>,
+    pub notices: Vec<Notice>,
     pub failed_constraints: Vec<String>,
     pub solve_ms: f64,
     pub complete: bool,
@@ -389,6 +404,7 @@ fn order_values(
     block: &TimeBlock,
     values: &[(i64, i64)],
     windows: &[Value],
+    deadline: Option<(i64, i64)>,
 ) -> EngineResult<Vec<(i64, i64)>> {
     if block.prefer_earliest {
         let mut ordered = values.to_vec();
@@ -396,7 +412,8 @@ fn order_values(
         return Ok(ordered);
     }
     let (low, high) = energy_window(&block.energy);
-    let mut keyed: Vec<(i64, i64, i64, i64, i64)> = Vec::with_capacity(values.len());
+    let due_day = deadline.map(|(day, _)| day);
+    let mut keyed: Vec<(i64, i64, i64, i64, i64, i64)> = Vec::with_capacity(values.len());
     for &(day, slot) in values {
         let start_min = DAY_START_MIN + slot * SLOT_MIN;
         let end_min = start_min + block.duration_min;
@@ -412,19 +429,102 @@ fn order_values(
             start_min,
             block.duration_min,
         )?;
+        let last_day = i64::from(due_day == Some(day));
         let match_energy = if low <= start_min && start_min < high {
             0
         } else {
             1
         };
-        keyed.push((night, study, match_energy, day, slot));
+        keyed.push((night, study, last_day, match_energy, day, slot));
     }
     keyed.sort();
-    Ok(keyed.into_iter().map(|k| (k.3, k.4)).collect())
+    Ok(keyed.into_iter().map(|k| (k.4, k.5)).collect())
 }
 
 fn assigned_contains(assigned: &[(String, (i64, i64))], id: &str) -> bool {
     assigned.iter().any(|(key, _)| key == id)
+}
+
+fn homework_id(block: &TimeBlock) -> Option<&str> {
+    block
+        .rest
+        .get("assignment_id")
+        .and_then(Value::as_str)
+        .filter(|id| !id.is_empty())
+}
+
+fn spread_group_key(block: &TimeBlock) -> String {
+    if let Some(id) = homework_id(block) {
+        return id.to_string();
+    }
+    match block.split_peer.as_deref() {
+        Some(peer) if peer < block.id.as_str() => peer.to_string(),
+        Some(_) => block.id.clone(),
+        None => block.id.clone(),
+    }
+}
+
+fn spread_mates(left: &TimeBlock, right: &TimeBlock) -> bool {
+    if left.id == right.id {
+        return false;
+    }
+    if left.split_peer.as_deref() == Some(right.id.as_str())
+        || right.split_peer.as_deref() == Some(left.id.as_str())
+    {
+        return true;
+    }
+    match (homework_id(left), homework_id(right)) {
+        (Some(a), Some(b)) => a == b,
+        _ => false,
+    }
+}
+
+const DAY_NAME: [&str; 7] = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+];
+
+fn same_day_spread_notes(placed: &[TimeBlock]) -> Vec<Notice> {
+    use std::collections::HashMap;
+    let mut groups: HashMap<String, Vec<&TimeBlock>> = HashMap::new();
+    for block in placed {
+        if block.kind != "flexible" {
+            continue;
+        }
+        groups
+            .entry(spread_group_key(block))
+            .or_default()
+            .push(block);
+    }
+    let mut notes = Vec::new();
+    for members in groups.values() {
+        if members.len() < 2 {
+            continue;
+        }
+        let mut counts: HashMap<i64, usize> = HashMap::new();
+        for block in members {
+            if let Some(day) = block.days.first() {
+                *counts.entry(*day).or_default() += 1;
+            }
+        }
+        if let Some((day, _)) = counts.into_iter().find(|(_, count)| *count >= 2) {
+            let title = members[0].title.as_str();
+            let name = DAY_NAME.get(day as usize).copied().unwrap_or("that day");
+            notes.push(Notice {
+                kind: "spread_same_day".into(),
+                block_id: members[0].id.clone(),
+                message: format!(
+                    "Couldn't spread {title} over separate days, so two parts share {name}."
+                ),
+            });
+        }
+    }
+    notes
 }
 
 fn score_assigned(
@@ -531,7 +631,12 @@ impl<'a> SearchCtx<'a> {
             .unwrap();
         let var = self.ids[var_idx].clone();
         let n = self.lengths[var_idx];
-        let ordered = order_values(&self.flex[var_idx], &domains[var_idx], self.windows)?;
+        let ordered = order_values(
+            &self.flex[var_idx],
+            &domains[var_idx],
+            self.windows,
+            self.parsed_deadlines[var_idx],
+        )?;
         for (day, slot) in ordered {
             if self.remaining_ms() <= 0.0 {
                 self.timed_out = true;
@@ -543,12 +648,14 @@ impl<'a> SearchCtx<'a> {
             new_occ[day as usize] |= mask;
             let mut new_domains: Vec<Vec<(i64, i64)>> = domains.to_vec();
             new_domains[var_idx] = vec![];
+            let placed_block = self.flex.iter().find(|block| block.id == var);
             for (other_idx, vals) in new_domains.iter_mut().enumerate() {
                 if other_idx == var_idx || assigned_contains(assigned, &self.ids[other_idx]) {
                     continue;
                 }
                 let other_n = self.lengths[other_idx];
-                let peer = self.flex[other_idx].split_peer.as_deref() == Some(var.as_str());
+                let peer =
+                    placed_block.is_some_and(|placed| spread_mates(placed, &self.flex[other_idx]));
                 if peer {
                     let mut elsewhere = Vec::new();
                     let mut same_day = Vec::new();
@@ -1007,7 +1114,6 @@ pub fn solve_with_rules(
         let mut placed = search_blocks[idx].clone();
         placed.start = Some(slot_to_hhmm(*slot)?);
         placed.days = vec![*day];
-        placed.split_peer = None;
         placed_flex.push(placed);
         occ_final[*day as usize] |= occupancy_mask(*slot, lengths[idx])?;
     }
@@ -1102,6 +1208,10 @@ pub fn solve_with_rules(
             slack_status: None,
         });
     }
+    let notices = same_day_spread_notes(&placed_flex);
+    for block in &mut placed_flex {
+        block.split_peer = None;
+    }
 
     let complete = unplaced.is_empty();
     Ok(SolveTrace {
@@ -1114,6 +1224,7 @@ pub fn solve_with_rules(
         unplaced,
         moves,
         explanations,
+        notices,
         failed_constraints: failed,
         solve_ms: elapsed_ms(),
         complete,
@@ -1515,11 +1626,23 @@ pub fn trace_to_value(trace: &SolveTrace) -> Value {
             })
         })
         .collect();
+    let notices: Vec<Value> = trace
+        .notices
+        .iter()
+        .map(|item| {
+            serde_json::json!({
+                "kind": item.kind,
+                "block_id": item.block_id,
+                "message": item.message,
+            })
+        })
+        .collect();
     serde_json::json!({
         "placed": trace.placed.iter().map(block_to_value).collect::<Vec<_>>(),
         "unplaced": trace.unplaced.iter().map(block_to_value).collect::<Vec<_>>(),
         "moves": moves,
         "explanations": explanations,
+        "notices": notices,
         "failed_constraints": trace.failed_constraints,
         "solve_ms": trace.solve_ms,
         "complete": trace.complete,

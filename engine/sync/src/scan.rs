@@ -99,7 +99,7 @@ fn untouched_migration_default(entity: &str, key: &str, body: &Value) -> bool {
     matches!(
         (key, value),
         ("weekend_homework_free", 0)
-            | ("buffer_min", 0)
+            | ("buffer_min", 15)
             | ("urgent_first", 1)
             | ("split_long_tasks", 0)
             | ("show_weekends", 1)

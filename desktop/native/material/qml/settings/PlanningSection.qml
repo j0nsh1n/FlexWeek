@@ -34,7 +34,7 @@ SectionPage {
             title: "Smart buffer time"
             subtitle: "Breathing room between planned blocks."
             choices: [{ label: "None", value: "0" }, { label: "15m", value: "15" }, { label: "30m", value: "30" }]
-            current: String(page.st.buffer === undefined ? 0 : page.st.buffer)
+            current: String(page.st.buffer === undefined ? 15 : page.st.buffer)
             onChosen: (value) => page.panel.setBuffer(parseInt(value))
         }
         ToggleRow {

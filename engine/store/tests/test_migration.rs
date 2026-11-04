@@ -256,7 +256,7 @@ fn test_system_theme_migration_keeps_chosen_themes_and_defaults_new_rows_to_syst
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
         )
         .unwrap();
-    assert_eq!(planner, (0, 0, 1, 0, 1));
+    assert_eq!(planner, (0, 15, 1, 0, 1));
     assert_eq!(leftovers, 0);
     match dark {
         Err(rusqlite::Error::SqliteFailure(err, _))

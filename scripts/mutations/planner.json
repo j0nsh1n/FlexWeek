@@ -2,8 +2,8 @@
  {
   "file": "engine/engine/src/solver.rs",
   "name": "night not ranked last",
-  "old": "        keyed.push((night, study, match_energy, day, slot));\n    }\n    keyed.sort();\n    Ok(keyed.into_iter().map(|k| (k.3, k.4)).collect())\n",
-  "new": "        keyed.push((study, match_energy, day, slot, night));\n    }\n    keyed.sort();\n    Ok(keyed.into_iter().map(|k| (k.2, k.3)).collect())\n",
+  "old": "        keyed.push((night, study, last_day, match_energy, day, slot));\n    }\n    keyed.sort();\n    Ok(keyed.into_iter().map(|k| (k.4, k.5)).collect())\n",
+  "new": "        keyed.push((study, last_day, match_energy, day, slot, night));\n    }\n    keyed.sort();\n    Ok(keyed.into_iter().map(|k| (k.3, k.4)).collect())\n",
   "test": "cargo:flexweek-engine:test_solver:test_a_low_session_skips_midnight_when_the_morning_is_free"
  },
  {

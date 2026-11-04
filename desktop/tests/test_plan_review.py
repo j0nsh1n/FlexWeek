@@ -373,3 +373,22 @@ def test_an_overfull_day_opens_the_panel_even_when_everything_has_a_time(qapp: Q
     assert [panel.list.item(i).text() for i in range(panel.list.count())] == [
         "Thursday has 5 h 30 min of homework."
     ]
+
+
+def test_a_same_day_spread_says_so_in_the_toast(qapp: QApplication) -> None:
+    trace = {
+        "placed": [{"id": "essay-a"}, {"id": "essay-b"}],
+        "unplaced": [],
+        "moves": [],
+        "explanations": [],
+        "notices": [
+            {
+                "kind": "spread_same_day",
+                "block_id": "essay-a",
+                "message": "Couldn't spread History essay over separate days, so two parts share Wednesday.",
+            }
+        ],
+    }
+    assert PlanReview().rows_for(trace, TITLES, WEEK) == [
+        "Couldn't spread History essay over separate days, so two parts share Wednesday."
+    ]

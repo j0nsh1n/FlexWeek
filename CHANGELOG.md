@@ -16,6 +16,9 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ### Changed
 - In the Material style, clicking a homework block, a homework card or a Day row opens it for editing; marking it finished has its own round button, and right-click or Shift+F10 opens Edit, Mark finished and Delete.
+- Spread-over-days homework sits on different days when it can, and the plan toast says so when two parts have to share a day.
+- The planner uses earlier free days before the due date instead of stacking everything on that last day.
+- A new or unset account leaves 15 minutes after events and between tasks. Choosing None keeps no gap.
 - Material Day and My day show leftover counts, the free-time Now card, Up next and Done, and a homework check with Undo.
 - Spotify for blocks is one link in Settings. Add and edit no longer ask for a link on a block or on homework. Open Spotify link and Focus set to Spotify use that link. A block starts with it only when the alarm sound is Spotify. A link already saved on a block stays in your data.
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.

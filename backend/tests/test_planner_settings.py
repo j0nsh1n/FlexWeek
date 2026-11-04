@@ -101,8 +101,9 @@ def test_timer_pacing_stays_separate_from_splitting_a_long_task(alice: TestClien
 
 
 def test_buffer_and_an_unknown_gap_are_checked(alice: TestClient) -> None:
-    assert save(alice, buffer_min=15)["buffer_min"] == 15
-    assert alice.get("/api/preferences").json()["buffer_min"] == 15
+    saved = save(alice, buffer_min=15)
+    assert "buffer_min" not in saved
+    assert "buffer_min" not in alice.get("/api/preferences").json()
     rejected = alice.put(
         "/api/preferences",
         json={**alice.get("/api/preferences").json(), "buffer_min": 10},
@@ -123,9 +124,9 @@ def test_each_planner_setting_moves_the_week(alice: TestClient) -> None:
         block("class", 60, [4], kind="locked", start="15:00", energy="medium"),
         block("hw", 60, [4]),
     ]
-    assert placed(alice, homework)["hw"] == (4, "16:00", 60)
-    save(alice, buffer_min=15)
     assert placed(alice, homework)["hw"] == (4, "16:15", 60)
+    save(alice, buffer_min=0)
+    assert placed(alice, homework)["hw"] == (4, "16:00", 60)
     save(alice, buffer_min=30)
     assert placed(alice, homework)["hw"] == (4, "16:30", 60)
     save(alice, buffer_min=0)
@@ -177,3 +178,73 @@ def test_each_planner_setting_moves_the_week(alice: TestClient) -> None:
     save(alice, work_windows=morning, show_weekends=False)
     assert placed(alice, [block("math", 60, [5], energy="high")])["math"] == (5, "10:00", 60)
     assert alice.get("/api/preferences").json()["show_weekends"] is False
+
+
+def test_a_new_account_plans_with_a_15_minute_buffer(alice: TestClient) -> None:
+    body = alice.get("/api/preferences").json()
+    # The dump omits the 15-minute default the way other planner defaults are omitted.
+    assert body.get("buffer_min", 15) == 15
+    save(alice, work_windows=[{"days": [4], "start": "16:00", "end": "20:00"}])
+    homework = [
+        block("class", 60, [4], kind="locked", start="15:00", energy="medium"),
+        block("hw", 60, [4]),
+    ]
+    assert placed(alice, homework)["hw"] == (4, "16:15", 60)
+
+
+def test_choosing_no_buffer_is_saved_and_kept(alice: TestClient) -> None:
+    saved = save(alice, buffer_min=0)
+    assert saved["buffer_min"] == 0
+    assert alice.get("/api/preferences").json()["buffer_min"] == 0
+
+
+def test_planning_a_spread_that_must_share_a_day_succeeds_and_returns_the_notice(
+    alice: TestClient,
+) -> None:
+    week_start = "2026-09-07"
+    body = {
+        "id": "essay",
+        "title": "History essay",
+        "course": None,
+        "category": None,
+        "priority": 3,
+        "energy": "medium",
+        "spotify_url": None,
+        "due": "2026-09-11T21:00",
+        "estimate_min": 90,
+        "focus_minutes": 0,
+        "focus_sessions": 0,
+        "completed": False,
+        "completed_at": None,
+        "revision": 0,
+    }
+    saved = alice.put("/api/assignments/essay", json=body, headers=WRITE)
+    assert saved.status_code == 200, saved.text
+    save(alice, work_windows=[{"days": [2], "start": "16:00", "end": "21:00"}])
+    pieces = [
+        block(
+            "essay-a",
+            60,
+            [2],
+            title="History essay",
+            assignment_id="essay",
+        ),
+        block(
+            "essay-b",
+            30,
+            [2],
+            title="History essay",
+            assignment_id="essay",
+        ),
+    ]
+    solved = alice.post(
+        "/api/solve",
+        json={"blocks": pieces, "week_start": week_start},
+        headers=WRITE,
+    )
+    assert solved.status_code == 200, solved.text
+    notice = "Couldn't spread History essay over separate days, so two parts share Wednesday."
+    notices = solved.json().get("notices") or []
+    assert any(item.get("kind") == "spread_same_day" and item.get("message") == notice for item in notices), (
+        notices
+    )

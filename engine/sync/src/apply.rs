@@ -270,8 +270,11 @@ fn write_real(tx: &Connection, user_id: i64, record: &Record) -> SyncResult<()> 
         }
         "pref" => {
             if let Some(body) = body {
+                // Version 4 already ran the 0→15 move. A new row at 0 would be
+                // treated as an old default and changed on the next open.
                 tx.execute(
-                    "INSERT INTO preferences(user_id) VALUES (?1) ON CONFLICT(user_id) DO NOTHING",
+                    "INSERT INTO preferences(user_id, prefs_version) VALUES (?1, 4)
+                     ON CONFLICT(user_id) DO NOTHING",
                     [user_id],
                 )?;
                 let sql = format!("UPDATE preferences SET {}=?1 WHERE user_id=?2", record.key);

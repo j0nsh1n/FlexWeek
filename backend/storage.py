@@ -18,7 +18,8 @@ SESSION_SECONDS_KEEP = flexweek_engine.SESSION_SECONDS_KEEP
 # 1: reminders on (0.15). Setup never asked, so they were off for everyone who had not turned them on.
 # 2: a 12-hour clock for new accounts (0.18.5). Every older account that never chose is stamped 24-hour.
 # 3: the standing week (0.19.0), built once from the Setup blocks an older account's weeks hold.
-PREFS_VERSION = 3
+# 4: stored buffer_min 0 becomes 15 once. After this, saving None (0) is kept.
+PREFS_VERSION = 4
 
 
 def digest(value: str) -> str:

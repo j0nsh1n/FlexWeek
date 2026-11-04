@@ -102,7 +102,8 @@ pub fn write_preferences(conn: &Connection, user_id: i64, fields_json: &str) -> 
 pub fn insert_preferences(conn: &Connection, user_id: i64, prefs_version: i64) -> StoreResult<()> {
     defer_write(
         conn,
-        "INSERT INTO preferences(user_id, reminders_enabled, prefs_version) VALUES (?1, 1, ?2)",
+        "INSERT INTO preferences(user_id, reminders_enabled, prefs_version, buffer_min)
+         VALUES (?1, 1, ?2, 15)",
         params![user_id, prefs_version],
     )?;
     Ok(())
