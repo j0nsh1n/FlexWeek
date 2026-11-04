@@ -96,8 +96,7 @@ fn rules() -> PlanRules {
 
 #[test]
 fn missing_keys_are_todays_planner() {
-    // These placements were printed by 129f891e's planner (`solve`, before plan rules).
-    // Missing keys have to land on the same times.
+    // A missing buffer_min is 15 minutes (FIX-SPEC v1.3). PlanRules::default() stays 0.
     let parsed = plan_rules_from_value(&json!({}));
     assert_eq!(
         (
@@ -107,7 +106,7 @@ fn missing_keys_are_todays_planner() {
             parsed.split_long_tasks,
             parsed.buffer_slots(),
         ),
-        (false, 0, true, false, 0)
+        (false, 15, true, false, 1)
     );
     let afternoon = [work_span(&[4], "16:00", "20:00", None)];
     let both = [
@@ -123,7 +122,7 @@ fn missing_keys_are_todays_planner() {
         None,
         parsed,
     );
-    assert_eq!(start_of(&touched, "hw"), expect(4, "16:00", 60));
+    assert_eq!(start_of(&touched, "hw"), expect(4, "16:15", 60));
     let open = plan(
         &[
             flex("science", 60, &[4], "medium", Some("Friday 18:00")),
@@ -145,7 +144,10 @@ fn missing_keys_are_todays_planner() {
         parsed,
     );
     assert_eq!(start_of(&urgent, "b-science"), expect(4, "16:00", 60));
-    assert_eq!(start_of(&urgent, "a-math"), expect(4, "17:00", 60));
+    assert!(
+        urgent.unplaced.iter().any(|block| block.id == "a-math"),
+        "a 15-minute buffer leaves no second hour in 16:00–18:00"
+    );
     let whole = plan(
         std::slice::from_ref(&flex("essay", 120, &[4, 5], "medium", None)),
         &both,

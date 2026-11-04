@@ -548,10 +548,11 @@ class Preferences(BaseModel):
         default_factory=list, max_length=21, exclude_if=lambda value: not value
     )
     day_cutoff: str | None = Field(default=None, exclude_if=lambda value: value is None)
-    # Planner switches. Omitted at the default so an account saved before these columns
-    # still reads as the planner it has today: weekends open, no gap, urgent first, no split.
+    # Planner switches. Omitted at the default so an account that never set them
+    # reads as weekends open, a 15-minute gap, urgent first, no split. An explicit
+    # 0 for the buffer is stored so None is not the same as never set.
     weekend_homework_free: bool = Field(default=False, exclude_if=lambda value: value is False)
-    buffer_min: Literal[0, 15, 30] = Field(default=0, exclude_if=lambda value: value == 0)
+    buffer_min: Literal[0, 15, 30] = Field(default=15, exclude_if=lambda value: value == 15)
     urgent_first: bool = Field(default=True, exclude_if=lambda value: value is True)
     split_long_tasks: bool = Field(default=False, exclude_if=lambda value: value is False)
     # The week grid reads this. The planner does not.

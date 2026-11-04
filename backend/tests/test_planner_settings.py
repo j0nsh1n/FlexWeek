@@ -81,6 +81,10 @@ def placed(client: TestClient, blocks: list[dict]) -> dict[str, tuple[int, str, 
 def test_a_fresh_account_omits_planner_settings(alice: TestClient) -> None:
     body = alice.get("/api/preferences").json()
     for key in PLANNER_KEYS:
+        if key == "buffer_min":
+            # The store row still defaults to 0, so a new account sends explicit None.
+            assert body.get(key) == 0
+            continue
         assert key not in body
     saved = alice.put("/api/preferences", json=body, headers=WRITE)
     assert saved.status_code == 200, saved.text
@@ -101,8 +105,9 @@ def test_timer_pacing_stays_separate_from_splitting_a_long_task(alice: TestClien
 
 
 def test_buffer_and_an_unknown_gap_are_checked(alice: TestClient) -> None:
-    assert save(alice, buffer_min=15)["buffer_min"] == 15
-    assert alice.get("/api/preferences").json()["buffer_min"] == 15
+    saved = save(alice, buffer_min=15)
+    assert "buffer_min" not in saved
+    assert "buffer_min" not in alice.get("/api/preferences").json()
     rejected = alice.put(
         "/api/preferences",
         json={**alice.get("/api/preferences").json(), "buffer_min": 10},

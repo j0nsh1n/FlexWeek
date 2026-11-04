@@ -13,9 +13,14 @@ use crate::time::{
 
 pub const SOLVE_BUDGET_MS: f64 = 150.0;
 
-/// Settings that change where homework lands. The defaults are today's planner:
-/// weekends stay available, tasks may touch, sooner deadlines go first, and a
-/// long task stays one block.
+/// Gap a new or unset account leaves after events and between tasks. The planner
+/// steps in 15-minute slots, so this is one slot. `PlanRules::default()` stays 0
+/// so a rules-off solve still lets tasks touch.
+pub const DEFAULT_BUFFER_MIN: i64 = 15;
+
+/// Settings that change where homework lands. `Default` is rules-off: weekends
+/// stay available, tasks may touch, sooner deadlines go first, and a long task
+/// stays one block. A missing preferences key is not this: see `plan_rules_from_value`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PlanRules {
     pub weekend_homework_free: bool,
@@ -47,8 +52,10 @@ impl PlanRules {
     }
 }
 
-/// Reads the planner switches off a preferences row. A missing key is the default,
-/// which is also what an account stored before these columns existed resolves to.
+/// Reads the planner switches off a preferences row. A missing or null
+/// `buffer_min` is `DEFAULT_BUFFER_MIN` (15). An explicit 0 stays 0 (None).
+/// 15 and 30 stay. Any other number is 0, as before. The other flags still
+/// match `PlanRules::default()` when the key is missing.
 pub fn plan_rules_from_value(value: &Value) -> PlanRules {
     let obj = value.as_object();
     let flag = |key: &str, default: bool| -> bool {
@@ -59,13 +66,13 @@ pub fn plan_rules_from_value(value: &Value) -> PlanRules {
             Some(_) => default,
         }
     };
-    let buffer_min = match obj
-        .and_then(|fields| fields.get("buffer_min"))
-        .and_then(Value::as_i64)
-    {
-        Some(15) => 15,
-        Some(30) => 30,
-        _ => 0,
+    let buffer_min = match obj.and_then(|fields| fields.get("buffer_min")) {
+        None | Some(Value::Null) => DEFAULT_BUFFER_MIN,
+        Some(value) => match value.as_i64() {
+            Some(15) => 15,
+            Some(30) => 30,
+            _ => 0,
+        },
     };
     PlanRules {
         weekend_homework_free: flag("weekend_homework_free", false),
