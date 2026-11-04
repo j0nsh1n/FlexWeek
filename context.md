@@ -1,6 +1,11 @@
 # context.md — FlexWeek
 
 ## Current State
+- 2026-11-03 (Step 0 of the FIX-SPEC v1.3 plan): at `ea5eacf4` plus the two static audit test files, the
+  full gate (3 workers) passes 5788 tests, ruff and mypy. Two runs with 8 workers on a busy machine each
+  failed one different timing test (`test_week_hour_labels.py`, `test_layout_clay.py`); both pass alone.
+  The Roboto Flex licence had Windows line endings, which failed the committed-range whitespace check;
+  it is now LF with the same text. Plan: `~/.flexweek-ui-harness/scratch/fix-spec-1.3/plan.md`.
 - 2026-11-03: Local static UI audit follow-ups reviewed through `92230b43`.
   Material Look now propagates light/dark colours to its rows; School times commit and
   format on Return. Day/Week/Month preview actions use passive projections, including
@@ -191,6 +196,10 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
+- 2026-11-03: Step 0 merges `fix/visual-artifacts-20261026` into `main` by PR (Jonathan's word). Next,
+  in the plan's order: the updater fixes and Linux nightly tarballs (plan section 3b), then PRs 1-7.
+  Writers are Gemini 3.8 Flash (T3 `antigravity`) and Grok 4.6 medium; Codex `gpt-6.1-sol` high reviews.
+  Jonathan's desktop now runs the 1.2.0 tarball install at `~/.local/opt/FlexWeek`.
 - Static audit: reviewed local source `92230b43`; no running repair at the latest handoff.
   Await direction for F1 cold Month and W3 Bento header drift; no retries under AFK
   authorization alone. Preserve two untracked weak audit tests without counting them
