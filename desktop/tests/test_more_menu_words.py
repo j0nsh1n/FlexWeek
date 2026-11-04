@@ -72,6 +72,7 @@ TOOLTIPS = {
     ),
     "Help": "What each screen is for, and the keyboard shortcuts.",
     "About FlexWeek": "The version, and where your plans are saved.",
+    "Back to Material": "Switch back to the Material 3 style. Your week and homework stay the same.",
     "Sign out": "Sign out on this computer. Your plans stay saved in your account.",
     "Undo": "Nothing to undo yet.",
     "Redo": "Nothing to redo.",

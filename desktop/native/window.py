@@ -378,6 +378,7 @@ MORE_TIPS = {
     "reloadWeek": "Load this week again as it's saved. Use it if something looks out of date.",
     "helpButton": "What each screen is for, and the keyboard shortcuts.",
     "aboutButton": "The version, and where your plans are saved.",
+    "backToMaterial": "Switch back to the Material 3 style. Your week and homework stay the same.",
     "signOut": "Sign out on this computer. Your plans stay saved in your account.",
 }
 # Why an action is greyed, when the reason is not simply that FlexWeek is busy.
@@ -1851,9 +1852,16 @@ class NativeWindow(QMainWindow):
         back_material = QPushButton("Back to Material")
         back_material.setObjectName("backToMaterial")
         back_material.clicked.connect(self._back_to_material)
+        # Its own line, so Help and About stay together and Sign out stays apart (Decision 22).
+        more_menu.addSeparator()
+        back_material.setParent(overflow)
+        back_material.hide()
+        action = mark(more_menu.addAction(back_material.text()), MORE_ICONS["backToMaterial"])
+        action.triggered.connect(back_material.click)
+        self._more_pairs.append((action, back_material))
         more_menu.addSeparator()
         add_heading(more_menu, HELP_HEADING)
-        for button in (help_button, about, back_material, sign_out):
+        for button in (help_button, about, sign_out):
             if button.parent() is not overflow:
                 button.setParent(overflow)
             button.hide()
