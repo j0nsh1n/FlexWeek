@@ -604,14 +604,14 @@ fn restamp_buffer_sync_baseline(db: &Connection, moved: &[i64]) -> StoreResult<(
         )?;
         // seq 0 is never exported (export is seq > since, since starts at 0), so
         // scan sees a matching hash and does not stamp 15 as a new edit.
-        if chosen != 0 {
-            if let Some(device_id) = device_id.as_deref() {
-                db.execute(
-                    "INSERT INTO sync_record(user_id, entity, key, hlc, device_id, deleted, hash, seq)
-                     VALUES (?1, 'pref', 'buffer_min', 0, ?2, 0, ?3, 0)",
-                    params![user_id, device_id, hash],
-                )?;
-            }
+        if chosen != 0
+            && let Some(device_id) = device_id.as_deref()
+        {
+            db.execute(
+                "INSERT INTO sync_record(user_id, entity, key, hlc, device_id, deleted, hash, seq)
+                 VALUES (?1, 'pref', 'buffer_min', 0, ?2, 0, ?3, 0)",
+                params![user_id, device_id, hash],
+            )?;
         }
     }
     Ok(())
