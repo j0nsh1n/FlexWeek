@@ -71,7 +71,7 @@ EXPECTED_SLATE_ACCENTS = {
 
 EXPECTED_CLASSES = {
     "class": "#3d6fc4",
-    "exercise": "#2f9e6b",
+    "exercise": "#2b9665",  # darker than the spec's #2f9e6b so it reaches 3:1 on the page (Jonathan)
     "extra": "#0f8a8a",
     "assignments": "#a87512",
     "study": "#c2557a",

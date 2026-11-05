@@ -198,15 +198,15 @@ def test_compact_settings_row_padding_is_10(gallery: tuple[QQuickView, QQuickIte
 def test_event_block_school_colour_radius_and_two_lines(
     gallery: tuple[QQuickView, QQuickItem],
 ) -> None:
-    """A school block is #EAE6FA, radius 12, padded 6 by 8 past the 4px bar, and the title is two lines."""
+    """A school block is #e4ebf7, radius 6, padded 6 by 8 past the 4px bar, and the title is two lines."""
     _view, root = gallery
     block = _find(root, "eventMeasure")
     shape = _child(block, "shape")
     title = _child(block, "title")
     body = _child(block, "body")
     bar = _child(block, "bar")
-    assert QColor(shape.property("color")).name() == "#eae6fa"
-    assert shape.property("radius") == 12
+    assert QColor(shape.property("color")).name() == "#e4ebf7"
+    assert shape.property("radius") == 6
     assert bar.width() == 4
     assert (body.x(), body.y()) == (12, 6)
     assert title.property("maximumLineCount") == 2
@@ -215,9 +215,16 @@ def test_event_block_school_colour_radius_and_two_lines(
 
 
 def test_past_event_is_dimmed(gallery: tuple[QQuickView, QQuickItem]) -> None:
-    """A past event block is drawn at 65% opacity."""
+    """A past event block fades its fill and bar to 55% while the block and title keep full opacity."""
     _view, root = gallery
-    assert _find(root, "pastEvent").opacity() == pytest.approx(0.65)
+    block = _find(root, "pastEvent")
+    shape = _child(block, "shape")
+    bar = _child(block, "bar")
+    title = _child(block, "title")
+    assert block.opacity() == pytest.approx(1.0)
+    assert shape.property("opacity") == pytest.approx(0.55)
+    assert bar.property("opacity") == pytest.approx(0.55)
+    assert title.property("opacity") == pytest.approx(1.0)
 
 
 def test_dialog_card_is_440_with_radius_28(gallery: tuple[QQuickView, QQuickItem]) -> None:

@@ -35,7 +35,7 @@ from desktop.native.weekmodel import clock_label, set_clock_24h
 
 # The spec's category fills: class colour mixed 14% into white (light) or 24% into dark card (#14171c).
 SCHOOL = {"light": "#e4ebf7", "dark": "#1e2c44"}
-SOCCER = {"light": "#e2f1ea", "dark": "#1a372f"}
+SOCCER = {"light": "#e1f0e9", "dark": "#1a352e"}
 CLUBS = {"light": "#ddefef", "dark": "#133336"}
 READING = {"light": "#f6e7ec", "dark": "#3e2633"}
 HOMEWORK = {"light": "#f3ecde", "dark": "#382e1a"}
@@ -193,12 +193,12 @@ def test_system_mode_follows_the_worn_axis_and_an_explicit_mode_wins() -> None:
 
 
 def test_event_block_categories_use_the_blocks_own_names() -> None:
-    assert event_category("class") == "school"
-    assert event_category("exercise") == "sports"
-    assert event_category("extra") == "sports"
+    assert event_category("class") == "class"
+    assert event_category("exercise") == "exercise"
+    assert event_category("extra") == "extra"
     assert event_category("study") == "study"
-    assert event_category("assignments") == "homework"
-    assert event_category("meal") == "homework"
+    assert event_category("assignments") == "assignments"
+    assert event_category("meal") == "other"
 
 
 def test_an_unknown_preset_mode_or_contrast_is_refused() -> None:

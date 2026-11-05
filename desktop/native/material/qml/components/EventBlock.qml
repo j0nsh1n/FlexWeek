@@ -6,8 +6,8 @@ Item {
     property string density: "comfortable"
     property bool reduceMotion: false
     property bool highContrast: false
-    // school, sports (soccer), study (bio reading), or homework.
-    property string category: "homework"
+    // class, exercise, extra, assignments, study, or other.
+    property string category: "assignments"
     property string title: ""
     property string detail: ""
     property bool past: false
@@ -15,26 +15,25 @@ Item {
     property int rightInset: 0
     property alias trailingInset: root.rightInset
 
-    // Absent keys keep the block the gallery measures: radius 12, pad 6, no shadow, an edge bar.
+    // Absent keys keep the block default: radius 6, pad 6, no shadow, an edge bar.
     readonly property int pad: (theme && theme.cardPad !== undefined) ? theme.cardPad : 6
     readonly property int shadowPx: (theme && theme.shadow !== undefined) ? theme.shadow : 0
     readonly property string blockStyle: (theme && theme.blockStyle) ? theme.blockStyle : "Edge"
-    readonly property int cornerRadius: (theme && theme.corner !== undefined) ? theme.corner : 12
+    readonly property int cornerRadius: (theme && theme.corner !== undefined) ? theme.corner : 6
     readonly property string fillOverride: {
         if (!theme)
             return ""
-        if (category === "school" && theme.catSchool)
+        if ((category === "class" || category === "school") && theme.catSchool)
             return theme.catSchool
-        if (category === "sports" && theme.catSports)
+        if ((category === "exercise" || category === "sports") && theme.catSports)
             return theme.catSports
         if (category === "study" && theme.catStudy)
             return theme.catStudy
-        if (category === "homework" && theme.catHomework)
+        if ((category === "assignments" || category === "homework") && theme.catHomework)
             return theme.catHomework
         return ""
     }
 
-    opacity: past ? 0.65 : 1
     implicitWidth: 160
     implicitHeight: Math.max(44, body.implicitHeight + pad * 2)
     height: implicitHeight
@@ -46,16 +45,61 @@ Item {
         return tone.r * 0.2126 + tone.g * 0.7152 + tone.b * 0.0722 < 0.4
     }
 
-    function tones() {
+    readonly property var defaultClasses: {
         var dark = darkSurface
-        if (category === "school")
-            return dark ? ["#2A244D", "#E4DEFF", "#9B8CF0"] : ["#EAE6FA", "#2A2160", "#7C6CD6"]
-        if (category === "sports")
-            return dark ? ["#1B3B2B", "#C9F2DA", "#5CCB8F"] : ["#E2F5EA", "#0E4A2C", "#2E9E63"]
-        if (category === "study")
-            return dark ? ["#3D2232", "#FFD9EC", "#E58ABB"] : ["#F9E6F0", "#6B1F49", "#C2528E"]
-        return dark ? ["#4A3219", "#FFE3BF", "#E8B268"] : ["#F7EBD9", "#5C3A0B", "#C98A2B"]
+        return {
+            "class": {
+                bar: "#3d6fc4",
+                fill: dark ? "#1e2c44" : "#e4ebf7",
+                ink: dark ? "#ececec" : "#0f172a"
+            },
+            "exercise": {
+                bar: "#2b9665",
+                fill: dark ? "#1a352e" : "#e1f0e9",
+                ink: dark ? "#ececec" : "#0f172a"
+            },
+            "extra": {
+                bar: "#0f8a8a",
+                fill: dark ? "#133336" : "#ddefef",
+                ink: dark ? "#ececec" : "#0f172a"
+            },
+            "assignments": {
+                bar: "#a87512",
+                fill: dark ? "#382e1a" : "#f3ecde",
+                ink: dark ? "#ececec" : "#0f172a"
+            },
+            "study": {
+                bar: "#c2557a",
+                fill: dark ? "#3e2633" : "#f6e7ec",
+                ink: dark ? "#ececec" : "#0f172a"
+            },
+            "other": {
+                bar: "#64748b",
+                fill: dark ? "#272d37" : "#e9ecef",
+                ink: dark ? "#ececec" : "#0f172a"
+            }
+        }
     }
+
+    readonly property var classData: {
+        var cls = (theme && theme.classes) ? theme.classes : palette.classes
+        var key = category
+        if (key === "school") key = "class"
+        else if (key === "sports") key = "exercise"
+        else if (key === "homework") key = "assignments"
+        else if (key === "clubs") key = "extra"
+        if (cls && cls[key])
+            return cls[key]
+        if (cls && cls["other"])
+            return cls["other"]
+        if (defaultClasses[key])
+            return defaultClasses[key]
+        return defaultClasses["other"]
+    }
+    readonly property color classBar: classData ? classData.bar : "#64748b"
+    readonly property color classFill: classData ? classData.fill : (darkSurface ? "#272d37" : "#e9ecef")
+    readonly property color classInk: classData ? classData.ink : (darkSurface ? "#ececec" : "#0f172a")
+    readonly property color textInk: root.past ? palette.inkMuted : classInk
 
     Rectangle {
         objectName: "shadow"
@@ -77,19 +121,34 @@ Item {
         radius: root.cornerRadius
         color: root.blockStyle === "Outline"
               ? "transparent"
-              : (root.fillOverride !== "" ? root.fillOverride : root.tones()[0])
+              : (root.fillOverride !== "" ? root.fillOverride : root.classFill)
         clip: true
+        opacity: root.past ? 0.55 : 1
         border.width: root.blockStyle === "Outline"
                       ? (root.highContrast ? 1.5 : 1)
                       : (root.highContrast ? 1.5 : 0)
-        border.color: root.tones()[1]
-        Rectangle {
-            objectName: "bar"
-            visible: root.blockStyle === "Edge"
-            width: 4
-            height: parent.height
-            color: root.tones()[2]
-        }
+        border.color: root.classBar
+    }
+
+    Rectangle {
+        id: bar
+        objectName: "bar"
+        visible: root.blockStyle === "Edge"
+        width: 4
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        color: root.classBar
+        opacity: root.past ? 0.55 : 1
+        topLeftRadius: root.cornerRadius
+        bottomLeftRadius: root.cornerRadius
+    }
+
+    // The words clip to the block, so a short block never paints them into the next hour.
+    Item {
+        objectName: "words"
+        anchors.fill: parent
+        clip: true
         Column {
             id: body
             objectName: "body"
@@ -98,10 +157,12 @@ Item {
             width: parent.width - 20
             spacing: 0
             Text {
+                id: title
                 objectName: "title"
                 width: Math.max(0, parent.width - root.rightInset)
                 text: root.title
-                color: root.tones()[1]
+                color: root.textInk
+                opacity: 1
                 wrapMode: Text.WordWrap
                 maximumLineCount: 2
                 elide: Text.ElideRight
@@ -112,11 +173,13 @@ Item {
                 lineHeightMode: Text.ProportionalHeight
             }
             Text {
+                id: detail
                 objectName: "detail"
                 width: parent.width
                 visible: root.detail !== ""
                 text: root.detail
-                color: root.tones()[1]
+                color: root.textInk
+                opacity: 1
                 font.family: M3Font.family
                 font.pixelSize: 11
                 font.weight: 400

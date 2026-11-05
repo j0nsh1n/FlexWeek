@@ -45,7 +45,7 @@ from desktop.tests.test_layouts_window import (  # noqa: E402
     wait_until,
 )
 
-SCHOOL_LIGHT = "#EAE6FA"
+SCHOOL_LIGHT = "#e4ebf7"
 HOUR_ROW = 56
 FALLBACK = "Material 3 could not open, so FlexWeek is showing the other styles. Your week is unchanged."
 NIGHT = {
@@ -267,7 +267,7 @@ def test_choosing_material_shows_the_week_and_swapping_back_keeps_it(
         colour = shape.property("color")
         name = colour.name() if hasattr(colour, "name") else str(colour)
         assert name.lower() == SCHOOL_LIGHT.lower()
-        assert int(shape.property("radius")) == 12
+        assert int(shape.property("radius")) == 6
         title = _named(school, "title")[0]
         assert int(title.property("maximumLineCount")) == 2
         drawer = _qml(root, "homeworkDrawer")

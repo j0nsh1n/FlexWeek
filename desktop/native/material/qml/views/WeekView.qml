@@ -352,7 +352,7 @@ Item {
                 y: (root.dragRangeStartMin / 60) * root.row
                 width: Math.max(8, root.dayWidth - 6)
                 height: Math.max(4, ((root.dragRangeEndMin - root.dragRangeStartMin) / 60) * root.row - 2)
-                radius: 12
+                radius: 6
                 color: m3.primaryContainer
                 opacity: 0.7
                 border.width: 2
@@ -388,7 +388,7 @@ Item {
                 y: Math.max(0, root.dropHour) * root.row
                 width: root.dayWidth - 6
                 height: root.row - 2
-                radius: 12
+                radius: 6
                 color: "transparent"
                 border.width: 2
                 border.color: m3.primary
@@ -524,7 +524,7 @@ Item {
         y: root.heldAt.y - 16
         width: 168
         height: 32
-        radius: 12
+        radius: 6
         color: m3.primaryContainer
         opacity: 0.92
         Text {

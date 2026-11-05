@@ -254,17 +254,18 @@ def test_plan_places_the_queue_and_undo_puts_it_back(qapp: QApplication, window:
     placed = [block for block in window.session.blocks if block["id"] in waiting_before]
     assert all(block.get("start") for block in placed)
 
-    # The button is in its strict disabled state: disabled, 12% fill, 38% ink, and a click does nothing.
+    # The button is a text button when disabled (no fill) and a click does nothing.
     plan = _qml(root, "planHomework")
     assert plan.property("enabled") is False
-    on_surface = _bridge(window).property("theme")["onSurface"].lower()
+    assert plan.property("kind") == "text"
     shape = _named(plan, "shape")[0]
-    wait_until(qapp, lambda: shape.property("color").name().lower() == on_surface)
+    wait_until(qapp, lambda: shape.property("color").alphaF() == 0.0)
     fill = shape.property("color")
-    assert fill.name().lower() == on_surface
-    assert abs(fill.alphaF() - 0.12) < 0.01
+    assert fill.alphaF() == 0.0
+    # Its words stay readable: the muted ink at full opacity (B3a3, FIX-SPEC PR 6), not the 38 % disabled ink.
     label = _named(plan, "label")[0].property("color")
-    assert abs(label.alphaF() - 0.38) < 0.01
+    assert label.name() == str(_bridge(window).property("theme")["inkMuted"]).lower()
+    assert label.alphaF() == 1.0
     note = _snack(window)
     _click(window, plan)
     assert _snack(window) == note
@@ -462,9 +463,14 @@ def test_past_blocks_are_dimmed_by_the_clock(qapp: QApplication, window: NativeW
     assert sorted(by_day) == [0, 1, 2, 3, 4]
     for day in (0, 1, 2, 3):
         assert by_day[day].property("past") is True
-        assert abs(by_day[day].childItems()[0].property("opacity") - 0.65) < 0.001
+        assert abs(by_day[day].childItems()[0].property("opacity") - 1.0) < 0.001
+        assert abs(_named(by_day[day], "shape")[0].property("opacity") - 0.55) < 0.001
+        assert abs(_named(by_day[day], "bar")[0].property("opacity") - 0.55) < 0.001
+        assert abs(_named(by_day[day], "title")[0].property("opacity") - 1.0) < 0.001
     assert by_day[4].property("past") is False
-    assert by_day[4].childItems()[0].property("opacity") == 1
+    assert abs(by_day[4].childItems()[0].property("opacity") - 1.0) < 0.001
+    assert abs(_named(by_day[4], "shape")[0].property("opacity") - 1.0) < 0.001
+    assert abs(_named(by_day[4], "bar")[0].property("opacity") - 1.0) < 0.001
     essay = _block_named(root, "History essay")
     assert essay.property("past") is False
 
@@ -815,4 +821,54 @@ def test_tabbing_through_homework_cards_keeps_the_focused_card_visible(
         assert top >= view_top - 1, (card.property("title"), top, view_top)
         assert bottom <= view_bottom + 1, (card.property("title"), bottom, view_bottom)
         QTest.keyClick(quick, Qt.Key.Key_Tab)
+        _pump(qapp)
+
+
+def test_the_drawn_week_keeps_block_words_and_bars_readable(qapp: QApplication, window: NativeWindow) -> None:
+    """B3a3 (FIX-SPEC PR 6) on the real Week, light and dark: each block's title reaches 4.5:1 on the fill
+    as drawn, past blocks included, with no fade from any ancestor; a current block's bar reaches 3:1 on
+    the ground beside it."""
+    from desktop.native.tokens import contrast
+
+    root = _reset(window, qapp)
+    panel = _bridge(window)._settings_bridge
+    quick = window._material_page._quick
+    try:
+        for mode in ("light", "dark"):
+            panel.setMode(mode)
+            QTest.qWait(600)
+            _pump(qapp)
+            image = quick.grabFramebuffer()
+            theme = _bridge(window).property("theme")
+            grounds = {str(theme["page"]).lower(), str(theme["card"]).lower()}
+            checked = {"past": 0, "current": 0}
+            for block in _named(root, "weekBlock"):
+                corner = block.mapToScene(QPointF(block.width() - 8, block.height() - 4)).toPoint()
+                top = block.mapToScene(QPointF(2, 6)).toPoint()
+                if not image.rect().contains(corner) or top.y() < 130:
+                    continue
+                title = _named(block, "title")[0]
+                item, seen = title, 1.0
+                while item is not None:
+                    seen *= float(item.property("opacity"))
+                    item = item.parentItem()
+                assert seen > 0.999, f"{mode}: {title.property('text')} words faded to {seen:.2f}"
+                fill = image.pixelColor(corner).name()
+                words = title.property("color").name()
+                assert contrast(words, fill) >= 4.5, f"{mode}: {title.property('text')} {words} on {fill}"
+                past = bool(block.property("past"))
+                checked["past" if past else "current"] += 1
+                if not past:
+                    edge = image.pixelColor(top).name()
+                    # The ground beside the block, past the 1 px column line: the page, or the card on today.
+                    spots = [block.mapToScene(QPointF(-step, 6)).toPoint() for step in range(2, 9)]
+                    around = [image.pixelColor(spot).name() for spot in spots]
+                    beside = next((colour for colour in around if colour in grounds), None)
+                    assert beside is not None, f"{mode}: no page or card colour beside the block: {around}"
+                    assert contrast(edge, beside) >= 3.0, f"{mode}: bar {edge} beside {beside}"
+            assert checked["past"] >= 1 and checked["current"] >= 1, checked
+    finally:
+        look_file().unlink(missing_ok=True)
+        _bridge(window).reload_material()
+        panel.note_applied()
         _pump(qapp)

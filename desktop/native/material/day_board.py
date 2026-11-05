@@ -15,10 +15,11 @@ from desktop.native.material.theme import EVENT_CATEGORY, bar_for_category, pain
 from desktop.native.weekmodel import due_label, length_label, range_label
 
 ICONS = {
-    "school": "school",
-    "sports": "schedule",
+    "class": "school",
+    "exercise": "schedule",
+    "extra": "schedule",
     "study": "edit_note",
-    "homework": "edit_note",
+    "assignments": "edit_note",
 }
 TAG_KINDS = {
     "Tight": "tight",
