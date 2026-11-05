@@ -872,4 +872,3 @@ def test_the_drawn_week_keeps_block_words_and_bars_readable(qapp: QApplication, 
         _bridge(window).reload_material()
         panel.note_applied()
         _pump(qapp)
-

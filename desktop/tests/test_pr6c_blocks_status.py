@@ -378,4 +378,3 @@ def test_a_short_block_keeps_its_words_inside(qapp: QGuiApplication) -> None:
     block.deleteLater()
     view.deleteLater()
     qapp.processEvents()
-
