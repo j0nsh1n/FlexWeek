@@ -217,6 +217,7 @@ Rectangle {
                         { "label": "Comfortable", "value": "comfortable" },
                         { "label": "Compact", "value": "compact" }
                     ]
+                    onSelected: (v) => current = v
                 }
                 Row {
                     spacing: 16
@@ -321,6 +322,7 @@ Rectangle {
                         { "label": "Comfortable", "value": "comfortable" },
                         { "label": "Compact", "value": "compact" }
                     ]
+                    onSelected: (v) => current = v
                 }
             }
         }
