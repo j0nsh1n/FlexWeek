@@ -8,6 +8,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Added
 - Dragging across empty time on the Material Week grid draws a snapped range and opens Add homework pinned to that day and time.
 - Settings → Computer has Get developer builds: this copy also gets developer test builds, and still moves to each official release when it is newer.
+- Widgets Settings → This computer also has the Get developer builds switch, under Updates; it shows and saves the same setting as Material's.
 - Developer builds: `scripts/dev-release.sh` starts a GitHub build of main that replaces the `dev` pre-release with a Linux tarball (never marked latest).
 - A seed colour can build a Material scheme: six palette styles, light or dark, and a contrast from low to high. Dynamic color uses the desktop's accent when the platform supplies one.
 - Material 3 is a style choice beside the existing ones. Choosing it opens a Material window on the real week, and choosing a Widgets style swaps back, with no restart. Today's app stays the default. The Material window has Day, Week, Month, My day, and Settings, and the week's homework list sits on the right.

@@ -237,3 +237,35 @@ def test_a_dev_release_without_a_version_in_its_title_is_not_offered(qapp: QAppl
     updater = made()
     kind, _update = outcome(qapp, updater, developer=True)
     assert kind == "none"
+
+
+def test_widgets_settings_has_the_same_switch(qapp: QApplication, window: NativeWindow) -> None:
+    """The switch was only in Material's Settings; Widgets This computer shows the same saved setting."""
+    from PySide6.QtWidgets import QWidget
+
+    from desktop.tests.test_layouts_window import look_file
+
+    before = dict(window._updates)
+    try:
+        window._surface = "widgets"
+        window._material_gave_up = False
+        window._on_week()
+        window._updates["developer_builds"] = True
+        window._save_look()
+        assert json.loads(look_file().read_text(encoding="utf-8"))["updates"]["developer_builds"] is True
+        window._open_settings()
+        switch = window._settings.findChild(QWidget, "prefDeveloperBuilds")
+        assert switch is not None and switch.isChecked() is True
+        switch.click()
+        qapp.processEvents()
+        assert window._updates["developer_builds"] is False
+        assert json.loads(look_file().read_text(encoding="utf-8"))["updates"]["developer_builds"] is False
+        window._close_settings()
+        window._updates["developer_builds"] = True  # as Material's switch would
+        window._open_settings()
+        assert window._settings.findChild(QWidget, "prefDeveloperBuilds").isChecked() is True
+    finally:
+        window._close_settings()
+        window._updates.clear()
+        window._updates.update(before)
+        window._save_look()
