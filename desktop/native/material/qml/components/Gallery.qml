@@ -386,7 +386,7 @@ Rectangle {
                 density: root.density
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
-                category: "school"
+                category: "class"
                 title: "History essay on the Tudor succession"
                 detail: "16:00"
             }
@@ -394,7 +394,7 @@ Rectangle {
                 width: 140
                 theme: root.theme
                 highContrast: root.highContrast
-                category: "sports"
+                category: "exercise"
                 title: "Soccer"
                 detail: "15:30"
             }
@@ -410,7 +410,7 @@ Rectangle {
                 width: 140
                 theme: root.theme
                 highContrast: root.highContrast
-                category: "homework"
+                category: "assignments"
                 title: "Maths set"
                 detail: "19:00"
             }
@@ -419,7 +419,7 @@ Rectangle {
                 width: 140
                 theme: root.theme
                 highContrast: root.highContrast
-                category: "school"
+                category: "class"
                 title: "Registration"
                 detail: "09:00"
                 past: true

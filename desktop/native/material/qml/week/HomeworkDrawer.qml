@@ -73,7 +73,8 @@ Rectangle {
             density: drawer.density
             reduceMotion: drawer.reduceMotion
             highContrast: drawer.highContrast
-            kind: "filled"
+            kind: enabled ? "filled" : "text"
+            mutedWhenDisabled: true
             icon: "schedule"
             text: "Plan my homework"
             enabled: drawer.count > 0
