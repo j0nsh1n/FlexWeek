@@ -85,15 +85,20 @@ def test_the_looks_stand_three_in_a_row_and_widen_with_large_text(
     window.resize(1280, 800)
     dialog = prefs(window)
     assert dialog.look.more.columns() == 3
-    tile(dialog, "High contrast").chosen.emit()
+    normal = tile(dialog, "High contrast").width()
+    # Text size stays the same when the look changes, so Large is set on its own control.
+    text = dialog.knobs["text"]
+    text.setCurrentIndex(text.findData("large"))
     for _ in range(5):
         qapp.processEvents()
+    assert tile(dialog, "High contrast").width() > normal, "the cards widen with the large text"
     label = tile(dialog, "High contrast").findChild(QLabel, "setupChoiceName")
     assert label.fontMetrics().horizontalAdvance(label.text()) <= label.contentsRect().width()
     assert label.heightForWidth(label.width()) <= label.fontMetrics().lineSpacing() + 2
-    dialog.look.main.buttons()[0].click()
+    text.setCurrentIndex(text.findData("normal"))
     for _ in range(5):
         qapp.processEvents()
+    assert tile(dialog, "High contrast").width() == normal
     assert dialog.look.more.columns() == 3, "back at normal text, three in a row again"
     dialog.close_page()
 
