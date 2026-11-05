@@ -896,6 +896,7 @@ class SettingsPage(QWidget):
     account_requested = Signal()
     availability_requested = Signal()
     updates_requested = Signal()
+    developer_builds_changed = Signal(bool)
     setup_requested = Signal()
 
     def __init__(
@@ -1283,7 +1284,13 @@ class SettingsPage(QWidget):
         version.setObjectName("prefsVersion")
         check_updates = _page_button("Check for updates", "prefsCheckUpdates")
         check_updates.clicked.connect(self.updates_requested.emit)
+        # The same switch as Material's Settings > Computer; the window sets it and saves it.
+        self.developer_builds = Switch("Get developer builds")
+        self.developer_builds.setObjectName("prefDeveloperBuilds")
+        self.developer_builds.setToolTip("Test builds with the newest fixes. They can have bugs.")
+        self.developer_builds.toggled.connect(self.developer_builds_changed.emit)
         update_col.addWidget(version)
+        update_col.addWidget(self.developer_builds)
         update_col.addWidget(check_updates)
         computer_form.addRow("Updates", update_col)
         self.computer_buttons = (open_account, run_setup, check_updates)

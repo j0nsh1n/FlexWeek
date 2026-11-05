@@ -5392,6 +5392,7 @@ class NativeWindow(QMainWindow):
         page.account_requested.connect(self._open_account)
         page.availability_requested.connect(self._open_availability)
         page.updates_requested.connect(lambda: self._check_updates(asked=True))
+        page.developer_builds_changed.connect(self._set_developer_builds)
         page.setup_requested.connect(self._run_setup_again)
         page.closed.connect(self._close_settings)
         stored = page.updates()
@@ -5507,6 +5508,10 @@ class NativeWindow(QMainWindow):
             self._attach_settings_page(self._build_settings_page())
             page = self._settings
             assert page is not None
+        # Material's Settings can flip the same switch while this page is kept; show what is saved.
+        page.developer_builds.blockSignals(True)
+        page.developer_builds.setChecked(bool(self._updates.get("developer_builds")))
+        page.developer_builds.blockSignals(False)
         if self._settings_unsaved is not None and self._settings_unsaved():
             page.motion_level = self._motion
             return
@@ -5560,6 +5565,10 @@ class NativeWindow(QMainWindow):
         finish(save and self.session.account is not None)
         if show_week and self.session.account is not None:
             self._show_surface()
+
+    def _set_developer_builds(self, on: bool) -> None:
+        self._updates["developer_builds"] = bool(on)
+        self._save_look()
 
     def _apply_start_at_login(self, wanted: bool) -> None:
         """The setting used to be stored on the account and obeyed by nothing. It is applied to this
