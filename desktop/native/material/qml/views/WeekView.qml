@@ -436,6 +436,17 @@ Item {
                 }
             }
 
+            Rectangle {
+                objectName: "nowLine"
+                visible: !!bridge && bridge.nowDay >= 0 && bridge.nowDay < root.columns
+                x: root.gutter - 5
+                y: (bridge ? bridge.nowMinute : 0) / 60 * root.row
+                width: parent.width - root.gutter + 5
+                height: 2
+                color: root.now
+                z: 1
+            }
+
             Repeater {
                 id: weekBlocks
                 objectName: "weekBlocks"
@@ -444,6 +455,7 @@ Item {
                 WeekBlock {
                     id: blockCell
                     objectName: "weekBlock"
+                    z: 2
                     passive: root.passive
                     x: root.gutter + model.day * root.dayWidth + 3
                     y: model.start / 60 * root.row
@@ -474,23 +486,15 @@ Item {
             }
 
             Rectangle {
-                objectName: "nowLine"
+                objectName: "nowDot"
                 visible: !!bridge && bridge.nowDay >= 0 && bridge.nowDay < root.columns
                 x: root.gutter - 5
-                y: (bridge ? bridge.nowMinute : 0) / 60 * root.row
-                width: parent.width - root.gutter + 5
-                height: 2
+                y: (bridge ? bridge.nowMinute : 0) / 60 * root.row - 4
+                width: 10
+                height: 10
+                radius: 5
                 color: root.now
                 z: 3
-
-                Rectangle {
-                    width: 10
-                    height: 10
-                    radius: 5
-                    x: 0
-                    y: -4
-                    color: parent.color
-                }
             }
         }
     }
