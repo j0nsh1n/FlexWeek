@@ -51,7 +51,6 @@ SLACK_TAGS = {
     "tight": ("Tight", "tight"),
     "ok": ("Plenty of time", "plenty"),
 }
-SNACK_MS = 8000
 DAY_MIN = 24 * 60
 # A status line after Plan my homework counts as its answer for this long.
 PLAN_WINDOW_S = 30.0
@@ -90,6 +89,7 @@ class WeekBridge(QObject):
     changed = Signal()
     blocksChanged = Signal()
     homeworkChanged = Signal()
+    planFinished = Signal()
 
     def __init__(self, window: QObject, parent: QObject) -> None:
         super().__init__(parent)
@@ -112,12 +112,7 @@ class WeekBridge(QObject):
         self._fresh_until: dict[tuple[str, int], float] = {}
         self._done_after_save = ""
         self._said_plan = 0.0
-        self._noted = ""
         self._published: dict[str, object] = {}
-        self._snack_timer = QTimer(self)
-        self._snack_timer.setSingleShot(True)
-        self._snack_timer.setInterval(SNACK_MS)
-        self._snack_timer.timeout.connect(self._clear_snack)
         self._target_week: str | None = None
         self._loading_week: str | None = None
         self._weekend_save = 0
@@ -275,18 +270,6 @@ class WeekBridge(QObject):
         if shell is None or not hasattr(shell, "note"):
             return
         shell.note(text, action=action)
-        self._noted = text
-        if text:
-            self._snack_timer.start()
-        else:
-            self._snack_timer.stop()
-
-    @Slot()
-    def _clear_snack(self) -> None:
-        """Take down this bridge's own line. Another screen's line, or none, stays as it is."""
-        shell = self.parent()
-        if shell is not None and shell.property("snackText") == self._noted:
-            self._note("")
 
     @Slot(str)
     def _on_status(self, message: str) -> None:
@@ -296,10 +279,12 @@ class WeekBridge(QObject):
         asked, self._said_plan = self._said_plan, 0.0
         if time.monotonic() - asked < PLAN_WINDOW_S:
             self._note(message)
+            self.planFinished.emit()
 
     @Slot(str)
     def _on_planned(self, _said: str) -> None:
         self._said_plan = 0.0
+        self.planFinished.emit()
 
     @Slot(bool, str)
     def _on_save_finished(self, ok: bool, _message: str) -> None:

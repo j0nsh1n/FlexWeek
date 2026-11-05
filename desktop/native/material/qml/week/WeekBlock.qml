@@ -19,6 +19,7 @@ Item {
     signal toggled()
     signal opened()
     signal menuAsked(real x, real y)
+    signal focused()
 
     M3Palette { id: m3; theme: cell.theme }
 
@@ -70,6 +71,7 @@ Item {
         anchors.right: parent.right
         anchors.margins: 4
         activeFocusOnTab: !cell.passive && cell.homework
+        onActiveFocusChanged: if (activeFocus) cell.focused()
         Accessible.role: Accessible.Button
         Accessible.name: cell.done ? "Open " + cell.title + " again" : "Mark " + cell.title + " finished"
         Accessible.onPressAction: cell.toggled()
@@ -133,6 +135,7 @@ Item {
     }
 
     activeFocusOnTab: !passive && homework
+    onActiveFocusChanged: if (activeFocus) cell.focused()
     Accessible.role: homework ? Accessible.Button : Accessible.StaticText
     Accessible.name: homework
                      ? ("Edit " + title)

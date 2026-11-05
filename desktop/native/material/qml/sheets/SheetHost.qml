@@ -179,6 +179,8 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: root.phone ? 96 : 24
+        onPauseRequested: if (root.sheets) root.sheets.pauseNotice()
+        onResumeRequested: if (root.sheets) root.sheets.resumeNotice()
         onActionClicked: root.sheets.noticeUndo ? root.sheets.undoNotice() : root.sheets.dismissNotice()
     }
 }

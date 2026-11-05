@@ -25,6 +25,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- The Undo notice stays at least 10 seconds, waits while the pointer is over it or it has keyboard focus, and shows Ctrl+Z. Material Settings → Look has a Text size choice that applies at once and makes Week and Day rows bigger, up to 1.6x. Disabled buttons are skipped by Tab, a focused Week block scrolls into view, Month dates use the shared focus ring, and focus lands on the Undo notice or Plan after planning and returns to where Focus mode was started.
 - In Material and Widgets, pressing Escape closes the Manage account and Advanced settings sheets/dialogs and returns keyboard focus to the opening row or control.
 - Widgets Add and Edit fixed time dialogs prompt before discarding unsaved changes on Escape or Cancel, and Look editor reaches Done within five Tab presses.
 - Widgets Settings and the More menu include a Back to Material button and menu entry when switching back to Material 3.

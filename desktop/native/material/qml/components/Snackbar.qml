@@ -10,10 +10,36 @@ Item {
     property string actionText: "UNDO"
     property string accessName: ""
     signal actionClicked()
+    signal pauseRequested()
+    signal resumeRequested()
+
+    HoverHandler { id: toastHover }
+    readonly property bool pointerHovered: toastHover.hovered
+    readonly property bool keyboardFocused: root.activeFocus || (action && action.activeFocus)
+    // Visibility is part of the hold: a notice shown again under a pointer that never moved
+    // still sends a pause, and hiding one always sends a resume.
+    readonly property bool held: visible && (pointerHovered || keyboardFocused)
+
+    onHeldChanged: {
+        if (held)
+            root.pauseRequested()
+        else
+            root.resumeRequested()
+    }
+
+    onVisibleChanged: {
+        if (!visible && activeFocus && parent)
+            parent.forceActiveFocus()
+    }
+
+    onActionTextChanged: {
+        if (actionText === "" && activeFocus && parent)
+            parent.forceActiveFocus()
+    }
 
     implicitHeight: 48
     height: 48
-    implicitWidth: Math.max(240, messageText.implicitWidth + actionTextItem.implicitWidth + 48)
+    implicitWidth: Math.max(240, messageText.implicitWidth + action.width + 48)
     width: implicitWidth
 
     M3Palette { id: palette; theme: root.theme }
@@ -42,16 +68,32 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: 8
         anchors.verticalCenter: parent.verticalCenter
-        width: actionTextItem.implicitWidth + 16
+        width: actionRow.implicitWidth + 16
         height: 36
-        Text {
-            id: actionTextItem
+        Row {
+            id: actionRow
             anchors.centerIn: parent
-            text: root.actionText
-            color: palette.inversePrimary
-            font.family: M3Font.family
-            font.pixelSize: 14
-            font.weight: 500
+            spacing: 6
+            Text {
+                id: actionTextItem
+                text: root.actionText
+                color: palette.inversePrimary
+                font.family: M3Font.family
+                font.pixelSize: 14
+                font.weight: 500
+            }
+            Text {
+                id: shortcutHintItem
+                objectName: "shortcutHint"
+                visible: root.actionText === "UNDO" || root.actionText.indexOf("Undo") !== -1
+                text: "Ctrl+Z"
+                color: palette.inversePrimary
+                opacity: 0.85
+                font.family: M3Font.family
+                font.pixelSize: 11
+                font.weight: 500
+                anchors.verticalCenter: parent.verticalCenter
+            }
         }
         M3StateLayer {
             anchors.fill: parent
@@ -75,7 +117,7 @@ Item {
     property bool keyDown: false
     activeFocusOnTab: actionText !== ""
     Accessible.role: actionText !== "" ? Accessible.Button : Accessible.StaticText
-    Accessible.name: (accessName !== "" ? accessName : message) + (actionText !== "" ? ", " + actionText : "")
+    Accessible.name: (accessName !== "" ? accessName : message) + (actionText !== "" ? ", " + actionText : "") + (shortcutHintItem.visible ? " (Ctrl+Z)" : "")
     Accessible.onPressAction: if (actionText !== "") root.actionClicked()
     Keys.enabled: actionText !== ""
     Keys.onPressed: (event) => {

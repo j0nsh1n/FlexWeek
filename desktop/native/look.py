@@ -2150,6 +2150,7 @@ def overlay_rules(palette: dict, knobs: dict, pad: int, card_radius: int) -> str
         f"QFrame#toast {{ background: {toast['background']}; color: {toast['text']}; "
         f"border: {toast_edge}; border-radius: {sheet_radius}px; padding: 10px 16px; }}"
         f"QLabel#toastText {{ color: {toast['text']}; }}"
+        f"QLabel#toastShortcut {{ color: {mix_oklab(toast['text'], toast['background'], 0.7)}; }}"
         # Ordinary toast actions read as part of the sentence; this optional action is filled.
         f"QPushButton#toastButton {{ background: transparent; color: {toast['action']}; border: none; "
         f"font-weight: {WEIGHT_STRONG}; padding: 4px 8px; min-height: 0; "

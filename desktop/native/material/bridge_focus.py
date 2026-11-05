@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from PySide6.QtCore import Property, QObject, Signal, Slot
+from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
+from shiboken6 import isValid
 
 from desktop.native.focus import format_countdown, phase_duration_ms, remaining_ms
 
@@ -38,6 +39,7 @@ class FocusBridge(QObject):
         self.setObjectName("focusBridge")
         self._window = window
         self._open = False
+        self._origin_item: QObject | None = None
         self._session().focus_changed.connect(self.refresh)
 
     def _session(self) -> Any:
@@ -148,6 +150,13 @@ class FocusBridge(QObject):
         """Open the screen on whatever the timer is doing, ready or running."""
         if self._session().account is None:
             return
+        page = getattr(self._window, "_material_page", None)
+        quick = getattr(page, "_quick", None) if page is not None else None
+        scene = quick.quickWindow() if quick is not None else None
+        if scene is not None:
+            active = scene.activeFocusItem()
+            if active is not None and getattr(active, "objectName", lambda: "")() != "materialFocus":
+                self._origin_item = active
         self._open = True
         self.changed.emit()
 
@@ -157,6 +166,23 @@ class FocusBridge(QObject):
         if self._open:
             self._open = False
             self.changed.emit()
+            if self._origin_item is not None:
+                item = self._origin_item
+                self._origin_item = None
+
+                def _restore() -> None:
+                    if not isValid(item):
+                        return
+                    has_vis = (
+                        item.isVisible() if hasattr(item, "isVisible") else bool(item.property("visible"))
+                    )
+                    has_en = (
+                        item.isEnabled() if hasattr(item, "isEnabled") else bool(item.property("enabled"))
+                    )
+                    if has_vis and has_en and hasattr(item, "forceActiveFocus"):
+                        item.forceActiveFocus()
+
+                QTimer.singleShot(0, _restore)
 
     @Slot()
     def begin(self) -> None:

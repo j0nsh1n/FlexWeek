@@ -374,6 +374,7 @@ Item {
                         phone: root.phone
                     }
                     WeekView {
+                        id: weekView
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         bridge: root.bridge
@@ -501,12 +502,15 @@ Item {
             }
 
             Snackbar {
+                id: materialSnackbar
                 objectName: "materialSnackbar"
                 visible: bridge.snackText !== ""
                 z: 3
                 message: bridge.snackText
                 actionText: bridge.snackAction
                 onActionClicked: if (bridge.snackAction !== "") bridge.undo()
+                onPauseRequested: if (bridge) bridge.pauseSnack()
+                onResumeRequested: if (bridge) bridge.resumeSnack()
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: root.phone ? 96 : 24
@@ -514,6 +518,19 @@ Item {
                 density: root.density
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
+            }
+
+            Connections {
+                target: bridge && bridge.week ? bridge.week : null
+                function onPlanFinished() {
+                    Qt.callLater(function() {
+                        if (weekView.drawer && weekView.drawer.count === 0) {
+                            materialSnackbar.forceActiveFocus()
+                        } else if (weekView.drawer && weekView.drawer.count > 0 && weekView.drawer.planButton) {
+                            weekView.drawer.planButton.forceActiveFocus()
+                        }
+                    })
+                }
             }
         }
     }

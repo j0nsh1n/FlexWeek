@@ -96,7 +96,7 @@ Item {
 
     HoverHandler { id: hover; enabled: root.enabled }
     TapHandler { id: tap; enabled: root.enabled; onTapped: root.clicked() }
-    activeFocusOnTab: true
+    activeFocusOnTab: root.enabled
     Accessible.role: Accessible.Button
     Accessible.name: accessName !== "" ? accessName : text
     Accessible.onPressAction: if (root.enabled) root.clicked()

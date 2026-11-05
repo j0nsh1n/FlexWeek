@@ -245,7 +245,7 @@ def register_fonts() -> tuple[int, ...]:
 # Done does not restyle the week. Seed colour, palette style, per-role colour overrides, the
 # contrast dial, font, heading weight and surface separation wait for the palette generator.
 CORNER_RANGE = (0, 28)
-SCALE_RANGE = (0.9, 1.3)
+SCALE_RANGE = (0.85, 1.8)
 HOUR_RANGE = (36, 90)
 PAD_RANGE = (4, 24)
 SHADOW_RANGE = (0, 3)
@@ -451,7 +451,11 @@ def hour_row_px(density: str, advanced: dict[str, Any]) -> int:
     hour = advanced.get("hour")
     if isinstance(hour, int):
         return hour
-    return int(DENSITY[density if density in DENSITY else DEFAULT_DENSITY]["hour_row"])
+    base = int(DENSITY[density if density in DENSITY else DEFAULT_DENSITY]["hour_row"])
+    scale = advanced.get("scale")
+    if isinstance(scale, (int, float)) and scale > 0:
+        return int(round(base * scale))
+    return base
 
 
 def dress_theme(theme: dict[str, Any], advanced: dict[str, Any]) -> dict[str, Any]:

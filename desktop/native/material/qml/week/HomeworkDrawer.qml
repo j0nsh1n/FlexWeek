@@ -16,6 +16,7 @@ Rectangle {
     signal cardDragStarted(string title)
 
     readonly property int count: bridge ? bridge.week.homeworkCount : 0
+    property alias planButton: planButton
 
     M3Palette { id: m3; theme: drawer.theme }
 
@@ -66,6 +67,7 @@ Rectangle {
         }
 
         Button {
+            id: planButton
             objectName: "planHomework"
             theme: drawer.theme
             density: drawer.density
@@ -75,7 +77,7 @@ Rectangle {
             icon: "schedule"
             text: "Plan my homework"
             enabled: drawer.count > 0
-            activeFocusOnTab: !drawer.passive
+            activeFocusOnTab: enabled && !drawer.passive
             onClicked: drawer.bridge.week.plan()
         }
     }

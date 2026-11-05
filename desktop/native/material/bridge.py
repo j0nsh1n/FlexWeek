@@ -45,7 +45,7 @@ from desktop.native.weekmodel import clock_label
 
 # Keys 1–5, and the StackLayout order. Week is the screen a new shell opens on.
 SCREENS = ("day", "week", "month", "myday", "settings")
-SNACK_MS = 6000
+SNACK_MS = 10000
 
 
 class _Session(Protocol):
@@ -86,6 +86,14 @@ class MaterialBridge(QObject):
         self._screen = "week"
         self._snack = ""
         self._snack_action = "UNDO"
+        self._snack_target = ""
+        self._snack_paused = False
+        self._snack_held = False
+        self._snack_remaining_ms = SNACK_MS
+        self._snack_timer = QTimer(self)
+        self._snack_timer.setSingleShot(True)
+        self._snack_timer.setInterval(SNACK_MS)
+        self._snack_timer.timeout.connect(self._on_snack_timeout)
         self._preset = DEFAULT_PRESET
         self._mode = "light"
         self._contrast = DEFAULT_CONTRAST
@@ -375,19 +383,55 @@ class MaterialBridge(QObject):
         """One snackbar line. Day uses it after a homework check."""
         self._snack = text
         self._snack_action = action
+        self._snack_target = text
+        self._snack_remaining_ms = SNACK_MS
+        if not text:
+            self._snack_timer.stop()
+            self._snack_paused = False
+        else:
+            if self._snack_held:
+                self._snack_paused = True
+                self._snack_timer.stop()
+            else:
+                self._snack_paused = False
+                self._snack_timer.start(SNACK_MS)
         self.changed.emit()
-        QTimer.singleShot(SNACK_MS, self, lambda: self._clear_snack(text))
+
+    def _on_snack_timeout(self) -> None:
+        self._clear_snack(self._snack_target)
 
     def _clear_snack(self, text: str) -> None:
         # A newer line, or Undo, has already replaced this one.
         if self._snack == text:
             self._snack = ""
+            self._snack_timer.stop()
+            self._snack_paused = False
+            self._snack_held = False
             self.changed.emit()
+
+    @Slot()
+    def pauseSnack(self) -> None:
+        self._snack_held = True
+        self._snack_paused = True
+        if self._snack_timer.isActive():
+            self._snack_remaining_ms = max(0, self._snack_timer.remainingTime())
+            self._snack_timer.stop()
+
+    @Slot()
+    def resumeSnack(self) -> None:
+        self._snack_held = False
+        if self._snack_paused:
+            self._snack_paused = False
+            if self._snack:
+                self._snack_timer.start(max(1000, self._snack_remaining_ms))
 
     @Slot()
     def undo(self) -> None:
         if self._snack:
             self._snack = ""
+            self._snack_timer.stop()
+            self._snack_paused = False
+            self._snack_held = False
         self._window.session.undo()
         self.refresh()
 

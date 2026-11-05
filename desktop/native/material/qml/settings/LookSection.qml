@@ -58,6 +58,19 @@ SectionPage {
             current: page.st.density || ""
             onChosen: (value) => page.panel.setDensity(value)
         }
+        ChoiceRow {
+            key: "textSize"
+            title: "Text size"
+            subtitle: "Scale text and rows."
+            choices: [
+                { label: "Small", value: "small" },
+                { label: "Normal", value: "normal" },
+                { label: "Large", value: "large" },
+                { label: "Larger", value: "larger" }
+            ]
+            current: page.st.textSize || "normal"
+            onChosen: (value) => page.panel.setTextSize(value)
+        }
     }
     Group {
         visible: !!page.st.showWeekendsRow || !!page.st.showClock
