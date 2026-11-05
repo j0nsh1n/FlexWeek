@@ -105,7 +105,8 @@ def test_each_screen_has_at_most_one_filled_button() -> None:
     assert _FILLED.findall(week_text) == []
 
     drawer_text = (QML / "week" / "HomeworkDrawer.qml").read_text(encoding="utf-8")
-    assert len(_FILLED.findall(drawer_text)) == 1
+    # Plan is filled while something waits and a text button when nothing does (PR 6c).
+    assert len(re.findall(r'kind:[^\n]*"filled"', drawer_text)) == 1
     assert 'objectName: "planHomework"' in drawer_text
 
     hw_sheet_text = (QML / "sheets" / "HomeworkSheet.qml").read_text(encoding="utf-8")
