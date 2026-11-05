@@ -88,19 +88,40 @@ fn default_build(checkout: &Path) -> EngineBuild {
     }
 }
 
+/// Cargo profile args for the default maturin command.
+///
+/// `FWTEST_ENGINE_PROFILE` replaces `--release` with `--profile <name>`. A mutant
+/// is caught or not by the tests, which do not depend on optimisation. Mutated
+/// and clean rebuilds share this profile so caught/missed compare like with like.
+pub fn profile_args(profile: Option<&str>) -> Vec<String> {
+    match profile {
+        Some(name) if !name.is_empty() => vec!["--profile".to_string(), name.to_string()],
+        _ => vec!["--release".to_string()],
+    }
+}
+
+pub fn engine_profile_from_env() -> Option<String> {
+    std::env::var("FWTEST_ENGINE_PROFILE")
+        .ok()
+        .filter(|value| !value.is_empty())
+}
+
 pub fn default_command(checkout: &Path) -> Vec<String> {
-    vec![
+    let mut command = vec![
         checkout
             .join(".venv/bin/maturin")
             .to_string_lossy()
             .into_owned(),
         "develop".to_string(),
-        "--release".to_string(),
+    ];
+    command.extend(profile_args(engine_profile_from_env().as_deref()));
+    command.extend([
         "--manifest-path".to_string(),
         "engine/py/Cargo.toml".to_string(),
         "--features".to_string(),
         "audit".to_string(),
-    ]
+    ]);
+    command
 }
 
 /// Drop `audit` from every `--features` value. Other features stay.
@@ -287,6 +308,20 @@ mod tests {
         assert_eq!(
             command[command.len() - 2..],
             ["--features".to_string(), "audit".to_string()]
+        );
+    }
+
+    #[test]
+    fn the_default_profile_is_release() {
+        assert_eq!(profile_args(None), vec!["--release".to_string()]);
+        assert_eq!(profile_args(Some("")), vec!["--release".to_string()]);
+    }
+
+    #[test]
+    fn a_named_profile_replaces_release() {
+        assert_eq!(
+            profile_args(Some("mutant")),
+            vec!["--profile".to_string(), "mutant".to_string()]
         );
     }
 

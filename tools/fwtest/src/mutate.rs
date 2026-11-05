@@ -39,6 +39,43 @@ struct Job<'a> {
     passing: RefCell<HashSet<String>>,
 }
 
+/// One slice of a mutation run. `index` is 1-based; `count` is N.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Shard {
+    pub index: usize,
+    pub count: usize,
+}
+
+/// Parse `K/N` for `--shard`. N=1 is today's behaviour: every case runs.
+pub fn parse_shard(text: &str) -> Result<Shard, String> {
+    let Some((left, right)) = text.split_once('/') else {
+        return Err(format!("shard must be K/N, got {text}"));
+    };
+    if left.is_empty() || right.is_empty() || text.matches('/').count() != 1 {
+        return Err(format!("shard must be K/N, got {text}"));
+    }
+    let index: usize = left
+        .parse()
+        .map_err(|_| format!("shard index K is not a number: {left}"))?;
+    let count: usize = right
+        .parse()
+        .map_err(|_| format!("shard count N is not a number: {right}"))?;
+    if count == 0 {
+        return Err("shard count N must be at least 1".to_string());
+    }
+    if index == 0 || index > count {
+        return Err(format!(
+            "shard index K must be between 1 and {count}, got {index}"
+        ));
+    }
+    Ok(Shard { index, count })
+}
+
+/// Whether the case at 0-based `position` in the already-filtered order belongs to `shard`.
+pub fn case_in_shard(position: usize, shard: Shard) -> bool {
+    position % shard.count == shard.index - 1
+}
+
 pub fn run(
     specs: &[PathBuf],
     case_name: Option<&str>,
@@ -46,6 +83,7 @@ pub fn run(
     engine_build: Option<&str>,
     no_engine_rebuild: bool,
     engine_only: bool,
+    shard: Option<Shard>,
 ) -> u8 {
     let checkout = match crate::state::git_toplevel() {
         Ok(path) => path,
@@ -104,6 +142,8 @@ pub fn run(
     };
     let mut missed = 0u32;
     let mut saw_case = false;
+    let mut named_case_exists = false;
+    let mut position = 0usize;
     for spec in files {
         let stem = spec
             .file_stem()
@@ -129,6 +169,14 @@ pub fn run(
                 continue;
             }
             if engine_only && !is_engine_source(&case.file) {
+                continue;
+            }
+            if case_name.is_some() {
+                named_case_exists = true;
+            }
+            let take = shard.is_none_or(|shard| case_in_shard(position, shard));
+            position += 1;
+            if !take {
                 continue;
             }
             saw_case = true;
@@ -157,8 +205,19 @@ pub fn run(
     if let Some(name) = case_name
         && !saw_case
     {
+        if named_case_exists {
+            println!("case {name} is not in this shard");
+            return 0;
+        }
         eprintln!("no case named {name}");
         return 2;
+    }
+    if !saw_case {
+        if let Some(shard) = shard {
+            println!("no cases in shard {}/{}", shard.index, shard.count);
+        }
+        println!("every mutation was caught");
+        return 0;
     }
     if missed == 0 {
         println!("every mutation was caught");
@@ -813,5 +872,56 @@ mod tests {
                 .is_none()
         );
         assert!(cargo_test("cargo:flexweek-engine:test_solver").is_err());
+    }
+
+    #[test]
+    fn one_shard_keeps_every_case() {
+        let shard = parse_shard("1/1").unwrap();
+        for position in 0..31 {
+            assert!(case_in_shard(position, shard));
+        }
+    }
+
+    #[test]
+    fn every_case_lands_in_exactly_one_shard() {
+        let count = 4;
+        let cases = 31;
+        let mut seen = vec![0u32; cases];
+        for index in 1..=count {
+            let shard = Shard { index, count };
+            for position in 0..cases {
+                if case_in_shard(position, shard) {
+                    seen[position] += 1;
+                }
+            }
+        }
+        assert!(seen.iter().all(|&hits| hits == 1));
+        let shard1: Vec<_> = (0..cases)
+            .filter(|&position| case_in_shard(position, Shard { index: 1, count }))
+            .collect();
+        assert_eq!(shard1, vec![0, 4, 8, 12, 16, 20, 24, 28]);
+    }
+
+    #[test]
+    fn the_split_is_the_same_every_time() {
+        let shard = parse_shard("2/4").unwrap();
+        let first: Vec<_> = (0..10)
+            .filter(|&position| case_in_shard(position, shard))
+            .collect();
+        let second: Vec<_> = (0..10)
+            .filter(|&position| case_in_shard(position, shard))
+            .collect();
+        assert_eq!(first, second);
+        assert_eq!(first, vec![1, 5, 9]);
+    }
+
+    #[test]
+    fn a_bad_shard_is_refused() {
+        assert!(parse_shard("1").is_err());
+        assert!(parse_shard("0/1").is_err());
+        assert!(parse_shard("2/1").is_err());
+        assert!(parse_shard("1/0").is_err());
+        assert!(parse_shard("a/4").is_err());
+        assert!(parse_shard("1/2/3").is_err());
     }
 }

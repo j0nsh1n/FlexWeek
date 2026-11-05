@@ -16,3 +16,12 @@ opt-level = 2
 # Production pairing costs about a second optimised; an unoptimised test exceeds its deadline.
 [profile.test.package.scrypt]
 opt-level = 3
+
+# A mutant is caught or not by the tests, which do not depend on optimisation.
+# Mutated and clean rebuilds share this profile so caught/missed compare like with like.
+[profile.mutant]
+inherits = "release"
+opt-level = 1
+lto = false
+codegen-units = 16
+incremental = true

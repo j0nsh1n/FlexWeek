@@ -34,7 +34,7 @@ This file is the contract. The implementation is built and reviewed against it.
 
 ```text
 fwtest gate [--backend-only] [--workers N]
-fwtest mutate [SPEC.json ...] [--case NAME] [--engine-build COMMAND] [--no-engine-rebuild]
+fwtest mutate [SPEC.json ...] [--case NAME] [--engine-build COMMAND] [--no-engine-rebuild] [--engine-only] [--shard K/N]
 fwtest rig [--server kwin|xvfb|auto] [ARGS FOR scripts/rig/drive.py ...]
 fwtest run [--timeout SECONDS] -- COMMAND [ARGS ...]
 fwtest clean
@@ -52,7 +52,10 @@ fwtest clean
   passed, as `verify.py` does. The per-step timeout is 2400 seconds; the desktop suite takes about
   15 minutes on 3 workers.
 - `mutate` runs every spec in `scripts/mutations/`, or the specs named. `--case` runs one case by
-  name. It prints one line per case (`RED`, `GREEN`, `BASE`, `PATTERN`, or `BUILD`, then the spec, the
+  name. `--engine-only` keeps cases whose file is under `engine/`. `--shard K/N` then keeps those
+  whose 0-based index modulo N is K-1, after that filter and the existing spec-then-case order. K is
+  1-based. N=1 is today's behaviour: every remaining case runs. The split is stable. Every case lands
+  in exactly one shard. It prints one line per case (`RED`, `GREEN`, `BASE`, `PATTERN`, or `BUILD`, then the spec, the
   case name, and a short detail) and ends with `every mutation was caught` or `N mutation(s)
   SURVIVED`. `RED` is caught. `GREEN`, `BASE`, `PATTERN`, and `BUILD` each count as not caught. `BASE`
   means the case's test was red before any mutation (each test is run once unmutated per run, after
@@ -304,7 +307,10 @@ For each such case `fwtest`:
 3. Runs that command with the checkout as its working directory. The case's `features` join
    the command's `--features` list. The default command is
    `<checkout>/.venv/bin/maturin develop --release --manifest-path engine/py/Cargo.toml --features audit`.
-   Before the first mutated build, `fwtest` asks the checkout's Python whether
+   `FWTEST_ENGINE_PROFILE` replaces `--release` with `--profile <name>` on that default command,
+   for both the mutated build and the clean rebuild, so caught/missed compare like with like. A
+   mutant is caught or not by the tests, which do not depend on optimisation. The default stays
+   `--release`. Before the first mutated build, `fwtest` asks the checkout's Python whether
    `flexweek_engine` has `panic_probe`. When it does not, the command stored for the clean
    rebuild omits `--features audit`, so the checkout is left as it was found. When the import
    cannot be read, the clean rebuild keeps `--features audit`. A command given with

@@ -9,20 +9,60 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  engine:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
       - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
-      - run: python -m pip install -r requirements.txt -r requirements-dev.txt
-      - name: Point .venv at the runner's Python
+      - name: Install Rust
         run: |
-          mkdir -p .venv/bin
-          ln -s "$pythonLocation/bin/python" .venv/bin/python
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            engine/target
+            tools/fwtest/target
+          key: engine-build-${{ runner.os }}-${{ hashFiles('engine/Cargo.lock', 'tools/fwtest/Cargo.lock') }}
+          restore-keys: |
+            engine-build-${{ runner.os }}-
+      - name: Install maturin
+        run: python -m pip install maturin==1.15.0
+      - name: Build the engine wheel
+        run: |
+          python -m maturin build --release -m engine/py/Cargo.toml --features audit
+          mkdir -p dist/engine
+          shopt -s nullglob
+          wheels=(engine/target/wheels/*.whl engine/py/target/wheels/*.whl target/wheels/*.whl)
+          if (( ${#wheels[@]} == 0 )); then
+            echo "maturin produced no wheel" >&2
+            find . -name '*.whl' -print >&2
+            exit 1
+          fi
+          cp "${wheels[0]}" dist/engine/
+      - name: Build fwtest
+        working-directory: tools/fwtest
+        run: cargo build --release
+      - uses: actions/upload-artifact@v7
+        with:
+          name: engine-wheel
+          path: dist/engine/*.whl
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fwtest
+          path: tools/fwtest/target/release/fwtest
+          if-no-files-found: error
+
+  verify-engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
       - name: Install Rust
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt,clippy --no-self-update
@@ -35,7 +75,9 @@ jobs:
             ~/.cargo/git/db
             tools/fwtest/target
             engine/target
-          key: fwtest-verify-${{ runner.os }}-${{ hashFiles('tools/fwtest/Cargo.lock', 'engine/Cargo.lock') }}
+          key: verify-engine-${{ runner.os }}-${{ hashFiles('tools/fwtest/Cargo.lock', 'engine/Cargo.lock') }}
+          restore-keys: |
+            verify-engine-${{ runner.os }}-
       - name: fwtest format
         working-directory: tools/fwtest
         run: cargo fmt --check
@@ -45,11 +87,6 @@ jobs:
       - name: fwtest tests
         working-directory: tools/fwtest
         run: cargo test
-      - name: Build fwtest
-        working-directory: tools/fwtest
-        run: |
-          cargo build --release
-          echo "$PWD/target/release" >> "$GITHUB_PATH"
       - name: engine format
         working-directory: engine
         run: cargo fmt --check
@@ -59,10 +96,39 @@ jobs:
       - name: engine tests
         working-directory: engine
         run: cargo test --workspace
-      - name: Build the engine module
-        # pip builds it through maturin (engine/py/pyproject.toml) into the runner's Python, which
-        # is not a virtualenv, so `maturin develop` has nowhere to install.
-        run: python -m pip install ./engine/py --config-settings=build-args="--features audit"
+
+  verify-python:
+    needs: engine
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - run: python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Point .venv at the runner's Python
+        run: |
+          mkdir -p .venv/bin
+          ln -s "$pythonLocation/bin/python" .venv/bin/python
+      - uses: actions/download-artifact@v7
+        with:
+          name: engine-wheel
+          path: dist/engine
+      - uses: actions/download-artifact@v7
+        with:
+          name: fwtest
+          path: dist/fwtest
+      - name: Install the engine wheel and fwtest
+        run: |
+          chmod +x dist/fwtest/fwtest
+          echo "$PWD/dist/fwtest" >> "$GITHUB_PATH"
+          python -m pip install dist/engine/*.whl
       - run: fwtest gate --backend-only
         env:
           VERIFY_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -71,8 +137,13 @@ jobs:
           FWTEST_STEP_TIMEOUT_SECS: "900"
 
   rig:
+    needs: engine
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        tab: [day, week]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -95,49 +166,42 @@ jobs:
         run: |
           mkdir -p .venv/bin
           ln -s "$pythonLocation/bin/python" .venv/bin/python
-      - name: Install Rust
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
-      - uses: actions/cache@v6
+      - uses: actions/download-artifact@v7
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            tools/fwtest/target
-          key: fwtest-rig-${{ runner.os }}-${{ hashFiles('tools/fwtest/Cargo.lock') }}
-      - name: Build fwtest
-        working-directory: tools/fwtest
+          name: engine-wheel
+          path: dist/engine
+      - uses: actions/download-artifact@v7
+        with:
+          name: fwtest
+          path: dist/fwtest
+      - name: Install the engine wheel and fwtest
         run: |
-          cargo build --release
-          echo "$PWD/target/release" >> "$GITHUB_PATH"
-      - name: Build the engine module
-        run: python -m pip install ./engine/py
+          chmod +x dist/fwtest/fwtest
+          echo "$PWD/dist/fwtest" >> "$GITHUB_PATH"
+          python -m pip install dist/engine/*.whl
       - name: Desktop engine tests
+        if: matrix.tab == 'day'
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
           fwtest run --timeout 1800 -- .venv/bin/python -m pytest -q -p no:cacheprovider -n 4 \
             desktop/tests/test_tokens.py \
             desktop/tests/test_update.py
-      - name: Run classic Day and Week with a real pointer
+      - name: Run classic ${{ matrix.tab }} with a real pointer
         run: |
-          set +e
-          fwtest rig --server xvfb --design classic --tab day --out rig-artifacts/day
-          day_status=$?
-          fwtest rig --server xvfb --design classic --tab week --out rig-artifacts/week
-          week_status=$?
-          if (( day_status || week_status )); then exit 1; fi
+          fwtest rig --server xvfb --design classic --tab ${{ matrix.tab }} --out rig-artifacts/${{ matrix.tab }}
           python - <<'PY'
           import json
+          import os
           from pathlib import Path
 
-          for tab in ("day", "week"):
-              results = json.loads((Path("rig-artifacts") / tab / "results.json").read_text())
-              if not results:
-                  raise SystemExit(f"Classic {tab} rig selected no scenarios")
+          tab = os.environ["TAB"]
+          results = json.loads((Path("rig-artifacts") / tab / "results.json").read_text())
+          if not results:
+              raise SystemExit(f"Classic {tab} rig selected no scenarios")
           PY
+        env:
+          TAB: ${{ matrix.tab }}
       - name: Stop the hidden display
         if: always()
         run: fwtest clean
@@ -145,21 +209,26 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: classic-rig
-          path: rig-artifacts/
+          name: classic-rig-${{ matrix.tab }}
+          path: rig-artifacts/${{ matrix.tab }}/
           if-no-files-found: warn
           retention-days: 7
 
   mutate:
-    # workflow_dispatch always. A pull request only when it changes the engine or a mutation spec.
+    # workflow_dispatch always. A pull request when it changes the engine, a mutation spec,
+    # this workflow, or fwtest.
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: See whether this pull request changes the engine or a mutation spec
+      - name: See whether this pull request changes the engine, a mutation spec, verify.yml, or fwtest
         id: changed
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -167,7 +236,7 @@ jobs:
             exit 0
           fi
           base="${{ github.event.pull_request.base.sha }}"
-          if git diff --name-only "$base" HEAD | grep -Eq '^(engine/|scripts/mutations/)'; then
+          if git diff --name-only "$base" HEAD | grep -Eq '^(engine/|scripts/mutations/|\.github/workflows/verify\.yml|tools/fwtest/)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -199,6 +268,19 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal --no-self-update
           rustup default stable
+      - uses: actions/cache@v6
+        if: steps.changed.outputs.run == 'true'
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            engine/target
+            tools/fwtest/target
+          key: mutate-engine-${{ runner.os }}-shard${{ matrix.shard }}-${{ hashFiles('engine/Cargo.lock', 'engine/**/*.rs', 'engine/**/Cargo.toml') }}
+          restore-keys: |
+            mutate-engine-${{ runner.os }}-shard${{ matrix.shard }}-
+            mutate-engine-${{ runner.os }}-
       - name: Build fwtest
         if: steps.changed.outputs.run == 'true'
         working-directory: tools/fwtest
@@ -207,9 +289,10 @@ jobs:
           echo "$PWD/target/release" >> "$GITHUB_PATH"
       - name: Build the engine module
         if: steps.changed.outputs.run == 'true'
-        run: .venv/bin/maturin develop --release --manifest-path engine/py/Cargo.toml --features audit
+        run: .venv/bin/maturin develop --profile mutant --manifest-path engine/py/Cargo.toml --features audit
       - name: Mutation cases whose rule is in the engine
         if: steps.changed.outputs.run == 'true'
         env:
           QT_QPA_PLATFORM: offscreen
-        run: fwtest mutate --engine-only
+          FWTEST_ENGINE_PROFILE: mutant
+        run: fwtest mutate --engine-only --shard ${{ matrix.shard }}/4

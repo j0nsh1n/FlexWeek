@@ -1,6 +1,8 @@
 # context.md — FlexWeek
 
 ## Current State
+- 2026-11-05: CI speed-ups on `ci/faster-workflows` (local only). Mutation shards x4, mutant
+  cargo profile, one shared engine wheel, parallel rig/verify, Nuitka/ccache. Nothing pushed.
 - 2026-11-03 (Step 0 of the FIX-SPEC v1.3 plan): at `ea5eacf4` plus the two static audit test files, the
   full gate (3 workers) passes 5788 tests, ruff and mypy. Two runs with 8 workers on a busy machine each
   failed one different timing test (`test_week_hour_labels.py`, `test_layout_clay.py`); both pass alone.
@@ -196,6 +198,8 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
+- 2026-11-05: `ci/faster-workflows` is a local commit for Claude to push and watch. App code under
+  `desktop/`, `backend/`, `engine/src/`, and `engine/py/src/` was not touched.
 - 2026-11-03: Step 0 merges `fix/visual-artifacts-20261026` into `main` by PR (Jonathan's word). Next,
   in the plan's order: the updater fixes and Linux nightly tarballs (plan section 3b), then PRs 1-7.
   Writers are Gemini 3.8 Flash (T3 `antigravity`) and Grok 4.6 medium; Codex `gpt-6.1-sol` high reviews.
