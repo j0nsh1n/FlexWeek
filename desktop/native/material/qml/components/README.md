@@ -18,14 +18,14 @@ Values are `#rrggbb` strings. Disabled controls mix `onSurface` at 12% for the f
 
 ## What the shell registers
 
-Font files, next to the faces FlexWeek already ships:
+Font files, the same Inter faces the other styles use:
 
-- `desktop/assets/fonts/RobotoFlex-Regular.ttf` (weight 400)
-- `desktop/assets/fonts/RobotoFlex-Medium.ttf` (weight 500)
-- `desktop/assets/fonts/RobotoFlex-SemiBold.ttf` (weight 600)
-- `desktop/assets/fonts/RobotoFlex-OFL.txt`
+- `desktop/assets/fonts/Inter-Regular.ttf` (weight 400)
+- `desktop/assets/fonts/Inter-Medium.ttf` (weight 500)
+- `desktop/assets/fonts/Inter-SemiBold.ttf` (weight 600)
+- `desktop/assets/fonts/LICENSE.txt` (Inter's OFL)
 
-Family name is `Roboto Flex`. Register each file with `QFontDatabase.addApplicationFont`, the same call `load_fonts` uses. These are static instances of Roboto Flex. A variable file does not answer Qt's weight. `M3Font` also loads the three files for text inside this module.
+Family name is `Inter`. Register each file with `QFontDatabase.addApplicationFont`, the same call `load_fonts` uses. `M3Font` also loads the three files for text inside this module.
 
 Icons are the rounded Material Symbols, weight 400, copied into `desktop/native/material/qml/icons/`. The Apache-2.0 notice is `icons/LICENSE`. Names in use: `add`, `arrow_back`, `calendar_month`, `calendar_view_day`, `calendar_view_week`, `check`, `chevron_left`, `chevron_right`, `close`, `edit_note`, `more_vert`, `pause`, `play_arrow`, `redo`, `schedule`, `school`, `settings`, `task_alt`, `undo`, `wb_sunny`.
 
