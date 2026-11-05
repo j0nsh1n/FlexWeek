@@ -17,6 +17,10 @@ All notable changes to FlexWeek are documented here. Format follows
 - Material's Focus screen covers the window: phase, task, timer, Pause or Resume, Skip, Finish and Back, on the same timer Widgets uses. Rain, Lo-Fi and White noise play while you focus and pause with the timer; Spotify still opens the Settings link. Auto-mute holds reminders during a focus work phase. Auto-complete, off by default, finishes only that session's block.
 
 ### Changed
+- The One thing day shows the current task's title large (28 px) with the time left under it; during homework, Homework finished is the one filled button and Focus, Running late and Back are text buttons.
+- The "New in 1.0.0" notice is a plain card with one Choose a look button and a close button; Esc closes it and Tab reaches it.
+- Settings → Look shows each look as a 160 px card with a Current chip on the one you wear, and Material 3 is one of the cards.
+- With the Retro layout, the top bar and the Settings page take Retro's colours too.
 - "Plenty of time" is no longer shown for homework due within 24 hours, in the Widgets styles and in Material's Week and Day; it says "Tight" instead. Date-only and 23:59 deadlines use the same end of that day as the rest of FlexWeek, including after this week's Sunday, and Day uses the real clock when you look at another day.
 - The Add homework sheet uses the same words in every style: the last step's button says "Save", the one-hour chip says "60 min", and the estimate shows "min" after the number. Material Settings → Planning offers the same seven study cutoffs as the Widgets styles, written in the 12- or 24-hour clock you chose, wrapping so every choice stays reachable down to the window's minimum width.
 - The focus card, the compact focus rail and the focus screen name the same homework. The compact rail elides a long name so the time left stays in the rail at Large text. Pause and Resume no longer shift the buttons beside them, and the Timeline week keeps a one-hour block's title without writing below a short block.
