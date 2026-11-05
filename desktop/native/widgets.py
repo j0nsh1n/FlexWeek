@@ -1221,12 +1221,16 @@ class Toast(QWidget):
         self.label = QLabel()
         self.label.setObjectName("toastText")
         self.label.setWordWrap(True)
-        row.addWidget(self.label, 1)
+        # Undo's key sits under the words, so it takes no width from them.
+        self._words = QVBoxLayout()
+        self._words.setContentsMargins(0, 0, 0, 0)
+        self._words.setSpacing(0)
+        self._words.addWidget(self.label)
         self.shortcut_hint = QLabel("Ctrl+Z", self.card)
         self.shortcut_hint.setObjectName("toastShortcut")
-        self.shortcut_hint.setStyleSheet("color: rgba(255, 255, 255, 0.75); font-size: 11px;")
         self.shortcut_hint.hide()
-        row.addWidget(self.shortcut_hint)
+        self._words.addWidget(self.shortcut_hint)
+        row.addLayout(self._words, 1)
         # Room for the button, which is not in this layout.
         self._slot = QSpacerItem(0, 0, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         row.addItem(self._slot)
@@ -1351,12 +1355,13 @@ class Toast(QWidget):
         if self.clock_ms is not None:
             self._clock_start = self.clock_ms()
             self._timer.stop()
+        # Shown before reposition measures the card, so the hint has room beside the words.
+        self.shortcut_hint.setVisible(button == "Undo")
         was_shown = self.isVisible()
         self.show()
         self.reposition()
         self.raise_()
         self.button.setVisible(bool(button))
-        self.shortcut_hint.setVisible(button == "Undo")
         self.secondary_button.setVisible(bool(secondary_button))
         self.close_button.setVisible(close_callback is not None)
         self._place_button()
@@ -1410,9 +1415,12 @@ class Toast(QWidget):
         area = QRect(over.mapTo(host, QPoint(0, 0)), over.size()) if over.isVisible() else host.rect()
         # A wrapped label asks for a narrow width, which broke short notices after their
         # second-last word. Measured unwrapped, a notice keeps one line until the room runs out.
+        # The words sit in a layout of their own, which keeps its cached size until told otherwise.
         self.label.setWordWrap(False)
+        self._words.invalidate()
         natural = self.sizeHint().width()
         self.label.setWordWrap(True)
+        self._words.invalidate()
         room = max(120, min(TOAST_MAX_WIDTH, area.width() - 2 * TOAST_FOOT) + 2 * TOAST_SHADOW)
         width = min(max(natural, TOAST_MIN_WIDTH), room)
         # Wrapping was switched back on a moment ago; asked before this, the layouts still gave the
