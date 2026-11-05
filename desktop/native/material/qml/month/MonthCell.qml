@@ -93,7 +93,7 @@ Item {
     M3FocusRing {
         anchors.fill: parent
         anchors.margins: -2
-        shown: root.activeFocus
+        target: root
         ring: tones.primary
         ringRadius: 14
     }

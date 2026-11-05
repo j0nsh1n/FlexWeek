@@ -93,11 +93,7 @@ Item {
     TapHandler {
         id: tap
         enabled: root.enabled
-        onPressedChanged: if (pressed) focusRing.hideForPointer = true
-        onTapped: {
-            root.forceActiveFocus()
-            root.activated()
-        }
+        onTapped: root.activated()
     }
     activeFocusOnTab: true
     Accessible.role: Accessible.PageTab

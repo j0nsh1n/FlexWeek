@@ -164,40 +164,54 @@ def test_the_add_button_is_card_coloured_with_an_accent_icon(
 def test_a_mouse_click_shows_no_ring_and_tab_does(
     gallery: tuple,
 ) -> None:
-    """Mouse focus hides the ring; Tab / keyboard focus shows a 2px focusRing with a 2px gap."""
+    """A ring shows on the focused control only after a key; any mouse press hides it, the first click on
+    a field included, and a key on the same control brings it back (Sol review of PR 6b)."""
+    from desktop.native.material.focus_visible import install
+
     view, root = gallery
+    assert install(view.engine()) is not None
     button = _find(root, "filledMeasure")
     ring = _child(button, "focusRing")
-
+    field = _find(root, "fieldMeasure")
+    field_ring = _child(field, "focusRing")
     dest = _find(root, "destMeasure")
     dest_ring = _child(dest, "focusRing")
 
-    _click(view, button)
-    assert button.hasActiveFocus()
-    assert ring.property("shown") is False
-
-    dest.forceActiveFocus(Qt.TabFocusReason)
-    QGuiApplication.processEvents()
+    view.requestActivate()
+    QTest.keyClick(view, Qt.Key_Tab)
     button.forceActiveFocus(Qt.TabFocusReason)
     QGuiApplication.processEvents()
-    assert button.hasActiveFocus()
     assert ring.property("shown") is True
     assert _border_width(ring) == 2
     assert ring.property("radius") == 10
     assert QColor(ring.property("ring")).name() == "#3d6fc4"
     assert ring.width() == button.width() + 8
 
+    # A press anywhere hides the ring, even though the button keeps focus.
     _click(view, dest)
+    assert button.hasActiveFocus()
+    assert ring.property("shown") is False
+
+    # A key on the same control brings it back.
+    QTest.keyClick(view, Qt.Key_Shift)
+    QGuiApplication.processEvents()
+    assert ring.property("shown") is True
+
+    # The first click into a field focuses it with no ring.
+    _click(view, field)
+    assert field.property("activeFocus") or any(
+        child.hasActiveFocus() for child in field.findChildren(type(field))
+    )
+    assert field_ring.property("shown") is False
+
+    # Focus given from code after a click (a mouse-opened sheet's first field) stays quiet too.
+    dest.forceActiveFocus(Qt.OtherFocusReason)
+    QGuiApplication.processEvents()
     assert dest.hasActiveFocus()
     assert dest_ring.property("shown") is False
-
-    button.forceActiveFocus(Qt.TabFocusReason)
+    QTest.keyClick(view, Qt.Key_Shift)
     QGuiApplication.processEvents()
-    dest.forceActiveFocus(Qt.TabFocusReason)
-    QGuiApplication.processEvents()
-    assert dest.hasActiveFocus()
     assert dest_ring.property("shown") is True
-    assert _border_width(dest_ring) == 2
     assert QColor(dest_ring.property("ring")).name() == "#3d6fc4"
 
 

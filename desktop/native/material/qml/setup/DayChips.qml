@@ -48,7 +48,7 @@ Flow {
                 anchors.fill: parent
                 anchors.margins: -4
                 ring: m3Palette.focusRing
-                ringRadius: height / 2 + 4
+                ringRadius: parent.height / 2 + 4
             }
             Row {
                 anchors.centerIn: parent

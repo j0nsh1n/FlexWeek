@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 from desktop.native.look import design_look
 from desktop.native.material.bridge import MaterialBridge
+from desktop.native.material.focus_visible import install as install_focus_visible
 from desktop.native.material.theme import qml_dir, qml_path, register_fonts
 
 log = logging.getLogger("flexweek.material")
@@ -102,6 +103,7 @@ class MaterialPage(QWidget):
                 self.failure = problems or "Material 3 could not load"
             log.warning("%s", self.failure)
             return False
+        install_focus_visible(self._quick.engine())
         self._ready = True
         return True
 

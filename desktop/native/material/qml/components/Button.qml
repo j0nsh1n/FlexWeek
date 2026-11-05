@@ -97,15 +97,7 @@ Item {
     }
 
     HoverHandler { id: hover; enabled: root.enabled }
-    TapHandler {
-        id: tap
-        enabled: root.enabled
-        onPressedChanged: if (pressed) focusRing.hideForPointer = true
-        onTapped: {
-            root.forceActiveFocus()
-            root.clicked()
-        }
-    }
+    TapHandler { id: tap; enabled: root.enabled; onTapped: root.clicked() }
     activeFocusOnTab: root.enabled
     Accessible.role: Accessible.Button
     Accessible.name: accessName !== "" ? accessName : text

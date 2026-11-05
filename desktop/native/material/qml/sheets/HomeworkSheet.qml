@@ -46,7 +46,7 @@ SheetFrame {
                     font.pixelSize: 14
                     font.weight: 500
                 }
-                M3FocusRing { anchors.fill: parent; anchors.margins: -4; ring: pal.focusRing; ringRadius: height / 2 + 4 }
+                M3FocusRing { anchors.fill: parent; anchors.margins: -4; ring: pal.focusRing; ringRadius: parent.height / 2 + 4 }
                 TapHandler { enabled: crumb.reachable; onTapped: root.sheets.goto(index) }
                 Keys.onPressed: (event) => {
                     if (crumb.reachable && (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
