@@ -83,6 +83,8 @@ class MaterialBridge(QObject):
     def __init__(self, window: QObject) -> None:
         super().__init__(window)
         self.setObjectName("materialBridge")
+        # Set before scheme() so a failed build can still dispose() this half-made bridge.
+        self._week_follow = None
         self._window = cast(_Window, window)
         self._screen = "week"
         self._snack = ""
@@ -114,7 +116,6 @@ class MaterialBridge(QObject):
         self._focus = FocusBridge(window, self)
         self._sheets = SheetsBridge(window, self)
         self._following = False
-        self._week_follow = None
         # Save finishes on this signal. The day lists and the Undo button read it then,
         # rather than waiting for the 20s clock tick.
         changed = getattr(self._window.session, "week_changed", None)
@@ -175,7 +176,7 @@ class MaterialBridge(QObject):
     def dispose(self) -> None:
         """Cut the session signals this bridge joined before its deleteLater runs. Between the drop
         and the next turn of the event loop a week change would still reach a half-made bridge."""
-        changed = self._week_follow
+        changed = getattr(self, "_week_follow", None)
         self._week_follow = None
         if changed is not None:
             with contextlib.suppress(RuntimeError, TypeError):
