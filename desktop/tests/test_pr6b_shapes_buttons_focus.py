@@ -256,3 +256,33 @@ def test_a_focused_field_draws_one_border(
     assert ring.property("shown") is True
     assert _border_width(ring) == 2
     assert QColor(ring.property("ring")).name() == "#3d6fc4"
+
+
+def _prompt_button_lists() -> list[tuple[str, list[dict]]]:
+    """Every `buttons: [...]` a settings Prompt is given, evaluated as the JavaScript it is."""
+    from PySide6.QtQml import QJSEngine
+
+    engine = QJSEngine()
+    found: list[tuple[str, list[dict]]] = []
+    for path in sorted(QML.rglob("*.qml")):
+        text = path.read_text(encoding="utf-8")
+        for match in re.finditer(r"\bbuttons:\s*\[", text):
+            depth, end = 0, match.end() - 1
+            for end in range(match.end() - 1, len(text)):
+                depth += {"[": 1, "]": -1}.get(text[end], 0)
+                if depth == 0:
+                    break
+            value = engine.evaluate("(" + text[match.end() - 1 : end + 1] + ")")
+            assert not value.isError(), f"{path.name}: {value.toString()}"
+            found.append((path.name, value.toVariant()))
+    return found
+
+
+def test_every_settings_prompt_has_at_most_one_filled_button(qapp: QGuiApplication) -> None:
+    """Each prompt is its own screen: one filled button at most (Jonathan's rule, FIX-SPEC PR 6)."""
+    lists = _prompt_button_lists()
+    names = {name for name, _buttons in lists}
+    assert {"AdvancedPage.qml", "SettingsView.qml"} <= names, names
+    for name, buttons in lists:
+        filled = [button["label"] for button in buttons if button.get("kind", "text") == "filled"]
+        assert len(filled) <= 1, f"{name}: {filled}"
