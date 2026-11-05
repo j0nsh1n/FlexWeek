@@ -251,6 +251,8 @@ def test_widgets_settings_has_the_same_switch(qapp: QApplication, window: Native
         window._material_gave_up = False
         window._on_week()
         window._updates["developer_builds"] = True
+        window._save_look()
+        assert json.loads(look_file().read_text(encoding="utf-8"))["updates"]["developer_builds"] is True
         window._open_settings()
         switch = window._settings.findChild(QWidget, "prefDeveloperBuilds")
         assert switch is not None and switch.isChecked() is True
