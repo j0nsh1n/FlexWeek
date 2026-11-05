@@ -4580,7 +4580,7 @@ class HomeworkDialog(Dialog):
         self.due.changed.connect(self._clear_due_problem)
         self._add_when(form)
         self.estimate = LengthBox("homeworkEstimate", self._original["estimate_min"])
-        self.stepper = Stepper(self.estimate, QUICK_LENGTHS)
+        self.stepper = Stepper(self.estimate, QUICK_LENGTHS, chip_suffix=" min")
         form.addRow("Estimated time", self.stepper)
         self.estimate_hint = QLabel(SLOT_HINT)
         self.estimate_hint.setObjectName("homeworkEstimateHint")

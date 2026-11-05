@@ -49,8 +49,6 @@ MORE_ROWS = (
     ("routinesButton", "Routines", "repeat", ""),
     ("quickFocusAction", "Quick focus", "timer", "quickFocusAction"),
     ("replanAll", "Replan all my homework", "autorenew", "replanAll"),
-    ("heading", "Edit"),
-    ("saveButton", "Save", "save", "saveButton"),
     ("heading", "Help and info"),
     ("helpButton", "Help", "help", "helpButton"),
     ("aboutButton", "About FlexWeek", "info", "aboutButton"),

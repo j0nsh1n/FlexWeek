@@ -58,7 +58,7 @@ SectionPage {
             visible: !!page.st.showCutoff
             title: "Study window cutoff"
             subtitle: "No homework planned after this hour."
-            choices: [{ label: "20:00", value: "20:00" }, { label: "21:00", value: "21:00" }, { label: "22:00", value: "22:00" }]
+            choices: page.st.cutoffChoices ? page.st.cutoffChoices : []
             current: page.st.cutoff || ""
             onChosen: (value) => page.panel.setCutoff(value)
         }

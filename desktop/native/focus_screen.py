@@ -146,6 +146,14 @@ class FocusScreen(QWidget):
         tallest = max(button.sizeHint().height() for button in everyone)
         for button in everyone:
             button.setMinimumHeight(tallest)
+        current = self.pause.text()
+        widths = []
+        for word in ("Pause", "Resume"):
+            self.pause.setText(word)
+            self.pause.ensurePolished()
+            widths.append(self.pause.sizeHint().width())
+        self.pause.setText(current)
+        self.pause.setFixedWidth(max(widths))
 
     def time_text(self) -> str:
         """The countdown as the ring shows it."""

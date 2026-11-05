@@ -25,7 +25,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     import shiboken6
     from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, Qt
-    from PySide6.QtGui import QColor, QFontMetricsF, QMouseEvent, QPainter, QTextDocument
+    from PySide6.QtGui import QColor, QFont, QFontMetricsF, QMouseEvent, QPainter, QTextDocument
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import (
         QApplication,
@@ -205,6 +205,42 @@ def drawn_words(qapp: QApplication, monkeypatch: pytest.MonkeyPatch, view: Timel
 
 
 # Week: two pages of columns
+
+
+def test_week_paints_the_history_essay_title_on_a_sixty_minute_block(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    blocks = [
+        {**item, "title": "History essay"} if item["id"] == "essay-1" else item for item in BLOCKS
+    ]
+    said = drawn_words(qapp, monkeypatch, shown(qapp, size=(1280, 800), blocks=blocks))
+    assert "History essay" in said
+
+
+@pytest.mark.parametrize("height", [60, 12, 5])
+def test_a_fallback_title_stays_inside_its_block(qapp: QApplication, height: int) -> None:
+    painter = TimelinePainter(scene_of().tokens)
+    drawn = Drawn("x", "History essay", "assignments", True, Span(3, 1080, 1095), 0, 1)
+    rect = QRectF(0, 0, 180, height)
+    title, small = painter.fonts(QFont("Inter", 13))
+    lay = painter._lay(title, small, rect, drawn, rect, pills=False)
+    assert all(
+        line.box.top() + 0.5 >= rect.top() and line.box.bottom() <= rect.bottom() + 0.5
+        for line in lay
+    )
+    if height >= 60:
+        assert any(line.title for line in lay)
+
+
+def test_a_partly_visible_block_does_not_write_below_what_is_on_screen(qapp: QApplication) -> None:
+    painter = TimelinePainter(scene_of().tokens)
+    drawn = Drawn("x", "History essay", "assignments", True, Span(3, 1080, 1095), 0, 1)
+    rect = QRectF(0, 0, 180, 60)
+    visible = QRectF(0, 0, 180, 8)
+    title, small = painter.fonts(QFont("Inter", 13))
+    lay = painter._lay(title, small, rect, drawn, visible, pills=False)
+    edge = min(rect.bottom(), visible.bottom())
+    assert all(line.box.bottom() <= edge + 0.5 for line in lay)
 
 
 def test_week_is_seven_columns_on_two_pages_of_one_canvas(qapp: QApplication) -> None:

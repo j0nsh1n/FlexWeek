@@ -157,6 +157,7 @@ class DayBridge(QObject):
                 dim=read_flag(prefs, DIM_KEYS, True),
                 mode=self._mode,
                 on=viewed,
+                now=moment,
             )
         )
 

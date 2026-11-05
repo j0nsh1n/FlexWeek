@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import importlib.util
 import os
+from datetime import datetime
 
 import pytest
 
-from desktop.native.weekmodel import build_week, homework_time_sentence
+from desktop.native.weekmodel import build_week, homework_time_sentence, slack_words_for
 
 WEEK = "2026-09-14"
 HOMEWORK = {
@@ -81,6 +82,37 @@ def test_homework_time_sentence_includes_overdue_carried_and_unplaced_work() -> 
         [{"id": "bio", "left_over_state": "overdue", "remaining_min": 60}], []
     ) == "1 overdue"
     assert homework_time_sentence([], []) == "Everything has a time."
+
+
+def test_plenty_of_time_is_never_due_within_24_hours() -> None:
+    now = datetime(2026, 11, 5, 19, 0)
+    assert slack_words_for("ok", "2026-11-06T18:00", now) == "Tight"
+    assert slack_words_for("ok", "2026-11-06T20:00", now) == "Plenty of time"
+    assert slack_words_for("ok", "2026-11-06T19:00", now) == "Plenty of time"
+    assert slack_words_for("danger", "2026-11-06T18:00", now) == "Cutting it close"
+    assert slack_words_for("ok", "2026-11-06T18:00", None) == "Plenty of time"
+
+
+def test_an_all_day_due_is_tight_five_hours_before_the_end_of_that_day() -> None:
+    now = datetime(2026, 11, 6, 19, 0)
+    assert slack_words_for("ok", "2026-11-06", now) == "Tight"
+    assert slack_words_for("ok", "2026-11-06T23:59", datetime(2026, 11, 6, 0, 0)) == "Plenty of time"
+
+
+def test_the_built_week_upgrades_plenty_when_due_within_24_hours() -> None:
+    now = datetime(2026, 11, 5, 19, 0)
+    due = "2026-11-06T18:00"
+    blocks = [block("essay-1", "flexible", [3], "20:00", 30, assignment_id="essay")]
+    homework = {"essay": {"id": "essay", "title": "History essay", "due": due, "completed": False}}
+    trace = {
+        "placed": [],
+        "unplaced": [],
+        "explanations": [{"block_id": "essay-1", "slack_status": "ok"}],
+    }
+    model = build_week("2026-11-02", blocks, homework, trace)
+    found = next(item for item in model.occurrences if item.block_id == "essay-1")
+    assert found.slack_words(now) == "Tight"
+    assert found.slack_words(None) == "Plenty of time"
 
 
 @pytest.mark.skipif(importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent")

@@ -1058,7 +1058,7 @@ class Stepper(QWidget):
     it and stop at its ends. `quick` adds a row of pills under it that set a length in one click, the
     one matching the value lit. Qt's arrows inside the box were too small to hit (T20)."""
 
-    def __init__(self, box: QSpinBox, quick: tuple[int, ...] = ()) -> None:
+    def __init__(self, box: QSpinBox, quick: tuple[int, ...] = (), chip_suffix: str = "") -> None:
         super().__init__()
         self.setObjectName("stepper")
         # As wide as its parts: stretched across a form, its + stood apart from where a box ends.
@@ -1088,7 +1088,7 @@ class Stepper(QWidget):
             chips.setContentsMargins(0, 0, 0, 0)
             chips.setSpacing(4)
             for minutes in quick:
-                chip = QPushButton(str(minutes))
+                chip = QPushButton(f"{minutes}{chip_suffix}")
                 chip.setObjectName("quickLength")
                 chip.setProperty("pill", True)
                 chip.setProperty("minutes", minutes)

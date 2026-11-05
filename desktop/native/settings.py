@@ -12,6 +12,7 @@ from PySide6.QtCore import QEvent, QMargins, QObject, QRectF, QSize, Qt, QTime, 
 from PySide6.QtGui import (
     QColor,
     QDesktopServices,
+    QFontMetrics,
     QGuiApplication,
     QIcon,
     QKeyEvent,
@@ -73,6 +74,7 @@ from desktop.native.fields import (
 from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_choices, remaining_ms
 from desktop.native.fonts import time_font
 from desktop.native.hours.geometry import drag_step
+from desktop.native.hours.rail import RAIL_PX
 from desktop.native.icons import pixmap as icon_pixmap
 from desktop.native.layouts.dialog import SLOTS, LayoutSection
 from desktop.native.layouts.registry import DESIGN_LOOKS, sanitize_layout
@@ -839,6 +841,21 @@ class FocusPanel(QWidget):
                 row.setDirection(direction)
         self.layout().setContentsMargins(QMargins() if compact else self._margins)
         self._compact = compact
+        self.setMaximumWidth(RAIL_PX if compact else 16777215)
+
+    def _compact_task_line(self, name: str, left: str) -> str:
+        """Keep the time left whole; elide the homework name so the line fits the rail."""
+        if not name:
+            return f"{left} left"
+        suffix = f" · {left} left"
+        full = f"{name}{suffix}"
+        metrics = QFontMetrics(self.task.font())
+        room = RAIL_PX - 2 * CARD_PAD
+        if metrics.horizontalAdvance(full) <= room:
+            return full
+        name_room = max(0, room - metrics.horizontalAdvance(suffix))
+        shown = metrics.elidedText(name, Qt.TextElideMode.ElideRight, name_room)
+        return f"{shown}{suffix}" if shown else f"{left} left"
 
     def show_now_next(self, text: str) -> None:
         self.now_next.setText(text)
@@ -877,11 +894,17 @@ class FocusPanel(QWidget):
         self.more.setEnabled(bool(choices))
         if running and self._compact:
             left = format_countdown(remaining_ms(state, session.now_ms()))
-            self.task.setText(f"Session · {left} left")
+            name = state.get("title") or ""
+            self.task.setText(self._compact_task_line(name, left))
+            self.task.setToolTip(name)
+            # The line may be shortened to fit; a screen reader hears the whole name and the time left.
+            self.task.setAccessibleName(f"{name} · {left} left" if name else f"{left} left")
             self.task.setVisible(True)
             self.phase.setVisible(False)
             self.time.setVisible(False)
         else:
+            self.task.setToolTip("")
+            self.task.setAccessibleName("")
             for label in (self.task, self.phase, self.time):
                 label.setVisible(bool(label.text()))
 

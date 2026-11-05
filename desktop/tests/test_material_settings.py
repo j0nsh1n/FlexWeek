@@ -280,7 +280,56 @@ def test_the_planner_controls_write_the_planner_preferences(
             {"split_long_tasks": True},
             {"show_weekends": False},
             {"day_cutoff": "21:00"},
+            {"day_cutoff": "23:00"},
         ]
+    finally:
+        _reset(window)
+
+
+def test_planning_cutoff_labels_follow_the_clock(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    from desktop.native.weekmodel import hhmm_text, set_clock_24h
+    from desktop.native.widgets import CUTOFFS as WIDGET_CUTOFFS
+
+    assert bridge_settings.CUTOFFS == WIDGET_CUTOFFS
+    _open_settings(qapp, window, "planning")
+    panel = _panel(window)
+    try:
+        set_clock_24h(False)
+        panel._publish()
+        twelve = [item["label"] for item in panel.state["cutoffChoices"]]
+        assert twelve == [hhmm_text(item) for item in WIDGET_CUTOFFS]
+        assert twelve[0] == "8:00 PM"
+        assert twelve[-1] == "11:00 PM"
+        set_clock_24h(True)
+        panel._publish()
+        twenty_four = [item["label"] for item in panel.state["cutoffChoices"]]
+        assert twenty_four == list(WIDGET_CUTOFFS)
+        assert twenty_four[0] == "20:00"
+    finally:
+        set_clock_24h(True)
+        _reset(window)
+
+
+@pytest.mark.parametrize("width", [800, 860, 900])
+def test_cutoff_choices_fit_the_planning_page(
+    qapp: QApplication, window: NativeWindow, width: int
+) -> None:
+    root = _open_settings(qapp, window, "planning")
+    window.resize(width, 800)
+    _pump(qapp)
+    try:
+        seg = _named(root, "cutoff")[0]
+        _flick_to(seg)
+        _pump(qapp)
+        parent = seg.parentItem()
+        clipper = parent
+        while clipper is not None and not clipper.property("clip"):
+            clipper = clipper.parentItem()
+        assert clipper is not None
+        right = seg.mapToItem(clipper, QPointF(seg.width(), 0)).x()
+        assert right <= clipper.width() + 0.5
     finally:
         _reset(window)
 

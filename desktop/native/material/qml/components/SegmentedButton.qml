@@ -11,9 +11,17 @@ Item {
     property string accessName: "Choose one"
     signal selected(string value)
 
-    implicitHeight: 40
-    height: 40
-    implicitWidth: row.implicitWidth
+    implicitHeight: Math.max(40, flow.implicitHeight)
+    height: implicitHeight
+    implicitWidth: {
+        var total = 0
+        for (var i = 0; i < segments.count; i++) {
+            var item = segments.itemAt(i)
+            if (item)
+                total += item.width
+        }
+        return total
+    }
     width: implicitWidth
 
     M3Palette { id: palette; theme: root.theme }
@@ -48,11 +56,12 @@ Item {
         border.width: 0
         border.color: root.lineColor
         clip: true
-        Row {
-            id: row
-            height: 40
+        Flow {
+            id: flow
+            width: parent.width
             spacing: 0
             Repeater {
+                id: segments
                 model: root.choices
                 delegate: Item {
                     id: segment

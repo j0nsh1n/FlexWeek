@@ -136,6 +136,64 @@ def test_status_tags_use_the_slack_words() -> None:
     assert done.done[0].tag_kind == ""
 
 
+def test_plenty_of_time_is_never_due_within_24_hours() -> None:
+    soon = _block(
+        "Soon", 20 * 60, 20 * 60 + 30, work=True, assignment="a1", slack="ok", due="2026-11-06T18:00"
+    )
+    later = _block(
+        "Later", 20 * 60, 20 * 60 + 30, work=True, assignment="a2", slack="ok", due="2026-11-06T20:00"
+    )
+    tags = {row.title: row.tag for row in _board([soon, later], 19 * 60).up_next}
+    assert tags["Soon"] == "Tight"
+    assert tags["Later"] == "Plenty of time"
+
+
+def test_an_all_day_due_is_tight_five_hours_before_midnight() -> None:
+    soon = _block("Soon", 20 * 60, 20 * 60 + 30, work=True, assignment="a1", slack="ok", due="2026-11-06")
+    board = board_for(
+        [soon],
+        minute=19 * 60,
+        when="today",
+        nudges=True,
+        dim=True,
+        mode="light",
+        on=date(2026, 11, 6),
+        now=datetime(2026, 11, 6, 19, 0),
+    )
+    assert board.up_next[0].tag == "Tight"
+
+
+def test_browsing_another_day_uses_the_real_clock(qapp: QApplication) -> None:
+    item = _block(
+        "Essay", 2 * 60, 2 * 60 + 30, work=True, assignment="a1", slack="ok", due="2026-11-06T20:00"
+    )
+    now = datetime(2026, 11, 5, 19, 0)
+
+    class Window:
+        session = SimpleNamespace(
+            preferences={},
+            account={"id": "review"},
+            week_start="2026-11-02",
+            selected_day="2026-11-06",
+            now_ms=lambda: int(now.timestamp() * 1000),
+            built_week=lambda: SimpleNamespace(on_day=lambda _: (item,)),
+            busy=False,
+        )
+
+    parent = QObject()
+    bridge = DayBridge(Window(), parent)  # type: ignore[arg-type]
+    bridge.reload("light")
+    assert bridge._board.up_next[0].tag == "Plenty of time"
+
+
+def test_the_now_card_names_the_homework_start_focus_would_open() -> None:
+    essay = _block("Essay", *ESSAY, work=True, assignment="a1")
+    board = _board([_block("School", *SCHOOL), essay], 15 * 60)
+    assert board.focus_block_id == "essay"
+    assert board.now_title == "Essay"
+    assert board.show_now is True
+
+
 def test_the_now_card_is_the_gap_to_the_next_block() -> None:
     day = [_block("School", *SCHOOL), _block("Soccer", *SOCCER)]
     board = _board(day, 15 * 60 + 40)
@@ -312,7 +370,7 @@ def test_day_screen_reads_the_real_day(qapp: QApplication, window: NativeWindow)
     day = _bridge(root).property("day")
     assert day.property("leftLine") == "1 thing left today"
     assert day.property("showNow") is True
-    assert day.property("nowTitle") == "Free time before History essay"
+    assert day.property("nowTitle") == "History essay"
     assert day.property("nowMinutes") == 105
     assert day.property("nowLine") == "1 h 45 min left"
     up = _rows(day.property("upNext"))
@@ -326,6 +384,16 @@ def test_day_screen_reads_the_real_day(qapp: QApplication, window: NativeWindow)
     assert myday.property("ringCount") == 1
     assert myday.property("ringCaption") == "thing left"
     assert myday.property("ringShare") == pytest.approx(0.5)
+    try:
+        day.startFocus()
+        _pump(qapp)
+        focus = window._material_page.bridge.focus
+        assert str(focus.property("title")) == "History essay"
+        assert str(day.property("nowTitle")) == "History essay"
+        assert str(myday.property("nowTitle")) == "History essay"
+    finally:
+        window.session.reset_focus()
+        _pump(qapp)
     window._use_widgets_styles()
 
 

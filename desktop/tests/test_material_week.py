@@ -26,7 +26,7 @@ from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication, QPushButton  # noqa: E402
 
 from desktop.native import material as material_package  # noqa: E402
-from desktop.native.material.bridge_week import WeekBridge  # noqa: E402
+from desktop.native.material.bridge_week import SLACK_TAGS, WeekBridge  # noqa: E402
 from desktop.native.weekmodel import clock_label, set_clock_24h  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.server import LocalServer  # noqa: E402
@@ -349,6 +349,56 @@ def test_plan_is_disabled_when_nothing_needs_a_time(qapp: QApplication, window: 
     assert _qml(root, "planHomework").property("enabled") is False
     assert _qml(root, "homeworkEmptyText").property("text") == "Everything has a time."
     assert _qml(root, "homeworkHeading").property("text") == "No time yet · drag onto a day"
+
+
+def test_plenty_of_time_is_never_due_within_24_hours() -> None:
+    start = date(2026, 11, 2)
+    moment = datetime(2026, 11, 5, 19, 0)
+    soon = SimpleNamespace(due="2026-11-06T18:00", minutes=30)
+    later = SimpleNamespace(due="2026-11-06T20:00", minutes=30)
+    assert WeekBridge._tag_for(soon, start, moment) == SLACK_TAGS["tight"]
+    assert WeekBridge._tag_for(later, start, moment) == SLACK_TAGS["ok"]
+
+
+def test_an_all_day_due_is_tight_five_hours_before_midnight() -> None:
+    start = date(2026, 11, 2)
+    assert WeekBridge._tag_for(
+        SimpleNamespace(due="2026-11-06", minutes=30), start, datetime(2026, 11, 6, 19, 0)
+    ) == SLACK_TAGS["tight"]
+    assert WeekBridge._tag_for(
+        SimpleNamespace(due="2026-11-06T23:59", minutes=30), start, datetime(2026, 11, 6, 0, 0)
+    ) == SLACK_TAGS["ok"]
+
+
+def test_plenty_applies_after_this_weeks_sunday() -> None:
+    start = date(2026, 11, 2)
+    moment = datetime(2026, 11, 8, 19, 0)
+    soon = SimpleNamespace(due="2026-11-09T18:00", minutes=30)
+    later = SimpleNamespace(due="2026-11-09T20:00", minutes=30)
+    assert WeekBridge._tag_for(soon, start, moment) == SLACK_TAGS["tight"]
+    assert WeekBridge._tag_for(later, start, moment) == SLACK_TAGS["ok"]
+
+
+def test_status_tags_say_plenty_is_tight_when_due_within_24_hours(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    friday = (_week_monday(window) + timedelta(days=4)).isoformat()
+    _homework(window, "soon", "Due soon", 30, f"{friday}T18:00")
+    _homework(window, "later", "Due later", 30, f"{friday}T20:00")
+    settled(qapp, window)
+    _pump(qapp)
+    found = {}
+    for card in _named(root, "homeworkCard"):
+        title = next((str(item.property("text")) for item in _named(card, "homeworkTitle")), "")
+        tag = next(
+            (str(item.property("text")) for item in _named(card, "homeworkTag") if item.property("visible")),
+            "",
+        )
+        if title:
+            found[title] = tag
+    assert found.get("Due soon") == "Tight"
+    assert found.get("Due later") == "Plenty of time"
 
 
 def test_status_tags_say_how_much_room_the_homework_has(qapp: QApplication, window: NativeWindow) -> None:
