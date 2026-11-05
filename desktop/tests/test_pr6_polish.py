@@ -105,6 +105,25 @@ def test_due_and_overdue_month_chips_use_class_and_status_colours_with_icons(
                 assert bar is None or bar.property("visible") is False
 
 
+def test_narrow_month_dots_use_the_chip_colours(qapp: QGuiApplication, cell: QQuickItem) -> None:
+    """At phone width a day shows dots, not chips: due is homework's bar, overdue the overdue
+    status, and no purple."""
+    try:
+        cell.setProperty("narrow", True)
+        for mode in ("light", "dark"):
+            th = theme_object(scheme("Slate", mode, "std"), "comfortable", False, False)
+            homework = th["classes"]["assignments"]["bar"]
+            for kind, colour in (("due", homework), ("overdue", th["statusOverdue"])):
+                _show(cell, th, [{"kind": kind, "text": f"{kind} History essay"}])
+                dot = _find(cell, "monthDot")
+                assert dot is not None, f"{kind} dot in {mode}"
+                assert _hex(dot.property("color")) == colour.lower(), f"{kind} dot in {mode}"
+                assert _hex(dot.property("color")) not in PURPLE_FAMILY
+    finally:
+        cell.setProperty("narrow", False)
+        QGuiApplication.processEvents()
+
+
 def test_a_plain_month_chip_stays_neutral(qapp: QGuiApplication, cell: QQuickItem) -> None:
     """A planned-time chip keeps the muted surface, no status icon, and a pill radius."""
     for mode in ("light", "dark"):

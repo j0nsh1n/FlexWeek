@@ -281,10 +281,11 @@ Item {
                 width: 6
                 height: 6
                 radius: 3
+                // The same colours as the wide chips: homework's bar, the overdue status, else muted.
                 color: modelData.kind === "overdue"
-                       ? tones.error
+                       ? tones.statusOverdue
                        : modelData.kind === "due"
-                         ? tones.tertiary
+                         ? root.homeworkClass.bar
                          : tones.inkMuted
                 Accessible.role: Accessible.StaticText
                 Accessible.name: modelData.text
