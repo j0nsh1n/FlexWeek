@@ -39,7 +39,7 @@ Item {
         if (root.kind === "tight")
             return "schedule"
         if (root.kind === "cutting")
-            return "close"
+            return "warning"
         return ""
     }
 
