@@ -357,6 +357,25 @@ def test_plenty_of_time_is_never_due_within_24_hours() -> None:
     assert WeekBridge._tag_for(later, start, moment) == SLACK_TAGS["ok"]
 
 
+def test_an_all_day_due_is_tight_five_hours_before_midnight() -> None:
+    start = date(2026, 11, 2)
+    assert WeekBridge._tag_for(
+        SimpleNamespace(due="2026-11-06", minutes=30), start, datetime(2026, 11, 6, 19, 0)
+    ) == SLACK_TAGS["tight"]
+    assert WeekBridge._tag_for(
+        SimpleNamespace(due="2026-11-06T23:59", minutes=30), start, datetime(2026, 11, 6, 0, 0)
+    ) == SLACK_TAGS["ok"]
+
+
+def test_plenty_applies_after_this_weeks_sunday() -> None:
+    start = date(2026, 11, 2)
+    moment = datetime(2026, 11, 8, 19, 0)
+    soon = SimpleNamespace(due="2026-11-09T18:00", minutes=30)
+    later = SimpleNamespace(due="2026-11-09T20:00", minutes=30)
+    assert WeekBridge._tag_for(soon, start, moment) == SLACK_TAGS["tight"]
+    assert WeekBridge._tag_for(later, start, moment) == SLACK_TAGS["ok"]
+
+
 def test_status_tags_say_plenty_is_tight_when_due_within_24_hours(
     qapp: QApplication, window: NativeWindow
 ) -> None:

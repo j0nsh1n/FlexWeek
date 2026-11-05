@@ -19,8 +19,8 @@ Item {
 
     readonly property int padV: density === "compact" ? 10 : 16
     readonly property int textHeight: 24 + (subtitle === "" ? 0 : 20)
-    readonly property bool stacked: Math.max(titleText.implicitWidth, Math.min(subtitleText.implicitWidth, 240)) + seg.width + 64 > width
-    implicitHeight: stacked ? padV * 2 + textHeight + 8 + 40 : Math.max(56, padV * 2 + textHeight)
+    readonly property bool stacked: Math.max(titleText.implicitWidth, Math.min(subtitleText.implicitWidth, 240)) + seg.implicitWidth + 64 > width
+    implicitHeight: stacked ? padV * 2 + textHeight + 8 + seg.height : Math.max(56, padV * 2 + textHeight)
     height: implicitHeight
 
     M3Palette { id: palette; theme: root.theme }
@@ -66,6 +66,8 @@ Item {
         objectName: root.key
         x: root.stacked ? 16 : root.width - width - 16
         y: root.stacked ? root.padV + root.textHeight + 8 : (root.height - height) / 2
+        width: root.stacked ? Math.min(implicitWidth, Math.max(0, root.width - 32)) : implicitWidth
+        height: implicitHeight
         theme: root.theme
         density: root.density
         reduceMotion: root.reduceMotion

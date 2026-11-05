@@ -93,6 +93,28 @@ def test_plenty_of_time_is_never_due_within_24_hours() -> None:
     assert slack_words_for("ok", "2026-11-06T18:00", None) == "Plenty of time"
 
 
+def test_an_all_day_due_is_tight_five_hours_before_the_end_of_that_day() -> None:
+    now = datetime(2026, 11, 6, 19, 0)
+    assert slack_words_for("ok", "2026-11-06", now) == "Tight"
+    assert slack_words_for("ok", "2026-11-06T23:59", datetime(2026, 11, 6, 0, 0)) == "Plenty of time"
+
+
+def test_the_built_week_upgrades_plenty_when_due_within_24_hours() -> None:
+    now = datetime(2026, 11, 5, 19, 0)
+    due = "2026-11-06T18:00"
+    blocks = [block("essay-1", "flexible", [3], "20:00", 30, assignment_id="essay")]
+    homework = {"essay": {"id": "essay", "title": "History essay", "due": due, "completed": False}}
+    trace = {
+        "placed": [],
+        "unplaced": [],
+        "explanations": [{"block_id": "essay-1", "slack_status": "ok"}],
+    }
+    model = build_week("2026-11-02", blocks, homework, trace)
+    found = next(item for item in model.occurrences if item.block_id == "essay-1")
+    assert found.slack_words(now) == "Tight"
+    assert found.slack_words(None) == "Plenty of time"
+
+
 @pytest.mark.skipif(importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent")
 def test_the_model_places_every_block_where_the_week_calendar_draws_it() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")

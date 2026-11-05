@@ -287,6 +287,11 @@ fn week_slack_words(slack: Option<&str>) -> PyResult<&'static str> {
 }
 
 #[pyfunction]
+fn week_live_slack_status(slack: &str, due_in_min: Option<i64>) -> PyResult<String> {
+    guard(|| Ok(weekmodel::live_slack_status(slack, due_in_min).to_string()))
+}
+
+#[pyfunction]
 fn week_occurrence_minutes(start: i64, end: i64) -> PyResult<i64> {
     guard(|| Ok(weekview::minutes(start, end)))
 }
@@ -889,6 +894,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         date_month_title,
         week_build,
         week_slack_words,
+        week_live_slack_status,
         week_occurrence_minutes,
         week_occurrence_live,
         week_date_of,

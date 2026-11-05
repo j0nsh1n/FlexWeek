@@ -15,9 +15,9 @@ from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from desktop.native.material.bridge_rows import Labels, Rows
 from desktop.native.material.theme import event_category, paint_for_category
-from desktop.native.reuse import due_point
 from desktop.native.weekmodel import (
     clock_label,
+    due_in_minutes,
     due_label,
     length_label,
     range_label,
@@ -235,13 +235,12 @@ class WeekBridge(QObject):
     @staticmethod
     def _tag_for(item: Any, start: date, moment: datetime) -> tuple[str, str]:
         """How much room this homework has before it is due. No deadline, no tag."""
+        del start
         if not item.due:
             return "", "plain"
-        point = due_point(item.due, start.isoformat())
-        if point is None:
+        due_in = due_in_minutes(str(item.due), moment)
+        if due_in is None:
             return SLACK_TAGS["ok"]
-        now_at = (moment.date() - start).days * DAY_MIN + moment.hour * 60 + moment.minute
-        due_in = point[0] * DAY_MIN + point[1] - now_at
         room = due_in - int(item.minutes)
         if room <= DANGER_SLACK_MIN:
             return SLACK_TAGS["danger"]

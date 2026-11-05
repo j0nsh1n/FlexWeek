@@ -6116,6 +6116,13 @@ class NativeWindow(QMainWindow):
             return
         current = self._stack.currentWidget()
         if current is not None and current.objectName() == "materialPage":
+            mods = event.modifiers()
+            if event.key() == Qt.Key.Key_S and mods & (
+                Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier
+            ):
+                self._told(self.session.save)
+                event.accept()
+                return
             # The QML shell has its own Undo, Redo and More. The week shortcuts stay off.
             super().keyPressEvent(event)
             return

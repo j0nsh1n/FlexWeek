@@ -1884,4 +1884,26 @@ mod tests {
         assert_eq!(slack_status(120, Some(25 * 60)), "tight");
         assert_eq!(slack_status(2000, Some(-5)), "ok");
     }
+
+    #[test]
+    fn plenty_of_time_uses_the_canonical_end_of_day_due() {
+        use crate::model::parse_due;
+        use chrono::NaiveDate;
+
+        let now_day = NaiveDate::from_ymd_opt(2026, 11, 6).unwrap();
+        let due_in = |stamp: &str, now_min: i64| {
+            let (day, minute) = parse_due(stamp).unwrap();
+            (day - now_day).num_days() * 24 * 60 + minute - now_min
+        };
+        assert_eq!(due_in("2026-11-06", 19 * 60), 5 * 60);
+        assert_eq!(
+            slack_status(2000, Some(due_in("2026-11-06", 19 * 60))),
+            "tight"
+        );
+        assert_eq!(due_in("2026-11-06T23:59", 0), 24 * 60);
+        assert_eq!(
+            slack_status(2000, Some(due_in("2026-11-06T23:59", 0))),
+            "ok"
+        );
+    }
 }

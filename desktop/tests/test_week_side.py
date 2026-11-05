@@ -251,6 +251,28 @@ def test_a_running_timer_is_the_rails_first_card(
     wait_until(qapp, lambda: window.session.focus is None)
 
 
+def test_the_compact_focus_line_fits_the_rail_at_large_text(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    seeded(qapp, window)
+    window._look = sanitize_look({"preset": "default", "knobs": {"text": "large"}})
+    window._apply_appearance()
+    essay = next(block for block in window.session.blocks if block.get("assignment_id") == "essay")
+    window.session.start_focus(essay["id"], 3)
+    wait_until(qapp, lambda: window.session.focus is not None)
+    window.session.focus["title"] = "History essay draft"
+    window._on_week()
+    qapp.processEvents()
+    panel, rail = window.focus_panel, window.rail
+    assert panel.isVisible() and panel._compact and panel.task.isVisible()
+    assert panel.width() <= rail.width() == RAIL_PX
+    assert panel.task.text().endswith(" left")
+    assert "30:00" in panel.task.text()
+    window.session.reset_focus()
+    wait_until(qapp, lambda: window.session.focus is None)
+
+
 def test_high_contrast_cuts_no_chip_and_scrolls_the_focus_list_neither_way(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811

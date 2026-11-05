@@ -345,6 +345,8 @@ class TimelinePainter(BlockPainter):
             return lay
         room = self._room(rect, drawn, visible, pills=pills)
         tm, sm = QFontMetricsF(title_font), QFontMetricsF(small)
+        if room.height() + 0.5 < tm.lineSpacing():
+            return lay
         title = word_elide(drawn.title, tm, room.width())
         if not title or (title.endswith("…") and len(title[:-1]) < 3):
             return lay

@@ -312,6 +312,28 @@ def test_planning_cutoff_labels_follow_the_clock(
         _reset(window)
 
 
+@pytest.mark.parametrize("width", [800, 860, 900])
+def test_cutoff_choices_fit_the_planning_page(
+    qapp: QApplication, window: NativeWindow, width: int
+) -> None:
+    root = _open_settings(qapp, window, "planning")
+    window.resize(width, 800)
+    _pump(qapp)
+    try:
+        seg = _named(root, "cutoff")[0]
+        _flick_to(seg)
+        _pump(qapp)
+        parent = seg.parentItem()
+        clipper = parent
+        while clipper is not None and not clipper.property("clip"):
+            clipper = clipper.parentItem()
+        assert clipper is not None
+        right = seg.mapToItem(clipper, QPointF(seg.width(), 0)).x()
+        assert right <= clipper.width() + 0.5
+    finally:
+        _reset(window)
+
+
 def test_the_focus_section_writes_audio_the_link_and_pomodoro(
     qapp: QApplication, window: NativeWindow
 ) -> None:

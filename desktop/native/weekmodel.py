@@ -10,12 +10,13 @@ never a threshold invented by a view.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 from weakref import WeakKeyDictionary
 
 import flexweek_engine  # type: ignore[import-untyped]
 
+from backend.models import parse_due
 from desktop.native.calendar import iso_of
 from desktop.native.wire import plain, restore, restored
 
@@ -37,27 +38,29 @@ def minute_of(hhmm: str) -> int:
     return int(flexweek_engine.week_minute_of(hhmm))
 
 
-def _due_instant(due: str) -> datetime | None:
+def due_instant(due: str) -> datetime | None:
+    """The calendar due instant. Date-only and 23:59 are the end of that day (minute 1440)."""
     try:
-        instant = datetime.fromisoformat(due)
+        day, minute = parse_due(due)
     except ValueError:
         return None
-    if instant.tzinfo is not None:
-        instant = instant.replace(tzinfo=None)
-    return instant
+    return datetime.combine(day, datetime.min.time()) + timedelta(minutes=minute)
+
+
+def due_in_minutes(due: str, now: datetime) -> int | None:
+    """Minutes from `now` until the canonical due instant, or None when `due` is not a due stamp."""
+    instant = due_instant(due)
+    if instant is None:
+        return None
+    moment = now.replace(tzinfo=None) if now.tzinfo is not None else now
+    return int((instant - moment).total_seconds() // 60)
 
 
 def slack_words_for(slack: str | None, due: str | None, now: datetime | None) -> str:
     """The slack chip. Homework due within 24 hours is never 'Plenty of time'."""
-    status = slack
-    if slack == "ok" and due and now is not None:
-        instant = _due_instant(due)
-        if instant is not None:
-            moment = now.replace(tzinfo=None) if now.tzinfo is not None else now
-            minutes = int((instant - moment).total_seconds() // 60)
-            if 0 <= minutes < PLENTY_WITHIN_MIN:
-                status = "tight"
-    return str(flexweek_engine.week_slack_words(status))
+    due_in = due_in_minutes(due, now) if due and now is not None else None
+    status = flexweek_engine.week_live_slack_status(slack or "", due_in)
+    return str(flexweek_engine.week_slack_words(status or None))
 
 
 # What the window last passed, as it passed it: `changed` compares that object, not its truth.
@@ -177,9 +180,9 @@ class Occurrence:
         """Still something to do: fixed blocks always, homework until it is done or missed."""
         return bool(flexweek_engine.week_occurrence_live(self.work, self.done, self.missed))
 
-    @property
-    def slack_words(self) -> str:
-        return slack_words_for(self.slack, self.due, None)
+    def slack_words(self, now: datetime | None = None) -> str:
+        """The slack chip at `now`. The stored status is the plan's; the 24-hour guard is live."""
+        return slack_words_for(self.slack, self.due, now)
 
 
 @dataclass(frozen=True)

@@ -59,6 +59,8 @@ def window(qapp: QApplication, signed_in: NativeWindow) -> Iterator[NativeWindow
         {"id": "math", "title": "Math worksheet", "due": due, "estimate_min": 45, "revision": 0}
     )
     block = next(b for b in session.blocks if b.get("assignment_id") == "math")
+    # The worksheet sits on Wednesday. A later clock in the week cannot move it onto an
+    # earlier day ("That time has passed"). Pinning a placed block is how a hand move saves.
     session.add_block({**block, "start": "17:00", "days": [2], "pinned": True})
     session.save()
     settled(qapp, signed_in)

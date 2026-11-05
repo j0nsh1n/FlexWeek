@@ -543,6 +543,12 @@ fn title_of(row: &Value) -> EngineResult<Value> {
 
 pub const PLENTY_WITHIN_MIN: i64 = 24 * 60;
 
+/// Minutes from `now` until the canonical due instant. Date-only and 23:59 are minute 1440.
+pub fn due_in_minutes(due: &str, now_day: NaiveDate, now_min: i64) -> Option<i64> {
+    let (day, minute) = crate::model::parse_due(due).ok()?;
+    Some((day - now_day).num_days() * 24 * 60 + minute - now_min)
+}
+
 /// Stored slack, upgraded to tight when the due instant is within 24 hours.
 pub fn live_slack_status(slack: &str, due_in_min: Option<i64>) -> &str {
     if slack == "ok" && due_in_min.is_some_and(|mins| (0..PLENTY_WITHIN_MIN).contains(&mins)) {
@@ -554,7 +560,8 @@ pub fn live_slack_status(slack: &str, due_in_min: Option<i64>) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use super::live_slack_status;
+    use super::{due_in_minutes, live_slack_status};
+    use chrono::NaiveDate;
 
     #[test]
     fn plenty_of_time_is_tight_when_due_within_24_hours() {
@@ -564,5 +571,20 @@ mod tests {
         assert_eq!(live_slack_status("ok", None), "ok");
         assert_eq!(live_slack_status("danger", Some(10)), "danger");
         assert_eq!(live_slack_status("tight", Some(25 * 60)), "tight");
+    }
+
+    #[test]
+    fn live_slack_uses_the_canonical_end_of_day_due() {
+        let friday = NaiveDate::from_ymd_opt(2026, 11, 6).unwrap();
+        assert_eq!(due_in_minutes("2026-11-06", friday, 19 * 60), Some(5 * 60));
+        assert_eq!(
+            live_slack_status("ok", due_in_minutes("2026-11-06", friday, 19 * 60)),
+            "tight"
+        );
+        assert_eq!(due_in_minutes("2026-11-06T23:59", friday, 0), Some(24 * 60));
+        assert_eq!(
+            live_slack_status("ok", due_in_minutes("2026-11-06T23:59", friday, 0)),
+            "ok"
+        );
     }
 }

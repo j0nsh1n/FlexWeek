@@ -82,12 +82,15 @@ def board_for(
     dim: bool,
     mode: str,
     on: date,
+    now: datetime | None = None,
 ) -> DayBoard:
     """Up next, Done, the free-time card, and the ring for one day.
 
     `when` is `today`, `past`, or `future`. The free-time card is the gap from
     `minute` to the next block that still occupies time, and only on today
     while nudges are on. A finished homework block does not occupy that gap.
+    Slack uses `now` when the caller has the real clock; otherwise the viewed
+    day's `minute`.
     """
     ordered = tuple(sorted(items, key=lambda item: (int(item.start), str(item.title))))
     up = tuple(item for item in ordered if not _settled(item) and not _clock_past(item, minute, when))
@@ -96,6 +99,7 @@ def board_for(
     focus = next((item for item in up if item.work and item.assignment_id), None)
     total = len(ordered)
     count = len(up)
+    moment = now if now is not None else datetime.combine(on, datetime.min.time()) + timedelta(minutes=minute)
     return DayBoard(
         left_line=_left_line(count, when == "today"),
         left_count=count,
@@ -106,8 +110,8 @@ def board_for(
         ring_count=count,
         ring_caption="thing left" if count == 1 else "things left",
         ring_share=0.0 if total == 0 else (total - count) / total,
-        up_next=tuple(_row(item, on, minute, mode, dim=False, finish=True) for item in up),
-        done=tuple(_row(item, on, minute, mode, dim=dim, finish=False) for item in finished),
+        up_next=tuple(_row(item, on, moment, mode, dim=False, finish=True) for item in up),
+        done=tuple(_row(item, on, moment, mode, dim=dim, finish=False) for item in finished),
         focus_block_id="" if focus is None else str(focus.block_id),
         focus_day=-1 if focus is None else int(focus.day),
     )
@@ -145,8 +149,10 @@ def _now_title(focus: object | None, gap: object | None) -> str:
     return f"Free time before {gap.title}"
 
 
-def _slack_words(item: object, on: date, minute: int) -> str:
-    now = datetime.combine(on, datetime.min.time()) + timedelta(minutes=minute)
+def _slack_words(item: object, now: datetime) -> str:
+    words = getattr(item, "slack_words", None)
+    if callable(words):
+        return str(words(now))
     return slack_words_for(getattr(item, "slack", None), getattr(item, "due", None), now)
 
 
@@ -158,10 +164,10 @@ def _left_line(count: int, today: bool) -> str:
     return f"{count} {noun} left" + (f" {tail}" if tail else "")
 
 
-def _row(item: object, on: date, minute: int, mode: str, *, dim: bool, finish: bool) -> DayRow:
+def _row(item: object, on: date, now: datetime, mode: str, *, dim: bool, finish: bool) -> DayRow:
     role = EVENT_CATEGORY.get(str(item.category or ""))
     scheme = mode if mode in ("light", "dark") else "light"
-    words = _slack_words(item, on, minute)
+    words = _slack_words(item, now)
     kind = TAG_KINDS.get(words, "plain" if words else "")
     parts = [range_label(int(item.start), int(item.end))]
     if item.pinned:
