@@ -73,9 +73,13 @@ def test_a_homework_length_steps_by_a_quarter_and_has_quick_lengths(
     dialog = HomeworkDialog(host, today=WEEK)
     stepper = dialog.estimate.parentWidget()
     assert isinstance(stepper, Stepper)
-    assert [chip.text() for chip in stepper.chips] == [str(minutes) for minutes in QUICK_LENGTHS] == [
-        "15", "30", "45", "60", "90",
+    assert dialog.estimate.suffix() == " min"
+    assert [chip.text() for chip in stepper.chips] == [f"{minutes} min" for minutes in QUICK_LENGTHS] == [
+        "15 min", "30 min", "45 min", "60 min", "90 min",
     ]
+    dialog._add_step = 2
+    dialog._apply_add_step()
+    assert dialog._save.text() == "Save"
     assert [chip.isChecked() for chip in stepper.chips] == [False, False, False, True, False]
     stepper.more.click()
     assert dialog.estimate.value() == 75

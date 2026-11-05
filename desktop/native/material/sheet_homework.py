@@ -394,7 +394,7 @@ class HomeworkDraft:
             self.step = index
 
     def advance(self) -> bool:
-        """Next on the first two steps. True when the sheet is on its last step and Add is next."""
+        """Next on the first two steps. True when the sheet is on its last step and Save is next."""
         if self.step is None or self.step >= 2:
             return True
         if self.step == 0 and not self.title.strip():
@@ -580,7 +580,8 @@ class HomeworkDraft:
             "whenProblem": self.when_problem,
             "estimate": self.estimate_text,
             "estimateLabel": length_label(self.estimate()) if self.estimate() else "",
-            "quickLengths": [{"value": str(value), "label": length_label(value)} for value in QUICK_LENGTHS],
+            "estimateSuffix": "min",
+            "quickLengths": [{"value": str(value), "label": f"{value} min"} for value in QUICK_LENGTHS],
             "estimateProblem": self.estimate_problem,
             "spreadShown": self.spread_shown(),
             "spreadChoices": [{"value": value, "label": label} for value, label in SPREAD_CHOICES],
@@ -602,7 +603,7 @@ class HomeworkDraft:
             "checkText": self.check_text,
             "error": self.error,
             "canBack": bool(step),
-            "primary": "Add" if last and not self.existing else ("Save" if self.existing else "Next"),
+            "primary": "Save" if last or self.existing else "Next",
             "last": last,
             "canDelete": self.existing,
             "canUnpin": self.existing and self.pinned_session,

@@ -135,7 +135,7 @@ def test_quick_focus_fills_the_window_and_esc_comes_back(qapp: QApplication, win
     panel = window.focus_panel
     # #18: in Today's app's rail the timer is one line, its time in the words.
     line = panel.task.text()
-    assert panel.task.isVisible() and line.startswith("Session · ") and line.endswith(" left")
+    assert panel.task.isVisible() and line.startswith("Quick focus · ") and line.endswith(" left")
     assert visible_buttons(panel) == ["Focus screen"], "the strip keeps its line and one way back"
     QTest.mouseClick(panel.screen, LEFT)
     assert on_screen(window) == "focusPage"
@@ -172,6 +172,27 @@ def test_start_focus_from_the_strip_opens_it_on_that_homework(
     wait_until(qapp, lambda: window.session.focus is not None)
     assert on_screen(window) == "focusPage"
     assert window.focus_screen.task.text() == "History essay"
+    QTest.keyClick(window.focus_screen, Qt.Key.Key_Escape)
+    wait_until(qapp, lambda: on_screen(window) == "weekPage")
+    assert window.focus_panel.task.text().startswith("History essay · ")
+    window.session.reset_focus()
+    wait_until(qapp, lambda: window.session.focus is None)
+
+
+def test_pause_and_resume_keep_the_buttons_still(qapp: QApplication, window: NativeWindow) -> None:
+    quick_focus(window)
+    screen = window.focus_screen
+    qapp.processEvents()
+    pause, skip, finish = screen.pause, screen.skip, screen.stop
+    before = (pause.x(), pause.width(), skip.x(), finish.x())
+    QTest.mouseClick(pause, LEFT)
+    qapp.processEvents()
+    assert pause.text() == "Resume"
+    assert (pause.x(), pause.width(), skip.x(), finish.x()) == before
+    QTest.mouseClick(pause, LEFT)
+    qapp.processEvents()
+    assert pause.text() == "Pause"
+    assert (pause.x(), pause.width(), skip.x(), finish.x()) == before
 
 
 def test_start_focus_on_my_day_opens_it(qapp: QApplication, window: NativeWindow) -> None:

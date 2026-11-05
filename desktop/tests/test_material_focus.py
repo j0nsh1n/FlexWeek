@@ -347,6 +347,25 @@ def test_pause_resume_and_skip_drive_the_session_and_say_so(qapp: QApplication, 
         close_focus(window, focus)
 
 
+def test_pause_and_resume_keep_the_buttons_still(qapp: QApplication, window: NativeWindow) -> None:
+    root, focus = open_focus(qapp, window)
+    try:
+        focus.begin()
+        _pump(qapp)
+        pause, skip, finish = _qml(root, "focusPause"), _qml(root, "focusSkip"), _qml(root, "focusFinish")
+        before = (float(pause.x()), float(pause.width()), float(skip.x()), float(finish.x()))
+        focus.togglePause()
+        _pump(qapp)
+        assert text_of(root, "focusPause") == "Resume"
+        assert (float(pause.x()), float(pause.width()), float(skip.x()), float(finish.x())) == before
+        focus.togglePause()
+        _pump(qapp)
+        assert text_of(root, "focusPause") == "Pause"
+        assert (float(pause.x()), float(pause.width()), float(skip.x()), float(finish.x())) == before
+    finally:
+        close_focus(window, focus)
+
+
 def test_finish_asks_then_ends_the_session_and_leaves_the_screen(
     qapp: QApplication, window: NativeWindow
 ) -> None:

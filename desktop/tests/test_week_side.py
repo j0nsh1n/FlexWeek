@@ -11,7 +11,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QPoint, QRectF, Qt
-from PySide6.QtGui import QFont, QFontMetricsF
+from PySide6.QtGui import QAccessible, QFont, QFontMetrics, QFontMetricsF
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QPushButton, QWidget
 
@@ -246,7 +246,34 @@ def test_a_running_timer_is_the_rails_first_card(
     assert tops["timer"] < tops["next"], tops
     assert not rail.month.isVisible()
     # #18: Today's app shows the one-line strip the other designs show, not the homework's name.
-    assert panel.width() <= RAIL_PX and panel.task.text() == "Session · 30:00 left"
+    assert panel.width() <= RAIL_PX and panel.task.text() == "History essay · 30:00 left"
+    window.session.reset_focus()
+    wait_until(qapp, lambda: window.session.focus is None)
+
+
+def test_the_compact_focus_line_fits_the_rail_at_large_text(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    seeded(qapp, window)
+    window._look = sanitize_look({"preset": "default", "knobs": {"text": "large"}})
+    window._apply_appearance()
+    essay = next(block for block in window.session.blocks if block.get("assignment_id") == "essay")
+    window.session.start_focus(essay["id"], 3)
+    wait_until(qapp, lambda: window.session.focus is not None)
+    window.session.focus["title"] = "History essay draft"
+    window._on_week()
+    qapp.processEvents()
+    panel, rail = window.focus_panel, window.rail
+    assert panel.isVisible() and panel._compact and panel.task.isVisible()
+    assert panel.width() <= rail.width() == RAIL_PX
+    assert panel.task.text().endswith(" left")
+    assert "30:00" in panel.task.text()
+    # The shortened line really fits its label, and the full name and time are still read out.
+    metrics = QFontMetrics(panel.task.font())
+    assert metrics.horizontalAdvance(panel.task.text()) <= panel.task.width()
+    spoken = QAccessible.queryAccessibleInterface(panel.task).text(QAccessible.Text.Name)
+    assert "History essay draft" in spoken and "30:00 left" in spoken
     window.session.reset_focus()
     wait_until(qapp, lambda: window.session.focus is None)
 

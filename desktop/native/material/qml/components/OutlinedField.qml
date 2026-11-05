@@ -9,6 +9,7 @@ FocusScope {
     property string label: "Label"
     property string text: ""
     property string placeholder: ""
+    property string suffix: ""
     property string accessName: ""
     signal textEdited(string value)
 
@@ -57,7 +58,7 @@ FocusScope {
         anchors.fill: parent
         anchors.topMargin: 8
         anchors.leftMargin: 16
-        anchors.rightMargin: 16
+        anchors.rightMargin: root.suffix !== "" ? 16 + suffixText.implicitWidth + 8 : 16
         verticalAlignment: TextInput.AlignVCenter
         text: root.text
         color: root.enabled ? palette.inkSurface : palette.disabledInk
@@ -79,6 +80,21 @@ FocusScope {
             color: palette.inkMuted
             font: input.font
         }
+    }
+    Text {
+        id: suffixText
+        visible: root.suffix !== ""
+        anchors.right: parent.right
+        anchors.rightMargin: 16
+        anchors.top: parent.top
+        anchors.topMargin: 8
+        anchors.bottom: parent.bottom
+        verticalAlignment: Text.AlignVCenter
+        text: root.suffix
+        color: palette.inkMuted
+        font.family: M3Font.family
+        font.pixelSize: 16
+        font.weight: 400
     }
     M3FocusRing {
         anchors.fill: shape

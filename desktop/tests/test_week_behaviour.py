@@ -59,7 +59,9 @@ def window(qapp: QApplication, signed_in: NativeWindow) -> Iterator[NativeWindow
         {"id": "math", "title": "Math worksheet", "due": due, "estimate_min": 45, "revision": 0}
     )
     block = next(b for b in session.blocks if b.get("assignment_id") == "math")
-    session.hand_move(block["id"], -1, 2, 17 * 60, 17 * 60 + block["duration_min"])
+    # The worksheet sits on Wednesday. A later clock in the week cannot move it onto an
+    # earlier day ("That time has passed"). Pinning a placed block is how a hand move saves.
+    session.add_block({**block, "start": "17:00", "days": [2], "pinned": True})
     session.save()
     settled(qapp, signed_in)
     signed_in.findChild(QAbstractButton, "viewWeek").click()
@@ -222,7 +224,8 @@ def test_a_running_timer_in_todays_app_is_one_line_in_the_rail(
     assert panel.task.isVisible()
     assert not panel.phase.isVisible() and not panel.time.isVisible()
     line = panel.task.text()
-    assert line.startswith("Session · ") and " left" in line
+    title = window.session.focus.get("title") or ""
+    assert title and line.startswith(f"{title} · ") and " left" in line
     assert [b.text() for b in panel.findChildren(QPushButton) if b.isVisible()] == ["Focus screen"]
 
 

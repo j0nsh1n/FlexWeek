@@ -125,8 +125,16 @@ def test_add_homework_goes_what_when_how_long_then_saves_through_the_session(
     sheets.next()
     assert sheets.form["step"] == 2
     assert sheets.form["prompt"] == "How long will it take?"
-    assert sheets.form["primary"] == "Add"
+    assert sheets.form["primary"] == "Save"
     assert sheets.form["estimate"] == "60"
+    assert sheets.form["estimateSuffix"] == "min"
+    assert [item["label"] for item in sheets.form["quickLengths"]] == [
+        "15 min",
+        "30 min",
+        "45 min",
+        "60 min",
+        "90 min",
+    ]
 
     sheets.setText("estimate", "45")
     sheets.next()
@@ -453,7 +461,7 @@ def test_more_rows_and_what_each_opens(qapp: QApplication, shell: NativeWindow, 
     shell._material_page.bridge.openMore()
     rows = {row["id"]: row for row in sheets.moreEntries if row["id"]}
     headings = [row["heading"] for row in sheets.moreEntries if row["heading"]]
-    assert headings == ["Planning", "Edit", "Help and info", "Account"]
+    assert headings == ["Planning", "Help and info", "Account"]
     assert rows["runningLate"]["enabled"] is True
     # The essay has its time, so nothing is left over.
     assert rows["unfinishedOpen"]["enabled"] is False
@@ -651,11 +659,11 @@ def test_more_actions_press_the_widgets_buttons_they_name(
         return fakes[name]
 
     monkeypatch.setattr(sheets, "_button", fake)
-    for name in ("quickFocusAction", "replanAll", "saveButton", "helpButton", "aboutButton", "signOut"):
+    for name in ("quickFocusAction", "replanAll", "helpButton", "aboutButton", "signOut"):
         sheets.openMore()
         sheets.moreAction(name)
         assert sheets.moreOpen is False
-    assert pressed == ["quickFocusAction", "replanAll", "saveButton", "helpButton", "aboutButton", "signOut"]
+    assert pressed == ["quickFocusAction", "replanAll", "helpButton", "aboutButton", "signOut"]
     fakes["helpButton"].setEnabled(False)
     sheets.openMore()
     sheets.moreAction("helpButton")

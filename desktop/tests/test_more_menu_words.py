@@ -12,8 +12,9 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QEvent, QPoint, QStandardPaths, QUrl
+from PySide6.QtCore import QEvent, QPoint, QStandardPaths, Qt, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QFontMetrics, QImage, QRegion
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -80,7 +81,6 @@ TOOLTIPS = {
     "Paste into (the selected day)": "Copy a block or a day first.",
     "Duplicate": "Make a copy of the selected block, with a preview first. Ctrl+D",
     "Copy (the selected day)": "Copy every block on the selected day to paste into another day.",
-    "Save this week now": "Save now. FlexWeek already saves after every change. Ctrl+S",
     "Copies of this week…": (
         "Save a copy of this week, or go back to an earlier one. FlexWeek keeps a restore point "
         "before big changes."
@@ -113,6 +113,30 @@ def opened_more(window: NativeWindow) -> QMenu:  # noqa: F811
     menu = window.more_button.menu()
     menu.aboutToShow.emit()
     return menu
+
+
+def test_neither_menu_offers_save_and_ctrl_s_still_flushes(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    labels = [named(action.text()) for action in actions(opened_more(window))]
+    assert "Save this week now" not in labels
+    assert "Save" not in labels
+    heard: list[bool] = []
+    original = window.session.save
+
+    def save() -> None:
+        heard.append(True)
+        original()
+
+    window.session.save = save  # type: ignore[method-assign]
+    try:
+        window.session.dirty = True
+        QTest.keyClick(window.week_table, Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)
+        settled(qapp, window)
+        assert heard == [True]
+    finally:
+        window.session.save = original  # type: ignore[method-assign]
 
 
 def test_every_action_under_more_and_advanced_says_what_it_does(

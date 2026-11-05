@@ -422,6 +422,8 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | weekmodel | homework_time_sentence | LOGIC | leftover counts and the "still needs a time" sentence from already-classified `left_over_state`; length words go through `length_label` |
 | weekmodel | planned_line | ADAPTER | encodes, makes one engine call, decodes |
 | weekmodel | due_label | ADAPTER | encodes, makes one engine call, decodes |
+| weekmodel | due_in_minutes | ADAPTER | passes the due text and the clock reading to one engine call |
+| weekmodel | slack_words_for | ADAPTER | passes the stored slack, due and clock reading to one engine call |
 | weekmodel | moved_words | ADAPTER | encodes, makes one engine call, decodes |
 | weekmodel | added_words | ADAPTER | encodes, makes one engine call, decodes |
 | weekmodel | dated_words | ADAPTER | encodes, makes one engine call, decodes |

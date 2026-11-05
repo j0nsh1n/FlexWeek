@@ -10,7 +10,7 @@ never a threshold invented by a view.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 from weakref import WeakKeyDictionary
 
@@ -20,6 +20,7 @@ from desktop.native.calendar import iso_of
 from desktop.native.wire import plain, restore, restored
 
 SLACK_WORDS = {"danger": "Cutting it close", "tight": "Tight", "ok": "Plenty of time"}
+PLENTY_WITHIN_MIN = 24 * 60
 NOT_PLANNED = "Not planned yet."
 # A homework session is saved with no category unless the student picked one. It is still homework.
 HOMEWORK = "assignments"
@@ -34,6 +35,17 @@ LEFTOVER = {
 
 def minute_of(hhmm: str) -> int:
     return int(flexweek_engine.week_minute_of(hhmm))
+
+
+def due_in_minutes(due: str, now: datetime) -> int | None:
+    """Minutes from `now` until the due instant (date-only and 23:59 are the end of that day), or None
+    when `due` is not a due stamp."""
+    return flexweek_engine.week_due_in_minutes(due, now)
+
+
+def slack_words_for(slack: str | None, due: str | None, now: datetime | None) -> str:
+    """The slack chip. Homework due within 24 hours is never 'Plenty of time'."""
+    return str(flexweek_engine.week_live_slack_words(slack, due, now))
 
 
 # What the window last passed, as it passed it: `changed` compares that object, not its truth.
@@ -153,9 +165,9 @@ class Occurrence:
         """Still something to do: fixed blocks always, homework until it is done or missed."""
         return bool(flexweek_engine.week_occurrence_live(self.work, self.done, self.missed))
 
-    @property
-    def slack_words(self) -> str:
-        return str(flexweek_engine.week_slack_words(self.slack))
+    def slack_words(self, now: datetime | None = None) -> str:
+        """The slack chip at `now`. The stored status is the plan's; the 24-hour guard is live."""
+        return slack_words_for(self.slack, self.due, now)
 
 
 @dataclass(frozen=True)

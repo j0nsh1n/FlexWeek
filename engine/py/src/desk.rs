@@ -287,6 +287,33 @@ fn week_slack_words(slack: Option<&str>) -> PyResult<&'static str> {
 }
 
 #[pyfunction]
+fn week_live_slack_status(slack: &str, due_in_min: Option<i64>) -> PyResult<String> {
+    guard(|| Ok(weekmodel::live_slack_status(slack, due_in_min).to_string()))
+}
+
+/// A Python datetime as the engine's "YYYY-MM-DDTHH:MM" clock reading, in its own wall time.
+fn minute_stamp(now: &Bound<'_, PyAny>) -> PyResult<String> {
+    now.call_method1("strftime", ("%Y-%m-%dT%H:%M",))?.extract()
+}
+
+#[pyfunction]
+fn week_due_in_minutes(due: &str, now: &Bound<'_, PyAny>) -> PyResult<Option<i64>> {
+    let stamp = minute_stamp(now)?;
+    guard(|| Ok(weekmodel::due_in_minutes_at(due, &stamp)))
+}
+
+#[pyfunction]
+#[pyo3(signature = (slack, due, now))]
+fn week_live_slack_words(
+    slack: Option<&str>,
+    due: Option<&str>,
+    now: Option<&Bound<'_, PyAny>>,
+) -> PyResult<&'static str> {
+    let stamp = now.map(minute_stamp).transpose()?;
+    guard(|| Ok(weekmodel::live_slack_words(slack, due, stamp.as_deref())))
+}
+
+#[pyfunction]
 fn week_occurrence_minutes(start: i64, end: i64) -> PyResult<i64> {
     guard(|| Ok(weekview::minutes(start, end)))
 }
@@ -889,6 +916,9 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         date_month_title,
         week_build,
         week_slack_words,
+        week_live_slack_status,
+        week_due_in_minutes,
+        week_live_slack_words,
         week_occurrence_minutes,
         week_occurrence_live,
         week_date_of,

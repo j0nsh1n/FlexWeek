@@ -1,6 +1,6 @@
 //! Week reading model from `desktop/native/weekmodel.py`.
 
-use chrono::NaiveDate;
+use chrono::{NaiveDate, NaiveDateTime, Timelike};
 use serde_json::{Map, Value, json};
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -539,4 +539,96 @@ fn due_of(row: &Value) -> EngineResult<Value> {
 
 fn title_of(row: &Value) -> EngineResult<Value> {
     Ok(subscript(row, "title")?.clone())
+}
+
+pub const PLENTY_WITHIN_MIN: i64 = 24 * 60;
+
+/// Minutes from `now` until the canonical due instant. Date-only and 23:59 are minute 1440.
+pub fn due_in_minutes(due: &str, now_day: NaiveDate, now_min: i64) -> Option<i64> {
+    let (day, minute) = crate::model::parse_due(due).ok()?;
+    Some((day - now_day).num_days() * 24 * 60 + minute - now_min)
+}
+
+/// `due_in_minutes` from a "YYYY-MM-DDTHH:MM" clock reading; None when either text does not parse.
+pub fn due_in_minutes_at(due: &str, now: &str) -> Option<i64> {
+    let at = NaiveDateTime::parse_from_str(now, "%Y-%m-%dT%H:%M").ok()?;
+    due_in_minutes(due, at.date(), i64::from(at.hour() * 60 + at.minute()))
+}
+
+/// The slack chip's words at `now`: homework due within 24 hours is never "Plenty of time".
+/// No due date or no clock reading leaves the stored slack as it is.
+pub fn live_slack_words(slack: Option<&str>, due: Option<&str>, now: Option<&str>) -> &'static str {
+    let due_in = match (due, now) {
+        (Some(due), Some(now)) if !due.is_empty() => due_in_minutes_at(due, now),
+        _ => None,
+    };
+    let status = live_slack_status(slack.unwrap_or(""), due_in);
+    crate::desk::weekview::slack_words(Some(status).filter(|status| !status.is_empty()))
+}
+
+/// Stored slack, upgraded to tight when the due instant is within 24 hours.
+pub fn live_slack_status(slack: &str, due_in_min: Option<i64>) -> &str {
+    if slack == "ok" && due_in_min.is_some_and(|mins| (0..PLENTY_WITHIN_MIN).contains(&mins)) {
+        "tight"
+    } else {
+        slack
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{due_in_minutes, due_in_minutes_at, live_slack_status, live_slack_words};
+    use chrono::NaiveDate;
+
+    #[test]
+    fn the_chip_words_follow_the_clock_reading() {
+        // Friday 19:00, an all-day Friday due: five hours left, so never "Plenty of time".
+        assert_eq!(
+            due_in_minutes_at("2026-11-06", "2026-11-06T19:00"),
+            Some(300)
+        );
+        assert_eq!(
+            live_slack_words(Some("ok"), Some("2026-11-06"), Some("2026-11-06T19:00")),
+            "Tight"
+        );
+        // Two days out it stays plenty; no due or no clock leaves the stored words.
+        assert_eq!(
+            live_slack_words(Some("ok"), Some("2026-11-08"), Some("2026-11-06T19:00")),
+            "Plenty of time"
+        );
+        assert_eq!(
+            live_slack_words(Some("ok"), None, Some("2026-11-06T19:00")),
+            "Plenty of time"
+        );
+        assert_eq!(
+            live_slack_words(Some("ok"), Some("2026-11-06"), None),
+            "Plenty of time"
+        );
+        assert_eq!(due_in_minutes_at("2026-11-06", "not a time"), None);
+    }
+
+    #[test]
+    fn plenty_of_time_is_tight_when_due_within_24_hours() {
+        assert_eq!(live_slack_status("ok", Some(23 * 60)), "tight");
+        assert_eq!(live_slack_status("ok", Some(25 * 60)), "ok");
+        assert_eq!(live_slack_status("ok", Some(24 * 60)), "ok");
+        assert_eq!(live_slack_status("ok", None), "ok");
+        assert_eq!(live_slack_status("danger", Some(10)), "danger");
+        assert_eq!(live_slack_status("tight", Some(25 * 60)), "tight");
+    }
+
+    #[test]
+    fn live_slack_uses_the_canonical_end_of_day_due() {
+        let friday = NaiveDate::from_ymd_opt(2026, 11, 6).unwrap();
+        assert_eq!(due_in_minutes("2026-11-06", friday, 19 * 60), Some(5 * 60));
+        assert_eq!(
+            live_slack_status("ok", due_in_minutes("2026-11-06", friday, 19 * 60)),
+            "tight"
+        );
+        assert_eq!(due_in_minutes("2026-11-06T23:59", friday, 0), Some(24 * 60));
+        assert_eq!(
+            live_slack_status("ok", due_in_minutes("2026-11-06T23:59", friday, 0)),
+            "ok"
+        );
+    }
 }

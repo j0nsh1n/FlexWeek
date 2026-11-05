@@ -46,7 +46,9 @@ from desktop.native.hours.canvas import (
     BlockPainter,
     Drawn,
     HoursCanvas,
+    Written,
     fit_lines,
+    word_elide,
 )
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.classic import (
@@ -327,6 +329,40 @@ class TimelinePainter(BlockPainter):
         if self._tiny:
             title = at_scale(base, "caption", self.scale(base), WEIGHT_STRONG)
         return title, small
+
+    def _lay(
+        self,
+        title_font: QFont,
+        small: QFont,
+        rect: QRectF,
+        drawn: Drawn,
+        visible: QRectF,
+        *,
+        pills: bool,
+    ) -> list[Written]:
+        lay = super()._lay(title_font, small, rect, drawn, visible, pills=pills)
+        if self.wide or any(line.title for line in lay):
+            return lay
+        room = self._room(rect, drawn, visible, pills=pills)
+        tm, sm = QFontMetricsF(title_font), QFontMetricsF(small)
+        if room.height() + 0.5 < tm.lineSpacing():
+            return lay
+        title = word_elide(drawn.title, tm, room.width())
+        if not title or (title.endswith("…") and len(title[:-1]) < 3):
+            return lay
+        top = room.top()
+        written = [Written(title, True, QRectF(room.left(), top, room.width(), tm.lineSpacing()))]
+        leftover = min(rect.bottom(), room.bottom()) - (top + tm.lineSpacing())
+        times = drawn.times if self.measures.get("show_times", True) else ""
+        if times and leftover + 0.5 >= sm.lineSpacing():
+            written.append(
+                Written(
+                    times,
+                    False,
+                    QRectF(room.left(), top + tm.lineSpacing(), room.width(), sm.lineSpacing()),
+                )
+            )
+        return written
 
     def block(self, painter: QPainter, rect: QRectF, drawn: Drawn, visible: QRectF) -> None:
         self._tiny = False

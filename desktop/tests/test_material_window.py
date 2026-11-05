@@ -770,7 +770,6 @@ def test_material_more_lists_the_planning_actions_and_leaves_the_widgets_menu_al
             "Routines",
             "Quick focus",
             "Replan all my homework",
-            "Save this week now",
             "Help",
             "About FlexWeek",
             "Sign out",
@@ -1161,3 +1160,18 @@ def test_rings_follow_the_last_input_in_the_real_window(qapp: QApplication, wind
     finally:
         sheets.forceClose()
         _pump(qapp)
+
+
+def test_ctrl_s_saves_when_the_material_shell_is_focused(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _show_material(qapp, window)
+    heard: list[bool] = []
+    monkeypatch.setattr(window.session, "save", lambda: heard.append(True))
+    window.session.dirty = True
+    quick = window._material_page._quick
+    quick.setFocus()
+    _pump(qapp)
+    QTest.keyClick(quick, Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)
+    _pump(qapp)
+    assert heard == [True]

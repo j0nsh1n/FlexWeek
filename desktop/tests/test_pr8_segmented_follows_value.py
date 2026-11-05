@@ -2,7 +2,7 @@
 
 Verifies:
 - test_a_typed_length_moves_the_tick_off_a_clicked_chip: click "45 min", type 37 -> no chip ticked;
-  type 60 -> only "1 h" ticked; type 0 -> none ticked.
+  type 60 -> only "60 min" ticked; type 0 -> none ticked.
 - test_arrow_keys_still_move_the_choice_and_the_estimate: focus the Quick lengths row,
   press Right twice from 15 min -> estimate is 45 and "45 min" is ticked.
 - test_a_settings_choice_follows_its_setting_after_a_click: click one option,
@@ -100,7 +100,7 @@ def test_a_typed_length_moves_the_tick_off_a_clicked_chip(
 
     # Initial state at step 3: default is 60 min
     assert quick_btn.property("current") == "60"
-    assert _ticked_labels(quick_btn) == ["1 h"]
+    assert _ticked_labels(quick_btn) == ["60 min"]
 
     # Click "45 min" chip
     _click_segment(qapp, shell, quick_btn, "45 min")
@@ -116,12 +116,12 @@ def test_a_typed_length_moves_the_tick_off_a_clicked_chip(
     assert quick_btn.property("current") == "37"
     assert _ticked_labels(quick_btn) == []
 
-    # Type 60 -> only "1 h" ticked
+    # Type 60 -> only "60 min" ticked
     sheets.setText("estimate", "60")
     _pump(qapp, 10)
     assert sheets.form["estimate"] == "60"
     assert quick_btn.property("current") == "60"
-    assert _ticked_labels(quick_btn) == ["1 h"]
+    assert _ticked_labels(quick_btn) == ["60 min"]
 
     # Type 0 -> none ticked
     sheets.setText("estimate", "0")
