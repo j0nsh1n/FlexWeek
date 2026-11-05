@@ -184,13 +184,17 @@ def category_paint(role: str, mode: str) -> tuple[str, str]:
     return paint_for_category(cat, mode)
 
 
-# EventBlock's own names. Soccer and reading use different words there than the fill table.
+# The EventBlock class keys for event categories.
 EVENT_CATEGORY = {
-    "class": "school",
-    "exercise": "sports",
-    "extra": "sports",
+    "class": "class",
+    "exercise": "exercise",
+    "extra": "extra",
+    "assignments": "assignments",
     "study": "study",
-    "assignments": "homework",
+    "other": "other",
+    "meals": "other",
+    "sleep": "other",
+    "free": "other",
 }
 # Every camelCase role the component README lists, in that order.
 THEME_ROLES = (
@@ -257,8 +261,8 @@ def qml_dir() -> Path:
 
 
 def event_category(category: str) -> str:
-    """The EventBlock category for a week block. One the block does not know reads as homework."""
-    return EVENT_CATEGORY.get(category, "homework")
+    """The EventBlock category for a week block: the category itself when in SIX_CLASSES, else 'other'."""
+    return category if category in SIX_CLASSES else "other"
 
 
 def read_material_choice(stored: object) -> dict[str, str]:

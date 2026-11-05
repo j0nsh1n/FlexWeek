@@ -254,15 +254,14 @@ def test_plan_places_the_queue_and_undo_puts_it_back(qapp: QApplication, window:
     placed = [block for block in window.session.blocks if block["id"] in waiting_before]
     assert all(block.get("start") for block in placed)
 
-    # The button is in its strict disabled state: disabled, 12% fill, 38% ink, and a click does nothing.
+    # The button is a text button when disabled (no fill) and a click does nothing.
     plan = _qml(root, "planHomework")
     assert plan.property("enabled") is False
-    on_surface = _bridge(window).property("theme")["onSurface"].lower()
+    assert plan.property("kind") == "text"
     shape = _named(plan, "shape")[0]
-    wait_until(qapp, lambda: shape.property("color").name().lower() == on_surface)
+    wait_until(qapp, lambda: shape.property("color").alphaF() == 0.0)
     fill = shape.property("color")
-    assert fill.name().lower() == on_surface
-    assert abs(fill.alphaF() - 0.12) < 0.01
+    assert fill.alphaF() == 0.0
     label = _named(plan, "label")[0].property("color")
     assert abs(label.alphaF() - 0.38) < 0.01
     note = _snack(window)
@@ -462,9 +461,14 @@ def test_past_blocks_are_dimmed_by_the_clock(qapp: QApplication, window: NativeW
     assert sorted(by_day) == [0, 1, 2, 3, 4]
     for day in (0, 1, 2, 3):
         assert by_day[day].property("past") is True
-        assert abs(by_day[day].childItems()[0].property("opacity") - 0.65) < 0.001
+        assert abs(by_day[day].childItems()[0].property("opacity") - 1.0) < 0.001
+        assert abs(_named(by_day[day], "shape")[0].property("opacity") - 0.55) < 0.001
+        assert abs(_named(by_day[day], "bar")[0].property("opacity") - 0.55) < 0.001
+        assert abs(_named(by_day[day], "title")[0].property("opacity") - 1.0) < 0.001
     assert by_day[4].property("past") is False
-    assert by_day[4].childItems()[0].property("opacity") == 1
+    assert abs(by_day[4].childItems()[0].property("opacity") - 1.0) < 0.001
+    assert abs(_named(by_day[4], "shape")[0].property("opacity") - 1.0) < 0.001
+    assert abs(_named(by_day[4], "bar")[0].property("opacity") - 1.0) < 0.001
     essay = _block_named(root, "History essay")
     assert essay.property("past") is False
 
