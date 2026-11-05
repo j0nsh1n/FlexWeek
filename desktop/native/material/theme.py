@@ -13,9 +13,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from desktop.native.tokens import contrast, fit_lightness
+from desktop.native.tokens import contrast, fit_lightness, mix
 
-PRESETS = ("Blue", "Sea", "Forest", "Gold", "Rose", "Plum")
+PRESETS = ("Slate", "Blue", "Sea", "Forest", "Gold", "Rose", "Plum")
 MODES = ("light", "dark")
 CONTRASTS = ("std", "high")
 HIGH_CONTRAST_STROKE = 1.5
@@ -24,24 +24,57 @@ DENSITY = {
     "comfortable": {"hour_row": 56, "settings_row_pad": 16, "card_pad": 12},
     "compact": {"hour_row": 44, "settings_row_pad": 10, "card_pad": 8},
 }
-# The spec's category colours, not the widgets look's OKLCH family.
-CATEGORY_FILLS = {
-    "school": {"light": "#EAE6FA", "dark": "#2A244D"},
-    "soccer": {"light": "#E2F5EA", "dark": "#1B3B2B"},
-    "reading": {"light": "#F9E6F0", "dark": "#3D2232"},
-    "homework": {"light": "#F7EBD9", "dark": "#4A3219"},
+
+# B3a3 neutral surfaces for every preset, and fixed accents for Slate
+B3A3 = {
+    "surface": {"light": "#eef1f5", "dark": "#0b0d10"},
+    "surfaceContainerLowest": {"light": "#ffffff", "dark": "#14171c"},
+    "surfaceContainerLow": {"light": "#ffffff", "dark": "#14171c"},
+    "surfaceContainer": {"light": "#ffffff", "dark": "#14171c"},
+    "surfaceContainerHigh": {"light": "#ffffff", "dark": "#14171c"},
+    "surfaceContainerHighest": {"light": "#ffffff", "dark": "#14171c"},
+    "surfaceVariant": {"light": "#ffffff", "dark": "#14171c"},
+    "outlineVariant": {"light": "#e5e9f0", "dark": "#252a33"},
+    "outline": {"light": "#64748b", "dark": "#6b7280"},
+    "onSurface": {"light": "#0f172a", "dark": "#ececec"},
+    "onSurfaceVariant": {"light": "#475569", "dark": "#9a9fa8"},
+    "onSurfaceVariant_high": {"light": "#334155", "dark": "#c4c8d0"},
+    "slate": {
+        "primary": {"light": "#3d6fc4", "dark": "#7fa8ff"},
+        "onPrimary": {"light": "#ffffff", "dark": "#0b1220"},
+        "secondaryContainer": {"light": "#e6edf8", "dark": "#1c2433"},
+        "onSecondaryContainer": {"light": "#0f172a", "dark": "#ececec"},
+    },
 }
-# Meals, sleep and free time have no spec colour. These neutrals still read.
-NEUTRAL_FILLS = {"light": "#F3F3FA", "dark": "#2E3036"}
-ROLE_FOR_CATEGORY = {
-    "class": "school",
-    "exercise": "soccer",
-    "extra": "soccer",
-    "study": "reading",
-    "assignments": "homework",
+
+# Status colours: dark from spec; light values proposed, not in the spec
+STATUS_COLORS = {
+    "dark": {
+        "statusDone": "#8fd19e",
+        "statusDueSoon": "#f0c674",
+        "statusOverdue": "#ff9b8f",
+    },
+    "light": {
+        "statusDone": "#2f7d4a",
+        "statusDueSoon": "#8a5a00",
+        "statusOverdue": "#b42318",
+    },
 }
-INK_DARK = "#1A1C20"
-INK_LIGHT = "#FFFFFF"
+
+CLASS_COLORS = {
+    "class": "#3d6fc4",       # School
+    "exercise": "#2f9e6b",    # Sports
+    "extra": "#0f8a8a",       # Clubs
+    "assignments": "#a87512", # Work
+    "study": "#c2557a",       # Personal
+    "meals": "#64748b",       # Other
+    "sleep": "#64748b",       # Other
+    "free": "#64748b",        # Other
+}
+OTHER_CLASS_COLOR = "#64748b"
+SIX_CLASSES = ("class", "exercise", "extra", "assignments", "study", "other")
+INK_DARK = "#0f172a"
+INK_LIGHT = "#ececec"
 _AA = 4.5
 
 
@@ -80,8 +113,30 @@ def scheme(preset: str, mode: str, contrast_name: str) -> dict[str, str]:
     """One scheme. An unknown preset, mode or contrast is a KeyError, not a quiet fallback."""
     if preset not in PRESETS or mode not in MODES or contrast_name not in CONTRASTS:
         raise KeyError(scheme_key(preset, mode, contrast_name))
-    found = _schemes()[scheme_key(preset, mode, contrast_name)]
-    return dict(found)
+    found = dict(_schemes()[scheme_key(preset, mode, contrast_name)])
+    for role in (
+        "surface",
+        "surfaceContainerLowest",
+        "surfaceContainerLow",
+        "surfaceContainer",
+        "surfaceContainerHigh",
+        "surfaceContainerHighest",
+        "surfaceVariant",
+        "outlineVariant",
+        "outline",
+        "onSurface",
+    ):
+        found[role] = B3A3[role][mode]
+    if contrast_name == "high":
+        found["onSurfaceVariant"] = B3A3["onSurfaceVariant_high"][mode]
+    else:
+        found["onSurfaceVariant"] = B3A3["onSurfaceVariant"][mode]
+
+    if preset == "Slate":
+        for role, vals in B3A3["slate"].items():
+            found[role] = vals[mode]
+
+    return found
 
 
 def stroke_for(contrast_name: str) -> float:
@@ -91,19 +146,42 @@ def stroke_for(contrast_name: str) -> float:
     return HIGH_CONTRAST_STROKE if contrast_name == "high" else 0.0
 
 
-def category_paint(role: str, mode: str) -> tuple[str, str]:
-    """Fill and ink for a spec role (`school`, `soccer`, `reading`, `homework`) or a neutral."""
-    if mode not in MODES:
-        raise KeyError(mode)
-    fills = CATEGORY_FILLS.get(role, NEUTRAL_FILLS)
-    fill = fills[mode]
-    ink = max((INK_DARK, INK_LIGHT), key=lambda item: contrast(fill, item))
-    return fill, ink
+def bar_for_category(category: str) -> str:
+    """The solid accent bar colour for an event category."""
+    return CLASS_COLORS.get(category, OTHER_CLASS_COLOR)
 
 
 def paint_for_category(category: str, mode: str) -> tuple[str, str]:
     """A week block's category key (`class`, `assignments`, …) as a Material fill and ink."""
-    return category_paint(ROLE_FOR_CATEGORY.get(category, "neutral"), mode)
+    if mode not in MODES:
+        raise KeyError(mode)
+    bar = bar_for_category(category)
+    card = "#ffffff" if mode == "light" else "#14171c"
+    alpha = 0.14 if mode == "light" else 0.24
+    fill = mix(bar, card, alpha)
+    ink = "#0f172a" if mode == "light" else "#ececec"
+    return fill, ink
+
+
+_ROLE_TO_CATEGORY = {
+    "school": "class",
+    "class": "class",
+    "soccer": "exercise",
+    "sports": "exercise",
+    "exercise": "exercise",
+    "clubs": "extra",
+    "extra": "extra",
+    "homework": "assignments",
+    "assignments": "assignments",
+    "reading": "study",
+    "study": "study",
+}
+
+
+def category_paint(role: str, mode: str) -> tuple[str, str]:
+    """Fill and ink for a role or category."""
+    cat = _ROLE_TO_CATEGORY.get(role, "other")
+    return paint_for_category(cat, mode)
 
 
 # EventBlock's own names. Soccer and reading use different words there than the fill table.
@@ -161,16 +239,16 @@ INK_ALIASES = {
     "onSurfaceVariant": "inkMuted",
 }
 SAVED_MODES = ("system", "light", "dark")
-DEFAULT_PRESET = "Blue"
+DEFAULT_PRESET = "Slate"
 DEFAULT_MODE = "system"
 DEFAULT_CONTRAST = "std"
 DEFAULT_DENSITY = "comfortable"
 FONT_FILES = (
-    "RobotoFlex-Regular.ttf",
-    "RobotoFlex-Medium.ttf",
-    "RobotoFlex-SemiBold.ttf",
+    "Inter-Regular.ttf",
+    "Inter-Medium.ttf",
+    "Inter-SemiBold.ttf",
 )
-ROBOTO_FLEX = "Roboto Flex"
+INTER = "Inter"
 
 
 def qml_dir() -> Path:
@@ -186,7 +264,7 @@ def event_category(category: str) -> str:
 def read_material_choice(stored: object) -> dict[str, str]:
     """Preset, mode, contrast, and density from a look file's top-level `material` object.
 
-    A missing file, a missing object, or a value this build does not know falls back to Blue,
+    A missing file, a missing object, or a value this build does not know falls back to Slate,
     follow system, standard contrast, and comfortable. Nothing here raises.
     """
     material = stored.get("material") if isinstance(stored, dict) else None
@@ -224,11 +302,34 @@ def theme_object(
     theme["density"] = density
     theme["reduceMotion"] = reduce_motion
     theme["highContrast"] = high_contrast
+
+    mode = "dark" if colours.get("surface") == B3A3["surface"]["dark"] else "light"
+    card = colours.get("surfaceContainer", "#ffffff" if mode == "light" else "#14171c")
+    page = colours.get("surface", "#eef1f5" if mode == "light" else "#0b0d10")
+    edge = colours.get("outlineVariant", "#e5e9f0" if mode == "light" else "#252a33")
+    theme["page"] = page
+    theme["card"] = card
+    theme["edge"] = edge
+    theme["focusRing"] = colours["primary"]
+
+    statuses = STATUS_COLORS[mode]
+    for key, val in statuses.items():
+        theme[key] = val
+        theme[f"{key}Tint"] = mix(val, card, 0.16)
+
+    theme["classes"] = {
+        cat: {
+            "bar": bar_for_category(cat),
+            "fill": paint_for_category(cat, mode)[0],
+            "ink": paint_for_category(cat, mode)[1],
+        }
+        for cat in SIX_CLASSES
+    }
     return theme
 
 
 def register_fonts() -> tuple[int, ...]:
-    """Register the three Roboto Flex faces. The ids Qt returned, skipping a file it refused."""
+    """Register the three Inter faces. The ids Qt returned, skipping a file it refused."""
     from PySide6.QtGui import QFontDatabase
 
     from desktop.native.fonts import FONT_DIR

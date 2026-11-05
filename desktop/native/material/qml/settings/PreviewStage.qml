@@ -141,7 +141,7 @@ Item {
                     verticalAlignment: Text.AlignVCenter
                     text: root.shown === "week" ? "Week" : (root.shown === "day" ? "Day" : "Month")
                     color: root.draft.onSurface || palette.inkSurface
-                    font.family: "Roboto Flex"
+                    font.family: M3Font.family
                     font.pixelSize: 22
                     font.weight: 500
                 }

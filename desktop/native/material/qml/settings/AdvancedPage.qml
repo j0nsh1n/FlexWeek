@@ -44,7 +44,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             text: "Advanced settings"
             color: palette.inkSurface
-            font.family: "Roboto Flex"
+            font.family: M3Font.family
             font.pixelSize: 22
             font.weight: 500
         }

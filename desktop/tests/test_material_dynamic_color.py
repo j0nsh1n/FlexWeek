@@ -23,6 +23,7 @@ from desktop.native.material.dynamic_color import scheme, system_accent
 TOKENS = Path(__file__).resolve().parents[1] / "native" / "material" / "tokens.json"
 
 PRESETS = (
+    ("Slate", "#3D6FC4", "Tonal Spot"),
     ("Blue", "#0B62C4", "Tonal Spot"),
     ("Sea", "#00797F", "Tonal Spot"),
     ("Forest", "#3B7A4B", "Fidelity"),

@@ -33,20 +33,21 @@ from desktop.native.material.theme import (
 from desktop.native.tokens import contrast
 from desktop.native.weekmodel import clock_label, set_clock_24h
 
-# The spec's category fills. School, Soccer, Bio Reading, Homework.
-SCHOOL = {"light": "#EAE6FA", "dark": "#2A244D"}
-SOCCER = {"light": "#E2F5EA", "dark": "#1B3B2B"}
-READING = {"light": "#F9E6F0", "dark": "#3D2232"}
-HOMEWORK = {"light": "#F7EBD9", "dark": "#4A3219"}
+# The spec's category fills: class colour mixed 14% into white (light) or 24% into dark card (#14171c).
+SCHOOL = {"light": "#e4ebf7", "dark": "#1e2c44"}
+SOCCER = {"light": "#e2f1ea", "dark": "#1a372f"}
+CLUBS = {"light": "#ddefef", "dark": "#133336"}
+READING = {"light": "#f6e7ec", "dark": "#3e2633"}
+HOMEWORK = {"light": "#f3ecde", "dark": "#382e1a"}
 SPEC_FILLS = {
     "school": SCHOOL,
     "soccer": SOCCER,
     "reading": READING,
     "homework": HOMEWORK,
 }
-PRESET_NAMES = ("Blue", "Sea", "Forest", "Gold", "Rose", "Plum")
-INK_DARK = "#1A1C20"
-INK_LIGHT = "#FFFFFF"
+PRESET_NAMES = ("Slate", "Blue", "Sea", "Forest", "Gold", "Rose", "Plum")
+INK_DARK = "#0f172a"
+INK_LIGHT = "#ececec"
 
 
 @pytest.fixture()
@@ -96,22 +97,25 @@ def test_sanitize_layout_still_returns_only_the_layout() -> None:
     assert cleaned["options"] == {"one": {"daybar": "hide"}}
 
 
-def test_six_presets_each_have_light_dark_standard_and_high_contrast() -> None:
+def test_seven_presets_each_have_light_dark_standard_and_high_contrast() -> None:
     loaded = json.loads(tokens_path().read_text(encoding="utf-8"))
-    assert len(loaded) == 24
+    assert len(loaded) == 28
     for preset in PRESET_NAMES:
         for mode in ("light", "dark"):
             for contrast_name in ("std", "high"):
                 key = f"{preset}.{mode}.{contrast_name}"
                 assert key in loaded
-                assert scheme(preset, mode, contrast_name)["primary"] == loaded[key]["primary"]
+                expected_primary = (
+                    "#3d6fc4" if mode == "light" else "#7fa8ff"
+                ) if preset == "Slate" else loaded[key]["primary"]
+                assert scheme(preset, mode, contrast_name)["primary"] == expected_primary
 
 
 def test_blue_light_standard_is_the_shipped_scheme() -> None:
     colours = scheme("Blue", "light", "std")
     assert colours["primary"] == "#425e91"
-    assert colours["surface"] == "#f9f9ff"
-    assert colours["onSurface"] == "#1a1c20"
+    assert colours["surface"] == "#eef1f5"
+    assert colours["onSurface"] == "#0f172a"
 
 
 # The component README's roles, written out here so a dropped key is not also dropped from the check.
@@ -154,10 +158,10 @@ def test_the_theme_object_carries_every_role_and_the_ink_aliases() -> None:
     for key in THEME_KEYS:
         assert theme[key] == scheme("Blue", "light", "std")[key]
     assert theme["primary"] == "#425e91"
-    assert theme["onSurface"] == "#1a1c20"
-    assert theme["inkSurface"] == "#1a1c20"
+    assert theme["onSurface"] == "#0f172a"
+    assert theme["inkSurface"] == "#0f172a"
     assert theme["inkPrimary"] == "#ffffff"
-    assert theme["inkMuted"] == "#44474e"
+    assert theme["inkMuted"] == "#475569"
     assert theme["inverseOnSurface"] == "#f0f0f7"
     assert "inkInverseSurface" not in theme
     assert theme["density"] == "comfortable"
@@ -166,7 +170,7 @@ def test_the_theme_object_carries_every_role_and_the_ink_aliases() -> None:
 
 
 def test_a_missing_or_unknown_material_choice_is_blue_system_standard_comfortable() -> None:
-    blank = {"preset": "Blue", "mode": "system", "contrast": "std", "density": "comfortable"}
+    blank = {"preset": "Slate", "mode": "system", "contrast": "std", "density": "comfortable"}
     assert read_material_choice(None) == blank
     assert read_material_choice({}) == blank
     assert read_material_choice({"material": "nope"}) == blank
@@ -225,7 +229,7 @@ def test_category_fills_are_the_spec_colours(mode: str) -> None:
 def test_week_categories_use_those_fills() -> None:
     assert paint_for_category("class", "light")[0] == SCHOOL["light"]
     assert paint_for_category("exercise", "dark")[0] == SOCCER["dark"]
-    assert paint_for_category("extra", "light")[0] == SOCCER["light"]
+    assert paint_for_category("extra", "light")[0] == CLUBS["light"]
     assert paint_for_category("study", "dark")[0] == READING["dark"]
     assert paint_for_category("assignments", "light")[0] == HOMEWORK["light"]
 

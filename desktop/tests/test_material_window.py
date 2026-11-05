@@ -1063,14 +1063,14 @@ def test_reduce_motion_runs_the_page_change_in_no_time(qapp: QApplication, windo
 
 
 def test_the_open_shell_publishes_the_theme_object(qapp: QApplication, window: NativeWindow) -> None:
-    """The shell's theme map is the Blue light scheme plus the ink aliases and the three flags."""
+    """The shell's theme map is the Slate light scheme plus the ink aliases and the three flags."""
     _show_material(qapp, window)
     theme = window._material_page.bridge.property("theme")
     try:
-        assert theme["primary"] == "#425e91"
-        assert theme["onSurface"] == "#1a1c20"
-        assert theme["inkSurface"] == "#1a1c20"
-        assert theme["inkMuted"] == "#44474e"
+        assert theme["primary"] == "#3d6fc4"
+        assert theme["onSurface"] == "#0f172a"
+        assert theme["inkSurface"] == "#0f172a"
+        assert theme["inkMuted"] == "#475569"
         assert theme["inverseOnSurface"] == "#f0f0f7"
         assert theme["density"] == "comfortable"
         assert theme["reduceMotion"] is False
@@ -1079,10 +1079,10 @@ def test_the_open_shell_publishes_the_theme_object(qapp: QApplication, window: N
         window._use_widgets_styles()
 
 
-def test_register_fonts_returns_the_three_roboto_flex_faces(qapp: QApplication) -> None:
+def test_register_fonts_returns_the_three_inter_faces(qapp: QApplication) -> None:
     from PySide6.QtGui import QFontDatabase
 
-    from desktop.native.material.theme import ROBOTO_FLEX, register_fonts
+    from desktop.native.material.theme import INTER, register_fonts
 
     ids = register_fonts()
     assert len(ids) == 3
@@ -1090,7 +1090,7 @@ def test_register_fonts_returns_the_three_roboto_flex_faces(qapp: QApplication) 
     for ident in ids:
         assert ident >= 0
         families.extend(QFontDatabase.applicationFontFamilies(ident))
-    assert ROBOTO_FLEX in families
+    assert INTER in families
 
 
 def test_opening_material_registers_those_faces(

@@ -46,7 +46,7 @@ Rectangle {
                 Layout.fillWidth: true
                 text: root.heading
                 color: tones.inkSurface
-                font.family: "Roboto Flex"
+                font.family: M3Font.family
                 font.pixelSize: 14
                 font.weight: 500
                 elide: Text.ElideRight
@@ -61,7 +61,7 @@ Rectangle {
                     text: model.label
                     wrapMode: Text.WordWrap
                     color: tones.inkMuted
-                    font.family: "Roboto Flex"
+                    font.family: M3Font.family
                     font.pixelSize: 13
                     font.weight: 500
                 }
