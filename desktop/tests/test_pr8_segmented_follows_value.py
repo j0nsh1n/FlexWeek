@@ -198,3 +198,53 @@ def test_a_settings_choice_follows_its_setting_after_a_click(qapp: QApplication,
         bridge.reload_material()
         panel.note_applied()
         shell._use_widgets_styles()
+
+
+def test_arrow_keys_step_on_while_a_settings_save_is_still_on_its_way(
+    qapp: QApplication, shell: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reminders are saved on the server, so the answer comes later. Two Right presses from Off before it
+    comes must ask for 5 and then 10 minutes, with the tick on 10m; a failed answer puts back the saved
+    one."""
+    session = shell.session
+    session.save_preferences({"reminders_enabled": False})
+    wait_until(qapp, lambda: (session.preferences or {}).get("reminders_enabled") is False)
+    held: list[tuple[dict, object]] = []
+
+    def hold(updates: dict, then=None) -> bool:
+        held.append((dict(updates), then))
+        return True
+
+    monkeypatch.setattr(session, "save_preferences", hold)
+    root = _show_material(qapp, shell)
+    bridge = shell._material_page.bridge
+    panel = bridge._settings_bridge
+    try:
+        bridge.showPage("settings")
+        panel.closeAdvanced()
+        panel.setSection("alerts")
+        _pump(qapp, 10)
+        reminder = _named(root, "reminder")[0]
+        assert _ticked_labels(reminder) == ["Off"]
+        reminder.forceActiveFocus()
+        _pump(qapp, 5)
+        quick = shell._material_page._quick
+        QTest.keyClick(quick, Qt.Key.Key_Right)
+        _pump(qapp, 10)
+        QTest.keyClick(quick, Qt.Key.Key_Right)
+        _pump(qapp, 10)
+
+        assert [updates.get("reminder_lead_min") for updates, _then in held] == [5, 10]
+        assert all(updates.get("reminders_enabled") is True for updates, _then in held)
+        assert _ticked_labels(reminder) == ["10m"]
+
+        held[-1][1](False)
+        _pump(qapp, 10)
+        assert _ticked_labels(reminder) == ["Off"]
+    finally:
+        monkeypatch.undo()
+        panel.closeAdvanced()
+        look_file().unlink(missing_ok=True)
+        bridge.reload_material()
+        panel.note_applied()
+        shell._use_widgets_styles()
