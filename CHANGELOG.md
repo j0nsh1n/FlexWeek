@@ -16,6 +16,9 @@ All notable changes to FlexWeek are documented here. Format follows
 - Material's Focus screen covers the window: phase, task, timer, Pause or Resume, Skip, Finish and Back, on the same timer Widgets uses. Rain, Lo-Fi and White noise play while you focus and pause with the timer; Spotify still opens the Settings link. Auto-mute holds reminders during a focus work phase. Auto-complete, off by default, finishes only that session's block.
 
 ### Changed
+- "Plenty of time" is no longer shown for homework due within 24 hours, in the Widgets styles and in Material's Week and Day; it says "Tight" instead.
+- The Add homework sheet uses the same words in every style: the last step's button says "Save", the one-hour chip says "60 min", and the estimate shows "min" after the number. Material Settings → Planning offers the same seven study cutoffs as the Widgets styles, written in the 12- or 24-hour clock you chose.
+- The focus card, the compact focus rail and the focus screen name the same homework. Pause and Resume no longer shift the buttons beside them, and the Timeline week keeps a one-hour block's title.
 - In the Material style, clicking a homework block, a homework card or a Day row opens it for editing; marking it finished has its own round button, and right-click or Shift+F10 opens Edit, Mark finished and Delete.
 - Spread-over-days homework sits on different days when it can, and the plan toast says so when two parts have to share a day.
 - The planner uses earlier free days before the due date instead of stacking everything on that last day.
@@ -61,6 +64,9 @@ All notable changes to FlexWeek are documented here. Format follows
 - The sign-in field's focus ring stays readable on a pale accent, and still uses the default blue when that blue already reads.
 - After you save a new block in Bento, the keyboard stays on that block even if the week refreshed while the editor was closing.
 - Settings Month preview stays current after save, Undo, and Plan, clears loading on every early return of the current request, rejects late replies, places Retry above the input shield as a focusable button, and reduces passive preview Tab stops to 3 or fewer.
+
+### Removed
+- "Save this week now" in the Widgets More menu and "Save" in Material's More menu: FlexWeek saves after every change. Ctrl+S still saves at once.
 
 ## [1.2.0] - 2026-10-26
 
