@@ -18,7 +18,7 @@ SectionPage {
                 density: Ui.density
                 reduceMotion: Ui.reduceMotion
                 highContrast: Ui.highContrast
-                kind: "tonal"
+                kind: "text"
                 text: "Widgets styles"
                 accessName: "Widgets styles"
                 onClicked: Ui.bridge.useWidgets()

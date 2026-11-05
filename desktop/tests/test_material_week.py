@@ -20,6 +20,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QObject, QPoint, QPointF, QStandardPaths, Qt  # noqa: E402
+from PySide6.QtGui import QColor  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication, QPushButton  # noqa: E402
 
@@ -924,3 +925,57 @@ def test_the_drawn_week_keeps_block_words_and_bars_readable(qapp: QApplication, 
         _bridge(window).reload_material()
         panel.note_applied()
         _pump(qapp)
+
+
+def _colour_distance(first: object, second: object) -> int:
+    a, b = QColor(first), QColor(second)
+    return abs(a.red() - b.red()) + abs(a.green() - b.green()) + abs(a.blue() - b.blue())
+
+
+def test_the_now_line_passes_behind_blocks_and_the_dot_stays_on_top(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """The now line sits under every week block; the left dot sits above. Inside a block's title
+    row the pixel is the block fill, and in empty grid it is the line colour."""
+    root = _reset(window, qapp)
+    line = _qml(root, "nowLine")
+    dot = _qml(root, "nowDot")
+    blocks = _named(root, "weekBlock")
+    assert blocks
+    line_z = float(line.property("z"))
+    dot_z = float(dot.property("z"))
+    for block in blocks:
+        block_z = float(block.property("z"))
+        assert line_z < block_z, (line_z, block_z)
+        assert dot_z > block_z, (dot_z, block_z)
+    # A homework held over a slot outlines it above the line (Sol, PR 6 polish).
+    assert float(_qml(root, "dropSlot").property("z")) > line_z
+
+    essay = _block_named(root, "History essay")
+    shape = _named(essay, "shape")[0]
+    quick = window._material_page._quick
+    image = quick.grabFramebuffer()
+    line_in_block = essay.mapFromItem(line, QPointF(0, 1))
+    inside = essay.mapToScene(QPointF(10, line_in_block.y())).toPoint()
+    assert image.rect().contains(inside), inside
+    fill = shape.property("color")
+    line_colour = line.property("color")
+    inside_px = image.pixelColor(inside)
+    assert _colour_distance(inside_px, fill) < _colour_distance(inside_px, line_colour), (
+        inside_px.name(),
+        QColor(fill).name(),
+        QColor(line_colour).name(),
+    )
+
+    week = _qml(root, "materialWeek")
+    day_w = float(week.property("dayWidth"))
+    # Saturday is empty at 19:00 (School is weekday mornings; the essay is Thursday).
+    empty = line.mapToScene(QPointF(5 + 5 * day_w + day_w / 2, 1)).toPoint()
+    assert image.rect().contains(empty), empty
+    empty_px = image.pixelColor(empty)
+    page = _bridge(window).property("theme")["page"]
+    assert _colour_distance(empty_px, line_colour) < _colour_distance(empty_px, page), (
+        empty_px.name(),
+        QColor(line_colour).name(),
+        str(page),
+    )
