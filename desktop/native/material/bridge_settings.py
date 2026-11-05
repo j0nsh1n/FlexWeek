@@ -750,6 +750,9 @@ class SettingsBridge(QObject):
         self._export_text = ""
         self._ask_preset = False
         self._pending_preset = ""
+        # Choices sent to the server and not yet answered. They show at once, so a second arrow key steps on
+        # from the first instead of from the old saved value.
+        self._unsaved: dict[str, Any] = {}
         self._preview_fit = "Fit"
         self._preview_view = "week"
         self._draft_theme: dict[str, Any] = {}
@@ -819,7 +822,7 @@ class SettingsBridge(QObject):
         return dress_theme(base, advanced)
 
     def _build(self) -> dict[str, Any]:
-        prefs = _prefs_of(self._window)
+        prefs = {**_prefs_of(self._window), **self._unsaved}
         draft = self._draft
         choice = self._draft_choice
         worn = self._worn_dark()
@@ -961,8 +964,16 @@ class SettingsBridge(QObject):
 
     def _write(self, updates: dict[str, Any], *, login: bool | None = None) -> None:
         session = self._window.session
+        self._unsaved.update(updates)
+
+        def settle() -> None:
+            # A newer choice for the same setting is still on its way and keeps showing.
+            for name, value in updates.items():
+                if name in self._unsaved and self._unsaved[name] == value:
+                    del self._unsaved[name]
 
         def then(ok: bool) -> None:
+            settle()
             if ok:
                 if login is not None:
                     self._window._apply_start_at_login(login)
@@ -973,8 +984,9 @@ class SettingsBridge(QObject):
             self._publish()
 
         if not session.save_preferences(updates, then):
+            settle()
             self._notice = "Could not save that."
-            self._publish()
+        self._publish()
 
     def _commit(self) -> None:
         path = self._window._look_path()

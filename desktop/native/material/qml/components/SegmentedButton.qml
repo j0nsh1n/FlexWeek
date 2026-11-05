@@ -36,8 +36,7 @@ Item {
         if (!enabled || choices.length === 0)
             return
         var next = (index + choices.length) % choices.length
-        current = choices[next].value
-        selected(current)
+        selected(choices[next].value)
     }
 
     Rectangle {
