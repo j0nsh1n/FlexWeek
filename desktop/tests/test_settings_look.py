@@ -20,6 +20,8 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QSpinBox, QWidget
 
 from desktop.native import settings as settings_module
+from desktop.native.layouts.registry import MATCH, sanitize_layout, tokens_for
+from desktop.native.layouts.retro import scheme as retro_scheme
 from desktop.native.look import ACCENT_COLORS, look_menu_token, resolved_palette
 from desktop.native.settings import SETTINGS_COLUMN, SettingsPage
 from desktop.native.tokens import contrast
@@ -111,7 +113,7 @@ def test_look_cards_announce_selection_position_and_wearing_badge(
         card.accessibleDescription()
         == f"{page.look.more.cards.index(card) + 1} of {len(page.look.more.cards)}"
     )
-    assert card.note.text() == "Wearing"
+    assert card.note.text() == "Current"
     # The page redraws what its style sheet cannot (the badge's colours) on the next turn of the event loop.
     qapp.processEvents()
     # The badge is a 24 px circle 10 px down and 12 px in from the card's top right, with a 16 px check in
@@ -126,6 +128,77 @@ def test_look_cards_announce_selection_position_and_wearing_badge(
     plain = card.grab().toImage()
     assert any(plain.pixelColor(x, y).name() != accent for x, y in ring)
     card.select(True)
+    page.close_page()
+
+
+def test_a_look_tile_is_160_pixels_and_only_the_worn_one_gets_the_accent_edge(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """UI22: the tiles are 160 px, and the one worn is edged in the accent; its neighbours are not."""
+    page = open_settings(qapp, window)
+    grid = page.look.more
+    card = next(item for item in grid.cards if item.accessibleName() == "Nocturne")
+    other = next(item for item in grid.cards if item is not card and item is not page.look.material)
+    assert card.picture.width() == 160
+    card.chosen.emit()
+    qapp.processEvents()
+
+    def edge(item: QWidget) -> str:
+        picture = item.grab().toImage()
+        return picture.pixelColor(1, item.height() // 2).name()
+
+    accent = palette_of(window)["accent"]
+    assert edge(card) == accent
+    assert edge(other) != accent
+    page.close_page()
+
+
+def test_material_is_one_more_card_and_choosing_it_wears_material(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """UI22/UI19: Material sits in the Look grid as one more 160 px card; choosing it switches to
+    Material, and it says Current while the Material window is the one worn."""
+    page = open_settings(qapp, window)
+    material = page.look.material
+    assert material.accessibleName() == "Material"
+    assert material.picture.width() == 160
+    assert material.note.text() == " "
+    material.chosen.emit()
+    for _ in range(10):
+        qapp.processEvents()
+    assert window._stack.currentWidget().objectName() == "materialPage"
+    assert material.note.text() == "Current"
+    assert not any(card.is_selected() for card in page.look.more.cards if card is not material)
+    window._use_widgets_styles()
+    for _ in range(10):
+        qapp.processEvents()
+    assert window._stack.currentWidget().objectName() == "weekPage"
+    assert material.note.text() == " "
+    page.close_page()
+
+
+def test_under_the_retro_layout_the_settings_page_shades_into_windows_98(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """T15: with the Retro layout on, Settings takes Retro's colours from its tokens whatever look
+    is worn; with another layout it stays in the look's own page colour."""
+
+    def page_ground(page: SettingsPage) -> str:
+        picture = page.grab().toImage()
+        return picture.pixelColor(page.width() - 30, page.height() // 2).name()
+
+    page = open_settings(qapp, window, (1600, 900))
+    assert page_ground(page) == palette_of(window)["window"]
+    page.close_page()
+
+    window._layout = sanitize_layout({"main": "retro", "day": "one"})
+    window._apply_appearance()
+    page = open_settings(qapp, window, (1600, 900))
+    colours = retro_scheme(tokens_for("retro", MATCH, palette_of(window)))
+    assert page_ground(page) == colours.face, (page_ground(page), colours.face)
     page.close_page()
 
 

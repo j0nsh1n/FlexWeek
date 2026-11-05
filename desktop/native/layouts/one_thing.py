@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from desktop.native.calendar import DAYS
-from desktop.native.fonts import at_scale
+from desktop.native.fonts import at_scale, numeral
 from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas
 from desktop.native.hours.geometry import Axis, LinearTrack, Span
 from desktop.native.hours.hand import Gesture, Hand, Held
@@ -62,6 +62,8 @@ RING_MAX, RING_MIN = 440, 200
 THEN_ROWS = 4
 # The most of the ring's inside the title may take, so the number stays the thing that is read.
 TITLE_SHARE = 0.4
+# The current thing's own size, in pixels at Normal text, whatever the point scale does (UI20).
+TITLE_PX = 28
 
 
 def label_minutes(first: int, last: int) -> list[int]:
@@ -533,11 +535,10 @@ class OneThingView(LayoutView):
             return f"{type_pt(role, scene.scale)}pt"
 
         ink, muted, strong = tokens["bg_ink"], tokens["bg_muted"], WEIGHT_STRONG
-        quiet = f"2px solid {tokens['line']}"
         return base_sheet(self.objectName(), tokens) + rules(
             self.objectName(),
             {
-                "#oneLine, #oneRowTime, #oneRowLength, #oneThenEmpty": css(
+                "#oneLine, #oneLeft, #oneRowTime, #oneRowLength, #oneThenEmpty": css(
                     color=muted, font_size=size("body")
                 ),
                 "#oneEvening, #oneWaiting, #oneWeekNotice": css(color=muted, font_size=size("body")),
@@ -548,10 +549,12 @@ class OneThingView(LayoutView):
                 "#oneRowName": css(color=ink, font_size=size("body"), font_weight=strong),
                 "#oneRule": css(background=tokens["line"]),
                 "#oneRow": css(border_bottom=f"1px solid {tokens['line']}"),
+                # A transparent border keeps the keyfocus ring's colour swap from moving anything,
+                # since the ring is this border's colour.
                 "QPushButton": css(
                     background="transparent",
                     color=ink,
-                    border=quiet,
+                    border="2px solid transparent",
                     border_radius=f"{RADIUS_CARD}px",
                     padding=f"0 {scene.px(SPACING[4])}px 0 {scene.px(SPACING[3])}px",
                     min_height=f"{scene.px(40)}px",
@@ -611,13 +614,19 @@ class OneThingView(LayoutView):
         # The thing itself can be carried onto the day bar, to a later time.
         needs_time = scene.today is not None and scene.week.leftover_kind(scene.today) == "needs_time"
         self._title.carry(item or (scene.week.due_today_unplaced(scene.today)[0] if needs_time else None))
+        to_go = 0 if item is None else (item.end if is_now else item.start) - scene.minute
+        left_words = f"{length_label(to_go)} left" if item is not None and is_now else ""
+        remaining = label(left_words, "oneLeft")
+        remaining.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ring.above.addWidget(self._title)
+        # show() on an unparented widget opens a top-level window and takes the keyboard.
+        ring.above.addWidget(remaining)
+        remaining.setVisible(bool(left_words))
         when = label(line, "oneLine")
         when.setAlignment(Qt.AlignmentFlag.AlignCenter)
         when.setAccessibleName(line)
         self._line = when
         ring.below.addWidget(when)
-        to_go = 0 if item is None else (item.end if is_now else item.start) - scene.minute
         share = min(to_go, 60) / 60
         ring.run_down(share if drawn is None else drawn, share, app_level())
         day = self.shown_day(scene)
@@ -744,18 +753,24 @@ class OneThingView(LayoutView):
         self._fit_line()
 
     def _fit_title(self) -> None:
-        """Inside the ring, in at most TITLE_SHARE of its height and two lines: at the title size, at
-        the heading size when it needs more, and past that shortened, with the whole name in its
-        tooltip. The number takes the height left over."""
+        """Inside the ring, in at most TITLE_SHARE of its height and two lines: at the display size,
+        at the title size when it needs more, then the heading size, and past that shortened, with
+        the whole name in its tooltip. The number takes the height left over."""
         ring, title = self._ring, self._title
         if ring is None:
             return
-        scale = self._scene.scale if self._scene else 1.0
+        scene = self._scene
+        scale = scene.scale if scene else 1.0
         inside = ring.inside()
         width, budget = max(inside.width(), 40), inside.height() * TITLE_SHARE
         words = shown = self._title_words
-        for role in ("title", "heading"):
-            metrics = QFontMetrics(at_scale(title.font(), role, scale, WEIGHT_STRONG))
+        px = max(scene.px(TITLE_PX), 1) if scene else TITLE_PX
+        fonts = [
+            numeral(title.font(), px, WEIGHT_STRONG),
+            *(at_scale(title.font(), role, scale, WEIGHT_STRONG) for role in ("title", "heading")),
+        ]
+        for font in fonts:
+            metrics = QFontMetrics(font)
             tall = metrics.boundingRect(QRect(0, 0, width, 10_000), int(Qt.TextFlag.TextWordWrap), words)
             wide = max((metrics.horizontalAdvance(line) for line in words.splitlines()), default=0)
             if (
@@ -767,7 +782,12 @@ class OneThingView(LayoutView):
         else:
             lines = 2 if metrics.lineSpacing() * 2 <= budget else 1
             shown = shortened(words, metrics, width, lines)
-        title.setStyleSheet(f"font-size: {type_pt(role, scale)}pt;")
+        title.setFont(font)
+        # A pixel-sized font keeps its pixels; the point roles keep their points.
+        if font.pixelSize() > 0:
+            title.setStyleSheet(f"font-size: {font.pixelSize()}px; font-weight: {WEIGHT_STRONG};")
+        else:
+            title.setStyleSheet(f"font-size: {font.pointSizeF()}pt; font-weight: {WEIGHT_STRONG};")
         title.setText(shown)
         title.setToolTip(words if shown != words else "")
         title.setAccessibleName(words)

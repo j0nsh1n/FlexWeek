@@ -10,6 +10,7 @@ theme object, and the slots every screen shares. Week rows live in bridge_week.
 
 from __future__ import annotations
 
+import contextlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -113,11 +114,13 @@ class MaterialBridge(QObject):
         self._focus = FocusBridge(window, self)
         self._sheets = SheetsBridge(window, self)
         self._following = False
+        self._week_follow = None
         # Save finishes on this signal. The day lists and the Undo button read it then,
         # rather than waiting for the 20s clock tick.
         changed = getattr(self._window.session, "week_changed", None)
         if changed is not None and hasattr(changed, "connect"):
             changed.connect(self._follow_week)
+            self._week_follow = changed
 
     def set_appearance(self, mode: str, _worn_contrast: str) -> None:
         """Apply the saved Material look. `mode` is the worn light or dark axis.
@@ -168,6 +171,15 @@ class MaterialBridge(QObject):
             self.refresh()
         finally:
             self._following = False
+
+    def dispose(self) -> None:
+        """Cut the session signals this bridge joined before its deleteLater runs. Between the drop
+        and the next turn of the event loop a week change would still reach a half-made bridge."""
+        changed = self._week_follow
+        self._week_follow = None
+        if changed is not None:
+            with contextlib.suppress(RuntimeError, TypeError):
+                changed.disconnect(self._follow_week)
 
     def _publish_theme(self) -> None:
         self._reduce_motion = self._motion_reduced() or self._advanced.get("motion") == "Off"

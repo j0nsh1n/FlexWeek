@@ -94,7 +94,15 @@ from desktop.native.controller import ROUTINE_STATUS, NativeSession, _late_summa
 from desktop.native.custom_look import sanitize_saved
 from desktop.native.devices import SyncDot, SyncHost, live_phones, run_off_ui, sync_state
 from desktop.native.elevation import flatten, lift
-from desktop.native.feel import Context, apply_feel, context_for, current, extra_stylesheet, set_current
+from desktop.native.feel import (
+    Context,
+    apply_feel,
+    bar_chrome,
+    context_for,
+    current,
+    extra_stylesheet,
+    set_current,
+)
 from desktop.native.fields import ProblemLine, announce
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.focus import focus_now, phase_duration_ms
@@ -1201,6 +1209,12 @@ class NativeWindow(QMainWindow):
         doomed.extend(self.findChildren(QWidget, "materialPage"))
         doomed.extend(self.findChildren(QObject, "materialBridge"))
         seen: set[int] = set()
+        # The bridges are the window's own children, not the page's: cut their session signals
+        # before the deleteLater below, so a week change on this turn finds no listener.
+        for bridge in self.findChildren(QObject, "materialBridge"):
+            dispose = getattr(bridge, "dispose", None)
+            if callable(dispose):
+                dispose()
         for item in doomed:
             if id(item) in seen:
                 continue
@@ -1604,6 +1618,13 @@ class NativeWindow(QMainWindow):
         self._bar_views = QHBoxLayout()
         bar.add_group(where)
         bar.add_group(self._bar_views)
+        # A widget of its own, so a design can dress the strip the bar sits on (Retro's chrome).
+        bar_host = QWidget()
+        bar_host.setObjectName("appBar")
+        bar_host.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        bar_box = QHBoxLayout(bar_host)
+        bar_box.setContentsMargins(0, 0, 0, 0)
+        bar_box.addLayout(bar)
         # ‹ › Today, then where you are, said once and said large. After the title, the arrows moved
         # sideways with its width on every switch between Day, Week and Month (decision 11).
         self.prev_nav = QPushButton()
@@ -1674,7 +1695,7 @@ class NativeWindow(QMainWindow):
         sign_out.setVisible(False)
         self._bar_views.addWidget(sign_out)
         self._top_bar = bar
-        layout.addLayout(bar)
+        layout.addWidget(bar_host)
         # Everything between the bar and the calendar is for planning, so a day screen can put it away.
         self.plan_chrome = QWidget()
         self.plan_chrome.setObjectName("planChrome")
@@ -3046,15 +3067,14 @@ class NativeWindow(QMainWindow):
             self._dismiss_new_look_notice(account_id)
 
         self._notice_step = None
+        # A B3a3 card of the look, with one action and the x: the x is "Not now" (UI21/A18).
         self.toast.show_message(
             "New in 1.0.0: each design has its own looks.",
             "Choose a look",
             lambda: self._choose_look_from_notice(account_id),
-            secondary_button="Not now",
-            secondary_callback=dismiss,
             close_callback=dismiss,
             dismiss_callback=dismiss,
-            filled=True,
+            card=True,
         )
 
     def _dismiss_new_look_notice(self, account_id: str) -> None:
@@ -5422,6 +5442,8 @@ class NativeWindow(QMainWindow):
                 self._save_look()
                 if surface_changed or choosing_material_again:
                     self._show_surface()
+                    # The Look grid's Material card takes its mark from the same landing (UI22).
+                    page.layout_sections[0].show_surface(surface)
                 self._on_week()
             wanted = page.updates()
             if self.session.preferences is not None:
@@ -5822,7 +5844,7 @@ class NativeWindow(QMainWindow):
                     if isValid(child):
                         child.setFont(font if own else QFont())
                 del self._retro_fonts
-            self.setStyleSheet(sheet)
+            self.setStyleSheet(sheet + (bar_chrome(ctx.tokens) if ctx.feel.key == "retro" else ""))
             self._keep_bar_whole()
             apply_ui_effects(self._motion)
             self.toast.motion = self._motion
@@ -6050,6 +6072,10 @@ class NativeWindow(QMainWindow):
         if not self._saved_to_leave and not self._save_before_leaving(self.close):
             event.ignore()
             return
+        for bridge in self.findChildren(QObject, "materialBridge"):
+            dispose = getattr(bridge, "dispose", None)
+            if callable(dispose):
+                dispose()
         super().closeEvent(event)
 
     def _week_surfaces(self) -> list:
@@ -6127,6 +6153,15 @@ class NativeWindow(QMainWindow):
         mods = event.modifiers()
         if isinstance(focus, EDITABLE) and not self._undo_passes(focus, event):
             super().keyPressEvent(event)
+            return
+        if (
+            key == Qt.Key.Key_Escape
+            and not mods
+            and self.toast.isVisible()
+            and bool(self.toast.card.property("card"))
+        ):
+            self.toast.close_button.click()
+            event.accept()
             return
         if key == Qt.Key.Key_Escape and not mods and isinstance(focus, HoursCanvas) and not self._day_mode:
             self._focus_top_bar()

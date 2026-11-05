@@ -94,7 +94,7 @@ def qml_path() -> Path:
     return Path(sys.executable).resolve().parent / "desktop" / "native" / "material" / "qml" / "Main.qml"
 
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=32)
 def _schemes() -> dict[str, dict[str, str]]:
     try:
         loaded = json.loads(tokens_path().read_text(encoding="utf-8"))

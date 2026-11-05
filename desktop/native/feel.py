@@ -53,6 +53,7 @@ from desktop.native.layouts.timeline import SHEET as PAPER
 from desktop.native.look import (
     FONT_FAMILIES,
     HEADING_NAMES,
+    VIEW_BUTTONS,
     pack_stylesheet,
     readable_edge,
     readable_focus_edge,
@@ -344,7 +345,58 @@ def extra_stylesheet(
     extra += face_rules(feel, tokens, text_scale(look))
     if feel.chrome == "hero" and hero_names:
         extra += hero_rules(tokens, text_scale(look), hero_names)
+    if feel.key == "retro":
+        extra += retro_shades(tokens)
     return extra
+
+
+def retro_shades(tokens: dict[str, str]) -> str:
+    """T15: Settings as a Windows 98 window while the Retro layout is on, whatever look is worn —
+    the page, its rail and its footer in the standard face, its cards in the window white."""
+    colours = retro.scheme(tokens)
+    return (
+        f"QWidget#settingsPage, QWidget#settingsRail, QListWidget#prefsNav, "
+        f"QWidget#settingsFooter {{ background: {colours.face}; }}"
+        f"QFrame#settingsCard {{ background: {colours.field}; }}"
+        f"QWidget#settingsFooter {{ border-top: 1px solid {colours.shadow}; }}"
+    )
+
+
+def bar_chrome(tokens: dict[str, str]) -> str:
+    """T14: the app's top bar as Retro's own chrome while the Retro layout is on, whatever look is
+    worn — the strip runs the title's colour, its words and views read in the title's ink, and Add
+    is raised on the gradient's light end like the chosen view."""
+    ink, start, end = title_bar_colours(tokens)
+    quiet = ", ".join(
+        f"QPushButton#{name}"
+        for name in (
+            "prevWeek",
+            "nextWeek",
+            "todayWeek",
+            "weekTitleMark",
+            "solveButton",
+            "retrySave",
+            "moreButton",
+            "settingsGear",
+        )
+    )
+    views = ", ".join(f"QRadioButton#{name}" for name in VIEW_BUTTONS)
+    return (
+        f"QWidget#appBar {{ background: {start}; }}"
+        f"{quiet} {{ background: transparent; border: none; color: {ink}; }}"
+        f"QLabel#weekTitle, QLabel#accountName {{ color: {ink}; }}"
+        f"QPushButton#signOut {{ background: transparent; border: none; color: {ink}; }}"
+        f"QGroupBox#segments {{ background: transparent; border: none; border-radius: 0; "
+        f"padding: 3px; margin: 0px; alternate-background-color: transparent; "
+        f"selection-background-color: {end}; color: {ink}; "
+        f"qproperty-shade: 0; qproperty-ring: transparent; }}"
+        f"{views} {{ background: transparent; color: {ink}; font-weight: 400; }}"
+        f"{views}:checked {{ background: transparent; color: {ink}; font-weight: {WEIGHT_STRONG}; }}"
+        f"QPushButton#addButton, QPushButton#addArrow {{ background: {end}; color: {ink}; }}"
+        f"QPushButton#addButton:hover, QPushButton#addArrow:hover {{ "
+        f"background: {mix_oklab(ink, end, 0.12)}; }}"
+        f"QPushButton#addArrow {{ border-left-color: {mix_oklab(ink, end, 0.3)}; }}"
+    )
 
 
 def dressed_stylesheet(

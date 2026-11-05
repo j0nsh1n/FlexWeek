@@ -19,9 +19,11 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QStandardPaths
+    from PySide6.QtCore import QStandardPaths, Qt
+    from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QPushButton
 
+    from desktop.native.look import resolved_palette
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
 
@@ -117,7 +119,9 @@ def test_an_existing_pre_100_account_sees_the_notice_once_on_its_first_planner_o
     assert window.toast.isVisible()
     assert window.toast.text() == NOTICE
     assert window.toast.button.text() == "Choose a look"
-    assert window.toast.secondary_button.text() == "Not now"
+    # One action and the x: "Not now" is gone, the x does what it did (UI21).
+    assert not window.toast.secondary_button.isVisibleTo(window.toast)
+    assert window.toast.close_button.isVisibleTo(window.toast)
     assert str(window.session.account["id"]) not in window._new_look_notice_seen
     assert window.session.preferences == preferences
     assert window._look == look
@@ -142,28 +146,73 @@ def test_a_fresh_account_does_not_see_the_notice_after_setup(
     assert fresh_window.toast.text() != NOTICE
 
 
-def test_not_now_dismisses_the_notice_for_that_account_on_this_device(
+def test_esc_closes_the_notice_for_that_account_on_this_device(
     qapp: QApplication, fresh_window: NativeWindow
 ) -> None:
+    """A18/UI21: Esc is the x, from whatever notice button holds focus."""
     window = fresh_window
     make_legacy_account(window)
     window._on_week()
-    account_id = window.session.account["id"]
-    preferences = deepcopy(window.session.preferences)
-    look = deepcopy(window._look)
-    layout = deepcopy(window._layout)
-    window.toast.secondary_button.click()
+    account_id = str(window.session.account["id"])
+    window.toast.button.setFocus()
+    qapp.processEvents()
+    QTest.keyClick(window.toast.button, Qt.Key.Key_Escape)
 
     assert not window.toast.isVisible()
-    assert str(account_id) in window._new_look_notice_seen
-    assert window.session.preferences == preferences
-    assert window._look == look
-    assert window._layout == layout
+    assert account_id in window._new_look_notice_seen
     stored = json.loads(device_look_file().read_text())
-    assert str(account_id) in stored["new_look_notice_seen"]
+    assert account_id in stored["new_look_notice_seen"]
     window._load_look()
     window._on_week()
     assert not window.toast.isVisible()
+
+
+def test_tab_reaches_the_notice_s_button_and_its_x(qapp: QApplication, fresh_window: NativeWindow) -> None:
+    window = fresh_window
+    make_legacy_account(window)
+    # An empty week shows its welcome, with no hours canvas for the notice's Tab chain to start from.
+    window.session.add_block(
+        {
+            "id": "school",
+            "title": "School",
+            "kind": "locked",
+            "category": "class",
+            "start": "08:00",
+            "duration_min": 240,
+            "days": [0, 1, 2, 3, 4],
+        }
+    )
+    window.session.save()
+    wait_until(qapp, lambda: not window.session.busy and not window.session.dirty)
+    window._on_week()
+    canvas = next(surface for surface in window._week_surfaces() if surface.isVisible())
+    canvas.setFocus()
+    qapp.processEvents()
+    QTest.keyClick(canvas, Qt.Key.Key_Tab)
+    assert QApplication.focusWidget() is window.toast.button
+    QTest.keyClick(window.toast.button, Qt.Key.Key_Tab)
+    assert QApplication.focusWidget() is window.toast.close_button
+
+
+def test_the_notice_is_a_card_of_the_look_not_the_dark_toast(
+    qapp: QApplication, fresh_window: NativeWindow
+) -> None:
+    """UI21: B3a3's card, not decision 20's dark toast — the card colour, its 8 px corners and a
+    1 px edge."""
+    window = fresh_window
+    make_legacy_account(window)
+    window._on_week()
+    card = window.toast.card
+    card.ensurePolished()
+    qapp.processEvents()
+    pack, dark, accent = window._look_inputs()
+    palette = resolved_palette(pack, dark, window._look, accent)
+    picture = card.grab().toImage()
+    middle = picture.height() // 2
+    assert picture.pixelColor(0, middle).name() == palette["hairline"], "the 1 px edge"
+    assert picture.pixelColor(1, 1).alpha() < 255, "the corner is rounded, not the sheet's 16 px"
+    spots = [picture.pixelColor(8, y).name() for y in (4, 6, 8)]
+    assert palette["panel"] in spots, (palette["panel"], spots)
 
 
 def test_choose_a_look_dismisses_the_notice_and_opens_settings_at_look(

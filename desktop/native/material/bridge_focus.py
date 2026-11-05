@@ -182,7 +182,8 @@ class FocusBridge(QObject):
                     if has_vis and has_en and hasattr(item, "forceActiveFocus"):
                         item.forceActiveFocus()
 
-                QTimer.singleShot(0, _restore)
+                # Owned by this bridge: a bridge dropped before the turn ends takes the timer with it.
+                QTimer.singleShot(0, self, _restore)
 
     @Slot()
     def begin(self) -> None:

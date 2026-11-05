@@ -2146,6 +2146,18 @@ def overlay_rules(palette: dict, knobs: dict, pad: int, card_radius: int) -> str
     toast_edge = "none" if flat else f"1px solid {toast['edge']}"
     box_edge = "none" if flat else f"1px solid {palette['hairline']}"
     action_text = max(("#000000", "#ffffff"), key=lambda colour: contrast(colour, toast["action"]))
+    # The 1.0.0 notice as a B3a3 card: the look's card colour, its 8 px corners and a 1 px edge, so
+    # the words and the one action read the way they do on any card (UI21).
+    card_hover = mix_oklab(palette["text"], palette["panel"], 0.12)
+    notice = (
+        f'QFrame#toast[card="true"] {{ background: {palette["panel"]}; '
+        f"border: 1px solid {palette['hairline']}; border-radius: 8px; }}"
+        f'QFrame#toast[card="true"] QLabel#toastText {{ color: {palette["text"]}; }}'
+        f'QFrame#toast[card="true"] QPushButton#toastButton {{ color: {palette["accent_text"]}; }}'
+        f'QFrame#toast[card="true"] QPushButton#toastButton:hover {{ background: {card_hover}; }}'
+        f'QFrame#toast[card="true"] QPushButton#toastCloseButton {{ color: {palette["muted"]}; }}'
+        f'QFrame#toast[card="true"] QPushButton#toastCloseButton:hover {{ background: {card_hover}; }}'
+    )
     return (
         f"QFrame#toast {{ background: {toast['background']}; color: {toast['text']}; "
         f"border: {toast_edge}; border-radius: {sheet_radius}px; padding: 10px 16px; }}"
@@ -2165,6 +2177,7 @@ def overlay_rules(palette: dict, knobs: dict, pad: int, card_radius: int) -> str
         f"min-height: 0; border-radius: {RADIUS_CONTROL}px; }}"
         f"QPushButton#toastSecondaryButton:hover, QPushButton#toastCloseButton:hover {{ "
         f"background: {mix_oklab(toast['text'], toast['background'], 0.12)}; }}"
+        f"{notice}"
         # The focus screen: the look's page, a muted phase over the ring and the homework under it.
         f"QLabel#focusScreenPhase {{ color: {palette['muted']}; font-size: {type_pt('heading', text)}pt; "
         f"font-weight: {WEIGHT_STRONG}; }}"

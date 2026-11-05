@@ -23,7 +23,17 @@ from desktop.tests.logic_support import PASSWORD, past_setup
 from desktop.tests.test_settings_words import page, prefs
 from desktop.tests.window_support import USERNAME, qapp, server, signed_out, wait_until, window  # noqa: F401
 
-MORE = ["High contrast", "Nocturne", "Slate", "Poster", "Terminal", "Paper", "Ink", "Pastel"]
+MORE = [
+    "High contrast",
+    "Nocturne",
+    "Slate",
+    "Poster",
+    "Terminal",
+    "Paper",
+    "Ink",
+    "Pastel",
+    "Material",
+]
 
 
 def tile(dialog: SettingsPage, name: str) -> ChoiceCard:
@@ -65,15 +75,16 @@ def test_more_looks_is_a_grid_of_named_pictures(qapp: QApplication, window: Nati
     dialog.close_page()
 
 
-def test_the_looks_stand_four_in_a_row_and_widen_with_large_text(
+def test_the_looks_stand_three_in_a_row_and_widen_with_large_text(
     qapp: QApplication, window: NativeWindow  # noqa: F811
 ) -> None:
-    """At 1280 wide the eight looks are two rows of four, which leaves the accent in sight under
-    them. High contrast's text is Large, and a card as wide as at normal text wrapped its name onto
-    a second line: the cards widen with the text, as far as the name needs."""
+    """At 1280 wide the nine 160 px cards (eight looks plus Material) are three rows of three, which
+    leaves the accent in sight under them. High contrast's text is Large, and a card as wide as at
+    normal text wrapped its name onto a second line: the cards widen with the text, as far as the
+    name needs."""
     window.resize(1280, 800)
     dialog = prefs(window)
-    assert dialog.look.more.columns() == 4
+    assert dialog.look.more.columns() == 3
     tile(dialog, "High contrast").chosen.emit()
     for _ in range(5):
         qapp.processEvents()
@@ -83,7 +94,7 @@ def test_the_looks_stand_four_in_a_row_and_widen_with_large_text(
     dialog.look.main.buttons()[0].click()
     for _ in range(5):
         qapp.processEvents()
-    assert dialog.look.more.columns() == 4, "back at normal text, four in a row again"
+    assert dialog.look.more.columns() == 3, "back at normal text, three in a row again"
     dialog.close_page()
 
 
@@ -120,7 +131,7 @@ def test_one_click_wears_a_look_and_marks_it_and_says_so(qapp: QApplication, win
     assert [card.is_selected() for card in dialog.look.more.cards].count(True) == 1
     assert dialog.look.main.currentIndex() == -1, "Light, Dark and System show none"
     assert dialog.look.worn.isHidden(), "the card says it, inside itself, not a line under the grid"
-    assert worn.note.text() == "Wearing"
+    assert worn.note.text() == "Current"
     dialog.look.main.buttons()[0].click()
     assert not any(card.is_selected() for card in dialog.look.more.cards)
     assert dialog.look.worn.isHidden()

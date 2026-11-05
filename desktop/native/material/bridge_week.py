@@ -420,7 +420,8 @@ class WeekBridge(QObject):
         if self._target_week == session.week_start:
             self._target_week = None
         if self._target_week and not session.busy:
-            QTimer.singleShot(0, self._flush_target)
+            # Owned by this bridge: a bridge dropped before the turn ends takes the timer with it.
+            QTimer.singleShot(0, self, self._flush_target)
 
     @Slot(bool)
     def _on_busy_changed(self, busy: bool) -> None:

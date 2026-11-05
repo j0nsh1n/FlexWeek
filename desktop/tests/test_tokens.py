@@ -28,6 +28,7 @@ from desktop.native.look import (
     pack_stylesheet,
     resolved_palette,
 )
+from desktop.native.material.theme import _schemes
 from desktop.native.tokens import (
     FILL,
     HOMEWORK_DARKER,
@@ -364,3 +365,9 @@ def test_every_stylesheet_is_whole_rules_that_qt_can_parse(name: str) -> None:
         sheet = pack_stylesheet(pack, dark, look, "default", resolved_palette(pack, dark, look))
         leftover = re.sub(r"[^{}]+\{[^{}]*\}", "", sheet)
         assert leftover.strip() == "", (name, text, leftover[:200])
+
+
+def test_the_material_theme_cache_keeps_thirty_two_schemes() -> None:
+    """C7: one scheme a time thrashed the cache while the shell crossed screens; thirty-two holds
+    every preset in both modes at once."""
+    assert _schemes.cache_info().maxsize == 32
