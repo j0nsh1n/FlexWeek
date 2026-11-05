@@ -1814,10 +1814,11 @@ class NativeWindow(QMainWindow):
             paste_block,
             duplicate,
             copy_day,
-            save,
             restore,
             reload_week,
         )
+        save.setParent(overflow)
+        save.hide()
         for leftover in (availability, settings, account, updates):
             leftover.setParent(overflow)
             leftover.hide()
@@ -1876,7 +1877,7 @@ class NativeWindow(QMainWindow):
         more.setMenu(more_menu)
         self.more_menu = more_menu
         # The week page is not in the window yet, so findChild cannot see these buttons.
-        self._build_material_more((undo, redo, save, help_button, about, sign_out))
+        self._build_material_more((undo, redo, help_button, about, sign_out))
         gear = QPushButton()
         gear.setObjectName("settingsGear")
         gear.setProperty("quiet", True)
@@ -1885,8 +1886,7 @@ class NativeWindow(QMainWindow):
         gear.setIconSize(QSize(BAR_ICON_PX, BAR_ICON_PX))
         icons.tint(gear, "settings")
         gear.clicked.connect(self._open_settings)
-        # The week saves itself now, so Save is not a thing to press; it stays reachable under More
-        # and on Ctrl+S for anyone who wants to be sure. Retry appears only when a save has failed.
+        # The week saves itself. Ctrl+S still flushes. Retry appears only when a save has failed.
         self.sync_dot = SyncDot()
         self._sync_timer = QTimer(self)
         self._sync_timer.setInterval(1000)

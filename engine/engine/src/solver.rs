@@ -84,6 +84,7 @@ pub fn plan_rules_from_value(value: &Value) -> PlanRules {
 
 const TIGHT_SLACK_MIN: i64 = 3 * 60;
 const DANGER_SLACK_MIN: i64 = 60;
+const PLENTY_WITHIN_MIN: i64 = 24 * 60;
 
 const CLUSTER_COPY: &str = "Several tasks are short on time. Shorten a session, pick another day, \
     or free some protected hours. Work that can't fit stays unplaced.";
@@ -321,10 +322,12 @@ fn flex_position_get(positions: &[(String, (i64, String))], id: &str) -> Option<
         .map(|(_, value)| value.clone())
 }
 
-fn slack_status(slack_min: i64) -> &'static str {
+fn slack_status(slack_min: i64, due_in_min: Option<i64>) -> &'static str {
     if slack_min <= DANGER_SLACK_MIN {
         "danger"
-    } else if slack_min <= TIGHT_SLACK_MIN {
+    } else if slack_min <= TIGHT_SLACK_MIN
+        || due_in_min.is_some_and(|mins| (0..PLENTY_WITHIN_MIN).contains(&mins))
+    {
         "tight"
     } else {
         "ok"
@@ -1179,7 +1182,9 @@ pub fn solve_with_rules(
             let day = block.days[0];
             let slack_min =
                 (deadline.0 - day) * 24 * 60 + deadline.1 - start_min - block.duration_min;
-            let status = slack_status(slack_min).to_string();
+            let due_in = now_floor
+                .map(|(now_day, now_min)| (deadline.0 - now_day) * 24 * 60 + deadline.1 - now_min);
+            let status = slack_status(slack_min, due_in).to_string();
             explanations.push(Explanation {
                 block_id: block.id.clone(),
                 reason: None,
@@ -1867,5 +1872,16 @@ mod tests {
         assert_eq!(placed.start.as_deref(), Some("17:15"));
         assert!(placed.pinned);
         assert!(trace.moves.is_empty());
+    }
+
+    #[test]
+    fn plenty_of_time_is_never_due_within_24_hours() {
+        assert_eq!(slack_status(2000, Some(23 * 60)), "tight");
+        assert_eq!(slack_status(2000, Some(25 * 60)), "ok");
+        assert_eq!(slack_status(2000, Some(24 * 60)), "ok");
+        assert_eq!(slack_status(2000, None), "ok");
+        assert_eq!(slack_status(30, Some(25 * 60)), "danger");
+        assert_eq!(slack_status(120, Some(25 * 60)), "tight");
+        assert_eq!(slack_status(2000, Some(-5)), "ok");
     }
 }

@@ -540,3 +540,29 @@ fn due_of(row: &Value) -> EngineResult<Value> {
 fn title_of(row: &Value) -> EngineResult<Value> {
     Ok(subscript(row, "title")?.clone())
 }
+
+pub const PLENTY_WITHIN_MIN: i64 = 24 * 60;
+
+/// Stored slack, upgraded to tight when the due instant is within 24 hours.
+pub fn live_slack_status(slack: &str, due_in_min: Option<i64>) -> &str {
+    if slack == "ok" && due_in_min.is_some_and(|mins| (0..PLENTY_WITHIN_MIN).contains(&mins)) {
+        "tight"
+    } else {
+        slack
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::live_slack_status;
+
+    #[test]
+    fn plenty_of_time_is_tight_when_due_within_24_hours() {
+        assert_eq!(live_slack_status("ok", Some(23 * 60)), "tight");
+        assert_eq!(live_slack_status("ok", Some(25 * 60)), "ok");
+        assert_eq!(live_slack_status("ok", Some(24 * 60)), "ok");
+        assert_eq!(live_slack_status("ok", None), "ok");
+        assert_eq!(live_slack_status("danger", Some(10)), "danger");
+        assert_eq!(live_slack_status("tight", Some(25 * 60)), "tight");
+    }
+}

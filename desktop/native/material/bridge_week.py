@@ -241,10 +241,11 @@ class WeekBridge(QObject):
         if point is None:
             return SLACK_TAGS["ok"]
         now_at = (moment.date() - start).days * DAY_MIN + moment.hour * 60 + moment.minute
-        room = point[0] * DAY_MIN + point[1] - now_at - int(item.minutes)
+        due_in = point[0] * DAY_MIN + point[1] - now_at
+        room = due_in - int(item.minutes)
         if room <= DANGER_SLACK_MIN:
             return SLACK_TAGS["danger"]
-        if room <= TIGHT_SLACK_MIN:
+        if room <= TIGHT_SLACK_MIN or 0 <= due_in < DAY_MIN:
             return SLACK_TAGS["tight"]
         return SLACK_TAGS["ok"]
 

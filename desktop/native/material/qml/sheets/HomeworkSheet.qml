@@ -211,6 +211,7 @@ SheetFrame {
             highContrast: root.highContrast
             label: "Estimated time"
             accessName: "Estimated time"
+            suffix: root.f.estimateSuffix ? root.f.estimateSuffix : "min"
             wanted: root.f.estimate ? root.f.estimate : ""
             onTextEdited: (value) => root.sheets.setText("estimate", value)
         }

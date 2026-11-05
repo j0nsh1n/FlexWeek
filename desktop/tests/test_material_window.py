@@ -770,7 +770,6 @@ def test_material_more_lists_the_planning_actions_and_leaves_the_widgets_menu_al
             "Routines",
             "Quick focus",
             "Replan all my homework",
-            "Save this week now",
             "Help",
             "About FlexWeek",
             "Sign out",

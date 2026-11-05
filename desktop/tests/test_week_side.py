@@ -246,7 +246,7 @@ def test_a_running_timer_is_the_rails_first_card(
     assert tops["timer"] < tops["next"], tops
     assert not rail.month.isVisible()
     # #18: Today's app shows the one-line strip the other designs show, not the homework's name.
-    assert panel.width() <= RAIL_PX and panel.task.text() == "Session · 30:00 left"
+    assert panel.width() <= RAIL_PX and panel.task.text() == "History essay · 30:00 left"
     window.session.reset_focus()
     wait_until(qapp, lambda: window.session.focus is None)
 

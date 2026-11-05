@@ -31,6 +31,20 @@ FocusScope {
     }
 
     M3Palette { id: palette; theme: root.theme }
+    TextMetrics {
+        id: pauseWord
+        font.family: M3Font.family
+        font.pixelSize: 14
+        font.weight: Font.Medium
+        text: "Pause"
+    }
+    TextMetrics {
+        id: resumeWord
+        font.family: M3Font.family
+        font.pixelSize: 14
+        font.weight: Font.Medium
+        text: "Resume"
+    }
 
     function cycle(step) {
         FocusCycle.take(FocusCycle.nextItem([root], step, Window.activeFocusItem), step)
@@ -211,6 +225,7 @@ FocusScope {
                 kind: "filled"
                 icon: root.focusBridge && root.focusBridge.running ? "pause" : "play_arrow"
                 text: root.focusBridge ? root.focusBridge.pauseText : "Pause"
+                width: Math.max(pauseWord.width, resumeWord.width) + 26 + 48
                 onClicked: root.focusBridge.togglePause()
             }
 

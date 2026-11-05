@@ -815,7 +815,8 @@ class FocusPanel(QWidget):
         self.more.setEnabled(bool(choices))
         if running and self._compact:
             left = format_countdown(remaining_ms(state, session.now_ms()))
-            self.task.setText(f"Session · {left} left")
+            name = state.get("title") or ""
+            self.task.setText(f"{name} · {left} left" if name else f"{left} left")
             self.task.setVisible(True)
             self.phase.setVisible(False)
             self.time.setVisible(False)

@@ -207,6 +207,16 @@ def drawn_words(qapp: QApplication, monkeypatch: pytest.MonkeyPatch, view: Timel
 # Week: two pages of columns
 
 
+def test_week_paints_the_history_essay_title_on_a_sixty_minute_block(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    blocks = [
+        {**item, "title": "History essay"} if item["id"] == "essay-1" else item for item in BLOCKS
+    ]
+    said = drawn_words(qapp, monkeypatch, shown(qapp, size=(1280, 800), blocks=blocks))
+    assert "History essay" in said
+
+
 def test_week_is_seven_columns_on_two_pages_of_one_canvas(qapp: QApplication) -> None:
     view = shown(qapp)
     hours = canvas(view)

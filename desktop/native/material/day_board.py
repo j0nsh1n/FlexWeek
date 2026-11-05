@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta
 
 from desktop.native.material.theme import EVENT_CATEGORY, bar_for_category, paint_for_category
-from desktop.native.weekmodel import due_label, length_label, range_label
+from desktop.native.weekmodel import due_label, length_label, range_label, slack_words_for
 
 ICONS = {
     "class": "school",
@@ -100,14 +100,14 @@ def board_for(
         left_line=_left_line(count, when == "today"),
         left_count=count,
         show_now=gap is not None,
-        now_title="" if gap is None else f"Free time before {gap.title}",
+        now_title=_now_title(focus, gap),
         now_minutes=0 if gap is None else int(gap.start) - minute,
         now_line="" if gap is None else f"{length_label(int(gap.start) - minute)} left",
         ring_count=count,
         ring_caption="thing left" if count == 1 else "things left",
         ring_share=0.0 if total == 0 else (total - count) / total,
-        up_next=tuple(_row(item, on, mode, dim=False, finish=True) for item in up),
-        done=tuple(_row(item, on, mode, dim=dim, finish=False) for item in finished),
+        up_next=tuple(_row(item, on, minute, mode, dim=False, finish=True) for item in up),
+        done=tuple(_row(item, on, minute, mode, dim=dim, finish=False) for item in finished),
         focus_block_id="" if focus is None else str(focus.block_id),
         focus_day=-1 if focus is None else int(focus.day),
     )
@@ -137,11 +137,17 @@ def _gap(items: Sequence[object], minute: int, when: str, nudges: bool) -> objec
     return next((item for item in items if _live(item) and int(item.start) > minute), None)
 
 
-def _slack_words(item: object) -> str:
-    raw = getattr(item, "slack_words", "")
-    if callable(raw):
-        raw = raw()
-    return str(raw or "")
+def _now_title(focus: object | None, gap: object | None) -> str:
+    if focus is not None:
+        return str(focus.title)
+    if gap is None:
+        return ""
+    return f"Free time before {gap.title}"
+
+
+def _slack_words(item: object, on: date, minute: int) -> str:
+    now = datetime.combine(on, datetime.min.time()) + timedelta(minutes=minute)
+    return slack_words_for(getattr(item, "slack", None), getattr(item, "due", None), now)
 
 
 def _left_line(count: int, today: bool) -> str:
@@ -152,10 +158,10 @@ def _left_line(count: int, today: bool) -> str:
     return f"{count} {noun} left" + (f" {tail}" if tail else "")
 
 
-def _row(item: object, on: date, mode: str, *, dim: bool, finish: bool) -> DayRow:
+def _row(item: object, on: date, minute: int, mode: str, *, dim: bool, finish: bool) -> DayRow:
     role = EVENT_CATEGORY.get(str(item.category or ""))
     scheme = mode if mode in ("light", "dark") else "light"
-    words = _slack_words(item)
+    words = _slack_words(item, on, minute)
     kind = TAG_KINDS.get(words, "plain" if words else "")
     parts = [range_label(int(item.start), int(item.end))]
     if item.pinned:
