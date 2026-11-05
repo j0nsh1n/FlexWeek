@@ -97,8 +97,7 @@ Item {
         z: 3
         anchors.fill: parent
         anchors.margins: -4
-        shown: root.activeFocus
-        ring: palette.primary
+        ring: palette.focusRing
         ringRadius: 20
     }
 

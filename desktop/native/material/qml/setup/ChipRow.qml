@@ -31,14 +31,14 @@ Flow {
             property bool keyDown: false
             Rectangle {
                 anchors.fill: parent
-                radius: 8
+                radius: height / 2
                 color: chip.on ? m3Palette.secondaryContainer : "transparent"
                 border.width: chip.on ? 0 : (root.highContrast ? 1.5 : 1)
                 border.color: m3Palette.outline
             }
             M3StateLayer {
                 anchors.fill: parent
-                radius: 8
+                radius: height / 2
                 color: chip.on ? m3Palette.inkSecondaryContainer : m3Palette.inkSurface
                 hovered: hover.hovered
                 down: tap.pressed || chip.keyDown
@@ -46,10 +46,9 @@ Flow {
             }
             M3FocusRing {
                 anchors.fill: parent
-                anchors.margins: -3
-                shown: chip.activeFocus
-                ring: m3Palette.primary
-                ringRadius: 11
+                anchors.margins: -4
+                ring: m3Palette.focusRing
+                ringRadius: parent.height / 2 + 4
             }
             Row {
                 anchors.centerIn: parent

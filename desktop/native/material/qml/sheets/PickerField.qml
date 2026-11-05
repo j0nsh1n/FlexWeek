@@ -71,10 +71,10 @@ Item {
         objectName: "shape"
         anchors.fill: parent
         anchors.topMargin: 8
-        radius: 4
+        radius: 6
         color: "transparent"
-        border.width: root.highContrast || root.activeFocus || popup.opened ? 1.5 : 1
-        border.color: !root.enabled ? pal.disabledInk : (root.activeFocus || popup.opened ? pal.primary : pal.outline)
+        border.width: root.highContrast ? 1.5 : 1
+        border.color: !root.enabled ? pal.disabledInk : pal.outline
     }
     Rectangle {
         visible: root.label !== ""
@@ -119,7 +119,7 @@ Item {
     }
     M3StateLayer {
         anchors.fill: shape
-        radius: 4
+        radius: 6
         color: pal.inkSurface
         hovered: hover.hovered && root.enabled
         down: tap.pressed && root.enabled
@@ -128,9 +128,8 @@ Item {
     M3FocusRing {
         anchors.fill: shape
         anchors.margins: -4
-        shown: root.activeFocus
-        ring: pal.primary
-        ringRadius: 8
+        ring: pal.focusRing
+        ringRadius: 10
     }
     HoverHandler { id: hover; enabled: root.enabled }
     TapHandler { id: tap; enabled: root.enabled; onTapped: { root.forceActiveFocus(); root.openList() } }

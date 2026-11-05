@@ -48,7 +48,7 @@ Item {
         id: shape
         objectName: "shape"
         anchors.fill: parent
-        radius: 20
+        radius: 6
         color: root.fill
         border.width: root.kind === "outlined" ? (root.highContrast ? 1.5 : 1) : 0
         border.color: palette.outline
@@ -62,18 +62,18 @@ Item {
     }
     M3StateLayer {
         anchors.fill: parent
-        radius: 20
+        radius: 6
         color: root.ink
         hovered: hover.hovered && root.enabled
         down: (tap.pressed || root.keyDown) && root.enabled
         reduceMotion: root.reduceMotion
     }
     M3FocusRing {
+        id: focusRing
         anchors.fill: parent
         anchors.margins: -4
-        shown: root.activeFocus
-        ring: palette.primary
-        ringRadius: 24
+        ring: palette.focusRing
+        ringRadius: 10
     }
     Row {
         anchors.centerIn: parent

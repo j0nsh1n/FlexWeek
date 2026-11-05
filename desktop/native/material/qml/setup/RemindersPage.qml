@@ -128,7 +128,7 @@ Column {
         density: page.density
         reduceMotion: page.reduceMotion
         highContrast: page.highContrast
-        kind: "outlined"
+        kind: "text"
         text: "Send a test reminder"
         onClicked: page.bridge.sendTest()
     }

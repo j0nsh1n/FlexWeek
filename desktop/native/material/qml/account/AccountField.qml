@@ -29,7 +29,7 @@ FocusScope {
     M3Palette { id: palette; theme: root.theme }
 
     readonly property bool bad: problem !== ""
-    readonly property color line: bad ? palette.error : (input.activeFocus ? palette.primary : palette.outline)
+    readonly property color line: bad ? palette.error : palette.outline
     readonly property int boxHeight: compact ? 44 : 56
 
     implicitWidth: 280
@@ -47,9 +47,9 @@ FocusScope {
         anchors.right: parent.right
         y: 8
         height: root.boxHeight
-        radius: 4
+        radius: 6
         color: "transparent"
-        border.width: root.highContrast || input.activeFocus || root.bad ? 1.5 : 1
+        border.width: root.highContrast || root.bad ? 1.5 : 1
         border.color: root.enabled ? root.line : palette.disabledInk
     }
     Rectangle {
@@ -136,9 +136,10 @@ FocusScope {
     M3FocusRing {
         anchors.fill: shape
         anchors.margins: -4
-        shown: input.activeFocus && root.theme !== undefined
-        ring: palette.primary
-        ringRadius: 8
+        extra: root.theme !== undefined
+        target: input
+        ring: palette.focusRing
+        ringRadius: 10
     }
     Text {
         id: support

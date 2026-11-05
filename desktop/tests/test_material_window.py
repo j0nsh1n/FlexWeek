@@ -1117,3 +1117,47 @@ def test_opening_material_registers_those_faces(
         assert all(ident >= 0 for ident in seen[-1])
     finally:
         window._use_widgets_styles()
+
+
+def _press_item(qapp: QApplication, window: NativeWindow, item: QObject) -> None:
+    from PySide6.QtCore import QPoint, QPointF
+
+    centre = item.mapToScene(QPointF(item.width() / 2, item.height() / 2))
+    QTest.mouseClick(
+        window._material_page._quick,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+        QPoint(int(centre.x()), int(centre.y())),
+    )
+    _pump(qapp)
+
+
+def test_rings_follow_the_last_input_in_the_real_window(qapp: QApplication, window: NativeWindow) -> None:
+    """B3a3 (FIX-SPEC PR 6): a sheet opened with the mouse puts focus on Title with no ring; Esc is a key,
+    so the focus it hands back shows its ring, even on the rail item that was just clicked."""
+    root = _show_material(qapp, window)
+    sheets = window._material_page.bridge.sheets
+    try:
+        _press_item(qapp, window, _named(root, "materialFab")[0])
+        def title_rings() -> list[QObject]:
+            return [ring for title in _named(root, "homeworkTitle") for ring in _named(title, "focusRing")]
+
+        def focused() -> list[QObject]:
+            return [ring for ring in title_rings() if ring.property("target").property("activeFocus")]
+
+        wait_until(qapp, lambda: bool(focused()))
+        title_ring = focused()[0]
+        assert title_ring.property("target").property("activeFocus") is True
+        assert title_ring.property("shown") is False
+
+        week = _named(root, "navWeek")[0]
+        sheets.forceClose()
+        _pump(qapp)
+        _press_item(qapp, window, week)
+        QTest.keyClick(window._material_page._quick, Qt.Key.Key_Escape)
+        _pump(qapp)
+        assert week.property("activeFocus") is True
+        assert _named(week, "focusRing")[0].property("shown") is True
+    finally:
+        sheets.forceClose()
+        _pump(qapp)

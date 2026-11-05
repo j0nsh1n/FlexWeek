@@ -1,10 +1,10 @@
 """The shared Material 3 controls, at the sizes in the mock-up.
 
 Numbers come from the mock-up's stylesheet and from Jonathan's spec: the rail is 80, the pill is
-56 by 32, the bar is 80, a FAB is 56 with radius 16, a segmented button is 40 with an 18px check,
+56 by 32, the bar is 80, a FAB is 56 with radius 6, a segmented button is 40 with an 18px check,
 a switch is 52 by 32 and its thumb grows from 16 to 24, a swatch disc is 48 with a 22 badge,
 settings type is 16/500 and 14 with padding 16 or 10, an event block is radius 12, a dialog is
-radius 28, and a snackbar sits 24px up. A disabled button is on-surface at 12% and 38%, and a
+radius 8, and a snackbar sits 24px up. A disabled button is on-surface at 12% and 38%, and a
 disabled text button has no fill. Space toggles a switch. Right moves the segmented button.
 """
 
@@ -102,13 +102,13 @@ def gallery(qapp: QGuiApplication) -> Iterator[tuple[QQuickView, QQuickItem]]:
 
 
 def test_fab_is_56_with_radius_16(gallery: tuple[QQuickView, QQuickItem]) -> None:
-    """A FAB is 56 by 56, radius 16, filled with the primary container."""
+    """A FAB is 56 by 56, radius 6, filled with the card color (#ffffff)."""
     _view, root = gallery
     fab = _find(root, "fabMeasure")
     shape = _child(fab, "shape")
     assert (fab.width(), fab.height()) == (56, 56)
-    assert shape.property("radius") == 16
-    assert _color(fab, "shape").name() == "#d7e2ff"
+    assert shape.property("radius") == 6
+    assert _color(fab, "shape").name() == "#ffffff"
 
 
 def test_rail_is_80_and_the_pill_is_56_by_32(gallery: tuple[QQuickView, QQuickItem]) -> None:
@@ -127,13 +127,13 @@ def test_bar_is_80_tall(gallery: tuple[QQuickView, QQuickItem]) -> None:
 
 
 def test_segmented_button_is_40_tall_with_an_18_check(gallery: tuple[QQuickView, QQuickItem]) -> None:
-    """A segmented button is 40 tall, radius 20, and the active segment's check is 18."""
+    """A segmented button is 40 tall, radius 6, and the active segment's check is 18."""
     _view, root = gallery
     segmented = _find(root, "segmentMeasure")
     shape = _child(segmented, "shape")
     check = _find(segmented, "segmentCheck")
     assert segmented.height() == 40
-    assert shape.property("radius") == 20
+    assert shape.property("radius") == 6
     assert (check.width(), check.height()) == (18, 18)
     assert check.isVisible()
 
@@ -174,14 +174,14 @@ def test_swatch_disc_is_48_and_the_badge_is_22(gallery: tuple[QQuickView, QQuick
 
 
 def test_settings_row_type_and_padding(gallery: tuple[QQuickView, QQuickItem]) -> None:
-    """A settings group has radius 16. The title is 16/500 at the 16px padding, the subtitle 14."""
+    """A settings group has radius 8. The title is 16/500 at the 16px padding, the subtitle 14."""
     _view, root = gallery
     group = _find(root, "groupMeasure")
     shape = _child(group, "shape")
     row = _find(root, "rowMeasure")
     title = _child(row, "title")
     subtitle = _child(row, "subtitle")
-    assert shape.property("radius") == 16
+    assert shape.property("radius") == 8
     assert title.y() == 16
     assert (title.property("font").pixelSize(), title.property("font").weight()) == (16, 500)
     assert (subtitle.property("font").pixelSize(), subtitle.property("font").weight()) == (14, 400)
@@ -228,12 +228,12 @@ def test_past_event_is_dimmed(gallery: tuple[QQuickView, QQuickItem]) -> None:
 
 
 def test_dialog_card_is_440_with_radius_28(gallery: tuple[QQuickView, QQuickItem]) -> None:
-    """A dialog card is 440 wide and radius 28."""
+    """A dialog card is 440 wide and radius 8."""
     _view, root = gallery
     dialog = _find(root, "dialogMeasure")
     card = _child(dialog, "dialogCard")
     assert card.width() == 440
-    assert card.property("radius") == 28
+    assert card.property("radius") == 8
 
 
 def test_snackbar_sits_24_from_the_bottom(gallery: tuple[QQuickView, QQuickItem]) -> None:
@@ -283,7 +283,7 @@ def test_disabled_filled_button_uses_the_spec_alphas(
     button = _find(root, "disabledMeasure")
     fill = _color(button, "shape")
     ink = _color(button, "label")
-    on_surface = QColor("#1a1c20")
+    on_surface = QColor("#0f172a")
     assert fill.name() == on_surface.name()
     assert fill.alphaF() == pytest.approx(0.12, abs=0.02)
     assert ink.name() == on_surface.name()
@@ -299,11 +299,11 @@ def test_disabled_text_button_has_no_fill(gallery: tuple[QQuickView, QQuickItem]
 
 
 def test_enabled_filled_button_uses_primary(gallery: tuple[QQuickView, QQuickItem]) -> None:
-    """An enabled filled button is 40 tall and filled with Blue's primary, #425e91."""
+    """An enabled filled button is 40 tall and filled with Slate's primary, #3d6fc4."""
     _view, root = gallery
     button = _find(root, "filledMeasure")
     assert button.height() == 40
-    assert _color(button, "shape").name() == "#425e91"
+    assert _color(button, "shape").name() == "#3d6fc4"
 
 
 def test_high_contrast_outlined_stroke_is_one_and_a_half(
@@ -312,6 +312,7 @@ def test_high_contrast_outlined_stroke_is_one_and_a_half(
     """High contrast thickens an outlined button's stroke from 1 to 1.5."""
     _view, root = gallery
     outlined = _find(root, "outlinedMeasure")
+    outlined.setProperty("kind", "outlined")
     shape = _child(outlined, "shape")
     assert QQmlProperty(shape, "border.width").read() == 1
     root.setProperty("scheme", "high")

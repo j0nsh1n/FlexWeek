@@ -25,8 +25,10 @@ Item {
         id: shape
         objectName: "shape"
         anchors.fill: parent
-        radius: 16
-        color: root.enabled ? palette.primaryContainer : palette.disabledFill
+        radius: 6
+        color: root.enabled ? palette.card : palette.disabledFill
+        border.width: root.highContrast ? 1.5 : 1
+        border.color: palette.edge
         Behavior on color {
             ColorAnimation {
                 duration: root.reduceMotion ? 0 : 200
@@ -37,8 +39,8 @@ Item {
     }
     M3StateLayer {
         anchors.fill: parent
-        radius: 16
-        color: root.enabled ? palette.inkPrimaryContainer : "transparent"
+        radius: 6
+        color: root.enabled ? palette.primary : "transparent"
         hovered: hover.hovered && root.enabled
         down: (tap.pressed || root.keyDown) && root.enabled
         reduceMotion: root.reduceMotion
@@ -46,16 +48,16 @@ Item {
     M3FocusRing {
         anchors.fill: parent
         anchors.margins: -4
-        shown: root.activeFocus
-        ring: palette.primary
-        ringRadius: 20
+        ring: palette.focusRing
+        ringRadius: 10
     }
     M3Icon {
+        objectName: "icon"
         anchors.centerIn: parent
         name: root.icon
         width: 24
         height: 24
-        color: root.enabled ? palette.inkPrimaryContainer : palette.disabledInk
+        color: root.enabled ? palette.primary : palette.disabledInk
     }
 
     HoverHandler { id: hover; enabled: root.enabled }

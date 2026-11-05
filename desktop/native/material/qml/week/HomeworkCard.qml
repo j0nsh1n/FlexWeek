@@ -28,7 +28,7 @@ Rectangle {
 
     implicitHeight: Math.max(56, row.implicitHeight + pad * 2)
     height: implicitHeight
-    radius: 12
+    radius: 8
     color: m3.surfaceContainer
     border.width: highContrast ? 1.5 : 0
     border.color: m3.outline
@@ -143,10 +143,9 @@ Rectangle {
 
     M3FocusRing {
         anchors.fill: parent
-        anchors.margins: -2
-        shown: card.activeFocus
-        ring: m3.primary
-        ringRadius: 14
+        anchors.margins: -4
+        ring: m3.focusRing
+        ringRadius: 12
     }
 
     activeFocusOnTab: !card.passive

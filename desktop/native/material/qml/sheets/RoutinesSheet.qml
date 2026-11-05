@@ -81,7 +81,7 @@ SheetFrame {
                         font.weight: 500
                         lineHeight: 0.9
                     }
-                    M3FocusRing { anchors.fill: parent; anchors.margins: -3; shown: day.activeFocus; ring: pal.primary; ringRadius: 15 }
+                    M3FocusRing { anchors.fill: parent; anchors.margins: -4; ring: pal.focusRing; ringRadius: 16 }
                     TapHandler { onTapped: root.sheets.toggleRoutineDay(index) }
                     Keys.onPressed: (event) => {
                         if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {

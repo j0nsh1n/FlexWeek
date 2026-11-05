@@ -86,7 +86,7 @@ SheetFrame {
                     density: root.density
                     reduceMotion: root.reduceMotion
                     highContrast: root.highContrast
-                    kind: "outlined"
+                    kind: "text"
                     text: "Delete"
                     accessName: "Delete " + modelData.title
                     onClicked: root.sheets.askDeleteUnfinished(modelData.id)

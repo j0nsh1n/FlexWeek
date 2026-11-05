@@ -640,3 +640,36 @@ def test_enter_and_space_on_focus_act_on_the_visible_layer(
         assert window._material_page.bridge.sheets.kind == ""
     finally:
         close_focus(window, focus)
+
+
+def _filled_on_screen(root: QObject) -> list[str]:
+    """Names of the filled Buttons the student can see on the focus screen right now."""
+    from desktop.tests.test_material_window import _visuals
+
+    screen = _qml(root, "materialFocus")
+    return [
+        str(item.objectName() or item.property("text"))
+        for item in _visuals(screen)
+        if item.property("kind") == "filled" and item.property("text") is not None and item.isVisible()
+    ]
+
+
+def test_the_focus_screen_shows_one_filled_button_in_every_state(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """B3a3 (FIX-SPEC PR 6): one filled button per screen. Ready shows Start, a running or paused session
+    shows one of Pause or Resume, never two at once."""
+    root, focus = open_focus(qapp, window)
+    try:
+        assert len(_filled_on_screen(root)) == 1, _filled_on_screen(root)
+        focus.begin()
+        _pump(qapp)
+        assert len(_filled_on_screen(root)) == 1, _filled_on_screen(root)
+        focus.togglePause()
+        _pump(qapp)
+        assert len(_filled_on_screen(root)) == 1, _filled_on_screen(root)
+        focus.togglePause()
+        _pump(qapp)
+        assert len(_filled_on_screen(root)) == 1, _filled_on_screen(root)
+    finally:
+        close_focus(window, focus)

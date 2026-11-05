@@ -117,8 +117,8 @@ Item {
         M3FocusRing {
             anchors.fill: knob
             anchors.margins: -4
-            shown: slider.activeFocus
-            ring: palette.primary
+            target: slider
+            ring: palette.focusRing
             ringRadius: 14
         }
         MouseArea {

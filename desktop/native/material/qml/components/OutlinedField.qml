@@ -22,17 +22,17 @@ FocusScope {
     }
 
     M3Palette { id: palette; theme: root.theme }
-    readonly property color line: input.activeFocus ? palette.primary : palette.outline
+    readonly property color line: palette.outline
 
     Rectangle {
         id: shape
         objectName: "shape"
         anchors.fill: parent
         anchors.topMargin: 8
-        radius: 4
+        radius: 6
         color: "transparent"
-        border.width: root.highContrast || input.activeFocus ? 1.5 : 1
-        border.color: root.enabled ? root.line : palette.disabledInk
+        border.width: root.highContrast ? 1.5 : 1
+        border.color: root.enabled ? palette.outline : palette.disabledInk
     }
     Rectangle {
         visible: root.label !== ""
@@ -83,9 +83,9 @@ FocusScope {
     M3FocusRing {
         anchors.fill: shape
         anchors.margins: -4
-        shown: input.activeFocus
-        ring: palette.primary
-        ringRadius: 8
+        target: input
+        ring: palette.focusRing
+        ringRadius: 10
     }
 
     Accessible.role: Accessible.EditableText

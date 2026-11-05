@@ -1,5 +1,6 @@
 module components
 singleton M3Font 1.0 M3Font.qml
+singleton FocusVisible 1.0 FocusVisible.qml
 M3Palette 1.0 M3Palette.qml
 M3Icon 1.0 M3Icon.qml
 M3StateLayer 1.0 M3StateLayer.qml

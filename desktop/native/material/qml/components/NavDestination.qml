@@ -34,9 +34,11 @@ Item {
         anchors.top: parent.top
         anchors.topMargin: root.bar ? 14 : 0
         Rectangle {
+            objectName: "indicatorShape"
             anchors.fill: parent
             radius: 16
             color: palette.secondaryContainer
+            border.width: 0
             scale: root.selected ? 1 : 0
             transformOrigin: Item.Center
             Behavior on scale {
@@ -56,11 +58,12 @@ Item {
             reduceMotion: root.reduceMotion
         }
         M3Icon {
+            objectName: "icon"
             anchors.centerIn: parent
             name: root.icon
             width: 24
             height: 24
-            color: root.selected ? palette.inkSecondaryContainer : palette.inkMuted
+            color: root.selected ? palette.primary : palette.inkMuted
         }
     }
     Text {
@@ -79,10 +82,10 @@ Item {
         font.weight: 500
     }
     M3FocusRing {
+        id: focusRing
         anchors.fill: mark
         anchors.margins: -4
-        shown: root.activeFocus
-        ring: palette.primary
+        ring: palette.focusRing
         ringRadius: 20
     }
 

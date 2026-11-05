@@ -10,26 +10,28 @@ Rectangle {
     readonly property var theme: scheme === "dark" ? darkTheme : scheme === "high" ? highTheme : lightTheme
 
     property var lightTheme: ({
-        "primary": "#425e91", "onPrimary": "#ffffff", "primaryContainer": "#d7e2ff", "onPrimaryContainer": "#294677",
-        "secondary": "#565e71", "onSecondary": "#ffffff", "secondaryContainer": "#dae2f9", "onSecondaryContainer": "#3e4759",
+        "primary": "#3d6fc4", "onPrimary": "#ffffff", "primaryContainer": "#d7e2ff", "onPrimaryContainer": "#294677",
+        "secondary": "#565e71", "onSecondary": "#ffffff", "secondaryContainer": "#e6edf8", "onSecondaryContainer": "#0f172a",
         "tertiary": "#705574", "onTertiary": "#ffffff", "tertiaryContainer": "#fad8fd", "onTertiaryContainer": "#573e5c",
         "error": "#ba1a1a", "onError": "#ffffff", "errorContainer": "#ffdad6", "onErrorContainer": "#93000a",
-        "surface": "#f9f9ff", "onSurface": "#1a1c20", "onSurfaceVariant": "#44474e",
-        "surfaceContainerLowest": "#ffffff", "surfaceContainerLow": "#f3f3fa", "surfaceContainer": "#ededf4",
-        "surfaceContainerHigh": "#e8e7ee", "surfaceContainerHighest": "#e2e2e9", "surfaceVariant": "#e0e2ec",
-        "outline": "#74777f", "outlineVariant": "#c4c6d0",
-        "inverseSurface": "#2e3036", "inverseOnSurface": "#f0f0f7", "inversePrimary": "#abc7ff"
+        "surface": "#eef1f5", "onSurface": "#0f172a", "onSurfaceVariant": "#475569",
+        "surfaceContainerLowest": "#ffffff", "surfaceContainerLow": "#ffffff", "surfaceContainer": "#ffffff",
+        "surfaceContainerHigh": "#ffffff", "surfaceContainerHighest": "#ffffff", "surfaceVariant": "#ffffff",
+        "outline": "#64748b", "outlineVariant": "#e5e9f0",
+        "inverseSurface": "#2e3036", "inverseOnSurface": "#f0f0f7", "inversePrimary": "#abc7ff",
+        "page": "#eef1f5", "card": "#ffffff", "edge": "#e5e9f0", "focusRing": "#3d6fc4"
     })
     property var darkTheme: ({
-        "primary": "#abc7ff", "onPrimary": "#0c305f", "primaryContainer": "#294677", "onPrimaryContainer": "#d7e2ff",
-        "secondary": "#bec6dc", "onSecondary": "#283041", "secondaryContainer": "#3e4759", "onSecondaryContainer": "#dae2f9",
+        "primary": "#7fa8ff", "onPrimary": "#0b1220", "primaryContainer": "#294677", "onPrimaryContainer": "#d7e2ff",
+        "secondary": "#bec6dc", "onSecondary": "#283041", "secondaryContainer": "#1c2433", "onSecondaryContainer": "#ececec",
         "tertiary": "#ddbce0", "onTertiary": "#3f2844", "tertiaryContainer": "#573e5c", "onTertiaryContainer": "#fad8fd",
         "error": "#ffb4ab", "onError": "#690005", "errorContainer": "#93000a", "onErrorContainer": "#ffdad6",
-        "surface": "#111318", "onSurface": "#e2e2e9", "onSurfaceVariant": "#c4c6d0",
-        "surfaceContainerLowest": "#0c0e13", "surfaceContainerLow": "#1a1c20", "surfaceContainer": "#1e2025",
-        "surfaceContainerHigh": "#282a2f", "surfaceContainerHighest": "#33353a", "surfaceVariant": "#44474e",
-        "outline": "#8e9099", "outlineVariant": "#44474e",
-        "inverseSurface": "#e2e2e9", "inverseOnSurface": "#2e3036", "inversePrimary": "#425e91"
+        "surface": "#0b0d10", "onSurface": "#ececec", "onSurfaceVariant": "#9a9fa8",
+        "surfaceContainerLowest": "#14171c", "surfaceContainerLow": "#14171c", "surfaceContainer": "#14171c",
+        "surfaceContainerHigh": "#14171c", "surfaceContainerHighest": "#14171c", "surfaceVariant": "#14171c",
+        "outline": "#6b7280", "outlineVariant": "#252a33",
+        "inverseSurface": "#e2e2e9", "inverseOnSurface": "#2e3036", "inversePrimary": "#425e91",
+        "page": "#0b0d10", "card": "#14171c", "edge": "#252a33", "focusRing": "#7fa8ff"
     })
     property var highTheme: ({
         "primary": "#052b5b", "onPrimary": "#ffffff", "primaryContainer": "#2b497a", "onPrimaryContainer": "#ffffff",
@@ -195,11 +197,11 @@ Rectangle {
                     spacing: 8
                     Button { objectName: "filledMeasure"; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; kind: "filled"; text: "Save" }
                     Button { theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; kind: "tonal"; text: "Done" }
-                    Button { objectName: "outlinedMeasure"; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; kind: "outlined"; text: "Outline" }
+                    Button { objectName: "outlinedMeasure"; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; kind: "text"; text: "Outline" }
                     Button { theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; kind: "text"; text: "Cancel" }
                     Button { objectName: "disabledMeasure"; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; kind: "filled"; text: "Save"; enabled: false }
                     Button { objectName: "textDisabledMeasure"; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; kind: "text"; text: "Cancel"; enabled: false }
-                    Button { theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; kind: "outlined"; text: "Outline"; enabled: false }
+                    Button { theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; kind: "text"; text: "Outline"; enabled: false }
                     Button { theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; kind: "tonal"; text: "Done"; enabled: false }
                     IconButton { theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; icon: "more_vert"; accessName: "More" }
                     IconButton { theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; icon: "close"; accessName: "Close"; enabled: false }

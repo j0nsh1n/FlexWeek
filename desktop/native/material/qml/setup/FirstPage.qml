@@ -60,7 +60,7 @@ Column {
                         density: page.density
                         reduceMotion: page.reduceMotion
                         highContrast: page.highContrast
-                        kind: "outlined"
+                        kind: "text"
                         text: "Remove"
                         accessName: "Remove this homework"
                         onClicked: page.bridge.removeHomeworkRow(item.index)

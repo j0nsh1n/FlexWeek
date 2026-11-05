@@ -125,10 +125,11 @@ FocusScope {
                     }
                     M3FocusRing {
                         anchors.fill: parent
-                        anchors.margins: 2
-                        shown: row.hot && root.activeFocus && !row.head
-                        ring: pal.primary
-                        ringRadius: 4
+                        anchors.margins: -4
+                        extra: row.hot && !row.head
+                        target: root
+                        ring: pal.focusRing
+                        ringRadius: 8
                     }
                     HoverHandler { id: hover }
                     TapHandler {

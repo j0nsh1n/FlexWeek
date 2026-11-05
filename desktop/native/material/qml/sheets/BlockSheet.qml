@@ -32,21 +32,21 @@ SheetFrame {
                 Accessible.onPressAction: if (reachable) root.sheets.goto(index)
                 Rectangle {
                     anchors.fill: parent
-                    radius: 8
+                    radius: height / 2
                     color: modelData.on ? pal.secondaryContainer : "transparent"
-                    border.width: modelData.on ? 0 : 1
+                    border.width: 0
                     border.color: pal.outline
                 }
                 Text {
                     id: crumbText
                     anchors.centerIn: parent
                     text: modelData.label
-                    color: modelData.on ? pal.inkSecondaryContainer : pal.inkSurface
+                    color: modelData.on ? pal.inkSecondaryContainer : pal.inkMuted
                     font.family: M3Font.family
                     font.pixelSize: 14
                     font.weight: 500
                 }
-                M3FocusRing { anchors.fill: parent; anchors.margins: -3; shown: crumb.activeFocus; ring: pal.primary; ringRadius: 11 }
+                M3FocusRing { anchors.fill: parent; anchors.margins: -4; ring: pal.focusRing; ringRadius: parent.height / 2 + 4 }
                 TapHandler { enabled: crumb.reachable; onTapped: root.sheets.goto(index) }
                 Keys.onPressed: (event) => {
                     if (crumb.reachable && (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
@@ -157,7 +157,7 @@ SheetFrame {
                             hovered: dayHover.hovered && day.enabled
                             reduceMotion: root.reduceMotion
                         }
-                        M3FocusRing { anchors.fill: parent; anchors.margins: -3; shown: day.activeFocus; ring: pal.primary; ringRadius: 15 }
+                        M3FocusRing { anchors.fill: parent; anchors.margins: -4; ring: pal.focusRing; ringRadius: 16 }
                         HoverHandler { id: dayHover }
                         TapHandler { enabled: day.enabled; onTapped: root.sheets.toggleDay(index) }
                         Keys.onPressed: (event) => {

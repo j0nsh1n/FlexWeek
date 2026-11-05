@@ -35,7 +35,7 @@ Column {
         width: parent.width
         implicitHeight: column.implicitHeight + pad * 2
         height: implicitHeight
-        radius: 28
+        radius: 8
         color: palette.primaryContainer
         Accessible.role: Accessible.Grouping
         Accessible.name: root.title + ", " + root.line
