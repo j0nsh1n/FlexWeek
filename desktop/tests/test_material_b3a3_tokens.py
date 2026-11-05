@@ -147,6 +147,8 @@ def test_status_colours_and_their_tints() -> None:
             expected_color = STATUS_COLORS[mode][key]
             assert t[key] == expected_color
             assert t[f"{key}Tint"] == mix(expected_color, card, 0.16)
+            # A status word may be drawn in its colour on its own tint (Sol review of PR 6a).
+            assert contrast(expected_color, t[f"{key}Tint"]) >= 4.5, f"{mode} {key} on its tint"
 
 
 def test_class_colours_by_category_and_block_ink_is_never_white() -> None:

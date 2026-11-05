@@ -53,7 +53,7 @@ QtObject {
     readonly property color edge: tone("edge", "#e5e9f0")
     readonly property color focusRing: tone("focusRing", "#3d6fc4")
     // Status colours: dark from spec; light values proposed, not in the spec
-    readonly property color statusDone: tone("statusDone", "#2f7d4a")
+    readonly property color statusDone: tone("statusDone", "#276b3f")
     readonly property color statusDueSoon: tone("statusDueSoon", "#8a5a00")
     readonly property color statusOverdue: tone("statusOverdue", "#b42318")
     readonly property color statusDoneTint: tone("statusDoneTint", "#deeae2")

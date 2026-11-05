@@ -55,7 +55,7 @@ STATUS_COLORS = {
         "statusOverdue": "#ff9b8f",
     },
     "light": {
-        "statusDone": "#2f7d4a",
+        "statusDone": "#276b3f",
         "statusDueSoon": "#8a5a00",
         "statusOverdue": "#b42318",
     },
