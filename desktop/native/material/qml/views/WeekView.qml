@@ -383,6 +383,8 @@ Item {
 
             Rectangle {
                 objectName: "dropSlot"
+                // Above the now line (z 1) and the blocks, so the slot's outline is never crossed.
+                z: 4
                 visible: root.dropDay >= 0
                 x: root.gutter + Math.max(0, root.dropDay) * root.dayWidth + 3
                 y: Math.max(0, root.dropHour) * root.row

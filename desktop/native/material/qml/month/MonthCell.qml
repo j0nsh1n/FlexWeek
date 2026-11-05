@@ -23,7 +23,8 @@ Item {
     signal step(int delta)
 
     objectName: "monthDate-" + iso
-    opacity: inMonth ? 1 : 0.45
+    // A date outside the month fades its fill and number only; its chips and dots keep their contrast.
+    readonly property real fade: inMonth ? 1 : 0.45
     activeFocusOnTab: !passive
     Accessible.role: Accessible.Button
     Accessible.name: accessName
@@ -75,6 +76,7 @@ Item {
         id: card
         objectName: "monthCellFill"
         anchors.fill: parent
+        opacity: root.fade
         radius: 12
         color: root.picked ? tones.secondaryContainer : tones.surfaceContainerLow
         border.width: root.highContrast ? 1.5 : 0
@@ -118,6 +120,7 @@ Item {
 
     Text {
         objectName: "monthDayNumber"
+        opacity: root.fade
         x: 6
         y: 4
         width: 24
@@ -263,7 +266,21 @@ Item {
         }
     }
 
+    // On a picked date the fill is the accent container, too close to some dot colours: the dots sit on
+    // a card-coloured pill there, which every dot colour clears at 3:1.
+    Rectangle {
+        objectName: "monthDotsBacking"
+        visible: dots.visible && root.picked
+        x: dots.x - 3
+        y: dots.y - 3
+        width: dots.width + 6
+        height: dots.height + 6
+        radius: height / 2
+        color: tones.card
+    }
+
     Row {
+        id: dots
         objectName: "monthDots"
         visible: root.narrow && root.dotShown.length > 0
         anchors.left: parent.left

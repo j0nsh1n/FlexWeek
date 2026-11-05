@@ -948,6 +948,8 @@ def test_the_now_line_passes_behind_blocks_and_the_dot_stays_on_top(
         block_z = float(block.property("z"))
         assert line_z < block_z, (line_z, block_z)
         assert dot_z > block_z, (dot_z, block_z)
+    # A homework held over a slot outlines it above the line (Sol, PR 6 polish).
+    assert float(_qml(root, "dropSlot").property("z")) > line_z
 
     essay = _block_named(root, "History essay")
     shape = _named(essay, "shape")[0]

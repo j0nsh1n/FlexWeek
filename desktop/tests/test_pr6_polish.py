@@ -152,3 +152,50 @@ def test_widgets_styles_is_a_text_button_and_look_has_at_most_one_filled() -> No
     assert use.group(1) == "text"
     filled = re.findall(r'kind:\s*"filled"', look_text)
     assert len(filled) <= 1
+
+
+def test_dots_on_a_picked_date_sit_on_the_card_colour(qapp: QGuiApplication, cell: QQuickItem) -> None:
+    """A picked date's accent fill can be close to a dot colour (Blue, dark, High contrast: 1.18:1), so the
+    dots sit on a card-coloured pill there; each dot clears 3:1 on it, in every preset."""
+    from desktop.native.material.theme import PRESETS
+    from desktop.native.tokens import contrast
+
+    try:
+        cell.setProperty("narrow", True)
+        cell.setProperty("picked", True)
+        for preset in PRESETS:
+            for mode in ("light", "dark"):
+                for level in ("std", "high"):
+                    th = theme_object(scheme(preset, mode, level), "comfortable", False, False)
+                    for kind in ("due", "overdue"):
+                        _show(cell, th, [{"kind": kind, "text": "History essay"}])
+                        backing = _find(cell, "monthDotsBacking")
+                        dot = _find(cell, "monthDot")
+                        assert backing is not None and backing.property("visible") is True
+                        assert _hex(backing.property("color")) == _hex(th["card"])
+                        ratio = contrast(_hex(dot.property("color")), _hex(th["card"]))
+                        assert ratio >= 3.0, f"{preset} {mode} {level} {kind}: {ratio:.2f}"
+    finally:
+        cell.setProperty("picked", False)
+        cell.setProperty("narrow", False)
+        QGuiApplication.processEvents()
+
+
+def test_a_date_outside_the_month_keeps_its_chips_opaque(qapp: QGuiApplication, cell: QQuickItem) -> None:
+    """Only the fill and the day number fade outside the month; a chip and its words keep full opacity."""
+    th = theme_object(scheme("Slate", "light", "std"), "comfortable", False, False)
+    try:
+        cell.setProperty("inMonth", False)
+        _show(cell, th, [{"kind": "due", "text": "History essay"}])
+        assert float(cell.property("opacity")) == 1.0
+        assert float(_find(cell, "monthCellFill").property("opacity")) == pytest.approx(0.45)
+        assert float(_find(cell, "monthDayNumber").property("opacity")) == pytest.approx(0.45)
+        chip = _find(cell, "monthChip")
+        item, seen = _find(cell, "monthChipText"), 1.0
+        while item is not None:
+            seen *= float(item.property("opacity"))
+            item = item.parentItem()
+        assert chip is not None and seen == pytest.approx(1.0)
+    finally:
+        cell.setProperty("inMonth", True)
+        QGuiApplication.processEvents()
