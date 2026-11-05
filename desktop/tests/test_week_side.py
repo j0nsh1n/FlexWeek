@@ -11,7 +11,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QPoint, QRectF, Qt
-from PySide6.QtGui import QFont, QFontMetricsF
+from PySide6.QtGui import QAccessible, QFont, QFontMetrics, QFontMetricsF
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QPushButton, QWidget
 
@@ -269,6 +269,11 @@ def test_the_compact_focus_line_fits_the_rail_at_large_text(
     assert panel.width() <= rail.width() == RAIL_PX
     assert panel.task.text().endswith(" left")
     assert "30:00" in panel.task.text()
+    # The shortened line really fits its label, and the full name and time are still read out.
+    metrics = QFontMetrics(panel.task.font())
+    assert metrics.horizontalAdvance(panel.task.text()) <= panel.task.width()
+    spoken = QAccessible.queryAccessibleInterface(panel.task).text(QAccessible.Text.Name)
+    assert "History essay draft" in spoken and "30:00 left" in spoken
     window.session.reset_focus()
     wait_until(qapp, lambda: window.session.focus is None)
 

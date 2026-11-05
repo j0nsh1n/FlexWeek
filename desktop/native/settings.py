@@ -835,12 +835,14 @@ class FocusPanel(QWidget):
             name = state.get("title") or ""
             self.task.setText(self._compact_task_line(name, left))
             self.task.setToolTip(name)
-            self.task.setAccessibleName(name or self.task.text())
+            # The line may be shortened to fit; a screen reader hears the whole name and the time left.
+            self.task.setAccessibleName(f"{name} · {left} left" if name else f"{left} left")
             self.task.setVisible(True)
             self.phase.setVisible(False)
             self.time.setVisible(False)
         else:
             self.task.setToolTip("")
+            self.task.setAccessibleName("")
             for label in (self.task, self.phase, self.time):
                 label.setVisible(bool(label.text()))
 
