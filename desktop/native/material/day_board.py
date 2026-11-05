@@ -11,16 +11,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 
-from desktop.native.material.theme import EVENT_CATEGORY, paint_for_category
+from desktop.native.material.theme import EVENT_CATEGORY, bar_for_category, paint_for_category
 from desktop.native.weekmodel import due_label, length_label, range_label
 
-# The mockup's category bars. ListRow keeps its own fill and paints this on the edge.
-BARS = {
-    "school": {"light": "#7C6CD6", "dark": "#9B8CF0"},
-    "sports": {"light": "#2E9E63", "dark": "#5CCB8F"},
-    "study": {"light": "#C2528E", "dark": "#E58ABB"},
-    "homework": {"light": "#C98A2B", "dark": "#E8B268"},
-}
 ICONS = {
     "school": "school",
     "sports": "schedule",
@@ -177,7 +170,8 @@ def _row(item: object, on: date, mode: str, *, dim: bool, finish: bool) -> DayRo
         title=str(item.title),
         subtitle=" · ".join(parts),
         icon=ICONS.get(role or "", "schedule"),
-        bar=BARS[role][scheme] if role else "",
+        # ListRow keeps its own fill and paints the class colour on the edge.
+        bar=bar_for_category(str(item.category or "")),
         fill=fill,
         ink=ink,
         tag=words if show_tag else "",

@@ -119,7 +119,7 @@ Item {
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         color: root.today ? tones.inkPrimary : tones.inkSurface
-        font.family: "Roboto Flex"
+        font.family: M3Font.family
         font.pixelSize: 13
         font.weight: 500
     }
@@ -135,7 +135,7 @@ Item {
         elide: Text.ElideRight
         verticalAlignment: Text.AlignVCenter
         color: tones.inkMuted
-        font.family: "Roboto Flex"
+        font.family: M3Font.family
         font.pixelSize: 11
         font.weight: 500
     }
@@ -203,7 +203,7 @@ Item {
                            : modelData.kind === "due"
                              ? tones.inkTertiaryContainer
                              : tones.inkMuted
-                    font.family: "Roboto Flex"
+                    font.family: M3Font.family
                     font.pixelSize: 11
                     font.weight: 500
                 }
@@ -219,7 +219,7 @@ Item {
             width: parent.width
             text: "and " + root.extra + " more"
             color: tones.inkMuted
-            font.family: "Roboto Flex"
+            font.family: M3Font.family
             font.pixelSize: 11
             font.weight: 500
         }

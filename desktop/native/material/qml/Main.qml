@@ -239,7 +239,7 @@ Item {
                     anchors.right: tools.left
                     text: bridge.title
                     color: root.theme.onSurface
-                    font.family: "Roboto Flex"
+                    font.family: M3Font.family
                     font.pixelSize: 22
                     font.weight: 500
                     elide: Text.ElideRight
@@ -298,7 +298,7 @@ Item {
                         verticalAlignment: Text.AlignVCenter
                         text: bridge.clockText
                         color: root.theme.onSurface
-                        font.family: "Roboto Flex"
+                        font.family: M3Font.family
                         font.pixelSize: 16
                         font.weight: 500
                     }

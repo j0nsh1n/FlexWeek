@@ -39,7 +39,8 @@ from desktop.tests.test_material_window import (  # noqa: E402, F401
 TOKENS = json.loads(
     (Path(__file__).parents[1] / "native" / "material" / "tokens.json").read_text(encoding="utf-8")
 )
-BLUE_DARK_SURFACE = "#111318"
+BLUE_DARK_SURFACE = "#0b0d10"
+BLUE_LIGHT_SURFACE = "#eef1f5"
 FIELDS = set(Preferences.model_fields)
 
 
@@ -148,7 +149,7 @@ def test_preset_mode_contrast_and_density_apply_at_once(qapp: QApplication, wind
         assert bridge.property("theme")["surface"] == BLUE_DARK_SURFACE
         _click_segment(qapp, window, _named(root, "mode")[0], "Light")
         wait_until(qapp, lambda: _material_file().get("mode") == "light")
-        assert bridge.property("theme")["surface"] == TOKENS["Blue.light.std"]["surface"]
+        assert bridge.property("theme")["surface"] == BLUE_LIGHT_SURFACE
 
         _click(qapp, window, _named(root, "preset_Sea")[0])
         wait_until(qapp, lambda: _material_file().get("preset") == "Sea")

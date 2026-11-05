@@ -191,7 +191,7 @@ Item {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: model.name
                         color: m3.inkMuted
-                        font.family: "Roboto Flex"
+                        font.family: M3Font.family
                         font.pixelSize: 12 * root.typeScale
                         font.weight: 500
                     }
@@ -208,7 +208,7 @@ Item {
                             anchors.centerIn: parent
                             text: model.date
                             color: parent.color.a > 0 ? m3.inkPrimary : m3.inkSurface
-                            font.family: "Roboto Flex"
+                            font.family: M3Font.family
                             font.pixelSize: 14 * root.typeScale
                             font.weight: model.today ? 700 : 500
                         }
@@ -430,7 +430,7 @@ Item {
                     horizontalAlignment: Text.AlignRight
                     text: model.label
                     color: m3.inkMuted
-                    font.family: "Roboto Flex"
+                    font.family: M3Font.family
                     font.pixelSize: 11 * root.typeScale
                     font.weight: 500
                 }
@@ -535,7 +535,7 @@ Item {
             text: root.heldTitle
             color: m3.inkPrimaryContainer
             elide: Text.ElideRight
-            font.family: "Roboto Flex"
+            font.family: M3Font.family
             font.pixelSize: 13
             font.weight: 500
         }

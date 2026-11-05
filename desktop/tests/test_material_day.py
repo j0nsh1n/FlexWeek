@@ -105,11 +105,12 @@ def test_rows_wear_the_spec_category_colours() -> None:
     ]
     set_clock_24h(True)
     light = board_for(day, minute=9 * 60, when="future", nudges=True, dim=True, mode="light", on=TODAY)
-    assert [row.fill for row in light.up_next] == ["#EAE6FA", "#E2F5EA", "#F7EBD9"]
-    assert [row.bar for row in light.up_next] == ["#7C6CD6", "#2E9E63", "#C98A2B"]
+    # B3a3 class colours (FIX-SPEC PR 6): School, Sports, Work; each fill a faint tint of its bar.
+    assert [row.fill for row in light.up_next] == ["#e4ebf7", "#e2f1ea", "#f3ecde"]
+    assert [row.bar for row in light.up_next] == ["#3d6fc4", "#2f9e6b", "#a87512"]
     dark = board_for(day, minute=9 * 60, when="future", nudges=True, dim=True, mode="dark", on=TODAY)
-    assert [row.fill for row in dark.up_next] == ["#2A244D", "#1B3B2B", "#4A3219"]
-    assert [row.bar for row in dark.up_next] == ["#9B8CF0", "#5CCB8F", "#E8B268"]
+    assert [row.fill for row in dark.up_next] == ["#1e2c44", "#1a372f", "#382e1a"]
+    assert [row.bar for row in dark.up_next] == ["#3d6fc4", "#2f9e6b", "#a87512"]
 
 
 def test_pinned_shows_in_the_row_note() -> None:

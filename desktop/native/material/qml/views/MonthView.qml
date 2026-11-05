@@ -103,7 +103,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.month ? root.month.studyLabel : ""
                 color: tones.inkMuted
-                font.family: "Roboto Flex"
+                font.family: M3Font.family
                 font.pixelSize: 13
                 font.weight: 500
                 elide: Text.ElideRight
@@ -131,7 +131,7 @@ Item {
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     color: tones.inkMuted
-                    font.family: "Roboto Flex"
+                    font.family: M3Font.family
                     font.pixelSize: 12
                     font.weight: 500
                 }

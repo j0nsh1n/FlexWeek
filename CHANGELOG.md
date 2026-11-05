@@ -25,6 +25,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- Material has a new default colour preset, Slate (the B3a3 design): a light grey page, white cards with a faint edge, dark text and a blue accent, or the matching dark colours. Every preset now uses these neutral page and card colours instead of a lavender tint, and only its accent differs. Material text uses Inter instead of Roboto Flex. Week blocks get class colours: School blue, Sports green, Activity teal, Homework amber, Study rose, and grey for meals, sleep and free time.
 - In Material, a choice row (homework length, When, Sessions, Settings choices, the preview's Fit or Actual size) keeps its tick on the value really in use: typing a length after clicking a chip no longer leaves the old chip ticked.
 - The Undo notice stays at least 10 seconds, waits while the pointer is over it or it has keyboard focus, and shows Ctrl+Z. Material Settings → Look has a Text size choice that applies at once and makes Week and Day rows bigger, up to 1.6x. Disabled buttons are skipped by Tab, a focused Week block scrolls into view, Month dates use the shared focus ring, and focus lands on the Undo notice or Plan after planning and returns to where Focus mode was started.
 - In Material and Widgets, pressing Escape closes the Manage account and Advanced settings sheets/dialogs and returns keyboard focus to the opening row or control.
