@@ -352,13 +352,39 @@ def extra_stylesheet(
 
 def retro_shades(tokens: dict[str, str]) -> str:
     """T15: Settings as a Windows 98 window while the Retro layout is on, whatever look is worn —
-    the page, its rail and its footer in the standard face, its cards in the window white."""
+    the page, its rail and its footer in the standard face, its cards in the window white, and
+    headings, notes, navigation and controls in the scheme's ink so a dark look cannot keep its
+    own text colours on those surfaces. High contrast uses the scheme's high-contrast ink."""
     colours = retro.scheme(tokens)
+    ink, field, face = colours.ink, colours.field, colours.face
+    headings = (
+        "QLabel#prefsHeading, QLabel#layoutMainHeading, QLabel#layoutDayHeading, "
+        "QLabel#cardTitle, QLabel#settingsTitle"
+    )
+    notes = (
+        "QLabel#settingsCardNote, QLabel#cardNote, QLabel#prefPlanningNote, "
+        "QLabel#prefDndNote, QLabel#prefTrayNote, QLabel#prefBlockSongNote, "
+        "QLabel#prefToneNote, QLabel#reminderLimits, QLabel#alarmEmpty, "
+        "QLabel#prefsSaveState"
+    )
     return (
         f"QWidget#settingsPage, QWidget#settingsRail, QListWidget#prefsNav, "
-        f"QWidget#settingsFooter {{ background: {colours.face}; }}"
-        f"QFrame#settingsCard {{ background: {colours.field}; }}"
+        f"QWidget#settingsFooter {{ background: {face}; color: {ink}; }}"
+        f"QFrame#settingsCard {{ background: {field}; color: {ink}; }}"
         f"QWidget#settingsFooter {{ border-top: 1px solid {colours.shadow}; }}"
+        f"QWidget#settingsPage QLabel {{ color: {ink}; }}"
+        f"{headings} {{ color: {ink}; }}"
+        f"{notes} {{ color: {ink}; }}"
+        f"QListWidget#prefsNav::item {{ color: {ink}; }}"
+        f"QListWidget#prefsNav::item:hover {{ background: {colours.light}; color: {ink}; }}"
+        f"QListWidget#prefsNav::item:selected {{ background: {colours.light}; color: {ink}; "
+        f"border-left: 3px solid {colours.accent}; }}"
+        f"QWidget#settingsPage QComboBox, QWidget#settingsPage QAbstractSpinBox, "
+        f"QWidget#settingsPage QLineEdit {{ color: {ink}; background: {field}; }}"
+        f"QWidget#settingsPage QPushButton {{ color: {ink}; }}"
+        f'QWidget#settingsPage QRadioButton[segment="true"] {{ color: {ink}; }}'
+        f'QWidget#settingsPage QRadioButton[segment="true"]:checked {{ color: {ink}; '
+        f"background: {field}; }}"
     )
 
 

@@ -5442,9 +5442,9 @@ class NativeWindow(QMainWindow):
                     self._material_failed = ""
                 self._save_look()
                 if surface_changed or choosing_material_again:
-                    self._show_surface()
-                    # The Look grid's Material card takes its mark from the same landing (UI22).
-                    page.layout_sections[0].show_surface(surface)
+                    opened = self._show_surface()
+                    # Current follows whether Material actually opened, not the saved choice (UI22).
+                    page.look.show_material(opened)
                 self._on_week()
             wanted = page.updates()
             if self.session.preferences is not None:
@@ -5891,7 +5891,7 @@ class NativeWindow(QMainWindow):
 
     def _dress_feel(self, ctx: Context, sheet: str, extra: str) -> None:
         for root in self._feel_roots():
-            root.setStyleSheet(sheet + extra if extra else "")
+            root.setStyleSheet(sheet + extra)
             apply_feel(root, ctx)
 
     def _dress_entry(self, palette: dict, look: dict) -> None:

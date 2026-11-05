@@ -2152,11 +2152,11 @@ def overlay_rules(palette: dict, knobs: dict, pad: int, card_radius: int) -> str
     notice = (
         f'QFrame#toast[card="true"] {{ background: {palette["panel"]}; '
         f"border: 1px solid {palette['hairline']}; border-radius: 8px; }}"
-        f'QFrame#toast[card="true"] QLabel#toastText {{ color: {palette["text"]}; }}'
-        f'QFrame#toast[card="true"] QPushButton#toastButton {{ color: {palette["accent_text"]}; }}'
-        f'QFrame#toast[card="true"] QPushButton#toastButton:hover {{ background: {card_hover}; }}'
-        f'QFrame#toast[card="true"] QPushButton#toastCloseButton {{ color: {palette["muted"]}; }}'
-        f'QFrame#toast[card="true"] QPushButton#toastCloseButton:hover {{ background: {card_hover}; }}'
+        f'QLabel#toastText[card="true"] {{ color: {palette["text"]}; }}'
+        f'QPushButton#toastButton[card="true"] {{ color: {palette["accent_text"]}; }}'
+        f'QPushButton#toastButton[card="true"]:hover {{ background: {card_hover}; }}'
+        f'QPushButton#toastCloseButton[card="true"] {{ color: {palette["muted"]}; }}'
+        f'QPushButton#toastCloseButton[card="true"]:hover {{ background: {card_hover}; }}'
     )
     return (
         f"QFrame#toast {{ background: {toast['background']}; color: {toast['text']}; "

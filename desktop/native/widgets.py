@@ -1330,14 +1330,16 @@ class Toast(QWidget):
         self._dismiss_callback = dismiss_callback
         self.button.setProperty("filled", filled)
         # The notice as a card of the look rather than the dark toast (the 1.0.0 look notice).
+        # The action and close sit over the card as the window's children, so they take the
+        # card state as a property; descendant selectors never reach them.
         self._card = card
-        self.card.setProperty("card", card)
-        self.card.style().unpolish(self.card)
-        self.card.style().polish(self.card)
+        for piece in (self.card, self.label, self.button, self.secondary_button, self.close_button):
+            piece.setProperty("card", card)
+            piece.style().unpolish(piece)
+            piece.style().polish(piece)
+            piece.update()
         self.secondary_button.setAccessibleName(secondary_button)
         self.button.setAccessibleName("Undo" if button == "Undo" else button)
-        self.button.style().unpolish(self.button)
-        self.button.style().polish(self.button)
         sizes = [
             self._button_size() if button else QSize(0, 0),
             self.secondary_button.sizeHint() if secondary_button else QSize(0, 0),

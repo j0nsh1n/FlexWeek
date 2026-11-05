@@ -286,10 +286,15 @@ class LayoutSection(QFrame):
         self.surface_changed.emit(name)
 
     def choose_material(self) -> None:
-        """Take the Material card's offer: the same toggle the button itself presses."""
+        """Take the Material card's offer. Checking the toggle is the apply; a failed open
+        leaves it checked, so emit again so that open can be retried."""
         button = self._material
-        if button is not None:
-            button.setChecked(True)
+        if button is None:
+            return
+        if button.isChecked():
+            self.changed.emit()
+            return
+        button.setChecked(True)
 
     def _show_material_choice(self, on: bool) -> None:
         if on:

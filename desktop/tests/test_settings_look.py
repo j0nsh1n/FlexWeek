@@ -15,19 +15,19 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QSpinBox, QWidget
 
 from desktop.native import settings as settings_module
 from desktop.native.layouts.registry import MATCH, sanitize_layout, tokens_for
 from desktop.native.layouts.retro import scheme as retro_scheme
-from desktop.native.look import ACCENT_COLORS, look_menu_token, resolved_palette
+from desktop.native.look import AA_TEXT, ACCENT_COLORS, look_menu_token, resolved_palette
 from desktop.native.settings import SETTINGS_COLUMN, SettingsPage
 from desktop.native.tokens import contrast
 from desktop.native.widgets import Segmented, Swatches, Switch
 from desktop.native.window import NativeWindow
-from desktop.tests.window_support import qapp, server, signed_out, window  # noqa: F401
+from desktop.tests.window_support import qapp, server, signed_out, still, window  # noqa: F401
 
 
 def open_settings(
@@ -200,6 +200,140 @@ def test_under_the_retro_layout_the_settings_page_shades_into_windows_98(
     colours = retro_scheme(tokens_for("retro", MATCH, palette_of(window)))
     assert page_ground(page) == colours.face, (page_ground(page), colours.face)
     page.close_page()
+
+
+def _words_on_card(label: QLabel) -> tuple[str, str, str]:
+    """Palette ink, the colour actually painted, and the card they sit on."""
+    card = label.parentWidget()
+    while card is not None and card.objectName() != "settingsCard":
+        card = card.parentWidget()
+    assert card is not None
+    label.ensurePolished()
+    card.ensurePolished()
+    ground = card.grab().toImage().pixelColor(max(8, card.width() - 10), max(8, card.height() - 10)).name()
+    pal = label.palette().color(QPalette.ColorRole.WindowText).name()
+    picture = label.grab().toImage()
+    skip = QColor(ground)
+    counts: dict[str, int] = {}
+    for x in range(picture.width()):
+        for y in range(picture.height()):
+            pixel = picture.pixelColor(x, y)
+            if pixel.alpha() < 200:
+                continue
+            if (
+                abs(pixel.red() - skip.red())
+                + abs(pixel.green() - skip.green())
+                + abs(pixel.blue() - skip.blue())
+                < 40
+            ):
+                continue
+            name = pixel.name()
+            counts[name] = counts.get(name, 0) + 1
+    painted = max(counts, key=counts.get) if counts else pal
+    return pal, painted, ground
+
+
+def test_retro_settings_under_a_dark_look_keeps_its_words_readable(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """T15: Retro Settings uses Retro's scheme for text and controls, not the worn look's heading
+    colours, so Dark plus Retro still reads. High contrast stays High contrast. Leaving Retro
+    restores the worn look's colours."""
+    window.session.preferences = {**(window.session.preferences or {}), "motion": "off"}
+    window._apply_appearance()
+    page = open_settings(qapp, window, (1280, 800))
+    heading = next(label for label in page.findChildren(QLabel, "prefsHeading") if label.text() == "Text")
+    body = next(label for label in heading.parentWidget().findChildren(QLabel) if label.text() == "Text size")
+    page.look.main.buttons()[1].click()
+    for _ in range(20):
+        qapp.processEvents()
+    still(window)
+    worn_pal, worn_paint, _ = _words_on_card(heading)
+    worn_body_pal, worn_body_paint, _ = _words_on_card(body)
+
+    main = page.layout_sections[0]
+    main.pick.setCurrentIndex(main.pick.findData("retro"))
+    for _ in range(20):
+        qapp.processEvents()
+    still(window)
+    # Dark after Retro rebuilds the look sheet on Retro's cards; Dark then Retro alone
+    # keeps Retro's own ink and misses the worn heading colours.
+    page.look.main.buttons()[0].click()
+    for _ in range(20):
+        qapp.processEvents()
+    still(window)
+    page.look.main.buttons()[1].click()
+    for _ in range(20):
+        qapp.processEvents()
+    still(window)
+    pal, painted, ground = _words_on_card(heading)
+    body_pal, body_painted, body_ground = _words_on_card(body)
+    assert contrast(pal, ground) >= AA_TEXT, (pal, ground)
+    assert contrast(painted, ground) >= AA_TEXT, (painted, ground)
+    assert contrast(body_pal, body_ground) >= AA_TEXT, (body_pal, body_ground)
+    assert contrast(body_painted, body_ground) >= AA_TEXT, (body_painted, body_ground)
+    colours = retro_scheme(tokens_for("retro", MATCH, palette_of(window)))
+    assert pal == colours.ink
+    assert body_pal == colours.ink
+
+    page.look.setCurrentIndex(page.look.findData(look_menu_token("preset", "high-contrast")))
+    for _ in range(20):
+        qapp.processEvents()
+    still(window)
+    pal, painted, ground = _words_on_card(heading)
+    assert contrast(pal, ground) >= AA_TEXT, (pal, ground)
+    assert contrast(painted, ground) >= AA_TEXT, (painted, ground)
+    assert pal == retro_scheme(tokens_for("retro", MATCH, palette_of(window))).ink
+
+    page.look.main.buttons()[1].click()
+    for _ in range(20):
+        qapp.processEvents()
+    still(window)
+    main.pick.setCurrentIndex(main.pick.findData("classic"))
+    for _ in range(20):
+        qapp.processEvents()
+    still(window)
+    pal, painted, _ = _words_on_card(heading)
+    body_pal, body_painted, _ = _words_on_card(body)
+    assert pal == worn_pal
+    assert painted == worn_paint
+    assert body_pal == worn_body_pal
+    assert body_painted == worn_body_paint
+    page.close_page()
+
+
+def test_choosing_material_again_retries_a_failed_open_and_current_follows_the_landing(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """UI22: activating the Material card always asks to open Material, even when the hidden toggle
+    is already checked, so a failed open can be retried. Current follows whether Material actually
+    opened."""
+    page = open_settings(qapp, window)
+    host = window._ensure_material()
+    assert host is not None
+    material = page.look.material
+    host.break_load = True
+    try:
+        material.chosen.emit()
+        for _ in range(20):
+            qapp.processEvents()
+        assert window._stack.currentWidget().objectName() == "weekPage"
+        assert material.note.text() != "Current"
+        host.break_load = False
+        material.chosen.emit()
+        for _ in range(20):
+            qapp.processEvents()
+        assert window._stack.currentWidget().objectName() == "materialPage"
+        assert material.note.text() == "Current"
+    finally:
+        host.break_load = False
+        window._material_gave_up = False
+        window._surface = "widgets"
+        if window._stack.currentWidget() is not None:
+            window._use_widgets_styles()
+        page.close_page()
 
 
 def test_a_look_card_reached_by_keyboard_has_a_ring_outside_its_face(
