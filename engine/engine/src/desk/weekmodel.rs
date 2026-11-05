@@ -1,6 +1,6 @@
 //! Week reading model from `desktop/native/weekmodel.py`.
 
-use chrono::NaiveDate;
+use chrono::{NaiveDate, NaiveDateTime, Timelike};
 use serde_json::{Map, Value, json};
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -549,6 +549,23 @@ pub fn due_in_minutes(due: &str, now_day: NaiveDate, now_min: i64) -> Option<i64
     Some((day - now_day).num_days() * 24 * 60 + minute - now_min)
 }
 
+/// `due_in_minutes` from a "YYYY-MM-DDTHH:MM" clock reading; None when either text does not parse.
+pub fn due_in_minutes_at(due: &str, now: &str) -> Option<i64> {
+    let at = NaiveDateTime::parse_from_str(now, "%Y-%m-%dT%H:%M").ok()?;
+    due_in_minutes(due, at.date(), i64::from(at.hour() * 60 + at.minute()))
+}
+
+/// The slack chip's words at `now`: homework due within 24 hours is never "Plenty of time".
+/// No due date or no clock reading leaves the stored slack as it is.
+pub fn live_slack_words(slack: Option<&str>, due: Option<&str>, now: Option<&str>) -> &'static str {
+    let due_in = match (due, now) {
+        (Some(due), Some(now)) if !due.is_empty() => due_in_minutes_at(due, now),
+        _ => None,
+    };
+    let status = live_slack_status(slack.unwrap_or(""), due_in);
+    crate::desk::weekview::slack_words(Some(status).filter(|status| !status.is_empty()))
+}
+
 /// Stored slack, upgraded to tight when the due instant is within 24 hours.
 pub fn live_slack_status(slack: &str, due_in_min: Option<i64>) -> &str {
     if slack == "ok" && due_in_min.is_some_and(|mins| (0..PLENTY_WITHIN_MIN).contains(&mins)) {
@@ -560,8 +577,35 @@ pub fn live_slack_status(slack: &str, due_in_min: Option<i64>) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use super::{due_in_minutes, live_slack_status};
+    use super::{due_in_minutes, due_in_minutes_at, live_slack_status, live_slack_words};
     use chrono::NaiveDate;
+
+    #[test]
+    fn the_chip_words_follow_the_clock_reading() {
+        // Friday 19:00, an all-day Friday due: five hours left, so never "Plenty of time".
+        assert_eq!(
+            due_in_minutes_at("2026-11-06", "2026-11-06T19:00"),
+            Some(300)
+        );
+        assert_eq!(
+            live_slack_words(Some("ok"), Some("2026-11-06"), Some("2026-11-06T19:00")),
+            "Tight"
+        );
+        // Two days out it stays plenty; no due or no clock leaves the stored words.
+        assert_eq!(
+            live_slack_words(Some("ok"), Some("2026-11-08"), Some("2026-11-06T19:00")),
+            "Plenty of time"
+        );
+        assert_eq!(
+            live_slack_words(Some("ok"), None, Some("2026-11-06T19:00")),
+            "Plenty of time"
+        );
+        assert_eq!(
+            live_slack_words(Some("ok"), Some("2026-11-06"), None),
+            "Plenty of time"
+        );
+        assert_eq!(due_in_minutes_at("2026-11-06", "not a time"), None);
+    }
 
     #[test]
     fn plenty_of_time_is_tight_when_due_within_24_hours() {

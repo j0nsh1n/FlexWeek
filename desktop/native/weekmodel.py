@@ -10,13 +10,12 @@ never a threshold invented by a view.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Any
 from weakref import WeakKeyDictionary
 
 import flexweek_engine  # type: ignore[import-untyped]
 
-from backend.models import parse_due
 from desktop.native.calendar import iso_of
 from desktop.native.wire import plain, restore, restored
 
@@ -38,29 +37,15 @@ def minute_of(hhmm: str) -> int:
     return int(flexweek_engine.week_minute_of(hhmm))
 
 
-def due_instant(due: str) -> datetime | None:
-    """The calendar due instant. Date-only and 23:59 are the end of that day (minute 1440)."""
-    try:
-        day, minute = parse_due(due)
-    except ValueError:
-        return None
-    return datetime.combine(day, datetime.min.time()) + timedelta(minutes=minute)
-
-
 def due_in_minutes(due: str, now: datetime) -> int | None:
-    """Minutes from `now` until the canonical due instant, or None when `due` is not a due stamp."""
-    instant = due_instant(due)
-    if instant is None:
-        return None
-    moment = now.replace(tzinfo=None) if now.tzinfo is not None else now
-    return int((instant - moment).total_seconds() // 60)
+    """Minutes from `now` until the due instant (date-only and 23:59 are the end of that day), or None
+    when `due` is not a due stamp."""
+    return flexweek_engine.week_due_in_minutes(due, now)
 
 
 def slack_words_for(slack: str | None, due: str | None, now: datetime | None) -> str:
     """The slack chip. Homework due within 24 hours is never 'Plenty of time'."""
-    due_in = due_in_minutes(due, now) if due and now is not None else None
-    status = flexweek_engine.week_live_slack_status(slack or "", due_in)
-    return str(flexweek_engine.week_slack_words(status or None))
+    return str(flexweek_engine.week_live_slack_words(slack, due, now))
 
 
 # What the window last passed, as it passed it: `changed` compares that object, not its truth.
