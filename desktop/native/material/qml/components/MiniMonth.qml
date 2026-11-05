@@ -24,7 +24,7 @@ Item {
     readonly property color dayInk: palette.inkSurface
     readonly property color todayFill: palette.primary
     readonly property color todayInk: palette.inkPrimary
-    readonly property color focusRing: palette.primary
+    readonly property color focusRing: palette.focusRing
     property int cursor: today
 
     onTodayChanged: if (!activeFocus)
@@ -109,10 +109,11 @@ Item {
             M3FocusRing {
                 objectName: cell.isCursor ? "cursorRing" : ""
                 anchors.fill: parent
-                anchors.margins: -2
-                shown: cell.isCursor
+                anchors.margins: -4
+                extra: cell.isCursor
+                target: root
                 ring: root.focusRing
-                ringRadius: 16
+                ringRadius: 18
             }
             Text {
                 objectName: "cell" + index

@@ -55,10 +55,9 @@ Item {
                 }
                 M3FocusRing {
                     anchors.fill: parent
-                    anchors.margins: -2
-                    shown: pill.activeFocus
-                    ring: m3.primary
-                    ringRadius: height / 2 + 2
+                    anchors.margins: -4
+                    ring: m3.focusRing
+                    ringRadius: height / 2 + 4
                 }
                 Text {
                     id: caption

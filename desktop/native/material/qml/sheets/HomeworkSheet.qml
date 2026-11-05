@@ -32,21 +32,21 @@ SheetFrame {
                 Accessible.onPressAction: if (reachable) root.sheets.goto(index)
                 Rectangle {
                     anchors.fill: parent
-                    radius: 8
+                    radius: height / 2
                     color: modelData.on ? pal.secondaryContainer : "transparent"
-                    border.width: modelData.on ? 0 : 1
+                    border.width: 0
                     border.color: pal.outline
                 }
                 Text {
                     id: crumbText
                     anchors.centerIn: parent
                     text: modelData.label
-                    color: modelData.on ? pal.inkSecondaryContainer : pal.inkSurface
+                    color: modelData.on ? pal.inkSecondaryContainer : pal.inkMuted
                     font.family: M3Font.family
                     font.pixelSize: 14
                     font.weight: 500
                 }
-                M3FocusRing { anchors.fill: parent; anchors.margins: -3; shown: crumb.activeFocus; ring: pal.primary; ringRadius: 11 }
+                M3FocusRing { anchors.fill: parent; anchors.margins: -4; ring: pal.focusRing; ringRadius: height / 2 + 4 }
                 TapHandler { enabled: crumb.reachable; onTapped: root.sheets.goto(index) }
                 Keys.onPressed: (event) => {
                     if (crumb.reachable && (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
@@ -287,7 +287,7 @@ SheetFrame {
             density: root.density
             reduceMotion: root.reduceMotion
             highContrast: root.highContrast
-            kind: "outlined"
+            kind: "text"
             text: "Unpin"
             accessName: "Unpin"
             onClicked: root.sheets.unpin()
@@ -301,7 +301,7 @@ SheetFrame {
         density: root.density
         reduceMotion: root.reduceMotion
         highContrast: root.highContrast
-        kind: "outlined"
+        kind: "text"
         text: root.f.detailsOpen ? "Fewer details" : "More details"
         accessName: text
         onClicked: root.sheets.setFlag("detailsOpen", !root.f.detailsOpen)
@@ -353,12 +353,20 @@ SheetFrame {
             width: parent.width
             height: 112
             Rectangle {
+                id: notesShape
                 anchors.fill: parent
                 anchors.topMargin: 8
-                radius: 4
+                radius: 6
                 color: "transparent"
-                border.width: notes.activeFocus || root.highContrast ? 1.5 : 1
-                border.color: notes.activeFocus ? pal.primary : pal.outline
+                border.width: root.highContrast ? 1.5 : 1
+                border.color: pal.outline
+            }
+            M3FocusRing {
+                anchors.fill: notesShape
+                anchors.margins: -4
+                target: notes
+                ring: pal.focusRing
+                ringRadius: 10
             }
             Rectangle {
                 x: 12

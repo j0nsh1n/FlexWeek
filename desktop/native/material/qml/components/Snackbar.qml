@@ -105,10 +105,10 @@ Item {
         }
         M3FocusRing {
             anchors.fill: parent
-            anchors.margins: -2
-            shown: root.activeFocus
-            ring: palette.inversePrimary
-            ringRadius: 20
+            anchors.margins: -4
+            target: root
+            ring: palette.focusRing
+            ringRadius: 22
         }
         HoverHandler { id: hover }
         TapHandler { id: tap; onTapped: root.actionClicked() }

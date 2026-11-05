@@ -50,7 +50,7 @@ Item {
         id: shape
         objectName: "shape"
         anchors.fill: parent
-        radius: 16
+        radius: 8
         color: palette.surfaceContainerLow
         clip: false
         Column {

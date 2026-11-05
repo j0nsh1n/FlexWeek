@@ -140,7 +140,7 @@ Column {
                         density: page.density
                         reduceMotion: page.reduceMotion
                         highContrast: page.highContrast
-                        kind: "outlined"
+                        kind: "text"
                         text: "Remove"
                         accessName: "Remove this activity"
                         onClicked: page.bridge.removeActivity(activity.index)

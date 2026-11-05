@@ -194,7 +194,7 @@ FocusScope {
                 density: root.density
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
-                kind: "outlined"
+                kind: "text"
                 text: "Skip"
                 accessName: root.focusBridge ? root.focusBridge.skipHint : "Skip"
                 onClicked: root.focusBridge.skip()
@@ -236,7 +236,7 @@ FocusScope {
                 density: root.density
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
-                kind: "filled"
+                kind: "tonal"
                 text: "Finished"
                 accessName: "Mark this homework as finished"
                 onClicked: root.focusBridge.markFinished()

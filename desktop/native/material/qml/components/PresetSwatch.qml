@@ -65,8 +65,7 @@ Item {
     M3FocusRing {
         anchors.fill: disc
         anchors.margins: -4
-        shown: root.selected || root.activeFocus
-        ring: palette.primary
+        ring: palette.focusRing
         ringRadius: 28
     }
     Rectangle {

@@ -72,10 +72,9 @@ FocusScope {
                     }
                     M3FocusRing {
                         anchors.fill: parent
-                        anchors.margins: -3
-                        shown: railRow.activeFocus
-                        ring: m3Palette.primary
-                        ringRadius: 27
+                        anchors.margins: -4
+                        ring: m3Palette.focusRing
+                        ringRadius: 28
                     }
                     Rectangle {
                         id: badge
@@ -248,7 +247,7 @@ FocusScope {
                         density: root.density
                         reduceMotion: root.reduceMotion
                         highContrast: root.highContrast
-                        kind: "outlined"
+                        kind: "text"
                         text: bridge ? bridge.backLabel : "Back"
                         onClicked: root.bridge.setupBack()
                     }

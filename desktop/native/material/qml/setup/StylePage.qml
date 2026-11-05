@@ -42,7 +42,7 @@ Column {
         density: page.density
         reduceMotion: page.reduceMotion
         highContrast: page.highContrast
-        kind: "outlined"
+        kind: "text"
         text: bridge ? bridge.ownLookLabel : ""
         onClicked: page.bridge.chooseOwnLook()
     }

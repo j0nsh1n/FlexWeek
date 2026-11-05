@@ -80,7 +80,7 @@ Column {
             density: page.density
             reduceMotion: page.reduceMotion
             highContrast: page.highContrast
-            kind: "outlined"
+            kind: "text"
             text: "Add other hours"
             enabled: bridge ? bridge.canAddWindow : false
             onClicked: page.bridge.addWorkCustom()
@@ -169,7 +169,7 @@ Column {
                         density: page.density
                         reduceMotion: page.reduceMotion
                         highContrast: page.highContrast
-                        kind: "outlined"
+                        kind: "text"
                         text: "Remove"
                         accessName: "Remove these hours"
                         onClicked: page.bridge.removeWorkWindow(win.index)

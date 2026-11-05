@@ -238,7 +238,7 @@ Item {
                         density: Ui.density
                         reduceMotion: Ui.reduceMotion
                         highContrast: Ui.highContrast
-                        kind: "filled"
+                        kind: "tonal"
                         text: "Fix all"
                         accessName: "Fix all colours"
                         onClicked: root.panel.fixAll()
@@ -286,13 +286,13 @@ Item {
             Button {
                 objectName: "importLook"
                 theme: Ui.theme; density: Ui.density; reduceMotion: Ui.reduceMotion; highContrast: Ui.highContrast
-                kind: "outlined"; text: "Import"; accessName: "Import a look"
+                kind: "text"; text: "Import"; accessName: "Import a look"
                 onClicked: root.panel.beginImport()
             }
             Button {
                 objectName: "exportLook"
                 theme: Ui.theme; density: Ui.density; reduceMotion: Ui.reduceMotion; highContrast: Ui.highContrast
-                kind: "outlined"; text: "Export"; accessName: "Export this look"
+                kind: "text"; text: "Export"; accessName: "Export this look"
                 onClicked: root.panel.beginExport()
             }
             Button {

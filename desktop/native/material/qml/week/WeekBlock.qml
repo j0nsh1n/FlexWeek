@@ -95,9 +95,9 @@ Item {
 
         M3FocusRing {
             anchors.fill: parent
-            anchors.margins: -2
-            shown: finishButton.activeFocus
-            ring: m3.primary
+            anchors.margins: -4
+            target: finishButton
+            ring: m3.focusRing
             ringRadius: 14
         }
 
@@ -120,9 +120,8 @@ Item {
 
     M3FocusRing {
         anchors.fill: parent
-        anchors.margins: -2
-        shown: cell.activeFocus
-        ring: m3.primary
+        anchors.margins: -4
+        ring: m3.focusRing
         ringRadius: 14
     }
 

@@ -31,7 +31,7 @@ FocusScope {
             y: Math.max(24, (scroller.height - implicitHeight) / 2)
             implicitHeight: column.implicitHeight + 64
             height: implicitHeight
-            radius: root.phone ? 16 : 28
+            radius: 8
             color: palette.surfaceContainerLow
             border.width: root.highContrast ? 1.5 : 0
             border.color: palette.outline
@@ -99,7 +99,7 @@ FocusScope {
                         density: root.density
                         reduceMotion: root.reduceMotion
                         highContrast: root.highContrast
-                        kind: "outlined"
+                        kind: "text"
                         text: bridge ? bridge.copyLabel : "Copy"
                         accessName: "Copy recovery codes"
                         onClicked: bridge.copyCodes()
@@ -110,7 +110,7 @@ FocusScope {
                         density: root.density
                         reduceMotion: root.reduceMotion
                         highContrast: root.highContrast
-                        kind: "outlined"
+                        kind: "text"
                         text: bridge ? bridge.saveLabel : "Save…"
                         accessName: "Save recovery codes to a file"
                         onClicked: bridge.saveCodes()

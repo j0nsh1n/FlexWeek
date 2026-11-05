@@ -25,7 +25,7 @@ Item {
     Rectangle {
         id: shape
         anchors.fill: parent
-        radius: 16
+        radius: 8
         color: root.selected ? palette.secondaryContainer : palette.surfaceContainerLow
         border.width: root.selected ? 2 : (root.highContrast ? 1.5 : 1)
         border.color: root.selected ? palette.primary : palette.outlineVariant
@@ -35,7 +35,7 @@ Item {
     }
     M3StateLayer {
         anchors.fill: parent
-        radius: 16
+        radius: 8
         color: root.selected ? palette.inkSecondaryContainer : palette.inkSurface
         hovered: hover.hovered && root.enabled
         down: (tap.pressed || root.keyDown) && root.enabled
@@ -44,9 +44,8 @@ Item {
     M3FocusRing {
         anchors.fill: parent
         anchors.margins: -4
-        shown: root.activeFocus
-        ring: palette.primary
-        ringRadius: 20
+        ring: palette.focusRing
+        ringRadius: 12
     }
     Item {
         id: mark

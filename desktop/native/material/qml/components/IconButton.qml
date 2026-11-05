@@ -39,8 +39,7 @@ Item {
     M3FocusRing {
         anchors.fill: parent
         anchors.margins: -4
-        shown: root.activeFocus
-        ring: palette.primary
+        ring: palette.focusRing
         ringRadius: root.side / 2 + 4
     }
     M3Icon {

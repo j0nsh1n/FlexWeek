@@ -55,7 +55,7 @@ FocusScope {
         objectName: "promptCard"
         width: Math.min(480, Math.max(0, root.width - 32))
         height: column.implicitHeight + 48
-        radius: 28
+        radius: 8
         anchors.centerIn: parent
         color: palette.surfaceContainerHigh
         Column {

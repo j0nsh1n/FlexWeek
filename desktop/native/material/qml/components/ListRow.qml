@@ -32,7 +32,7 @@ Item {
         id: shape
         objectName: "shape"
         anchors.fill: parent
-        radius: 12
+        radius: 8
         color: root.fill
         border.width: root.highContrast ? 1.5 : 0
         border.color: palette.outline
@@ -84,7 +84,7 @@ Item {
     }
     M3StateLayer {
         anchors.fill: parent
-        radius: 12
+        radius: 8
         color: palette.inkSurface
         hovered: hover.hovered && root.enabled
         down: (tap.pressed || root.keyDown) && root.enabled
@@ -93,9 +93,8 @@ Item {
     M3FocusRing {
         anchors.fill: parent
         anchors.margins: -4
-        shown: root.activeFocus
-        ring: palette.primary
-        ringRadius: 16
+        ring: palette.focusRing
+        ringRadius: 12
     }
 
     HoverHandler { id: hover; enabled: root.enabled }

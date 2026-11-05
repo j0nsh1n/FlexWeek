@@ -21,7 +21,7 @@ Item {
     readonly property color lineColor: palette.outline
     readonly property color activeFill: palette.secondaryContainer
     readonly property color activeInk: palette.inkSecondaryContainer
-    readonly property color offInk: palette.inkSurface
+    readonly property color offInk: palette.inkMuted
     property bool keyDown: false
 
     function indexOfCurrent() {
@@ -43,9 +43,9 @@ Item {
         id: shape
         objectName: "shape"
         anchors.fill: parent
-        radius: 20
+        radius: 6
         color: "transparent"
-        border.width: root.highContrast ? 1.5 : 1
+        border.width: 0
         border.color: root.lineColor
         clip: true
         Row {
@@ -60,13 +60,8 @@ Item {
                     width: 12 + (on ? 24 : 0) + caption.implicitWidth + 12
                     height: 40
                     Rectangle {
-                        visible: index > 0
-                        width: root.highContrast ? 1.5 : 1
-                        height: parent.height
-                        color: root.lineColor
-                    }
-                    Rectangle {
                         anchors.fill: parent
+                        radius: height / 2
                         color: segment.on ? root.activeFill : "transparent"
                     }
                     Row {
@@ -99,7 +94,7 @@ Item {
     }
     M3StateLayer {
         anchors.fill: parent
-        radius: 20
+        radius: 6
         color: palette.inkSurface
         hovered: hover.hovered && root.enabled
         down: (root.keyDown) && root.enabled
@@ -108,9 +103,8 @@ Item {
     M3FocusRing {
         anchors.fill: parent
         anchors.margins: -4
-        shown: root.activeFocus
-        ring: palette.primary
-        ringRadius: 24
+        ring: palette.focusRing
+        ringRadius: 10
     }
 
     HoverHandler { id: hover; enabled: root.enabled }
