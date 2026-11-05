@@ -74,6 +74,7 @@ Rectangle {
             reduceMotion: drawer.reduceMotion
             highContrast: drawer.highContrast
             kind: enabled ? "filled" : "text"
+            mutedWhenDisabled: true
             icon: "schedule"
             text: "Plan my homework"
             enabled: drawer.count > 0

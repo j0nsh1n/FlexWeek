@@ -237,8 +237,8 @@ Rectangle {{
             where = f"{cat} (past={past}) in {mode} on {ground}"
             assert c_text >= 4.5, f"Text contrast {c_text:.2f} < 4.5:1 for {where}"
 
-            # The spec holds bars to 3:1 on the card. Sports on the page is 2.98:1 (reported, not hidden).
-            if not past and ground == "card":
+            # Bars reach 3:1 on the card (spec) and on the page (Sports was darkened for it).
+            if not past:
                 c_bar = contrast(bar_px, card_px)
                 assert c_bar >= 3.0, f"Bar contrast {c_bar:.2f} < 3:1 for {cat} in {mode} on {ground}"
 
@@ -346,3 +346,36 @@ def test_disabled_plan_is_a_text_button_with_its_hint(qapp: QGuiApplication) -> 
         expected_muted = th["inkMuted"].lower()
         actual_muted = QColor(empty_text.property("color")).name().lower()
         assert actual_muted == expected_muted
+        # Plan's own words and icon are the muted ink at full opacity, not the 38 % disabled ink (Sol, PR 6c).
+        ink = QColor(plan.property("ink"))
+        assert ink.name().lower() == expected_muted and ink.alphaF() == 1.0
+        label = plan.findChild(QQuickItem, "label")
+        assert QColor(label.property("color")).name().lower() == expected_muted
+        assert QColor(label.property("color")).alphaF() == 1.0
+
+
+def test_a_short_block_keeps_its_words_inside(qapp: QGuiApplication) -> None:
+    """A 30-minute block is 36 px tall: a two-line title and its time must not paint into the next hour."""
+    th = theme_object(scheme("Slate", "light", "std"), "comfortable", False, False)
+    view = _make_view(qapp)
+    comp = QQmlComponent(view.engine())
+    comp.setData(
+        b"import components 1.0\nEventBlock { width: 90; height: 36; category: 'class'; "
+        b"title: 'Chemistry lab report write-up'; detail: '8:00-8:30 AM' }\n",
+        view.engine().baseUrl(),
+    )
+    block = comp.create()
+    assert block is not None, comp.errorString()
+    block.setProperty("theme", th)
+    qapp.processEvents()
+    words = block.findChild(QQuickItem, "words")
+    title = block.findChild(QQuickItem, "title")
+    detail = block.findChild(QQuickItem, "detail")
+    tall = float(title.property("implicitHeight")) + float(detail.property("implicitHeight")) + 6
+    assert tall > block.height(), "the sample must overflow, or it tests nothing"
+    assert words.property("clip") is True
+    assert words.width() == block.width() and words.height() == block.height()
+    block.deleteLater()
+    view.deleteLater()
+    qapp.processEvents()
+

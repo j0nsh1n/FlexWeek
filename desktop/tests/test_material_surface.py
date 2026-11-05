@@ -35,7 +35,7 @@ from desktop.native.weekmodel import clock_label, set_clock_24h
 
 # The spec's category fills: class colour mixed 14% into white (light) or 24% into dark card (#14171c).
 SCHOOL = {"light": "#e4ebf7", "dark": "#1e2c44"}
-SOCCER = {"light": "#e2f1ea", "dark": "#1a372f"}
+SOCCER = {"light": "#e1f0e9", "dark": "#1a352e"}
 CLUBS = {"light": "#ddefef", "dark": "#133336"}
 READING = {"light": "#f6e7ec", "dark": "#3e2633"}
 HOMEWORK = {"light": "#f3ecde", "dark": "#382e1a"}

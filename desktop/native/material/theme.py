@@ -63,7 +63,7 @@ STATUS_COLORS = {
 
 CLASS_COLORS = {
     "class": "#3d6fc4",       # School
-    "exercise": "#2f9e6b",    # Sports
+    "exercise": "#2b9665",    # Sports (darker than the spec's #2f9e6b: 3:1 on the page, Jonathan 11-04)
     "extra": "#0f8a8a",       # Clubs
     "assignments": "#a87512", # Work
     "study": "#c2557a",       # Personal

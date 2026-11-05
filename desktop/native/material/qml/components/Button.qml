@@ -11,6 +11,8 @@ Item {
     property string text: "Button"
     property string icon: ""
     property string accessName: ""
+    // A quiet button that stays readable while disabled: muted ink at full opacity, not the 38 % disabled ink.
+    property bool mutedWhenDisabled: false
     signal clicked()
 
     readonly property bool quiet: kind === "text"
@@ -34,7 +36,7 @@ Item {
     }
     readonly property color ink: {
         if (!root.enabled)
-            return palette.disabledInk
+            return root.mutedWhenDisabled ? palette.inkMuted : palette.disabledInk
         if (root.kind === "filled")
             return palette.inkPrimary
         if (root.kind === "tonal")

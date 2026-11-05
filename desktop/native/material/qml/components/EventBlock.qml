@@ -54,8 +54,8 @@ Item {
                 ink: dark ? "#ececec" : "#0f172a"
             },
             "exercise": {
-                bar: "#2f9e6b",
-                fill: dark ? "#1a372f" : "#e2f1ea",
+                bar: "#2b9665",
+                fill: dark ? "#1a352e" : "#e1f0e9",
                 ink: dark ? "#ececec" : "#0f172a"
             },
             "extra": {
@@ -144,41 +144,47 @@ Item {
         bottomLeftRadius: root.cornerRadius
     }
 
-    Column {
-        id: body
-        objectName: "body"
-        x: 12
-        y: root.pad
-        width: parent.width - 20
-        spacing: 0
-        Text {
-            id: title
-            objectName: "title"
-            width: Math.max(0, parent.width - root.rightInset)
-            text: root.title
-            color: root.textInk
-            opacity: 1
-            wrapMode: Text.WordWrap
-            maximumLineCount: 2
-            elide: Text.ElideRight
-            font.family: M3Font.family
-            font.pixelSize: 12 * ((root.theme && root.theme.typeScale) ? root.theme.typeScale : 1)
-            font.weight: 600
-            lineHeight: 1.25
-            lineHeightMode: Text.ProportionalHeight
-        }
-        Text {
-            id: detail
-            objectName: "detail"
-            width: parent.width
-            visible: root.detail !== ""
-            text: root.detail
-            color: root.textInk
-            opacity: 1
-            font.family: M3Font.family
-            font.pixelSize: 11
-            font.weight: 400
-            elide: Text.ElideRight
+    // The words clip to the block, so a short block never paints them into the next hour.
+    Item {
+        objectName: "words"
+        anchors.fill: parent
+        clip: true
+        Column {
+            id: body
+            objectName: "body"
+            x: 12
+            y: root.pad
+            width: parent.width - 20
+            spacing: 0
+            Text {
+                id: title
+                objectName: "title"
+                width: Math.max(0, parent.width - root.rightInset)
+                text: root.title
+                color: root.textInk
+                opacity: 1
+                wrapMode: Text.WordWrap
+                maximumLineCount: 2
+                elide: Text.ElideRight
+                font.family: M3Font.family
+                font.pixelSize: 12 * ((root.theme && root.theme.typeScale) ? root.theme.typeScale : 1)
+                font.weight: 600
+                lineHeight: 1.25
+                lineHeightMode: Text.ProportionalHeight
+            }
+            Text {
+                id: detail
+                objectName: "detail"
+                width: parent.width
+                visible: root.detail !== ""
+                text: root.detail
+                color: root.textInk
+                opacity: 1
+                font.family: M3Font.family
+                font.pixelSize: 11
+                font.weight: 400
+                elide: Text.ElideRight
+            }
         }
     }
 
