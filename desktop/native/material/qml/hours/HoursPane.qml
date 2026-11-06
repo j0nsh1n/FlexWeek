@@ -5,6 +5,8 @@ import "../week"
 
 Item {
     id: root
+    // A block's menu is open: the zoom keys leave the hours behind it alone (J21).
+    readonly property bool menuOpen: blockMenu.open
     property var bridge
     property var theme: ({})
     property string density: "comfortable"

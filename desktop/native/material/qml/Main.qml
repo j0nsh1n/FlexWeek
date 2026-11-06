@@ -613,25 +613,25 @@ Item {
     Shortcut {
         sequence: "Ctrl+="
         context: Qt.WindowShortcut
-        enabled: !modalActive && (bridge.screen === "week" || bridge.screen === "day")
+        enabled: !modalActive && ((bridge.screen === "week" && !weekView.menuOpen) || (bridge.screen === "day" && !dayView.menuOpen))
         onActivated: bridge.screen === "day" ? dayView.zoomFromKeys(1) : weekView.zoomFromKeys(1)
     }
     Shortcut {
         sequence: "Ctrl++"
         context: Qt.WindowShortcut
-        enabled: !modalActive && (bridge.screen === "week" || bridge.screen === "day")
+        enabled: !modalActive && ((bridge.screen === "week" && !weekView.menuOpen) || (bridge.screen === "day" && !dayView.menuOpen))
         onActivated: bridge.screen === "day" ? dayView.zoomFromKeys(1) : weekView.zoomFromKeys(1)
     }
     Shortcut {
         sequence: "Ctrl+-"
         context: Qt.WindowShortcut
-        enabled: !modalActive && (bridge.screen === "week" || bridge.screen === "day")
+        enabled: !modalActive && ((bridge.screen === "week" && !weekView.menuOpen) || (bridge.screen === "day" && !dayView.menuOpen))
         onActivated: bridge.screen === "day" ? dayView.zoomFromKeys(-1) : weekView.zoomFromKeys(-1)
     }
     Shortcut {
         sequence: "Ctrl+0"
         context: Qt.WindowShortcut
-        enabled: !modalActive && (bridge.screen === "week" || bridge.screen === "day")
+        enabled: !modalActive && ((bridge.screen === "week" && !weekView.menuOpen) || (bridge.screen === "day" && !dayView.menuOpen))
         onActivated: bridge.screen === "day" ? dayView.resetZoomFromKeys() : weekView.resetZoomFromKeys()
     }
     Shortcut {

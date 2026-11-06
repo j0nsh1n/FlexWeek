@@ -45,11 +45,13 @@ Item {
                 enabled: root.canZoomOut
                 onClicked: root.zoomOut()
             }
+            // Two separate targets: the divider is the outline colour, as tall as the glyphs' row.
             Rectangle {
+                objectName: "weekZoomDivider"
                 width: 1
-                height: 12
+                height: 14
                 anchors.verticalCenter: parent.verticalCenter
-                color: palette.outlineVariant
+                color: palette.outline
             }
             ZoomBtn {
                 id: inBtn

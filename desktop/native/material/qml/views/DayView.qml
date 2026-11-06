@@ -18,6 +18,9 @@ Item {
     readonly property int row: bridge && bridge.dayHourRow ? bridge.dayHourRow : 56
     readonly property int dayIndex: board ? board.dayIndex : -1
 
+    // A block's menu is open on Day: the zoom keys wait, as on Week.
+    readonly property bool menuOpen: hoursLoader.item ? hoursLoader.item.menuOpen : false
+
     function zoomFromKeys(steps) {
         if (hoursLoader.item)
             hoursLoader.item.zoomFromKeys(steps)
