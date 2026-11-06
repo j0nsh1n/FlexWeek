@@ -313,10 +313,13 @@ def test_a_block_at_ten_sits_at_ten_times_the_hour_row_at_two_levels(
     assert _named(root, "weekBlock")
 
 
-def _press_zoom_keys(qapp: QApplication, quick: object) -> None:
-    for key in (Qt.Key.Key_Equal, Qt.Key.Key_Minus, Qt.Key.Key_0):
+def _zoom_keys_change_nothing(qapp: QApplication, window: NativeWindow, quick: object) -> None:
+    """Each zoom chord in turn, checked after each one, so a zoom in and a zoom out cannot cancel."""
+    before = (_row(window), window._zoom.get("material.week"))
+    for key in (Qt.Key.Key_Equal, Qt.Key.Key_Plus, Qt.Key.Key_Minus, Qt.Key.Key_0):
         QTest.keyClick(quick, key, Qt.KeyboardModifier.ControlModifier)
         _pump(qapp)
+        assert (_row(window), window._zoom.get("material.week")) == before, key
 
 
 def test_zoom_keys_wait_while_a_block_menu_is_open(qapp: QApplication, window: NativeWindow) -> None:
@@ -332,8 +335,7 @@ def test_zoom_keys_wait_while_a_block_menu_is_open(qapp: QApplication, window: N
     _pump(qapp)
     menu = _named(root, "blockMenu")[0]
     assert menu.property("open") is True
-    _press_zoom_keys(qapp, quick)
-    assert _row(window) == 72 and window._zoom.get("material.week") == 72
+    _zoom_keys_change_nothing(qapp, window, quick)
     QTest.keyClick(quick, Qt.Key.Key_Escape)
     _pump(qapp)
     assert menu.property("open") is False
@@ -349,6 +351,9 @@ def test_zoom_keys_wait_while_a_homework_card_menu_is_open(qapp: QApplication, w
     _homework(window, "lab", "Lab notes", 30, due)
     _pump(qapp)
     quick = window._material_page._quick
+    QTest.keyClick(quick, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
+    _pump(qapp)
+    assert _row(window) == 72
     try:
         card = _named(root, "homeworkCard")[0]
         card.forceActiveFocus()
@@ -357,8 +362,7 @@ def test_zoom_keys_wait_while_a_homework_card_menu_is_open(qapp: QApplication, w
         _pump(qapp)
         menu = _named(root, "cardMenu")[0]
         assert menu.property("open") is True
-        _press_zoom_keys(qapp, quick)
-        assert _row(window) == 56 and "material.week" not in window._zoom
+        _zoom_keys_change_nothing(qapp, window, quick)
         QTest.keyClick(quick, Qt.Key.Key_Escape)
         _pump(qapp)
         assert menu.property("open") is False
