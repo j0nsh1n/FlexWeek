@@ -46,11 +46,23 @@ are on main (PRs #67-#83). In order:
 - Complete when: each has a test that failed first, or is closed with a reason.
 - Status: [ ] open.
 
-### R3 — Testing structure
-- Revise how FlexWeek is tested (being discussed with Jonathan 2026-11-06): clock-dependent and load-dependent tests,
-  settings leaking between tests, a 27-30 minute local gate, off-screen-only visual checks.
-- Complete when: the plan Jonathan approves is in spec.md's Validation section and the suite runs on it.
-- Status: [ ] planning.
+### R3 — Testing structure (rebuild; rules: the "Testing structure" proposal awaiting approval for spec.md)
+Jonathan's decisions 2026-11-06: behaviour in code, looks by pictures and video, a light app plus a small end-to-end
+set, CI as the gate, Rust tools in fwtest. Draft: `~/.flexweek-ui-harness/scratch/testing-revision/`.
+- R3.1 Foundations: the shared fake clock (a test reading the real clock fails), clean look file and settings per
+  test, one wait helper, the light app with seeded data. Complete when: Week's existing tests pass on them unchanged
+  in behaviour, at the same or lower run time.
+- R3.2 Week first: Week's behaviour tests regrouped and rewritten on the light app, its visual checks removed from
+  code, its logic tests moved to engine tests, its mutation specs pointed at the new tests. Complete when: the old
+  Week files are deleted and every Week mutation is still caught.
+- R3.3 Pictures and video: fwtest's picture renderer, comparer and review page (main vs pull request, touched screens
+  only), the rig's Widgets-and-Material flows with frame strips, CI keeping them until merge. Complete when: a pull
+  request touching Week shows its changed pictures and clips on the review page and Kimi's annotations.
+- R3.4 The other areas, one pull request each (Day, Month, My day, Focus, Settings, sheets, setup, account, sync,
+  updater, planner). Complete when: no test file is named after a PR or audit and none reads the real clock.
+- R3.5 Test selection and the flaky log in fwtest; CI as the gate; spec.md and fwtest's contract updated. Complete
+  when: a local run picks only the touched area and CI runs everything.
+- Status: [ ] waiting on approval of the spec text.
 
 ### R4 — Look and feel (Jonathan's calls)
 - Material Week: move an existing block by dragging (decide).
