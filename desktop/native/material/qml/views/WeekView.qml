@@ -1,5 +1,6 @@
 import QtQuick
 import components 1.0
+import hours 1.0
 import "../week"
 
 Item {
@@ -16,7 +17,7 @@ Item {
     property bool passive: false
     // The floating add button sits 96px up on a phone. The grid can scroll clear of it.
     // A block's or a card's menu is open: the zoom keys leave the grid behind it alone.
-    readonly property bool menuOpen: blockMenu.open || drawer.menuOpen
+    readonly property bool menuOpen: hoursPane.menuOpen || drawer.menuOpen
     readonly property int scrollClearance: phone ? 96 : 0
     readonly property int gutter: 68
     readonly property int drawerWidth: 320
@@ -119,36 +120,19 @@ Item {
             root.bridge.sheets.setDragRangeActive(false)
     }
 
-    property int wheelAcc: 0
-    property bool zooming: false
+    property alias scroller: hoursPane.scroller
+    property alias hours: hoursPane.hours
 
     function zoomAbout(steps, viewY) {
-        if (root.passive || !bridge || !bridge.zoomBy)
-            return
-        var row = Math.max(1, root.row)
-        var minute = ((scroller.contentY + viewY) / row) * 60
-        root.zooming = true
-        if (steps === 0)
-            bridge.zoomReset()
-        else
-            bridge.zoomBy(steps)
-        function place() {
-            var next = Math.max(1, root.row)
-            var y = (minute / 60) * next - viewY
-            var limit = Math.max(0, scroller.contentHeight - scroller.height)
-            scroller.contentY = Math.min(Math.max(0, y), limit)
-            root.zooming = false
-        }
-        place()
-        Qt.callLater(place)
+        hoursPane.zoomAbout(steps, viewY)
     }
 
     function zoomFromKeys(steps) {
-        zoomAbout(steps, scroller.height / 2)
+        hoursPane.zoomFromKeys(steps)
     }
 
     function resetZoomFromKeys() {
-        zoomAbout(0, scroller.height / 2)
+        hoursPane.resetZoomFromKeys()
     }
 
     Connections {
@@ -267,303 +251,33 @@ Item {
         }
     }
 
-    Flickable {
-        id: scroller
-        objectName: "weekScroller"
+    HoursPane {
+        id: hoursPane
         anchors.left: parent.left
         anchors.right: root.phone ? parent.right : drawer.left
         anchors.top: headerRow.bottom
         anchors.bottom: root.phone ? drawer.top : parent.bottom
-        contentWidth: width
-        contentHeight: hours.height + root.scrollClearance
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
-
-        property string revealedKey: ""
-
-        function reveal(itemY, itemHeight) {
-            if (itemY < contentY)
-                contentY = Math.max(0, itemY - 8)
-            else if (itemY + itemHeight > contentY + height)
-                contentY = Math.min(Math.max(0, contentHeight - height), itemY + itemHeight - height + 8)
-        }
-
-        function revealNow() {
-            if (scroller.moving || scroller.dragging || root.holding || root.zooming)
-                return
-            var view = height
-            if (!bridge || view < 40 || bridge.nowDay < 0)
-                return
-            var key = bridge.nowDay + ":" + (bridge.week ? bridge.week.columns : 7)
-            if (revealedKey === key)
-                return
-            revealedKey = key
-            var row = root.row
-            var nowY = bridge.nowMinute / 60 * row
-            var earliest = nowY
-            var rows = bridge.blockRows || []
-            for (var i = 0; i < rows.length; i++) {
-                var top = rows[i].start / 60 * row
-                if (top < earliest)
-                    earliest = top
-            }
-            var contentY = (nowY - earliest + 48 < view)
-                    ? Math.max(0, earliest - 24)
-                    : Math.max(0, nowY - view * 0.65)
-            var limit = Math.max(0, contentHeight - view)
-            scroller.contentY = Math.min(Math.max(0, contentY), limit)
-        }
-
-        onHeightChanged: revealNow()
-
-        Connections {
-            target: bridge
-            function onBlocksChanged() { scroller.revealNow() }
-            function onChanged() { scroller.revealNow() }
-        }
-
-        // Direct Flickable children live on contentItem, so event.y is content-relative.
-        WheelHandler {
-            acceptedModifiers: Qt.ControlModifier
-            onWheel: (event) => {
-                if (root.passive || !root.bridge || !root.bridge.zoomBy)
-                    return
-                root.wheelAcc += event.angleDelta.y
-                var steps = Math.trunc(root.wheelAcc / 120)
-                event.accepted = true
-                if (steps === 0)
-                    return
-                root.wheelAcc -= steps * 120
-                root.zoomAbout(steps, event.y - scroller.contentY)
-            }
-        }
-
-        Item {
-            id: hours
-            width: scroller.width
-            height: 24 * root.row
-            focus: true
-            Keys.onEscapePressed: (event) => {
-                if (root.dragRangeActive) {
-                    root.cancelDragRange()
-                    event.accepted = true
-                }
-            }
-
-            DragHandler {
-                id: gridDrag
-                target: null
-                dragThreshold: 4
-                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                grabPermissions: PointerHandler.CanTakeOverFromItems | PointerHandler.CanTakeOverFromHandlersOfDifferentType
-                onActiveChanged: {
-                    if (active) {
-                        var px = centroid.pressPosition.x
-                        var py = centroid.pressPosition.y
-                        if (!root.emptyGridTimeAt(px, py)) {
-                            root.dragRangeValid = false
-                            root.dragRangeActive = false
-                            return
-                        }
-                        // Only a drag on empty time takes focus, so Escape can cancel it; a block keeps its own.
-                        hours.forceActiveFocus()
-                        root.dragRangeValid = true
-                        root.dragRangeCanceled = false
-                        root.dragRangeDay = Math.floor((px - root.gutter) / root.dayWidth)
-                        root.dragRangePressY = py
-                        var m1 = root.snapToQuarter(py)
-                        var m2 = root.snapToQuarter(centroid.position.y)
-                        root.dragRangeStartMin = Math.min(m1, m2)
-                        root.dragRangeEndMin = Math.max(m1, m2)
-                        root.dragRangeActive = true
-                        if (root.bridge && root.bridge.sheets)
-                            root.bridge.sheets.setDragRangeActive(true)
-                    } else {
-                        if (root.bridge && root.bridge.sheets)
-                            root.bridge.sheets.setDragRangeActive(false)
-                        if (root.dragRangeActive && root.dragRangeValid && !root.dragRangeCanceled) {
-                            var start = root.dragRangeStartMin
-                            var end = root.dragRangeEndMin
-                            var day = root.dragRangeDay
-                            root.dragRangeActive = false
-                            root.dragRangeValid = false
-                            if (end - start >= 15 && root.bridge && root.bridge.sheets) {
-                                root.bridge.sheets.openHomeworkAt(day, start, end)
-                            }
-                        }
-                        root.dragRangeActive = false
-                        root.dragRangeValid = false
-                        root.dragRangeCanceled = false
-                        root.dragRangeStartMin = 0
-                        root.dragRangeEndMin = 0
-                        root.dragRangeDay = -1
-                    }
-                }
-                onCentroidChanged: {
-                    if (active && root.dragRangeActive && root.dragRangeValid && !root.dragRangeCanceled) {
-                        var m1 = root.snapToQuarter(root.dragRangePressY)
-                        var m2 = root.snapToQuarter(centroid.position.y)
-                        root.dragRangeStartMin = Math.min(m1, m2)
-                        root.dragRangeEndMin = Math.max(m1, m2)
-                    }
-                }
-            }
-
-            Rectangle {
-                id: rangeGhost
-                objectName: "rangeGhost"
-                visible: root.dragRangeActive && (root.dragRangeEndMin > root.dragRangeStartMin) && !root.dragRangeCanceled
-                x: root.gutter + root.dragRangeDay * root.dayWidth + 3
-                y: (root.dragRangeStartMin / 60) * root.row
-                width: Math.max(8, root.dayWidth - 6)
-                height: Math.max(4, ((root.dragRangeEndMin - root.dragRangeStartMin) / 60) * root.row - 2)
-                radius: 6
-                color: m3.primaryContainer
-                opacity: 0.7
-                border.width: 2
-                border.color: m3.primary
-                z: 10
-            }
-
-            // Today's column is a step above the page, as in the mockup.
-            Rectangle {
-                objectName: "todayColumn"
-                visible: !!bridge && bridge.nowDay >= 0 && bridge.nowDay < root.columns
-                         && !(root.theme && root.theme.todayHighlight === false)
-                x: root.gutter + (bridge ? bridge.nowDay : 0) * root.dayWidth
-                width: root.dayWidth
-                height: parent.height
-                color: m3.surfaceContainerLow
-            }
-
-            Rectangle {
-                objectName: "dropColumn"
-                visible: root.dropDay >= 0
-                x: root.gutter + Math.max(0, root.dropDay) * root.dayWidth
-                width: root.dayWidth
-                height: parent.height
-                color: m3.secondaryContainer
-                opacity: 0.6
-            }
-
-            Rectangle {
-                objectName: "dropSlot"
-                // Above the now line (z 1) and the blocks, so the slot's outline is never crossed.
-                z: 4
-                visible: root.dropDay >= 0
-                x: root.gutter + Math.max(0, root.dropDay) * root.dayWidth + 3
-                y: Math.max(0, root.dropHour) * root.row
-                width: root.dayWidth - 6
-                height: root.row - 2
-                radius: 6
-                color: "transparent"
-                border.width: 2
-                border.color: m3.primary
-            }
-
-            Repeater {
-                model: 24
-
-                Rectangle {
-                    y: index * root.row
-                    x: root.gutter
-                    width: parent.width - root.gutter
-                    height: 1
-                    color: root.theme && root.theme.hourLines === "None" ? "transparent" : root.line
-                }
-            }
-
-            Repeater {
-                model: root.columns + 1
-
-                Rectangle {
-                    x: root.gutter + index * root.dayWidth
-                    width: root.highContrast ? 1.5 : 1
-                    height: parent.height
-                    color: root.line
-                }
-            }
-
-            Repeater {
-                id: hourLabels
-                objectName: "hourLabels"
-                model: bridge ? bridge.hours : 0
-
-                Text {
-                    objectName: "hourLabel"
-                    x: 0
-                    y: Math.max(0, index * root.row - 8)
-                    width: root.gutter - 8
-                    horizontalAlignment: Text.AlignRight
-                    text: model.label
-                    color: m3.inkMuted
-                    font.family: M3Font.family
-                    font.pixelSize: 11 * root.typeScale
-                    font.weight: 500
-                }
-            }
-
-            Rectangle {
-                objectName: "nowLine"
-                visible: !!bridge && bridge.nowDay >= 0 && bridge.nowDay < root.columns
-                x: root.gutter - 5
-                y: (bridge ? bridge.nowMinute : 0) / 60 * root.row
-                width: parent.width - root.gutter + 5
-                height: 2
-                color: root.now
-                z: 1
-            }
-
-            Repeater {
-                id: weekBlocks
-                objectName: "weekBlocks"
-                model: bridge ? bridge.blocks : 0
-
-                WeekBlock {
-                    id: blockCell
-                    objectName: "weekBlock"
-                    z: 2
-                    passive: root.passive
-                    x: root.gutter + model.day * root.dayWidth + 3
-                    y: model.start / 60 * root.row
-                    width: Math.max(8, root.dayWidth - 6)
-                    height: Math.max(36, (model.end - model.start) / 60 * root.row - 2)
-                    theme: root.theme
-                    density: root.density
-                    reduceMotion: root.reduceMotion
-                    highContrast: root.highContrast
-                    category: model.category
-                    title: model.title
-                    detail: {
-                        var text = (root.theme && root.theme.showTimes === false) ? "" : model.detail
-                        if (root.theme && root.theme.showLengths)
-                            text = (text ? text + " · " : "") + (model.end - model.start) + "m"
-                        return text
-                    }
-                    past: model.past
-                    done: model.done
-                    fresh: model.fresh
-                    homework: model.homework
-                    onToggled: if (root.bridge) root.bridge.week.toggleDone(model.assignmentId)
-                    onOpened: if (root.bridge && root.bridge.sheets) root.bridge.sheets.editBlock(model.blockId, model.day)
-                    onMenuAsked: (mx, my) => root.openBlockMenu(blockCell, model, mx, my)
-                    onActiveFocusChanged: if (activeFocus) scroller.reveal(y, height)
-                    onFocused: scroller.reveal(y, height)
-                }
-            }
-
-            Rectangle {
-                objectName: "nowDot"
-                visible: !!bridge && bridge.nowDay >= 0 && bridge.nowDay < root.columns
-                x: root.gutter - 5
-                y: (bridge ? bridge.nowMinute : 0) / 60 * root.row - 4
-                width: 10
-                height: 10
-                radius: 5
-                color: root.now
-                z: 3
-            }
-        }
+        bridge: root.bridge
+        theme: root.theme
+        density: root.density
+        reduceMotion: root.reduceMotion
+        highContrast: root.highContrast
+        passive: root.passive
+        phone: root.phone
+        row: root.row
+        gutter: root.gutter
+        columns: root.columns
+        dayWidth: root.dayWidth
+        filterDay: -1
+        showNowLine: !!bridge && bridge.nowDay >= 0 && bridge.nowDay < root.columns
+        showPill: false
+        weekMode: true
+        followNow: true
+        scrollClearance: root.scrollClearance
+        scrollerName: "weekScroller"
+        host: root
+        dropDay: root.dropDay
+        dropHour: root.dropHour
     }
 
     HomeworkDrawer {
@@ -609,97 +323,6 @@ Item {
             font.family: M3Font.family
             font.pixelSize: 13
             font.weight: 500
-        }
-    }
-
-    property Item menuOriginItem: null
-    property var menuTargetModel: null
-
-    function openBlockMenu(item, blockModel, mx, my) {
-        menuOriginItem = item
-        menuTargetModel = {
-            blockId: blockModel.blockId,
-            assignmentId: blockModel.assignmentId,
-            day: blockModel.day,
-            done: blockModel.done
-        }
-        var mapped = item.mapToItem(root, mx, my)
-        var menuX = Math.max(8, Math.min(mapped.x, root.width - blockMenu.width - 8))
-        var menuY = Math.max(8, Math.min(mapped.y, root.height - blockMenu.height - 8))
-        blockMenu.x = menuX
-        blockMenu.y = menuY
-        blockMenu.entries = [
-            { label: "Edit", icon: "edit_note" },
-            { label: blockModel.done ? "Open again" : "Mark finished", icon: "check" },
-            { label: "Delete", icon: "close" }
-        ]
-        blockMenu.cursor = 0
-        blockMenu.open = true
-        blockMenu.forceActiveFocus()
-    }
-
-    function closeBlockMenu() {
-        if (!blockMenu.open && !menuOriginItem && !menuTargetModel)
-            return
-        blockMenu.open = false
-        var origin = menuOriginItem
-        menuOriginItem = null
-        menuTargetModel = null
-        if (origin && origin.visible)
-            origin.forceActiveFocus()
-    }
-
-    FocusScope {
-        id: menuOverlay
-        anchors.fill: parent
-        z: 50
-        visible: blockMenu.open
-        enabled: blockMenu.open
-
-        Rectangle {
-            id: menuDim
-            anchors.fill: parent
-            color: "transparent"
-            TapHandler {
-                enabled: blockMenu.open
-                onTapped: root.closeBlockMenu()
-            }
-        }
-
-        Menu {
-            id: blockMenu
-            objectName: "blockMenu"
-            open: false
-            focus: true
-            activeFocusOnTab: open && !root.passive
-            onActiveFocusChanged: {
-                if (!activeFocus && open)
-                    root.closeBlockMenu()
-            }
-            theme: root.theme
-            density: root.density
-            reduceMotion: root.reduceMotion
-            highContrast: root.highContrast
-            onChosen: (index, label) => {
-                var target = root.menuTargetModel
-                root.closeBlockMenu()
-                if (!root.bridge || !target)
-                    return
-                if (label === "Edit") {
-                    if (root.bridge.sheets)
-                        root.bridge.sheets.editBlock(target.blockId, target.day)
-                } else if (label === "Mark finished" || label === "Open again") {
-                    root.bridge.week.toggleDone(target.assignmentId)
-                } else if (label === "Delete") {
-                    if (root.bridge.sheets) {
-                        if (root.bridge.sheets.askDeleteHomework)
-                            root.bridge.sheets.askDeleteHomework(target.assignmentId)
-                        else
-                            root.bridge.sheets.askDeleteUnfinished(target.assignmentId)
-                    }
-                }
-            }
-            onDismissed: root.closeBlockMenu()
         }
     }
 }

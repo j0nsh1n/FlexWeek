@@ -42,6 +42,30 @@ BLOCK_ROLES = (
     "done",
     "fresh",
 )
+
+
+def occurrence_row(item: Any, mode: str, *, dim: bool, gone: bool, fresh: bool) -> dict:
+    """One QML block row from a week occurrence. Day and Week share this shape."""
+    fill, ink = paint_for_category(item.category, mode)
+    end = int(item.end)
+    return {
+        "title": item.title,
+        "day": int(item.day),
+        "start": int(item.start),
+        "end": end,
+        "fill": fill,
+        "ink": ink,
+        "category": event_category(item.category),
+        "detail": range_label(int(item.start), end),
+        "past": dim and (gone or bool(item.done)),
+        "blockId": item.block_id,
+        "assignmentId": item.assignment_id or "",
+        "homework": bool(item.work and item.assignment_id),
+        "done": bool(item.done),
+        "fresh": fresh,
+    }
+
+
 HOMEWORK_ROLES = ("title", "minutes", "blockId", "assignmentId", "detail", "tag", "tagKind", "reason")
 # The solver's own lines: at most an hour of room is "Cutting it close", at most three is "Tight".
 DANGER_SLACK_MIN = 60
@@ -185,28 +209,18 @@ class WeekBridge(QObject):
                 gone = False
             else:
                 gone = day < offset or (day == offset and end <= self._now_minute)
-            fill, ink = paint_for_category(item.category, mode)
             key = (item.block_id, day)
             keys.add(key)
             if fresh_ok and key not in self._seen:
                 self._fresh_until[key] = clock + FRESH_S
             block_rows.append(
-                {
-                    "title": item.title,
-                    "day": day,
-                    "start": int(item.start),
-                    "end": end,
-                    "fill": fill,
-                    "ink": ink,
-                    "category": event_category(item.category),
-                    "detail": range_label(int(item.start), end),
-                    "past": dim and (gone or bool(item.done)),
-                    "blockId": item.block_id,
-                    "assignmentId": item.assignment_id or "",
-                    "homework": bool(item.work and item.assignment_id),
-                    "done": bool(item.done),
-                    "fresh": self._fresh_until.get(key, 0.0) > clock,
-                }
+                occurrence_row(
+                    item,
+                    mode,
+                    dim=dim,
+                    gone=gone,
+                    fresh=self._fresh_until.get(key, 0.0) > clock,
+                )
             )
         for item in getattr(week, "waiting", ()):
             tag, kind = self._tag_for(item, start, moment)

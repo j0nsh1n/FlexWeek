@@ -20,6 +20,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Changed
 - Material Month's "Show study time per date" now fills each date from the bottom, full at three hours: the homework tint is planned time and a deeper homework colour is time done. The old 3 px line was too faint to see.
 - On a wide Widgets Settings window, Look's live preview sits beside the cards (about 60% of the stage) and stays put while they scroll; below 1000 px wide it stays the strip on top.
+- Material Day shows the day's hours in one wide column, with the same blocks, now line and zoom as Week, remembering its own height under material.day.
 - The One thing day shows the current task's title large (28 px) with the time left under it; during homework, Homework finished is the one filled button and Focus, Running late and Back are text buttons.
 - The "New in 1.0.0" notice is a plain card with readable words, one Choose a look button and a close button; Esc closes it and Tab reaches it.
 - Settings → Look shows each look as a 160 px card with a Current chip on the one you wear, and Material 3 is one of the cards. Current stays only when Material actually opened, and choosing the card again retries a failed open.
@@ -36,6 +37,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- Material Day keeps its blocks when the clock ticks, still shows Saturday and Sunday when Week hides weekends, only jumps to now when opening a date, and leaves 16 px so the now line shows past the blocks. Every Day block opens with a click, Tab, or Enter; Space marks homework finished.
 - Material Month due chips use the homework class tint and icon instead of purple, overdue chips use the overdue tint, Settings → Look's Widgets styles control is a text button, and the Week now-line passes behind blocks.
 - Material controls follow the B3a3 shapes: 8 px corners on cards, sheets and dialogs, 6 px on buttons, fields and the add button, and pills only for chips. Each screen has one filled button; the others are text buttons. The add button is a plain card-coloured button with a blue plus, a choice row shows the picked option as a chip, and the selected rail item is a light tint with a blue icon. The focus ring shows after a key press and hides after a mouse press, so clicking or opening a sheet with the mouse leaves no ring while Tab and Esc still show one, and a focused field draws one border.
 - Material Week and Day blocks wear their class colour as a left bar on a faint tint with dark text (no purple). Past blocks fade only their fill and bar, and their words stay readable. Status chips show an icon with the word (Plenty of time, Tight, Cutting it close), and Plan my homework turns into a quiet text button when nothing is waiting.

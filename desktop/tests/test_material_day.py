@@ -499,13 +499,11 @@ def test_the_day_screen_has_the_named_controls(qapp: QApplication, window: Nativ
         "dayNow",
         "dayNowTitle",
         "dayStartFocus",
-        "dayFinish",
         "dayMonthToggle",
         "dayMonthSide",
         "dayMiniMonth",
         "dayNowLabel",
-        "dayUpNext",
-        "dayDone",
+        "dayScroller",
     ):
         assert name in names, name
     _bridge(root).showPage("myday")

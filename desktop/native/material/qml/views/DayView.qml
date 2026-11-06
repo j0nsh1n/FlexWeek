@@ -1,6 +1,7 @@
 import QtQuick
 import components 1.0
 import day 1.0
+import hours 1.0
 
 Item {
     id: root
@@ -14,6 +15,26 @@ Item {
     readonly property string density: bridge && bridge.density ? bridge.density : "comfortable"
     readonly property bool reduceMotion: bridge ? bridge.reduceMotion : false
     readonly property bool highContrast: bridge ? bridge.highContrast : false
+    readonly property int row: bridge && bridge.dayHourRow ? bridge.dayHourRow : 56
+    readonly property int dayIndex: board ? board.dayIndex : -1
+
+    // A block's menu is open on Day: the zoom keys wait, as on Week.
+    readonly property bool menuOpen: hoursLoader.item ? hoursLoader.item.menuOpen : false
+
+    function zoomFromKeys(steps) {
+        if (hoursLoader.item)
+            hoursLoader.item.zoomFromKeys(steps)
+    }
+
+    function resetZoomFromKeys() {
+        if (hoursLoader.item)
+            hoursLoader.item.resetZoomFromKeys()
+    }
+
+    function zoomAbout(steps, viewY) {
+        if (hoursLoader.item)
+            hoursLoader.item.zoomAbout(steps, viewY)
+    }
 
     // The page's heading for screen readers. The top bar already shows the title.
     Text {
@@ -45,23 +66,20 @@ Item {
         today: root.board ? root.board.miniDay : 0
     }
 
-    Flickable {
+    Item {
         id: pane
         anchors.left: side.visible ? side.right : parent.left
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        contentWidth: width
-        contentHeight: column.implicitHeight + (root.phone ? 96 : 24)
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
 
         Column {
-            id: column
-            width: Math.min(760, Math.max(0, pane.width - (root.phone ? 32 : 48)))
-            x: Math.max(root.phone ? 16 : 24, (pane.width - width) / 2)
-            y: root.phone ? 16 : 24
+            id: heading
+            width: parent.width
             spacing: 12
+            topPadding: root.phone ? 16 : 24
+            leftPadding: root.phone ? 16 : 24
+            rightPadding: root.phone ? 16 : 24
 
             Row {
                 spacing: 4
@@ -91,7 +109,7 @@ Item {
 
             Text {
                 objectName: "dayLeftLine"
-                width: column.width
+                width: heading.width - heading.leftPadding - heading.rightPadding
                 text: root.board ? root.board.leftLine : ""
                 wrapMode: Text.WordWrap
                 color: palette.inkMuted
@@ -103,7 +121,7 @@ Item {
             }
 
             NowCard {
-                width: column.width
+                width: heading.width - heading.leftPadding - heading.rightPadding
                 passive: root.passive
                 visible: root.board && root.board.showNow
                 theme: root.theme
@@ -115,28 +133,50 @@ Item {
                 line: root.board ? root.board.nowLine : ""
                 onStartFocus: if (root.board) root.board.startFocus()
             }
+        }
 
-            DayLists {
-                width: column.width
-                passive: root.passive
+        Loader {
+            id: hoursLoader
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: heading.bottom
+            anchors.bottom: parent.bottom
+            active: root.passive || (root.bridge && root.bridge.screen === "day")
+            sourceComponent: HoursPane {
+                bridge: root.bridge
                 theme: root.theme
                 density: root.density
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
-                scope: "day"
-                upModel: root.board ? root.board.upNext : null
-                doneModel: root.board ? root.board.doneRows : null
-                onFinish: (assignmentId) => {
-                    if (root.board)
-                        root.board.finishHomework(assignmentId)
-                }
-                onEdit: (assignmentId) => {
-                    if (root.bridge && root.bridge.sheets)
-                        root.bridge.sheets.editHomework(assignmentId)
-                }
+                passive: root.passive
+                phone: root.phone
+                row: root.row
+                gutter: 68
+                columns: 1
+                filterDay: root.dayIndex
+                showNowLine: root.dayIndex >= 0 && root.bridge && root.bridge.nowDay === root.dayIndex
+                showPill: true
+                weekMode: false
+                followOpening: true
+                openingMinute: root.board ? root.board.openingMinute : 480
+                scrollClearance: root.phone ? 96 : 0
+                scrollerName: "dayScroller"
             }
         }
     }
 
     M3Palette { id: palette; theme: root.theme }
+
+    onVisibleChanged: {
+        if (visible && hoursLoader.item)
+            hoursLoader.item.revealOpening(true)
+    }
+
+    Connections {
+        target: root.board
+        function onDateOpened() {
+            if (hoursLoader.item)
+                hoursLoader.item.revealOpening(true)
+        }
+    }
 }

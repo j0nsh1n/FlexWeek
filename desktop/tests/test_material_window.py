@@ -827,6 +827,9 @@ def test_the_material_week_comes_from_the_session(qapp: QApplication, window: Na
     class Empty:
         occurrences: tuple = ()
 
+        def on_day(self, day: int) -> tuple:
+            return ()
+
     window.session.built_week = lambda: Empty()
     try:
         window._material_page.bridge.refresh()

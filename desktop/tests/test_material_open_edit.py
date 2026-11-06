@@ -302,18 +302,20 @@ def test_enter_on_a_drawer_card_opens_edit_and_place_now_is_in_its_menu(
     assert card.property("activeFocus") is True
 
 
-def test_clicking_a_day_row_opens_edit_and_its_finish_button_still_finishes(
+def test_clicking_a_day_block_opens_edit_and_its_tick_still_finishes(
     qapp: QApplication, window: NativeWindow
 ) -> None:
+    """Day draws its hours with Week's blocks (J22): a click opens the homework, and the tick
+    finishes it with Undo, as on Week."""
     root = _reset(window, qapp)
     monday = _week_monday(window)
     thursday = (monday + timedelta(days=3)).isoformat()
     window.session.open_day(thursday)
     _bridge(window).showPage("day")
     _pump(qapp)
-    wait_until(qapp, lambda: len(_named(root, "dayFinish")) > 0)
-    row = next(r for r in _named(root, "dayRow0") if r.property("title") == "History essay")
-    _click(window, row)
+    day = _qml(root, "materialDay")
+    wait_until(qapp, lambda: _day_block(day, "History essay") is not None)
+    _click(window, _day_block(day, "History essay"))
     sheets = window._material_page.bridge.sheets
     wait_until(qapp, lambda: sheets.kind == "homework")
     assert sheets.form["title"] == "History essay"
@@ -321,14 +323,26 @@ def test_clicking_a_day_row_opens_edit_and_its_finish_button_still_finishes(
     _settle(qapp, window)
     _pump(qapp)
 
-    finish_btn = _named(root, "dayFinish")[0]
-    _click(window, finish_btn)
+    _click(window, _named(_day_block(day, "History essay"), "weekBlockFinish")[0])
     wait_until(
         qapp,
         lambda: not window.session.busy and bool(window.session.assignments["essay"].get("completed")),
     )
-    assert _bridge(window).property("snackText") == "Finished History essay"
+    wait_until(qapp, lambda: _snack(window) == "Finished History essay.")
+    bar = _qml(root, "materialSnackbar")
+    _click(window, bar, dx=int(bar.property("width")) // 2 - 30)
+    wait_until(
+        qapp,
+        lambda: not window.session.busy and not window.session.assignments["essay"].get("completed"),
+    )
     _bridge(window).showPage("week")
+
+
+def _day_block(day: QObject, title: str) -> QObject | None:
+    for block in _named(day, "weekBlock"):
+        if any(str(label.property("text")) == title for label in _named(block, "title")):
+            return block
+    return None
 
 
 def test_delete_from_the_block_menu_asks_first_and_can_be_undone(

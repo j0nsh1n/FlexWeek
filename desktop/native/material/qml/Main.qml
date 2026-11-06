@@ -368,6 +368,7 @@ Item {
                     currentIndex: bridge.pageIndex
 
                     DayView {
+                        id: dayView
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         bridge: root.bridge
@@ -612,26 +613,26 @@ Item {
     Shortcut {
         sequence: "Ctrl+="
         context: Qt.WindowShortcut
-        enabled: !modalActive && !weekView.menuOpen && bridge.screen === "week"
-        onActivated: weekView.zoomFromKeys(1)
+        enabled: !modalActive && ((bridge.screen === "week" && !weekView.menuOpen) || (bridge.screen === "day" && !dayView.menuOpen))
+        onActivated: bridge.screen === "day" ? dayView.zoomFromKeys(1) : weekView.zoomFromKeys(1)
     }
     Shortcut {
         sequence: "Ctrl++"
         context: Qt.WindowShortcut
-        enabled: !modalActive && !weekView.menuOpen && bridge.screen === "week"
-        onActivated: weekView.zoomFromKeys(1)
+        enabled: !modalActive && ((bridge.screen === "week" && !weekView.menuOpen) || (bridge.screen === "day" && !dayView.menuOpen))
+        onActivated: bridge.screen === "day" ? dayView.zoomFromKeys(1) : weekView.zoomFromKeys(1)
     }
     Shortcut {
         sequence: "Ctrl+-"
         context: Qt.WindowShortcut
-        enabled: !modalActive && !weekView.menuOpen && bridge.screen === "week"
-        onActivated: weekView.zoomFromKeys(-1)
+        enabled: !modalActive && ((bridge.screen === "week" && !weekView.menuOpen) || (bridge.screen === "day" && !dayView.menuOpen))
+        onActivated: bridge.screen === "day" ? dayView.zoomFromKeys(-1) : weekView.zoomFromKeys(-1)
     }
     Shortcut {
         sequence: "Ctrl+0"
         context: Qt.WindowShortcut
-        enabled: !modalActive && !weekView.menuOpen && bridge.screen === "week"
-        onActivated: weekView.resetZoomFromKeys()
+        enabled: !modalActive && ((bridge.screen === "week" && !weekView.menuOpen) || (bridge.screen === "day" && !dayView.menuOpen))
+        onActivated: bridge.screen === "day" ? dayView.resetZoomFromKeys() : weekView.resetZoomFromKeys()
     }
     Shortcut {
         sequence: "Escape"
