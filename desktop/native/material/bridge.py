@@ -49,6 +49,7 @@ from desktop.native.weekmodel import clock_label
 SCREENS = ("day", "week", "month", "myday", "settings")
 SNACK_MS = 10000
 WEEK_ZOOM = Scale("material.week", (32, 44, 56, 72, 96, 128), 56)
+DAY_ZOOM = Scale("material.day", (32, 44, 56, 72, 96, 128), 56)
 
 
 class _Session(Protocol):
@@ -246,44 +247,78 @@ class MaterialBridge(QObject):
     def stroke(self) -> float:
         return stroke_for(self._contrast)
 
-    def _hour_row(self) -> int:
+    def _px_for(self, scale: Scale, key: str) -> int:
         zoom = getattr(self._window, "_zoom", None)
-        if isinstance(zoom, dict) and "material.week" in zoom:
-            return WEEK_ZOOM.nearest(zoom["material.week"])
+        if isinstance(zoom, dict) and key in zoom:
+            return scale.nearest(zoom[key])
         return hour_row_px(self._density, self._advanced)
+
+    def _hour_row(self) -> int:
+        return self._px_for(WEEK_ZOOM, "material.week")
+
+    def _day_hour_row(self) -> int:
+        return self._px_for(DAY_ZOOM, "material.day")
+
+    def _screen_zoom(self) -> tuple[Scale, str] | None:
+        if self._screen == "week":
+            return WEEK_ZOOM, "material.week"
+        if self._screen == "day":
+            return DAY_ZOOM, "material.day"
+        return None
 
     @Property(int, notify=changed)
     def hourRow(self) -> int:
         return self._hour_row()
 
+    @Property(int, notify=changed)
+    def dayHourRow(self) -> int:
+        return self._day_hour_row()
+
     @Property(bool, notify=changed)
     def canZoomIn(self) -> bool:
-        return self._hour_row() < WEEK_ZOOM.levels[-1]
+        pair = self._screen_zoom()
+        if pair is None:
+            return False
+        scale, key = pair
+        return self._px_for(scale, key) < scale.levels[-1]
 
     @Property(bool, notify=changed)
     def canZoomOut(self) -> bool:
-        return self._hour_row() > WEEK_ZOOM.levels[0]
+        pair = self._screen_zoom()
+        if pair is None:
+            return False
+        scale, key = pair
+        return self._px_for(scale, key) > scale.levels[0]
 
     @Slot(int)
     def zoomBy(self, steps: int) -> None:
-        px = WEEK_ZOOM.step(self._hour_row(), steps)
-        if px == self._hour_row():
+        pair = self._screen_zoom()
+        if pair is None:
+            return
+        scale, key = pair
+        current = self._px_for(scale, key)
+        px = scale.step(current, steps)
+        if px == current:
             return
         remember = getattr(self._window, "_remember_zoom", None)
         if callable(remember):
-            remember("material.week", px)
+            remember(key, px)
         else:
             zoom = getattr(self._window, "_zoom", None)
             if isinstance(zoom, dict):
-                zoom["material.week"] = px
+                zoom[key] = px
         self.changed.emit()
 
     @Slot()
     def zoomReset(self) -> None:
-        zoom = getattr(self._window, "_zoom", None)
-        if not isinstance(zoom, dict) or "material.week" not in zoom:
+        pair = self._screen_zoom()
+        if pair is None:
             return
-        del zoom["material.week"]
+        _scale, key = pair
+        zoom = getattr(self._window, "_zoom", None)
+        if not isinstance(zoom, dict) or key not in zoom:
+            return
+        del zoom[key]
         save = getattr(self._window, "_save_look", None)
         if callable(save):
             save()

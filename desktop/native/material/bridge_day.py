@@ -8,6 +8,7 @@ from typing import Any, Protocol
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from desktop.native.calendar import monday_of
+from desktop.native.hours.zoom import OPENS, opening_minute
 from desktop.native.material.bridge_rows import Rows
 from desktop.native.material.day_board import (
     DIM_KEYS,
@@ -79,6 +80,8 @@ class DayBridge(QObject):
         self._year = 2026
         self._month = 1
         self._mini_day = 0
+        self._day_index = -1
+        self._opening_minute = OPENS
         self._waiting = False
         self._load_error = ""
         self._asked_week = ""
@@ -110,6 +113,8 @@ class DayBridge(QObject):
         items: tuple = ()
         week_start = getattr(session, "week_start", "") or ""
         account = getattr(session, "account", None)
+        self._day_index = -1
+        week_model = None
         if self._today_only and account is not None:
             needed = monday_of(viewed.isoformat())
             if week_start != needed:
@@ -140,12 +145,17 @@ class DayBridge(QObject):
             self._load_started = False
         if account is not None and week_start:
             start = date.fromisoformat(week_start)
+            week_model = session.built_week()
             if start <= viewed <= start + timedelta(days=6):
-                on_day = getattr(session.built_week(), "on_day", None)
+                self._day_index = (viewed - start).days
+                on_day = getattr(week_model, "on_day", None)
                 if callable(on_day):
-                    items = on_day((viewed - start).days)
+                    items = on_day(self._day_index)
         when = "today" if viewed == today else ("past" if viewed < today else "future")
         minute = moment.hour * 60 + moment.minute if when == "today" else 0
+        self._opening_minute = _opening_minute(
+            week_model, viewed, today, minute if when == "today" else None, self._day_index
+        )
         self._waiting = False
         self._load_error = ""
         self._publish(
@@ -355,9 +365,25 @@ class DayBridge(QObject):
     def miniDay(self) -> int:
         return self._mini_day
 
+    @Property(int, notify=changed)
+    def dayIndex(self) -> int:
+        return self._day_index
+
+    @Property(int, notify=changed)
+    def openingMinute(self) -> int:
+        return self._opening_minute
+
     @Property(str, notify=changed)
     def focusBlockId(self) -> str:
         return self._board.focus_block_id
+
+
+def _opening_minute(week: object, viewed: date, today: date, now: int | None, day_index: int) -> int:
+    """Now on today, else the day's first block, else 08:00. QML only scrolls."""
+    if day_index < 0 or week is None:
+        return now if viewed == today and now is not None else OPENS
+    today_index = day_index if viewed == today else None
+    return opening_minute(week, today_index, now, day_index)  # type: ignore[arg-type]
 
 
 def _chosen_day(session: object, today: date) -> date:

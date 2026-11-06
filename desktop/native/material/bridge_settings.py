@@ -248,6 +248,14 @@ class PassiveDayBridge(QObject):
     def miniDay(self) -> int:
         return int(self._live.miniDay)  # type: ignore[attr-defined]
 
+    @Property(int, notify=changed)
+    def dayIndex(self) -> int:
+        return int(self._live.dayIndex)  # type: ignore[attr-defined]
+
+    @Property(int, notify=changed)
+    def openingMinute(self) -> int:
+        return int(self._live.openingMinute)  # type: ignore[attr-defined]
+
     @Slot()
     def previousDay(self) -> None:
         pass
@@ -660,6 +668,10 @@ class PreviewBridge(QObject):
     def hourRow(self) -> int:
         panel = self._settings
         return hour_row_px(panel._draft_choice["density"], panel._draft)
+
+    @Property(int, notify=changed)
+    def dayHourRow(self) -> int:
+        return int(self.hourRow)
 
     @Property("QVariantMap", notify=changed)  # type: ignore[arg-type]
     def theme(self) -> dict[str, Any]:
