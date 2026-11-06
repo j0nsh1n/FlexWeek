@@ -18,6 +18,7 @@ from typing import Any, Protocol, cast
 
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
+from desktop.native.hours.zoom import Scale
 from desktop.native.material.bridge_account import AccountBridge
 from desktop.native.material.bridge_day import DayBridge
 from desktop.native.material.bridge_focus import FocusBridge
@@ -47,6 +48,7 @@ from desktop.native.weekmodel import clock_label
 # Keys 1–5, and the StackLayout order. Week is the screen a new shell opens on.
 SCREENS = ("day", "week", "month", "myday", "settings")
 SNACK_MS = 10000
+WEEK_ZOOM = Scale("material.week", (32, 44, 56, 72, 96, 128), 56)
 
 
 class _Session(Protocol):
@@ -244,9 +246,48 @@ class MaterialBridge(QObject):
     def stroke(self) -> float:
         return stroke_for(self._contrast)
 
+    def _hour_row(self) -> int:
+        zoom = getattr(self._window, "_zoom", None)
+        if isinstance(zoom, dict) and "material.week" in zoom:
+            return WEEK_ZOOM.nearest(zoom["material.week"])
+        return hour_row_px(self._density, self._advanced)
+
     @Property(int, notify=changed)
     def hourRow(self) -> int:
-        return hour_row_px(self._density, self._advanced)
+        return self._hour_row()
+
+    @Property(bool, notify=changed)
+    def canZoomIn(self) -> bool:
+        return self._hour_row() < WEEK_ZOOM.levels[-1]
+
+    @Property(bool, notify=changed)
+    def canZoomOut(self) -> bool:
+        return self._hour_row() > WEEK_ZOOM.levels[0]
+
+    @Slot(int)
+    def zoomBy(self, steps: int) -> None:
+        px = WEEK_ZOOM.step(self._hour_row(), steps)
+        if px == self._hour_row():
+            return
+        remember = getattr(self._window, "_remember_zoom", None)
+        if callable(remember):
+            remember("material.week", px)
+        else:
+            zoom = getattr(self._window, "_zoom", None)
+            if isinstance(zoom, dict):
+                zoom["material.week"] = px
+        self.changed.emit()
+
+    @Slot()
+    def zoomReset(self) -> None:
+        zoom = getattr(self._window, "_zoom", None)
+        if not isinstance(zoom, dict) or "material.week" not in zoom:
+            return
+        del zoom["material.week"]
+        save = getattr(self._window, "_save_look", None)
+        if callable(save):
+            save()
+        self.changed.emit()
 
     @Property(bool, notify=changed)
     def shortcuts(self) -> bool:

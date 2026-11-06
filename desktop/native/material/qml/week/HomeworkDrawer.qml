@@ -4,6 +4,8 @@ import components 1.0
 // Homework that has no time yet: count, Plan my homework, cards, and the empty state.
 Rectangle {
     id: drawer
+    // A card's menu is open: keys that would change the week behind it wait (J21 zoom).
+    readonly property bool menuOpen: cardMenu.open
     property var bridge
     property var theme
     property string density: "comfortable"
