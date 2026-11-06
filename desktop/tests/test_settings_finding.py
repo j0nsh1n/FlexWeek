@@ -78,13 +78,12 @@ def test_more_looks_is_a_grid_of_named_pictures(qapp: QApplication, window: Nati
 def test_the_looks_stand_three_in_a_row_and_widen_with_large_text(
     qapp: QApplication, window: NativeWindow  # noqa: F811
 ) -> None:
-    """At 1280 wide the nine 160 px cards (eight looks plus Material) are three rows of three, which
-    leaves the accent in sight under them. High contrast's text is Large, and a card as wide as at
-    normal text wrapped its name onto a second line: the cards widen with the text, as far as the
-    name needs."""
+    """At 1280 wide the Look cards sit beside the preview, two to a row. High contrast's text is
+    Large, and a card as wide as at normal text wrapped its name onto a second line: the cards
+    widen with the text, as far as the name needs."""
     window.resize(1280, 800)
     dialog = prefs(window)
-    assert dialog.look.more.columns() == 3
+    assert dialog.look.more.columns() == 2
     normal = tile(dialog, "High contrast").width()
     # Text size stays the same when the look changes, so Large is set on its own control.
     text = dialog.knobs["text"]
@@ -99,7 +98,7 @@ def test_the_looks_stand_three_in_a_row_and_widen_with_large_text(
     for _ in range(5):
         qapp.processEvents()
     assert tile(dialog, "High contrast").width() == normal
-    assert dialog.look.more.columns() == 3, "back at normal text, three in a row again"
+    assert dialog.look.more.columns() == 2, "back at normal text, two in a row again"
     dialog.close_page()
 
 

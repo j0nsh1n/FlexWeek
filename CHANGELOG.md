@@ -19,6 +19,7 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ### Changed
 - Material Month's "Show study time per date" now fills each date from the bottom, full at three hours: the homework tint is planned time and a deeper homework colour is time done. The old 3 px line was too faint to see.
+- On a wide Widgets Settings window, Look's live preview sits beside the cards (about 60% of the stage) and stays put while they scroll; below 1000 px wide it stays the strip on top.
 - The One thing day shows the current task's title large (28 px) with the time left under it; during homework, Homework finished is the one filled button and Focus, Running late and Back are text buttons.
 - The "New in 1.0.0" notice is a plain card with readable words, one Choose a look button and a close button; Esc closes it and Tab reaches it.
 - Settings → Look shows each look as a 160 px card with a Current chip on the one you wear, and Material 3 is one of the cards. Current stays only when Material actually opened, and choosing the card again retries a failed open.
