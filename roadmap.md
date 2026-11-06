@@ -22,6 +22,49 @@ this file's git history, in `CHANGELOG.md`, and in `docs/cac-build-plan.md`.
 - Decisions left open by 0.18.1 are listed under "Open after 0.18.1".
 - 12 days to the contest submission (Phase 8).
 
+## After FIX-SPEC 1.3 (planned 2026-11-06)
+FIX-SPEC 1.3 and the J lanes (J21 Week zoom, J22 Day hours, J23 Month study fill, J25 Look preview side by side)
+are on main (PRs #67-#83). In order:
+
+### R1 — Unblock releases
+- Windows packaging: `opengl32sw.dll imports imagehlp.dll` fails the Windows release job (since Nov 4).
+- The local Nuitka build on Fedora drops the PySide6 libraries.
+- spec.md catch-up (Jonathan approves): CI jobs (engine wheel once, sharded mutations, rig matrix, no ffmpeg in
+  rigs), the developer channel keeping the previous build, the "Material 3" switch label (FIX-SPEC said "Back to
+  Material"), reason and notice wording.
+- Developer builds: the commit in the release title and the kept copy's tag (the number stays for ordering).
+- Complete when: a stable release builds on every platform and spec.md matches CI.
+- Status: [ ] open.
+
+### R2 — Correctness
+- Two quick settings saves can overwrite each other (save_preferences).
+- The phone does not receive same-day `notices`.
+- Material memory growth (1.9 GB after 49 min on the tarball): measure, then fix or close.
+- The autostart entry is only rewritten when the switch changes; no check at startup.
+- Check and close or fix: the Undo notice 6 s against the spec's 10 s; planner spread around held pieces and
+  grouping that ignores "one piece".
+- Complete when: each has a test that failed first, or is closed with a reason.
+- Status: [ ] open.
+
+### R3 — Testing structure
+- Revise how FlexWeek is tested (being discussed with Jonathan 2026-11-06): clock-dependent and load-dependent tests,
+  settings leaking between tests, a 27-30 minute local gate, off-screen-only visual checks.
+- Complete when: the plan Jonathan approves is in spec.md's Validation section and the suite runs on it.
+- Status: [ ] planning.
+
+### R4 — Look and feel (Jonathan's calls)
+- Material Week: move an existing block by dragging (decide).
+- Retro ignores Surface fine-tuning.
+- Look preview at 1280 px gets about 52% (two Look tiles come first): keep or change.
+- A real-screen check of J21, J22, J23 and J25.
+- Complete when: each is built, closed or decided.
+- Status: [ ] open.
+
+### R5 — Bigger work (needs scope from Jonathan)
+- The setup rebuild and day-to-day changes (Nov 3), the power-user vs everyday settings split, the Material 3
+  style option.
+- Status: [ ] waiting on scope.
+
 ## Phase 8 — Contest delivery (Oct 25, 2026)
 - README with account setup, both contributors and the AI-assistance disclosure.
 - Contest recording using an account-created schedule, plus the submission form.
