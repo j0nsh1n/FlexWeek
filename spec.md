@@ -8,7 +8,7 @@ plus their assignments, places the assignments in the gaps with a constraint
 solver, and explains in plain English every time something could not be placed
 or had to move. Built as a Congressional App Challenge 2026 entry. Working title
 was *Reslot*; the public name is **FlexWeek**. The original Sep 6 contest brief
-is archived in `docs/cac-build-plan.md`. Living schedule and remaining work live
+is in git history (`docs/cac-build-plan.md`). Living schedule and remaining work live
 in `roadmap.md`.
 
 ## Intended Users
@@ -166,7 +166,7 @@ Contract for the finished app:
   student can zoom: Ctrl and the wheel, Ctrl with =, - and 0, or two buttons
   beside the hours. Each surface's level is remembered per device in the look
   file. Every design draws its own Day and Week on one shared gesture engine
-  (`docs/0.15/architecture.md`): a block moves with the pointer in the
+  (the 0.15 architecture, `docs/0.15/architecture.md` in git history): a block moves with the pointer in the
   student's step, 5 minutes or 15 (the `drag_step_min` preference, 5 unless
   chosen otherwise in setup or Settings > Planning), with its times beside it
   while held; a typed time keeps any minute; an end drags to resize;
@@ -805,16 +805,13 @@ do not.
 other suite or script, and `fwtest clean` stops what a killed run left.
 Run every local suite, mutation run and rig through `fwtest` rather than
 bare Python, so runs queue behind each other and leave nothing running.
-`.github/workflows/verify.yml` runs `fwtest gate --backend-only` and the
-harness's and the engine's cargo checks on every push and pull request
-(Python 3.14, Rust stable, `contents: read`). Its `rig` job runs the
-real-pointer rig on Today's app under Xvfb through `fwtest rig`, then the
-desktop engine suites offscreen (the desk parity files and the wrapper
-modules' tests, which do not depend on fonts). Its `mutate` job runs
-`fwtest mutate --engine-only`, the mutation cases whose rule is in the
-engine, on a manual run and on a pull request that changes `engine/` or
-`scripts/mutations/`. All build the engine module; none builds an app
-binary.
+`.github/workflows/verify.yml` runs on every push and pull request (Python 3.14, Rust stable, `contents: read`). An
+`engine` job builds the engine wheel once; the other jobs install that wheel. `verify-python` runs the Python gate,
+`verify-engine` the harness's and the engine's cargo checks, `rig` runs the real-pointer rig for the Day and Week
+tabs under Xvfb (without ffmpeg: the rig keeps its frames and skips the video), and `mutate` runs every mutation
+case on pull requests, split over four shards. `.github/workflows/dev-build.yml`, started by hand
+(`scripts/dev-release.sh`), builds the Linux tarball, replaces the `dev` pre-release and keeps the build it replaces
+as `dev-<its commit>`; none of these is ever marked latest.
 
 The commands it runs, each of which must exit 0:
 
@@ -853,6 +850,42 @@ The commands it runs, each of which must exit 0:
   and again after the engine changes:
   `.venv/bin/maturin develop --release --manifest-path engine/py/Cargo.toml --features audit`
   (`audit` adds functions only the tests call; release builds leave it out).
+
+### Testing structure (approved 2026-11-06)
+Every rule below applies to new tests now and to each product area as it moves (see roadmap R3).
+
+1. What tests check. Code tests check behaviour: what happens on a click, key, drag, save, undo or sync, the state
+   that results, and accessible names. They do not assert colours, pixel positions or sizes. Looks are checked with
+   pictures and video (rule 6).
+2. One clock. Every test runs on the shared fake clock, which starts at a fixed moment (a Thursday at 19:00 in a fixed
+   week) and moves only when a test moves it. A test that reads the real clock fails.
+3. Clean state. Every test starts with no look file, default preferences and the 24-hour clock. Waiting is done with
+   the shared wait helper on the app's own signals; fixed sleeps are not used.
+4. Layers.
+   - Engine logic (planner, dates, slots, solver, estimates) is tested in Rust in `engine/`; Python tests of logic
+     that lives in the engine move there.
+   - Screen behaviour tests use the light app: the real windows and QML with seeded data, no server and no sign-in.
+   - A small end-to-end set keeps the local server and sign-in: accounts, sync, and save and undo round trips.
+5. Layout. Tests are grouped by product area (week, day, month, my day, focus, settings, sheets, setup, account,
+   sync, updater, planner) and named after the behaviour they check, not after the PR or audit that added them.
+6. Pictures and video.
+   - Pictures are rendered off-screen in one fixed setup (fonts, clock, data). The full set is about 100: every
+     screen in every style at 1280x800, Normal text, light and dark; plus each main screen at 1024x640 with Large text
+     and in High contrast, light.
+   - A pull request renders only the screens its changed files touch, once from main and once from the pull request,
+     and the review page shows what changed (before, after, difference). No reference pictures are stored.
+   - Video comes from the real-display rig: the actions meant to behave the same in Widgets and Material 3 (add
+     homework, tick done and Undo, open and edit, drag a block, Plan my homework, Running late, Focus, switching
+     Day / Week / Month, changing the look) and the animations, with Animations on and off. The review page shows
+     each clip as a strip of frames with the video linked.
+   - Review: Kimi annotates; Gemini (with Jonathan's OK for that run) or Claude decides. Contrast, words that do not
+     fit and the focus ring are judged by the reviewer; the page shows the measurements.
+   - Pictures and videos are kept until the pull request merges, then deleted.
+7. Where tests run. Locally, only the tests for the area a change touches (picked by `fwtest` from the changed
+   paths). CI runs everything (Python, Rust, pictures, mutations, rigs) and is the gate; a full local run is not
+   required before a push.
+8. Tools. The picture comparer, the review page, test selection by changed paths and the flaky-test log are Rust,
+   in `tools/fwtest` (approved by Jonathan 2026-11-06). App tests stay Python.
 
 ## Branches and Storage
 Decided by Jonathan on 2026-10-08, so old worktrees and their build output do

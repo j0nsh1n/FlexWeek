@@ -9,8 +9,8 @@
 
 The browser sends weeks to the Python solver; it does not implement placement.
 A solver result is a preview. Editor saves persist the student's entered blocks.
-The original Sep 6 contest brief (working title Reslot) is archived in
-[docs/cac-build-plan.md](docs/cac-build-plan.md).
+The original Sep 6 contest brief (working title Reslot) is in git history
+(`docs/cac-build-plan.md`, removed 2026-11-06).
 
 ## Data flow
 

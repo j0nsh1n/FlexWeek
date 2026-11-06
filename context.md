@@ -1,254 +1,97 @@
 # context.md — FlexWeek
 
-## Current State
-- 2026-11-05: CI speed-ups (`ci/faster-workflows`): mutation cases in 4 shards with a `mutant` cargo
-  profile, one shared engine wheel, rig and verify split into parallel jobs, Nuitka/ccache caches, and
-  developer builds keep the build they replace as `dev-<version>`. No app code changed.
-- 2026-11-03 (Step 0 of the FIX-SPEC v1.3 plan): at `ea5eacf4` plus the two static audit test files, the
-  full gate (3 workers) passes 5788 tests, ruff and mypy. Two runs with 8 workers on a busy machine each
-  failed one different timing test (`test_week_hour_labels.py`, `test_layout_clay.py`); both pass alone.
-  The Roboto Flex licence had Windows line endings, which failed the committed-range whitespace check;
-  it is now LF with the same text. Plan: `~/.flexweek-ui-harness/scratch/fix-spec-1.3/plan.md`.
-- 2026-11-03: Local static UI audit follow-ups reviewed through `92230b43`.
-  Material Look now propagates light/dark colours to its rows; School times commit and
-  format on Return. Day/Week/Month preview actions use passive projections, including
-  keyboard and Qt accessibility paths. Bento's drag instruction sits below its card
-  heading so the settled Undo toast does not cover it. Codex independently checked the
-  Gemini bundle (86 focused tests plus bounded probes); Gemini passed the small Codex
-  completion-slot/clipping follow-up, rerunning 17 tests (18.27s, 329 MB, zero job swap).
-  This does NOT complete the overhaul: cold Advanced Month preview still has no data,
-  and Bento's 1024px/Large/Saturday-Today headers drift up to 49px. Both repairs are
-  paused at Debugging Limits pending Jonathan's direction. The latest full gate failed
-  two clipping cases before subsequent repairs; no newer full-gate pass is claimed.
-  Capture filenames are not reached-state proof; several captures are mislabeled.
-  Source and focused evidence: `~/.flexweek-ui-harness/scratch/static-ui-audit-20261103/`.
-  No overhaul changes have been pushed or released; animation review remains deferred.
-- 2026-11-02: Material desktop overhaul lanes are integrated locally on
-  `fix/visual-artifacts-20261026`, reviewed through `fdf0ed1c`. The wide Codex review's
-  five blockers and subsequent modal-pointer and sheet-focus findings have fixes with
-  independent Grok 4.7 verification. Sheet Tab/Backtab full cycles and picker Escape
-  passed on hidden KWin. Canonical SQL weekend preferences and local focus extras remain.
-  Menu/card shadows now flatten and re-lift the same effect; combined historical-path
-  tests pass, but the timing-dependent process abort itself was not reproduced.
-  This is focused verification, not a full-gate pass. Graphics fallback remains
-  offscreen-only; packaging, audible checks, Android redesign and final visual review
-  remain pending. Nothing from the overhaul has been pushed or released.
-  Evidence: `~/.flexweek-ui-harness/scratch/material-week-review-grok/`.
-- 2026-10-27: **1.2.0 released as Latest**, PR #54 merged into `main` at
-  `a71e4d91f09873b5c6ef1daeafac2f7d0319d433`, tag `v1.2.0`.
-  https://github.com/j0nsh1n/FlexWeek/releases/tag/v1.2.0 has all ten assets; five checksum pairs
-  and all ten public asset digests match the downloaded files. Desktop and Android report 1.2.0;
-  Android versionCode is 4. Release notes are `docs/release-notes-v1.2.0.md`.
-- Local follow-ups on the reused task branch route overdue announcements through visible More
-  or the window while Settings is open. Plan tests inspect painted accent text in Light/Dark,
-  excluding the count pill. Both regressions have mutation proof; 49 related tests pass.
-  The capped full gate passes 5425 tests, lint, types, mutation anchors and whitespace
-  (558.12s, service peak 4 GiB). Grok 4.6 independently passed `5ebe583d`, rerunning all 49
-  related tests in 64.27s with scoped Ruff and whitespace checks. Nothing new has been pushed.
-  Native AT-SPI delivery remains unverified: the isolated registry failed to start. Jonathan
-  accepted Qt accessibility-tree/KWin proof and this reported gap.
-  The four approved clean, merged worktrees and local branches were removed after usage checks,
-  totaling 117 MiB of listed files. All other checkouts, including Windows records, were kept.
-- Quiet split removes the repeated status row, moves Week as a list into More, keeps Ctrl+Shift+L
-  and focus return, quiets Plan, and separates the rail with type and spacing. Light, Dark at
-  1024x640 Large, and High contrast each passed all 15 real-KWin pointer and shortcut steps.
-  Logs and captures: `~/.flexweek-ui-harness/scratch/quiet-split-ui/integrated/`.
-- Setup's mismatched test clock now holds Monday 09:00; no planner change. Retro's late-month
-  fixture now has a visible deadline; ten slide tests pass and the repaint mutation is caught.
-  Bento's background-refresh focus loss reproduced before preserving the window's remembered
-  focus; 20 related tests and both real-KWin focus checks pass after the fix.
-- The 1.2.0 release's rebuilt-fwtest gate passed: 5423 tests, Ruff, mypy, mutation anchors and
-  whitespace checks (547.98s, service peak 4.2 GiB). The Plan mutation catches loss of accent text. Harness and engine
-  fmt, clippy and tests pass. Cartographer's launcher cannot import the traceworks module.
-- Android unit tests and the release build pass. The signed 1.2.0 APK retains 1.1.1's certificate.
-  Release artifacts and verification logs are in integrated scratch. Independent Grok 4.6 review
-  passed on `007ba1ff`, with 47 focused tests. Windows/Linux packaging and installer checks pass
-  in run `40469595259`, attempt 2. The first Windows Rust setup failed; a fresh-runner retry
-  resolved it without source changes. Both downloaded Linux MCP launchers pass with fresh
-  HOME/data, and the downloaded Android APK's certificate matches 1.1.1.
-  Its overdue announcement finding affected the hidden Unfinished control in published 1.2.0;
-  the local follow-up corrects the target. Screen-reader delivery is still unverified.
-- PR #54's Classic Week rig exposed a fixed-height Unfinished list forcing Large text above
-  640 px. The list now keeps one whole row visible and scrolls when height is short. The exact
-  1024x640 real-KWin scenario and 26 related tests pass. Restoring fixed height makes the new
-  regression fail at 1024x776. The final gate and all 19 Classic Week scenarios pass;
-  Grok 4.6 independently passed the correction on `096dedcd`, reran four targeted tests,
-  and caught the fixed-height mutation before restoring its clean checkout.
-- Requested post-release Grok 4.6 follow-up passed on `3cab7f65`: 64 Retro/Setup tests in
-  64.71s, scoped Ruff and diff checks pass. The empty Retro fixture explained the old failure;
-  no remaining snapshot defect was found. Its Plan paint-coverage finding is addressed by the
-  local follow-up. The review checkout is clean.
-- `feat/refined-look-renovation` remains separate at `4f1b9f97`, with its previously recorded
-  772 focused tests and ten-look captures under `scratch/theme-renovation-2026-10-26/`.
-  Its uncommitted spec/changelog drafts were preserved as patches under the integrated scratch
-  folder before removing those changes from the 1.2.0 documents.
-- Latest published release is 1.2.0; 1.1.1 is the previous release. The source trial ran from this task branch;
-  its log is `~/.flexweek-ui-harness/scratch/manual-trial-20261026/desktop.log`.
-- Since 0.18.5: new accounts start on a 12-hour clock (the desktop conftest sets 24-hour per test
-  unless a test chooses); tests fail on any error inside a Qt slot (`no_error_is_lost_inside_a_qt_slot`).
-- Rust (`engine/`, contract `docs/engine/contract.md`, wrappers `docs/engine/adapters.md`): the
-  planner and solver, slots, weeks, day, month, explain, restore, recovery codes, the store's SQL
-  helpers and database connection, and the desktop's Qt-free logic (`desk`: calendar, custom looks
-  with saving, naming and import, files, focus, history, pomodoro, remind, reuse, tokens, update,
-  week model). Python calls it through the `flexweek_engine` module; the Python wrappers only
-  encode, call and decode.
-- Python: the FastAPI routes (about 40 SQL statements remain in the route bodies of `create_app`),
-  password hashing's random salt, the clock, the environment and file reads (the engine core is
-  pure), the pydantic checks, `backend/models.py`'s Spotify and due-date copies, the `CATEGORIES`
-  table in `calendar.py`, `TYPE_PT` in `tokens.py`, `custom_look.readability`, all Qt drawing, and
+## Current State (2026-11-06)
+- Latest release: v1.2.0 (2026-10-27, tag `v1.2.0`, all ten assets and checksums verified); previous 1.1.1.
+  Developer build 1.2.0.202611061702 is `dev` (main 33fe5eef); replaced developer builds stay as
+  `dev-<commit>` pre-releases, never offered by the updater.
+- On main since 1.2.0: FIX-SPEC 1.3 (#67-#76), CI speed-ups (#75), rigs without ffmpeg (#78), J23 Month study fill
+  (#79), J21 Material Week zoom (#80), J25 Look preview side by side (#81), J22 Material Day hours (#82), developer
+  builds kept by commit (#84).
+- Checks: the last full gate (J22, before merge) passed 6031 tests, ruff and mypy; every PR's 13 CI checks passed.
+  A timed full run takes 27 min wall, 80 min of test time over 3 workers, 74% of it in tests that start the
+  whole app.
+- Known failures: `test_layout_fit_small` (Clay 1024x640 Large) fails locally in the daytime because it reads the
+  wall clock; `test_placeholder_0185`, `test_regress_item0_time_boxes`, `test_week_hour_labels` and
+  `test_setup_wizard` sometimes fail under gate load and pass alone. The Windows release job fails with
+  `opengl32sw.dll imports imagehlp.dll` (since 2026-11-04), so no stable release can be published.
+- Known gaps: Material memory growth (1.9 GB after 49 min on the tarball) is unmeasured; native AT-SPI delivery
+  is unverified (Jonathan accepted the Qt accessibility tree); the static audit's F1 and W3 are open (roadmap).
+- Testing rebuild: rules approved in spec.md (Validation & Tooling, "Testing structure"); phases in roadmap R3;
+  not started. Draft, survey and timings: `~/.flexweek-ui-harness/scratch/testing-revision/`.
+- Rust (`engine/`, contract `docs/engine/contract.md`, wrappers `docs/engine/adapters.md`): planner and solver,
+  slots, weeks, day, month, explain, restore, recovery codes, the store's SQL helpers and connection, and the
+  desktop's Qt-free logic (`desk`). Python calls it through `flexweek_engine`; the wrappers only encode, call and
+  decode.
+- Python: the FastAPI routes (about 40 SQL statements remain in `create_app`'s route bodies), password hashing's
+  salt, the clock, environment and file reads, the pydantic checks, `backend/models.py`'s Spotify and due-date
+  copies, `CATEGORIES` in `calendar.py`, `TYPE_PT` in `tokens.py`, `custom_look.readability`, all Qt drawing and
   `scripts/rig/drive.py`.
-- Tests: the Rust engine suites (engine, store, bindings and sync; clippy and fmt clean at last
-  count) and the Python gate through `fwtest gate`. The differential tests and the
-  frozen Python copies are deleted; the Python tests that remain guard Python-only code and the
-  interface. Regression Tester's suites live in desktop/tests/regress184, regress190 and
-  backend/tests/regress184, collected only with FLEXWEEK_REGRESS=1 (regress184 waits for its
-  conftest); `scripts/rig/play.py` gives agents a play mode (steps, shots and widget trees).
-  `hypothesis` is used by no test and still awaits Jonathan's word to go.
-- Speed (`log.tsv`, pr35 review at 2e2f76a): placing the probe week 1.1 ms (0.17.2: 2.9 ms; with a
-  busy second thread 1.0 ms against 8.0). Drawing a frame of the hours 10.2 ms median (0.17.2:
-  9.1 ms; the limit is 16 ms).
-- Known differences from the Python originals: integers past 64 bits and JSON only Python reads
-  (NaN, lone surrogates) in stored rows; an assignment estimate past 2^63 raises `OverflowError` in
-  the engine where Python returned a number (seen once under hypothesis); `build_month` returns a
-  month where Python raised `TypeError` on a finished session with no start. About 100 cases the
-  deleted differential tests pinned have no Rust test of the same case (list in the 0.18.1 scratch
-  report).
+- Speed (pr35 review): placing the probe week 1.1 ms; drawing a frame of the hours 10.2 ms median (limit 16 ms).
+- Known differences from the Python originals: integers past 64 bits and Python-only JSON (NaN, lone surrogates)
+  in stored rows; an estimate past 2^63 raises `OverflowError`; `build_month` returns a month where Python raised
+  `TypeError` on a finished session with no start. About 100 cases the deleted differential tests pinned have no
+  Rust test (roadmap, carried over).
 
 ## Repo Landmarks
 ```
 engine/engine/          pure Rust core: plan, solve, day, month, restore, desk modules; tests/ are the Rust twins
-engine/sync/            iroh device sync (`flexweek-sync`): apply, records, schema, peers, scan, and net/ (pair, protocol, session, service, qr)
-engine/ffi/             UniFFI crate (`flexweek-ffi`) the Android app loads as libflexweek_ffi.so
-engine/store/           Rust SQL helpers per table (assignments, ledger, prefs, routines, weeks, rules)
-engine/py/              PyO3 binding built as `flexweek_engine` (`pip install ./engine/py`)
-engine/clippy.toml      forbids key-reordering removes; `Cargo.toml` builds the engine at opt-level 2 in debug
+engine/sync/            iroh device sync (`flexweek-sync`)
+engine/ffi/             UniFFI crate the Android app loads as libflexweek_ffi.so
+engine/store/           Rust SQL helpers per table
+engine/py/              PyO3 binding built as `flexweek_engine`
+engine/mcp/             the `flexweek-mcp` server (stdio)
 docs/engine/            contract.md, adapters.md (every wrapper's class), interface-logic.md
-tools/fwtest/           Rust test runner: gate, mutate, rig, run, clean; builds with cargo
+tools/fwtest/           Rust test runner: gate, mutate, rig, run, clean (contract docs/tooling/fwtest.md)
 scripts/mutations/      mutation specs (JSON); engine cases point at `cargo:` tests
-scripts/rig/            Python rig driver for the hidden desktop (fwtest starts and stops the session)
+scripts/rig/            rig driver and plays for the hidden real-display session
 backend/app.py          FastAPI routes: account, session, ownership; serves no pages
-backend/storage.py      Python adapter over the engine's connection; scrypt and sessions
-backend/{slots,weeks,limits,...}.py  wrappers that re-export or call the engine
 desktop/main.py         launcher: starts the backend in-process, then the native window
-desktop/server.py       bundled uvicorn on a loopback port, no Qt imports
 desktop/native/window.py     chrome, pages, dialogs, autosave, updater wiring
-desktop/native/controller.py session: saves, solve, focus, alarms, reminders
-desktop/native/widgets.py    week grid, day agenda, month, editors, Add menu
-desktop/native/layouts/      the eight designs; registry.py builds the dialog
+desktop/native/controller.py session: saves, solve, focus, alarms, reminders; now_ms is the clock
+desktop/native/settings.py   Widgets Settings (Look preview side by side from 1000 px)
+desktop/native/layouts/      the Widgets designs; registry.py builds the dialog
+desktop/native/material/     Material 3 shell: bridges (Python) and qml/ (views, week, hours/HoursPane, month)
 desktop/native/look.py       packs, presets, palettes, the one stylesheet
 desktop/native/version.py    VERSION, kept equal to the newest CHANGELOG heading
-desktop/native/*.py          the Qt-free modules are thin wrappers over engine::desk
 desktop/{build_*,package_*}  Linux and Windows builds; packaging/ holds AppImage, Inno, WiX
-android/                the Android phone app: Kotlin + Compose, loads the ffi lib; scripts/android/ builds and signs it
-desktop/tests/          widget tests, engine desk parity tests, `--smoke-test`
-.github/workflows/      verify, codeql, release packages
+android/                the Android phone app (Kotlin + Compose)
+desktop/tests/, backend/tests/  the Python suites (regress184/190 only with FLEXWEEK_REGRESS=1)
+.github/workflows/      verify, codeql, release packages, dev-build
 ```
 
 ## Domain Model
-SQLite: users → sessions, many dated weeks keyed (user_id, week_start), one preference row. Default
-desktop mode uses a local per-user database; hosted mode uses the configured deployment. There is no
-automatic synchronization between them. Only the engine opens the database; the format is unchanged
-from 0.17.2, so earlier passwords, sessions and recovery codes still work.
-Assignments are keyed (user_id, id) with a JSON body and revision. A flexible block with
-`assignment_id` is a work session of that assignment. Routines are keyed (user_id, id) as named
-templates of locked blocks. Restore points snapshot all of an account's weeks and assignments.
-Recovery codes are hashed per user and shown only once. A format-3 export can copy weeks,
-assignments, preferences and routines onto another account after a preview. Recorded `operation_id`
-values make a retried write return the first result.
+SQLite: users → sessions, many dated weeks keyed (user_id, week_start), one preference row. Default desktop mode
+uses a local per-user database; hosted mode uses the configured deployment; there is no automatic sync between
+them except device sync. Only the engine opens the database. Assignments are keyed (user_id, id) with a JSON body
+and revision; a flexible block with `assignment_id` is a work session of that assignment. Routines are named
+templates of locked blocks. Restore points snapshot an account's weeks and assignments. Recovery codes are hashed
+and shown once. A format-3 export copies weeks, assignments, preferences and routines onto another account after a
+preview. Recorded `operation_id` values make a retried write return the first result.
 
 ## Non-Obvious Decisions
-- The engine core is pure: Python reads the clock, environment, files and randomness and passes
-  them in. JSON text crosses the boundary (a 12-block week costs about 0.02 ms to encode and decode).
-- `serde_json` has `preserve_order` on, and `engine/clippy.toml` forbids the removes that reorder
-  keys, so stored JSON keeps Python's key order.
-- Colour maths calls the C library's `cbrt`, `pow`, `atan2`, `sin` and `cos`, looked up at run time
-  (`desk/cmath.rs`: `libm.so.6`, `ucrtbase.dll` on Windows), so results match Python's to the bit.
-- Case folding uses a table generated from this interpreter (`engine/tools/generate_casefold.py`),
-  not a crate.
-- The engine crate builds at opt-level 2 in debug so the solver's 150 ms budget holds under load
-  (Jonathan's choice).
-- A week's identity is its Monday. Blocks store a day index and derive their date. `weeks` pins the
-  ISO shape before parsing, because `date.fromisoformat` also accepts "20260907" and "2026-W37-1".
-- GET /api/week 422s a non-Monday rather than snapping it, so client and server cannot disagree about
-  which week is open.
-- The identical-blocks short-circuit runs before the revision check, as the pre-dated code did.
-- The migration is guarded on the weeks table existing and runs in an explicit BEGIN IMMEDIATE.
-  Registration seeds no weeks row; a missing row already means an empty week.
-- A new flexible task in the week on screen may use today onward, since the solver does not know
-  today's date. The dialog offers Fixed or Flexible only for a new item; editing keeps the kind.
-- The desktop app bundles the backend and runs it in-process (owner's choice 2026-09-07). The
-  loopback port is chosen by binding a socket before `create_app`, because the backend pins its CSRF
-  origin check and TrustedHostMiddleware to one origin; uvicorn gets the bound socket and runs with
-  `loop="asyncio"`, `http="h11"`.
-- An invalid FLEXWEEK_*_ORIGIN is an error, not a fall back to local, so a typo cannot quietly open
-  a different, empty database.
-- `profile_root()` reads QStandardPaths AppDataLocation, so `main()` sets the application name first.
-- Nuitka is called directly, since `pyside6-deploy` rewrites its spec with machine paths.
-- `theme` is `system|slate|nocturne` (default `system`, owner decision 2026-09-10).
-  `allow_system_theme()` rebuilds an older preferences table once, keeping stored slate/nocturne.
-- The accent stays at least CIE76 distance 15 from every category colour; a test in
-  `desktop/tests/test_look.py` holds it.
-- Windows installers: the Inno `AppId` and the MSI `UpgradeCode` are fixed forever so upgrades find
-  the installed copy. The .exe is per account, the .msi per machine. Inno Setup 7.1.0 is downloaded in
-  CI with its SHA-256 checked; WiX is pinned to 6.0.2 because v7 blocks on an EULA. Windows ICU is
-  required from Windows 10 1809 rather than copied out of System32.
-- Linux leads with a tar.gz so the executable bit survives. The AppImage needs FUSE; without it use
-  `--appimage-extract` then `squashfs-root/AppRun`, or the tarball.
-- The smoke test decides a week was drawn by counting colours in a grab of the window
-  (`PAINTED_MIN_COLORS`, 8 px grid): a blank window is one flat colour.
-- The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
+- The engine core is pure: Python reads the clock, environment, files and randomness and passes them in.
+- `serde_json` has `preserve_order` on and `engine/clippy.toml` forbids key-reordering removes, so stored JSON
+  keeps Python's key order.
+- Colour maths calls the C library's `cbrt`, `pow`, `atan2`, `sin`, `cos` at run time so results match Python's.
+- Case folding uses a table generated from this interpreter, not a crate.
+- The engine builds at opt-level 2 in debug so the solver's 150 ms budget holds under load (Jonathan's choice).
+- A week's identity is its Monday; GET /api/week refuses a non-Monday rather than snapping it.
+- The desktop app runs the backend in-process on a pre-bound loopback socket (CSRF origin and TrustedHost pin one
+  origin). An invalid FLEXWEEK_*_ORIGIN is an error, never a fall back to local.
+- Nuitka is called directly; `pyside6-deploy` rewrites its spec with machine paths.
+- The accent stays at least CIE76 distance 15 from every category colour (`desktop/tests/test_look.py`).
+- Windows installers: the Inno `AppId` and MSI `UpgradeCode` never change; Inno 7.1.0 is checksum-checked; WiX is
+  pinned to 6.0.2. Linux leads with a tar.gz so the executable bit survives.
+- The Material switch button keeps the label "Material 3" (Jonathan, 2026-11-06), not FIX-SPEC's "Back to Material".
+- Developer build versions stay a timestamp because the updater orders builds by it; the commit goes in the kept
+  copy's tag and title. The kept copy's tag points at the new run's commit, because the workflow token may not tag
+  an older commit once main's workflows have changed (HTTP 403, 2026-11-06).
+- CI rigs install no ffmpeg (the Ubuntu mirror hung on its libraries); the rig keeps frames and skips the video.
+- The Android release key lives in `~/.config/flexweek-android/`, outside the repo; phone updates are signed with it.
 
 ## Session Handoff
-- 2026-11-06, `main` 7725ddca: J lanes done. J23 (#79) Month study time fills each date; J21 (#80) Material
-  Week zoom (material.week, Ctrl+=/-/0, Ctrl+wheel, pill); J25 (#81) Widgets Settings Look preview beside
-  the cards from 1000 px; J22 (#82) Material Day shows its hours through the shared `hours/HoursPane.qml`
-  (Week uses it too), own zoom (material.day). CI rigs install no ffmpeg (#78). The Material switch button
-  keeps the label "Material 3" (his call; FIX-SPEC said "Back to Material"). Grok is near its 15% line.
-  test_layout_fit_small clay 1024x640 large fails locally in the daytime on main (passed in CI and overnight).
-- 2026-11-06, `main` 965e79e2: FIX-SPEC 1.3 stage done through PR 7b (#67-#74, #76) and the CI
-  speed-ups (#75: engine wheel built once, mutation cases in four shards, Day/Week rig matrix;
-  mutations about 6 min instead of 60). Developer build 1.2.0.202611060358 is `dev`; the build it
-  replaced stays downloadable as `dev-1.2.0.202611050822`, which the updater never offers.
-  Next on his word: J25 (Look preview side by side, option A), J21-J23. The Windows release job
-  fails on `opengl32sw.dll imports imagehlp.dll` (since Nov 4); no stable release until it is fixed.
-  Cleanup (his approval, 2026-11-06): 54 merged checkouts, 78 merged local branches and three
-  downloaded builds removed; unmerged work and the Windows `D:/` worktree records kept.
-  Plan and log: `~/.flexweek-ui-harness/scratch/fix-spec-1.3/plan.md`.
-- 2026-11-03: Step 0 merges `fix/visual-artifacts-20261026` into `main` by PR (Jonathan's word). Next,
-  in the plan's order: the updater fixes and Linux nightly tarballs (plan section 3b), then PRs 1-7.
-  Writers are Gemini 3.8 Flash (T3 `antigravity`) and Grok 4.6 medium; Codex `gpt-6.1-sol` high reviews.
-  Jonathan's desktop now runs the 1.2.0 tarball install at `~/.local/opt/FlexWeek`.
-- Static audit: reviewed local source `92230b43`; no running repair at the latest handoff.
-  Await direction for F1 cold Month and W3 Bento header drift; no retries under AFK
-  authorization alone. Preserve two untracked weak audit tests without counting them
-  as acceptance evidence. Remaining independent static checks may continue read-only.
-  Once blockers are resolved and independently reviewed, run the capped `fwtest gate`
-  (10 GiB/800%, nice 19/default eight workers/watcher); AFK gate authorization exists.
-  Never use old release gates as current overhaul proof. No remote actions or cleanup.
-- 2026-10-27: Local overdue-accessibility and Plan paint-test follow-ups are complete on
-  `fix/visual-artifacts-20261026`, reused with Jonathan's approval. Test-first commit `6ecf2123`
-  records both intentionally failing page-specific announcement cases. The fix passes all four
-  focused cases and 49 related tests; both mutation regressions are caught. Four specifically
-  approved old checkouts/local branches were removed; other work was preserved. The full gate
-  passes 5425 tests plus lint/types/mutation anchors. Grok 4.6 passed `5ebe583d` and independently
-  reran the 49 related tests. The clean review checkout `t3-0cbd52a3` is retained. Native AT-SPI
-  proof is unavailable in the isolated session and accepted as a reported gap. The local fix is
-  committed; published 1.2.0 is unchanged. No push/PR/release requested.
-- 2026-10-27: **1.2.0 released**, PR #54 / `main` `a71e4d91`, tag `v1.2.0`, Latest.
-  Quiet split, Settings footer, Unfinished wrapping/scrolling and calendar focus fixes shipped.
-  Final gate: 5423 tests, lint, types, mutation anchors and whitespace pass. Rust checks pass.
-  Grok 4.6 independently passed the source and final short-window correction; mutation proofs
-  catch both old failures. All 19 Classic Week rig scenarios pass on real KWin.
-  Windows/Linux CI and Windows installer checks pass; all ten downloads/public digests and
-  five checksum pairs verified, both Linux MCP launchers smoked, Android certificate unchanged.
-  The publication-triggered redundant build `40476977696` was cancelled; the release schedule
-  was deleted. Final handoff is local on `fix/visual-artifacts-20261026`; release source is on main.
-  Earlier renovation and other checkouts remain separate; storage cleanup remains deferred.
-  The requested read-only Retro/integration/test-clock/release follow-up also passed, with
-  64 targeted tests; its temporary checkout was retained and no release change resulted.
-- 2026-10-21, `main` fff4d064: **1.1.1 released** (PR #53, tag `v1.1.1`, Latest; all ten assets attached, every checksum verified). Linux packages carry `flexweek-mcp` (`--mcp` from the AppImage, the tar.gz launcher and the app); the release workflow smokes both, and the published AppImage and tar.gz were smoked again locally. spec.md's Releases section now names the Linux packages; Windows and Android do not carry the helper. Next: Bori moves to `<package> --mcp --read-only` (Bori agent, `.handoff/bori-calendar-mcp.md` section 12); release cleanup awaiting Jonathan's approval of the list; MCP track C (plan, running late, routines, restore) and the phone screens remain.
-- Next (Jonathan's pick: MCP first): track C, Plan / Running late / explain tools, routines, restore, then the app switching to the Rust views, write door and restore so nothing is written twice. Duplicates until then: Python validators and homework-edit rules in `backend/` and `desktop/`, and the desktop's focus phase advance (`controller.py` `advance_focus`) beside the phone's in `engine/ffi/src/focus.rs`.
-- Phone screens not built yet: full-screen focus with breaks (8 A), Month (6 B), Day (7 A), Week C with drag. Their plans are in `~/.flexweek-ui-harness/scratch/android-1.1/` (`rebuild-test-plan.md`, `wave4-test-plan.md`).
-- Still waiting on Jonathan: what shrinks on My day and One thing at 1024x640 Large, and a device check of the phone updater and the lane 1 fixes.
-- The Android release key lives in `~/.config/flexweek-android/` (outside the repo). Every phone update must be signed with it.
-- Run plan: `~/.flexweek-ui-harness/scratch/1.1/plan.md`.
+- 2026-11-06, main 33fe5eef plus docs PR #85 (branch `docs/roadmap-after-1-3`: roadmap R1-R5 and its prune, spec
+  Validation and Testing structure, legacy docs removed, this file pruned). Next on Jonathan's go: R1 (unblock
+  releases) or R3.1 (testing foundations); step 2 of developer build naming (commit in the title) once he has
+  installed 1.2.0.202611061702. Logs: `~/.flexweek-ui-harness/scratch/fix-spec-1.3/plan.md`,
+  `~/.flexweek-ui-harness/scratch/testing-revision/`.

@@ -1,4 +1,5 @@
-"""Settings in the 0.17 system (decision 24 of docs/0.17/plan.md, look-review.md section 8).
+"""Settings in the 0.17 system (decision 24 of the 0.17 plan, section 8 of its look review;
+docs/0.17/ in git history).
 
 The cards stood at 760 pixels against the left with a quarter of the window empty; the section list
 was plain words; Look was one long dropdown and Accent another; the number boxes were four widths;

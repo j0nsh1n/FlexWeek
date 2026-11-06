@@ -160,9 +160,8 @@ deliberate breaks, `fwtest rig ...` drives the app with a real pointer,
 `fwtest run -- CMD` runs any other command the same way, and `fwtest clean`
 stops what a killed run left behind. It uses `.venv/bin/python` unless you pass
 `--python` or set `FWTEST_PYTHON`. The contract is
-[docs/tooling/fwtest.md](docs/tooling/fwtest.md). See the
-[coverage map and feature verification guide](docs/verification.md) for focused
-checks and release limitations.
+[docs/tooling/fwtest.md](docs/tooling/fwtest.md). What is checked, and how, is in
+spec.md under Validation & Tooling.
 
 ## Progress
 
@@ -206,9 +205,8 @@ what was built and checked what shipped:
 
 The app itself uses no AI service.
 
-The original Sep 6 contest brief (working title Reslot) is in
-[docs/cac-build-plan.md](docs/cac-build-plan.md). The living schedule is the
-[roadmap](roadmap.md).
+The original Sep 6 contest brief (working title Reslot) is in git history. The
+living schedule is the [roadmap](roadmap.md).
 
 Submit by Sunday, October 25, 2026, 8:00 p.m. PDT.
 
