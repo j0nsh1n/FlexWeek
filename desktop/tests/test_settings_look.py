@@ -586,3 +586,76 @@ def test_high_contrast_names_its_text_suggestion_and_the_button_says_what_it_doe
     assert page.knobs["text"].currentData() == "large"
     assert spoken == ["Text size is now Large."]
     page.close_page()
+
+
+def _button_words_and_face(button: QPushButton) -> tuple[str, str]:
+    """The button's text colour and the colour most of its face is painted."""
+    button.ensurePolished()
+    picture = button.grab().toImage()
+    counts: dict[str, int] = {}
+    for x in range(2, picture.width() - 2, 2):
+        for y in range(2, picture.height() - 2, 2):
+            name = picture.pixelColor(x, y).name()
+            counts[name] = counts.get(name, 0) + 1
+    face = max(counts, key=counts.get)
+    return button.palette().color(QPalette.ColorRole.ButtonText).name(), face
+
+
+def test_retro_settings_buttons_keep_a_readable_pair_under_light_and_dark(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """T15 (Sol, PR 7b round 2): with the Retro layout, an outlined button takes Retro's ink on Retro's face
+    and Done keeps its own filled pair, so neither is black on a dark face or on the accent fill."""
+    window.session.preferences = {**(window.session.preferences or {}), "motion": "off"}
+    window._apply_appearance()
+    page = open_settings(qapp, window, (1280, 800))
+    main = page.layout_sections[0]
+    try:
+        main.pick.setCurrentIndex(main.pick.findData("retro"))
+        for index in (1, 0):  # Dark, then Light
+            page.look.main.buttons()[index].click()
+            for _ in range(20):
+                qapp.processEvents()
+            still(window)
+            for button in (page.findChild(QPushButton, "prefCustomise"), page.done):
+                words, face = _button_words_and_face(button)
+                assert contrast(words, face) >= AA_TEXT, (button.text(), index, words, face)
+    finally:
+        main.pick.setCurrentIndex(main.pick.findData("classic"))
+        page.look.main.buttons()[0].click()
+        page.close_page()
+
+
+def test_material_is_not_current_after_a_late_failure_or_a_rebuilt_settings_page(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """UI22 (Sol, PR 7b round 2): Material that opens and then fails, and a Settings page built after a failed
+    open, both leave the Material card not Current while the Widgets week is up."""
+    page = open_settings(qapp, window)
+    host = window._ensure_material()
+    assert host is not None
+    try:
+        page.look.material.chosen.emit()
+        for _ in range(20):
+            qapp.processEvents()
+        assert window._stack.currentWidget().objectName() == "materialPage"
+        host._on_scene_graph_error(None, "the graphics device was lost")
+        for _ in range(20):
+            qapp.processEvents()
+        assert window._material_gave_up is True
+        window._open_settings()
+        for _ in range(5):
+            qapp.processEvents()
+        assert window._settings.look.material.note.text() != "Current"
+        window._discard_settings_page()
+        window._attach_settings_page(window._build_settings_page())
+        assert window._settings.look.material.note.text() != "Current"
+    finally:
+        window._material_gave_up = False
+        window._surface = "widgets"
+        if window._stack.currentWidget() is not None:
+            window._use_widgets_styles()
+        if window._settings is not None:
+            window._settings.close_page()

@@ -381,7 +381,12 @@ def retro_shades(tokens: dict[str, str]) -> str:
         f"border-left: 3px solid {colours.accent}; }}"
         f"QWidget#settingsPage QComboBox, QWidget#settingsPage QAbstractSpinBox, "
         f"QWidget#settingsPage QLineEdit {{ color: {ink}; background: {field}; }}"
-        f"QWidget#settingsPage QPushButton {{ color: {ink}; }}"
+        # An outlined button gets Retro's whole pair, face and ink; Done keeps its own filled pair, since
+        # Retro's ink on the worn look's fill (or dark button face) does not read (Sol, PR 7b).
+        f'QWidget#settingsPage QPushButton[outline="true"] {{ color: {ink}; background: {face}; '
+        f"border: 1px solid {colours.shadow}; }}"
+        f'QWidget#settingsPage QPushButton[outline="true"]:hover {{ background: {colours.light}; '
+        f"color: {ink}; }}"
         f'QWidget#settingsPage QRadioButton[segment="true"] {{ color: {ink}; }}'
         f'QWidget#settingsPage QRadioButton[segment="true"]:checked {{ color: {ink}; '
         f"background: {field}; }}"

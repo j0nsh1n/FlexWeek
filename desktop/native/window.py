@@ -32,6 +32,7 @@ from PySide6.QtGui import (
     QPixmap,
     QResizeEvent,
     QShortcut,
+    QShowEvent,
 )
 from PySide6.QtNetwork import QLocalServer
 from PySide6.QtWidgets import (
@@ -45,6 +46,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
@@ -94,15 +96,7 @@ from desktop.native.controller import ROUTINE_STATUS, NativeSession, _late_summa
 from desktop.native.custom_look import sanitize_saved
 from desktop.native.devices import SyncDot, SyncHost, live_phones, run_off_ui, sync_state
 from desktop.native.elevation import flatten, lift
-from desktop.native.feel import (
-    Context,
-    apply_feel,
-    bar_chrome,
-    context_for,
-    current,
-    extra_stylesheet,
-    set_current,
-)
+from desktop.native.feel import Context, apply_feel, context_for, current, extra_stylesheet, set_current
 from desktop.native.fields import ProblemLine, announce
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.focus import focus_now, phase_duration_ms
@@ -545,6 +539,37 @@ class LastInput(QObject):
         elif kind == QEvent.Type.MouseButtonPress:
             self.keyboard = False
         return False
+
+
+class _BarStrip(QWidget):
+    """Retro's title-bar colour behind the top bar (T14): sized to the bar's rows across the page, under
+    every widget on it, and passing clicks through. Hidden for every other design."""
+
+    def __init__(self, page: QWidget, bar: QLayout) -> None:
+        super().__init__(page)
+        self._bar = bar
+        self.setObjectName("appBar")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.hide()
+        page.installEventFilter(self)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt virtual
+        if event.type() in (QEvent.Type.Resize, QEvent.Type.LayoutRequest, QEvent.Type.Show):
+            self.follow()
+        return False
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 - Qt virtual
+        self.follow()
+        super().showEvent(event)
+
+    def follow(self) -> None:
+        page = self.parentWidget()
+        if page is None:
+            return
+        bottom = self._bar.geometry().bottom() + 1 + page.layout().contentsMargins().top()
+        self.setGeometry(0, 0, page.width(), max(0, bottom))
+        self.lower()
 
 
 class NativeWindow(QMainWindow):
@@ -1232,6 +1257,9 @@ class NativeWindow(QMainWindow):
         """
         self._material_gave_up = True
         self._material_failed = VERSION
+        if self._settings is not None:
+            # Material is no longer the one worn, whatever Settings showed when it opened (UI22).
+            self._settings.look.show_material(False)
         self._week_keys(True)
         current = self._stack.currentWidget()
         bridge = self._account_bridge()
@@ -1618,13 +1646,6 @@ class NativeWindow(QMainWindow):
         self._bar_views = QHBoxLayout()
         bar.add_group(where)
         bar.add_group(self._bar_views)
-        # A widget of its own, so a design can dress the strip the bar sits on (Retro's chrome).
-        bar_host = QWidget()
-        bar_host.setObjectName("appBar")
-        bar_host.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        bar_box = QHBoxLayout(bar_host)
-        bar_box.setContentsMargins(0, 0, 0, 0)
-        bar_box.addLayout(bar)
         # ‹ › Today, then where you are, said once and said large. After the title, the arrows moved
         # sideways with its width on every switch between Day, Week and Month (decision 11).
         self.prev_nav = QPushButton()
@@ -1695,7 +1716,10 @@ class NativeWindow(QMainWindow):
         sign_out.setVisible(False)
         self._bar_views.addWidget(sign_out)
         self._top_bar = bar
-        layout.addWidget(bar_host)
+        layout.addLayout(bar)
+        # Retro's title bar (T14) is a strip painted behind the bar, not a box around it, so the bar
+        # keeps its place on the page for every other design.
+        self._bar_strip = _BarStrip(page, bar)
         # Everything between the bar and the calendar is for planning, so a day screen can put it away.
         self.plan_chrome = QWidget()
         self.plan_chrome.setObjectName("planChrome")
@@ -5332,6 +5356,8 @@ class NativeWindow(QMainWindow):
         # does not swap in the middle of building Settings.
         if self._surface == "material" and page.layout_sections:
             page.layout_sections[0].show_surface("material")
+            # The saved choice, not the landing: after a failed open the Widgets week is up (UI22).
+            page.look.show_material(not self._material_gave_up)
         return page
 
     def _sync_started(self, service: SyncService) -> None:
@@ -5853,7 +5879,11 @@ class NativeWindow(QMainWindow):
                     if isValid(child):
                         child.setFont(font if own else QFont())
                 del self._retro_fonts
-            self.setStyleSheet(sheet + (bar_chrome(ctx.tokens) if ctx.feel.key == "retro" else ""))
+            from desktop.native.feel import bar_chrome
+
+            retro_bar = ctx.feel.key == "retro"
+            self.setStyleSheet(sheet + (bar_chrome(ctx.tokens) if retro_bar else ""))
+            self._bar_strip.setVisible(retro_bar)
             self._keep_bar_whole()
             apply_ui_effects(self._motion)
             self.toast.motion = self._motion
@@ -5891,7 +5921,7 @@ class NativeWindow(QMainWindow):
 
     def _dress_feel(self, ctx: Context, sheet: str, extra: str) -> None:
         for root in self._feel_roots():
-            root.setStyleSheet(sheet + extra)
+            root.setStyleSheet(sheet + extra if extra else "")
             apply_feel(root, ctx)
 
     def _dress_entry(self, palette: dict, look: dict) -> None:
