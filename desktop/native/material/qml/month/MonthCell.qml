@@ -25,6 +25,8 @@ Item {
     objectName: "monthDate-" + iso
     // A date outside the month fades its fill and number only; its chips and dots keep their contrast.
     readonly property real fade: inMonth ? 1 : 0.45
+    // Study time is painted under this date's words and dots (J23).
+    readonly property bool studyShown: showStudy && (plannedShare > 0 || completedShare > 0)
     activeFocusOnTab: !passive
     Accessible.role: Accessible.Button
     Accessible.name: accessName
@@ -90,6 +92,65 @@ Item {
         }
     }
 
+    // Study time fills the date from the bottom, full at the 3-hour cap: the homework tint is what
+    // is planned, the homework colour over it what is done. A 3 px line was too faint to read (J23).
+    Item {
+        objectName: "monthStudyFill"
+        visible: root.studyShown
+        anchors.fill: parent
+        opacity: root.fade
+
+        Item {
+            objectName: "monthStudyPlanned"
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: parent.height * Math.min(1, root.plannedShare)
+            clip: true
+
+            // Full height and clipped, so its rounded corners are the card's and its top is flat.
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: root.height
+                radius: 12
+                color: root.homeworkClass.fill
+            }
+        }
+
+        Item {
+            objectName: "monthStudyDone"
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: parent.height * Math.min(1, root.completedShare)
+            clip: true
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: root.height
+                radius: 12
+                color: root.homeworkClass.bar
+                opacity: 0.3
+            }
+        }
+    }
+
+    // The fill covers the card's own edge and its picked colour, so both are drawn again above it.
+    Rectangle {
+        objectName: "monthStudyEdge"
+        visible: root.studyShown && (root.highContrast || root.picked)
+        anchors.fill: parent
+        opacity: root.fade
+        radius: 12
+        color: "transparent"
+        border.width: root.picked ? 2 : 1.5
+        border.color: root.picked ? tones.secondary : tones.outline
+    }
+
     M3StateLayer {
         anchors.fill: parent
         radius: 12
@@ -144,34 +205,12 @@ Item {
         text: "and " + root.extra + " more"
         elide: Text.ElideRight
         verticalAlignment: Text.AlignVCenter
-        color: tones.inkMuted
+        color: root.studyShown ? tones.inkSurface : tones.inkMuted
         font.family: M3Font.family
         font.pixelSize: 11
         font.weight: 500
     }
 
-    Item {
-        objectName: "monthStudyBar"
-        visible: root.showStudy && (root.plannedShare > 0 || root.completedShare > 0)
-        x: 6
-        y: 30
-        width: Math.max(0, parent.width - 12)
-        height: 3
-
-        Rectangle {
-            width: parent.width * root.plannedShare
-            height: 3
-            radius: 1
-            color: tones.primaryContainer
-        }
-
-        Rectangle {
-            width: parent.width * root.completedShare
-            height: 3
-            radius: 1
-            color: tones.primary
-        }
-    }
 
     Column {
         visible: !root.narrow
@@ -259,18 +298,18 @@ Item {
             visible: root.extra > 0 && root.rowsFit > 1
             width: parent.width
             text: "and " + root.extra + " more"
-            color: tones.inkMuted
+            color: root.studyShown ? tones.inkSurface : tones.inkMuted
             font.family: M3Font.family
             font.pixelSize: 11
             font.weight: 500
         }
     }
 
-    // On a picked date the fill is the accent container, too close to some dot colours: the dots sit on
-    // a card-coloured pill there, which every dot colour clears at 3:1.
+    // On a picked date the fill is the accent container, and under study time the homework colour, both too
+    // close to some dot colours: the dots sit on a card-coloured pill there, which every dot colour clears at 3:1.
     Rectangle {
         objectName: "monthDotsBacking"
-        visible: dots.visible && root.picked
+        visible: dots.visible && (root.picked || root.studyShown)
         x: dots.x - 3
         y: dots.y - 3
         width: dots.width + 6
