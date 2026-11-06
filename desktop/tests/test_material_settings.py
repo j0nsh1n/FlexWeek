@@ -192,6 +192,33 @@ def test_the_style_row_goes_back_to_the_widgets_styles(qapp: QApplication, windo
     _reset(window)
 
 
+def test_widgets_styles_is_a_text_button_and_look_keeps_at_most_one_filled(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Widgets styles is a text button; Look still has at most one filled button."""
+    root = _open_settings(qapp, window)
+    try:
+        button = _named(root, "useWidgets")[0]
+        assert button.property("kind") == "text"
+        look = _named(root, "lookSection")[0]
+        filled = [
+            item
+            for item in _every_quick(look)
+            if item.property("kind") == "filled" and item.property("text") is not None
+        ]
+        assert len(filled) <= 1
+    finally:
+        _reset(window)
+
+
+def _every_quick(item: QObject) -> list[QObject]:
+    found: list[QObject] = [item]
+    children = item.childItems() if hasattr(item, "childItems") else []
+    for child in children:
+        found.extend(_every_quick(child))
+    return found
+
+
 def test_every_section_opens_and_names_only_controls_with_a_real_effect(
     qapp: QApplication, window: NativeWindow
 ) -> None:

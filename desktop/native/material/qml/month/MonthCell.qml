@@ -23,7 +23,8 @@ Item {
     signal step(int delta)
 
     objectName: "monthDate-" + iso
-    opacity: inMonth ? 1 : 0.45
+    // A date outside the month fades its fill and number only; its chips and dots keep their contrast.
+    readonly property real fade: inMonth ? 1 : 0.45
     activeFocusOnTab: !passive
     Accessible.role: Accessible.Button
     Accessible.name: accessName
@@ -64,10 +65,18 @@ Item {
 
     M3Palette { id: tones; theme: root.theme }
 
+    readonly property var homeworkClass: {
+        var cls = tones.classes
+        if (cls && cls.assignments)
+            return cls.assignments
+        return { bar: "#a87512", fill: tones.surfaceContainerHighest, ink: tones.inkMuted }
+    }
+
     Rectangle {
         id: card
         objectName: "monthCellFill"
         anchors.fill: parent
+        opacity: root.fade
         radius: 12
         color: root.picked ? tones.secondaryContainer : tones.surfaceContainerLow
         border.width: root.highContrast ? 1.5 : 0
@@ -111,6 +120,7 @@ Item {
 
     Text {
         objectName: "monthDayNumber"
+        opacity: root.fade
         x: 6
         y: 4
         width: 24
@@ -179,33 +189,64 @@ Item {
             model: root.chipShown
 
             Rectangle {
+                id: chipBody
                 objectName: "monthChip"
                 required property var modelData
+                readonly property bool due: modelData.kind === "due"
+                readonly property bool overdue: modelData.kind === "overdue"
+                readonly property color chipFill: overdue
+                    ? tones.statusOverdueTint
+                    : (due ? homeworkClass.fill : tones.surfaceContainerHighest)
+                readonly property color chipInk: overdue
+                    ? tones.statusOverdue
+                    : (due ? homeworkClass.ink : tones.inkMuted)
+                readonly property string chipIcon: overdue ? "warning" : (due ? "edit_note" : "")
                 width: parent.width
                 height: 16
-                radius: 6
-                color: modelData.kind === "overdue"
-                       ? tones.errorContainer
-                       : modelData.kind === "due"
-                         ? tones.tertiaryContainer
-                         : tones.surfaceContainerHighest
+                radius: height / 2
+                color: chipFill
 
-                Text {
-                    objectName: "monthChipText"
-                    anchors.fill: parent
-                    anchors.leftMargin: 6
+                Rectangle {
+                    objectName: "monthChipBar"
+                    visible: chipBody.due
+                    width: 3
+                    height: parent.height
+                    color: homeworkClass.bar
+                    topLeftRadius: parent.radius
+                    bottomLeftRadius: parent.radius
+                }
+
+                Row {
+                    id: chipRow
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: chipBody.due ? 5 : 4
                     anchors.rightMargin: 4
-                    text: modelData.text
-                    elide: Text.ElideRight
-                    verticalAlignment: Text.AlignVCenter
-                    color: modelData.kind === "overdue"
-                           ? tones.inkErrorContainer
-                           : modelData.kind === "due"
-                             ? tones.inkTertiaryContainer
-                             : tones.inkMuted
-                    font.family: M3Font.family
-                    font.pixelSize: 11
-                    font.weight: 500
+                    spacing: 2
+
+                    M3Icon {
+                        objectName: "monthChipIcon"
+                        visible: chipBody.chipIcon !== ""
+                        name: chipBody.chipIcon
+                        width: 12
+                        height: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: chipBody.chipInk
+                    }
+
+                    Text {
+                        objectName: "monthChipText"
+                        width: Math.max(0, chipRow.width - (chipBody.chipIcon !== "" ? 14 : 0))
+                        height: 16
+                        text: modelData.text
+                        elide: Text.ElideRight
+                        verticalAlignment: Text.AlignVCenter
+                        color: chipBody.chipInk
+                        font.family: M3Font.family
+                        font.pixelSize: 11
+                        font.weight: 500
+                    }
                 }
 
                 Accessible.role: Accessible.StaticText
@@ -225,7 +266,21 @@ Item {
         }
     }
 
+    // On a picked date the fill is the accent container, too close to some dot colours: the dots sit on
+    // a card-coloured pill there, which every dot colour clears at 3:1.
+    Rectangle {
+        objectName: "monthDotsBacking"
+        visible: dots.visible && root.picked
+        x: dots.x - 3
+        y: dots.y - 3
+        width: dots.width + 6
+        height: dots.height + 6
+        radius: height / 2
+        color: tones.card
+    }
+
     Row {
+        id: dots
         objectName: "monthDots"
         visible: root.narrow && root.dotShown.length > 0
         anchors.left: parent.left
@@ -243,10 +298,11 @@ Item {
                 width: 6
                 height: 6
                 radius: 3
+                // The same colours as the wide chips: homework's bar, the overdue status, else muted.
                 color: modelData.kind === "overdue"
-                       ? tones.error
+                       ? tones.statusOverdue
                        : modelData.kind === "due"
-                         ? tones.tertiary
+                         ? root.homeworkClass.bar
                          : tones.inkMuted
                 Accessible.role: Accessible.StaticText
                 Accessible.name: modelData.text
