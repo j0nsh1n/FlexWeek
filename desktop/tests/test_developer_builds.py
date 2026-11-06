@@ -239,6 +239,24 @@ def test_a_dev_release_without_a_version_in_its_title_is_not_offered(qapp: QAppl
     assert kind == "none"
 
 
+def test_a_dev_title_may_carry_its_commit_after_the_number(qapp: QApplication, github: str) -> None:
+    """Developer builds will name their commit, "Developer build 1.2.0.202611040300 (4b3e1cd)"; the number
+    still decides what is newer. Anything else after the number is not a developer build title."""
+    GitHub.dev_body = json.dumps(
+        {**_dev_release("1.2.0.202611040300"), "name": "Developer build 1.2.0.202611040300 (4b3e1cd)"}
+    ).encode()
+    kind, update = outcome(qapp, made(), developer=True)
+    assert kind == "found"
+    assert isinstance(update, dict) and update["version"] == "1.2.0.202611040300"
+    for name in (
+        "Developer build 1.2.0.202611040300 (not a commit)",
+        "Developer build 1.2.0.202611040300 4b3e1cd",
+    ):
+        GitHub.dev_body = json.dumps({**_dev_release("1.2.0.202611040300"), "name": name}).encode()
+        kind, _update = outcome(qapp, made(), developer=True)
+        assert kind == "none", name
+
+
 def test_widgets_settings_has_the_same_switch(qapp: QApplication, window: NativeWindow) -> None:
     """The switch was only in Material's Settings; Widgets This computer shows the same saved setting."""
     from PySide6.QtWidgets import QWidget

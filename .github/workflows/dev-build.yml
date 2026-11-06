@@ -129,32 +129,40 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # The build being replaced stays downloadable as dev-<its version>, a pre-release that is
+          # The build being replaced stays downloadable as dev-<its commit>, a pre-release that is
           # never latest, so the updater (which reads only the dev tag and the latest release) never
           # offers it. dev is deleted only once that copy is published with both files; anything
           # unexpected stops the job first, so a build is never lost.
           if old_name=$(gh release view dev --json name --jq .name 2>/dev/null); then
             old_version=${old_name#Developer build }
-            if [ "$old_version" = "$old_name" ] || [ -z "$old_version" ]; then
+            old_version=${old_version%% (*}
+            if ! [[ "$old_version" =~ ^[0-9]+(\.[0-9]+){1,3}$ ]]; then
               echo "The dev release is titled '$old_name', not 'Developer build <version>': not replacing it." >&2
               exit 1
             fi
-            kept="dev-$old_version"
+            old_sha=$(git ls-remote origin refs/tags/dev | cut -f1)
+            if ! [[ "$old_sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "The dev tag's commit could not be read ('$old_sha'): not replacing it." >&2
+              exit 1
+            fi
+            kept="dev-${old_sha:0:7}"
             assets='["FlexWeek-Linux-x86_64.tar.gz","FlexWeek-Linux-x86_64.tar.gz.sha256"]'
             have=$(gh release view "$kept" --json isDraft,assets \
               --jq '[.isDraft, ([.assets[].name] | sort)] | tostring' 2>/dev/null || true)
             if [ "$have" != "[false,$assets]" ]; then
               # Missing or half made by an earlier run: make it again from the dev release.
               gh release delete "$kept" --cleanup-tag --yes 2>/dev/null || true
-              old_sha=$(git ls-remote origin refs/tags/dev | cut -f1)
               rm -rf previous-dev && mkdir -p previous-dev
               gh release download dev --dir previous-dev
+              # The tag points at this run's commit, not the old build's: once main's workflows have
+              # changed, GitHub refuses the workflow token a new tag on an older commit (HTTP 403,
+              # 2026-11-06). The old commit stays in the tag's name, the title and the notes.
               gh release create "$kept" previous-dev/* \
                 --prerelease \
                 --latest=false \
-                --target "$old_sha" \
-                --title "Developer build $old_version" \
-                --notes "An earlier developer build, kept when Developer build $DEVVERSION replaced it. The updater does not offer it."
+                --target "$(git rev-parse HEAD)" \
+                --title "Developer build $old_version (${old_sha:0:7})" \
+                --notes "An earlier developer build, built from $old_sha, kept when Developer build $DEVVERSION replaced it. The updater does not offer it."
               have=$(gh release view "$kept" --json isDraft,assets \
                 --jq '[.isDraft, ([.assets[].name] | sort)] | tostring')
               if [ "$have" != "[false,$assets]" ]; then

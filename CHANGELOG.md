@@ -18,6 +18,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Material's Focus screen covers the window: phase, task, timer, Pause or Resume, Skip, Finish and Back, on the same timer Widgets uses. Rain, Lo-Fi and White noise play while you focus and pause with the timer; Spotify still opens the Settings link. Auto-mute holds reminders during a focus work phase. Auto-complete, off by default, finishes only that session's block.
 
 ### Changed
+- A developer build that is replaced stays on GitHub tagged by its commit (dev-<commit>), and the updater also reads a developer build title that names its commit after the number.
 - Material Month's "Show study time per date" now fills each date from the bottom, full at three hours: the homework tint is planned time and a deeper homework colour is time done. The old 3 px line was too faint to see.
 - On a wide Widgets Settings window, Look's live preview sits beside the cards (about 60% of the stage) and stays put while they scroll; below 1000 px wide it stays the strip on top.
 - Material Day shows the day's hours in one wide column, with the same blocks, now line and zoom as Week, remembering its own height under material.day.
