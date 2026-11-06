@@ -23,6 +23,7 @@ from PySide6.QtGui import (
     QPalette,
     QPen,
     QPixmap,
+    QResizeEvent,
     QShortcut,
     QShowEvent,
 )
@@ -163,6 +164,10 @@ MORE_LOOKS = "More looks"
 # A More looks card's picture is this wide at normal text, and wider as the text is larger; its
 # card a little more (ChoiceCard).
 LOOK_TILE = 160
+# Look preview beside the cards once Settings is this wide, if two Look tiles still fit.
+SIDE_BY_SIDE_MIN_PX = 1000
+# Two Look tiles, their gap, the section's side margins, and the Colours card pad around the grid.
+LOOK_CARDS_MIN_PX = 2 * (LOOK_TILE + CARD_WIDTH_PAD) + CARD_GAP + 2 * SPACING[3] + 2 * CARD_PAD
 ACCENT_LABELS = {"default": "Blue"}
 TEXT_KEPT_NOTE = "Your text size stays the same when you change looks."
 STUDY_HOURS_LINE = "Choose when FlexWeek may plan homework, including hours kept for one class."
@@ -1388,13 +1393,18 @@ class SettingsPage(QWidget):
             look=self.look_choice,
             accent=lambda: self._accent_chosen,
         )
-        # The preview grows with the window: the row stretches split the stage about 40/60 with the
-        # cards, and 240 keeps Fit readable on the smallest window.
+        # The preview grows with the window: on a wide Look page it sits to the right; below
+        # SIDE_BY_SIDE_MIN_PX it is the 40/60 strip on top. 240 keeps Fit readable on the smallest
+        # window.
         self.style_preview.setMinimumHeight(240)
         preview_policy = self.style_preview.sizePolicy()
+        preview_policy.setHorizontalPolicy(QSizePolicy.Policy.Expanding)
         preview_policy.setVerticalPolicy(QSizePolicy.Policy.Expanding)
         self.style_preview.setSizePolicy(preview_policy)
+        self.stage = stage
         self.stage_grid = stage_grid
+        self._stage_mode = "strip"
+        stage.installEventFilter(self)
         stage_grid.addWidget(self.style_preview, 0, 0)
         stage_grid.addWidget(self.stack, 1, 0)
         stage_grid.addWidget(footer, 1, 0, Qt.AlignmentFlag.AlignBottom)
@@ -1487,6 +1497,12 @@ class SettingsPage(QWidget):
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
         self._dress()
+        self._show_preview_row(self.nav.currentRow())
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if hasattr(self, "style_preview"):
+            self._show_preview_row(self.nav.currentRow())
 
     def changeEvent(self, event: QEvent) -> None:  # noqa: N802
         super().changeEvent(event)
@@ -1591,6 +1607,8 @@ class SettingsPage(QWidget):
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
         if watched is self.footer and event.type() == QEvent.Type.Resize:
             self._clear_footer()
+        if watched is self.stage and event.type() == QEvent.Type.Resize and hasattr(self, "style_preview"):
+            self._show_preview_row(self.nav.currentRow())
         return super().eventFilter(watched, event)
 
     def _follow_focus(self, _was: QWidget | None, now: QWidget | None) -> None:
@@ -1618,11 +1636,97 @@ class SettingsPage(QWidget):
             return
         super().keyPressEvent(event)
 
+    def _look_column_min(self) -> int:
+        """Room for two Look tiles: the grid, section margins, card pad, the form's label column,
+        and the scroll bar the Look area keeps even when the bar is overlaid."""
+        extra = 0
+        area = self.stack.widget(0)
+        body = area.widget() if isinstance(area, QScrollArea) else None
+        if body is not None:
+            labels = body.findChildren(FieldLabel)
+            extra = max((max(label.minimumWidth(), label.sizeHint().width()) for label in labels), default=0)
+            extra += max(self.colours_card.layout().horizontalSpacing(), 0)
+        if isinstance(area, QScrollArea):
+            extra += max(area.verticalScrollBar().sizeHint().width(), 0)
+        return LOOK_CARDS_MIN_PX + extra
+
+    def _want_side_by_side(self) -> bool:
+        if self.width() < SIDE_BY_SIDE_MIN_PX:
+            return False
+        return self.stage.width() >= self._look_column_min()
+
+    def _clear_stage_cells(self) -> None:
+        grid = self.stage_grid
+        for widget in (self.style_preview, self.stack, self.footer):
+            grid.removeWidget(widget)
+        for row in range(2):
+            grid.setRowStretch(row, 0)
+            grid.setRowMinimumHeight(row, 0)
+        for col in range(2):
+            grid.setColumnStretch(col, 0)
+            grid.setColumnMinimumWidth(col, 0)
+
+    def _place_side(self) -> None:
+        self._clear_stage_cells()
+        stack_policy = self.stack.sizePolicy()
+        stack_policy.setHorizontalPolicy(QSizePolicy.Policy.Ignored)
+        stack_policy.setVerticalPolicy(QSizePolicy.Policy.Ignored)
+        self.stack.setSizePolicy(stack_policy)
+        preview_policy = self.style_preview.sizePolicy()
+        preview_policy.setHorizontalPolicy(QSizePolicy.Policy.Ignored)
+        preview_policy.setVerticalPolicy(QSizePolicy.Policy.Expanding)
+        self.style_preview.setSizePolicy(preview_policy)
+        self.stage_grid.addWidget(self.stack, 0, 0)
+        self.stage_grid.addWidget(self.style_preview, 0, 1)
+        self.stage_grid.addWidget(self.footer, 1, 0, 1, 2)
+        self.stage_grid.setRowStretch(0, 1)
+        self.footer.raise_()
+
+    def _place_strip(self) -> None:
+        self._clear_stage_cells()
+        stack_policy = self.stack.sizePolicy()
+        stack_policy.setHorizontalPolicy(QSizePolicy.Policy.Preferred)
+        stack_policy.setVerticalPolicy(QSizePolicy.Policy.Preferred)
+        self.stack.setSizePolicy(stack_policy)
+        preview_policy = self.style_preview.sizePolicy()
+        preview_policy.setHorizontalPolicy(QSizePolicy.Policy.Expanding)
+        preview_policy.setVerticalPolicy(QSizePolicy.Policy.Expanding)
+        self.style_preview.setSizePolicy(preview_policy)
+        self.stage_grid.addWidget(self.style_preview, 0, 0)
+        self.stage_grid.addWidget(self.stack, 1, 0)
+        self.stage_grid.addWidget(self.footer, 1, 0, Qt.AlignmentFlag.AlignBottom)
+        self.stage_grid.setColumnStretch(0, 1)
+        self.footer.raise_()
+
+    def _size_side_columns(self) -> None:
+        stage_w = max(self.stage.width(), 1)
+        min_cards = self._look_column_min()
+        cards_w = stage_w - round(stage_w * 0.6)
+        if cards_w < min_cards:
+            cards_w = min_cards
+        preview_w = max(stage_w - cards_w, 1)
+        if (self.stage_grid.columnStretch(0), self.stage_grid.columnStretch(1)) != (cards_w, preview_w):
+            self.stage_grid.setColumnStretch(0, cards_w)
+            self.stage_grid.setColumnStretch(1, preview_w)
+
     def _show_preview_row(self, row: int) -> None:
-        """The preview rides above the Look section only. A stretched grid row keeps its share even
-        when its widget is hidden, so the row also gives the space back when the preview goes."""
-        self.style_preview.setVisible(row == 0)
-        self.stage_grid.setRowStretch(0, 2 if row == 0 else 0)
+        """The preview rides with the Look section only. Wide Look pages put it on the right; a
+        stretched grid row keeps its share even when its widget is hidden, so the row also gives the
+        space back when the preview goes."""
+        look = row == 0
+        self.style_preview.setVisible(look)
+        side = look and self._want_side_by_side()
+        if side:
+            if self._stage_mode != "side":
+                self._place_side()
+                self._stage_mode = "side"
+            self._size_side_columns()
+            return
+        if self._stage_mode != "strip":
+            self._place_strip()
+            self._stage_mode = "strip"
+        self.stage_grid.setRowStretch(0, 2 if look else 0)
+        self.stage_grid.setRowStretch(1, 3)
 
     def _show_section(self, row: int) -> None:
         """The section picked, sliding in from the side the student moved toward in the list."""

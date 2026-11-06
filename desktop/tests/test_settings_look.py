@@ -50,6 +50,9 @@ def palette_of(window: NativeWindow) -> dict:  # noqa: F811
 
 def test_the_column_of_cards_is_centred_up_to_960(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
     page = open_settings(qapp, window, (1600, 900))
+    page.nav.setCurrentRow(1)
+    for _ in range(6):
+        qapp.processEvents()
     area = page.stack.currentWidget()
     body = area.widget()
     items = [body.layout().itemAt(index) for index in range(body.layout().count())]

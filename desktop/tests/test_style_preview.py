@@ -320,3 +320,117 @@ def test_other_settings_pages_do_not_keep_room_for_the_preview(qapp: QApplicatio
     assert isinstance(cards, QScrollArea)
     assert cards.mapTo(stage, cards.rect().topLeft()).y() == 0
     page.close()
+
+
+def _open_look(qapp: QApplication, width: int, height: int) -> SettingsPage:
+    page = SettingsPage(None, {}, {}, {})
+    page.resize(width, height)
+    page.show()
+    preview = page.style_preview
+    _wait(lambda: preview.isVisible() and not preview.stage.pictures[0].source.isNull())
+    for _ in range(6):
+        qapp.processEvents()
+    return page
+
+
+def test_a_wide_look_page_puts_the_preview_beside_the_cards(qapp: QApplication) -> None:
+    """At 1400 the preview sits on the right of the Look cards, about 60% of the stage, and Fit
+    fills that taller box instead of the strip's ~370 px picture."""
+    page = _open_look(qapp, 1400, 900)
+    preview = page.style_preview
+    stage = preview.parentWidget()
+    stack = page.stack
+    footer = page.footer
+    assert stage is not None
+    preview_origin = preview.mapTo(stage, preview.rect().topLeft())
+    stack_corner = stack.mapTo(stage, stack.rect().topRight())
+    assert preview_origin.x() >= stack_corner.x()
+    assert 0.55 * stage.width() <= preview.width() <= 0.65 * stage.width()
+    preview_bottom = preview.mapTo(stage, preview.rect().bottomLeft()).y()
+    footer_top = footer.mapTo(stage, footer.rect().topLeft()).y()
+    assert preview_bottom <= footer_top
+    assert preview.height() >= stage.height() * 0.70
+    shown = _child(preview, QLabel, "stylePreviewImage").pixmap()
+    assert shown is not None and not shown.isNull()
+    assert shown.deviceIndependentSize().width() > 500
+    page.close()
+
+
+def test_the_left_look_column_fits_two_tiles_when_just_wide_enough(qapp: QApplication) -> None:
+    """Between 1000 and 1100 px the Look cards stay wide enough for two tiles on the first row."""
+    page = _open_look(qapp, 1050, 800)
+    first, second = page.look.more.cards[0], page.look.more.cards[1]
+    grid = page.look.more
+    assert first.mapTo(grid, first.rect().topLeft()).y() == second.mapTo(grid, second.rect().topLeft()).y()
+    page.close()
+
+
+def test_a_narrow_look_page_keeps_the_preview_strip_on_top(qapp: QApplication) -> None:
+    """Below the 1000 px threshold the preview stays the J20 strip: above the cards, full stage width."""
+    page = _open_look(qapp, 900, 700)
+    preview = page.style_preview
+    stage = preview.parentWidget()
+    stack = page.stack
+    assert stage is not None
+    preview_origin = preview.mapTo(stage, preview.rect().topLeft())
+    stack_origin = stack.mapTo(stage, stack.rect().topLeft())
+    assert preview_origin.y() < stack_origin.y()
+    assert preview.width() == stage.width()
+    assert stack.width() == stage.width()
+    page.close()
+
+
+def test_resizing_across_the_side_by_side_threshold_switches_layout(qapp: QApplication) -> None:
+    """Crossing 1000 px wide switches between side-by-side and the strip without reopening Settings."""
+    page = _open_look(qapp, 1400, 900)
+    preview = page.style_preview
+    stage = preview.parentWidget()
+    stack = page.stack
+    assert stage is not None
+    preview_left = preview.mapTo(stage, preview.rect().topLeft()).x()
+    stack_right = stack.mapTo(stage, stack.rect().topRight()).x()
+    assert preview_left >= stack_right
+    page.resize(900, 700)
+    for _ in range(8):
+        qapp.processEvents()
+    assert preview.mapTo(stage, preview.rect().topLeft()).y() < stack.mapTo(stage, stack.rect().topLeft()).y()
+    assert preview.width() == stage.width()
+    page.resize(1400, 900)
+    for _ in range(8):
+        qapp.processEvents()
+    preview_left = preview.mapTo(stage, preview.rect().topLeft()).x()
+    stack_right = stack.mapTo(stage, stack.rect().topRight()).x()
+    assert preview_left >= stack_right
+    assert 0.55 * stage.width() <= preview.width() <= 0.65 * stage.width()
+    page.close()
+
+
+def test_another_section_at_a_wide_width_gives_the_cards_the_whole_stage(qapp: QApplication) -> None:
+    """Planning at 1400 has no preview and no leftover column: the cards use the full stage."""
+    page = _open_look(qapp, 1400, 900)
+    preview = page.style_preview
+    stage = preview.parentWidget()
+    assert stage is not None
+    page.nav.setCurrentRow(1)
+    for _ in range(6):
+        qapp.processEvents()
+    assert preview.isVisible() is False
+    assert page.stack.width() == stage.width()
+    page.close()
+
+
+def test_scrolling_the_look_cards_does_not_move_the_preview(qapp: QApplication) -> None:
+    """The preview stays put while the Look cards scroll."""
+    page = _open_look(qapp, 1400, 900)
+    preview = page.style_preview
+    area = page.stack.currentWidget()
+    assert isinstance(area, QScrollArea)
+    before = preview.geometry()
+    bar = area.verticalScrollBar()
+    assert bar.maximum() > 0
+    bar.setValue(bar.maximum())
+    for _ in range(4):
+        qapp.processEvents()
+    assert preview.geometry() == before
+    page.close()
+

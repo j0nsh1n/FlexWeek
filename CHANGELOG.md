@@ -17,6 +17,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Material's Focus screen covers the window: phase, task, timer, Pause or Resume, Skip, Finish and Back, on the same timer Widgets uses. Rain, Lo-Fi and White noise play while you focus and pause with the timer; Spotify still opens the Settings link. Auto-mute holds reminders during a focus work phase. Auto-complete, off by default, finishes only that session's block.
 
 ### Changed
+- On a wide Widgets Settings window, Look's live preview sits beside the cards (about 60% of the stage) and stays put while they scroll; below 1000 px wide it stays the strip on top.
 - The One thing day shows the current task's title large (28 px) with the time left under it; during homework, Homework finished is the one filled button and Focus, Running late and Back are text buttons.
 - The "New in 1.0.0" notice is a plain card with readable words, one Choose a look button and a close button; Esc closes it and Tab reaches it.
 - Settings → Look shows each look as a 160 px card with a Current chip on the one you wear, and Material 3 is one of the cards. Current stays only when Material actually opened, and choosing the card again retries a failed open.
