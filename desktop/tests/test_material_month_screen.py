@@ -320,20 +320,20 @@ def test_a_short_date_keeps_one_chip_and_counts_the_rest(qapp: QApplication, win
         window._use_widgets_styles()
 
 
-def test_the_study_time_switch_shows_the_load_bar(qapp: QApplication, window: NativeWindow) -> None:
+def test_the_study_time_switch_shows_the_study_fill(qapp: QApplication, window: NativeWindow) -> None:
     root, month = _open_month(qapp, window)
     quick = window._material_page._quick
     try:
         today = window.session.today_iso()
         assert month.property("showStudyTime") is False
-        assert _named_on(_cell(root, today), "monthStudyBar") == []
+        assert _named_on(_cell(root, today), "monthStudyFill") == []
         _click(quick, _qml(root, "monthStudyTime"), 26, 16)
         wait_until(qapp, lambda: month.property("showStudyTime") is True)
-        wait_until(qapp, lambda: _named_on(_cell(root, today), "monthStudyBar") != [])
+        wait_until(qapp, lambda: _named_on(_cell(root, today), "monthStudyFill") != [])
         assert _cell(root, today).property("plannedShare") == pytest.approx(60 / 180)
         month.setShowStudyTime(False)
         wait_until(qapp, lambda: _qml(root, "monthStudyTime").property("checked") is False)
-        wait_until(qapp, lambda: _named_on(_cell(root, today), "monthStudyBar") == [])
+        wait_until(qapp, lambda: _named_on(_cell(root, today), "monthStudyFill") == [])
     finally:
         month.setShowStudyTime(False)
         window._use_widgets_styles()
