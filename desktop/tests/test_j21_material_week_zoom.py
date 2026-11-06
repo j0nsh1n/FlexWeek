@@ -33,6 +33,7 @@ from desktop.tests.test_material_week import (  # noqa: E402
     _block_named,
     _bridge,
     _click,
+    _homework,
     _look,
     _named,
     _qml,
@@ -220,16 +221,21 @@ def test_ctrl_equal_zooms_the_week_and_ctrl_zero_resets_and_month_ignores_them(
     assert _row(window) == 56
     assert "material.week" not in window._zoom
 
+    # Month leaves a remembered Week level alone: neither zooms nor resets it.
+    QTest.keyClick(quick, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
+    _pump(qapp)
+    assert _row(window) == 72 and window._zoom.get("material.week") == 72
     _bridge(window).showPage("month")
     _pump(qapp)
     QTest.keyClick(quick, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
     _pump(qapp)
-    assert _row(window) == 56
+    assert _row(window) == 72
     QTest.keyClick(quick, Qt.Key.Key_0, Qt.KeyboardModifier.ControlModifier)
     _pump(qapp)
-    assert _row(window) == 56
+    assert _row(window) == 72 and window._zoom.get("material.week") == 72
     _bridge(window).showPage("week")
     _pump(qapp)
+    _forget_week_zoom(window)
 
 
 def test_ctrl_wheel_over_the_grid_zooms_about_the_pointer_and_plain_wheel_does_not(
@@ -305,3 +311,59 @@ def test_a_block_at_ten_sits_at_ten_times_the_hour_row_at_two_levels(
     block = _block_named(root, "Clinic")
     assert int(block.property("y")) == 10 * 72
     assert _named(root, "weekBlock")
+
+
+def _press_zoom_keys(qapp: QApplication, quick: object) -> None:
+    for key in (Qt.Key.Key_Equal, Qt.Key.Key_Minus, Qt.Key.Key_0):
+        QTest.keyClick(quick, key, Qt.KeyboardModifier.ControlModifier)
+        _pump(qapp)
+
+
+def test_zoom_keys_wait_while_a_block_menu_is_open(qapp: QApplication, window: NativeWindow) -> None:
+    root = _week(qapp, window)
+    quick = window._material_page._quick
+    QTest.keyClick(quick, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
+    _pump(qapp)
+    assert _row(window) == 72
+    block = _block_named(root, "History essay")
+    block.forceActiveFocus()
+    _pump(qapp)
+    QTest.keyClick(quick, Qt.Key.Key_F10, Qt.KeyboardModifier.ShiftModifier)
+    _pump(qapp)
+    menu = _named(root, "blockMenu")[0]
+    assert menu.property("open") is True
+    _press_zoom_keys(qapp, quick)
+    assert _row(window) == 72 and window._zoom.get("material.week") == 72
+    QTest.keyClick(quick, Qt.Key.Key_Escape)
+    _pump(qapp)
+    assert menu.property("open") is False
+    QTest.keyClick(quick, Qt.Key.Key_0, Qt.KeyboardModifier.ControlModifier)
+    _pump(qapp)
+    assert _row(window) == 56
+    _forget_week_zoom(window)
+
+
+def test_zoom_keys_wait_while_a_homework_card_menu_is_open(qapp: QApplication, window: NativeWindow) -> None:
+    root = _week(qapp, window)
+    due = (date.fromisoformat(window.session.week_start) + timedelta(days=6)).isoformat()
+    _homework(window, "lab", "Lab notes", 30, due)
+    _pump(qapp)
+    quick = window._material_page._quick
+    try:
+        card = _named(root, "homeworkCard")[0]
+        card.forceActiveFocus()
+        _pump(qapp)
+        QTest.keyClick(quick, Qt.Key.Key_F10, Qt.KeyboardModifier.ShiftModifier)
+        _pump(qapp)
+        menu = _named(root, "cardMenu")[0]
+        assert menu.property("open") is True
+        _press_zoom_keys(qapp, quick)
+        assert _row(window) == 56 and "material.week" not in window._zoom
+        QTest.keyClick(quick, Qt.Key.Key_Escape)
+        _pump(qapp)
+        assert menu.property("open") is False
+    finally:
+        window.session.delete_homework("lab")
+        window.session.save()
+        settled(qapp, window)
+        _forget_week_zoom(window)

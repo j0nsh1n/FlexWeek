@@ -612,25 +612,25 @@ Item {
     Shortcut {
         sequence: "Ctrl+="
         context: Qt.WindowShortcut
-        enabled: !modalActive && bridge.screen === "week"
+        enabled: !modalActive && !weekView.menuOpen && bridge.screen === "week"
         onActivated: weekView.zoomFromKeys(1)
     }
     Shortcut {
         sequence: "Ctrl++"
         context: Qt.WindowShortcut
-        enabled: !modalActive && bridge.screen === "week"
+        enabled: !modalActive && !weekView.menuOpen && bridge.screen === "week"
         onActivated: weekView.zoomFromKeys(1)
     }
     Shortcut {
         sequence: "Ctrl+-"
         context: Qt.WindowShortcut
-        enabled: !modalActive && bridge.screen === "week"
+        enabled: !modalActive && !weekView.menuOpen && bridge.screen === "week"
         onActivated: weekView.zoomFromKeys(-1)
     }
     Shortcut {
         sequence: "Ctrl+0"
         context: Qt.WindowShortcut
-        enabled: !modalActive && bridge.screen === "week"
+        enabled: !modalActive && !weekView.menuOpen && bridge.screen === "week"
         onActivated: weekView.resetZoomFromKeys()
     }
     Shortcut {

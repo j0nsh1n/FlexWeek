@@ -15,6 +15,8 @@ Item {
     property bool highContrast: false
     property bool passive: false
     // The floating add button sits 96px up on a phone. The grid can scroll clear of it.
+    // A block's or a card's menu is open: the zoom keys leave the grid behind it alone.
+    readonly property bool menuOpen: blockMenu.open || drawer.menuOpen
     readonly property int scrollClearance: phone ? 96 : 0
     readonly property int gutter: 68
     readonly property int drawerWidth: 320
