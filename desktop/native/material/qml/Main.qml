@@ -610,6 +610,30 @@ Item {
         onActivated: bridge.plan()
     }
     Shortcut {
+        sequence: "Ctrl+="
+        context: Qt.WindowShortcut
+        enabled: !modalActive && bridge.screen === "week"
+        onActivated: weekView.zoomFromKeys(1)
+    }
+    Shortcut {
+        sequence: "Ctrl++"
+        context: Qt.WindowShortcut
+        enabled: !modalActive && bridge.screen === "week"
+        onActivated: weekView.zoomFromKeys(1)
+    }
+    Shortcut {
+        sequence: "Ctrl+-"
+        context: Qt.WindowShortcut
+        enabled: !modalActive && bridge.screen === "week"
+        onActivated: weekView.zoomFromKeys(-1)
+    }
+    Shortcut {
+        sequence: "Ctrl+0"
+        context: Qt.WindowShortcut
+        enabled: !modalActive && bridge.screen === "week"
+        onActivated: weekView.resetZoomFromKeys()
+    }
+    Shortcut {
         sequence: "Escape"
         context: Qt.WindowShortcut
         enabled: !accountLayer.active && !focusOverlay.ending && !sheetHost.active && !settingsPromptOpen

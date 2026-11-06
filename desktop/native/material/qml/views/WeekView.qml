@@ -117,6 +117,38 @@ Item {
             root.bridge.sheets.setDragRangeActive(false)
     }
 
+    property int wheelAcc: 0
+    property bool zooming: false
+
+    function zoomAbout(steps, viewY) {
+        if (root.passive || !bridge || !bridge.zoomBy)
+            return
+        var row = Math.max(1, root.row)
+        var minute = ((scroller.contentY + viewY) / row) * 60
+        root.zooming = true
+        if (steps === 0)
+            bridge.zoomReset()
+        else
+            bridge.zoomBy(steps)
+        function place() {
+            var next = Math.max(1, root.row)
+            var y = (minute / 60) * next - viewY
+            var limit = Math.max(0, scroller.contentHeight - scroller.height)
+            scroller.contentY = Math.min(Math.max(0, y), limit)
+            root.zooming = false
+        }
+        place()
+        Qt.callLater(place)
+    }
+
+    function zoomFromKeys(steps) {
+        zoomAbout(steps, scroller.height / 2)
+    }
+
+    function resetZoomFromKeys() {
+        zoomAbout(0, scroller.height / 2)
+    }
+
     Connections {
         target: root.bridge && root.bridge.sheets ? root.bridge.sheets : null
         function onDragRangeCanceled() {
@@ -155,8 +187,9 @@ Item {
 
         IconButton {
             objectName: "toggleWeekends"
-            x: 12
-            anchors.verticalCenter: parent.verticalCenter
+            small: !root.phone && !root.passive
+            x: Math.round((root.gutter - width) / 2)
+            y: root.phone || root.passive ? Math.round((parent.height - height) / 2) : 0
             theme: root.theme
             density: root.density
             reduceMotion: root.reduceMotion
@@ -165,6 +198,20 @@ Item {
             accessName: root.columns === 7 ? "Hide weekends" : "Show weekends"
             activeFocusOnTab: !root.passive
             onClicked: if (root.bridge) root.bridge.week.toggleWeekends()
+        }
+
+        ZoomPill {
+            visible: !root.phone && !root.passive
+            x: Math.round((root.gutter - width) / 2)
+            y: 32
+            theme: root.theme
+            density: root.density
+            reduceMotion: root.reduceMotion
+            highContrast: root.highContrast
+            canZoomIn: !!(bridge && bridge.canZoomIn)
+            canZoomOut: !!(bridge && bridge.canZoomOut)
+            onZoomOut: root.zoomFromKeys(-1)
+            onZoomIn: root.zoomFromKeys(1)
         }
 
         Repeater {
@@ -240,7 +287,7 @@ Item {
         }
 
         function revealNow() {
-            if (scroller.moving || scroller.dragging || root.holding)
+            if (scroller.moving || scroller.dragging || root.holding || root.zooming)
                 return
             var view = height
             if (!bridge || view < 40 || bridge.nowDay < 0)
@@ -271,6 +318,22 @@ Item {
             target: bridge
             function onBlocksChanged() { scroller.revealNow() }
             function onChanged() { scroller.revealNow() }
+        }
+
+        // Direct Flickable children live on contentItem, so event.y is content-relative.
+        WheelHandler {
+            acceptedModifiers: Qt.ControlModifier
+            onWheel: (event) => {
+                if (root.passive || !root.bridge || !root.bridge.zoomBy)
+                    return
+                root.wheelAcc += event.angleDelta.y
+                var steps = Math.trunc(root.wheelAcc / 120)
+                event.accepted = true
+                if (steps === 0)
+                    return
+                root.wheelAcc -= steps * 120
+                root.zoomAbout(steps, event.y - scroller.contentY)
+            }
         }
 
         Item {

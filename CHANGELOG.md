@@ -6,6 +6,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Material Week zooms the hour grid like Widgets: Ctrl+= and Ctrl++ zoom in, Ctrl+- zoom out, Ctrl+0 restores the density height, Ctrl+wheel zooms about the pointer, and a − + pill sits in the corner above the hour labels.
 - Dragging across empty time on the Material Week grid draws a snapped range and opens Add homework pinned to that day and time.
 - Settings → Computer has Get developer builds: this copy also gets developer test builds, and still moves to each official release when it is newer.
 - Widgets Settings → This computer also has the Get developer builds switch, under Updates; it shows and saves the same setting as Material's.
