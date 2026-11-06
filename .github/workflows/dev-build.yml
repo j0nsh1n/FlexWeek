@@ -129,6 +129,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The build being replaced stays downloadable as dev-<its version>, a pre-release that is
+          # never latest, so the updater (which reads only the dev tag and the latest release) never
+          # offers it. Done once per version; a rerun finds it already kept.
+          old_name=$(gh release view dev --json name --jq .name 2>/dev/null || true)
+          old_version=${old_name#Developer build }
+          if [ -n "$old_name" ] && [ "$old_version" != "$old_name" ] \
+            && ! gh release view "dev-$old_version" >/dev/null 2>&1; then
+            old_sha=$(git ls-remote origin refs/tags/dev | cut -f1)
+            mkdir -p previous-dev
+            gh release download dev --dir previous-dev
+            gh release create "dev-$old_version" previous-dev/* \
+              --prerelease \
+              --latest=false \
+              --target "$old_sha" \
+              --title "Developer build $old_version" \
+              --notes "An earlier developer build, kept when Developer build $DEVVERSION replaced it. The updater does not offer it."
+          fi
           gh release delete dev --cleanup-tag --yes || true
           gh release create dev \
             dist/release/FlexWeek-Linux-x86_64.tar.gz \
