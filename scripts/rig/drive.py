@@ -397,6 +397,12 @@ def child_main(args: argparse.Namespace) -> int:
         def finish(self, video: Path) -> None:
             self.timer.stop()
             folder, self.folder = self.folder, None
+            # CI installs no ffmpeg (its media libraries made the slow package mirror cancel the job);
+            # the frames stay in the folder either way.
+            if shutil.which("ffmpeg") is None:
+                if folder is not None and self.count:
+                    print(f"No ffmpeg: frames kept in {folder}, no {video.name}", flush=True)
+                return
             if folder is not None and self.count:
                 subprocess.run(
                     [
