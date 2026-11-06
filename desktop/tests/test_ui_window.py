@@ -208,7 +208,8 @@ def test_w_d_and_m_switch_views_while_the_calendar_has_the_keyboard(
 def test_ctrl_c_in_the_week_grid_copies_the_block_and_leaves_the_os_clipboard_alone(
     qapp: QApplication, window: NativeWindow
 ) -> None:
-    """docs/native-python-migration.md: "Ctrl/C/V/D never touch the OS clipboard"."""
+    """The native migration's rule (docs/native-python-migration.md, in git history): "Ctrl/C/V/D never
+    touch the OS clipboard"."""
     saved(qapp, window, soccer())
     window.session.select_block("soccer", 0)
     QGuiApplication.clipboard().setText("the student's own text")

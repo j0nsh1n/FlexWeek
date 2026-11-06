@@ -1,4 +1,5 @@
-"""Dialogs in the 0.17 system (decision 23 of docs/0.17/plan.md, look-review.md section 7).
+"""Dialogs in the 0.17 system (decision 23 of the 0.17 plan, section 7 of its look review;
+docs/0.17/ in git history).
 
 Add homework, Edit event, Routines, Help, About, Running late, School hours, Choose a time and Spread
 are sheets inside the window: a card over the dimmed week. (0.18.1 made Availability, the previews,

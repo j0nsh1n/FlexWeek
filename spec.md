@@ -8,7 +8,7 @@ plus their assignments, places the assignments in the gaps with a constraint
 solver, and explains in plain English every time something could not be placed
 or had to move. Built as a Congressional App Challenge 2026 entry. Working title
 was *Reslot*; the public name is **FlexWeek**. The original Sep 6 contest brief
-is archived in `docs/cac-build-plan.md`. Living schedule and remaining work live
+is in git history (`docs/cac-build-plan.md`). Living schedule and remaining work live
 in `roadmap.md`.
 
 ## Intended Users
@@ -166,7 +166,7 @@ Contract for the finished app:
   student can zoom: Ctrl and the wheel, Ctrl with =, - and 0, or two buttons
   beside the hours. Each surface's level is remembered per device in the look
   file. Every design draws its own Day and Week on one shared gesture engine
-  (`docs/0.15/architecture.md`): a block moves with the pointer in the
+  (the 0.15 architecture, `docs/0.15/architecture.md` in git history): a block moves with the pointer in the
   student's step, 5 minutes or 15 (the `drag_step_min` preference, 5 unless
   chosen otherwise in setup or Settings > Planning), with its times beside it
   while held; a typed time keeps any minute; an end drags to resize;

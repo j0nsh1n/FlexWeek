@@ -6,7 +6,7 @@ Congressional App Challenge 2026. Submit **Sunday, Oct 25, 2026, 8:00 p.m. PDT**
 History up to 0.18.0 (Phases 1–7, the student experience stages, the native
 desktop units, the 0.10.1 and 0.11 polish, the web client's retirement, the
 first implementation slice) was removed from this file on 2026-10-02. It is in
-this file's git history, in `CHANGELOG.md`, and in `docs/cac-build-plan.md`.
+this file's git history and in `CHANGELOG.md`.
 
 ## Where things stand (2026-10-13)
 - v0.18.4 (smoother motion, sheets dim at the click, Clay's day change, Retro
@@ -487,7 +487,7 @@ page; the Settings forms; the sign-in error and the password eye; the Focus
 screen's controls; Timeline's fold handle; Clay's dimmed neighbours. Drawn
 with the app's own widgets and stylesheet; Jonathan picks; behaviour inside
 them waits for the pick.
-Picked 2026-10-07 (boards in `docs/mockups/round2-0183/`), final after a second
+Picked 2026-10-07 (boards in `docs/mockups/round2-0183/`, now in git history), final after a second
 look: Add and Edit homework B, a segmented "In one go / Spread over days" under
 Estimated time with a grey line saying what Plan will do; Availability the B+C
 mix with tabs (board 2b): a Mon–Sun strip of study hours, protected time and
@@ -677,7 +677,7 @@ Notepad, #95's wording and parts of #74, #90 and #101 were already done):
   status ("Not placed yet", "Placed Tue 16:00") and "planned" a time total
   ("2 h 30 min planned"), as 0.18.2 already made "Planned" the total in every
   design; no sweep of either word.
-- Mockup round 3 is approved (`docs/mockups/round3-0185/`, its README lists
+- Mockup round 3 is approved (`docs/mockups/round3-0185/`, now in git history; its README lists
   each choice): "Sign in" as the one heading, words on the dial's arcs with a
   key, Lucide `calendar-sync` for Replan, the warm edge on every card in Paper
   and Ink.
