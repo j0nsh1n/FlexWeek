@@ -145,7 +145,9 @@ def test_the_month_screen_draws_the_dates_the_session_asked_for(
         for item in _cells(root):
             iso = str(item.objectName())[len("monthDate-") :]
             assert item.property("inMonth") is (iso[:7] == today.isoformat()[:7]), iso
-            assert float(item.property("opacity")) == (1.0 if iso[:7] == today.isoformat()[:7] else 0.45), iso
+            # Outside the month only the fill and number fade (PR 6 polish), so chips keep their contrast.
+            assert float(item.property("opacity")) == 1.0, iso
+            assert float(item.property("fade")) == (1.0 if iso[:7] == today.isoformat()[:7] else 0.45), iso
         assert _texts(_qml(root, "materialMonth"), "monthStudyCaption") == [LOAD_WORDS]
     finally:
         window._use_widgets_styles()
