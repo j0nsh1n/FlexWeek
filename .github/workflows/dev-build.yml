@@ -154,12 +154,15 @@ jobs:
               gh release delete "$kept" --cleanup-tag --yes 2>/dev/null || true
               rm -rf previous-dev && mkdir -p previous-dev
               gh release download dev --dir previous-dev
+              # The tag points at this run's commit, not the old build's: once main's workflows have
+              # changed, GitHub refuses the workflow token a new tag on an older commit (HTTP 403,
+              # 2026-11-06). The old commit stays in the tag's name, the title and the notes.
               gh release create "$kept" previous-dev/* \
                 --prerelease \
                 --latest=false \
-                --target "$old_sha" \
+                --target "$(git rev-parse HEAD)" \
                 --title "Developer build $old_version (${old_sha:0:7})" \
-                --notes "An earlier developer build, kept when Developer build $DEVVERSION replaced it. The updater does not offer it."
+                --notes "An earlier developer build, built from $old_sha, kept when Developer build $DEVVERSION replaced it. The updater does not offer it."
               have=$(gh release view "$kept" --json isDraft,assets \
                 --jq '[.isDraft, ([.assets[].name] | sort)] | tostring')
               if [ "$have" != "[false,$assets]" ]; then
