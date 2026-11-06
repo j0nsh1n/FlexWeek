@@ -10,6 +10,7 @@ from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 from desktop.native.calendar import monday_of
 from desktop.native.hours.zoom import OPENS, opening_minute
 from desktop.native.material.bridge_rows import Rows
+from desktop.native.material.bridge_week import BLOCK_ROLES, occurrence_row
 from desktop.native.material.day_board import (
     DIM_KEYS,
     NUDGE_KEYS,
@@ -66,6 +67,7 @@ class DayBridge(QObject):
     """One day's lists, the free-time card, and the actions those rows take."""
 
     changed = Signal()
+    dateOpened = Signal()
 
     def __init__(self, window: QObject, parent: QObject, *, today_only: bool = False) -> None:
         super().__init__(parent)
@@ -75,6 +77,8 @@ class DayBridge(QObject):
         self._mode = "light"
         self._up = Rows(ROW_ROLES, self)
         self._done = Rows(ROW_ROLES, self)
+        self._blocks = Rows(BLOCK_ROLES, self)
+        self._block_rows: list[dict] = []
         self._board = _empty()
         self._iso = ""
         self._year = 2026
@@ -143,8 +147,11 @@ class DayBridge(QObject):
             self._load_error = ""
             self._asked_week = ""
             self._load_started = False
+        offset = -1
+        now_minute = moment.hour * 60 + moment.minute
         if account is not None and week_start:
             start = date.fromisoformat(week_start)
+            offset = (today - start).days
             week_model = session.built_week()
             if start <= viewed <= start + timedelta(days=6):
                 self._day_index = (viewed - start).days
@@ -152,29 +159,46 @@ class DayBridge(QObject):
                 if callable(on_day):
                     items = on_day(self._day_index)
         when = "today" if viewed == today else ("past" if viewed < today else "future")
-        minute = moment.hour * 60 + moment.minute if when == "today" else 0
+        minute = now_minute if when == "today" else 0
         self._opening_minute = _opening_minute(
             week_model, viewed, today, minute if when == "today" else None, self._day_index
         )
         self._waiting = False
         self._load_error = ""
+        dim = read_flag(prefs, DIM_KEYS, True)
+        block_rows = []
+        for item in items:
+            end = int(item.end)
+            day = int(item.day)
+            if offset > 6:
+                gone = True
+            elif offset < 0:
+                gone = False
+            else:
+                gone = day < offset or (day == offset and end <= now_minute)
+            block_rows.append(occurrence_row(item, self._mode, dim=dim, gone=gone, fresh=False))
         self._publish(
             board_for(
                 items,
                 minute=minute,
                 when=when,
                 nudges=read_flag(prefs, NUDGE_KEYS, True),
-                dim=read_flag(prefs, DIM_KEYS, True),
+                dim=dim,
                 mode=self._mode,
                 on=viewed,
                 now=moment,
-            )
+            ),
+            block_rows,
         )
 
-    def _publish(self, board: DayBoard) -> None:
+    def _publish(self, board: DayBoard, block_rows: list[dict] | None = None) -> None:
         self._board = board
         self._up.set_rows([_qml_row(row) for row in board.up_next])
         self._done.set_rows([_qml_row(row) for row in board.done])
+        rows = block_rows if block_rows is not None else []
+        if self._block_rows != rows:
+            self._block_rows = list(rows)
+            self._blocks.set_rows(rows)
         self.changed.emit()
 
     def _say(self, text: str) -> None:
@@ -216,6 +240,7 @@ class DayBridge(QObject):
         self._load_started = False
         self._load_error = ""
         self.reload(self._mode, fetch=True)
+        self.dateOpened.emit()
 
     def _after_week(self) -> None:
         """Open today again once a week load that was already running when Day asked has landed.
@@ -292,6 +317,7 @@ class DayBridge(QObject):
         else:
             session.selected_day = iso
         self.reload(self._mode)
+        self.dateOpened.emit()
 
     @Property(str, notify=changed)
     def iso(self) -> str:
@@ -352,6 +378,10 @@ class DayBridge(QObject):
     @Property(QObject, constant=True)
     def doneRows(self) -> QObject:
         return self._done
+
+    @Property(QObject, constant=True)
+    def blocks(self) -> QObject:
+        return self._blocks
 
     @Property(int, notify=changed)
     def year(self) -> int:

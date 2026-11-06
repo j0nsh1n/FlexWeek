@@ -45,16 +45,13 @@ Item {
     property bool zooming: false
 
     readonly property real typeScale: (theme && theme.typeScale) ? theme.typeScale : 1
-    readonly property var shownBlocks: {
-        var rows = (root.bridge && root.bridge.blockRows) ? root.bridge.blockRows : []
-        var out = []
-        if (!root.weekMode && root.filterDay < 0)
-            return out
-        for (var i = 0; i < rows.length; i++) {
-            if (root.weekMode || rows[i].day === root.filterDay)
-                out.push(rows[i])
-        }
-        return out
+    readonly property int blockRightInset: root.weekMode ? 3 : 16
+
+    function openingAbove(view) {
+        var margin = 45 / 60 * root.row
+        if (view < margin + root.row)
+            return Math.min(margin, Math.max(8, view * 0.08))
+        return margin
     }
 
     M3Palette { id: m3; theme: root.theme }
@@ -128,23 +125,35 @@ Item {
     }
 
     property string openedKey: ""
+    // Iso is the date. A clock tick, save, or zoom leaves it alone; previous/next/Today change it.
+    readonly property string dateKey: (root.followOpening && root.bridge && root.bridge.day)
+                                      ? root.bridge.day.iso : ""
+    onDateKeyChanged: if (root.followOpening) root.revealOpening(true)
 
     function revealOpening(force) {
-        if (!root.followOpening || scroller.moving || scroller.dragging || root.zooming)
+        if (!root.followOpening)
+            return
+        if (!force && (scroller.moving || scroller.dragging || root.zooming))
             return
         var view = scroller.height
         if (view < 40)
             return
-        var key = (bridge && bridge.day ? bridge.day.iso : "") + ":" + root.openingMinute + ":"
-                + root.row + ":" + Math.round(view) + ":" + Math.round(scroller.contentHeight)
+        var key = (bridge && bridge.day ? bridge.day.iso : "")
         if (!force && openedKey === key)
             return
         openedKey = key
         var y = (root.openingMinute / 60) * root.row
-        var above = Math.min(45 / 60 * root.row, Math.max(8, view * 0.08))
+        var above = openingAbove(view)
         var wanted = Math.max(0, y - above)
         var limit = Math.max(0, scroller.contentHeight - view)
         scroller.contentY = Math.min(wanted, limit)
+    }
+
+    Connections {
+        target: root.followOpening && root.bridge && root.bridge.day ? root.bridge.day : null
+        function onDateOpened() {
+            root.revealOpening(true)
+        }
     }
 
     ZoomPill {
@@ -168,9 +177,7 @@ Item {
         anchors.fill: parent
         contentWidth: width
         contentHeight: hours.height + root.scrollClearance
-                       + (root.followOpening
-                          ? Math.max(0, height - Math.min(45 / 60 * root.row, Math.max(8, height * 0.08)))
-                          : 0)
+                       + (root.followOpening ? Math.max(0, height - openingAbove(height)) : 0)
         clip: true
         boundsBehavior: Flickable.StopAtBounds
 
@@ -194,8 +201,6 @@ Item {
             function onChanged() {
                 if (root.followNow)
                     root.revealNow()
-                if (root.followOpening)
-                    root.revealOpening(false)
             }
         }
 
@@ -395,40 +400,48 @@ Item {
             Repeater {
                 id: weekBlocks
                 objectName: "weekBlocks"
-                model: root.shownBlocks
+                model: root.weekMode
+                       ? (root.bridge ? root.bridge.blocks : 0)
+                       : (root.bridge && root.bridge.day ? root.bridge.day.blocks : 0)
 
                 WeekBlock {
                     id: blockCell
                     objectName: "weekBlock"
                     z: 2
                     passive: root.passive
+                    dayOpen: !root.weekMode
                     x: root.weekMode
-                       ? root.gutter + modelData.day * root.dayWidth + 3
+                       ? root.gutter + model.day * root.dayWidth + 3
                        : root.gutter + 3
-                    y: modelData.start / 60 * root.row
+                    y: model.start / 60 * root.row
                     width: root.weekMode
                            ? Math.max(8, root.dayWidth - 6)
-                           : Math.max(8, hours.width - root.gutter - 6)
-                    height: Math.max(36, (modelData.end - modelData.start) / 60 * root.row - 2)
+                           : Math.max(8, hours.width - root.gutter - 3 - root.blockRightInset)
+                    height: Math.max(36, (model.end - model.start) / 60 * root.row - 2)
                     theme: root.theme
                     density: root.density
                     reduceMotion: root.reduceMotion
                     highContrast: root.highContrast
-                    category: modelData.category
-                    title: modelData.title
+                    category: model.category
+                    title: model.title
                     detail: {
-                        var text = (root.theme && root.theme.showTimes === false) ? "" : modelData.detail
+                        var text = (root.theme && root.theme.showTimes === false) ? "" : model.detail
                         if (root.theme && root.theme.showLengths)
-                            text = (text ? text + " · " : "") + (modelData.end - modelData.start) + "m"
+                            text = (text ? text + " · " : "") + (model.end - model.start) + "m"
                         return text
                     }
-                    past: modelData.past
-                    done: modelData.done
-                    fresh: modelData.fresh
-                    homework: modelData.homework
-                    onToggled: if (root.bridge && root.bridge.week) root.bridge.week.toggleDone(modelData.assignmentId)
-                    onOpened: if (root.bridge && root.bridge.sheets) root.bridge.sheets.editBlock(modelData.blockId, modelData.day)
-                    onMenuAsked: (mx, my) => root.openBlockMenu(blockCell, modelData, mx, my)
+                    past: model.past
+                    done: model.done
+                    fresh: model.fresh
+                    homework: model.homework
+                    onToggled: if (root.bridge && root.bridge.week) root.bridge.week.toggleDone(model.assignmentId)
+                    onOpened: if (root.bridge && root.bridge.sheets) root.bridge.sheets.editBlock(model.blockId, model.day)
+                    onMenuAsked: (mx, my) => root.openBlockMenu(blockCell, {
+                        blockId: model.blockId,
+                        assignmentId: model.assignmentId,
+                        day: model.day,
+                        done: model.done
+                    }, mx, my)
                     onActiveFocusChanged: if (activeFocus) root.reveal(y, height)
                     onFocused: root.reveal(y, height)
                 }

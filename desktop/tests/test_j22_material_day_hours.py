@@ -125,9 +125,9 @@ def _bridge(window: NativeWindow) -> object:
     return window._material_page.bridge
 
 
-def _day(qapp: QApplication, window: NativeWindow) -> object:
+def _day(qapp: QApplication, window: NativeWindow, *, weekends: bool = True) -> object:
     set_clock_24h(True)
-    _pref(window, show_weekends=True, clock_24h=True)
+    _pref(window, show_weekends=weekends, clock_24h=True)
     session = window.session
     if session.week_start != window.home_week:
         session.load_week(window.home_week)
@@ -149,8 +149,19 @@ def _day(qapp: QApplication, window: NativeWindow) -> object:
         sheets.forceClose()
     window._material_page.publish()
     _pump(qapp)
-    _bridge(window).showPage("day")
+    bridge = _bridge(window)
+    bridge.showPage("day")
     _pump(qapp)
+    settled(qapp, window)
+    _pump(qapp)
+    # showPage("day") is a no-op when Day is already showing, and leftover
+    # contentY would leak. Previous then Next is a new date each time, so the
+    # opening scroll runs the same way Previous/Next does for the student.
+    day_bridge = bridge.property("day")
+    day_bridge.previousDay()
+    settled(qapp, window)
+    _pump(qapp)
+    day_bridge.nextDay()
     settled(qapp, window)
     _pump(qapp)
     return root
@@ -373,7 +384,8 @@ def test_toggling_the_essay_and_opening_school_use_the_week_bridge_calls(
         assert session.assignments["essay"].get("completed") is True
 
         school = _block_named(_day_item(root), "School")
-        school.opened.emit()
+        _scroll_block_into_view(qapp, _day_item(root), school)
+        _click(window, school)
         wait_until(qapp, lambda: sheets.kind == "block")
         draft = sheets._block
         assert draft is not None
@@ -389,15 +401,235 @@ def test_toggling_the_essay_and_opening_school_use_the_week_bridge_calls(
             settled(qapp, window)
 
 
+def _opening_above(view: float, row: int) -> float:
+    """45 minutes above now, unless the pane is shorter than that margin plus one hour."""
+    margin = NOW_MARGIN / 60 * row
+    if view < margin + row:
+        return min(margin, max(8.0, view * 0.08))
+    return margin
+
+
+def _scroll_block_into_view(qapp: QApplication, day: object, block: object) -> None:
+    scroller = _qml(day, "dayScroller")
+    scroller.setProperty("contentY", max(0.0, float(block.property("y")) - 16.0))
+    _pump(qapp)
+
+
 def test_it_opens_scrolled_so_nineteen_is_near_the_top(qapp: QApplication, window: NativeWindow) -> None:
     root = _day(qapp, window)
     day = _day_item(root)
     scroller = _qml(day, "dayScroller")
     row = int(_bridge(window).property("dayHourRow"))
     now_y = 19 * row
+    essay_y = 18.75 * row
     content_y = float(scroller.property("contentY"))
     view_h = float(scroller.property("height"))
     assert view_h > 40
+    above = _opening_above(view_h, row)
     assert content_y <= now_y <= content_y + view_h
-    assert now_y - content_y <= NOW_MARGIN / 60 * row + row
+    assert content_y <= essay_y <= content_y + view_h
+    assert abs((now_y - content_y) - above) < 2
     assert int(_bridge(window).property("day").property("openingMinute")) == NOW_MINUTE
+
+    quick = window._material_page._quick
+    quick.setFocus()
+    _pump(qapp)
+    QTest.keyClick(quick, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
+    _pump(qapp)
+    day_bridge = _bridge(window).property("day")
+    day_bridge.previousDay()
+    settled(qapp, window)
+    _pump(qapp)
+    day_bridge.nextDay()
+    settled(qapp, window)
+    _pump(qapp)
+    row = int(_bridge(window).property("dayHourRow"))
+    assert row == 72
+    scroller = _qml(_day_item(root), "dayScroller")
+    now_y = 19 * row
+    essay_y = 18.75 * row
+    content_y = float(scroller.property("contentY"))
+    view_h = float(scroller.property("height"))
+    above = _opening_above(view_h, row)
+    assert content_y <= now_y <= content_y + view_h
+    assert content_y <= essay_y <= content_y + view_h
+    assert abs((now_y - content_y) - above) < 2
+
+
+def test_a_focused_block_keeps_focus_across_an_unchanged_refresh(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _day(qapp, window)
+    day = _day_item(root)
+    essay = _block_named(day, "History essay")
+    essay.forceActiveFocus()
+    _pump(qapp)
+    assert essay.property("activeFocus") is True
+    _bridge(window).refresh()
+    _pump(qapp)
+    essay = _block_named(_day_item(root), "History essay")
+    assert essay.property("activeFocus") is True
+
+    _bridge(window).showPage("week")
+    _pump(qapp)
+    week = _qml(root, "materialWeek")
+    essay = _block_named(week, "History essay")
+    essay.forceActiveFocus()
+    _pump(qapp)
+    assert essay.property("activeFocus") is True
+    _bridge(window).refresh()
+    _pump(qapp)
+    essay = _block_named(_qml(root, "materialWeek"), "History essay")
+    assert essay.property("activeFocus") is True
+
+
+def test_day_shows_saturday_when_week_hides_weekends(qapp: QApplication, window: NativeWindow) -> None:
+    session = window.session
+    saturday = {
+        "id": "sat-club",
+        "title": "Saturday club",
+        "kind": "locked",
+        "category": "extra",
+        "start": "10:00",
+        "duration_min": 60,
+        "days": [5],
+    }
+    try:
+        session.add_block(saturday)
+        session.save()
+        settled(qapp, window)
+        root = _day(qapp, window, weekends=False)
+        day_bridge = _bridge(window).property("day")
+        day_bridge.nextDay()
+        settled(qapp, window)
+        _pump(qapp)
+        day_bridge.nextDay()
+        settled(qapp, window)
+        _pump(qapp)
+        assert int(day_bridge.property("dayIndex")) == 5
+        day = _day_item(root)
+        assert "Saturday club" in _blocks_by_title(day)
+        _bridge(window).showPage("week")
+        _pump(qapp)
+        assert int(_bridge(window).property("week").property("columns")) == 5
+        assert len(_named(root, "dayHeader")) == 5
+        week_blocks = _named(_qml(root, "materialWeek"), "weekBlock")
+        week_titles = [str(block.property("title")) for block in week_blocks]
+        assert "Saturday club" not in week_titles
+    finally:
+        _pref(window, show_weekends=True)
+        if any(block["id"] == "sat-club" for block in session.blocks):
+            session.delete_block("sat-club")
+            session.save()
+            settled(qapp, window)
+        session.open_day((date.fromisoformat(session.week_start) + timedelta(days=NOW_DAY)).isoformat())
+        settled(qapp, window)
+
+
+def test_a_clock_tick_does_not_move_day_scroll_or_a_zoom_anchor(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _day(qapp, window)
+    day = _day_item(root)
+    scroller = _qml(day, "dayScroller")
+    row = int(_bridge(window).property("dayHourRow"))
+    school_y = 8 * row
+    scroller.setProperty("contentY", float(school_y))
+    _pump(qapp)
+    held = float(scroller.property("contentY"))
+    assert abs(held - school_y) < 2
+    real_now = window.session.now_ms
+    later = datetime.fromisoformat(window.session.week_start) + timedelta(days=NOW_DAY, hours=19, minutes=1)
+    try:
+        window.session.now_ms = lambda: int(later.timestamp() * 1000)
+        _bridge(window).refresh()
+        _pump(qapp)
+        assert abs(float(scroller.property("contentY")) - held) < 2
+
+        view_y = float(scroller.property("height")) / 2
+        minute = ((float(scroller.property("contentY")) + view_y) / row) * 60
+        quick = window._material_page._quick
+        quick.setFocus()
+        _pump(qapp)
+        QTest.keyClick(quick, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
+        _pump(qapp)
+        row = int(_bridge(window).property("dayHourRow"))
+        assert row == 72
+        after_zoom = ((float(scroller.property("contentY")) + view_y) / row) * 60
+        assert abs(after_zoom - minute) < 1
+        _bridge(window).refresh()
+        _pump(qapp)
+        after_tick = ((float(scroller.property("contentY")) + view_y) / row) * 60
+        assert abs(after_tick - minute) < 1
+    finally:
+        window.session.now_ms = real_now
+        _bridge(window).refresh()
+        _pump(qapp)
+
+
+def test_every_day_block_opens_from_a_click_tab_and_enter_and_space_toggles_homework(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _day(qapp, window)
+    day = _day_item(root)
+    sheets = _bridge(window).property("sheets")
+    quick = window._material_page._quick
+    blocks = _blocks_by_title(day)
+    school = blocks["School"]
+    soccer = blocks["Soccer"]
+    essay = blocks["History essay"]
+    assert school.property("activeFocusOnTab") is True
+    assert soccer.property("activeFocusOnTab") is True
+    assert essay.property("activeFocusOnTab") is True
+
+    _scroll_block_into_view(qapp, day, soccer)
+    _click(window, soccer)
+    wait_until(qapp, lambda: sheets.kind == "block")
+    assert sheets._block is not None
+    assert sheets._block.original["id"] == "soccer"
+    sheets.forceClose()
+    _pump(qapp)
+
+    school.forceActiveFocus()
+    _pump(qapp)
+    assert school.property("activeFocus") is True
+    QTest.keyClick(quick, Qt.Key.Key_Tab)
+    _pump(qapp)
+    soccer = _blocks_by_title(_day_item(root))["Soccer"]
+    assert soccer.property("activeFocus") is True
+    QTest.keyClick(quick, Qt.Key.Key_Return)
+    wait_until(qapp, lambda: sheets.kind == "block")
+    assert sheets._block is not None
+    assert sheets._block.original["id"] == "soccer"
+    sheets.forceClose()
+    _pump(qapp)
+
+    essay = _blocks_by_title(_day_item(root))["History essay"]
+    essay.forceActiveFocus()
+    _pump(qapp)
+    assert essay.property("activeFocus") is True
+    assert window.session.assignments["essay"].get("completed") in (None, False)
+    QTest.keyClick(quick, Qt.Key.Key_Space)
+    wait_until(
+        qapp,
+        lambda: not window.session.busy and bool(window.session.assignments["essay"].get("completed")),
+    )
+    assert sheets.kind == ""
+    window.session.complete_homework("essay", False)
+    window.session.save()
+    settled(qapp, window)
+
+
+def test_day_blocks_leave_a_sixteen_pixel_gutter_for_the_now_line(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _day(qapp, window)
+    day = _day_item(root)
+    scroller = _qml(day, "dayScroller")
+    essay = _blocks_by_title(day)["History essay"]
+    pane_right = int(scroller.property("width"))
+    block_right = int(essay.property("x")) + int(essay.property("width"))
+    assert pane_right - block_right == 16
+    line = _qml(day, "nowLine")
+    line_right = int(line.property("x")) + int(line.property("width"))
+    assert line_right > block_right

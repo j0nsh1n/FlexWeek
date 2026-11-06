@@ -1,7 +1,7 @@
 import QtQuick
 import components 1.0
 
-// One block on the grid. Homework blocks answer a click or Space with "finished".
+// One block on the grid. Day sets dayOpen so every block opens; Week keeps homework-only.
 Item {
     id: cell
     property var theme
@@ -16,6 +16,9 @@ Item {
     property bool fresh: false
     property bool homework: false
     property bool passive: false
+    // Day sets this so School and Soccer open like homework; Week leaves it off.
+    property bool dayOpen: false
+    readonly property bool canOpen: !cell.passive && (cell.homework || cell.dayOpen)
     signal toggled()
     signal opened()
     signal menuAsked(real x, real y)
@@ -125,30 +128,36 @@ Item {
         ringRadius: 14
     }
 
-    HoverHandler { enabled: cell.homework; cursorShape: Qt.PointingHandCursor }
-    TapHandler { enabled: cell.homework; onTapped: cell.opened() }
+    HoverHandler { enabled: cell.canOpen; cursorShape: Qt.PointingHandCursor }
+    TapHandler { enabled: cell.canOpen; onTapped: cell.opened() }
     TapHandler {
         acceptedButtons: Qt.RightButton
         enabled: cell.homework
         onTapped: (point) => cell.menuAsked(point.position.x, point.position.y)
     }
 
-    activeFocusOnTab: !passive && homework
+    activeFocusOnTab: cell.canOpen
     onActiveFocusChanged: if (activeFocus) cell.focused()
-    Accessible.role: homework ? Accessible.Button : Accessible.StaticText
-    Accessible.name: homework
+    Accessible.role: cell.canOpen ? Accessible.Button : Accessible.StaticText
+    Accessible.name: cell.canOpen
                      ? ("Edit " + title)
                      : title + (detail !== "" ? ", " + detail : "")
-    Accessible.onPressAction: if (cell.homework) cell.opened()
+    Accessible.onPressAction: if (cell.canOpen) cell.opened()
     Keys.onPressed: (event) => {
-        if (!cell.homework)
+        if (!cell.canOpen)
             return
-        if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+        if (cell.dayOpen && cell.homework && event.key === Qt.Key_Space) {
+            cell.toggled()
+            event.accepted = true
+        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter
+                   || (event.key === Qt.Key_Space && !cell.dayOpen)) {
             cell.opened()
             event.accepted = true
         } else if ((event.key === Qt.Key_F10 && (event.modifiers & Qt.ShiftModifier)) || event.key === Qt.Key_Menu) {
-            cell.menuAsked(width / 2, height / 2)
-            event.accepted = true
+            if (cell.homework) {
+                cell.menuAsked(width / 2, height / 2)
+                event.accepted = true
+            }
         }
     }
 

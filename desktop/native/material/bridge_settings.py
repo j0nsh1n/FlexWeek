@@ -177,12 +177,16 @@ class PassiveDayBridge(QObject):
     """
 
     changed = Signal()
+    dateOpened = Signal()
 
     def __init__(self, live: QObject, parent: QObject) -> None:
         super().__init__(parent)
         self.setObjectName("passiveDayBridge")
         self._live = live
         live.changed.connect(self.changed)
+        opened = getattr(live, "dateOpened", None)
+        if opened is not None and hasattr(opened, "connect"):
+            opened.connect(self.dateOpened)
 
     @Property(str, notify=changed)
     def leftLine(self) -> str:
@@ -255,6 +259,14 @@ class PassiveDayBridge(QObject):
     @Property(int, notify=changed)
     def openingMinute(self) -> int:
         return int(self._live.openingMinute)  # type: ignore[attr-defined]
+
+    @Property(str, notify=changed)
+    def iso(self) -> str:
+        return str(self._live.iso)  # type: ignore[attr-defined]
+
+    @Property(QObject, constant=True)
+    def blocks(self) -> QObject:
+        return self._live.blocks  # type: ignore[attr-defined]
 
     @Slot()
     def previousDay(self) -> None:

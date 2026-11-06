@@ -171,4 +171,12 @@ Item {
         if (visible && hoursLoader.item)
             hoursLoader.item.revealOpening(true)
     }
+
+    Connections {
+        target: root.board
+        function onDateOpened() {
+            if (hoursLoader.item)
+                hoursLoader.item.revealOpening(true)
+        }
+    }
 }
