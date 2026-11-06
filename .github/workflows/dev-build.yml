@@ -42,7 +42,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            patchelf binutils libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+            patchelf binutils ccache libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
             libxcb-keysyms1 libxcb-render-util0 libxcb-util1 \
             libxkbcommon0 libxkbcommon-x11-0 xvfb \
             libegl1 libgl1 libopengl0 libglx0 libgles2 libgl1-mesa-dri
@@ -53,14 +53,38 @@ jobs:
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/python -m pip install -r requirements.txt -r requirements-desktop.txt -r requirements-dev.txt
 
-      - name: Install Rust and build the engine module
+      - name: Install Rust
         run: |
           rustup toolchain install stable --profile minimal --no-self-update
           rustup default stable
-          .venv/bin/python -m maturin develop --release --manifest-path engine/py/Cargo.toml
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            engine/target
+          key: engine-build-${{ runner.os }}-${{ hashFiles('engine/Cargo.lock') }}
+          restore-keys: |
+            engine-build-${{ runner.os }}-
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/Nuitka
+            ~/.ccache
+          key: nuitka-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-desktop.txt') }}-${{ hashFiles('desktop/**') }}
+          restore-keys: |
+            nuitka-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-desktop.txt') }}-
+            nuitka-${{ runner.os }}-
+      - name: Build the engine module
+        run: .venv/bin/python -m maturin develop --release --manifest-path engine/py/Cargo.toml
 
       - name: Build and package Linux onedir
         run: |
+          export NUITKA_CACHE_DIR="${HOME}/.cache/Nuitka"
+          export CCACHE_DIR="${HOME}/.ccache"
+          export PATH="/usr/lib/ccache:$PATH"
+          mkdir -p "$NUITKA_CACHE_DIR" "$CCACHE_DIR"
           ./desktop/build_linux.sh
           ./desktop/package_linux.sh dist/FlexWeek dist/release
 
@@ -105,6 +129,40 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The build being replaced stays downloadable as dev-<its version>, a pre-release that is
+          # never latest, so the updater (which reads only the dev tag and the latest release) never
+          # offers it. dev is deleted only once that copy is published with both files; anything
+          # unexpected stops the job first, so a build is never lost.
+          if old_name=$(gh release view dev --json name --jq .name 2>/dev/null); then
+            old_version=${old_name#Developer build }
+            if [ "$old_version" = "$old_name" ] || [ -z "$old_version" ]; then
+              echo "The dev release is titled '$old_name', not 'Developer build <version>': not replacing it." >&2
+              exit 1
+            fi
+            kept="dev-$old_version"
+            assets='["FlexWeek-Linux-x86_64.tar.gz","FlexWeek-Linux-x86_64.tar.gz.sha256"]'
+            have=$(gh release view "$kept" --json isDraft,assets \
+              --jq '[.isDraft, ([.assets[].name] | sort)] | tostring' 2>/dev/null || true)
+            if [ "$have" != "[false,$assets]" ]; then
+              # Missing or half made by an earlier run: make it again from the dev release.
+              gh release delete "$kept" --cleanup-tag --yes 2>/dev/null || true
+              old_sha=$(git ls-remote origin refs/tags/dev | cut -f1)
+              rm -rf previous-dev && mkdir -p previous-dev
+              gh release download dev --dir previous-dev
+              gh release create "$kept" previous-dev/* \
+                --prerelease \
+                --latest=false \
+                --target "$old_sha" \
+                --title "Developer build $old_version" \
+                --notes "An earlier developer build, kept when Developer build $DEVVERSION replaced it. The updater does not offer it."
+              have=$(gh release view "$kept" --json isDraft,assets \
+                --jq '[.isDraft, ([.assets[].name] | sort)] | tostring')
+              if [ "$have" != "[false,$assets]" ]; then
+                echo "Keeping $kept did not finish ($have): not replacing dev." >&2
+                exit 1
+              fi
+            fi
+          fi
           gh release delete dev --cleanup-tag --yes || true
           gh release create dev \
             dist/release/FlexWeek-Linux-x86_64.tar.gz \

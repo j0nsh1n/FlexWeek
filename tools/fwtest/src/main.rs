@@ -44,6 +44,9 @@ enum Command {
         /// Run only cases whose file is under engine/.
         #[arg(long)]
         engine_only: bool,
+        /// Run shard K of N after the existing case order (1-based K, as K/N).
+        #[arg(long, value_name = "K/N", value_parser = fwtest::mutate::parse_shard)]
+        shard: Option<fwtest::mutate::Shard>,
         /// Spec files. Default is every scripts/mutations/*.json in the checkout.
         specs: Vec<std::path::PathBuf>,
     },
@@ -88,6 +91,7 @@ fn main() {
             engine_build,
             no_engine_rebuild,
             engine_only,
+            shard,
             specs,
         } => fwtest::mutate::run(
             &specs,
@@ -96,6 +100,7 @@ fn main() {
             engine_build.as_deref(),
             no_engine_rebuild,
             engine_only,
+            shard,
         ),
         Command::Rig { python, args } => fwtest::rig::run(&args, python.as_deref()),
         Command::Run { timeout, command } => fwtest::contain::execute(&command, timeout),

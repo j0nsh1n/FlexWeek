@@ -1,6 +1,9 @@
 # context.md — FlexWeek
 
 ## Current State
+- 2026-11-05: CI speed-ups (`ci/faster-workflows`): mutation cases in 4 shards with a `mutant` cargo
+  profile, one shared engine wheel, rig and verify split into parallel jobs, Nuitka/ccache caches, and
+  developer builds keep the build they replace as `dev-<version>`. No app code changed.
 - 2026-11-03 (Step 0 of the FIX-SPEC v1.3 plan): at `ea5eacf4` plus the two static audit test files, the
   full gate (3 workers) passes 5788 tests, ruff and mypy. Two runs with 8 workers on a busy machine each
   failed one different timing test (`test_week_hour_labels.py`, `test_layout_clay.py`); both pass alone.
