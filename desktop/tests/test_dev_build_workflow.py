@@ -89,3 +89,11 @@ def test_the_dev_release_script_starts_the_workflow_on_main() -> None:
     assert "gh release create" not in SCRIPT
     # It must not claim another run's link: a run listed right after dispatch may not be this one.
     assert "gh run list" not in SCRIPT
+
+
+def test_the_build_it_replaces_is_kept_under_its_commit() -> None:
+    """The kept copy is tagged dev-<the old build's commit> and the old title may already name a commit."""
+    assert "old_version=${old_version%% (*}" in WORKFLOW
+    assert "old_sha=$(git ls-remote origin refs/tags/dev | cut -f1)" in WORKFLOW
+    assert 'kept="dev-${old_sha:0:7}"' in WORKFLOW
+    assert WORKFLOW.index('kept="dev-${old_sha:0:7}"') < WORKFLOW.index("gh release delete dev --cleanup-tag")

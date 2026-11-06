@@ -54,7 +54,9 @@ CHECK_FAILED = "FlexWeek could not check for updates right now. Try again later,
 DOWNLOAD_STOPPED = "The download stopped before it finished. Try again, or open the release page."
 
 
-DEV_TITLE = re.compile(r"Developer build (\d+(?:\.\d+){1,3})")
+# The commit may follow the number, "Developer build 1.2.0.202611061530 (4b3e1cd)"; only the number
+# orders builds.
+DEV_TITLE = re.compile(r"Developer build (\d+(?:\.\d+){1,3})(?: \([0-9a-f]{7,40}\))?")
 
 
 class Updater(QObject):
