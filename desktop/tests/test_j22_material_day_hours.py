@@ -633,3 +633,91 @@ def test_day_blocks_leave_a_sixteen_pixel_gutter_for_the_now_line(
     line = _qml(day, "nowLine")
     line_right = int(line.property("x")) + int(line.property("width"))
     assert line_right > block_right
+
+
+def _no_blank_past_midnight(scroller: object, row: int) -> None:
+    content_y = float(scroller.property("contentY"))
+    view_h = float(scroller.property("height"))
+    if 24 * row >= view_h:
+        assert content_y + view_h <= 24 * row + 1, (content_y, view_h, row)
+
+
+def test_an_evening_zoom_keeps_the_essay_and_no_blank_past_midnight(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Day opens with the evening near the top and room past midnight; zooming from there anchors a
+    time in the day and never leaves midnight above the bottom while earlier time could show."""
+    root = _day(qapp, window)
+    quick = window._material_page._quick
+    quick.setFocus()
+    _pump(qapp)
+    try:
+        for expected, key in ((72, Qt.Key.Key_Equal), (96, Qt.Key.Key_Equal), (56, Qt.Key.Key_0)):
+            QTest.keyClick(quick, key, Qt.KeyboardModifier.ControlModifier)
+            _pump(qapp)
+            row = int(_bridge(window).property("dayHourRow"))
+            assert row == expected
+            scroller = _qml(_day_item(root), "dayScroller")
+            _no_blank_past_midnight(scroller, row)
+            content_y = float(scroller.property("contentY"))
+            view_h = float(scroller.property("height"))
+            assert content_y <= 18.75 * row and 19.75 * row <= content_y + view_h, (
+                expected,
+                content_y,
+                view_h,
+            )
+    finally:
+        _forget_zoom(window)
+
+
+def test_opening_a_date_in_the_next_week_waits_for_that_week(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Next past Sunday loads the next week; Day opens at that Monday's first block once it lands,
+    not at the fallback hour it had while the week was loading."""
+    session = window.session
+    home = window.home_week
+    following = (date.fromisoformat(home) + timedelta(days=7)).isoformat()
+    art = {
+        "id": "mon-art",
+        "title": "Art club",
+        "kind": "locked",
+        "category": "extra",
+        "start": "14:00",
+        "duration_min": 60,
+        "days": [0],
+    }
+    session.load_week(following)
+    settled(qapp, window)
+    session.add_block(art)
+    session.save()
+    settled(qapp, window)
+    try:
+        root = _day(qapp, window)
+        day_bridge = _bridge(window).property("day")
+        for _ in range(4):
+            day_bridge.nextDay()
+            settled(qapp, window)
+            _pump(qapp)
+        wait_until(qapp, lambda: session.week_start == following)
+        settled(qapp, window)
+        _pump(qapp)
+        assert int(day_bridge.property("dayIndex")) == 0
+        assert int(day_bridge.property("openingMinute")) == 14 * 60
+        scroller = _qml(_day_item(root), "dayScroller")
+        row = int(_bridge(window).property("dayHourRow"))
+        view_h = float(scroller.property("height"))
+        wait_until(
+            qapp,
+            lambda: abs(14 * row - float(scroller.property("contentY")) - _opening_above(view_h, row)) < 2,
+        )
+    finally:
+        if session.week_start != following:
+            session.load_week(following)
+            settled(qapp, window)
+        if any(block["id"] == "mon-art" for block in session.blocks):
+            session.delete_block("mon-art")
+            session.save()
+            settled(qapp, window)
+        session.load_week(home)
+        settled(qapp, window)

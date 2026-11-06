@@ -62,7 +62,10 @@ Item {
         if (root.passive || !bridge || !bridge.zoomBy)
             return
         var row = Math.max(1, root.row)
-        var minute = ((scroller.contentY + viewY) / row) * 60
+        // The anchor is a time in the day: the hours end at midnight, and Day's pane scrolls on past
+        // it so an evening can open near the top.
+        var minute = Math.min(24 * 60, ((scroller.contentY + viewY) / row) * 60)
+        viewY = (minute / 60) * row - scroller.contentY
         root.zooming = true
         if (steps === 0)
             bridge.zoomReset()
@@ -71,7 +74,9 @@ Item {
         function place() {
             var next = Math.max(1, root.row)
             var y = (minute / 60) * next - viewY
-            var limit = Math.max(0, scroller.contentHeight - scroller.height)
+            // A zoom never leaves midnight above the bottom of the view while earlier time could show.
+            var dayEnd = Math.max(0, 24 * next - scroller.height)
+            var limit = Math.min(Math.max(0, scroller.contentHeight - scroller.height), dayEnd)
             scroller.contentY = Math.min(Math.max(0, y), limit)
             root.zooming = false
         }
@@ -79,12 +84,18 @@ Item {
         Qt.callLater(place)
     }
 
+    // Keys and the pill zoom about the middle of the hours on screen, not of blank space past midnight.
+    function middleOfHours() {
+        var shown = Math.min(scroller.height, Math.max(0, 24 * root.row - scroller.contentY))
+        return shown / 2
+    }
+
     function zoomFromKeys(steps) {
-        zoomAbout(steps, scroller.height / 2)
+        zoomAbout(steps, middleOfHours())
     }
 
     function resetZoomFromKeys() {
-        zoomAbout(0, scroller.height / 2)
+        zoomAbout(0, middleOfHours())
     }
 
     function reveal(itemY, itemHeight) {
@@ -129,6 +140,8 @@ Item {
     readonly property string dateKey: (root.followOpening && root.bridge && root.bridge.day)
                                       ? root.bridge.day.iso : ""
     onDateKeyChanged: if (root.followOpening) root.revealOpening(true)
+    // A turn later, so the opening minute that arrives with the same week has landed too.
+    onFilterDayChanged: if (root.followOpening && root.filterDay >= 0 && openedKey === "") Qt.callLater(root.revealOpening, false)
 
     function revealOpening(force) {
         if (!root.followOpening)
@@ -141,7 +154,9 @@ Item {
         var key = (bridge && bridge.day ? bridge.day.iso : "")
         if (!force && openedKey === key)
             return
-        openedKey = key
+        // A date in a week still loading has no blocks yet and opens at the fallback hour; it stays
+        // unopened so the opening runs again once the week lands (filterDay becomes valid).
+        openedKey = root.filterDay >= 0 ? key : ""
         var y = (root.openingMinute / 60) * root.row
         var above = openingAbove(view)
         var wanted = Math.max(0, y - above)
