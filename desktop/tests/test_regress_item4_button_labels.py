@@ -159,6 +159,25 @@ def test_no_button_clips_its_words(qapp, window, design, preset, size) -> None:
     assert clipped == []
 
 
+def test_large_text_suggestion_keeps_its_words_beside_the_preview(qapp, window) -> None:
+    dress(qapp, window, "retro", "high-contrast", "normal")
+    window._open_settings()
+    page = window._settings
+    page.nav.setCurrentRow(0)
+    settled(qapp, window)
+    for size in ("normal", "small", "normal"):
+        dress(qapp, window, "retro", "high-contrast", size)
+        assert page.style_preview.geometry().left() >= page.stack.geometry().right()
+        button = page.text_suggest.findChild(QPushButton, "prefTextSuggestUse")
+        assert button.isVisible()
+        room, need = words_room(button)
+        assert room >= need, f"{size}: Use Large text needs {need}px, has {room}px"
+    button.click()
+    qapp.processEvents()
+    assert page.knobs["text"].currentData() == "large"
+    assert not page.text_suggest.isVisible()
+
+
 @pytest.mark.parametrize(("design", "preset", "size"), params(ROOMY_COMBOS))
 def test_every_button_has_the_roomy_padding(qapp, window, design, preset, size) -> None:
     _, cramped = measure(qapp, window, design, preset, size)

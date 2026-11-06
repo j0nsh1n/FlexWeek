@@ -1126,13 +1126,16 @@ class SettingsPage(QWidget):
         self.text_suggest.setObjectName("prefTextSuggest")
         suggest_row = QHBoxLayout(self.text_suggest)
         suggest_row.setContentsMargins(0, 0, 0, 0)
-        suggest_row.addWidget(QLabel(TEXT_SUGGEST))
+        # Give the wrapping sentence the flexible space, so Qt reserves the button's size hint
+        # before dividing up a narrow row beside the preview.
+        suggest_words = QLabel(TEXT_SUGGEST)
+        suggest_words.setWordWrap(True)
+        suggest_row.addWidget(suggest_words, 1)
         use_large = _page_button(USE_LARGE_TEXT, "prefTextSuggestUse")
         text_box = self.knobs["text"]
         use_large.clicked.connect(lambda: text_box.setCurrentIndex(text_box.findData("large")))
         use_large.clicked.connect(lambda: announce(use_large, USE_LARGE_ANNOUNCED))
         suggest_row.addWidget(use_large)
-        suggest_row.addStretch(1)
         text_form.addRow(self.text_suggest)
         text_form.addRow(_note(TEXT_KEPT_NOTE, "settingsCardNote"))
         self.knobs["text"].currentIndexChanged.connect(self._show_text_suggestion)
