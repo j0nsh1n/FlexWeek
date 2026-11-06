@@ -32,6 +32,7 @@ from PySide6.QtGui import (
     QPixmap,
     QResizeEvent,
     QShortcut,
+    QShowEvent,
 )
 from PySide6.QtNetwork import QLocalServer
 from PySide6.QtWidgets import (
@@ -45,6 +46,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
@@ -537,6 +539,37 @@ class LastInput(QObject):
         elif kind == QEvent.Type.MouseButtonPress:
             self.keyboard = False
         return False
+
+
+class _BarStrip(QWidget):
+    """Retro's title-bar colour behind the top bar (T14): sized to the bar's rows across the page, under
+    every widget on it, and passing clicks through. Hidden for every other design."""
+
+    def __init__(self, page: QWidget, bar: QLayout) -> None:
+        super().__init__(page)
+        self._bar = bar
+        self.setObjectName("appBar")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.hide()
+        page.installEventFilter(self)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt virtual
+        if event.type() in (QEvent.Type.Resize, QEvent.Type.LayoutRequest, QEvent.Type.Show):
+            self.follow()
+        return False
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 - Qt virtual
+        self.follow()
+        super().showEvent(event)
+
+    def follow(self) -> None:
+        page = self.parentWidget()
+        if page is None:
+            return
+        bottom = self._bar.geometry().bottom() + 1 + page.layout().contentsMargins().top()
+        self.setGeometry(0, 0, page.width(), max(0, bottom))
+        self.lower()
 
 
 class NativeWindow(QMainWindow):
@@ -1201,6 +1234,12 @@ class NativeWindow(QMainWindow):
         doomed.extend(self.findChildren(QWidget, "materialPage"))
         doomed.extend(self.findChildren(QObject, "materialBridge"))
         seen: set[int] = set()
+        # The bridges are the window's own children, not the page's: cut their session signals
+        # before the deleteLater below, so a week change on this turn finds no listener.
+        for bridge in self.findChildren(QObject, "materialBridge"):
+            dispose = getattr(bridge, "dispose", None)
+            if callable(dispose):
+                dispose()
         for item in doomed:
             if id(item) in seen:
                 continue
@@ -1218,6 +1257,9 @@ class NativeWindow(QMainWindow):
         """
         self._material_gave_up = True
         self._material_failed = VERSION
+        if self._settings is not None:
+            # Material is no longer the one worn, whatever Settings showed when it opened (UI22).
+            self._settings.look.show_material(False)
         self._week_keys(True)
         current = self._stack.currentWidget()
         bridge = self._account_bridge()
@@ -1675,6 +1717,9 @@ class NativeWindow(QMainWindow):
         self._bar_views.addWidget(sign_out)
         self._top_bar = bar
         layout.addLayout(bar)
+        # Retro's title bar (T14) is a strip painted behind the bar, not a box around it, so the bar
+        # keeps its place on the page for every other design.
+        self._bar_strip = _BarStrip(page, bar)
         # Everything between the bar and the calendar is for planning, so a day screen can put it away.
         self.plan_chrome = QWidget()
         self.plan_chrome.setObjectName("planChrome")
@@ -3046,15 +3091,14 @@ class NativeWindow(QMainWindow):
             self._dismiss_new_look_notice(account_id)
 
         self._notice_step = None
+        # A B3a3 card of the look, with one action and the x: the x is "Not now" (UI21/A18).
         self.toast.show_message(
             "New in 1.0.0: each design has its own looks.",
             "Choose a look",
             lambda: self._choose_look_from_notice(account_id),
-            secondary_button="Not now",
-            secondary_callback=dismiss,
             close_callback=dismiss,
             dismiss_callback=dismiss,
-            filled=True,
+            card=True,
         )
 
     def _dismiss_new_look_notice(self, account_id: str) -> None:
@@ -5312,6 +5356,8 @@ class NativeWindow(QMainWindow):
         # does not swap in the middle of building Settings.
         if self._surface == "material" and page.layout_sections:
             page.layout_sections[0].show_surface("material")
+            # The saved choice, not the landing: after a failed open the Widgets week is up (UI22).
+            page.look.show_material(not self._material_gave_up)
         return page
 
     def _sync_started(self, service: SyncService) -> None:
@@ -5422,7 +5468,9 @@ class NativeWindow(QMainWindow):
                     self._material_failed = ""
                 self._save_look()
                 if surface_changed or choosing_material_again:
-                    self._show_surface()
+                    opened = self._show_surface()
+                    # Current follows whether Material actually opened, not the saved choice (UI22).
+                    page.look.show_material(opened)
                 self._on_week()
             wanted = page.updates()
             if self.session.preferences is not None:
@@ -5831,7 +5879,11 @@ class NativeWindow(QMainWindow):
                     if isValid(child):
                         child.setFont(font if own else QFont())
                 del self._retro_fonts
-            self.setStyleSheet(sheet)
+            from desktop.native.feel import bar_chrome
+
+            retro_bar = ctx.feel.key == "retro"
+            self.setStyleSheet(sheet + (bar_chrome(ctx.tokens) if retro_bar else ""))
+            self._bar_strip.setVisible(retro_bar)
             self._keep_bar_whole()
             apply_ui_effects(self._motion)
             self.toast.motion = self._motion
@@ -6059,6 +6111,10 @@ class NativeWindow(QMainWindow):
         if not self._saved_to_leave and not self._save_before_leaving(self.close):
             event.ignore()
             return
+        for bridge in self.findChildren(QObject, "materialBridge"):
+            dispose = getattr(bridge, "dispose", None)
+            if callable(dispose):
+                dispose()
         super().closeEvent(event)
 
     def _week_surfaces(self) -> list:
@@ -6143,6 +6199,15 @@ class NativeWindow(QMainWindow):
         mods = event.modifiers()
         if isinstance(focus, EDITABLE) and not self._undo_passes(focus, event):
             super().keyPressEvent(event)
+            return
+        if (
+            key == Qt.Key.Key_Escape
+            and not mods
+            and self.toast.isVisible()
+            and bool(self.toast.card.property("card"))
+        ):
+            self.toast.close_button.click()
+            event.accept()
             return
         if key == Qt.Key.Key_Escape and not mods and isinstance(focus, HoursCanvas) and not self._day_mode:
             self._focus_top_bar()

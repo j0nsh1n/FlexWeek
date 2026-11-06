@@ -21,8 +21,8 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QPointF, Qt
-    from PySide6.QtGui import QFontMetricsF, QKeyEvent
+    from PySide6.QtCore import QPoint, QPointF, Qt
+    from PySide6.QtGui import QColor, QFontMetricsF, QKeyEvent
     from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QScrollArea
 
     from desktop.native.layouts.base import Scene, rules
@@ -31,7 +31,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.look import design_look, resolved_palette
     from desktop.native.motion import apply_ui_effects, duration
     from desktop.native.ring import ARC_MS, CountdownRing
-    from desktop.native.weekmodel import build_week, clock_label, minute_of, set_clock_24h
+    from desktop.native.weekmodel import build_week, clock_label, length_label, minute_of, set_clock_24h
     from desktop.native.widgets import FittedLabel
 
 THURSDAY = 3
@@ -192,6 +192,44 @@ def test_during_homework_it_offers_finishing_and_focus(qapp: QApplication) -> No
     view = shown(qapp, "19:00")
     assert says(view) == ("Now", "Essay-1", "18:45–19:45")
     assert buttons(view) == ["oneFinished", "oneFocus", "oneLate", "oneBack"]
+
+
+def test_the_current_thing_is_read_at_28_pixels_strong(qapp: QApplication) -> None:
+    """UI20: the thing itself is set in pixels, 28 at Normal text, at weight 600, not at the heading
+    scale's points; the fitting still takes it smaller when a small ring needs it."""
+    view = shown(qapp, "19:00", size=(1280, 800))
+    title = view.findChild(QLabel, "oneTitle")
+    title.ensurePolished()
+    assert title.font().pixelSize() == 28
+    assert title.font().weight() == 600
+
+
+def test_the_time_left_sits_under_the_title(qapp: QApplication) -> None:
+    """UI20: while the current homework is on, remaining time is written under its title, not only
+    as the ring's number."""
+    view = shown(qapp, "19:00", size=(1280, 800))
+    title = view.findChild(QLabel, "oneTitle")
+    left = view.findChild(QLabel, "oneLeft")
+    assert left is not None and left.isVisibleTo(view)
+    assert left.text() == f"{length_label(45)} left"
+    assert title.geometry().bottom() <= left.geometry().bottom()
+    later = shown(qapp, "15:00", size=(1280, 800))
+    assert later.findChild(QLabel, "oneLeft").isVisibleTo(later) is False
+
+
+def test_during_homework_homework_finished_is_the_one_filled_button(qapp: QApplication) -> None:
+    """UI20: Homework finished stays the one filled button and the rest are text buttons: no quiet
+    edge of their own, so their rim is the screen behind them."""
+    view = shown(qapp, "19:00", size=(1280, 800))
+    day = [
+        button for button in view.findChildren(QPushButton) if not button.objectName().startswith("oneDay")
+    ]
+    assert [button.objectName() for button in day if button.property("kind") == "main"] == ["oneFinished"]
+    focus = next(button for button in day if button.objectName() == "oneFocus")
+    focus.ensurePolished()
+    picture = view.grab().toImage()
+    spot = focus.mapTo(view, QPoint(1, focus.height() // 2))
+    assert picture.pixelColor(spot).name() == QColor(view.scene.tokens["bg"]).name()
 
 
 def test_between_blocks_it_says_what_is_next_and_when(qapp: QApplication) -> None:

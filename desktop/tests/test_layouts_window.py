@@ -1289,7 +1289,13 @@ def test_the_chrome_and_canvas_follow_the_same_look(
             palette, _ = design_look(colour, pack, system_dark, window._worn_look(), accent)
             assert page == tokens_for(layout_id, colour, palette)
             assert window.week_table.hours.painter.colours["window"] == palette["window"]
-            assert chrome_colour(window) == page["bg"]
+            if layout_id == "retro":
+                # T14 (Jonathan, PR 7b): under Retro the top bar wears Retro's own title bar.
+                from desktop.native.feel import title_bar_colours
+
+                assert chrome_colour(window) == title_bar_colours(page)[1].lower()
+            else:
+                assert chrome_colour(window) == page["bg"]
         window.session.set_view("week")
 
 

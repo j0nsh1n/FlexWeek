@@ -6,11 +6,13 @@ the account's own data, not from reading what the QML prints.
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import json
 import os
 from collections.abc import Iterator
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -19,11 +21,12 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QObject, QPoint, QPointF, QStandardPaths, Qt  # noqa: E402
+from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QStandardPaths, Qt  # noqa: E402
 from PySide6.QtGui import QColor  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication, QPushButton  # noqa: E402
 
+from desktop.native import material as material_package  # noqa: E402
 from desktop.native.material.bridge_week import SLACK_TAGS, WeekBridge  # noqa: E402
 from desktop.native.weekmodel import clock_label, set_clock_24h  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
@@ -925,6 +928,42 @@ def test_the_drawn_week_keeps_block_words_and_bars_readable(qapp: QApplication, 
         _bridge(window).reload_material()
         panel.note_applied()
         _pump(qapp)
+
+
+def test_a_zero_timer_dies_with_its_bridge(qapp: QApplication) -> None:
+    """C6: the 0 ms target timer is owned by the bridge, so a bridge dropped in the same turn takes
+    it with it instead of running the slot from behind a deleted wrapper."""
+    fired: list[str] = []
+    session = SimpleNamespace(busy=False, week_start="2026-11-02", load_week=fired.append)
+    holder = QObject()
+    bridge = WeekBridge(SimpleNamespace(session=session), holder)
+    # A plain recording stand-in, so the call itself proves the timer fired; the real slot would
+    # only raise on the deleted C++ object before it reached the session.
+    bridge._flush_target = lambda: fired.append("flush")
+    bridge._target_week = "2026-11-09"
+    bridge._settle_navigation()
+    bridge.deleteLater()
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    qapp.processEvents()
+    assert fired == []
+
+
+def test_every_zero_timer_in_material_has_an_owner() -> None:
+    """C6: a singleShot(0, ...) without a context object outlives the bridge that made it and runs
+    its slot on a deleted wrapper. Day's ensure_today is the pattern the rest of material/ follows."""
+    folder = Path(material_package.__file__).resolve().parent
+    found = 0
+    for path in sorted(folder.glob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+                continue
+            if node.func.attr != "singleShot" or not node.args:
+                continue
+            first = node.args[0]
+            if isinstance(first, ast.Constant) and first.value == 0:
+                found += 1
+                assert len(node.args) >= 3, f"{path.name}:{node.lineno} singleShot without an owner"
+    assert found >= 4, "the zero timers this rule exists for are gone; drop the rule with them"
 
 
 def _colour_distance(first: object, second: object) -> int:

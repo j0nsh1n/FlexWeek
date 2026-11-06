@@ -26,6 +26,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from desktop.native.feel import title_bar_colours
+from desktop.native.layouts.registry import MATCH, sanitize_layout, tokens_for
 from desktop.native.look import mix, pack_stylesheet, resolved_palette, sanitize_look
 from desktop.native.widgets import control_art, keyboard_focus_rings
 from desktop.native.window import NativeWindow
@@ -459,3 +461,50 @@ def test_the_zoom_buttons_are_quiet_at_rest_and_take_the_6_percent_hover(
             painter.end()
             seen = image.pixelColor(4, button.height() // 2)
             assert near(seen, mix(text, ground, share)), f"{name} {state}: {seen.name()}"
+
+
+def test_under_the_retro_layout_the_bar_and_add_wear_its_colours(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """T14: while the Retro layout is the week's, the bar strip runs the title's colour and Add is
+    raised on its light end, whatever look is worn; another layout leaves the frost bar alone."""
+    window.resize(1280, 800)
+    shown(qapp, window, "week")
+    palette = dress(qapp, window)
+    # Off: the switch between designs fades through a held picture, and a picture of the frost bar
+    # mid-fade would be the pixels this test reads.
+    window.session.preferences = {**(window.session.preferences or {}), "motion": "off"}
+    window._apply_appearance()
+    tokens = tokens_for("retro", MATCH, palette)
+    _ink, start, end = title_bar_colours(tokens)
+
+    def strip(window: NativeWindow) -> QColor:
+        """The colour most of the strip's middle row wears: the background, not a control on it."""
+        picture = window.grab().toImage()
+        chrome = window.findChild(QWidget, "appBar")
+        assert chrome is not None
+        area = box(window, chrome)
+        counts: dict[str, int] = {}
+        for x in range(area.left(), area.right(), 3):
+            name = picture.pixelColor(x, area.center().y()).name()
+            counts[name] = counts.get(name, 0) + 1
+        return QColor(max(counts, key=counts.get))
+
+    window._layout = sanitize_layout({"main": "retro", "day": "one"})
+    window._apply_appearance()
+    window._on_week()
+    wait_until(qapp, lambda: not window.session.busy and not window.session.dirty)
+    for _ in range(5):
+        qapp.processEvents()
+    assert near(strip(window), start), (strip(window).name(), start)
+    add = box(window, bar(window, "addButton"))
+    picture = window.grab().toImage()
+    assert near(picture.pixelColor(add.left() + 2, add.center().y()), end)
+
+    window._layout = sanitize_layout({"main": "classic", "day": "dial"})
+    window._apply_appearance()
+    window._on_week()
+    wait_until(qapp, lambda: not window.session.busy and not window.session.dirty)
+    for _ in range(5):
+        qapp.processEvents()
+    assert near(strip(window), palette["window"]), (strip(window).name(), palette["window"])

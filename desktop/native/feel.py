@@ -53,6 +53,7 @@ from desktop.native.layouts.timeline import SHEET as PAPER
 from desktop.native.look import (
     FONT_FAMILIES,
     HEADING_NAMES,
+    VIEW_BUTTONS,
     pack_stylesheet,
     readable_edge,
     readable_focus_edge,
@@ -344,7 +345,90 @@ def extra_stylesheet(
     extra += face_rules(feel, tokens, text_scale(look))
     if feel.chrome == "hero" and hero_names:
         extra += hero_rules(tokens, text_scale(look), hero_names)
+    if feel.key == "retro":
+        extra += retro_shades(tokens)
     return extra
+
+
+def retro_shades(tokens: dict[str, str]) -> str:
+    """T15: Settings as a Windows 98 window while the Retro layout is on, whatever look is worn —
+    the page, its rail and its footer in the standard face, its cards in the window white, and
+    headings, notes, navigation and controls in the scheme's ink so a dark look cannot keep its
+    own text colours on those surfaces. High contrast uses the scheme's high-contrast ink."""
+    colours = retro.scheme(tokens)
+    ink, field, face = colours.ink, colours.field, colours.face
+    headings = (
+        "QLabel#prefsHeading, QLabel#layoutMainHeading, QLabel#layoutDayHeading, "
+        "QLabel#cardTitle, QLabel#settingsTitle"
+    )
+    notes = (
+        "QLabel#settingsCardNote, QLabel#cardNote, QLabel#prefPlanningNote, "
+        "QLabel#prefDndNote, QLabel#prefTrayNote, QLabel#prefBlockSongNote, "
+        "QLabel#prefToneNote, QLabel#reminderLimits, QLabel#alarmEmpty, "
+        "QLabel#prefsSaveState"
+    )
+    return (
+        f"QWidget#settingsPage, QWidget#settingsRail, QListWidget#prefsNav, "
+        f"QWidget#settingsFooter {{ background: {face}; color: {ink}; }}"
+        f"QFrame#settingsCard {{ background: {field}; color: {ink}; }}"
+        f"QWidget#settingsFooter {{ border-top: 1px solid {colours.shadow}; }}"
+        f"QWidget#settingsPage QLabel {{ color: {ink}; }}"
+        f"{headings} {{ color: {ink}; }}"
+        f"{notes} {{ color: {ink}; }}"
+        f"QListWidget#prefsNav::item {{ color: {ink}; }}"
+        f"QListWidget#prefsNav::item:hover {{ background: {colours.light}; color: {ink}; }}"
+        f"QListWidget#prefsNav::item:selected {{ background: {colours.light}; color: {ink}; "
+        f"border-left: 3px solid {colours.accent}; }}"
+        f"QWidget#settingsPage QComboBox, QWidget#settingsPage QAbstractSpinBox, "
+        f"QWidget#settingsPage QLineEdit {{ color: {ink}; background: {field}; }}"
+        # An outlined button gets Retro's whole pair, face and ink; Done keeps its own filled pair, since
+        # Retro's ink on the worn look's fill (or dark button face) does not read (Sol, PR 7b).
+        f'QWidget#settingsPage QPushButton[outline="true"] {{ color: {ink}; background: {face}; '
+        f"border: 1px solid {colours.shadow}; }}"
+        f'QWidget#settingsPage QPushButton[outline="true"]:hover {{ background: {colours.light}; '
+        f"color: {ink}; }}"
+        f'QWidget#settingsPage QRadioButton[segment="true"] {{ color: {ink}; }}'
+        f'QWidget#settingsPage QRadioButton[segment="true"]:checked {{ color: {ink}; '
+        f"background: {field}; }}"
+    )
+
+
+def bar_chrome(tokens: dict[str, str]) -> str:
+    """T14: the app's top bar as Retro's own chrome while the Retro layout is on, whatever look is
+    worn — the strip runs the title's colour, its words and views read in the title's ink, and Add
+    is raised on the gradient's light end like the chosen view."""
+    ink, start, end = title_bar_colours(tokens)
+    quiet = ", ".join(
+        f"QPushButton#{name}"
+        for name in (
+            "prevWeek",
+            "nextWeek",
+            "todayWeek",
+            "weekTitleMark",
+            "solveButton",
+            "retrySave",
+            "moreButton",
+            "settingsGear",
+        )
+    )
+    views = ", ".join(f"QRadioButton#{name}" for name in VIEW_BUTTONS)
+    # A transparent border rather than none: the buttons keep the 1 px the roomy minimum height counts.
+    return (
+        f"QWidget#appBar {{ background: {start}; }}"
+        f"{quiet} {{ background: transparent; border: 1px solid transparent; color: {ink}; }}"
+        f"QLabel#weekTitle, QLabel#accountName {{ color: {ink}; }}"
+        f"QPushButton#signOut {{ background: transparent; border: 1px solid transparent; color: {ink}; }}"
+        f"QGroupBox#segments {{ background: transparent; border: none; border-radius: 0; "
+        f"padding: 3px; margin: 0px; alternate-background-color: transparent; "
+        f"selection-background-color: {end}; color: {ink}; "
+        f"qproperty-shade: 0; qproperty-ring: transparent; }}"
+        f"{views} {{ background: transparent; color: {ink}; font-weight: 400; }}"
+        f"{views}:checked {{ background: transparent; color: {ink}; font-weight: {WEIGHT_STRONG}; }}"
+        f"QPushButton#addButton, QPushButton#addArrow {{ background: {end}; color: {ink}; }}"
+        f"QPushButton#addButton:hover, QPushButton#addArrow:hover {{ "
+        f"background: {mix_oklab(ink, end, 0.12)}; }}"
+        f"QPushButton#addArrow {{ border-left-color: {mix_oklab(ink, end, 0.3)}; }}"
+    )
 
 
 def dressed_stylesheet(

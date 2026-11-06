@@ -1514,7 +1514,8 @@ class SettingsBridge(QObject):
                     self._pair_error = ""
                 self._publish()
 
-            QTimer.singleShot(0, apply)
+            # Owned by this bridge: a bridge dropped before the turn ends takes the timer with it.
+            QTimer.singleShot(0, self, apply)
 
         if not session.begin_pairing(finish):
             self._pair_code = ""

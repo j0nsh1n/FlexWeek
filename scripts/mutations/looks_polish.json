@@ -95,14 +95,14 @@
     "file": "desktop/native/settings.py",
     "old": "        width = round(LOOK_TILE * scale)\n",
     "new": "        width = LOOK_TILE\n",
-    "test": "desktop/tests/test_settings_finding.py::test_the_looks_stand_four_in_a_row_and_widen_with_large_text"
+    "test": "desktop/tests/test_settings_finding.py::test_the_looks_stand_three_in_a_row_and_widen_with_large_text"
   },
   {
-    "name": "Look cards are wide at every text size, two in a row at 1280",
+    "name": "Look cards are 160 px at normal text",
     "file": "desktop/native/settings.py",
-    "old": "LOOK_TILE = 150\n",
-    "new": "LOOK_TILE = 180\n",
-    "test": "desktop/tests/test_settings_finding.py::test_the_looks_stand_four_in_a_row_and_widen_with_large_text"
+    "old": "LOOK_TILE = 160\n",
+    "new": "LOOK_TILE = 200\n",
+    "test": "desktop/tests/test_settings_look.py::test_a_look_tile_is_160_pixels_and_only_the_worn_one_gets_the_accent_edge"
   },
   {
     "name": "Small blocks keep icons at their name's expense",

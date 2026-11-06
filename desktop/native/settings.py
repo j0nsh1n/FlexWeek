@@ -99,13 +99,13 @@ from desktop.native.look import (
     text_scale,
 )
 from desktop.native.look_editor import LookEditor
-from desktop.native.look_preview import look_choice, look_preview
+from desktop.native.look_preview import PICTURE_RATIO, look_choice, look_preview
 from desktop.native.motion import switch_page
 from desktop.native.remind import ALARM_SNOOZE_MIN, reminder_lead_min
 from desktop.native.sound import Bell
 from desktop.native.spotify import SpotifyPlayer, open_in_app
 from desktop.native.style_preview import StylePreview
-from desktop.native.tokens import SPACING
+from desktop.native.tokens import SPACING, mix
 from desktop.native.tones import FALLBACK, SOUNDS
 from desktop.native.version import VERSION
 from desktop.native.weekmodel import hhmm_text, length_label
@@ -162,7 +162,7 @@ MAIN_LOOKS = ("light-frost", "dark-frost", "system")
 MORE_LOOKS = "More looks"
 # A More looks card's picture is this wide at normal text, and wider as the text is larger; its
 # card a little more (ChoiceCard).
-LOOK_TILE = 150
+LOOK_TILE = 160
 ACCENT_LABELS = {"default": "Blue"}
 TEXT_KEPT_NOTE = "Your text size stays the same when you change looks."
 STUDY_HOURS_LINE = "Choose when FlexWeek may plan homework, including hours kept for one class."
@@ -183,7 +183,7 @@ YOUR_LOOKS = "Your looks"
 UNSAVED_LOOK = "{name} (not saved)"
 WEARING = "Wearing {name}"
 # What a card says inside itself while its look is the one worn.
-WORN = "Wearing"
+WORN = "Current"
 # The footer says this one thing; the status line's routine "Saving…" and "Saved preferences." would
 # have it swap between two sentences for the same fact (Grok Bot's 0.17.0 audit, T33).
 SAVE_STATE = "Changes are saved as you make them."
@@ -388,6 +388,59 @@ def _section_page(title: str, cards: tuple[QWidget, ...]) -> QWidget:
 
 BADGE_PX = 24
 
+# Material 3's own light scheme, as the spec's PR 6 names it: the colours its card's picture shows.
+MATERIAL_PREVIEW = {
+    "page": "#eef1f5",
+    "card": "#ffffff",
+    "edge": "#e5e9f0",
+    "text": "#0f172a",
+    "accent": "#3d6fc4",
+    "school": "#3d6fc4",
+    "work": "#a87512",
+}
+CLASS_TINT = 0.14
+
+
+def material_preview(width: int) -> QPixmap:
+    """A Material week as its card's picture: the same drawing a look's card carries, in Material's
+    own colours, so the grid reads as one row of styles."""
+    height = round(width * PICTURE_RATIO)
+    scale = 2
+    picture = QPixmap(width * scale, height * scale)
+    picture.setDevicePixelRatio(scale)
+    picture.fill(QColor(MATERIAL_PREVIEW["page"]))
+    painter = QPainter(picture)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(Qt.PenStyle.NoPen)
+    bar = height * 0.2
+    painter.setBrush(QColor(MATERIAL_PREVIEW["card"]))
+    painter.drawRect(QRectF(0, 0, width, bar))
+    painter.setBrush(QColor(MATERIAL_PREVIEW["edge"]))
+    painter.drawRect(QRectF(0, bar - 1, width, 1))
+    painter.setBrush(QColor(MATERIAL_PREVIEW["text"]))
+    painter.drawRoundedRect(QRectF(width * 0.06, bar * 0.36, width * 0.22, bar * 0.28), 2, 2)
+    painter.setBrush(QColor(MATERIAL_PREVIEW["accent"]))
+    painter.drawRoundedRect(QRectF(width * 0.78, bar * 0.28, width * 0.16, bar * 0.44), 3, 3)
+    body_top, body_height = bar + 4, height - bar - 8
+    column = (width - 8) / 5
+    painter.setBrush(QColor(MATERIAL_PREVIEW["edge"]))
+    for day in range(1, 5):
+        painter.drawRect(QRectF(4 + column * day, body_top, 1, body_height))
+    for day, top, tall, colour in (
+        (0, 0.05, 0.42, "school"),
+        (1, 0.30, 0.30, "work"),
+        (2, 0.05, 0.42, "school"),
+        (3, 0.52, 0.30, "work"),
+    ):
+        mark = QColor(MATERIAL_PREVIEW[colour])
+        area = QRectF(4 + column * day + 2, body_top + body_height * top, column - 4, body_height * tall)
+        painter.setBrush(QColor(mix(MATERIAL_PREVIEW[colour], MATERIAL_PREVIEW["card"], CLASS_TINT)))
+        painter.drawRoundedRect(area, 3, 3)
+        painter.setBrush(mark)
+        painter.drawRect(QRectF(area.left(), area.top() + 3, 2, area.height() - 6))
+    painter.end()
+    return picture
+
 
 class LookCard(ChoiceCard):
     """A look's card. The one worn is ringed and says so inside the card. Every card keeps that line
@@ -490,9 +543,8 @@ class LookCard(ChoiceCard):
 
 
 class LookGrid(CardGrid):
-    """The looks as cards that share the row: as many to a row as hold their smallest width, each
-    as wide as the row allows, its picture drawn at that width (the grid left 75 to 190 px empty on
-    the right)."""
+    """The looks as cards of one size: as many 160 px tiles to a row as hold, wider only as the text
+    is larger (UI22), the row's remainder left at the right."""
 
     def __init__(self, card_width: int, gap: int, draw: Callable[[ChoiceCard, int], None]) -> None:
         super().__init__(card_width, gap)
@@ -531,22 +583,14 @@ class LookGrid(CardGrid):
             QRectF(corner.x() - 4, corner.y() - 4, card.width() + 8, card.height() + 8), 8, 8
         )
 
-    def _place(self, room: int) -> None:
-        super()._place(room)
-        columns = self.columns()
-        if not columns:
-            return
-        picture = (room - (columns - 1) * self._gap) // columns - CARD_WIDTH_PAD
-        for card in self.cards:
-            if card.picture.width() != picture:
-                card.set_width(picture)
-                self._draw(card, picture)
-
 
 class LookPicker(Choices):
     """Look as "Light | Dark | System", with every other look as a small picture of a week in its own
     colours under them, and the student's own looks after those (decision 24 of 0.17; Grok Bot's
-    0.17.0 audit, A10 and T15). To the code that reads it, one control whose choices are every look."""
+    0.17.0 audit, A10 and T15). To the code that reads it, one control whose choices are every look.
+    Material 3 is one more card: choosing it is not a look but the other style's whole window."""
+
+    material_requested = Signal()
 
     def __init__(self, name: str) -> None:
         super().__init__()
@@ -560,12 +604,19 @@ class LookPicker(Choices):
             self._remember(label, token)
         self._tile_width = LOOK_TILE
         self._saved: list[dict] = []
+        self._material_on = False
         self.main = Segmented(tuple(item for item in ordered if item[1] in main), f"{name}Main")
         self.main.setAccessibleName("Look")
         self.more = LookGrid(LOOK_TILE + CARD_WIDTH_PAD, CARD_GAP, self._draw)
         self.more.setObjectName(f"{name}More")
         self.more.setAccessibleName(MORE_LOOKS)
-        self.more.set_cards([self._tile(label, token, []) for label, token in ordered if token not in main])
+        tiles = [self._tile(label, token, []) for label, token in ordered if token not in main]
+        # Material is one more card in the grid (UI22): not a look, so it draws its own picture and
+        # asks for the other style's window rather than changing the look.
+        self.material = LookCard("Material", self._tile_width)
+        self.material.set_picture(material_preview(self._tile_width))
+        self.material.chosen.connect(self.material_requested.emit)
+        self.more.set_cards([*tiles, self.material])
         self.yours = LookGrid(LOOK_TILE + CARD_WIDTH_PAD, CARD_GAP, self._draw)
         self.yours.setObjectName(f"{name}Yours")
         self.yours.setAccessibleName(YOUR_LOOKS)
@@ -608,8 +659,18 @@ class LookPicker(Choices):
 
     def _draw(self, card: ChoiceCard, width: int) -> None:
         """A card's picture at `width`: drawn again when the card is stretched, so it stays sharp."""
-        pack, look = look_choice(card.property("token"), self._saved)
+        token = card.property("token")
+        if not token:
+            return
+        pack, look = look_choice(token, self._saved)
         card.set_picture(look_preview(pack, look, width))
+
+    def show_material(self, on: bool) -> None:
+        """The Material card as the one worn while the other style's window is on: the look tiles
+        step aside, and take their marks back when the Widgets styles return. Said again by every
+        sync, so a look applied after the swap cannot take the mark back."""
+        self._material_on = on
+        self._show(self.currentIndex())
 
     def set_text_scale(self, scale: float) -> None:
         """The pictures as much wider as the text is larger, so a name keeps its one line under its
@@ -674,7 +735,8 @@ class LookPicker(Choices):
         self.main.setCurrentIndex(self.main.findData(token))
         self.main.blockSignals(False)
         for card in (*self.more.cards, *self.yours.cards):
-            card.select(card.property("token") == token)
+            card.select(not self._material_on and card.property("token") == token)
+        self.material.select(self._material_on)
         self._say_worn()
 
 
@@ -1040,6 +1102,12 @@ class SettingsPage(QWidget):
         ]
         self._show_look()
         main_section, day_section = self.layout_sections
+        # Material's card in the Look grid (UI22): choosing it is the Designs card's own Material
+        # toggle, and the grid marks whichever surface is worn.
+        self.look.material_requested.connect(main_section.choose_material)
+        main_section.surface_changed.connect(
+            lambda surface: self.look.show_material(surface == "material")
+        )
         text_card, text_form = _card("Text")
         text_form.addRow(KNOB_LABELS["text"], self.knobs["text"])
         # High contrast suggests Large and leaves the choice to the student.

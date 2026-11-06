@@ -308,14 +308,14 @@ def test_the_chosen_look_card_is_ringed_and_says_wearing_inside_the_card(
     worn = tile(page, "Nocturne")
     ring = worn.grab().toImage()
     assert near(ring.pixelColor(worn.width() // 2, 1), accent)
-    # N14: worn card "<Name>, selected"; the note inside the card still says Wearing.
+    # N14: worn card "<Name>, selected"; the note inside the card still says Current.
     assert worn.accessibleName() == "Nocturne, selected"
     inside = [label.text() for label in worn.findChildren(QLabel) if label.isVisibleTo(worn)]
-    assert "Wearing" in inside
+    assert "Current" in inside
     for other in page.look.more.cards:
         if other is not worn:
             assert not near(other.grab().toImage().pixelColor(other.width() // 2, 1), accent)
-            assert "Wearing" not in [
+            assert "Current" not in [
                 label.text() for label in other.findChildren(QLabel) if label.isVisibleTo(other)
             ]
     assert page.look.worn.isHidden(), "no line under the grid: the card says it"
@@ -347,18 +347,18 @@ def test_light_dark_and_system_show_the_chosen_one_the_same_way(
 
 
 @pytest.mark.parametrize("size", [(1024, 700), (1280, 800)])
-def test_the_look_grids_stretch_to_the_row(
+def test_the_look_grids_keep_160_pixel_pictures(
     qapp: QApplication, window: NativeWindow, size: tuple[int, int]
 ) -> None:
+    """UI22: More looks tiles stay 160 px rather than stretching to fill the row."""
     page = open_settings(qapp, window, size)
     page.look.set_saved([{"name": "Night study", "base": "light"}, {"name": "Bus", "base": "dark"}])
     for _ in range(8):
         qapp.processEvents()
     for grid in (page.look.more, page.look.yours):
         assert grid.cards
-        right = max(card.geometry().right() + 1 for card in grid.cards)
-        assert grid.width() - right <= 16, (size, grid.width(), right)
         for card in grid.cards:
+            assert card.picture.width() == 160
             sharp = card.picture.pixmap().width() / card.picture.pixmap().devicePixelRatio()
             assert abs(sharp - card.picture.width()) <= 2, "the picture is drawn at the card's width"
     page.close_page()

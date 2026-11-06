@@ -466,6 +466,9 @@ def _drop_material(window: NativeWindow, qapp: QApplication) -> None:
         item.setParent(None)
         item.deleteLater()
     for bridge in window.findChildren(QObject, "materialBridge"):
+        dispose = getattr(bridge, "dispose", None)
+        if callable(dispose):
+            dispose()
         bridge.setParent(None)
         bridge.deleteLater()
     _pump(qapp)
@@ -1160,6 +1163,28 @@ def test_rings_follow_the_last_input_in_the_real_window(qapp: QApplication, wind
     finally:
         sheets.forceClose()
         _pump(qapp)
+
+
+def test_a_disposed_bridge_stops_following_the_week(qapp: QApplication, window: NativeWindow) -> None:
+    """C5: dispose() cuts the session signal the bridge joined, so a week change after the drop
+    reaches the bridge's own follower no more. The window's own follower is out of the way, since
+    the window answers a week change through the page's publish, which refreshes directly."""
+    _show_material(qapp, window)
+    bridge = window.findChild(QObject, "materialBridge")
+    assert bridge is not None
+    session = window.session
+    reached: list[str] = []
+    original = bridge.refresh
+    bridge.refresh = lambda: reached.append("refresh")
+    window.session.week_changed.disconnect(window._on_week)
+    try:
+        bridge.dispose()
+        session.week_changed.emit()
+        _pump(qapp)
+        assert reached == []
+    finally:
+        bridge.refresh = original
+        session.week_changed.connect(window._on_week)
 
 
 def test_ctrl_s_saves_when_the_material_shell_is_focused(
