@@ -63,6 +63,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # fwtest's own tests run Python (fake gates, mutation fixtures) and read git history, as the
+      # single verify job gave them before it was split.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - run: python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Point .venv at the runner's Python
+        run: |
+          mkdir -p .venv/bin
+          ln -s "$pythonLocation/bin/python" .venv/bin/python
       - name: Install Rust
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt,clippy --no-self-update
