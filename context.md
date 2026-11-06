@@ -199,6 +199,12 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
+- 2026-11-06, `main` 7725ddca: J lanes done. J23 (#79) Month study time fills each date; J21 (#80) Material
+  Week zoom (material.week, Ctrl+=/-/0, Ctrl+wheel, pill); J25 (#81) Widgets Settings Look preview beside
+  the cards from 1000 px; J22 (#82) Material Day shows its hours through the shared `hours/HoursPane.qml`
+  (Week uses it too), own zoom (material.day). CI rigs install no ffmpeg (#78). The Material switch button
+  keeps the label "Material 3" (his call; FIX-SPEC said "Back to Material"). Grok is near its 15% line.
+  test_layout_fit_small clay 1024x640 large fails locally in the daytime on main (passed in CI and overnight).
 - 2026-11-06, `main` 965e79e2: FIX-SPEC 1.3 stage done through PR 7b (#67-#74, #76) and the CI
   speed-ups (#75: engine wheel built once, mutation cases in four shards, Day/Week rig matrix;
   mutations about 6 min instead of 60). Developer build 1.2.0.202611060358 is `dev`; the build it
