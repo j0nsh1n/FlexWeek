@@ -199,6 +199,15 @@ values make a retried write return the first result.
 - The release workflow stops a Windows installer or smoke test that hangs after ten minutes.
 
 ## Session Handoff
+- 2026-11-06, `main` 965e79e2: FIX-SPEC 1.3 stage done through PR 7b (#67-#74, #76) and the CI
+  speed-ups (#75: engine wheel built once, mutation cases in four shards, Day/Week rig matrix;
+  mutations about 6 min instead of 60). Developer build 1.2.0.202611060358 is `dev`; the build it
+  replaced stays downloadable as `dev-1.2.0.202611050822`, which the updater never offers.
+  Next on his word: J25 (Look preview side by side, option A), J21-J23. The Windows release job
+  fails on `opengl32sw.dll imports imagehlp.dll` (since Nov 4); no stable release until it is fixed.
+  Cleanup (his approval, 2026-11-06): 54 merged checkouts, 78 merged local branches and three
+  downloaded builds removed; unmerged work and the Windows `D:/` worktree records kept.
+  Plan and log: `~/.flexweek-ui-harness/scratch/fix-spec-1.3/plan.md`.
 - 2026-11-03: Step 0 merges `fix/visual-artifacts-20261026` into `main` by PR (Jonathan's word). Next,
   in the plan's order: the updater fixes and Linux nightly tarballs (plan section 3b), then PRs 1-7.
   Writers are Gemini 3.8 Flash (T3 `antigravity`) and Grok 4.6 medium; Codex `gpt-6.1-sol` high reviews.
