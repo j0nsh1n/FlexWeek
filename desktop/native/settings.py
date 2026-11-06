@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from copy import deepcopy
+from math import ceil
 from pathlib import Path
 from uuid import uuid4
 
@@ -102,6 +103,7 @@ from desktop.native.look import (
 from desktop.native.look_editor import LookEditor
 from desktop.native.look_preview import PICTURE_RATIO, look_choice, look_preview
 from desktop.native.motion import switch_page
+from desktop.native.previews import CANVAS
 from desktop.native.remind import ALARM_SNOOZE_MIN, reminder_lead_min
 from desktop.native.sound import Bell
 from desktop.native.spotify import SpotifyPlayer, open_in_app
@@ -164,10 +166,9 @@ MORE_LOOKS = "More looks"
 # A More looks card's picture is this wide at normal text, and wider as the text is larger; its
 # card a little more (ChoiceCard).
 LOOK_TILE = 160
-# Look preview beside the cards once Settings is this wide, if two Look tiles still fit.
+# Look preview beside the cards once Settings is this wide, if two Look tiles and the preview's
+# controls still fit.
 SIDE_BY_SIDE_MIN_PX = 1000
-# Two Look tiles, their gap, the section's side margins, and the Colours card pad around the grid.
-LOOK_CARDS_MIN_PX = 2 * (LOOK_TILE + CARD_WIDTH_PAD) + CARD_GAP + 2 * SPACING[3] + 2 * CARD_PAD
 ACCENT_LABELS = {"default": "Blue"}
 TEXT_KEPT_NOTE = "Your text size stays the same when you change looks."
 STUDY_HOURS_LINE = "Choose when FlexWeek may plan homework, including hours kept for one class."
@@ -689,6 +690,11 @@ class LookPicker(Choices):
                 card.set_width(width)
                 self._draw(card, width)
             grid.set_card_width(width + CARD_WIDTH_PAD)
+
+    @property
+    def tile_width(self) -> int:
+        """How wide a look's picture is drawn now: LOOK_TILE, wider at Large text."""
+        return self._tile_width
 
     def set_saved(self, looks: list[dict]) -> None:
         """The student's saved looks, after the others, each chosen by its name."""
@@ -1414,6 +1420,10 @@ class SettingsPage(QWidget):
         self._show_preview_row(self.nav.currentRow())
         for box in (self.look, self.accent, *self.knobs.values()):
             box.currentIndexChanged.connect(self.style_preview.refresh)
+        # Fit caps the side preview's height to its picture; Actual size gives the height back.
+        self.style_preview.stage.zoom.currentIndexChanged.connect(
+            lambda *_: self._show_preview_row(self.nav.currentRow())
+        )
         QApplication.instance().focusChanged.connect(self._follow_focus)
         footer.raise_()
         self._clear_footer()
@@ -1637,8 +1647,13 @@ class SettingsPage(QWidget):
         super().keyPressEvent(event)
 
     def _look_column_min(self) -> int:
-        """Room for two Look tiles: the grid, section margins, card pad, the form's label column,
-        and the scroll bar the Look area keeps even when the bar is overlaid."""
+        """Room for two Look tiles at the text size worn: the tiles and their gap, section margins,
+        card pad, the form's label column, and the scroll bar the Look area keeps even when the bar
+        is overlaid."""
+        two_tiles = 2 * (self.look.tile_width + CARD_WIDTH_PAD) + CARD_GAP + 2 * SPACING[3] + 2 * CARD_PAD
+        # The section column is centred in its body, which can leave a pixel each side beyond the
+        # margins; without this room the second tile wrapped by 2 px at Large text.
+        two_tiles += SPACING[1]
         extra = 0
         area = self.stack.widget(0)
         body = area.widget() if isinstance(area, QScrollArea) else None
@@ -1648,12 +1663,13 @@ class SettingsPage(QWidget):
             extra += max(self.colours_card.layout().horizontalSpacing(), 0)
         if isinstance(area, QScrollArea):
             extra += max(area.verticalScrollBar().sizeHint().width(), 0)
-        return LOOK_CARDS_MIN_PX + extra
+        return two_tiles + extra
 
     def _want_side_by_side(self) -> bool:
         if self.width() < SIDE_BY_SIDE_MIN_PX:
             return False
-        return self.stage.width() >= self._look_column_min()
+        # The preview's own controls must fit beside the cards too, or the strip keeps them whole.
+        return self.stage.width() >= self._look_column_min() + self.style_preview.minimumSizeHint().width()
 
     def _clear_stage_cells(self) -> None:
         grid = self.stage_grid
@@ -1677,7 +1693,8 @@ class SettingsPage(QWidget):
         preview_policy.setVerticalPolicy(QSizePolicy.Policy.Expanding)
         self.style_preview.setSizePolicy(preview_policy)
         self.stage_grid.addWidget(self.stack, 0, 0)
-        self.stage_grid.addWidget(self.style_preview, 0, 1)
+        # At the top of its column, so its controls sit right under the fitted picture.
+        self.stage_grid.addWidget(self.style_preview, 0, 1, Qt.AlignmentFlag.AlignTop)
         self.stage_grid.addWidget(self.footer, 1, 0, 1, 2)
         self.stage_grid.setRowStretch(0, 1)
         self.footer.raise_()
@@ -1696,6 +1713,8 @@ class SettingsPage(QWidget):
         self.stage_grid.addWidget(self.stack, 1, 0)
         self.stage_grid.addWidget(self.footer, 1, 0, Qt.AlignmentFlag.AlignBottom)
         self.stage_grid.setColumnStretch(0, 1)
+        self.style_preview.setMinimumHeight(240)
+        self.style_preview.setMaximumHeight(16777215)
         self.footer.raise_()
 
     def _size_side_columns(self) -> None:
@@ -1705,6 +1724,22 @@ class SettingsPage(QWidget):
         if cards_w < min_cards:
             cards_w = min_cards
         preview_w = max(stage_w - cards_w, 1)
+        # Fit draws the window's shape across the column and the preview ends under its controls, so
+        # they follow the picture instead of waiting at the bottom; Actual size scrolls in the whole
+        # height. A top-aligned grid cell gives a widget only its size hint, so the height is set.
+        room = max(self.stage.height() - self.footer.sizeHint().height(), 1)
+        tall = room
+        if self.style_preview.stage.fit():
+            bar = self.style_preview.stage.findChild(QWidget, "stylePreviewBar")
+            picture = ceil(preview_w * CANVAS.height() / CANVAS.width())
+            under = 0
+            if bar is not None:
+                # The bar's note wraps, so its height depends on the column's width.
+                lay = bar.layout()
+                wraps = lay is not None and lay.hasHeightForWidth()
+                under = lay.totalHeightForWidth(preview_w) if wraps else bar.sizeHint().height()
+            tall = min(room, picture + under)
+        self.style_preview.setFixedHeight(tall)
         if (self.stage_grid.columnStretch(0), self.stage_grid.columnStretch(1)) != (cards_w, preview_w):
             self.stage_grid.setColumnStretch(0, cards_w)
             self.stage_grid.setColumnStretch(1, preview_w)
@@ -2027,6 +2062,9 @@ class SettingsPage(QWidget):
 
     def _fit_look_cards(self) -> None:
         self.look.set_text_scale(text_scale(self.look_choice()))
+        # Wider tiles need a wider cards column: side by side may no longer fit.
+        if getattr(self, "_stage_mode", None) is not None:
+            self._show_preview_row(self.nav.currentRow())
 
     def _saved_look(self, token: object) -> dict | None:
         if not isinstance(token, str) or not token.startswith(SAVED_LOOK):

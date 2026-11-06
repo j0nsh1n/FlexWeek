@@ -16,13 +16,13 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import Qt
+    from PySide6.QtCore import QSize, Qt
     from PySide6.QtGui import QImage, QPixmap
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QRadioButton, QScrollArea, QWidget
 
     from desktop.native.layouts.dialog import LayoutSection
-    from desktop.native.settings import SettingsPage
+    from desktop.native.settings import LOOK_TILE, SettingsPage
     from desktop.native.style_preview import ACTUAL_NOTE, Redraw, StylePreview
 
 
@@ -335,7 +335,7 @@ def _open_look(qapp: QApplication, width: int, height: int) -> SettingsPage:
 
 def test_a_wide_look_page_puts_the_preview_beside_the_cards(qapp: QApplication) -> None:
     """At 1400 the preview sits on the right of the Look cards, about 60% of the stage, and Fit
-    fills that taller box instead of the strip's ~370 px picture."""
+    fills that column's width instead of the strip's ~370 px picture."""
     page = _open_look(qapp, 1400, 900)
     preview = page.style_preview
     stage = preview.parentWidget()
@@ -349,8 +349,7 @@ def test_a_wide_look_page_puts_the_preview_beside_the_cards(qapp: QApplication) 
     preview_bottom = preview.mapTo(stage, preview.rect().bottomLeft()).y()
     footer_top = footer.mapTo(stage, footer.rect().topLeft()).y()
     assert preview_bottom <= footer_top
-    assert preview.height() >= stage.height() * 0.70
-    shown = _child(preview, QLabel, "stylePreviewImage").pixmap()
+    shown = preview.stage.stack.currentWidget().widget().pixmap()
     assert shown is not None and not shown.isNull()
     assert shown.deviceIndependentSize().width() > 500
     page.close()
@@ -434,3 +433,71 @@ def test_scrolling_the_look_cards_does_not_move_the_preview(qapp: QApplication) 
     assert preview.geometry() == before
     page.close()
 
+
+def _wear_large_text(qapp: QApplication, page: SettingsPage) -> None:
+    text = page.knobs["text"]
+    text.setCurrentIndex(text.findData("large"))
+    for _ in range(8):
+        qapp.processEvents()
+
+
+@pytest.mark.parametrize("width", [1050, 1280])
+def test_large_text_keeps_two_look_tiles_on_a_row(qapp: QApplication, width: int) -> None:
+    """Large text widens the Look tiles; the cards column still holds two of them, beside the
+    preview or, when that no longer fits, under the strip."""
+    page = _open_look(qapp, width, 800)
+    _wear_large_text(qapp, page)
+    assert page.look.tile_width > LOOK_TILE
+    grid = page.look.more
+    first, second = grid.cards[0], grid.cards[1]
+    assert first.mapTo(grid, first.rect().topLeft()).y() == second.mapTo(grid, second.rect().topLeft()).y()
+    page.close()
+
+
+@pytest.mark.parametrize("width", [1000, 1050, 1280, 1400])
+@pytest.mark.parametrize("large", [False, True])
+def test_the_preview_controls_are_never_squeezed(qapp: QApplication, width: int, large: bool) -> None:
+    page = _open_look(qapp, width, 800)
+    if large:
+        _wear_large_text(qapp, page)
+    for name in ("stylePreviewSurface", "stylePreviewSize"):
+        control = page.style_preview.findChild(QWidget, name)
+        assert control is not None and control.isVisible(), name
+        assert control.width() >= control.minimumSizeHint().width(), (name, width, large)
+    page.close()
+
+
+@pytest.mark.parametrize("size", [(1400, 900), (1280, 800)])
+def test_the_side_preview_controls_follow_the_picture(qapp: QApplication, size: tuple[int, int]) -> None:
+    """Side by side with Fit, the controls sit right under the fitted picture, not at the bottom
+    of the column; Actual size gives the preview the whole height back to scroll in."""
+    page = _open_look(qapp, *size)
+    preview = page.style_preview
+    stage_box = page.stage.geometry()
+    assert preview.geometry().left() >= page.stack.geometry().right(), "side by side"
+    # The picture on the page showing; the Day screen page holds a label of the same name.
+    image = preview.stage.stack.currentWidget().widget()
+    bar = preview.findChild(QWidget, "stylePreviewBar")
+    picture_bottom = image.mapTo(page, image.rect().bottomLeft()).y()
+    bar_top = bar.mapTo(page, bar.rect().topLeft()).y()
+    assert 0 <= bar_top - picture_bottom <= 16, (picture_bottom, bar_top)
+    preview.stage.zoom.setCurrentIndex(1)
+    for _ in range(8):
+        qapp.processEvents()
+    assert preview.height() >= stage_box.height() * 0.7
+    page.close()
+
+
+def test_side_by_side_waits_until_the_preview_controls_fit(qapp: QApplication) -> None:
+    """Side by side needs room for the cards and the preview's own controls; when the controls
+    would be squeezed, the strip keeps them whole."""
+    page = _open_look(qapp, 1050, 800)
+    assert page._stage_mode == "side"
+    wide = QSize(page.stage.width(), 0)
+    page.style_preview.minimumSizeHint = lambda: wide  # type: ignore[method-assign]
+    page._show_preview_row(0)
+    for _ in range(6):
+        qapp.processEvents()
+    assert page._stage_mode == "strip"
+    assert page.style_preview.geometry().bottom() <= page.stack.geometry().top()
+    page.close()
