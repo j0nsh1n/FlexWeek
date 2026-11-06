@@ -131,20 +131,37 @@ jobs:
         run: |
           # The build being replaced stays downloadable as dev-<its version>, a pre-release that is
           # never latest, so the updater (which reads only the dev tag and the latest release) never
-          # offers it. Done once per version; a rerun finds it already kept.
-          old_name=$(gh release view dev --json name --jq .name 2>/dev/null || true)
-          old_version=${old_name#Developer build }
-          if [ -n "$old_name" ] && [ "$old_version" != "$old_name" ] \
-            && ! gh release view "dev-$old_version" >/dev/null 2>&1; then
-            old_sha=$(git ls-remote origin refs/tags/dev | cut -f1)
-            mkdir -p previous-dev
-            gh release download dev --dir previous-dev
-            gh release create "dev-$old_version" previous-dev/* \
-              --prerelease \
-              --latest=false \
-              --target "$old_sha" \
-              --title "Developer build $old_version" \
-              --notes "An earlier developer build, kept when Developer build $DEVVERSION replaced it. The updater does not offer it."
+          # offers it. dev is deleted only once that copy is published with both files; anything
+          # unexpected stops the job first, so a build is never lost.
+          if old_name=$(gh release view dev --json name --jq .name 2>/dev/null); then
+            old_version=${old_name#Developer build }
+            if [ "$old_version" = "$old_name" ] || [ -z "$old_version" ]; then
+              echo "The dev release is titled '$old_name', not 'Developer build <version>': not replacing it." >&2
+              exit 1
+            fi
+            kept="dev-$old_version"
+            assets='["FlexWeek-Linux-x86_64.tar.gz","FlexWeek-Linux-x86_64.tar.gz.sha256"]'
+            have=$(gh release view "$kept" --json isDraft,assets \
+              --jq '[.isDraft, ([.assets[].name] | sort)] | tostring' 2>/dev/null || true)
+            if [ "$have" != "[false,$assets]" ]; then
+              # Missing or half made by an earlier run: make it again from the dev release.
+              gh release delete "$kept" --cleanup-tag --yes 2>/dev/null || true
+              old_sha=$(git ls-remote origin refs/tags/dev | cut -f1)
+              rm -rf previous-dev && mkdir -p previous-dev
+              gh release download dev --dir previous-dev
+              gh release create "$kept" previous-dev/* \
+                --prerelease \
+                --latest=false \
+                --target "$old_sha" \
+                --title "Developer build $old_version" \
+                --notes "An earlier developer build, kept when Developer build $DEVVERSION replaced it. The updater does not offer it."
+              have=$(gh release view "$kept" --json isDraft,assets \
+                --jq '[.isDraft, ([.assets[].name] | sort)] | tostring')
+              if [ "$have" != "[false,$assets]" ]; then
+                echo "Keeping $kept did not finish ($have): not replacing dev." >&2
+                exit 1
+              fi
+            fi
           fi
           gh release delete dev --cleanup-tag --yes || true
           gh release create dev \

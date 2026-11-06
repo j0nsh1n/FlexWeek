@@ -34,17 +34,16 @@ jobs:
       - name: Install maturin
         run: python -m pip install maturin==1.15.0
       - name: Build the engine wheel
+        # Straight into a fresh folder outside the cached target directory, so an older wheel
+        # restored with the cache can never be the one uploaded.
         run: |
-          python -m maturin build --release -m engine/py/Cargo.toml --features audit
-          mkdir -p dist/engine
-          shopt -s nullglob
-          wheels=(engine/target/wheels/*.whl engine/py/target/wheels/*.whl target/wheels/*.whl)
-          if (( ${#wheels[@]} == 0 )); then
-            echo "maturin produced no wheel" >&2
-            find . -name '*.whl' -print >&2
+          rm -rf dist/engine
+          python -m maturin build --release -m engine/py/Cargo.toml --features audit --out dist/engine
+          wheels=(dist/engine/*.whl)
+          if (( ${#wheels[@]} != 1 )) || [ ! -f "${wheels[0]}" ]; then
+            echo "expected exactly one fresh engine wheel, got: ${wheels[*]}" >&2
             exit 1
           fi
-          cp "${wheels[0]}" dist/engine/
       - name: Build fwtest
         working-directory: tools/fwtest
         run: cargo build --release
