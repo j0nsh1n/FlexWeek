@@ -412,11 +412,12 @@ def bar_chrome(tokens: dict[str, str]) -> str:
         )
     )
     views = ", ".join(f"QRadioButton#{name}" for name in VIEW_BUTTONS)
+    # A transparent border rather than none: the buttons keep the 1 px the roomy minimum height counts.
     return (
         f"QWidget#appBar {{ background: {start}; }}"
-        f"{quiet} {{ background: transparent; border: none; color: {ink}; }}"
+        f"{quiet} {{ background: transparent; border: 1px solid transparent; color: {ink}; }}"
         f"QLabel#weekTitle, QLabel#accountName {{ color: {ink}; }}"
-        f"QPushButton#signOut {{ background: transparent; border: none; color: {ink}; }}"
+        f"QPushButton#signOut {{ background: transparent; border: 1px solid transparent; color: {ink}; }}"
         f"QGroupBox#segments {{ background: transparent; border: none; border-radius: 0; "
         f"padding: 3px; margin: 0px; alternate-background-color: transparent; "
         f"selection-background-color: {end}; color: {ink}; "
