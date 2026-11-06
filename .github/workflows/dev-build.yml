@@ -178,5 +178,5 @@ jobs:
             --prerelease \
             --latest=false \
             --target "$(git rev-parse HEAD)" \
-            --title "Developer build $DEVVERSION" \
-            --notes "Developer build $DEVVERSION from main $(git rev-parse --short HEAD). It can have bugs. Turn on Settings → Computer → Get developer builds to get these."
+            --title "Developer build $DEVVERSION ($(git rev-parse --short=7 HEAD))" \
+            --notes "Developer build $DEVVERSION from main $(git rev-parse --short=7 HEAD). It can have bugs. Turn on Settings → Computer → Get developer builds to get these."

@@ -107,3 +107,9 @@ def test_the_kept_copy_is_tagged_at_this_runs_commit() -> None:
     assert '--target "$(git rev-parse HEAD)"' in keep
     assert '--target "$old_sha"' not in keep
     assert "built from $old_sha" in keep
+
+
+def test_the_dev_title_names_its_commit_after_the_number() -> None:
+    """Installed copies from 1.2.0.202611061702 on read "Developer build <number> (<commit>)"; the number
+    still orders builds, so it stays first."""
+    assert '--title "Developer build $DEVVERSION ($(git rev-parse --short=7 HEAD))"' in WORKFLOW
