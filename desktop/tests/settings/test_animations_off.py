@@ -1,34 +1,47 @@
-"""0.18.5 #96: with Animations at Off nothing moves anywhere. Each main transition is walked and, right
-after it, no clock has run, no picture or dim is over the page, and no widget is drawn through a fade."""
+"""With Animations at Off nothing moves anywhere. Each main transition is walked and, right after it, no
+clock has run, no picture or dim is over the page, and no widget is drawn through a fade."""
 
 from __future__ import annotations
 
 import importlib.util
+import os
 from collections.abc import Callable, Iterator
 
 import pytest
-
-pytest_plugins = ["desktop.tests.window_support"]
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
 )
 
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QEvent
-    from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QPushButton, QWidget
+    from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QPushButton, QVBoxLayout, QWidget
 
     import desktop.native.motion as motion
     from desktop.native.layouts.registry import sanitize_layout
-    from desktop.native.motion import FADE_NAME, SLIDE_NAME, Dim, Shift, apply_ui_effects
-    from desktop.native.widgets import HomeworkDialog, SheetShade
+    from desktop.native.motion import (
+        FADE_NAME,
+        SLIDE_NAME,
+        Dim,
+        Shift,
+        app_level,
+        apply_ui_effects,
+        switch_page,
+    )
+    from desktop.native.widgets import Dialog, HomeworkDialog, SheetShade
     from desktop.native.window import NativeWindow
+    from desktop.tests.light_app import window  # noqa: F401
+    from desktop.tests.settings.support_motion import LATER, Hours, pictures, two_pages
     from desktop.tests.test_week_side import seeded
-    from desktop.tests.window_support import qapp, settled, still, wait_until, window  # noqa: F401
+    from desktop.tests.waiting import wait_until
+    from desktop.tests.window_support import qapp, settled, still  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
 def motion_is_put_back() -> Iterator[None]:
+    apply_ui_effects("normal")
     yield
     apply_ui_effects("normal")
 
@@ -56,7 +69,7 @@ def moving(root: QWidget) -> list[str]:
 
 
 def go_off(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
-    """The window signed in with a seeded week at Off, and a record of every clock that starts."""
+    """The window signed in with a seeded week at Off."""
     # Saved, not set on the session: a later reload of the preferences would put Normal back.
     assert window.session.save_preferences({"motion": "off"})
     settled(qapp, window)
@@ -212,3 +225,38 @@ def test_choosing_off_in_settings_stops_its_own_sections_moving_at_once(
     page.nav.setCurrentRow(1 if page.nav.currentRow() == 0 else 0)
     assert moving(window) == []
     assert starts == [] and not motion.busy()
+
+
+def test_animations_off_means_no_animation_anywhere(qapp: QApplication) -> None:  # noqa: F811
+    apply_ui_effects("off")
+    hours = Hours(qapp)
+    final = hours.settled_picture(LATER)
+    hours.canvas.set_week(LATER)
+    assert hours.picture() == final, "blocks are simply where they are"
+    hours.window.close()
+    stack, _first, second = two_pages(qapp)
+    switch_page(stack, second, app_level())
+    assert pictures(stack) == [] and second.graphicsEffect() is None
+    stack.close()
+    dialog = Dialog()
+    QVBoxLayout(dialog).addWidget(QLabel("Nothing moves"))
+    dialog.show()
+    qapp.processEvents()
+    assert dialog.windowOpacity() == 1.0
+    assert [child for child in dialog.findChildren(QWidget) if child.graphicsEffect()] == []
+    dialog.close()
+
+
+def test_a_design_tile_built_with_motion_is_instant_once_animations_are_off(qapp: QApplication) -> None:  # noqa: F811
+    from desktop.native.layouts.bento import DayTile
+    from desktop.tests.test_layout_bento import shown
+
+    apply_ui_effects("normal")
+    view = shown(qapp, hero="today")
+    tile = view.findChild(DayTile)
+    tile._lifting.stop()
+    tile.lift = 0.0
+    apply_ui_effects("off")
+    tile._aim(True)
+    assert tile.lift == 1.0
+    view.close()
