@@ -33,10 +33,12 @@ This file is the contract. The implementation is built and reviewed against it.
 ## Commands
 
 ```text
-fwtest gate [--backend-only] [--workers N]
+fwtest gate [--backend-only | --touched [--base REF | --paths-from FILE]] [--workers N]
+fwtest select [--base REF | --paths-from FILE]
 fwtest mutate [SPEC.json ...] [--case NAME] [--engine-build COMMAND] [--no-engine-rebuild] [--engine-only] [--shard K/N]
 fwtest rig [--server kwin|xvfb|auto] [ARGS FOR scripts/rig/drive.py ...]
-fwtest run [--timeout SECONDS] -- COMMAND [ARGS ...]
+fwtest run [--timeout SECONDS] [--touched [--base REF | --paths-from FILE]] -- COMMAND [ARGS ...]
+fwtest flaky [--log FILE]
 fwtest clean
 ```
 
@@ -50,7 +52,18 @@ fwtest clean
   and at least 2. It prints `VERIFIED: Backend and desktop. Packaged binaries and other platforms
   need separate checks.` (or `VERIFIED: Backend.` with `--backend-only`) only when every step
   passed, as `verify.py` does. The per-step timeout is 2400 seconds; the desktop suite takes about
-  15 minutes on 3 workers.
+  15 minutes on 3 workers. pytest also gets `--junitxml` and `-o junit_family=xunit1`, so a failed
+  test can be rerun alone (see [Flaky tests](#flaky-tests)).
+- `gate --touched` runs the same steps on what the changed paths select (see
+  [Test selection](#test-selection)): pytest gets only the selected paths, or no pytest step at all
+  when nothing selected has pytest tests, and `cargo test --manifest-path DIR/Cargo.toml -p PKG ...`
+  runs for each selected cargo workspace, after pytest. It prints the selection first, including
+  the mutation cases the change touches, which it does not run. It ends with `VERIFIED: Touched
+  areas only (AREAS); CI runs everything. ...` and never with the full-suite line. `--touched` does
+  not combine with `--backend-only`. A full local gate is not needed before a push; CI is the gate.
+- `select` prints what the changed paths select, without running anything: where the paths came
+  from, how many changed, each path the map does not know, the areas, the pytest paths, the cargo
+  packages by workspace, the mutation cases (spec and case name) and the picture areas.
 - `mutate` runs every spec in `scripts/mutations/`, or the specs named. `--case` runs one case by
   name. `--engine-only` keeps cases whose file is under `engine/`. `--shard K/N` then keeps those
   whose 0-based index modulo N is K-1, after that filter and the existing spec-then-case order. K is
@@ -75,7 +88,17 @@ fwtest clean
 - `rig --play PLAY.json` runs the steps in a file instead of the fixed scenarios. See
   [Playing the app](#playing-the-app).
 - `run` runs any command as a job, with the guarantees above. It exists for the picture tours and
-  the one-off scripts that currently go through `run-alone.sh`.
+  the one-off scripts that currently go through `run-alone.sh`. When the command is a pytest run
+  (`... -m pytest ...`, or a program named `pytest`), `run` adds `--junitxml` to a temporary file
+  unless the command names one, adds `-o junit_family=xunit1`, and reruns a failed test alone (see
+  [Flaky tests](#flaky-tests)).
+- `run --touched -- PYTEST COMMAND` adds the selected pytest paths to the end of the command and runs
+  it at the checkout's top level, because the paths are relative to it. When the selection has no
+  pytest tests it says so, runs nothing and exits 0. When it selects every area, the command runs
+  as given (pytest.ini's testpaths). A command that is not a pytest run is refused with exit 2.
+- `flaky` summarises the flaky-test log: one entry per test, most often logged first, then the most
+  recent, with the last date, commit, where it ran and the first line of how it failed. `--log`
+  reads another file, for example a log downloaded from a CI run.
 - `clean` stops every process recorded by a job that is no longer running. It also stops a hidden
   session whenever a job record or a state file names it, including when the job record is already
   gone and only the state file under `/tmp/flexweek-rig/` remains. That is how you stop a stranded
@@ -94,6 +117,114 @@ these exists, `fwtest` says so and exits 2 rather than falling back to the syste
 Exit codes: 0 when everything passed; 1 when a check failed or a mutation survived; 124 when a job
 timed out; 75 when another suite outside `fwtest` held the machine for 30 minutes; 2 for a usage
 error.
+
+## Test selection
+
+Spec.md's Testing structure rule 7: locally, only the tests for the area a change touches; CI runs
+everything and is the gate. `fwtest select`, `gate --touched` and `run --touched` pick those tests
+from the changed paths with the map in `tools/fwtest/areas.toml`.
+
+The changed paths are, by default, every path that differs between the working tree and the merge
+base of `HEAD` with `origin/main` (or `main` when there is no `origin/main`), plus untracked files
+that are not ignored. A rename counts as both paths. `--base REF` compares with that ref's merge
+base instead. `--paths-from FILE` reads the paths from a file, one per line, and does not ask git.
+Without `--touched`, `--base` and `--paths-from` are a usage error (exit 2).
+
+The map has three kinds of table:
+
+- `[[area]]`: a set of tests. `tests` are pytest paths: a folder ends in `/`, and `*` in the file
+  name matches any run of characters (`desktop/tests/test_*.py`). `cargo = { dir, packages }`
+  names packages in one cargo workspace. `pictures = true` marks an area with picture screens. The
+  picture areas are exactly the names in `desktop/tests/pictures/screen.py`'s `AREAS`, and each one's
+  tests are `desktop/tests/<area>/`; a test checks both.
+- `[[rule]]`: `paths` to `areas`, or to `everything = true`. A path pattern ending in `/` matches
+  everything under that folder; otherwise it is one path, where `*` matches within one path part.
+  The rules are tried in order and the first one that matches a path decides it. `areas = []` marks
+  a path that no test checks (prose docs); it selects nothing.
+- `[[also]]`: `paths` to `areas` added on top of the first matching rule. An also rule never makes
+  a path known.
+
+How the map reads:
+
+- A path no `[[rule]]` matches selects every area. A change is never left with nothing to run
+  because the map did not know a file. `select` names each unknown path, so the map can be updated.
+- A test file selects its own area. A product file selects the areas whose behaviour it is mainly
+  about. Shared plumbing (the window, the controller, the look, the backend's app and storage, the
+  engine core and the store and binding) and the shared test foundations (both conftests, the light
+  app, the wait helper, the fake clock, `screen.py`, the requirements) select every area.
+- The `unmoved` area holds the desktop test files that are not in an area folder yet
+  (`desktop/tests/test_*.py`, `regress184/`, `regress190/`). An also rule adds it for every change
+  under `desktop/` and in the backend's own code, so they keep running while the area lanes move
+  them. A pattern that matches nothing in the checkout is left out, so `unmoved` empties itself.
+- When the selected areas have pytest tests but none of their paths exist yet, pytest runs the whole
+  suite instead.
+- A mutation case is touched when its spec file, its `file`, or the Python file its `test` names has
+  changed, and every case is touched when every area is.
+- Picture areas say which areas' screens may need drawing again. `fwtest pictures render --set
+  touched` decides screen by screen from each screen's `sources`.
+- No changed paths select nothing.
+
+What CI does instead is every test: see [CI](#ci).
+
+## Flaky tests
+
+When pytest exits 1 in `gate` or in a pytest `fwtest run`, `fwtest` reads the JUnit report and runs
+each failed or errored test again, alone (`python -m pytest -q -p no:cacheprovider NODE_ID` at the
+checkout's top level, in the same job containment). A node id is built from the report's `file`
+attribute, or from its dotted `classname` matched against the files in the checkout.
+
+The rule: a test that passes alone is flaky. It is logged and printed (`FLAKY: ...`) and does not
+fail the run. A test that fails again alone fails the run (`FAILED again alone: ...`). The run passes
+only when every failed test passed alone. Nothing is rerun when pytest failed without naming a
+failed test (a collection error), when it exited with anything but 1 (an interrupt, a usage error,
+the job's timeout), or when more than 10 tests failed: that many is a break, not flakiness.
+Mutation runs never rerun: a mutated test is meant to fail.
+
+The log is JSON lines in `$FWTEST_FLAKY_LOG`, or `~/.flexweek-ui-harness/scratch/fwtest/flaky.jsonl`.
+One line per flaky test:
+
+```json
+{
+  "test": "desktop/tests/week/test_drag_a_block.py::test_a_dropped_block_keeps_its_length",
+  "date": "2026-11-07T18:02:11Z",
+  "commit": "<HEAD when it ran>",
+  "place": "local",
+  "how": "assert 3 == 4\nE   assert 3 == 4 ...",
+  "beside": {
+    "command": ".venv/bin/python -m pytest -q -n 8 ...",
+    "tests_in_run": 412,
+    "other_failures": []
+  }
+}
+```
+
+`place` is `local`, or `ci <job>` on GitHub Actions, where the flaky line is also added to the job's
+summary. `how` is the failure's message and the start of its traceback, at most 2,000 characters.
+`beside` is what else ran: the full command (its worker count and paths), how many tests the run
+had and the other tests that failed in it. JUnit does not record which xdist worker ran a test, so
+the log cannot name the tests that shared its worker.
+
+## CI
+
+`.github/workflows/verify.yml` runs on every push and pull request:
+
+| Job | What | Shards |
+|---|---|---|
+| `engine` | builds the engine wheel and fwtest once | 1 |
+| `verify-engine` | fwtest's and the engine's `cargo fmt --check`, `clippy -D warnings`, `cargo test` | 1 |
+| `verify-python` | `fwtest gate --backend-only`: lint, types, mutation patterns, backend tests, diff checks | 1 |
+| `desktop` | every test file under `desktop/tests` and `scripts/rig`, offscreen, through `fwtest run` | 4 |
+| `rig` | the real-pointer rig, Day and Week, under Xvfb | 2 |
+| `mutate` | the mutation cases under `engine/` (pull requests and by hand) | 4 |
+| `mutate-python` | every other mutation case (pull requests and by hand) | 6 |
+| `pictures` | the touched screens, before and after (see the pictures section) | |
+
+The desktop shards deal the sorted test files out in turn. Each test-running job sets
+`FLEXWEEK_SILENT=1`, and the Python jobs upload their flaky log as an artifact (`flaky-*`, kept 30
+days) when there is one. `mutate-python` copies the specs without their engine cases into the
+runner's temporary folder, because `fwtest mutate` has `--engine-only` and no opposite. Expected
+wall time for a pull request: about 30 to 40 minutes, most of it the engine build followed by the
+desktop and mutation shards running side by side; the engine mutation shards are the longest.
 
 ## Playing the app
 
@@ -367,12 +498,14 @@ with that directory already warm: a mutated build took 4.4s to 7.5s, and a clean
 ## What changes for the people who use it
 
 - The developer runs `fwtest gate` where they ran `scripts/verify.py`, and keeps using the machine
-  while it runs.
+  while it runs. While working, `fwtest gate --touched` runs only the touched areas; CI runs the
+  rest.
 - Agents run every suite through `fwtest`. `run-alone.sh`, `scripts/verify.py` and
   `scripts/mutate.py` are deleted once `fwtest` reaches parity (below), with every caller moved in
   the same change: README, `agents.md`, CI and the workflow notes.
-- CI installs a Rust toolchain and runs `fwtest gate --backend-only` and `fwtest rig --server xvfb
-  …` where it ran the Python scripts.
+- CI installs a Rust toolchain and runs `fwtest gate --backend-only`, the desktop suite through
+  `fwtest run`, the mutation cases and `fwtest rig --server xvfb …` where it ran the Python scripts
+  (see [CI](#ci)).
 
 ## Parity
 
