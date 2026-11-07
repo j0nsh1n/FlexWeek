@@ -1,6 +1,7 @@
-"""Numbers and times without Qt's tiny arrows (T20 of the 0.17.0 audit, 5.2 A of 0.17.2): a length or
-a count is − value +, a homework's length has 15/30/45/60/90 pills under it, and a clock time is typed.
-Setup, Focus and Alerts each had big boxes with arrows too small to hit."""
+"""Numbers and times without Qt's tiny arrows: a length or a count is − value +, a homework's length has
+15/30/45/60/90 pills under it, and a clock time is typed. Setup, Focus and Alerts each had big boxes with
+arrows too small to hit. That the Focus page's steppers and timer preset line up is a picture:
+screens_settings_h7.py."""
 
 from __future__ import annotations
 
@@ -8,7 +9,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QAbstractSpinBox, QApplication, QButtonGroup, QDateEdit, QSpinBox, QWidget
 
@@ -16,6 +17,7 @@ from desktop.native.fields import QUICK_LENGTHS, Stepper
 from desktop.native.settings import SettingsPage
 from desktop.native.setup import SetupPage
 from desktop.native.widgets import AvailabilityDialog, BlockDialog, ChooseTimeDialog, HomeworkDialog
+from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import free, host, qapp  # noqa: F401
 
 WEEK = "2026-09-21"
@@ -139,22 +141,11 @@ def test_a_stepper_greys_with_its_box(qapp: QApplication) -> None:  # noqa: F811
     free(setup)
 
 
-def test_volume_reads_80_percent_and_the_timer_preset_is_as_wide_as_the_fields(
-    qapp: QApplication,  # noqa: F811
-) -> None:
+def test_volume_reads_80_percent(qapp: QApplication) -> None:  # noqa: F811
     page = SettingsPage(None, {"alarms": [], "alert_volume": 80}, {}, {})
     page.resize(1280, 800)
     page.show()
     page.nav.setCurrentRow(FOCUS)
-    for _ in range(4):
-        qapp.processEvents()
+    wait_until(qapp, lambda: page.stack.widget(FOCUS).isVisible(), what="the Focus page showing")
     assert page.volume.text() == "80%"
-    body = page.stack.widget(FOCUS).widget()
-
-    def edges(widget: QWidget) -> tuple[int, int]:
-        left = widget.mapTo(body, QPoint()).x()
-        return left, left + widget.width()
-
-    assert edges(page.preset_timer) == edges(page.focus_steppers[0]), "the preset as wide as the fields"
-    assert len({edges(stepper) for stepper in page.focus_steppers}) == 1
     free(page)

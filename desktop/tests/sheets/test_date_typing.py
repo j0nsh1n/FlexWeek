@@ -1,5 +1,6 @@
-"""A date typed with no year is the next one that day and month come round (finding 35 of the 0.17.2
-audit), and the box that takes the year in the picker's header wears the header's own style."""
+"""A date typed with no year is the next one that day and month come round, and the box that takes the
+year in the picker's header has no arrows. How that box is sized and styled is a picture:
+screens_sheets_h7.py."""
 
 from __future__ import annotations
 
@@ -12,8 +13,9 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QAbstractSpinBox, QSpinBox, QToolButton, QVBoxLayout, QWidget
 
 from desktop.native.fields import DateField
-from desktop.native.look import pack_stylesheet, resolved_palette
-from desktop.native.widgets import DueField, control_art
+from desktop.native.widgets import DueField
+from desktop.tests.sheets.support_date_picker import dressed
+from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import free, qapp  # noqa: F401
 
 FORMAT = "ddd d MMM yyyy"
@@ -26,7 +28,7 @@ def shown(field: DateField) -> QWidget:
     host.show()
     field.activateWindow()
     field.setFocus()
-    QTest.qWait(20)
+    wait_until(None, field.isVisible, what="the date field showing")
     return host
 
 
@@ -101,10 +103,8 @@ def test_the_due_field_counts_from_the_day_it_is_given(qapp) -> None:  # noqa: F
     free(host)
 
 
-def test_the_year_box_in_the_picker_is_the_header_s_own_size_and_style(qapp) -> None:  # noqa: F811
-    palette = resolved_palette("light-frost", False, None, "default")
-    host = QWidget()
-    host.setStyleSheet(pack_stylesheet("light-frost", False, None, "default", palette, control_art(palette)))
+def test_the_year_box_in_the_picker_has_no_arrows_over_its_digits(qapp) -> None:  # noqa: F811
+    host, _palette = dressed("light-frost")
     field = DateField(QDate(2026, 10, 3))
     QVBoxLayout(host).addWidget(field)
     host.resize(500, 400)
@@ -116,17 +116,10 @@ def test_the_year_box_in_the_picker_is_the_header_s_own_size_and_style(qapp) -> 
         Qt.KeyboardModifier.NoModifier,
         QPoint(field.width() - 6, field.height() // 2),
     )
-    for _ in range(6):
-        qapp.processEvents()
     month = field.calendarWidget()
+    wait_until(qapp, month.isVisible, what="the month opening")
     month.findChild(QToolButton, "qt_calendar_yearbutton").click()
-    for _ in range(4):
-        qapp.processEvents()
     year = month.findChild(QSpinBox, "qt_calendar_yearedit")
-    button = month.findChild(QToolButton, "qt_calendar_monthbutton")
-    assert year.isVisible()
+    wait_until(qapp, year.isVisible, what="the year box showing")
     assert year.buttonSymbols() == QAbstractSpinBox.ButtonSymbols.NoButtons, "no arrows over its digits"
-    assert year.height() == button.height(), "as tall as the month beside it"
-    assert year.font().weight() == button.font().weight()
-    assert year.fontMetrics().horizontalAdvance("2026") <= year.width() - 2, "its digits are not cut"
     free(host)
