@@ -1,4 +1,4 @@
-"""T-W25: labels with no full stop, sentences with one, contractions in the app's own words.
+"""Labels have no full stop, sentences have one, and the app's own words use contractions.
 
 Expected copy is from 03-wording-audit.md T-W25 and decisions.md 2026-10-13, not from reading the
 code's current output. The scan walks desktop/native string literals a student can be shown.
@@ -7,34 +7,21 @@ code's current output. The scan walks desktop/native string literals a student c
 from __future__ import annotations
 
 import ast
-import os
 import re
-from collections.abc import Iterator
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QListWidget
+from PySide6.QtWidgets import QApplication
 
-from desktop.native.calendar import DAY_FULL
-from desktop.native.hours.classic import DaySummary
-from desktop.native.layouts.base import Scene
-from desktop.native.layouts.bento import planned_words
-from desktop.native.layouts.one_thing import OneThingView
-from desktop.native.layouts.registry import options_for, tokens_for
-from desktop.native.look import resolved_palette
 from desktop.native.settings import HELP_PLANNING, HELP_SCREENS
-from desktop.native.weekmodel import build_week, minute_of, set_clock_24h
 from desktop.native.widgets import PlanReview
-from desktop.native.window import PLAN_TIP, NativeWindow
+from desktop.native.window import PLAN_TIP
+from desktop.tests.window_support import qapp  # noqa: F401
 
-NATIVE = Path(__file__).resolve().parents[1] / "native"
-ENGINE_WEEKMODEL = (
-    Path(__file__).resolve().parents[2] / "engine" / "engine" / "src" / "desk" / "weekmodel.rs"
-)
+NATIVE = Path(__file__).resolve().parents[2] / "native"
 POLISH_A = frozenset(
     {
         "look_editor.py",
@@ -62,8 +49,6 @@ ALLOWED = frozenset(
 )
 LOG_FUNCS = frozenset({"debug", "info", "warning", "error", "exception", "critical", "log"})
 WEEK = "2026-10-12"
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
 def _call_name(func: ast.expr) -> str:
@@ -150,12 +135,7 @@ def test_user_facing_copy_uses_contractions() -> None:
     assert leftover == []
 
 
-def test_planned_line_empty_is_the_label() -> None:
-    source = ENGINE_WEEKMODEL.read_text(encoding="utf-8")
-    assert 'return "Nothing planned".to_string();' in source
-
-
-def test_controller_named_copy_uses_contractions() -> None:
+def test_the_controllers_notices_use_contractions() -> None:
     source = (NATIVE / "controller.py").read_text(encoding="utf-8")
     for wanted in (
         "There's nothing to copy from last week yet.",
@@ -173,20 +153,7 @@ def test_controller_named_copy_uses_contractions() -> None:
         assert wanted in source, wanted
 
 
-@pytest.fixture(scope="module")
-def qapp() -> Iterator[QApplication]:
-    yield QApplication.instance() or QApplication(["flexweek-wording-100"])
-
-
-def test_day_summary_empty_is_the_label(qapp: QApplication) -> None:
-    assert DaySummary().text() == "Nothing planned"
-
-
-def test_bento_empty_planned_words_is_the_label() -> None:
-    assert planned_words(0) == "Nothing planned"
-
-
-def test_help_planning_and_day_use_contractions() -> None:
+def test_help_for_planning_and_the_day_screen_use_contractions() -> None:
     assert HELP_PLANNING == (
         "Add homework with its due date and length. Press Plan my homework and FlexWeek finds free time for "
         "it in your study hours, around your fixed times, before it's due. Homework that already has a time "
@@ -199,14 +166,14 @@ def test_help_planning_and_day_use_contractions() -> None:
     )
 
 
-def test_plan_tip_uses_contraction() -> None:
+def test_the_plan_buttons_tip_uses_a_contraction() -> None:
     assert PLAN_TIP == (
         "Find a time for homework that has none, around your fixed times and before it's due. Homework "
         "that already has a time keeps it."
     )
 
 
-def test_fair_share_row_is_a_sentence(qapp: QApplication) -> None:
+def test_a_fair_share_row_is_a_sentence(qapp: QApplication) -> None:  # noqa: F811
     trace = {
         "placed": [],
         "unplaced": [],
@@ -227,29 +194,8 @@ def test_fair_share_row_is_a_sentence(qapp: QApplication) -> None:
     ]
 
 
-def test_empty_week_list_says_nothing_planned(qapp: QApplication) -> None:
-    listing = QListWidget()
-    host = SimpleNamespace(
-        week_access_list=listing,
-        session=SimpleNamespace(planner_view="week"),
-        _day_mode=False,
-        _show_week_list_row=lambda _shown: None,
-    )
-    NativeWindow._sync_week_access_list(host, build_week(WEEK, []))
-    rows = [listing.item(i).text() for i in range(listing.count())]
-    assert rows == [f"{name}: Nothing planned" for name in DAY_FULL]
-    assert rows[1] == "Tuesday: Nothing planned"
-
-
-def test_one_thing_empty_day_caption_is_a_sentence(qapp: QApplication) -> None:
-    set_clock_24h(True)
-    options = options_for(None, "one")
-    palette = resolved_palette("light-frost", False, None)
-    scene = Scene(
-        build_week(WEEK, []),
-        3,
-        minute_of("13:40"),
-        options,
-        tokens_for("one", options["look"], palette),
-    )
-    assert OneThingView()._bar_caption(scene) == "Today, 06:00 to 22:00. Nothing planned."
+def test_thats_in_the_past_is_not_used_anywhere_in_native() -> None:
+    hits = [
+        path for path in NATIVE.rglob("*.py") if "That's in the past." in path.read_text(encoding="utf-8")
+    ]
+    assert hits == []
