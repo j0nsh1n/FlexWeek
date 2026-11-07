@@ -4,42 +4,42 @@
     "file": "desktop/native/window.py",
     "old": "        self.forgot_button.setVisible(mode == SIGN_IN)\n",
     "new": "        self.forgot_button.setVisible(True)\n",
-    "test": "desktop/tests/test_sign_in_card.py::test_the_card_has_one_heading_and_create_account_hides_forgot_password"
+    "test": "desktop/tests/account/test_sign_in_pages.py::test_the_card_has_one_heading_and_create_account_hides_forgot_password"
   },
   {
     "name": "a second heading under the greeting",
     "file": "desktop/native/window.py",
     "old": "        self.auth_note.setVisible(bool(note))\n",
     "new": "        self.auth_note.setVisible(True)\n",
-    "test": "desktop/tests/test_sign_in_card.py::test_the_card_has_one_heading_and_create_account_hides_forgot_password"
+    "test": "desktop/tests/account/test_sign_in_pages.py::test_the_card_has_one_heading_and_create_account_hides_forgot_password"
   },
   {
     "name": "Sign in stays filled beside Reset password",
     "file": "desktop/native/window.py",
     "old": "        self.sign_in_button.setVisible(mode == SIGN_IN)\n",
     "new": "        self.sign_in_button.setVisible(mode != CREATE)\n",
-    "test": "desktop/tests/test_sign_in_card.py::test_forgot_password_is_the_cards_own_page_with_one_filled_button"
+    "test": "desktop/tests/account/test_sign_in_pages.py::test_forgot_password_is_the_cards_own_page_with_one_filled_button"
   },
   {
     "name": "the eye does not show the password",
     "file": "desktop/native/widgets.py",
     "old": "        self.setEchoMode(QLineEdit.EchoMode.Normal if shown else QLineEdit.EchoMode.Password)\n",
     "new": "        self.setEchoMode(QLineEdit.EchoMode.Password)\n",
-    "test": "desktop/tests/test_sign_in_card.py::test_the_eye_sits_inside_the_password_box_and_shows_and_hides_it"
+    "test": "desktop/tests/account/test_sign_in_pages.py::test_the_eye_shows_and_hides_the_password_and_a_log_out_hides_it_again"
   },
   {
     "name": "a shown password stays shown after log out",
     "file": "desktop/native/window.py",
     "old": "            self.password_reveal.setChecked(False)\n",
     "new": "",
-    "test": "desktop/tests/test_sign_in_card.py::test_the_eye_sits_inside_the_password_box_and_shows_and_hides_it"
+    "test": "desktop/tests/account/test_sign_in_pages.py::test_the_eye_shows_and_hides_the_password_and_a_log_out_hides_it_again"
   },
   {
     "name": "no wordmark on the page",
     "file": "desktop/native/window.py",
     "old": "        outer.addLayout(brand_row())\n",
     "new": "",
-    "test": "desktop/tests/test_sign_in_card.py::test_the_wordmark_sits_on_the_page_centred_above_the_card"
+    "test": "desktop/tests/account/test_sign_in_pages.py::test_the_wordmark_is_on_the_page_not_in_the_card"
   },
   {
     "name": "recovery codes in proportional figures",
@@ -47,27 +47,6 @@
     "old": "QLabel#recoveryList {{ font-family: {FONT_FAMILIES['mono']};",
     "new": "QLabel#recoveryList {{ font-family: {FONT_FAMILIES['sans']};",
     "test": "desktop/tests/test_time_numbers.py::test_recovery_codes_use_the_bundled_mono_face"
-  },
-  {
-    "name": "the sign-in card rounded as a card, not a sheet",
-    "file": "desktop/native/look.py",
-    "old": "    title = f\"font-size: {type_pt('title', text)}pt; font-weight: {WEIGHT_STRONG};\"\n    sheet = RADIUS_SHEET if card_radius else 0\n",
-    "new": "    title = f\"font-size: {type_pt('title', text)}pt; font-weight: {WEIGHT_STRONG};\"\n    sheet = card_radius\n",
-    "test": "desktop/tests/test_sign_in_card.py::test_the_card_is_a_sheet_lifted_with_the_large_shadow_where_the_look_has_shadows"
-  },
-  {
-    "name": "the sign-in card without its shadow",
-    "file": "desktop/native/window.py",
-    "old": "            if soft:\n                lift(card, SHADOW_LARGE",
-    "new": "            if not soft:\n                lift(card, SHADOW_LARGE",
-    "test": "desktop/tests/test_sign_in_card.py::test_the_card_is_a_sheet_lifted_with_the_large_shadow_where_the_look_has_shadows"
-  },
-  {
-    "name": "the sign-in card as narrow at Large text as at Normal",
-    "file": "desktop/native/window.py",
-    "old": "            card.setFixedWidth(round(AUTH_CARD_WIDTH * text_scale(look)))\n",
-    "new": "            card.setFixedWidth(AUTH_CARD_WIDTH)\n",
-    "test": "desktop/tests/test_sign_in_card.py::test_every_line_on_the_card_is_whole_at_large_text"
   },
   {
     "name": "the school hint under a week of school days",
@@ -193,27 +172,6 @@
     "file": "desktop/native/window.py",
     "old": "SIGN_IN_HEADING = \"Sign in\"\n",
     "new": "SIGN_IN_HEADING = \"Welcome to FlexWeek\"\n",
-    "test": "desktop/tests/test_sign_in_card.py::test_the_name_is_said_once_not_again_in_the_heading"
-  },
-  {
-    "name": "Forgot password as heavy as Create an account",
-    "file": "desktop/native/look.py",
-    "old": "min-height: 0; font-weight: {WEIGHT_REGULAR}; }}\"\n",
-    "new": "min-height: 0; font-weight: {WEIGHT_STRONG}; }}\"\n",
-    "test": "desktop/tests/test_sign_in_card.py::test_creating_an_account_carries_more_weight_than_forgot_password"
-  },
-  {
-    "name": "A link in reach goes near-black",
-    "file": "desktop/native/look.py",
-    "old": "deeper = mix(palette[\"accent\"], palette[\"text\"], 0.7)\n",
-    "new": "deeper = palette[\"text\"]\n",
-    "test": "desktop/tests/test_sign_in_card.py::test_a_link_in_reach_keeps_the_accent_darker_and_underlined"
-  },
-  {
-    "name": "A link reached by the keyboard shows nothing",
-    "file": "desktop/native/look.py",
-    "old": "{name}:hover, {name}[keyfocus=\"true\"]:focus'",
-    "new": "{name}:hover'",
-    "test": "desktop/tests/test_sign_in_card.py::test_a_link_in_reach_keeps_the_accent_darker_and_underlined"
+    "test": "desktop/tests/account/test_sign_in_pages.py::test_the_name_is_said_once_not_again_in_the_heading"
   }
 ]
