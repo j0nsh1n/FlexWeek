@@ -1,63 +1,67 @@
 """Deleting homework: with its times in every week, in one step that Undo brings back, from its
-editor, from Unfinished and from its right-click menu. Weeks are read back from the server."""
+editor, from Unfinished and from its right-click menu. Weeks are read back from the API."""
 
 from __future__ import annotations
 
-import importlib.util
 from datetime import date, datetime, timedelta
 
 import pytest
 
+pytest.importorskip("PySide6")
+
+from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QLabel, QPushButton
+
 from backend.tests.fake_clock import FakeClock
+from desktop.native import widgets
+from desktop.native.calendar import sunday_due
+from desktop.native.controller import NativeSession
+from desktop.native.reuse import copied_homework_block
+from desktop.native.widgets import HomeworkDialog, UnfinishedPanel
+from desktop.native.window import NativeWindow
 from desktop.tests import logic_support
+from desktop.tests.blocks_helper import put_block
+from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.waiting import wait_until
+from desktop.tests.window_support import qapp  # noqa: F401
 
-pytestmark = pytest.mark.skipif(
-    importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
-)
 
-qapp = logic_support.qapp
-server = logic_support.server
-
-if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import Qt
-    from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QLabel, QPushButton
-
-    from desktop.native import widgets
-    from desktop.native.calendar import sunday_due
-    from desktop.native.controller import NativeSession
-    from desktop.native.reuse import copied_homework_block
-    from desktop.native.widgets import HomeworkDialog, UnfinishedPanel
-    from desktop.server import LocalServer
-    from desktop.tests.blocks_helper import put_block
-    from desktop.tests.logic_support import settled, signed_in
+def settled(qapp: QApplication, session: NativeSession) -> None:  # noqa: F811
+    """Every request the session sent has been answered and handled."""
+    wait_until(
+        qapp,
+        lambda: not session.busy and not getattr(session.client, "pending", 0),
+        what="the session's requests answered",
+    )
 
 
 def week_after(week_start: str) -> str:
     return (date.fromisoformat(week_start) + timedelta(days=7)).isoformat()
 
 
-def read(qapp: QApplication, session: NativeSession, path: str) -> dict:
+def read(qapp: QApplication, session: NativeSession, path: str) -> dict:  # noqa: F811
     got: dict = {}
     session.client.request("GET", path, None, lambda data: got.update(data=data), lambda e: got.update(e=e))
+    wait_until(qapp, lambda: bool(got), what=f"the answer to {path}")
     settled(qapp, session)
     assert "data" in got, got.get("e")
     return got["data"]
 
 
-def essay_times(qapp: QApplication, session: NativeSession, week_start: str) -> list[str]:
+def essay_times(qapp: QApplication, session: NativeSession, week_start: str) -> list[str]:  # noqa: F811
     blocks = read(qapp, session, f"/api/week?week_start={week_start}")["blocks"]
     return sorted(block.get("start") or "" for block in blocks if block.get("assignment_id") == "essay")
 
 
-def essay_saved(qapp: QApplication, session: NativeSession) -> bool:
+def essay_saved(qapp: QApplication, session: NativeSession) -> bool:  # noqa: F811
     listed = read(qapp, session, f"/api/assignments?week_start={session.week_start}")["assignments"]
     return any(item["id"] == "essay" for item in listed)
 
 
-def essay_in_two_weeks(qapp: QApplication, server: LocalServer) -> tuple[NativeSession, str, str]:
+def essay_in_two_weeks(qapp: QApplication, window: NativeWindow) -> tuple[NativeSession, str, str]:  # noqa: F811
     """History essay at Monday 16:00 this week and Tuesday 17:00 next week, back on this week."""
-    session = signed_in(qapp, server.origin, "alice", create=True)
+    session = window.session
     first, second = session.week_start, week_after(session.week_start)
     session.add_homework(
         {"id": "essay", "title": "History essay", "due": sunday_due(second), "estimate_min": 60,
@@ -85,9 +89,10 @@ def essay_in_two_weeks(qapp: QApplication, server: LocalServer) -> tuple[NativeS
 
 
 def test_deleting_homework_takes_its_times_off_every_week_and_undo_brings_them_back(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
 ) -> None:
-    session, first, second = essay_in_two_weeks(qapp, server)
+    session, first, second = essay_in_two_weeks(qapp, window)
     assert session.delete_homework("essay") is True
     settled(qapp, session)
     assert session.message == "Deleted History essay."
@@ -113,9 +118,10 @@ def test_deleting_homework_takes_its_times_off_every_week_and_undo_brings_them_b
 
 
 def test_homework_with_no_time_yet_is_deleted_and_nothing_else_moves(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
 ) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
+    session = window.session
     session.add_block(logic_support.fixed("soccer", "Soccer", 1, "16:00"))
     session.add_homework(
         {"id": "essay", "title": "History essay", "due": sunday_due(session.week_start),
@@ -135,9 +141,10 @@ def test_homework_with_no_time_yet_is_deleted_and_nothing_else_moves(
 
 
 def test_a_change_still_saving_is_finished_before_anything_is_deleted(
-    qapp: QApplication, server: LocalServer
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
 ) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
+    session = window.session
     session.add_homework(
         {"id": "essay", "title": "History essay", "due": sunday_due(session.week_start),
          "estimate_min": 60, "revision": 0}
@@ -148,7 +155,8 @@ def test_a_change_still_saving_is_finished_before_anything_is_deleted(
 
 
 def test_the_editor_offers_delete_only_for_homework_that_exists(
-    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+    qapp: QApplication,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     new = HomeworkDialog(None, today="2026-09-21")
     assert not new.delete_button.isVisibleTo(new)
@@ -168,7 +176,7 @@ def test_the_editor_offers_delete_only_for_homework_that_exists(
     assert asked and "History essay" in asked[0] and "undo" in asked[0]
 
 
-def test_each_unfinished_row_has_its_own_delete(qapp: QApplication) -> None:
+def test_each_unfinished_row_has_its_own_delete(qapp: QApplication) -> None:  # noqa: F811
     panel = UnfinishedPanel()
     panel.set_items(
         [{"id": "essay", "title": "History essay", "remaining_min": 60, "due": "2000-01-15T12:00"}]
@@ -181,8 +189,11 @@ def test_each_unfinished_row_has_its_own_delete(qapp: QApplication) -> None:
     assert asked == ["essay"]
 
 
-def test_the_unfinished_list_holds_only_overdue_homework(qapp: QApplication, clock: FakeClock) -> None:
-    """#14: Unfinished listed work due today and tomorrow. It keeps only what is already late."""
+def test_the_unfinished_list_holds_only_overdue_homework(
+    qapp: QApplication,  # noqa: F811
+    clock: FakeClock,
+) -> None:
+    """Unfinished listed work due today and tomorrow. It keeps only what is already late."""
     clock.set(datetime(2026, 10, 3, 18, 0))
     panel = UnfinishedPanel()
     panel.set_items(
@@ -200,7 +211,9 @@ def test_the_unfinished_list_holds_only_overdue_homework(qapp: QApplication, clo
     ]
 
 
-def test_homework_rows_expose_state_and_tab_through_each_action(qapp: QApplication) -> None:
+def test_homework_rows_expose_state_and_tab_through_each_action(
+    qapp: QApplication,  # noqa: F811
+) -> None:
     panel = UnfinishedPanel()
     panel.set_items(
         [
