@@ -10,14 +10,18 @@
 - Checks: the last full gate (J22, before merge) passed 6031 tests, ruff and mypy; every PR's 13 CI checks passed.
   A timed full run takes 27 min wall, 80 min of test time over 3 workers, 74% of it in tests that start the
   whole app.
-- Known failures: `test_layout_fit_small` (Clay 1024x640 Large) fails locally in the daytime because it reads the
-  wall clock; `test_placeholder_0185`, `test_regress_item0_time_boxes`, `test_week_hour_labels` and
-  `test_setup_wizard` sometimes fail under gate load and pass alone. The Windows release job fails with
-  `opengl32sw.dll imports imagehlp.dll` (since 2026-11-04), so no stable release can be published.
+- Known failures: `test_placeholder_0185`, `test_regress_item0_time_boxes`, `test_week_hour_labels`,
+  `test_setup_wizard`, `test_u19_week_list_row`'s fit cases, `test_layouts_window`'s 1024x640 Month card and some
+  `test_material_window` / `test_material_focus` cases sometimes fail under load or with other files on the same
+  worker and pass alone. The Windows release job builds again (#87, 2026-11-07); no tagged release has run yet.
+- CI's `verify-python` runs the backend gate only; the desktop suite runs locally (R3.5 moves it to CI).
 - Known gaps: Material memory growth (1.9 GB after 49 min on the tarball) is unmeasured; native AT-SPI delivery
   is unverified (Jonathan accepted the Qt accessibility tree); the static audit's F1 and W3 are open (roadmap).
-- Testing rebuild: rules approved in spec.md (Validation & Tooling, "Testing structure"); phases in roadmap R3;
-  not started. Draft, survey and timings: `~/.flexweek-ui-harness/scratch/testing-revision/`.
+- Testing rebuild: rules approved in spec.md (Validation & Tooling, "Testing structure"); phases in roadmap R3.
+  R3.1 foundations on branch `test/r3-1-foundations`: one app clock (`backend/clock.py`, faked for every test by
+  the root `conftest.py` at Thu 2026-11-05 19:00, guarded by `backend/tests/test_one_wall_clock.py`), a clean
+  computer per test, one wait helper (`desktop/tests/waiting.py`) and the light app (`desktop/tests/light_app.py`);
+  the Week files run on them. Draft, survey and timings: `~/.flexweek-ui-harness/scratch/testing-revision/`.
 - Rust (`engine/`, contract `docs/engine/contract.md`, wrappers `docs/engine/adapters.md`): planner and solver,
   slots, weeks, day, month, explain, restore, recovery codes, the store's SQL helpers and connection, and the
   desktop's Qt-free logic (`desk`). Python calls it through `flexweek_engine`; the wrappers only encode, call and
@@ -55,7 +59,8 @@ desktop/native/look.py       packs, presets, palettes, the one stylesheet
 desktop/native/version.py    VERSION, kept equal to the newest CHANGELOG heading
 desktop/{build_*,package_*}  Linux and Windows builds; packaging/ holds AppImage, Inno, WiX
 android/                the Android phone app (Kotlin + Compose)
-desktop/tests/, backend/tests/  the Python suites (regress184/190 only with FLEXWEEK_REGRESS=1)
+desktop/tests/, backend/tests/  the Python suites (regress184/190 only with FLEXWEEK_REGRESS=1); light_app.py, waiting.py
+conftest.py             root: every test runs on backend/tests/fake_clock.CLOCK
 .github/workflows/      verify, codeql, release packages, dev-build
 ```
 
@@ -90,8 +95,8 @@ preview. Recorded `operation_id` values make a retried write return the first re
 - The Android release key lives in `~/.config/flexweek-android/`, outside the repo; phone updates are signed with it.
 
 ## Session Handoff
-- 2026-11-06, main 33fe5eef plus docs PR #85 (branch `docs/roadmap-after-1-3`: roadmap R1-R5 and its prune, spec
-  Validation and Testing structure, legacy docs removed, this file pruned). Next on Jonathan's go: R1 (unblock
-  releases) or R3.1 (testing foundations); step 2 of developer build naming (commit in the title) once he has
-  installed 1.2.0.202611061702. Logs: `~/.flexweek-ui-harness/scratch/fix-spec-1.3/plan.md`,
-  `~/.flexweek-ui-harness/scratch/testing-revision/`.
+- 2026-11-07, main 01a7e197 (#87 merged: Windows bundle check knows imagehlp.dll, Windows trims Qt's web modules).
+  R3.1 on branch `test/r3-1-foundations` (worktree `~/.worktrees/flexweek-r3-1`), PR to open after rebase. Next:
+  Jonathan approves the spec catch-up proposal (`~/.flexweek-ui-harness/scratch/r1/spec-catch-up.md`), then a
+  tagged release to finish R1; R3.2 (Week rewrite) on his go. Logs: `~/.flexweek-ui-harness/scratch/r3-1/plan.md`,
+  `~/.flexweek-ui-harness/scratch/r1/`.

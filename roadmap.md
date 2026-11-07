@@ -56,7 +56,12 @@ set, CI as the gate, Rust tools in fwtest. Draft: `~/.flexweek-ui-harness/scratc
   updater, planner). Complete when: no test file is named after a PR or audit and none reads the real clock.
 - R3.5 Test selection and the flaky log in fwtest; CI as the gate; spec.md and fwtest's contract updated. Complete
   when: a local run picks only the touched area and CI runs everything.
-- Status: [ ] approved 2026-11-06; R3.1 starts on Jonathan's go.
+- Status: [ ] approved 2026-11-06. R3.1 built 2026-11-07 on `test/r3-1-foundations`: the 65 Week files pass on the
+  one clock, a clean computer per test, the shared wait helper and the light app, in 898 s of test time against
+  main's 1,193 s; done when its pull request merges. Left for R3.2: Week's fixed waits for animations (drag results,
+  hours zoom, hours hand, Material week, bare end times), its focus tests' own session clock (`logic_support`), and
+  the module-wide Material windows. Left for R3.4: `test_layouts_window`'s overdue month card holds Saturday on the
+  session only (one shared clock keeps the Unfinished card shut there; not yet understood).
 
 ### R4 — Look and feel (Jonathan's calls)
 - Material Week: move an existing block by dragging (decide).
