@@ -14,12 +14,19 @@ FIX-SPEC 1.3 and the J lanes (J21 Week zoom, J22 Day hours, J23 Month study fill
 are on main (PRs #67-#83). In order:
 
 ### R1 — Unblock releases
-- Windows packaging: `opengl32sw.dll imports imagehlp.dll` fails the Windows release job (since Nov 4).
-- The local Nuitka build on Fedora drops the PySide6 libraries.
+- Windows packaging: `opengl32sw.dll imports imagehlp.dll` fails the Windows release job (since Nov 4). Fixed on
+  `fix/r1-release-unblock`: `imagehlp.dll` joins the system DLL list, and the Windows bundle now drops Qt's web modules
+  the way Linux does (the next step failed on them). A by-hand run of the release workflow on that branch built,
+  smoke-tested and made the installers on both Windows and Linux (run 42344994884, 2026-11-07). Open until it is
+  merged and a tagged release builds.
+- The local Nuitka build on Fedora drops the PySide6 libraries. Not reproduced (2026-11-07): a fresh venv from the
+  requirements files builds a bundle with 0 check problems; the old failure most likely came from a symlinked `.venv`
+  in a detached worktree (unproven). The working steps are in the R1 PR description.
 - spec.md catch-up (Jonathan approves): CI jobs (engine wheel once, sharded mutations, rig matrix, no ffmpeg in
   rigs), the developer channel keeping the previous build, the "Material 3" switch label (FIX-SPEC said "Back to
-  Material"), reason and notice wording.
-- Developer builds: the commit in the release title and the kept copy's tag (the number stays for ordering).
+  Material"), reason and notice wording. Proposal with exact text written 2026-11-07; waiting on Jonathan's approval.
+- Developer builds: the commit in the release title and the kept copy's tag (the number stays for ordering). Done
+  (PRs #84, #86).
 - Complete when: a stable release builds on every platform and spec.md matches CI.
 - Status: [ ] open.
 

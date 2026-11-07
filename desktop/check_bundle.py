@@ -141,6 +141,8 @@ WINDOWS_SYSTEM_DLLS = frozenset(
         "icu.dll",
         "icuin.dll",
         "icuuc.dll",
+        # A System32 component; Qt's software OpenGL renderer (opengl32sw.dll) links it.
+        "imagehlp.dll",
         "imm32.dll",
         "iphlpapi.dll",
         "kernel32.dll",

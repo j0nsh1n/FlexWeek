@@ -145,6 +145,15 @@ Get-ChildItem -LiteralPath $Built -Recurse -File -Filter '*.pak' |
 Get-ChildItem -LiteralPath $Built -Recurse -File -Filter '*.debug.pak' | Remove-Item
 Get-ChildItem -LiteralPath $Built -Recurse -File -Filter 'qtwebengine_devtools_resources*.pak' | Remove-Item
 
+# The pyside6 plugin copies every QML module once the Material shell uses QML, and with them Qt's web
+# modules (QtWebEngine, QtWebView) and Chromium. FlexWeek's QML imports none of them, and the packaged
+# smoke refuses any WebEngine file. Same trim as finish_linux_bundle.sh; deepest paths first so a folder
+# is emptied before it is removed.
+Get-ChildItem -LiteralPath $Built -Recurse -Force |
+    Where-Object { $_.Name -match 'webengine|webview' } |
+    Sort-Object { $_.FullName.Length } -Descending |
+    ForEach-Object { if (Test-Path -LiteralPath $_.FullName) { Remove-Item -LiteralPath $_.FullName -Recurse -Force } }
+
 # Every imported DLL must be in the bundle or part of Windows 10 1809+. System
 # DLLs such as icuuc.dll are checked for, never copied (see check_bundle.py).
 try {

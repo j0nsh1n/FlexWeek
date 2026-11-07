@@ -112,6 +112,8 @@ def test_windows_qt_and_pydantic_use_system_dlls() -> None:
         # 1.0.0's engine syncs through iroh, which links the COM runtime (the v1.0.0 Windows build
         # stopped on it).
         "flexweek_engine/flexweek_engine.pyd": ["combase.dll", "ws2_32.dll", "iphlpapi.dll"],
+        # Qt's software OpenGL renderer; the Windows job stopped on it on 2026-11-04.
+        "PySide6/opengl32sw.dll": ["KERNEL32.dll", "imagehlp.dll"],
     }
     assert windows_problems(binaries, set()) == []
 
