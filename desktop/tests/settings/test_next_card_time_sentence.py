@@ -1,5 +1,5 @@
 """The rail's Next card says how long is left in a whole sentence that wraps. That the sentence is not
-cut off in Terminal is judged on the pictures in pictures/screens_settings_tokens.py."""
+cut off in Terminal is judged on the pictures in pictures/screens_settings_h2.py."""
 
 from __future__ import annotations
 

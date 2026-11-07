@@ -1,6 +1,6 @@
 """The pictures of each design in setup and Settings are built and freed whole, are of the design once
 it has finished laying out, and the sample week files Soccer under Sports. How the Today's app picture
-is coloured in High contrast is judged on the pictures in pictures/screens_settings_preview.py."""
+is coloured in High contrast is judged on the pictures in pictures/screens_settings_h2.py."""
 
 from __future__ import annotations
 

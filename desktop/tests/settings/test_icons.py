@@ -1,7 +1,7 @@
 """Lucide's icons: every icon the plan names ships with its licence, is drawn in the colour asked at the
 system's stroke, and is sharp on a high-density screen; Replan and School have icons of their own. Whether
 the School icon reads on its block is judged on the pictures in
-pictures/screens_settings_paper_and_controls.py.
+pictures/screens_settings_h2.py.
 """
 
 from __future__ import annotations

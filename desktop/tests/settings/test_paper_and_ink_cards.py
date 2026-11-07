@@ -1,6 +1,6 @@
 """Paper and Ink draw a 1 px warm edge on every card, and keep the serif and the even figures. That the
 edge reads at 3 to 1 and that a block's book icon stays inside its block are judged on the pictures in
-pictures/screens_settings_paper_and_controls.py.
+pictures/screens_settings_h2.py.
 """
 
 from __future__ import annotations

@@ -1,5 +1,5 @@
 """The Week-as-a-list panel opens over the planner. That it is a 360 px overlay that does not crush the
-planner is judged on the pictures in pictures/screens_settings_audit.py."""
+planner is judged on the pictures in pictures/screens_settings_h2.py."""
 
 from __future__ import annotations
 

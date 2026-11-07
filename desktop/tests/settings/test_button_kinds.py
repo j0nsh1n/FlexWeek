@@ -1,6 +1,6 @@
 """The `outlined`, `danger` and `tonal` buttons and a disabled main button are written as the rules
 the app promises in every shipped look. Whether their words and edges read (4.5 to 1, 3 to 1, about
-7 to 1) is judged on the pictures in pictures/screens_settings_paper_and_controls.py.
+7 to 1) is judged on the pictures in pictures/screens_settings_h2.py.
 """
 
 from __future__ import annotations

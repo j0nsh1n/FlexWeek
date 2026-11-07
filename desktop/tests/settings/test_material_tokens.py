@@ -1,6 +1,6 @@
 """Material 3's colour tokens, the Slate default preset and the Inter fonts, written from the B3a3
 specification tables. Whether its status words, class bars and focus ring read (4.5 to 1 and 3 to 1) is
-judged on the pictures in pictures/screens_settings_tokens.py.
+judged on the pictures in pictures/screens_settings_h2.py.
 """
 
 from __future__ import annotations

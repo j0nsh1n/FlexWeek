@@ -1,7 +1,7 @@
 """What each look and accent is: Paper's cream and serif, Pastel's tinted cards, Sand against Gold, the
 chosen blue, and the Readability list that names and mends a pale accent. The category hues and the
 darker Sleep fill are held by the engine's desk_looks_polish.rs; whether the colours read is judged on
-the pictures in pictures/screens_settings_tokens.py.
+the pictures in pictures/screens_settings_h2.py.
 """
 
 from __future__ import annotations

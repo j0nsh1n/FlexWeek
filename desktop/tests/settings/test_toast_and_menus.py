@@ -1,6 +1,6 @@
 """The toast and the menus in every look: a dark toast with light words, Undo in the accent's light shade
 on a light look, a hovered row that differs from its card, and a menu's shadow. Whether their words
-read and where a menu opens are judged on the pictures in pictures/screens_settings_paper_and_controls.py.
+read and where a menu opens are judged on the pictures in pictures/screens_settings_h2.py.
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """The style picker draws the real view while a style, an option, or the accent changes, keeps focus
 where the student is, and hides on the other Settings pages. Where it sits and how big it is are judged
-on the pictures in pictures/screens_settings_preview.py."""
+on the pictures in pictures/screens_settings_h2.py."""
 
 from __future__ import annotations
 

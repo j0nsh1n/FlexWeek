@@ -1,6 +1,6 @@
 """The shared design system's numbers: shadows, the category fill, the type scale and the stylesheet's
 shape. How the colours look (contrast, spread of lightness, colour blindness) is judged on the
-pictures in pictures/screens_settings_tokens.py.
+pictures in pictures/screens_settings_h2.py.
 
 The category colours worked out from their hues, and the five sizes of the Text knob, are held by the
 engine's desk_tokens.rs.

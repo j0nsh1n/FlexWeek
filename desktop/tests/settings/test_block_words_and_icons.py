@@ -1,7 +1,7 @@
 """What a block writes in the room it has: the title is cut first, a narrow block keeps a whole time
 range or its start and never a cut time, and the icon is left out where it would cost that time line.
 Which icon each category draws. Whether an icon reads against its block is judged on the pictures in
-pictures/screens_settings_tokens.py.
+pictures/screens_settings_h2.py.
 """
 
 from __future__ import annotations

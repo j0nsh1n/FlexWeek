@@ -1,6 +1,6 @@
 """Every text field's placeholder is written in a colour of the look's own, not Qt's default. That it
 reads at 4.5 to 1 and is drawn in that colour is judged on the pictures in
-pictures/screens_settings_paper_and_controls.py."""
+pictures/screens_settings_h2.py."""
 
 from __future__ import annotations
 
