@@ -1,3 +1,7 @@
+"""The two demo schedules (Alex and Jordan) load as valid blocks that sit on the 15-minute grid."""
+
+from __future__ import annotations
+
 import json
 from pathlib import Path
 

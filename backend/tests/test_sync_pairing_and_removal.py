@@ -1,4 +1,8 @@
-"""The Rust sync service as Python sees it: pairing by QR, removal, the key file, and error words."""
+"""Pairing a phone with the desktop through the Rust sync service as Python sees it: pairing by QR,
+removal, the private key file, and the words of each refusal.
+
+The pairing code's five-minute life is stamped by the service on the real clock, which no test can
+move, so this file reads time.time (allowed for it in test_one_wall_clock.py)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,7 @@
-"""The browser cookie and stored session use the engine's 7-day and 30-day lengths."""
+"""The browser cookie and the stored session use the engine's 7-day and 30-day lengths.
+
+The test clock (the `clock` fixture) is the time the app and the session check read, so a day passes
+by moving it."""
 
 from __future__ import annotations
 
@@ -11,18 +14,12 @@ import flexweek_engine  # type: ignore[import-untyped]
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import clock as app_clock
 from backend.app import SESSION_ENDED, create_app
 from backend.storage import SESSION_SECONDS, SESSION_SECONDS_KEEP, connect, digest
+from backend.tests.fake_clock import FakeClock
 
-DAY = 24 * 60 * 60
 ACCOUNT = {"username": "student", "password": "a-long-test-password"}
 HEADERS = {"X-FlexWeek-Request": "1", "Origin": "http://testserver"}
-
-
-def hold_clock(monkeypatch: pytest.MonkeyPatch, clock: list[int]) -> None:
-    """The app's clock reads `clock[0]`, in seconds, for this test."""
-    monkeypatch.setattr(app_clock, "_seconds", lambda: clock[0])
 
 
 def cookie_token(response) -> str:
@@ -38,21 +35,21 @@ def cookie_age(response) -> int:
 
 
 @contextmanager
-def signed_in(tmp_path: Path, keep: bool) -> Iterator[tuple[TestClient, str, Path]]:
+def signed_in(tmp_path: Path, keep: bool) -> Iterator[tuple[TestClient, object, Path]]:
+    """A client that has registered and signed in; yields it, the sign-in response and the database."""
     path = tmp_path / "sessions.db"
     with TestClient(create_app(database=path, origin="http://testserver")) as client:
         assert client.post("/api/auth/register", json=ACCOUNT, headers=HEADERS).status_code == 201
         response = client.post("/api/auth/login", json={**ACCOUNT, "keep": keep}, headers=HEADERS)
         assert response.status_code == 200, response.text
-        yield client, cookie_token(response), path
+        yield client, response, path
 
 
 @pytest.mark.parametrize("endpoint", ["register", "login"])
 def test_cookie_age_matches_the_stored_session_lifetime(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, endpoint: str
+    tmp_path: Path, clock: FakeClock, endpoint: str
 ) -> None:
-    opened_at = 1_800_000_000
-    hold_clock(monkeypatch, [opened_at])
+    opened_at = int(clock())
     path = tmp_path / "sessions.db"
     with TestClient(create_app(database=path, origin="http://testserver")) as client:
         response = client.post("/api/auth/register", json=ACCOUNT, headers=HEADERS)
@@ -70,74 +67,67 @@ def test_cookie_age_matches_the_stored_session_lifetime(
         assert cookie_age(response) == lifetime
 
 
-def test_a_ticked_session_is_valid_at_day_29_and_gone_at_day_31_unused(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    clock = [1_800_000_000]
-    hold_clock(monkeypatch, clock)
-    with signed_in(tmp_path, True) as (client, token, path):
-        assert cookie_age(client.post("/api/auth/login", json={**ACCOUNT, "keep": True}, headers=HEADERS)) == (
-            SESSION_SECONDS_KEEP
-        )
-        token = cookie_token(client.post("/api/auth/login", json={**ACCOUNT, "keep": True}, headers=HEADERS))
+def test_a_ticked_session_is_stored_for_thirty_days(tmp_path: Path, clock: FakeClock) -> None:
+    opened_at = int(clock())
+    with signed_in(tmp_path, True) as (_client, response, path):
+        assert cookie_age(response) == SESSION_SECONDS_KEEP
         with connect(path) as db:
             expires, lifetime = db.execute(
-                "SELECT expires, lifetime FROM sessions WHERE token_hash = ?", (digest(token),)
+                "SELECT expires, lifetime FROM sessions WHERE token_hash = ?",
+                (digest(cookie_token(response)),),
             ).fetchone()
         assert lifetime == SESSION_SECONDS_KEEP
-        assert expires - clock[0] == SESSION_SECONDS_KEEP
-        clock[0] += 29 * DAY
-        client.cookies.set("flexweek_session", token)
+        assert expires - opened_at == SESSION_SECONDS_KEEP
+
+
+def test_a_ticked_session_used_on_day_29_is_still_valid(tmp_path: Path, clock: FakeClock) -> None:
+    with signed_in(tmp_path, True) as (client, response, _path):
+        clock.move(days=29)
+        client.cookies.set("flexweek_session", cookie_token(response))
         assert client.get("/api/auth/me").status_code == 200
-    clock = [1_800_000_000]
-    hold_clock(monkeypatch, clock)
-    with signed_in(tmp_path / "idle", True) as (client, token, _path):
-        clock[0] += 31 * DAY
-        client.cookies.set("flexweek_session", token)
+
+
+def test_a_ticked_session_left_alone_is_gone_on_day_31(tmp_path: Path, clock: FakeClock) -> None:
+    with signed_in(tmp_path, True) as (client, response, _path):
+        clock.move(days=31)
+        client.cookies.set("flexweek_session", cookie_token(response))
         gone = client.get("/api/auth/me")
         assert gone.status_code == 401
         assert gone.json()["detail"] == SESSION_ENDED
 
 
-def test_an_unticked_session_is_gone_at_day_8(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    clock = [1_800_000_000]
-    hold_clock(monkeypatch, clock)
-    with signed_in(tmp_path, False) as (client, token, _path):
-        clock[0] += 8 * DAY
-        client.cookies.set("flexweek_session", token)
+def test_an_unticked_session_is_gone_on_day_8(tmp_path: Path, clock: FakeClock) -> None:
+    with signed_in(tmp_path, False) as (client, response, _path):
+        clock.move(days=8)
+        client.cookies.set("flexweek_session", cookie_token(response))
         assert client.get("/api/auth/me").status_code == 401
 
 
-def test_a_used_unticked_session_is_valid_at_day_12(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    clock = [1_800_000_000]
-    hold_clock(monkeypatch, clock)
-    with signed_in(tmp_path, False) as (client, token, _path):
-        clock[0] += 6 * DAY
-        client.cookies.set("flexweek_session", token)
+def test_a_used_unticked_session_is_still_valid_on_day_12(tmp_path: Path, clock: FakeClock) -> None:
+    with signed_in(tmp_path, False) as (client, response, _path):
+        clock.move(days=6)
+        client.cookies.set("flexweek_session", cookie_token(response))
         assert client.get("/api/auth/me").status_code == 200
-        clock[0] += 6 * DAY
+        clock.move(days=6)
         assert client.get("/api/auth/me").status_code == 200
 
 
-def test_a_session_row_with_no_length_is_seven_days(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    clock = [1_800_000_000]
-    hold_clock(monkeypatch, clock)
-    with signed_in(tmp_path, False) as (client, token, path):
+def test_a_session_row_with_no_length_is_seven_days(tmp_path: Path, clock: FakeClock) -> None:
+    with signed_in(tmp_path, False) as (client, response, path):
+        token = cookie_token(response)
         with connect(path) as db:
             db.execute(
                 "UPDATE sessions SET lifetime = NULL, expires = ? WHERE token_hash = ?",
-                (clock[0] + SESSION_SECONDS, digest(token)),
+                (int(clock()) + SESSION_SECONDS, digest(token)),
             )
-        clock[0] += 8 * DAY
+        clock.move(days=8)
         client.cookies.set("flexweek_session", token)
         ended = client.get("/api/auth/me")
         assert ended.status_code == 401
         assert ended.json()["detail"] == SESSION_ENDED
 
 
-def test_login_401_keeps_its_own_words(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    clock = [1_800_000_000]
-    hold_clock(monkeypatch, clock)
+def test_a_wrong_password_keeps_its_own_words(tmp_path: Path) -> None:
     with TestClient(create_app(database=tmp_path / "login.db", origin="http://testserver")) as client:
         assert client.post("/api/auth/register", json=ACCOUNT, headers=HEADERS).status_code == 201
         wrong = client.post(

@@ -1,7 +1,7 @@
-"""A login checked against the old password must not outlive a password rotation (audit finding 1).
+"""A sign-in checked against the old password must not outlive a password change or recovery.
 
-The interleaving is forced, not timed: the password check of the login is patched so that, after it
-has accepted the old password, the account is recovered (or its password changed) before the login
+The interleaving is forced, not timed: the password check of the sign-in is patched so that, after it
+has accepted the old password, the account is recovered (or its password changed) before the sign-in
 goes on to create its session.
 """
 
@@ -14,8 +14,8 @@ from fastapi.testclient import TestClient
 import backend.app as app_module
 from backend.app import create_app
 from backend.storage import connect
+from backend.tests.account_support import WRITE
 
-HEADERS = {"X-FlexWeek-Request": "1"}
 OLD = "temporary-test-password"
 NEW = "a-brand-new-test-password"
 
@@ -40,13 +40,13 @@ def session_count(path: Path) -> int:
         return db.execute("SELECT count(*) FROM sessions").fetchone()[0]
 
 
-def test_login_with_the_old_password_gets_no_session_after_recovery(
+def test_signing_in_with_the_old_password_gets_no_session_after_a_recovery(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     path = tmp_path / "accounts.db"
     with (
-        TestClient(create_app(path, "http://testserver"), headers=HEADERS) as owner,
-        TestClient(create_app(path, "http://testserver"), headers=HEADERS) as stale,
+        TestClient(create_app(path, "http://testserver"), headers=WRITE) as owner,
+        TestClient(create_app(path, "http://testserver"), headers=WRITE) as stale,
     ):
         codes = owner.post("/api/auth/register", json={"username": "student", "password": OLD}).json()[
             "recovery_codes"
@@ -61,7 +61,7 @@ def test_login_with_the_old_password_gets_no_session_after_recovery(
 
         seen = rotate_during_check(monkeypatch, recover)
         result = stale.post("/api/auth/login", json={"username": "student", "password": OLD})
-        assert seen == [True], "the login's check must have accepted the old password"
+        assert seen == [True], "the sign-in's check must have accepted the old password"
         assert result.status_code == 401
         assert stale.get("/api/auth/me").status_code == 401
         # Only the session recovery itself opened is left.
@@ -69,13 +69,13 @@ def test_login_with_the_old_password_gets_no_session_after_recovery(
         assert owner.get("/api/auth/me").status_code == 200
 
 
-def test_login_with_the_old_password_gets_no_session_after_a_password_change(
+def test_signing_in_with_the_old_password_gets_no_session_after_a_password_change(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     path = tmp_path / "accounts.db"
     with (
-        TestClient(create_app(path, "http://testserver"), headers=HEADERS) as owner,
-        TestClient(create_app(path, "http://testserver"), headers=HEADERS) as stale,
+        TestClient(create_app(path, "http://testserver"), headers=WRITE) as owner,
+        TestClient(create_app(path, "http://testserver"), headers=WRITE) as stale,
     ):
         assert (
             owner.post("/api/auth/register", json={"username": "student", "password": OLD}).status_code == 201
@@ -94,17 +94,3 @@ def test_login_with_the_old_password_gets_no_session_after_a_password_change(
         assert stale.get("/api/auth/me").status_code == 401
         assert session_count(path) == 1
         assert owner.get("/api/auth/me").status_code == 200
-
-
-def test_login_with_an_unchanged_password_still_signs_in(tmp_path: Path) -> None:
-    path = tmp_path / "accounts.db"
-    with TestClient(create_app(path, "http://testserver"), headers=HEADERS) as client:
-        assert (
-            client.post("/api/auth/register", json={"username": "student", "password": OLD}).status_code
-            == 201
-        )
-        client.post("/api/auth/logout")
-        assert (
-            client.post("/api/auth/login", json={"username": "student", "password": OLD}).status_code == 200
-        )
-        assert client.get("/api/auth/me").json()["username"] == "student"

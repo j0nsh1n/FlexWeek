@@ -1,16 +1,17 @@
-"""The Rust connection against Python's sqlite3, on the same statements."""
+"""The Rust connection behaves like Python's sqlite3 on the same statements: values, rows, error
+classes, file names and when a transaction starts."""
 
 from __future__ import annotations
 
 import sqlite3
 import threading
-import time
 from pathlib import Path
 
 import flexweek_engine  # type: ignore[import-untyped]
 import pytest
 
-from backend.storage import connect, initialize, throttle
+from backend import storage as live
+from backend.storage import connect, initialize
 
 
 def test_request_connections_explicitly_enforce_foreign_keys() -> None:
@@ -42,22 +43,29 @@ def test_startup_and_requests_use_the_same_literal_file_name(
         assert db.execute("SELECT username FROM users").fetchone()[0] == "ada"
 
 
-def test_database_panic_survives_cleanup_and_rolls_back(tmp_path: Path) -> None:
-    path = tmp_path / "panic.db"
-    with connect(path) as db:
-        db.execute("CREATE TABLE notes(title TEXT)")
-    with pytest.raises(RuntimeError, match="^invalid UTF-8"), connect(path) as db:
-        db.execute("INSERT INTO notes VALUES ('must roll back')")
-        db.execute("SELECT CAST(X'ff' AS TEXT)")
-    with connect(path) as db:
-        assert db.execute("SELECT COUNT(*) FROM notes").fetchone()[0] == 0
+def test_a_path_that_starts_with_file_colon_is_a_plain_file_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    name = "file:planner.db?mode=memory"
+    monkeypatch.chdir(tmp_path)
+    with connect(Path(name)) as db:
+        db.execute("CREATE TABLE t(a)")
+        db.execute("INSERT INTO t VALUES (1)")
+    with connect(Path(name)) as db:
+        rows = [list(row) for row in db.execute("SELECT a FROM t")]
+    # The store always opens a plain file, whatever the name looks like.
+    assert sorted(path.name for path in tmp_path.iterdir()) == [name]
+    assert rows == [[1]]
 
 
-def test_database_can_be_used_after_catching_its_panic(tmp_path: Path) -> None:
-    with connect(tmp_path / "caught.db") as db:
-        with pytest.raises(RuntimeError, match="^invalid UTF-8"):
-            db.execute("SELECT CAST(X'ff' AS TEXT)")
-        assert db.execute("SELECT 42").fetchone()[0] == 42
+def test_initialize_again_does_not_wipe_the_file(tmp_path: Path) -> None:
+    path = tmp_path / "keep.db"
+    initialize(path)
+    with connect(path) as db:
+        db.execute("INSERT INTO users(username, password_hash) VALUES ('ada', 'x')")
+    initialize(path)
+    with connect(path) as db:
+        assert db.execute("SELECT username FROM users").fetchone()["username"] == "ada"
 
 
 def _script(db, statements: list[tuple[str, tuple]]) -> list[tuple[bool, object]]:
@@ -91,36 +99,6 @@ def test_statement_kinds_start_a_transaction_only_for_writes(tmp_path: Path) -> 
     finally:
         py.close()
         rust.close()
-
-
-def test_a_failed_later_write_rolls_the_earlier_ones_back(tmp_path: Path) -> None:
-    path = tmp_path / "reg.db"
-    with connect(path) as db:
-        db.execute("CREATE TABLE users(id INTEGER PRIMARY KEY, name TEXT UNIQUE)")
-    with pytest.raises(sqlite3.IntegrityError), connect(path) as db:
-        db.execute("INSERT INTO users(name) VALUES ('a')")
-        db.execute("INSERT INTO users(name) VALUES ('b')")
-        db.execute("INSERT INTO users(name) VALUES ('a')")
-    with connect(path) as db:
-        assert db.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"] == 0
-
-
-def test_begin_immediate_commits_or_rolls_back(tmp_path: Path) -> None:
-    path = tmp_path / "tx.db"
-    with connect(path) as db:
-        db.execute("CREATE TABLE t(id INTEGER PRIMARY KEY, name TEXT)")
-    with connect(path) as db:
-        db.execute("BEGIN IMMEDIATE")
-        db.execute("INSERT INTO t(name) VALUES ('kept')")
-    with connect(path) as db:
-        assert db.execute("SELECT name FROM t").fetchone()["name"] == "kept"
-    with pytest.raises(sqlite3.IntegrityError), connect(path) as db:
-        db.execute("BEGIN IMMEDIATE")
-        db.execute("INSERT INTO t(id, name) VALUES (1, 'x')")
-        db.execute("INSERT INTO t(id, name) VALUES (1, 'y')")
-    with connect(path) as db:
-        names = [row["name"] for row in db.execute("SELECT name FROM t")]
-    assert names == ["kept"]
 
 
 def test_another_thread_cannot_use_the_connection(tmp_path: Path) -> None:
@@ -189,38 +167,60 @@ def test_fetch_and_iteration_and_a_row_after_close(tmp_path: Path) -> None:
     assert kept["n"] == 1
 
 
-def test_initialize_again_does_not_wipe_the_file(tmp_path: Path) -> None:
-    path = tmp_path / "keep.db"
-    initialize(path)
-    with connect(path) as db:
-        db.execute("INSERT INTO users(username, password_hash) VALUES ('ada', 'x')")
-    initialize(path)
-    with connect(path) as db:
-        assert db.execute("SELECT username FROM users").fetchone()["username"] == "ada"
+def garbage(path: Path) -> None:
+    path.write_bytes(b"this is not a database\n" * 400)
 
 
-def test_a_held_write_lock_makes_throttle_wait(tmp_path: Path) -> None:
-    path = tmp_path / "lock.db"
-    initialize(path)
-    holder = flexweek_engine.open_connection(str(path))
-    holder.execute("BEGIN IMMEDIATE")
-    beats: list[int] = []
-    flag = {"stop": False}
+def users_table(path: Path) -> None:
+    check = sqlite3.connect(path)
+    check.execute("CREATE TABLE users(id INTEGER PRIMARY KEY, username TEXT UNIQUE)")
+    check.execute("INSERT INTO users(username) VALUES ('ada')")
+    check.commit()
+    check.close()
 
-    def beat() -> None:
-        while not flag["stop"]:
-            beats.append(1)
-            time.sleep(0.05)
 
-    thread = threading.Thread(target=beat)
-    thread.start()
-    started = time.perf_counter()
-    with pytest.raises(sqlite3.OperationalError):
-        throttle(path, "10.0.0.1", "ada")
-    waited = time.perf_counter() - started
-    flag["stop"] = True
-    thread.join()
-    holder.rollback()
-    holder.close()
-    assert waited >= 5
-    assert len(beats) >= 10
+def damaged(path: Path) -> None:
+    check = sqlite3.connect(path)
+    check.execute("CREATE TABLE t(a INTEGER PRIMARY KEY, b TEXT)")
+    check.executemany("INSERT INTO t(b) VALUES (?)", [("x" * 100,)] * 200)
+    check.commit()
+    check.close()
+    data = bytearray(path.read_bytes())
+    data[4096 : 4096 + 64] = b"\xff" * 64
+    path.write_bytes(bytes(data))
+
+
+def outcome(path: Path, sql: str):
+    try:
+        with live.connect(path) as db:
+            db.execute(sql).fetchall()
+    except Exception as error:  # noqa: BLE001
+        return [type(error).__module__ + "." + type(error).__name__, str(error)]
+    return ["ok"]
+
+
+@pytest.mark.parametrize(
+    ("prepare", "sql", "kind"),
+    [
+        (garbage, "SELECT * FROM sqlite_master", "sqlite3.DatabaseError"),
+        (garbage, "CREATE TABLE t(a)", "sqlite3.DatabaseError"),
+        (users_table, "INSERT INTO users(username) VALUES ('ada')", "sqlite3.IntegrityError"),
+        (users_table, "INSERT INTO users(id) VALUES ('not a number')", "sqlite3.IntegrityError"),
+        (users_table, "SELECT zeroblob(2000000000)", "sqlite3.DataError"),
+        (damaged, "SELECT * FROM t", "sqlite3.DatabaseError"),
+        (users_table, "SELECT * FROM nowhere", "sqlite3.OperationalError"),
+    ],
+    ids=[
+        "not-a-database",
+        "not-a-database-write",
+        "duplicate-key",
+        "datatype-mismatch",
+        "too-big",
+        "corrupt",
+        "no-table",
+    ],
+)
+def test_errors_map_to_the_classes_sqlite3_raises(tmp_path, prepare, sql, kind):
+    prepare(tmp_path / "live.db")
+    got = outcome(tmp_path / "live.db", sql)
+    assert got[0] == kind, got

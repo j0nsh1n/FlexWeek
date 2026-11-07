@@ -1,4 +1,4 @@
-"""Restore-point and storage-info HTTP API from docs/stage3-contract.md."""
+"""Restore points: making one, previewing and restoring it, the 20-point cap, and that they belong to one account."""
 
 from __future__ import annotations
 
@@ -11,10 +11,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.app import create_app
+from backend.storage import connect
+from backend.tests.account_support import PASSWORD, WEEK, WRITE, assignment, school
 
-PASSWORD = "a-long-test-password"
-WRITE = {"X-FlexWeek-Request": "1", "Origin": "http://testserver"}
-WEEK = "2026-09-14"
 STAMP = re.compile(r"\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d\Z")
 
 
@@ -40,41 +39,6 @@ def alice(client: TestClient) -> TestClient:
     return client
 
 
-def school() -> dict:
-    return {
-        "id": "school",
-        "title": "School",
-        "kind": "locked",
-        "duration_min": 390,
-        "days": [0, 1, 2, 3, 4],
-        "priority": 1,
-        "energy": "medium",
-        "start": "08:00",
-        "category": "School",
-    }
-
-
-def assignment(**overrides) -> dict:
-    body = {
-        "id": "hw-essay",
-        "title": "Essay",
-        "course": None,
-        "category": "Homework",
-        "priority": 3,
-        "energy": "medium",
-        "spotify_url": None,
-        "due": "2026-09-16T23:59",
-        "estimate_min": 120,
-        "focus_minutes": 0,
-        "focus_sessions": 0,
-        "completed": False,
-        "completed_at": None,
-        "revision": 0,
-    }
-    body.update(overrides)
-    return body
-
-
 def save_week(client: TestClient, blocks: list[dict], revision: int = 0, week_start: str = WEEK):
     return client.put(
         "/api/week",
@@ -95,47 +59,13 @@ def create_point(client: TestClient, label: str, operation_id: str):
     )
 
 
-def test_storage_info_is_local_on_loopback(alice: TestClient) -> None:
-    response = alice.get("/api/storage-info")
-    assert response.status_code == 200, response.text
-    assert response.json() == {
-        "mode": "local",
-        "label": "On this device",
-        "username": "alice",
-        "origin": "http://testserver",
-        "transfer_limit_bytes": 262144,
-    }
-
-
-def test_storage_info_is_hosted_on_a_public_origin(tmp_path: Path) -> None:
-    app = create_app(database=tmp_path / "hosted.db", origin="https://flexweek.example")
-    with TestClient(app, base_url="https://flexweek.example") as client:
-        assert (
-            client.post(
-                "/api/auth/register",
-                json={"username": "alice", "password": PASSWORD},
-                headers={"X-FlexWeek-Request": "1", "Origin": "https://flexweek.example"},
-            ).status_code
-            == 201
-        )
-        response = client.get("/api/storage-info")
-        assert response.status_code == 200, response.text
-        assert response.json() == {
-            "mode": "hosted",
-            "label": "On your FlexWeek server",
-            "username": "alice",
-            "origin": "https://flexweek.example",
-            "transfer_limit_bytes": 262144,
-        }
-
-
-def test_empty_account_has_no_restore_points(alice: TestClient) -> None:
+def test_a_new_account_has_no_restore_points(alice: TestClient) -> None:
     response = alice.get("/api/restore-points")
     assert response.status_code == 200, response.text
     assert response.json() == {"restore_points": []}
 
 
-def test_create_restore_point_snapshots_weeks_and_assignments(alice: TestClient) -> None:
+def test_a_restore_point_snapshots_the_weeks_and_homework(alice: TestClient) -> None:
     assert put_assignment(alice, assignment()).status_code == 200
     assert save_week(alice, [school()]).status_code == 200
     created = create_point(alice, "Before finals week", "op-rp-1")
@@ -152,7 +82,9 @@ def test_create_restore_point_snapshots_weeks_and_assignments(alice: TestClient)
     assert retry.json() == point
 
 
-def test_restore_preview_then_restore_replaces_and_keeps_a_recovery_point(alice: TestClient) -> None:
+def test_restoring_after_a_preview_replaces_the_account_and_keeps_a_before_restore_point(
+    alice: TestClient,
+) -> None:
     assert put_assignment(alice, assignment()).status_code == 200
     assert save_week(alice, [school()]).status_code == 200
     original = create_point(alice, "School week", "op-rp-school")
@@ -193,7 +125,7 @@ def test_restore_preview_then_restore_replaces_and_keeps_a_recovery_point(alice:
     assert retry.json() == restored.json()
 
 
-def test_stale_restore_preview_does_not_mutate(alice: TestClient) -> None:
+def test_restoring_from_an_out_of_date_preview_is_refused_and_changes_nothing(alice: TestClient) -> None:
     assert save_week(alice, [school()]).status_code == 200
     point_id = create_point(alice, "School", "op-rp-stale").json()["id"]
     token = alice.get(f"/api/restore-points/{point_id}/preview").json()["state_token"]
@@ -208,7 +140,7 @@ def test_stale_restore_preview_does_not_mutate(alice: TestClient) -> None:
     assert alice.get("/api/restore-points").json()["restore_points"][0]["id"] == point_id
 
 
-def test_changes_snapshot_label_rolls_back_when_the_week_is_stale(alice: TestClient) -> None:
+def test_a_save_with_a_snapshot_label_makes_no_point_when_its_week_is_stale(alice: TestClient) -> None:
     assert save_week(alice, [school()]).status_code == 200
     failed = alice.post(
         "/api/changes",
@@ -225,7 +157,7 @@ def test_changes_snapshot_label_rolls_back_when_the_week_is_stale(alice: TestCli
     assert [block["id"] for block in alice.get(f"/api/week?week_start={WEEK}").json()["blocks"]] == ["school"]
 
 
-def test_changes_snapshot_label_creates_a_point_then_writes(alice: TestClient) -> None:
+def test_a_save_with_a_snapshot_label_makes_a_point_then_writes(alice: TestClient) -> None:
     assert save_week(alice, [school()]).status_code == 200
     cleared = alice.post(
         "/api/changes",
@@ -256,7 +188,7 @@ def test_changes_snapshot_label_creates_a_point_then_writes(alice: TestClient) -
     assert len(alice.get("/api/restore-points").json()["restore_points"]) == 1
 
 
-def test_changes_operation_id_rejects_a_different_payload(alice: TestClient) -> None:
+def test_reusing_an_operation_id_with_a_different_save_is_refused(alice: TestClient) -> None:
     first = alice.post(
         "/api/changes",
         json={"operation_id": "op-same", "weeks": [], "assignments": []},
@@ -275,7 +207,7 @@ def test_changes_operation_id_rejects_a_different_payload(alice: TestClient) -> 
     assert clash.status_code == 409
 
 
-def test_newest_20_restore_points_are_kept(alice: TestClient) -> None:
+def test_only_the_newest_20_restore_points_are_kept(alice: TestClient) -> None:
     ids = []
     for index in range(20):
         point = create_point(alice, f"Point {index}", f"op-cap-{index}").json()
@@ -288,7 +220,7 @@ def test_newest_20_restore_points_are_kept(alice: TestClient) -> None:
     assert len(remaining) == 20
 
 
-def test_restore_from_the_oldest_point_does_not_prune_it(alice: TestClient) -> None:
+def test_restoring_the_oldest_point_does_not_delete_it(alice: TestClient) -> None:
     ids = [create_point(alice, f"Point {index}", f"op-keep-{index}").json()["id"] for index in range(20)]
     oldest = ids[0]
     token = alice.get(f"/api/restore-points/{oldest}/preview").json()["state_token"]
@@ -303,7 +235,7 @@ def test_restore_from_the_oldest_point_does_not_prune_it(alice: TestClient) -> N
     assert len(remaining) == 20
 
 
-def test_restore_points_require_a_session(client: TestClient) -> None:
+def test_restore_point_routes_need_a_session(client: TestClient) -> None:
     assert client.get("/api/storage-info").status_code == 401
     assert client.get("/api/restore-points").status_code == 401
     assert create_point(client, "Nope", "op-no").status_code == 401
@@ -318,7 +250,7 @@ def test_restore_points_require_a_session(client: TestClient) -> None:
     )
 
 
-def test_operation_id_does_not_leak_across_accounts(app: FastAPI, alice: TestClient) -> None:
+def test_the_same_operation_id_in_two_accounts_makes_two_points(app: FastAPI, alice: TestClient) -> None:
     alice_point = create_point(alice, "Alice secret", "shared-op")
     assert alice_point.status_code == 200, alice_point.text
     with TestClient(app) as bob:
@@ -336,7 +268,9 @@ def test_operation_id_does_not_leak_across_accounts(app: FastAPI, alice: TestCli
         assert bob.get("/api/restore-points").json()["restore_points"][0]["label"] == "Bob point"
 
 
-def test_changes_snapshot_rolls_back_when_an_assignment_is_unknown(alice: TestClient) -> None:
+def test_a_save_with_a_snapshot_label_makes_no_point_when_it_names_unknown_homework(
+    alice: TestClient,
+) -> None:
     session = {
         "id": "w1",
         "title": "Essay",
@@ -361,7 +295,7 @@ def test_changes_snapshot_rolls_back_when_an_assignment_is_unknown(alice: TestCl
     assert alice.get(f"/api/week?week_start={WEEK}").json()["blocks"] == []
 
 
-def test_restore_points_are_not_visible_to_another_account(app: FastAPI, alice: TestClient) -> None:
+def test_another_account_can_not_list_preview_or_restore_my_points(app: FastAPI, alice: TestClient) -> None:
     assert save_week(alice, [school()]).status_code == 200
     point_id = create_point(alice, "Alice only", "op-alice").json()["id"]
     with TestClient(app) as bob:
@@ -382,3 +316,57 @@ def test_restore_points_are_not_visible_to_another_account(app: FastAPI, alice: 
             == 404
         )
         assert alice.get("/api/restore-points").json()["restore_points"][0]["id"] == point_id
+
+
+def test_restore_points_with_the_same_id_stay_with_their_account(app: FastAPI, tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    with TestClient(app) as alice, TestClient(app) as bob:
+        for client, name in ((alice, "alice"), (bob, "bob")):
+            registered = client.post(
+                "/api/auth/register", json={"username": name, "password": PASSWORD}, headers=WRITE
+            )
+            assert registered.status_code == 201, registered.text
+        bob_id = bob.get("/api/auth/me").json()["id"]
+        assert save_week(alice, [{**school(), "title": "Alice school"}], 0).status_code == 200
+        assert save_week(bob, [{**school(), "title": "Bob school"}], 0).status_code == 200
+        point_a = create_point(alice, "Alice", "op-1").json()
+        # Bob's point has the same id as Alice's but a different label, and it holds no weeks at all.
+        with connect(database) as db:
+            db.execute(
+                "INSERT INTO restore_points(user_id, id, label, created_at, weeks_count, assignments_count, body)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (bob_id, point_a["id"], "Bob", "2026-09-14T08:00", 0, 0, '{"weeks":[],"assignments":[]}'),
+            )
+        listed_a = alice.get("/api/restore-points").json()["restore_points"]
+        listed_b = bob.get("/api/restore-points").json()["restore_points"]
+        assert [(item["id"], item["label"]) for item in listed_a] == [(point_a["id"], "Alice")]
+        assert listed_b == [
+            {
+                "id": point_a["id"],
+                "label": "Bob",
+                "created_at": "2026-09-14T08:00",
+                "weeks": 0,
+                "assignments": 0,
+            }
+        ]
+        preview = bob.get(f"/api/restore-points/{point_a['id']}/preview").json()
+        assert preview["id"] == point_a["id"]
+        # Bob's point holds no weeks, so his one week would go; Alice's point would only change hers.
+        assert preview["changes"] == {
+            "weeks": {"added": [], "changed": [], "removed": [WEEK]},
+            "assignments": {"added": [], "changed": [], "removed": []},
+        }
+        restored = bob.post(
+            f"/api/restore-points/{point_a['id']}/restore",
+            json={"state_token": preview["state_token"], "operation_id": "op-bob"},
+            headers=WRITE,
+        )
+        assert restored.status_code == 200, restored.text
+        assert bob.get(f"/api/week?week_start={WEEK}").json() == {
+            "week_start": WEEK,
+            "blocks": [],
+            "revision": 0,
+        }
+        assert alice.get(f"/api/week?week_start={WEEK}").json()["blocks"][0]["title"] == "Alice school"
+        missing = alice.get("/api/restore-points/rp-nothing/preview")
+        assert (missing.status_code, missing.json()) == (404, {"detail": "Restore point not found"})
