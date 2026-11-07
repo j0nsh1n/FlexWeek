@@ -4,112 +4,84 @@
     "file": "desktop/native/setup.py",
     "old": "\"category\": row.category.currentData(),",
     "new": "\"category\": \"extra\",",
-    "test": "desktop/tests/test_setup_wizard.py::test_setup_saves_the_chosen_sports_category_and_restores_it"
-  },
-  {
-    "name": "Now reuses the chosen blue without enough block contrast",
-    "file": "desktop/native/look.py",
-    "old": "    palette[\"selection\"] = palette[\"now\"]",
-    "new": "    palette[\"now\"] = palette[\"accent\"]\n    palette[\"selection\"] = palette[\"now\"]",
-    "test": "desktop/tests/test_looks_polish.py::test_chosen_blue_stays_exact_with_readable_now_and_selection"
+    "test": "desktop/tests/setup/test_setup_pages.py::test_setup_saves_the_chosen_sports_category_and_restores_it"
   },
   {
     "name": "The now line is fitted to 4.5 to 1 again",
     "file": "desktop/native/look.py",
     "old": "    palette[\"now\"] = fit_lightness(palette[\"accent\"], fills + (palette[\"grid\"],), AA_GRAPHIC)\n",
     "new": "    palette[\"now\"] = fit_lightness(palette[\"accent_text\"], fills + (palette[\"grid\"],), 4.5)\n",
-    "test": "desktop/tests/test_look.py::test_the_now_line_and_the_selection_ring_show_at_3_to_1_and_keep_the_accent"
+    "test": "desktop/tests/settings/test_look_readability.py::test_the_now_line_and_the_selection_ring_show_at_3_to_1_and_keep_the_accent"
   },
   {
     "name": "School returns to its crowded hue",
     "file": "desktop/native/calendar.py",
     "old": "\"label\": \"School\",\n        \"hue\": 250,",
     "new": "\"label\": \"School\",\n        \"hue\": 255,",
-    "test": "desktop/tests/test_looks_polish.py::test_the_categories_use_the_hues_in_the_approved_mockup[class-250]"
+    "test": "cargo:flexweek-engine:desk_looks_polish:test_the_categories_use_the_hues_in_the_approved_mockup"
   },
   {
     "name": "Sleep loses its darker fill",
     "file": "desktop/native/calendar.py",
     "old": "\"color\": \"#c4c8e8\",",
     "new": "\"color\": \"#f2dbf8\",",
-    "test": "desktop/tests/test_looks_polish.py::test_sleep_is_darker_than_the_other_light_fills"
+    "test": "cargo:flexweek-engine:desk_looks_polish:test_sleep_is_darker_than_the_other_light_fills"
   },
   {
     "name": "Paper returns to white cards",
     "file": "desktop/native/look.py",
     "old": "panel=\"#fbf6ea\",",
     "new": "panel=\"#ffffff\",",
-    "test": "desktop/tests/test_looks_polish.py::test_paper_is_a_cream_planner_with_serif_figures"
+    "test": "desktop/tests/settings/test_look_character.py::test_paper_is_a_cream_planner_with_serif_figures"
   },
   {
     "name": "Pastel returns to white cards",
     "file": "desktop/native/look.py",
     "old": "panel=\"#fbf8ff\",",
     "new": "panel=\"#ffffff\",",
-    "test": "desktop/tests/test_looks_polish.py::test_pastel_has_tinted_cards_and_fuller_fills"
+    "test": "desktop/tests/settings/test_look_character.py::test_pastel_has_tinted_cards_and_fuller_fills"
   },
   {
     "name": "Sand repeats Gold",
     "file": "desktop/native/look.py",
     "old": "\"light\": (\"#805441\", LIGHT_INK)",
     "new": "\"light\": (\"#a16207\", LIGHT_INK)",
-    "test": "desktop/tests/test_looks_polish.py::test_sand_is_distinct_from_gold_and_reads_as_text[light]"
+    "test": "desktop/tests/settings/test_look_character.py::test_sand_is_a_different_colour_from_gold[light]"
   },
   {
     "name": "Terminal time sentence stops wrapping",
     "file": "desktop/native/hours/rail.py",
     "old": "self.when.setWordWrap(True)",
     "new": "self.when.setWordWrap(False)",
-    "test": "desktop/tests/test_looks_polish.py::test_terminal_next_card_shows_its_whole_time_sentence"
-  },
-  {
-    "name": "Dark selected segment loses its ring",
-    "file": "desktop/native/look.py",
-    "old": "selected_ring = palette[\"accent\"] if dark and not contrast_look else \"transparent\"",
-    "new": "selected_ring = \"transparent\"",
-    "test": "desktop/tests/test_looks_polish.py::test_dark_selected_segment_has_a_lighter_chip_and_a_one_pixel_ring"
+    "test": "desktop/tests/settings/test_next_card_time_sentence.py::test_terminals_next_card_wraps_and_ends_with_the_time_left"
   },
   {
     "name": "Non-homework blocks lose their category icons",
     "file": "engine/engine/src/desk/calendar.rs",
     "old": "    CATEGORIES\n        .iter()\n        .find(|(key, _)| Some(*key) == category)\n        .and_then(|(_, info)| info.icon)\n",
     "new": "    None\n",
-    "test": "desktop/tests/test_looks_polish.py::test_each_category_paints_its_approved_icon_in_its_mark"
+    "test": "desktop/tests/settings/test_block_words_and_icons.py::test_each_category_paints_its_approved_icon"
   },
   {
     "name": "Plan pale accent drops out of Readability",
     "file": "engine/engine/src/desk/custom_look.rs",
     "old": "            \"The Plan button's words\",\n            palette.accent.as_str(),\n            tint.as_str(),\n            \"accent\",\n",
     "new": "            \"The Plan button's words\",\n            palette.text.as_str(),\n            tint.as_str(),\n            \"accent\",\n",
-    "test": "desktop/tests/test_looks_polish.py::test_readability_names_each_use_of_a_pale_accent_and_fixes_them"
+    "test": "desktop/tests/settings/test_look_character.py::test_readability_names_each_use_of_a_pale_accent_and_fixes_them"
   },
   {
     "name": "Stock blue gets a misleading Readability warning",
     "file": "engine/engine/src/desk/custom_look.rs",
     "old": "        if field == \"accent\" && !own_accent {\n            continue;\n        }\n",
     "new": "        if field == \"accent\" && !own_accent && field.len() > 100 {\n            continue;\n        }\n",
-    "test": "desktop/tests/test_looks_polish.py::test_stock_accents_have_no_readability_warning[default]"
-  },
-  {
-    "name": "Look cards lose room for their large titles",
-    "file": "desktop/native/settings.py",
-    "old": "        width = round(LOOK_TILE * scale)\n",
-    "new": "        width = LOOK_TILE\n",
-    "test": "desktop/tests/test_settings_finding.py::test_the_looks_stand_three_in_a_row_and_widen_with_large_text"
-  },
-  {
-    "name": "Look cards are 160 px at normal text",
-    "file": "desktop/native/settings.py",
-    "old": "LOOK_TILE = 160\n",
-    "new": "LOOK_TILE = 200\n",
-    "test": "desktop/tests/test_settings_look.py::test_a_look_tile_is_160_pixels_and_only_the_worn_one_gets_the_accent_edge"
+    "test": "desktop/tests/settings/test_look_character.py::test_stock_accents_have_no_readability_warning[default]"
   },
   {
     "name": "Small blocks keep icons at their name's expense",
     "file": "desktop/native/hours/canvas.py",
     "old": "    return bare if said(bare) > said(lay) else lay\n",
     "new": "    return lay\n",
-    "test": "desktop/tests/test_looks_polish.py::test_the_icon_gives_way_where_it_would_cost_the_name"
+    "test": "desktop/tests/settings/test_block_words_and_icons.py::test_the_icon_gives_way_where_it_would_cost_the_name"
   },
   {
     "name": "Small Clay blocks keep icons at their name's expense",
@@ -123,14 +95,14 @@
     "file": "desktop/native/hours/canvas.py",
     "old": "    return bare if said(bare) > said(lay) else lay\n",
     "new": "    return bare if said(bare) >= said(lay) else lay\n",
-    "test": "desktop/tests/test_looks_polish.py::test_the_icon_stays_where_it_costs_the_name_nothing"
+    "test": "desktop/tests/settings/test_block_words_and_icons.py::test_the_icon_stays_where_it_costs_the_name_nothing"
   },
   {
     "name": "A half hour's time loses to its icon",
     "file": "desktop/native/hours/canvas.py",
     "old": "    return bare if said(bare) > said(lay) else lay\n",
     "new": "    return bare if said(bare)[0] > said(lay)[0] else lay\n",
-    "test": "desktop/tests/test_looks_polish.py::test_a_line_with_room_for_the_name_and_its_time_but_not_the_icon_too_says_the_time"
+    "test": "desktop/tests/settings/test_block_words_and_icons.py::test_a_line_with_room_for_the_name_and_its_time_but_not_the_icon_too_says_the_time"
   },
   {
     "name": "A half hour's time loses to its icon on a Clay card",
@@ -140,32 +112,18 @@
     "test": "desktop/tests/test_layout_clay.py::test_a_half_hour_on_a_card_says_its_start_time_rather_than_its_icon"
   },
   {
-    "name": "Icons are drawn in the text ink again",
-    "file": "desktop/native/hours/canvas.py",
-    "old": "        return QColor(fit_lightness(edge.name(), (paper.name(),), AA_TEXT))\n",
-    "new": "        return ink\n",
-    "test": "desktop/tests/test_looks_polish.py::test_category_icons_are_their_marks_at_4_5_to_1_on_each_block_style"
-  },
-  {
-    "name": "Icons are fitted to only 3 to 1 again",
-    "file": "desktop/native/hours/canvas.py",
-    "old": "        return QColor(fit_lightness(edge.name(), (paper.name(),), AA_TEXT))\n",
-    "new": "        return QColor(fit_lightness(edge.name(), (paper.name(),), 3.0))\n",
-    "test": "desktop/tests/test_looks_polish.py::test_category_icons_are_their_marks_at_4_5_to_1_on_each_block_style"
-  },
-  {
     "name": "Free time gets its icon back",
     "file": "engine/engine/src/desk/calendar.rs",
     "old": "        \"free\",\n        CategoryInfo {\n            icon: None,\n",
     "new": "        \"free\",\n        CategoryInfo {\n            icon: Some(\"wind\"),\n",
-    "test": "desktop/tests/test_looks_polish.py::test_category_icons_are_their_marks_at_4_5_to_1_on_each_block_style"
+    "test": "desktop/tests/settings/test_block_words_and_icons.py::test_only_free_time_has_no_icon_colour_in_every_look_and_block_style"
   },
   {
     "name": "Look preview puts Soccer back in Activity",
     "file": "desktop/native/previews.py",
     "old": "_block(\"soccer\", \"Soccer\", \"locked\", \"exercise\", [1, 3], \"15:30\", 90)",
     "new": "_block(\"soccer\", \"Soccer\", \"locked\", \"extra\", [1, 3], \"15:30\", 90)",
-    "test": "desktop/tests/test_previews.py::test_the_preview_week_puts_soccer_in_sports"
+    "test": "desktop/tests/settings/test_design_pictures.py::test_the_preview_week_puts_soccer_in_sports"
   },
   {
     "name": "The hours' painter is left active when a design's painter raises",

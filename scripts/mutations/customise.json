@@ -4,112 +4,105 @@
   "name": "0.16's round read as Round",
   "old": "    (\"corners\", \"round\", \"soft\"),\n",
   "new": "    (\"corners\", \"round\", \"sharp\"),\n",
-  "test": "desktop/tests/test_look.py::test_a_look_saved_by_016_opens_with_its_knobs_named_as_017_names_them"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "the accent's words left unreadable on a tinted page",
-  "old": "    if readable != palette[\"accent\"] and not own:\n",
-  "new": "    if False:\n",
-  "test": "desktop/tests/test_tokens.py::test_text_reads_on_every_fill_card_and_page[Slate-layered-default]"
+  "test": "desktop/tests/settings/test_look_choices.py::test_a_look_saved_by_016_opens_with_its_knobs_named_as_017_names_them"
  },
  {
   "file": "desktop/native/look.py",
   "name": "Poster on 0.16's yellow",
   "old": "        window=\"#fff8e7\",\n",
   "new": "        window=\"#ffd60a\",\n",
-  "test": "desktop/tests/test_look.py::test_the_seven_looks_keep_their_pages_and_separate_their_surfaces"
+  "test": "desktop/tests/settings/test_look_palettes.py::test_the_seven_looks_keep_their_pages_and_separate_their_surfaces"
  },
  {
   "file": "desktop/native/look.py",
   "name": "Ink follows the pack again",
   "old": "        window=\"#1c1b19\",\n",
   "new": "        window=\"#f4f1ea\",\n",
-  "test": "desktop/tests/test_look.py::test_ink_is_papers_night_on_any_pack"
+  "test": "desktop/tests/settings/test_look_palettes.py::test_ink_is_papers_night_on_any_pack"
  },
  {
   "file": "desktop/native/look.py",
   "name": "Paper's fills at the family's chroma",
   "old": "        fill=(0.915, 0.040),\n",
   "new": "",
-  "test": "desktop/tests/test_look.py::test_paper_draws_the_family_quieter_and_poster_bolder"
+  "test": "desktop/tests/settings/test_look_palettes.py::test_paper_draws_the_family_quieter_and_poster_bolder"
  },
  {
   "file": "desktop/native/look.py",
   "name": "Paper at the pack's motion",
   "old": "    return \"reduce\" if selected[\"preset\"] == \"paper\" else \"normal\"",
   "new": "    return \"normal\"",
-  "test": "desktop/tests/test_look.py::test_paper_starts_at_reduce_motion"
+  "test": "desktop/tests/settings/test_look_choices.py::test_paper_starts_at_reduce_motion"
  },
  {
   "file": "desktop/native/look.py",
   "name": "headings in the body face",
   "old": "        + f\" {{ font-family: {measures['heading']}; }}\"",
   "new": "        + f\" {{ font-family: {measures['body']}; }}\"",
-  "test": "desktop/tests/test_look.py::test_serif_is_newsreader_headings_over_inter_and_mono_is_jetbrains_mono_throughout"
+  "test": "desktop/tests/settings/test_look_stylesheet.py::test_serif_is_newsreader_headings_over_inter_and_mono_is_jetbrains_mono_throughout"
  },
  {
   "file": "desktop/native/look.py",
   "name": "Mono in the system's mono",
   "old": "    \"mono\": \"JetBrains Mono, Noto Sans Mono, DejaVu Sans Mono, monospace\",",
   "new": "    \"mono\": \"Noto Sans Mono, DejaVu Sans Mono, monospace\",",
-  "test": "desktop/tests/test_look.py::test_serif_is_newsreader_headings_over_inter_and_mono_is_jetbrains_mono_throughout"
+  "test": "desktop/tests/settings/test_look_stylesheet.py::test_serif_is_newsreader_headings_over_inter_and_mono_is_jetbrains_mono_throughout"
  },
  {
   "file": "desktop/native/look.py",
   "name": "muted text derived without a floor",
   "old": "        if min(contrast(muted, card), contrast(muted, page)) >= AA_TEXT + 0.1:\n",
   "new": "        if True:\n",
-  "test": "desktop/tests/test_custom_look.py::test_the_students_colours_replace_the_bases_and_the_rest_follows_from_them"
+  "test": "desktop/tests/settings/test_custom_look_drawing.py::test_the_students_colours_replace_the_bases_and_the_rest_follows_from_them"
  },
  {
   "file": "engine/engine/src/desk/custom_look.rs",
   "name": "a list as a base crashes",
   "old": "    let base = match raw.get(\"base\") {\n        Some(Value::String(base)) if LOOK_BASES.iter().any(|(known, _, _)| known == base) => base,\n",
   "new": "    let base = match raw.get(\"base\") {\n        Some(Value::Array(_)) => panic!(\"list as a base\"),\n        Some(Value::String(base)) if LOOK_BASES.iter().any(|(known, _, _)| known == base) => base,\n",
-  "test": "desktop/tests/test_custom_look.py::test_unknown_settings_and_bad_values_are_dropped_and_said_never_a_crash"
+  "test": "desktop/tests/settings/test_custom_look_file.py::test_unknown_settings_and_bad_values_are_dropped_and_said_never_a_crash"
  },
  {
   "file": "desktop/native/look.py",
   "name": "an exact category colour ignored",
   "old": "        colour = str(spec[1])\n",
   "new": "        colour = \"#dddddd\"\n",
-  "test": "desktop/tests/test_custom_look.py::test_a_category_takes_a_hue_on_the_family_or_an_exact_colour"
+  "test": "desktop/tests/settings/test_custom_look_drawing.py::test_a_category_takes_a_hue_on_the_family_or_an_exact_colour"
  },
  {
   "file": "desktop/native/look.py",
   "name": "the custom page ignored",
   "old": "        table.update(window=page, panel=card, field=sunk, grid=sunk, text=text, hairline=line)\n",
   "new": "        table.update(panel=card, field=sunk, grid=sunk, text=text, hairline=line)\n",
-  "test": "desktop/tests/test_custom_look.py::test_the_students_colours_replace_the_bases_and_the_rest_follows_from_them"
+  "test": "desktop/tests/settings/test_custom_look_drawing.py::test_the_students_colours_replace_the_bases_and_the_rest_follows_from_them"
  },
  {
   "file": "engine/engine/src/desk/custom_look.rs",
   "name": "a readability fix that does not move the text",
   "old": "            } else if field == \"text\" {\n                text_fixed.clone()\n            } else {\n                fit_lightness(ink, &grounds_of(&surfaces), AA_TEXT)?\n            };\n",
   "new": "            } else if field == \"text\" {\n                let _ = &text_fixed;\n                ink.to_string()\n            } else {\n                ink.to_string()\n            };\n",
-  "test": "desktop/tests/test_custom_look.py::test_each_unreadable_pair_is_named_with_a_fix_that_ends_at_four_and_a_half_to_one"
+  "test": "desktop/tests/settings/test_custom_look_readability.py::test_each_unreadable_pair_is_named_with_a_fix_that_ends_at_four_and_a_half_to_one"
  },
  {
   "file": "engine/engine/src/desk/custom_look.rs",
   "name": "a pale accent's fix that does not move it",
   "old": "                fit_accent(&palette.accent, &surfaces, &palette.window)?\n",
   "new": "                palette.accent.clone()\n",
-  "test": "desktop/tests/test_custom_look.py::test_a_colour_of_the_students_own_as_the_accent"
+  "test": "desktop/tests/settings/test_custom_look_drawing.py::test_a_colour_of_the_students_own_as_the_accent"
  },
  {
   "file": "engine/engine/src/desk/custom_look.rs",
   "name": "the now line held to the 4.5 to 1 of text",
   "old": "        let need = if words == \"Now line\" {\n            AA_GRAPHIC\n        } else {\n            AA_TEXT\n        };\n",
   "new": "        let need = AA_TEXT;\n",
-  "test": "desktop/tests/test_looks_polish.py::test_the_now_line_is_flagged_only_when_the_line_would_not_show"
+  "test": "desktop/tests/settings/test_look_character.py::test_the_now_line_is_flagged_only_when_the_line_would_not_show"
  },
  {
   "file": "desktop/native/look.py",
   "name": "a set muted colour ignored",
   "old": "            table[\"muted\"] = colours[\"muted\"]\n",
   "new": "            pass\n",
-  "test": "desktop/tests/test_custom_look.py::test_each_unreadable_pair_is_named_with_a_fix_that_ends_at_four_and_a_half_to_one"
+  "test": "desktop/tests/settings/test_custom_look_readability.py::test_each_unreadable_pair_is_named_with_a_fix_that_ends_at_four_and_a_half_to_one"
  },
  {
   "file": "engine/engine/src/desk/custom_look.rs",

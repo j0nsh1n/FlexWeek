@@ -1,0 +1,42 @@
+[
+ {
+  "name": "the cards against the left",
+  "file": "desktop/native/settings.py",
+  "old": "    around.addStretch(1)\n    around.addWidget(column, 1000)\n",
+  "new": "    around.addWidget(column, 1000)\n",
+  "test": "desktop/tests/test_settings_look.py::test_the_column_of_cards_is_centred_up_to_960",
+  "screen": "none: now a picture (settings.appearance, column 960 wide and centred)"
+ },
+ {
+  "name": "no bar on the chosen section",
+  "file": "desktop/native/look.py",
+  "old": "        f\"border-left: 3px solid {palette['accent']}; font-weight: {WEIGHT_STRONG}; }}\"\n",
+  "new": "        f\"font-weight: {WEIGHT_STRONG}; }}\"\n",
+  "test": "desktop/tests/test_settings_look.py::test_each_section_has_its_icon_and_the_chosen_one_an_accent_bar",
+  "screen": "none: now a picture (settings.sidebar)"
+ },
+ {
+  "name": "the swatches all grey",
+  "file": "desktop/native/widgets.py",
+  "old": "            button.fill, button.ink = colours.get(data, (button.fill, button.ink))\n",
+  "new": "",
+  "test": "desktop/tests/test_settings_look.py::test_the_accent_is_swatches_in_the_looks_own_colours",
+  "screen": "none: now a picture (settings.accent_swatches); nearest behaviour test desktop/tests/settings/test_settings_look_choices.py::test_the_accent_is_swatches_in_the_looks_own_colours (names and the saved accent only, does not see the colour)"
+ },
+ {
+  "name": "number boxes each their own width",
+  "file": "desktop/native/settings.py",
+  "old": "            even_fields(self.stack.widget(index))\n",
+  "new": "            pass\n",
+  "test": "desktop/tests/test_settings_look.py::test_every_number_box_on_a_page_is_one_width",
+  "screen": "none: now a picture (settings.focus)"
+ },
+ {
+  "name": "nothing ends the page above the footer",
+  "file": "desktop/native/look.py",
+  "old": "        f\"QWidget#settingsFooter {{ background: {palette['window']}; border-top: {footer_line}; }}\"\n",
+  "new": "        f\"QWidget#settingsFooter {{ background: {palette['window']}; }}\"\n",
+  "test": "desktop/tests/test_settings_look.py::test_a_hairline_ends_the_page_above_the_footer",
+  "screen": "none: now a picture (settings.footer_over_a_dark_preview and the footer_in_* screens)"
+ }
+]

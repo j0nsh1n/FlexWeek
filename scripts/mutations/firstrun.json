@@ -74,119 +74,56 @@
     "file": "desktop/native/setup.py",
     "old": "        self.school_hint.setVisible(not self.school_days.days())\n",
     "new": "        self.school_hint.setVisible(True)\n",
-    "test": "desktop/tests/test_setup_look.py::test_the_school_hint_shows_only_when_no_school_day_is_picked"
-  },
-  {
-    "name": "Send a test reminder filled like Next",
-    "file": "desktop/native/setup.py",
-    "old": "        self.test.setProperty(\"outline\", True)\n",
-    "new": "        self.test.setProperty(\"outline\", False)\n",
-    "test": "desktop/tests/test_setup_look.py::test_next_is_the_one_filled_button_on_every_page"
-  },
-  {
-    "name": "Add custom hours filled like Next",
-    "file": "desktop/native/setup.py",
-    "old": "        self.work_editor.add_button.setProperty(\"outline\", True)\n",
-    "new": "        self.work_editor.add_button.setProperty(\"outline\", False)\n",
-    "test": "desktop/tests/test_setup_look.py::test_next_is_the_one_filled_button_on_every_page"
+    "test": "desktop/tests/setup/test_setup_week_page.py::test_the_school_hint_shows_only_when_no_school_day_is_picked"
   },
   {
     "name": "no tick on a finished step",
     "file": "desktop/native/setup.py",
     "old": "            state = CURRENT if current else SKIPPED if skipped else FINISHED if done else PENDING\n",
     "new": "            state = CURRENT if current else SKIPPED if skipped else PENDING\n",
-    "test": "desktop/tests/test_setup_look.py::test_a_finished_step_shows_a_tick_on_the_rail"
-  },
-  {
-    "name": "setup's page left at its narrow hint",
-    "file": "desktop/native/setup.py",
-    "old": "    line.addWidget(column, SETUP_COLUMN)\n",
-    "new": "    line.addWidget(column, 1)\n",
-    "test": "desktop/tests/test_setup_look.py::test_each_page_and_its_buttons_are_centred_up_to_880_pixels"
-  },
-  {
-    "name": "Play keeps the first look's colour",
-    "file": "desktop/native/setup.py",
-    "old": "            play.setIcon(icons.icon(\"circle-play\", palette[\"accent\"]))\n",
-    "new": "            play.setIcon(play.icon())\n",
-    "test": "desktop/tests/test_setup_look.py::test_play_is_an_icon_in_the_looks_accent"
+    "test": "desktop/tests/setup/test_setup_rail.py::test_a_finished_step_shows_a_tick_on_the_rail"
   },
   {
     "name": "Help's keys as plain words",
     "file": "desktop/native/settings.py",
     "old": "        made.setObjectName(\"helpKeycap\" if cap else \"helpKeyJoin\")\n",
     "new": "        made.setObjectName(\"helpKeyJoin\")\n",
-    "test": "desktop/tests/test_more_menu_words.py::test_help_draws_each_shortcut_as_keycaps"
+    "test": "desktop/tests/settings/test_help_and_about.py::test_help_draws_each_shortcut_as_keycaps"
   },
   {
     "name": "Help without its scroll-edge fade",
     "file": "desktop/native/settings.py",
     "old": "        self.setVisible(bar.value() > bar.minimum() if self._top else bar.value() < bar.maximum())\n",
     "new": "        self.setVisible(False)\n",
-    "test": "desktop/tests/test_more_menu_words.py::test_help_fades_its_words_at_an_edge_with_more_past_it"
-  },
-  {
-    "name": "Help's fade never reaches the page colour",
-    "file": "desktop/native/settings.py",
-    "old": "        ramp.setColorAt(1, clear if self._top else page)\n",
-    "new": "        ramp.setColorAt(1, clear)\n",
-    "test": "desktop/tests/test_more_menu_words.py::test_help_fades_its_words_at_an_edge_with_more_past_it"
+    "test": "desktop/tests/settings/test_help_and_about.py::test_help_shows_a_fade_only_at_an_edge_with_more_words_past_it"
   },
   {
     "name": "About without the logo",
     "file": "desktop/native/settings.py",
     "old": "        brand.addWidget(_logo(ABOUT_LOGO_PX))\n",
     "new": "",
-    "test": "desktop/tests/test_more_menu_words.py::test_about_gives_the_version_what_flexweek_is_and_opens_the_folder_its_data_lives_in"
-  },
-  {
-    "name": "Setup's picture cards run off a narrow page",
-    "file": "desktop/native/setup.py",
-    "old": "    cards = CardGrid(picture + CARD_WIDTH_PAD, 14)\n",
-    "new": "    cards = CardGrid(10, 14)\n",
-    "test": "desktop/tests/test_setup_audit.py::test_the_picture_cards_are_whole_at_the_end_of_their_page"
+    "test": "desktop/tests/settings/test_help_and_about.py::test_about_gives_the_version_what_flexweek_is_and_opens_the_folder_its_data_lives_in"
   },
   {
     "name": "Planning-hours presets drawn as plain words",
     "file": "desktop/native/setup.py",
     "old": "            preset.setProperty(\"chip\", True)\n",
     "new": "            preset.setProperty(\"chip\", False)\n",
-    "test": "desktop/tests/test_setup_audit.py::test_the_planning_hours_chips_are_the_pills_the_day_picker_uses"
+    "test": "desktop/tests/setup/test_setup_pages.py::test_the_planning_hours_presets_are_chips_that_each_add_a_row"
   },
   {
     "name": "The example homework without e.g.",
     "file": "desktop/native/setup.py",
     "old": "setPlaceholderText(\"e.g. History essay\")",
     "new": "setPlaceholderText(\"History essay\")",
-    "test": "desktop/tests/test_setup_audit.py::test_the_example_homework_reads_as_an_example_and_adds_nothing"
-  },
-  {
-    "name": "School's line without its card, so a sport's times sit elsewhere",
-    "file": "desktop/native/setup.py",
-    "old": "        school_line.setContentsMargins(12, 10, 12, 10)\n",
-    "new": "        school_line.setContentsMargins(0, 0, 0, 0)\n",
-    "test": "desktop/tests/test_setup_audit.py::test_a_sports_time_fields_line_up_with_schools"
+    "test": "desktop/tests/setup/test_setup_homework.py::test_the_example_homework_is_words_in_an_empty_box_and_adds_nothing"
   },
   {
     "name": "Setup's day screens with two names",
     "file": "desktop/native/setup.py",
     "old": "    return tuple((spec.id, spec.label) for spec in specs)\n",
     "new": "    return tuple((spec.id, f\"{spec.purpose} · {spec.label}\") for spec in specs)\n",
-    "test": "desktop/tests/test_setup_audit.py::test_setup_calls_each_design_by_the_one_name_settings_uses"
-  },
-  {
-    "name": "Setup's example in the field's own grey",
-    "file": "desktop/native/look.py",
-    "old": "f\"{fit_lightness(palette['muted'], (palette['field'], palette['panel']), AA_TEXT)}; }}\"",
-    "new": "f\"{palette['text']}; }}\"",
-    "test": "desktop/tests/test_setup_audit.py::test_the_example_homework_reads_as_an_example_and_adds_nothing"
-  },
-  {
-    "name": "Preset chips lose the pill rule",
-    "file": "desktop/native/look.py",
-    "old": "    pills = f\"QPushButton#setupChip, {day}, {adds}, QPushButton#setupStudyChip\"\n",
-    "new": "    pills = f\"QPushButton#setupChip, {day}, QPushButton#setupStudyChip\"\n",
-    "test": "desktop/tests/test_setup_audit.py::test_the_planning_hours_chips_are_the_pills_the_day_picker_uses"
+    "test": "desktop/tests/setup/test_setup_pages.py::test_setup_calls_each_design_by_the_one_name_settings_uses"
   },
   {
     "name": "The sign-in greeting says the name again",

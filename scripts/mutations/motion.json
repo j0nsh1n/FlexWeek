@@ -4,28 +4,28 @@
     "file": "desktop/native/motion.py",
     "old": "    \"reduce\": Level(1.0, 0.0),",
     "new": "    \"reduce\": Level(1.0, 1.0),",
-    "test": "desktop/tests/test_motion.py::test_normal_runs_the_plans_numbers_and_the_other_levels_scale_them"
+    "test": "desktop/tests/settings/test_animation_levels.py::test_normal_runs_the_plans_numbers_and_the_other_levels_scale_them"
   },
   {
     "name": "a page waits for the old one to go again, through blank frames",
     "file": "desktop/native/motion.py",
     "old": "        appear(widget, level, shift=direction * SLIDE_PX, delay_ms=PAGE_IN_AFTER_MS, ms=PAGE_IN_MS)",
     "new": "        appear(widget, level, shift=direction * SLIDE_PX, delay_ms=PAGE_OUT_MS, ms=PAGE_IN_MS)",
-    "test": "desktop/tests/test_motion.py::test_a_switch_never_shows_an_empty_page"
+    "test": "desktop/tests/settings/test_page_change_motion.py::test_a_switch_never_shows_an_empty_page"
   },
   {
     "name": "a page cross-fades over the old one from the first frame",
     "file": "desktop/native/motion.py",
     "old": "        appear(widget, level, shift=direction * SLIDE_PX, delay_ms=PAGE_IN_AFTER_MS, ms=PAGE_IN_MS)",
     "new": "        appear(widget, level, shift=direction * SLIDE_PX, delay_ms=0, ms=PAGE_IN_MS)",
-    "test": "desktop/tests/test_motion.py::test_a_switch_never_shows_an_empty_page"
+    "test": "desktop/tests/settings/test_page_change_motion.py::test_a_switch_never_shows_an_empty_page"
   },
   {
     "name": "the old page fades fast first and leaves the window near empty",
     "file": "desktop/native/motion.py",
     "old": "    fade_away(picture, level, ms=PAGE_OUT_MS, drift=-direction * SLIDE_PX, steady=True)",
     "new": "    fade_away(picture, level, ms=PAGE_OUT_MS, drift=-direction * SLIDE_PX)",
-    "test": "desktop/tests/test_motion.py::test_a_switch_never_shows_an_empty_page"
+    "test": "desktop/tests/settings/test_page_change_motion.py::test_a_switch_never_shows_an_empty_page"
   },
   {
     "name": "Day, Week and Month do not slide",
@@ -53,21 +53,21 @@
     "file": "desktop/native/motion.py",
     "old": "        dim.share = 1 - share if back else share",
     "new": "        dim.share = 0.0",
-    "test": "desktop/tests/test_motion.py::test_settings_slides_in_from_the_right_over_the_page_dimmed"
+    "test": "desktop/tests/settings/test_settings_slide_motion.py::test_settings_slides_in_from_the_right_over_the_page_dimmed"
   },
   {
     "name": "a dialog's content fades without rising",
     "file": "desktop/native/widgets.py",
     "old": "                appear(part, level, rise=True)",
     "new": "                appear(part, level)",
-    "test": "desktop/tests/test_motion.py::test_a_dialog_fades_and_rises_through_its_content_once"
+    "test": "desktop/tests/settings/test_notice_and_sheet_motion.py::test_a_dialog_fades_and_rises_through_its_content_once"
   },
   {
     "name": "a sheet's dimming appears at once",
     "file": "desktop/native/widgets.py",
     "old": "        self.dim_progress = 0.0\n        self.fading = True\n        self.update()\n",
     "new": "        self.dim_progress = 1.0\n        self.fading = False\n        self.update()\n",
-    "test": "desktop/tests/test_motion.py::test_a_sheet_fades_its_card_and_shadow_as_one_and_keeps_the_shadow"
+    "test": "desktop/tests/settings/test_notice_and_sheet_motion.py::test_a_sheet_fades_its_card_and_shadow_as_one_and_keeps_the_shadow"
   },
   {
     "name": "Ctrl+K's box appears where it stays",
@@ -81,35 +81,35 @@
     "file": "desktop/native/widgets.py",
     "old": "        if on and self._drawn is not None and self.isVisible() and length:",
     "new": "        if False:",
-    "test": "desktop/tests/test_motion.py::test_the_segmented_selection_slides_to_the_segment_chosen"
+    "test": "desktop/tests/settings/test_segmented_selection_motion.py::test_the_chosen_pill_slides_over_the_segments_between_to_the_one_chosen"
   },
   {
     "name": "Animations are pinned by the first change in Settings",
     "file": "desktop/native/settings.py",
     "old": "            \"motion\": self._motion_chosen,",
     "new": "            \"motion\": self.motion.currentData(),",
-    "test": "desktop/tests/test_settings_words.py::test_animations_has_four_levels_and_follows_the_look_until_one_is_chosen"
+    "test": "desktop/tests/settings/test_settings_page_words.py::test_animations_has_four_levels_and_follows_the_look_until_one_is_chosen"
   },
   {
     "name": "the server turns Reduce away",
     "file": "backend/app.py",
     "old": "    motion: Literal[\"off\", \"normal\", \"extra\", \"reduce\"] | None = Field(",
     "new": "    motion: Literal[\"off\", \"normal\", \"extra\"] | None = Field(",
-    "test": "backend/tests/test_stage8_appearance.py::test_reduce_motion_is_kept_and_an_unknown_level_is_rejected"
+    "test": "backend/tests/test_appearance_preferences.py::test_reduce_motion_is_kept_and_an_unknown_level_is_rejected"
   },
   {
     "name": "scrolling to what a plan placed cuts its slide short",
     "file": "desktop/native/hours/canvas.py",
     "old": "        if rects != self._last_rects:\n",
     "new": "        if True:\n",
-    "test": "desktop/tests/test_motion.py::test_laying_the_hours_out_again_where_nothing_moved_keeps_the_slide"
+    "test": "desktop/tests/settings/test_hours_motion.py::test_laying_the_hours_out_again_where_nothing_moved_keeps_the_slide"
   },
   {
     "name": "a moved block slides under Reduce",
     "file": "desktop/native/hours/canvas.py",
     "old": "                if travels:\n",
     "new": "                if True:\n",
-    "test": "desktop/tests/test_motion.py::test_under_reduce_a_moved_block_fades_in_where_it_went_rather_than_sliding"
+    "test": "desktop/tests/settings/test_hours_motion.py::test_under_reduce_a_moved_block_fades_in_where_it_went_rather_than_sliding"
   },
   {
     "name": "Clay's row slides under Reduce",
@@ -207,6 +207,6 @@
     "file": "desktop/native/controller.py",
     "old": "                if planned:\n                    # `planned` says it, with Undo.\n",
     "new": "                if False:\n                    # `planned` says it, with Undo.\n",
-    "test": "desktop/tests/test_homework_plan.py::test_plan_says_what_it_did_with_an_undo_that_takes_it_all_back"
+    "test": "desktop/tests/sheets/test_plan_undo.py::test_plan_says_what_it_did_with_an_undo_that_takes_it_all_back"
   }
 ]

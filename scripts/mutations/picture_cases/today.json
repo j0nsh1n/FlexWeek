@@ -1,0 +1,26 @@
+[
+ {
+  "file": "desktop/native/layouts/dialog.py",
+  "name": "Reset is a quiet button",
+  "old": "        self.reset.setProperty(\"outline\", True)\n",
+  "new": "",
+  "test": "desktop/tests/test_settings_words.py::test_reset_is_an_outlined_button_at_the_left_not_a_bar_across_the_page",
+  "screen": "none: now a picture (settings.appearance, outlined Reset); nearest behaviour test desktop/tests/settings/test_settings_page_words.py::test_every_main_view_is_a_picture_with_a_single_name_and_the_experimental_ones_say_so (Reset is there, not how it is drawn)"
+ },
+ {
+  "file": "desktop/native/look.py",
+  "name": "headings stand out",
+  "old": "f\"font-size: {pt['heading']}; font-weight: {WEIGHT_STRONG}; color: {palette['text']}; }}\"",
+  "new": "f\"font-size: {pt['heading']}; color: {palette['text']}; }}\"",
+  "test": "desktop/tests/test_settings_words.py::test_every_heading_on_appearance_stands_out_from_the_rows_under_it",
+  "screen": "none: now a picture (settings.appearance, bold headings); nearest behaviour test desktop/tests/settings/test_settings_page_words.py::test_every_heading_on_appearance_is_there"
+ },
+ {
+  "file": "desktop/native/settings.py",
+  "name": "a button that opens something else is plain",
+  "old": "    made.setProperty(\"outline\", True)\n    made.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)\n",
+  "new": "",
+  "test": "desktop/tests/test_settings_words.py::test_a_button_that_opens_something_else_is_outlined_and_as_wide_as_its_words",
+  "screen": "none: now a picture (settings.planning and settings.computer)"
+ }
+]

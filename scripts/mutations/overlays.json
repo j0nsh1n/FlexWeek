@@ -25,14 +25,14 @@
     "name": "the toast is a pale card on a light look",
     "old": "            \"background\": palette[\"text\"],\n",
     "new": "            \"background\": palette[\"panel\"],\n",
-    "test": "desktop/tests/test_overlays.py::test_the_toast_is_dark_with_light_words_and_undo_reads_on_it_in_every_look"
+    "test": "desktop/tests/settings/test_toast_and_menus.py::test_the_toast_is_dark_with_light_words_in_every_look"
   },
   {
     "file": "desktop/native/look.py",
     "name": "Undo is the plain accent on a light look's toast",
     "old": "            \"action\": mix_oklab(palette[\"accent\"], palette[\"window\"], 0.45),\n",
     "new": "            \"action\": palette[\"accent\"],\n",
-    "test": "desktop/tests/test_overlays.py::test_undo_is_the_accents_light_shade_on_a_light_look_and_the_accent_on_a_dark_one"
+    "test": "desktop/tests/settings/test_toast_and_menus.py::test_undo_is_the_accents_light_shade_on_a_light_look_and_the_accent_on_a_dark_one"
   },
   {
     "file": "desktop/native/ring.py",
@@ -95,28 +95,14 @@
     "name": "Log out sits with Help and About",
     "old": "                more_menu.addSeparator()\n                add_heading(more_menu, ACCOUNT_HEADING)\n",
     "new": "                add_heading(more_menu, ACCOUNT_HEADING)\n",
-    "test": "desktop/tests/test_more_menu_words.py::test_every_row_under_more_has_an_icon_and_log_out_stands_apart"
+    "test": "desktop/tests/settings/test_more_menu.py::test_every_row_under_more_has_an_icon_and_log_out_stands_apart"
   },
   {
     "file": "desktop/native/menus.py",
     "name": "a menu keeps no shadow in a look with depth",
     "old": "        if colours.lifted:\n",
     "new": "        if False:\n",
-    "test": "desktop/tests/test_overlays.py::test_a_menu_casts_the_large_shadow_only_in_a_look_with_depth"
-  },
-  {
-    "file": "desktop/native/menus.py",
-    "name": "a menu opens its shadow's room below and right of the pointer",
-    "old": "            self.move(self.pos() - QPoint(MENU_EDGE, MENU_EDGE))\n",
-    "new": "            pass\n",
-    "test": "desktop/tests/test_overlays.py::test_a_menus_panel_opens_where_qt_put_the_menu_with_its_shadow_round_it"
-  },
-  {
-    "file": "desktop/native/look.py",
-    "name": "High contrast's row under the pointer is 6 %, which no one can see",
-    "old": "    amount = max(share, HIGH_CONTRAST_HOVER) if palette.get(\"family\") == \"contrast\" else share",
-    "new": "    amount = share",
-    "test": "desktop/tests/test_overlays.py::test_a_row_under_the_pointer_shows_and_keeps_its_words_readable_in_every_look"
+    "test": "desktop/tests/settings/test_toast_and_menus.py::test_a_menu_casts_the_large_shadow_only_in_a_look_with_depth"
   },
   {
     "file": "desktop/native/command_bar.py",

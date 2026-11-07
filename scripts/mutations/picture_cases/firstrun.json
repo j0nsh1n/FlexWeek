@@ -1,0 +1,74 @@
+[
+ {
+  "name": "Send a test reminder filled like Next",
+  "file": "desktop/native/setup.py",
+  "old": "        self.test.setProperty(\"outline\", True)\n",
+  "new": "        self.test.setProperty(\"outline\", False)\n",
+  "test": "desktop/tests/test_setup_look.py::test_next_is_the_one_filled_button_on_every_page",
+  "screen": "none: now a picture (setup.reminders_page, check \"Next is the one filled button\")"
+ },
+ {
+  "name": "Add custom hours filled like Next",
+  "file": "desktop/native/setup.py",
+  "old": "        self.work_editor.add_button.setProperty(\"outline\", True)\n",
+  "new": "        self.work_editor.add_button.setProperty(\"outline\", False)\n",
+  "test": "desktop/tests/test_setup_look.py::test_next_is_the_one_filled_button_on_every_page",
+  "screen": "none: now a picture (setup.homework_page, same check)"
+ },
+ {
+  "name": "setup's page left at its narrow hint",
+  "file": "desktop/native/setup.py",
+  "old": "    line.addWidget(column, SETUP_COLUMN)\n",
+  "new": "    line.addWidget(column, 1)\n",
+  "test": "desktop/tests/test_setup_look.py::test_each_page_and_its_buttons_are_centred_up_to_880_pixels",
+  "screen": "none: now a picture (setup.week_page, \"centred in a column up to 880 px\")"
+ },
+ {
+  "name": "Play keeps the first look's colour",
+  "file": "desktop/native/setup.py",
+  "old": "            play.setIcon(icons.icon(\"circle-play\", palette[\"accent\"]))\n",
+  "new": "            play.setIcon(play.icon())\n",
+  "test": "desktop/tests/test_setup_look.py::test_play_is_an_icon_in_the_looks_accent",
+  "screen": "none: now a picture (setup.reminders_page, \"Play drawn in the accent\"); nearest behaviour test is desktop/tests/setup/test_setup_reminders_page.py::test_play_is_an_icon_button_with_a_tooltip, which does not see the colour"
+ },
+ {
+  "name": "Help's fade never reaches the page colour",
+  "file": "desktop/native/settings.py",
+  "old": "        ramp.setColorAt(1, clear if self._top else page)\n",
+  "new": "        ramp.setColorAt(1, clear)\n",
+  "test": "desktop/tests/test_more_menu_words.py::test_help_fades_its_words_at_an_edge_with_more_past_it",
+  "screen": "none: now a picture (screen settings.help_fade_edge); nearest behaviour test is desktop/tests/settings/test_help_and_about.py::test_help_shows_a_fade_only_at_an_edge_with_more_words_past_it, which does not see colours"
+ },
+ {
+  "name": "Setup's picture cards run off a narrow page",
+  "file": "desktop/native/setup.py",
+  "old": "    cards = CardGrid(picture + CARD_WIDTH_PAD, 14)\n",
+  "new": "    cards = CardGrid(10, 14)\n",
+  "test": "desktop/tests/test_setup_audit.py::test_the_picture_cards_are_whole_at_the_end_of_their_page",
+  "screen": "none: now a picture (setup.look_cards_end_of_page_narrow); no behaviour test can catch it"
+ },
+ {
+  "name": "School's line without its card, so a sport's times sit elsewhere",
+  "file": "desktop/native/setup.py",
+  "old": "        school_line.setContentsMargins(12, 10, 12, 10)\n",
+  "new": "        school_line.setContentsMargins(0, 0, 0, 0)\n",
+  "test": "desktop/tests/test_setup_audit.py::test_a_sports_time_fields_line_up_with_schools",
+  "screen": "none: now a picture (setup.week_times, setup.week_times_narrow)"
+ },
+ {
+  "name": "Setup's example in the field's own grey",
+  "file": "desktop/native/look.py",
+  "old": "f\"{fit_lightness(palette['muted'], (palette['field'], palette['panel']), AA_TEXT)}; }}\"",
+  "new": "f\"{palette['text']}; }}\"",
+  "test": "desktop/tests/test_setup_audit.py::test_the_example_homework_reads_as_an_example_and_adds_nothing",
+  "screen": "none: now a picture (setup.first_homework_example); nearest behaviour test: desktop/tests/setup/test_setup_homework.py::test_the_example_homework_is_words_in_an_empty_box_and_adds_nothing (does not see colour)"
+ },
+ {
+  "name": "Preset chips lose the pill rule",
+  "file": "desktop/native/look.py",
+  "old": "    pills = f\"QPushButton#setupChip, {day}, {adds}, QPushButton#setupStudyChip\"\n",
+  "new": "    pills = f\"QPushButton#setupChip, {day}, QPushButton#setupStudyChip\"\n",
+  "test": "desktop/tests/test_setup_audit.py::test_the_planning_hours_chips_are_the_pills_the_day_picker_uses",
+  "screen": "none: now a picture (setup.planning_hours_chips); nearest behaviour test: desktop/tests/setup/test_setup_pages.py::test_the_planning_hours_presets_are_chips_that_each_add_a_row (does not see the stylesheet)"
+ }
+]

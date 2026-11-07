@@ -1,0 +1,18 @@
+[
+ {
+  "file": "desktop/native/menus.py",
+  "name": "a menu opens its shadow's room below and right of the pointer",
+  "old": "            self.move(self.pos() - QPoint(MENU_EDGE, MENU_EDGE))\n",
+  "new": "            pass\n",
+  "test": "desktop/tests/test_overlays.py::test_a_menus_panel_opens_where_qt_put_the_menu_with_its_shadow_round_it",
+  "screen": "none: now a picture (screen settings.menu: panel corner at the pointer, shadow room clear)"
+ },
+ {
+  "file": "desktop/native/look.py",
+  "name": "High contrast's row under the pointer is 6 %, which no one can see",
+  "old": "    amount = max(share, HIGH_CONTRAST_HOVER) if palette.get(\"family\") == \"contrast\" else share",
+  "new": "    amount = share",
+  "test": "desktop/tests/test_overlays.py::test_a_row_under_the_pointer_shows_and_keeps_its_words_readable_in_every_look",
+  "screen": "none: now a picture (screen settings.menu, main so drawn in High contrast: row off the card by at least 1.5 to 1); nearest behaviour: desktop/tests/settings/test_toast_and_menus.py::test_a_row_under_the_pointer_differs_from_its_card_in_every_look (a 6 % step still differs, so it would not fail)"
+ }
+]

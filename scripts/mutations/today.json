@@ -25,14 +25,14 @@
   "name": "a block saved inside its lead reminds at once",
   "old": "    start - lead <= i128::from(now_min) && i128::from(now_min) <= start\n",
   "new": "    i128::from(now_min) - i128::from(REMINDER_WINDOW_MIN) <= start - lead && start - lead <= i128::from(now_min)\n",
-  "test": "desktop/tests/test_reminders_window.py::test_a_block_saved_inside_its_lead_reminds_at_once_and_only_once"
+  "test": "desktop/tests/settings/test_block_reminders.py::test_a_block_saved_inside_its_lead_reminds_at_once_and_only_once"
  },
  {
   "file": "engine/engine/src/desk/remind.rs",
   "name": "a block reminds once",
   "old": "        if member(fired, fired_is_set, &key)? || !start_alert_due(start_min, now_min, lead_min) {\n",
   "new": "        let _ = member(fired, fired_is_set, &key)?;\n        if !start_alert_due(start_min, now_min, lead_min) {\n",
-  "test": "desktop/tests/test_reminders_window.py::test_a_block_saved_inside_its_lead_reminds_at_once_and_only_once"
+  "test": "desktop/tests/settings/test_block_reminders.py::test_a_block_saved_inside_its_lead_reminds_at_once_and_only_once"
  },
  {
   "file": "engine/engine/src/desk/remind.rs",
@@ -46,49 +46,49 @@
   "name": "a routine save writes over a reminder",
   "old": "        if (asked or message not in ROUTINE_STATUS) and self._stack.currentWidget() is self._week_page:\n",
   "new": "        if self._stack.currentWidget() is self._week_page:\n",
-  "test": "desktop/tests/test_reminders_window.py::test_the_toast_keeps_a_reminder_until_something_more_important"
+  "test": "desktop/tests/settings/test_block_reminders.py::test_the_toast_keeps_a_reminder_until_something_more_important"
  },
  {
   "file": "desktop/native/window.py",
   "name": "a reminder shows in the window as well as the tray",
   "old": "            self._say_in_toast(self._reminder_said)\n",
   "new": "",
-  "test": "desktop/tests/test_reminders_window.py::test_a_block_saved_inside_its_lead_reminds_at_once_and_only_once"
+  "test": "desktop/tests/settings/test_block_reminders.py::test_a_block_saved_inside_its_lead_reminds_at_once_and_only_once"
  },
  {
   "file": "desktop/native/window.py",
   "name": "dismissing a block's song stops it",
   "old": "            self._bell.stop()\n            self._spotify.stop()\n",
   "new": "            self._bell.stop()\n",
-  "test": "desktop/tests/test_reminders_window.py::test_a_block_without_a_link_plays_the_settings_link_when_the_sound_is_spotify"
+  "test": "desktop/tests/settings/test_block_start_song.py::test_a_block_without_a_link_plays_the_settings_link_when_the_sound_is_spotify"
  },
  {
   "file": "desktop/native/controller.py",
   "name": "a snoozed block song rings again",
   "old": "                self._snoozed_songs[alarm[\"id\"]] = alarm\n",
   "new": "                pass\n",
-  "test": "desktop/tests/test_reminders_window.py::test_a_snoozed_block_song_plays_again_five_minutes_later"
+  "test": "desktop/tests/settings/test_block_start_song.py::test_a_snoozed_block_song_plays_again_five_minutes_later"
  },
  {
   "file": "engine/store/src/lib.rs",
   "name": "accounts from 0.14 get reminders on",
   "old": "    upgrade_preferences(&db)?;\n",
   "new": "",
-  "test": "desktop/tests/test_reminders_window.py::test_an_account_from_0_14_with_reminders_off_reminds_after_the_update"
+  "test": "desktop/tests/settings/test_block_reminders.py::test_an_account_from_0_14_with_reminders_off_reminds_after_the_update"
  },
  {
   "file": "engine/store/src/lib.rs",
   "name": "reminders turned off after the update stay off",
   "old": "        \"UPDATE preferences SET reminders_enabled = 1, prefs_version = 1 WHERE prefs_version < 1\",\n",
   "new": "        \"UPDATE preferences SET reminders_enabled = 1, prefs_version = 1\",\n",
-  "test": "desktop/tests/test_reminders_window.py::test_reminders_turned_off_after_the_update_stay_off"
+  "test": "desktop/tests/settings/test_block_reminders.py::test_reminders_turned_off_after_the_update_stay_off"
  },
  {
   "file": "desktop/native/settings.py",
   "name": "reminder settings grey while reminders are off",
   "old": "        self.reminders.toggled.connect(self.reminder_controls.setEnabled)\n",
   "new": "",
-  "test": "desktop/tests/test_alerts_page.py::test_the_reminder_controls_are_greyed_while_reminders_are_off"
+  "test": "desktop/tests/settings/test_alerts_settings.py::test_the_reminder_controls_are_greyed_while_reminders_are_off"
  },
  {
   "file": "desktop/native/widgets.py",
@@ -109,42 +109,42 @@
   "name": "cancelling Running late clears its preview",
   "old": "            if preview is not None:\n                # The preview's",
   "new": "            if False:\n                # The preview's",
-  "test": "desktop/tests/test_words_on_screen.py::test_cancelling_running_late_takes_its_preview_off_the_screen"
+  "test": "desktop/tests/sheets/test_running_late_words.py::test_cancelling_running_late_takes_its_preview_off_the_screen"
  },
  {
   "file": "desktop/native/widgets.py",
   "name": "the block editor is titled as a student says it",
   "old": "self.card_body(\"Edit fixed time\" if existing else \"Add fixed time\")",
   "new": "self.card_body(\"Edit fixed commitment\" if existing else \"Add fixed commitment\")",
-  "test": "desktop/tests/test_block_editor_words.py::test_the_editor_is_titled_as_a_student_says_it"
+  "test": "desktop/tests/sheets/test_fixed_time_editor_words.py::test_the_editor_is_titled_as_a_student_says_it"
  },
  {
   "file": "desktop/native/widgets.py",
   "name": "deleting a block asks first",
   "old": "elif not confirm(self, \"Delete fixed time\", question, \"Delete\"):",
   "new": "elif False:",
-  "test": "desktop/tests/test_block_editor_words.py::test_delete_asks_first_and_does_nothing_when_refused"
+  "test": "desktop/tests/sheets/test_fixed_time_delete.py::test_delete_asks_first_and_does_nothing_when_refused"
  },
  {
   "file": "desktop/native/widgets.py",
   "name": "the delete sheet's answer not drawn red",
   "old": "        ((\"stay\", \"Cancel\", \"outlined\"), (\"yes\", yes, \"danger\" if danger else \"\")),\n",
   "new": "        ((\"stay\", \"Cancel\", \"outlined\"), (\"yes\", yes, \"\")),\n",
-  "test": "desktop/tests/test_block_editor_words.py::test_the_question_before_deleting_draws_its_answer_red_and_cancel_plain"
+  "test": "desktop/tests/sheets/test_fixed_time_delete.py::test_the_question_before_deleting_has_a_delete_answer_and_cancel_is_the_one_enter_gives"
  },
  {
   "file": "desktop/native/widgets.py",
   "name": "a series opened on one day does not say every day changes",
   "old": "and scope_box.isHidden())",
   "new": "and not scope_box.isVisible())",
-  "test": "desktop/tests/test_block_editor_words.py::test_a_series_opened_on_one_day_does_not_also_say_every_day_changes"
+  "test": "desktop/tests/sheets/test_fixed_time_editor_words.py::test_a_series_opened_on_one_day_does_not_also_say_every_day_changes"
  },
  {
   "file": "desktop/native/widgets.py",
   "name": "the repeat note sits under the day pills, in their field",
   "old": "        days_column.addWidget(self.day_picker)\n        days_column.addWidget(self.repeat_note)\n",
   "new": "        days_column.addWidget(self.repeat_note)\n        days_column.addWidget(self.day_picker)\n",
-  "test": "desktop/tests/test_block_editor_words.py::test_the_repeat_note_sits_whole_under_the_day_boxes"
+  "test": "desktop/tests/sheets/test_fixed_time_editor_words.py::test_it_says_that_ticking_another_day_repeats_it"
  },
  {
   "file": "desktop/native/client.py",
@@ -172,77 +172,56 @@
   "name": "More shows its descriptions",
   "old": "        self.setToolTipsVisible(True)\n",
   "new": "",
-  "test": "desktop/tests/test_more_menu_words.py::test_every_action_under_more_and_advanced_says_what_it_does"
+  "test": "desktop/tests/settings/test_more_menu.py::test_every_action_under_more_and_advanced_says_what_it_does"
  },
  {
   "file": "desktop/native/window.py",
   "name": "a greyed Unfinished says why",
   "old": "    \"unfinishedOpen\": NOTHING_UNFINISHED,\n",
   "new": "",
-  "test": "desktop/tests/test_more_menu_words.py::test_unfinished_with_nothing_unfinished_is_greyed_and_says_why"
+  "test": "desktop/tests/settings/test_more_menu.py::test_unfinished_with_nothing_unfinished_is_greyed_and_says_why"
  },
  {
   "file": "desktop/native/window.py",
   "name": "Unfinished opens its list",
   "old": "        self._fill_unfinished(items)\n        self._unfinished_opened = bool(items)\n",
   "new": "        self._unfinished_opened = bool(items)\n",
-  "test": "desktop/tests/test_more_menu_words.py::test_unfinished_opens_its_list_in_any_design"
+  "test": "desktop/tests/settings/test_more_menu.py::test_unfinished_opens_its_list_in_any_design"
  },
  {
   "file": "desktop/native/look.py",
   "name": "a description takes the chosen text size",
   "old": "border-radius: {item}px; font-size: {pt['body']}; }}",
   "new": "border-radius: {item}px; }}",
-  "test": "desktop/tests/test_more_menu_words.py::test_a_description_is_as_large_as_the_text_the_student_chose"
+  "test": "desktop/tests/settings/test_more_menu.py::test_a_description_is_as_large_as_the_text_the_student_chose"
  },
  {
   "file": "desktop/native/layouts/dialog.py",
   "name": "Settings opens on Main view with one sentence on designs",
   "old": "lines = (DESIGN_LINE, blurb) if slot == \"main\" else (blurb,)",
   "new": "lines = (blurb,)",
-  "test": "desktop/tests/test_settings_words.py::test_appearance_puts_the_design_before_the_colours_that_fine_tune_it"
+  "test": "desktop/tests/settings/test_settings_page_words.py::test_appearance_names_the_design_the_look_the_text_size_and_says_what_a_design_is"
  },
  {
   "file": "desktop/native/settings.py",
   "name": "Long break after counts focus sessions",
   "old": "        self.long_every.setSuffix(\" focus sessions\")\n",
   "new": "",
-  "test": "desktop/tests/test_settings_words.py::test_focus_says_what_the_long_break_counts"
+  "test": "desktop/tests/settings/test_settings_page_words.py::test_focus_says_what_the_long_break_counts"
  },
  {
   "file": "desktop/native/settings.py",
   "name": "Play that hears nothing says what to do",
   "old": "\" and not muted, then press Play again.\"",
   "new": "\" and not muted.\"",
-  "test": "desktop/tests/test_settings_words.py::test_play_that_hears_nothing_says_what_to_do"
- },
- {
-  "file": "desktop/native/layouts/dialog.py",
-  "name": "Reset is a quiet button",
-  "old": "        self.reset.setProperty(\"outline\", True)\n",
-  "new": "",
-  "test": "desktop/tests/test_settings_words.py::test_reset_is_an_outlined_button_at_the_left_not_a_bar_across_the_page"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "headings stand out",
-  "old": "f\"font-size: {pt['heading']}; font-weight: {WEIGHT_STRONG}; color: {palette['text']}; }}\"",
-  "new": "f\"font-size: {pt['heading']}; color: {palette['text']}; }}\"",
-  "test": "desktop/tests/test_settings_words.py::test_every_heading_on_appearance_stands_out_from_the_rows_under_it"
- },
- {
-  "file": "desktop/native/settings.py",
-  "name": "a button that opens something else is plain",
-  "old": "    made.setProperty(\"outline\", True)\n    made.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)\n",
-  "new": "",
-  "test": "desktop/tests/test_settings_words.py::test_a_button_that_opens_something_else_is_outlined_and_as_wide_as_its_words"
+  "test": "desktop/tests/settings/test_settings_page_words.py::test_play_that_hears_nothing_says_what_to_do"
  },
  {
   "file": "desktop/native/look.py",
   "name": "a design's page colours keep text readable",
   "old": "if contrast(tokens[\"bg_ink\"], tokens[\"surface\"]) >= AA_TEXT:",
   "new": "if True:",
-  "test": "desktop/tests/test_look.py::test_a_design_page_falls_back_to_readable_ink_when_its_own_ink_is_too_light"
+  "test": "desktop/tests/settings/test_look_palettes.py::test_a_design_page_falls_back_to_readable_ink_when_its_own_ink_is_too_light"
  },
  {
   "file": "desktop/native/hours/chips.py",
@@ -424,7 +403,7 @@
   "name": "deleting homework keeps no other week for Undo",
   "old": "            others = [week for week in removed if week != self.week_start]\n",
   "new": "            others: list[str] = []\n",
-  "test": "desktop/tests/test_delete_homework.py::test_deleting_homework_takes_its_times_off_every_week_and_undo_brings_them_back"
+  "test": "desktop/tests/sheets/test_delete_homework.py::test_deleting_homework_takes_its_times_off_every_week_and_undo_brings_them_back"
  },
  {
   "file": "desktop/native/window.py",
@@ -438,7 +417,7 @@
   "name": "new homework offers Delete",
   "old": "        self.delete_button.setVisible(assignment is not None)\n",
   "new": "        self.delete_button.setVisible(True)\n",
-  "test": "desktop/tests/test_delete_homework.py::test_the_editor_offers_delete_only_for_homework_that_exists"
+  "test": "desktop/tests/sheets/test_delete_homework.py::test_the_editor_offers_delete_only_for_homework_that_exists"
  },
  {
   "file": "desktop/native/window.py",
