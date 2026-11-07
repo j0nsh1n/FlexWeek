@@ -1,22 +1,19 @@
-"""Audit finding 10: a file that is not a FlexWeek export is refused in words, whatever is in its header."""
+"""A file that is not a FlexWeek export is refused in words, whatever is in its header, and the import
+preview says whose weeks it deletes."""
 
 from __future__ import annotations
 
-import importlib.util
 import json
 
 import pytest
 
-pytestmark = pytest.mark.skipif(
-    importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
-)
+pytest.importorskip("PySide6")
 
-if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtWidgets import QLabel
+from PySide6.QtWidgets import QApplication, QLabel
 
-    from desktop.native.files import parse_import_payload
-    from desktop.native.settings import TransferPreviewDialog
-    from desktop.tests.window_support import qapp  # noqa: F401
+from desktop.native.files import parse_import_payload
+from desktop.native.settings import TransferPreviewDialog
+from desktop.tests.window_support import qapp  # noqa: F401
 
 
 @pytest.mark.parametrize("format_", [[], {}, 5, None, True])
@@ -35,8 +32,8 @@ def test_a_file_nested_too_deep_to_read_is_refused_not_raised() -> None:
     assert isinstance(result["error"], str) and result["error"]
 
 
-def test_the_import_preview_says_whose_weeks_it_deletes(qapp) -> None:
-    """T-W13: "1 week removed" did not say these are the account's own weeks, deleted because the backup
+def test_the_import_preview_says_whose_weeks_it_deletes(qapp: QApplication) -> None:  # noqa: F811
+    """"1 week removed" did not say these are the account's own weeks, deleted because the backup
     lacks them. The sentence is the audit's, word for word."""
     preview = {
         "source_username": "joo2",
@@ -59,7 +56,7 @@ def test_the_import_preview_says_whose_weeks_it_deletes(qapp) -> None:
     dialog.close()
 
 
-def test_several_deleted_weeks_say_they_are_not_in_the_backup(qapp) -> None:
+def test_several_deleted_weeks_say_they_are_not_in_the_backup(qapp: QApplication) -> None:  # noqa: F811
     preview = {
         "source_username": "joo2",
         "changes": {"weeks": {"removed": ["a", "b"]}, "assignments": {"removed": [{"id": "x"}]}},
