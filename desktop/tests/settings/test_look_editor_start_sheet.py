@@ -1,18 +1,11 @@
-"""0.18.5 #59: Start from is a grid of small pictures of the looks, not a plain dropdown. Choosing a card
-starts the look from it, as choosing in the dropdown did; the arrow keys move between cards and Enter or
-Space chooses."""
-
-# ruff: noqa: F811  (pytest fixtures imported by name)
+"""Start from is a grid of small pictures of the looks, not a plain dropdown. Choosing a card starts the
+look from it; the arrow keys move between cards and Enter or Space chooses."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-import pytest
-
-pytest.importorskip("PySide6")
-
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QPushButton
@@ -20,8 +13,9 @@ from PySide6.QtWidgets import QApplication, QDialog, QPushButton
 from desktop.native.look import BASE_LABELS
 from desktop.native.look_editor import LookEditor, StartGrid, StartSheet
 from desktop.native.window import NativeWindow
-from desktop.tests.test_look_editor import open_editor, pump
-from desktop.tests.window_support import qapp, server, signed_out, window  # noqa: F401
+from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.settings.support_look_editor import on_modal, open_editor, pump
+from desktop.tests.window_support import qapp  # noqa: F401
 
 BASES = list(BASE_LABELS)
 
@@ -31,8 +25,7 @@ def through_sheet(editor: LookEditor, act: Callable[[StartSheet], None]) -> Star
     `act` left it open, so a test that fails cannot hang the run."""
     seen: list[StartSheet] = []
 
-    def drive() -> None:
-        sheet = QApplication.activeModalWidget()
+    def drive(sheet: object) -> None:
         assert isinstance(sheet, StartSheet)
         seen.append(sheet)
         try:
@@ -41,7 +34,7 @@ def through_sheet(editor: LookEditor, act: Callable[[StartSheet], None]) -> Star
             if sheet.isVisible():
                 sheet.reject()
 
-    QTimer.singleShot(200, drive)
+    on_modal(drive)
     editor.start_from.click()
     return seen[0]
 
@@ -51,7 +44,7 @@ def names(sheet: StartSheet) -> list[str]:
 
 
 def test_start_from_is_a_button_that_names_the_look_it_started_from(
-    qapp: QApplication, window: NativeWindow
+    qapp: QApplication, window: NativeWindow  # noqa: F811
 ) -> None:
     page, editor = open_editor(qapp, window)
     assert isinstance(editor.start_from, QPushButton)
@@ -61,7 +54,7 @@ def test_start_from_is_a_button_that_names_the_look_it_started_from(
 
 
 def test_the_sheet_has_a_picture_card_for_every_look_and_rings_the_one_started_from(
-    qapp: QApplication, window: NativeWindow
+    qapp: QApplication, window: NativeWindow  # noqa: F811
 ) -> None:
     page, editor = open_editor(qapp, window)
     seen: dict[str, object] = {}
@@ -78,7 +71,7 @@ def test_the_sheet_has_a_picture_card_for_every_look_and_rings_the_one_started_f
     page.close_page()
 
 
-def test_clicking_a_card_starts_the_look_from_it(qapp: QApplication, window: NativeWindow) -> None:
+def test_clicking_a_card_starts_the_look_from_it(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
     page, editor = open_editor(qapp, window)
     assert editor._draft.look["base"] != "dark"
 
@@ -95,7 +88,7 @@ def test_clicking_a_card_starts_the_look_from_it(qapp: QApplication, window: Nat
 
 
 def test_the_arrow_keys_move_between_cards_and_enter_chooses(
-    qapp: QApplication, window: NativeWindow
+    qapp: QApplication, window: NativeWindow  # noqa: F811
 ) -> None:
     page, editor = open_editor(qapp, window)
     start = BASES.index(editor._draft.look["base"])
@@ -124,7 +117,7 @@ def test_the_arrow_keys_move_between_cards_and_enter_chooses(
     page.close_page()
 
 
-def test_space_chooses_and_the_arrows_stop_at_the_ends(qapp: QApplication, window: NativeWindow) -> None:
+def test_space_chooses_and_the_arrows_stop_at_the_ends(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
     page, editor = open_editor(qapp, window)
 
     def last(sheet: StartSheet) -> None:
@@ -145,7 +138,7 @@ def test_space_chooses_and_the_arrows_stop_at_the_ends(qapp: QApplication, windo
     page.close_page()
 
 
-def test_escape_closes_the_sheet_and_changes_nothing(qapp: QApplication, window: NativeWindow) -> None:
+def test_escape_closes_the_sheet_and_changes_nothing(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
     page, editor = open_editor(qapp, window)
     before = dict(editor._draft.look)
 
@@ -160,7 +153,7 @@ def test_escape_closes_the_sheet_and_changes_nothing(qapp: QApplication, window:
 
 
 def test_a_saved_look_is_a_card_after_the_built_in_ones_and_starts_from_that_look(
-    qapp: QApplication, window: NativeWindow
+    qapp: QApplication, window: NativeWindow  # noqa: F811
 ) -> None:
     page, editor = open_editor(qapp, window)
     editor._save("Mine")
