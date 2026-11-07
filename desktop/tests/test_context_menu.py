@@ -15,12 +15,14 @@ from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
 from PySide6.QtGui import QContextMenuEvent, QKeyEvent, QMouseEvent
 from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog, QWidget
 
+from backend.tests.fake_clock import CLOCK
 from desktop.native import window as window_module
 from desktop.native.calendar import sunday_due
 from desktop.native.hours.chips import TrayChip
 from desktop.native.menus import DANGER, ICON, Menu
 from desktop.native.widgets import BlockDialog, HomeworkDialog, PreviewDialog
 from desktop.native.window import NativeWindow
+from desktop.tests.light_app import window as signed_in  # noqa: F401
 from desktop.tests.window_support import (  # noqa: F401
     qapp,
     server,
@@ -28,7 +30,6 @@ from desktop.tests.window_support import (  # noqa: F401
     signed_out,
     wait_until,
 )
-from desktop.tests.window_support import window as signed_in  # noqa: F401
 
 SCHOOL = {
     "id": "school",
@@ -433,7 +434,7 @@ def test_the_menu_key_and_shift_f10_ask_at_the_next_free_time_after_now_when_not
 ) -> None:
     # School runs to 14:30 on weekdays, so from Thursday 14:07 the next free quarter hour is 14:30.
     thursday = datetime.fromisoformat(window.session.week_start) + timedelta(days=3, hours=14, minutes=7)
-    window.session.now_ms = lambda: int(thursday.timestamp() * 1000)
+    CLOCK.set(thursday)
     window._fill_classic()
     qapp.processEvents()
     hours = window.week_table.hours
@@ -454,7 +455,7 @@ def test_every_design_with_shared_hours_has_the_free_time_menu(
     # and that card opens at now. Before about 09:00 that stretch ends before 17:00, so Tuesday would
     # have no track there unless it was the day in front. Wednesday noon keeps Tuesday's card in range.
     noon = datetime.fromisoformat(window.session.week_start) + timedelta(days=2, hours=12)
-    window.session.now_ms = lambda: int(noon.timestamp() * 1000)
+    CLOCK.set(noon)
     window._layout = sanitize_layout({"main": design, "day": "one"})
     window._apply_appearance()
     window._on_week()

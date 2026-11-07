@@ -3,8 +3,8 @@ give homework a time by hand: dropping a block (and its drag preview), Choose a 
 homework > Do it at. The refusal reads "That time has passed. Choose 2:15 PM or later
 today, or another day."
 
-The clock is held through `session.now_ms` (grid_support.hold_clock), the injectable clock the window,
-the dialogs (`HomeworkDialog._now`) and the planner already read. """
+The clock is held with grid_support.hold_clock, which moves the tests' one clock: the window, the
+dialogs (`HomeworkDialog._now`) and the planner all read it. """
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations

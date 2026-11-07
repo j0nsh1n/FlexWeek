@@ -9,10 +9,12 @@ import importlib.util
 import os
 import time
 from collections.abc import Callable, Iterator
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
+
+from backend import clock as wall_clock
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
@@ -60,7 +62,7 @@ class Clock:
     """Thursday 15:40 of this week, held, and moved on only by the test."""
 
     def __init__(self) -> None:
-        monday = datetime.fromisoformat(monday_of(date.today().isoformat()))
+        monday = datetime.fromisoformat(monday_of(wall_clock.today().isoformat()))
         self.at = monday + timedelta(days=3, hours=15, minutes=40)
 
     def ms(self) -> int:

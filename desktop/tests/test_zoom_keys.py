@@ -4,15 +4,15 @@ keyboard, which a click on Day, Week or a block's editor took away."""
 
 from __future__ import annotations
 
-import contextlib
 import importlib.util
 import os
-import time
 from collections.abc import Callable, Iterator
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
+
+from backend.tests.fake_clock import CLOCK
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
@@ -23,13 +23,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QStandardPaths, Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton
+    from PySide6.QtWidgets import QAbstractButton, QApplication
 
     from desktop.native.hours.zoom import HoursScroll
     from desktop.native.layouts.registry import sanitize_layout
     from desktop.native.window import NativeWindow
-    from desktop.server import LocalServer
-    from desktop.tests.logic_support import past_setup
+    from desktop.tests.light_app import open_light  # noqa: F401
+    from desktop.tests.waiting import wait_until  # noqa: F401
 
 PASSWORD = "a-long-test-password"
 DESIGNS = ("classic", "timeline", "mission", "bento", "retro", "clay")
@@ -58,55 +58,25 @@ def qapp() -> Iterator[QApplication]:
     yield QApplication.instance() or QApplication(["flexweek-zoom-keys-test"])
 
 
-def wait_until(qapp: QApplication, predicate: Callable[[], bool], timeout: float = 8.0) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        qapp.processEvents()
-        if predicate():
-            return
-        time.sleep(0.02)
-    raise AssertionError("condition was still false")
-
-
 def look_file() -> Path:
     root = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
     return Path(root) / "flexweek-look.json"
 
 
 @pytest.fixture()
-def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
+def window(qapp: QApplication, open_light: Callable[..., NativeWindow]) -> Iterator[NativeWindow]:
     """Signed in, with School on weekdays and the clock held at Thursday 15:40. No zoom is remembered."""
-    look_file().unlink(missing_ok=True)
-    server = LocalServer(tmp_path / "flexweek.db")
-    server.start()
-    made = NativeWindow(server.origin)
-    made.resize(1280, 860)
-    made.show()
-    try:
-        made.username.setText("zoom_keys_student")
-        made.password.setText(PASSWORD)
-        made.findChild(QPushButton, "createAccount").click()
-        wait_until(qapp, lambda: made._stack.currentWidget().objectName() == "recoveryPage")
-        made.recovery_ack.setChecked(True)
-        made.recovery_continue.click()
-        past_setup(qapp, made)
-        session = made.session
-        thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=15, minutes=40)
-        session.now_ms = lambda: int(thursday.timestamp() * 1000)
-        session.add_block(
-            {"id": "school", "title": "School", "kind": "locked", "category": "class",
-             "start": "08:00", "duration_min": 390, "days": [0, 1, 2, 3, 4]}
-        )
-        session.save()
-        wait_until(qapp, lambda: not session.busy and not session.dirty)
-        yield made
-    finally:
-        with contextlib.suppress(RuntimeError):
-            made.session.client.reset()
-        made.hide()
-        qapp.processEvents()
-        server.stop()
-        look_file().unlink(missing_ok=True)
+    made = open_light((1280, 860))
+    session = made.session
+    thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=15, minutes=40)
+    CLOCK.set(thursday)
+    session.add_block(
+        {"id": "school", "title": "School", "kind": "locked", "category": "class",
+         "start": "08:00", "duration_min": 390, "days": [0, 1, 2, 3, 4]}
+    )
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    yield made
 
 
 def show(qapp: QApplication, window: NativeWindow, design: str, tab: str) -> QAbstractButton:

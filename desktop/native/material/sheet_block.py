@@ -13,6 +13,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from backend import clock as wall_clock
 from backend.models import TimeBlock, WeekRequest
 from backend.slots import SLOT_MIN, hhmm_to_minutes
 from desktop.native.calendar import (
@@ -317,7 +318,7 @@ class BlockDraft:
         week = self.session.week_start
         if occurrence:
             if not isinstance(week, str):
-                week = monday_of(date.today().isoformat())
+                week = monday_of(wall_clock.today().isoformat())
             stamp = date.fromisoformat(date_for_day(week, self.occurrence_day))
             question = (
                 f"Delete {name} on {DAY_FULL[self.occurrence_day]} {stamp.day} {stamp.strftime('%b')} only?"

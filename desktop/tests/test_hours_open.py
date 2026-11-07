@@ -5,15 +5,15 @@ Today and returning to this week reopen at now; other returns keep the chosen po
 
 from __future__ import annotations
 
-import contextlib
 import importlib.util
 import os
-import time
 from collections.abc import Callable, Iterator
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
+
+from backend.tests.fake_clock import CLOCK
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
@@ -23,7 +23,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QAbstractAnimation, QEvent, QPoint, QPointF, QStandardPaths
-    from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QPushButton, QScrollBar, QWidget
+    from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QScrollBar, QWidget
 
     from desktop.native import motion
     from desktop.native.calendar import sunday_due
@@ -31,8 +31,8 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.hours.zoom import HoursScroll
     from desktop.native.layouts.registry import sanitize_layout
     from desktop.native.window import NativeWindow
-    from desktop.server import LocalServer
-    from desktop.tests.logic_support import past_setup
+    from desktop.tests.light_app import open_light  # noqa: F401
+    from desktop.tests.waiting import wait_until  # noqa: F401
 
 PASSWORD = "a-long-test-password"
 DESIGNS = ("classic", "timeline", "mission", "bento", "retro", "clay")
@@ -49,61 +49,29 @@ def qapp() -> Iterator[QApplication]:
     yield QApplication.instance() or QApplication(["flexweek-hours-open-test"])
 
 
-def wait_until(qapp: QApplication, predicate: Callable[[], bool], timeout: float = 8.0) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        qapp.processEvents()
-        if predicate():
-            return
-        time.sleep(0.02)
-    raise AssertionError("condition was still false")
-
-
 def look_file() -> Path:
     root = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
     return Path(root) / "flexweek-look.json"
 
 
 @pytest.fixture()
-def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
+def window(qapp: QApplication, open_light: Callable[..., NativeWindow]) -> Iterator[NativeWindow]:
     """Signed in with the clock held at Thursday 15:40 on 2026-10-15 from before the week is first
     shown: school on weekdays from 08:00, dinner every day at 18:00, and nothing next week."""
-    # A look saved by an earlier test on this worker would choose another day screen (One thing has no
-    # Running late), and the window reads it at start.
-    look_file().unlink(missing_ok=True)
-    server = LocalServer(tmp_path / "flexweek.db")
-    server.start()
-    made = NativeWindow(server.origin)
-    made.session.now_ms = lambda: int(HELD.timestamp() * 1000)
-    made.resize(1280, 860)
-    made.show()
-    try:
-        made.username.setText("opening_student")
-        made.password.setText(PASSWORD)
-        made.findChild(QPushButton, "createAccount").click()
-        wait_until(qapp, lambda: made._stack.currentWidget().objectName() == "recoveryPage")
-        made.recovery_ack.setChecked(True)
-        made.recovery_continue.click()
-        past_setup(qapp, made)
-        session = made.session
-        session.add_block(
-            {"id": "school", "title": "School", "kind": "locked", "category": "class",
-             "start": "08:00", "duration_min": 390, "days": [0, 1, 2, 3, 4]}
-        )
-        session.add_block(
-            {"id": "dinner", "title": "Dinner", "kind": "locked", "category": "meals",
-             "start": "18:00", "duration_min": 30, "days": [0, 1, 2, 3, 4, 5, 6]}
-        )
-        session.save()
-        wait_until(qapp, lambda: not session.busy and not session.dirty)
-        yield made
-    finally:
-        with contextlib.suppress(RuntimeError):
-            made.session.client.reset()
-        made.hide()
-        qapp.processEvents()
-        server.stop()
-        look_file().unlink(missing_ok=True)
+    CLOCK.set(HELD)
+    made = open_light((1280, 860))
+    session = made.session
+    session.add_block(
+        {"id": "school", "title": "School", "kind": "locked", "category": "class",
+         "start": "08:00", "duration_min": 390, "days": [0, 1, 2, 3, 4]}
+    )
+    session.add_block(
+        {"id": "dinner", "title": "Dinner", "kind": "locked", "category": "meals",
+         "start": "18:00", "duration_min": 30, "days": [0, 1, 2, 3, 4, 5, 6]}
+    )
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    yield made
 
 
 def hours(window: NativeWindow) -> HoursScroll:
@@ -357,7 +325,7 @@ def test_month_and_mini_month_use_today_at_a_week_boundary(
 ) -> None:
     session = window.session
     held = datetime.fromisoformat(today + "T10:20")
-    session.now_ms = lambda: int(held.timestamp() * 1000)
+    CLOCK.set(held)
     session.load_week("2026-09-28")
     wait_until(qapp, lambda: not session.busy)
     window._on_week()
@@ -382,7 +350,7 @@ def test_open_week_month_is_prefetched_without_waiting_for_it(
     qapp: QApplication, window: NativeWindow, monkeypatch
 ) -> None:
     session = window.session
-    session.now_ms = lambda: int(datetime.fromisoformat("2026-10-15T15:40").timestamp() * 1000)
+    CLOCK.set(datetime.fromisoformat("2026-10-15T15:40"))
     session.week_start = "2026-10-12"
     session._month_cache.clear()
     session._month_prefetching.clear()
@@ -411,7 +379,7 @@ def test_month_keeps_a_picked_day_and_uses_thursday_for_a_week_without_today(
 ) -> None:
     session = window.session
     held = datetime.fromisoformat("2026-09-29T10:20")
-    session.now_ms = lambda: int(held.timestamp() * 1000)
+    CLOCK.set(held)
     session.open_day("2026-09-30")
     wait_until(qapp, lambda: not session.busy)
     session.set_view("month")

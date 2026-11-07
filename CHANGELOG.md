@@ -39,6 +39,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- Autosave waits for you to stop changing things by elapsed time, so setting the computer's clock back no longer holds a change unsaved until the clock catches up.
 - Material Day keeps its blocks when the clock ticks, still shows Saturday and Sunday when Week hides weekends, only jumps to now when opening a date, and leaves 16 px so the now line shows past the blocks. Every Day block opens with a click, Tab, or Enter; Space marks homework finished.
 - Material Month due chips use the homework class tint and icon instead of purple, overdue chips use the overdue tint, Settings → Look's Widgets styles control is a text button, and the Week now-line passes behind blocks.
 - Material controls follow the B3a3 shapes: 8 px corners on cards, sheets and dialogs, 6 px on buttons, fields and the add button, and pills only for chips. Each screen has one filled button; the others are text buttons. The add button is a plain card-coloured button with a blue plus, a choice row shows the picked option as a chip, and the selected rail item is a light tint with a blue icon. The focus ring shows after a key press and hides after a mouse press, so clicking or opening a sheet with the mouse leaves no ring while Tab and Esc still show one, and a focused field draws one border.

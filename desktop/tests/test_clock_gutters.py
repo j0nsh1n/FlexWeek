@@ -9,6 +9,7 @@ from datetime import datetime
 
 import pytest
 
+from backend.tests.fake_clock import CLOCK
 from desktop.tests.test_hours_open import DESIGNS
 
 pytestmark = pytest.mark.skipif(
@@ -25,6 +26,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.layouts.registry import sanitize_layout
     from desktop.native.look import sanitize_look
     from desktop.native.window import NativeWindow
+    from desktop.tests.light_app import open_light  # noqa: F401
     from desktop.tests.test_hours_open import hours, wait_until
     from desktop.tests.test_hours_open import qapp as qapp
     from desktop.tests.test_hours_open import window as window
@@ -182,7 +184,7 @@ def test_the_now_pill_is_whole_beside_the_hours_as_the_minutes_pass_to_its_wides
     window.resize(810, 800)
     for hour, minute, words in ((9, 5, "9:05 AM"), (12, 58, "12:58 PM")):
         held = day.replace(hour=hour, minute=minute)
-        session.now_ms = lambda held=held: int(held.timestamp() * 1000)
+        CLOCK.set(held)
         if words == "9:05 AM":
             window._sync_chrome()
             window._on_week()

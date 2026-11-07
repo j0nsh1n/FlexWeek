@@ -6,7 +6,6 @@ import re
 from datetime import date
 
 from flexweek_engine import (  # type: ignore[import-untyped]
-    current_week_start,
     is_calendar_date,
     is_month_label,
     is_week_start,
@@ -14,6 +13,8 @@ from flexweek_engine import (  # type: ignore[import-untyped]
     month_grid,
     parse_month,
 )
+
+from backend import clock
 
 FIRST_DAY = date(2000, 1, 1)
 LAST_DAY = date(2099, 12, 31)
@@ -39,3 +40,8 @@ __all__ = [
     "month_grid",
     "parse_month",
 ]
+
+
+def current_week_start() -> str:
+    """This week's Monday on the app's clock (the engine's own version reads the real date)."""
+    return str(monday_of(clock.today().isoformat()))

@@ -104,6 +104,7 @@ from PySide6.QtWidgets import (
 )
 from shiboken6 import isValid
 
+from backend import clock as wall_clock
 from backend.availability import spread_sessions
 from backend.explain import REASON_COPY
 from backend.models import ESTIMATE_MAX_MIN, Assignment, TimeBlock, WeekRequest, due_is_timed, parse_due
@@ -4151,7 +4152,7 @@ class BlockDialog(Dialog):
         setup = is_setup_block(self._original)
         if occurrence:
             if not isinstance(week_start, str):
-                week_start = monday_of(date.today().isoformat())
+                week_start = monday_of(wall_clock.today().isoformat())
             occurrence_date = date.fromisoformat(date_for_day(week_start, self._occurrence_day))
             date_text = f"{occurrence_date.day} {occurrence_date.strftime('%b')}"
             question = f"Delete {name} on {DAY_FULL[self._occurrence_day]} {date_text} only?"
@@ -4411,7 +4412,7 @@ class DueField(QWidget):
 
     def _follow_year(self, *_value: object) -> None:
         """The year is written only for a date outside this one: "Tue 15 Sep" says enough."""
-        this_year = (self.date.today or QDate.currentDate()).year()
+        this_year = (self.date.today or QDate(wall_clock.today())).year()
         other_year = self.date.date().year() != this_year
         wanted = DUE_DATE_FORMAT if other_year else DUE_DATE_FORMAT.replace(" yyyy", "")
         if self.date.displayFormat() != wanted:
@@ -4467,7 +4468,7 @@ def spread_words(sessions: list[dict], due: str, today: date) -> str:
 
 
 def _day_on_screen(today: str | None, now: datetime | None) -> date:
-    return date.fromisoformat(today) if today else (now or datetime.now()).date()
+    return date.fromisoformat(today) if today else (now or wall_clock.now()).date()
 
 
 def today_from_words(minute: int) -> str:
@@ -5228,7 +5229,7 @@ class HomeworkDialog(Dialog):
             return datetime.fromtimestamp(session.now_ms() / 1000)
         if self._today:
             return datetime.combine(date.fromisoformat(self._today), time.min)
-        return datetime.now()
+        return wall_clock.now()
 
     def _due_passed(self) -> bool:
         """Whether the student set a deadline that is already over. A saved deadline they did not
@@ -5578,7 +5579,7 @@ class PreviewDialog(Dialog):
 def overdue_unfinished(items: list[dict], now: datetime | None = None) -> list[dict]:
     """Homework whose deadline is already past. The engine's unfinished list also holds work due
     today or tomorrow; this list is only what is late."""
-    moment = datetime.now() if now is None else now
+    moment = wall_clock.now() if now is None else now
     return [item for item in items if _deadline_passed(item.get("due"), moment)]
 
 

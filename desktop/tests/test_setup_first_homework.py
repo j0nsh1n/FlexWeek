@@ -14,6 +14,7 @@ from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QTableView
 
+from backend import clock as wall_clock
 from desktop.native.setup import FIRST, SetupPage, next_school_day
 from desktop.tests.test_date_picker import cells, ink, same
 from desktop.tests.test_setup_look import dressed, qapp  # noqa: F401
@@ -61,7 +62,7 @@ def test_the_calendar_in_setup_draws_its_day_numbers_once_it_is_open(qapp, dress
 def test_first_homework_is_due_on_the_next_school_day(qapp, dressed) -> None:  # noqa: F811
     setup, _palette = dressed
     setup._show(FIRST)
-    expected = next_weekday(date.today(), {0, 1, 2, 3, 4})
+    expected = next_weekday(wall_clock.today(), {0, 1, 2, 3, 4})
     assert setup.homework_rows[0].due.value() == expected.isoformat()
 
 
@@ -69,7 +70,7 @@ def test_a_date_nobody_touched_follows_the_school_days_picked_earlier(qapp, dres
     setup, _palette = dressed
     setup.school_days.set_days([1])
     setup._show(FIRST)
-    assert setup.homework_rows[0].due.value() == next_weekday(date.today(), {1}).isoformat()
+    assert setup.homework_rows[0].due.value() == next_weekday(wall_clock.today(), {1}).isoformat()
 
 
 def test_a_date_the_student_chose_is_left_where_it_is(qapp, dressed) -> None:  # noqa: F811

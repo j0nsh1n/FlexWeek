@@ -1,16 +1,17 @@
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from backend.app import COOKIE, create_app
 from backend.storage import connect
+from backend.tests.fake_clock import START
 
 HEADERS = {"X-FlexWeek-Request": "1"}
 PASSWORD = "temporary-test-password"
 # The week a parameterless /api/week uses, worked out here rather than from the code under test.
-TODAY = date.today()
+TODAY = START.date()
 WEEK = (TODAY - timedelta(days=TODAY.weekday())).isoformat()
 
 

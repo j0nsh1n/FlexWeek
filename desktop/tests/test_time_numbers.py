@@ -18,6 +18,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.layouts.registry import sanitize_layout
     from desktop.native.look import sanitize_look
     from desktop.native.window import NativeWindow
+    from desktop.tests.light_app import open_light  # noqa: F401
     from desktop.tests.test_hours_open import hours, wait_until
     from desktop.tests.test_hours_open import qapp as qapp
     from desktop.tests.test_hours_open import window as window

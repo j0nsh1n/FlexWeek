@@ -31,6 +31,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtWidgets import QApplication
 
+from backend import clock as wall_clock
 from backend.models import valid_spotify_url
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm
 from desktop.native.calendar import (
@@ -1379,7 +1380,7 @@ class AccountBridge(QObject):
     @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
     def dueChoices(self) -> list:  # noqa: N802 — QML name
         """The next two weeks as buttons, and any later date a row already holds."""
-        today = date.today()
+        today = wall_clock.today()
         days = [today + timedelta(days=ahead) for ahead in range(0, 14)]
         known = {day.isoformat() for day in days}
         extra = sorted({row["due"] for row in self._homework} - known)

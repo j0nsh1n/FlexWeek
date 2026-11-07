@@ -10,10 +10,12 @@ import os
 import sqlite3
 import time
 from collections.abc import Callable, Iterator
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
+
+from backend import clock as wall_clock
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
@@ -54,7 +56,7 @@ if importlib.util.find_spec("PySide6") is not None:
 
 def next_school_day() -> str:
     """The first Monday-to-Friday after today, which is when first homework starts out due."""
-    day = date.today() + timedelta(days=1)
+    day = wall_clock.today() + timedelta(days=1)
     while day.weekday() > 4:
         day += timedelta(days=1)
     return day.isoformat()

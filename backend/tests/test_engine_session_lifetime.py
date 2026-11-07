@@ -11,6 +11,7 @@ import flexweek_engine  # type: ignore[import-untyped]
 import pytest
 from fastapi.testclient import TestClient
 
+from backend import clock as app_clock
 from backend.app import SESSION_ENDED, create_app
 from backend.storage import SESSION_SECONDS, SESSION_SECONDS_KEEP, connect, digest
 
@@ -20,8 +21,8 @@ HEADERS = {"X-FlexWeek-Request": "1", "Origin": "http://testserver"}
 
 
 def hold_clock(monkeypatch: pytest.MonkeyPatch, clock: list[int]) -> None:
-    monkeypatch.setattr("backend.storage.time.time", lambda: clock[0])
-    monkeypatch.setattr("backend.app.time.time", lambda: clock[0])
+    """The app's clock reads `clock[0]`, in seconds, for this test."""
+    monkeypatch.setattr(app_clock, "_seconds", lambda: clock[0])
 
 
 def cookie_token(response) -> str:

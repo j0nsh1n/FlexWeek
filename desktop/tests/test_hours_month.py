@@ -664,3 +664,12 @@ def test_a_view_too_short_for_the_tight_rows_scrolls_as_before(qapp: QApplicatio
     assert grid.scroll.verticalScrollBar().maximum() > 0
     assert grid.canvas.cell_rect(0).height() >= grid.canvas.tight_row()
     grid.close()
+
+
+def test_the_month_marks_the_today_it_is_given_not_the_clocks(qapp: QApplication) -> None:
+    """A preview draws the month for its own day; the clock (Thursday 5 November) is another."""
+    grid = MonthGrid()
+    grid.set_month(september(), False, "2026-09-16")
+    marked = [cell.iso for cell in grid.canvas.cells if cell.today]
+    grid.close()
+    assert marked == ["2026-09-16"]

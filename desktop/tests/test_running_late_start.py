@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QApplication, QDialog, QLabel
 
 from desktop.native.widgets import LateDialog
 from desktop.native.window import NativeWindow
+from desktop.tests.light_app import open_light  # noqa: F401
 from desktop.tests.test_default_times import THURSDAY, hold_clock
 from desktop.tests.test_drag_results import qapp, settled, wait_until, window  # noqa: F401
 

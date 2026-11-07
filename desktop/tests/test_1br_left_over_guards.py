@@ -19,6 +19,7 @@ from PySide6.QtGui import QFontMetrics
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
+from backend.tests.fake_clock import CLOCK
 from desktop.native.client import ApiError
 from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.look import sanitize_look
@@ -54,7 +55,7 @@ def overdue_this_week(qapp, window) -> str:
     session.save()
     settled(qapp, window)
     saturday = datetime.fromisoformat(session.week_start) + timedelta(days=SATURDAY, hours=10)
-    session.now_ms = lambda: int(saturday.timestamp() * 1000)
+    CLOCK.set(saturday)
     session.week_changed.emit()
     settled(qapp, window)
     return block["id"]
@@ -263,12 +264,12 @@ def test_1br_deadline_timer_refreshes_tags_sidebar_and_focus(qapp, window, monke
     )
     before = datetime.combine(friday, datetime.min.time()).replace(hour=23, minute=58)
     after = before + timedelta(minutes=3)
-    session.now_ms = lambda: int(before.timestamp() * 1000)
+    CLOCK.set(before)
     session.week_changed.emit()
     settled(qapp, window)
     assert not session.unfinished()
     assert 0 < window._deadline_tick.remainingTime() <= 61_000
-    session.now_ms = lambda: int(after.timestamp() * 1000)
+    CLOCK.set(after)
     window._deadline_tick.timeout.emit()
     settled(qapp, window)
     assert session.unfinished()[0]["left_over_state"] == "overdue"
@@ -331,7 +332,7 @@ def test_1br_next_week_does_not_call_current_week_work_carried(qapp, window) -> 
     session = window.session
     week = session.week_start
     monday = date.fromisoformat(week)
-    session.now_ms = lambda: int(datetime.combine(monday, datetime.min.time()).timestamp() * 1000)
+    CLOCK.set(datetime.combine(monday, datetime.min.time()))
     earlier = (monday - timedelta(days=7)).isoformat()
     session.load_week(earlier)
     settled(qapp, window)
@@ -457,12 +458,16 @@ def test_1br_overdue_left_minutes_are_placed_plus_unallocated(qapp, window) -> N
     session.save()
     settled(qapp, window)
     saturday = datetime.fromisoformat(session.week_start) + timedelta(days=SATURDAY, hours=10)
-    session.now_ms = lambda: int(saturday.timestamp() * 1000)
+    CLOCK.set(saturday)
     session.week_changed.emit()
     settled(qapp, window)
     item = next(row for row in session.unfinished() if row["id"] == "essay")
     assert (item["left_over_state"], item["remaining_min"]) == ("overdue", 120)
-    assert session.homework_time_needed() == []
+    # Past its deadline it is in Unfinished, and its hour that never had a time still asks for one this
+    # week (Jonathan, 2026-11-07); the missed Wednesday hour is not counted again.
+    assert session.homework_time_needed() == [
+        {"assignment_id": "essay", "title": "Essay", "minutes": 60, "period": "this_week"}
+    ]
 
 
 def test_1br_plan_overdue_moves_a_future_session(qapp, window) -> None:

@@ -15,6 +15,7 @@ from desktop.native import window as window_module
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import ConfirmSheet
 from desktop.native.window import NativeWindow
+from desktop.tests.light_app import window as signed_in  # noqa: F401
 from desktop.tests.window_support import (  # noqa: F401
     qapp,
     server,
@@ -22,7 +23,6 @@ from desktop.tests.window_support import (  # noqa: F401
     signed_out,
     wait_until,
 )
-from desktop.tests.window_support import window as signed_in  # noqa: F401
 
 SOCCER = {"id": "activity-1", "title": "Soccer", "kind": "locked", "category": "extra", "start": "16:00",
           "duration_min": 90, "days": [1, 3]}

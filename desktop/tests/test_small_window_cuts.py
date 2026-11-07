@@ -11,17 +11,13 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QPoint, QRect
 from PySide6.QtWidgets import QLabel, QPushButton, QWidget
 
+from backend.tests.fake_clock import CLOCK
 from desktop.native.hours.rail import RAIL_PX
 from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.look import sanitize_look
 from desktop.native.window import NativeWindow
-from desktop.tests.window_support import (  # noqa: F401
-    qapp,
-    server,
-    settled,
-    signed_out,
-    window,
-)
+from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.window_support import qapp, server, settled, signed_out  # noqa: F401
 
 SMALL_WINDOW = (1024, 640)  # The brief's smallest supported window.
 NORMAL_WINDOW = (1280, 800)  # The brief's normal-size layout guard.
@@ -87,9 +83,7 @@ def test_rail_next_rows_put_start_focus_below_the_words_at_1024_large(
 ) -> None:
     session = window.session
     monday = datetime.fromisoformat(session.week_start)
-    session.now_ms = lambda: int(
-        (monday + timedelta(days=HOMEWORK_DAY, hours=PLAN_DEADLINE_HOUR)).timestamp() * 1000
-    )
+    CLOCK.set(monday + timedelta(days=HOMEWORK_DAY, hours=PLAN_DEADLINE_HOUR))
     session.add_homework(
         {
             "id": "history", "title": "History essay",

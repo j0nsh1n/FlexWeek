@@ -98,6 +98,9 @@ def _panel(window: NativeWindow):
 
 
 def _material_file() -> dict:
+    """What the look file keeps for Material; nothing when no look has been saved on this computer."""
+    if not look_file().exists():
+        return {}
     return json.loads(look_file().read_text(encoding="utf-8")).get("material", {})
 
 

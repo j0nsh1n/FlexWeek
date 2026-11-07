@@ -3,7 +3,6 @@ import os
 import re
 import secrets
 import sqlite3
-import time
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from pathlib import Path
@@ -17,6 +16,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from backend import clock as wall_clock
 from backend.assignments import (
     planned_minutes_by_id,
     prepare_solve,
@@ -239,7 +239,7 @@ def save_week_row(
 
 
 def naive_now() -> str:
-    return time.strftime("%Y-%m-%dT%H:%M")
+    return wall_clock.now().strftime("%Y-%m-%dT%H:%M")
 
 
 def payload_digest(value: object) -> str:
@@ -1031,7 +1031,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     def user(request: Request) -> dict:
         token = request.cookies.get(COOKIE, "")
-        now = int(time.time())
+        now = int(wall_clock.seconds())
         token_hash = digest(token)
         with connect(path) as db:
             found = db.session_user(token_hash, now)

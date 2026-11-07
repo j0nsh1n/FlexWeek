@@ -673,7 +673,7 @@ def test_plan_waits_for_a_failed_save_before_offering_undo(
     before = stored_blocks(window)
     session.pending_save = {"weeks": [], "assignments": [], "operation_id": "failed-save"}
     # A save that failed was tried just now, so the autosave tick does not retry it mid-test.
-    window._last_try_ms = session.now_ms()
+    window._last_try_ms = int(time.monotonic() * 1000)
     _press_solve(window)
     qapp.processEvents()
     assert stored_blocks(window) == before

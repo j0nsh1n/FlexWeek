@@ -25,7 +25,8 @@ from PySide6.QtWidgets import (
 
 from desktop.native.settings import SettingsPage
 from desktop.native.window import NativeWindow
-from desktop.tests.window_support import host, qapp, server, signed_out, window  # noqa: F401
+from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.window_support import host, qapp, server, signed_out  # noqa: F401
 
 
 def page(parent: QWidget) -> tuple[QScrollArea, QLineEdit, QSpinBox, QTimeEdit, QComboBox]:

@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
+from backend.tests.fake_clock import FakeClock
 from desktop.tests import logic_support
 
 pytestmark = pytest.mark.skipif(
@@ -180,18 +181,9 @@ def test_each_unfinished_row_has_its_own_delete(qapp: QApplication) -> None:
     assert asked == ["essay"]
 
 
-def test_the_unfinished_list_holds_only_overdue_homework(
-    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_the_unfinished_list_holds_only_overdue_homework(qapp: QApplication, clock: FakeClock) -> None:
     """#14: Unfinished listed work due today and tomorrow. It keeps only what is already late."""
-    now = datetime(2026, 10, 3, 18, 0)
-
-    class Clock(datetime):
-        @classmethod
-        def now(cls, tz: object = None) -> datetime:
-            return now
-
-    monkeypatch.setattr(widgets, "datetime", Clock)
+    clock.set(datetime(2026, 10, 3, 18, 0))
     panel = UnfinishedPanel()
     panel.set_items(
         [

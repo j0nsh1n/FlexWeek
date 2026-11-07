@@ -12,9 +12,11 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication, QDialog
 
+from backend.tests.fake_clock import CLOCK
 from desktop.native.hours.geometry import next_slot
 from desktop.native.widgets import BlockDialog, ChooseTimeDialog
 from desktop.native.window import NativeWindow
+from desktop.tests.light_app import open_light  # noqa: F401
 from desktop.tests.test_drag_results import qapp, session_of, settled, wait_until, window  # noqa: F401
 
 MONDAY, THURSDAY, FRIDAY, SUNDAY = 0, 3, 4, 6
@@ -26,7 +28,7 @@ def hold_clock(window: NativeWindow, day: int, clock: str) -> None:
     moment = datetime.fromisoformat(window.session.week_start) + timedelta(
         days=day, hours=hours, minutes=minutes, seconds=seconds[0] if seconds else 0
     )
-    window.session.now_ms = lambda: int(moment.timestamp() * 1000)
+    CLOCK.set(moment)
 
 
 @pytest.mark.parametrize(

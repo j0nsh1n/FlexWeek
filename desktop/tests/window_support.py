@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import os
-import time
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -19,6 +18,7 @@ from desktop.native.motion import settle
 from desktop.native.window import NativeWindow
 from desktop.server import LocalServer
 from desktop.tests.logic_support import past_setup
+from desktop.tests.waiting import wait_until  # noqa: F401
 
 PASSWORD = "a-long-test-password"
 USERNAME = "words_student"
@@ -29,16 +29,6 @@ def qapp() -> Iterator[QApplication]:
     QStandardPaths.setTestModeEnabled(True)
     application = QApplication.instance() or QApplication(["flexweek-words-test"])
     yield application
-
-
-def wait_until(qapp: QApplication, predicate: Callable[[], bool], timeout: float = 8.0) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        qapp.processEvents()
-        if predicate():
-            return
-        time.sleep(0.02)
-    raise AssertionError("condition was still false")
 
 
 def settled(qapp: QApplication, window: NativeWindow) -> None:

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
-import time
 from collections.abc import Callable, Iterator
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -15,8 +13,9 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QPoint, QStandardPaths, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog, QPushButton, QWidget
+from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog, QWidget
 
+from backend.tests.fake_clock import CLOCK
 from desktop.native.calendar import sunday_due
 from desktop.native.command_bar import (
     BAR_WIDTH,
@@ -32,9 +31,9 @@ from desktop.native.command_bar import (
 from desktop.native.settings import HELP_KEYS
 from desktop.native.widgets import ChooseTimeDialog, HomeworkDialog
 from desktop.native.window import NativeWindow
-from desktop.server import LocalServer
 from desktop.tests.blocks_helper import put_block
-from desktop.tests.logic_support import past_setup
+from desktop.tests.light_app import open_light  # noqa: F401
+from desktop.tests.waiting import wait_until  # noqa: F401
 
 PASSWORD = "a-long-test-password"
 CTRL = Qt.KeyboardModifier.ControlModifier
@@ -44,16 +43,6 @@ CTRL = Qt.KeyboardModifier.ControlModifier
 def qapp() -> Iterator[QApplication]:
     QStandardPaths.setTestModeEnabled(True)
     yield QApplication.instance() or QApplication(["flexweek-command-bar-test"])
-
-
-def wait_until(qapp: QApplication, predicate: Callable[[], bool], timeout: float = 8.0) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        qapp.processEvents()
-        if predicate():
-            return
-        time.sleep(0.02)
-    raise AssertionError("condition was still false")
 
 
 def look_file() -> Path:
@@ -69,41 +58,21 @@ def settled(qapp: QApplication, window: NativeWindow) -> None:
 
 
 @pytest.fixture()
-def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
+def window(qapp: QApplication, open_light: Callable[..., NativeWindow]) -> Iterator[NativeWindow]:  # noqa: F811
     """Today's app's Week with a History essay and a Math worksheet, neither with a time yet."""
-    look_file().unlink(missing_ok=True)
-    server = LocalServer(tmp_path / "flexweek.db")
-    server.start()
-    made = NativeWindow(server.origin)
-    made.resize(1280, 860)
-    made.show()
-    try:
-        made.username.setText("command_bar_student")
-        made.password.setText(PASSWORD)
-        made.findChild(QPushButton, "createAccount").click()
-        wait_until(qapp, lambda: made._stack.currentWidget().objectName() == "recoveryPage")
-        made.recovery_ack.setChecked(True)
-        made.recovery_continue.click()
-        past_setup(qapp, made)
-        session = made.session
-        thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=10)
-        session.now_ms = lambda: int(thursday.timestamp() * 1000)
-        due = sunday_due(session.week_start)
-        for key, title in (("essay", "History essay"), ("math", "Math worksheet")):
-            session.add_homework({"id": key, "title": title, "due": due, "estimate_min": 60, "revision": 0})
-        session.save()
-        settled(qapp, made)
-        made.findChild(QAbstractButton, "viewWeek").click()
-        settled(qapp, made)
-        made.week_table.hours.setFocus()
-        yield made
-    finally:
-        with contextlib.suppress(RuntimeError):
-            made.session.client.reset()
-        made.hide()
-        qapp.processEvents()
-        server.stop()
-        look_file().unlink(missing_ok=True)
+    made = open_light((1280, 860))
+    session = made.session
+    thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=10)
+    CLOCK.set(thursday)
+    due = sunday_due(session.week_start)
+    for key, title in (("essay", "History essay"), ("math", "Math worksheet")):
+        session.add_homework({"id": key, "title": title, "due": due, "estimate_min": 60, "revision": 0})
+    session.save()
+    settled(qapp, made)
+    made.findChild(QAbstractButton, "viewWeek").click()
+    settled(qapp, made)
+    made.week_table.hours.setFocus()
+    yield made
 
 
 def open_bar(window: NativeWindow) -> None:

@@ -10,9 +10,11 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtWidgets import QApplication, QLabel
 
+from backend.tests.fake_clock import CLOCK
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import LateDialog
 from desktop.native.window import NativeWindow
+from desktop.tests.light_app import open_light  # noqa: F401
 from desktop.tests.logic_support import qapp, server, settled, signed_in, wait_until  # noqa: F401
 from desktop.tests.test_drag_results import session_of, window  # noqa: F401
 
@@ -223,7 +225,7 @@ def test_running_late_summary_is_status_not_an_error(
 ) -> None:
     session = window.session
     thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=15, minutes=40)
-    session.now_ms = lambda: int(thursday.timestamp() * 1000)
+    CLOCK.set(thursday)
     # Running late moves what already has a time and never places homework that waits, so the
     # Math worksheet is given Thursday 4 PM first.
     math = session_of(window, "math")
@@ -269,7 +271,7 @@ def _plan_at_monday_five(qapp: QApplication, server, username: str, *, everythin
     wait_until(qapp, lambda: session.preferences is not None)
     monday = datetime.fromisoformat(session.week_start)
     held = monday + timedelta(hours=17)
-    session.now_ms = lambda: int(held.timestamp() * 1000)
+    CLOCK.set(held)
     session.add_homework(
         {
             "id": "l12-floor-homework",

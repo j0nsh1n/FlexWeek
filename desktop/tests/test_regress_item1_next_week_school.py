@@ -19,6 +19,7 @@ pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
 )
 
+from backend.tests.fake_clock import CLOCK  # noqa: E402
 from desktop.tests.logic_support import qapp, server, settled, signed_in, wait_until  # noqa: F401,E402
 
 SETUP_HERE = "Nothing to copy: School and the fixed times you added in Setup are already in every week."
@@ -118,7 +119,7 @@ def plan_in_open_week(qapp, session, title: str) -> None:
     session.save()
     wait_until(qapp, lambda: not session.busy and not session.dirty)
     monday_6am = datetime.fromisoformat(week) + timedelta(hours=6)
-    session.now_ms = lambda: int(monday_6am.timestamp() * 1000)
+    CLOCK.set(monday_6am)
     session.solve()
     wait_until(qapp, lambda: not session.planning and not session.busy and not session.dirty, timeout=20)
     settled(qapp, session)

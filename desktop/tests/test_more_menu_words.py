@@ -27,6 +27,8 @@ from PySide6.QtWidgets import (
     QWidgetAction,
 )
 
+from backend import clock as wall_clock
+from backend.tests.fake_clock import FakeClock
 from desktop.native import settings
 from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.look import sanitize_look
@@ -215,7 +217,7 @@ def test_unfinished_opens_its_list_in_any_design(
     session.add_block({"id": "school", "title": "School", "kind": "locked", "start": "08:00",
                        "duration_min": 390, "days": [0, 1, 2, 3, 4]})
     session.add_homework({"id": "essay", "title": "History essay", "estimate_min": 120, "revision": 0,
-                          "due": (date.today() - timedelta(days=3)).isoformat() + "T12:00"})
+                          "due": (wall_clock.today() - timedelta(days=3)).isoformat() + "T12:00"})
     session.save()
     settled(qapp, window)
     planned = next(block for block in session.blocks if block.get("assignment_id") == "essay")
@@ -236,7 +238,7 @@ def test_unfinished_opens_its_list_in_any_design(
     panel = window.unfinished_panel
     assert panel.isVisibleTo(window), "Timeline showed nothing"
     rows = [label.text() for label in panel.findChildren(QLabel) if label.isVisibleTo(window)]
-    due = date.today() - timedelta(days=3)
+    due = wall_clock.today() - timedelta(days=3)
     assert f"History essay · 2 h left · due {due:%a} {due.day} {due:%b} · Overdue" in rows
     assert action.toolTip() == (
         "Overdue and earlier-week homework that still needs time. Plan it into this week."
@@ -258,7 +260,7 @@ def test_unfinished_stays_open_when_the_week_changes_after_it_is_opened(
     session = window.session
     week = date.fromisoformat(session.week_start)
     session.add_homework({"id": "essay", "title": "History essay", "estimate_min": 120, "revision": 0,
-                          "due": (date.today() - timedelta(days=3)).isoformat() + "T12:00"})
+                          "due": (wall_clock.today() - timedelta(days=3)).isoformat() + "T12:00"})
     session.save()
     settled(qapp, window)
     planned = next(block for block in session.blocks if block.get("assignment_id") == "essay")
@@ -326,13 +328,12 @@ def test_unfinished_is_on_for_work_that_is_not_yet_overdue(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
+    clock: FakeClock,
 ) -> None:
     """#14 asked the button to follow the overdue-only list. 0.19.2 (P1 rule d) made the count the one the
     rail shows: work still needing time is listed and counted whether or not it is overdue."""
     from datetime import datetime
 
-    from desktop.native import widgets as widgets_module
-    from desktop.native import window as window_module
 
     week = date.fromisoformat(window.session.week_start)
     # Saturday evening of the open week while the essay is planned; Monday morning of the next week
@@ -340,18 +341,8 @@ def test_unfinished_is_on_for_work_that_is_not_yet_overdue(
     # that was saved before the clock's week.
     saturday = datetime.combine(week + timedelta(days=5), datetime.min.time()).replace(hour=18)
     monday = datetime.combine(week + timedelta(days=7), datetime.min.time()).replace(hour=9)
-    clock = [saturday]
-
-    class Clock(datetime):
-        @classmethod
-        def now(cls, tz: object = None) -> datetime:
-            return clock[0]
-
-    monkeypatch.setattr(widgets_module, "datetime", Clock)
-    monkeypatch.setattr(window_module, "datetime", Clock)
+    clock.set(saturday)
     session = window.session
-    # Item 1b: the window asks with the session's own clock.
-    monkeypatch.setattr(session, "now_ms", lambda: int(clock[0].timestamp() * 1000))
     session.add_block({"id": "school", "title": "School", "kind": "locked", "start": "08:00",
                        "duration_min": 390, "days": [0, 1, 2, 3, 4]})
     session.add_homework({"id": "essay", "title": "History essay", "estimate_min": 120, "revision": 0,
@@ -362,7 +353,7 @@ def test_unfinished_is_on_for_work_that_is_not_yet_overdue(
     later = (week + timedelta(days=7)).isoformat()
     session.load_week(later)
     wait_until(qapp, lambda: session.week_start == later and not session.busy)
-    clock[0] = monday
+    clock.set(monday)
     assert session.unfinished()
     action = unfinished_action(window)
     button = window.findChild(QPushButton, "unfinishedOpen")
