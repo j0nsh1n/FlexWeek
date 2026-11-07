@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QWidget
 
 from desktop.native.look import resolved_palette
@@ -46,3 +49,17 @@ def name_look(qapp: QApplication, editor: LookEditor, name: str) -> None:
     editor.name.textEdited.emit(name)
     editor.name.editingFinished.emit()
     pump(qapp)
+
+
+def on_modal(act: Callable[[QWidget], None]) -> None:
+    """Run `act` on the modal sheet from inside its own event loop, as soon as the sheet is up. Call it
+    just before the click that opens the sheet: that click blocks until the sheet closes."""
+
+    def attempt() -> None:
+        sheet = QApplication.activeModalWidget()
+        if sheet is None:
+            QTimer.singleShot(0, attempt)
+            return
+        act(sheet)
+
+    QTimer.singleShot(0, attempt)
