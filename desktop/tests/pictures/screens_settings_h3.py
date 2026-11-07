@@ -81,14 +81,17 @@ def _footer_with_dark_preview_behind(window: NativeWindow) -> object:
     return None
 
 
-def _footer_in_high_contrast(window: NativeWindow) -> object:
-    dialog = _section(window, APPEARANCE)
-    dialog.look.setCurrentIndex(dialog.look.findData(HIGH_CONTRAST))
-    _pump(8)
-    area = dialog.stack.widget(APPEARANCE)
-    area.verticalScrollBar().setValue(area.verticalScrollBar().maximum() // 2)
-    _pump(5)
-    return None
+def _footer_in_look(kind: str, name: str):
+    def prepare(window: NativeWindow) -> object:
+        dialog = _section(window, APPEARANCE)
+        dialog.look.setCurrentIndex(dialog.look.findData(look_menu_token(kind, name)))
+        _pump(8)
+        area = dialog.stack.widget(APPEARANCE)
+        area.verticalScrollBar().setValue(area.verticalScrollBar().maximum() // 2)
+        _pump(5)
+        return None
+
+    return prepare
 
 
 def _look_cards(window: NativeWindow) -> object:
@@ -220,7 +223,9 @@ SCREENS: list[Screen] = [
             " painted on the page itself, with no grey band behind them. Reset is an outlined button at the"
             " left, no wider than its words, not a bar across the page. Every field in a form column starts"
             " at the same left edge (text boxes, steppers, drop-downs, buttons and the segmented control's"
-            " drawn track, to the pixel), and the label column is one width."
+            " drawn track, to the pixel), and the label column is one width. On every section (Appearance,"
+            " Planning, Focus, Alerts, This computer) scrolled to the bottom, the last control ends above"
+            " the footer's top edge and the page's bottom margin is at least the footer's height."
         ),
         sources=SETTINGS,
         main=True,
@@ -231,9 +236,7 @@ SCREENS: list[Screen] = [
         prepare=_planning,
         checks=(
             "The Study hours button is outlined, not filled, and no wider than its words or 190 px,"
-            " whichever is more. Labels and fields line up in the same two columns as on the other pages."
-            " The last control ends above the footer with the page's bottom margin at least the footer's"
-            " height."
+            " whichever is more. Labels share one width and the fields start at one left edge."
         ),
         sources=SETTINGS,
     ),
@@ -244,7 +247,8 @@ SCREENS: list[Screen] = [
         checks=(
             "The timer preset sits first, then the work, break, long break and long break count boxes, top"
             " to bottom. Each of the five controls is exactly 260 px wide, and every number box on the page"
-            " is the same width (they were 30, 15, 30 and the width of '4 focus sessions')."
+            " is the same width (they were 30, 15, 30 and the width of '4 focus sessions'). Labels share one"
+            " width and the fields start at one left edge."
         ),
         sources=SETTINGS,
     ),
@@ -256,7 +260,7 @@ SCREENS: list[Screen] = [
             "With the sound set to Spotify, the lead, volume, sound, Spotify link, alarm name, alarm time,"
             " alarm sound and alarm Spotify controls are all one width, at least 260 px (the widest label,"
             " 'A Spotify song or playlist', sets it). The tray note and 'No alarms yet' are in the muted"
-            " grey of the look."
+            " grey of the look. Labels share one width and the fields start at one left edge."
         ),
         sources=SETTINGS,
         main=True,
@@ -269,7 +273,7 @@ SCREENS: list[Screen] = [
             "The values on This computer (preferred view, clock, account, run setup, version, check for"
             " updates) start at the same x as the values on Focus and Alerts. Manage account, Run setup"
             " and Check for updates are three buttons of one width, outlined, as wide as their words and"
-            " not wider than 190 px, and each is quieter than Done."
+            " not wider than 190 px, and each is quieter than Done. Labels share one width."
         ),
         sources=SETTINGS,
     ),
@@ -281,7 +285,8 @@ SCREENS: list[Screen] = [
             "Scrolled so a dark look preview is under the footer's top edge: the footer ends the page"
             " with a hairline in the look's hairline colour and the preview is cut cleanly there. No blurred"
             " cream band mixes into the dark preview above Done (the old 24 px ramp), and the footer's"
-            " padding is the page colour, opaque. Footer margins are 32, 12, 32 and 16 px."
+            " padding is the page colour, opaque. Footer margins are 32, 12, 32 and 16 px, and the Done"
+            " button shows in the footer."
         ),
         sources=SETTINGS,
         main=True,
@@ -289,7 +294,7 @@ SCREENS: list[Screen] = [
     Screen(
         id="settings.footer_in_high_contrast",
         area="settings",
-        prepare=_footer_in_high_contrast,
+        prepare=_footer_in_look("preset", "high-contrast"),
         checks=(
             "High contrast keeps its own black page and yellow (#ffd400) accent. The footer stays black"
             " with a hairline in the look's hairline colour and a visible Done button, with no fade band"
@@ -297,6 +302,54 @@ SCREENS: list[Screen] = [
         ),
         sources=SETTINGS,
         main=True,
+    ),
+    Screen(
+        id="settings.footer_in_light_frost",
+        area="settings",
+        prepare=_footer_in_look("pack", "light-frost"),
+        checks=(
+            "Scrolled so content is under the footer's top edge in the Light look: the pixels half the"
+            " fade's height above the footer are the content's own colours (within 8 of each channel), not"
+            " mixed with the page colour, so there is no fade band above Done, and the footer's padding is"
+            " the page colour (within 4 of each channel)."
+        ),
+        sources=SETTINGS,
+    ),
+    Screen(
+        id="settings.footer_in_dark_frost",
+        area="settings",
+        prepare=_footer_in_look("pack", "dark-frost"),
+        checks=(
+            "Scrolled so content is under the footer's top edge in the Dark look: the pixels half the"
+            " fade's height above the footer are the content's own colours (within 8 of each channel), not"
+            " mixed with the page colour, so there is no fade band above Done, and the footer's padding is"
+            " the page colour (within 4 of each channel)."
+        ),
+        sources=SETTINGS,
+    ),
+    Screen(
+        id="settings.footer_in_paper",
+        area="settings",
+        prepare=_footer_in_look("preset", "paper"),
+        checks=(
+            "Scrolled so content is under the footer's top edge in the Paper look: the pixels half the"
+            " fade's height above the footer are the content's own colours (within 8 of each channel), not"
+            " mixed with the page colour, so there is no fade band above Done, and the footer's padding is"
+            " the page colour (within 4 of each channel)."
+        ),
+        sources=SETTINGS,
+    ),
+    Screen(
+        id="settings.footer_in_nocturne",
+        area="settings",
+        prepare=_footer_in_look("pack", "nocturne"),
+        checks=(
+            "Scrolled so content is under the footer's top edge in the Nocturne look: the pixels half the"
+            " fade's height above the footer are the content's own colours (within 8 of each channel), not"
+            " mixed with the page colour, so there is no fade band above Done, and the footer's padding is"
+            " the page colour (within 4 of each channel)."
+        ),
+        sources=SETTINGS,
     ),
     Screen(
         id="settings.look_cards",

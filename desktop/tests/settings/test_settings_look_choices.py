@@ -16,7 +16,7 @@ from desktop.native import settings as settings_module
 from desktop.native.layouts.registry import LAYOUTS, MATCH, tokens_for
 from desktop.native.layouts.retro import scheme as retro_scheme
 from desktop.native.look import look_menu_token
-from desktop.native.widgets import ChoiceCard, Segmented, Swatches
+from desktop.native.widgets import ChoiceCard, Segmented, Swatches, card_columns
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.settings.support_settings_pages import palette_of, prefs, tile, visible_words
@@ -374,3 +374,21 @@ def test_retro_gives_the_settings_text_its_own_ink_whatever_look_is_worn(
     apply(qapp, window)
     assert ink(heading) == worn_heading
     assert ink(body) == worn_body
+
+
+def test_design_cards_fill_their_rows(qapp: QApplication) -> None:
+    six = 6
+    assert card_columns(six, 3 * 240, 228, 12) == 3, "two full rows of three"
+    assert card_columns(six, 2 * 240, 228, 12) == 2, "three full rows of two"
+    assert card_columns(six, 4 * 240, 228, 12) == 3, "four fit but would leave two alone"
+    assert card_columns(2, 2 * 240, 228, 12) == 2, "Day screen's two sit side by side"
+    assert card_columns(5, 4 * 240, 228, 12) == 3, "five, when nothing divides, share out as 3 and 2"
+    assert card_columns(6, 100, 228, 12) == 1, "a window narrower than a card gets one column"
+    assert card_columns(1, 1000, 228, 12) == 1
+
+
+def test_each_section_has_its_icon(qapp: QApplication, window: NativeWindow) -> None:
+    dialog = prefs(window)
+    nav = dialog.nav
+    assert nav.count() == 5
+    assert all(not nav.item(row).icon().isNull() for row in range(nav.count()))
