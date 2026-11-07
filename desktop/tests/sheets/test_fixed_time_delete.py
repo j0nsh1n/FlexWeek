@@ -1,6 +1,6 @@
 """Deleting a fixed time: it asks first, says exactly what goes, does nothing when refused, and the notice
 that follows offers Undo. The question sheet's colours (the Delete answer red, Cancel plain) are a picture:
-desktop/tests/pictures/screens_sheets_h8.py (sheets.delete-fixed-time-question).
+desktop/tests/pictures/screens_sheets_h8.py (sheets.delete-fixed-time-question, sheets.sign-out-question).
 """
 
 from __future__ import annotations
@@ -105,8 +105,21 @@ def test_the_question_before_deleting_has_a_delete_answer_and_cancel_is_the_one_
     shown_buttons = [button.text() for button in box.buttons.values() if button.isVisible()]
     assert sorted(shown_buttons) == ["Cancel", "Delete"]
     assert cancel.isDefault() and not yes.isDefault(), "Enter pressed out of habit changes nothing"
+    assert yes.property("danger"), "the Delete answer is the destructive kind (drawn red)"
     assert not cancel.property("danger"), "Cancel is plain"
     box.close()
+
+
+def test_the_sign_out_question_is_not_a_destructive_answer(
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
+) -> None:
+    """Signing out keeps everything, so its answer is filled in the accent, not drawn as a danger."""
+    leave = widgets.confirm_sheet(window, "Sign out", "Sure?", "Sign out", danger=False)
+    leave.show()
+    qapp.processEvents()
+    assert not leave.buttons["yes"].property("danger")
+    leave.close()
 
 
 def test_setup_delete_from_one_day_uses_one_sheet_and_offers_undo(

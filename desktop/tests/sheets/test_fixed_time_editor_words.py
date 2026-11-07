@@ -14,6 +14,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import QPoint
 from PySide6.QtWidgets import (
     QApplication,
     QDialogButtonBox,
@@ -62,6 +63,9 @@ def test_it_says_that_ticking_another_day_repeats_it(qapp: QApplication, host: Q
     note = dialog.findChild(QLabel, "blockRepeatNote")
     assert note.text() == "Pick more days to repeat it."
     assert note.isVisibleTo(dialog)
+    qapp.processEvents()
+    days_bottom = dialog.day_picker.mapTo(dialog, QPoint(0, dialog.day_picker.height())).y()
+    assert note.mapTo(dialog, QPoint(0, 0)).y() >= days_bottom, "the note stands under the day boxes"
     series = BlockDialog(host, soccer(), occurrence_day=3)
     series.show()
     series.scope_occurrence.setChecked(True)

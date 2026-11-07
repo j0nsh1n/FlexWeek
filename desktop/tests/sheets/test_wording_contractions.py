@@ -166,7 +166,7 @@ def test_help_for_planning_and_the_day_screen_use_contractions() -> None:
     )
 
 
-def test_the_plan_button_s_tip_uses_a_contraction() -> None:
+def test_the_plan_buttons_tip_uses_a_contraction() -> None:
     assert PLAN_TIP == (
         "Find a time for homework that has none, around your fixed times and before it's due. Homework "
         "that already has a time keeps it."
