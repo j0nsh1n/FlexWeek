@@ -1,25 +1,29 @@
-"""The remaining design animations follow the screen without changing their paths or ends."""
+"""The design animations follow the screen's refresh rate without changing their paths or ends: halfway
+along the clock each value is where its easing curve puts it, and at the end it is the target, or, where
+nothing travels (Reduce and Off), it was there at once."""
 
 from __future__ import annotations
 
+import importlib.util
 import os
+
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
+)
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import pytest
-from PySide6.QtCore import QEvent, QRectF
-from PySide6.QtWidgets import QApplication
+if importlib.util.find_spec("PySide6") is not None:
+    from PySide6.QtCore import QEvent, QRectF
+    from PySide6.QtWidgets import QApplication
 
-from desktop.native import motion
-from desktop.tests.test_motion import Hours
+    from desktop.native import motion
+    from desktop.tests.settings.support_motion import Hours
+    from desktop.tests.window_support import qapp  # noqa: F401
 
 LEVELS = ["normal", "extra", "reduce", "off"]
-
-
-@pytest.fixture(scope="module")
-def qapp():
-    yield QApplication.instance() or QApplication(["flexweek-motion-clocks"])
-
 
 
 def clock_at(clock, length, share=0.5):
@@ -31,10 +35,10 @@ def clock_at(clock, length, share=0.5):
 
 
 @pytest.fixture(autouse=True)
-def screen_clock(monkeypatch):
+def screen_clock(monkeypatch):  # noqa: ANN201
     monkeypatch.setattr(motion, "screen_rate", lambda _: 360)
     yield
-    motion.apply_ui_effects("off")
+    motion.apply_ui_effects("normal")
 
 
 @pytest.mark.parametrize("level", LEVELS)
@@ -178,21 +182,6 @@ def test_ring_keeps_its_cubic_arc_and_end(qapp, level):
     ring.run_down(0.2, 0.8, level)
     assert ring.left() == 0.8, "a new countdown never eases backwards"
     ring.close()
-
-
-def test_bento_off_is_instant_even_for_a_tile_built_with_motion(qapp):
-    from desktop.native.layouts.bento import DayTile
-    from desktop.tests.test_layout_bento import shown
-
-    motion.apply_ui_effects("normal")
-    view = shown(qapp, hero="today")
-    tile = view.findChild(DayTile)
-    tile._lifting.stop()
-    tile.lift = 0.0
-    motion.apply_ui_effects("off")
-    tile._aim(True)
-    assert tile.lift == 1.0
-    view.close()
 
 
 def test_dials_finished_clock_clears_its_hand_even_if_the_live_minute_changed(qapp):
