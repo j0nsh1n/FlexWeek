@@ -33,7 +33,7 @@ FEELS = (
     ("retro", "retro", "Retro"),
 )
 
-# What every title picture checks; Large text is the edge set's, not this screen's own variant.
+# What every title picture checks; Large text comes from the edge set, which every feel screen is in.
 TITLE_CHECKS = (
     "the page's title is whole at 800 and 1280 pixels wide (its words fit the label, neither cut off nor "
     "wrapped past the label's height) at Large text"
@@ -122,7 +122,7 @@ for key, main, name in FEELS:
             prepare=_settings(main),
             checks=f"Settings in the {name} feel: {extra}; {TITLE_CHECKS}; {SCROLL_CHECK}",
             sources=SOURCES,
-            main=key in ("dashboard", "retro"),
+            main=True,
         )
     )
     if key == "plain":
@@ -142,6 +142,7 @@ for key, main, name in FEELS:
                 )
             ),
             sources=SOURCES + ("desktop/native/widgets.py",),
+            main=True,
         )
     )
     SCREENS.append(
@@ -155,6 +156,7 @@ for key, main, name in FEELS:
                 "make it scroll in Retro)"
             ),
             sources=SOURCES,
+            main=True,
         )
     )
 
