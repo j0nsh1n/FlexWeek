@@ -1,47 +1,32 @@
-"""The bundled faces, shipped with the app, and times written in figures of one width."""
+"""The bundled faces, shipped with the app, Retro's figures and ligatures, and times written in figures of
+one width."""
 
 from __future__ import annotations
 
-import importlib.util
-import os
-from collections.abc import Iterator
-
 import pytest
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QFontDatabase, QFontInfo, QFontMetricsF
+from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QTimeEdit
 
-pytestmark = pytest.mark.skipif(
-    importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
+from desktop.native.fonts import (
+    FACES,
+    FAMILIES,
+    FONT_DIR,
+    TABULAR,
+    caption,
+    load_fonts,
+    time_font,
+    weighted,
+    without_ligatures,
 )
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import Qt
-    from PySide6.QtGui import QFont, QFontDatabase, QFontInfo, QFontMetricsF
-    from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QTimeEdit
-
-    from desktop.native.fonts import (
-        FACES,
-        FAMILIES,
-        FONT_DIR,
-        TABULAR,
-        caption,
-        load_fonts,
-        time_font,
-        weighted,
-        without_ligatures,
-    )
-    from desktop.native.tokens import WEIGHT_STRONG, type_pt
-    from desktop.native.widgets import use_app_style
-    from desktop.native.window import NativeWindow
-    from desktop.tests.window_support import server, signed_out, window  # noqa: F401
+from desktop.native.tokens import WEIGHT_STRONG, type_pt
+from desktop.native.widgets import use_app_style
+from desktop.native.window import NativeWindow
+from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.window_support import qapp  # noqa: F401
 
 
-@pytest.fixture(scope="module")
-def qapp() -> Iterator[QApplication]:
-    yield QApplication.instance() or QApplication(["flexweek-fonts-test"])
-
-
-def test_every_bundled_face_loads_as_its_family_at_its_weight(qapp: QApplication) -> None:
+def test_every_bundled_face_loads_as_its_family_at_its_weight(qapp: QApplication) -> None:  # noqa: F811
     """Inter, Newsreader and JetBrains Mono for the Serif and Mono fonts, and Retro desktop's Pixelify
     Sans and VT323, each drawn at the weight asked for. The mock-up's variable fonts, registered as they
     were, drew a 600 heading at 400."""
@@ -64,7 +49,7 @@ def test_every_bundled_face_loads_as_its_family_at_its_weight(qapp: QApplication
             assert (QFontInfo(font).family(), QFontInfo(font).styleName()) == (family, style)
 
 
-def test_retros_face_takes_its_figures_from_vt323(qapp: QApplication) -> None:
+def test_retros_face_takes_its_figures_from_vt323(qapp: QApplication) -> None:  # noqa: F811
     """Pixelify Sans draws its 5 as an S and, at the caption size, its 2 as an 8, so Retro's face has
     VT323's figures and colon, a third larger (the mock-up's size-adjust of 128 %), at every weight,
     and keeps its own letters."""
@@ -80,10 +65,10 @@ def test_retros_face_takes_its_figures_from_vt323(qapp: QApplication) -> None:
         assert metrics.horizontalAdvance("S") != pytest.approx(vt.horizontalAdvance("S") * 1.28, abs=1)
 
 
-def test_pixelify_sets_fi_as_one_glyph_unless_ligatures_are_off(qapp: QApplication) -> None:
-    """Q17: Pixelify Sans joins "fi" into one glyph that reads as "A", so Retro showed "Add Axed time".
-    The same word measured with ligatures off is a different width from the plain face, which is what
-    proves the check measures the ligature and not kerning."""
+def test_pixelify_sets_fi_as_one_glyph_unless_ligatures_are_off(qapp: QApplication) -> None:  # noqa: F811
+    """Pixelify Sans joins "fi" into one glyph that reads as "A", so Retro showed "Add Axed time". The
+    same word measured with ligatures off is a different width from the plain face, which is what proves
+    the check measures the ligature and not kerning."""
     load_fonts()
     plain = QFont("Pixelify Sans", 14)
     assert QFontMetricsF(plain).horizontalAdvance("fixed") != pytest.approx(
@@ -97,10 +82,11 @@ def test_pixelify_sets_fi_as_one_glyph_unless_ligatures_are_off(qapp: QApplicati
 
 
 def test_retros_window_hands_its_words_the_font_without_ligatures(
-    qapp: QApplication, window: NativeWindow  # noqa: F811
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
 ) -> None:
-    """Q17: a label set in Pixelify Sans inside the window takes its font features from the window, so
-    Retro's window must turn them off and any other look's must not."""
+    """A label set in Pixelify Sans inside the window takes its font features from the window, so Retro's
+    window must turn them off and any other look's must not."""
     load_fonts()
     label = QLabel("fixed", window)
     label.setStyleSheet("QLabel { font-family: 'Pixelify Sans'; }")
@@ -119,10 +105,11 @@ def test_retros_window_hands_its_words_the_font_without_ligatures(
 
 
 def test_retro_keeps_a_times_even_figures_and_a_strong_words_weight(
-    qapp: QApplication, window: NativeWindow  # noqa: F811
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
 ) -> None:
-    """Q17 review: turning ligatures off in Retro changes only the features. A time keeps tabular figures
-    and its weight, and after Retro it has its own font back with no ligature setting left on it."""
+    """Turning ligatures off in Retro changes only the features. A time keeps tabular figures and its
+    weight, and after Retro it has its own font back with no ligature setting left on it."""
     load_fonts()
     label = QLabel("10:00", window)
     label.setFont(time_font(weighted(label.font(), WEIGHT_STRONG)))
@@ -142,10 +129,11 @@ def test_retro_keeps_a_times_even_figures_and_a_strong_words_weight(
 
 
 def test_a_label_made_while_in_retro_takes_the_plain_font_after_it(
-    qapp: QApplication, window: NativeWindow  # noqa: F811
+    qapp: QApplication,  # noqa: F811
+    window: NativeWindow,  # noqa: F811
 ) -> None:
-    """Q17 review: a widget made while Retro is worn does not keep Retro's no-ligature font into the next
-    look, so the next look's words join as that look's face means them to."""
+    """A widget made while Retro is worn does not keep Retro's no-ligature font into the next look, so
+    the next look's words join as that look's face means them to."""
     load_fonts()
     window._layout = {"main": "retro", "day": "one", "options": {}}
     window._apply_appearance()
@@ -164,7 +152,7 @@ def test_a_label_made_while_in_retro_takes_the_plain_font_after_it(
     label.deleteLater()
 
 
-def test_a_time_takes_as_much_room_whatever_its_figures(qapp: QApplication) -> None:
+def test_a_time_takes_as_much_room_whatever_its_figures(qapp: QApplication) -> None:  # noqa: F811
     load_fonts()
     plain = QFont("Inter", 12)
     ones, zeros = "11:11", "00:00"
@@ -176,9 +164,9 @@ def test_a_time_takes_as_much_room_whatever_its_figures(qapp: QApplication) -> N
     assert time_font(plain).pointSizeF() == plain.pointSizeF() and time_font(plain).family() == "Inter"
 
 
-def test_the_hours_small_words_are_the_scales_caption_at_every_text_size(qapp: QApplication) -> None:
-    """Hour labels, block times and the now line's time were the body shrunk by 0.86, a size of their
-    own at every Text knob. They are the caption beside the body the knob chose."""
+def test_the_hours_small_words_are_the_scales_caption_at_every_text_size(qapp: QApplication) -> None:  # noqa: F811
+    """Hour labels, block times and the now line's time were the body shrunk by 0.86, a size of their own
+    at every Text knob. They are the caption beside the body the knob chose."""
     for text in ("small", "normal", "large"):
         body = QFont("Inter")
         body.setPointSizeF(type_pt("body", text))
@@ -189,14 +177,14 @@ def test_the_hours_small_words_are_the_scales_caption_at_every_text_size(qapp: Q
     assert caption(own).pointSizeF() == pytest.approx(17.2)
 
 
-def test_a_strong_word_is_600_not_bold(qapp: QApplication) -> None:
+def test_a_strong_word_is_600_not_bold(qapp: QApplication) -> None:  # noqa: F811
     load_fonts()
     strong = weighted(QFont("Inter", 13), WEIGHT_STRONG)
     assert strong.weight() == QFont.Weight.DemiBold
     assert QFontInfo(strong).styleName() == "SemiBold"
 
 
-def test_every_time_box_writes_its_figures_at_one_width(qapp: QApplication) -> None:
+def test_every_time_box_writes_its_figures_at_one_width(qapp: QApplication) -> None:  # noqa: F811
     use_app_style(qapp)
     time, line = QTimeEdit(), QLineEdit()
     for box in (time, line):
