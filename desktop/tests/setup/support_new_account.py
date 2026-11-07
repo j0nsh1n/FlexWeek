@@ -56,16 +56,18 @@ class Launcher:
         self._windows.remove(window)
         _free(window)
 
-    def restart_backend(self) -> None:
-        """The server is stopped and started again on the same database."""
+    def stop_backend(self) -> None:
+        """The backend stops, leaving its database free to change."""
         self.api.close()
+
+    def start_backend(self) -> None:
         self.api = InProcessApi(self.database)
 
     def close(self) -> None:
         for window in reversed(self._windows):
             _free(window)
         self._windows.clear()
-        self.api.close()
+        self.stop_backend()
 
 
 def _free(window: NativeWindow) -> None:
@@ -128,9 +130,7 @@ def sign_up(qapp: QApplication, window: NativeWindow, name: str) -> None:
     wait_until(qapp, lambda: page(window) == "recoveryPage", HASHING_WAIT, "the recovery codes")
     window.recovery_ack.setChecked(True)
     window.recovery_continue.click()
-    wait_until(
-        qapp, lambda: page(window) == "setupPage" and not window.session.busy, HASHING_WAIT, "setup"
-    )
+    wait_until(qapp, lambda: page(window) == "setupPage" and not window.session.busy, HASHING_WAIT, "setup")
     wait_until(qapp, lambda: window.session.preferences is not None, HASHING_WAIT, "the preferences")
 
 
@@ -146,10 +146,12 @@ def sign_in(qapp: QApplication, launcher: Launcher, name: str) -> NativeWindow:
     window.sign_in_button.click()
     wait_until(
         qapp,
-        lambda: window.session.preferences is not None
-        and page(window) in {"weekPage", "setupPage", "materialPage"}
-        and not window.session.busy
-        and not window.session.client.pending,
+        lambda: (
+            window.session.preferences is not None
+            and page(window) in {"weekPage", "setupPage", "materialPage"}
+            and not window.session.busy
+            and not window.session.client.pending
+        ),
         HASHING_WAIT,
         "the account's preferences",
     )
