@@ -1,5 +1,6 @@
-"""Days are picked with pills everywhere (T19 and X7 of the 0.17.0 audit, 5.2 A of 0.17.2): the block
-editor's Add fixed time used check boxes while setup used pills, so one choice looked two ways."""
+"""Days are picked with pills everywhere: the block editor's Add fixed time used check boxes while setup
+used pills, so one choice looked two ways. That the alarm's pills sit on one row is a picture:
+screens_settings_h7.py."""
 
 from __future__ import annotations
 
@@ -40,7 +41,7 @@ def test_routines_school_hours_and_work_hours_pick_days_with_pills(
     qapp: QApplication,  # noqa: F811
     host: QWidget,  # noqa: F811
 ) -> None:
-    """X7: setup's planning-hours step ticked work hours' days in check boxes. (Availability edits
+    """Setup's planning-hours step ticked work hours' days in check boxes. (Availability edits
     each day on its own row since #54, so it has no days to pick.)"""
     from desktop.native.widgets import RoutineDialog, SchoolHoursDialog
     from desktop.native.work_windows import WorkWindowsEditor
@@ -63,8 +64,7 @@ def test_routines_school_hours_and_work_hours_pick_days_with_pills(
 
 
 def test_alarm_days_are_pills_on_one_row(qapp: QApplication) -> None:  # noqa: F811
-    """T21: the alarm's days wrapped into two rows of check boxes, Monday to Thursday then Friday to
-    Sunday."""
+    """The alarm's days wrapped into two rows of check boxes, Monday to Thursday then Friday to Sunday."""
     from desktop.native.settings import SettingsPage
 
     page = SettingsPage(None, {"alarms": []}, {}, {})
@@ -75,7 +75,6 @@ def test_alarm_days_are_pills_on_one_row(qapp: QApplication) -> None:  # noqa: F
     days = [pill for pill in pills(page) if pill.objectName().startswith("alarmDay")]
     assert [pill.text() for pill in days] == list(DAYS)
     assert [pill.isChecked() for pill in days] == [True] * 5 + [False] * 2
-    assert len({pill.mapToGlobal(pill.rect().topLeft()).y() for pill in days}) == 1, "one row"
     assert day_boxes(page) == []
     free(page)
 
