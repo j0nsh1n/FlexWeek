@@ -1,4 +1,4 @@
-"""Stage 5 authenticated API: comfort prefs, split preview, presets and limits."""
+"""Comfort and timer preferences through the API: defaults left off the wire, range limits, the split preview, presets and reminder limits."""
 
 from __future__ import annotations
 
