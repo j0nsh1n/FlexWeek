@@ -1,11 +1,10 @@
-"""Under Due, Add and Edit homework asks "FlexWeek picks the time" or "Pin to a time" a day and time
-(finding 32 of the 0.17.2 audit, T-W14). Pinning the homework's time means no plan moves it; the other
-choice frees it. A drop on the grid pins too, and reopening the homework shows where it was put."""
+"""Under Due, Add and Edit homework asks "FlexWeek picks the time" or "Pin to a time" a day and time.
+Pinning the homework's time means no plan moves it; the other choice frees it. A drop on the grid pins
+too, and reopening the homework shows where it was put."""
 
 from __future__ import annotations
 
 from datetime import datetime
-from types import SimpleNamespace
 
 import pytest
 
@@ -15,28 +14,24 @@ from PySide6.QtCore import QDate, QTime
 from PySide6.QtWidgets import QApplication, QDialog, QWidget
 
 from desktop.native.widgets import NO_TIME_LEFT, ChooseTimeDialog, HomeworkDialog
-from desktop.tests.test_homework_form import go_when
-from desktop.tests.test_homework_plan import (  # noqa: F401
+from desktop.native.window import NativeWindow
+from desktop.tests.light_app import open_light  # noqa: F401
+from desktop.tests.sheets.support_homework import go_when
+from desktop.tests.sheets.support_homework import host as clocked_host
+from desktop.tests.sheets.support_homework_week import (  # noqa: F401
+    homework_window,
     opened_with,
-    qapp,
-    server,
     session_of,
     settled,
-    window,
 )
-from desktop.tests.window_support import free
+from desktop.tests.window_support import free, qapp  # noqa: F401
 
 WEEK = "2026-09-14"
 MONDAY_AT_NOON = datetime(2026, 9, 14, 12, 0)
 
 
 def host(*sessions: dict, now: datetime = MONDAY_AT_NOON) -> QWidget:
-    """A parent whose session has this week's blocks and a clock, as the window's session does."""
-    parent = QWidget()
-    parent.session = SimpleNamespace(  # type: ignore[attr-defined]
-        now_ms=lambda: int(now.timestamp() * 1000), blocks=list(sessions), week_start=WEEK
-    )
-    return parent
+    return clocked_host(*sessions, now=now)
 
 
 def session(**more: object) -> dict:
@@ -64,7 +59,7 @@ def homework(due: str = "2026-09-20") -> dict:
 
 
 def opened(parent: QWidget, *, assignment: dict | None = None) -> HomeworkDialog:
-    dialog = HomeworkDialog(parent, assignment, "2026-09-14")
+    dialog = HomeworkDialog(parent, assignment, WEEK)
     dialog.show()
     QApplication.processEvents()
     return dialog
@@ -89,11 +84,7 @@ def test_new_homework_asks_who_picks_the_time_and_starts_with_flexweek(qapp: QAp
     free(parent)
 
 
-def test_pinned_time_accessible_names_and_help_keep_pinned_homework(
-    qapp: QApplication,  # noqa: F811
-) -> None:
-    from desktop.native.settings import HELP_PLANNING
-
+def test_the_pinned_time_and_its_error_are_named_for_screen_readers(qapp: QApplication) -> None:  # noqa: F811
     parent = host()
     dialog = opened(parent)
     go_when(dialog)
@@ -102,6 +93,11 @@ def test_pinned_time_accessible_names_and_help_keep_pinned_homework(
     assert dialog.when_problem.accessibleName() == "Pinned time error"
     free(dialog)
     free(parent)
+
+
+def test_the_planning_help_says_pinned_homework_keeps_its_time() -> None:
+    from desktop.native.settings import HELP_PLANNING
+
     assert HELP_PLANNING == (
         "Add homework with its due date and length. Press Plan my homework and FlexWeek finds free time for "
         "it in your study hours, around your fixed times, before it's due. Homework that already has a time "
@@ -110,7 +106,7 @@ def test_pinned_time_accessible_names_and_help_keep_pinned_homework(
     )
 
 
-def test_do_it_at_shows_one_day_and_a_time_and_says_where_it_stays(qapp: QApplication) -> None:  # noqa: F811
+def test_pin_to_a_time_shows_one_day_and_a_time_and_says_where_it_stays(qapp: QApplication) -> None:  # noqa: F811
     parent = host()
     dialog = opened(parent)
     go_when(dialog)
@@ -123,7 +119,7 @@ def test_do_it_at_shows_one_day_and_a_time_and_says_where_it_stays(qapp: QApplic
     free(parent)
 
 
-def test_do_it_at_starts_today_at_the_next_sensible_time(qapp: QApplication) -> None:  # noqa: F811
+def test_pin_to_a_time_starts_today_at_the_next_sensible_time(qapp: QApplication) -> None:  # noqa: F811
     noon = host()
     dialog = opened(noon)
     go_when(dialog)
@@ -155,7 +151,7 @@ def test_only_one_day_can_be_picked(qapp: QApplication) -> None:  # noqa: F811
     free(parent)
 
 
-def test_saving_do_it_at_hands_over_the_day_and_time(qapp: QApplication) -> None:  # noqa: F811
+def test_saving_a_pinned_time_hands_over_the_day_and_time(qapp: QApplication) -> None:  # noqa: F811
     parent = host()
     dialog = opened(parent)
     dialog.title.setText("History essay")
@@ -187,7 +183,7 @@ def test_leaving_the_choice_alone_hands_over_nothing(qapp: QApplication) -> None
     free(planned_parent)
 
 
-def test_homework_with_a_pinned_time_opens_on_do_it_at_with_that_day_and_time(
+def test_homework_with_a_pinned_time_opens_on_pin_to_a_time_with_that_day_and_time(
     qapp: QApplication,  # noqa: F811
 ) -> None:
     parent = host(session(pinned=True, days=[3], start="17:00"))
@@ -200,7 +196,7 @@ def test_homework_with_a_pinned_time_opens_on_do_it_at_with_that_day_and_time(
     free(parent)
 
 
-def test_homework_flexweek_planned_opens_on_let_flexweek_pick(qapp: QApplication) -> None:  # noqa: F811
+def test_homework_flexweek_planned_opens_on_flexweek_picks_the_time(qapp: QApplication) -> None:  # noqa: F811
     parent = host(session())
     dialog = opened(parent, assignment=homework())
     assert dialog.when.currentData() == "plan"
@@ -208,7 +204,7 @@ def test_homework_flexweek_planned_opens_on_let_flexweek_pick(qapp: QApplication
     free(parent)
 
 
-def test_choosing_let_flexweek_pick_on_pinned_homework_hands_over_a_release(
+def test_choosing_flexweek_picks_on_pinned_homework_hands_over_a_release(
     qapp: QApplication,  # noqa: F811
 ) -> None:
     parent = host(session(pinned=True))
@@ -223,14 +219,14 @@ def test_choosing_let_flexweek_pick_on_pinned_homework_hands_over_a_release(
 def test_homework_spread_over_several_times_keeps_the_spread_way(qapp: QApplication) -> None:  # noqa: F811
     parent = host(session(), session(id="s2", days=[4]))
     dialog = opened(parent, assignment=homework())
-    assert not dialog.when.isVisible(), "which of its times would Do it at mean?"
+    assert not dialog.when.isVisible(), "which of its times would Pin to a time mean?"
     dialog.accept()
     assert "fixed_at" not in dialog.assignment()
     free(dialog)
     free(parent)
 
 
-def test_do_it_at_after_it_is_due_is_refused_in_words(qapp: QApplication) -> None:  # noqa: F811
+def test_a_pinned_time_after_it_is_due_is_refused_in_words(qapp: QApplication) -> None:  # noqa: F811
     parent = host()
     dialog = opened(parent, assignment=homework(due="2026-09-16T14:00"))
     dialog.when.setCurrentIndex(1)
@@ -244,7 +240,7 @@ def test_do_it_at_after_it_is_due_is_refused_in_words(qapp: QApplication) -> Non
     free(parent)
 
 
-def test_past_do_it_at_save_focuses_field_and_announces_one_description(
+def test_a_pinned_time_that_has_passed_focuses_the_time_and_announces_one_description(
     qapp: QApplication,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -278,7 +274,7 @@ def test_past_do_it_at_save_focuses_field_and_announces_one_description(
     free(parent)
 
 
-def test_homework_title_save_error_focuses_title_and_announces_once(
+def test_a_missing_title_on_save_focuses_the_title_and_announces_once(
     qapp: QApplication,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -307,11 +303,13 @@ def test_homework_title_save_error_focuses_title_and_announces_once(
 # Through the window and its session
 
 
-def test_a_new_homework_saved_with_do_it_at_is_pinned_there(
+def test_a_new_homework_saved_with_a_pinned_time_is_pinned_there(
     qapp: QApplication,  # noqa: F811
-    window,  # noqa: F811
-    monkeypatch: pytest.MonkeyPatch,  # noqa: F811
+    homework_window: NativeWindow,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    window = homework_window
+
     def act(dialog: HomeworkDialog) -> int:
         dialog.title.setText("Chemistry lab")
         dialog.due.date.setDate(dialog.due.date.date().addDays(3))
@@ -329,11 +327,12 @@ def test_a_new_homework_saved_with_do_it_at_is_pinned_there(
     assert (block["days"], block["start"], block.get("pinned")) == ([4], "16:00", True)
 
 
-def test_do_it_at_pins_planned_homework_and_let_flexweek_pick_frees_it_again(
+def test_pin_to_a_time_pins_planned_homework_and_flexweek_picks_frees_it_again(
     qapp: QApplication,  # noqa: F811
-    window,  # noqa: F811
-    monkeypatch: pytest.MonkeyPatch,  # noqa: F811
+    homework_window: NativeWindow,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    window = homework_window
     window.session.unpin_assignment("essay")
     window.session.save()
     settled(qapp, window)
@@ -362,14 +361,15 @@ def test_do_it_at_pins_planned_homework_and_let_flexweek_pick_frees_it_again(
     window._edit_homework("essay")
     settled(qapp, window)
     block = session_of(window, "essay")
-    assert not block.get("pinned"), "Let FlexWeek pick a time clears the pin"
+    assert not block.get("pinned"), "FlexWeek picks the time clears the pin"
 
 
 def test_a_drop_on_the_grid_pins_the_homework_and_reopening_shows_where(
     qapp: QApplication,  # noqa: F811
-    window,  # noqa: F811
-    monkeypatch: pytest.MonkeyPatch,  # noqa: F811
+    homework_window: NativeWindow,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    window = homework_window
     window.session.unpin_assignment("essay")
     window.session.save()
     settled(qapp, window)
@@ -401,9 +401,7 @@ def test_no_time_left_this_week_says_to_close_and_go_to_next_week(
         "duration_min": 60,
         "days": [6],
     }
-    dialog = ChooseTimeDialog(
-        None, waiting, WEEK, [6], [], None, today=6, minute=23 * 60 + 50
-    )
+    dialog = ChooseTimeDialog(None, waiting, WEEK, [6], [], None, today=6, minute=23 * 60 + 50)
     dialog.show()
     QApplication.processEvents()
     assert dialog.problem.text() == NO_TIME_LEFT
@@ -413,8 +411,9 @@ def test_no_time_left_this_week_says_to_close_and_go_to_next_week(
 
 def test_undoing_an_unpin_says_undid_unpinning_the_homework(
     qapp: QApplication,  # noqa: F811
-    window,  # noqa: F811
+    homework_window: NativeWindow,  # noqa: F811
 ) -> None:
+    window = homework_window
     window.session.unpin_assignment("essay")
     window.session.save()
     settled(qapp, window)

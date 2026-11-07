@@ -1,5 +1,5 @@
-"""The Due row of Add and Edit homework (finding 32 of the 0.17.2 audit): a switch called "Due by" with
-the time beside it, and a deadline that has already passed is refused where it was set."""
+"""The Due row of Add and Edit homework: a switch called "Due by" with the time beside it, and a deadline
+that has already passed is refused where it was set."""
 
 from __future__ import annotations
 
@@ -14,19 +14,20 @@ from PySide6.QtCore import QDate, Qt, QTime
 from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QToolButton, QWidget
 
 from desktop.native.widgets import HomeworkDialog
-from desktop.tests.test_homework_form import go_when
+from desktop.tests.sheets.support_homework import go_when
 from desktop.tests.window_support import free, qapp  # noqa: F401
 
 TODAY = "2026-09-14"
 NOW = datetime(2026, 9, 14, 15, 0)
+TOO_LATE = "That due time has passed. Choose a later one."
 
 
 def clocked() -> QWidget:
     """A parent whose session says it is 15:00 on 14 Sep 2026, as the window's session does."""
     parent = QWidget()
-    parent.session = SimpleNamespace(
+    parent.session = SimpleNamespace(  # type: ignore[attr-defined]
         now_ms=lambda: int(NOW.timestamp() * 1000), blocks=[], week_start="2026-09-14"
-    )  # type: ignore[attr-defined]
+    )
     return parent
 
 
@@ -74,7 +75,7 @@ def test_a_day_that_has_passed_is_refused_beside_the_date(qapp: QApplication) ->
     go_when(dialog)
     dialog.due.date.setDate(QDate(2026, 9, 13))
     assert not saved(dialog)
-    assert dialog.due.problem.text() == "That due time has passed. Choose a later one."
+    assert dialog.due.problem.text() == TOO_LATE
     assert dialog.due.problem.isVisible()
     assert dialog.due.problem.objectName() == "validationError", "the sheet's error colour"
     assert not dialog.error.isVisible(), "beside the field, not in the form's last line"
@@ -95,7 +96,7 @@ def test_a_time_earlier_today_is_refused_and_a_later_one_is_not(qapp: QApplicati
     dialog.due.timed.setChecked(True)
     dialog.due.time.setTime(QTime(14, 0))
     assert not saved(dialog), "14:00 is an hour ago at 15:00"
-    assert dialog.due.problem.text() == "That due time has passed. Choose a later one."
+    assert dialog.due.problem.text() == TOO_LATE
     dialog.due.time.setTime(QTime(15, 30))
     assert saved(dialog)
     assert dialog.assignment()["due"] == "2026-09-14T15:30"
@@ -137,7 +138,7 @@ def test_a_new_deadline_on_old_homework_is_checked_too(qapp: QApplication) -> No
     dialog = HomeworkDialog(parent, homework("2026-09-20"), TODAY)
     dialog.due.date.setDate(QDate(2026, 9, 12))
     assert not saved(dialog)
-    assert dialog.due.problem.text() == "That due time has passed. Choose a later one."
+    assert dialog.due.problem.text() == TOO_LATE
     free(dialog)
     free(parent)
 
@@ -163,7 +164,6 @@ def test_due_date_is_one_tab_stop(qapp: QApplication) -> None:  # noqa: F811
     date.focusNextPrevChild(True)
     focused = dialog.focusWidget()
     assert focused is not date and focused is not date.lineEdit()
-    date.calendarWidget()
     tools = date.calendarWidget().findChildren(QToolButton)
     assert tools
     assert all(button.focusPolicy() == Qt.FocusPolicy.NoFocus for button in tools)
