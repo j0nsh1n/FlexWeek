@@ -21,15 +21,8 @@ from PySide6.QtWidgets import (
 
 from desktop.native.widgets import SchoolHoursDialog
 from desktop.native.window import NativeWindow
-from desktop.tests.window_support import (  # noqa: F401
-    host,
-    qapp,
-    server,
-    settled,
-    signed_out,
-    wait_until,
-)
-from desktop.tests.window_support import window as signed_in  # noqa: F401
+from desktop.tests.light_app import window as signed_in  # noqa: F401
+from desktop.tests.window_support import host, qapp, settled  # noqa: F401
 
 
 @pytest.fixture()
@@ -141,8 +134,9 @@ def test_an_end_before_the_start_is_said_and_nothing_is_saved(qapp: QApplication
     assert dialog.block() is None
     buttons = dialog.findChild(QDialogButtonBox)
     save = buttons.button(QDialogButtonBox.StandardButton.Save)
-    cancel = buttons.button(QDialogButtonBox.StandardButton.Cancel)
-    assert (save.isDefault(), cancel.property("quiet")) == (True, True), "Save filled, Cancel quiet"
+    # Save is the default button, so Enter saves; that it is the filled one and Cancel the quiet one is
+    # the picture settings.school_hours_dialog.
+    assert save.isDefault()
 
 
 def test_no_school_days_is_said_only_when_no_day_is_picked(qapp: QApplication, host: QWidget) -> None:
