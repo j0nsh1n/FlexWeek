@@ -1,4 +1,4 @@
-"""Appearance preference fields: pack, accent, chips and motion."""
+"""Preference fields beyond the basics: pack, accent, chips, motion, alarm tone, planning style, drag step, setup progress and the 24-hour clock."""
 
 from __future__ import annotations
 
@@ -114,7 +114,7 @@ def test_explicit_normal_motion_stays_on_the_wire(alice: TestClient) -> None:
 
 
 def test_reduce_motion_is_kept_and_an_unknown_level_is_rejected(alice: TestClient) -> None:
-    """Decision 33 of 0.17: Reduce, fades without movement, is a level a student can keep."""
+    """Reduce, fades without movement, is a level a student can keep."""
     saved = alice.put("/api/preferences", json={**defaults(), "motion": "reduce"}, headers=WRITE)
     assert saved.status_code == 200, saved.text
     assert alice.get("/api/preferences").json()["motion"] == "reduce"
@@ -158,7 +158,7 @@ SETUP_KEYS = ("alarm_tone", "planning_style", "drag_step_min", "setup")
 
 
 def test_a_fresh_account_omits_the_setup_preferences(alice: TestClient) -> None:
-    """Default values stay off the wire, so a 0.14 client reads an account exactly as before."""
+    """Default values stay off the wire, so an older client reads an account exactly as before."""
     body = alice.get("/api/preferences").json()
     for key in SETUP_KEYS:
         assert key not in body
