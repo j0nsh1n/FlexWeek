@@ -93,6 +93,16 @@ def running_late_after_text_size_changes(window: NativeWindow) -> object:
     return dialog
 
 
+def look_with_high_contrast(window: NativeWindow) -> None:
+    """The Look page wearing High contrast, which shows the Large text suggestion beside the preview."""
+    qapp = QApplication.instance()
+    window._open_settings()
+    page = window._settings
+    page.nav.setCurrentRow(0)
+    page.look.setCurrentIndex(page.look.findData("preset:high-contrast"))
+    settled(qapp, window)
+
+
 def long_homework_title(window: NativeWindow) -> None:
     # Imported here: it needs the views lane's Material helpers, which a screens module need not load.
     from desktop.tests.sheets.support_material_sheets import material_week
@@ -197,6 +207,18 @@ SCREENS: list[Screen] = [
             "running-late",
             "study-hours",
         )
+    ),
+    Screen(
+        id="settings.look_high_contrast_suggestion",
+        area="settings",
+        prepare=look_with_high_contrast,
+        checks=(
+            "With High contrast worn, the suggestion 'High contrast is easiest to read with Large text.' "
+            "and its 'Use Large text' button keep their words (the label is not cut off) at Small, Normal "
+            "and Large text, and the style preview sits to the right of the settings list, not under it."
+        ),
+        sources=("desktop/native/settings.py", "desktop/native/look.py"),
+        styles=WIDGETS,
     ),
     Screen(
         id="sheets.running_late_after_preview",
