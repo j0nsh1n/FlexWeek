@@ -9,6 +9,7 @@ how a look is drawn is in the settings pictures.
 
 from __future__ import annotations
 
+import re
 from itertools import product
 from math import dist
 
@@ -40,10 +41,12 @@ from desktop.native.look import (
     readable_focus_edge,
     readable_ink,
     resolved_palette,
+    sanitize_look,
     settings_rules,
     setup_rules,
     switch_track_edge,
 )
+from desktop.native.look_editor import editor_rules
 from desktop.native.tokens import SINK, mix, mix_oklab, oklab
 from desktop.tests.settings.support_look import _lab, look_of
 
@@ -291,3 +294,31 @@ def test_a_filled_block_on_a_dark_look_is_its_colour_sunk_into_the_panel_with_li
             assert drawn["ink"] == palette["text"], where
             assert contrast(drawn["ink"], drawn["fill"]) >= AA_TEXT, where
     assert seen
+
+
+CHIP_PRESETS = ("default", "paper", "ink", "pastel", "terminal", "poster", "high-contrast")
+# A pale accent is the case where the plain accent cannot be words on its own tint.
+CHIP_ACCENTS = ("default", "gold", "sand", "#dfff00", "#809dce")
+
+
+def chip_colours(css: str) -> tuple[str, str]:
+    rule = re.search(r"QLabel#lookTag \{ background: (#[0-9a-f]{6}|transparent); color: (#[0-9a-f]{6});", css)
+    assert rule, "the editor's rules have no Changed chip"
+    return rule.group(1), rule.group(2)
+
+
+@pytest.mark.parametrize("accent", CHIP_ACCENTS)
+@pytest.mark.parametrize("pack", ["light-frost", "dark-frost"])
+def test_the_changed_chip_reads_at_4_5_to_1_on_its_tint(pack: str, accent: str) -> None:
+    palette = resolved_palette(pack, False, None, accent)
+    tint, words = chip_colours(editor_rules(palette, 6))
+    assert contrast(words, tint) >= AA_TEXT, (pack, accent, words, tint)
+
+
+@pytest.mark.parametrize("preset", CHIP_PRESETS)
+def test_the_changed_chip_reads_in_every_look(preset: str) -> None:
+    look = sanitize_look({"preset": preset})
+    palette = resolved_palette("light-frost", False, look)
+    tint, words = chip_colours(editor_rules(palette, 6))
+    ground = palette["panel"] if tint == "transparent" else tint
+    assert contrast(words, ground) >= AA_TEXT, (preset, words, ground)
