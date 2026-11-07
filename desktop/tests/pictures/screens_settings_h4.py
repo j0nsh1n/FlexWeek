@@ -5,11 +5,12 @@ labels, positions, sizes), so the reviewer judges them on the picture."""
 
 from __future__ import annotations
 
+from PySide6.QtCore import QStandardPaths
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.look import sanitize_look
-from desktop.native.settings import HelpDialog
+from desktop.native.settings import AboutDialog, HelpDialog
 from desktop.native.widgets import SchoolHoursDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
@@ -107,6 +108,16 @@ def _help_scrolling_sheet(window: NativeWindow) -> object:
 
 def _help_fade_edge(window: NativeWindow) -> object:
     return _help(window, 1280, 560, large=True)
+
+
+def _about_dialog(window: NativeWindow) -> object:
+    wait_until(QApplication.instance(), lambda: window.session.storage_info is not None)
+    folder = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
+    dialog = AboutDialog(window, window.session.storage_info, folder)
+    dialog.show()
+    QApplication.processEvents()
+    still(dialog)
+    return dialog
 
 
 def _new_looks_notice(window: NativeWindow) -> object:
@@ -256,7 +267,8 @@ SCREENS: list[Screen] = [
             " the look's hairline colour and 8 px rounded corners (not the sheet's 16 px). The message,"
             " the 'Choose a look' action (in the accent) and the x each reach at least 4.5 to 1 on the"
             " card, in Light, Dark and High contrast. The week behind it has not moved or shrunk: the"
-            " planner has the same position and size as in settings.more_count_none."
+            " notice floats over the window without pushing the planner down or making it smaller (0 px"
+            " difference from the same week without the notice)."
         ),
         sources=("desktop/native/window.py", "desktop/native/look.py", "desktop/native/widgets.py"),
         main=True,
@@ -271,5 +283,16 @@ SCREENS: list[Screen] = [
             " reading on the toast's background."
         ),
         sources=("desktop/native/window.py", "desktop/native/look.py", "desktop/native/widgets.py"),
+    ),
+    Screen(
+        id="settings.about_dialog",
+        area="settings",
+        prepare=_about_dialog,
+        checks=(
+            "About FlexWeek shows the FlexWeek logo beside the product name at 56 px wide, the version,"
+            " what FlexWeek is, where the week is saved, and an 'Open folder' button; nothing is cut"
+            " off."
+        ),
+        sources=("desktop/native/settings.py",),
     ),
 ]
