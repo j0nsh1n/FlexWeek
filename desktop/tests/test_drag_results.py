@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import contextlib
 import importlib.util
 import os
-import time
 from collections.abc import Callable, Iterator
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
+
+from backend.tests.fake_clock import CLOCK
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
@@ -35,8 +35,8 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.hours.canvas import HoursCanvas
     from desktop.native.widgets import BlockDialog
     from desktop.native.window import NativeWindow
-    from desktop.server import LocalServer
-    from desktop.tests.logic_support import past_setup
+    from desktop.tests.light_app import open_light  # noqa: F401
+    from desktop.tests.waiting import wait_until  # noqa: F401
 
     LEFT = Qt.MouseButton.LeftButton
 
@@ -47,16 +47,6 @@ PASSWORD = "a-long-test-password"
 def qapp() -> Iterator[QApplication]:
     QStandardPaths.setTestModeEnabled(True)
     yield QApplication.instance() or QApplication(["flexweek-drag-results-test"])
-
-
-def wait_until(qapp: QApplication, predicate: Callable[[], bool], timeout: float = 8.0) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        qapp.processEvents()
-        if predicate():
-            return
-        time.sleep(0.02)
-    raise AssertionError("condition was still false")
 
 
 def settled(qapp: QApplication, window: NativeWindow) -> None:
@@ -75,54 +65,34 @@ def look_file() -> Path:
 
 
 @pytest.fixture()
-def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
+def window(qapp: QApplication, open_light: Callable[..., NativeWindow]) -> Iterator[NativeWindow]:
     """Today's app's Week: School on weekdays 08:00-14:30, Piano on Thursday 17:00-17:30, the History
     essay on Thursday 19:00-20:00 and a Math worksheet with no time yet. The clock is held at Thursday
     10:00."""
-    look_file().unlink(missing_ok=True)
-    server = LocalServer(tmp_path / "flexweek.db")
-    server.start()
-    made = NativeWindow(server.origin)
-    made.resize(1280, 860)
-    made.show()
-    try:
-        made.username.setText("drag_results_student")
-        made.password.setText(PASSWORD)
-        made.findChild(QPushButton, "createAccount").click()
-        wait_until(qapp, lambda: made._stack.currentWidget().objectName() == "recoveryPage")
-        made.recovery_ack.setChecked(True)
-        made.recovery_continue.click()
-        past_setup(qapp, made)
-        session = made.session
-        thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=10)
-        session.now_ms = lambda: int(thursday.timestamp() * 1000)
-        session.add_block(
-            {"id": "school", "title": "School", "kind": "locked", "category": "class",
-             "start": "08:00", "duration_min": 390, "days": [0, 1, 2, 3, 4]}
-        )
-        session.add_block(
-            {"id": "piano", "title": "Piano", "kind": "locked", "category": "extra",
-             "start": "17:00", "duration_min": 30, "days": [3]}
-        )
-        due = sunday_due(session.week_start)
-        for key, title in (("essay", "History essay"), ("math", "Math worksheet")):
-            session.add_homework({"id": key, "title": title, "due": due, "estimate_min": 60, "revision": 0})
-        session.save()
-        settled(qapp, made)
-        essay = session_of(made, "essay")
-        session.add_block({**essay, "start": "19:00", "days": [3], "pinned": True})
-        session.save()
-        settled(qapp, made)
-        made.findChild(QAbstractButton, "viewWeek").click()
-        settled(qapp, made)
-        yield made
-    finally:
-        with contextlib.suppress(RuntimeError):
-            made.session.client.reset()
-        made.hide()
-        qapp.processEvents()
-        server.stop()
-        look_file().unlink(missing_ok=True)
+    made = open_light((1280, 860))
+    session = made.session
+    thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=10)
+    CLOCK.set(thursday)
+    session.add_block(
+        {"id": "school", "title": "School", "kind": "locked", "category": "class",
+         "start": "08:00", "duration_min": 390, "days": [0, 1, 2, 3, 4]}
+    )
+    session.add_block(
+        {"id": "piano", "title": "Piano", "kind": "locked", "category": "extra",
+         "start": "17:00", "duration_min": 30, "days": [3]}
+    )
+    due = sunday_due(session.week_start)
+    for key, title in (("essay", "History essay"), ("math", "Math worksheet")):
+        session.add_homework({"id": key, "title": title, "due": due, "estimate_min": 60, "revision": 0})
+    session.save()
+    settled(qapp, made)
+    essay = session_of(made, "essay")
+    session.add_block({**essay, "start": "19:00", "days": [3], "pinned": True})
+    session.save()
+    settled(qapp, made)
+    made.findChild(QAbstractButton, "viewWeek").click()
+    settled(qapp, made)
+    yield made
 
 
 def session_of(window: NativeWindow, assignment_id: str) -> dict:
@@ -317,6 +287,7 @@ def test_the_notice_waits_for_the_pointer_and_goes_once_its_change_is_no_longer_
     hours = window.week_table.hours
     hours.reveal(3, 16 * 60, 21 * 60)
     qapp.processEvents()
+    session.client.hold()
     drag(qapp, hours, hours, hours.point_for(3, 19 * 60 + 30), hours.point_for(3, 20 * 60 + 30))
     assert session.busy, "the essay's save is still on its way"
     # The chips the release took out of the tray are freed before a hand could press again. Freed
@@ -325,11 +296,15 @@ def test_the_notice_waits_for_the_pointer_and_goes_once_its_change_is_no_longer_
     # Held on Piano while the essay's save lands.
     send(hours, QEvent.Type.MouseButtonPress, hours.point_for(3, 17 * 60 + 15), True)
     send(hours, QEvent.Type.MouseMove, hours.point_for(3, 17 * 60 + 45), True)
+    session.client.release()
     wait_until(qapp, lambda: not session.busy and session_of(window, "essay")["start"] == "20:00")
     held = notice(window)
+    # Read before Piano's own save lands and says what it did.
+    session.client.hold()
     send(hours, QEvent.Type.MouseButtonRelease, hours.point_for(3, 17 * 60 + 45), False)
     qapp.processEvents()
     let_go = notice(window)
+    session.client.release()
     wait_until(qapp, lambda: next(b for b in session.blocks if b["id"] == "piano")["start"] == "17:30")
     settled(qapp, window)
     after_piano = notice(window)

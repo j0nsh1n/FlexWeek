@@ -5,7 +5,6 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import os
-import time
 from collections.abc import Iterator
 from datetime import date, timedelta
 from pathlib import Path
@@ -22,6 +21,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.client import _error
     from desktop.native.controller import NativeSession
     from desktop.server import LocalServer
+    from desktop.tests.waiting import wait_until  # noqa: F401
 
 PASSWORD = "a-long-test-password"
 HELD: list[object] = []
@@ -48,16 +48,6 @@ def server(qapp: QApplication, tmp_path: Path) -> Iterator[LocalServer]:
     HELD.clear()
     qapp.processEvents()
     running.stop()
-
-
-def wait_until(qapp: QApplication, predicate, timeout: float = 8.0) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        qapp.processEvents()
-        if predicate():
-            return
-        time.sleep(0.02)
-    raise AssertionError("condition was still false")
 
 
 def past_setup(qapp: QApplication, window: object) -> None:

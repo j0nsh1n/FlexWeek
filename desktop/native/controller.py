@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import date, datetime, timedelta
@@ -12,6 +11,7 @@ from uuid import uuid4
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
+from backend import clock as wall_clock
 from backend.models import Assignment, ProtectedWindow, TimeBlock, WorkWindow, parse_due
 from backend.slots import hhmm_to_minutes
 from backend.weeks import current_week_start
@@ -240,7 +240,7 @@ class NativeSession(QObject):
         self.busy = False
         self.message = ""
         self.planner_view = "week"
-        self.selected_day = date.today().isoformat()
+        self.selected_day = wall_clock.today().isoformat()
         self.day_data: dict | None = None
         self.selected_month: str | None = None
         self.month_data: dict | None = None
@@ -297,7 +297,7 @@ class NativeSession(QObject):
         self.new_account = False
         self.focus_store: dict[int, dict | None] = {}
         self.look: dict = sanitize_look(None)
-        self.now_ms = lambda: int(time.time() * 1000)
+        self.now_ms = wall_clock.now_ms
         self._focus_busy = False
         self._pending_focus: dict | None = None
         # Material 3's focus rules (mute reminders, finish the block) apply only while Material is the
@@ -416,7 +416,7 @@ class NativeSession(QObject):
         self.pending_save = None
         self._standing = None
         self.planner_view = "week"
-        self.selected_day = date.today().isoformat()
+        self.selected_day = wall_clock.today().isoformat()
         self.day_data = None
         self.selected_month = None
         self.month_data = None
@@ -2542,7 +2542,7 @@ class NativeSession(QObject):
         if self.planner_view == "day" and monday_of(self.selected_day) == self.week_start:
             day = (date.fromisoformat(self.selected_day) - date.fromisoformat(self.week_start)).days
             return (day, None)
-        today = today or date.today()
+        today = today or wall_clock.today()
         if monday_of(today.isoformat()) == self.week_start:
             return (today.weekday(), None)
         return None
@@ -3063,7 +3063,7 @@ class NativeSession(QObject):
         )
 
     def preview_running_late(self, minutes: int, now: datetime | None = None) -> None:
-        moment = now or datetime.now()
+        moment = now or wall_clock.now()
         refusal = running_late_refusal(
             week_start=self.week_start,
             now=moment,

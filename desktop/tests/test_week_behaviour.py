@@ -15,6 +15,7 @@ from PySide6.QtGui import QContextMenuEvent, QMouseEvent
 from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog, QLabel, QPushButton, QWidget
 from shiboken6 import isValid
 
+from backend.tests.fake_clock import CLOCK
 from desktop.native import icons
 from desktop.native import window as window_module
 from desktop.native.calendar import monday_of, sunday_due
@@ -26,6 +27,7 @@ from desktop.native.menus import Menu
 from desktop.native.widgets import ConfirmSheet, PreviewDialog, RoutineDialog
 from desktop.native.window import PLAN_LABEL, PLAN_SHORT, PLAN_TINY, NativeWindow
 from desktop.tests import window_support as window_support_mod
+from desktop.tests.light_app import window as signed_in  # noqa: F401
 from desktop.tests.window_support import (  # noqa: F401
     free,
     qapp,
@@ -34,7 +36,6 @@ from desktop.tests.window_support import (  # noqa: F401
     signed_out,
     wait_until,
 )
-from desktop.tests.window_support import window as signed_in  # noqa: F401
 
 # A drop on an earlier day than today: that day is over (1.0.0 decision on the past-time sentence).
 DAY_OVER = "That time has passed. The day is over, so choose another day."
@@ -76,7 +77,7 @@ def essay_on_past_day(window: NativeWindow) -> None:
     set_clock_24h(False)
     session = window.session
     thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=12)
-    session.now_ms = lambda: int(thursday.timestamp() * 1000)
+    CLOCK.set(thursday)
     session.save()
     settled(QApplication.instance(), window)
 

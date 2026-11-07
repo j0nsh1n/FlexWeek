@@ -19,6 +19,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native import motion
     from desktop.native import window as window_module
     from desktop.native.layouts.registry import sanitize_layout
+    from desktop.tests.light_app import open_light  # noqa: F401
     from desktop.tests.test_hours_open import qapp, wait_until, window  # noqa: F401
     from desktop.tests.test_week_side import seeded
 

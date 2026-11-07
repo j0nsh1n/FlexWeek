@@ -14,10 +14,12 @@ from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QAbstractButton, QApplication
 
+from backend.tests.fake_clock import CLOCK
 from desktop.native import window as window_module
 from desktop.native.hours.canvas import HoursCanvas
 from desktop.native.menus import Menu
 from desktop.native.window import NativeWindow
+from desktop.tests.light_app import window as signed_in  # noqa: F401
 from desktop.tests.window_support import (  # noqa: F401
     qapp,
     server,
@@ -25,7 +27,6 @@ from desktop.tests.window_support import (  # noqa: F401
     signed_out,
     wait_until,
 )
-from desktop.tests.window_support import window as signed_in  # noqa: F401
 
 NONE = Qt.KeyboardModifier.NoModifier
 WEDNESDAY = 2
@@ -41,8 +42,7 @@ PIANO = {
 
 
 def hold_clock(window: NativeWindow, day: int, minute: int) -> None:
-    moment = datetime.fromisoformat(window.session.week_start) + timedelta(days=day, minutes=minute)
-    window.session.now_ms = lambda: int(moment.timestamp() * 1000)
+    CLOCK.set(datetime.fromisoformat(window.session.week_start) + timedelta(days=day, minutes=minute))
     window._fill_classic()
     QApplication.processEvents()
 

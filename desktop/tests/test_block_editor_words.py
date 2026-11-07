@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from backend import clock as wall_clock
 from desktop.native import widgets
 from desktop.native.calendar import date_for_day
 from desktop.native.look import resolved_palette, sanitize_look
@@ -210,7 +211,7 @@ def test_delete_asks_first_and_does_nothing_when_refused(
     one_day = BlockDialog(host, soccer(), occurrence_day=3)
     one_day.scope_occurrence.setChecked(True)
     one_day.delete_button.click()
-    today = date.today()
+    today = wall_clock.today()
     occurrence_date = today - timedelta(days=today.weekday()) + timedelta(days=3)
     date_text = f"{occurrence_date.day} {occurrence_date.strftime('%b')}"
     assert asked[-1] == (

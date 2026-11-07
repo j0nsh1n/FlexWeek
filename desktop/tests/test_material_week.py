@@ -7,7 +7,6 @@ the account's own data, not from reading what the QML prints.
 from __future__ import annotations
 
 import ast
-import contextlib
 import json
 import os
 from collections.abc import Iterator
@@ -24,16 +23,15 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QStandardPaths, Qt  # noqa: E402
 from PySide6.QtGui import QColor  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QPushButton  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
+from backend.tests.fake_clock import CLOCK  # noqa: E402
 from desktop.native import material as material_package  # noqa: E402
 from desktop.native.material.bridge_week import SLACK_TAGS, WeekBridge  # noqa: E402
 from desktop.native.weekmodel import clock_label, set_clock_24h  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
-from desktop.server import LocalServer  # noqa: E402
-from desktop.tests.logic_support import past_setup  # noqa: E402
+from desktop.tests.light_app import LightWindows  # noqa: E402
 from desktop.tests.test_layouts_window import (  # noqa: E402
-    PASSWORD,
     look_file,
     settled,
     wait_until,
@@ -77,25 +75,14 @@ def _look(window: NativeWindow, **material: str) -> None:
 def window(qapp: QApplication, tmp_path_factory: pytest.TempPathFactory) -> Iterator[NativeWindow]:
     """Signed in, clock held at Thursday 19:00, School Monday to Thursday mornings, the History
     essay planned for 18:45 that day, and nothing else placed."""
-    look_file().unlink(missing_ok=True)
-    server = LocalServer(tmp_path_factory.mktemp("material-week") / "flexweek.db")
-    server.start()
-    made = NativeWindow(server.origin)
-    made.show()
-    made.resize(WIDTH, 800)
+    windows = LightWindows(qapp, tmp_path_factory.getbasetemp(), tmp_path_factory.mktemp("material-week"))
+    made = windows.open((WIDTH, 800))
     try:
-        made.username.setText("material_week")
-        made.password.setText(PASSWORD)
-        made.findChild(QPushButton, "createAccount").click()
-        wait_until(qapp, lambda: made._stack.currentWidget().objectName() == "recoveryPage")
-        made.recovery_ack.setChecked(True)
-        made.recovery_continue.click()
-        past_setup(qapp, made)
         wait_until(qapp, lambda: made.session.preferences is not None)
         session = made.session
         made.home_week = session.week_start
         thursday = datetime.fromisoformat(session.week_start) + timedelta(days=NOW_DAY, hours=19)
-        session.now_ms = lambda: int(thursday.timestamp() * 1000)
+        CLOCK.set(thursday)
         session.add_block(
             {
                 "id": "school",
@@ -125,11 +112,7 @@ def window(qapp: QApplication, tmp_path_factory: pytest.TempPathFactory) -> Iter
         settled(qapp, made)
         yield made
     finally:
-        with contextlib.suppress(RuntimeError):
-            made.session.client.reset()
-        made.hide()
-        qapp.processEvents()
-        server.stop()
+        windows.close()
         look_file().unlink(missing_ok=True)
 
 
@@ -225,6 +208,10 @@ def _reset(window: NativeWindow, qapp: QApplication) -> QObject:
     _clean(window, qapp)
     look_file().unlink(missing_ok=True)
     root = _show_material(qapp, window)
+    # A plan that placed everything focuses its snackbar, which holds it open; left over from an
+    # earlier test it draws over the grid the pixel tests read.
+    bridge = _bridge(window)
+    bridge._clear_snack(bridge._snack)
     if hasattr(window._material_page.bridge, "sheets"):
         window._material_page.bridge.sheets.forceClose()
     window._material_page.publish()

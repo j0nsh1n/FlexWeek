@@ -45,6 +45,7 @@ from PySide6.QtWidgets import (
 )
 from shiboken6 import isValid
 
+from backend import clock as wall_clock
 from backend.models import due_is_timed
 from desktop.native.calendar import DAYS
 from desktop.native.fields import week_starts_on
@@ -1013,7 +1014,9 @@ class MonthGrid(QWidget):
                 self._drawn_for = account
                 self.canvas.open_week = self._week.week_start if self._week is not None else None
                 self.canvas.set_cells(
-                    month_cells(None, self._weeks_as_kept(), today_iso or date.today().isoformat(), month)
+                    month_cells(
+                        None, self._weeks_as_kept(), today_iso or wall_clock.today().isoformat(), month
+                    )
                 )
                 # The dates are all there; a "Loading month…" line would take a row and give it back,
                 # and the month would grow when its chips came.
@@ -1028,7 +1031,7 @@ class MonthGrid(QWidget):
         self._say(self.warning, "")
         weeks = self._weeks_as_kept()
         self.canvas.open_week = self._week.week_start if self._week is not None else None
-        today = today_iso or date.today().isoformat()
+        today = today_iso or wall_clock.today().isoformat()
         self.canvas.set_cells(month_cells(snapshot, weeks, today, month))
         self._say(self.overdue, "")
         chosen = self.canvas.selected

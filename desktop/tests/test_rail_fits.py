@@ -12,6 +12,7 @@ pytestmark = pytest.mark.skipif(importlib.util.find_spec("PySide6") is None, rea
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QLabel, QPushButton
 
+    from desktop.tests.light_app import open_light  # noqa: F401
     from desktop.tests.test_hours_open import qapp, wait_until, window  # noqa: F401
 
 LONG = "A very long assignment title that must fit the narrow Agenda rail"

@@ -1,0 +1,128 @@
+"""The app and its tests read the date and time only through backend.clock, so the tests' fake clock
+(the root conftest.py) is the only time any test sees."""
+
+from __future__ import annotations
+
+import ast
+import re
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+SCANNED = ("backend", "desktop", "conftest.py")
+# backend/clock.py is the clock. The rest compare against times written on the real clock by
+# something no test can set: downloads' file times (the updater) and the sync service's own stamps
+# (pairing expiry, a phone last seen).
+ALLOWED = {
+    ("backend/clock.py", "time.time"),
+    ("desktop/native/updater.py", "time.time"),
+    ("desktop/tests/test_audit_0190_updates.py", "time.time"),
+    ("desktop/native/devices.py", "datetime.now"),
+    ("backend/tests/test_engine_sync.py", "time.time"),
+}
+# Python calls that return the current date or time, by the last two names of what is called.
+WALL_CLOCK = {
+    ("date", "today"),
+    ("datetime", "today"),
+    ("datetime", "now"),
+    ("datetime", "utcnow"),
+    ("time", "time"),
+    ("time", "time_ns"),
+    ("QDate", "currentDate"),
+    ("QTime", "currentTime"),
+    ("QDateTime", "currentDateTime"),
+    ("QDateTime", "currentDateTimeUtc"),
+    ("QDateTime", "currentMSecsSinceEpoch"),
+    ("QDateTime", "currentSecsSinceEpoch"),
+}
+# These read the current time only when given no time to work on.
+WALL_CLOCK_WITHOUT_ARGUMENTS = {("time", "localtime"), ("time", "gmtime"), ("time", "ctime")}
+QML_WALL_CLOCK = re.compile(r"\bDate\.now\(\)|\bnew\s+Date\(\s*\)")
+
+
+# A class reached through its module (datetime.date, QtCore.QDate). Any other attribute is an
+# object's own, as a time field's self.time.time().
+CLASSES = {"date", "datetime", "QDate", "QTime", "QDateTime"}
+
+
+def called_name(call: ast.Call) -> tuple[str, str] | None:
+    func = call.func
+    if not isinstance(func, ast.Attribute):
+        return None
+    owner = func.value
+    if isinstance(owner, ast.Name):
+        return owner.id, func.attr
+    if isinstance(owner, ast.Attribute) and owner.attr in CLASSES and isinstance(owner.value, ast.Name):
+        return owner.attr, func.attr
+    return None
+
+
+def python_files() -> list[Path]:
+    found: list[Path] = []
+    for name in SCANNED:
+        path = ROOT / name
+        found.extend([path] if path.is_file() else sorted(path.rglob("*.py")))
+    return [path for path in found if ".venv" not in path.parts and "__pycache__" not in path.parts]
+
+
+def wall_clock_reads(source: str) -> list[tuple[int, str]]:
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call):
+            continue
+        name = called_name(node)
+        if name is None:
+            continue
+        given = node.args or node.keywords
+        if name in WALL_CLOCK or (name in WALL_CLOCK_WITHOUT_ARGUMENTS and not given):
+            found.append((node.lineno, ".".join(name)))
+        elif name == ("time", "strftime") and len(node.args) < 2:
+            found.append((node.lineno, "time.strftime"))
+    return found
+
+
+def test_no_python_file_reads_the_wall_clock_itself() -> None:
+    reads = []
+    for path in python_files():
+        where = path.relative_to(ROOT).as_posix()
+        for line, name in wall_clock_reads(path.read_text(encoding="utf-8")):
+            if (where, name) not in ALLOWED:
+                reads.append(f"{where}:{line} {name}()")
+    assert reads == [], "read the time through backend.clock instead:\n" + "\n".join(reads)
+
+
+def test_no_qml_reads_the_wall_clock_itself() -> None:
+    reads = []
+    for path in sorted((ROOT / "desktop").rglob("*")):
+        if path.suffix not in {".qml", ".js"} or ".venv" in path.parts:
+            continue
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if QML_WALL_CLOCK.search(line):
+                reads.append(f"{path.relative_to(ROOT).as_posix()}:{number}")
+    assert reads == [], "QML takes the time from its bridge, which reads backend.clock:\n" + "\n".join(reads)
+
+
+def test_the_scan_finds_each_kind_of_wall_clock_read() -> None:
+    source = "\n".join(
+        [
+            "date.today()",
+            "datetime.datetime.now()",
+            "time.time()",
+            "QDate.currentDate()",
+            "time.localtime()",
+            "time.strftime('%H')",
+            "time.localtime(5)",
+            "time.strftime('%H', parts)",
+            "wall_clock.today()",
+            "self.time.time()",
+        ]
+    )
+    assert [name for _line, name in wall_clock_reads(source)] == [
+        "date.today",
+        "datetime.now",
+        "time.time",
+        "QDate.currentDate",
+        "time.localtime",
+        "time.strftime",
+    ]
+    assert QML_WALL_CLOCK.search("var t = Date.now()") and QML_WALL_CLOCK.search("new Date()")
+    assert not QML_WALL_CLOCK.search("new Date(2026, 1, 1)")

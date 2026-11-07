@@ -16,7 +16,8 @@ from PySide6.QtWidgets import QApplication, QPushButton, QWidget
 from desktop.native.layouts.base import NARROW_WIDTH
 from desktop.native.layouts.registry import LAYOUTS
 from desktop.native.look import LOOK_PRESETS
-from desktop.tests.window_support import qapp, server, settled, signed_out, window  # noqa: F401
+from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.window_support import qapp, server, settled, signed_out  # noqa: F401
 
 CTRL_SHIFT = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier
 ROW_NAME = "Week as a list"

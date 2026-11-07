@@ -5,17 +5,18 @@ The 17-minute block from the audit is saved, the store is started again, and the
 still export with the block as the student typed it.
 """
 
-from datetime import date, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from backend.app import create_app
 from backend.storage import initialize
+from backend.tests.fake_clock import START
 
 HEADERS = {"X-FlexWeek-Request": "1"}
 PASSWORD = "temporary-test-password"
-TODAY = date.today()
+TODAY = START.date()
 WEEK = (TODAY - timedelta(days=TODAY.weekday())).isoformat()
 READING = {"id": "b17", "title": "Reading", "kind": "flexible", "duration_min": 17, "days": [0]}
 

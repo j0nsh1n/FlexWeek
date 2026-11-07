@@ -27,15 +27,8 @@ from desktop.native.weekmodel import (
 from desktop.native.widgets import BlockDialog, LateDialog, PreviewDialog, Segmented
 from desktop.native.window import NativeWindow
 from desktop.native.work_windows import WorkWindowsEditor
-from desktop.tests.window_support import (  # noqa: F401
-    host,
-    qapp,
-    server,
-    settled,
-    signed_out,
-    wait_until,
-    window,
-)
+from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.window_support import host, qapp, server, settled, signed_out, wait_until  # noqa: F401
 
 TWELVE = False
 

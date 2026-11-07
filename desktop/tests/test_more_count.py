@@ -16,6 +16,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QPoint
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 
+from backend import clock as wall_clock
 from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.look import contrast, count_pill, resolved_palette
 from desktop.native.weekmodel import length_label
@@ -65,7 +66,8 @@ def left_over_week_two(qapp: QApplication, window: NativeWindow) -> None:  # noq
     week = date.fromisoformat(session.week_start)
     session.add_block({"id": "school", "title": "School", "kind": "locked", "start": "08:00",
                        "duration_min": 390, "days": [0, 1, 2, 3, 4]})
-    add(window, "essay", "History essay", 120, (date.today() - timedelta(days=3)).isoformat() + "T12:00")
+    overdue = (wall_clock.today() - timedelta(days=3)).isoformat()
+    add(window, "essay", "History essay", 120, overdue + "T12:00")
     session.save()
     settled(qapp, window)
     planned = next(block for block in session.blocks if block.get("assignment_id") == "essay")
@@ -103,7 +105,7 @@ def test_badge_more_row_panel_and_rail_show_the_same_items_and_minutes(
     window.findChild(QPushButton, "unfinishedOpen").click()
     qapp.processEvents()
     assert window.unfinished_panel.isVisibleTo(window)
-    essay_due = date.today() - timedelta(days=3)
+    essay_due = wall_clock.today() - timedelta(days=3)
     due_words = f"due {essay_due.strftime('%a')} {essay_due.day} {essay_due.strftime('%b')}"
     panel_lines = sorted(
         (

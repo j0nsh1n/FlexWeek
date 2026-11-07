@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 from collections.abc import Iterator
-from datetime import date, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -13,11 +13,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.app import create_app
+from backend.tests.fake_clock import START
 
 PASSWORD = "a-long-test-password"
 WRITE = {"X-FlexWeek-Request": "1", "Origin": "http://testserver"}
 # The week a parameterless /api/week uses, worked out here rather than from the code under test.
-TODAY = date.today()
+TODAY = START.date()
 WEEK = (TODAY - timedelta(days=TODAY.weekday())).isoformat()
 
 

@@ -7,6 +7,8 @@ from datetime import date, datetime
 
 import flexweek_engine  # type: ignore[import-untyped]
 
+from backend import clock as wall_clock
+
 LOCKED_CATEGORIES = ("class", "exercise", "extra", "meals", "sleep", "free")
 FLEX_CATEGORIES = ("assignments", "study")
 WEEKDAYS = [0, 1, 2, 3, 4]
@@ -118,7 +120,7 @@ def is_series(block: dict) -> bool:
 
 
 def iso_of(day: date | str | None) -> str:
-    return date.today().isoformat() if day is None else day if isinstance(day, str) else day.isoformat()
+    return wall_clock.today().isoformat() if day is None else day if isinstance(day, str) else day.isoformat()
 
 
 # The app's one short and one long way to write a date, made by the engine (datetext.rs). `today`
@@ -156,7 +158,7 @@ def sunday_due(week_start: str) -> str:
 
 
 def local_stamp(now: datetime | None = None) -> str:
-    moment = now or datetime.now()
+    moment = now or wall_clock.now()
     return str(flexweek_engine.calendar_local_stamp(moment.strftime("%Y-%m-%dT%H:%M")))
 
 
@@ -242,7 +244,7 @@ def relocate_block(
 
 
 def first_plannable_day(week_start: str, today: date | None = None) -> int:
-    today = today or date.today()
+    today = today or wall_clock.today()
     return int(flexweek_engine.calendar_first_day(week_start, today.isoformat()))
 
 

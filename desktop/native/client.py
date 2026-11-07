@@ -284,7 +284,7 @@ class NativeClient(QObject):
         payload: dict | None,
         on_success: Callable[[dict], None],
         on_error: Callable[[ApiError], None],
-    ) -> QNetworkReply:
+    ) -> QNetworkReply | None:
         self._check_thread()
         _api_path(path)
         method = method.upper()
@@ -293,21 +293,63 @@ class NativeClient(QObject):
         if payload is not None and not isinstance(payload, dict):
             raise ValueError("API request bodies must be JSON objects.")
         encoded = json.dumps(payload, allow_nan=False).encode() if payload is not None else b""
-        data = QByteArray(encoded)
+        account_id = self.account["id"] if self.account is not None else None
+        epoch = self.epoch
+
+        def finish(status: int, body: bytes, reached: bool) -> None:
+            if epoch != self.epoch:
+                return
+            result: object = None
+            if len(body) <= MAX_RESPONSE_BYTES:
+                with contextlib.suppress(ValueError, UnicodeDecodeError):
+                    result = json.loads(body) if body else {}
+            detail = result.get("detail") if isinstance(result, dict) else None
+            if not 200 <= status < 300 or not reached:
+                self._notify_error(on_error, _error(status, detail))
+                expired = (
+                    status == 401
+                    and account_id is not None
+                    and detail
+                    not in {
+                        "Incorrect password",
+                        "Incorrect username or password",
+                        "Incorrect username or recovery code",
+                    }
+                    and epoch == self.epoch
+                )
+                if expired:
+                    self.expired.emit()
+                return
+            if not isinstance(result, dict) or (not body and status != 204):
+                self._notify_error(on_error, ApiError(status, "FlexWeek returned an unreadable response."))
+                return
+            try:
+                on_success(result)
+            except Exception:
+                logger.error("A native request result handler failed.")
+                self._notify_error(on_error, ApiError(status, "FlexWeek could not display this response."))
+
+        return self._send(method, path, encoded, account_id, finish)
+
+    def _send(
+        self,
+        method: str,
+        path: str,
+        encoded: bytes,
+        account_id: int | None,
+        finish: Callable[[int, bytes, bool], None],
+    ) -> QNetworkReply | None:
+        """Send one request to the local server; `finish` gets its status, its body, and whether it got
+        an answer at all. The tests' light app answers in-process here instead (desktop/tests)."""
         request = QNetworkRequest(QUrl(self.origin + path))
         request.setAttribute(
             QNetworkRequest.Attribute.RedirectPolicyAttribute,
             QNetworkRequest.RedirectPolicy.ManualRedirectPolicy,
         )
-        request.setRawHeader(b"Accept", b"application/json")
-        request.setRawHeader(b"Content-Type", b"application/json")
-        request.setRawHeader(b"Origin", self.origin.encode("ascii"))
-        request.setRawHeader(b"X-FlexWeek-Request", b"1")
-        account_id = self.account["id"] if self.account is not None else None
-        if account_id is not None:
-            request.setRawHeader(b"X-FlexWeek-Account", str(account_id).encode("ascii"))
-        epoch, manager = self.epoch, self._manager
-        reply = manager.sendCustomRequest(request, method.encode("ascii"), data)
+        for name, value in self.headers(account_id).items():
+            request.setRawHeader(name.encode("ascii"), value.encode("ascii"))
+        manager = self._manager
+        reply = manager.sendCustomRequest(request, method.encode("ascii"), QByteArray(encoded))
         self._replies[manager].add(reply)
         timer = QTimer(reply)
         timer.setSingleShot(True)
@@ -318,46 +360,23 @@ class NativeClient(QObject):
             timer.stop()
             self._replies[manager].discard(reply)
             try:
-                if epoch != self.epoch:
-                    return
                 status = reply.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute) or 0
                 body = bytes(reply.readAll().data())
-                result: object = None
-                if len(body) <= MAX_RESPONSE_BYTES:
-                    with contextlib.suppress(ValueError, UnicodeDecodeError):
-                        result = json.loads(body) if body else {}
-                detail = result.get("detail") if isinstance(result, dict) else None
-                if not 200 <= status < 300 or reply.error() != QNetworkReply.NetworkError.NoError:
-                    self._notify_error(on_error, _error(status, detail))
-                    expired = (
-                        status == 401
-                        and account_id is not None
-                        and detail
-                        not in {
-                            "Incorrect password",
-                            "Incorrect username or password",
-                            "Incorrect username or recovery code",
-                        }
-                        and epoch == self.epoch
-                    )
-                    if expired:
-                        self.expired.emit()
-                    return
-                if not isinstance(result, dict) or (not body and status != 204):
-                    self._notify_error(
-                        on_error, ApiError(status, "FlexWeek returned an unreadable response.")
-                    )
-                    return
-                try:
-                    on_success(result)
-                except Exception:
-                    logger.error("A native request result handler failed.")
-                    self._notify_error(
-                        on_error, ApiError(status, "FlexWeek could not display this response.")
-                    )
+                finish(status, body, reply.error() == QNetworkReply.NetworkError.NoError)
             finally:
                 reply.deleteLater()
                 self._retire(manager)
 
         reply.finished.connect(finished)
         return reply
+
+    def headers(self, account_id: int | None) -> dict[str, str]:
+        sent = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Origin": self.origin,
+            "X-FlexWeek-Request": "1",
+        }
+        if account_id is not None:
+            sent["X-FlexWeek-Account"] = str(account_id)
+        return sent

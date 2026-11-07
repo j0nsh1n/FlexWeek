@@ -12,6 +12,7 @@ from PySide6.QtGui import QColor, QImage
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDateEdit, QLabel, QTableView, QWidget
 
+from backend import clock as wall_clock
 from desktop.native.fields import DateField, LookCalendar
 from desktop.native.look import pack_stylesheet, resolved_palette
 from desktop.native.tokens import contrast
@@ -32,7 +33,7 @@ def dressed(pack: str) -> tuple[QWidget, dict]:
 
 def picked_near_today() -> QDate:
     """A day in this month that is not today, so the month shows both."""
-    today = QDate.currentDate()
+    today = QDate(wall_clock.today())
     tomorrow = today.addDays(1)
     return tomorrow if tomorrow.month() == today.month() else today.addDays(-1)
 
@@ -120,7 +121,7 @@ def test_weekends_are_plain_the_pick_is_round_and_today_is_ringed(
 ) -> None:
     parent, palette = dressed(pack)
     day = picked_near_today()
-    today = QDate.currentDate()
+    today = QDate(wall_clock.today())
     dialog, _popup, month = opened(qapp, parent, day)
     view, shown = cells(month)
     picture = view.viewport().grab().toImage()

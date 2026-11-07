@@ -12,6 +12,7 @@ from PySide6.QtCore import QEventLoop, QSize, Qt
 from PySide6.QtGui import QGuiApplication, QPalette, QPixmap
 from PySide6.QtWidgets import QWidget
 
+from backend import clock as wall_clock
 from desktop.native.calendar import monday_of
 from desktop.native.fields import week_starts_on
 from desktop.native.hours.classic import ClassicWeek
@@ -57,7 +58,7 @@ def _block(
 
 def sample_week(today: date | None = None) -> tuple[str, list[dict], dict[str, dict]]:
     """This week, so the dates in the picture are the student's own."""
-    monday = monday_of((today or date.today()).isoformat())
+    monday = monday_of((today or wall_clock.today()).isoformat())
     start = date.fromisoformat(monday)
 
     def due(days: int, hhmm: str) -> str:
@@ -174,7 +175,7 @@ class Previews:
     @staticmethod
     def _key(main: str, colour: str | None, pack: str, look: dict | None, width: int) -> tuple:
         # The week they show is this one, and a pack that follows the system follows it light or dark.
-        this_week = monday_of(date.today().isoformat())
+        this_week = monday_of(wall_clock.today().isoformat())
         return (
             main,
             colour if colour not in (None, "your") else pack,

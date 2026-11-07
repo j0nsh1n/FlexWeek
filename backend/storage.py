@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import secrets
-import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
@@ -9,6 +8,7 @@ from typing import Any, Protocol
 
 import flexweek_engine  # type: ignore[import-untyped]
 
+from backend import clock as wall_clock
 from backend.weeks import current_week_start as current_week_start
 
 SESSION_SECONDS = flexweek_engine.SESSION_SECONDS
@@ -250,7 +250,7 @@ def new_preferences(db: Connection, user_id: int) -> None:
 
 
 def initialize(path: Path) -> None:
-    flexweek_engine.store_initialize_today(str(path))
+    flexweek_engine.store_initialize(str(path), current_week_start())
 
 
 def delete_account(db: Connection, user_id: int) -> None:
@@ -259,7 +259,7 @@ def delete_account(db: Connection, user_id: int) -> None:
 
 def create_session(db: Connection, user_id: int, keep: bool = False) -> str:
     token = secrets.token_urlsafe(32)
-    now = int(time.time())
+    now = int(wall_clock.seconds())
     db.open_session(token, user_id, now, keep)
     return token
 
@@ -270,4 +270,4 @@ def cookie_age(keep: bool) -> int:
 
 
 def throttle(path: Path, address: str, username: str) -> bool:
-    return flexweek_engine.store_throttle(str(path), address, username, int(time.time()))
+    return flexweek_engine.store_throttle(str(path), address, username, int(wall_clock.seconds()))

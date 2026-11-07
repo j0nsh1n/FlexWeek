@@ -203,11 +203,35 @@ def no_window_is_left_for_the_garbage_collector() -> Iterator[None]:
     assert left == [], "left for the garbage collector"
 
 
-@pytest.fixture(autouse=True)
-def the_clock_starts_at_24_hours() -> Iterator[None]:
-    """The clock is one setting for the whole app, so a test that chose 12-hour would leave it for the
-    next test."""
+# The look and the week's first day are kept per computer, in files under the data folder. Qt's
+# test mode keeps that folder in ~/.qttest, never the developer's own.
+DEVICE_FILES = ("flexweek-look.json", "week-start.json")
+if importlib.util.find_spec("PySide6") is not None:
+    from PySide6.QtCore import QStandardPaths
+
+    QStandardPaths.setTestModeEnabled(True)
+
+
+def forget_this_computer() -> None:
+    from PySide6.QtCore import QStandardPaths
+
     from desktop.native.weekmodel import set_clock_24h
 
-    yield
+    # The folder is named after the QApplication, which a worker's first test file names.
+    folder = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))
+    for name in DEVICE_FILES:
+        (folder / name).unlink(missing_ok=True)
+    # The 12- or 24-hour clock is one setting for the whole app, held in memory.
     set_clock_24h(True)
+
+
+@pytest.fixture(autouse=True)
+def every_test_starts_on_a_clean_computer() -> Iterator[None]:
+    """No look file, Monday-first weeks, the 24-hour clock: what one test chose is not the next one's
+    start. (Each test's account is new, so its preferences are the defaults.)"""
+    if importlib.util.find_spec("PySide6") is None:
+        yield
+        return
+    forget_this_computer()
+    yield
+    forget_this_computer()

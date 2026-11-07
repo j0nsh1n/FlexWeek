@@ -63,6 +63,7 @@ from PySide6.QtWidgets import (
 )
 from shiboken6 import isValid
 
+from backend import clock as wall_clock
 from backend.slots import DAY_END_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
 from desktop.native import autostart, icons
 from desktop.native.ambient import FocusAudio
@@ -792,7 +793,8 @@ class NativeWindow(QMainWindow):
         session = self.session
         if session.account is None or session.busy or session.conflict:
             return
-        now = session.now_ms()
+        # Time since the last change, not the time of day: a clock set back must not hold a save.
+        now = int(time.monotonic() * 1000)
         if session.pending_save is not None:
             # A save that failed. Its payload and operation id are kept, so this writes the same
             # thing once however many times it is tried.
@@ -2760,7 +2762,7 @@ class NativeWindow(QMainWindow):
         self.session.flush_setup()
 
     def _finish_setup(self) -> None:
-        stamp = datetime.now().strftime("%Y-%m-%dT%H:%M")
+        stamp = wall_clock.now().strftime("%Y-%m-%dT%H:%M")
         bridge = self._account_bridge()
         current = self._stack.currentWidget()
         widgets_owns = self._material_gave_up or (
@@ -2905,7 +2907,7 @@ class NativeWindow(QMainWindow):
         self._sync_left_chip()
         if self.session.dirty:
             # Every change reaches here, so this is where the clock on "stopped changing" restarts.
-            self._changed_ms = self.session.now_ms()
+            self._changed_ms = int(time.monotonic() * 1000)
         if self._on_recovery() and not self._allow_week_page:
             return
         current = (self.session.account["id"], self.session.week_start)
@@ -3871,7 +3873,7 @@ class NativeWindow(QMainWindow):
             return
         week = self.session.week_start
         today, _minute = self._clock_in_week()
-        now = date.today() if today is None else date.fromisoformat(week) + timedelta(days=today)
+        now = wall_clock.today() if today is None else date.fromisoformat(week) + timedelta(days=today)
         due = frozenset(
             str(item.get("due") or "")[:10]
             for item in (self.session.assignments or {}).values()

@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+from backend import clock as wall_clock
+
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
 )
@@ -1695,16 +1697,15 @@ def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, win
 
 
 def test_today_jumps_the_planner_to_this_week(qapp: QApplication, window: NativeWindow) -> None:
-    from datetime import date
 
     from desktop.native.calendar import monday_of
 
     click(window, "nextWeek")
     settled(qapp, window)
-    assert window.session.week_start != monday_of(date.today().isoformat())
+    assert window.session.week_start != monday_of(wall_clock.today().isoformat())
     click(window, "todayWeek")
     settled(qapp, window)
-    assert window.session.week_start == monday_of(date.today().isoformat())
+    assert window.session.week_start == monday_of(wall_clock.today().isoformat())
 
 
 def test_the_week_title_sits_beside_its_arrows_and_is_whole_when_there_is_room(
@@ -2168,7 +2169,7 @@ def test_the_week_saves_itself_without_anyone_pressing_save(qapp: QApplication, 
         }
     )
     assert window.session.dirty is True
-    # The clock the debounce reads is the session's, so move it rather than sleeping.
+    # Move the debounce's start back rather than sleeping.
     window._changed_ms = 0
     window._last_try_ms = 0
     window._autosave_tick()
@@ -2182,7 +2183,7 @@ def test_autosave_waits_until_the_student_stops_changing_things(
     """Dragging a block emits a change per step. Saving on each one would post continuously."""
     window.session.dirty = True
     window.session.pending_save = None
-    window._changed_ms = window.session.now_ms()
+    window._changed_ms = int(time.monotonic() * 1000)
     posted = []
     window.session.save = lambda *a, **k: posted.append(1)
     window._autosave_tick()

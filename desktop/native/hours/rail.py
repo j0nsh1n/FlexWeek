@@ -53,6 +53,7 @@ from PySide6.QtWidgets import (
 )
 from shiboken6 import isValid
 
+from backend import clock as wall_clock
 from desktop.native import icons
 from desktop.native.calendar import DAYS, day_short, month_title
 from desktop.native.fonts import at_scale, time_font, weighted
@@ -213,9 +214,9 @@ class MiniMonth(QWidget):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.colours = Colours()
         self.look: dict | None = None
-        self.month = date.today().replace(day=1)
+        self.month = wall_clock.today().replace(day=1)
         self.week_start = ""
-        self.today = date.today()
+        self.today = wall_clock.today()
         self.due: frozenset[str] = frozenset()
 
     def dates(self) -> list[date]:
@@ -961,7 +962,7 @@ class Rail(QFrame):
             if item.get("due") and not item.get("completed")
         )
         self._due = due
-        now = date.today() if today is None else week.date_of(today)
+        now = wall_clock.today() if today is None else week.date_of(today)
         self.month.show_week(week.week_start, now, due)
         amounts = {item["assignment_id"]: item["minutes"] for item in time_needed or []}
         self.set_waiting(week.waiting, amounts)

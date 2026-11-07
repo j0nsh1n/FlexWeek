@@ -15,6 +15,7 @@ from PySide6.QtGui import QAccessible, QFont, QFontMetrics, QFontMetricsF
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QPushButton, QWidget
 
+from backend.tests.fake_clock import CLOCK
 from desktop.native.calendar import DAY_FULL, sunday_due
 from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas
 from desktop.native.hours.geometry import Span
@@ -24,14 +25,8 @@ from desktop.native.look import sanitize_look
 from desktop.native.settings import HELP_KEYS
 from desktop.native.weekmodel import due_label, length_label, range_label
 from desktop.native.window import WINDOW_MIN_WIDTH, NativeWindow
-from desktop.tests.window_support import (  # noqa: F401
-    qapp,
-    server,
-    settled,
-    signed_out,
-    wait_until,
-    window,
-)
+from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.window_support import qapp, server, settled, signed_out, wait_until  # noqa: F401
 
 
 def seeded(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
@@ -39,7 +34,7 @@ def seeded(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
     on Monday, the worksheet with no time."""
     session = window.session
     thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=15, minutes=40)
-    session.now_ms = lambda: int(thursday.timestamp() * 1000)
+    CLOCK.set(thursday)
     session.add_block({"id": "soccer", "title": "Soccer practice", "kind": "locked", "category": "extra",
                        "start": "16:00", "duration_min": 90, "days": [1, 3]})
     session.add_block({"id": "dinner", "title": "Dinner", "kind": "locked", "category": "meals",
@@ -376,7 +371,7 @@ def test_the_focus_list_grows_to_its_rows_with_no_scroll_bar_and_no_row_cut(
     seeded(qapp, window)
     session = window.session
     monday = datetime.fromisoformat(session.week_start) + timedelta(hours=19)
-    session.now_ms = lambda: int(monday.timestamp() * 1000)
+    CLOCK.set(monday)
     session.week_changed.emit()
     settled(qapp, window)
     math = next(block for block in session.blocks if block.get("assignment_id") == "math")

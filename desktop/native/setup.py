@@ -55,6 +55,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from backend import clock as wall_clock
 from backend.models import valid_spotify_url
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm
 from desktop.native import icons
@@ -1185,7 +1186,7 @@ class ActivityRow(QFrame):
 def next_school_day(school_days: list[int], today: date | None = None) -> str:
     """The first day after today that is a school day, as the day first homework is most likely due:
     the default of Sunday was a day with no school. With no school days picked, tomorrow."""
-    today = today or date.today()
+    today = today or wall_clock.today()
     for ahead in range(1, 8):
         day = today + timedelta(days=ahead)
         if not school_days or day.weekday() in school_days:

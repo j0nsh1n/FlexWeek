@@ -15,6 +15,8 @@ from pathlib import Path
 
 import pytest
 
+from backend import clock as wall_clock
+
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
 )
@@ -915,7 +917,7 @@ def test_running_late_saves_a_locked_occupancy_block(qapp: QApplication, server:
     wait_until(qapp, lambda: not session.busy and not session.dirty)
     from datetime import datetime, time
 
-    now = datetime.combine(date.today(), time(14, 7))
+    now = datetime.combine(wall_clock.today(), time(14, 7))
     session.preview_running_late(30, now=now)
     wait_until(qapp, lambda: session.late_preview is not None and not session.busy)
     assert session.late_preview["block"]["title"] == "Running late"

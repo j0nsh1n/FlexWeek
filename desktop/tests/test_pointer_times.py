@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QApplication, QDialog
 
 from desktop.native.widgets import BlockDialog
 from desktop.native.window import NativeWindow
+from desktop.tests.light_app import open_light  # noqa: F401
 from desktop.tests.test_context_menu import menus, right_click  # noqa: F401
 from desktop.tests.test_drag_results import (  # noqa: F401
     click,

@@ -61,6 +61,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from backend import clock as wall_clock
 from backend.slots import SLOT_MIN
 from desktop.native import icons
 from desktop.native.calendar import DAY_FULL, DAYS
@@ -295,7 +296,7 @@ class LookCalendar(QCalendarWidget):
             painter.setBrush(accent)
             painter.drawEllipse(dot)
             words = ink
-        elif day == QDate.currentDate():
+        elif day == QDate(wall_clock.today()):
             painter.setPen(QPen(accent, 1.5))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawEllipse(dot.adjusted(0.75, 0.75, -0.75, -0.75))
@@ -398,7 +399,7 @@ class DateField(QDateEdit):
         """A date typed with no year is the next one that day and month come round, not one already
         gone: a typed day or month kept the year the field had, which left it in the past."""
         typed, self._typed = self._typed, False
-        today = self.today or QDate.currentDate()
+        today = self.today or QDate(wall_clock.today())
         day = self.date()
         if not typed or day >= today:
             return

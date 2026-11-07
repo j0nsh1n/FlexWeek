@@ -19,6 +19,7 @@ from desktop.tests.grid_support import (  # noqa: F401
     right_click,
     window,
 )
+from desktop.tests.light_app import window as signed_in  # noqa: F401
 from desktop.tests.window_support import (  # noqa: F401
     qapp,
     server,
@@ -26,7 +27,6 @@ from desktop.tests.window_support import (  # noqa: F401
     signed_out,
     wait_until,
 )
-from desktop.tests.window_support import window as signed_in  # noqa: F401
 
 
 def test_every_right_click_on_free_time_opens_the_menu(

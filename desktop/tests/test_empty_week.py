@@ -17,6 +17,7 @@ from desktop.native.calendar import sunday_due
 from desktop.native.layouts.empty import EMPTY_BUTTON, EMPTY_HEADING, EMPTY_LINE
 from desktop.native.widgets import HomeworkDialog
 from desktop.native.window import NativeWindow
+from desktop.tests.light_app import window as signed_in  # noqa: F401
 from desktop.tests.window_support import (  # noqa: F401
     qapp,
     server,
@@ -24,7 +25,6 @@ from desktop.tests.window_support import (  # noqa: F401
     signed_out,
     wait_until,
 )
-from desktop.tests.window_support import window as signed_in  # noqa: F401
 
 
 def look_file() -> Path:
