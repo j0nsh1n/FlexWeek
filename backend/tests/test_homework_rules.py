@@ -1,4 +1,4 @@
-"""Assignment and session-block rules from docs/stage1-contract.md. Expected values are from the contract, not a recorded run."""
+"""Homework and session-block rules from docs/stage1-contract.md. Expected values are from the contract, not a recorded run."""
 
 from __future__ import annotations
 

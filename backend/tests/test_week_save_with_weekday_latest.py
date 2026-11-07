@@ -1,4 +1,4 @@
-"""Old weekday latest on PUT /api/week. Expected dues are from the calendar, not a recorded run."""
+"""A flexible block saved with a weekday "latest" becomes homework with one session. Dues are worked from the calendar."""
 
 from __future__ import annotations
 
@@ -139,7 +139,7 @@ def test_a_completed_block_ending_at_midnight_saves_and_reloads(tmp_path: Path) 
     """23:45 for 15 minutes ends at 24:00. That instant is the next date at 00:00, not T24:00."""
     path = tmp_path / "midnight.db"
     origin = "http://testserver"
-    legacy = {
+    reading = {
         "id": "night",
         "title": "Night reading",
         "kind": "flexible",
@@ -174,7 +174,7 @@ def test_a_completed_block_ending_at_midnight_saves_and_reloads(tmp_path: Path) 
             == 201
         )
         saved = client.put(
-            "/api/week", json={"week_start": WEEK, "blocks": [legacy], "revision": 0}, headers=WRITE
+            "/api/week", json={"week_start": WEEK, "blocks": [reading], "revision": 0}, headers=WRITE
         )
         assert saved.status_code == 200, saved.text
         reloaded = client.get(f"/api/week?week_start={WEEK}")

@@ -1,4 +1,4 @@
-"""Solve adapter for assignment dues. Bounds and slack minutes are worked from the calendar, not from a recorded run."""
+"""How a homework due bounds where the solver places its sessions. Bounds and slack minutes are worked from the calendar, not from a recorded run."""
 
 from __future__ import annotations
 
