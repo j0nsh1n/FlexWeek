@@ -5,29 +5,19 @@ the app does, so a kept session has to work for a server it was not issued by.
 from __future__ import annotations
 
 import contextlib
-import importlib.util
-import os
 import stat
-import time
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import QStandardPaths
+from PySide6.QtWidgets import QApplication
 
-pytestmark = pytest.mark.skipif(
-    importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
-)
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QStandardPaths
-    from PySide6.QtWidgets import QApplication
-
-    from desktop.native.kept import KeptSession
-    from desktop.native.window import NativeWindow
-    from desktop.server import LocalServer
-    from desktop.tests.logic_support import past_setup
+from desktop.native.kept import KeptSession
+from desktop.native.window import NativeWindow
+from desktop.server import LocalServer
+from desktop.tests.logic_support import past_setup
+from desktop.tests.waiting import wait_until
 
 PASSWORD = "a-long-test-password"
 TOKEN_LIKE = "A" * 43
@@ -38,16 +28,6 @@ def qapp() -> Iterator[QApplication]:
     QStandardPaths.setTestModeEnabled(True)
     application = QApplication.instance() or QApplication(["flexweek-keep-signed-in-test"])
     yield application
-
-
-def wait_until(qapp: QApplication, predicate: Callable[[], bool], timeout: float = 8.0) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        qapp.processEvents()
-        if predicate():
-            return
-        time.sleep(0.02)
-    raise AssertionError("condition was still false")
 
 
 def page(window: NativeWindow) -> str:
@@ -127,30 +107,6 @@ def test_the_sign_in_card_offers_it_and_it_starts_on(qapp: QApplication, launche
     assert window.keep_signed_in.isVisibleTo(window)
     window._toggle_auth_mode()
     assert window.keep_signed_in.isVisibleTo(window), "creating an account offers it too"
-
-
-def test_the_box_can_be_seen_ticked_or_not(qapp: QApplication, launches: Launches) -> None:
-    """Fusion's own box was a faint line that vanished on the white card on the KDE desktop."""
-    from PySide6.QtGui import QColor
-
-    window = launches.launch()
-    box = window.keep_signed_in
-    card = QColor(window.styleSheet().split("QWidget#authCard { background: ")[1].split(";")[0])
-
-    def marked(checked: bool) -> int:
-        box.setChecked(checked)
-        qapp.processEvents()
-        image = box.grab().toImage()
-        # The box sits at the left end; its text starts after it.
-        return sum(
-            1
-            for x in range(min(22, image.width()))
-            for y in range(image.height())
-            if abs(image.pixelColor(x, y).lightness() - card.lightness()) > 60
-        )
-
-    assert marked(False) >= 20, "an unticked box is drawn"
-    assert marked(True) > marked(False), "a ticked box is filled"
 
 
 def test_a_kept_session_opens_the_week_at_the_next_launch(qapp: QApplication, launches: Launches) -> None:

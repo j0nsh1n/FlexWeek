@@ -1,30 +1,26 @@
-"""Undo and Redo against a real local API. Expected values follow frontend/history.js."""
+"""Undo and Redo against the real local server. Expected values follow frontend/history.js."""
 
 from __future__ import annotations
 
-import importlib.util
+from PySide6.QtWidgets import QApplication
 
-from desktop.tests import logic_support
+from desktop.native.calendar import sunday_due
+from desktop.server import LocalServer
+from desktop.tests.logic_support import (
+    essay,
+    fail_once,
+    fixed,
+    place_on_monday,
+    qapp,  # noqa: F401
+    server,  # noqa: F401
+    settled,
+    signed_in,
+    start_focus_on_first_block,
+    tick_focus_after_half_an_hour,
+)
 
-pytestmark = logic_support.NEEDS_DESKTOP
-qapp = logic_support.qapp
-server = logic_support.server
-
-if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtWidgets import QApplication
-
-    from desktop.server import LocalServer
-    from desktop.tests.logic_support import (
-        essay,
-        fail_once,
-        fixed,
-        place_on_monday,
-        settled,
-        signed_in,
-        start_focus_on_first_block,
-        sunday_due,
-        tick_focus_after_half_an_hour,
-    )
+# The fixtures are used by name, so each test's argument list redefines them.
+# ruff: noqa: F811
 
 
 def test_undo_of_new_homework_does_not_conflict(qapp: QApplication, server: LocalServer) -> None:

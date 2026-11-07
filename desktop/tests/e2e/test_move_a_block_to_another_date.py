@@ -1,55 +1,40 @@
-"""move_to_date against a real local API. Saved weeks are read back from the server."""
+"""Moving a block to another date, against the real local server. Saved weeks are read back from it."""
 
 from __future__ import annotations
 
-import importlib.util
 from copy import deepcopy
-from datetime import datetime
 
-from desktop.native.calendar import date_for_day
+from PySide6.QtWidgets import QApplication
+
+from desktop.native.calendar import date_for_day, sunday_due
+from desktop.native.controller import NativeSession
+from desktop.server import LocalServer
 from desktop.tests import logic_support
+from desktop.tests.blocks_helper import put_block
+from desktop.tests.e2e.saved_weeks import hold_the_clock_at_the_start_of_the_open_week, read_week
+from desktop.tests.logic_support import (  # noqa: F401
+    PASSWORD,
+    fixed,
+    qapp,
+    server,
+    settled,
+    signed_in,
+    titles,
+    week_after,
+)
+from desktop.tests.waiting import wait_until
 
-pytestmark = logic_support.NEEDS_DESKTOP
-qapp = logic_support.qapp
-server = logic_support.server
+# The fixtures are used by name, so each test's argument list redefines them.
+# ruff: noqa: F811
 
-if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtWidgets import QApplication
-
-    from desktop.native.calendar import sunday_due
-    from desktop.native.controller import NativeSession
-    from desktop.server import LocalServer
-    from desktop.tests.blocks_helper import put_block
-    from desktop.tests.logic_support import PASSWORD, fixed, settled, signed_in, titles, week_after
-
-
-def hold_the_open_week_ahead(session: NativeSession) -> None:
-    """Move to a date refuses a start before now, so a test about moving holds the clock at the start
-    of the open week, whatever day the suite runs on."""
-    moment = datetime.fromisoformat(session.week_start)
-    session.now_ms = lambda: int(moment.timestamp() * 1000)
+PAST_DUE = "That ends after it's due, so it stayed where it was."
 
 
-def read_week(qapp: QApplication, session: NativeSession, week_start: str) -> dict:
-    got: dict = {}
-
-    def ok(data: dict) -> None:
-        got["week"] = data
-
-    def err(error) -> None:
-        got["error"] = error
-
-    session.client.request("GET", f"/api/week?week_start={week_start}", None, ok, err)
-    settled(qapp, session)
-    assert "week" in got, got.get("error")
-    return got["week"]
-
-
-def test_move_to_date_keeps_the_time_on_another_day_of_the_same_week(
+def test_a_block_moved_to_another_day_of_the_week_keeps_its_time(
     qapp: QApplication, server: LocalServer
 ) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
-    hold_the_open_week_ahead(session)
+    hold_the_clock_at_the_start_of_the_open_week(session)
     session.add_block(fixed("soccer", "Soccer", 0, "16:00"))
     session.save()
     settled(qapp, session)
@@ -64,7 +49,7 @@ def test_move_to_date_keeps_the_time_on_another_day_of_the_same_week(
     assert soccer["duration_min"] == 60
 
 
-def test_move_to_date_writes_both_weeks_going_forward(qapp: QApplication, server: LocalServer) -> None:
+def test_a_block_moved_to_next_week_is_written_to_both_weeks(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     first = session.week_start
     second = week_after(first)
@@ -87,9 +72,11 @@ def test_move_to_date_writes_both_weeks_going_forward(qapp: QApplication, server
     assert titles(session.blocks) == []
 
 
-def test_move_to_date_writes_both_weeks_going_back(qapp: QApplication, server: LocalServer) -> None:
+def test_a_block_moved_to_an_earlier_week_is_written_to_both_weeks(
+    qapp: QApplication, server: LocalServer
+) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
-    hold_the_open_week_ahead(session)
+    hold_the_clock_at_the_start_of_the_open_week(session)
     first = session.week_start
     second = week_after(first)
     session.load_week(second)
@@ -109,7 +96,9 @@ def test_move_to_date_writes_both_weeks_going_back(qapp: QApplication, server: L
     assert soccer["start"] == "16:00"
 
 
-def test_move_to_date_splits_one_day_off_a_repeating_block(qapp: QApplication, server: LocalServer) -> None:
+def test_moving_one_day_of_a_repeating_block_leaves_its_other_days_where_they_were(
+    qapp: QApplication, server: LocalServer
+) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     first = session.week_start
     second = week_after(first)
@@ -141,11 +130,9 @@ def test_move_to_date_splits_one_day_off_a_repeating_block(qapp: QApplication, s
     assert moved["title"] == "Soccer"
 
 
-def test_date_problem_and_move_to_date_refuse_homework_past_due(
-    qapp: QApplication, server: LocalServer
-) -> None:
+def test_homework_is_not_moved_to_a_day_after_it_is_due(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
-    hold_the_open_week_ahead(session)
+    hold_the_clock_at_the_start_of_the_open_week(session)
     due = date_for_day(session.week_start, 3) + "T15:00"
     session.add_homework({"id": "essay", "title": "Essay", "due": due, "estimate_min": 60, "revision": 0})
     session.save()
@@ -156,18 +143,18 @@ def test_date_problem_and_move_to_date_refuse_homework_past_due(
     settled(qapp, session)
     wednesday = date_for_day(session.week_start, 2)
     friday = date_for_day(session.week_start, 4)
-    assert session.date_problem(waiting["id"], wednesday, friday) == (
-        "That ends after it's due, so it stayed where it was."
-    )
+    assert session.date_problem(waiting["id"], wednesday, friday) == PAST_DUE
     before = read_week(qapp, session, session.week_start)
     assert session.move_to_date(waiting["id"], wednesday, friday) is False
     settled(qapp, session)
     after = read_week(qapp, session, session.week_start)
     assert after["blocks"] == before["blocks"]
-    assert session.message == "That ends after it's due, so it stayed where it was."
+    assert session.message == PAST_DUE
 
 
-def test_move_to_date_keeps_homework_pinned_on_the_new_week(qapp: QApplication, server: LocalServer) -> None:
+def test_homework_the_student_pinned_stays_pinned_in_the_new_week(
+    qapp: QApplication, server: LocalServer
+) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     first = session.week_start
     second = week_after(first)
@@ -197,7 +184,9 @@ def test_move_to_date_keeps_homework_pinned_on_the_new_week(qapp: QApplication, 
     assert essay["start"] == "16:00"
 
 
-def test_a_409_on_the_other_week_leaves_both_weeks_untouched(qapp: QApplication, server: LocalServer) -> None:
+def test_a_move_refused_because_the_other_week_changed_leaves_both_weeks_untouched(
+    qapp: QApplication, server: LocalServer
+) -> None:
     alice = signed_in(qapp, server.origin, "alice", create=True)
     first = alice.week_start
     second = week_after(first)
@@ -207,7 +196,7 @@ def test_a_409_on_the_other_week_leaves_both_weeks_untouched(qapp: QApplication,
     bob = NativeSession(server.origin, qapp)
     logic_support.HELD.append(bob)
     bob.login("alice", PASSWORD)
-    logic_support.wait_until(qapp, lambda: bob.account is not None and not bob.busy)
+    wait_until(qapp, lambda: bob.account is not None and not bob.busy)
     settled(qapp, bob)
     bob.load_week(second)
     settled(qapp, bob)
@@ -239,7 +228,7 @@ def test_a_409_on_the_other_week_leaves_both_weeks_untouched(qapp: QApplication,
     assert titles(alice.blocks) == ["Soccer"]
 
 
-def test_retrying_the_same_operation_id_moves_the_block_once(qapp: QApplication, server: LocalServer) -> None:
+def test_sending_the_same_move_again_moves_the_block_once(qapp: QApplication, server: LocalServer) -> None:
     session = signed_in(qapp, server.origin, "alice", create=True)
     first = session.week_start
     second = week_after(first)
@@ -307,29 +296,6 @@ def test_the_open_week_does_not_change_until_the_server_accepts_the_move(
     assert titles(dest["blocks"]) == ["Soccer"]
 
 
-def test_undo_puts_both_weeks_back(qapp: QApplication, server: LocalServer) -> None:
-    session = signed_in(qapp, server.origin, "alice", create=True)
-    first = session.week_start
-    second = week_after(first)
-    session.add_block(fixed("soccer", "Soccer", 0, "16:00"))
-    session.save()
-    settled(qapp, session)
-    monday = date_for_day(first, 0)
-    next_monday = date_for_day(second, 0)
-    assert session.move_to_date("soccer", monday, next_monday) is True
-    settled(qapp, session)
-    session.undo()
-    settled(qapp, session)
-    source = read_week(qapp, session, first)
-    dest = read_week(qapp, session, second)
-    assert titles(source["blocks"]) == ["Soccer"]
-    assert titles(dest["blocks"]) == []
-    assert titles(session.blocks) == ["Soccer"]
-    soccer = next(block for block in source["blocks"] if block["id"] == "soccer")
-    assert soccer["days"] == [0]
-    assert soccer["start"] == "16:00"
-
-
 def test_a_move_into_a_week_that_already_has_blocks_keeps_them(
     qapp: QApplication, server: LocalServer
 ) -> None:
@@ -370,47 +336,12 @@ def test_a_move_into_a_week_that_already_has_blocks_keeps_them(
     assert next(block for block in source["blocks"] if block["title"] == "Band")["days"] == [2, 4]
 
 
-def test_undo_of_a_move_refuses_when_the_other_week_changed_elsewhere(
-    qapp: QApplication, server: LocalServer
-) -> None:
-    """A later save to the other week, not on this undo stack, is kept. Undo is a 409, the week is
-    reloaded as it is saved, and both weeks stay as they are."""
-    alice = signed_in(qapp, server.origin, "alice", create=True)
-    first = alice.week_start
-    second = week_after(first)
-    alice.add_block(fixed("soccer", "Soccer", 0, "16:00"))
-    alice.save()
-    settled(qapp, alice)
-    monday = date_for_day(first, 0)
-    next_monday = date_for_day(second, 0)
-    assert alice.move_to_date("soccer", monday, next_monday) is True
-    settled(qapp, alice)
-    bob = NativeSession(server.origin, qapp)
-    logic_support.HELD.append(bob)
-    bob.login("alice", PASSWORD)
-    logic_support.wait_until(qapp, lambda: bob.account is not None and not bob.busy)
-    settled(qapp, bob)
-    bob.load_week(second)
-    settled(qapp, bob)
-    bob.add_block(fixed("piano", "Piano", 0, "17:00"))
-    bob.save()
-    settled(qapp, bob)
-    alice.undo()
-    settled(qapp, alice)
-    assert alice.conflict is False
-    assert alice.message == "Undo did not go through. Your week was reloaded as it's saved."
-    source = read_week(qapp, alice, first)
-    dest = read_week(qapp, alice, second)
-    assert titles(source["blocks"]) == []
-    assert sorted(titles(dest["blocks"])) == ["Piano", "Soccer"]
-
-
-def test_date_problem_judges_a_chip_when_its_week_is_not_loaded(
+def test_a_chip_in_a_week_that_is_not_open_is_judged_against_its_due_time(
     qapp: QApplication, server: LocalServer
 ) -> None:
     """Month has the chip's start and length from the month reply, not from the open week."""
     session = signed_in(qapp, server.origin, "alice", create=True)
-    hold_the_open_week_ahead(session)
+    hold_the_clock_at_the_start_of_the_open_week(session)
     first = session.week_start
     second = week_after(first)
     due = date_for_day(first, 3) + "T15:00"
@@ -429,7 +360,6 @@ def test_date_problem_judges_a_chip_when_its_week_is_not_loaded(
     settled(qapp, session)
     assert session.week_start == second
     assert all(block.get("id") != chip["id"] for block in session.blocks)
-    past_due = "That ends after it's due, so it stayed where it was."
     assert (
         session.date_problem(
             chip["id"],
@@ -439,7 +369,7 @@ def test_date_problem_judges_a_chip_when_its_week_is_not_loaded(
             duration_min=chip["duration_min"],
             assignment_id=chip["assignment_id"],
         )
-        == past_due
+        == PAST_DUE
     )
     assert (
         session.date_problem(

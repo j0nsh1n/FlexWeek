@@ -1,28 +1,24 @@
-"""Audit finding 6: leaving the app saves what is unsaved first."""
+"""Leaving the app saves what is unsaved first, against the real local server."""
 
 from __future__ import annotations
 
-import importlib.util
-
 import pytest
+from PySide6.QtWidgets import QApplication
 
-pytest_plugins = ["desktop.tests.window_support"]
-
-pytestmark = pytest.mark.skipif(
-    importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
-)
-
-if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtWidgets import QApplication
-
-    import desktop.native.window as window_module
-    from desktop.native.window import NativeWindow
-    from desktop.tests.audit_support import reconnect, refuse_all
-    from desktop.tests.logic_support import fixed
-    from desktop.tests.window_support import qapp, wait_until, window  # noqa: F401
+import desktop.native.window as window_module
+from desktop.native.window import NativeWindow
+from desktop.tests.audit_support import reconnect, refuse_all
+from desktop.tests.logic_support import fixed
+from desktop.tests.waiting import wait_until
+from desktop.tests.window_support import qapp, server, signed_out, window  # noqa: F401
 
 # The fixtures are used by name, so each test's argument list redefines them.
 # ruff: noqa: F811
+
+QUIT_FAILED = (
+    "Couldn't save, so FlexWeek stayed open. Your changes are still on screen. "
+    "Choose Retry save, then close FlexWeek again."
+)
 
 
 class Leaving:
@@ -47,7 +43,7 @@ def leaving(window: NativeWindow, monkeypatch: pytest.MonkeyPatch) -> Leaving:
 def test_quit_saves_a_preference_that_has_not_reached_the_server(
     qapp: QApplication, window: NativeWindow, leaving: Leaving
 ) -> None:
-    """Audit finding 6: Quit before the 600 ms timer fired dropped the change."""
+    """Quit before the 600 ms timer fired used to drop the change."""
     window._open_settings()
     window._settings.work.setValue(45)
     window.quit_app()
@@ -70,12 +66,6 @@ def test_quit_waits_for_a_week_save_that_failed_and_is_being_retried(
     assert leaving.calls == [False]
     session.reload()
     wait_until(qapp, lambda: not session.busy and [b["id"] for b in session.blocks] == ["soccer"])
-
-
-QUIT_FAILED = (
-    "Couldn't save, so FlexWeek stayed open. Your changes are still on screen. "
-    "Choose Retry save, then close FlexWeek again."
-)
 
 
 def test_quit_that_cannot_save_stays_open_and_says_so(
