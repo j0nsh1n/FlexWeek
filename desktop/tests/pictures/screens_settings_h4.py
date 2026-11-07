@@ -8,6 +8,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.look import sanitize_look
+from desktop.native.widgets import SchoolHoursDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.settings.support_alerts import WEEKDAYS, settings_page
@@ -37,6 +38,14 @@ def _alerts_alarm_row(window: NativeWindow) -> object:
     dialog._dress()
     dialog.alarm_list.setFocus()
     return dialog.alarm_list
+
+
+def _school_hours_dialog(window: NativeWindow) -> object:
+    dialog = SchoolHoursDialog(window, None)
+    dialog.times.end.set_minutes(7 * 60)
+    dialog.accept()
+    dialog.show()
+    return dialog
 
 
 SCREENS: list[Screen] = [
@@ -72,5 +81,16 @@ SCREENS: list[Screen] = [
             " list's own colour), so a student sees which alarm Remove will take."
         ),
         sources=("desktop/native/settings.py",),
+    ),
+    Screen(
+        id="settings.school_hours_dialog",
+        area="settings",
+        prepare=_school_hours_dialog,
+        checks=(
+            "School hours with an End before the Start shows the error 'End needs to be later than Start"
+            " (08:00).' and the dialog stays open. Save is the one filled button, Cancel is quiet (an"
+            " outline or plain text), and the error is readable and not hidden behind the buttons."
+        ),
+        sources=("desktop/native/widgets.py",),
     ),
 ]
