@@ -8,7 +8,15 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAccessible
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import (
+    QAbstractSpinBox,
+    QApplication,
+    QComboBox,
+    QLabel,
+    QLineEdit,
+    QPlainTextEdit,
+    QWidget,
+)
 
 from desktop.native.fields import ClockField
 from desktop.native.widgets import Segmented
@@ -80,3 +88,39 @@ def tab_into(segmented: Segmented) -> QWidget | None:
     QApplication.processEvents()
     press(before, Qt.Key.Key_Tab)
     return QApplication.focusWidget()
+
+
+def fields_of(root: QWidget) -> list[QWidget]:
+    """The visible entry fields of a sheet or page: line edits, notes, combo and spin boxes, segments."""
+    out: list[QWidget] = []
+    for widget in root.findChildren(QWidget):
+        if not widget.isVisible():
+            continue
+        if isinstance(widget, QLineEdit) and isinstance(widget.parentWidget(), (QAbstractSpinBox, QComboBox)):
+            continue  # the inside of a spin box or combo box, named through its owner
+        if isinstance(widget, (QLineEdit, QPlainTextEdit, QComboBox, QAbstractSpinBox, Segmented)):
+            out.append(widget)
+    return out
+
+
+def unnamed(root: QWidget) -> list[str]:
+    """Every field of `root` a screen reader would announce with no name, or with only its own value."""
+    bad = []
+    buddies = {label.buddy() for label in root.findChildren(QLabel) if label.buddy() is not None}
+    for field in fields_of(root):
+        label = f"{type(field).__name__}:{field.objectName()}"
+        if isinstance(field, QComboBox):
+            # Qt answers a combo box's accessible Name with its current text whatever is set, so a screen
+            # reader takes its label from the "labelled by" relation that a buddy creates. A name of its own
+            # does not stand in for the buddy.
+            if field not in buddies:
+                bad.append(f"{label} has no buddy label")
+            continue
+        name = a11y_name(field).strip()
+        value = field.currentText() if isinstance(field, Segmented) else ""
+        if isinstance(field, QLineEdit):
+            value = field.text()
+        placeholder = getattr(field, "placeholderText", lambda: "")()
+        if not name or name in (value, placeholder):
+            bad.append(f"{label} named {name!r}")
+    return bad
