@@ -1,3 +1,6 @@
+"""What the shipped READMEs and the release notes tell a student to do, and that the README's
+pictures exist."""
+
 from __future__ import annotations
 
 import re
@@ -5,7 +8,7 @@ from pathlib import Path
 
 from desktop.readme import OFFLINE, ONLINE, render
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_linux_readme_names_the_machine_requirements() -> None:

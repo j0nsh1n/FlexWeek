@@ -5,12 +5,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-try:
-    import yaml
-except ImportError:
-    yaml = None  # type: ignore[assignment]
+import pytest
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 WORKFLOW_PATH = ROOT / ".github/workflows/dev-build.yml"
 SCRIPT_PATH = ROOT / "scripts/dev-release.sh"
 
@@ -19,11 +16,11 @@ SCRIPT = SCRIPT_PATH.read_text(encoding="utf-8")
 
 
 def test_the_dev_build_workflow_parses_as_valid_yaml() -> None:
-    if yaml is not None:
-        data = yaml.safe_load(WORKFLOW)
-        assert data.get("name") == "Developer build"
-        triggers = data.get("on") if "on" in data else data.get(True, {})
-        assert "workflow_dispatch" in triggers
+    yaml = pytest.importorskip("yaml")
+    data = yaml.safe_load(WORKFLOW)
+    assert data.get("name") == "Developer build"
+    triggers = data.get("on") if "on" in data else data.get(True, {})
+    assert "workflow_dispatch" in triggers
 
 
 def test_the_dev_build_runs_only_by_hand() -> None:

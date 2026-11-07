@@ -1,9 +1,8 @@
 """The Windows installers' fixed facts. Windows itself runs them in the release workflow.
 
-0.9.0 and 0.9.1 shipped a shortcut that pointed at the build machine's folder. These
-checks keep shortcut paths as installer constants resolved on the user's PC, keep the
-ids that upgrades depend on, and keep the file names in the scripts, the workflow and
-the download docs in step.
+A shortcut once pointed at the build machine's folder. These checks keep shortcut paths as
+installer constants resolved on the user's PC, keep the ids that upgrades depend on, and keep
+the file names in the scripts, the workflow and the download docs in step.
 """
 
 from __future__ import annotations
@@ -12,7 +11,7 @@ import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 ISS = (ROOT / "packaging/windows/flexweek.iss").read_text(encoding="utf-8")
 WXS = ET.parse(ROOT / "packaging/windows/flexweek.wxs").getroot()
 WORKFLOW = (ROOT / ".github/workflows/release-windows.yml").read_text(encoding="utf-8")

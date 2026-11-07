@@ -1,3 +1,6 @@
+"""The bundle check: what it reads from readelf and PE files, and the missing libraries and files it
+refuses a package for."""
+
 from __future__ import annotations
 
 import struct

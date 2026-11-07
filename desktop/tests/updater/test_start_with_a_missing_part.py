@@ -1,3 +1,5 @@
+"""The app, started with a part it needs missing, says so in one plain message."""
+
 from __future__ import annotations
 
 import subprocess
@@ -6,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 # Blocks one module by setting it to None in sys.modules, which makes its import raise, then runs
 # the app's entry point the way `python -m desktop.main` does.

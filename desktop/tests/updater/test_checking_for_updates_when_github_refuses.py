@@ -10,8 +10,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import threading
-import time
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -27,12 +26,16 @@ if importlib.util.find_spec("PySide6") is not None:
 
     from desktop.native import updater as updater_module
     from desktop.native.updater import CHECK_FAILED, Updater
+    from desktop.tests.waiting import wait_until
 
 TAG_PAGE = "https://github.com/j0nsh1n/FlexWeek/releases/tag/v9.9.9"
 # In the app the updater lives as long as the window. Freed at the end of a test, its network manager
 # went while Qt still had events queued for it, and the next test crashed.
 KEPT: list[object] = []
 DOWNLOADS = "https://github.com/j0nsh1n/FlexWeek/releases/download/v9.9.9/"
+# The updater's own transfer timeout is shortened to this, so the check that hears nothing gives up
+# on Qt's timer within the wait.
+SHORT_CHECK_TIMEOUT_MS = 300
 
 
 class GitHub(BaseHTTPRequestHandler):
@@ -40,10 +43,12 @@ class GitHub(BaseHTTPRequestHandler):
 
     api_status = 403
     page_status = 302
+    # Held shut while a test runs, so /slow stays unanswered without any sleep; opened at the end.
+    let_go = threading.Event()
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/slow":
-            time.sleep(2)
+            self.let_go.wait(30)
             return
         if self.path == "/api":
             self.send_response(self.api_status)
@@ -66,17 +71,20 @@ def qapp() -> Iterator[QApplication]:
 
 @pytest.fixture()
 def github(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    GitHub.let_go.clear()
     server = ThreadingHTTPServer(("127.0.0.1", 0), GitHub)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     origin = f"http://127.0.0.1:{server.server_address[1]}"
     monkeypatch.setattr(updater_module, "RELEASES_URL", origin + "/api")
     monkeypatch.setattr(updater_module, "RELEASE_PAGE", origin + "/page")
-    monkeypatch.setattr(updater_module, "CHECK_TIMEOUT_MS", 300)
+    monkeypatch.setattr(updater_module, "CHECK_TIMEOUT_MS", SHORT_CHECK_TIMEOUT_MS)
     monkeypatch.setattr(GitHub, "api_status", 403)
     monkeypatch.setattr(GitHub, "page_status", 302)
     yield origin
+    GitHub.let_go.set()
     server.shutdown()
+    server.server_close()
 
 
 def made() -> Updater:
@@ -85,24 +93,15 @@ def made() -> Updater:
     return updater
 
 
-def outcome(qapp: QApplication, updater: Updater, timeout: float = 5.0) -> tuple[str, object]:
+def outcome(updater: Updater, timeout: float = 5.0) -> tuple[str, object]:
+    """Start a check and wait for the one thing it tells the app."""
     heard: list[tuple[str, object]] = []
     updater.found.connect(lambda update: heard.append(("found", update)))
     updater.none_found.connect(lambda: heard.append(("none", None)))
     updater.unreachable.connect(lambda why: heard.append(("unreachable", why)))
     updater.check()
-    wait_until(qapp, lambda: bool(heard), timeout)
+    wait_until(None, lambda: bool(heard), timeout, "the check never finished")
     return heard[0]
-
-
-def wait_until(qapp: QApplication, predicate: Callable[[], bool], timeout: float) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        qapp.processEvents()
-        if predicate():
-            return
-        time.sleep(0.01)
-    raise AssertionError("the check never finished")
 
 
 def test_a_refused_api_still_finds_the_update_through_the_release_page(
@@ -110,7 +109,7 @@ def test_a_refused_api_still_finds_the_update_through_the_release_page(
 ) -> None:
     updater = made()
     updater.kind = "appimage"
-    kind, update = outcome(qapp, updater)
+    kind, update = outcome(updater)
     assert kind == "found"
     assert isinstance(update, dict) and update["url"] == DOWNLOADS + "FlexWeek-x86_64.AppImage"
     assert updater.busy is False
@@ -121,7 +120,7 @@ def test_a_check_that_cannot_be_done_says_so(
 ) -> None:
     monkeypatch.setattr(GitHub, "page_status", 500)
     updater = made()
-    assert outcome(qapp, updater) == ("unreachable", CHECK_FAILED)
+    assert outcome(updater) == ("unreachable", CHECK_FAILED)
     assert updater.busy is False, "a second check can start"
 
 
@@ -131,4 +130,5 @@ def test_a_check_that_hears_nothing_gives_up(
     monkeypatch.setattr(updater_module, "RELEASES_URL", github + "/slow")
     monkeypatch.setattr(updater_module, "RELEASE_PAGE", github + "/slow")
     updater = made()
-    assert outcome(qapp, updater, timeout=4.0) == ("unreachable", CHECK_FAILED)
+    assert outcome(updater, timeout=8.0) == ("unreachable", CHECK_FAILED)
+    assert updater.busy is False

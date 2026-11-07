@@ -1,4 +1,4 @@
-"""Audit finding 11: a downloaded update does not stay on the disk once it has been used."""
+"""A downloaded update does not stay on the disk once it has been used."""
 
 from __future__ import annotations
 
@@ -6,16 +6,20 @@ import importlib.util
 import os
 import tarfile
 import tempfile
-import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+
+from backend.tests.fake_clock import FakeClock
+from desktop.tests.updater.support import a_download
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
 )
 
 if importlib.util.find_spec("PySide6") is not None:
+    from desktop.native import updater as updater_module
     from desktop.native.updater import STALE_DOWNLOAD_S, apply_update, collect_stale_downloads
 
 
@@ -25,14 +29,6 @@ def temp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     root.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(root))
     return root
-
-
-def a_download(temp: Path, name: str = "flexweek-update-abc123") -> Path:
-    folder = temp / name
-    folder.mkdir()
-    package = folder / "FlexWeek.AppImage"
-    package.write_bytes(b"new")
-    return package
 
 
 def test_an_appimage_update_that_took_leaves_no_download_behind(
@@ -97,15 +93,25 @@ def test_the_windows_installer_is_kept_while_it_runs(temp: Path, monkeypatch: py
     assert package.exists()
 
 
-def test_downloads_left_by_an_earlier_run_are_collected_at_launch(temp: Path) -> None:
+def test_downloads_left_by_an_earlier_run_are_collected_at_launch(
+    temp: Path, clock: FakeClock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The updater compares folder times with the time it reads; it reads the test's clock here, and
+    # the folders' times are set from the same clock.
+    monkeypatch.setattr(updater_module, "time", SimpleNamespace(time=clock))
     old = a_download(temp, "flexweek-update-old").parent
     recent = a_download(temp, "flexweek-update-recent").parent
+    almost_old = a_download(temp, "flexweek-update-almost").parent
     other = temp / "something-else"
     other.mkdir()
-    long_ago = time.time() - STALE_DOWNLOAD_S - 60
+    now = clock()
+    long_ago = now - STALE_DOWNLOAD_S - 60
     os.utime(old, (long_ago, long_ago))
     os.utime(other, (long_ago, long_ago))
+    os.utime(almost_old, (now - STALE_DOWNLOAD_S + 60, now - STALE_DOWNLOAD_S + 60))
+    os.utime(recent, (now - 60, now - 60))
     collect_stale_downloads()
     assert not old.exists()
     assert recent.exists()
+    assert almost_old.exists()
     assert other.exists()

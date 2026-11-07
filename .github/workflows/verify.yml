@@ -197,7 +197,8 @@ jobs:
         run: |
           fwtest run --timeout 1800 -- .venv/bin/python -m pytest -q -p no:cacheprovider -n 4 \
             desktop/tests/test_tokens.py \
-            desktop/tests/test_update.py
+            desktop/tests/updater/test_which_update_is_offered.py \
+            desktop/tests/updater/test_the_version_matches_the_changelog.py
       - name: Run classic ${{ matrix.tab }} with a real pointer
         run: |
           fwtest rig --server xvfb --design classic --tab ${{ matrix.tab }} --out rig-artifacts/${{ matrix.tab }}

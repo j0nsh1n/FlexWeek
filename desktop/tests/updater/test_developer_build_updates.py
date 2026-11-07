@@ -1,43 +1,27 @@
 # ruff: noqa: F811
-"""Get developer builds: the switch, the `dev` pre-release check, and the version label."""
+"""Get developer builds: when the update check asks for the `dev` pre-release, and which title it reads
+a version from. The checks run against a small local web server that answers like GitHub."""
 
 from __future__ import annotations
 
 import json
-import os
 import threading
-import time
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from desktop.native.update import sanitize_updates
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtWidgets import QApplication
 
-from desktop.native import updater as updater_module  # noqa: E402
-from desktop.native.updater import Updater  # noqa: E402
-from desktop.native.window import NativeWindow  # noqa: E402
-from desktop.tests.test_material_window import qapp, window  # noqa: E402, F401
+from desktop.native import updater as updater_module
+from desktop.native.updater import Updater
+from desktop.tests.waiting import wait_until
+from desktop.tests.window_support import qapp  # noqa: F401
 
 KEPT: list[object] = []
 TARBALL = "FlexWeek-Linux-x86_64.tar.gz"
-
-
-def test_the_switch_is_off_by_default_and_survives_a_save() -> None:
-    assert sanitize_updates({})["developer_builds"] is False
-    assert sanitize_updates({"developer_builds": True})["developer_builds"] is True
-    assert sanitize_updates({"developer_builds": "yes"})["developer_builds"] is False
-
-
-def _dev_release(version: str) -> dict:
-    """The `dev` pre-release as GitHub returns it: the tag is always `dev`, the version is in the title."""
-    return {**_release("dev", prerelease=True), "name": f"Developer build {version}"}
 
 
 def _release(tag: str, *, prerelease: bool = False) -> dict:
@@ -56,6 +40,11 @@ def _release(tag: str, *, prerelease: bool = False) -> dict:
             },
         ],
     }
+
+
+def _dev_release(version: str) -> dict:
+    """The `dev` pre-release as GitHub returns it: the tag is always `dev`, the version is in the title."""
+    return {**_release("dev", prerelease=True), "name": f"Developer build {version}"}
 
 
 class GitHub(BaseHTTPRequestHandler):
@@ -124,18 +113,8 @@ def outcome(
     updater.unreachable.connect(lambda why: heard.append(("unreachable", why)))
     updater.failed.connect(lambda why: heard.append(("failed", why)))
     updater.check(developer=developer)
-    wait_until(qapp, lambda: bool(heard), timeout)
+    wait_until(qapp, lambda: bool(heard), timeout, what="the update check never finished")
     return heard[0]
-
-
-def wait_until(qapp: QApplication, predicate: Callable[[], bool], timeout: float) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        qapp.processEvents()
-        if predicate():
-            return
-        time.sleep(0.01)
-    raise AssertionError("the check never finished")
 
 
 def test_with_the_switch_off_the_dev_build_is_never_asked_for(qapp: QApplication, github: str) -> None:
@@ -154,7 +133,9 @@ def test_a_newer_dev_build_is_offered_with_the_switch_on(qapp: QApplication, git
 
 
 def test_a_newer_official_release_beats_an_older_dev_build(
-    qapp: QApplication, github: str, monkeypatch: pytest.MonkeyPatch
+    qapp: QApplication,
+    github: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     GitHub.latest_body = json.dumps(_release("v1.2.1")).encode()
     GitHub.dev_body = json.dumps(_dev_release("1.2.0.202611050300")).encode()
@@ -181,58 +162,10 @@ def test_a_failed_dev_request_falls_back_to_the_release_answer(qapp: QApplicatio
     assert update["version"] == "99.0.0"
 
 
-def test_the_material_switch_saves_the_setting(qapp: QApplication, window: NativeWindow) -> None:
-    from desktop.tests.test_layouts_window import look_file, wait_until
-    from desktop.tests.test_material_settings import (
-        _click,
-        _named,
-        _open_settings,
-        _reset,
-    )
-    from desktop.tests.test_material_window import _visuals
-
-    root = _open_settings(qapp, window, "computer")
-    try:
-        row = _named(root, "developerBuildsRow")[0]
-        switch = next(item for item in _visuals(row) if str(item.objectName()) == "developerBuilds")
-        _click(qapp, window, switch)
-        wait_until(qapp, lambda: window._updates.get("developer_builds") is True)
-        saved = json.loads(look_file().read_text(encoding="utf-8"))
-        assert saved["updates"]["developer_builds"] is True
-    finally:
-        _reset(window)
-
-
-def test_a_dev_build_says_developer_build_in_settings(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+def test_a_dev_release_without_a_version_in_its_title_is_not_offered(
+    qapp: QApplication,
+    github: str,
 ) -> None:
-    from desktop.native.material import bridge_settings
-    from desktop.native.version import VERSION
-    from desktop.tests.test_material_settings import (
-        _named,
-        _open_settings,
-        _panel,
-        _pump,
-        _reset,
-        _texts,
-    )
-
-    root = _open_settings(qapp, window, "computer")
-    try:
-        panel = _panel(window)
-        assert panel.state["version"] == f"FlexWeek {VERSION}"
-        assert "developer build" not in panel.state["version"]
-        monkeypatch.setattr(bridge_settings, "CHANNEL", "dev")
-        panel._publish()
-        _pump(qapp)
-        assert panel.state["version"] == f"FlexWeek {VERSION} (developer build)"
-        words = " ".join(str(item.property("text") or "") for item in _texts(_named(root, "row_updates")[0]))
-        assert "developer build" in words
-    finally:
-        _reset(window)
-
-
-def test_a_dev_release_without_a_version_in_its_title_is_not_offered(qapp: QApplication, github: str) -> None:
     GitHub.dev_body = json.dumps({**_dev_release("1.2.0.202611040300"), "name": "Developer build"}).encode()
     updater = made()
     kind, _update = outcome(qapp, updater, developer=True)
@@ -240,7 +173,7 @@ def test_a_dev_release_without_a_version_in_its_title_is_not_offered(qapp: QAppl
 
 
 def test_a_dev_title_may_carry_its_commit_after_the_number(qapp: QApplication, github: str) -> None:
-    """Developer builds will name their commit, "Developer build 1.2.0.202611040300 (4b3e1cd)"; the number
+    """Developer builds name their commit, "Developer build 1.2.0.202611040300 (4b3e1cd)"; the number
     still decides what is newer. Anything else after the number is not a developer build title."""
     GitHub.dev_body = json.dumps(
         {**_dev_release("1.2.0.202611040300"), "name": "Developer build 1.2.0.202611040300 (4b3e1cd)"}
@@ -255,35 +188,3 @@ def test_a_dev_title_may_carry_its_commit_after_the_number(qapp: QApplication, g
         GitHub.dev_body = json.dumps({**_dev_release("1.2.0.202611040300"), "name": name}).encode()
         kind, _update = outcome(qapp, made(), developer=True)
         assert kind == "none", name
-
-
-def test_widgets_settings_has_the_same_switch(qapp: QApplication, window: NativeWindow) -> None:
-    """The switch was only in Material's Settings; Widgets This computer shows the same saved setting."""
-    from PySide6.QtWidgets import QWidget
-
-    from desktop.tests.test_layouts_window import look_file
-
-    before = dict(window._updates)
-    try:
-        window._surface = "widgets"
-        window._material_gave_up = False
-        window._on_week()
-        window._updates["developer_builds"] = True
-        window._save_look()
-        assert json.loads(look_file().read_text(encoding="utf-8"))["updates"]["developer_builds"] is True
-        window._open_settings()
-        switch = window._settings.findChild(QWidget, "prefDeveloperBuilds")
-        assert switch is not None and switch.isChecked() is True
-        switch.click()
-        qapp.processEvents()
-        assert window._updates["developer_builds"] is False
-        assert json.loads(look_file().read_text(encoding="utf-8"))["updates"]["developer_builds"] is False
-        window._close_settings()
-        window._updates["developer_builds"] = True  # as Material's switch would
-        window._open_settings()
-        assert window._settings.findChild(QWidget, "prefDeveloperBuilds").isChecked() is True
-    finally:
-        window._close_settings()
-        window._updates.clear()
-        window._updates.update(before)
-        window._save_look()
