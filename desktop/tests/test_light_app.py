@@ -10,6 +10,8 @@ from pathlib import Path
 import pytest
 from PySide6.QtWidgets import QApplication
 
+from backend.tests.fake_clock import FakeClock
+from desktop.native.calendar import monday_of
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import account, open_light, open_light_window  # noqa: F401
 from desktop.tests.waiting import wait_until
@@ -73,3 +75,13 @@ def test_what_one_light_window_saves_is_not_in_the_next(
         second.hide()
         free(second)
         api.close()
+
+
+def test_a_light_window_opens_long_after_the_account_was_made(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+    clock: FakeClock,
+) -> None:
+    clock.move(days=60)
+    opened = open_light()
+    assert opened.session.week_start == monday_of(clock.today().isoformat())

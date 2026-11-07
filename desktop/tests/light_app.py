@@ -19,6 +19,7 @@ from PySide6.QtWidgets import QApplication, QPushButton
 from shiboken6 import isValid
 from starlette.testclient import TestClient
 
+from backend.storage import connect, create_session
 from backend.tests.fake_clock import CLOCK
 from desktop.native import controller as controller_module
 from desktop.native.client import NativeClient
@@ -115,7 +116,7 @@ class LightClient(NativeClient):
 class Account:
     database: Path
     look: bytes | None
-    token: str
+    user_id: int
 
 
 _ACCOUNT: Account | None = None
@@ -172,14 +173,14 @@ def account(qapp: QApplication, root: Path) -> Account:
         window.recovery_ack.setChecked(True)
         window.recovery_continue.click()
         past_setup(qapp, window)
-        token = window.session.client.session_token()
-        assert token, "signing up kept no session"
+        assert window.session.account is not None, "signing up left no account"
+        user_id = int(window.session.account["id"])
         look = look_file().read_bytes() if look_file().exists() else None
     finally:
         _close(window)
         api.close()
         CLOCK.set(held)
-    _ACCOUNT = Account(database, look, token)
+    _ACCOUNT = Account(database, look, user_id)
     return _ACCOUNT
 
 
@@ -189,31 +190,42 @@ def open_light_window(
     tmp_path.mkdir(parents=True, exist_ok=True)
     database = tmp_path / "flexweek.db"
     _copy(made.database, database)
+    # Opened at the clock's time now, which a test may have moved past the sign-up session's life.
+    with connect(database) as db:
+        token = create_session(db, made.user_id, keep=True)
     look_file().parent.mkdir(parents=True, exist_ok=True)
     if made.look is None:
         look_file().unlink(missing_ok=True)
     else:
         look_file().write_bytes(made.look)
-    api = InProcessApi(database)
     kept = KeptSession(tmp_path / "kept-session")
-    kept.keep(made.token)
-    with _client_for(api):
-        window = NativeWindow(ORIGIN, kept=kept)
-    if size is not None:
-        window.resize(*size)
-    window.show()
-    session = window.session
-    session.resume()
-    wait_until(
-        qapp,
-        lambda: (
-            window._stack.currentWidget().objectName() in {"weekPage", "materialPage"}
-            and session.preferences is not None
-            and not session.busy
-            and not getattr(session.client, "pending", 0)
-        ),
-        what="the light window opening on the week",
-    )
+    kept.keep(token)
+    api = InProcessApi(database)
+    window: NativeWindow | None = None
+    try:
+        with _client_for(api):
+            window = NativeWindow(ORIGIN, kept=kept)
+        if size is not None:
+            window.resize(*size)
+        window.show()
+        session = window.session
+        session.resume()
+        opened = window
+        wait_until(
+            qapp,
+            lambda: (
+                opened._stack.currentWidget().objectName() in {"weekPage", "materialPage"}
+                and session.preferences is not None
+                and not session.busy
+                and not getattr(session.client, "pending", 0)
+            ),
+            what="the light window opening on the week",
+        )
+    except BaseException:
+        if window is not None:
+            _close(window)
+        api.close()
+        raise
     # As after signing up: the account is new for this sitting (set only now, or setup would open
     # before the preferences that say it was finished), and no session was kept on this computer.
     session.new_account = True

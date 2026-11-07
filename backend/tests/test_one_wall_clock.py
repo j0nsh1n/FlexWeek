@@ -44,13 +44,38 @@ QML_WALL_CLOCK = re.compile(r"\bDate\.now\(\)|\bnew\s+Date\(\s*\)")
 CLASSES = {"date", "datetime", "QDate", "QTime", "QDateTime"}
 
 
-def called_name(call: ast.Call) -> tuple[str, str] | None:
+def imported_names(tree: ast.Module) -> tuple[dict[str, str], dict[str, tuple[str, str]]]:
+    """Names a file gave the clock's modules and classes (`import time as t`, `from datetime import
+    datetime as DT`), and the clock functions it imported by name (`from time import time`)."""
+    owners: dict[str, str] = {}
+    functions: dict[str, tuple[str, str]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname and alias.name in {"time", "datetime"}:
+                    owners[alias.asname] = alias.name
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            module = node.module.split(".")[-1]
+            for alias in node.names:
+                local = alias.asname or alias.name
+                if alias.name in CLASSES:
+                    owners[local] = alias.name
+                elif (module, alias.name) in WALL_CLOCK | WALL_CLOCK_WITHOUT_ARGUMENTS:
+                    functions[local] = (module, alias.name)
+    return owners, functions
+
+
+def called_name(
+    call: ast.Call, owners: dict[str, str], functions: dict[str, tuple[str, str]]
+) -> tuple[str, str] | None:
     func = call.func
+    if isinstance(func, ast.Name):
+        return functions.get(func.id)
     if not isinstance(func, ast.Attribute):
         return None
     owner = func.value
     if isinstance(owner, ast.Name):
-        return owner.id, func.attr
+        return owners.get(owner.id, owner.id), func.attr
     if isinstance(owner, ast.Attribute) and owner.attr in CLASSES and isinstance(owner.value, ast.Name):
         return owner.attr, func.attr
     return None
@@ -66,10 +91,12 @@ def python_files() -> list[Path]:
 
 def wall_clock_reads(source: str) -> list[tuple[int, str]]:
     found = []
-    for node in ast.walk(ast.parse(source)):
+    tree = ast.parse(source)
+    owners, functions = imported_names(tree)
+    for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-        name = called_name(node)
+        name = called_name(node, owners, functions)
         if name is None:
             continue
         given = node.args or node.keywords
@@ -126,3 +153,31 @@ def test_the_scan_finds_each_kind_of_wall_clock_read() -> None:
     ]
     assert QML_WALL_CLOCK.search("var t = Date.now()") and QML_WALL_CLOCK.search("new Date()")
     assert not QML_WALL_CLOCK.search("new Date(2026, 1, 1)")
+
+
+def test_the_scan_follows_names_a_file_gives_the_clock() -> None:
+    source = "\n".join(
+        [
+            "from time import time",
+            "from time import time as moment",
+            "from datetime import datetime as DT",
+            "import datetime as dt",
+            "import time as t",
+            "from PySide6.QtCore import QDate as Day",
+            "time()",
+            "moment()",
+            "DT.now()",
+            "dt.date.today()",
+            "t.time()",
+            "Day.currentDate()",
+            "t.monotonic()",
+        ]
+    )
+    assert [name for _line, name in sorted(wall_clock_reads(source))] == [
+        "time.time",
+        "time.time",
+        "datetime.now",
+        "date.today",
+        "time.time",
+        "QDate.currentDate",
+    ]

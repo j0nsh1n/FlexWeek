@@ -14,6 +14,13 @@
   "test": "desktop/tests/test_hours_open.py::test_month_and_mini_month_use_today_at_a_week_boundary"
  },
  {
+  "name": "Month ignores the today it is given",
+  "file": "desktop/native/hours/month.py",
+  "old": "        today = today_iso or wall_clock.today().isoformat()\n",
+  "new": "        today = wall_clock.today().isoformat()\n",
+  "test": "desktop/tests/test_hours_month.py::test_the_month_marks_the_today_it_is_given_not_the_clocks"
+ },
+ {
   "name": "Month discards the picked day",
   "file": "desktop/native/controller.py",
   "old": "        anchor = self.selected_day if self.selected_day[:7] == self.selected_month else (\n            month_anchor_date(self.selected_month, today)\n        )\n",

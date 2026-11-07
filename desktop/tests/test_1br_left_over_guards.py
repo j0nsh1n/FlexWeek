@@ -55,7 +55,7 @@ def overdue_this_week(qapp, window) -> str:
     session.save()
     settled(qapp, window)
     saturday = datetime.fromisoformat(session.week_start) + timedelta(days=SATURDAY, hours=10)
-    session.now_ms = lambda: int(saturday.timestamp() * 1000)
+    CLOCK.set(saturday)
     session.week_changed.emit()
     settled(qapp, window)
     return block["id"]
