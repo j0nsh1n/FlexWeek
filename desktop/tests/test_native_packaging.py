@@ -136,3 +136,9 @@ def test_linux_bundle_drops_qts_web_modules_before_the_check() -> None:
     # The packaged smoke refuses WebEngine; the QML copy would otherwise ship QtWebEngine and QtWebView.
     trim = FINISH.index("-iname '*webengine*' -o -iname '*webview*'")
     assert trim < FINISH.index("desktop.check_bundle"), "trim before the bundle check"
+
+
+def test_windows_bundle_drops_qts_web_modules_before_the_check() -> None:
+    # Same QML copy as on Linux: without the trim the Windows package ships QtWebEngine and the smoke refuses it.
+    trim = WINDOWS.index("-match 'webengine|webview'")
+    assert trim < WINDOWS.index("desktop.check_bundle"), "trim before the bundle check"
