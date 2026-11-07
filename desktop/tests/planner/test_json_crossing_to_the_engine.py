@@ -1,8 +1,8 @@
-"""What crosses to the engine as JSON, and back (0.18.5: the fast path for plain values).
+"""What crosses to the engine as JSON, and back.
 
 NaN, infinity and lone surrogates cannot be JSON text the engine reads, so `plain` writes them in a
 form `restore` turns back. Values with none of them skip the walk; these tests hold both paths to the
-same answers.
+same answers. (The engine reads the marker in engine/engine/src/stored.rs; the writing is Python's.)
 """
 
 from __future__ import annotations

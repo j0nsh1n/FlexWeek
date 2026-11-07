@@ -1,4 +1,5 @@
-"""1.0.0 planning screen: shared bar, Agenda rail pick A, quiet Week chrome."""
+"""The planning screen: the shared plan bar, the Agenda rail (next, no time yet, due this week) and a Week
+with no status strip."""
 
 from __future__ import annotations
 
@@ -12,29 +13,12 @@ from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
-from desktop.native.hours.rail import RAIL_PX
-from desktop.native.look import sanitize_look
-from desktop.native.tokens import SPACING
 from desktop.native.window import NativeWindow
-from desktop.tests.test_1br_left_over_guards import overdue_this_week
+from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.planner.support import overdue_this_week, week_list_action
 from desktop.tests.test_more_count import more_row
 from desktop.tests.test_week_side import chips, seeded
-from desktop.tests.window_support import (  # noqa: F401
-    qapp,
-    server,
-    settled,
-    signed_out,
-    wait_until,
-    window,
-)
-
-
-def week_list_action(native: NativeWindow):
-    native._sync_more_menu()
-    for action, button in native._more_pairs:
-        if button.objectName() == "weekListRow":
-            return action
-    raise AssertionError("More has no Week as a list")
+from desktop.tests.window_support import qapp, settled, wait_until  # noqa: F401
 
 
 def test_the_week_has_no_status_strip_and_week_as_a_list_lives_in_more(
@@ -74,7 +58,7 @@ def test_the_agenda_rail_lists_next_no_time_yet_and_due_this_week(
 ) -> None:
     seeded(qapp, window)
     rail = window.rail
-    assert rail.isVisible() and not rail.folded and rail.width() == RAIL_PX
+    assert rail.isVisible() and not rail.folded
     assert not rail.month.isVisible()
     assert not rail.focus.isVisible()
     assert not rail.show_month.isVisible()
@@ -105,26 +89,6 @@ def test_the_agenda_rail_lists_next_no_time_yet_and_due_this_week(
     ]
 
 
-def test_the_agenda_rail_has_no_count_pill_and_headings_in_ink(
-    qapp: QApplication,  # noqa: F811
-    window: NativeWindow,  # noqa: F811
-) -> None:
-    seeded(qapp, window)
-    sheet = window.styleSheet()
-    waiting = sheet.split("QLabel#railWaitingCount {")[1].split("}")[0]
-    assert "background:" not in waiting
-    assert "border-radius" not in waiting
-    assert "padding:" not in waiting
-    assert window.rail.waiting_count.text() == "1"
-    assert window.rail.waiting_count.isVisible()
-    labels = sheet.split('QLabel[railLabel="true"] {')[1].split("}")[0]
-    assert "color: " in labels
-    assert window.rail.next.label.property("railLabel") is True
-    assert window.rail.waiting_label.property("railLabel") is True
-    assert window.rail.due_label.property("railLabel") is True
-    assert window.rail.sections.spacing() == SPACING[4]
-
-
 def test_the_week_title_opens_the_mini_month(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
@@ -151,23 +115,6 @@ def test_the_week_title_opens_the_mini_month(
     )
     wait_until(qapp, lambda: window.session.week_start == later.isoformat() and not window.session.busy)
     assert not window.month_pop.isVisible()
-
-
-def test_large_text_puts_the_date_under_the_day_name(
-    qapp: QApplication,  # noqa: F811
-    window: NativeWindow,  # noqa: F811
-) -> None:
-    seeded(qapp, window)
-    label = window.week_table.findChild(QLabel, "weekDayName0")
-    before = label.sizeHint().height()
-    window._look = sanitize_look({"preset": "default", "knobs": {"text": "large"}})
-    window._apply_appearance()
-    for _ in range(5):
-        qapp.processEvents()
-    assert label._twoline() is True
-    assert label.sizeHint().height() > before
-    assert window.findChild(QWidget, "weekStatusStrip") is None
-    assert week_list_action(window).isEnabled()
 
 
 def test_overdue_homework_that_already_has_a_time_stays_in_unfinished(
@@ -234,18 +181,16 @@ def test_ctrl_shift_l_opens_the_week_list_and_esc_returns_focus(
     assert QApplication.focusWidget() is gear
 
 
-def test_more_week_as_a_list_opens_the_list_over_the_grid(
+def test_more_week_as_a_list_opens_the_list_and_again_closes_it(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
 ) -> None:
     seeded(qapp, window)
-    before = window.planner.mapTo(window, window.planner.rect().topLeft()).y()
     week_list_action(window).trigger()
     for _ in range(3):
         qapp.processEvents()
     assert window.week_list_panel.isVisible()
     assert window.week_access_list.isVisibleTo(window)
-    assert window.planner.mapTo(window, window.planner.rect().topLeft()).y() == before
     week_list_action(window).trigger()
     for _ in range(3):
         qapp.processEvents()

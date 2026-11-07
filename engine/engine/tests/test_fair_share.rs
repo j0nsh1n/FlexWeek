@@ -65,6 +65,24 @@ fn work_due_this_week_is_left_whole() {
 }
 
 #[test]
+fn work_due_this_sunday_planned_on_saturday_is_left_whole() {
+    // Sunday is six days after Monday, inside the coming seven days of Saturday.
+    let (blocks, notes) = share(&[session("s1", 120)], "2026-10-11T23:59", 120, 5, &["s1"]);
+    assert_eq!(blocks[0]["duration_min"], json!(120));
+    assert!(notes.is_empty());
+}
+
+#[test]
+fn sharing_again_keeps_the_same_whole_session() {
+    // Planning everything a second time hands the first answer back in: 120 minutes in all, in one piece.
+    let (once, _) = share(&[session("s1", 120)], "2026-10-14T23:59", 120, 5, &["s1"]);
+    let (twice, notes) = share(&once, "2026-10-14T23:59", 120, 5, &["s1"]);
+    assert_eq!(twice.len(), 1);
+    assert_eq!(twice[0]["duration_min"], json!(120));
+    assert!(notes.is_empty());
+}
+
+#[test]
 fn due_next_monday_keeps_all_of_it_this_week() {
     // Every plannable day before it is in this week.
     let (blocks, notes) = share(&[session("s1", 120)], "2026-10-12T08:00", 120, 5, &["s1"]);

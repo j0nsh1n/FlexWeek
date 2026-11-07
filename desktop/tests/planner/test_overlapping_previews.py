@@ -13,14 +13,9 @@ from PySide6.QtWidgets import QApplication, QCheckBox, QDialog, QLabel
 
 from desktop.native.widgets import PreviewDialog
 from desktop.native.window import NativeWindow
-from desktop.tests.window_support import (  # noqa: F401
-    qapp,
-    server,
-    settled,
-    signed_out,
-    wait_until,
-)
-from desktop.tests.window_support import window as signed_in  # noqa: F401
+from desktop.tests.light_app import window as signed_in  # noqa: F401
+from desktop.tests.waiting import wait_until
+from desktop.tests.window_support import qapp, settled  # noqa: F401
 
 SOCCER = {
     "id": "soccer",
@@ -63,7 +58,7 @@ def test_a_preview_row_that_lands_on_a_block_warns_in_the_editors_words_and_can_
         dialog.deleteLater()
 
 
-def test_only_selecting_nothing_still_blocks_a_preview(qapp: QApplication, window: NativeWindow) -> None:
+def test_a_preview_with_nothing_selected_cannot_be_saved(qapp: QApplication, window: NativeWindow) -> None:
     dialog = PreviewDialog(window, "Preview paste", "", on_top_rows(window), window.session.blocks)
     try:
         dialog.findChild(QCheckBox, "previewInclude0").setChecked(False)

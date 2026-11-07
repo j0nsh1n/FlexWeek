@@ -1,5 +1,5 @@
-"""What the reuse wrapper still decides in Python: `row_conflict` finds the row's own place in the
-preview rows by object identity before asking the engine, so a row never conflicts with itself."""
+"""What the reuse wrappers still decide in Python, and that their answers come back decoded from the real
+engine. The rules themselves are tested in engine/engine/tests/desk_reuse.rs and test_fair_share.rs."""
 
 from __future__ import annotations
 
@@ -25,6 +25,8 @@ def soccer() -> dict:
 
 
 def test_paste_of_a_fixed_block_onto_the_same_slot_conflicts() -> None:
+    """`row_conflict` finds the row's own place among the preview rows by identity, so a row never
+    conflicts with itself, only with the week's blocks."""
     source = soccer()
     items = [{"block": source, "source_day": 0, "scope": "occurrence", "group_id": "g1"}]
     rows = proposals_from_clipboard(
@@ -39,18 +41,6 @@ def test_paste_of_a_fixed_block_onto_the_same_slot_conflicts() -> None:
     assert row_conflict(rows[0], rows, [source]) == "Soccer"
     rows[0]["block"]["start"] = "18:00"
     assert row_conflict(rows[0], rows, [source]) is None
-
-
-def test_adjacent_blocks_do_not_conflict() -> None:
-    existing = [soccer()]
-    row = {
-        "week_start": "2026-09-07",
-        "day": 0,
-        "fixed": True,
-        "checked": True,
-        "block": {"title": "Piano", "start": "17:00", "duration_min": 30, "days": [0]},
-    }
-    assert row_conflict(row, [row], existing) is None
 
 
 def test_remaining_time_wrappers_call_the_engine_and_return_decoded_values() -> None:
