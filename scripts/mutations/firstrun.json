@@ -46,7 +46,7 @@
     "file": "desktop/native/look.py",
     "old": "QLabel#recoveryList {{ font-family: {FONT_FAMILIES['mono']};",
     "new": "QLabel#recoveryList {{ font-family: {FONT_FAMILIES['sans']};",
-    "test": "desktop/tests/test_time_numbers.py::test_recovery_codes_use_the_bundled_mono_face"
+    "test": "desktop/tests/week/test_week_dates_and_times_at_every_width.py::test_new_recovery_codes_are_listed_one_to_a_line"
   },
   {
     "name": "the sign-in card rounded as a card, not a sheet",

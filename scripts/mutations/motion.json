@@ -74,7 +74,7 @@
     "file": "desktop/native/command_bar.py",
     "old": "        self.box.move(home.topLeft() + QPoint(0, distance(BAR_RISE_PX, self.motion)))\n",
     "new": "",
-    "test": "desktop/tests/test_command_bar.py::test_the_box_rises_16_pixels_into_place_as_the_window_dims"
+    "test": "desktop/tests/week/test_command_bar.py::test_the_box_rises_into_place_as_the_window_dims_and_not_at_all_under_reduce"
   },
   {
     "name": "the segmented selection jumps",
@@ -165,14 +165,14 @@
     "file": "desktop/native/command_bar.py",
     "old": "BAR_RISE_PX, BAR_RISE_MS = 2 * RISE_PX, EASE_MS + 80\n",
     "new": "BAR_RISE_PX, BAR_RISE_MS = RISE_PX, EASE_MS + 80\n",
-    "test": "desktop/tests/test_command_bar.py::test_the_box_rises_16_pixels_into_place_as_the_window_dims"
+    "test": "desktop/tests/week/test_command_bar.py::test_the_box_rises_into_place_as_the_window_dims_and_not_at_all_under_reduce"
   },
   {
     "name": "a notice said under Ctrl+K stays bright over its dimming",
     "file": "desktop/native/widgets.py",
     "old": "                    cover.raise_()\n",
     "new": "                    pass\n",
-    "test": "desktop/tests/test_command_bar.py::test_a_notice_said_while_ctrl_k_is_open_goes_under_its_dimming"
+    "test": "desktop/tests/week/test_command_bar.py::test_a_notice_said_while_ctrl_k_is_open_goes_under_its_dimming"
   },
   {
     "name": "the top bar greys the moment it is busy",
@@ -193,14 +193,14 @@
     "file": "desktop/native/hours/zoom.py",
     "old": "            if top + min(above, shown / 4) <= minute <= top + shown - 60:\n                return\n",
     "new": "            if top + min(above, shown / 4) <= minute <= top + shown - 60:\n                pass\n",
-    "test": "desktop/tests/test_hours_zoom.py::test_after_a_plan_the_hours_ease_to_homework_off_screen_and_stay_for_homework_on_it"
+    "test": "desktop/tests/week/test_lanes_keep_their_time.py::test_after_a_plan_the_hours_ease_to_homework_off_screen_and_stay_for_homework_on_it"
   },
   {
     "name": "after a plan the hours jump instead of easing",
     "file": "desktop/native/hours/zoom.py",
     "old": "        if end == start or length == 0 or not moves(level):\n            return\n",
     "new": "        if True:\n            return\n",
-    "test": "desktop/tests/test_hours_zoom.py::test_after_a_plan_the_hours_ease_to_homework_off_screen_and_stay_for_homework_on_it"
+    "test": "desktop/tests/week/test_lanes_keep_their_time.py::test_after_a_plan_the_hours_ease_to_homework_off_screen_and_stay_for_homework_on_it"
   },
   {
     "name": "a plan's words are toasted before its Undo again",

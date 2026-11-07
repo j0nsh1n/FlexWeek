@@ -4,63 +4,63 @@
   "name": "a move bounded by the day, not its tile",
   "old": "        start = max(min(snap(minute - held.grab, step), last - held.minutes), first)\n",
   "new": "        start = max(min(snap(minute - held.grab, step), 1440 - held.minutes), 0)\n",
-  "test": "desktop/tests/test_hours_targets.py::test_a_tile_keeps_a_block_inside_its_own_hours"
+  "test": "desktop/tests/week/test_one_hand_on_every_surface.py::test_a_tile_keeps_a_block_inside_its_own_hours"
  },
  {
   "file": "desktop/native/hours/hand.py",
   "name": "a resize bounded by the day, not its tile",
   "old": "            return replace(origin, end=min(max(snap(minute - held.grab, step), earliest), last))\n",
   "new": "            return replace(origin, end=min(max(snap(minute - held.grab, step), earliest), 1440))\n",
-  "test": "desktop/tests/test_hours_targets.py::test_a_tile_keeps_a_block_inside_its_own_hours"
+  "test": "desktop/tests/week/test_one_hand_on_every_surface.py::test_a_tile_keeps_a_block_inside_its_own_hours"
  },
  {
   "file": "desktop/native/hours/hand.py",
   "name": "a new block drawn past its tile",
   "old": "            here = min(max(snap(minute, step), first), last)\n",
   "new": "            here = min(max(snap(minute, step), first), 1440)\n",
-  "test": "desktop/tests/test_hours_targets.py::test_a_tile_keeps_a_block_inside_its_own_hours"
+  "test": "desktop/tests/week/test_one_hand_on_every_surface.py::test_a_tile_keeps_a_block_inside_its_own_hours"
  },
  {
   "file": "desktop/native/hours/canvas.py",
   "name": "a click-made block runs past its tile",
   "old": "            self.hand.commit(Create(Span(track.day, made[0], min(made[1], track.last))))\n",
   "new": "            self.hand.commit(Create(Span(track.day, made[0], made[1])))\n",
-  "test": "desktop/tests/test_hours_targets.py::test_a_click_near_a_tiles_end_makes_only_what_fits_in_it"
+  "test": "desktop/tests/week/test_one_hand_on_every_surface.py::test_a_click_near_a_tiles_end_makes_only_what_fits_in_it"
  },
  {
   "file": "desktop/native/hours/hand.py",
   "name": "only Today's app canvases take blocks",
   "old": "    return isinstance(widget, QWidget) and bool(getattr(widget, \"takes_blocks\", False))\n",
   "new": "    return type(widget).__name__ == \"HoursCanvas\"\n",
-  "test": "desktop/tests/test_hours_targets.py::test_one_hand_lands_a_block_on_every_kind_of_surface"
+  "test": "desktop/tests/week/test_one_hand_on_every_surface.py::test_one_hand_lands_a_block_on_every_kind_of_surface"
  },
  {
   "file": "desktop/native/hours/hand.py",
   "name": "renders held only once the pointer moves",
   "old": "        QApplication.instance().installEventFilter(self)\n        self.holding.emit(True)\n",
   "new": "        QApplication.instance().installEventFilter(self)\n",
-  "test": "desktop/tests/test_hours_targets.py::test_renders_are_held_from_the_press_until_the_hand_lets_go"
+  "test": "desktop/tests/week/test_one_hand_on_every_surface.py::test_renders_are_held_from_the_press_until_the_hand_lets_go"
  },
  {
   "file": "desktop/native/hours/hand.py",
   "name": "renders never let go",
   "old": "        if was_holding:\n            self.holding.emit(False)\n",
   "new": "",
-  "test": "desktop/tests/test_hours_targets.py::test_renders_are_held_from_the_press_until_the_hand_lets_go"
+  "test": "desktop/tests/week/test_one_hand_on_every_surface.py::test_renders_are_held_from_the_press_until_the_hand_lets_go"
  },
  {
   "file": "desktop/native/hours/canvas.py",
   "name": "no names for lanes that run across",
   "old": "        if track.axis is Axis.ACROSS and self.gutter:\n",
   "new": "        if False:\n",
-  "test": "desktop/tests/test_hours_targets.py::test_a_days_name_opens_it_whichever_way_its_time_runs"
+  "test": "desktop/tests/week/test_one_hand_on_every_surface.py::test_a_days_name_opens_it_whichever_way_its_time_runs"
  },
  {
   "file": "desktop/native/layouts/base.py",
   "name": "a design lists no surfaces",
   "old": "        return [widget for widget in self.findChildren(QWidget) if is_surface(widget) and widget.isVisible()]\n",
   "new": "        return []\n",
-  "test": "desktop/tests/test_hours_targets.py::test_a_design_lists_every_surface_it_shows"
+  "test": "desktop/tests/week/test_one_hand_on_every_surface.py::test_a_design_lists_every_surface_it_shows"
  },
  {
   "file": "desktop/native/window.py",
@@ -81,7 +81,7 @@
   "name": "the hand snaps to quarter hours whatever the step",
   "old": "        origin, first, last, step = held.origin, track.first, track.last, self.step\n",
   "new": "        origin, first, last, step = held.origin, track.first, track.last, 15\n",
-  "test": "desktop/tests/test_hours_hand.py::test_a_move_a_resize_and_a_new_block_land_on_the_step_and_never_finer"
+  "test": "desktop/tests/week/test_drag_on_the_hours.py::test_a_move_a_resize_and_a_new_block_land_on_the_step_and_never_finer"
  },
  {
   "file": "desktop/native/window.py",
@@ -95,27 +95,27 @@
   "name": "a tap on a block opens nothing",
   "old": "            self.hand.press(self, held, at, tap=lambda: self.hand.open(drawn.block_id), home=(self, track))\n",
   "new": "            self.hand.press(self, held, at, home=(self, track))\n",
-  "test": "desktop/tests/test_hours_hand.py::test_a_click_on_a_block_opens_it_and_a_drag_only_moves_it"
+  "test": "desktop/tests/week/test_click_on_a_block.py::test_a_click_on_a_block_opens_it_and_a_drag_only_moves_it"
  },
  {
   "file": "desktop/native/hours/canvas.py",
   "name": "a right-click picks a block up and moves it",
   "old": "    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802\n        if event.button() != Qt.MouseButton.LeftButton:\n",
   "new": "    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802\n        if event.button() not in (Qt.MouseButton.LeftButton, Qt.MouseButton.RightButton):\n",
-  "test": "desktop/tests/test_hours_hand.py::test_a_right_click_asks_for_the_blocks_menu_and_never_moves_it"
+  "test": "desktop/tests/week/test_click_on_a_block.py::test_a_right_click_asks_for_the_blocks_menu_and_never_moves_it"
  },
  {
   "file": "desktop/native/hours/hand.py",
   "name": "a double-click opens a second editor",
   "old": "        if second_click and last is not None and last[0] == block_id and now - last[1] < soon:\n",
   "new": "        if False:\n",
-  "test": "desktop/tests/test_hours_hand.py::test_a_double_click_opens_the_block_once_and_enter_opens_it"
+  "test": "desktop/tests/week/test_click_on_a_block.py::test_a_double_click_opens_the_block_once_and_enter_opens_it"
  },
  {
   "file": "desktop/native/hours/hand.py",
   "name": "a double-click's second click presses the editor",
   "old": "                SecondClick(self, self._last)\n",
   "new": "",
-  "test": "desktop/tests/test_hours_hand.py::test_a_double_clicks_second_click_does_nothing_on_the_editor_its_first_opened"
+  "test": "desktop/tests/week/test_click_on_a_block.py::test_a_double_clicks_second_click_does_nothing_on_the_editor_its_first_opened"
  }
 ]

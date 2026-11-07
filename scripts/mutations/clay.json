@@ -130,7 +130,7 @@
   "name": "Week opens at 64 pixels an hour",
   "old": "WEEK_SCALE = Scale(\"clay.week\", (30, 38, 48, 64, 96), 38)\n",
   "new": "WEEK_SCALE = Scale(\"clay.week\", (30, 38, 48, 64, 96), 64)\n",
-  "test": "desktop/tests/test_zoom_keys.py::test_ctrl_and_equals_minus_and_zero_zoom_the_hours_showing_wherever_the_keyboard_is"
+  "test": "desktop/tests/week/test_zoom_hours_with_the_keyboard.py::test_ctrl_and_equals_minus_and_zero_zoom_the_hours_showing_wherever_the_keyboard_is"
  },
  {
   "file": "desktop/native/look.py",
