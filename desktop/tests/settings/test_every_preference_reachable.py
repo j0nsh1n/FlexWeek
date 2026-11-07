@@ -7,19 +7,11 @@ feature the desktop app could not turn on.
 
 from __future__ import annotations
 
-import importlib.util
-import os
 import pathlib
-
-import pytest
 
 from backend.app import Preferences
 
-pytestmark = pytest.mark.skipif(
-    importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
-)
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+ROOT = pathlib.Path(__file__).parents[3]
 
 # Settings the desktop app has nothing to do with. Each needs a reason, not just an entry.
 WEB_ONLY = {
@@ -37,7 +29,7 @@ DERIVED = {"theme": "follows theme_pack, set in NativeSession.save_preferences"}
 
 
 def native_source() -> str:
-    return "\n".join(p.read_text() for p in pathlib.Path("desktop/native").rglob("*.py"))
+    return "\n".join(p.read_text(encoding="utf-8") for p in (ROOT / "desktop" / "native").rglob("*.py"))
 
 
 def test_every_preference_is_reachable_from_the_desktop_app() -> None:
@@ -50,7 +42,7 @@ def test_every_preference_is_reachable_from_the_desktop_app() -> None:
 
 def test_the_settings_dialog_saves_what_it_shows() -> None:
     """A control the dialog builds but never writes back is worse than no control at all."""
-    settings = pathlib.Path("desktop/native/settings.py").read_text()
+    settings = (ROOT / "desktop" / "native" / "settings.py").read_text()
     body = settings[settings.index("def updates(") :]
     saved = {field for field in Preferences.model_fields if f'"{field}"' in body}
     shown = {
@@ -62,7 +54,7 @@ def test_the_settings_dialog_saves_what_it_shows() -> None:
 
 
 def test_a_derived_preference_really_is_derived() -> None:
-    controller = pathlib.Path("desktop/native/controller.py").read_text()
+    controller = (ROOT / "desktop" / "native" / "controller.py").read_text()
     for field in DERIVED:
         assert f'body["{field}"]' in controller, f"{field} is not derived anywhere"
 

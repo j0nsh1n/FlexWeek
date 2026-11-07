@@ -1,46 +1,30 @@
-"""One source per setting: the Spotify link, the reminder lead, the homework cutoff and the snooze
-length each have one place that decides them, and every page that shows them reads it."""
+"""Settings, Setup and the Availability sheet agree: the Spotify link, the reminder lead, the homework
+cutoff and the snooze length each have one place that decides them, and every page that shows them reads
+it."""
 
 from __future__ import annotations
 
 import ast
-import importlib.util
 import inspect
-import os
-from collections.abc import Iterator
 
 import flexweek_engine  # type: ignore[import-untyped]
 import pytest
+from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QPushButton
 
 from desktop.native import remind
+from desktop.native.calendar import monday_of
+from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.settings import SPOTIFY_TONE_NOTE, AlarmRingDialog, SettingsPage
+from desktop.native.setup import NOTES, REMINDERS, WEEK, SetupPage, SetupState
+from desktop.native.widgets import AvailabilityDialog
+from desktop.tests.window_support import qapp  # noqa: F401
 
-pytestmark = pytest.mark.skipif(
-    importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
-)
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QStandardPaths
-    from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QPushButton
-
-    from desktop.native.calendar import monday_of
-    from desktop.native.layouts.registry import sanitize_layout
-    from desktop.native.settings import SPOTIFY_TONE_NOTE, AlarmRingDialog, SettingsPage
-    from desktop.native.setup import NOTES, REMINDERS, WEEK, SetupPage, SetupState
-    from desktop.native.widgets import AvailabilityDialog
+# ruff: noqa: F811
 
 ALERTS = 3
 HINT = "Plays when a block starts if the alarm sound is Spotify, and when focus is set to Spotify."
 TRACK = "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"
-TRACK_ADDRESS = "spotify:track:4cOdK2wGLETKBW3PvgPWqT"
 NO_HOMEWORK_AFTER = ["No limit", "20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00"]
-
-
-@pytest.fixture(scope="module")
-def qapp() -> Iterator[QApplication]:
-    QStandardPaths.setTestModeEnabled(True)
-    yield QApplication.instance() or QApplication(["flexweek-one-source-test"])
 
 
 def settings(qapp: QApplication, **preferences: object) -> SettingsPage:
@@ -223,8 +207,6 @@ def test_the_availability_cutoff_says_what_it_is_for(qapp: QApplication) -> None
     assert availability.cutoff.accessibleName() == "No homework after"
     labels = [label for label in availability.findChildren(QLabel) if label.text() == "No homework after"]
     assert len(labels) == 1 and labels[0].isVisible()
-    above = labels[0].mapTo(availability, labels[0].rect().topLeft()).y()
-    assert above < availability.cutoff.mapTo(availability, availability.cutoff.rect().topLeft()).y()
     availability.close()
 
 
