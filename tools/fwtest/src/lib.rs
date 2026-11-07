@@ -3,6 +3,7 @@
 pub mod clean;
 pub mod contain;
 pub mod edits;
+pub mod flaky;
 pub mod gate;
 pub mod hidden;
 pub mod identity;
@@ -11,6 +12,8 @@ pub mod mutate;
 pub mod queue;
 pub mod rebuild;
 pub mod rig;
+pub mod select;
+pub mod select_run;
 pub mod state;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
