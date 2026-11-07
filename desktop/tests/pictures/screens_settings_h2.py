@@ -321,11 +321,33 @@ SCREENS: list[Screen] = [
             "(between 55 % and 65 %), and its bottom is above the footer. Fit fills that column's width: the "
             "picture is wider than 500 px and at least 1000 px wide in the picture's own size. The preview's "
             "controls sit right under the fitted picture, no more than 16 px below it. Choosing Actual size "
-            "gives the preview at least 70 % of the stage's height. The preview takes at least 35 % of the "
-            "stage's height with the picture at least 240 px tall."
+            "gives the preview at least 70 % of the stage's height."
         ),
         sources=LOOK_SOURCES,
         main=True,
+        styles=("widgets",),
+    ),
+    Screen(
+        id="settings.look_preview_wide",
+        area="settings",
+        prepare=look_preview(0, (1600, 1000)),
+        checks=(
+            "At 1600 by 1000 a wide window gives the preview a real share of the stage: at least 35 % of the "
+            "stage's height, with the picture shown at least 240 px tall, so Fit fills the room instead of "
+            "squeezing the window picture into a thin strip between empty bars."
+        ),
+        sources=LOOK_SOURCES,
+        styles=("widgets",),
+    ),
+    Screen(
+        id="settings.look_preview_threshold",
+        area="settings",
+        prepare=look_preview(0, (1000, 800)),
+        checks=(
+            "At 1000 by 800, the width where the side-by-side layout starts, the preview's controls (the "
+            "surface choice and the size choice) are visible and each is at least as wide as it asks for."
+        ),
+        sources=LOOK_SOURCES,
         styles=("widgets",),
     ),
     Screen(
