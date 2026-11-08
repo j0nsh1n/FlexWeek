@@ -311,6 +311,36 @@ pub fn read_arguments(name: &str) -> Value {
             "block_id": "club",
             "scope": "series"
         }),
+        "add_block" => json!({
+            "operation_id": "session-check",
+            "week_start": "2026-10-19",
+            "title": "Dinner",
+            "days": [3],
+            "start": "18:00",
+            "end": "18:30"
+        }),
+        "edit_block" => json!({
+            "operation_id": "session-check",
+            "week_start": "2026-10-19",
+            "expected_revision": 0,
+            "block_id": "club",
+            "title": "Club"
+        }),
+        "skip_block_day" => json!({
+            "operation_id": "session-check",
+            "week_start": "2026-10-19",
+            "expected_revision": 0,
+            "block_id": "club",
+            "day": 2
+        }),
+        "plan_homework" => json!({
+            "operation_id": "session-check",
+            "week_start": "2026-10-19"
+        }),
+        "restore_point" => json!({
+            "operation_id": "session-check",
+            "id": "rp-none"
+        }),
         _ => json!({}),
     }
 }

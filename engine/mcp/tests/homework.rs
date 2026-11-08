@@ -147,10 +147,6 @@ fn seed_essay(world: &World, weeks: &[(&str, i64, Value)]) {
     }
 }
 
-fn setup_ids() -> Vec<&'static str> {
-    vec!["school", "sport", "activity-piano"]
-}
-
 fn essay_session(id: &str, days: &[i64], start: Option<&str>) -> Value {
     let mut block = json!({
         "id": id,
@@ -802,7 +798,7 @@ fn set_block_done_sets_completed_and_completed_day() {
 }
 
 #[test]
-fn set_block_done_refuses_a_foreign_day_and_school() {
+fn set_block_done_refuses_a_foreign_day_and_marks_school() {
     let world = signed_in("refuse-block");
     let conn = open_connection(Path::new(&world.database_arg)).expect("open");
     let blocks = json!([
@@ -866,29 +862,39 @@ fn set_block_done_refuses_a_foreign_day_and_school() {
         Some("day is not one of the block's days"),
         "agenda.rs 359 refuses a day the block does not have, got {foreign}"
     );
-    let setup = setup_ids();
-    assert!(!setup.is_empty(), "school and activities must be checked");
-    for (offset, id) in setup.iter().enumerate() {
+    let (_, refused) =
+        week_row(&world.database_arg, world.user, "2026-10-19").unwrap_or((Value::Null, -1));
+    assert_eq!(refused, 4, "a refusal writes nothing");
+    // School and Setup's activities may be marked done now, each on a day it is on.
+    let setup = [("school", 0), ("sport", 1), ("activity-piano", 3)];
+    for (offset, (id, day)) in setup.iter().enumerate() {
         let response = server.call(
             "set_block_done",
             json!({
                 "operation_id": format!("op-setup-{offset}{id}"),
                 "week_start": "2026-10-19",
                 "block_id": id,
-                "day": 0,
+                "day": day,
                 "done": true
             }),
             3 + offset as i64,
         );
-        assert_eq!(
-            tool_error_text(&response),
-            Some("School and activities are changed in the app."),
-            "{id} is not changeable through MCP, got {response}"
+        assert!(
+            tool_ok_text(&response).is_some(),
+            "{id} can be marked done through MCP, got {response}"
         );
     }
-    let (_, revision) =
+    let (stored, revision) =
         week_row(&world.database_arg, world.user, "2026-10-19").unwrap_or((Value::Null, -1));
-    assert_eq!(revision, 4, "a refusal writes nothing");
+    assert_eq!(revision, 7, "each mark is one change");
+    for (id, _) in setup {
+        let block = stored
+            .as_array()
+            .and_then(|items| items.iter().find(|block| block["id"] == id))
+            .cloned()
+            .unwrap_or(Value::Null);
+        assert_eq!(block["completed"], json!(true), "{id} is done, got {block}");
+    }
 }
 
 fn club_week(world: &World) {
