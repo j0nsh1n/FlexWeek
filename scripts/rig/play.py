@@ -33,7 +33,13 @@ ACTIONS = (
     "say",
     "see",
 )
-SETUP_KEYS = ("clock", "seed", "size", "design", "clock_24h", "text", "look", "mode", "motion", "record")
+SETUP_KEYS = (
+    "clock", "seed", "size", "design", "clock_24h", "text", "look", "mode", "motion", "record", "live",
+)
+# A live play keeps the app open and runs the step files dropped in OUT/inbox/ until OUT/inbox/quit
+# appears or nothing comes for this long.
+LIVE_IDLE_S = 30 * 60
+LIVE_POLL_MS = 200
 # material-new: Material is the saved surface and nobody is signed in, so the play starts on the sign-in card.
 SEEDS = ("rig", "empty", "setup-done", "material-new")
 MODES = ("light", "dark")
@@ -63,6 +69,7 @@ class Setup:
     mode: str = "light"
     motion: str | None = None
     record: bool = False
+    live: bool = False
 
 
 @dataclass(frozen=True)
@@ -138,7 +145,7 @@ def _setup_value(key: str, value: object, designs: tuple[str, ...], looks: tuple
         return _one_of(value, MODES, key)
     if key == "motion":
         return _one_of(value, tuple(MOTIONS), key)
-    if key in ("clock_24h", "record"):
+    if key in ("clock_24h", "record", "live"):
         if not isinstance(value, bool):
             raise ValueError("true or false")
         return value
@@ -820,6 +827,62 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
             return f"{step.action} {target_words(step.value)}"  # type: ignore[arg-type]
         return f"{step.action} {step.value!r}"
 
+    def run_one(number: int, step: Step):
+        """One step, logged as a play's steps are; returns the log line."""
+        head = f"{number:02d} {step_words(step)}"
+        try:
+            what = yield from do_step(number, step)
+            outcome = f"ok: {what}"
+            results["done"] += 1
+        except CannotDo as why:
+            outcome = f"NOT DONE: {why}"
+            results["not_done"] += 1
+        except (subprocess.SubprocessError, OSError, RuntimeError, AssertionError) as broken:
+            outcome = f"NOT DONE: {type(broken).__name__}: {broken}"
+            results["not_done"] += 1
+            traceback.print_exc()
+        yield 100
+        line = f"{head} -> {outcome}; {pointer_line()}; {focus_line()}"
+        log(line)
+        return line
+
+    def live(number: int):
+        """Run the step files an agent drops in OUT/inbox/ (NAME.json: a step, or a list of steps), in name
+        order, and answer each in OUT/outbox/NAME.txt with its log lines. Ends on OUT/inbox/quit or after
+        LIVE_IDLE_S with nothing new."""
+        inbox, outbox = out / "inbox", out / "outbox"
+        inbox.mkdir(exist_ok=True)
+        outbox.mkdir(exist_ok=True)
+        log(f"live: drop step files in {inbox}; answers in {outbox}; {inbox / 'quit'} ends the session")
+        (out / "ready").write_text("ready\n")
+        idle = time.monotonic()
+        while True:
+            if (inbox / "quit").exists():
+                log("live: quit")
+                return number
+            answered = {path.stem for path in outbox.glob("*.txt")}
+            waiting = sorted(path for path in inbox.glob("*.json") if path.stem not in answered)
+            if not waiting:
+                if time.monotonic() - idle > LIVE_IDLE_S:
+                    log("live: nothing new for a while; ending")
+                    return number
+                yield LIVE_POLL_MS
+                continue
+            idle = time.monotonic()
+            path = waiting[0]
+            lines: list[str] = []
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+                steps = [_parse_step(item) for item in (raw if isinstance(raw, list) else [raw])]
+            except (ValueError, OSError) as wrong:
+                lines.append(f"NOT READ: {wrong}")
+                steps = []
+            for step in steps:
+                line = yield from run_one(number, step)
+                lines.append(line)
+                number += 1
+            (outbox / f"{path.stem}.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
     def script():
         for number, step in enumerate(play.steps, 1):
             head = f"{number:02d} {step_words(step)}"
@@ -837,6 +900,8 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
             yield 100
             log(f"{head} -> {outcome}; {pointer_line()}; {focus_line()}")
         number = len(play.steps) + 1
+        if setup.live:
+            number = yield from live(number)
         pictures = save_shots("final", number)
         tree = save_tree("final", number)
         log(f"{number:02d} final -> wrote {', '.join(pictures)}, {tree}; {pointer_line()}; {focus_line()}")
