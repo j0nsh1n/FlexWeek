@@ -230,9 +230,8 @@ def test_choosing_off_in_settings_stops_its_own_sections_moving_at_once(
 def test_animations_off_means_no_animation_anywhere(qapp: QApplication) -> None:  # noqa: F811
     apply_ui_effects("off")
     hours = Hours(qapp)
-    final = hours.settled_picture(LATER)
     hours.canvas.set_week(LATER)
-    assert hours.picture() == final, "blocks are simply where they are"
+    assert hours.canvas._slides == {} and hours.canvas._fresh == set(), "blocks are simply where they are"
     hours.window.close()
     stack, _first, second = two_pages(qapp)
     switch_page(stack, second, app_level())
