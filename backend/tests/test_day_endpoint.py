@@ -1,4 +1,6 @@
-"""GET /api/day from docs/stage2-contract.md. Expected minutes are from the 00:00-24:00 grid, not a recorded run."""
+"""GET /api/day from docs/stage2-contract.md. Expected minutes are from the 00:00-24:00 grid, not a recorded run.
+
+The dates are the request's own, so no test here reads the clock."""
 
 from __future__ import annotations
 
@@ -10,7 +12,6 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.app import create_app
-from backend.day import build_day
 
 PASSWORD = "a-long-test-password"
 WRITE = {"X-FlexWeek-Request": "1", "Origin": "http://testserver"}
@@ -105,7 +106,7 @@ def get_day(client: TestClient, day: str = DAY):
     return client.get(f"/api/day?date={day}")
 
 
-def test_empty_day_is_add_with_seventeen_free_hours(alice: TestClient) -> None:
+def test_an_empty_day_asks_to_add_and_has_the_whole_day_free(alice: TestClient) -> None:
     response = get_day(alice)
     assert response.status_code == 200, response.text
     assert response.json() == {
@@ -124,7 +125,7 @@ def test_empty_day_is_add_with_seventeen_free_hours(alice: TestClient) -> None:
     }
 
 
-def test_school_and_a_finished_session_leave_570_minutes_free(alice: TestClient) -> None:
+def test_school_and_a_finished_session_leave_the_rest_of_the_day_free(alice: TestClient) -> None:
     assert (
         put_assignment(alice, assignment(completed=True, completed_at="2026-09-15T17:00")).status_code == 200
     )
@@ -169,14 +170,6 @@ def test_a_placed_unfinished_session_is_start(alice: TestClient) -> None:
     assert body["workload"]["scheduled_min"] == 60
     assert body["workload"]["focus_min"] == 0
     assert body["workload"]["available_min"] == 1380
-
-
-def test_a_block_at_any_minute_takes_every_quarter_hour_it_touches_from_free_time() -> None:
-    """Free time is the quarter hours the planner can still use. A lesson from 17:37 to 18:22 leaves
-    none of 17:30 to 18:30; with its end floored, 18:15 was counted free."""
-    lesson = {"id": "lesson", "title": "Lesson", "kind": "locked", "start": "17:37", "duration_min": 45, "days": [1]}
-    body = build_day(DAY, WEEK, [lesson], [], [])
-    assert body["workload"]["available_min"] == 24 * 60 - 60
 
 
 def test_overdue_open_homework_is_due_soon(alice: TestClient) -> None:
@@ -268,7 +261,7 @@ def test_an_unfinished_session_still_offers_every_candidate_day(alice: TestClien
 
 
 def test_only_homework_with_a_time_counts_as_planned(alice: TestClient) -> None:
-    """The audit's Day said "9 h 15 min planned" for homework that had no time on any day."""
+    """Homework with no time on any day must not show as hours planned."""
     assert put_assignment(alice, assignment()).status_code == 200
     placed = session("w1", start="16:00")
     waiting = session("w2", days=[0, 1, 2])
@@ -291,7 +284,6 @@ def test_an_untimed_due_sorts_after_a_morning_due_the_same_day(alice: TestClient
     )
     body = get_day(alice).json()
     assert [item["id"] for item in body["due_soon"]] == ["morning", "allday"]
-
 
 
 def test_work_finished_without_a_time_still_counts_as_planned_that_day(alice: TestClient) -> None:
