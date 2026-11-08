@@ -18,7 +18,7 @@
   "name": "blocks back to back two pixels apart",
   "old": "BETWEEN = 3.0\n",
   "new": "BETWEEN = 2.0\n",
-  "test": "desktop/tests/test_hours_geometry.py::test_a_span_is_drawn_between_its_minutes_and_shares_the_width_when_it_overlaps"
+  "test": "desktop/tests/week/test_minutes_on_a_track.py::test_a_span_is_drawn_between_its_minutes_and_shares_the_width_when_it_overlaps"
  },
  {
   "file": "engine/engine/src/desk/custom_look.rs",
@@ -32,70 +32,70 @@
   "name": "a 12-hour range says PM twice",
   "old": "    if first_half == last_half && !ends_at_midnight {\n",
   "new": "    if false && first_half == last_half && !ends_at_midnight {\n",
-  "test": "desktop/tests/test_clock.py::test_the_hours_words"
+  "test": "desktop/tests/week/test_twelve_hour_clock.py::test_the_hours_say_a_range_as_short_as_it_still_reads"
  },
  {
   "file": "desktop/native/hours/canvas.py",
   "name": "a short block cuts its title inside a word",
-  "old": "        return kept + \"\u2026\"\n",
+  "old": "        return kept + \"…\"\n",
   "new": "        return metrics.elidedText(text, Qt.TextElideMode.ElideRight, width)\n",
-  "test": "desktop/tests/test_hours_painter.py::test_a_short_block_at_large_text_keeps_its_time_range_whole"
+  "test": "desktop/tests/week/test_block_words_fit.py::test_a_short_block_at_large_text_keeps_its_time_range_whole"
  },
  {
   "file": "desktop/native/hours/canvas.py",
   "name": "a cut title put after its time",
   "old": "    for way in time_ways:\n        found = way(True)\n        if found is not None:\n            return found\n    time_line = _fit_times_line(times, clock_label(drawn.span.start), sm, width) if times else None\n",
   "new": "    for way in name_ways:\n        found = way(True)\n        if found is not None:\n            return found\n    time_line = None\n",
-  "test": "desktop/tests/test_week_words.py::test_a_short_block_says_its_name_then_its_start"
+  "test": "desktop/tests/week/test_block_words.py::test_a_short_block_says_its_name_then_its_start"
  },
  {
   "file": "desktop/native/window.py",
   "name": "the rail's month fold forgotten after a restart",
   "old": "                \"rail\": {\"month\": self.rail.month_shown},\n",
   "new": "",
-  "test": "desktop/tests/test_week_side.py::test_the_month_folds_away_from_its_header_and_stays_folded_after_a_restart"
+  "test": "desktop/tests/week/test_the_rail.py::test_the_month_folded_from_its_header_is_still_folded_after_a_restart"
  },
  {
   "file": "desktop/native/hours/rail.py",
   "name": "the focus list out of time order",
   "old": "        ordered = sorted(\n",
   "new": "        ordered = list(tasks) or sorted(\n",
-  "test": "desktop/tests/test_week_side.py::test_the_rail_holds_next_not_placed_yet_and_the_focus_list_left_of_the_week"
+  "test": "desktop/tests/week/test_the_rail.py::test_the_focus_list_is_in_time_order_with_undated_rows_last"
  },
  {
   "file": "desktop/native/window.py",
   "name": "a running timer above the hours, not in the rail",
   "old": "        in_rail = shown\n",
   "new": "        in_rail = False\n",
-  "test": "desktop/tests/test_week_side.py::test_a_running_timer_is_the_rails_first_card"
+  "test": "desktop/tests/week/test_the_rail.py::test_a_running_timer_is_the_rails_first_card"
  },
  {
   "file": "desktop/native/hours/rail.py",
   "name": "a rail chip widens the rail",
   "old": "        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)\n",
   "new": "",
-  "test": "desktop/tests/test_classic_hours.py::test_a_rail_chip_shortens_its_title_to_the_rail_and_keeps_its_length"
+  "test": "desktop/tests/week/test_tray_and_rail_chips.py::test_a_rail_chip_shortens_its_title_to_the_rail_and_keeps_its_length"
  },
  {
   "file": "desktop/native/window.py",
   "name": "a new look resets the scroll again",
   "old": "        if dressed != self._dressed:\n            self._dressed = dressed\n",
   "new": "        if dressed != self._dressed:\n            self._dressed = dressed\n            self.week_table.open_again()\n",
-  "test": "desktop/tests/test_hours_open.py::test_todays_app_keeps_its_scroll_after_a_page_or_look_change"
+  "test": "desktop/tests/week/test_hours_open_where_the_student_looks.py::test_todays_app_keeps_its_scroll_after_a_page_or_look_change"
  },
  {
   "file": "desktop/native/window.py",
   "name": "returning from another page resets the scroll again",
   "old": "    def _show_page(self, name: str) -> None:\n",
   "new": "    def _show_page(self, name: str) -> None:\n        if name == \"weekPage\":\n            self.week_table.open_again()\n",
-  "test": "desktop/tests/test_hours_open.py::test_todays_app_keeps_its_scroll_after_a_page_or_look_change"
+  "test": "desktop/tests/week/test_hours_open_where_the_student_looks.py::test_todays_app_keeps_its_scroll_after_a_page_or_look_change"
  },
  {
   "file": "desktop/native/hours/rail.py",
   "name": "rail chips stay on one elided line",
   "old": "def rail_title_lines(text: str, metrics: QFontMetricsF, width: float, most: int = 2) -> list[str]:\n",
   "new": "def rail_title_lines(text: str, metrics: QFontMetricsF, width: float, most: int = 1) -> list[str]:\n",
-  "test": "desktop/tests/test_week_side.py::test_rail_chips_and_focus_rows_wrap_long_names_on_two_lines_at_large_text"
+  "test": "desktop/tests/week/test_the_rail.py::test_rail_chips_and_focus_rows_wrap_long_names_on_two_lines_at_large_text"
  },
  {
   "file": "desktop/native/window.py",
@@ -109,14 +109,14 @@
   "name": "now at the top rather than the middle",
   "old": "    scroll.open_at(key, opening_minute(week, today, now, day), None if at_now else 90)\n",
   "new": "    scroll.open_at(key, opening_minute(week, today, now, day), 90)\n",
-  "test": "desktop/tests/test_hours_zoom.py::test_a_week_opened_while_hidden_scrolls_to_now_when_it_is_shown"
+  "test": "desktop/tests/week/test_hours_keep_their_place.py::test_a_week_opened_while_hidden_scrolls_to_now_when_it_is_shown"
  },
  {
   "file": "desktop/native/window.py",
   "name": "Plan leaves its blocks off screen",
   "old": "        shown.scroll.reveal(minute, 60, self._motion)\n",
   "new": "        pass\n",
-  "test": "desktop/tests/test_hours_open.py::test_after_plan_the_week_scrolls_to_the_first_homework_it_placed"
+  "test": "desktop/tests/week/test_hours_open_where_the_student_looks.py::test_after_plan_the_week_scrolls_to_the_first_homework_it_placed"
  },
  {
   "file": "desktop/native/hours/month.py",

@@ -1,4 +1,4 @@
-"""Routine HTTP API from docs/stage3-contract.md. Expected values are from the contract, not a recorded run."""
+"""Routine HTTP API: save, revision conflicts, overlap rules, delete, limits and account ownership."""
 
 from __future__ import annotations
 

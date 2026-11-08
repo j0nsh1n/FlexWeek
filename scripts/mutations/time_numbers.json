@@ -4,63 +4,63 @@
     "file": "engine/engine/src/desk/datetext.rs",
     "old": "    let last = format!(\"{} {}\", end.day(), month_name(end, true));\n",
     "new": "    let last = format!(\"{} {}\", end.day(), month_name(end, false));\n",
-    "test": "desktop/tests/test_time_numbers.py::test_the_week_title_uses_the_same_short_date_at_every_width[default-classic]"
+    "test": "desktop/tests/week/test_week_dates_and_times_at_every_width.py::test_the_week_title_uses_the_same_short_date_at_every_width"
   },
   {
     "name": "Retro keeps its old internal week range",
     "file": "desktop/native/layouts/retro.py",
     "old": "        return f\"Week.exe - {week_range(week.week_start)}\"",
     "new": "        return \"Week.exe - 28 September to 4 October\"",
-    "test": "desktop/tests/test_time_numbers.py::test_the_week_title_uses_the_same_short_date_at_every_width[default-retro]"
+    "test": "desktop/tests/week/test_week_dates_and_times_at_every_width.py::test_the_week_title_uses_the_same_short_date_at_every_width"
   },
   {
     "name": "Recovery codes revert to proportional figures",
     "file": "desktop/native/look.py",
     "old": "QLabel#recoveryList {{ font-family: {FONT_FAMILIES['mono']};",
     "new": "QLabel#recoveryList {{ font-family: {FONT_FAMILIES['sans']};",
-    "test": "desktop/tests/test_time_numbers.py::test_recovery_codes_use_the_bundled_mono_face"
+    "test": "desktop/tests/week/test_week_dates_and_times_at_every_width.py::test_new_recovery_codes_are_listed_one_to_a_line"
   },
   {
     "name": "Narrow Week hides block times",
     "file": "desktop/native/window.py",
     "old": "        self.week_table.set_narrow(False)",
     "new": "        self.week_table.set_narrow(self.width() < NARROW_WIDTH)",
-    "test": "desktop/tests/test_time_numbers.py::test_narrow_week_blocks_still_include_their_times"
+    "test": "desktop/tests/week/test_week_dates_and_times_at_every_width.py::test_narrow_week_blocks_still_include_their_times"
   },
   {
     "name": "Narrow blocks omit their stacked start and end",
     "file": "desktop/native/hours/canvas.py",
     "old": "    if metrics.horizontalAdvance(times) <= width:\n        return times\n    if metrics.horizontalAdvance(start) <= width:\n        return start\n    return None\n",
     "new": "    return None\n",
-    "test": "desktop/tests/test_week_words.py::test_a_blocks_range_stays_on_one_line_and_the_two_times_are_never_stacked"
+    "test": "desktop/tests/week/test_block_words.py::test_a_blocks_range_stays_on_one_line_and_the_two_times_are_never_stacked"
   },
   {
     "name": "Now is drawn after the blocks, over their words",
     "file": "desktop/native/hours/canvas.py",
     "old": "            if crossed:\n                with _fresh(painter):\n                    self.painter.now(painter, track, self.now_min)\n            for drawn, rect in self.drawn(track):\n                with _fresh(painter):\n                    key = (drawn.block_id, drawn.span.day)\n                    if not drawn.held and key in self._slides:\n                        start = track.transform.inverted()[0].mapRect(self._slides[key])\n                        rect = between(start, rect, self._progress)\n                    elif not drawn.held and key in self._fresh:\n                        painter.setOpacity(self._progress)\n                    pills = self.painter.pills_fit(painter.font(), rect, drawn, upright_visible)\n                    drawn = replace(drawn, pills=pills)\n                    self.painter.block(painter, rect, drawn, upright_visible)\n                    if pills:\n                        self.painter.history_tag(painter, rect, drawn)\n",
     "new": "            for drawn, rect in self.drawn(track):\n                with _fresh(painter):\n                    key = (drawn.block_id, drawn.span.day)\n                    if not drawn.held and key in self._slides:\n                        start = track.transform.inverted()[0].mapRect(self._slides[key])\n                        rect = between(start, rect, self._progress)\n                    elif not drawn.held and key in self._fresh:\n                        painter.setOpacity(self._progress)\n                    pills = self.painter.pills_fit(painter.font(), rect, drawn, upright_visible)\n                    drawn = replace(drawn, pills=pills)\n                    self.painter.block(painter, rect, drawn, upright_visible)\n                    if pills:\n                        self.painter.history_tag(painter, rect, drawn)\n            if crossed:\n                with _fresh(painter):\n                    self.painter.now(painter, track, self.now_min)\n",
-    "test": "desktop/tests/test_time_numbers.py::test_now_crosses_a_block_over_its_colour_and_under_its_words[classic]"
+    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_the_now_line_is_drawn_before_the_blocks_so_their_words_stay_on_top"
   },
   {
     "name": "Now is hidden under a block's colour",
     "file": "desktop/native/hours/canvas.py",
     "old": "        self.crossing(painter, rect)\n",
     "new": "",
-    "test": "desktop/tests/test_time_numbers.py::test_now_crosses_a_block_over_its_colour_and_under_its_words[clay]"
+    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_the_now_line_is_drawn_before_the_blocks_so_their_words_stay_on_top"
   },
   {
     "name": "Now is drawn again on blocks it does not reach",
     "file": "desktop/native/hours/canvas.py",
     "old": "        if not first - NOW_REACH <= at <= last + NOW_REACH:\n            return\n",
     "new": "",
-    "test": "desktop/tests/test_hours_painter.py::test_the_now_line_carries_the_time_on_a_pill_at_its_start"
+    "test": "desktop/tests/week/test_the_hours_grid.py::test_the_now_line_carries_the_time_on_a_pill_once_in_the_accent"
   },
   {
     "name": "A now pill reaching into a block loses its foot",
     "file": "desktop/native/hours/canvas.py",
     "old": "NOW_REACH = 12\n",
     "new": "NOW_REACH = 0\n",
-    "test": "desktop/tests/test_hours_painter.py::test_a_now_pill_that_reaches_into_a_block_is_whole_over_its_colour"
+    "test": "desktop/tests/week/test_the_hours_grid.py::test_a_now_pill_that_reaches_into_a_block_is_drawn_again_over_its_colour"
   },
   {
     "name": "One thing's tick for now is hidden under a segment",
@@ -81,7 +81,7 @@
     "file": "desktop/native/hours/canvas.py",
     "old": "        self.crossing(painter, rect)\n        painter.setFont(font)\n        self.words(painter, rect, drawn, ink, visible, fill, edge)\n",
     "new": "        written = self.words(painter, rect, drawn, ink, visible, fill, edge)\n        painter.setFont(font)\n        self.crossing(painter, rect, written)\n",
-    "test": "desktop/tests/test_time_numbers.py::test_the_now_line_runs_under_a_blocks_words_without_a_gap[classic]"
+    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_the_now_line_is_drawn_before_the_blocks_so_their_words_stay_on_top"
   },
   {
     "name": "The now line stops right at a block's words",
@@ -95,7 +95,7 @@
     "file": "desktop/native/layouts/clay.py",
     "old": "        if self._too_short(rect, scale) or width < least:\n",
     "new": "        return []\n        if self._too_short(rect, scale) or width < least:\n",
-    "test": "desktop/tests/test_time_numbers.py::test_the_now_line_runs_under_a_blocks_words_without_a_gap[clay]"
+    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_the_now_line_is_drawn_before_the_blocks_so_their_words_stay_on_top"
   },
   {
     "name": "Mission's now line runs over a tick's icon",
@@ -116,35 +116,35 @@
     "file": "desktop/native/hours/classic.py",
     "old": "self.heading.setText(\"Agenda\")",
     "new": "self.heading.setText(\"Thursday 1 October\")",
-    "test": "desktop/tests/test_time_numbers.py::test_day_names_its_date_once"
+    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_day_names_its_date_once"
   },
   {
     "name": "Day repeats its name over its hours",
     "file": "desktop/native/hours/classic.py",
     "old": "self.name.show_day(\"Hours\", \"\", homework_minutes(week, day), day == today)",
     "new": "self.name.show_day(DAYS[day], str(week.date_of(day).day), homework_minutes(week, day), day == today)",
-    "test": "desktop/tests/test_time_numbers.py::test_day_names_its_date_once"
+    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_day_names_its_date_once"
   },
   {
     "name": "Labelled clock ticks return as minus signs",
     "file": "desktop/native/layouts/dial.py",
     "old": "            if hour % 2:\n                painter.drawLine",
     "new": "            if True:\n                painter.drawLine",
-    "test": "desktop/tests/test_time_numbers.py::test_my_day_labels_do_not_have_ticks_that_read_as_minus_signs"
+    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_my_day_offers_running_late_for_a_late_session"
   },
   {
     "name": "My day action icon loses its gap",
     "file": "desktop/native/layouts/base.py",
     "old": "tint(entry, DAY_ICONS[entry.objectName().removeprefix(prefix)], gap=scene.px(4))",
     "new": "tint(entry, DAY_ICONS[entry.objectName().removeprefix(prefix)])",
-    "test": "desktop/tests/test_time_numbers.py::test_my_day_actions_leave_room_after_their_icons"
+    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_my_day_offers_running_late_for_a_late_session"
   },
   {
     "name": "Agenda restores its fixed narrow time column",
     "file": "desktop/native/hours/classic.py",
     "old": "        column = max(\n            [44.0, *(QFontMetricsF(font).horizontalAdvance(clock_label(minute)) + 2\n              for row in self.rows\n              for font, minute in ((strong, row.item.start), (small, row.item.end)))],\n        )\n",
     "new": "        column = 44.0\n",
-    "test": "desktop/tests/test_time_numbers.py::test_day_agenda_times_fit_in_twelve_hour_format[True]"
+    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_the_day_agenda_writes_each_time_on_the_twelve_hour_clock"
   },
   {
     "name": "timeline puts its Now pill over block words",
@@ -179,20 +179,20 @@
     "file": "desktop/native/layouts/clay.py",
     "old": "max(0, area.left() - metrics.horizontalAdvance(words) - 15)",
     "new": "area.left() + 7",
-    "test": "desktop/tests/test_time_numbers.py::test_clays_now_pill_stays_outside_the_blocks"
+    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_clays_now_pill_takes_the_place_of_the_hour_label_under_it"
   },
   {
     "name": "Clay writes an hour label under its Now pill",
     "file": "desktop/native/layouts/clay.py",
     "old": "an hour label under it is left out.\n    now_in_gutter = True\n",
     "new": "an hour label under it is left out.\n    now_in_gutter = False\n",
-    "test": "desktop/tests/test_time_numbers.py::test_clays_now_pill_takes_the_place_of_the_hour_label_under_it"
+    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_clays_now_pill_takes_the_place_of_the_hour_label_under_it"
   },
   {
     "name": "Agenda adds a misleading Now row inside School",
     "file": "desktop/native/hours/classic.py",
     "old": "        self.rows = rows\n",
     "new": "        rows.append(Row(QRectF(0, top, self.width(), tall), None))\n        self.rows = rows\n",
-    "test": "desktop/tests/test_time_numbers.py::test_running_school_has_no_agenda_now_row"
+    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_running_school_has_no_agenda_now_row"
   }
 ]

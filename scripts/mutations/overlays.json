@@ -11,14 +11,14 @@
     "name": "the toast stays when the student leaves its page",
     "old": "                    self.toast.hide()\n                    left = \"\" if leaving is None",
     "new": "                    pass\n                    left = \"\" if leaving is None",
-    "test": "desktop/tests/test_drag_results.py::test_the_toast_belongs_to_the_page_it_was_said_on"
+    "test": "desktop/tests/week/test_notice_toast.py::test_the_toast_belongs_to_the_page_it_was_said_on"
   },
   {
     "file": "desktop/native/widgets.py",
     "name": "the toast is centred over the page again",
     "old": "        self.setGeometry(max(0, right - width), max(0, bottom - height), width, height)",
     "new": "        self.setGeometry(area.left() + (area.width() - width) // 2, max(0, bottom - height), width, height)",
-    "test": "desktop/tests/test_drag_results.py::test_the_toast_sits_bottom_right_of_the_page_and_lets_the_pointer_through"
+    "test": "desktop/tests/week/test_notice_toast.py::test_the_notice_sits_in_the_right_half_of_the_page_and_lets_the_pointer_through"
   },
   {
     "file": "desktop/native/look.py",
@@ -81,14 +81,14 @@
     "name": "Delete is painted in the text colour",
     "old": "        ink = colours.danger if danger else (colours.text if enabled else colours.muted)",
     "new": "        ink = colours.text if enabled else colours.muted",
-    "test": "desktop/tests/test_context_menu.py::test_a_delete_row_is_painted_red_and_the_rest_in_the_text_colour"
+    "test": "desktop/tests/week/test_block_and_free_time_menus.py::test_the_menu_has_an_icon_on_every_row_and_red_only_for_deleting"
   },
   {
     "file": "desktop/native/window.py",
     "name": "the deletes are not set apart by a line",
     "old": "        menu.addSeparator()\n        menu.add(\"Delete\", \"trash\"",
     "new": "        menu.add(\"Delete\", \"trash\"",
-    "test": "desktop/tests/test_context_menu.py::test_a_right_click_offers_four_things_and_finished_only_for_homework"
+    "test": "desktop/tests/week/test_block_and_free_time_menus.py::test_a_right_click_offers_four_things_and_finished_only_for_homework"
   },
   {
     "file": "desktop/native/window.py",
@@ -123,27 +123,27 @@
     "name": "Ctrl+K lists its groups in a fixed order, so Enter may run a worse match",
     "old": "    order = sorted(rows, key=place)",
     "new": "    order = sorted(rows, key=lambda group: GROUPS.index(group))",
-    "test": "desktop/tests/test_command_bar.py::test_the_group_with_the_best_match_comes_first_so_enter_runs_it"
+    "test": "desktop/tests/week/test_command_bar.py::test_the_group_with_the_best_match_comes_first_so_enter_runs_it"
   },
   {
     "file": "desktop/native/command_bar.py",
     "name": "Ctrl+K's arrows land on a group label",
     "old": "            if self.list.item(row).data(KEY_ROLE):\n",
     "new": "            if True:\n",
-    "test": "desktop/tests/test_command_bar.py::test_every_row_has_an_icon_and_the_views_their_keys"
+    "test": "desktop/tests/week/test_command_bar.py::test_every_row_has_an_icon_and_the_views_their_keys"
   },
   {
     "file": "desktop/native/look.py",
     "name": "Ctrl+K dims the window 35 %",
     "old": "\"QWidget#commandBar { background: rgba(0, 0, 0, 102); }\"",
     "new": "\"QWidget#commandBar { background: rgba(0, 0, 0, 90); }\"",
-    "test": "desktop/tests/test_command_bar.py::test_the_window_is_dimmed_40_percent_and_the_box_is_lifted_with_the_large_shadow"
+    "test": "desktop/tests/week/test_command_bar.py::test_the_box_is_lifted_with_a_shadow_the_fade_leaves_alone"
   },
   {
     "file": "desktop/native/command_bar.py",
     "name": "Ctrl+K's box casts no shadow",
     "old": "            lift(self.box, shadow, dark)\n",
     "new": "            self.box.setGraphicsEffect(None)\n",
-    "test": "desktop/tests/test_command_bar.py::test_the_window_is_dimmed_40_percent_and_the_box_is_lifted_with_the_large_shadow"
+    "test": "desktop/tests/week/test_command_bar.py::test_the_box_is_lifted_with_a_shadow_the_fade_leaves_alone"
   }
 ]

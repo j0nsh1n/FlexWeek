@@ -172,6 +172,6 @@
     "file": "desktop/native/hours/canvas.py",
     "old": "            self._paint_hours(painter)\n        finally:\n",
     "new": "            self._paint_hours(painter)\n        except ZeroDivisionError:\n            raise\n        else:\n",
-    "test": "desktop/tests/test_hours_painter.py::test_a_paint_that_raises_still_ends_its_painter"
+    "test": "desktop/tests/week/test_a_failed_paint.py::test_a_paint_that_raises_still_ends_its_painter"
   }
 ]

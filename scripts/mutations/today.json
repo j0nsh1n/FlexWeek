@@ -11,14 +11,14 @@
   "name": "a tray chip keeps its whole words",
   "old": "        if fitted != self.text():\n            self.setText(fitted)\n",
   "new": "",
-  "test": "desktop/tests/test_classic_hours.py::test_a_tray_chip_shortens_its_title_and_keeps_its_length_whole"
+  "test": "desktop/tests/week/test_tray_and_rail_chips.py::test_a_tray_chip_shortens_its_title_and_keeps_its_length_whole"
  },
  {
   "file": "desktop/native/hours/chips.py",
   "name": "a shortened chip asks only for its short words",
   "old": "    def sizeHint(self) -> QSize:  # noqa: N802\n",
   "new": "    def _unused_size_hint(self) -> QSize:\n",
-  "test": "desktop/tests/test_classic_hours.py::test_a_tray_chip_in_a_row_says_it_all_again_once_the_row_has_room"
+  "test": "desktop/tests/week/test_tray_and_rail_chips.py::test_a_tray_chip_in_a_row_says_it_all_again_once_the_row_has_room"
  },
  {
   "file": "engine/engine/src/desk/remind.rs",
@@ -95,7 +95,7 @@
   "name": "the wheel scrolls past a box nobody clicked into",
   "old": "            event.ignore()\n            return True\n",
   "new": "            return False\n",
-  "test": "desktop/tests/test_wheel_guard.py::test_the_wheel_over_a_box_the_student_is_not_in_scrolls_the_page"
+  "test": "desktop/tests/week/test_wheel_over_boxes.py::test_the_wheel_over_a_box_the_student_is_not_in_scrolls_the_page"
  },
  {
   "file": "engine/engine/src/desk/focus.rs",
@@ -249,7 +249,7 @@
   "name": "a tray chip shortens its length before its title",
   "old": "            if title.strip(\"…\"):\n                fitted = title + self._length\n",
   "new": "",
-  "test": "desktop/tests/test_classic_hours.py::test_a_tray_chip_shortens_its_title_and_keeps_its_length_whole"
+  "test": "desktop/tests/week/test_tray_and_rail_chips.py::test_a_tray_chip_shortens_its_title_and_keeps_its_length_whole"
  },
  {
   "file": "desktop/native/widgets.py",
@@ -291,7 +291,7 @@
   "name": "the countdown waits for a focus timer to redraw it",
   "old": "        self._layout_tick.timeout.connect(self._count_down)\n",
   "new": "",
-  "test": "desktop/tests/test_now_next.py::test_the_next_and_now_countdowns_move_with_the_minute_without_a_focus_timer"
+  "test": "desktop/tests/week/test_now_and_next_card.py::test_the_next_and_now_countdowns_move_with_the_minute_without_a_focus_timer"
  },
  {
   "file": "desktop/native/hours/rail.py",
@@ -305,119 +305,119 @@
   "name": "a block made by dragging is School whenever it starts",
   "old": "        self.armed_category: str | None = None\n",
   "new": "        self.armed_category: str | None = \"class\"\n",
-  "test": "desktop/tests/test_drag_results.py::test_a_block_made_by_dragging_guesses_its_category_from_when_it_starts"
+  "test": "desktop/tests/week/test_drag_says_what_it_did.py::test_a_block_made_by_dragging_guesses_its_category_from_when_it_starts"
  },
  {
   "file": "desktop/native/controller.py",
   "name": "a drag saves with no sign",
   "old": "        self.hand_placed.emit(words)\n",
   "new": "",
-  "test": "desktop/tests/test_drag_results.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
+  "test": "desktop/tests/week/test_drag_says_what_it_did.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
  },
  {
   "file": "desktop/native/window.py",
   "name": "a block made by dragging says nothing",
   "old": "            self._say_when_saved(added_words(made[0]))\n",
   "new": "            pass\n",
-  "test": "desktop/tests/test_drag_results.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
+  "test": "desktop/tests/week/test_drag_says_what_it_did.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
  },
  {
   "file": "desktop/native/window.py",
   "name": "a date carried on Month says nothing",
   "old": "            self._say_when_saved(dated_words(title, change.to_iso, self._today()))\n",
   "new": "            pass\n",
-  "test": "desktop/tests/test_drag_results.py::test_a_chip_carried_on_month_says_what_it_did"
+  "test": "desktop/tests/week/test_drag_says_what_it_did.py::test_a_chip_carried_on_month_says_what_it_did"
  },
  {
   "file": "engine/engine/src/desk/weekmodel.rs",
   "name": "a resize said as a move",
   "old": "    if day == from_day && start_at == was && end_at != was_end {\n",
   "new": "    if false && day == from_day && start_at == was && end_at != was_end {\n",
-  "test": "desktop/tests/test_drag_results.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
+  "test": "desktop/tests/week/test_drag_says_what_it_did.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
  },
  {
   "file": "desktop/native/window.py",
   "name": "a notice appears under a held block",
   "old": "        if self._change_saved is None or self.hand.busy:\n",
   "new": "        if self._change_saved is None:\n",
-  "test": "desktop/tests/test_drag_results.py::test_the_notice_waits_for_the_pointer_and_goes_once_its_change_is_no_longer_the_last"
+  "test": "desktop/tests/week/test_drag_says_what_it_did.py::test_the_notice_waits_for_the_pointer_and_goes_once_its_change_is_no_longer_the_last"
  },
  {
   "file": "desktop/native/window.py",
   "name": "a notice keeps an Undo that would take back a later change",
   "old": "        elif stored and self._notice_step is not None and self.session.last_step() is not self._notice_step:\n",
   "new": "        elif False:\n",
-  "test": "desktop/tests/test_drag_results.py::test_the_notice_waits_for_the_pointer_and_goes_once_its_change_is_no_longer_the_last"
+  "test": "desktop/tests/week/test_drag_says_what_it_did.py::test_the_notice_waits_for_the_pointer_and_goes_once_its_change_is_no_longer_the_last"
  },
  {
   "file": "desktop/native/window.py",
   "name": "Advanced actions go unanswered when their words are routine",
   "old": "            action.triggered.connect(lambda _=False, pressed=button: self._told(pressed.click))\n",
   "new": "            action.triggered.connect(button.click)\n",
-  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+  "test": "desktop/tests/week/test_notice_toast.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
  },
  {
   "file": "desktop/native/window.py",
   "name": "the toast says an action is still going, not what it did",
   "old": "        if message.endswith(\"…\"):\n            return\n",
   "new": "",
-  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+  "test": "desktop/tests/week/test_notice_toast.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
  },
  {
   "file": "desktop/native/controller.py",
   "name": "Duplicate says it copied",
   "old": "        if not self.copy_block(source_id, day, scope, say=False):\n",
   "new": "        if not self.copy_block(source_id, day, scope):\n",
-  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+  "test": "desktop/tests/week/test_notice_toast.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
  },
  {
   "file": "desktop/native/controller.py",
   "name": "Reload says This week",
   "old": "        self.load_week(self.week_start, discard=True, said=\"Reloaded this week.\")\n",
   "new": "        self.load_week(self.week_start, discard=True)\n",
-  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+  "test": "desktop/tests/week/test_notice_toast.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
  },
  {
   "file": "desktop/native/window.py",
   "name": "a paste says Saved, not what it pasted",
   "old": "            said=said,\n        )\n",
   "new": "        )\n",
-  "test": "desktop/tests/test_drag_results.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+  "test": "desktop/tests/week/test_notice_toast.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
  },
  {
   "file": "desktop/native/window.py",
   "name": "a view switch takes the Undo toast away again",
   "old": "        if self.session.week_start != self._toast_week:\n",
   "new": "        if True:\n",
-  "test": "desktop/tests/test_drag_results.py::test_a_view_switch_keeps_the_toast_and_its_undo"
+  "test": "desktop/tests/week/test_notice_toast.py::test_a_view_switch_keeps_the_toast_and_its_undo"
  },
  {
   "file": "desktop/native/widgets.py",
   "name": "the toast takes the hours' clicks",
   "old": "        self.setObjectName(\"toastHost\")\n        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)\n",
   "new": "        self.setObjectName(\"toastHost\")\n",
-  "test": "desktop/tests/test_drag_results.py::test_the_toast_sits_bottom_right_of_the_page_and_lets_the_pointer_through"
+  "test": "desktop/tests/week/test_notice_toast.py::test_the_notice_sits_in_the_right_half_of_the_page_and_lets_the_pointer_through"
  },
  {
   "file": "desktop/native/widgets.py",
   "name": "the toast runs off the bottom of a short window",
   "old": "        bottom = min(area.top() + area.height(), host.height()) - inset - TOAST_FOOT + TOAST_SHADOW\n",
   "new": "        bottom = area.top() + area.height() + TOAST_FOOT * 4\n",
-  "test": "desktop/tests/test_drag_results.py::test_the_toast_sits_bottom_right_of_the_page_and_lets_the_pointer_through"
+  "test": "desktop/tests/week/test_notice_toast.py::test_the_notice_sits_in_the_right_half_of_the_page_and_lets_the_pointer_through"
  },
  {
   "file": "desktop/native/window.py",
   "name": "the rail never folds",
   "old": "        self.rail.setVisible(shown)\n",
   "new": "        self.rail.setVisible(shown)\n        self.rail.set_folded(self.width() < NARROW_WIDTH)\n",
-  "test": "desktop/tests/test_week_behaviour.py::test_the_folded_rail_shows_a_waiting_chip_not_a_bare_line"
+  "test": "desktop/tests/week/test_week_rail.py::test_the_folded_rail_shows_a_waiting_chip_not_a_bare_line"
  },
  {
   "file": "desktop/native/hours/canvas.py",
   "name": "a narrow block keeps its times and cuts its name",
   "old": "    times = drawn.times if shown[0] else \"\"\n    length = drawn.length if shown[1] else flags\n",
   "new": "    times = \"\"\n    length = drawn.length if shown[1] else flags\n",
-  "test": "desktop/tests/test_week_side.py::test_a_short_block_keeps_its_whole_time_and_cuts_its_name_first"
+  "test": "desktop/tests/week/test_block_words.py::test_a_short_block_keeps_its_whole_time_and_cuts_its_name_first"
  },
  {
   "file": "desktop/native/controller.py",
@@ -431,7 +431,7 @@
   "name": "homework with no time offers a one-time Delete",
   "old": "        if not block.get(\"start\"):\n            self._delete_homework(assignment[\"id\"])\n",
   "new": "        if not block.get(\"start\"):\n            self._delete_block(block, \"occurrence\", on)\n",
-  "test": "desktop/tests/test_context_menu.py::test_delete_homework_asks_first_and_takes_it_away_with_an_undo"
+  "test": "desktop/tests/week/test_block_and_free_time_menus.py::test_delete_homework_asks_first_and_takes_it_away_with_an_undo"
  },
  {
   "file": "desktop/native/widgets.py",
@@ -473,6 +473,6 @@
   "name": "the focus list a row short",
   "old": "            tall = sum(self.tasks.visualItemRect(self.tasks.item(row)).height() for row in range(rows))\n",
   "new": "            tall = sum(self.tasks.visualItemRect(self.tasks.item(row)).height() for row in range(rows - 1))\n",
-  "test": "desktop/tests/test_week_side.py::test_high_contrast_cuts_no_chip_and_scrolls_the_focus_list_neither_way"
+  "test": "desktop/tests/week/test_the_rail.py::test_the_focus_list_is_as_tall_as_all_its_rows_so_no_row_is_cut"
  }
 ]
