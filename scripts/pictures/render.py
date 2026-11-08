@@ -8,9 +8,11 @@
 area. The screens are the `SCREENS` lists in `desktop/tests/pictures/screens_*.py` (the contract is
 `desktop/tests/pictures/screen.py`). Each screen is drawn in each of its variants: every style (the
 Widgets designs and Material 3) at 1280x800, Normal text, light and dark; a main screen also at 1024x640
-with Large text in High contrast, light. A picture lands at `DIR/<screen id>/<variant>.png`, and
-`DIR/index.json` lists every picture with the screen's checks and sources and the measurements the
-reviewer is shown. A screen whose `prepare` raises is listed with its error, never left out.
+with Large text in High contrast, light. A screen's `styles` narrows that: design ids, `"material"`,
+and `"widgets"` for every Widgets design of its role. A picture lands at
+`DIR/<screen id>/<variant>.png`, and `DIR/index.json` lists every picture with the screen's checks and
+sources and the measurements the reviewer is shown. A screen whose `prepare` raises is listed with its
+error, never left out.
 
 `--list` prints every declared screen as JSON (id, area, sources, module), which is what fwtest
 selects the touched screens from. `--screens` is a file of screen ids, one per line. `--root` draws
@@ -39,6 +41,8 @@ DEFAULT_ROOT = HERE.parents[1]
 FULL_SIZE = (1280, 800)
 EDGE_SIZE = (1024, 640)
 MATERIAL = "material"
+# A screen's `styles` may say "widgets" for every Widgets design of its role (and no Material 3).
+WIDGETS = "widgets"
 MODES = ("light", "dark")
 # The Widgets packs light and dark mean; Material has its own light and dark in the look file.
 PACKS = {"light": "light-frost", "dark": "dark-frost"}
@@ -63,20 +67,29 @@ class Variant:
         return name + ".hc" if self.high_contrast else name
 
 
-def default_styles(area: str, designs: dict[str, str]) -> tuple[str, ...]:
-    """The styles a screen is drawn in when it names none: the designs of its role, then Material 3.
-    `designs` maps each Widgets design to its role ("plan" or "day"), in the registry's order."""
+def role_designs(area: str, designs: dict[str, str]) -> tuple[str, ...]:
+    """The Widgets designs a screen of `area` is worn in: the day screens for My day, else the main
+    views. `designs` maps each Widgets design to its role ("plan" or "day"), in the registry's order."""
     role = "day" if area in DAY_AREAS else "plan"
-    return (*(design for design, kind in designs.items() if kind == role), MATERIAL)
+    return tuple(design for design, kind in designs.items() if kind == role)
+
+
+def default_styles(area: str, designs: dict[str, str]) -> tuple[str, ...]:
+    """The styles a screen is drawn in when it names none: the designs of its role, then Material 3."""
+    return (*role_designs(area, designs), MATERIAL)
 
 
 def plan_variants(area: str, main: bool, styles: tuple[str, ...], designs: dict[str, str]) -> list[Variant]:
     """Every picture of one screen, in drawing order. Raises ValueError for a style nobody knows."""
-    chosen = styles or default_styles(area, designs)
-    unknown = [style for style in chosen if style != MATERIAL and style not in designs]
+    unknown = [style for style in styles if style not in (MATERIAL, WIDGETS) and style not in designs]
     if unknown:
-        known = ", ".join((*designs, MATERIAL))
+        known = ", ".join((*designs, WIDGETS, MATERIAL))
         raise ValueError(f"unknown style {', '.join(unknown)}; the styles are {known}")
+    chosen: list[str] = []
+    for style in styles or default_styles(area, designs):
+        for one in role_designs(area, designs) if style == WIDGETS else (style,):
+            if one not in chosen:
+                chosen.append(one)
     variants = [Variant(style, mode, "normal", FULL_SIZE) for style in chosen for mode in MODES]
     if main:
         variants += [Variant(style, "light", "large", EDGE_SIZE, True) for style in chosen]
@@ -353,8 +366,10 @@ def qml_labels(widget, pixels: Pixels) -> list[dict]:
             rect = (corner.x(), corner.y(), int(shown.width()), int(shown.height()))
             truncated = item.property("truncated")
             content = item.property("contentWidth")
-            too_wide = bool(truncated) if truncated is not None else (
-                content is not None and float(content) > item.width() + 0.5
+            too_wide = (
+                bool(truncated)
+                if truncated is not None
+                else (content is not None and float(content) > item.width() + 0.5)
             )
             row = {
                 "name": str(item.objectName() or ""),
@@ -429,18 +444,51 @@ def focus_ring(qapp, widget, before: Pixels) -> dict:
     }
 
 
+# The files the app keeps per computer (desktop/tests/conftest.py's DEVICE_FILES).
+DEVICE_FILES = ("flexweek-look.json", "week-start.json")
+
+
+def clean_computer() -> None:
+    """What desktop/tests/conftest.py's forget_this_computer does between tests, done between pictures:
+    a screen that set the 12-hour clock, a Sunday-first week or another look in its `prepare` leaves
+    none of it for the next screen. (That module is not imported: it turns the collector off.)"""
+    from PySide6.QtCore import QStandardPaths
+
+    from backend.tests.fake_clock import CLOCK
+    from desktop.native.weekmodel import set_clock_24h
+
+    folder = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))
+    for name in DEVICE_FILES:
+        (folder / name).unlink(missing_ok=True)
+    # The 12- or 24-hour clock is one setting for the whole app, held in memory.
+    set_clock_24h(True)
+    CLOCK.reset()
+
+
+def nothing_leaves(qapp) -> None:
+    """As in the tests (conftest's nothing_leaves_the_test): no screen reaches this computer's own
+    apps, such as a Spotify alarm telling the Spotify app to play, or a link opening the browser."""
+    from PySide6.QtGui import QDesktopServices
+
+    from desktop.native import spotify
+
+    spotify.system_remote = spotify.NoRemote
+    QDesktopServices.openUrl = staticmethod(lambda _url: False)
+
+
 def draw(qapp, made, folder: Path, screen, variant: Variant, picture: Path, setup: dict) -> dict:
     """Open a window in `variant`, let the screen prepare it, save the picture, and measure it."""
     from PySide6.QtWidgets import QWidget
 
-    from backend.tests.fake_clock import CLOCK
     from desktop.tests.light_app import Account, _close, open_light_window
     from desktop.tests.waiting import wait_until
     from desktop.tests.window_support import still
 
     body = look_body(made.look, variant, setup["designs"], setup["defaults"], setup["scales"])
     account = Account(made.database, json.dumps(body).encode(), made.user_id)
-    CLOCK.reset()
+    # Each picture opens on a fresh copy of the account, so preferences a screen saved are gone; what
+    # the app holds in memory or in files per computer is cleared here.
+    clean_computer()
     window, api = open_light_window(qapp, folder, account, variant.size)
     try:
         width, height = variant.size
@@ -472,6 +520,7 @@ def draw(qapp, made, folder: Path, screen, variant: Variant, picture: Path, setu
     finally:
         _close(window)
         api.close()
+        clean_computer()
 
 
 def render(root: Path, out: Path, chosen: list[str] | None, which: str) -> int:
@@ -485,6 +534,7 @@ def render(root: Path, out: Path, chosen: list[str] | None, which: str) -> int:
     CLOCK.reset()
     QStandardPaths.setTestModeEnabled(True)
     qapp = QApplication.instance() or QApplication(["flexweek-pictures"])
+    nothing_leaves(qapp)
 
     from desktop.native.layouts.registry import DAY_DEFAULT, LAYOUTS, MAIN_DEFAULT
     from desktop.native.tokens import TEXT_SCALE

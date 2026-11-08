@@ -49,6 +49,19 @@ def test_a_style_nobody_knows_is_refused_with_the_known_ones():
         render.plan_variants("week", False, ("poster",), DESIGNS)
 
 
+def test_widgets_means_every_widgets_design_of_the_screens_role_and_no_material():
+    week = {variant.style for variant in render.plan_variants("settings", False, ("widgets",), DESIGNS)}
+    assert week == {"classic", "timeline", "bento"}
+    day = {variant.style for variant in render.plan_variants("myday", False, ("widgets",), DESIGNS)}
+    assert day == {"dial", "one"}
+
+
+def test_widgets_and_material_together_are_every_style_once():
+    variants = render.plan_variants("week", False, ("widgets", "material", "classic"), DESIGNS)
+    styles = [variant.style for variant in variants if variant.mode == "light"]
+    assert styles == ["classic", "timeline", "bento", "material"]
+
+
 def test_a_widgets_main_view_is_worn_as_the_main_slot_on_the_widgets_surface():
     variant = render.Variant("timeline", "dark", "normal", render.FULL_SIZE)
     body = render.look_body(None, variant, DESIGNS, DEFAULTS, SCALES)
@@ -80,8 +93,13 @@ def test_material_takes_its_own_mode_contrast_and_text_size():
 
 def test_the_accounts_own_look_keeps_what_the_variant_does_not_set_and_loses_a_material_failure():
     stored = json.dumps(
-        {"preset": "paper", "knobs": {"font": "serif", "text": "small"}, "zoom": {"week": 2},
-         "material_failed": "1.2.0", "custom": {"base": "light"}}
+        {
+            "preset": "paper",
+            "knobs": {"font": "serif", "text": "small"},
+            "zoom": {"week": 2},
+            "material_failed": "1.2.0",
+            "custom": {"base": "light"},
+        }
     ).encode()
     variant = render.Variant("classic", "light", "normal", render.FULL_SIZE)
     body = render.look_body(stored, variant, DESIGNS, DEFAULTS, SCALES)
