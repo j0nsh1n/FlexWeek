@@ -150,11 +150,22 @@ def busy_week(qapp: QApplication, open_light: Callable[..., NativeWindow]) -> It
 
 
 def hours_scroll(window: NativeWindow) -> HoursScroll:
-    shown = [
-        scroll for scroll in window.planner.currentWidget().findChildren(HoursScroll) if scroll.isVisible()
-    ]
-    assert len(shown) == 1, f"{len(shown)} hours on screen"
-    return shown[0]
+    """The one hours area on screen. Bento puts its hours back a turn of the event loop after a
+    relayout, so it is waited for."""
+
+    def on_screen() -> list[HoursScroll]:
+        return [
+            scroll
+            for scroll in window.planner.currentWidget().findChildren(HoursScroll)
+            if scroll.isVisible()
+        ]
+
+    wait_until(
+        None,
+        lambda: len(on_screen()) == 1,
+        what=lambda: f"{len(on_screen())} hours on screen",
+    )
+    return on_screen()[0]
 
 
 @pytest.fixture()

@@ -8,6 +8,7 @@ the pictures (pictures/week_clock.py, screen week.hour-labels-and-now-pill)."""
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
 from datetime import datetime
 
 import pytest
@@ -26,10 +27,48 @@ from desktop.native.look import sanitize_look
 from desktop.native.tokens import WEIGHT_STRONG
 from desktop.native.weekmodel import clock_label
 from desktop.native.window import NativeWindow
-from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.light_app import open_light  # noqa: F401
 from desktop.tests.waiting import wait_until
-from desktop.tests.week.support_clock import DESIGNS, hours_scroll, written_clock_words  # noqa: F401
+from desktop.tests.week.support_clock import (  # noqa: F401
+    DESIGNS,
+    hours_scroll,
+    saved,
+    written_clock_words,
+)
 from desktop.tests.window_support import qapp, still  # noqa: F401
+
+
+@pytest.fixture()
+def window(qapp: QApplication, open_light: Callable[..., NativeWindow]) -> Iterator[NativeWindow]:
+    """Signed in on a week with something in it, so Today's app shows its hours rather than the card
+    a brand-new account's empty week gets: school on weekdays from 08:00 and dinner every day at 18:00."""
+    made = open_light((1280, 860))
+    session = made.session
+    session.add_block(
+        {
+            "id": "school",
+            "title": "School",
+            "kind": "locked",
+            "category": "class",
+            "start": "08:00",
+            "duration_min": 390,
+            "days": [0, 1, 2, 3, 4],
+        }
+    )
+    session.add_block(
+        {
+            "id": "dinner",
+            "title": "Dinner",
+            "kind": "locked",
+            "category": "meals",
+            "start": "18:00",
+            "duration_min": 30,
+            "days": [0, 1, 2, 3, 4, 5, 6],
+        }
+    )
+    session.save()
+    saved(qapp, made)
+    yield made
 
 
 def label_font(scroll: HoursScroll):
