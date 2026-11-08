@@ -654,6 +654,55 @@ def test_escape_closes_the_replace_timer_question_and_changes_nothing(
         close_focus(window, focus)
 
 
+def test_after_escape_closes_the_replace_timer_question_focus_is_back_on_the_button_that_opened_it(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    from PySide6.QtCore import QTimer
+
+    from desktop.native.widgets import ConfirmSheet
+
+    first = homework(qapp, window, "latin", 1)[0]
+    other = homework(qapp, window, "greek", 1)[0]
+    root = _show_material(qapp, window)
+    bridge = window._material_page.bridge
+    focus = bridge.focus
+    scene = window._material_page._quick.quickWindow()
+    closed: list[bool] = []
+
+    def press_escape() -> None:
+        shown = [s for s in qapp.topLevelWidgets() if isinstance(s, ConfirmSheet) and s.isVisible()]
+        if not shown:
+            QTimer.singleShot(20, press_escape)
+            return
+        sheet = shown[0]
+        sheet.activateWindow()
+        qapp.processEvents()
+        QTest.keyClick(QApplication.focusWidget() or sheet, Qt.Key.Key_Escape)
+        qapp.processEvents()
+        closed.append(not sheet.isVisible())
+        if sheet.isVisible():
+            sheet.buttons["keep"].click()
+
+    try:
+        window.start_material_focus(first["id"], first["days"][0])
+        _pump(qapp)
+        focus.hide()
+        bridge.showPage("myday")
+        _pump(qapp)
+        _qml(root, "myDayStartFocus").forceActiveFocus()
+        _pump(qapp)
+        assert scene.activeFocusItem().objectName() == "myDayStartFocus"
+        QTimer.singleShot(20, press_escape)
+        window.start_material_focus(other["id"], other["days"][0])
+        _pump(qapp)
+        assert closed == [True]
+        assert scene.activeFocusItem() is not None
+        assert scene.activeFocusItem().objectName() == "myDayStartFocus"
+    finally:
+        bridge.showPage("week")
+        close_focus(window, focus)
+
+
 def test_pause_and_break_hold_ambient_sound_and_finish_stops_it(
     qapp: QApplication, window: NativeWindow
 ) -> None:

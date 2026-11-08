@@ -81,11 +81,15 @@ Item {
                 highContrast: root.highContrast
                 timerTitle: root.board ? root.board.timerTitle : ""
                 timerLine: root.board ? root.board.timerLine : ""
+                timerEnded: root.board ? root.board.timerEnded : false
+                timerCanFinish: root.board ? root.board.timerCanFinish : false
                 scope: "myDay"
                 title: root.board ? root.board.nowTitle : ""
                 focusTitle: root.board ? root.board.focusTitle : ""
                 line: root.board ? root.board.nowLine : ""
                 onStartFocus: if (root.board) root.board.startFocus()
+                onMarkFinished: if (root.board) root.board.markFinished()
+                onStartAgain: if (root.board) root.board.startAgain()
             }
 
             DayLists {

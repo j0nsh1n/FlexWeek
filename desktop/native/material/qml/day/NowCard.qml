@@ -11,12 +11,18 @@ Column {
     // A running focus timer: the card names it and its button goes back to it.
     property string timerTitle: ""
     property string timerLine: ""
+    // The timer has run out and is not cleared: the card says so and offers Mark finished (when the
+    // homework is still open) and Start again.
+    property bool timerEnded: false
+    property bool timerCanFinish: false
     property string scope: "day"
     property string title: ""
     property string line: ""
     // The homework Start focus opens; the free-time card does not name it anywhere else.
     property string focusTitle: ""
     signal startFocus()
+    signal markFinished()
+    signal startAgain()
 
     spacing: 8
     width: parent ? parent.width : implicitWidth
@@ -78,18 +84,38 @@ Column {
                 }
             }
             Item { width: 1; height: 12 }
-            Button {
-                objectName: root.scope + "StartFocus"
-                theme: root.theme
-                density: root.density
-                reduceMotion: root.reduceMotion
-                highContrast: root.highContrast
-                kind: "filled"
-                text: root.timerTitle ? "Back to " + root.timerTitle : (root.focusTitle ? "Start " + root.focusTitle : "Start focus")
-                icon: "play_arrow"
-                accessName: text
-                activeFocusOnTab: !root.passive
-                onClicked: root.startFocus()
+            Flow {
+                width: parent.width
+                spacing: 8
+                Button {
+                    objectName: root.scope + "MarkFinished"
+                    visible: root.timerEnded && root.timerCanFinish
+                    theme: root.theme
+                    density: root.density
+                    reduceMotion: root.reduceMotion
+                    highContrast: root.highContrast
+                    kind: "filled"
+                    text: "Mark finished"
+                    icon: "check"
+                    accessName: text
+                    activeFocusOnTab: !root.passive
+                    onClicked: { forceActiveFocus(); root.markFinished() }
+                }
+                Button {
+                    objectName: root.scope + "StartFocus"
+                    theme: root.theme
+                    density: root.density
+                    reduceMotion: root.reduceMotion
+                    highContrast: root.highContrast
+                    kind: root.timerEnded && root.timerCanFinish ? "outlined" : "filled"
+                    text: root.timerEnded ? "Start again"
+                        : (root.timerTitle ? "Back to " + root.timerTitle : (root.focusTitle ? "Start " + root.focusTitle : "Start focus"))
+                    icon: "play_arrow"
+                    accessName: text
+                    activeFocusOnTab: !root.passive
+                    // The button that was used holds the keyboard, so whatever it opens hands focus back to it.
+                    onClicked: { forceActiveFocus(); if (root.timerEnded) root.startAgain(); else root.startFocus() }
+                }
             }
         }
     }

@@ -553,16 +553,189 @@ def test_while_a_focus_timer_runs_the_now_card_names_it_and_goes_back_to_it(
         for page, scope in (("myday", "myDay"), ("day", "day")):
             bridge.showPage(page)
             _pump(qapp)
-            board = bridge.property(page)
-            homework = board.property("focusTitle")
-            button = "Start " + homework if homework else "Start focus"
-            usual = (board.property("nowTitle"), board.property("nowLine"), button)
-            assert _card(root, scope) == usual
+            assert _card(root, scope) == ("History essay", "Session finished", "Start again")
     finally:
         session.focus_replace_needed.disconnect(heard)
         session.reset_focus()
         focus.hide()
         _pump(qapp)
+        bridge.showPage("week")
+        window._use_widgets_styles()
+
+
+@pytest.fixture()
+def keep_on_replace(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A replace question that gets asked is answered Keep instead of waiting on a modal sheet, so a
+    wrongly asked question fails the test (through `asked`) instead of hanging it."""
+    import desktop.native.window as window_module
+
+    class Keep:
+        answer = "keep"
+
+        def __init__(self, *_args: object, **_kw: object) -> None:
+            pass
+
+        def exec(self) -> int:
+            return 0
+
+    monkeypatch.setattr(window_module, "ConfirmSheet", Keep)
+
+
+def _run_out(qapp: QApplication, window: NativeWindow, root: QObject, *, quick: bool = False) -> QObject:
+    """A focus timer on today's first homework (or a quick one) that has run out and is not cleared."""
+    session = window.session
+    bridge = _bridge(root)
+    focus = bridge.property("focus")
+    if quick:
+        session.start_quick_focus()
+    else:
+        bridge.property("myday").startFocus()
+    _pump(qapp)
+    focus.hide()
+    session.focus["endsAt"] = session.now_ms() - 1
+    session.tick_focus()
+    settled(qapp, window)
+    if quick:
+        # A quick focus moves on to its break on its own; the card must still cope with it being over.
+        session.focus.update({"phase": "ended", "running": False, "remainingMs": 0})
+        session.focus_changed.emit()
+    _pump(qapp)
+    assert session.focus["phase"] == "ended"
+    return focus
+
+
+def _leave_focus(window: NativeWindow, qapp: QApplication, root: QObject) -> None:
+    window.session.reset_focus()
+    _bridge(root).property("focus").hide()
+    _pump(qapp)
+    _bridge(root).showPage("week")
+    window._use_widgets_styles()
+
+
+def test_a_finished_timer_makes_the_now_card_say_so_with_mark_finished_and_start_again(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _show_material(qapp, window)
+    bridge = _bridge(root)
+    try:
+        _run_out(qapp, window, root)
+        title = window.session.focus["title"]
+        for page, scope in (("myday", "myDay"), ("day", "day")):
+            bridge.showPage(page)
+            _pump(qapp)
+            assert _card(root, scope) == (title, "Session finished", "Start again")
+            assert _qml(root, scope + "MarkFinished").property("visible") is True
+            assert _qml(root, scope + "MarkFinished").property("text") == "Mark finished"
+    finally:
+        _leave_focus(window, qapp, root)
+
+
+def test_mark_finished_on_the_now_card_marks_the_homework_done_and_clears_the_timer(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    session = window.session
+    root = _show_material(qapp, window)
+    bridge = _bridge(root)
+    homework = ""
+    try:
+        _run_out(qapp, window, root)
+        homework = session.focus["assignmentId"]
+        assert not session.assignments[homework].get("completed")
+        bridge.showPage("myday")
+        _pump(qapp)
+        _qml(root, "myDayMarkFinished").clicked.emit()
+        settled(qapp, window)
+        _pump(qapp)
+        assert session.assignments[homework]["completed"] is True
+        assert session.focus is None
+        assert not bridge.property("focus").property("open")
+        assert _qml(root, "myDayStartFocus").property("text") != "Start again"
+        assert _qml(root, "myDayMarkFinished").property("visible") is False
+        for page, scope in (("myday", "myDay"), ("day", "day")):
+            bridge.showPage(page)
+            _pump(qapp)
+            assert "Session finished" not in _card(root, scope)
+    finally:
+        _leave_focus(window, qapp, root)
+        # The fixture's window is shared with the tests after this one: give the homework back.
+        if homework:
+            session.complete_homework(homework, False)
+            settled(qapp, window)
+
+
+def test_start_again_on_the_now_card_starts_a_new_timer_on_the_same_homework_without_asking(
+    qapp: QApplication, window: NativeWindow, keep_on_replace: None
+) -> None:
+    session = window.session
+    root = _show_material(qapp, window)
+    bridge = _bridge(root)
+    asked: list[tuple[str, str]] = []
+    session.focus_replace_needed.connect(lambda *names: asked.append(names))
+    try:
+        _run_out(qapp, window, root)
+        before = dict(session.focus)
+        bridge.showPage("day")
+        _pump(qapp)
+        _qml(root, "dayStartFocus").clicked.emit()
+        _pump(qapp)
+        assert asked == []
+        after = session.focus
+        assert after["phase"] == "work" and after["running"] is True
+        for key in ("assignmentId", "blockId", "title", "weekStart"):
+            assert after[key] == before[key], key
+        assert _card(root, "day")[1] != "Session finished"
+        assert not session.assignments[before["assignmentId"]].get("completed")
+    finally:
+        _leave_focus(window, qapp, root)
+
+
+def test_a_finished_quick_focus_is_named_quick_focus_and_has_no_mark_finished(
+    qapp: QApplication, window: NativeWindow, keep_on_replace: None
+) -> None:
+    root = _show_material(qapp, window)
+    bridge = _bridge(root)
+    asked: list[tuple[str, str]] = []
+    window.session.focus_replace_needed.connect(lambda *names: asked.append(names))
+    try:
+        _run_out(qapp, window, root, quick=True)
+        for page, scope in (("myday", "myDay"), ("day", "day")):
+            bridge.showPage(page)
+            _pump(qapp)
+            assert _card(root, scope) == ("Quick focus", "Session finished", "Start again")
+            assert _qml(root, scope + "MarkFinished").property("visible") is False
+        _qml(root, "dayStartFocus").clicked.emit()
+        _pump(qapp)
+        assert asked == []
+        assert window.session.focus["title"] == "Quick focus"
+        assert window.session.focus["phase"] == "work"
+    finally:
+        _leave_focus(window, qapp, root)
+
+
+def test_clicking_the_now_cards_button_puts_keyboard_focus_on_it(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A click on the card's button leaves keyboard focus on that button, so the screen or question it
+    opens hands focus back to it, not to the rail button the student used before."""
+    from PySide6.QtCore import QPointF, Qt
+    from PySide6.QtTest import QTest
+
+    root = _show_material(qapp, window)
+    bridge = _bridge(root)
+    scene = window._material_page._quick.quickWindow()
+    monkeypatch.setattr(window.session, "start_focus", lambda *_a, **_k: False)
+    try:
+        bridge.showPage("myday")
+        _pump(qapp)
+        _qml(root, "navDay").forceActiveFocus()
+        _pump(qapp)
+        assert scene.activeFocusItem().objectName() == "navDay"
+        button = _qml(root, "myDayStartFocus")
+        centre = button.mapToScene(QPointF(button.width() / 2, button.height() / 2)).toPoint()
+        QTest.mouseClick(window._material_page._quick, Qt.MouseButton.LeftButton, pos=centre)
+        _pump(qapp)
+        assert scene.activeFocusItem().objectName() == "myDayStartFocus"
+    finally:
         bridge.showPage("week")
         window._use_widgets_styles()
 

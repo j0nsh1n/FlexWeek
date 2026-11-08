@@ -3745,6 +3745,22 @@ class NativeSession(QObject):
         self.save()
         return True
 
+    def restart_finished_focus(self) -> bool:
+        """Start again on a timer that has run out: a new session on the same homework (or a quick
+        one), taking the place of the finished timer without asking to replace it."""
+        state = self.focus
+        if state is None or state.get("phase") != "ended" or self.busy or self._focus_busy:
+            return False
+        target = {
+            key: state.get(key) for key in ("weekStart", "blockId", "assignmentId", "day", "start", "title")
+        }
+        self.focus = begin_state(target, self.preferences, self.now_ms())
+        self._pending_focus = None
+        self._persist_focus()
+        self.focus_changed.emit()
+        self._open_focus_spotify()
+        return True
+
     def add_focus_time(self, minutes: int) -> bool:
         state = self.focus
         if state is None or state.get("phase") != "ended" or self.busy or self._focus_busy:
