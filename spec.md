@@ -855,8 +855,8 @@ The commands it runs, each of which must exit 0:
 Every rule below applies to new tests now and to each product area as it moves (see roadmap R3).
 
 1. What tests check. Code tests check behaviour: what happens on a click, key, drag, save, undo or sync, the state
-   that results, and accessible names. They do not assert colours, pixel positions or sizes. Looks are checked with
-   pictures and video (rule 6).
+   that results, and accessible names. They do not assert colours, pixel positions or sizes. Looks are judged in
+   visual review (rule 6), not asserted in tests or mutation cases.
 2. One clock. Every test runs on the shared fake clock, which starts at a fixed moment (a Thursday at 19:00 in a fixed
    week) and moves only when a test moves it. A test that reads the real clock fails.
 3. Clean state. Every test starts with no look file, default preferences and the 24-hour clock. Waiting is done with
@@ -868,24 +868,24 @@ Every rule below applies to new tests now and to each product area as it moves (
    - A small end-to-end set keeps the local server and sign-in: accounts, sync, and save and undo round trips.
 5. Layout. Tests are grouped by product area (week, day, month, my day, focus, settings, sheets, setup, account,
    sync, updater, planner) and named after the behaviour they check, not after the PR or audit that added them.
-6. Pictures and video.
-   - Pictures are rendered off-screen in one fixed setup (fonts, clock, data). The full set is about 100: every
-     screen in every style at 1280x800, Normal text, light and dark; plus each main screen at 1024x640 with Large text
-     and in High contrast, light.
-   - A pull request renders only the screens its changed files touch, once from main and once from the pull request,
-     and the review page shows what changed (before, after, difference). No reference pictures are stored.
-   - Video comes from the real-display rig: the actions meant to behave the same in Widgets and Material 3 (add
-     homework, tick done and Undo, open and edit, drag a block, Plan my homework, Running late, Focus, switching
-     Day / Week / Month, changing the look) and the animations, with Animations on and off. The review page shows
-     each clip as a strip of frames with the video linked.
-   - Review: Kimi annotates; Gemini (with Jonathan's OK for that run) or Claude decides. Contrast, words that do not
-     fit and the focus ring are judged by the reviewer; the page shows the measurements.
-   - Pictures and videos are kept until the pull request merges, then deleted.
+6. Visual review. Testing and review are separate: tests are automated pass or fail on behaviour, and review is
+   judgement. A look is never asserted in a test or in a mutation case, and there are no pictures in CI or on pull
+   requests.
+   - The review is done on this computer by a reviewer model that is blind: it is not told who changed what.
+   - It works in one live session of the app (the rig's live mode: `fwtest rig --play` with `"live": true`; step
+     files go in, answers and PNGs come out), within a time limit.
+   - It reports what it finds as bugs. A finding's cause is investigated only after the report, with Jonathan's
+     approval.
+   - Material 3 is reviewed first, the other styles later.
+   - What a removed look check covered is listed for the reviewer.
+   - The picture renderer (`scripts/pictures`, `fwtest pictures`) stays as a local aid, not a gate. Video from the
+     real-display rig stays available for motion.
 7. Where tests run. Locally, only the tests for the area a change touches (picked by `fwtest` from the changed
-   paths). CI runs everything (Python, Rust, pictures, mutations, rigs) and is the gate; a full local run is not
-   required before a push.
-8. Tools. The picture comparer, the review page, test selection by changed paths and the flaky-test log are Rust,
-   in `tools/fwtest` (approved by Jonathan 2026-11-06). App tests stay Python.
+   paths). CI runs everything except pictures (Python, Rust, mutations, the rig) and is the gate; a full local run is
+   not required before a push.
+8. Tools. Test selection by changed paths and the flaky-test log are Rust, in `tools/fwtest`; so are the picture
+   comparer and the review page, which stay there as local aids (approved by Jonathan 2026-11-06). App tests stay
+   Python.
 
 ## Branches and Storage
 Decided by Jonathan on 2026-10-08, so old worktrees and their build output do
