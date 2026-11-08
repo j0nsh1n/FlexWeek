@@ -1,7 +1,8 @@
-//! `desktop/native/controller.py` `delete_block` (1538-1559) and
-//! `grid.rs` `delete_occurrence`. Setup blocks are refused (decision Q5).
+//! `desktop/native/controller.py` `delete_block` (1750-1771) and
+//! `grid.rs` `delete_occurrence`. School or a Setup activity taken out of this week alone stays
+//! in it missed on every day, or the standing week would bring it back; every week takes it out.
 
-use flexweek_engine::desk::blocks::{BlockDeletion, SETUP_BLOCK, delete_block, mark_block_done};
+use flexweek_engine::desk::blocks::{BlockDeletion, delete_block, mark_block_done};
 use serde_json::{Map, Value, json};
 
 const WEEK: &str = "2026-10-19";
@@ -24,6 +25,16 @@ fn delete(
     scope: &str,
     day: Option<i64>,
 ) -> Result<BlockDeletion, String> {
+    delete_every(blocks, block_id, scope, day, false)
+}
+
+fn delete_every(
+    blocks: &[Value],
+    block_id: &str,
+    scope: &str,
+    day: Option<i64>,
+    every_week: bool,
+) -> Result<BlockDeletion, String> {
     delete_block(
         blocks,
         &Map::new(),
@@ -33,6 +44,7 @@ fn delete(
         day,
         TODAY,
         NOW_MINUTE,
+        every_week,
     )
 }
 
@@ -124,9 +136,10 @@ fn a_homework_session_is_removed_whole() {
     );
 }
 
-/// Decision Q5. School, the old sport card, and a Setup activity are refused.
+/// controller.py:1763-1768. School, the old sport card, and a Setup activity taken out of this week
+/// stay in it missed on every day they were on; taken out of every week they are gone.
 #[test]
-fn school_and_activities_are_refused() {
+fn school_and_activities_this_week_stay_missed_and_every_week_go() {
     let ids = setup_ids();
     assert!(!ids.is_empty(), "the setup ids are listed");
     for id in ids {
@@ -135,13 +148,34 @@ fn school_and_activities_are_refused() {
             "title": "School",
             "kind": "locked",
             "duration_min": 60,
-            "days": [0],
+            "days": [0, 3],
             "start": "08:30"
         });
+        let mut missed = block.clone();
+        missed["missed_days"] = json!([0, 3]);
         assert_eq!(
-            delete(&[block], id, "series", None).map(|_| ()),
-            Err(SETUP_BLOCK.to_string()),
-            "{id}"
+            show(delete(std::slice::from_ref(&block), id, "series", None)),
+            Ok(json!({"label": "deleting School", "blocks": [missed], "lost": []})),
+            "{id} this week"
+        );
+        assert_eq!(
+            show(delete_every(
+                std::slice::from_ref(&block),
+                id,
+                "series",
+                None,
+                true
+            )),
+            Ok(json!({"label": "deleting School", "blocks": [], "lost": []})),
+            "{id} every week"
+        );
+        let mut monday = block.clone();
+        monday["days"] = json!([0]);
+        monday["missed_days"] = json!([]);
+        assert_eq!(
+            show(delete(&[block], id, "occurrence", Some(3))),
+            Ok(json!({"label": "deleting School", "blocks": [monday], "lost": []})),
+            "{id} one day of it keeps the other day"
         );
     }
 }

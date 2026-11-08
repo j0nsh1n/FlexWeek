@@ -1,8 +1,7 @@
 //! Homework and block writes. Sessions stay in step through `desk::homework`,
 //! and the batch is `changes::apply`. Done rules live in the engine.
 
-use flexweek_engine::desk::blocks::{self, SETUP_BLOCK};
-use flexweek_engine::desk::grid::is_setup_block;
+use flexweek_engine::desk::blocks;
 use flexweek_engine::desk::homework::{edit_homework, mark_homework_done};
 use flexweek_store::{
     ApplyClock, ApplyInput, AssignmentInput, Connection, Recall, WeekInput, apply,
@@ -143,9 +142,12 @@ pub(crate) fn remembered(
     }
 }
 
+/// Every assistant write lands here, and saves a restore point of the account before it changes
+/// anything, so the student can undo the whole change in one step.
 pub(crate) fn run_apply(
     conn: &Connection,
     user_id: i64,
+    tool: &str,
     operation_id: &str,
     digest: &str,
     mut input: ApplyInput,
@@ -153,7 +155,14 @@ pub(crate) fn run_apply(
 ) -> Result<Value, String> {
     input.operation_id = Some(operation_id.to_string());
     input.argument_digest = Some(digest.to_string());
-    write::from_apply(apply(conn, user_id, &input, clock))
+    let (restore_token, label) =
+        write::restore_point_before(conn, user_id, tool, operation_id, None, &clock.now)?;
+    input.snapshot_label = Some(label);
+    let clock = ApplyClock {
+        now: clock.now.clone(),
+        restore_token,
+    };
+    write::from_apply(apply(conn, user_id, &input, &clock))
 }
 
 pub(crate) fn parse_blocks(text: &str) -> Result<Vec<Value>, String> {
@@ -477,6 +486,7 @@ impl crate::App {
             let applied = run_apply(
                 &opened.conn,
                 opened.user_id,
+                "add_homework",
                 &operation_id,
                 &digest,
                 input,
@@ -523,6 +533,7 @@ impl crate::App {
             let applied = run_apply(
                 &opened.conn,
                 opened.user_id,
+                "edit_homework",
                 &operation_id,
                 &digest,
                 input,
@@ -570,6 +581,7 @@ impl crate::App {
             let applied = run_apply(
                 &opened.conn,
                 opened.user_id,
+                "delete_homework",
                 &operation_id,
                 &digest,
                 input,
@@ -661,6 +673,7 @@ impl crate::App {
             let applied = run_apply(
                 &opened.conn,
                 opened.user_id,
+                "set_homework_done",
                 &operation_id,
                 &digest,
                 input,
@@ -695,18 +708,8 @@ impl crate::App {
             if let Some(saved) = remembered(&opened.conn, opened.user_id, &operation_id, &digest)? {
                 return saved_block(&saved);
             }
-            let Some((text, revision)) = read_week(&opened.conn, opened.user_id, &args.week_start)
-                .map_err(session::storage_sentence)?
-            else {
-                return Err("week was not found".into());
-            };
-            let mut blocks = parse_blocks(&text)?;
-            if let Some(block) = blocks.iter().find(|block| {
-                block.get("id").and_then(Value::as_str) == Some(args.block_id.as_str())
-            }) && is_setup_block(block).map_err(|err| err.message)?
-            {
-                return Err(SETUP_BLOCK.into());
-            }
+            let (mut blocks, revision) =
+                super::fixed::seen_week(&opened.conn, opened.user_id, &args.week_start)?;
             blocks::mark_block_done(&mut blocks, &args.block_id, args.day, args.done)?;
             let input = ApplyInput {
                 weeks: vec![WeekInput {
@@ -723,6 +726,7 @@ impl crate::App {
             let applied = run_apply(
                 &opened.conn,
                 opened.user_id,
+                "set_block_done",
                 &operation_id,
                 &digest,
                 input,

@@ -1,14 +1,10 @@
-//! `desktop/native/controller.py` `delete_block` (1538-1559).
-//! School and Setup activities are refused: the assistant cannot change the standing week.
+//! `desktop/native/controller.py` `delete_block` (1750-1771).
 
 use serde_json::{Map, Value, json};
 
 use super::{grid, planning};
 use crate::model;
 use crate::stored::truthy;
-
-/// The desktop asks which weeks to change. The assistant is not given that choice.
-pub const SETUP_BLOCK: &str = "School and activities are changed in the app.";
 
 pub struct BlockDeletion {
     pub blocks: Vec<Value>,
@@ -25,6 +21,7 @@ pub fn delete_block(
     day: Option<i64>,
     today: &str,
     now_minute: i64,
+    every_week: bool,
 ) -> Result<BlockDeletion, String> {
     let Some(block) = blocks
         .iter()
@@ -36,10 +33,7 @@ pub fn delete_block(
             lost: Vec::new(),
         });
     };
-    if grid::is_setup_block(block).map_err(|err| err.message)? {
-        return Err(SETUP_BLOCK.to_string());
-    }
-    let removed = if truthy(block.get("assignment_id")) || scope != "occurrence" {
+    let mut removed: Vec<Value> = if truthy(block.get("assignment_id")) || scope != "occurrence" {
         blocks
             .iter()
             .filter(|item| item.get("id").and_then(Value::as_str) != Some(block_id))
@@ -50,6 +44,20 @@ pub fn delete_block(
         grid::delete_occurrence(&Value::Array(blocks.to_vec()), &json!(block_id), &day_value)
             .map_err(|err| err.message)?
     };
+    // School or a Setup activity stands in every week, so taking it out of this week alone keeps
+    // it here missed on every day, or the standing week would bring it back. `every_week` is the
+    // caller's to take out of the standing week too.
+    let gone = !removed
+        .iter()
+        .any(|item| item.get("id").and_then(Value::as_str) == Some(block_id));
+    if gone && !every_week && grid::is_setup_block(block).map_err(|err| err.message)? {
+        let mut missed = block.clone();
+        let days = block.get("days").cloned().unwrap_or_else(|| json!([]));
+        if let Some(fields) = missed.as_object_mut() {
+            fields.insert("missed_days".into(), days);
+        }
+        removed.push(missed);
+    }
     let title = match block.get("title") {
         Some(Value::String(text)) => text.clone(),
         _ => return Err("'title'".to_string()),

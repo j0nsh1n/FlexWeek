@@ -53,6 +53,48 @@ pub fn from_apply(result: Result<Value, ApplyFailure>) -> Result<Value, String> 
     }
 }
 
+/// The app keeps 20 restore points (`MAX_RESTORE_POINTS`). The assistant keeps at most this many
+/// of its own, so a busy assistant never pushes out the student's points.
+pub const ASSISTANT_POINTS: i64 = 10;
+
+fn point_token(operation_id: &str) -> String {
+    format!(
+        "assistant-{}",
+        &flexweek_store::digest(&format!("restore:{operation_id}"))[..16]
+    )
+}
+
+/// The restore point an assistant write saves first. It comes from the operation id, so a retry
+/// names the same point.
+pub fn point_id(operation_id: &str) -> String {
+    format!("rp-{}", point_token(operation_id))
+}
+
+/// Makes room for the restore point the next `apply` saves before it changes anything, and returns
+/// its token and label. `keep` is never pruned: the point a restore brings back.
+pub fn restore_point_before(
+    conn: &flexweek_store::Connection,
+    user_id: i64,
+    tool: &str,
+    operation_id: &str,
+    keep: Option<&str>,
+    now: &str,
+) -> Result<(String, String), String> {
+    conn.execute(
+        "DELETE FROM restore_points WHERE user_id = ?1 AND id LIKE 'rp-assistant-%' AND id != ?2
+        AND seq NOT IN (
+            SELECT seq FROM restore_points WHERE user_id = ?1 AND id LIKE 'rp-assistant-%'
+            AND id != ?2 ORDER BY seq DESC LIMIT ?3
+        )",
+        (user_id, keep.unwrap_or(""), ASSISTANT_POINTS - 1),
+    )
+    .map_err(|error| session::storage_sentence(flexweek_store::StoreError::from(error)))?;
+    Ok((
+        point_token(operation_id),
+        format!("Before assistant {tool} — {now}"),
+    ))
+}
+
 pub fn finish(name: &str, result: Result<Value, String>) -> Result<String, String> {
     match result {
         Ok(value) => {
