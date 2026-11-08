@@ -25,8 +25,19 @@ ORDER = ["plain", "night", "dashboard", "retro"]
 SLIDE_MS = 450
 
 
+def _forget_clocks_of_closed_windows() -> None:
+    """A window an earlier test closed can leave a clock in motion's running set whose timer is gone;
+    ManualTime.advance asks every running clock about its timer."""
+    for clock in list(motion._RUNNING):
+        try:
+            clock._timer.isActive()
+        except RuntimeError:
+            motion._RUNNING.discard(clock)
+
+
 @pytest.fixture()
 def moving(qapp: QApplication, window: NativeWindow) -> SetupPage:
+    _forget_clocks_of_closed_windows()
     return show_setup(qapp, window, motion="normal")
 
 
