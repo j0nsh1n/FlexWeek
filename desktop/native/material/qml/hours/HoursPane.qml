@@ -391,6 +391,7 @@ Item {
                     objectName: "hourLabel"
                     x: 0
                     y: Math.max(0, index * root.row - 8)
+                    opacity: y >= scroller.contentY ? 1 : 0
                     width: root.gutter - 8
                     horizontalAlignment: Text.AlignRight
                     text: model.label

@@ -40,6 +40,7 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ### Fixed
 - Material Day's month panel is as wide as the mini month, so no weekday column is cut off at Larger text.
+- Material Day and Week hide an hour label that would be only partly shown at the top of the hours pane, and Day leaves a small gap between the Now card and the hours.
 - Autosave waits for you to stop changing things by elapsed time, so setting the computer's clock back no longer holds a change unsaved until the clock catches up.
 - Material Day keeps its blocks when the clock ticks, still shows Saturday and Sunday when Week hides weekends, only jumps to now when opening a date, and leaves 16 px so the now line shows past the blocks. Every Day block opens with a click, Tab, or Enter; Space marks homework finished.
 - Material Month due chips use the homework class tint and icon instead of purple, overdue chips use the overdue tint, Settings → Look's Widgets styles control is a text button, and the Week now-line passes behind blocks.
