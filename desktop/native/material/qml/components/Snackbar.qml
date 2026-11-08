@@ -61,7 +61,7 @@ Item {
         text: root.message
         color: palette.inverseOnSurface
         font.family: M3Font.family
-        font.pixelSize: 14
+        font.pixelSize: M3Font.px(14)
         font.weight: 400
     }
     Item {
@@ -81,7 +81,7 @@ Item {
                 text: root.actionText
                 color: palette.inversePrimary
                 font.family: M3Font.family
-                font.pixelSize: 14
+                font.pixelSize: M3Font.px(14)
                 font.weight: 500
             }
             Text {
@@ -92,7 +92,7 @@ Item {
                 color: palette.inversePrimary
                 opacity: 0.85
                 font.family: M3Font.family
-                font.pixelSize: 11
+                font.pixelSize: M3Font.px(11)
                 font.weight: 500
                 anchors.verticalCenter: parent.verticalCenter
             }

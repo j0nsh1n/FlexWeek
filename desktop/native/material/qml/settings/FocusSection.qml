@@ -15,7 +15,7 @@ SectionPage {
         text: "No focus settings are available in this build yet."
         color: Ui.theme.onSurfaceVariant || "#44474e"
         font.family: M3Font.family
-        font.pixelSize: 14
+        font.pixelSize: M3Font.px(14)
         wrapMode: Text.WordWrap
     }
     Group {

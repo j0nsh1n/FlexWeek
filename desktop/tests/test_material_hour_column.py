@@ -21,7 +21,15 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.test_layouts_window import look_file  # noqa: E402
-from desktop.tests.test_material_week import NOW_MINUTE, _bridge, _pump, _qml, _reset  # noqa: E402
+from desktop.tests.test_material_week import (  # noqa: E402
+    NOW_MINUTE,
+    _bridge,
+    _named,
+    _pref,
+    _pump,
+    _qml,
+    _reset,
+)
 
 
 def _text_size(window: NativeWindow, scale: float) -> None:
@@ -53,6 +61,42 @@ def test_a_larger_text_size_brings_the_time_now_back_into_view(
         top = float(grid.property("contentY"))
         assert top <= now_y <= top + float(grid.property("height"))
     finally:
+        look_file().unlink(missing_ok=True)
+        window._material_page.publish()
+        _pump(qapp, 4)
+
+
+def _cut_labels(root) -> list[str]:
+    """Hour labels whose words are wider than the column they are drawn in, so the rail cuts their digits."""
+    return [
+        str(label.property("text"))
+        for label in _named(root, "hourLabel")
+        if float(label.property("contentWidth")) > float(label.property("width"))
+    ]
+
+
+def test_every_hour_label_fits_its_column_at_a_larger_text_size(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """V23/V28: at Large text "10:00 AM" lost its first digit under the rail. The column grows with the
+    widest label, so no label is wider than its column, and at the normal size it stays 68 px."""
+    root = _reset(window, qapp)
+    # The 12-hour clock's labels are the widest the Week draws.
+    _pref(window, clock_24h=False)
+    window._material_page.publish()
+    _pump(qapp)
+    week = _qml(root, "materialWeek")
+    assert any("AM" in str(label.property("text")) for label in _named(root, "hourLabel")), (
+        "no 12-hour labels found, so this test would prove nothing"
+    )
+    assert int(week.property("gutter")) == 68
+    assert _cut_labels(root) == []
+    try:
+        _text_size(window, 1.5)
+        assert _cut_labels(root) == []
+        assert int(week.property("gutter")) > 68
+    finally:
+        _pref(window, clock_24h=True)
         look_file().unlink(missing_ok=True)
         window._material_page.publish()
         _pump(qapp, 4)
