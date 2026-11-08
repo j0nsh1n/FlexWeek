@@ -38,6 +38,13 @@ Item {
     property bool dragRangeValid: false
     property bool dragRangeCanceled: false
     property real dragRangePressY: 0
+    // Week keeps the drag range on its view (Esc and the header read it); Day keeps it here.
+    readonly property var rangeHost: root.host ? root.host : root
+    readonly property bool takesEmptyTime: !root.passive && (root.weekMode ? !!root.host : root.filterDay >= 0)
+    // The time the empty-time menu was opened for, marked on the grid while the menu is up.
+    property int slotDay: -1
+    property int slotStart: 0
+    property int slotEnd: 0
 
     property alias scroller: scroller
     property alias hours: hours
@@ -64,6 +71,37 @@ Item {
     onTypeScaleChanged: if (root.followNow) Qt.callLater(root.revealNow)
     onDensityChanged: if (root.followNow) Qt.callLater(root.revealNow)
     readonly property int blockRightInset: root.weekMode ? 3 : 16
+
+    function snapToQuarter(y) {
+        var snapped = Math.round((y / root.row) * 60 / 15) * 15
+        return Math.max(0, Math.min(24 * 60, snapped))
+    }
+
+    function dayAt(x) {
+        return root.weekMode ? Math.floor((x - root.gutter) / root.dayWidth) : root.filterDay
+    }
+
+    // Day's own test for a point on free time: inside the hours and on no block.
+    function emptyGridTimeAt(x, y) {
+        if (root.filterDay < 0 || x < root.gutter || x >= hours.width || y < 0 || y >= 24 * root.row)
+            return false
+        for (var i = 0; i < weekBlocks.count; i++) {
+            var block = weekBlocks.itemAt(i)
+            if (block && x >= block.x && x <= block.x + block.width && y >= block.y && y <= block.y + block.height)
+                return false
+        }
+        return true
+    }
+
+    function cancelDragRange() {
+        dragRangeCanceled = true
+        dragRangeActive = false
+        dragRangeStartMin = 0
+        dragRangeEndMin = 0
+        dragRangeDay = -1
+        if (root.bridge && root.bridge.sheets)
+            root.bridge.sheets.setDragRangeActive(false)
+    }
 
     function openingAbove(view) {
         var margin = 45 / 60 * root.row
@@ -259,83 +297,106 @@ Item {
             height: 24 * root.row
             focus: true
             Keys.onEscapePressed: (event) => {
-                if (root.host && root.host.dragRangeActive) {
-                    root.host.cancelDragRange()
+                if (root.rangeHost.dragRangeActive) {
+                    root.rangeHost.cancelDragRange()
                     event.accepted = true
+                }
+            }
+
+            // A click on free time offers to add something there: an hour from the nearest quarter hour,
+            // as the Widgets grid places a click.
+            TapHandler {
+                objectName: "emptyTimeTap"
+                enabled: root.takesEmptyTime
+                acceptedButtons: Qt.LeftButton
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                onTapped: (eventPoint) => {
+                    var p = eventPoint.position
+                    if (!root.rangeHost.emptyGridTimeAt(p.x, p.y))
+                        return
+                    var start = Math.min(23 * 60, root.rangeHost.snapToQuarter(p.y))
+                    root.openSlotMenu(root.dayAt(p.x), start, Math.min(24 * 60, start + 60), p.x, p.y)
                 }
             }
 
             DragHandler {
                 id: gridDrag
                 target: null
-                enabled: root.weekMode && !root.passive && root.host
+                enabled: root.takesEmptyTime
                 dragThreshold: 4
                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 grabPermissions: PointerHandler.CanTakeOverFromItems | PointerHandler.CanTakeOverFromHandlersOfDifferentType
                 onActiveChanged: {
-                    if (!root.host)
-                        return
+                    var range = root.rangeHost
                     if (active) {
                         var px = centroid.pressPosition.x
                         var py = centroid.pressPosition.y
-                        if (!root.host.emptyGridTimeAt(px, py)) {
-                            root.host.dragRangeValid = false
-                            root.host.dragRangeActive = false
+                        if (!range.emptyGridTimeAt(px, py)) {
+                            range.dragRangeValid = false
+                            range.dragRangeActive = false
                             return
                         }
                         hours.forceActiveFocus()
-                        root.host.dragRangeValid = true
-                        root.host.dragRangeCanceled = false
-                        root.host.dragRangeDay = Math.floor((px - root.gutter) / root.dayWidth)
-                        root.host.dragRangePressY = py
-                        var m1 = root.host.snapToQuarter(py)
-                        var m2 = root.host.snapToQuarter(centroid.position.y)
-                        root.host.dragRangeStartMin = Math.min(m1, m2)
-                        root.host.dragRangeEndMin = Math.max(m1, m2)
-                        root.host.dragRangeActive = true
+                        range.dragRangeValid = true
+                        range.dragRangeCanceled = false
+                        range.dragRangeDay = root.dayAt(px)
+                        range.dragRangePressY = py
+                        var m1 = range.snapToQuarter(py)
+                        var m2 = range.snapToQuarter(centroid.position.y)
+                        range.dragRangeStartMin = Math.min(m1, m2)
+                        range.dragRangeEndMin = Math.max(m1, m2)
+                        range.dragRangeActive = true
                         if (root.bridge && root.bridge.sheets)
                             root.bridge.sheets.setDragRangeActive(true)
                     } else {
                         if (root.bridge && root.bridge.sheets)
                             root.bridge.sheets.setDragRangeActive(false)
-                        if (root.host.dragRangeActive && root.host.dragRangeValid && !root.host.dragRangeCanceled) {
-                            var start = root.host.dragRangeStartMin
-                            var end = root.host.dragRangeEndMin
-                            var day = root.host.dragRangeDay
-                            root.host.dragRangeActive = false
-                            root.host.dragRangeValid = false
-                            if (end - start >= 15 && root.bridge && root.bridge.sheets)
-                                root.bridge.sheets.openHomeworkAt(day, start, end)
+                        if (range.dragRangeActive && range.dragRangeValid && !range.dragRangeCanceled) {
+                            var start = range.dragRangeStartMin
+                            var end = range.dragRangeEndMin
+                            var day = range.dragRangeDay
+                            range.dragRangeActive = false
+                            range.dragRangeValid = false
+                            var menuX = centroid.pressPosition.x
+                            // After the release is delivered, so the menu keeps the focus it takes.
+                            if (end - start >= 15)
+                                Qt.callLater(root.openSlotMenu, day, start, end, menuX, end / 60 * root.row)
                         }
-                        root.host.dragRangeActive = false
-                        root.host.dragRangeValid = false
-                        root.host.dragRangeCanceled = false
-                        root.host.dragRangeStartMin = 0
-                        root.host.dragRangeEndMin = 0
-                        root.host.dragRangeDay = -1
+                        range.dragRangeActive = false
+                        range.dragRangeValid = false
+                        range.dragRangeCanceled = false
+                        range.dragRangeStartMin = 0
+                        range.dragRangeEndMin = 0
+                        range.dragRangeDay = -1
                     }
                 }
                 onCentroidChanged: {
-                    if (!root.host)
-                        return
-                    if (active && root.host.dragRangeActive && root.host.dragRangeValid && !root.host.dragRangeCanceled) {
-                        var m1 = root.host.snapToQuarter(root.host.dragRangePressY)
-                        var m2 = root.host.snapToQuarter(centroid.position.y)
-                        root.host.dragRangeStartMin = Math.min(m1, m2)
-                        root.host.dragRangeEndMin = Math.max(m1, m2)
+                    var range = root.rangeHost
+                    if (active && range.dragRangeActive && range.dragRangeValid && !range.dragRangeCanceled) {
+                        var m1 = range.snapToQuarter(range.dragRangePressY)
+                        var m2 = range.snapToQuarter(centroid.position.y)
+                        range.dragRangeStartMin = Math.min(m1, m2)
+                        range.dragRangeEndMin = Math.max(m1, m2)
                     }
                 }
             }
 
             Rectangle {
                 objectName: "rangeGhost"
-                visible: root.weekMode && root.host && root.host.dragRangeActive
-                         && (root.host.dragRangeEndMin > root.host.dragRangeStartMin)
-                         && !root.host.dragRangeCanceled
-                x: root.gutter + (root.host ? root.host.dragRangeDay : 0) * root.dayWidth + 3
-                y: root.host ? (root.host.dragRangeStartMin / 60) * root.row : 0
-                width: Math.max(8, root.dayWidth - 6)
-                height: root.host ? Math.max(4, ((root.host.dragRangeEndMin - root.host.dragRangeStartMin) / 60) * root.row - 2) : 0
+                readonly property bool dragging: root.rangeHost.dragRangeActive
+                                                 && root.rangeHost.dragRangeEndMin > root.rangeHost.dragRangeStartMin
+                                                 && !root.rangeHost.dragRangeCanceled
+                readonly property bool picked: blockMenu.open && root.slotDay >= 0
+                readonly property int ghostDay: dragging ? root.rangeHost.dragRangeDay : root.slotDay
+                readonly property int ghostStart: dragging ? root.rangeHost.dragRangeStartMin : root.slotStart
+                readonly property int ghostEnd: dragging ? root.rangeHost.dragRangeEndMin : root.slotEnd
+                visible: dragging || picked
+                x: root.weekMode ? root.gutter + Math.max(0, ghostDay) * root.dayWidth + 3 : root.gutter + 3
+                y: (ghostStart / 60) * root.row
+                width: root.weekMode
+                       ? Math.max(8, root.dayWidth - 6)
+                       : Math.max(8, hours.width - root.gutter - 3 - root.blockRightInset)
+                height: Math.max(4, ((ghostEnd - ghostStart) / 60) * root.row - 2)
                 radius: 6
                 color: m3.primaryContainer
                 opacity: 0.7
@@ -529,15 +590,46 @@ Item {
         blockMenu.forceActiveFocus()
     }
 
-    function closeBlockMenu() {
+    // Free time clicked or dragged over: add homework or a fixed time there (Jonathan, 2026-11-07).
+    function openSlotMenu(day, start, end, hx, hy) {
+        if (day < 0)
+            return
+        slotDay = day
+        slotStart = start
+        slotEnd = end
+        menuOriginItem = hours
+        menuTargetModel = { slot: true, day: day, start: start, end: end }
+        var mapped = hours.mapToItem(root, hx, hy)
+        blockMenu.entries = [
+            { label: "Add homework here", icon: "edit_note" },
+            { label: "Add fixed time here", icon: "schedule" }
+        ]
+        blockMenu.x = Math.max(8, Math.min(mapped.x, root.width - blockMenu.width - 8))
+        blockMenu.y = Math.max(8, Math.min(mapped.y, root.height - blockMenu.height - 8))
+        blockMenu.cursor = 0
+        blockMenu.open = true
+        blockMenu.forceActiveFocus()
+    }
+
+    function closeBlockMenu(giveFocusBack) {
+        slotDay = -1
         if (!blockMenu.open && !menuOriginItem && !menuTargetModel)
             return
         blockMenu.open = false
         var origin = menuOriginItem
         menuOriginItem = null
         menuTargetModel = null
-        if (origin && origin.visible)
+        if (giveFocusBack !== false && origin && origin.visible)
             origin.forceActiveFocus()
+    }
+
+    // The focus left the menu for an item outside it, such as a card the student clicked.
+    function focusTakenElsewhere(item) {
+        for (var at = item; at; at = at.parent) {
+            if (at === menuOverlay)
+                return false
+        }
+        return !!item
     }
 
     FocusScope {
@@ -565,7 +657,7 @@ Item {
             activeFocusOnTab: open && !root.passive
             onActiveFocusChanged: {
                 if (!activeFocus && open)
-                    root.closeBlockMenu()
+                    root.closeBlockMenu(!root.focusTakenElsewhere(Window.activeFocusItem))
             }
             theme: root.theme
             density: root.density
@@ -576,7 +668,14 @@ Item {
                 root.closeBlockMenu()
                 if (!root.bridge || !target)
                     return
-                if (label === "Edit") {
+                if (target.slot) {
+                    if (!root.bridge.sheets)
+                        return
+                    if (label === "Add homework here")
+                        root.bridge.sheets.openHomeworkAt(target.day, target.start, target.end)
+                    else if (label === "Add fixed time here")
+                        root.bridge.sheets.openBlockAt(target.day, target.start, target.end)
+                } else if (label === "Edit") {
                     if (root.bridge.sheets)
                         root.bridge.sheets.editBlock(target.blockId, target.day)
                 } else if (label === "Mark finished" || label === "Open again") {
@@ -592,6 +691,13 @@ Item {
                 }
             }
             onDismissed: root.closeBlockMenu()
+        }
+    }
+
+    Connections {
+        target: !root.host && root.bridge && root.bridge.sheets ? root.bridge.sheets : null
+        function onDragRangeCanceled() {
+            root.cancelDragRange()
         }
     }
 

@@ -41,6 +41,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Fixed
 - Material Day's month panel is as wide as the mini month, so no weekday column is cut off at Larger text.
 - Material Day and Week hide an hour label that would be only partly shown at the top of the hours pane, Day's zoom control never covers an hour label, and Day leaves a small gap between the Now card and the hours.
+- A click or a drag over empty time on Material Week and Day opens a small menu at that spot, Add homework here and Add fixed time here, each opening its sheet with that day and time (a click gives an hour from the nearest quarter hour); before, a click did nothing and the fixed-time sheet could not be reached. Clicking the snackbar over the grid no longer opens that menu, Esc closes it and gives the focus back, and a card that takes the focus while it is open keeps it.
 - A short block on Material Week and Day keeps its words inside its border: a title that would push the time out shows on one line, and when even that does not fit, the time line is left out.
 - Material Week and Day widen the hour column to fit its labels at Large and Larger text, so "10:00 AM" no longer loses its first digits, and the Week shows the time now again after the text size or density changes.
 - Material Week and Day place blocks that share time side by side, so a homework pinned over Soccer shows and opens instead of hiding under it.
