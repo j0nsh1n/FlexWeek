@@ -17,7 +17,7 @@ Item {
     property var board
 
     visible: !phone
-    width: phone ? 0 : (open ? 272 : 64)
+    width: phone ? 0 : (open ? 16 + miniMonth.width + 16 : 64)
     clip: true
     Accessible.role: Accessible.Pane
     Accessible.name: "Month"
@@ -52,6 +52,7 @@ Item {
     }
 
     MiniMonth {
+        id: miniMonth
         objectName: "dayMiniMonth"
         x: 16
         y: 64

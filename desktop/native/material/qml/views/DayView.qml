@@ -44,7 +44,7 @@ Item {
         opacity: 0
         text: "Day"
         font.family: M3Font.family
-        font.pixelSize: 12
+        font.pixelSize: M3Font.px(12)
         Accessible.role: Accessible.Heading
         Accessible.name: text
     }
@@ -80,6 +80,7 @@ Item {
             topPadding: root.phone ? 16 : 24
             leftPadding: root.phone ? 16 : 24
             rightPadding: root.phone ? 16 : 24
+            bottomPadding: 8
 
             Row {
                 spacing: 4
@@ -114,7 +115,7 @@ Item {
                 wrapMode: Text.WordWrap
                 color: palette.inkMuted
                 font.family: M3Font.family
-                font.pixelSize: 16
+                font.pixelSize: M3Font.px(16)
                 font.weight: 400
                 Accessible.role: Accessible.StaticText
                 Accessible.name: text
@@ -130,6 +131,7 @@ Item {
                 highContrast: root.highContrast
                 scope: "day"
                 title: root.board ? root.board.nowTitle : ""
+                focusTitle: root.board ? root.board.focusTitle : ""
                 line: root.board ? root.board.nowLine : ""
                 onStartFocus: if (root.board) root.board.startFocus()
             }
@@ -151,7 +153,6 @@ Item {
                 passive: root.passive
                 phone: root.phone
                 row: root.row
-                gutter: 68
                 columns: 1
                 filterDay: root.dayIndex
                 showNowLine: root.dayIndex >= 0 && root.bridge && root.bridge.nowDay === root.dayIndex

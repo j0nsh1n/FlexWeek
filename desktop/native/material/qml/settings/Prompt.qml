@@ -69,7 +69,7 @@ FocusScope {
                 text: root.title
                 color: palette.inkSurface
                 font.family: M3Font.family
-                font.pixelSize: 24
+                font.pixelSize: M3Font.px(24)
                 wrapMode: Text.WordWrap
             }
             Text {
@@ -78,7 +78,7 @@ FocusScope {
                 text: root.body
                 color: palette.inkMuted
                 font.family: M3Font.family
-                font.pixelSize: 14
+                font.pixelSize: M3Font.px(14)
                 wrapMode: Text.WordWrap
             }
             OutlinedField {
@@ -119,7 +119,7 @@ FocusScope {
                         wrapMode: TextEdit.WrapAnywhere
                         color: palette.inkSurface
                         font.family: "monospace"
-                        font.pixelSize: 12
+                        font.pixelSize: M3Font.px(12)
                         Accessible.role: Accessible.StaticText
                         Accessible.name: "Exported look"
                     }
@@ -132,7 +132,7 @@ FocusScope {
                 text: root.error
                 color: palette.error
                 font.family: M3Font.family
-                font.pixelSize: 14
+                font.pixelSize: M3Font.px(14)
                 wrapMode: Text.WordWrap
             }
             Item {

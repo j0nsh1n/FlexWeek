@@ -20,8 +20,7 @@ Item {
     property int trail: 0
     signal clicked()
 
-    readonly property real typeScale: (root.theme && root.theme.typeScale) ? root.theme.typeScale : 1
-    implicitHeight: Math.max(Math.round(56 * typeScale), words.implicitHeight + 16)
+    implicitHeight: Math.max(M3Font.px(56), words.implicitHeight + 16)
     height: implicitHeight
     implicitWidth: 360
 
@@ -65,7 +64,7 @@ Item {
             text: root.title
             color: root.tinted ? root.ink : palette.inkSurface
             font.family: M3Font.family
-            font.pixelSize: 16 * root.typeScale
+            font.pixelSize: M3Font.px(16)
             font.weight: 500
             elide: Text.ElideRight
         }
@@ -76,7 +75,7 @@ Item {
             text: root.subtitle
             color: root.tinted ? root.ink : palette.inkMuted
             font.family: M3Font.family
-            font.pixelSize: 12 * root.typeScale
+            font.pixelSize: M3Font.px(12)
             font.weight: 400
             elide: Text.ElideRight
             maximumLineCount: 1

@@ -386,7 +386,7 @@ def test_finish_asks_then_ends_the_session_and_leaves_the_screen(
         close_focus(window, focus)
 
 
-def test_back_ends_a_running_session_the_same_way_and_a_ready_screen_just_closes(
+def test_back_leaves_a_running_timer_running_and_only_finish_asks(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     _root, focus = open_focus(qapp, window)
@@ -398,9 +398,36 @@ def test_back_ends_a_running_session_the_same_way_and_a_ready_screen_just_closes
         window._open_focus_screen()
         focus.begin()
         focus.back()
-        assert asked == [True] and window.session.focus is not None
-        focus.confirmEnd()
-        assert window.session.focus is None and not focus.open
+        _pump(qapp)
+        assert asked == [] and not focus.open
+        assert window.session.focus is not None and window.session.focus["phase"] == "work"
+        window._open_focus_screen()
+        _pump(qapp)
+        assert focus.open and window.session.focus["phase"] == "work"  # reopens on the same timer
+        focus.finish()
+        assert asked == [True]
+    finally:
+        close_focus(window, focus)
+
+
+def test_back_on_a_finished_session_clears_it_so_the_next_start_does_not_ask(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Back keeps a running timer, but a session that has finished has nothing to keep: Back clears it,
+    so the next Start focus starts at once instead of asking to replace a timer that is over."""
+    only = homework(qapp, window, "essay3", 1)[0]
+    _root, focus = open_focus(qapp, window)
+    asked: list[bool] = []
+    focus.endRequested.connect(lambda: asked.append(True))
+    try:
+        assert start(window, only)
+        run_out(qapp, window)
+        _pump(qapp)
+        assert window.session.focus["phase"] == "ended"
+        focus.back()
+        _pump(qapp)
+        assert asked == [] and not focus.open
+        assert window.session.focus is None
     finally:
         close_focus(window, focus)
 
@@ -531,7 +558,7 @@ def test_escape_on_the_screen_goes_back(qapp: QApplication, window: NativeWindow
         close_focus(window, focus)
 
 
-def test_escape_on_the_end_dialog_keeps_the_session_going(
+def test_escape_on_a_running_timer_goes_back_and_the_timer_keeps_running(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root, focus = open_focus(qapp, window)
@@ -543,6 +570,26 @@ def test_escape_on_the_end_dialog_keeps_the_session_going(
         _qml(root, "materialFocus").forceActiveFocus()
         _pump(qapp)
         QTest.keyClick(quick, Qt.Key.Key_Escape)
+        _pump(qapp)
+        assert asked == [] and _qml(root, "focusEndDialog").property("open") is False
+        assert not focus.open
+        assert window.session.focus is not None and window.session.focus["phase"] == "work"
+    finally:
+        close_focus(window, focus)
+
+
+def test_escape_on_the_end_dialog_keeps_the_session_going(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root, focus = open_focus(qapp, window)
+    quick = window._material_page._quick
+    asked: list[bool] = []
+    focus.endRequested.connect(lambda: asked.append(True))
+    try:
+        focus.begin()
+        _qml(root, "materialFocus").forceActiveFocus()
+        _pump(qapp)
+        focus.finish()
         _pump(qapp)
         dialog = _qml(root, "focusEndDialog")
         assert asked == [True] and dialog.property("open") is True
@@ -609,7 +656,7 @@ def test_focus_keeps_tab_inside_ready_running_paused_and_end(
         _pump(qapp)
         assert dialog.property("open") is False
         assert focus.open
-        QTest.keyClick(quick, Qt.Key.Key_Escape)
+        focus.finish()
         _pump(qapp)
         assert dialog.property("open") is True
         QTest.keyClick(quick, Qt.Key.Key_Escape)

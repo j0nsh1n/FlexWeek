@@ -26,7 +26,7 @@ SheetFrame {
         text: root.ask.body ? root.ask.body : ""
         color: pal.inkMuted
         font.family: M3Font.family
-        font.pixelSize: 14
+        font.pixelSize: M3Font.px(14)
         wrapMode: Text.WordWrap
     }
     trailing: Repeater {

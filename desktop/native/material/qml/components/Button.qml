@@ -91,7 +91,7 @@ Item {
             text: root.text
             color: root.ink
             font.family: M3Font.family
-            font.pixelSize: 14
+            font.pixelSize: M3Font.px(14)
             font.weight: 500
         }
     }
