@@ -7,11 +7,10 @@ events, and reads back what the hand reported and what the week saved.
 
 from __future__ import annotations
 
-import contextlib
 import importlib.util
 import os
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -26,19 +25,19 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QPoint, QStandardPaths, Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QPushButton, QWidget
+    from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QWidget
 
+    from backend.tests.fake_clock import FakeClock
     from desktop.native.calendar import sunday_due
     from desktop.native.hours.geometry import Span
     from desktop.native.hours.hand import Move, Place
     from desktop.native.layouts.base import LayoutView
     from desktop.native.layouts.registry import sanitize_layout
     from desktop.native.window import NativeWindow
-    from desktop.server import LocalServer
-    from desktop.tests.logic_support import past_setup, wait_until
+    from desktop.tests.light_app import open_light  # noqa: F401
+    from desktop.tests.waiting import wait_until
 
-PASSWORD = "a-long-test-password"
-LAYOUTS = Path(__file__).resolve().parents[1] / "native" / "layouts"
+LAYOUTS = Path(__file__).resolve().parents[2] / "native" / "layouts"
 # T-W25: contractions in the app's own words ("it's due").
 REFUSED = "That ends after it's due, so it stayed where it was."
 THURSDAY = 3
@@ -51,66 +50,52 @@ def qapp() -> Iterator[QApplication]:
 
 
 def settled(qapp: QApplication, window: NativeWindow) -> None:
-    wait_until(qapp, lambda: not window.session.busy and not window.session.dirty)
-    for _ in range(5):
-        qapp.processEvents()
-    wait_until(qapp, lambda: not window.session.busy and not window.session.dirty)
+    """The window has saved what it was given and heard every answer."""
+    session = window.session
+    wait_until(
+        qapp,
+        lambda: not session.busy and not session.dirty and not getattr(session.client, "pending", 0),
+        what="the window to finish saving",
+    )
 
 
 @pytest.fixture()
-def window(qapp: QApplication, tmp_path: Path) -> Iterator[NativeWindow]:
+def window(
+    qapp: QApplication, open_light: Callable[..., NativeWindow], clock: FakeClock
+) -> NativeWindow:
     """School Monday to Friday 08:00-14:30 and the History essay on Thursday 19:00-20:00, due on
     Sunday. The clock is held at Thursday 15:00, so the essay is what comes next. The window fits
     the offscreen screen, where the hand can find what lies under the pointer."""
-    server = LocalServer(tmp_path / "flexweek.db")
-    server.start()
-    made = NativeWindow(server.origin)
-    made.resize(800, 780)
+    made = open_light((800, 780))
     made.move(0, 0)
-    made.show()
-    try:
-        made.username.setText("my_day_student")
-        made.password.setText(PASSWORD)
-        made.findChild(QPushButton, "createAccount").click()
-        wait_until(qapp, lambda: made._stack.currentWidget().objectName() == "recoveryPage")
-        made.recovery_ack.setChecked(True)
-        made.recovery_continue.click()
-        past_setup(qapp, made)
-        session = made.session
-        thursday = datetime.fromisoformat(session.week_start) + timedelta(days=THURSDAY, hours=15)
-        session.now_ms = lambda: int(thursday.timestamp() * 1000)
-        session.add_block(
-            {
-                "id": "school",
-                "title": "School",
-                "kind": "locked",
-                "category": "class",
-                "start": "08:00",
-                "duration_min": 390,
-                "days": [0, 1, 2, 3, 4],
-            }
-        )
-        session.add_homework(
-            {
-                "id": "essay",
-                "title": "History essay",
-                "due": sunday_due(session.week_start),
-                "estimate_min": 60,
-                "revision": 0,
-            }
-        )
-        session.save()
-        settled(qapp, made)
-        session.add_block({**essay_block(made), "start": "19:00", "days": [THURSDAY]})
-        session.save()
-        settled(qapp, made)
-        yield made
-    finally:
-        with contextlib.suppress(RuntimeError):
-            made.session.client.reset()
-        made.hide()
-        qapp.processEvents()
-        server.stop()
+    session = made.session
+    clock.set(datetime.fromisoformat(session.week_start) + timedelta(days=THURSDAY, hours=15))
+    session.add_block(
+        {
+            "id": "school",
+            "title": "School",
+            "kind": "locked",
+            "category": "class",
+            "start": "08:00",
+            "duration_min": 390,
+            "days": [0, 1, 2, 3, 4],
+        }
+    )
+    session.add_homework(
+        {
+            "id": "essay",
+            "title": "History essay",
+            "due": sunday_due(session.week_start),
+            "estimate_min": 60,
+            "revision": 0,
+        }
+    )
+    session.save()
+    settled(qapp, made)
+    session.add_block({**essay_block(made), "start": "19:00", "days": [THURSDAY]})
+    session.save()
+    settled(qapp, made)
+    return made
 
 
 def essay_block(window: NativeWindow) -> dict:
@@ -136,10 +121,13 @@ def my_day(qapp: QApplication, window: NativeWindow, screen: str) -> tuple[Layou
     """Open My day on `screen` from the top bar, and find the one surface it moves blocks on."""
     window._layout = sanitize_layout({"main": "classic", "day": screen})
     window.findChild(QAbstractButton, "viewMyDay").click()
-    for _ in range(10):
-        qapp.processEvents()
+    wait_until(
+        qapp,
+        lambda: isinstance(window.planner.currentWidget(), LayoutView)
+        and window.planner.currentWidget().layout_id == screen,
+        what="My day to open on the chosen screen",
+    )
     view = window.planner.currentWidget()
-    assert isinstance(view, LayoutView) and view.layout_id == screen
     surfaces = view.hours_surfaces()
     assert [surface.objectName() for surface in surfaces] == [
         {"one": "oneDayBar", "dial": "dialFace"}[screen]
@@ -266,13 +254,13 @@ def test_the_thing_itself_carried_onto_the_day_bar_goes_at_that_time(
 
 
 def test_homework_due_today_with_no_time_is_given_one_by_carrying_its_title_onto_the_bar(
-    qapp: QApplication, window: NativeWindow
+    qapp: QApplication, window: NativeWindow, clock: FakeClock
 ) -> None:
     """At 20:30 nothing else is planned today, so the thing is the Math worksheet, due today and
     still without a time. Let go on the bar at 21:00, it is placed there."""
     session = window.session
     thursday = datetime.fromisoformat(session.week_start) + timedelta(days=THURSDAY, hours=20, minutes=30)
-    session.now_ms = lambda: int(thursday.timestamp() * 1000)
+    clock.set(thursday)
     due = f"{thursday.date().isoformat()}T23:59"
     session.add_homework(
         {"id": "math", "title": "Math worksheet", "due": due, "estimate_min": 60, "revision": 0}
@@ -326,6 +314,4 @@ def test_my_day_has_no_drag_rules_of_its_own() -> None:
     snap of their own."""
     for name in ("one_thing.py", "dial.py"):
         text = (LAYOUTS / name).read_text()
-        assert not re.search(r"\bQDrag\b|\bQMimeData\b|startDragDistance|\bsnap\(", text), (
-            name
-        )
+        assert not re.search(r"\bQDrag\b|\bQMimeData\b|startDragDistance|\bsnap\(", text), name
