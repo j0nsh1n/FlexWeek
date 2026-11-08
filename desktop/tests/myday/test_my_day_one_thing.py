@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import Qt  # noqa: E402
+from PySide6.QtCore import QPoint, QRect, Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel  # noqa: E402
 
@@ -144,7 +144,14 @@ def test_my_day_changes_its_chrome_and_its_page_without_fading(
     while My day slides in over it. What the frames look like is judged in the picture review."""
     at_motion_level(qapp, window, "normal")
     assert window.rail.isVisible()
+    page = window._week_page
+    rail = QRect(window.rail.mapTo(page, QPoint(0, 0)), window.rail.size())
+    chrome = QRect(window.plan_chrome.mapTo(page, QPoint(0, 0)), window.plan_chrome.size())
     click(window, "viewMyDay")
     assert not window.rail.isVisible() and not window.plan_chrome.isVisible()
+    # The live chrome went at once; the held picture of the week still covers where it was, so it goes
+    # in the same step as the page rather than before it.
+    held = [picture.geometry() for picture in fades(page)]
+    assert any(area.contains(rail) and area.contains(chrome) for area in held), (held, rail, chrome)
     assert window.planner.currentWidget().graphicsEffect() is None, "My day does not fade, it slides over"
     wait_until(qapp, lambda: fades(window) == [], what="the slide ending")

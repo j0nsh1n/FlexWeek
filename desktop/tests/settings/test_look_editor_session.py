@@ -327,8 +327,13 @@ def test_start_from_another_look_is_worn_and_the_motion_levels_are_the_looks(
     window: NativeWindow,  # noqa: F811
 ) -> None:
     page, editor = open_editor(qapp, window)
+    editor._start_from("base:light")
+    pump(qapp)
+    light = editor._chrome["window"]
     editor._start_from("base:dark")
     pump(qapp)
+    # The editor itself is dressed in the look it now starts from, as the window wearing it is.
+    assert editor._chrome["window"] == palette_of(window)["window"] != light
     motion = editor.findChild(QWidget, "lookMotion")
     assert [motion.itemData(index) for index in range(motion.count())] == list(MOTION_LEVELS)
     assert [motion.itemText(index) for index in range(motion.count())] == ["Normal", "More", "Reduce", "Off"]

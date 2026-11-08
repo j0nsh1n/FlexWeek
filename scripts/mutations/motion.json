@@ -201,5 +201,12 @@
     "old": "                if planned:\n                    # `planned` says it, with Undo.\n",
     "new": "                if False:\n                    # `planned` says it, with Undo.\n",
     "test": "desktop/tests/sheets/test_plan_undo.py::test_plan_says_what_it_did_with_an_undo_that_takes_it_all_back"
+  },
+  {
+    "name": "My day's held picture is only of the planner, so its chrome goes before its page",
+    "file": "desktop/native/window.py",
+    "old": "        picture = hold_picture(page, self._motion, QRect(0, top, page.width(), page.height() - top))\n",
+    "new": "        picture = hold_picture(page, self._motion, QRect(self.planner.mapTo(page, QPoint(0, 0)), self.planner.size()))\n",
+    "test": "desktop/tests/myday/test_my_day_one_thing.py::test_my_day_changes_its_chrome_and_its_page_without_fading"
   }
 ]

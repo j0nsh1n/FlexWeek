@@ -13,6 +13,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QStandardPaths, Qt
+from PySide6.QtGui import QPalette
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QAbstractButton,
@@ -104,6 +105,35 @@ def test_the_zoom_is_one_pill_of_two_icon_buttons(qapp: QApplication, window: Na
     pill = out.parentWidget()
     assert pill is into.parentWidget() and pill.property("zoomPill")
     assert not out.icon().isNull() and not into.icon().isNull()
+
+
+def test_the_bars_icons_are_drawn_again_in_the_new_words_colour_when_the_look_changes(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Each icon is drawn in its button's words colour, and drawn again when the look changes: a dark
+    icon kept from Light on Dark's page could not be seen. The icon each button was last drawn with is
+    recorded on it as its name and colours."""
+    names = ("prevWeek", "nextWeek", "settingsGear", "addArrow")
+
+    def dress(pack: str) -> dict[str, tuple[str, str, int]]:
+        window.session.preferences = {**(window.session.preferences or {}), "theme_pack": pack}
+        window._apply_appearance()
+        for _ in range(3):
+            qapp.processEvents()
+        drawn = {}
+        for name in names:
+            button = bar(window, name)
+            words = button.palette().color(QPalette.ColorGroup.Active, QPalette.ColorRole.ButtonText).name()
+            drawn[name] = (str(button.property("iconTint")).split("|")[1], words, button.icon().cacheKey())
+        return drawn
+
+    light = dress("light-frost")
+    dark = dress("dark-frost")
+    for name in names:
+        assert light[name][0] == light[name][1], (name, "light", light[name])
+        assert dark[name][0] == dark[name][1], (name, "dark", dark[name])
+        assert dark[name][1] != light[name][1], (name, "the look changed its words colour")
+        assert dark[name][2] != light[name][2], (name, "its icon was drawn again")
 
 
 def test_the_hours_month_and_settings_scroll_under_overlay_bars(

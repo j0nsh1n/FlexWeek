@@ -40,5 +40,12 @@
   "old": "        overlay_scroll_bars(self)\n",
   "new": "",
   "test": "desktop/tests/week/test_top_bar_controls.py::test_the_hours_month_and_settings_scroll_under_overlay_bars"
+ },
+ {
+  "file": "desktop/native/icons.py",
+  "name": "icons drawn once and never again when the look changes",
+  "old": "        if event.type() in (QEvent.Type.PaletteChange, QEvent.Type.StyleChange):\n",
+  "new": "        if False:\n",
+  "test": "desktop/tests/week/test_top_bar_controls.py::test_the_bars_icons_are_drawn_again_in_the_new_words_colour_when_the_look_changes"
  }
 ]

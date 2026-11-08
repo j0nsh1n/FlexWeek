@@ -124,5 +124,12 @@
   "old": "                self._saved_looks = list(page.saved_looks)\n",
   "new": "",
   "test": "desktop/tests/settings/test_look_editor_session.py::test_done_keeps_the_look_by_its_name_and_more_looks_offers_it_beside_the_ten"
+ },
+ {
+  "file": "desktop/native/look_editor.py",
+  "name": "Start from keeps the editor in the look it opened in",
+  "old": "        base = self._draft.look[\"base\"]\n        dressed = (base, self._accent, self._dark)",
+  "new": "        base = self._before.get(\"custom\", {}).get(\"base\", \"system\")\n        dressed = (base, self._accent, self._dark)",
+  "test": "desktop/tests/settings/test_look_editor_session.py::test_start_from_another_look_is_worn_and_the_motion_levels_are_the_looks"
  }
 ]
