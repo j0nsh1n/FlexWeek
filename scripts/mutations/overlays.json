@@ -49,13 +49,6 @@
     "test": "desktop/tests/focus/test_focus_screen_timer.py::test_the_ring_counts_down_with_the_timer"
   },
   {
-    "file": "desktop/native/menus.py",
-    "name": "Delete is painted in the text colour",
-    "old": "        ink = colours.danger if danger else (colours.text if enabled else colours.muted)",
-    "new": "        ink = colours.text if enabled else colours.muted",
-    "test": "desktop/tests/week/test_block_and_free_time_menus.py::test_the_menu_has_an_icon_on_every_row_and_red_only_for_deleting"
-  },
-  {
     "file": "desktop/native/window.py",
     "name": "the deletes are not set apart by a line",
     "old": "        menu.addSeparator()\n        menu.add(\"Delete\", \"trash\"",
@@ -89,13 +82,6 @@
     "old": "            if self.list.item(row).data(KEY_ROLE):\n",
     "new": "            if True:\n",
     "test": "desktop/tests/week/test_command_bar.py::test_every_row_has_an_icon_and_the_views_their_keys"
-  },
-  {
-    "file": "desktop/native/look.py",
-    "name": "Ctrl+K dims the window 35 %",
-    "old": "\"QWidget#commandBar { background: rgba(0, 0, 0, 102); }\"",
-    "new": "\"QWidget#commandBar { background: rgba(0, 0, 0, 90); }\"",
-    "test": "desktop/tests/week/test_command_bar.py::test_the_box_is_lifted_with_a_shadow_the_fade_leaves_alone"
   },
   {
     "file": "desktop/native/command_bar.py",

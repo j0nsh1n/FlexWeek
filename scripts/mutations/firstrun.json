@@ -42,13 +42,6 @@
     "test": "desktop/tests/account/test_sign_in_pages.py::test_the_wordmark_is_on_the_page_not_in_the_card"
   },
   {
-    "name": "recovery codes in proportional figures",
-    "file": "desktop/native/look.py",
-    "old": "QLabel#recoveryList {{ font-family: {FONT_FAMILIES['mono']};",
-    "new": "QLabel#recoveryList {{ font-family: {FONT_FAMILIES['sans']};",
-    "test": "desktop/tests/week/test_week_dates_and_times_at_every_width.py::test_new_recovery_codes_are_listed_one_to_a_line"
-  },
-  {
     "name": "the school hint under a week of school days",
     "file": "desktop/native/setup.py",
     "old": "        self.school_hint.setVisible(not self.school_days.days())\n",

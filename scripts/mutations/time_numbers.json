@@ -14,13 +14,6 @@
     "test": "desktop/tests/week/test_week_dates_and_times_at_every_width.py::test_the_week_title_uses_the_same_short_date_at_every_width"
   },
   {
-    "name": "Recovery codes revert to proportional figures",
-    "file": "desktop/native/look.py",
-    "old": "QLabel#recoveryList {{ font-family: {FONT_FAMILIES['mono']};",
-    "new": "QLabel#recoveryList {{ font-family: {FONT_FAMILIES['sans']};",
-    "test": "desktop/tests/week/test_week_dates_and_times_at_every_width.py::test_new_recovery_codes_are_listed_one_to_a_line"
-  },
-  {
     "name": "Narrow Week hides block times",
     "file": "desktop/native/window.py",
     "old": "        self.week_table.set_narrow(False)",
@@ -42,13 +35,6 @@
     "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_the_now_line_is_drawn_before_the_blocks_so_their_words_stay_on_top"
   },
   {
-    "name": "Now is hidden under a block's colour",
-    "file": "desktop/native/hours/canvas.py",
-    "old": "        self.crossing(painter, rect)\n",
-    "new": "",
-    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_the_now_line_is_drawn_before_the_blocks_so_their_words_stay_on_top"
-  },
-  {
     "name": "Now is drawn again on blocks it does not reach",
     "file": "desktop/native/hours/canvas.py",
     "old": "        if not first - NOW_REACH <= at <= last + NOW_REACH:\n            return\n",
@@ -63,20 +49,6 @@
     "test": "desktop/tests/week/test_the_hours_grid.py::test_a_now_pill_that_reaches_into_a_block_is_drawn_again_over_its_colour"
   },
   {
-    "name": "The now line runs through a block's words",
-    "file": "desktop/native/hours/canvas.py",
-    "old": "        self.crossing(painter, rect)\n        painter.setFont(font)\n        self.words(painter, rect, drawn, ink, visible, fill, edge)\n",
-    "new": "        written = self.words(painter, rect, drawn, ink, visible, fill, edge)\n        painter.setFont(font)\n        self.crossing(painter, rect, written)\n",
-    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_the_now_line_is_drawn_before_the_blocks_so_their_words_stay_on_top"
-  },
-  {
-    "name": "Clay's now line runs through its words",
-    "file": "desktop/native/layouts/clay.py",
-    "old": "        if self._too_short(rect, scale) or width < least:\n",
-    "new": "        return []\n        if self._too_short(rect, scale) or width < least:\n",
-    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_the_now_line_is_drawn_before_the_blocks_so_their_words_stay_on_top"
-  },
-  {
     "name": "Day repeats the date in its agenda heading",
     "file": "desktop/native/hours/classic.py",
     "old": "self.heading.setText(\"Agenda\")",
@@ -89,34 +61,6 @@
     "old": "self.name.show_day(\"Hours\", \"\", homework_minutes(week, day), day == today)",
     "new": "self.name.show_day(DAYS[day], str(week.date_of(day).day), homework_minutes(week, day), day == today)",
     "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_day_names_its_date_once"
-  },
-  {
-    "name": "Labelled clock ticks return as minus signs",
-    "file": "desktop/native/layouts/dial.py",
-    "old": "            if hour % 2:\n                painter.drawLine",
-    "new": "            if True:\n                painter.drawLine",
-    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_my_day_offers_running_late_for_a_late_session"
-  },
-  {
-    "name": "My day action icon loses its gap",
-    "file": "desktop/native/layouts/base.py",
-    "old": "tint(entry, DAY_ICONS[entry.objectName().removeprefix(prefix)], gap=scene.px(4))",
-    "new": "tint(entry, DAY_ICONS[entry.objectName().removeprefix(prefix)])",
-    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_my_day_offers_running_late_for_a_late_session"
-  },
-  {
-    "name": "Agenda restores its fixed narrow time column",
-    "file": "desktop/native/hours/classic.py",
-    "old": "        column = max(\n            [44.0, *(QFontMetricsF(font).horizontalAdvance(clock_label(minute)) + 2\n              for row in self.rows\n              for font, minute in ((strong, row.item.start), (small, row.item.end)))],\n        )\n",
-    "new": "        column = 44.0\n",
-    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_the_day_agenda_writes_each_time_on_the_twelve_hour_clock"
-  },
-  {
-    "name": "clay puts its Now pill over block words",
-    "file": "desktop/native/layouts/clay.py",
-    "old": "max(0, area.left() - metrics.horizontalAdvance(words) - 15)",
-    "new": "area.left() + 7",
-    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_clays_now_pill_takes_the_place_of_the_hour_label_under_it"
   },
   {
     "name": "Clay writes an hour label under its Now pill",

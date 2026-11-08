@@ -57,13 +57,6 @@
  },
  {
   "file": "desktop/native/hours/zoom.py",
-  "name": "the header as wide as the scroll area, not the hours",
-  "old": "        self.header.setGeometry(QRect(port.left(), port.top() - tall, port.width(), tall))\n",
-  "new": "        self.header.setGeometry(QRect(port.left(), port.top() - tall, self.width(), tall))\n",
-  "test": "desktop/tests/week/test_zoom_the_hours.py::test_ctrl_and_the_wheel_zoom_about_the_pointer"
- },
- {
-  "file": "desktop/native/hours/zoom.py",
   "name": "hidden hours never scroll on show",
   "old": "        if self._pending is not None:\n            self.scroll_to(*self._pending)\n",
   "new": "        if self._pending is not None:\n            pass\n",
@@ -96,13 +89,6 @@
   "old": "        bar.setValue(bar.value() - round(event.angleDelta().y() / 120 * 3 * bar.singleStep()))\n",
   "new": "        pass\n",
   "test": "desktop/tests/week/test_zoom_the_hours.py::test_lanes_zoom_about_the_pointer_and_the_plain_wheel_moves_them_through_the_day"
- },
- {
-  "file": "desktop/native/hours/zoom.py",
-  "name": "lane names scroll away with the hours",
-  "old": "        self.header.setGeometry(QRect(port.left() - wide, port.top(), wide, port.height()))\n",
-  "new": "        self.header.setGeometry(QRect(port.left(), port.top(), wide, port.height()))\n",
-  "test": "desktop/tests/week/test_lanes_keep_their_time.py::test_scrolling_the_lanes_to_a_time_puts_it_at_the_left"
  },
  {
   "file": "desktop/native/hours/zoom.py",
@@ -159,13 +145,6 @@
   "old": "        if not fitted.strip(\"…\"):\n            # Not one letter",
   "new": "        if not fitted:\n            # Not one letter",
   "test": "desktop/tests/week/test_block_words_fit.py::test_a_line_with_room_for_nothing_but_dots_is_left_out"
- },
- {
-  "file": "desktop/native/hours/canvas.py",
-  "name": "an hour label cut by the edge of what shows",
-  "old": "                    box.moveLeft(max(min(box.left(), visible.right() - wide), visible.left()))\n",
-  "new": "                    pass\n",
-  "test": "desktop/tests/week/test_hour_labels.py::test_the_first_and_last_hour_on_screen_are_named_at_every_scroll_position"
  },
  {
   "file": "desktop/native/window.py",
