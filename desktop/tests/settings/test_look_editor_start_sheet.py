@@ -15,6 +15,7 @@ from desktop.native.look_editor import LookEditor, StartGrid, StartSheet
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.settings.support_look_editor import on_modal, open_editor, pump
+from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
 
 BASES = list(BASE_LABELS)
@@ -97,6 +98,7 @@ def test_the_arrow_keys_move_between_cards_and_enter_chooses(
 
     def walk(sheet: StartSheet) -> None:
         sheet.activateWindow()
+        wait_until(None, sheet.isActiveWindow, what="the sheet active")
         grid: StartGrid = sheet.looks
         grid.cards[start].setFocus()
         QTest.keyClick(grid.cards[start], Qt.Key.Key_Right)
@@ -122,6 +124,7 @@ def test_space_chooses_and_the_arrows_stop_at_the_ends(qapp: QApplication, windo
 
     def last(sheet: StartSheet) -> None:
         sheet.activateWindow()
+        wait_until(None, sheet.isActiveWindow, what="the sheet active")
         grid: StartGrid = sheet.looks
         grid.cards[0].setFocus()
         QTest.keyClick(grid.cards[0], Qt.Key.Key_Left)
