@@ -13,14 +13,13 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication
 
+from backend.tests.fake_clock import CLOCK
 from desktop.native.calendar import sunday_due
 from desktop.native.reuse import copied_homework_block
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.sheets.support_homework_week import settled
 from desktop.tests.window_support import qapp  # noqa: F401
-
-FOCUS_START_MS = 1_000_000
 
 THREE_SESSIONS = [
     ("essay-part-0", [0], "16:00", 30),
@@ -138,11 +137,10 @@ def test_an_edit_from_an_older_copy_keeps_focus_credit_and_saves(
     session.blocks[0]["days"] = [0]
     session.save()
     settled(qapp, window)
-    session.now_ms = lambda: FOCUS_START_MS
     assert session.start_focus(session.blocks[0]["id"], 0) is True
     # The homework dialog deep-copies the assignment when it opens and stays open across the tick.
     opened = deepcopy(session.assignments["essay"])
-    session.now_ms = lambda: FOCUS_START_MS + 30 * 60 * 1000
+    CLOCK.move(minutes=30)
     session.tick_focus()
     settled(qapp, window)
     assert session.assignments["essay"]["focus_minutes"] == 30
