@@ -19,7 +19,7 @@ Item {
     // A block's or a card's menu is open: the zoom keys leave the grid behind it alone.
     readonly property bool menuOpen: hoursPane.menuOpen || drawer.menuOpen
     readonly property int scrollClearance: phone ? 96 : 0
-    readonly property int gutter: 68
+    readonly property int gutter: hoursPane.hourGutter
     readonly property int drawerWidth: 320
     readonly property real gridWidth: phone ? width : Math.max(0, width - drawerWidth)
     property alias drawer: drawer
