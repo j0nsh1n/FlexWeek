@@ -116,7 +116,7 @@ def test_finish_asks_then_ends_the_session_and_leaves_the_screen(
     assert not focus.open
 
 
-def test_back_ends_a_running_session_the_same_way_and_a_ready_screen_just_closes(
+def test_back_leaves_a_running_timer_running_and_only_finish_asks(
     qapp: QApplication, material_focus_window: NativeWindow
 ) -> None:
     window = material_focus_window
@@ -128,9 +128,34 @@ def test_back_ends_a_running_session_the_same_way_and_a_ready_screen_just_closes
     window._open_focus_screen()
     focus.begin()
     focus.back()
-    assert asked == [True] and window.session.focus is not None
-    focus.confirmEnd()
-    assert window.session.focus is None and not focus.open
+    pump(qapp)
+    assert asked == [] and not focus.open
+    assert window.session.focus is not None and window.session.focus["phase"] == "work"
+    window._open_focus_screen()
+    pump(qapp)
+    assert focus.open and window.session.focus["phase"] == "work"  # reopens on the same timer
+    focus.finish()
+    assert asked == [True]
+
+
+def test_back_on_a_finished_session_clears_it_so_the_next_start_does_not_ask(
+    qapp: QApplication, material_focus_window: NativeWindow
+) -> None:
+    """Back keeps a running timer, but a session that has finished has nothing to keep: Back clears it,
+    so the next Start focus starts at once instead of asking to replace a timer that is over."""
+    window = material_focus_window
+    only = homework(qapp, window, "essay3", 1)[0]
+    _root, focus = open_focus(qapp, window)
+    asked: list[bool] = []
+    focus.endRequested.connect(lambda: asked.append(True))
+    assert start(window, only)
+    run_out(qapp, window)
+    pump(qapp)
+    assert window.session.focus["phase"] == "ended"
+    focus.back()
+    pump(qapp)
+    assert asked == [] and not focus.open
+    assert window.session.focus is None
 
 
 def test_the_note_says_what_is_on_for_this_session(

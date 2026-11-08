@@ -1,7 +1,7 @@
 # ruff: noqa: F811
 """Keyboard use of the Material sheets: Esc closes a sheet and the keyboard goes back to the Add button,
 Esc on the discard question keeps editing, and Tab and Shift+Tab stay inside a sheet, skip what is hidden
-or off, and wrap both ways.
+or off, and wrap both ways; sheets opened from the More menu take the keyboard.
 
 Expected focus names come from the sheet's controls, not from reading the focus order the QML computes.
 """
@@ -27,6 +27,7 @@ from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: E402
     find_named,
     open_light,
     qapp,
+    settle,
     sheets,
     shell,
     type_homework,
@@ -299,3 +300,44 @@ def test_fixed_time_sheet_tab_wraps_inside_and_skips_hidden_controls(
     pump(qapp, 5)
     assert sheets.kind == ""
     assert _week_marks(shell) == marks
+
+
+def _open_from_more(qapp: QApplication, shell: NativeWindow, sheets, action: str) -> None:
+    shell.activateWindow()
+    shell._material_page._quick.setFocus()
+    qml(shell._material_page.root, "materialFab").forceActiveFocus()
+    pump(qapp)
+    sheets.openMore()
+    pump(qapp, 10)
+    sheets.moreAction(action)
+    pump(qapp, 10)
+
+
+def test_running_late_from_more_takes_the_keyboard_and_tab_stays_in_the_sheet(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    _open_from_more(qapp, shell, sheets, "runningLate")
+    assert sheets.kind == "late"
+    chain = _lineage(_focused(shell))
+    assert "lateMinutes" in chain, chain
+    chain = _press(qapp, shell, Qt.Key.Key_Tab)
+    assert "lateSheet" in chain and "lateMinutes" not in chain, chain
+
+
+def test_unfinished_from_more_takes_the_keyboard(qapp: QApplication, shell: NativeWindow, sheets) -> None:
+    session = shell.session
+    session.add_homework(
+        {
+            "id": "lab-writeup",
+            "title": "Lab write-up",
+            "due": f"{session.week_start}T09:00",
+            "estimate_min": 45,
+            "revision": 0,
+        }
+    )
+    session.save()
+    settle(qapp, shell)
+    _open_from_more(qapp, shell, sheets, "unfinishedOpen")
+    assert sheets.kind == "unfinished"
+    assert "unfinishedSheet" in _lineage(_focused(shell))
+    assert "unfinishedSheet" in _press(qapp, shell, Qt.Key.Key_Tab)

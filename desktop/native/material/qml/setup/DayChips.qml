@@ -64,7 +64,7 @@ Flow {
                     text: chip.modelData.short
                     color: chip.on ? m3Palette.inkSecondaryContainer : m3Palette.inkSurface
                     font.family: M3Font.family
-                    font.pixelSize: 14
+                    font.pixelSize: M3Font.px(14)
                     font.weight: 500
                 }
             }

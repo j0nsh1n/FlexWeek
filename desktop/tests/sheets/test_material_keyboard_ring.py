@@ -1,8 +1,8 @@
 # ruff: noqa: F811
 """The Material focus ring appears for the keyboard and not for the mouse: a press anywhere hides it, even
 on the control that keeps focus, a key brings it back, the first click into a field and focus given from
-code after a click stay quiet, a selected rail item shows none until focused, and a field that takes Tab
-focus shows one.
+code after a click stay quiet, a selected rail item shows none until focused, and a text field marks focus
+with its own border instead of a ring.
 
 How the ring looks (width, radius, colour, the gap round the control) is judged on the pictures
 (screens `week.material_add_button_and_rail` and `sheets.material_homework_sheet`).
@@ -18,7 +18,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QPointF, Qt  # noqa: E402
+from PySide6.QtCore import QObject, QPointF, Qt  # noqa: E402
 from PySide6.QtGui import QGuiApplication  # noqa: E402
 from PySide6.QtQuick import QQuickItem, QQuickView  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
@@ -48,7 +48,6 @@ def test_a_mouse_click_shows_no_ring_and_tab_does(gallery: tuple[QQuickView, QQu
     button = gallery_find(root, "filledMeasure")
     ring = gallery_child(button, "focusRing")
     field = gallery_find(root, "fieldMeasure")
-    field_ring = gallery_child(field, "focusRing")
     dest = gallery_find(root, "destMeasure")
     dest_ring = gallery_child(dest, "focusRing")
 
@@ -68,12 +67,11 @@ def test_a_mouse_click_shows_no_ring_and_tab_does(gallery: tuple[QQuickView, QQu
     QGuiApplication.processEvents()
     assert ring.property("shown") is True
 
-    # The first click into a field focuses it with no ring.
+    # A click into a field focuses it; the field marks focus with its own border, not a ring.
     _click(view, field)
     assert field.property("activeFocus") or any(
         child.hasActiveFocus() for child in field.findChildren(type(field))
     )
-    assert field_ring.property("shown") is False
 
     # Focus given from code after a click (a mouse-opened sheet's first field) stays quiet too.
     dest.forceActiveFocus(Qt.FocusReason.OtherFocusReason)
@@ -96,15 +94,17 @@ def test_the_selected_rail_item_is_selected_and_shows_no_ring_until_it_has_focus
     assert ring.property("shown") is False
 
 
-def test_a_field_given_focus_by_tab_shows_its_ring(gallery: tuple[QQuickView, QQuickItem]) -> None:
+def test_a_focused_field_draws_one_border(gallery: tuple[QQuickView, QQuickItem]) -> None:
+    """Material 3 (Jonathan 2026-11-07): a field marks focus with its own border, so it has no outer
+    ring to draw a second one. How that border looks is judged on the pictures."""
     _view, root = gallery
     field = gallery_find(root, "fieldMeasure")
     input_item = gallery_child(field, "fieldInput")
-    ring = gallery_child(field, "focusRing")
 
-    assert ring.property("shown") is False
+    assert not field.findChildren(QObject, "focusRing")
 
-    input_item.forceActiveFocus(Qt.FocusReason.TabFocusReason)
+    field.forceActiveFocus(Qt.FocusReason.TabFocusReason)
     QGuiApplication.processEvents()
 
-    assert ring.property("shown") is True
+    assert input_item.hasActiveFocus()
+    assert not field.findChildren(QObject, "focusRing")

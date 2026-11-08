@@ -16,7 +16,7 @@ SheetFrame {
         text: root.f.intro ? root.f.intro : ""
         color: pal.inkMuted
         font.family: M3Font.family
-        font.pixelSize: 14
+        font.pixelSize: M3Font.px(14)
         wrapMode: Text.WordWrap
     }
     Text {
@@ -25,7 +25,7 @@ SheetFrame {
         text: root.f.context ? root.f.context : ""
         color: pal.inkSurface
         font.family: M3Font.family
-        font.pixelSize: 14
+        font.pixelSize: M3Font.px(14)
         wrapMode: Text.WordWrap
     }
     PickerField {
@@ -49,7 +49,7 @@ SheetFrame {
         text: root.f.summary ? root.f.summary : ""
         color: pal.inkSurface
         font.family: M3Font.family
-        font.pixelSize: 16
+        font.pixelSize: M3Font.px(16)
         font.weight: 500
         wrapMode: Text.WordWrap
         Accessible.role: Accessible.StaticText
@@ -75,7 +75,7 @@ SheetFrame {
                     text: modelData
                     color: pal.inkSurface
                     font.family: M3Font.family
-                    font.pixelSize: 14
+                    font.pixelSize: M3Font.px(14)
                     wrapMode: Text.WordWrap
                     Accessible.role: Accessible.StaticText
                     Accessible.name: text

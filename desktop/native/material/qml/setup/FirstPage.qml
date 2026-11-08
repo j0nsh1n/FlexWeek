@@ -109,7 +109,7 @@ Column {
                         text: "Due by a time of day"
                         color: m3Palette.inkSurface
                         font.family: M3Font.family
-                        font.pixelSize: 14
+                        font.pixelSize: M3Font.px(14)
                         font.weight: 500
                     }
                     AccountField {

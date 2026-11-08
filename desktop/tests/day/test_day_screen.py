@@ -48,9 +48,9 @@ def test_the_day_screen_reads_the_real_day(qapp: QApplication, window: NativeWin
     day = root_bridge(root).property("day")
     assert day.property("leftLine") == "1 thing left today"
     assert day.property("showNow") is True
-    assert day.property("nowTitle") == "History essay"
+    assert day.property("nowTitle") == "Free for 1 h 45 min"
     assert day.property("nowMinutes") == 105
-    assert day.property("nowLine") == "1 h 45 min left"
+    assert day.property("nowLine") == "Next: History essay at 18:45"
     up = rows_of(day.property("upNext"))
     done = rows_of(day.property("doneRows"))
     assert [row["title"] for row in up] == ["History essay"]
@@ -70,7 +70,7 @@ def test_start_focus_on_the_day_screen_opens_the_next_homework(
         pump(qapp)
         focus = window._material_page.bridge.focus
         assert str(focus.property("title")) == "History essay"
-        assert str(day.property("nowTitle")) == "History essay"
+        assert str(day.property("nowTitle")) == "Free for 1 h 45 min"
     finally:
         window.session.reset_focus()
         pump(qapp)

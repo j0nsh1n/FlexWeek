@@ -1,5 +1,6 @@
-"""Keys on Material's Focus screen: F opens it, Esc goes back or asks to end, Tab stays inside it, Enter and
-Space act on the layer in front, and the number keys wait while it covers the window."""
+"""Keys on Material's Focus screen: F opens it, Esc goes back (a running timer keeps running) or closes
+the end question, Tab stays inside it, Enter and Space act on the layer in front, and the number keys
+wait while it covers the window."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
@@ -76,7 +77,7 @@ def test_escape_on_the_screen_goes_back(qapp: QApplication, material_focus_windo
     assert not focus.open  # nothing was running, so Back only closes
 
 
-def test_escape_on_the_end_dialog_keeps_the_session_going(
+def test_escape_on_a_running_timer_goes_back_and_the_timer_keeps_running(
     qapp: QApplication, material_focus_window: NativeWindow
 ) -> None:
     window = material_focus_window
@@ -88,6 +89,24 @@ def test_escape_on_the_end_dialog_keeps_the_session_going(
     qml(root, "materialFocus").forceActiveFocus()
     pump(qapp)
     QTest.keyClick(quick, Qt.Key.Key_Escape)
+    pump(qapp)
+    assert asked == [] and qml(root, "focusEndDialog").property("open") is False
+    assert not focus.open
+    assert window.session.focus is not None and window.session.focus["phase"] == "work"
+
+
+def test_escape_on_the_end_dialog_keeps_the_session_going(
+    qapp: QApplication, material_focus_window: NativeWindow
+) -> None:
+    window = material_focus_window
+    root, focus = open_focus(qapp, window)
+    quick = window._material_page._quick
+    asked: list[bool] = []
+    focus.endRequested.connect(lambda: asked.append(True))
+    focus.begin()
+    qml(root, "materialFocus").forceActiveFocus()
+    pump(qapp)
+    focus.finish()
     pump(qapp)
     dialog = qml(root, "focusEndDialog")
     assert asked == [True] and dialog.property("open") is True
@@ -152,7 +171,7 @@ def test_focus_keeps_tab_inside_ready_running_paused_and_end(
     pump(qapp)
     assert dialog.property("open") is False
     assert focus.open
-    QTest.keyClick(quick, Qt.Key.Key_Escape)
+    focus.finish()
     pump(qapp)
     assert dialog.property("open") is True
     QTest.keyClick(quick, Qt.Key.Key_Escape)

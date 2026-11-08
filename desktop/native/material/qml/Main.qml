@@ -17,6 +17,11 @@ Item {
     readonly property bool reduceMotion: bridge ? bridge.reduceMotion : false
     readonly property bool highContrast: bridge ? bridge.highContrast : false
     readonly property int enterMs: reduceMotion ? 0 : 300
+    Binding {
+        target: M3Font
+        property: "scale"
+        value: root.theme && root.theme.typeScale ? root.theme.typeScale : 1
+    }
     readonly property bool typing: sheetHost.active || _field(Window.activeFocusItem)
     // The Focus screen covers the window. The number keys, Z and Esc belong to it while it is open.
     readonly property bool focusOpen: bridge ? bridge.focus.open : false
@@ -240,7 +245,7 @@ Item {
                     text: bridge.title
                     color: root.theme.onSurface
                     font.family: M3Font.family
-                    font.pixelSize: 22
+                    font.pixelSize: M3Font.px(22)
                     font.weight: 500
                     elide: Text.ElideRight
                     verticalAlignment: Text.AlignVCenter
@@ -299,7 +304,7 @@ Item {
                         text: bridge.clockText
                         color: root.theme.onSurface
                         font.family: M3Font.family
-                        font.pixelSize: 16
+                        font.pixelSize: M3Font.px(16)
                         font.weight: 500
                     }
 
@@ -637,7 +642,9 @@ Item {
     Shortcut {
         sequence: "Escape"
         context: Qt.WindowShortcut
+        // An open Week or Day menu takes its own Escape, so it can close and give the focus back.
         enabled: !accountLayer.active && !focusOverlay.ending && !sheetHost.active && !settingsPromptOpen
+                 && !(bridge.screen === "week" && weekView.menuOpen) && !(bridge.screen === "day" && dayView.menuOpen)
         onActivated: {
             if (bridge && bridge.settingsBridge && bridge.settingsBridge.page === "advanced")
                 bridge.settingsBridge.closeAdvanced()

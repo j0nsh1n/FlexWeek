@@ -47,13 +47,13 @@ def test_the_ring_counts_what_is_left_today(qapp: QApplication, window: NativeWi
 def test_start_focus_on_my_day_opens_the_next_homework(qapp: QApplication, window: NativeWindow) -> None:
     root = show_material(qapp, window)
     myday = root_bridge(root).property("myday")
-    assert str(myday.property("nowTitle")) == "History essay"
+    assert str(myday.property("nowTitle")) == "Free for 1 h 45 min"
     try:
         myday.startFocus()
         pump(qapp)
         focus = window._material_page.bridge.focus
         assert str(focus.property("title")) == "History essay"
-        assert str(myday.property("nowTitle")) == "History essay"
+        assert str(myday.property("nowTitle")) == "Free for 1 h 45 min"
     finally:
         window.session.reset_focus()
         pump(qapp)

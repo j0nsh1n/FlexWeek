@@ -84,7 +84,7 @@ Item {
             wrapMode: Text.WordWrap
             color: root.selected ? palette.inkSecondaryContainer : palette.inkSurface
             font.family: M3Font.family
-            font.pixelSize: 16
+            font.pixelSize: M3Font.px(16)
             font.weight: 500
         }
         Text {
@@ -94,7 +94,7 @@ Item {
             wrapMode: Text.WordWrap
             color: root.selected ? palette.inkSecondaryContainer : palette.inkMuted
             font.family: M3Font.family
-            font.pixelSize: 14
+            font.pixelSize: M3Font.px(14)
         }
     }
 

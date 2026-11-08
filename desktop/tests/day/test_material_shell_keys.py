@@ -96,22 +96,23 @@ def test_ctrl_s_saves_when_the_material_shell_is_focused(
 def test_rings_follow_the_last_input_in_the_real_window(
     qapp: QApplication, material_window: NativeWindow
 ) -> None:
-    """A sheet opened with the mouse puts focus on Title with no ring. Esc is a key, so the focus it
+    """A sheet opened with the mouse puts focus on Title, which has no ring. Esc is a key, so the focus it
     hands back shows its ring, even on the rail item that was just clicked."""
     root = show_material(qapp, material_window)
     sheets = material_window._material_page.bridge.sheets
     _press_item(qapp, material_window, named(root, "materialFab")[0])
 
-    def title_rings() -> list[QObject]:
-        return [ring for title in named(root, "homeworkTitle") for ring in named(title, "focusRing")]
-
+    # Title marks focus with its own border (Material 3), so it has no ring to show.
     def focused() -> list[QObject]:
-        return [ring for ring in title_rings() if ring.property("target").property("activeFocus")]
+        return [
+            field
+            for title in named(root, "homeworkTitle")
+            for field in named(title, "fieldInput")
+            if field.property("activeFocus")
+        ]
 
     wait_until(qapp, lambda: bool(focused()))
-    title_ring = focused()[0]
-    assert title_ring.property("target").property("activeFocus") is True
-    assert title_ring.property("shown") is False
+    assert not [ring for title in named(root, "homeworkTitle") for ring in named(title, "focusRing")]
 
     week = named(root, "navWeek")[0]
     sheets.forceClose()

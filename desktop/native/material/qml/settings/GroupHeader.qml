@@ -29,7 +29,7 @@ Item {
         text: root.title
         color: palette.primary
         font.family: M3Font.family
-        font.pixelSize: 16
+        font.pixelSize: M3Font.px(16)
         font.weight: 500
     }
     Button {

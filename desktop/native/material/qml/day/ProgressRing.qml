@@ -54,7 +54,7 @@ Item {
             text: root.count
             color: palette.inkSurface
             font.family: M3Font.family
-            font.pixelSize: 36
+            font.pixelSize: M3Font.px(36)
             font.weight: 400
             Accessible.ignored: true
         }
@@ -65,7 +65,7 @@ Item {
             text: root.caption
             color: palette.inkMuted
             font.family: M3Font.family
-            font.pixelSize: 14
+            font.pixelSize: M3Font.px(14)
             font.weight: 400
             Accessible.ignored: true
         }

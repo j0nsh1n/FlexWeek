@@ -89,7 +89,7 @@ Item {
                             text: modelData.label
                             color: segment.on ? root.activeInk : root.offInk
                             font.family: M3Font.family
-                            font.pixelSize: 14
+                            font.pixelSize: M3Font.px(14)
                             font.weight: 500
                         }
                     }

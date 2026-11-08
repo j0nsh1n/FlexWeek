@@ -27,7 +27,7 @@ SheetFrame {
                 text: modelData.type === "item" ? "" : modelData.text
                 color: pal.inkMuted
                 font.family: M3Font.family
-                font.pixelSize: modelData.type === "heading" ? 12 : 14
+                font.pixelSize: M3Font.px(modelData.type === "heading" ? 12 : 14)
                 font.weight: modelData.type === "heading" ? 500 : 400
             }
             ListRow {

@@ -1,4 +1,5 @@
-"""Material Week: press-and-drag across empty time opens Add homework with that day and time range."""
+"""Material Week and Day: a click or a drag over empty time opens a menu at that spot, "Add homework
+here" and "Add fixed time here", each opening its sheet with that day and time (Jonathan, 2026-11-07)."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
@@ -6,7 +7,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 import pytest
-from PySide6.QtCore import QObject, QPoint, QPointF, Qt
+from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QObject, QPoint, QPointF, Qt
 from PySide6.QtGui import QGuiApplication, QWheelEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
@@ -133,6 +134,14 @@ def _block_named(root: QObject, title: str) -> QObject:
     raise AssertionError(f"no block named {title}")
 
 
+def _click(window: NativeWindow, item: QObject, dx: int = 0, dy: int = 0) -> None:
+    """A real left click on a QML item through the Quick widget, as the pointer does it."""
+    quick = window._material_page._quick
+    point = _centre(window._material_page.root, item) + QPoint(dx, dy)
+    QTest.mouseClick(quick, Qt.MouseButton.LeftButton, pos=point)
+    _pump(QApplication.instance())
+
+
 def _drag(window: NativeWindow, item: QObject, to: QPoint) -> None:
     quick = window._material_page._quick
     start = _centre(window._material_page.root, item)
@@ -193,6 +202,22 @@ def _drag_pos(window: NativeWindow, start: QPoint, to: QPoint) -> None:
     _pump(app, 6)
 
 
+def _slot_menu(root: QObject) -> list[str]:
+    """The labels of the open menu over the hours, or nothing when no menu is up."""
+    menus = [menu for menu in _named(root, "blockMenu") if menu.property("open")]
+    return [entry["label"] for entry in menus[0].property("entries").toVariant()] if menus else []
+
+
+def _choose(window: NativeWindow, root: QObject, label: str) -> None:
+    """Pick a menu entry with the keys, as a student on the keyboard would."""
+    labels = _slot_menu(root)
+    quick = window._material_page._quick
+    for _ in range(labels.index(label)):
+        QTest.keyClick(quick, Qt.Key.Key_Down)
+    QTest.keyClick(quick, Qt.Key.Key_Return)
+    _pump(QApplication.instance(), 4)
+
+
 def _grid_geometry(root: QObject, window: NativeWindow) -> tuple[QObject, int, int, float, int]:
     grid = _qml(root, "weekScroller")
     hours_item = next(child for child in grid.childItems()[0].childItems() if child.property("width"))
@@ -217,6 +242,9 @@ def test_a_drag_across_empty_saturday_9_to_12_opens_add_with_saturday_9_to_12(
     _drag_pos(window, QPoint(int(p1.x()), int(p1.y())), QPoint(int(p2.x()), int(p2.y())))
 
     sheets = window._material_page.bridge.sheets
+    assert sheets.kind == ""
+    assert _slot_menu(root) == ["Add homework here", "Add fixed time here"]
+    _choose(window, root, "Add homework here")
     assert sheets.kind == "homework"
     form = sheets.form
     assert form["heading"] == "Add homework"
@@ -238,6 +266,7 @@ def test_dragging_upwards_gives_the_same_range(qapp: QApplication, window: Nativ
     _drag_pos(window, QPoint(int(p2.x()), int(p2.y())), QPoint(int(p1.x()), int(p1.y())))
 
     sheets = window._material_page.bridge.sheets
+    _choose(window, root, "Add homework here")
     assert sheets.kind == "homework"
     form = sheets.form
     assert form["heading"] == "Add homework"
@@ -259,6 +288,7 @@ def test_saving_the_sheet_places_the_homework_at_that_time(qapp: QApplication, w
     _drag_pos(window, QPoint(int(p1.x()), int(p1.y())), QPoint(int(p2.x()), int(p2.y())))
 
     sheets = window._material_page.bridge.sheets
+    _choose(window, root, "Add homework here")
     assert sheets.kind == "homework"
     sheets.setText("title", "Saturday Math")
     sheets.save()
@@ -300,22 +330,278 @@ def test_a_drag_shorter_than_a_quarter_hour_opens_nothing(qapp: QApplication, wi
 
     assert seen_active, "the drag never started, so this test would prove nothing"
     assert window._material_page.bridge.sheets.kind == ""
+    assert _slot_menu(root) == []
 
 
-def test_a_plain_click_on_empty_time_opens_nothing(qapp: QApplication, window: NativeWindow) -> None:
+def _click_at(window: NativeWindow, hours_item: QObject, x: float, y: float) -> None:
+    spot = hours_item.mapToScene(QPointF(x, y))
+    QTest.mouseClick(
+        window._material_page._quick, Qt.MouseButton.LeftButton, pos=QPoint(int(spot.x()), int(spot.y()))
+    )
+    _pump(QApplication.instance(), 4)
+
+
+def test_a_click_on_empty_saturday_11_offers_homework_or_fixed_time_and_opens_neither_yet(
+    qapp: QApplication, window: NativeWindow
+) -> None:
     root = _reset(window, qapp)
     hours_item, row, gutter, day_width, saturday = _grid_geometry(root, window)
-    grid = _qml(root, "weekScroller")
-    grid.setProperty("contentY", 0.0)
+    _qml(root, "weekScroller").setProperty("contentY", float(9 * row))
+    _pump(qapp)
+
+    _click_at(window, hours_item, gutter + saturday * day_width + day_width / 2, 11 * row + row / 12)
+
+    assert _slot_menu(root) == ["Add homework here", "Add fixed time here"]
+    assert window._material_page.bridge.sheets.kind == ""
+    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Escape)
+    _pump(qapp, 4)
+    assert _slot_menu(root) == []
+    assert window._material_page.bridge.sheets.kind == ""
+
+
+def test_add_homework_here_from_a_click_opens_add_homework_at_that_day_and_time(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    hours_item, row, gutter, day_width, saturday = _grid_geometry(root, window)
+    _qml(root, "weekScroller").setProperty("contentY", float(9 * row))
+    _pump(qapp)
+
+    _click_at(window, hours_item, gutter + saturday * day_width + day_width / 2, 11 * row + row / 12)
+    _choose(window, root, "Add homework here")
+
+    sheets = window._material_page.bridge.sheets
+    assert sheets.kind == "homework"
+    form = sheets.form
+    assert form["heading"] == "Add homework"
+    assert (form["when"], form["whenDay"], form["whenTime"], form["estimate"]) == (
+        "fixed",
+        saturday,
+        "11:00",
+        "60",
+    )
+
+
+def test_add_fixed_time_here_from_a_click_opens_add_fixed_time_at_that_day_and_hour(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    hours_item, row, gutter, day_width, saturday = _grid_geometry(root, window)
+    _qml(root, "weekScroller").setProperty("contentY", float(9 * row))
+    _pump(qapp)
+
+    _click_at(window, hours_item, gutter + saturday * day_width + day_width / 2, 13 * row + row / 12)
+    _choose(window, root, "Add fixed time here")
+
+    sheets = window._material_page.bridge.sheets
+    assert sheets.kind == "block"
+    form = sheets.form
+    assert form["heading"] == "Add fixed time"
+    assert [day["value"] for day in form["days"] if day["on"]] == [saturday]
+    assert (form["start"], form["end"]) == ("13:00", 14 * 60)
+
+
+def test_add_fixed_time_here_from_a_drag_gets_the_dragged_range(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    hours_item, row, gutter, day_width, saturday = _grid_geometry(root, window)
+    _qml(root, "weekScroller").setProperty("contentY", 0.0)
     _pump(qapp)
 
     p1 = hours_item.mapToScene(QPointF(gutter + saturday * day_width + day_width / 2, 9 * row))
-    quick = window._material_page._quick
-    QTest.mouseClick(quick, Qt.MouseButton.LeftButton, pos=QPoint(int(p1.x()), int(p1.y())))
-    _pump(qapp, 4)
+    p2 = hours_item.mapToScene(QPointF(gutter + saturday * day_width + day_width / 2, 12 * row))
+    _drag_pos(window, p1.toPoint(), p2.toPoint())
+    _choose(window, root, "Add fixed time here")
 
     sheets = window._material_page.bridge.sheets
-    assert sheets.kind == ""
+    assert sheets.kind == "block"
+    form = sheets.form
+    assert [day["value"] for day in form["days"] if day["on"]] == [saturday]
+    assert (form["start"], form["end"]) == ("09:00", 12 * 60)
+
+
+def test_a_click_on_a_block_opens_the_block_not_the_add_menu(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    hours_item, row, gutter, day_width, saturday = _grid_geometry(root, window)
+    _qml(root, "weekScroller").setProperty("contentY", float(14 * row))
+    _pump(qapp)
+
+    _click(window, _block_named(root, "History essay"))
+
+    assert _slot_menu(root) == []
+    assert window._material_page.bridge.sheets.kind == "homework"
+    assert window._material_page.bridge.sheets.form["heading"] == "Edit homework"
+
+
+def _empty_time_under(root: QObject, hours_item: QObject, scene: QPointF) -> bool:
+    """Whether a window point sits over free time on the week grid, so a click there would reach it."""
+    local = hours_item.mapFromScene(scene)
+    week = _qml(root, "materialWeek")
+    found = QMetaObject.invokeMethod(
+        week,
+        "emptyGridTimeAt",
+        Q_RETURN_ARG("QVariant"),
+        Q_ARG("QVariant", float(local.x())),
+        Q_ARG("QVariant", float(local.y())),
+    )
+    return bool(found)
+
+
+def _open_slot_menu(window: NativeWindow, root: QObject) -> QObject:
+    """Click free time on Saturday at 11 and return the grid item the menu was opened from."""
+    hours_item, row, gutter, day_width, saturday = _grid_geometry(root, window)
+    _qml(root, "weekScroller").setProperty("contentY", float(9 * row))
+    _pump(QApplication.instance())
+    _click_at(window, hours_item, gutter + saturday * day_width + day_width / 2, 11 * row + row / 12)
+    assert _slot_menu(root) == ["Add homework here", "Add fixed time here"]
+    return hours_item
+
+
+def test_undo_on_the_snackbar_over_free_time_opens_no_add_menu(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    hours_item, row, _gutter, _day_width, _saturday = _grid_geometry(root, window)
+    _qml(root, "weekScroller").setProperty("contentY", float(14 * row))
+    _pump(qapp)
+    _click(window, _named(_block_named(root, "History essay"), "weekBlockFinish")[0])
+    wait_until(qapp, lambda: str(_bridge(window).property("snackText")) == "Finished History essay.")
+    bar = _qml(root, "materialSnackbar")
+    undo = bar.mapToScene(QPointF(bar.property("width") - 30, bar.property("height") / 2))
+    # Scroll until UNDO sits over free time, where the grid would take a click that fell through.
+    for hour in range(24):
+        _qml(root, "weekScroller").setProperty("contentY", float(hour * row))
+        _pump(qapp)
+        if _empty_time_under(root, hours_item, undo):
+            break
+    assert _empty_time_under(root, hours_item, undo), "no free time under the snackbar"
+
+    QTest.mouseClick(window._material_page._quick, Qt.MouseButton.LeftButton, pos=undo.toPoint())
+    _pump(qapp, 4)
+
+    session = window.session
+    wait_until(qapp, lambda: not session.busy and not session.assignments["essay"].get("completed"))
+    assert _slot_menu(root) == []
+
+
+def test_a_click_inside_an_open_sheet_over_free_time_opens_no_add_menu(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    hours_item, row, _gutter, _day_width, _saturday = _grid_geometry(root, window)
+    _qml(root, "weekScroller").setProperty("contentY", float(9 * row))
+    _pump(qapp)
+    sheets = window._material_page.bridge.sheets
+    sheets.openHomework()
+    _pump(qapp, 4)
+    card = _qml(root, "sheetCard")
+    inside = card.mapToScene(QPointF(card.property("width") - 6, card.property("height") - 6))
+    assert _empty_time_under(root, hours_item, inside), "no free time under the sheet"
+
+    QTest.mouseClick(window._material_page._quick, Qt.MouseButton.LeftButton, pos=inside.toPoint())
+    _pump(qapp, 4)
+
+    assert _slot_menu(root) == []
+    assert sheets.kind == "homework"
+
+
+def test_a_click_elsewhere_closes_the_add_menu_and_opens_nothing_new(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    hours_item = _open_slot_menu(window, root)
+    _hours, row, gutter, day_width, saturday = _grid_geometry(root, window)
+
+    _click_at(window, hours_item, gutter + (saturday - 1) * day_width + day_width / 2, 12 * row + row / 2)
+
+    assert _slot_menu(root) == []
+    assert window._material_page.bridge.sheets.kind == ""
+
+
+def test_escape_on_the_add_menu_gives_the_focus_back_to_the_grid(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    hours_item = _open_slot_menu(window, root)
+
+    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Escape)
+    _pump(qapp, 4)
+
+    assert _slot_menu(root) == []
+    assert hours_item.property("activeFocus") is True
+
+
+def test_a_card_that_takes_the_focus_while_the_add_menu_is_open_keeps_it(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    due = (_week_monday(window) + timedelta(days=6)).isoformat()
+    _homework(window, "sheet", "Math worksheet", 30, due)
+    _pump(qapp)
+    _open_slot_menu(window, root)
+    card = _named(root, "homeworkCard")[0]
+
+    card.forceActiveFocus()
+    _pump(qapp, 4)
+
+    assert _slot_menu(root) == []
+    assert card.property("activeFocus") is True
+
+
+def test_clicking_a_drawer_card_while_the_add_menu_is_open_opens_the_card_with_the_focus(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    due = (_week_monday(window) + timedelta(days=6)).isoformat()
+    _homework(window, "sheet", "Math worksheet", 30, due)
+    _pump(qapp)
+    _open_slot_menu(window, root)
+
+    _click(window, _named(root, "homeworkCard")[0])
+    _pump(qapp, 6)
+
+    sheets = window._material_page.bridge.sheets
+    assert _slot_menu(root) == []
+    assert (sheets.kind, sheets.form["heading"]) == ("homework", "Edit homework")
+    focused = window._material_page._quick.quickWindow().activeFocusItem()
+    assert focused is not None and _qml(root, "sheetCard").isAncestorOf(focused)
+
+
+def test_a_click_on_empty_time_in_day_offers_the_same_choices_for_that_day(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    _reset(window, qapp)
+    session = window.session
+    thursday = (_week_monday(window) + timedelta(days=NOW_DAY)).isoformat()
+    session.open_day(thursday)
+    settled(qapp, window)
+    bridge = window._material_page.bridge
+    bridge.showPage("day")
+    _pump(qapp, 6)
+    try:
+        root = window._material_page.root
+        scroller = _qml(root, "dayScroller")
+        hours_item = scroller.childItems()[0].childItems()[0]
+        day_pane = scroller.parentItem()
+        gutter = int(day_pane.property("gutter"))
+        row = int(day_pane.property("row"))
+        scroller.setProperty("contentY", float(16 * row))
+        _pump(qapp, 4)
+
+        _click_at(window, hours_item, gutter + 200, 17 * row + row / 12)
+        assert _slot_menu(root) == ["Add homework here", "Add fixed time here"]
+        _choose(window, root, "Add homework here")
+
+        form = bridge.sheets.form
+        assert bridge.sheets.kind == "homework"
+        assert (form["whenDay"], form["whenTime"], form["estimate"]) == (NOW_DAY, "17:00", "60")
+    finally:
+        bridge.sheets.forceClose()
+        bridge.showPage("week")
+        _pump(qapp, 4)
 
 
 def test_dragging_an_existing_block_or_card_does_not_open_add(
