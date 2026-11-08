@@ -348,8 +348,8 @@ together:
 - **The renderer**, `scripts/pictures/render.py`. It is Python because it draws Qt. It draws every
   declared screen in every variant in one fixed setup and writes the PNGs and `index.json`.
 - **`fwtest pictures`**, in Rust. It picks the screens a change touches, runs the renderer as a
-  contained job on both sides of a pull request, compares the two drawings, asks a reviewer, records
-  the flows as clips, and builds the review page.
+  contained job on this checkout and, to see what a branch changed, on another ref, compares the two
+  drawings, asks a reviewer, records the flows as clips, and builds the review page.
 
 ```text
 fwtest pictures render --set full|touched [--base REF] [--changed FILE] [--out DIR] [--timeout SECONDS] [--python PATH]
@@ -359,7 +359,7 @@ fwtest pictures annotate COMPARE --reviewer COMMAND [--timeout SECONDS]
 fwtest pictures clips [--flow NAME] [--out DIR] [--python PATH]
 ```
 
-A pull request's review, by hand:
+What a branch changed, by hand:
 
 ```sh
 fwtest pictures render --set touched --out ~/.flexweek-ui-harness/scratch/pictures/my-pr
@@ -537,15 +537,11 @@ falls back to a slow CPU encode. The output folder (default
 `~/.flexweek-ui-harness/scratch/pictures/clips/<time>-<pid>/`) lists every run in `clips.json`, which
 `page --clips` reads. The exit code is the worst run's.
 
-### On pull requests (CI)
+### Where pictures are used
 
-The `pictures` job in `.github/workflows/verify.yml` runs on pull requests only. It draws the touched
-screens on the pull request's base commit and on its head, compares them, builds the page, and
-uploads the compare folder as the artifact `pictures-pr-<number>-<attempt>`. The page is uploaded
-even when a screen could not be drawn, and the job then fails. No reference pictures are stored, and
-no reviewer runs. `.github/workflows/pictures-cleanup.yml` deletes a pull request's artifacts when it
-is merged or closed. Clips are not recorded in CI: the CI runners have no ffmpeg, and the flows
-are recorded locally with `fwtest pictures clips`.
+Pictures are a local review aid. They are drawn and looked at on this machine by the visual reviewer,
+never in CI and never on a pull request: CI runs tests only, and no test reads a picture. Clips are
+recorded locally too.
 
 ## Data
 

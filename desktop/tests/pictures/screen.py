@@ -47,7 +47,7 @@ class Screen:
     passes behind blocks and its dot stays on top".
 
     `sources` are the product paths (files or folders under desktop/ or backend/) whose change means
-    this screen is drawn again on a pull request.
+    this screen is drawn again for the visual review of that change.
 
     `main` screens are also drawn in the edge set: 1024x640 with Large text, and High contrast.
     """
