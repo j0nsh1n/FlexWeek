@@ -10,6 +10,7 @@ from desktop.native.hours.canvas import BlockPainter, HoursCanvas
 from desktop.native.hours.geometry import LinearTrack
 from desktop.native.hours.hand import Hand, Verdict
 from desktop.native.look import resolved_palette
+from desktop.native import motion
 from desktop.native.motion import (
     FADE_NAME,
     PAGE_IN_AFTER_MS,
@@ -44,8 +45,19 @@ def two_pages(qapp: QApplication) -> tuple[QStackedWidget, QWidget, QWidget]:
     return stack, first, second
 
 
+def forget_dead_clocks() -> None:
+    """A window an earlier test closed can leave a clock in motion's running set whose timer is gone;
+    ManualTime.advance asks every running clock about its timer."""
+    for clock in list(motion._RUNNING):
+        try:
+            clock._timer.isActive()
+        except RuntimeError:
+            motion._RUNNING.discard(clock)
+
+
 def move_on(manual_time: ManualTime, ms: int) -> None:
     """Move the animation time `ms` on, then let the pictures a finished fade deleted go."""
+    forget_dead_clocks()
     manual_time.advance(ms)
     QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     QApplication.processEvents()

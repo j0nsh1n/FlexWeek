@@ -17,6 +17,7 @@ from desktop.tests.day.support_layouts_window import (  # noqa: E402
     settled,
     thursday_at,
     visible_copy,
+    wait_until,
     window,  # noqa: F401
 )
 
@@ -72,7 +73,10 @@ def test_unplaced_homework_due_today_is_named_on_every_screen(
         window._day_mode = False
         session.set_view("week")
     window._on_week()
-    qapp.processEvents()
+    if layout_id == "dial":
+        wait_until(qapp, lambda: "not placed yet" in visible_copy(window).lower(), what="the dial's strip")
+    else:
+        wait_until(qapp, lambda: "math worksheet" in visible_copy(window).lower(), what="the homework named")
     said = visible_copy(window).lower()
     if layout_id == "dial":
         # The demo's not-placed strip on the day dial gives the count only; the names are not listed.

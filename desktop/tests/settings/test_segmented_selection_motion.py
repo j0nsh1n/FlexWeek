@@ -69,7 +69,7 @@ def test_the_chosen_pill_slides_over_the_segments_between_to_the_one_chosen(
     month.setChecked(True)
     assert track._pills(target) == [(start, 1.0)], "it leaves from where it was"
     # A fifth of the way through, where the out-cubic curve is 1 - (4/5)^3 of the way.
-    manual_time.advance(duration(SEGMENT_MS) // 5)
+    move_on(manual_time, duration(SEGMENT_MS) // 5)
     ((pill, opacity),) = track._pills(target)
     share = 1 - (4 / 5) ** 3
     assert opacity == 1.0
@@ -87,7 +87,7 @@ def test_under_reduce_the_chosen_pill_fades_across_instead_of_travelling(
     track, (day, _week, month) = segments(qapp)
     start, target = QRectF(day.geometry()), QRectF(month.geometry())
     month.setChecked(True)
-    manual_time.advance(duration(SEGMENT_MS) // 5)
+    move_on(manual_time, duration(SEGMENT_MS) // 5)
     share = 1 - (4 / 5) ** 3
     leaving, arriving = track._pills(target)
     assert leaving == (start, pytest.approx(1 - share)), "the old pill stays where it was, fading out"

@@ -11,7 +11,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication, QLabel  # noqa: E402
 
-from desktop.native.motion import SLIDE_NAME  # noqa: E402
+from desktop.native.motion import SLIDE_NAME, busy  # noqa: E402
 from desktop.native.settings import SettingsPage  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_layouts_window import (  # noqa: E402
@@ -27,7 +27,7 @@ from desktop.tests.day.support_layouts_window import (  # noqa: E402
 
 def _moving(window: NativeWindow) -> bool:
     slides = [label for label in window._stack.findChildren(QLabel, SLIDE_NAME) if label.isVisible()]
-    return bool(fades(window) or slides)
+    return bool(fades(window) or slides or busy())
 
 
 def _over(qapp: QApplication, window: NativeWindow) -> None:

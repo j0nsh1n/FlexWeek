@@ -144,7 +144,9 @@ def use_layout(window: NativeWindow, main: str = "classic", day: str = "one", da
 
 
 def fades(host: QWidget) -> list[QLabel]:
-    """The pictures of old pages still fading out."""
+    """The pictures of old pages still fading out. A finished fade deletes its picture later; the wait helper
+    does not run deferred deletes as QTest.qWait did, so they are run here."""
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     return [label for label in host.findChildren(QLabel, FADE_NAME) if label.isVisible()]
 
 
