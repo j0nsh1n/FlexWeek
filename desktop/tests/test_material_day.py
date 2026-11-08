@@ -29,7 +29,7 @@ from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.server import LocalServer  # noqa: E402
 from desktop.tests.logic_support import past_setup  # noqa: E402
 from desktop.tests.test_layouts_window import PASSWORD, look_file, settled, wait_until  # noqa: E402
-from desktop.tests.test_material_window import _pump, _show_material, _visuals  # noqa: E402
+from desktop.tests.test_material_window import _pump, _qml, _show_material, _visuals  # noqa: E402
 
 TODAY = date(2026, 11, 5)
 
@@ -450,6 +450,80 @@ def test_nudges_off_hides_the_card_on_both_screens(qapp: QApplication, window: N
     assert _bridge(root).property("day").property("showNow") is True
     assert _bridge(root).property("myday").property("showNow") is True
     window._use_widgets_styles()
+
+
+def _card(root: QObject, scope: str) -> tuple[str, str, str]:
+    """The Now card as the student reads it: title, line, button."""
+    return tuple(  # type: ignore[return-value]
+        str(_qml(root, scope + name).property("text")) for name in ("NowTitle", "NowLine", "StartFocus")
+    )
+
+
+def test_while_a_focus_timer_runs_the_now_card_names_it_and_goes_back_to_it(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import desktop.native.window as window_module
+
+    class Keep:
+        """A replace question is answered Keep instead of waiting on a modal sheet."""
+
+        answer = "keep"
+
+        def __init__(self, *_args: object, **_kw: object) -> None:
+            pass
+
+        def exec(self) -> int:
+            return 0
+
+    monkeypatch.setattr(window_module, "ConfirmSheet", Keep)
+    session = window.session
+    root = _show_material(qapp, window)
+    bridge = _bridge(root)
+    focus = bridge.property("focus")
+    asked: list[tuple[str, str]] = []
+
+    def heard(*names: str) -> None:
+        asked.append(names)
+
+    session.focus_replace_needed.connect(heard)
+    try:
+        bridge.property("myday").startFocus()
+        _pump(qapp)
+        assert focus.property("open") is True
+        focus.hide()
+        session.focus["endsAt"] = session.now_ms() + 13 * 60_000
+        session.tick_focus()
+        _pump(qapp)
+        for page, scope in (("myday", "myDay"), ("day", "day")):
+            bridge.showPage(page)
+            _pump(qapp)
+            assert _card(root, scope) == ("History essay", "13 min left", "Back to History essay")
+            started = dict(session.focus)
+            _qml(root, scope + "StartFocus").clicked.emit()
+            _pump(qapp)
+            assert focus.property("open") is True
+            assert asked == []
+            assert session.focus == started  # the same timer, not a new one
+            focus.hide()
+            _pump(qapp)
+        session.focus["endsAt"] = session.now_ms() - 1
+        session.tick_focus()
+        settled(qapp, window)
+        _pump(qapp)
+        assert session.focus["phase"] == "ended"
+        for page, scope in (("myday", "myDay"), ("day", "day")):
+            bridge.showPage(page)
+            _pump(qapp)
+            board = bridge.property(page)
+            usual = (board.property("nowTitle"), board.property("nowLine"), "Start focus")
+            assert _card(root, scope) == usual
+    finally:
+        session.focus_replace_needed.disconnect(heard)
+        session.reset_focus()
+        focus.hide()
+        _pump(qapp)
+        bridge.showPage("week")
+        window._use_widgets_styles()
 
 
 def test_picking_a_date_shows_that_day_and_my_day_stays_on_today(

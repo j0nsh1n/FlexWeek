@@ -195,6 +195,17 @@ ROUTINE_STATUS = frozenset(
 )
 
 
+def _same_timer(running: dict, target: dict) -> bool:
+    """Starting the homework (or block) whose timer is already going is going back to it, not a replace."""
+    if running.get("phase") == "ended":
+        return False
+    homework = target.get("assignmentId")
+    if homework:
+        return homework == running.get("assignmentId")
+    block = target.get("blockId")
+    return bool(block) and block == running.get("blockId")
+
+
 def _late_summary(moved: int) -> str:
     if not moved:
         return "Nothing needs to move."
@@ -3478,6 +3489,8 @@ class NativeSession(QObject):
                     "start": placed["start"],
                     "title": block["title"],
                 }
+        if self.focus is not None and not replace and _same_timer(self.focus, target):
+            return True
         if self.focus is not None and not replace:
             self._pending_focus = {**target, "quick": quick, "block_id": block_id, "day": day}
             self.focus_replace_needed.emit(self.focus["title"], target["title"])

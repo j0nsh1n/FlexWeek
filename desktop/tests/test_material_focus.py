@@ -500,6 +500,81 @@ def test_start_material_focus_opens_the_screen_on_that_homework(
         close_focus(window, focus)
 
 
+def keep_on_replace(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Every "Replace timer" question the window asks, answered Keep current timer (no modal wait)."""
+    import desktop.native.window as window_module
+
+    questions: list[str] = []
+
+    class Keep:
+        def __init__(
+            self, _parent: object, _title: str, question: str, *_rest: object, **_options: object
+        ) -> None:
+            questions.append(question)
+            self.answer = ""
+
+        def exec(self) -> int:
+            self.answer = "keep"
+            return 0
+
+    monkeypatch.setattr(window_module, "ConfirmSheet", Keep)
+    return questions
+
+
+def test_starting_the_homework_whose_timer_runs_opens_that_timer_without_asking(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    only = homework(qapp, window, "geography", 1)[0]
+    _show_material(qapp, window)
+    focus = window._material_page.bridge.focus
+    asked = keep_on_replace(monkeypatch)
+    try:
+        window.start_material_focus(only["id"], only["days"][0])
+        _pump(qapp)
+        running = dict(window.session.focus)
+        focus.hide()
+        _pump(qapp)
+        window.start_material_focus(only["id"], only["days"][0])
+        _pump(qapp)
+        assert asked == []
+        assert focus.open
+        assert window.session.focus == running
+        focus.hide()
+        assert window.session.start_focus("geography") is True  # the same homework, named by its id
+        assert asked == [] and window.session.focus == running
+    finally:
+        close_focus(window, focus)
+
+
+def test_keep_current_timer_leaves_my_day_as_it_was_with_the_card_on_that_timer(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = homework(qapp, window, "biology", 1)[0]
+    other = homework(qapp, window, "chemistry", 1)[0]
+    questions = keep_on_replace(monkeypatch)
+    root = _show_material(qapp, window)
+    bridge = window._material_page.bridge
+    focus = bridge.focus
+    try:
+        window.start_material_focus(first["id"], first["days"][0])
+        _pump(qapp)
+        running = dict(window.session.focus)
+        focus.hide()
+        bridge.showPage("myday")
+        _pump(qapp)
+        window.start_material_focus(other["id"], other["days"][0])
+        _pump(qapp)
+        assert questions == ["Stop the timer for Biology and start Chemistry instead?"]
+        assert not focus.open
+        assert bridge.screen == "myday"
+        assert window.session.focus == running
+        assert text_of(root, "myDayStartFocus") == "Back to Biology"
+        assert text_of(root, "myDayNowTitle") == "Biology"
+    finally:
+        bridge.showPage("week")
+        close_focus(window, focus)
+
+
 def test_pause_and_break_hold_ambient_sound_and_finish_stops_it(
     qapp: QApplication, window: NativeWindow
 ) -> None:

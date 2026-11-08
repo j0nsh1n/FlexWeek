@@ -8,6 +8,9 @@ Column {
     property bool reduceMotion: false
     property bool highContrast: false
     property bool passive: false
+    // A running focus timer: the card names it and its button goes back to it.
+    property string timerTitle: ""
+    property string timerLine: ""
     property string scope: "day"
     property string title: ""
     property string line: ""
@@ -38,7 +41,7 @@ Column {
         radius: 8
         color: palette.primaryContainer
         Accessible.role: Accessible.Grouping
-        Accessible.name: root.title + ", " + root.line
+        Accessible.name: (root.timerTitle || root.title) + ", " + (root.timerTitle ? root.timerLine : root.line)
 
         readonly property int pad: root.density === "compact" ? 16 : 24
 
@@ -55,7 +58,7 @@ Column {
                 Text {
                     objectName: root.scope + "NowTitle"
                     width: parent.width
-                    text: root.title
+                    text: root.timerTitle || root.title
                     wrapMode: Text.WordWrap
                     color: palette.inkPrimaryContainer
                     font.family: M3Font.family
@@ -65,7 +68,7 @@ Column {
                 Text {
                     objectName: root.scope + "NowLine"
                     width: parent.width
-                    text: root.line
+                    text: root.timerTitle ? root.timerLine : root.line
                     color: palette.inkPrimaryContainer
                     font.family: M3Font.family
                     font.pixelSize: 16
@@ -80,9 +83,9 @@ Column {
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
                 kind: "filled"
-                text: "Start focus"
+                text: root.timerTitle ? "Back to " + root.timerTitle : "Start focus"
                 icon: "play_arrow"
-                accessName: "Start focus"
+                accessName: text
                 activeFocusOnTab: !root.passive
                 onClicked: root.startFocus()
             }

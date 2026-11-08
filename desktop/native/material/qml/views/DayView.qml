@@ -128,6 +128,8 @@ Item {
                 density: root.density
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
+                timerTitle: root.board ? root.board.timerTitle : ""
+                timerLine: root.board ? root.board.timerLine : ""
                 scope: "day"
                 title: root.board ? root.board.nowTitle : ""
                 line: root.board ? root.board.nowLine : ""
