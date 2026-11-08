@@ -19,7 +19,9 @@ Item {
     readonly property int padH: quiet ? 12 : 24
     height: 40
     implicitHeight: 40
-    implicitWidth: label.implicitWidth + (icon !== "" ? 26 : 0) + padH * 2
+    // The icon grows with the label (18 px beside 14 px text) and shares its centre line.
+    readonly property int iconSize: M3Font.px(18)
+    implicitWidth: label.implicitWidth + (icon !== "" ? iconSize + 8 : 0) + padH * 2
     width: implicitWidth
 
     M3Palette { id: palette; theme: root.theme }
@@ -81,8 +83,9 @@ Item {
         M3Icon {
             visible: root.icon !== ""
             name: root.icon
-            width: 18
-            height: 18
+            width: root.iconSize
+            height: root.iconSize
+            anchors.verticalCenter: parent.verticalCenter
             color: root.ink
         }
         Text {
