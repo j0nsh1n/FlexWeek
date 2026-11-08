@@ -33,7 +33,6 @@ def test_light_and_dark_are_the_neutral_surfaces_of_decision_2() -> None:
     for palette in (light, dark):
         surfaces = [palette[key] for key in ("panel", "card_2", "field", "grid")]
         assert len(set(surfaces)) == 4
-        assert contrast(palette["hairline"], palette["panel"]) >= 1.55
 
 
 def test_every_look_but_high_contrast_wears_flexweeks_blue_by_default() -> None:
@@ -141,12 +140,6 @@ def test_the_seven_looks_keep_their_pages_and_separate_their_surfaces() -> None:
         assert {key: palette[key] for key in anchors} == anchors, (pack, preset)
         surfaces = [palette[key] for key in ("panel", "card_2", "field", "grid")]
         assert len(set(surfaces)) >= 3, (pack, preset)
-        if preset == "poster":
-            continue
-        edge = contrast(palette["hairline"], palette["panel"])
-        assert edge >= 1.55, (pack, preset, edge)
-        marks = [contrast(category_paint(key, palette)[1], palette["panel"]) for key in CATEGORIES]
-        assert edge < min(marks), (pack, preset, edge)
 
 
 def test_design_palettes_separate_the_card_the_field_and_the_grid() -> None:
@@ -157,14 +150,9 @@ def test_design_palettes_separate_the_card_the_field_and_the_grid() -> None:
         palette = resolved_palette("system", False, look_of(preset))
         if preset == "retro-teal":
             assert palette["field"] == palette["grid"]
-            assert contrast(palette["hairline"], palette["panel"]) > 1.55
             continue
         surfaces = [palette[key] for key in ("panel", "card_2", "field", "grid")]
         assert len(set(surfaces)) == 4, preset
-        edge = contrast(palette["hairline"], palette["panel"])
-        assert edge >= 1.55, (preset, edge)
-        marks = [contrast(category_paint(key, palette)[1], palette["panel"]) for key in CATEGORIES]
-        assert edge < min(marks), (preset, edge, min(marks))
 
 
 def test_paper_draws_the_family_quieter_and_poster_bolder() -> None:

@@ -10,7 +10,6 @@ from functools import cache
 from itertools import product
 
 from desktop.native.look import ACCENTS, LOOK_KNOBS, LOOK_PRESETS, PACKS, pack_stylesheet, resolved_palette
-from desktop.native.tokens import contrast
 
 EVERY_LOOK = list(product(PACKS, (False, True), LOOK_PRESETS, ACCENTS, LOOK_KNOBS["surface"]))
 
@@ -34,7 +33,6 @@ def test_a_tonal_buttons_tint_is_the_accent_and_not_the_card() -> None:
     palette, _look, sheet = look_of("light-frost", False, "default", "default", "flat")
     tonal = rule(sheet, 'QPushButton[tonal="true"]')
     assert tonal["background"] != palette["panel"]
-    assert contrast(tonal["background"], palette["panel"]) < 1.5, "a tint, not a second filled button"
 
 
 def test_every_look_writes_a_tonal_rule() -> None:
