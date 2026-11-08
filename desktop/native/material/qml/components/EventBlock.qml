@@ -177,7 +177,7 @@ Item {
                 maximumLineCount: !root.fitToHeight || 2 * root.titleLine + root.detailLine <= root.room ? 2 : 1
                 elide: Text.ElideRight
                 font.family: M3Font.family
-                font.pixelSize: 12 * ((root.theme && root.theme.typeScale) ? root.theme.typeScale : 1)
+                font.pixelSize: M3Font.px(12)
                 font.weight: 600
                 lineHeight: 1.25
                 lineHeightMode: Text.ProportionalHeight
@@ -191,7 +191,7 @@ Item {
                 color: root.textInk
                 opacity: 1
                 font.family: M3Font.family
-                font.pixelSize: 11
+                font.pixelSize: M3Font.px(11)
                 font.weight: 400
                 elide: Text.ElideRight
             }

@@ -16,7 +16,7 @@ Item {
     signal chosen(string name)
     objectName: "row_preset"
 
-    implicitHeight: 16 + 24 + 20 + 12 + flow.implicitHeight + 16
+    implicitHeight: 16 + M3Font.px(24) + M3Font.px(20) + 12 + flow.implicitHeight + 16
     height: implicitHeight
 
     M3Palette { id: palette; theme: root.theme }
@@ -28,21 +28,21 @@ Item {
         spacing: 0
         Text {
             width: parent.width
-            height: 24
+            height: M3Font.px(24)
             verticalAlignment: Text.AlignVCenter
             text: root.title
             color: palette.inkSurface
             font.family: M3Font.family
-            font.pixelSize: 16
+            font.pixelSize: M3Font.px(16)
             font.weight: 500
         }
         Text {
             width: parent.width
-            height: 20
+            height: M3Font.px(20)
             text: root.subtitle
             color: palette.inkMuted
             font.family: M3Font.family
-            font.pixelSize: 14
+            font.pixelSize: M3Font.px(14)
         }
         Item { width: 1; height: 12 }
         Flow {

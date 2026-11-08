@@ -47,7 +47,7 @@ Rectangle {
                 text: root.heading
                 color: tones.inkSurface
                 font.family: M3Font.family
-                font.pixelSize: 14
+                font.pixelSize: M3Font.px(14)
                 font.weight: 500
                 elide: Text.ElideRight
             }
@@ -62,7 +62,7 @@ Rectangle {
                     wrapMode: Text.WordWrap
                     color: tones.inkMuted
                     font.family: M3Font.family
-                    font.pixelSize: 13
+                    font.pixelSize: M3Font.px(13)
                     font.weight: 500
                 }
             }

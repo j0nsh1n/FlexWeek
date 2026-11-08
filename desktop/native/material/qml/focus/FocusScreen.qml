@@ -34,14 +34,14 @@ FocusScope {
     TextMetrics {
         id: pauseWord
         font.family: M3Font.family
-        font.pixelSize: 14
+        font.pixelSize: M3Font.px(14)
         font.weight: Font.Medium
         text: "Pause"
     }
     TextMetrics {
         id: resumeWord
         font.family: M3Font.family
-        font.pixelSize: 14
+        font.pixelSize: M3Font.px(14)
         font.weight: Font.Medium
         text: "Resume"
     }
@@ -115,7 +115,7 @@ FocusScope {
             text: root.focusBridge ? root.focusBridge.phaseText : ""
             color: palette.primary
             font.family: M3Font.family
-            font.pixelSize: 14
+            font.pixelSize: M3Font.px(14)
             font.weight: 500
             Accessible.role: Accessible.StaticText
             Accessible.name: "Focus phase " + text
@@ -131,7 +131,7 @@ FocusScope {
             text: root.focusBridge ? root.focusBridge.title : ""
             color: palette.inkSurface
             font.family: M3Font.family
-            font.pixelSize: 28
+            font.pixelSize: M3Font.px(28)
             font.weight: 400
             Accessible.role: Accessible.StaticText
             Accessible.name: "Task " + text
@@ -159,7 +159,7 @@ FocusScope {
             text: root.focusBridge ? root.focusBridge.note : ""
             color: palette.inkMuted
             font.family: M3Font.family
-            font.pixelSize: 14
+            font.pixelSize: M3Font.px(14)
             font.weight: 400
             Accessible.role: Accessible.StaticText
             Accessible.name: text

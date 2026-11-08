@@ -73,8 +73,9 @@ Item {
         anchors.topMargin: 8
         radius: 6
         color: "transparent"
-        border.width: root.highContrast ? 1.5 : 1
-        border.color: !root.enabled ? pal.disabledInk : pal.outline
+        // Material 3: focus thickens the field's own border in the accent; the label sits in its notch.
+        border.width: root.activeFocus || popup.opened ? 2 : (root.highContrast ? 1.5 : 1)
+        border.color: !root.enabled ? pal.disabledInk : (root.activeFocus || popup.opened ? pal.primary : pal.outline)
     }
     Rectangle {
         visible: root.label !== ""
@@ -89,7 +90,7 @@ Item {
             text: root.label
             color: root.activeFocus || popup.opened ? pal.primary : (root.enabled ? pal.inkMuted : pal.disabledInk)
             font.family: M3Font.family
-            font.pixelSize: 12
+            font.pixelSize: M3Font.px(12)
             font.weight: 400
         }
     }
@@ -105,7 +106,7 @@ Item {
         elide: Text.ElideRight
         color: root.enabled ? (root.currentIndex >= 0 ? pal.inkSurface : pal.inkMuted) : pal.disabledInk
         font.family: M3Font.family
-        font.pixelSize: 16
+        font.pixelSize: M3Font.px(16)
         font.weight: 400
     }
     SIcon {
@@ -124,12 +125,6 @@ Item {
         hovered: hover.hovered && root.enabled
         down: tap.pressed && root.enabled
         reduceMotion: root.reduceMotion
-    }
-    M3FocusRing {
-        anchors.fill: shape
-        anchors.margins: -4
-        ring: pal.focusRing
-        ringRadius: 10
     }
     HoverHandler { id: hover; enabled: root.enabled }
     TapHandler { id: tap; enabled: root.enabled; onTapped: { root.forceActiveFocus(); root.openList() } }
@@ -194,7 +189,7 @@ Item {
                     elide: Text.ElideRight
                     color: row.chosen ? pal.inkSecondaryContainer : pal.inkSurface
                     font.family: M3Font.family
-                    font.pixelSize: 14
+                    font.pixelSize: M3Font.px(14)
                     font.weight: row.chosen ? 500 : 400
                 }
                 HoverHandler { id: hoverRow }

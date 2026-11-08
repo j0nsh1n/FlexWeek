@@ -12,7 +12,7 @@ Text {
     wrapMode: Text.WordWrap
     color: problem ? pal.error : pal.inkMuted
     font.family: M3Font.family
-    font.pixelSize: 12
+    font.pixelSize: M3Font.px(12)
     font.weight: 400
     Accessible.role: Accessible.StaticText
     Accessible.name: text
