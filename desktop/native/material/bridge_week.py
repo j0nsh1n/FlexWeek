@@ -7,6 +7,7 @@ through NativeSession.
 
 from __future__ import annotations
 
+import re
 import time
 from datetime import date, datetime, timedelta
 from typing import Any, Protocol
@@ -83,6 +84,8 @@ def side_by_side(rows: list[dict]) -> list[dict]:
     return rows
 
 
+# "1 h" and "30 min": a number keeps its unit on one line, so a wrapped card never leaves the unit alone.
+LENGTH_GAP = re.compile(r"(\d) (h|min)\b")
 HOMEWORK_ROLES = ("title", "minutes", "blockId", "assignmentId", "detail", "tag", "tagKind", "reason")
 # The solver's own lines: at most an hour of room is "Cutting it close", at most three is "Tight".
 DANGER_SLACK_MIN = 60
@@ -244,7 +247,7 @@ class WeekBridge(QObject):
             parts = []
             if item.due:
                 parts.append(f"Due {due_label(item.due, today)}")
-            parts.append(length_label(int(item.minutes)))
+            parts.append(LENGTH_GAP.sub("\\1\u00a0\\2", length_label(int(item.minutes))))
             homework_rows.append(
                 {
                     "title": item.title,

@@ -405,13 +405,14 @@ def test_status_tags_say_how_much_room_the_homework_has(qapp: QApplication, wind
     assert said == ["Cutting it close", "Plenty of time", "Tight"]
     details = sorted(_repeater_texts(root, "homeworkRows", "homeworkDetail"))
     sunday = monday + timedelta(days=6)
+    # A length keeps its unit on the same line (non-breaking space), so a narrow card never leaves "h" alone.
     assert details == sorted(
         [
             f"Due Thu {(monday + timedelta(days=NOW_DAY)).day} "
-            f"{(monday + timedelta(days=NOW_DAY)).strftime('%b')}, 21:00 · 1 h",
+            f"{(monday + timedelta(days=NOW_DAY)).strftime('%b')}, 21:00 · 1\u00a0h",
             f"Due Thu {(monday + timedelta(days=NOW_DAY)).day} "
-            f"{(monday + timedelta(days=NOW_DAY)).strftime('%b')}, 22:00 · 30 min",
-            f"Due Sun {sunday.day} {sunday.strftime('%b')} · 30 min",
+            f"{(monday + timedelta(days=NOW_DAY)).strftime('%b')}, 22:00 · 30\u00a0min",
+            f"Due Sun {sunday.day} {sunday.strftime('%b')} · 30\u00a0min",
         ]
     )
 

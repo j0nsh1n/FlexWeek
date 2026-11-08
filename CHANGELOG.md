@@ -42,6 +42,9 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- Material Week drawer: a homework length such as "1 h" or "30 min" stays on one line, so "h" is never left alone on the last line at Large and Larger text.
+- Material buttons with an icon, such as "Plan my homework": the icon grows with the text size and is centred on the label.
+- Every Material picker opens with the chosen value in view and selected instead of at the top of the list (a 7:00 PM time no longer opens at 12:00 AM); on a closed picker Up and Down move to the previous or next value (a quarter hour on a time picker), and Space, Enter and Alt+Down open the list.
 - The open app shows an assistant's change (made through `FlexWeek --mcp`) within a few seconds instead of after a restart. Unsaved edits are kept and the week is marked as changed elsewhere (More > Reload this week shows the change), an open sheet holds the reload until it closes, and the app's own saves never reload it.
 - Several changes an assistant sends at once all apply. Before, some came back as a conflict until they were sent again one at a time. A change made against homework or a week the student has changed since is still refused.
 - Material Day's month panel is as wide as the mini month, so no weekday column is cut off at Larger text.
