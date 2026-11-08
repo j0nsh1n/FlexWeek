@@ -13,7 +13,6 @@ from typing import Any, Protocol
 
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
-from desktop.native.hours.geometry import overlap_columns
 from desktop.native.material.bridge_rows import Labels, Rows
 from desktop.native.material.theme import event_category, paint_for_category
 from desktop.native.weekmodel import (
@@ -42,8 +41,8 @@ BLOCK_ROLES = (
     "homework",
     "done",
     "fresh",
-    "column",
-    "columns",
+    "indent",
+    "lifts",
 )
 
 
@@ -66,20 +65,28 @@ def occurrence_row(item: Any, mode: str, *, dim: bool, gone: bool, fresh: bool) 
         "homework": bool(item.work and item.assignment_id),
         "done": bool(item.done),
         "fresh": fresh,
-        "column": 0,
-        "columns": 1,
+        "indent": 0,
+        "lifts": [[int(item.start), 0]],
     }
 
 
-def side_by_side(rows: list[dict]) -> list[dict]:
-    """Give each row its lane among the rows that share its day and time, as the Widgets grid does."""
-    by_day: dict[int, list[dict]] = {}
-    for row in rows:
-        by_day.setdefault(row["day"], []).append(row)
-    for same_day in by_day.values():
-        lanes = overlap_columns([(row["start"], row["end"]) for row in same_day])
-        for row, (column, columns) in zip(same_day, lanes, strict=True):
-            row["column"], row["columns"] = column, columns
+def overlapped(rows: list[dict]) -> list[dict]:
+    """Items that share time overlap instead of splitting the lane (Jonathan, 2026-11-08).
+
+    Rows come back in time order, the longer first on a tie, which is also their Tab order and the
+    order they are drawn in, so a later item lies on top of the earlier ones it shares time with.
+    `indent` is how many steps right it sits: one past the deepest item it covers. `lifts` are
+    [minute, names] pairs: its top sits at the lowest of `minute` plus that many name strips, so the
+    names of the items it covers still show above it."""
+    rows.sort(key=lambda row: (row["day"], row["start"], row["start"] - row["end"]))
+    for at, row in enumerate(rows):
+        under = [other for other in rows[:at] if other["day"] == row["day"] and other["end"] > row["start"]]
+        row["indent"] = max((other["indent"] + 1 for other in under), default=0)
+        lifts = {0: row["start"]}
+        for other in under:
+            for minute, names in other["lifts"]:
+                lifts[names + 1] = max(lifts.get(names + 1, minute), minute)
+        row["lifts"] = [[minute, names] for names, minute in sorted(lifts.items())]
     return rows
 
 
@@ -261,7 +268,7 @@ class WeekBridge(QObject):
         self._seen = keys
         self._fresh_until = {key: until for key, until in self._fresh_until.items() if until > clock}
         self._block_rows, self._homework_rows, self._day_rows = (
-            side_by_side(block_rows),
+            overlapped(block_rows),
             homework_rows,
             day_rows,
         )

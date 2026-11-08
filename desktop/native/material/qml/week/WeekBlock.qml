@@ -18,6 +18,10 @@ Item {
     property bool passive: false
     // Day sets this so School and Soccer open like homework; Week leaves it off.
     property bool dayOpen: false
+    // Drawn over a block it shares time with: an opaque base and a light shadow keep the one under it
+    // from showing through.
+    property bool raised: false
+    readonly property bool keyFocus: finishButton.activeFocus
     readonly property bool canOpen: !cell.passive && (cell.homework || cell.dayOpen)
     signal toggled()
     signal opened()
@@ -57,6 +61,27 @@ Item {
         accessName: cell.title
         rightInset: cell.homework && !cell.circleBelow ? 28 : 0
         fitToHeight: true
+    }
+
+    Rectangle {
+        objectName: "overlapShadow"
+        z: -2
+        visible: cell.raised
+        x: -1
+        y: 1
+        width: cell.width + 2
+        height: cell.height + 2
+        radius: blockContent.cornerRadius + 1
+        color: "#000000"
+        opacity: 0.16
+    }
+
+    Rectangle {
+        z: -1
+        visible: cell.raised
+        anchors.fill: parent
+        radius: blockContent.cornerRadius
+        color: m3.surfaceContainerLowest
     }
 
     function findTitle(item) {
@@ -145,10 +170,12 @@ Item {
     }
 
     HoverHandler { enabled: cell.canOpen; cursorShape: Qt.PointingHandCursor }
-    TapHandler { enabled: cell.canOpen; onTapped: cell.opened() }
+    // A block can lie over another: the one on top takes the tap, so the one under it does not open too.
+    TapHandler { enabled: cell.canOpen; gesturePolicy: TapHandler.WithinBounds; onTapped: cell.opened() }
     TapHandler {
         acceptedButtons: Qt.RightButton
         enabled: cell.homework
+        gesturePolicy: TapHandler.WithinBounds
         onTapped: (point) => cell.menuAsked(point.position.x, point.position.y)
     }
 

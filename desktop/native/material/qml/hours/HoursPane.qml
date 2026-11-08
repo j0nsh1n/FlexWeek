@@ -71,6 +71,17 @@ Item {
     onTypeScaleChanged: if (root.followNow) Qt.callLater(root.revealNow)
     onDensityChanged: if (root.followNow) Qt.callLater(root.revealNow)
     readonly property int blockRightInset: root.weekMode ? 3 : 16
+    // Blocks that share time: how far right each later one steps, and the strip it leaves above itself
+    // so the title of the block under it still reads. Both grow with the text size.
+    readonly property real overlapStep: M3Font.px(16)
+    FontMetrics {
+        id: stripFont
+        font.family: M3Font.family
+        font.pixelSize: M3Font.px(12)
+        font.weight: 600
+    }
+    readonly property real nameStrip: Math.ceil(stripFont.height * 1.25)
+                                      + ((root.theme && root.theme.cardPad !== undefined) ? root.theme.cardPad : 6) + 2
 
     function snapToQuarter(y) {
         var snapped = Math.round((y / root.row) * 60 / 15) * 15
@@ -506,20 +517,28 @@ Item {
                 WeekBlock {
                     id: blockCell
                     objectName: "weekBlock"
-                    z: 2
+                    // Model order is time order, so a later block lies on the earlier ones it shares time
+                    // with; a focused block comes to the front so its focus ring shows whole.
+                    z: activeFocus || keyFocus ? 3 : 2
                     passive: root.passive
                     dayOpen: !root.weekMode
-                    // Blocks sharing time split their day's lane side by side (spec: overlaps are drawn
-                    // side by side). A preview model without the roles keeps the whole lane.
-                    readonly property int lanes: Math.max(1, model.columns || 1)
+                    // Blocks sharing time overlap (Jonathan, 2026-11-08): the earliest keeps the whole lane,
+                    // each later one sits a step right and low enough that the names it covers show. A
+                    // preview model without the roles keeps the whole lane at its own time.
                     readonly property real laneSpan: root.weekMode
                                                      ? root.dayWidth - 6
                                                      : hours.width - root.gutter - 3 - root.blockRightInset
-                    readonly property real laneStep: (laneSpan + 3) / lanes
-                    x: (root.weekMode ? root.gutter + model.day * root.dayWidth + 3 : root.gutter + 3)
-                       + (model.column || 0) * laneStep
-                    y: model.start / 60 * root.row
-                    width: Math.max(8, laneStep - 3)
+                    readonly property real indentX: (model.indent || 0) * root.overlapStep
+                    raised: (model.indent || 0) > 0
+                    x: (root.weekMode ? root.gutter + model.day * root.dayWidth + 3 : root.gutter + 3) + indentX
+                    y: {
+                        var top = model.start / 60 * root.row
+                        var lifts = model.lifts || []
+                        for (var i = 0; i < lifts.length; i++)
+                            top = Math.max(top, lifts[i][0] / 60 * root.row + lifts[i][1] * root.nameStrip)
+                        return top
+                    }
+                    width: Math.max(8, laneSpan - indentX)
                     height: Math.max(36, (model.end - model.start) / 60 * root.row - 2)
                     theme: root.theme
                     density: root.density
