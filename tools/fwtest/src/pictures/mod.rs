@@ -61,7 +61,7 @@ pub enum Command {
     /// Run a reviewer command for every changed or added picture and keep its answers.
     Annotate {
         compare: PathBuf,
-        /// A shell command; see docs/tooling/fwtest.md, "Writing a reviewer".
+        /// A shell command; see docs/tooling/fwtest.md, "annotate and writing a reviewer".
         #[arg(long)]
         reviewer: String,
         /// Seconds one picture's review may take.
