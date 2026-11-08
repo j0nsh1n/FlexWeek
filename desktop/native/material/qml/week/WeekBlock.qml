@@ -26,6 +26,22 @@ Item {
 
     M3Palette { id: m3; theme: cell.theme }
 
+    // The title's column is the block minus its 12 px left and 8 px right padding. When the circle on
+    // the title row would leave it less than three wide letters, the circle moves under the time so
+    // the title keeps the whole column.
+    FontMetrics {
+        id: titleMetrics
+        font.family: M3Font.family
+        font.pixelSize: 12 * ((cell.theme && cell.theme.typeScale) ? cell.theme.typeScale : 1)
+        font.weight: 600
+    }
+    readonly property bool circleBelow: cell.homework
+                                        && cell.width - 20 - 28 < titleMetrics.advanceWidth("MMM")
+    // A narrow block too short for the circle under its words hides it: Edit, the right-click menu and
+    // Shift+F10 still finish the homework.
+    readonly property bool circleFits: !cell.circleBelow
+                                       || blockContent.contentBottom + 2 + finishButton.height + 4 <= cell.height
+
     EventBlock {
         id: blockContent
         width: cell.width
@@ -39,7 +55,7 @@ Item {
         detail: cell.detail
         past: cell.past
         accessName: cell.title
-        rightInset: cell.homework ? 28 : 0
+        rightInset: cell.homework && !cell.circleBelow ? 28 : 0
         fitToHeight: true
     }
 
@@ -68,13 +84,12 @@ Item {
     Item {
         id: finishButton
         objectName: "weekBlockFinish"
-        visible: cell.homework
+        visible: cell.homework && cell.circleFits
         width: 24
         height: 24
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.margins: 4
-        activeFocusOnTab: !cell.passive && cell.homework
+        x: cell.circleBelow ? 12 : cell.width - width - 4
+        y: cell.circleBelow ? blockContent.contentBottom + 2 : 4
+        activeFocusOnTab: !cell.passive && cell.homework && cell.circleFits
         onActiveFocusChanged: if (activeFocus) cell.focused()
         Accessible.role: Accessible.Button
         Accessible.name: cell.done ? "Open " + cell.title + " again" : "Mark " + cell.title + " finished"

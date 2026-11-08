@@ -47,6 +47,8 @@ Item {
     readonly property real titleLine: Math.ceil(titleFont.height * title.lineHeight)
     readonly property real detailLine: root.detail !== "" ? Math.ceil(detailFont.height) : 0
     readonly property real room: root.height - root.pad - (root.highContrast ? 2 : 1)
+    // Where the last drawn line ends, so a block can place something below its words.
+    readonly property real contentBottom: body.y + body.height
 
     readonly property bool darkSurface: {
         var tone = palette.surface

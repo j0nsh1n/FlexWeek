@@ -21,7 +21,7 @@ from PySide6.QtCore import QObject, QRectF  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
-from desktop.tests.test_layouts_window import settled  # noqa: E402
+from desktop.tests.test_layouts_window import settled, wait_until  # noqa: E402
 from desktop.tests.test_material_week import (  # noqa: E402
     NOW_DAY,
     _block_named,
@@ -31,12 +31,14 @@ from desktop.tests.test_material_week import (  # noqa: E402
     _pump,
     _qml,
     _reset,
+    _snack,
     _week_monday,
 )
+from desktop.tests.test_material_window import _named  # noqa: E402
 
 
-def _soccer_and_a_pinned_reading(window: NativeWindow, qapp: QApplication) -> None:
-    """Soccer Thursday 16:00-17:30, Reading pinned over it 16:00-17:00, Snack right after Soccer."""
+def _soccer_and_a_pinned_reading(window: NativeWindow, qapp: QApplication, minutes: int = 60) -> None:
+    """Soccer Thursday 16:00-17:30, Reading pinned over it 16:00 for `minutes`, Snack right after Soccer."""
     session = window.session
     session.add_block(
         {
@@ -63,9 +65,9 @@ def _soccer_and_a_pinned_reading(window: NativeWindow, qapp: QApplication) -> No
     session.save()
     settled(qapp, window)
     due = (_week_monday(window) + timedelta(days=6)).isoformat()
-    _homework(window, "reading", "Pinned reading", 60, due)
+    _homework(window, "reading", "Pinned reading", minutes, due)
     work = next(block for block in session.blocks if block.get("assignment_id") == "reading")
-    work.update({"start": "16:00", "days": [NOW_DAY], "duration_min": 60, "pinned": True})
+    work.update({"start": "16:00", "days": [NOW_DAY], "duration_min": minutes, "pinned": True})
     session.add_block(work)
     session.save()
     settled(qapp, window)
@@ -115,6 +117,50 @@ def test_overlapping_blocks_in_week_sit_side_by_side_and_the_pinned_one_opens(
     assert sheets.form["title"] == "Pinned reading"
     sheets.forceClose()
     _pump(qapp)
+
+
+def test_a_squeezed_homework_block_keeps_a_done_circle_that_finishes_it_and_undo_reopens_it(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    # Long enough that the circle has room under the time, however narrow the lane is.
+    _soccer_and_a_pinned_reading(window, qapp, minutes=150)
+    grid = _qml(root, "weekScroller")
+    row = int(_bridge(window).property("hourRow"))
+    grid.setProperty("contentY", float(15 * row))
+    _pump(qapp, 4)
+    reading = _block_named(root, "Pinned reading")
+    # A block shares the lane with Soccer, so its title has no room beside a circle on the title row.
+    assert reading.property("circleBelow") is True
+    finish = _named(reading, "weekBlockFinish")[0]
+    assert finish.property("visible") is True
+    assert finish.property("activeFocusOnTab") is True
+
+    _click(window, finish)
+    wait_until(
+        qapp,
+        lambda: not window.session.busy and bool(window.session.assignments["reading"].get("completed")),
+    )
+    wait_until(qapp, lambda: _snack(window) == "Finished Pinned reading.")
+    _pump(qapp)
+    assert _block_named(root, "Pinned reading").property("done") is True
+    bar = _qml(root, "materialSnackbar")
+    _click(window, bar, dx=int(bar.property("width")) // 2 - 30)
+    wait_until(
+        qapp,
+        lambda: not window.session.busy and not window.session.assignments["reading"].get("completed"),
+    )
+    _pump(qapp)
+    assert _block_named(root, "Pinned reading").property("done") is False
+
+
+def test_a_wide_homework_block_keeps_its_circle_where_it_was(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    essay = _block_named(root, "History essay")
+    assert essay.property("circleBelow") is False
+    assert _named(essay, "weekBlockFinish")[0].property("visible") is True
 
 
 def test_overlapping_blocks_in_day_sit_side_by_side(qapp: QApplication, window: NativeWindow) -> None:
