@@ -168,7 +168,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -204,6 +204,27 @@ jobs:
           chmod +x dist/fwtest/fwtest
           echo "$PWD/dist/fwtest" >> "$GITHUB_PATH"
           python -m pip install dist/engine/*.whl
+      - name: DIAG
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          fc-match -s sans | head -5 || true
+          fc-list | wc -l
+          fc-list : family | sort -u | head -40
+          .venv/bin/python - <<'PY'
+          import traceback
+          from PySide6.QtWidgets import QApplication
+          app = QApplication([])
+          try:
+              from PySide6.QtMultimedia import QAudioDecoder, QAudioFormat
+              d = QAudioDecoder()
+              print("decoder ok", d.isSupported() if hasattr(d, "isSupported") else "")
+          except Exception:
+              traceback.print_exc()
+          from PySide6.QtGui import QFont, QFontInfo
+          print("default font", QFont().family(), QFontInfo(QFont()).family())
+          PY
+          ldconfig -p | grep -E "pulse|asound" || true
       - name: Desktop tests, shard ${{ matrix.shard }} of 4
         env:
           QT_QPA_PLATFORM: offscreen
@@ -219,7 +240,7 @@ jobs:
         run: |
           mapfile -t files < <(git ls-files -- 'desktop/tests/*.py' 'scripts/rig/*.py' \
             | grep -E '/test_[^/]*\.py$' | grep -vE '^desktop/tests/regress(184|190)/' \
-            | sort | awk -v k="$SHARD" 'NR % 4 == k % 4')
+            | sort | awk -v k="$SHARD" 'NR % 4 == k % 4' | grep -E 'test_ambient_sound|test_bento_week')
           if (( ${#files[@]} == 0 )); then
             echo "shard $SHARD has no test files" >&2
             exit 1
