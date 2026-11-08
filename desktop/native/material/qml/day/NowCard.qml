@@ -15,6 +15,8 @@ Column {
     // homework is still open) and Start again.
     property bool timerEnded: false
     property bool timerCanFinish: false
+    // The timer has run out on homework that is already done: the one button is OK, which clears it.
+    property bool timerDone: false
     property string scope: "day"
     property string title: ""
     property string line: ""
@@ -23,6 +25,7 @@ Column {
     signal startFocus()
     signal markFinished()
     signal startAgain()
+    signal dismissFinished()
 
     spacing: 8
     width: parent ? parent.width : implicitWidth
@@ -110,13 +113,18 @@ Column {
                     reduceMotion: root.reduceMotion
                     highContrast: root.highContrast
                     kind: root.timerEnded && root.timerCanFinish ? "outlined" : "filled"
-                    text: root.timerEnded ? "Start again"
+                    text: root.timerDone ? "OK" : root.timerEnded ? "Start again"
                         : (root.timerTitle ? "Back to " + root.timerTitle : (root.focusTitle ? "Start " + root.focusTitle : "Start focus"))
-                    icon: "play_arrow"
+                    icon: root.timerDone ? "check" : "play_arrow"
                     accessName: text
                     activeFocusOnTab: !root.passive
                     // The button that was used holds the keyboard, so whatever it opens hands focus back to it.
-                    onClicked: { forceActiveFocus(); if (root.timerEnded) root.startAgain(); else root.startFocus() }
+                    onClicked: {
+                        forceActiveFocus()
+                        if (root.timerDone) root.dismissFinished()
+                        else if (root.timerEnded) root.startAgain()
+                        else root.startFocus()
+                    }
                 }
             }
         }

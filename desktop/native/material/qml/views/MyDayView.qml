@@ -83,6 +83,7 @@ Item {
                 timerLine: root.board ? root.board.timerLine : ""
                 timerEnded: root.board ? root.board.timerEnded : false
                 timerCanFinish: root.board ? root.board.timerCanFinish : false
+                timerDone: root.board ? root.board.timerDone : false
                 scope: "myDay"
                 title: root.board ? root.board.nowTitle : ""
                 focusTitle: root.board ? root.board.focusTitle : ""
@@ -90,6 +91,7 @@ Item {
                 onStartFocus: if (root.board) root.board.startFocus()
                 onMarkFinished: if (root.board) root.board.markFinished()
                 onStartAgain: if (root.board) root.board.startAgain()
+                onDismissFinished: if (root.board) root.board.dismissFinished()
             }
 
             DayLists {

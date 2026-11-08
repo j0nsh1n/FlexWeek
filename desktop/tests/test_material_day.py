@@ -690,6 +690,54 @@ def test_mark_finished_on_the_now_card_marks_the_homework_done_and_clears_the_ti
             settled(qapp, window)
 
 
+def test_a_finished_session_on_already_finished_homework_offers_only_ok(
+    qapp: QApplication, window: NativeWindow, keep_on_replace: None
+) -> None:
+    """Finish-automatically can mark the homework done as the last session ends: nothing is left to
+    mark or to start again, so the card says Finished with one OK that clears the timer."""
+    session = window.session
+    root = _show_material(qapp, window)
+    bridge = _bridge(root)
+    asked: list[tuple[str, str]] = []
+
+    def heard(*names: str) -> None:
+        asked.append(names)
+
+    session.focus_replace_needed.connect(heard)
+    homework = ""
+    try:
+        _run_out(qapp, window, root)
+        homework = session.focus["assignmentId"]
+        title = session.focus["title"]
+        session.complete_homework(homework, True)
+        settled(qapp, window)
+        for page, scope in (("myday", "myDay"), ("day", "day")):
+            bridge.showPage(page)
+            wait_until(qapp, lambda scope=scope: _card(root, scope)[1] == "Finished")
+            assert _card(root, scope) == (title, "Finished", "OK")
+            assert _qml(root, scope + "MarkFinished").property("visible") is False
+        before = dict(session.focus)
+        _qml(root, "dayStartFocus").clicked.emit()
+        settled(qapp, window)
+        _pump(qapp)
+        assert session.focus is None
+        assert before["phase"] == "ended"
+        assert asked == []
+        assert not bridge.property("focus").property("open")
+        assert session.assignments[homework]["completed"] is True
+        for page, scope in (("myday", "myDay"), ("day", "day")):
+            bridge.showPage(page)
+            _pump(qapp)
+            assert _card(root, scope)[1] not in ("Finished", "Session finished")
+            assert _card(root, scope)[2] != "OK"
+    finally:
+        _leave_focus(window, qapp, root)
+        session.focus_replace_needed.disconnect(heard)
+        if homework:
+            session.complete_homework(homework, False)
+            settled(qapp, window)
+
+
 def test_mark_finished_from_the_keyboard_leaves_focus_on_a_visible_button(
     qapp: QApplication, window: NativeWindow
 ) -> None:

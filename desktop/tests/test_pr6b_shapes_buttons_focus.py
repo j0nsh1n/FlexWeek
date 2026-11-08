@@ -115,7 +115,7 @@ def test_each_screen_has_at_most_one_filled_button() -> None:
 
     now_card_text = (QML / "day" / "NowCard.qml").read_text(encoding="utf-8")
     assert len(_BUTTON_FILLED.findall(now_card_text)) == 1
-    assert 'text: root.timerEnded ? "Start again"' in now_card_text
+    assert 'text: root.timerDone ? "OK" : root.timerEnded ? "Start again"' in now_card_text
     assert (
         ': (root.timerTitle ? "Back to " + root.timerTitle'
         ' : (root.focusTitle ? "Start " + root.focusTitle : "Start focus"))'

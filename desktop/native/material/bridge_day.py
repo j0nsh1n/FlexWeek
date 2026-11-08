@@ -319,6 +319,14 @@ class DayBridge(QObject):
                 opener()
 
     @Slot()
+    def dismissFinished(self) -> None:
+        """The Now card's OK on a finished session whose homework is already done: clear the timer."""
+        session = self._window.session  # type: ignore[attr-defined]
+        state = getattr(session, "focus", None)
+        if isinstance(state, dict) and state.get("phase") == "ended":
+            session.reset_focus()
+
+    @Slot()
     def startFocus(self) -> None:
         """Back to a running timer; else the Focus lane's hook, otherwise the Widgets Start focus path."""
         window = self._window
@@ -459,6 +467,11 @@ class DayBridge(QObject):
         return bool(self._today and self._timer[0] and self._timer[2])
 
     @Property(bool, notify=changed)
+    def timerDone(self) -> bool:
+        """Time is up on homework that is already done: only OK is left to offer."""
+        return bool(self.timerEnded and self._timer[4])
+
+    @Property(bool, notify=changed)
     def timerCanFinish(self) -> bool:
         """Time is up on homework that is still open, which a quick focus never has."""
         return bool(self.timerEnded and self._timer[3])
@@ -472,21 +485,24 @@ def _opening_minute(week: object, viewed: date, today: date, now: int | None, da
     return opening_minute(week, today_index, now, day_index)  # type: ignore[arg-type]
 
 
-def _timer_words(session: object) -> tuple[str, str, bool, bool]:
+def _timer_words(session: object) -> tuple[str, str, bool, bool, bool]:
     """The timer's homework and its time left, or "Session finished" once it has run out and has not
-    been cleared; blank when there is none. The last two say it has ended and its homework is open."""
+    been cleared ("Finished" when its homework was already done); blank when there is none. The last
+    three say it has ended, its homework is open, and its homework is already done."""
     state = getattr(session, "focus", None)
     if not isinstance(state, dict):
-        return ("", "", False, False)
+        return ("", "", False, False, False)
     title = str(state.get("title") or "Quick focus")
     if state.get("phase") == "ended":
         homework = (getattr(session, "assignments", None) or {}).get(state.get("assignmentId"))
-        return (title, "Session finished", True, homework is not None and not homework.get("completed"))
+        if homework is not None and homework.get("completed"):
+            return (title, "Finished", True, False, True)
+        return (title, "Session finished", True, homework is not None, False)
     left = max(1, -(-remaining_ms(state, session.now_ms()) // 60_000))  # type: ignore[attr-defined]
     words = f"{length_label(left)} left"
     if state.get("phase") in ("break", "long_break"):
         words = f"Break, {words}"
-    return (title, words, False, False)
+    return (title, words, False, False, False)
 
 
 def _chosen_day(session: object, today: date) -> date:
