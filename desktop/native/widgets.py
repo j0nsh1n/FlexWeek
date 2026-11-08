@@ -3540,6 +3540,18 @@ class ConfirmSheet(Dialog):
         if self._default in self.buttons:
             self.buttons[self._default].setFocus()
 
+    def event(self, event: QEvent) -> bool:
+        # Material's window-wide Esc shortcut is also live while this sheet is up, and a shortcut
+        # wins over a key press; claiming Esc here lets the sheet close on it.
+        if (
+            event.type() == QEvent.Type.ShortcutOverride
+            and event.key() == Qt.Key.Key_Escape
+            and event.modifiers() == Qt.KeyboardModifier.NoModifier
+        ):
+            event.accept()
+            return True
+        return super().event(event)
+
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             focused = QApplication.focusWidget()

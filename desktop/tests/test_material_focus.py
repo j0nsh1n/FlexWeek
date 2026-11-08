@@ -575,6 +575,58 @@ def test_keep_current_timer_leaves_my_day_as_it_was_with_the_card_on_that_timer(
         close_focus(window, focus)
 
 
+def test_escape_closes_the_replace_timer_question_and_changes_nothing(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    from PySide6.QtCore import QTimer
+
+    from desktop.native.widgets import ConfirmSheet
+
+    first = homework(qapp, window, "physics", 1)[0]
+    other = homework(qapp, window, "economics", 1)[0]
+    root = _show_material(qapp, window)
+    bridge = window._material_page.bridge
+    focus = bridge.focus
+    seen: list[tuple[ConfirmSheet, bool]] = []
+
+    def press_escape() -> None:
+        shown = [s for s in qapp.topLevelWidgets() if isinstance(s, ConfirmSheet) and s.isVisible()]
+        if not shown:
+            QTimer.singleShot(20, press_escape)
+            return
+        sheet = shown[0]
+        sheet.activateWindow()  # the real keyboard path: the key goes to the sheet's focused button
+        qapp.processEvents()
+        QTest.keyClick(QApplication.focusWidget() or sheet, Qt.Key.Key_Escape)
+        qapp.processEvents()
+        seen.append((sheet, sheet.isVisible()))
+        if sheet.isVisible():
+            sheet.buttons["keep"].click()  # lets the test end, and fail below, instead of hanging
+
+    try:
+        window.start_material_focus(first["id"], first["days"][0])
+        _pump(qapp)
+        running = dict(window.session.focus)
+        focus.hide()
+        bridge.showPage("myday")
+        _pump(qapp)
+        QTimer.singleShot(20, press_escape)
+        window.start_material_focus(other["id"], other["days"][0])
+        _pump(qapp)
+        assert len(seen) == 1
+        sheet, still_open = seen[0]
+        assert not still_open, "Esc left the Replace timer question open"
+        assert sheet.answer in (None, "keep")
+        assert window.session.focus == running
+        assert not focus.open
+        assert bridge.screen == "myday"
+        assert text_of(root, "myDayStartFocus") == "Back to Physics"
+        assert QApplication.focusWidget() is window._material_page._quick, "focus went back to the page"
+    finally:
+        bridge.showPage("week")
+        close_focus(window, focus)
+
+
 def test_pause_and_break_hold_ambient_sound_and_finish_stops_it(
     qapp: QApplication, window: NativeWindow
 ) -> None:
