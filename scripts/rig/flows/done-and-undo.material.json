@@ -1,0 +1,57 @@
+{
+ "setup": {
+  "seed": "rig",
+  "look": "light-frost",
+  "size": [
+   1280,
+   800
+  ],
+  "clock_24h": false
+ },
+ "steps": [
+  {
+   "click": "settingsGear"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "click": "chooseMaterial"
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "see": "materialRail"
+  },
+  {
+   "click": "navDay"
+  },
+  {
+   "see": "materialDay"
+  },
+  {
+   "click": "dayFinish"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "see": "UNDO"
+  },
+  {
+   "shot": "done"
+  },
+  {
+   "click": {
+    "text": "UNDO"
+   }
+  },
+  {
+   "wait": 400
+  },
+  {
+   "shot": "undone"
+  }
+ ]
+}

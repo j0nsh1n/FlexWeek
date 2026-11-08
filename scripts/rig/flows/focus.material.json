@@ -1,0 +1,75 @@
+{
+ "setup": {
+  "seed": "rig",
+  "look": "light-frost",
+  "size": [
+   1280,
+   800
+  ],
+  "clock_24h": false
+ },
+ "steps": [
+  {
+   "click": "settingsGear"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "click": "chooseMaterial"
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "see": "materialRail"
+  },
+  {
+   "click": "navDay"
+  },
+  {
+   "see": "materialDay"
+  },
+  {
+   "key": "F"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "see": "materialFocus"
+  },
+  {
+   "click": "focusStart"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "see": "focusPause"
+  },
+  {
+   "shot": "running"
+  },
+  {
+   "advance_clock": 25
+  },
+  {
+   "click": "focusFinish"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "click": {
+    "text": "End session"
+   }
+  },
+  {
+   "wait": 400
+  },
+  {
+   "shot": "finished"
+  }
+ ]
+}

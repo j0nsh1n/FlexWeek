@@ -79,6 +79,11 @@ enum Command {
         /// Spec files. Default is every scripts/mutations/*.json in the checkout.
         specs: Vec<std::path::PathBuf>,
     },
+    /// Draw, compare and review pictures of the app, and record its flows as clips.
+    Pictures {
+        #[command(subcommand)]
+        command: fwtest::pictures::Command,
+    },
     /// Start the hidden session, run the rig driver, then stop that session.
     Rig {
         /// Python interpreter. Overrides FWTEST_PYTHON and .venv/bin/python.
@@ -164,6 +169,7 @@ fn main() {
             engine_only,
             shard,
         ),
+        Command::Pictures { command } => fwtest::pictures::run(command),
         Command::Rig { python, args } => fwtest::rig::run(&args, python.as_deref()),
         Command::Run {
             timeout,

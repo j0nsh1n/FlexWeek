@@ -33,11 +33,13 @@ ACTIONS = (
     "say",
     "see",
 )
-SETUP_KEYS = ("clock", "seed", "size", "design", "clock_24h", "text", "look", "mode")
+SETUP_KEYS = ("clock", "seed", "size", "design", "clock_24h", "text", "look", "mode", "motion", "record")
 # material-new: Material is the saved surface and nobody is signed in, so the play starts on the sign-in card.
 SEEDS = ("rig", "empty", "setup-done", "material-new")
 MODES = ("light", "dark")
 TEXT_SIZES = ("normal", "large")
+# Animations on (the app's Normal motion) or off; unset leaves the account's own.
+MOTIONS = {"on": "normal", "off": "off"}
 KEY_NAME = re.compile(r"[A-Za-z0-9_]+(\+[A-Za-z0-9_]+)*")
 LABEL = re.compile(r"[A-Za-z0-9_.-]+")
 MAX_WAIT_MS = 60_000
@@ -59,6 +61,8 @@ class Setup:
     text: str = "normal"
     look: str | None = None
     mode: str = "light"
+    motion: str | None = None
+    record: bool = False
 
 
 @dataclass(frozen=True)
@@ -132,7 +136,9 @@ def _setup_value(key: str, value: object, designs: tuple[str, ...], looks: tuple
         return _one_of(value, looks, key)
     if key == "mode":
         return _one_of(value, MODES, key)
-    if key == "clock_24h":
+    if key == "motion":
+        return _one_of(value, tuple(MOTIONS), key)
+    if key in ("clock_24h", "record"):
         if not isinstance(value, bool):
             raise ValueError("true or false")
         return value
@@ -494,6 +500,8 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
             updates = {"clock_24h": setup.clock_24h}
             if pack:
                 updates["theme_pack"] = pack
+            if setup.motion is not None:
+                updates["motion"] = MOTIONS[setup.motion]
             session.save_preferences(updates)
             wait_until(app, lambda: not session.busy, 20)
             window._set_clock()
@@ -866,9 +874,19 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
         f"clock {held['now']:%Y-%m-%d %H:%M} held, {len(play.steps)} steps"
     )
     started = time.monotonic()
+    recorder = None
+    if setup.record:
+        from clip import Recorder
+
+        recorder = Recorder(window, out)
+        recorder.start()
     QTimer.singleShot(200, lambda: drive(script()))
     app.exec()
     seconds = time.monotonic() - started
+    if recorder is not None:
+        made = recorder.finish()
+        said = f"; {made['note']}" if made["note"] else ", clip.mp4"
+        log(f"recorded {len(made['frames'])} frames{said}")
     server.stop()
     if python_errors:
         log(f"STOPPED by a Python error: {python_errors[0]}")

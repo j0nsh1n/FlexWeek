@@ -18,6 +18,20 @@ Behaviour only: what a click, key, drag, save, undo or sync does, the state that
 reads, accessible names and keyboard paths. Not colours, pixel positions, sizes or contrast. Those become screens
 in `desktop/tests/pictures/screens_<area>.py`, each with the checks the reviewer makes (see `screen.py`).
 
+## Looking at your screens locally
+The renderer draws them offscreen, in the same fixed setup CI uses, so nothing opens on your display. Run it
+through fwtest, which queues it behind other suites and caps it like any job:
+
+```sh
+fwtest pictures render --set touched             # the screens your branch touches, yours and origin/main's
+fwtest pictures render --set full                # every screen in every variant: slow
+```
+
+It prints where the pictures went; for `touched` it also prints the `compare` and `page` commands that turn the
+two sides into the review page (docs/tooling/fwtest.md, "Pictures"). To check that a new screens file loads and lists what you meant, without
+drawing anything: `.venv/bin/python scripts/pictures/render.py --list`. A screen whose `prepare` raises shows on
+the page with its error rather than a picture.
+
 ## The shared pieces (do not copy them)
 - The clock: every test starts at Thursday 2026-11-05 19:00 (`backend/tests/fake_clock.py`). Move it with the
   `clock` fixture or `fake_clock.CLOCK`; never patch `now_ms` or `datetime`.

@@ -149,6 +149,8 @@ def test_a_bad_step_is_named_with_its_number(step, says):
         ({"look": "default"}, "terminal, dark-frost"),
         ({"clock_24h": "yes"}, "true or false"),
         ({"mode": "sepia"}, "light, dark"),
+        ({"motion": "reduce"}, "Valid: on, off"),
+        ({"record": "yes"}, "true or false"),
         ({"size": [1280]}, "[width, height]"),
         ({"size": [100, 100]}, "between 640x480 and 3840x2160"),
         ({"zoom": 2}, "Setup keys: clock, seed, size, design, clock_24h, text, look, mode"),
@@ -158,6 +160,13 @@ def test_a_bad_setup_value_is_named(setup, says):
     with pytest.raises(play.PlayError) as refused:
         _parse({"setup": setup, "steps": []})
     assert says in str(refused.value)
+
+
+def test_a_clip_play_sets_animations_and_recording():
+    got = _parse({"setup": {"motion": "off", "record": True}, "steps": []})
+    assert (got.setup.motion, got.setup.record) == ("off", True)
+    plain = _parse({"steps": []})
+    assert (plain.setup.motion, plain.setup.record) == (None, False)
 
 
 def test_every_mistake_is_reported_at_once_not_one_per_run():

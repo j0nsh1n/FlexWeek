@@ -1,0 +1,33 @@
+{
+ "setup": {
+  "seed": "rig",
+  "look": "light-frost",
+  "size": [
+   1280,
+   800
+  ],
+  "clock_24h": false
+ },
+ "steps": [
+  {
+   "drag": [
+    {
+     "text": "Math worksheet"
+    },
+    [
+     760,
+     520
+    ]
+   ]
+  },
+  {
+   "wait": 800
+  },
+  {
+   "see": "Math worksheet"
+  },
+  {
+   "shot": "dropped"
+  }
+ ]
+}

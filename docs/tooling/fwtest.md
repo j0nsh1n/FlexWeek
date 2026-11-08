@@ -39,6 +39,7 @@ fwtest mutate [SPEC.json ...] [--case NAME] [--engine-build COMMAND] [--no-engin
 fwtest rig [--server kwin|xvfb|auto] [ARGS FOR scripts/rig/drive.py ...]
 fwtest run [--timeout SECONDS] [--touched [--base REF | --paths-from FILE]] -- COMMAND [ARGS ...]
 fwtest flaky [--log FILE]
+fwtest pictures render|compare|page|annotate|clips ...
 fwtest clean
 ```
 
@@ -99,6 +100,8 @@ fwtest clean
 - `flaky` summarises the flaky-test log: one entry per test, most often logged first, then the most
   recent, with the last date, commit, where it ran and the first line of how it failed. `--log`
   reads another file, for example a log downloaded from a CI run.
+- `pictures` draws the app's screens, compares two drawings, records the Widgets and Material flows as
+  clips, asks a reviewer and builds the review page. See [Pictures](#pictures).
 - `clean` stops every process recorded by a job that is no longer running. It also stops a hidden
   session whenever a job record or a state file names it, including when the job record is already
   gone and only the state file under `/tmp/flexweek-rig/` remains. That is how you stop a stranded
@@ -278,6 +281,8 @@ Setup:
 | `text` | `normal` or `large` text | `normal` |
 | `look` | A look preset (`high-contrast`, `paper`, `ink`, `terminal`, `poster`, `pastel`) or a theme pack (`system`, `light-frost`, `dark-frost`, `nocturne`, `slate`). Ignored for the pack when `seed` is `empty`. | the pack's own |
 | `mode` | `light` or `dark`. Used with `material-new` for Material's own light/dark. | `light` |
+| `motion` | `on` (the app's Normal animations) or `off` | the account's own |
+| `record` | Record the play as a clip: PNG frames and, with a GPU encoder, a video (see [clips](#clips)) | `false` |
 
 Steps, each an object with one action:
 
@@ -329,6 +334,218 @@ Example: a new account that skipped Setup, Add fixed time, type a title, Tab, lo
 
 The `Escape` then `space` after the click is deliberate. On a fresh window the first click on a menu
 button sometimes only focuses it (cause not found), so the keyboard opens the menu either way.
+
+## Pictures
+
+Looks are checked with pictures, not in code (spec.md, Testing structure, rule 6). Three pieces work
+together:
+
+- **Screens.** Each area declares the screens worth a picture in
+  `desktop/tests/pictures/screens_<area>.py` (a lane may split one area over several files,
+  `screens_<area>_h<N>.py`). Each is a `Screen` from `desktop/tests/pictures/screen.py`: an id, a
+  `prepare` that puts a light window in the state to photograph, the `checks` the reviewer makes,
+  and the product `sources` whose change means the screen is drawn again.
+- **The renderer**, `scripts/pictures/render.py`. It is Python because it draws Qt. It draws every
+  declared screen in every variant in one fixed setup and writes the PNGs and `index.json`.
+- **`fwtest pictures`**, in Rust. It picks the screens a change touches, runs the renderer as a
+  contained job on both sides of a pull request, compares the two drawings, asks a reviewer, records
+  the flows as clips, and builds the review page.
+
+```text
+fwtest pictures render --set full|touched [--base REF] [--changed FILE] [--out DIR] [--timeout SECONDS] [--python PATH]
+fwtest pictures compare BEFORE AFTER --out DIR [--tolerance N] [--min-pixels N]
+fwtest pictures page COMPARE [--clips DIR]
+fwtest pictures annotate COMPARE --reviewer COMMAND [--timeout SECONDS]
+fwtest pictures clips [--flow NAME] [--out DIR] [--python PATH]
+```
+
+A pull request's review, by hand:
+
+```sh
+fwtest pictures render --set touched --out ~/.flexweek-ui-harness/scratch/pictures/my-pr
+fwtest pictures compare ~/.flexweek-ui-harness/scratch/pictures/my-pr/base \
+  ~/.flexweek-ui-harness/scratch/pictures/my-pr/head --out ~/.flexweek-ui-harness/scratch/pictures/my-pr/compare
+fwtest pictures page ~/.flexweek-ui-harness/scratch/pictures/my-pr/compare
+```
+
+`render` prints the compare and page lines with the right folders when it finishes. Open
+`compare/index.html` in a browser.
+
+### Which screens are drawn
+
+- `--set full` draws every screen, on this checkout only unless `--base` is given.
+- `--set touched` draws the screens the changed paths touch, on this checkout and on the base
+  (`--base`, default `origin/main`). The changed paths are git's: everything changed since this
+  branch and the base parted, plus changes in the working tree and untracked files. `--changed FILE`
+  gives them instead, one per line.
+- A changed path touches a screen when it is, or lies in a folder that is, one of the screen's
+  `sources` or the screen's own screens file. A path touches every screen when it is something every
+  picture is drawn from: `scripts/pictures/`, `screen.py`, `light_app.py`, `waiting.py`,
+  `window_support.py`, `backend/tests/fake_clock.py`, `desktop/tests/fontconfig.conf` or
+  `desktop/assets/fonts/`. So does any other file in `desktop/tests/pictures/`, because it is a
+  helper some screens files import and the listing cannot say which.
+- When nothing is touched, the renderer is not started (it would still cost a sign-up), and the side
+  gets an `index.json` with no pictures.
+
+### How `render` runs
+
+Each side is one contained job, with everything in [How a job is contained](#how-a-job-is-contained):
+the machine-wide lock, nice 19 and the caps. `--timeout` stops a side after that many seconds
+(default 3600, exit 124). The base is checked out in a detached worktree under
+`~/.flexweek-ui-harness/scratch/pictures/worktrees/` and removed afterwards. It is drawn with this
+checkout's renderer and this checkout's Python, so both sides are drawn the same way and share one
+installed engine module. The output folder (default
+`~/.flexweek-ui-harness/scratch/pictures/<time>-<pid>/`) holds `head/`, `base/` and `changed.txt`.
+The exit code is the worse side's. The renderer exits 1 when any picture failed or a screens file
+could not be read.
+
+### The fixed setup and the variants
+
+Every picture is drawn offscreen (`QT_QPA_PLATFORM=offscreen`), silent (`FLEXWEEK_SILENT=1`), with
+grey-shade text (`FONTCONFIG_FILE=desktop/tests/fontconfig.conf`) and the bundled fonts, under a home
+folder of its own so Qt's test files are never a test run's. Before each picture, and again after
+it, the computer is made clean the way the desktop conftest does it between tests: the clock goes back
+to `fake_clock.START` (Thursday 2026-11-05 19:00), the 24-hour clock is set again, and the look file
+and the week-start file are removed. Each picture opens a light window on a fresh copy of the one
+signed-up account, so preferences a screen saved in `prepare` are gone for the next one. Animations
+are off, so nothing is caught halfway through a fade. Screens never reach Spotify or the browser.
+
+The variants of one screen:
+
+| Set | Styles | Mode | Text | Size | High contrast |
+|---|---|---|---|---|---|
+| every screen | each style | light and dark | Normal | 1280x800 | no |
+| `main` screens, also | each style | light | Large | 1024x640 | yes |
+
+The styles are every Widgets design of the screen's role (the main views; the day screens for a My
+day screen), in the layouts registry's order, then Material 3. A screen's `styles` narrows them:
+design ids (`"classic"`), `"material"`, and `"widgets"` for every Widgets design of its role. An
+unknown style is reported as that screen's error. Light and dark are the `light-frost` and
+`dark-frost` packs on Widgets, and Material's own mode on Material 3.
+
+A picture is `<out>/<screen id>/<style>.<mode>.<text>.<width>x<height>[.hc].png`, for example
+`week.grid/classic.dark.normal.1280x800.png`.
+
+### index.json
+
+```json
+{
+ "version": 1, "set": "touched", "root": "/path/to/checkout", "commit": "<sha>",
+ "problems": [{"module": "desktop/tests/pictures/screens_week.py", "error": "<traceback>"}],
+ "pictures": [{
+  "screen": "week.grid", "area": "week", "module": "desktop/tests/pictures/screens_week.py",
+  "main": true, "checks": "...", "sources": ["desktop/native/hours"],
+  "variant": "classic.light.normal.1280x800", "style": "classic", "mode": "light", "text": "normal",
+  "size": [1280, 800], "high_contrast": false,
+  "picture": "week.grid/classic.light.normal.1280x800.png",
+  "measurements": {"labels": [], "focus": {}},
+  "error": null
+ }]
+}
+```
+
+- `problems` are screens files that could not be imported, entries that are not a `Screen`, ids
+  declared twice, and ids chosen for `touched` that no file declares.
+- A picture whose `prepare` (or drawing) raised has `picture: null` and the traceback in `error`. It
+  is never left out.
+- `measurements.labels`: every visible label, button and Material 3 `Text` with words, with its
+  rectangle in the picture, `too_wide` (the words need more room than the widget has: a size hint
+  wider than the widget, a word-wrapped label taller than its height, a QML text that is truncated;
+  `null` for rich text), and the text contrast. The contrast is read from the picture: the colour most
+  of the rectangle is (what the words sit on) against the colour that stands out from it most (the
+  ink). It is a measurement to look at, not a verdict. The page flags anything under 4.5:1.
+- `measurements.focus`: the widget (or QML item) that has keyboard focus, and `ring`, whether it draws
+  differently without focus. The picture is taken again with focus removed and the pixels compared
+  in the widget's rectangle grown by 4 px, since a ring is drawn just outside a control as often as
+  inside it.
+
+### compare
+
+`compare` matches the two folders' pictures by screen and variant. Two pixels are the same when no
+channel differs by more than `--tolerance` (default 24 of 255), which absorbs the anti-aliasing noise
+of text drawn twice. A picture has changed when more than `--min-pixels` (default 8) pixels are not
+the same. A picture whose size changed is changed, with no difference image. Each picture is
+`failed` (either side could not draw it), `changed`, `added`, `removed` or `unchanged`. Only the
+pictures that are not unchanged are copied into `--out` (`before/`, `after/`, and `diff/` with the
+differing pixels marked), beside `compare.json`, so the folder carries what the page shows and nothing
+more. It exits 1 when the after side failed to draw something or had a problem.
+
+### page
+
+`page` writes `index.html` into the compare folder. Failed pictures come first, then changed (most
+pixels changed first), added and removed, each with before, after and the difference, the screen's
+checks, the reviewer's notes when `annotate` ran, and the measurements. Unchanged pictures are listed
+by name only. With `--clips`, each clip is shown as a strip of 8 PNG frames picked evenly from first
+to last, with the video linked beside it. Everything the page shows is copied into the compare folder,
+so the folder is uploaded as it is.
+
+### annotate and writing a reviewer
+
+`annotate` runs a reviewer command once for each changed or added picture, keeps what it prints in
+`review/<screen id>/<variant>.txt`, and the page shows it under the picture. Run `page` again
+afterwards. `fwtest` ships no reviewer and calls no model, and CI runs no reviewer. Kimi K3.1 Pro
+(T3 provider `acpRegistry_kimi`) is the planned annotator, and Gemini or Claude decides (spec.md,
+Testing structure, rule 6). Whoever runs the review passes the command.
+
+A reviewer is any shell command, run with `sh -c` in its own process group. For each picture it gets:
+
+- the request as JSON on its standard input, and the same JSON in the file named by
+  `FWTEST_REVIEW_REQUEST`:
+  `{"screen", "variant", "status", "checks", "before", "after", "diff", "measurements"}`, where
+  `before`, `after` and `diff` are absolute PNG paths or `null`;
+- the same facts in `FWTEST_SCREEN`, `FWTEST_VARIANT`, `FWTEST_STATUS` (`changed` or `added`),
+  `FWTEST_CHECKS`, `FWTEST_BEFORE`, `FWTEST_AFTER` and `FWTEST_DIFF` (empty when there is no such
+  picture).
+
+What it prints on standard output is the answer, kept as plain text. Exiting non-zero, printing
+nothing, or running past `--timeout` (default 300 seconds; the whole process group is stopped) leaves
+a "Reviewer failed: ..." note in place of the answer, and `annotate` exits 1 after asking about the
+rest. A minimal reviewer that only lists what the measurements flag:
+
+```sh
+#!/bin/sh
+# review-measurements.sh: a stand-in reviewer for trying annotate without a model.
+jq -r '"Checks: \(.checks)",
+  (.measurements.labels // [] | .[] | select(.contrast != null and .contrast < 4.5)
+    | "Low contrast \(.contrast):1 on \(.text)"),
+  (.measurements.labels // [] | .[] | select(.too_wide == true) | "Too wide: \(.text)"),
+  (if .measurements.focus.ring == false then "No focus ring on \(.measurements.focus.focused)" else empty end)'
+```
+
+```sh
+fwtest pictures annotate COMPARE --reviewer ./review-measurements.sh
+```
+
+A model reviewer does the same: it reads the request, sends the `before`, `after` and `diff` PNGs with
+the checks to the model, and prints the model's notes.
+
+### clips
+
+`clips` records the flows that must behave the same in Widgets and Material 3, on the rig's hidden
+desktop: add homework, tick done and Undo, open and edit, drag a block, Plan my homework, Running
+late, start and finish Focus, switch Day / Week / Month, and change the look in Settings. Each flow
+is a play file per surface, `scripts/rig/flows/<flow>.widgets.json` and
+`scripts/rig/flows/<flow>.material.json`, in the format of [Playing the app](#playing-the-app). Each
+file is played twice, with animations on and off, each run one `fwtest rig --play` with the play's
+setup given `"motion"` and `"record": true`. `--flow NAME` records one flow. A whole run is 36 rig
+runs, so it is heavy: run it once, when the flows or what they cover changed.
+
+A recorded run keeps PNG frames of the window, ten a second, with the pointer drawn as a red dot, in
+`<run>/frames/`. It also keeps `<run>/clip.mp4` when the computer can encode on the GPU (`ffmpeg` with
+`h264_vaapi` on `/dev/dri/renderD128`). Without either, it keeps the frames only and says why; it never
+falls back to a slow CPU encode. The output folder (default
+`~/.flexweek-ui-harness/scratch/pictures/clips/<time>-<pid>/`) lists every run in `clips.json`, which
+`page --clips` reads. The exit code is the worst run's.
+
+### On pull requests (CI)
+
+The `pictures` job in `.github/workflows/verify.yml` runs on pull requests only. It draws the touched
+screens on the pull request's base commit and on its head, compares them, builds the page, and
+uploads the compare folder as the artifact `pictures-pr-<number>-<attempt>`. The page is uploaded
+even when a screen could not be drawn, and the job then fails. No reference pictures are stored, and
+no reviewer runs. `.github/workflows/pictures-cleanup.yml` deletes a pull request's artifacts when it
+is merged or closed. Clips are not recorded in CI: the CI runners have no ffmpeg, and the flows
+are recorded locally with `fwtest pictures clips`.
 
 ## Data
 

@@ -1,0 +1,47 @@
+{
+ "setup": {
+  "seed": "rig",
+  "look": "light-frost",
+  "size": [
+   1280,
+   800
+  ],
+  "clock_24h": false
+ },
+ "steps": [
+  {
+   "click": {
+    "text": "Day"
+   }
+  },
+  {
+   "wait": 600
+  },
+  {
+   "shot": "day"
+  },
+  {
+   "click": {
+    "text": "Month"
+   }
+  },
+  {
+   "wait": 600
+  },
+  {
+   "shot": "month"
+  },
+  {
+   "click": "viewWeek"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "see": "Math worksheet"
+  },
+  {
+   "shot": "week"
+  }
+ ]
+}
