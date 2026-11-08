@@ -14,6 +14,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import FakeClock
+from desktop.native.weekmodel import set_clock_24h
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.window_support import qapp, settled  # noqa: F401
@@ -65,6 +66,8 @@ def test_a_start_that_has_passed_is_refused_in_the_calendars_words_and_nothing_m
          "start": "08:00", "duration_min": 390}
     )
     at(window, clock, 2, 12)
+    # A new account reads the 12-hour clock; the words are checked in the 24-hour one.
+    set_clock_24h(True)
     assert session.hand_move("school", 2, 2, 8 * 60 + 30, 15 * 60) is False
     assert session.message == "That time has passed. Choose 12:00 or later today, or another day."
     school = next(item for item in session.blocks if item["id"] == "school")
