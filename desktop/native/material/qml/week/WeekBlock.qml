@@ -32,7 +32,7 @@ Item {
     FontMetrics {
         id: titleMetrics
         font.family: M3Font.family
-        font.pixelSize: 12 * ((cell.theme && cell.theme.typeScale) ? cell.theme.typeScale : 1)
+        font.pixelSize: M3Font.px(12)
         font.weight: 600
     }
     readonly property bool circleBelow: cell.homework
