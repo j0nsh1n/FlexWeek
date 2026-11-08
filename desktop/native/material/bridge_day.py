@@ -10,7 +10,7 @@ from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 from desktop.native.calendar import monday_of
 from desktop.native.hours.zoom import OPENS, opening_minute
 from desktop.native.material.bridge_rows import Rows
-from desktop.native.material.bridge_week import BLOCK_ROLES, occurrence_row
+from desktop.native.material.bridge_week import BLOCK_ROLES, occurrence_row, side_by_side
 from desktop.native.material.day_board import (
     DIM_KEYS,
     NUDGE_KEYS,
@@ -188,7 +188,7 @@ class DayBridge(QObject):
                 on=viewed,
                 now=moment,
             ),
-            block_rows,
+            side_by_side(block_rows),
         )
 
     def _publish(self, board: DayBoard, block_rows: list[dict] | None = None) -> None:
@@ -350,6 +350,10 @@ class DayBridge(QObject):
     @Property(str, notify=changed)
     def nowTitle(self) -> str:
         return self._board.now_title
+
+    @Property(str, notify=changed)
+    def focusTitle(self) -> str:
+        return self._board.focus_title
 
     @Property(int, notify=changed)
     def nowMinutes(self) -> int:

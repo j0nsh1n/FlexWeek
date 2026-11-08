@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from desktop.native.material.theme import EVENT_CATEGORY, bar_for_category, paint_for_category
-from desktop.native.weekmodel import due_label, length_label, range_label, slack_words_for
+from desktop.native.weekmodel import clock_text, due_label, length_label, range_label, slack_words_for
 
 ICONS = {
     "class": "school",
@@ -61,6 +61,8 @@ class DayBoard:
     done: tuple[DayRow, ...]
     focus_block_id: str
     focus_day: int
+    # The homework Start focus opens, which the card names on its button.
+    focus_title: str
 
 
 def read_flag(preferences: object, keys: tuple[str, ...], default: bool) -> bool:
@@ -84,11 +86,13 @@ def board_for(
     on: date,
     now: datetime | None = None,
 ) -> DayBoard:
-    """Up next, Done, the free-time card, and the ring for one day.
+    """Up next, Done, the Now card, and the ring for one day.
 
-    `when` is `today`, `past`, or `future`. The free-time card is the gap from
-    `minute` to the next block that still occupies time, and only on today
-    while nudges are on. A finished homework block does not occupy that gap.
+    `when` is `today`, `past`, or `future`. The Now card shows only on today
+    while nudges are on. It names homework that is happening at `minute`, with
+    its time left; otherwise it gives the free time from `minute` to the next
+    block that still occupies time, and that block. A finished homework block
+    does not occupy that gap.
     Slack uses `now` when the caller has the real clock; otherwise the viewed
     day's `minute`.
     """
@@ -97,16 +101,17 @@ def board_for(
     finished = tuple(item for item in ordered if item not in up)
     gap = _gap(ordered, minute, when, nudges)
     focus = next((item for item in up if item.work and item.assignment_id), None)
+    doing = _doing(up, minute, when, nudges)
     total = len(ordered)
     count = len(up)
     moment = now if now is not None else datetime.combine(on, datetime.min.time()) + timedelta(minutes=minute)
     return DayBoard(
         left_line=_left_line(count, when == "today"),
         left_count=count,
-        show_now=gap is not None,
-        now_title=_now_title(focus, gap),
-        now_minutes=0 if gap is None else int(gap.start) - minute,
-        now_line="" if gap is None else f"{length_label(int(gap.start) - minute)} left",
+        show_now=doing is not None or gap is not None,
+        now_title=_now_title(doing, gap, minute),
+        now_minutes=_now_minutes(doing, gap, minute),
+        now_line=_now_line(doing, gap, minute),
         ring_count=count,
         ring_caption="thing left" if count == 1 else "things left",
         ring_share=0.0 if total == 0 else (total - count) / total,
@@ -114,6 +119,7 @@ def board_for(
         done=tuple(_row(item, on, moment, mode, dim=dim, finish=False) for item in finished),
         focus_block_id="" if focus is None else str(focus.block_id),
         focus_day=-1 if focus is None else int(focus.day),
+        focus_title="" if focus is None else str(focus.title),
     )
 
 
@@ -141,12 +147,33 @@ def _gap(items: Sequence[object], minute: int, when: str, nudges: bool) -> objec
     return next((item for item in items if _live(item) and int(item.start) > minute), None)
 
 
-def _now_title(focus: object | None, gap: object | None) -> str:
-    if focus is not None:
-        return str(focus.title)
+def _doing(up: Sequence[object], minute: int, when: str, nudges: bool) -> object | None:
+    if not nudges or when != "today":
+        return None
+    homework = (item for item in up if item.work and item.assignment_id)
+    return next((item for item in homework if int(item.start) <= minute < int(item.end)), None)
+
+
+def _now_minutes(doing: object | None, gap: object | None, minute: int) -> int:
+    if doing is not None:
+        return int(doing.end) - minute
+    return 0 if gap is None else int(gap.start) - minute
+
+
+def _now_title(doing: object | None, gap: object | None, minute: int) -> str:
+    if doing is not None:
+        return str(doing.title)
     if gap is None:
         return ""
-    return f"Free time before {gap.title}"
+    return f"Free for {length_label(int(gap.start) - minute)}"
+
+
+def _now_line(doing: object | None, gap: object | None, minute: int) -> str:
+    if doing is not None:
+        return f"{length_label(int(doing.end) - minute)} left"
+    if gap is None:
+        return ""
+    return f"Next: {gap.title} at {clock_text(int(gap.start))}"
 
 
 def _slack_words(item: object, now: datetime) -> str:

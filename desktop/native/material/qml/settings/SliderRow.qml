@@ -20,7 +20,7 @@ Item {
     signal moved(real value)
     objectName: "row_" + key
 
-    implicitHeight: 76
+    implicitHeight: 52 + M3Font.px(24)
     height: implicitHeight
 
     M3Palette { id: palette; theme: root.theme }
@@ -47,12 +47,12 @@ Item {
     Text {
         x: 16
         y: 10
-        height: 24
+        height: M3Font.px(24)
         verticalAlignment: Text.AlignVCenter
         text: root.title
         color: palette.inkSurface
         font.family: M3Font.family
-        font.pixelSize: 16
+        font.pixelSize: M3Font.px(16)
         font.weight: 500
     }
     Text {
@@ -60,19 +60,19 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: 16
         y: 10
-        height: 24
+        height: M3Font.px(24)
         verticalAlignment: Text.AlignVCenter
         text: root.shown.toFixed(root.decimals) + root.unit
         color: palette.primary
         font.family: M3Font.family
-        font.pixelSize: 14
+        font.pixelSize: M3Font.px(14)
         font.weight: 500
     }
     Item {
         id: slider
         objectName: root.key
         x: 16
-        y: 38
+        y: 14 + M3Font.px(24)
         width: root.width - 32
         height: 28
         activeFocusOnTab: true

@@ -186,24 +186,63 @@ def test_browsing_another_day_uses_the_real_clock(qapp: QApplication) -> None:
     assert bridge._board.up_next[0].tag == "Plenty of time"
 
 
-def test_the_now_card_names_the_homework_start_focus_would_open() -> None:
-    essay = _block("Essay", *ESSAY, work=True, assignment="a1")
-    board = _board([_block("School", *SCHOOL), essay], 15 * 60)
-    assert board.focus_block_id == "essay"
-    assert board.now_title == "Essay"
-    assert board.show_now is True
+def _board_12h(items: list[Occurrence], minute: int):
+    set_clock_24h(False)
+    try:
+        return board_for(items, minute=minute, when="today", nudges=True, dim=True, mode="light", on=TODAY)
+    finally:
+        set_clock_24h(True)
 
 
-def test_the_now_card_is_the_gap_to_the_next_block() -> None:
-    day = [_block("School", *SCHOOL), _block("Soccer", *SOCCER)]
-    board = _board(day, 15 * 60 + 40)
+def test_free_time_says_how_long_then_what_is_next() -> None:
+    """Jonathan's words: "Free for 20 min — next: Soccer at 4:00 PM"."""
+    essay = _block("History essay", *ESSAY, work=True, assignment="a1")
+    day = [_block("School", *SCHOOL), _block("Soccer", *SOCCER, category="exercise"), essay]
+    board = _board_12h(day, 15 * 60 + 40)
     assert board.show_now is True
-    assert board.now_title == "Free time before Soccer"
-    assert board.now_minutes == 20
-    assert board.now_line == "20 min left"
+    assert board.now_title == "Free for 20 min"
+    assert board.now_line == "Next: Soccer at 4:00 PM"
+    assert "History essay" not in board.now_title + board.now_line
+    later = _board_12h(day, 15 * 60 + 47)
+    assert later.now_title == "Free for 13 min"
+    assert later.now_line == "Next: Soccer at 4:00 PM"
+    assert later.ring_count == 2
     longer = _board(day, 13 * 60)
-    assert longer.now_minutes == 180
-    assert longer.now_line == "3 h left"
+    assert longer.now_title == "Free for 3 h"
+    assert longer.now_line == "Next: Soccer at 16:00"
+
+
+def test_the_start_button_names_the_homework_it_starts() -> None:
+    """During free time the card no longer names the homework, so its button does (Jonathan, 2026-11-08)."""
+    essay = _block("History essay", *ESSAY, work=True, assignment="a1")
+    day = [_block("School", *SCHOOL), _block("Soccer", *SOCCER, category="exercise"), essay]
+    assert _board_12h(day, 15 * 60 + 40).focus_title == "History essay"
+    assert _board_12h([_block("School", *SCHOOL)], 15 * 60 + 40).focus_title == ""
+
+
+def test_free_time_before_a_homework_block_does_not_count_down_the_homework() -> None:
+    new = _block("Causes of WW1 essay", 16 * 60, 17 * 60, work=True, assignment="a2")
+    board = _board_12h([_block("School", *SCHOOL), new], 15 * 60 + 47)
+    assert board.now_title == "Free for 13 min"
+    assert board.now_line == "Next: Causes of WW1 essay at 4:00 PM"
+    assert board.focus_block_id == "causes-of-ww1-essay"
+
+
+def test_homework_happening_now_is_named_with_its_time_left() -> None:
+    essay = _block("Essay", *ESSAY, work=True, assignment="a1")
+    board = _board([_block("School", *SCHOOL), essay], 19 * 60)
+    assert board.show_now is True
+    assert board.now_title == "Essay"
+    assert board.now_line == "45 min left"
+    assert board.focus_block_id == "essay"
+
+
+def test_nothing_left_today_has_no_now_card() -> None:
+    essay = _block("Essay", *ESSAY, work=True, assignment="a1", done=True)
+    board = _board([_block("School", *SCHOOL), essay], 15 * 60)
+    assert board.left_line == "Nothing left today"
+    assert board.show_now is False
+    assert board.now_title == "" and board.now_line == ""
 
 
 def test_no_now_card_inside_a_block_after_the_last_one_or_off_today() -> None:
@@ -370,9 +409,9 @@ def test_day_screen_reads_the_real_day(qapp: QApplication, window: NativeWindow)
     day = _bridge(root).property("day")
     assert day.property("leftLine") == "1 thing left today"
     assert day.property("showNow") is True
-    assert day.property("nowTitle") == "History essay"
+    assert day.property("nowTitle") == "Free for 1 h 45 min"
     assert day.property("nowMinutes") == 105
-    assert day.property("nowLine") == "1 h 45 min left"
+    assert day.property("nowLine") == "Next: History essay at 18:45"
     up = _rows(day.property("upNext"))
     done = _rows(day.property("doneRows"))
     assert [row["title"] for row in up] == ["History essay"]
@@ -389,8 +428,8 @@ def test_day_screen_reads_the_real_day(qapp: QApplication, window: NativeWindow)
         _pump(qapp)
         focus = window._material_page.bridge.focus
         assert str(focus.property("title")) == "History essay"
-        assert str(day.property("nowTitle")) == "History essay"
-        assert str(myday.property("nowTitle")) == "History essay"
+        assert str(day.property("nowTitle")) == "Free for 1 h 45 min"
+        assert str(myday.property("nowTitle")) == "Free for 1 h 45 min"
     finally:
         window.session.reset_focus()
         _pump(qapp)

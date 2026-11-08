@@ -60,11 +60,17 @@ class BlockDraft:
         start: str = "16:00",
         category: str | None = None,
         occurrence_day: int | None = None,
+        length: int | None = None,
     ) -> None:
         self.session = session
         self.now = datetime.fromtimestamp(session.now_ms() / 1000)
         self.existing = block is not None
-        self.original = deepcopy(block) if block is not None else _preset_locked(category, day, start, 60)
+        self.original = (
+            deepcopy(block) if block is not None else _preset_locked(category, day, start, length or 60)
+        )
+        if block is None and length is not None:
+            # A time picked on the grid keeps its own day, start and length over a category's preset.
+            self.original.update(days=[day], start=start, duration_min=length)
         self.occurrence_day = occurrence_day
         self.step: int | None = None if self.existing else 0
         original = self.original

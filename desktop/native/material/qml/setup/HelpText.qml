@@ -7,6 +7,6 @@ Text {
     M3Palette { id: palette; theme: root.theme }
     color: palette.inkMuted
     font.family: M3Font.family
-    font.pixelSize: 14
+    font.pixelSize: M3Font.px(14)
     wrapMode: Text.WordWrap
 }

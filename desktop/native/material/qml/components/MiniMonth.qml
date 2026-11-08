@@ -12,7 +12,7 @@ Item {
     property string accessName: "Month"
     signal dayActivated(int day)
 
-    readonly property int cell: 28
+    readonly property int cell: M3Font.px(28)
     implicitWidth: 7 * cell + 12
     implicitHeight: caption.implicitHeight + 8 + 7 * cell
     width: implicitWidth
@@ -63,7 +63,7 @@ Item {
         text: root.monthName()
         color: root.muteInk
         font.family: M3Font.family
-        font.pixelSize: 12
+        font.pixelSize: M3Font.px(12)
         font.weight: 500
     }
 
@@ -79,7 +79,7 @@ Item {
             text: ["M", "T", "W", "T", "F", "S", "S"][index]
             color: root.muteInk
             font.family: M3Font.family
-            font.pixelSize: 12
+            font.pixelSize: M3Font.px(12)
             font.weight: 500
         }
     }
@@ -127,7 +127,7 @@ Item {
                 }
                 color: cell.isToday ? root.todayInk : root.dayInk
                 font.family: M3Font.family
-                font.pixelSize: 12
+                font.pixelSize: M3Font.px(12)
                 font.weight: cell.isToday ? 500 : 400
                 Accessible.role: Accessible.StaticText
                 Accessible.name: cell.inside ? String(cell.day) : ""
