@@ -2,12 +2,16 @@
 
 use super::index::Listing;
 
-/// Paths every picture is drawn from: the renderer, the contract, the light app, the font setup and
-/// the bundled fonts. A change to one draws every screen.
+/// Paths every picture is drawn from: the renderer, the contract, the light app and the helpers the
+/// renderer uses, the one clock, the font setup and the bundled fonts. A change to one draws every
+/// screen.
 pub const EVERY_SCREEN: &[&str] = &[
     "scripts/pictures",
     "desktop/tests/pictures/screen.py",
     "desktop/tests/light_app.py",
+    "desktop/tests/waiting.py",
+    "desktop/tests/window_support.py",
+    "backend/tests/fake_clock.py",
     "desktop/tests/fontconfig.conf",
     "desktop/assets/fonts",
 ];
@@ -28,12 +32,24 @@ pub fn touches(changed: &str, source: &str) -> bool {
             .is_some_and(|rest| rest.starts_with('/'))
 }
 
+/// The folder the screens files live in, beside the helper modules they import.
+pub const SCREENS_FOLDER: &str = "desktop/tests/pictures";
+
 /// The ids of the screens to draw, in the registry's order: a screen whose sources or own screens
-/// file a changed path touches, or every screen when a changed path is one all pictures use.
+/// file a changed path touches, or every screen when a changed path is one all pictures use. A
+/// changed file in the screens folder that is no screen's own module is a helper some screens files
+/// import (which ones is not known here), so it draws every screen too.
 pub fn select(listing: &Listing, changed: &[String]) -> Vec<String> {
+    let helper = |path: &String| {
+        touches(path, SCREENS_FOLDER)
+            && !listing
+                .screens
+                .iter()
+                .any(|screen| touches(path, &screen.module))
+    };
     let everything = changed
         .iter()
-        .any(|path| EVERY_SCREEN.iter().any(|shared| touches(path, shared)));
+        .any(|path| EVERY_SCREEN.iter().any(|shared| touches(path, shared)) || helper(path));
     listing
         .screens
         .iter()

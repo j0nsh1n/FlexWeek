@@ -418,10 +418,22 @@ fn a_change_to_a_screens_file_draws_its_screens() {
 }
 
 #[test]
+fn a_change_to_a_helper_beside_the_screens_files_draws_every_screen() {
+    // A helper module some screens files import; the listing cannot say which.
+    let chosen = select::select(
+        &listing(),
+        &changed(&["desktop/tests/pictures/week_clock.py"]),
+    );
+    assert_eq!(chosen, ["week.grid", "day.hours", "settings.look"]);
+}
+
+#[test]
 fn a_change_to_what_every_picture_uses_draws_every_screen() {
     for shared in [
         "scripts/pictures/render.py",
         "desktop/tests/light_app.py",
+        "desktop/tests/waiting.py",
+        "backend/tests/fake_clock.py",
         "desktop/assets/fonts/Inter-Regular.ttf",
     ] {
         assert_eq!(
