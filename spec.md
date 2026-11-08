@@ -108,8 +108,9 @@ Contract for the finished app:
   activity asks once, naming the days: "This day only" (when opened from one
   day), "This week only" or "This week and later"; earlier weeks keep it, and
   this week and later rewrites the saved later weeks in the same save
-  (`standing` in `/api/changes`) and can't be undone; only the open week's part
-  has Undo. Restore points and account exports carry the standing
+  (`standing` in `/api/changes`) and can't be undone with Undo; only the open
+  week's part has Undo (an assistant's change of this kind is undone with the
+  restore point it saved first). Restore points and account exports carry the standing
   rows.
 - A later week reviews unfinished homework using the original assignment ID,
   exact deadline and progress. Repeated planning and request retries cannot
@@ -117,8 +118,8 @@ Contract for the finished app:
   under More > Unfinished and, after a plan, as "N unfinished from last week"
   with Plan them and I did these.
 - Account-owned restore points snapshot weeks and assignments. Clear week,
-  routine application and restore preserve the replaced schedule first; a
-  stale restore preview returns 409 and no failure stores partial state. The UI
+  routine application, restore and every assistant (MCP) change preserve the
+  replaced schedule first; a stale restore preview returns 409 and no failure stores partial state. The UI
   labels backups as local-device or hosted-server data.
 - New accounts receive eight one-time recovery codes, shown once. A forgotten
   password is recovered with a username, an unused code and a new password, not
@@ -649,8 +650,9 @@ nothing loops.
   - `engine/mcp`. The `flexweek-mcp` binary (from 1.1): a Model Context
     Protocol server over stdio, built on the Rust SDK `rmcp` (pinned
     `=3.5.1`), that lets an assistant the student runs on this computer read
-    and change the signed-in account's schedule. It holds no rules: every tool
-    calls the engine, the store or `engine/ffi`. It opens the database file,
+    and change the signed-in account's schedule. Its rules come from the
+    engine and the store; its Plan follows the same steps as the phone's
+    `plan_week`. It opens the database file,
     not the HTTP API, and listens on no port. The open desktop app notices
     its changes within a few seconds and shows them without a restart,
     keeping any edits the student has not saved.
@@ -739,8 +741,12 @@ nothing loops.
 - The MCP server (`flexweek-mcp`) acts as the account kept signed in on this
   computer. It reads the kept session file, refuses a file readable by anyone
   but its owner, checks the session in the database on every call and refuses
-  an expired or ended one. It is given no password. It cannot change the
-  password, read or replace recovery codes, delete the account, export or
+  an expired or ended one. It is given no password. It can add, edit, move,
+  finish and delete homework and fixed time (breaks, meals, rest, events),
+  change School and activities (this week, or from this week on), run Plan
+  and restore a restore point. Before every change it saves a restore point;
+  it keeps at most 10 of its own and never drops the student's points to make
+  room for them. It cannot change the password, read or replace recovery codes, delete the account, export or
   import an account, pair or remove a phone, or change preferences, and it
   never returns a session token, a password hash or a recovery-code hash. It
   listens on no port and logs only tool names and outcomes.
