@@ -39,6 +39,8 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- Material Week drawer: a homework length such as "1 h" or "30 min" stays on one line, so "h" is never left alone on the last line at Large and Larger text.
+- Material buttons with an icon, such as "Plan my homework": the icon grows with the text size and is centred on the label.
 - Material Edit homework: the Pinned time list opens on the chosen time (for example 7:00 PM) instead of at 12:00 AM, and Up and Down on the closed field move the time by a quarter hour. Alt+Down, Space and Enter still open the list.
 - Material Day's month panel is as wide as the mini month, so no weekday column is cut off at Larger text.
 - Material Day and Week hide an hour label that would be only partly shown at the top of the hours pane, Day's zoom control never covers an hour label, and Day leaves a small gap between the Now card and the hours.
