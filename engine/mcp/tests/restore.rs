@@ -712,3 +712,50 @@ fn a_refused_write_keeps_every_restore_point() {
         "a refused write changes nothing"
     );
 }
+
+#[test]
+fn a_replayed_restore_changes_nothing() {
+    let world = signed_in("restore-replay");
+    let mut server = boot(&world);
+    server.handshake();
+    for n in 0..10 {
+        let added = add_essay(&mut server, &format!("op-replay-fill-{n:02}"), 2 + n);
+        assert_eq!(
+            body_of(&added)["ok"],
+            json!(true),
+            "write {n} lands, got {added}"
+        );
+    }
+    let target = points(&world)
+        .first()
+        .map(|(id, _, _)| id.clone())
+        .unwrap_or_default();
+    let args = json!({"operation_id": "op-replay-restore", "id": target});
+    let first = server.call("restore_point", args.clone(), 20);
+    assert_eq!(
+        body_of(&first)["ok"],
+        json!(true),
+        "the restore lands, got {first}"
+    );
+    let after = points(&world);
+    let week_after = week_row(&world);
+    let again = server.call("restore_point", args, 21);
+    assert_eq!(
+        body_of(&first),
+        body_of(&again),
+        "a replayed restore answers the first result"
+    );
+    let ids = |list: &[(String, String, Value)]| -> Vec<String> {
+        list.iter().map(|(id, _, _)| id.clone()).collect()
+    };
+    assert_eq!(
+        ids(&points(&world)),
+        ids(&after),
+        "a replayed restore drops and adds no restore point"
+    );
+    assert_eq!(
+        week_row(&world),
+        week_after,
+        "a replayed restore changes no week"
+    );
+}

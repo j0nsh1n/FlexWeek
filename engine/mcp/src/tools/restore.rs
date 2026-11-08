@@ -79,6 +79,22 @@ fn perform(app: &crate::App, args: &RestoreArgs) -> Result<Value, String> {
         write::argument_digest("restore_point", &args.operation_id, &json!({"id": args.id}));
     let (conn, user_id) = (&opened.conn, opened.user_id);
     let now = homework::clock_of(app).now;
+    // A replay or a clashing reuse of the operation id is answered before the prune, so it changes
+    // nothing, not even an old assistant restore point.
+    let early = match recall_operation(conn, user_id, &operation_id, &digest).map_err(stored_error)
+    {
+        Ok(flexweek_store::Recall::Hit(text)) => Some(
+            serde_json::from_str::<Value>(&text)
+                .map_err(|_| session::STORAGE_UNAVAILABLE.to_string()),
+        ),
+        Ok(flexweek_store::Recall::Conflict) => Some(Err(OPERATION_CONFLICT.to_string())),
+        Ok(flexweek_store::Recall::Missing) => None,
+        Err(message) => Some(Err(message)),
+    };
+    if let Some(answer) = early {
+        let _ = conn.execute_batch("ROLLBACK");
+        return write::stable(answer?);
+    }
     let (token, _) = write::restore_point_before(
         conn,
         user_id,
@@ -90,14 +106,6 @@ fn perform(app: &crate::App, args: &RestoreArgs) -> Result<Value, String> {
     // `homework::open` already holds the write lock, as every write does, so the point read here is
     // the one replaced, and a restore sent beside other writes waits its turn.
     let result = (|| {
-        match recall_operation(conn, user_id, &operation_id, &digest).map_err(stored_error)? {
-            flexweek_store::Recall::Hit(text) => {
-                return serde_json::from_str::<Value>(&text)
-                    .map_err(|_| session::STORAGE_UNAVAILABLE.to_string());
-            }
-            flexweek_store::Recall::Conflict => return Err(OPERATION_CONFLICT.to_string()),
-            flexweek_store::Recall::Missing => {}
-        }
         let Some((point_id, body)) =
             restore_point_body(conn, user_id, &args.id).map_err(stored_error)?
         else {
