@@ -13,6 +13,7 @@ from typing import Any, Protocol
 
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
+from desktop.native.hours.geometry import overlap_columns
 from desktop.native.material.bridge_rows import Labels, Rows
 from desktop.native.material.theme import event_category, paint_for_category
 from desktop.native.weekmodel import (
@@ -41,6 +42,8 @@ BLOCK_ROLES = (
     "homework",
     "done",
     "fresh",
+    "column",
+    "columns",
 )
 
 
@@ -63,7 +66,21 @@ def occurrence_row(item: Any, mode: str, *, dim: bool, gone: bool, fresh: bool) 
         "homework": bool(item.work and item.assignment_id),
         "done": bool(item.done),
         "fresh": fresh,
+        "column": 0,
+        "columns": 1,
     }
+
+
+def side_by_side(rows: list[dict]) -> list[dict]:
+    """Give each row its lane among the rows that share its day and time, as the Widgets grid does."""
+    by_day: dict[int, list[dict]] = {}
+    for row in rows:
+        by_day.setdefault(row["day"], []).append(row)
+    for same_day in by_day.values():
+        lanes = overlap_columns([(row["start"], row["end"]) for row in same_day])
+        for row, (column, columns) in zip(same_day, lanes, strict=True):
+            row["column"], row["columns"] = column, columns
+    return rows
 
 
 HOMEWORK_ROLES = ("title", "minutes", "blockId", "assignmentId", "detail", "tag", "tagKind", "reason")
@@ -243,7 +260,11 @@ class WeekBridge(QObject):
         self._week_key = session.week_start
         self._seen = keys
         self._fresh_until = {key: until for key, until in self._fresh_until.items() if until > clock}
-        self._block_rows, self._homework_rows, self._day_rows = block_rows, homework_rows, day_rows
+        self._block_rows, self._homework_rows, self._day_rows = (
+            side_by_side(block_rows),
+            homework_rows,
+            day_rows,
+        )
         self._publish()
 
     @staticmethod

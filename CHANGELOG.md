@@ -41,6 +41,9 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Fixed
 - In Material, Esc closes the "Replace timer" question like Keep current timer: nothing changes and you stay where you were.
 - While a focus timer runs, Material's Now card on Day and My day names it with its time left ("History essay", "13 min left") and its button reads "Back to History essay", opening that timer; when the timer ends the card goes back to its usual text. Starting focus on the homework whose timer is already running opens that timer instead of asking to replace it with itself.
+- A short block on Material Week and Day keeps its words inside its border: a title that would push the time out shows on one line, and when even that does not fit, the time line is left out.
+- Material Week and Day widen the hour column to fit its labels at Large and Larger text, so "10:00 AM" no longer loses its first digits, and the Week shows the time now again after the text size or density changes.
+- Material Week and Day place blocks that share time side by side, so a homework pinned over Soccer shows and opens instead of hiding under it.
 - Material Focus: Esc and the Back arrow leave the screen with the timer still running; only Finish asks "End this session?".
 - Material: Running late and Unfinished, opened from the More menu, take the keyboard, so Tab moves through their controls and the focus ring shows.
 - Material Day and My day: the Now card says the free time and what comes next, for example "Free for 20 min" and "Next: Soccer at 4:00 PM". It names a homework only while that homework is happening, with its time left, and its button names the homework it starts ("Start History essay").
