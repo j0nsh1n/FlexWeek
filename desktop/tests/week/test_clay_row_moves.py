@@ -12,7 +12,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QAbstractAnimation, QCursor, QPoint, QPointF, Qt  # noqa: E402
+from PySide6.QtCore import QAbstractAnimation, QPoint, QPointF, Qt  # noqa: E402
+from PySide6.QtGui import QCursor  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication, QPushButton  # noqa: E402
 

@@ -4,7 +4,7 @@ in it, since Plan puts nothing before now."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from backend.tests.fake_clock import FakeClock
 from desktop.native.controller import NativeSession
@@ -31,3 +31,8 @@ def auto_split_preferences() -> dict:
         "timer_long_break_min": 30,
         "timer_long_break_every": 4,
     }
+
+
+def due_on(session: NativeSession, day: int, time: str = "21:00") -> str:
+    """A deadline on `day` (0 is Monday) of the session's week, at `time`."""
+    return (date.fromisoformat(session.week_start) + timedelta(days=day)).isoformat() + "T" + time

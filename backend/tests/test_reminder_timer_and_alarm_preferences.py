@@ -13,7 +13,7 @@ from backend.models import valid_spotify_url
 from backend.storage import initialize
 from backend.tests.account_support import PASSWORD, WRITE, preferences
 
-TIMER_DEFAULTS = {
+TIMER_DEFAULTS: dict[str, object] = {
     "reminder_dnd_override": False,
     "timer_work_min": 30,
     "timer_break_min": 15,
