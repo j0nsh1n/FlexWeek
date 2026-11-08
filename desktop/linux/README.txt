@@ -42,6 +42,11 @@ Without --read-only it can also change homework and blocks, the way you do in
 FlexWeek itself. The helper uses the FlexWeek account kept signed in on this
 computer. It opens no connection to the internet.
 
+If FlexWeek is open, a change the assistant makes shows up within a few
+seconds. If you have changes that are not saved yet, FlexWeek keeps them and
+says the week changed; choose More > Reload this week to see the assistant's
+change.
+
 This download carries the helper. The Windows download does not include it.
 
 

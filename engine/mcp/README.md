@@ -77,5 +77,17 @@ The write tools are `add_homework`, `edit_homework`, `delete_homework`,
 `operation_id` (8 to 80 characters): the same id with the same arguments returns the
 first answer and changes nothing, and the same id with other arguments is refused.
 Edits carry the revision they were read at; a stale one returns
-`{"error": "conflict", "current_revision": N}` and changes nothing. School and
-activities are changed in the app, not here.
+`{"error": "conflict", "current_revision": N}` and changes nothing.
+`set_homework_done` and `set_block_done` take an optional `expected_revision`
+(the homework's revision, or the week's from `get_week`), checked the same way
+when it is given. School and activities are changed in the app, not here.
+
+Several writes can be sent at once without waiting for each answer. Each one
+reads what it changes and saves it under one database lock, so changes to
+different things all apply; only a change made against a revision that has
+moved is refused.
+
+While FlexWeek is open on this computer it shows a write within a few seconds,
+without a restart. If the student has edits there that are not saved yet, they
+are kept, and the week is marked as changed elsewhere until the student chooses
+More > Reload this week.

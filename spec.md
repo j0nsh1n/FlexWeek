@@ -642,14 +642,18 @@ nothing loops.
     explanations, and the desktop's Qt-free logic (`desk/`). No files, clock,
     network or database; it takes them as arguments.
   - `engine/store`. SQLite: schema, start-up migrations, transactions, password
-    hashing, sessions and throttling. The only code that opens the database.
+    hashing, sessions and throttling. The only code that writes the database;
+    the desktop may open it read-only to notice another program's changes and
+    to check for a linked phone.
   - `engine/py`. The `flexweek_engine` module that Python imports.
   - `engine/mcp`. The `flexweek-mcp` binary (from 1.1): a Model Context
     Protocol server over stdio, built on the Rust SDK `rmcp` (pinned
     `=3.5.1`), that lets an assistant the student runs on this computer read
     and change the signed-in account's schedule. It holds no rules: every tool
     calls the engine, the store or `engine/ffi`. It opens the database file,
-    not the HTTP API, and listens on no port.
+    not the HTTP API, and listens on no port. The open desktop app notices
+    its changes within a few seconds and shows them without a restart,
+    keeping any edits the student has not saved.
   - `backend/solver.py`. Adapter to the engine's synchronous CSP placement. No
     HTTP knowledge.
   - `backend/explain.py`. Adapter: reason code and slack status to English string.

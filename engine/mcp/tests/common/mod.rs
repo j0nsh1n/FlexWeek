@@ -125,6 +125,40 @@ impl Server {
         )
     }
 
+    /// Sends a tool call and does not wait, as an assistant that sends several changes at once does.
+    pub fn send_call(&mut self, name: &str, arguments: Value, id: i64) {
+        let message = json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments},
+        });
+        self.send(&message);
+    }
+
+    /// The answers to `ids`, in that order, whatever order they arrive in. A missing one is `Null`.
+    pub fn answers(&self, ids: &[i64]) -> Vec<Value> {
+        let mut found = std::collections::HashMap::new();
+        let deadline = std::time::Instant::now() + Duration::from_secs(20);
+        while found.len() < ids.len() {
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            let Ok(line) = self.lines.recv_timeout(remaining) else {
+                break;
+            };
+            let Ok(value) = serde_json::from_str::<Value>(&line) else {
+                continue;
+            };
+            if let Some(id) = value.get("id").and_then(Value::as_i64)
+                && ids.contains(&id)
+            {
+                found.insert(id, value);
+            }
+        }
+        ids.iter()
+            .map(|id| found.remove(id).unwrap_or(Value::Null))
+            .collect()
+    }
+
     fn send(&mut self, message: &Value) {
         let line = match serde_json::to_string(message) {
             Ok(line) => line,
