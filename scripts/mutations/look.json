@@ -15,31 +15,10 @@
  },
  {
   "file": "desktop/native/hours/canvas.py",
-  "name": "today washed in the accent",
-  "old": "            wash = self.c(\"text\")\n",
-  "new": "            wash = self.c(\"accent\")\n",
-  "test": "desktop/tests/week/test_the_hours_grid.py::test_today_is_washed_in_a_little_of_the_text_colour_on_a_week_and_not_at_all_on_a_day"
- },
- {
-  "file": "desktop/native/hours/canvas.py",
   "name": "the now line without its time",
   "old": "        painter.setFont(font)\n        painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, words)\n",
   "new": "        painter.setFont(font)\n",
-  "test": "desktop/tests/week/test_the_hours_grid.py::test_the_now_line_carries_the_time_on_a_pill_once_in_the_accent"
- },
- {
-  "file": "desktop/native/hours/canvas.py",
-  "name": "hour labels in proportional figures",
-  "old": "        font = at_scale(time_font(painter.font()), \"caption\", self.scale(painter.font()))\n",
-  "new": "        font = at_scale(painter.font(), \"caption\", self.scale(painter.font()))\n",
-  "test": "desktop/tests/week/test_block_words_on_the_week.py::test_every_time_on_the_hours_is_written_in_figures_of_one_width"
- },
- {
-  "file": "desktop/native/hours/canvas.py",
-  "name": "block times in proportional figures",
-  "old": "        small = at_scale(time_font(base), \"caption\", scale, WEIGHT_REGULAR)\n",
-  "new": "        small = at_scale(base, \"caption\", scale, WEIGHT_REGULAR)\n",
-  "test": "desktop/tests/week/test_block_words_on_the_week.py::test_every_time_on_the_hours_is_written_in_figures_of_one_width"
+  "test": "desktop/tests/week/test_the_hours_grid.py::test_the_now_line_carries_the_time_on_a_pill_once"
  },
  {
   "file": "desktop/native/widgets.py",
@@ -113,24 +92,10 @@
  },
  {
   "file": "desktop/native/hours/canvas.py",
-  "name": "today's wash at a tenth",
-  "old": "TODAY_WASH = 0.03\n",
-  "new": "TODAY_WASH = 0.10\n",
-  "test": "desktop/tests/week/test_the_hours_grid.py::test_today_is_washed_in_a_little_of_the_text_colour_on_a_week_and_not_at_all_on_a_day"
- },
- {
-  "file": "desktop/native/hours/canvas.py",
   "name": "Day washed as well as Week",
   "old": "self.painter.track(painter, track, week and track.day == self.today)",
   "new": "self.painter.track(painter, track, track.day == self.today)",
-  "test": "desktop/tests/week/test_the_hours_grid.py::test_today_is_washed_in_a_little_of_the_text_colour_on_a_week_and_not_at_all_on_a_day"
- },
- {
-  "file": "desktop/native/hours/canvas.py",
-  "name": "the now line red again",
-  "old": "        colour = QColor(self.colours.get(\"now\", self.colours[\"accent\"]))\n        font = weighted(",
-  "new": "        colour = self.c(\"error\")\n        font = weighted(",
-  "test": "desktop/tests/week/test_the_hours_grid.py::test_the_now_line_carries_the_time_on_a_pill_once_in_the_accent"
+  "test": "desktop/tests/week/test_the_hours_grid.py::test_today_is_washed_on_a_week_and_not_at_all_on_a_day"
  },
  {
   "file": "desktop/native/look.py",

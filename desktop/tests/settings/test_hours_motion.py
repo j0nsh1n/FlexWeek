@@ -16,8 +16,6 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QPoint
-    from PySide6.QtGui import QImage
     from PySide6.QtWidgets import QApplication
 
     from desktop.native.motion import EASE_MS, apply_ui_effects, duration
@@ -33,42 +31,35 @@ def motion_is_put_back() -> Iterator[None]:
     apply_ui_effects("normal")
 
 
+ESSAY, CLUB = ("essay", 3), ("club", 5)
+
+
 def test_after_a_plan_blocks_slide_to_their_places_and_new_ones_fade_in(
     qapp: QApplication, manual_time: ManualTime  # noqa: F811
 ) -> None:
     apply_ui_effects("normal")
     hours = Hours(qapp)
-    final = hours.settled_picture(LATER)
     hours.canvas.set_week(LATER)
+    assert set(hours.canvas._slides) == {ESSAY}, "the moved block slides from where it was"
+    assert hours.canvas._fresh == {CLUB}, "the new block fades in"
     manual_time.advance(40)
     # 40 of the 220 ms planning ease on the out-cubic curve: 1 - (1 - 2/11)^3.
     assert hours.canvas._progress == pytest.approx(1 - (9 / 11) ** 3)
-    assert hours.picture() != final, "partway there, not already there"
     manual_time.advance(duration(EASE_MS) - 40)
-    assert hours.picture() == final
+    assert hours.canvas._progress == 1.0
+    assert hours.canvas._slides == {} and hours.canvas._fresh == set(), "nothing is left moving"
     hours.window.close()
-
-
-def first_frame_and_last(qapp: QApplication, level: str) -> tuple[QImage, QImage, QPoint]:  # noqa: F811
-    """The hours the moment a plan moved the essay from Tuesday 9:00, as they end up, and where the
-    essay was."""
-    apply_ui_effects(level)
-    hours = Hours(qapp)
-    was = hours.canvas.tracks[1].rect_for(9 * 60, 10 * 60).center().toPoint()
-    final = hours.settled_picture(LATER)
-    hours.canvas.set_week(LATER)
-    first = hours.picture()
-    hours.window.close()
-    return first, final, was
 
 
 def test_under_reduce_a_moved_block_fades_in_where_it_went_rather_than_sliding(qapp: QApplication) -> None:  # noqa: F811
     """The motion-sensitive student: fades yes, sliding blocks no."""
-    first, final, was = first_frame_and_last(qapp, "normal")
-    assert first.pixelColor(was) != final.pixelColor(was), "Normal starts it where it was"
-    first, final, was = first_frame_and_last(qapp, "reduce")
-    assert first.pixelColor(was) == final.pixelColor(was), "Reduce never draws it there"
-    assert first != final, "but it still fades in"
+    for level, slides, fades in (("normal", {ESSAY}, {CLUB}), ("reduce", set(), {ESSAY, CLUB})):
+        apply_ui_effects(level)
+        hours = Hours(qapp)
+        hours.canvas.set_week(LATER)
+        assert set(hours.canvas._slides) == slides, level
+        assert hours.canvas._fresh == fades, level
+        hours.window.close()
 
 
 def test_laying_the_hours_out_again_where_nothing_moved_keeps_the_slide(
@@ -77,21 +68,19 @@ def test_laying_the_hours_out_again_where_nothing_moved_keeps_the_slide(
     """After Plan the hours scroll to what it placed, and the slide was cut short by that scroll's
     layout, so nothing was seen to move."""
     hours = Hours(qapp)
-    final = hours.settled_picture(LATER)
     hours.canvas.set_week(LATER)
     hours.canvas.relayout()
     manual_time.advance(40)
-    assert hours.picture() != final, "still on its way"
+    assert set(hours.canvas._slides) == {ESSAY} and hours.canvas._progress < 1.0, "still on its way"
     manual_time.advance(duration(EASE_MS) - 40)
-    assert hours.picture() == final
+    assert hours.canvas._progress == 1.0 and hours.canvas._slides == {}
     hours.window.close()
 
 
 def test_a_block_let_go_by_hand_is_already_where_it_belongs(qapp: QApplication) -> None:  # noqa: F811
     hours = Hours(qapp)
-    moved = [occurrence("essay", 3, 15 * 60, 16 * 60)]
-    final = hours.settled_picture(moved)
     hours.hand.dropped = "essay"
-    hours.canvas.set_week(moved)
-    assert hours.picture() == final, "it does not jump back to slide from where it was picked up"
+    hours.canvas.set_week([occurrence("essay", 3, 15 * 60, 16 * 60)])
+    assert hours.canvas._slides == {}, "it does not jump back to slide from where it was picked up"
+    assert hours.canvas._progress == 1.0
     hours.window.close()

@@ -88,23 +88,5 @@ class Hours:
         self.window.show()
         qapp.processEvents()
 
-    def picture(self):  # noqa: ANN201
-        return self.canvas.grab().toImage()
-
-    def settled_picture(self, week: list[Occurrence]):  # noqa: ANN201
-        """The week as it looks with nothing moving: drawn on a fresh canvas of the same size."""
-        other = Hours.__new__(Hours)
-        other.window = QWidget()
-        other.window.resize(self.window.size())
-        other.hand = Hand(lambda block_id, from_day, span: Verdict(True, ""), other.window)
-        other.canvas = HoursCanvas(other.hand, self.canvas.painter, self.canvas._lay_out)
-        QVBoxLayout(other.window).addWidget(other.canvas)
-        other.window.show()
-        QApplication.processEvents()
-        other.canvas.set_week(week)
-        picture = other.picture()
-        other.window.close()
-        return picture
-
 
 LATER = [occurrence("essay", 3, 15 * 60, 16 * 60), occurrence("club", 5, 12 * 60, 13 * 60)]

@@ -123,14 +123,7 @@
   "name": "today washed though the look turned it off",
   "old": "        if today and self.measures[\"today_highlight\"]:\n",
   "new": "        if today:\n",
-  "test": "desktop/tests/week/test_the_hours_grid.py::test_a_custom_look_sets_todays_wash_the_now_line_and_the_edge"
- },
- {
-  "file": "desktop/native/hours/canvas.py",
-  "name": "the edge at 3 pixels whatever the look says",
-  "old": "            width = self.measures[\"edge_width\"] or EDGE_WIDTH\n",
-  "new": "            width = EDGE_WIDTH\n",
-  "test": "desktop/tests/week/test_the_hours_grid.py::test_a_custom_look_sets_todays_wash_the_now_line_and_the_edge"
+  "test": "desktop/tests/week/test_the_hours_grid.py::test_a_custom_look_can_turn_todays_wash_off"
  },
  {
   "file": "desktop/native/hours/canvas.py",

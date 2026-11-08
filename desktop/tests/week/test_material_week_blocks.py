@@ -214,3 +214,18 @@ def test_the_top_bar_moves_the_week_and_today_comes_back(qapp, window) -> None:
     _pump(qapp)
     assert _qml(root, "weekToday").property("visible") is False
     _bridge(window).showPage("week")
+
+
+def test_the_now_line_passes_behind_blocks_and_the_dot_stays_on_top(qapp, window) -> None:
+    """The now line sits under every week block and the left dot above; a homework held over a slot
+    outlines it above the line. How they look where they cross is judged in the picture review."""
+    root = _reset(window, qapp)
+    line_z = float(_qml(root, "nowLine").property("z"))
+    dot_z = float(_qml(root, "nowDot").property("z"))
+    blocks = _named(root, "weekBlock")
+    assert blocks
+    for block in blocks:
+        block_z = float(block.property("z"))
+        assert line_z < block_z, (line_z, block_z)
+        assert dot_z > block_z, (dot_z, block_z)
+    assert float(_qml(root, "dropSlot").property("z")) > line_z

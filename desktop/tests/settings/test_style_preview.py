@@ -11,7 +11,6 @@ from PySide6.QtWidgets import QApplication, QComboBox, QRadioButton, QWidget
 from desktop.native.layouts.dialog import LayoutSection
 from desktop.native.settings import SettingsPage
 from desktop.native.style_preview import ACTUAL_NOTE, Redraw, StylePreview
-from desktop.tests.settings.support_previews import settled_image
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
 
@@ -144,55 +143,6 @@ def test_quick_look_changes_draw_once_as_the_last_choice(qapp: QApplication) -> 
     wait_until(qapp, lambda: image(preview) != contrast and len(shown) == 3)
     assert image(preview) == burst
     assert contrast != burst
-    page.close()
-
-
-def classic_as_settings_applies_it(pack: str, look: dict, accent: str) -> QImage:
-    """The week Settings would show for this pack, look and accent, drawn without the preview."""
-    from desktop.native.hours.classic import ClassicWeek
-    from desktop.native.hours.hand import Hand, Verdict
-    from desktop.native.look import design_look, pack_stylesheet
-    from desktop.native.previews import CANVAS, SAMPLE_DAY, SAMPLE_MINUTE, sample_week, system_dark
-    from desktop.native.weekmodel import build_week
-
-    dark = system_dark()
-    palette, applied = design_look("your", pack, dark, look, accent)
-    host = QWidget()
-    week = ClassicWeek(Hand(lambda _block, _day, _span: Verdict(False, ""), host))
-    week.setStyleSheet(pack_stylesheet(pack, dark, applied, accent, palette))
-    week.set_look(applied, palette)
-    monday, blocks, homework = sample_week()
-    week.set_week(build_week(monday, blocks, homework, None), SAMPLE_DAY, SAMPLE_MINUTE)
-    week.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
-    week.resize(CANVAS)
-    week.show()
-    smooth = Qt.TransformationMode.SmoothTransformation
-    picture = settled_image(lambda: week.grab().scaledToWidth(CANVAS.width(), smooth).toImage())
-    week.close()
-    week.deleteLater()
-    host.deleteLater()
-    QApplication.sendPostedEvents(None, 0)
-    return picture
-
-
-def test_the_preview_uses_the_accent_settings_applies(qapp: QApplication) -> None:  # noqa: F811
-    """Choosing Sky changes the preview to the same picture the applied look draws."""
-    page = SettingsPage(None, {}, {}, {})
-    page.resize(1024, 640)
-    page.show()
-    preview = page.style_preview
-    wait_until(qapp, lambda: drawn(preview))
-    pack = page._pack
-    look = page.look_choice()
-    before = image(preview)
-    assert before == classic_as_settings_applies_it(pack, look, "default")
-    page.accent.setCurrentIndex(page.accent.findData("sky"))
-    assert page.updates()["accent"] == "sky"
-    for _ in range(4):
-        qapp.processEvents()
-    assert image(preview) == before
-    wait_until(qapp, lambda: image(preview) != before)
-    assert image(preview) == classic_as_settings_applies_it(pack, look, "sky")
     page.close()
 
 

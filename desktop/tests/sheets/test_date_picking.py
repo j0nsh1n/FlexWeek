@@ -22,8 +22,8 @@ from desktop.tests.window_support import free, qapp  # noqa: F401
 def test_text_in_a_test_is_drawn_in_grey_shades_so_its_colour_can_be_read(
     qapp: QApplication,  # noqa: F811
 ) -> None:
-    """`ink` reads a number's colour off its darkest pixel. Drawn in coloured subpixel stripes, a 10 had
-    no pixel in the text's colour; conftest keeps text in grey shades on every computer."""
+    """Drawn in coloured subpixel stripes, a 10 had no pixel in the text's colour; conftest keeps text in
+    grey shades on every computer. A check on the test rig, not on the app's looks."""
     number = QLabel("10")
     number.setStyleSheet("background: white; color: black; font: 13pt 'Inter'")
     number.resize(60, 30)

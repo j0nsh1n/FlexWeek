@@ -23,6 +23,7 @@ from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import LightWindows
+from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import look_file, settled
 
 WIDTH = 1280
@@ -341,4 +342,7 @@ def _reset(window: NativeWindow, qapp: QApplication) -> QObject:
         window._material_page.bridge.sheets.forceClose()
     window._material_page.publish()
     _pump(qapp)
+    # Every screen fades in over 300 ms when Material is first built; hand the page back once it has.
+    stage = _qml(root, "materialWeek").parentItem().parentItem()
+    wait_until(qapp, lambda: float(stage.property("opacity")) >= 1.0, what="Material to finish fading in")
     return root

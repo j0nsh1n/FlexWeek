@@ -1,5 +1,5 @@
 """Opening the date picker's month and reading its grid. The date picker tests and the date picker
-pictures share it; test_setup_first_homework imports `cells`, `ink` and `same`."""
+pictures share it."""
 
 from __future__ import annotations
 
@@ -8,13 +8,11 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QDate, QModelIndex, QRect
-from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication, QTableView, QWidget
 
 from backend import clock as wall_clock
 from desktop.native.fields import LookCalendar
 from desktop.native.look import pack_stylesheet, resolved_palette
-from desktop.native.tokens import contrast
 from desktop.native.widgets import HomeworkDialog, control_art
 
 WEEK = "2026-09-21"
@@ -66,19 +64,3 @@ def cells(month: LookCalendar) -> tuple[QTableView, dict[QDate, QRect]]:
                 day = first
             shown[QDate(day.year(), day.month(), number)] = view.visualRect(index)
     return view, shown
-
-
-def ink(picture: QImage, rect: QRect, ground: str) -> str:
-    """The colour in `rect` that stands out most from `ground`: the number's."""
-    colours = {
-        picture.pixelColor(x, y).name()
-        for x in range(rect.left(), rect.right())
-        for y in range(rect.top(), rect.bottom())
-    }
-    return max(colours, key=lambda colour: contrast(colour, ground))
-
-
-def same(first: str, second: str) -> bool:
-    """One colour, give or take the last bit of each channel that drawing text can change."""
-    pairs = zip(QColor(first).getRgb()[:3], QColor(second).getRgb()[:3], strict=True)
-    return all(abs(one - two) <= 3 for one, two in pairs)

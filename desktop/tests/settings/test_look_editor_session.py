@@ -63,9 +63,9 @@ def test_the_preview_follows_each_change_and_can_be_shown_at_actual_size(
 ) -> None:
     page, editor = open_editor(qapp, window)
     assert editor.pictures[0].source.width() >= 1000, "the whole window, at its size"
-    before = editor.pictures[0].source.toImage()
+    before = editor.pictures[0].source.cacheKey()
     type_colour(qapp, editor, "page", "#1e2430")
-    assert editor.pictures[0].source.toImage() != before, "the preview is taken again after a change"
+    assert editor.pictures[0].source.cacheKey() != before, "the preview is taken again after a change"
     editor.zoom.buttons()[1].click()
     pump(qapp)
     shown_now = editor.pictures[0].image

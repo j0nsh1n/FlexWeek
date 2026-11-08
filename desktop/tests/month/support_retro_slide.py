@@ -8,8 +8,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QRect
-from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QWidget
 
 import desktop.native.motion as motion
@@ -145,17 +143,3 @@ def month_arrives(window: NativeWindow, data: dict) -> None:
 def slide_in_progress(window: NativeWindow) -> QLabel | None:
     slides, _fades, _dims = pictures_over(window._week_page)
     return slides[0] if slides else None
-
-
-def live_month_now(window: NativeWindow):  # type: ignore[no-untyped-def]
-    """The month on screen once the slide is over, in the area the slide covered."""
-    page = window._week_page
-    top = window._top_bar.geometry().bottom() + 1
-    return page.grab(QRect(0, top, page.width(), page.height() - top)).toImage()
-
-
-def blank_like(image):  # type: ignore[no-untyped-def]
-    """An image of one colour, the page's background, the size of `image`."""
-    blank = QImage(image.size(), image.format())
-    blank.fill(image.pixelColor(0, image.height() - 1))
-    return blank

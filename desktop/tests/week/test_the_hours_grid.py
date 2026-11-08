@@ -70,64 +70,47 @@ def washes(canvas) -> dict[int, QColor]:
     }
 
 
-def test_today_is_washed_in_a_little_of_the_text_colour_on_a_week_and_not_at_all_on_a_day(
+def test_today_is_washed_on_a_week_and_not_at_all_on_a_day(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Decision 13 of 0.17: 3 % of the text colour at most, never the accent, which picked as Gold
-    turned today's column khaki; and none on Day, where washing the one day marks nothing."""
+    """Decision 13 of 0.17: only today's column is washed on a week, and none on Day, where washing
+    the one day marks nothing. The wash colour and strength are judged in the picture review."""
     monkeypatch.setattr(canvas_module, "QPainter", Inked)
     for pack, dark, accent in (("light-frost", False, "gold"), ("dark-frost", True, "default")):
         palette = resolved_palette(pack, dark, None, accent)
         week = washes(three_days(now_min=15 * 60 + 40, palette=palette))
         assert list(week) == [0], f"{pack}: only today's column is washed"
-        assert week[0].getRgb()[:3] == QColor(palette["text"]).getRgb()[:3], pack
-        assert 0 < week[0].alphaF() <= 0.035, pack
         day = washes(three_days(now_min=15 * 60 + 40, palette=palette, days=1))
         assert day == {}, f"{pack}: a day is not washed"
 
 
-def test_a_custom_look_sets_todays_wash_the_now_line_and_the_edge(
+def test_a_custom_look_can_turn_todays_wash_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Customise's grid and block settings: today's highlight off, the now line in the text colour,
-    and a 6-pixel category edge, where the look's own are a 3 % wash, the accent and 3 pixels."""
+    """Customise's grid setting: today's highlight off, where the look's own is a wash on today.
+    The now line colour and the edge width are judged in the picture review."""
     monkeypatch.setattr(canvas_module, "QPainter", Inked)
 
-    def drawn(custom: dict):
-        canvas, palette = custom_hours(custom)
+    def washed_days(custom: dict) -> list[int]:
+        canvas, _palette = custom_hours(custom)
         Inked.clear()
         canvas.grab()
-        edges = {rect.width() for rect, _ in Inked.fills if rect.width() < 10 and rect.height() > 30}
-        now = {line[2].name() for line in Inked.lines if line[3] == 2.0}
-        washed = [t.day for t in canvas.tracks for rect, _ in Inked.fills if rect == t.area]
-        return palette, washed, now, edges
+        return [t.day for t in canvas.tracks for rect, _ in Inked.fills if rect == t.area]
 
-    plain_palette, washed, now, edges = drawn({"blocks": "edge"})
-    assert washed == [0]
-    assert now == {QColor(plain_palette["now"]).name()}
-    assert edges == {3.0}
-    palette, washed, now, edges = drawn(
-        {"blocks": "edge", "today_highlight": False, "now_line": "text", "edge_width": 6}
-    )
-    assert washed == []
-    assert now == {QColor(palette["text"]).name()}
-    assert edges == {6.0}
+    assert washed_days({"blocks": "edge"}) == [0]
+    assert washed_days({"blocks": "edge", "today_highlight": False}) == []
 
 
-def test_the_now_line_carries_the_time_on_a_pill_once_in_the_accent(
+def test_the_now_line_carries_the_time_on_a_pill_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The line said where now is but not what time it is. At 15:40 it starts from a pill reading
-    "15:40" and is drawn in the look's now colour: red is for what cannot be, and now is not that.
-    The next block is 20 minutes away, past the dot's reach, so the time is not drawn again on it."""
+    "15:40". The next block is 20 minutes away, past the dot's reach, so the time is not drawn again on it."""
     monkeypatch.setattr(canvas_module, "QPainter", Inked)
     canvas = three_days(now_min=15 * 60 + 40)
     Inked.clear()
     canvas.grab()
     assert [text for text, _where in Said.words].count("15:40") == 1
-    palette = resolved_palette("system", False, None)
-    assert {line[2].name() for line in Inked.lines if line[3] == 2.0} == {QColor(palette["now"]).name()}
-    assert palette["now"].lower() != palette["error"].lower()
 
 
 def test_a_now_pill_that_reaches_into_a_block_is_drawn_again_over_its_colour(

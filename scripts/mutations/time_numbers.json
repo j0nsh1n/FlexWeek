@@ -32,7 +32,7 @@
     "file": "desktop/native/hours/canvas.py",
     "old": "        if not first - NOW_REACH <= at <= last + NOW_REACH:\n            return\n",
     "new": "",
-    "test": "desktop/tests/week/test_the_hours_grid.py::test_the_now_line_carries_the_time_on_a_pill_once_in_the_accent"
+    "test": "desktop/tests/week/test_the_hours_grid.py::test_the_now_line_carries_the_time_on_a_pill_once"
   },
   {
     "name": "A now pill reaching into a block loses its foot",
