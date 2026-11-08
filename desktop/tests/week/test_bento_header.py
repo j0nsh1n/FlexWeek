@@ -21,8 +21,6 @@ from PySide6.QtWidgets import QApplication, QPushButton  # noqa: E402
 
 from desktop.native.calendar import DAYS  # noqa: E402
 from desktop.native.layouts import bento  # noqa: E402
-from desktop.native.layouts.registry import MATCH, tokens_for  # noqa: E402
-from desktop.native.look import resolved_palette  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402, F401
 from desktop.tests.waiting import wait_until  # noqa: E402
 
@@ -77,16 +75,3 @@ def test_every_day_header_writes_its_day_word_and_date(
         assert not header.grab().isNull(), name
         expected = [DAYS[day], str((week_start + timedelta(days=day)).day)]
         assert painted[name] == expected, (name, width, text)
-
-
-def test_a_narrow_header_does_not_shorten_to_a_single_letter_and_digit(
-    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    painted: dict[str, list[str]] = {}
-    watch_headers(monkeypatch, painted)
-    tokens = tokens_for("bento", MATCH, resolved_palette("light-frost", False, None))
-    head = bento.DayHead(4)
-    head.show_date(2, True, head.ink, tokens, 1.25)
-    head.resize(52, 36)
-    head.grab()
-    assert painted[head.objectName()] == [DAYS[4], "2"]

@@ -1,8 +1,9 @@
-"""The grid under the blocks: a rule at each hour and none between, today washed on a week and not on a
-day, the now line carrying its time, and a custom look's settings reaching the painter.
+"""The grid under the blocks: today washed on a week and not on a day, the now line carrying its time,
+and a custom look's settings reaching the painter.
 
 These read what the painter is told to draw (its fills, lines and words), not the pixels that come
-of it; how they look together is judged on the pictures (week.hours-grid-rules-and-wash and others)."""
+of it; how they look together, the hour rules and a block's shadow included, is judged on the pictures
+(week.hours-grid-rules-and-wash, week.block-depth-and-shadow and others)."""
 
 from __future__ import annotations
 
@@ -27,12 +28,9 @@ pytestmark = [
     pytest.mark.usefixtures("qapp"),
 ]
 
-from PySide6.QtCore import QRectF  # noqa: E402
-from PySide6.QtGui import QColor, QImage  # noqa: E402
+from PySide6.QtGui import QColor  # noqa: E402
 
 from desktop.native.hours import canvas as canvas_module  # noqa: E402
-from desktop.native.hours.canvas import BlockPainter, Drawn  # noqa: E402
-from desktop.native.hours.geometry import LinearTrack, Span  # noqa: E402
 from desktop.native.look import mix, resolved_palette  # noqa: E402
 
 ESSAY_QUARTER = {
@@ -61,22 +59,6 @@ def test_each_look_names_its_hour_rule(pack: str, dark: bool, look: dict | None,
     Nocturne draws looks.css's 8 % of its text."""
     palette = resolved_palette(pack, dark, look)
     assert palette["rule"] == rule(palette)
-
-
-def test_the_hours_have_a_rule_at_each_hour_and_none_at_the_half() -> None:
-    """The dashed half-hour rules crowded the grid. One track from 08:00 to 10:00 at 48 pixels an
-    hour gets a horizontal rule at 08:00, 09:00 and 10:00 and none between, in the look's rule
-    colour, beside the track's own left edge."""
-    track = LinearTrack(0, QRectF(10, 10, 100, 2 * HOUR_PX), first=8 * 60, last=10 * 60)
-    for pack, dark in (("slate", False), ("dark-frost", True), ("nocturne", True)):
-        palette = resolved_palette(pack, dark, None)
-        Inked.clear()
-        paint = Inked(QImage(120, 2 * HOUR_PX + 20, QImage.Format.Format_ARGB32))
-        BlockPainter(palette).track(paint, track, False)
-        paint.end()
-        across = [line for line in Inked.lines if line[0].y() == line[1].y()]
-        assert [line[0].y() for line in across] == [10.5, 10.5 + HOUR_PX, 10.5 + 2 * HOUR_PX], pack
-        assert {line[2].name() for line in Inked.lines} == {QColor(palette["rule"]).name()}, pack
 
 
 def washes(canvas) -> dict[int, QColor]:
@@ -160,34 +142,3 @@ def test_a_now_pill_that_reaches_into_a_block_is_drawn_again_over_its_colour(
     Inked.clear()
     canvas.grab()
     assert [text for text, _where in Said.words].count("15:55") == 2
-
-
-def test_a_block_casts_a_shadow_only_when_the_look_has_depth() -> None:
-    """Depth none, Paper and High contrast add nothing under a block (its fill is the only shape
-    filled). Soft adds one faint cast under it and bold a darker one, both with the block's own
-    shape; a dark look casts a stronger one than a light look."""
-    essay = Drawn("essay", "History essay", "class", False, Span(1, 9 * 60, 10 * 60), 0, 1)
-    contrast = {"preset": "high-contrast", "knobs": {}}
-    soft = {"preset": "default", "knobs": {"depth": "soft"}}
-
-    def casts(look: dict, palette: dict) -> list[float]:
-        """The alpha of each shape filled before the block's own fill, which is opaque."""
-        Inked.clear()
-        paint = Inked(QImage(180, 140, QImage.Format.Format_ARGB32))
-        BlockPainter(palette, look).body(paint, QRectF(24, 24, 120, 80), essay)
-        paint.end()
-        return [colour.alphaF() for colour in Inked.paths[:-1]]
-
-    none = {"preset": "default", "knobs": {"depth": "none"}}
-    bold = {"preset": "default", "knobs": {"depth": "bold"}}
-    light = resolved_palette("light-frost", False, soft)
-    assert casts(none, resolved_palette("light-frost", False, none)) == []
-    assert casts({"preset": "paper", "knobs": {}}, resolved_palette("light-frost", False, None)) == []
-    assert casts(contrast, resolved_palette("light-frost", False, contrast)) == []
-    # The palette is High contrast even though the knobs ask for a soft cast.
-    assert casts(soft, resolved_palette("light-frost", False, contrast)) == []
-    (faint,) = casts(soft, light)
-    (darker,) = casts(bold, light)
-    (stronger,) = casts(soft, resolved_palette("dark-frost", True, soft))
-    assert 0 < faint < darker
-    assert stronger > faint

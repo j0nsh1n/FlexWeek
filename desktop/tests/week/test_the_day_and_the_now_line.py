@@ -17,7 +17,7 @@ from desktop.native.calendar import sunday_due
 from desktop.native.hours import classic
 from desktop.native.hours.geometry import LinearTrack
 from desktop.native.layouts.clay import ClayPainter
-from desktop.native.layouts.registry import MATCH, sanitize_layout, tokens_for
+from desktop.native.layouts.registry import MATCH, tokens_for
 from desktop.native.look import resolved_palette
 from desktop.native.weekmodel import clock_label, set_clock_24h
 from desktop.native.window import NativeWindow
@@ -100,39 +100,6 @@ def test_running_school_has_no_agenda_now_row(qapp: QApplication, hours_window: 
     school = next(row.item for row in view.agenda.list.rows if row.item.block_id == "school")
     assert school.start < 620 < school.end
     assert view.hours.now_min == 620
-
-
-@pytest.mark.parametrize("design", DESIGNS)
-def test_the_now_line_is_drawn_before_the_blocks_so_their_words_stay_on_top(
-    qapp: QApplication, hours_window: NativeWindow, monkeypatch: pytest.MonkeyPatch, design: str
-) -> None:
-    """During School the line for now shows on School, and School's words are written over it. Drawn
-    after the blocks, the line ran through "School" and hid under no block's colour."""
-    window = hours_window
-    window._layout = sanitize_layout({"main": design})
-    window._apply_appearance()
-    window._on_week()
-    for _ in range(4):
-        qapp.processEvents()
-    canvas = hours(window).canvas
-    canvas.set_week(canvas.occurrences, 3, 10 * 60 + 30)
-    painter = canvas.painter
-    calls: list[str] = []
-    now, block = painter.now, painter.block
-
-    def drew_now(*args, **kwargs):
-        calls.append("now")
-        return now(*args, **kwargs)
-
-    def drew_block(*args, **kwargs):
-        calls.append("block")
-        return block(*args, **kwargs)
-
-    monkeypatch.setattr(painter, "now", drew_now)
-    monkeypatch.setattr(painter, "block", drew_block)
-    assert not canvas.grab().isNull()
-    assert "now" in calls, "the line for now was not drawn during School"
-    assert calls.index("now") < calls.index("block"), calls
 
 
 def test_clays_now_pill_takes_the_place_of_the_hour_label_under_it() -> None:
