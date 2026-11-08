@@ -227,7 +227,12 @@ class FocusBridge(QObject):
 
     @Slot()
     def back(self) -> None:
-        self.hide()
+        # A running or paused timer keeps going behind the other screens; a finished one has
+        # nothing left to keep, so leaving clears it as Finish does.
+        if self.active:
+            self.hide()
+        else:
+            self._leave()
 
     def _leave(self) -> None:
         if self.active:
