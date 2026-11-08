@@ -225,7 +225,7 @@ FocusScope {
                 kind: "filled"
                 icon: root.focusBridge && root.focusBridge.running ? "pause" : "play_arrow"
                 text: root.focusBridge ? root.focusBridge.pauseText : "Pause"
-                width: Math.max(pauseWord.width, resumeWord.width) + 26 + 48
+                width: Math.max(pauseWord.width, resumeWord.width) + pause.iconSize + 8 + 48
                 onClicked: root.focusBridge.togglePause()
             }
 

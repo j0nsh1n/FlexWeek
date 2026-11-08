@@ -1,12 +1,11 @@
 //! Homework and block writes. Sessions stay in step through `desk::homework`,
 //! and the batch is `changes::apply`. Done rules live in the engine.
 
-use flexweek_engine::desk::blocks::{self, SETUP_BLOCK};
-use flexweek_engine::desk::grid::is_setup_block;
+use flexweek_engine::desk::blocks;
 use flexweek_engine::desk::homework::{edit_homework, mark_homework_done};
 use flexweek_store::{
-    ApplyClock, ApplyInput, AssignmentInput, Connection, Recall, WeekInput, apply,
-    list_account_weeks, list_assignment_rows, read_week, recall_operation,
+    ApplyClock, ApplyInput, AssignmentInput, Connection, Recall, WeekInput, apply_within,
+    begin_immediate, list_account_weeks, list_assignment_rows, read_week, recall_operation,
 };
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::schemars::JsonSchema;
@@ -78,6 +77,9 @@ struct HomeworkDoneArgs {
     operation_id: String,
     id: String,
     done: bool,
+    /// The homework's revision as last read. When given, a newer one is refused as a conflict.
+    #[serde(default)]
+    expected_revision: Option<i64>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -88,6 +90,9 @@ struct BlockDoneArgs {
     block_id: String,
     day: i64,
     done: bool,
+    /// The week's revision from `get_week`. When given, a newer one is refused as a conflict.
+    #[serde(default)]
+    expected_revision: Option<i64>,
 }
 
 pub(crate) struct Opened {
@@ -95,6 +100,10 @@ pub(crate) struct Opened {
     pub(crate) conn: Connection,
 }
 
+/// Opens the database for one write and takes the write lock before anything is read, so writes sent
+/// at once each build on the last one's saved revisions instead of all on the same stale ones. The
+/// lock ends with `run_apply`'s commit, or when the connection closes, which rolls back an
+/// unfinished transaction (a refusal or an early return).
 pub(crate) fn open(app: &crate::App) -> Result<Opened, String> {
     let account = session::for_call(
         app.started_as.as_ref(),
@@ -103,6 +112,7 @@ pub(crate) fn open(app: &crate::App) -> Result<Opened, String> {
         app.now_unix,
     )?;
     let conn = flexweek_store::open_connection(&app.database).map_err(session::storage_sentence)?;
+    begin_immediate(&conn).map_err(session::storage_sentence)?;
     Ok(Opened {
         user_id: account.user_id,
         conn,
@@ -143,9 +153,12 @@ pub(crate) fn remembered(
     }
 }
 
+/// Every assistant write lands here, and saves a restore point of the account before it changes
+/// anything, so the student can undo the whole change in one step.
 pub(crate) fn run_apply(
     conn: &Connection,
     user_id: i64,
+    tool: &str,
     operation_id: &str,
     digest: &str,
     mut input: ApplyInput,
@@ -153,7 +166,23 @@ pub(crate) fn run_apply(
 ) -> Result<Value, String> {
     input.operation_id = Some(operation_id.to_string());
     input.argument_digest = Some(digest.to_string());
-    write::from_apply(apply(conn, user_id, &input, clock))
+    let (restore_token, label) =
+        write::restore_point_before(conn, user_id, tool, operation_id, None, &clock.now)?;
+    input.snapshot_label = Some(label);
+    let clock = ApplyClock {
+        now: clock.now.clone(),
+        restore_token,
+    };
+    let applied = apply_within(conn, user_id, &input, &clock);
+    // A refused write changes nothing, the restore point pruning above included.
+    let end = if applied.is_ok() {
+        "COMMIT"
+    } else {
+        "ROLLBACK"
+    };
+    conn.execute(end, [])
+        .map_err(|error| session::storage_sentence(error.into()))?;
+    write::from_apply(applied)
 }
 
 pub(crate) fn parse_blocks(text: &str) -> Result<Vec<Value>, String> {
@@ -414,6 +443,15 @@ fn saved_block(applied: &Value) -> Result<Value, String> {
     }))
 }
 
+/// The digest takes `expected_revision` only when it was sent, so an operation remembered before
+/// the field existed still matches its retry.
+fn with_revision(mut arguments: Value, expected_revision: Option<i64>) -> Value {
+    if let (Some(revision), Some(map)) = (expected_revision, arguments.as_object_mut()) {
+        map.insert("expected_revision".into(), json!(revision));
+    }
+    arguments
+}
+
 fn add_arguments(args: &AddArgs) -> Value {
     json!({
         "category": args.category,
@@ -477,6 +515,7 @@ impl crate::App {
             let applied = run_apply(
                 &opened.conn,
                 opened.user_id,
+                "add_homework",
                 &operation_id,
                 &digest,
                 input,
@@ -523,6 +562,7 @@ impl crate::App {
             let applied = run_apply(
                 &opened.conn,
                 opened.user_id,
+                "edit_homework",
                 &operation_id,
                 &digest,
                 input,
@@ -570,6 +610,7 @@ impl crate::App {
             let applied = run_apply(
                 &opened.conn,
                 opened.user_id,
+                "delete_homework",
                 &operation_id,
                 &digest,
                 input,
@@ -594,7 +635,10 @@ impl crate::App {
             let digest = write::argument_digest(
                 "set_homework_done",
                 &args.operation_id,
-                &json!({"done": args.done, "id": args.id}),
+                &with_revision(
+                    json!({"done": args.done, "id": args.id}),
+                    args.expected_revision,
+                ),
             );
             if let Some(saved) = remembered(&opened.conn, opened.user_id, &operation_id, &digest)? {
                 return saved_homework(&saved);
@@ -651,7 +695,7 @@ impl crate::App {
                 assignments: vec![AssignmentInput {
                     id: args.id,
                     assignment: Some(marked.assignment),
-                    revision,
+                    revision: args.expected_revision.unwrap_or(revision),
                 }],
                 operation_id: None,
                 snapshot_label: None,
@@ -661,6 +705,7 @@ impl crate::App {
             let applied = run_apply(
                 &opened.conn,
                 opened.user_id,
+                "set_homework_done",
                 &operation_id,
                 &digest,
                 input,
@@ -685,34 +730,27 @@ impl crate::App {
             let digest = write::argument_digest(
                 "set_block_done",
                 &args.operation_id,
-                &json!({
-                    "block_id": args.block_id,
-                    "day": args.day,
-                    "done": args.done,
-                    "week_start": args.week_start,
-                }),
+                &with_revision(
+                    json!({
+                        "block_id": args.block_id,
+                        "day": args.day,
+                        "done": args.done,
+                        "week_start": args.week_start,
+                    }),
+                    args.expected_revision,
+                ),
             );
             if let Some(saved) = remembered(&opened.conn, opened.user_id, &operation_id, &digest)? {
                 return saved_block(&saved);
             }
-            let Some((text, revision)) = read_week(&opened.conn, opened.user_id, &args.week_start)
-                .map_err(session::storage_sentence)?
-            else {
-                return Err("week was not found".into());
-            };
-            let mut blocks = parse_blocks(&text)?;
-            if let Some(block) = blocks.iter().find(|block| {
-                block.get("id").and_then(Value::as_str) == Some(args.block_id.as_str())
-            }) && is_setup_block(block).map_err(|err| err.message)?
-            {
-                return Err(SETUP_BLOCK.into());
-            }
+            let (mut blocks, revision) =
+                super::fixed::seen_week(&opened.conn, opened.user_id, &args.week_start)?;
             blocks::mark_block_done(&mut blocks, &args.block_id, args.day, args.done)?;
             let input = ApplyInput {
                 weeks: vec![WeekInput {
                     week_start: args.week_start,
                     blocks,
-                    revision,
+                    revision: args.expected_revision.unwrap_or(revision),
                 }],
                 assignments: Vec::new(),
                 operation_id: None,
@@ -723,6 +761,7 @@ impl crate::App {
             let applied = run_apply(
                 &opened.conn,
                 opened.user_id,
+                "set_block_done",
                 &operation_id,
                 &digest,
                 input,
