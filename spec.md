@@ -800,16 +800,39 @@ tools/fwtest/target/release/fwtest gate
 Before the test step the gate checks that every case in `scripts/mutations/`
 still finds its `old` text exactly once in its file, and fails naming any that
 do not.
+While working, run only what the change touches (Testing structure rule 7):
+`fwtest gate --touched` runs the gate's steps on the tests the changed paths
+select, plus `cargo test` for the selected engine or fwtest packages, and
+`fwtest run --touched -- .venv/bin/python -m pytest -q` adds the selected test
+paths to a pytest command. `fwtest select` prints what a change selects (areas,
+pytest paths, cargo packages, mutation cases, picture areas) without running
+anything. The changed paths are the differences from the merge base with
+`origin/main` plus untracked files; `--base REF` or `--paths-from FILE` give
+others. The map from paths to areas is `tools/fwtest/areas.toml`; a path it
+does not know selects every area. A full local gate is not required before a
+push.
+A test that fails in a gate or a pytest `fwtest run` is rerun alone once (when
+more than ten fail, none is: that is a real break). A pass alone is logged as
+flaky (`~/.flexweek-ui-harness/scratch/fwtest/flaky.jsonl`, or
+`$FWTEST_FLAKY_LOG`) and does not fail the run; a second failure does.
+`fwtest flaky` lists the logged tests, most frequent first. A test logged as
+flaky is fixed or reported, not left.
 `fwtest mutate [SPEC]` runs the mutation specs in `scripts/mutations/`,
 `fwtest rig ...` runs `scripts/rig/drive.py`, `fwtest run -- CMD` runs any
 other suite or script, and `fwtest clean` stops what a killed run left.
 Run every local suite, mutation run and rig through `fwtest` rather than
 bare Python, so runs queue behind each other and leave nothing running.
-`.github/workflows/verify.yml` runs on every push and pull request (Python 3.14, Rust stable, `contents: read`). An
-`engine` job builds the engine wheel once; the other jobs install that wheel. `verify-python` runs the Python gate,
-`verify-engine` the harness's and the engine's cargo checks, `rig` runs the real-pointer rig for the Day and Week
-tabs under Xvfb (without ffmpeg: the rig keeps its frames and skips the video), and `mutate` runs every mutation
-case on pull requests, split over four shards. `.github/workflows/dev-build.yml`, started by hand
+`.github/workflows/verify.yml` runs on every push and pull request (Python 3.14, Rust stable, `contents: read`) and
+is the gate: everything runs there except pictures. An `engine` job builds the engine wheel and fwtest once;
+`verify-python`, `desktop`, `rig` and `mutate-python` install them. `verify-python` runs `fwtest gate --backend-only`
+(lint, types, mutation patterns, backend tests, diff checks). `desktop` runs every test file under `desktop/tests`,
+`scripts/rig` and `scripts/pictures` offscreen over four shards, and leaves out the opt-in regression suites
+(regress184 and regress190, which run only with `FLEXWEEK_REGRESS=1`); a test still running after 300 s prints every
+thread's stack. `verify-engine` runs the harness's and the engine's cargo checks. `rig` runs the real-pointer rig for
+the Day and Week tabs under Xvfb (without ffmpeg: the rig keeps its frames and skips the video). On pull requests and
+by hand, `mutate` builds its own engine module and runs the mutation cases under `engine/` over four shards, and
+`mutate-python` runs the rest over six. `verify-python` and `desktop` set `FLEXWEEK_SILENT=1` and upload their flaky
+log as an artifact. `.github/workflows/dev-build.yml`, started by hand
 (`scripts/dev-release.sh`), builds the Linux tarball, replaces the `dev` pre-release and keeps the build it replaces
 as `dev-<its commit>`; none of these is ever marked latest.
 
@@ -918,8 +941,9 @@ The numbers the Machine Resources rules in AGENTS.md use for this project.
   and keep watching while it runs; warn below 6 GB available or when swap
   climbs, stop the job below 3 GB.
 - Runs only in CI: CodeQL, the Windows and Linux packaging and installer checks
-  (`release-windows.yml`). The rig runs in CI too, but not in the local gate,
-  so run `fwtest rig` before pushing UI changes.
+  (`release-windows.yml`), the whole desktop suite, every mutation case and the
+  rig. Locally, `fwtest gate --touched` runs the touched areas; a full local
+  gate or rig run before a push is not required (Testing structure rule 7).
 - Scratch folder: `~/.flexweek-ui-harness/scratch`.
 - Silent switch for tests: `FLEXWEEK_SILENT=1`.
 - Names `fwtest` watches for (do not reuse for helpers): `mutate.py`,
