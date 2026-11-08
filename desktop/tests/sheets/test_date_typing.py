@@ -119,7 +119,11 @@ def test_the_year_box_in_the_picker_has_no_arrows_over_its_digits(qapp) -> None:
     month = field.calendarWidget()
     wait_until(qapp, month.isVisible, what="the month opening")
     month.findChild(QToolButton, "qt_calendar_yearbutton").click()
-    year = month.findChild(QSpinBox, "qt_calendar_yearedit")
-    wait_until(qapp, year.isVisible, what="the year box showing")
-    assert year.buttonSymbols() == QAbstractSpinBox.ButtonSymbols.NoButtons, "no arrows over its digits"
+
+    def year_box() -> QSpinBox:
+        # Found afresh each time: the Python object found before the events are handled is gone after them.
+        return month.findChild(QSpinBox, "qt_calendar_yearedit")
+
+    wait_until(qapp, lambda: year_box().isVisible(), what="the year box showing")
+    assert year_box().buttonSymbols() == QAbstractSpinBox.ButtonSymbols.NoButtons, "no arrows over its digits"
     free(host)
