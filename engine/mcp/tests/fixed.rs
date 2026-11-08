@@ -760,3 +760,52 @@ fn one_day_of_school_cannot_be_deleted_from_every_week() {
     );
     assert_eq!(stored(&world, WEEK).1, -1, "nothing was written");
 }
+
+#[test]
+fn fixed_time_and_a_plan_sent_without_waiting_all_apply() {
+    // An assistant planning a day sends its blocks and the plan at once. Each write reads and saves
+    // under the one database lock, so none is refused for a revision another one moved.
+    let world = signed_in("fixed-at-once");
+    seed_week(&world, json!([club(&[2], "16:00")]));
+    let mut server = boot(&world);
+    let titles = ["Lunch", "Walk", "Dinner", "Call"];
+    for (offset, title) in titles.iter().enumerate() {
+        server.send_call(
+            "add_block",
+            json!({
+                "operation_id": format!("op-at-once-{offset}"),
+                "week_start": WEEK,
+                "title": title,
+                "category": "free",
+                "days": [3 + (offset as i64 % 3)],
+                "start": format!("{:02}:00", 12 + offset),
+                "end": format!("{:02}:30", 12 + offset)
+            }),
+            10 + offset as i64,
+        );
+    }
+    server.send_call(
+        "plan_homework",
+        json!({"operation_id": "op-at-once-plan", "week_start": WEEK}),
+        20,
+    );
+    let answers = server.answers(&[10, 11, 12, 13, 20]);
+    for answer in &answers {
+        let body = body_of(answer);
+        assert_eq!(body["ok"], json!(true), "every write lands, got {answer}");
+    }
+    let (blocks, revision) = stored(&world, WEEK);
+    for title in titles {
+        assert_eq!(
+            titled(&blocks, title).len(),
+            1,
+            "{title} is saved, got {blocks}"
+        );
+    }
+    assert_eq!(revision, 8, "four adds are four changes to the week");
+    assert_eq!(
+        point_count(&world),
+        4,
+        "one restore point per change; a plan with nothing to place saves none"
+    );
+}

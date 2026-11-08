@@ -20,6 +20,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Material's Focus screen covers the window: phase, task, timer, Pause or Resume, Skip, Finish and Back, on the same timer Widgets uses. Rain, Lo-Fi and White noise play while you focus and pause with the timer; Spotify still opens the Settings link. Auto-mute holds reminders during a focus work phase. Auto-complete, off by default, finishes only that session's block.
 
 ### Changed
+- The assistant's `set_homework_done` and `set_block_done` take an optional `expected_revision`, checked like the other writes when it is given. Clients that leave it out work as before.
 - Developer builds are titled with their commit after the version number, for example "Developer build 1.2.0.202611071200 (4b3e1cd)".
 - A developer build that is replaced stays on GitHub tagged by its commit (dev-<commit>), and the updater also reads a developer build title that names its commit after the number.
 - Material Month's "Show study time per date" now fills each date from the bottom, full at three hours: the homework tint is planned time and a deeper homework colour is time done. The old 3 px line was too faint to see.
@@ -41,6 +42,8 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- The open app shows an assistant's change (made through `FlexWeek --mcp`) within a few seconds instead of after a restart. Unsaved edits are kept and the week is marked as changed elsewhere (More > Reload this week shows the change), an open sheet holds the reload until it closes, and the app's own saves never reload it.
+- Several changes an assistant sends at once all apply. Before, some came back as a conflict until they were sent again one at a time. A change made against homework or a week the student has changed since is still refused.
 - Autosave waits for you to stop changing things by elapsed time, so setting the computer's clock back no longer holds a change unsaved until the clock catches up.
 - Material Day keeps its blocks when the clock ticks, still shows Saturday and Sunday when Week hides weekends, only jumps to now when opening a date, and leaves 16 px so the now line shows past the blocks. Every Day block opens with a click, Tab, or Enter; Space marks homework finished.
 - Material Month due chips use the homework class tint and icon instead of purple, overdue chips use the overdue tint, Settings → Look's Widgets styles control is a text button, and the Week now-line passes behind blocks.

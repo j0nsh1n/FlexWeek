@@ -3,8 +3,8 @@
 //! restore can be undone, then every week, homework and the standing week as the point holds them.
 
 use flexweek_store::{
-    StoreError, begin_immediate, create_restore_point, recall_operation, remember_operation,
-    replace_account, replace_standing, restore_point_body,
+    StoreError, create_restore_point, recall_operation, remember_operation, replace_account,
+    replace_standing, restore_point_body,
 };
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::schemars::JsonSchema;
@@ -87,7 +87,8 @@ fn perform(app: &crate::App, args: &RestoreArgs) -> Result<Value, String> {
         Some(&args.id),
         &now,
     )?;
-    begin_immediate(conn).map_err(stored_error)?;
+    // `homework::open` already holds the write lock, as every write does, so the point read here is
+    // the one replaced, and a restore sent beside other writes waits its turn.
     let result = (|| {
         match recall_operation(conn, user_id, &operation_id, &digest).map_err(stored_error)? {
             flexweek_store::Recall::Hit(text) => {

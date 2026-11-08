@@ -44,6 +44,11 @@ meals and events, and change school or activity times (a day off, a moved
 activity). The helper uses the FlexWeek account kept signed in on this
 computer. It opens no connection to the internet.
 
+If FlexWeek is open, a change the assistant makes shows up within a few
+seconds. If you have changes that are not saved yet, FlexWeek keeps them and
+says the week changed; choose More > Reload this week to see the assistant's
+change.
+
 Before each change the assistant makes, FlexWeek saves a restore point named
 "Before assistant ...". To undo the change, pick that point under Copies of
 this week in FlexWeek, or ask the assistant to restore it. Restoring the point
