@@ -144,5 +144,9 @@ Before each change the helper saves the whole schedule as a restore point named
 that change, in one step, the same way Restore in the app does. Restoring the
 point made before an assistant's first change undoes everything it did after.
 The restore saves a "Before restore" point first, so it can be undone too.
-FlexWeek keeps 20 restore points; the assistant keeps at most 10 of its own, so
-it never pushes out the ones the student made.
+FlexWeek keeps 20 restore points. The assistant keeps at most 10 of its own, and
+fewer when the student's points leave less room, so its changes never push out
+a point the student made: with 15 of the student's, it keeps its newest 5. Only
+when the student alone has 20 does a change drop their oldest, as any save in
+the app does. A change that is refused (a stale revision, for example) changes
+nothing, its restore points included.

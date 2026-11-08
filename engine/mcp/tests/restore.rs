@@ -1,8 +1,9 @@
 //! Every assistant write saves a restore point first, and `restore_point` brings one back in one
 //! step, the way the desktop's Restore does (`backend/app.py` restore route): the whole account is
 //! replaced by the point, after a "Before restore" point of its own so the restore can be undone.
-//! The app keeps 20 points (`MAX_RESTORE_POINTS`); the assistant keeps at most 10 of its own so it
-//! never pushes out the student's.
+//! The app keeps 20 points (`MAX_RESTORE_POINTS`); the assistant keeps at most 10 of its own, and
+//! fewer when the student's leave less room under the 20, so it never pushes out the student's. A
+//! refused write changes no point.
 
 mod common;
 
@@ -603,5 +604,111 @@ fn restore_point_brings_back_school_as_it_stood() {
     assert!(
         back.to_string().contains("\"school\""),
         "the restore brings school back to later weeks, got {back}"
+    );
+}
+
+fn student_points(world: &World, count: usize) -> Vec<String> {
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let ids: Vec<String> = (0..count).map(|n| format!("student{n:02}")).collect();
+    for token in &ids {
+        create_restore_point(
+            &conn,
+            world.user,
+            token,
+            "Before import — 2026-10-20T09:00",
+            "2026-10-20T09:00",
+            &[],
+            20,
+        )
+        .expect("the student's own point");
+    }
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    ids.iter().map(|token| format!("rp-{token}")).collect()
+}
+
+#[test]
+fn the_assistant_never_pushes_out_the_students_points() {
+    let world = signed_in("restore-student-kept");
+    let students = student_points(&world, 15);
+    let mut server = boot(&world);
+    server.handshake();
+    for n in 0..10 {
+        let added = add_essay(&mut server, &format!("op-keep-student-{n:02}"), 2 + n);
+        assert_eq!(
+            body_of(&added)["ok"],
+            json!(true),
+            "write {n} lands, got {added}"
+        );
+        let after = points(&world);
+        let ids: Vec<&str> = after.iter().map(|(id, _, _)| id.as_str()).collect();
+        for student in &students {
+            assert!(
+                ids.contains(&student.as_str()),
+                "write {n}: the student's point {student} is still there, got {ids:?}"
+            );
+        }
+        assert!(
+            after.len() <= 20,
+            "write {n}: the app's 20 points are still the most kept, got {}",
+            after.len()
+        );
+        assert!(
+            after
+                .last()
+                .is_some_and(|(_, label, _)| label.starts_with("Before assistant add_homework")),
+            "write {n}: the newest point is this write's, got {after:?}"
+        );
+    }
+}
+
+#[test]
+fn a_refused_write_keeps_every_restore_point() {
+    let world = signed_in("restore-refused");
+    seed_week(&world, json!([club()]));
+    let mut server = boot(&world);
+    server.handshake();
+    for n in 0..10 {
+        let added = add_essay(&mut server, &format!("op-refused-fill-{n:02}"), 2 + n);
+        assert_eq!(
+            body_of(&added)["ok"],
+            json!(true),
+            "write {n} lands, got {added}"
+        );
+    }
+    let before = points(&world);
+    assert_eq!(before.len(), 10, "the assistant keeps ten, got {before:?}");
+    let week_before = week_row(&world);
+    let stale = server.call(
+        "move_block",
+        json!({
+            "operation_id": "op-refused-move",
+            "week_start": WEEK,
+            "expected_revision": 1,
+            "block_id": "club",
+            "day": 2,
+            "start": "17:00",
+            "end": "18:00"
+        }),
+        20,
+    );
+    assert_eq!(
+        body_of(&stale)["error"],
+        json!("conflict"),
+        "a stale revision is refused, got {stale}"
+    );
+    let ids = |list: &[(String, String, Value)]| -> Vec<String> {
+        list.iter().map(|(id, _, _)| id.clone()).collect()
+    };
+    assert_eq!(
+        ids(&points(&world)),
+        ids(&before),
+        "a refused write keeps every restore point"
+    );
+    assert_eq!(
+        week_row(&world),
+        week_before,
+        "a refused write changes nothing"
     );
 }

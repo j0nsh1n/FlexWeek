@@ -174,7 +174,13 @@ pub(crate) fn run_apply(
         restore_token,
     };
     let applied = apply_within(conn, user_id, &input, &clock);
-    conn.execute("COMMIT", [])
+    // A refused write changes nothing, the restore point pruning above included.
+    let end = if applied.is_ok() {
+        "COMMIT"
+    } else {
+        "ROLLBACK"
+    };
+    conn.execute(end, [])
         .map_err(|error| session::storage_sentence(error.into()))?;
     write::from_apply(applied)
 }

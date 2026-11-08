@@ -53,9 +53,11 @@ pub fn from_apply(result: Result<Value, ApplyFailure>) -> Result<Value, String> 
     }
 }
 
-/// The app keeps 20 restore points (`MAX_RESTORE_POINTS`). The assistant keeps at most this many
-/// of its own, so a busy assistant never pushes out the student's points.
+/// The app keeps 20 restore points (`MAX_RESTORE_POINTS` in the store), dropping the oldest of any
+/// origin. The assistant keeps at most `ASSISTANT_POINTS` of its own and never more than the room the
+/// student's points leave under the 20, so the store's prune never reaches a student's point.
 pub const ASSISTANT_POINTS: i64 = 10;
+const ALL_POINTS: i64 = 20;
 
 fn point_token(operation_id: &str) -> String {
     format!(
@@ -80,15 +82,31 @@ pub fn restore_point_before(
     keep: Option<&str>,
     now: &str,
 ) -> Result<(String, String), String> {
+    let storage = |error| session::storage_sentence(flexweek_store::StoreError::from(error));
+    let keep = keep.unwrap_or("");
+    // The points that stay whatever the assistant prunes (the student's own, and `keep`), and
+    // whether `keep` is one of the assistant's.
+    let (fixed, kept_assistant): (i64, i64) = conn
+        .query_row(
+            "SELECT COUNT(*), COUNT(*) FILTER (WHERE id LIKE 'rp-assistant-%')
+            FROM restore_points WHERE user_id = ?1 AND (id NOT LIKE 'rp-assistant-%' OR id = ?2)",
+            (user_id, keep),
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(storage)?;
+    // Room for the assistant's older points, leaving one place for the point about to be saved.
+    let room = (ASSISTANT_POINTS - 1 - kept_assistant)
+        .min(ALL_POINTS - 1 - fixed)
+        .max(0);
     conn.execute(
         "DELETE FROM restore_points WHERE user_id = ?1 AND id LIKE 'rp-assistant-%' AND id != ?2
         AND seq NOT IN (
             SELECT seq FROM restore_points WHERE user_id = ?1 AND id LIKE 'rp-assistant-%'
             AND id != ?2 ORDER BY seq DESC LIMIT ?3
         )",
-        (user_id, keep.unwrap_or(""), ASSISTANT_POINTS - 1),
+        (user_id, keep, room),
     )
-    .map_err(|error| session::storage_sentence(flexweek_store::StoreError::from(error)))?;
+    .map_err(storage)?;
     Ok((
         point_token(operation_id),
         format!("Before assistant {tool} — {now}"),
