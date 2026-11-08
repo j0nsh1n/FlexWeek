@@ -746,8 +746,9 @@ nothing loops.
   change School and activities (this week, or from this week on), run Plan
   and restore a restore point. Before every change it saves a restore point;
   it keeps at most 10 of its own and never drops the student's points to make
-  room for them. It cannot change the password, read or replace recovery codes, delete the account, export or
-  import an account, pair or remove a phone, or change preferences, and it
+  room for them. It cannot change the password, read or replace recovery
+  codes, delete the account, export or import an account, pair or remove a
+  phone, or change preferences, and it
   never returns a session token, a password hash or a recovery-code hash. It
   listens on no port and logs only tool names and outcomes.
 - Device sync keeps a private key on this computer, in a file with mode 0600
