@@ -239,6 +239,25 @@ class SheetsBridge(QObject):
         )
         self._open("block")
 
+    @Slot(int, int, int)
+    def openBlockAt(self, day: int, start_min: int, end_min: int) -> None:
+        """Add fixed time for a time picked on the grid: that day, that start, that length."""
+        session = self._session
+        if session is None or session.account is None:
+            return
+        start_min, end_min = sorted((start_min, end_min))
+        if end_min - start_min < 15:
+            return
+        category = session.armed_category
+        self._block = BlockDraft(
+            session,
+            day=day,
+            start=f"{start_min // 60:02d}:{start_min % 60:02d}",
+            length=end_min - start_min,
+            category=None if category in FLEX_CATEGORIES else category,
+        )
+        self._open("block")
+
     @Slot(str, int)
     def editBlock(self, block_id: str, day: int) -> None:
         """A block on the week: homework opens Edit homework, a fixed time opens Edit fixed time."""
