@@ -433,7 +433,7 @@ fn bring_clips(compare_dir: &Path, clips_dir: &Path) -> Result<Vec<Clip>, String
             let extension = Path::new(frame)
                 .extension()
                 .and_then(|e| e.to_str())
-                .unwrap_or("jpg");
+                .unwrap_or("png");
             let name = format!(
                 "{folder}/{:02}.{}",
                 number + 1,

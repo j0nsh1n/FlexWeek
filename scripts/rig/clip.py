@@ -2,9 +2,10 @@
 computer can encode one on the GPU.
 
 A play with `"record": true` in its setup is recorded (fwtest pictures clips sets it). The frames are
-JPEGs in `<out>/frames/`, ten a second. The video is H.264 from VA-API (`h264_vaapi`); with no ffmpeg
-(CI installs none) or no VA-API device, only the frames are kept, never a slow CPU encode. What was
-made is written to `<out>/clip.json`, which `fwtest pictures clips` reads.
+PNGs in `<out>/frames/`, ten a second: the review page shows them, since video does not play where
+the review is read. The video is H.264 from VA-API (`h264_vaapi`); with no ffmpeg (CI installs none)
+or no VA-API device, only the frames are kept, never a slow CPU encode. What was made is written to
+`<out>/clip.json`, which `fwtest pictures clips` reads.
 """
 
 from __future__ import annotations
@@ -30,7 +31,7 @@ def encode_command(frames: Path, video: Path, device: Path = RENDER_NODE) -> lis
         "-framerate",
         str(1000 // FRAME_MS),
         "-i",
-        str(frames / "%05d.jpg"),
+        str(frames / "%05d.png"),
         "-vf",
         "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=nv12,hwupload",
         "-c:v",
@@ -84,13 +85,14 @@ class Recorder:
         painter.setBrush(QColor("#e11d48"))
         painter.drawEllipse(QPointF(at), 7, 7)
         painter.end()
-        image.save(str(self.frames / f"{self.count:05d}.jpg"), "JPG", 82)
+        # Light compression: a frame is saved well inside the tick, so the timer keeps its pace.
+        image.save(str(self.frames / f"{self.count:05d}.png"), "PNG", 80)
         self.count += 1
 
     def finish(self) -> dict:
         """Stop, encode, and write clip.json. Returns what it wrote."""
         self.timer.stop()
-        names = [f"frames/{number:05d}.jpg" for number in range(self.count)]
+        names = [f"frames/{number:05d}.png" for number in range(self.count)]
         video = self.out / "clip.mp4"
         note = encode(self.frames, video) if self.count else "No frames were recorded."
         made = {"frames": names, "video": None if note else video.name, "note": note}

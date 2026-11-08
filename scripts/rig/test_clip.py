@@ -12,7 +12,7 @@ def test_the_video_is_encoded_with_va_api_at_ten_frames_a_second():
     assert command[command.index("-c:v") + 1] == "h264_vaapi"
     assert command[command.index("-vaapi_device") + 1] == "/dev/dri/renderD129"
     assert command[command.index("-framerate") + 1] == "10"
-    assert command[command.index("-i") + 1] == "out/frames/%05d.jpg"
+    assert command[command.index("-i") + 1] == "out/frames/%05d.png"
     assert "hwupload" in command[command.index("-vf") + 1]
     assert "libx264" not in command
     assert command[-1] == "out/clip.mp4"

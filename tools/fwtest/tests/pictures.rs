@@ -561,12 +561,12 @@ fn the_page_carries_each_clips_strip_and_video_and_needs_no_comparison() {
     let root = scratch("page-clips");
     let clips_dir = root.join("clips");
     let frames: Vec<String> = (0..20)
-        .map(|n| format!("add.widgets.motion-on/frames/{n:05}.jpg"))
+        .map(|n| format!("add.widgets.motion-on/frames/{n:05}.png"))
         .collect();
     for frame in &frames {
         let path = clips_dir.join(frame);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(&path, b"jpg").unwrap();
+        fs::write(&path, b"png").unwrap();
     }
     fs::write(clips_dir.join("add.widgets.motion-on/clip.mp4"), b"mp4").unwrap();
     let listed = page::Clips {
@@ -593,7 +593,7 @@ fn the_page_carries_each_clips_strip_and_video_and_needs_no_comparison() {
             .count(),
         page::STRIP_FRAMES
     );
-    assert!(out.join("clips/add.widgets.motion-on/01.jpg").is_file());
+    assert!(out.join("clips/add.widgets.motion-on/01.png").is_file());
     assert!(out.join("clips/add.widgets.motion-on/clip.mp4").is_file());
     assert!(html.contains("href=\"clips/add.widgets.motion-on/clip.mp4\""));
 }
