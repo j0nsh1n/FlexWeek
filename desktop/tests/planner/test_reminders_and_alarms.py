@@ -10,9 +10,11 @@ from datetime import datetime
 from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import FakeClock
+from desktop.native.controller import NativeSession
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import open_light  # noqa: F401
 from desktop.tests.planner.planning_week import soccer
+from desktop.tests.planner.session_without_a_window import sign_up  # noqa: F401
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
 
@@ -56,11 +58,12 @@ def test_todays_reminders_still_fire_while_another_week_is_on_screen(
 
 
 def test_a_second_alarm_waits_until_the_first_is_dismissed(
-    qapp: QApplication, open_light: Callable[..., NativeWindow], clock: FakeClock
+    sign_up: Callable[[str], NativeSession], clock: FakeClock
 ) -> None:
+    # No window: a window rings an alarm in a dialog that waits for the student, which would hold
+    # this test.
     clock.set(datetime(2026, 11, 2, 7, 0))
-    session = open_light().session
-    wait_until(qapp, lambda: session.preferences is not None)
+    session = sign_up("alice")
     session.preferences = {
         **(session.preferences or {}),
         "alarms": [
