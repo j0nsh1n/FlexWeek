@@ -104,7 +104,8 @@ def test_homework_estimate_and_due_are_checked_with_the_widgets_words(shell: Nat
         sheets.setText("estimate", typed)
         sheets.next()
         assert sheets.kind == "homework", typed
-        assert sheets.form["estimateProblem"] == said
+        # The hint keeps its last two words together with a no-break space; the words are the same.
+        assert sheets.form["estimateProblem"].replace("\u00a0", " ") == said
     sheets.setText("estimate", "30")
     # Monday has already gone by on Thursday evening.
     monday = shell.session.week_start

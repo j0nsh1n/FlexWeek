@@ -15,8 +15,10 @@ from PySide6.QtQuick import QQuickItem
 from PySide6.QtWidgets import QApplication, QPushButton
 
 from desktop.native.window import NativeWindow
+from desktop.tests.day.support_layouts_window import add_school_week
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.material_support import pump, qml
+from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material_page import fresh_material
 
 
@@ -93,8 +95,10 @@ def test_focus_mode_return_when_origin_is_deleted_falls_back_without_error(
     assert bridge.focus.open is False
 
     # Widgets
-    window._surface = "widgets"
-    window._show_surface()
+    # An empty week shows the empty-week page, which has no hours to return to.
+    add_school_week(qapp, window)
+    window._use_widgets_styles()
+    wait_until(qapp, lambda: bool(window._week_surfaces()), what="the week drawn")
     temporary = QPushButton("Temp Button", window)
     temporary.show()
     temporary.setFocus(Qt.FocusReason.TabFocusReason)
