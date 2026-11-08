@@ -425,13 +425,17 @@ Item {
                     z: 2
                     passive: root.passive
                     dayOpen: !root.weekMode
-                    x: root.weekMode
-                       ? root.gutter + model.day * root.dayWidth + 3
-                       : root.gutter + 3
+                    // Blocks sharing time split their day's lane side by side (spec: overlaps are drawn
+                    // side by side). A preview model without the roles keeps the whole lane.
+                    readonly property int lanes: Math.max(1, model.columns || 1)
+                    readonly property real laneSpan: root.weekMode
+                                                     ? root.dayWidth - 6
+                                                     : hours.width - root.gutter - 3 - root.blockRightInset
+                    readonly property real laneStep: (laneSpan + 3) / lanes
+                    x: (root.weekMode ? root.gutter + model.day * root.dayWidth + 3 : root.gutter + 3)
+                       + (model.column || 0) * laneStep
                     y: model.start / 60 * root.row
-                    width: root.weekMode
-                           ? Math.max(8, root.dayWidth - 6)
-                           : Math.max(8, hours.width - root.gutter - 3 - root.blockRightInset)
+                    width: Math.max(8, laneStep - 3)
                     height: Math.max(36, (model.end - model.start) / 60 * root.row - 2)
                     theme: root.theme
                     density: root.density
