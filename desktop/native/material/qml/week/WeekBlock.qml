@@ -40,6 +40,7 @@ Item {
         past: cell.past
         accessName: cell.title
         rightInset: cell.homework ? 28 : 0
+        fitToHeight: true
     }
 
     function findTitle(item) {
