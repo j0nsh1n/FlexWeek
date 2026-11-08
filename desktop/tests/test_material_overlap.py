@@ -17,7 +17,8 @@ pytest.importorskip("PySide6")
 
 pytest_plugins = ["desktop.tests.test_material_week"]
 
-from PySide6.QtCore import QObject, QRectF  # noqa: E402
+from PySide6.QtCore import QObject, QRectF, Qt  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
@@ -26,6 +27,7 @@ from desktop.tests.test_material_week import (  # noqa: E402
     NOW_DAY,
     _block_named,
     _bridge,
+    _centre,
     _click,
     _homework,
     _pump,
@@ -131,10 +133,14 @@ def test_a_squeezed_homework_block_keeps_a_done_circle_that_finishes_it_and_undo
     _pump(qapp, 4)
     reading = _block_named(root, "Pinned reading")
     # A block shares the lane with Soccer, so its title has no room beside a circle on the title row.
-    assert reading.property("circleBelow") is True
+    # What the student relies on is where the circle is: below the title's last line, inside the block's
+    # border, so a click on it marks the homework done instead of opening the title.
     finish = _named(reading, "weekBlockFinish")[0]
     assert finish.property("visible") is True
     assert finish.property("activeFocusOnTab") is True
+    circle, title, block = _rect(finish), _rect(_named(reading, "title")[0]), _rect(reading)
+    assert circle.top() >= title.bottom()
+    assert block.contains(circle)
 
     _click(window, finish)
     wait_until(
@@ -164,12 +170,54 @@ def test_a_squeezed_blocks_title_never_runs_past_its_column_and_shows_it_is_cut(
     grid.setProperty("contentY", float(15 * row))
     _pump(qapp, 4)
     reading = _block_named(root, "Pinned reading")
-    assert reading.property("circleBelow") is True
     title = _named(reading, "title")[0]
     # The column is narrower than the word "Pinned": the word breaks inside itself, no line is wider
     # than the column (so the block's edge never cuts a letter), and the cut title says so with "...".
     assert float(title.property("contentWidth")) <= float(title.property("width")) + 0.5
     assert title.property("truncated") is True
+
+
+def test_a_squeezed_block_too_short_for_the_circle_hides_it_and_the_menu_still_finishes_the_homework(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    # The default 60 minutes: squeezed beside Soccer, the block is too short for the circle under its words.
+    _soccer_and_a_pinned_reading(window, qapp)
+    grid = _qml(root, "weekScroller")
+    row = int(_bridge(window).property("hourRow"))
+    grid.setProperty("contentY", float(15 * row))
+    _pump(qapp, 4)
+    reading = _block_named(root, "Pinned reading")
+    finish = _named(reading, "weekBlockFinish")[0]
+    assert finish.property("visible") is False
+    assert finish.property("activeFocusOnTab") is False
+    assert reading.property("activeFocusOnTab") is True
+
+    quick = window._material_page._quick
+    reading.forceActiveFocus()
+    _pump(qapp)
+    for _ in range(3):
+        QTest.keyClick(quick, Qt.Key.Key_Tab)
+        _pump(qapp)
+        assert finish.property("activeFocus") is False
+    reading.forceActiveFocus()
+    _pump(qapp)
+
+    menu = _named(root, "blockMenu")[0]
+    QTest.keyClick(quick, Qt.Key.Key_F10, Qt.KeyboardModifier.ShiftModifier)
+    _pump(qapp)
+    assert menu.property("open") is True
+    assert "Mark finished" in [e["label"] for e in menu.property("entries").toVariant()]
+    QTest.keyClick(quick, Qt.Key.Key_Escape)
+    _pump(qapp)
+    assert menu.property("open") is False
+
+    QTest.mouseClick(quick, Qt.MouseButton.RightButton, pos=_centre(root, reading))
+    _pump(qapp)
+    assert menu.property("open") is True
+    assert "Mark finished" in [e["label"] for e in menu.property("entries").toVariant()]
+    QTest.keyClick(quick, Qt.Key.Key_Escape)
+    _pump(qapp)
 
 
 def test_a_wide_homework_block_keeps_its_circle_where_it_was(
