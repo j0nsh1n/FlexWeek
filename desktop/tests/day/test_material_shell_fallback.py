@@ -22,6 +22,8 @@ from desktop.native.version import VERSION  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_window import (  # noqa: E402
     FALLBACK,
+    material_window,
+    qapp,
 )
 from desktop.tests.material_support import pump  # noqa: E402
 from desktop.tests.window_support import look_file  # noqa: E402
