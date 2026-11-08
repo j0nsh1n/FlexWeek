@@ -61,6 +61,8 @@ class DayBoard:
     done: tuple[DayRow, ...]
     focus_block_id: str
     focus_day: int
+    # The homework Start focus opens, which the card names on its button.
+    focus_title: str
 
 
 def read_flag(preferences: object, keys: tuple[str, ...], default: bool) -> bool:
@@ -117,6 +119,7 @@ def board_for(
         done=tuple(_row(item, on, moment, mode, dim=dim, finish=False) for item in finished),
         focus_block_id="" if focus is None else str(focus.block_id),
         focus_day=-1 if focus is None else int(focus.day),
+        focus_title="" if focus is None else str(focus.title),
     )
 
 

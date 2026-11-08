@@ -212,6 +212,14 @@ def test_free_time_says_how_long_then_what_is_next() -> None:
     assert longer.now_line == "Next: Soccer at 16:00"
 
 
+def test_the_start_button_names_the_homework_it_starts() -> None:
+    """During free time the card no longer names the homework, so its button does (Jonathan, 2026-11-08)."""
+    essay = _block("History essay", *ESSAY, work=True, assignment="a1")
+    day = [_block("School", *SCHOOL), _block("Soccer", *SOCCER, category="exercise"), essay]
+    assert _board_12h(day, 15 * 60 + 40).focus_title == "History essay"
+    assert _board_12h([_block("School", *SCHOOL)], 15 * 60 + 40).focus_title == ""
+
+
 def test_free_time_before_a_homework_block_does_not_count_down_the_homework() -> None:
     new = _block("Causes of WW1 essay", 16 * 60, 17 * 60, work=True, assignment="a2")
     board = _board_12h([_block("School", *SCHOOL), new], 15 * 60 + 47)

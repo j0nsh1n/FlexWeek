@@ -81,6 +81,7 @@ Item {
                 highContrast: root.highContrast
                 scope: "myDay"
                 title: root.board ? root.board.nowTitle : ""
+                focusTitle: root.board ? root.board.focusTitle : ""
                 line: root.board ? root.board.nowLine : ""
                 onStartFocus: if (root.board) root.board.startFocus()
             }

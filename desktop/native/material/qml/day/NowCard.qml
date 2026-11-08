@@ -11,6 +11,8 @@ Column {
     property string scope: "day"
     property string title: ""
     property string line: ""
+    // The homework Start focus opens; the free-time card does not name it anywhere else.
+    property string focusTitle: ""
     signal startFocus()
 
     spacing: 8
@@ -80,9 +82,9 @@ Column {
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
                 kind: "filled"
-                text: "Start focus"
+                text: root.focusTitle ? "Start " + root.focusTitle : "Start focus"
                 icon: "play_arrow"
-                accessName: "Start focus"
+                accessName: text
                 activeFocusOnTab: !root.passive
                 onClicked: root.startFocus()
             }
