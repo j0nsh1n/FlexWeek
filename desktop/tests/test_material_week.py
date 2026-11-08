@@ -413,6 +413,98 @@ def test_place_now_that_changes_nothing_does_not_offer_undo(qapp: QApplication, 
     assert str(bridge.property("snackAction")) == "", _snack(window)
 
 
+def _homework_block(window: NativeWindow, key: str) -> dict:
+    return next(b for b in window.session.blocks if b.get("assignment_id") == key)
+
+
+def _with_study_hours(window: NativeWindow, qapp: QApplication, hours: list[dict]) -> list[dict] | None:
+    """Study hours saved for the account; returns what was there so the test can put it back."""
+    before = window.session.preferences.get("work_windows")
+    saved: list[bool] = []
+    window.session.save_preferences({"work_windows": hours}, then=saved.append)
+    wait_until(qapp, lambda: saved and not window.session.busy)
+    assert saved == [True]
+    return before
+
+
+def _place_now_in_week(
+    window: NativeWindow, qapp: QApplication, root: QObject, minutes: int
+) -> None:
+    due = (_week_monday(window) + timedelta(days=6)).isoformat()
+    _homework(window, "sheet", "Math worksheet", minutes, due)
+    settled(qapp, window)
+    _pump(qapp)
+    assert _qml(root, "homeworkCount").property("text") == "1"
+    _bridge(window).week.planOne("sheet")
+    wait_until(qapp, lambda: _snack(window) != "" and not window.session.busy)
+    _pump(qapp)
+
+
+def test_place_now_takes_the_first_free_gap_from_now_and_says_where(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    # Now is Thursday 19:00 and the History essay holds 18:45-19:45. The default 15-minute buffer
+    # keeps the next block off it, so the first free start is Thursday 20:00. Left to its energy
+    # hours (midday), the planner would put a 30-minute worksheet on Friday 14:45 instead.
+    root = _reset(window, qapp)
+    _place_now_in_week(window, qapp, root, 30)
+    block = _homework_block(window, "sheet")
+    assert (block["days"], block["start"]) == ([NOW_DAY], "20:00")
+    assert block["duration_min"] == 30
+    assert "prefer_earliest" not in block
+    assert _snack(window) == "Placed Math worksheet on Thu 20:00."
+    assert str(_bridge(window).property("snackAction")) == "UNDO"
+    assert _qml(root, "homeworkCount").property("text") == "0"
+
+
+def test_place_now_goes_to_the_next_day_when_nothing_fits_today(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    # Study hours leave Thursday only 20:00-20:30 after the essay and its buffer: too short for an hour.
+    # Friday opens at 17:00. Saturday 12:00-17:00 is where the planner's energy rule would send it.
+    root = _reset(window, qapp)
+    hours = [
+        {"days": [NOW_DAY], "start": "18:00", "end": "20:30"},
+        {"days": [4], "start": "17:00", "end": "21:00"},
+        {"days": [5], "start": "12:00", "end": "17:00"},
+    ]
+    before = _with_study_hours(window, qapp, hours)
+    try:
+        _place_now_in_week(window, qapp, root, 60)
+        block = _homework_block(window, "sheet")
+        assert (block["days"], block["start"]) == ([4], "17:00")
+        assert block["duration_min"] == 60
+        assert _snack(window) == "Placed Math worksheet on Fri 17:00."
+    finally:
+        _with_study_hours(window, qapp, before or [])
+
+
+def test_place_now_with_no_room_this_week_says_so_and_offers_no_undo(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    before = _with_study_hours(window, qapp, [{"days": [NOW_DAY], "start": "20:00", "end": "20:30"}])
+    try:
+        _place_now_in_week(window, qapp, root, 60)
+        assert not _homework_block(window, "sheet").get("start")
+        assert _snack(window) == "No free time this week for Math worksheet."
+        assert str(_bridge(window).property("snackAction")) == ""
+        assert _qml(root, "homeworkCount").property("text") == "1"
+    finally:
+        _with_study_hours(window, qapp, before or [])
+
+
+def test_ctrl_z_takes_back_a_place_now_in_one_step(qapp: QApplication, window: NativeWindow) -> None:
+    root = _reset(window, qapp)
+    _place_now_in_week(window, qapp, root, 30)
+    assert _homework_block(window, "sheet")["start"] == "20:00"
+    _press(window, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+    _waiting_again(window, qapp, root, "sheet")
+    assert _snack(window) == ""
+    # The one step was the placement: the essay is where it was.
+    assert _homework_block(window, "essay")["start"] == "18:45"
+
+
 def test_a_same_day_spread_says_so_in_the_snackbar(qapp: QApplication, window: NativeWindow) -> None:
     root = _reset(window, qapp)
     due = (_week_monday(window) + timedelta(days=6)).isoformat()

@@ -353,7 +353,7 @@ class WeekBridge(QObject):
 
     @Slot(str)
     def planOne(self, identifier: str) -> None:
-        """The keyboard's way to give one card a time: plan only that homework, as Find a new time does."""
+        """Place now, and Enter on a card: that homework at the first free gap from now that fits it."""
         session = self._window.session  # type: ignore[attr-defined]
         target = next(
             (
@@ -365,7 +365,7 @@ class WeekBridge(QObject):
         )
         if target:
             self._said_plan = time.monotonic()
-            session.solve(only={target})
+            session.solve(only={target}, earliest_first=True)
 
     @Slot(str)
     def toggleDone(self, assignment_id: str) -> None:
