@@ -55,7 +55,8 @@ pub fn from_apply(result: Result<Value, ApplyFailure>) -> Result<Value, String> 
 
 /// The app keeps 20 restore points (`MAX_RESTORE_POINTS` in the store), dropping the oldest of any
 /// origin. The assistant keeps at most `ASSISTANT_POINTS` of its own and never more than the room the
-/// student's points leave under the 20, so the store's prune never reaches a student's point.
+/// student's points leave under the 20, so its saves never drop a student's point to keep its own;
+/// only when the student alone has 20 does a save drop their oldest, as any save in the app does.
 pub const ASSISTANT_POINTS: i64 = 10;
 const ALL_POINTS: i64 = 20;
 

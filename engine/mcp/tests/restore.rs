@@ -2,8 +2,9 @@
 //! step, the way the desktop's Restore does (`backend/app.py` restore route): the whole account is
 //! replaced by the point, after a "Before restore" point of its own so the restore can be undone.
 //! The app keeps 20 points (`MAX_RESTORE_POINTS`); the assistant keeps at most 10 of its own, and
-//! fewer when the student's leave less room under the 20, so it never pushes out the student's. A
-//! refused write changes no point.
+//! fewer when the student's leave less room under the 20, so it never drops the student's to keep
+//! its own (only when the student alone has 20 does a save drop their oldest). A refused write
+//! changes no point.
 
 mod common;
 
