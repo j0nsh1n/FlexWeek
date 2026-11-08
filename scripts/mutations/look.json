@@ -7,13 +7,6 @@
   "test": "desktop/tests/week/test_block_words_on_the_week.py::test_a_block_says_the_most_it_can_without_cutting_a_word_or_ending_a_line_in_a_dot"
  },
  {
-  "file": "desktop/native/hours/canvas.py",
-  "name": "half-hour rules drawn again",
-  "old": "        for minute in range(-(-track.first // 60) * 60, track.last + 1, 60):\n",
-  "new": "        for minute in range(-(-track.first // 60) * 60, track.last + 1, 30):\n",
-  "test": "desktop/tests/week/test_the_hours_grid.py::test_the_hours_have_a_rule_at_each_hour_and_none_at_the_half"
- },
- {
   "file": "desktop/native/look.py",
   "name": "dark looks' rules in the plain hairline",
   "old": "table.setdefault(\"rule\", table[\"hairline_strong\" if axis == \"dark\" else \"hairline\"])",
