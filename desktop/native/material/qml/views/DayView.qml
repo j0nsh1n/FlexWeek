@@ -152,7 +152,6 @@ Item {
                 passive: root.passive
                 phone: root.phone
                 row: root.row
-                gutter: M3Font.px(68)
                 columns: 1
                 filterDay: root.dayIndex
                 showNowLine: root.dayIndex >= 0 && root.bridge && root.bridge.nowDay === root.dayIndex
