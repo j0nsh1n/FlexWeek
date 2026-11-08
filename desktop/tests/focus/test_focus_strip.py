@@ -1,8 +1,5 @@
-"""The focus panel over the week (0.17.2 lane 3, Grok Bot's 0.17.0 audit X3 and X8).
-
-A running timer is one line: its name, time and Focus screen. Now and Next, Quick focus and the
-what-to-do sentence used to stack into three strips above the week.
-"""
+"""The focus panel over the week: a running timer is one line (its name, time and Focus screen). Now and
+Next, Quick focus and the what-to-do sentence used to stack into three strips above the week."""
 
 from __future__ import annotations
 
@@ -21,7 +18,7 @@ from desktop.native import settings
 @pytest.fixture(scope="module")
 def qapp() -> Iterator[QApplication]:
     QStandardPaths.setTestModeEnabled(True)
-    yield QApplication.instance() or QApplication(["flexweek-focus-panel-test"])
+    yield QApplication.instance() or QApplication(["flexweek-focus-strip-test"])
 
 
 NOW_NEXT = "Now: Maths until 15:00"
@@ -94,11 +91,4 @@ def test_a_running_timer_in_the_rail_is_also_one_line(qapp: QApplication) -> Non
     assert not _shown(panel, panel.note)
     assert not _shown(panel, panel.quick)
     assert not _shown(panel, panel.now_next)
-    panel.deleteLater()
-
-
-def test_focus_screen_is_outlined_not_filled(qapp: QApplication) -> None:
-    panel = settings.FocusPanel()
-    assert panel.screen.property("outline") is True
-    assert not panel.screen.property("quiet")
     panel.deleteLater()

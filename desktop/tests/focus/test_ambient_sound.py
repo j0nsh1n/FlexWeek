@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import os
 import random
-import time
 from array import array
 from collections.abc import Iterator
 from pathlib import Path
@@ -37,19 +36,12 @@ from desktop.native.ambient import (  # noqa: E402
     white_noise,
 )
 from desktop.native.sound import SILENT  # noqa: E402
+from desktop.tests.waiting import wait_until  # noqa: E402
 
 
 @pytest.fixture(scope="module")
 def qapp() -> Iterator[QApplication]:
     yield QApplication.instance() or QApplication(["flexweek-ambient"])
-
-
-def pump(qapp: QApplication, until, seconds: float = 10.0) -> None:
-    end = time.monotonic() + seconds
-    while not until() and time.monotonic() < end:
-        qapp.processEvents()
-        time.sleep(0.0003)
-    assert until(), "timed out"
 
 
 class FakeSink(QObject):
@@ -219,18 +211,18 @@ def test_fades_move_the_volume_in_steps_not_in_one_jump(qapp: QApplication, hear
     player.play("white-noise", 100)
     sink = made[0]
     assert sink.volume == 0.0  # starts silent
-    pump(qapp, lambda: sink.volume > 0.0)
+    wait_until(qapp, lambda: sink.volume > 0.0)
     assert sink.volume < 1.0
-    pump(qapp, lambda: sink.volume == pytest.approx(1.0))
+    wait_until(qapp, lambda: sink.volume == pytest.approx(1.0))
     player.pause()
-    pump(qapp, lambda: 0.0 < sink.volume < 1.0)
+    wait_until(qapp, lambda: 0.0 < sink.volume < 1.0)
     assert not sink.suspended  # still fading out
-    pump(qapp, lambda: sink.suspended)
+    wait_until(qapp, lambda: sink.suspended)
     assert sink.volume == 0.0
     player.resume()
-    pump(qapp, lambda: sink.volume == pytest.approx(1.0))
+    wait_until(qapp, lambda: sink.volume == pytest.approx(1.0))
     player.stop()
-    pump(qapp, lambda: sink.stopped)
+    wait_until(qapp, lambda: sink.stopped)
 
 
 def test_a_failed_sink_leaves_the_player_running_without_sound(qapp: QApplication, heard: None) -> None:
@@ -260,7 +252,7 @@ def test_each_file_decodes_into_a_loop_as_long_as_the_file_less_its_blend(
     player = AmbientPlayer(fade_ms=0)
     player.play(kind, 80)
     assert player.state == "loading"
-    pump(qapp, lambda: player.state == "playing", 20)
+    wait_until(qapp, lambda: player.state == "playing", 20)
     loop = player.loop_pcm(kind)
     assert loop is not None
     assert len(loop) % FRAME == 0
@@ -278,7 +270,7 @@ def test_pausing_while_a_file_is_still_loading_waits_and_resume_starts_it(
     player.play("rain", 80)
     player.pause()
     assert player.state == "paused"
-    pump(qapp, lambda: player.loop_pcm("rain") is not None, 20)
+    wait_until(qapp, lambda: player.loop_pcm("rain") is not None, 20)
     assert player.state == "paused"
     player.resume()
     assert player.state == "playing"
