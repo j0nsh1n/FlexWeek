@@ -31,7 +31,7 @@ Item {
             text: "Live preview"
             color: palette.inkSurface
             font.family: M3Font.family
-            font.pixelSize: 16
+            font.pixelSize: M3Font.px(16)
             font.weight: 500
         }
         Row {
@@ -142,7 +142,7 @@ Item {
                     text: root.shown === "week" ? "Week" : (root.shown === "day" ? "Day" : "Month")
                     color: root.draft.onSurface || palette.inkSurface
                     font.family: M3Font.family
-                    font.pixelSize: 22
+                    font.pixelSize: M3Font.px(22)
                     font.weight: 500
                 }
                 Item {
@@ -224,7 +224,7 @@ Item {
                             text: root.settings && root.settings.preview && root.settings.preview.month && root.settings.preview.month.loading ? "Loading month…" : (root.settings && root.settings.preview && root.settings.preview.month ? root.settings.preview.month.loadError : "")
                             color: root.settings && root.settings.preview && root.settings.preview.month && root.settings.preview.month.loadError ? bannerPalette.inkErrorContainer : bannerPalette.inkSurface
                             font.family: M3Font.family
-                            font.pixelSize: 12
+                            font.pixelSize: M3Font.px(12)
                             anchors.verticalCenter: parent.verticalCenter
                         }
                         Button {
@@ -251,11 +251,11 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        height: 20
+        height: M3Font.px(20)
         text: "The real Material views, drawn from these values. Nothing else changes until Done."
         color: palette.inkMuted
         font.family: M3Font.family
-        font.pixelSize: 12
+        font.pixelSize: M3Font.px(12)
         elide: Text.ElideRight
     }
 }

@@ -18,7 +18,7 @@ Item {
     signal activated()
 
     implicitWidth: bar ? 64 : 72
-    implicitHeight: bar ? 80 : 52
+    implicitHeight: Math.max(bar ? 80 : 52, (bar ? 14 : 0) + 36 + caption.implicitHeight)
     width: implicitWidth
     height: implicitHeight
 
@@ -78,7 +78,7 @@ Item {
         visible: !(root.theme && root.theme.railLabels === false)
         color: root.selected ? palette.inkSurface : palette.inkMuted
         font.family: M3Font.family
-        font.pixelSize: 12
+        font.pixelSize: M3Font.px(12, 16)
         font.weight: 500
     }
     M3FocusRing {

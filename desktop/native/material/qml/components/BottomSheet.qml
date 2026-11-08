@@ -63,7 +63,7 @@ Item {
                 text: root.title
                 color: palette.inkSurface
                 font.family: M3Font.family
-                font.pixelSize: 24
+                font.pixelSize: M3Font.px(24)
                 font.weight: 400
                 wrapMode: Text.WordWrap
             }
@@ -73,7 +73,7 @@ Item {
                 text: root.body
                 color: palette.inkMuted
                 font.family: M3Font.family
-                font.pixelSize: 14
+                font.pixelSize: M3Font.px(14)
                 wrapMode: Text.WordWrap
             }
         }

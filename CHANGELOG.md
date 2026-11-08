@@ -39,6 +39,11 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- Material Focus: Esc and the Back arrow leave the screen with the timer still running; only Finish asks "End this session?".
+- Material: Running late and Unfinished, opened from the More menu, take the keyboard, so Tab moves through their controls and the focus ring shows.
+- Material Day and My day: the Now card says the free time and what comes next, for example "Free for 20 min" and "Next: Soccer at 4:00 PM". It names a homework only while that homework is happening, with its time left, and its button names the homework it starts ("Start History essay").
+- Material text fields (the add and edit sheets, Running late, Settings and sign-in) show focus the Material 3 way: their own border turns the accent and thicker, with no second outline, and nothing runs through the field's label.
+- Material: Large and Larger text now reach every screen, including Settings, Month, Focus, the add and edit sheets, block times, the Now card, the mini month and section labels; rows, month cells and the hour labels grow to fit.
 - Autosave waits for you to stop changing things by elapsed time, so setting the computer's clock back no longer holds a change unsaved until the clock catches up.
 - Material Day keeps its blocks when the clock ticks, still shows Saturday and Sunday when Week hides weekends, only jumps to now when opening a date, and leaves 16 px so the now line shows past the blocks. Every Day block opens with a click, Tab, or Enter; Space marks homework finished.
 - Material Month due chips use the homework class tint and icon instead of purple, overdue chips use the overdue tint, Settings → Look's Widgets styles control is a text button, and the Week now-line passes behind blocks.

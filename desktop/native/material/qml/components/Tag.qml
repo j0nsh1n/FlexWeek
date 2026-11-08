@@ -10,8 +10,8 @@ Item {
     property string kind: "plain"
     property string text: ""
 
-    implicitHeight: 20
-    height: 20
+    implicitHeight: Math.max(20, content.implicitHeight + 4)
+    height: implicitHeight
 
     M3Palette { id: palette; theme: root.theme }
 
@@ -80,7 +80,7 @@ Item {
             text: root.text
             color: root.ink
             font.family: M3Font.family
-            font.pixelSize: 11
+            font.pixelSize: M3Font.px(11)
             font.weight: 500
         }
     }
