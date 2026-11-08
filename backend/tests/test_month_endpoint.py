@@ -1,4 +1,5 @@
-"""GET /api/month from docs/stage7-contract.md. Grid lengths are from the calendar, not a recorded run."""
+"""GET /api/month: the weeks of a month with each date's blocks, deadlines and counts. Grid lengths are
+from the calendar, not a recorded run; every date is fixed in the test, none depends on today."""
 
 from __future__ import annotations
 
