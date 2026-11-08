@@ -637,7 +637,9 @@ Item {
     Shortcut {
         sequence: "Escape"
         context: Qt.WindowShortcut
+        // An open Week or Day menu takes its own Escape, so it can close and give the focus back.
         enabled: !accountLayer.active && !focusOverlay.ending && !sheetHost.active && !settingsPromptOpen
+                 && !(bridge.screen === "week" && weekView.menuOpen) && !(bridge.screen === "day" && dayView.menuOpen)
         onActivated: {
             if (bridge && bridge.settingsBridge && bridge.settingsBridge.page === "advanced")
                 bridge.settingsBridge.closeAdvanced()

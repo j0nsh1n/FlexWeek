@@ -50,6 +50,8 @@ Item {
         anchors.fill: parent
         radius: 4
         color: palette.inverseSurface
+        // Takes the presses on the bar so a click on it never reaches the Week grid underneath.
+        TapHandler { gesturePolicy: TapHandler.WithinBounds }
     }
     Text {
         id: messageText
