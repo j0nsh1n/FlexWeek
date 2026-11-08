@@ -80,6 +80,7 @@ Item {
             topPadding: root.phone ? 16 : 24
             leftPadding: root.phone ? 16 : 24
             rightPadding: root.phone ? 16 : 24
+            bottomPadding: 8
 
             Row {
                 spacing: 4

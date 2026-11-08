@@ -228,6 +228,7 @@ Item {
     }
 
     ZoomPill {
+        id: zoomPill
         visible: root.showPill && !root.phone && !root.passive
         z: 6
         x: Math.round((root.gutter - width) / 2)
@@ -470,6 +471,10 @@ Item {
                     objectName: "hourLabel"
                     x: 0
                     y: Math.max(0, index * root.row - 8)
+                    readonly property real viewY: y - scroller.contentY
+                    // Whole or not at all: hide a label cut by the pane's top edge or covered by the zoom pill.
+                    opacity: viewY >= 0 && !(zoomPill.visible && viewY < zoomPill.y + zoomPill.height + 2
+                                             && viewY + height > zoomPill.y - 2) ? 1 : 0
                     width: root.gutter - 8
                     horizontalAlignment: Text.AlignRight
                     text: model.label
