@@ -96,7 +96,8 @@ tests = ["desktop/tests/e2e/"]
 # nothing in the checkout is left out, so this area empties itself as the files move.
 [[area]]
 name = "unmoved"
-tests = ["desktop/tests/test_*.py", "desktop/tests/regress184/", "desktop/tests/regress190/"]
+# Not the Regression Tester's suites: they run only with FLEXWEEK_REGRESS=1 (desktop/tests/conftest.py).
+tests = ["desktop/tests/test_*.py"]
 
 [[area]]
 name = "rig"

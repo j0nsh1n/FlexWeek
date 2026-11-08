@@ -20,7 +20,7 @@ from PySide6.QtWidgets import QApplication, QPushButton, QWidget  # noqa: E402
 
 from desktop.native.version import VERSION  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
-from desktop.tests.day.support_material_window import (  # noqa: E402
+from desktop.tests.day.support_material_window import (  # noqa: E402, F401
     FALLBACK,
     material_window,
     qapp,

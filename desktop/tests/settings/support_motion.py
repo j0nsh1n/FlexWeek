@@ -6,11 +6,11 @@ from __future__ import annotations
 from PySide6.QtCore import QEvent, QRectF
 from PySide6.QtWidgets import QApplication, QLabel, QStackedWidget, QVBoxLayout, QWidget
 
+from desktop.native import motion
 from desktop.native.hours.canvas import BlockPainter, HoursCanvas
 from desktop.native.hours.geometry import LinearTrack
 from desktop.native.hours.hand import Hand, Verdict
 from desktop.native.look import resolved_palette
-from desktop.native import motion
 from desktop.native.motion import (
     FADE_NAME,
     PAGE_IN_AFTER_MS,
