@@ -41,7 +41,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Fixed
 - Material Week drawer: a homework length such as "1 h" or "30 min" stays on one line, so "h" is never left alone on the last line at Large and Larger text.
 - Material buttons with an icon, such as "Plan my homework": the icon grows with the text size and is centred on the label.
-- Material pickers (Pinned time, due date, fixed time, Running late) open with the chosen value in view and selected (for example 7:00 PM) instead of at 12:00 AM; on a closed picker Up and Down step the value by a quarter hour, and Space, Enter and Alt+Down open the list.
+- Material pickers (times, due date, category, type and energy) open with the chosen value in view and selected instead of at the top of the list (a 7:00 PM time no longer opens at 12:00 AM); on a closed picker Up and Down move to the previous or next value (a quarter hour on a time picker), and Space, Enter and Alt+Down open the list.
 - Material Day's month panel is as wide as the mini month, so no weekday column is cut off at Larger text.
 - Material Day and Week hide an hour label that would be only partly shown at the top of the hours pane, Day's zoom control never covers an hour label, and Day leaves a small gap between the Now card and the hours.
 - A click or a drag over empty time on Material Week and Day opens a small menu at that spot, Add homework here and Add fixed time here, each opening its sheet with that day and time (a click gives an hour from the nearest quarter hour); before, a click did nothing and the fixed-time sheet could not be reached. Clicking the snackbar over the grid no longer opens that menu, Esc closes it and gives the focus back, and a card that takes the focus while it is open keeps it.
