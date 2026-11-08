@@ -7,6 +7,7 @@ from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
+from desktop.tests.waiting import wait_until
 
 
 def pump(qapp: QApplication, count: int = 30) -> None:
@@ -30,7 +31,15 @@ def show_material(qapp: QApplication, window: NativeWindow) -> QObject:
     assert window._stack.currentWidget().objectName() == "materialPage"
     root = window._material_page.root
     assert root is not None
+    faded_in(qapp, root)
     return root
+
+
+def faded_in(qapp: QApplication, root: QObject) -> None:
+    """Wait for the screen's 300 ms fade-in to end. It runs whenever Material is built or changes
+    screen; a test that reads geometry or pixels during it reads them half-faded."""
+    stage = qml(root, "materialWeek").parentItem().parentItem()
+    wait_until(qapp, lambda: float(stage.property("opacity")) >= 1.0, what="Material to finish fading in")
 
 
 def qml(root: QObject, name: str) -> QObject:

@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.calendar import sunday_due
 from desktop.native.window import NativeWindow
+from desktop.tests.material_support import faded_in
 from desktop.tests.window_support import look_file, settled
 
 
@@ -38,6 +39,7 @@ def _show_material(qapp: QApplication, window: NativeWindow) -> QObject:
     assert window._stack.currentWidget().objectName() == "materialPage"
     root = window._material_page.root
     assert root is not None
+    faded_in(qapp, root)
     return root
 
 

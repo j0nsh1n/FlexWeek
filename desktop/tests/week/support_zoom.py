@@ -49,6 +49,7 @@ from desktop.native.look import resolved_palette  # noqa: E402
 from desktop.native.weekmodel import build_week  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import LightWindows  # noqa: E402
+from desktop.tests.material_support import faded_in  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402, F401
 
 DESIGNS = ("classic", "timeline", "mission", "bento", "retro", "clay")
@@ -384,6 +385,7 @@ def show_material(qapp: QApplication, window: NativeWindow) -> QObject:
     assert window._stack.currentWidget().objectName() == "materialPage"
     root = window._material_page.root
     assert root is not None
+    faded_in(qapp, root)
     return root
 
 
