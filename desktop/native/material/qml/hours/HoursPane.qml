@@ -15,7 +15,7 @@ Item {
     property bool passive: false
     property bool phone: false
     property int row: 56
-    property int gutter: 68
+    property int gutter: M3Font.px(68)
     property int columns: 1
     property real dayWidth: Math.max(48, (width - gutter) / Math.max(1, columns))
     property int filterDay: -1
@@ -44,7 +44,6 @@ Item {
     property int wheelAcc: 0
     property bool zooming: false
 
-    readonly property real typeScale: (theme && theme.typeScale) ? theme.typeScale : 1
     readonly property int blockRightInset: root.weekMode ? 3 : 16
 
     function openingAbove(view) {
@@ -396,7 +395,7 @@ Item {
                     text: model.label
                     color: m3.inkMuted
                     font.family: M3Font.family
-                    font.pixelSize: 11 * root.typeScale
+                    font.pixelSize: M3Font.px(11)
                     font.weight: 500
                 }
             }

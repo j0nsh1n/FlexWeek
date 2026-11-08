@@ -20,7 +20,7 @@ Item {
     objectName: "row_" + key
 
     readonly property int padV: density === "compact" ? 10 : 16
-    implicitHeight: padV * 2 + 24 + (subtitle === "" ? 0 : 20) + 8 + 56 + (error === "" ? 0 : 20)
+    implicitHeight: padV * 2 + M3Font.px(24) + (subtitle === "" ? 0 : M3Font.px(20)) + 8 + 56 + (error === "" ? 0 : M3Font.px(20))
     height: implicitHeight
 
     M3Palette { id: palette; theme: root.theme }
@@ -38,22 +38,22 @@ Item {
         spacing: 0
         Text {
             width: parent.width
-            height: 24
+            height: M3Font.px(24)
             verticalAlignment: Text.AlignVCenter
             text: root.title
             color: palette.inkSurface
             font.family: M3Font.family
-            font.pixelSize: 16
+            font.pixelSize: M3Font.px(16)
             font.weight: 500
         }
         Text {
             width: parent.width
-            height: 20
+            height: M3Font.px(20)
             visible: root.subtitle !== ""
             text: root.subtitle
             color: palette.inkMuted
             font.family: M3Font.family
-            font.pixelSize: 14
+            font.pixelSize: M3Font.px(14)
             elide: Text.ElideRight
         }
         Item { width: 1; height: 8 }
@@ -89,12 +89,12 @@ Item {
         Text {
             objectName: root.key + "Error"
             width: parent.width
-            height: 20
+            height: M3Font.px(20)
             visible: root.error !== ""
             text: root.error
             color: palette.error
             font.family: M3Font.family
-            font.pixelSize: 14
+            font.pixelSize: M3Font.px(14)
         }
     }
 }

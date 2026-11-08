@@ -66,7 +66,7 @@ Item {
                     text: modelData.label
                     color: pill.on ? m3.inkSecondaryContainer : m3.inkMuted
                     font.family: M3Font.family
-                    font.pixelSize: 14
+                    font.pixelSize: M3Font.px(14)
                     font.weight: 500
                 }
                 HoverHandler { id: hover }

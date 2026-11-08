@@ -371,6 +371,10 @@ class DayBridge(QObject):
     def nowTitle(self) -> str:
         return self._board.now_title
 
+    @Property(str, notify=changed)
+    def focusTitle(self) -> str:
+        return self._board.focus_title
+
     @Property(int, notify=changed)
     def nowMinutes(self) -> int:
         return self._board.now_minutes

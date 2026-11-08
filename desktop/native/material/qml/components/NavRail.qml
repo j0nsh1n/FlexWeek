@@ -52,6 +52,11 @@ Item {
         }
     }
 
+    // A larger text size makes each destination taller.
+    Connections {
+        target: M3Font
+        function onScaleChanged() { Qt.callLater(root.place) }
+    }
     onWidthChanged: place()
     onHeightChanged: place()
     Component.onCompleted: place()

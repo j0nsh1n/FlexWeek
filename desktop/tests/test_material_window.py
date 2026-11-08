@@ -1144,16 +1144,17 @@ def test_rings_follow_the_last_input_in_the_real_window(qapp: QApplication, wind
     sheets = window._material_page.bridge.sheets
     try:
         _press_item(qapp, window, _named(root, "materialFab")[0])
-        def title_rings() -> list[QObject]:
-            return [ring for title in _named(root, "homeworkTitle") for ring in _named(title, "focusRing")]
-
+        # Title marks focus with its own border (Material 3), so it has no ring to show.
         def focused() -> list[QObject]:
-            return [ring for ring in title_rings() if ring.property("target").property("activeFocus")]
+            return [
+                field
+                for title in _named(root, "homeworkTitle")
+                for field in _named(title, "fieldInput")
+                if field.property("activeFocus")
+            ]
 
         wait_until(qapp, lambda: bool(focused()))
-        title_ring = focused()[0]
-        assert title_ring.property("target").property("activeFocus") is True
-        assert title_ring.property("shown") is False
+        assert not [ring for title in _named(root, "homeworkTitle") for ring in _named(title, "focusRing")]
 
         week = _named(root, "navWeek")[0]
         sheets.forceClose()

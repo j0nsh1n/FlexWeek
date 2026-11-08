@@ -14,6 +14,8 @@ Column {
     property string scope: "day"
     property string title: ""
     property string line: ""
+    // The homework Start focus opens; the free-time card does not name it anywhere else.
+    property string focusTitle: ""
     signal startFocus()
 
     spacing: 8
@@ -26,7 +28,7 @@ Column {
         text: "Now"
         color: palette.inkMuted
         font.family: M3Font.family
-        font.pixelSize: 12
+        font.pixelSize: M3Font.px(12)
         font.weight: 500
         Accessible.role: Accessible.StaticText
         Accessible.name: text
@@ -62,7 +64,7 @@ Column {
                     wrapMode: Text.WordWrap
                     color: palette.inkPrimaryContainer
                     font.family: M3Font.family
-                    font.pixelSize: 24
+                    font.pixelSize: M3Font.px(24)
                     font.weight: 400
                 }
                 Text {
@@ -71,7 +73,7 @@ Column {
                     text: root.timerTitle ? root.timerLine : root.line
                     color: palette.inkPrimaryContainer
                     font.family: M3Font.family
-                    font.pixelSize: 16
+                    font.pixelSize: M3Font.px(16)
                     font.weight: 400
                 }
             }
@@ -83,7 +85,7 @@ Column {
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
                 kind: "filled"
-                text: root.timerTitle ? "Back to " + root.timerTitle : "Start focus"
+                text: root.timerTitle ? "Back to " + root.timerTitle : (root.focusTitle ? "Start " + root.focusTitle : "Start focus")
                 icon: "play_arrow"
                 accessName: text
                 activeFocusOnTab: !root.passive

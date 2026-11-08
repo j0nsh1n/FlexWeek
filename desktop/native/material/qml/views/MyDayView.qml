@@ -24,7 +24,7 @@ Item {
         opacity: 0
         text: "My day"
         font.family: M3Font.family
-        font.pixelSize: 12
+        font.pixelSize: M3Font.px(12)
         Accessible.role: Accessible.Heading
         Accessible.name: text
     }
@@ -53,7 +53,7 @@ Item {
                 wrapMode: Text.WordWrap
                 color: palette.inkMuted
                 font.family: M3Font.family
-                font.pixelSize: 16
+                font.pixelSize: M3Font.px(16)
                 Accessible.role: Accessible.StaticText
                 Accessible.name: text
             }
@@ -83,6 +83,7 @@ Item {
                 timerLine: root.board ? root.board.timerLine : ""
                 scope: "myDay"
                 title: root.board ? root.board.nowTitle : ""
+                focusTitle: root.board ? root.board.focusTitle : ""
                 line: root.board ? root.board.nowLine : ""
                 onStartFocus: if (root.board) root.board.startFocus()
             }

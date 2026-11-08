@@ -18,7 +18,7 @@ Item {
     objectName: "row_" + key
 
     readonly property int padV: density === "compact" ? 10 : 16
-    readonly property int textHeight: 24 + (subtitle === "" ? 0 : 20)
+    readonly property int textHeight: M3Font.px(24) + (subtitle === "" ? 0 : M3Font.px(20))
     readonly property bool stacked: Math.max(titleText.implicitWidth, Math.min(subtitleText.implicitWidth, 240)) + seg.implicitWidth + 64 > width
     implicitHeight: stacked ? padV * 2 + textHeight + 8 + seg.height : Math.max(56, padV * 2 + textHeight)
     height: implicitHeight
@@ -39,25 +39,25 @@ Item {
         Text {
             id: titleText
             width: parent.width
-            height: 24
+            height: M3Font.px(24)
             verticalAlignment: Text.AlignVCenter
             text: root.title
             color: palette.inkSurface
             font.family: M3Font.family
-            font.pixelSize: 16
+            font.pixelSize: M3Font.px(16)
             font.weight: 500
             elide: Text.ElideRight
         }
         Text {
             id: subtitleText
             width: parent.width
-            height: 20
+            height: M3Font.px(20)
             visible: root.subtitle !== ""
             verticalAlignment: Text.AlignVCenter
             text: root.subtitle
             color: palette.inkMuted
             font.family: M3Font.family
-            font.pixelSize: 14
+            font.pixelSize: M3Font.px(14)
             elide: Text.ElideRight
         }
     }

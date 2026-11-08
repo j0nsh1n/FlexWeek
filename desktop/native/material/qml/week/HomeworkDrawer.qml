@@ -43,7 +43,7 @@ Rectangle {
                 color: m3.inkSurface
                 wrapMode: Text.WordWrap
                 font.family: M3Font.family
-                font.pixelSize: 16
+                font.pixelSize: M3Font.px(16)
                 font.weight: 500
             }
             Rectangle {
@@ -60,7 +60,7 @@ Rectangle {
                     text: String(drawer.count)
                     color: m3.inkSecondaryContainer
                     font.family: M3Font.family
-                    font.pixelSize: 12
+                    font.pixelSize: M3Font.px(12)
                     font.weight: 500
                 }
                 Accessible.role: Accessible.StaticText
@@ -167,7 +167,7 @@ Rectangle {
             text: "Everything has a time."
             color: m3.inkMuted
             font.family: M3Font.family
-            font.pixelSize: 14
+            font.pixelSize: M3Font.px(14)
             font.weight: 400
         }
     }
