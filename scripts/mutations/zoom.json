@@ -200,13 +200,13 @@
   "name": "lanes open at the evening whatever now is",
   "old": "            start = min(start, self._keep - NOW_MARGIN)\n",
   "new": "            start = start\n",
-  "test": "desktop/tests/test_layout_mission.py::test_now_is_on_screen_when_the_evening_does_not_fit_with_it"
+  "test": "desktop/tests/week/test_mission_lanes_opening.py::test_now_is_on_screen_when_the_evening_does_not_fit_with_it"
  },
  {
   "file": "desktop/native/hours/zoom.py",
   "name": "a resize forgets that now was kept in view",
   "old": "            wanted = round(self._y_for(self._start_for_end(self._centre)))\n",
   "new": "            wanted = round(self._y_for(self._centre) - self._port_length())\n",
-  "test": "desktop/tests/test_layout_mission.py::test_the_lanes_keep_their_opening_while_the_window_settles"
+  "test": "desktop/tests/week/test_mission_lanes_opening.py::test_the_lanes_keep_their_opening_while_the_window_settles"
  }
 ]

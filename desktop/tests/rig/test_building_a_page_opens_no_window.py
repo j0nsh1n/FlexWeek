@@ -1,6 +1,6 @@
 """Building a page never opens a window of its own. A label shown before it has a parent opens as a
 separate window for a moment, which takes the keyboard from FlexWeek's window: with Settings built in
-the background (J12), the week lost the keyboard after every visit to the week page."""
+the background, the week lost the keyboard after every visit to the week page."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ if importlib.util.find_spec("PySide6") is not None:
 
 @pytest.fixture(scope="module")
 def qapp() -> Iterator[QApplication]:
-    yield QApplication.instance() or QApplication(["flexweek-stray-windows-test"])
+    yield QApplication.instance() or QApplication(["flexweek-no-window-test"])
 
 
 def windows_shown(build: Callable[[], object]) -> list[str]:

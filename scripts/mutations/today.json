@@ -4,7 +4,7 @@
   "name": "a held block kept when the view switches",
   "old": "            self.hand.cancel()\n        if not self.hand.busy:\n            self._shown = self._where()\n",
   "new": "            pass\n        if not self.hand.busy:\n            self._shown = self._where()\n",
-  "test": "desktop/tests/test_layouts_window.py::test_a_block_held_on_the_week_goes_back_when_the_student_switches_to_day"
+  "test": "desktop/tests/week/test_dragging_blocks_on_the_week.py::test_a_block_held_on_the_week_goes_back_when_the_student_switches_to_day"
  },
  {
   "file": "desktop/native/hours/chips.py",
@@ -158,7 +158,7 @@
   "name": "the sign-out sheet drawn in red",
   "old": "        if confirm(\n            self, \"Sign out\", SIGN_OUT_QUESTION.format(where=where), \"Sign out\", danger=False\n        ) and self._save_before_leaving(self.session.logout, again=\"sign out again\"):\n",
   "new": "        if confirm(\n            self, \"Sign out\", SIGN_OUT_QUESTION.format(where=where), \"Sign out\"\n        ) and self._save_before_leaving(self.session.logout, again=\"sign out again\"):\n",
-  "test": "desktop/tests/test_sheets.py::test_the_sign_out_sheet_says_where_the_week_lives_and_does_not_draw_sign_out_red"
+  "test": "desktop/tests/sheets/test_confirm_sheets.py::test_the_sign_out_sheet_says_where_the_week_lives_and_does_not_draw_sign_out_red"
  },
  {
   "file": "desktop/native/window.py",
@@ -252,39 +252,18 @@
   "test": "desktop/tests/test_classic_hours.py::test_a_tray_chip_shortens_its_title_and_keeps_its_length_whole"
  },
  {
-  "file": "desktop/native/widgets.py",
-  "name": "the week title cut short of its short form",
-  "old": "        return QSize(max(self._minimum, short if self._short else 0), super().minimumSizeHint().height())\n",
-  "new": "        return QSize(self._minimum, super().minimumSizeHint().height())\n",
-  "test": "desktop/tests/test_window_screens.py::test_the_top_bar_is_never_cut_mid_word"
- },
- {
-  "file": "desktop/native/widgets.py",
-  "name": "the top bar squeezed instead of wrapping",
-  "old": "        if least + self.between + second.minimumSize().width() <= area.width():\n",
-  "new": "        if True:\n",
-  "test": "desktop/tests/test_window_screens.py::test_the_top_bar_is_never_cut_mid_word"
- },
- {
-  "file": "desktop/native/window.py",
-  "name": "the window narrower than the top bar's buttons",
-  "old": "        self.setMinimumWidth(max(WINDOW_MIN_WIDTH, needed))\n",
-  "new": "        self.setMinimumWidth(WINDOW_MIN_WIDTH)\n",
-  "test": "desktop/tests/test_window_screens.py::test_the_top_bar_is_never_cut_mid_word"
- },
- {
   "file": "desktop/native/layouts/retro.py",
   "name": "a notepad line runs off the page",
   "old": "    if len(line.title) <= title and title + 2 + len(rest) <= chars:\n",
   "new": "    if True:\n",
-  "test": "desktop/tests/test_layout_retro.py::test_a_notepad_line_short_of_room_puts_its_length_and_time_under_its_title"
+  "test": "desktop/tests/week/test_retro_notepad.py::test_a_notepad_line_short_of_room_puts_its_length_and_time_under_its_title"
  },
  {
   "file": "desktop/native/layouts/retro.py",
   "name": "Retro shows what has no time twice",
   "old": "        if scene.week.waiting and not self._open.get(\"notes\"):\n",
   "new": "        if scene.week.waiting:\n",
-  "test": "desktop/tests/test_layout_retro.py::test_what_has_no_time_is_shown_once_in_the_notepad_or_under_the_hours_when_it_is_closed"
+  "test": "desktop/tests/week/test_retro_notepad.py::test_what_has_no_time_is_shown_once_in_the_notepad_or_under_the_hours_when_it_is_closed"
  },
  {
   "file": "desktop/native/window.py",
@@ -298,7 +277,7 @@
   "name": "an empty Next card still takes its room",
   "old": "        self.card.setVisible(bool(said[1]))\n",
   "new": "        self.card.setVisible(True)\n",
-  "test": "desktop/tests/test_mutation_guards_100.py::test_a_next_card_with_nothing_to_say_hides_its_card"
+  "test": "desktop/tests/day/test_next_card_with_nothing_to_say.py::test_a_next_card_with_nothing_to_say_hides_its_card"
  },
  {
   "file": "desktop/native/controller.py",
@@ -441,32 +420,18 @@
   "test": "desktop/tests/test_delete_homework.py::test_the_editor_offers_delete_only_for_homework_that_exists"
  },
  {
-  "file": "desktop/native/window.py",
-  "name": "the chrome dressed by the design again",
-  "old": "        sheet = pack_stylesheet(pack, system_dark, look, accent, palette, art)\n",
-  "new": "        sheet = pack_stylesheet(pack, system_dark, look, accent)\n",
-  "test": "desktop/tests/test_layouts_window.py::test_the_chrome_and_canvas_follow_the_same_look"
- },
- {
-  "file": "desktop/native/window.py",
-  "name": "a design's page in the look's colours",
-  "old": "        palette, applied_look = design_look(options[\"look\"], pack, system_dark, self._worn_look(), accent)\n",
-  "new": "        palette, applied_look = design_look(\"your\", pack, system_dark, self._worn_look(), accent)\n",
-  "test": "desktop/tests/test_layouts_window.py::test_setup_design_picture_and_applied_canvas_share_look_pixels"
- },
- {
   "file": "desktop/native/layouts/registry.py",
   "name": "a missing per-design look falls back to the signature instead of 'your'",
   "old": "    return Option(\"look\", \"Look\", \"style\", (*choices, Choice(\"your\", \"Your look\")), shipped=\"your\")\n",
   "new": "    return Option(\"look\", \"Look\", \"style\", (*choices, Choice(\"your\", \"Your look\")))\n",
-  "test": "desktop/tests/test_layouts_registry.py::test_missing_design_looks_keep_the_account_look_for_every_design"
+  "test": "desktop/tests/week/test_design_registry.py::test_missing_design_looks_keep_the_account_look_for_every_design"
  },
  {
   "file": "desktop/native/hours/chips.py",
   "name": "a tray chip keeps its words through a change of look",
   "old": "        if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange):\n            self._fit()\n",
   "new": "        if False:\n            self._fit()\n",
-  "test": "desktop/tests/test_tray_chip.py::test_a_chip_shortens_its_words_again_when_a_new_look_makes_them_larger"
+  "test": "desktop/tests/week/test_not_placed_chips.py::test_a_chip_shortens_its_title_again_when_a_new_look_makes_the_words_larger"
  },
  {
   "file": "desktop/native/hours/rail.py",

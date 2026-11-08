@@ -32,21 +32,21 @@
     "file": "desktop/native/window.py",
     "old": "            direction = (step > 0) - (step < 0)",
     "new": "            direction = 0",
-    "test": "desktop/tests/test_layouts_window.py::test_a_new_view_is_live_at_once_while_the_old_one_fades"
+    "test": "desktop/tests/day/test_view_changes_fade_and_slide.py::test_a_new_view_is_live_at_once_while_the_old_one_fades"
   },
   {
     "name": "My day's chrome changes before its page",
     "file": "desktop/native/window.py",
     "old": "        changed = [piece for piece in self._turn_pieces() if before[piece] != after[piece]]\n",
     "new": "        changed = [self.planner]\n",
-    "test": "desktop/tests/test_layouts_window.py::test_my_day_changes_its_chrome_and_its_page_in_the_same_frame"
+    "test": "desktop/tests/myday/test_my_day_one_thing.py::test_my_day_changes_its_chrome_and_its_page_in_the_same_frame"
   },
   {
     "name": "Settings fades over the week instead of sliding over it",
     "file": "desktop/native/window.py",
     "old": "                if name == \"settingsPage\":\n                    slide_over(self._stack, page, self._motion)",
     "new": "                if name == \"settingsPage\":\n                    switch_page(self._stack, page, self._motion)",
-    "test": "desktop/tests/test_layouts_window.py::test_settings_slide_in_over_the_week_and_away_again"
+    "test": "desktop/tests/day/test_view_changes_fade_and_slide.py::test_settings_slide_in_over_the_week_and_away_again"
   },
   {
     "name": "the week behind Settings is not dimmed",
@@ -116,49 +116,49 @@
     "file": "desktop/native/layouts/clay.py",
     "old": "        slides = moving and moves(level)\n",
     "new": "        slides = moving\n",
-    "test": "desktop/tests/test_layout_clay.py::test_under_reduce_the_row_changes_where_it_is_under_a_fading_picture"
+    "test": "desktop/tests/week/test_clay_row_slide.py::test_under_reduce_the_row_changes_where_it_is_under_a_fading_picture"
   },
   {
     "name": "Bento's tile rises under Reduce",
     "file": "desktop/native/layouts/bento.py",
     "old": "        self.moves = moves()\n",
     "new": "        self.moves = True\n",
-    "test": "desktop/tests/test_layout_bento.py::test_a_pointed_at_day_lifts_and_does_not_rise_with_animations_off_or_reduced"
+    "test": "desktop/tests/week/test_bento_week.py::test_a_pointed_at_day_lifts_and_does_not_rise_with_animations_off_or_reduced"
   },
   {
     "name": "the dial's hand jumps",
     "file": "desktop/native/layouts/dial.py",
     "old": "            self._face.ease_hand(was[1])\n",
     "new": "            pass\n",
-    "test": "desktop/tests/test_layout_dial.py::test_the_hand_eases_to_where_the_time_moved_it_and_jumps_where_nothing_may_travel"
+    "test": "desktop/tests/day/test_dial_face.py::test_the_hand_eases_to_where_the_time_moved_it_and_jumps_where_nothing_may_travel"
   },
   {
     "name": "Retro's windows open without the zoom rectangle",
     "file": "desktop/native/layouts/retro.py",
     "old": "        if start is None or not moves(level):\n",
     "new": "        if True:\n",
-    "test": "desktop/tests/test_layout_retro.py::test_a_window_opens_with_windows_98s_zoom_rectangle_within_the_levels"
+    "test": "desktop/tests/week/test_retro_desktop_windows.py::test_a_window_opens_with_windows_98s_zoom_rectangle_within_the_levels"
   },
   {
     "name": "the title fades with the page again",
     "file": "desktop/native/window.py",
     "old": "        self.week_title.set_full_text(\n            planner_title(self.session, title_view, selected_day=watched),\n",
     "new": "        from PySide6.QtWidgets import QGraphicsOpacityEffect\n\n        self.week_title.setGraphicsEffect(QGraphicsOpacityEffect(self.week_title))\n        self.week_title.set_full_text(\n            planner_title(self.session, title_view, selected_day=watched),\n",
-    "test": "desktop/tests/test_layouts_window.py::test_a_new_view_is_live_at_once_while_the_old_one_fades"
+    "test": "desktop/tests/day/test_view_changes_fade_and_slide.py::test_a_new_view_is_live_at_once_while_the_old_one_fades"
   },
   {
     "name": "the focus ring before Start looks finished again",
     "file": "desktop/native/focus_screen.py",
     "old": "        self.ring.set_waiting(state is None)\n",
     "new": "",
-    "test": "desktop/tests/test_focus_screen.py::test_quick_focus_fills_the_window_and_esc_comes_back"
+    "test": "desktop/tests/focus/test_focus_screen_open_and_close.py::test_quick_focus_fills_the_window_and_esc_comes_back"
   },
   {
     "name": "a waiting ring is drawn softer than the accent",
     "file": "desktop/native/ring.py",
     "old": "        return self._colours.arc\n",
     "new": "        return self._colours.track if self._waiting else self._colours.arc\n",
-    "test": "desktop/tests/test_ring.py::test_a_timer_not_started_draws_its_arc_in_the_accent_itself"
+    "test": "desktop/tests/focus/test_countdown_ring.py::test_a_timer_not_started_draws_its_arc_in_the_accent_itself"
   },
   {
     "name": "Ctrl+K rises only a notice's 8 pixels",
@@ -179,14 +179,14 @@
     "file": "desktop/native/window.py",
     "old": "            self._busy_look.start()\n",
     "new": "            self._grey_while_busy()\n",
-    "test": "desktop/tests/test_layouts_window.py::test_a_short_busy_spell_takes_no_clicks_but_does_not_grey_the_top_bar"
+    "test": "desktop/tests/week/test_week_page_chrome.py::test_a_short_busy_spell_takes_no_clicks_but_does_not_grey_the_top_bar"
   },
   {
     "name": "a busy top bar takes clicks before it greys",
     "file": "desktop/native/window.py",
     "old": "        return event.type() in self.SWALLOWED and self._busy()\n",
     "new": "        return False\n",
-    "test": "desktop/tests/test_layouts_window.py::test_a_short_busy_spell_takes_no_clicks_but_does_not_grey_the_top_bar"
+    "test": "desktop/tests/week/test_week_page_chrome.py::test_a_short_busy_spell_takes_no_clicks_but_does_not_grey_the_top_bar"
   },
   {
     "name": "after a plan the hours scroll to homework already in sight",

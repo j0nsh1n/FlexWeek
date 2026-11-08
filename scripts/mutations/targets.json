@@ -67,14 +67,14 @@
   "name": "the window holds renders only once a drag starts",
   "old": "        self.hand.holding.connect(self._hold_renders)\n",
   "new": "        self.hand.active_changed.connect(self._hold_renders)\n",
-  "test": "desktop/tests/test_layout_drag.py::test_a_design_holds_its_renders_from_the_press_and_has_the_windows_hand"
+  "test": "desktop/tests/week/test_designs_hand_drops.py::test_a_design_holds_its_renders_from_the_press_and_has_the_windows_hand"
  },
  {
   "file": "desktop/native/window.py",
   "name": "designs get a hand of their own",
   "old": "            view = VIEW_CLASSES[layout_id](hand=self.hand)\n",
   "new": "            view = VIEW_CLASSES[layout_id]()\n",
-  "test": "desktop/tests/test_layout_drag.py::test_a_design_holds_its_renders_from_the_press_and_has_the_windows_hand"
+  "test": "desktop/tests/week/test_designs_hand_drops.py::test_a_design_holds_its_renders_from_the_press_and_has_the_windows_hand"
  },
  {
   "file": "desktop/native/hours/hand.py",
@@ -88,7 +88,7 @@
   "name": "the window never gives the hand the student's step",
   "old": "        self.hand.step = drag_step((self.session.preferences or {}).get(\"drag_step_min\"))\n",
   "new": "",
-  "test": "desktop/tests/test_layouts_window.py::test_the_drag_step_is_chosen_in_settings_kept_by_the_account_and_given_to_the_hand"
+  "test": "desktop/tests/settings/test_settings_page.py::test_the_drag_step_is_chosen_in_settings_kept_by_the_account_and_given_to_the_hand"
  },
  {
   "file": "desktop/native/hours/canvas.py",

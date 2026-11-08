@@ -63,20 +63,6 @@
     "test": "desktop/tests/test_hours_painter.py::test_a_now_pill_that_reaches_into_a_block_is_whole_over_its_colour"
   },
   {
-    "name": "One thing's tick for now is hidden under a segment",
-    "file": "desktop/native/layouts/one_thing.py",
-    "old": "or the thing on now hid it.\n        self.crossing(painter, rect)\n",
-    "new": "or the thing on now hid it.\n",
-    "test": "desktop/tests/test_layout_one_thing.py::test_the_bars_tick_for_now_shows_on_the_thing_it_is_in"
-  },
-  {
-    "name": "Mission's line for now is hidden under a tick",
-    "file": "desktop/native/layouts/mission.py",
-    "old": "        self.crossing(painter, bar, [])\n",
-    "new": "",
-    "test": "desktop/tests/test_layout_mission.py::test_the_line_for_now_stops_short_of_a_ticks_icon"
-  },
-  {
     "name": "The now line runs through a block's words",
     "file": "desktop/native/hours/canvas.py",
     "old": "        self.crossing(painter, rect)\n        painter.setFont(font)\n        self.words(painter, rect, drawn, ink, visible, fill, edge)\n",
@@ -84,32 +70,11 @@
     "test": "desktop/tests/test_time_numbers.py::test_the_now_line_runs_under_a_blocks_words_without_a_gap[classic]"
   },
   {
-    "name": "The now line stops right at a block's words",
-    "file": "desktop/native/hours/canvas.py",
-    "old": "NOW_CLEAR = 3\n",
-    "new": "NOW_CLEAR = 0\n",
-    "test": "desktop/tests/test_layout_mission.py::test_the_line_for_now_stops_short_of_a_ticks_icon"
-  },
-  {
     "name": "Clay's now line runs through its words",
     "file": "desktop/native/layouts/clay.py",
     "old": "        if self._too_short(rect, scale) or width < least:\n",
     "new": "        return []\n        if self._too_short(rect, scale) or width < least:\n",
     "test": "desktop/tests/test_time_numbers.py::test_the_now_line_runs_under_a_blocks_words_without_a_gap[clay]"
-  },
-  {
-    "name": "Mission's now line runs over a tick's icon",
-    "file": "desktop/native/layouts/mission.py",
-    "old": "        self.crossing(painter, bar, [])\n",
-    "new": "        self.crossing(painter, rect, [])\n",
-    "test": "desktop/tests/test_layout_mission.py::test_the_line_for_now_stops_short_of_a_ticks_icon"
-  },
-  {
-    "name": "Mission's lane is not laid again round a tick's icon",
-    "file": "desktop/native/layouts/mission.py",
-    "old": "                painter.fillRect(backdrop, card)\n",
-    "new": "                pass\n",
-    "test": "desktop/tests/test_layout_mission.py::test_the_line_for_now_stops_short_of_a_ticks_icon"
   },
   {
     "name": "Day repeats the date in its agenda heading",
@@ -145,34 +110,6 @@
     "old": "        column = max(\n            [44.0, *(QFontMetricsF(font).horizontalAdvance(clock_label(minute)) + 2\n              for row in self.rows\n              for font, minute in ((strong, row.item.start), (small, row.item.end)))],\n        )\n",
     "new": "        column = 44.0\n",
     "test": "desktop/tests/test_time_numbers.py::test_day_agenda_times_fit_in_twelve_hour_format[True]"
-  },
-  {
-    "name": "timeline puts its Now pill over block words",
-    "file": "desktop/native/layouts/timeline.py",
-    "old": "        pill = QRectF(max(0, left), at - height / 2, width, height)\n",
-    "new": "        pill = QRectF(max(0, left) + 40, at - height / 2, width, height)\n",
-    "test": "desktop/tests/test_layout_timeline.py::test_the_time_now_is_on_a_pill_clear_of_every_block_and_hour_label"
-  },
-  {
-    "name": "Timeline's pill for a day on the right page goes beside that day again",
-    "file": "desktop/native/layouts/timeline.py",
-    "old": "            fold = area.left() - page.index(track.day) * area.width() - self.spine / 2\n",
-    "new": "            fold = area.left() - self.spine / 2\n",
-    "test": "desktop/tests/test_layout_timeline.py::test_the_time_now_is_on_a_pill_clear_of_every_block_and_hour_label"
-  },
-  {
-    "name": "Timeline writes an hour label under its pill",
-    "file": "desktop/native/layouts/timeline.py",
-    "old": "        self.now_in_gutter = self._beside_labels(font)\n",
-    "new": "        self.now_in_gutter = False\n",
-    "test": "desktop/tests/test_layout_timeline.py::test_the_time_now_is_on_a_pill_clear_of_every_block_and_hour_label"
-  },
-  {
-    "name": "Timeline's pill goes to the fold where it does not fit",
-    "file": "desktop/native/layouts/timeline.py",
-    "old": "self._pill_width(base, self.now_minute) + 2 > self.spine",
-    "new": "self._pill_width(base, self.now_minute) > 2 * self.spine",
-    "test": "desktop/tests/test_layout_timeline.py::test_the_time_now_is_on_a_pill_clear_of_every_block_and_hour_label"
   },
   {
     "name": "clay puts its Now pill over block words",

@@ -1,4 +1,4 @@
-"""An error inside a Qt slot fails the test that caused it (0.18.5).
+"""An error inside a Qt slot fails the test that caused it.
 
 Qt prints it through sys.excepthook and carries on, so a test stayed green over the plan bar's layout
 error for weeks. conftest.py records the calls and fails the test; a marker that names the reason
@@ -35,8 +35,8 @@ def run_with_the_hook(
     pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, test: str
 ) -> pytest.RunResult:
     """A session of its own: in this one, the hook of the test running would be handed the error."""
-    monkeypatch.setenv("PYTHONPATH", str(Path(__file__).parents[2]))
-    pytester.makeconftest(Path(__file__).with_name("conftest.py").read_text())
+    monkeypatch.setenv("PYTHONPATH", str(Path(__file__).parents[3]))
+    pytester.makeconftest((Path(__file__).parents[1] / "conftest.py").read_text())
     pytester.makepyfile(RAISES + test)
     return pytester.runpytest_subprocess("-p", "no:cacheprovider")
 

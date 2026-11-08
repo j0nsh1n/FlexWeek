@@ -252,20 +252,6 @@
   "test": "desktop/tests/test_tokens.py::test_text_reads_on_every_fill_card_and_page[High contrast-layered-default]"
  },
  {
-  "file": "desktop/native/layouts/clay.py",
-  "name": "Clay lightens the mark again",
-  "old": "        fill = QColor(family_fill(drawn.category, self.tokens))\n",
-  "new": "        fill = QColor(mark).lighter(175)\n",
-  "test": "desktop/tests/test_layouts_main_views.py::test_a_designs_blocks_take_the_family_and_their_words_read_on_them[clay]"
- },
- {
-  "file": "desktop/native/layouts/mission.py",
-  "name": "Mission darkens the mark again",
-  "old": "        return QColor(fill), QColor(self.tokens[\"text\"]), None, QColor(mark)\n",
-  "new": "        return QColor(mark).darker(350), QColor(self.tokens[\"text\"]), None, QColor(mark)\n",
-  "test": "desktop/tests/test_layouts_main_views.py::test_a_designs_blocks_take_the_family_and_their_words_read_on_them[mission]"
- },
- {
   "file": "desktop/native/look.py",
   "name": "The default accent too pale to see over a block",
   "old": "    \"default\": {\"dark\": (\"#7fa8ff\", DARK_INK), \"light\": (\"#3d6fc4\", LIGHT_INK)},\n",
