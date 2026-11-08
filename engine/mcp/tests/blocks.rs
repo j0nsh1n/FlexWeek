@@ -3,7 +3,7 @@
 //! "That time has passed. Choose 12:00 or later today, or another day."
 //! (`grid.rs` `past_problem`). `delete_block` follows `controller.py` 1538-1559:
 //! a series goes, one day of a repeating block stays on the other days, and
-//! school and activities are refused.
+//! school or an activity taken out of this week stays there missed on every day.
 
 mod common;
 
@@ -21,7 +21,6 @@ const TOKEN: &str = "abcdefghijklmnopqrstuvwxyz012345";
 const REACHES: &str = "when FlexWeek is open on this computer with a phone paired";
 const OPERATION_CONFLICT: &str = "This operation was already used with different data.";
 const PAST: &str = "That time has passed. Choose 12:00 or later today, or another day.";
-const SETUP_BLOCK: &str = "School and activities are changed in the app.";
 
 struct World {
     data_arg: String,
@@ -486,55 +485,71 @@ fn delete_block_removes_a_series_and_one_day() {
 }
 
 #[test]
-fn move_and_delete_refuse_school_and_activities() {
+fn move_and_delete_change_school_and_activities_this_week() {
     let ids = setup_ids();
     assert!(!ids.is_empty(), "school and activities must be listed");
-    let world = signed_in("refuse-setup");
+    let world = signed_in("setup-this-week");
     seed_week(&world, setup_blocks());
     let mut server = boot(&world);
     server.handshake();
+    let mut revision = 4;
     for (offset, id) in ids.iter().enumerate() {
         let moved = server.call(
             "move_block",
             json!({
                 "operation_id": format!("op-move-{id}"),
                 "week_start": "2026-10-19",
-                "expected_revision": 4,
+                "expected_revision": revision,
                 "block_id": id,
-                "day": 2,
+                "day": 4,
                 "start": "17:00",
                 "end": "18:00"
             }),
             10 + offset as i64,
         );
         assert_eq!(
-            tool_error_text(&moved),
-            Some(SETUP_BLOCK),
-            "{id} cannot be moved through the assistant, got {moved}"
+            body_of(&moved).get("ok"),
+            Some(&json!(true)),
+            "{id} can be moved through the assistant, got {moved}"
+        );
+        revision += 1;
+        let (stored, _) =
+            week_row(&world.database_arg, world.user, "2026-10-19").unwrap_or((Value::Null, -1));
+        let block = find_block(&stored, id);
+        assert_eq!(
+            (block.get("days"), block.get("start")),
+            (Some(&json!([4])), Some(&json!("17:00"))),
+            "{id} is on Friday at 17:00, got {block}"
         );
         let deleted = server.call(
             "delete_block",
             json!({
                 "operation_id": format!("op-del-{id}"),
                 "week_start": "2026-10-19",
-                "expected_revision": 4,
+                "expected_revision": revision,
                 "block_id": id,
                 "scope": "series"
             }),
             20 + offset as i64,
         );
         assert_eq!(
-            tool_error_text(&deleted),
-            Some(SETUP_BLOCK),
-            "{id} cannot be deleted through the assistant, got {deleted}"
+            body_of(&deleted).get("ok"),
+            Some(&json!(true)),
+            "{id} can be deleted through the assistant, got {deleted}"
+        );
+        revision += 1;
+        let (stored, _) =
+            week_row(&world.database_arg, world.user, "2026-10-19").unwrap_or((Value::Null, -1));
+        assert_eq!(
+            find_block(&stored, id).get("missed_days"),
+            Some(&json!([4])),
+            "{id} taken out of this week stays missed on its days, so the standing week does \
+             not bring it back (controller.py delete_block)"
         );
     }
-    let (_, revision) =
+    let (_, stored_revision) =
         week_row(&world.database_arg, world.user, "2026-10-19").unwrap_or((Value::Null, -1));
-    assert_eq!(
-        revision, 4,
-        "refused school and activity edits write nothing"
-    );
+    assert_eq!(stored_revision, revision, "each change is one save");
 }
 
 #[test]

@@ -147,10 +147,6 @@ fn seed_essay(world: &World, weeks: &[(&str, i64, Value)]) {
     }
 }
 
-fn setup_ids() -> Vec<&'static str> {
-    vec!["school", "sport", "activity-piano"]
-}
-
 fn essay_session(id: &str, days: &[i64], start: Option<&str>) -> Value {
     let mut block = json!({
         "id": id,
@@ -802,7 +798,7 @@ fn set_block_done_sets_completed_and_completed_day() {
 }
 
 #[test]
-fn set_block_done_refuses_a_foreign_day_and_school() {
+fn set_block_done_refuses_a_foreign_day_and_marks_school() {
     let world = signed_in("refuse-block");
     let conn = open_connection(Path::new(&world.database_arg)).expect("open");
     let blocks = json!([
@@ -866,27 +862,317 @@ fn set_block_done_refuses_a_foreign_day_and_school() {
         Some("day is not one of the block's days"),
         "agenda.rs 359 refuses a day the block does not have, got {foreign}"
     );
-    let setup = setup_ids();
-    assert!(!setup.is_empty(), "school and activities must be checked");
-    for (offset, id) in setup.iter().enumerate() {
+    let (_, refused) =
+        week_row(&world.database_arg, world.user, "2026-10-19").unwrap_or((Value::Null, -1));
+    assert_eq!(refused, 4, "a refusal writes nothing");
+    // School and Setup's activities may be marked done now, each on a day it is on.
+    let setup = [("school", 0), ("sport", 1), ("activity-piano", 3)];
+    for (offset, (id, day)) in setup.iter().enumerate() {
         let response = server.call(
             "set_block_done",
             json!({
                 "operation_id": format!("op-setup-{offset}{id}"),
                 "week_start": "2026-10-19",
                 "block_id": id,
-                "day": 0,
+                "day": day,
                 "done": true
             }),
             3 + offset as i64,
         );
-        assert_eq!(
-            tool_error_text(&response),
-            Some("School and activities are changed in the app."),
-            "{id} is not changeable through MCP, got {response}"
+        assert!(
+            tool_ok_text(&response).is_some(),
+            "{id} can be marked done through MCP, got {response}"
         );
     }
+    let (stored, revision) =
+        week_row(&world.database_arg, world.user, "2026-10-19").unwrap_or((Value::Null, -1));
+    assert_eq!(revision, 7, "each mark is one change");
+    for (id, _) in setup {
+        let block = stored
+            .as_array()
+            .and_then(|items| items.iter().find(|block| block["id"] == id))
+            .cloned()
+            .unwrap_or(Value::Null);
+        assert_eq!(block["completed"], json!(true), "{id} is done, got {block}");
+    }
+}
+
+fn club_week(world: &World) {
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let blocks = json!([
+        essay_session("sess-essay", &[2], None),
+        {
+            "id": "club",
+            "title": "Club",
+            "kind": "flexible",
+            "duration_min": 60,
+            "days": [2],
+            "start": "16:00",
+            "priority": 3,
+            "energy": "medium"
+        }
+    ]);
+    conn.execute(
+        "UPDATE weeks SET blocks = ?1 WHERE user_id = ?2 AND week_start = '2026-10-19'",
+        (blocks.to_string(), world.user),
+    )
+    .expect("week");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+}
+
+fn add_args(operation_id: &str, title: &str) -> Value {
+    json!({
+        "operation_id": operation_id,
+        "title": title,
+        "due": "2026-10-23T21:00",
+        "estimate_min": 30
+    })
+}
+
+#[test]
+fn four_adds_sent_without_waiting_all_apply() {
+    let world = signed_in("batch-adds");
+    let mut server = boot(&world);
+    server.handshake();
+    let titles = ["Essay", "Lab report", "Reading", "Worksheet"];
+    for (index, title) in titles.iter().enumerate() {
+        server.send_call(
+            "add_homework",
+            add_args(&format!("op-batch-add-{index}"), title),
+            10 + index as i64,
+        );
+    }
+    let answers = server.answers(&[10, 11, 12, 13]);
+    for answer in &answers {
+        assert_eq!(
+            body_of(answer).get("ok"),
+            Some(&json!(true)),
+            "every add sent at once applies, got {answer}"
+        );
+    }
+    assert_eq!(count_assignments(&world.database_arg, world.user), 4);
+    let (blocks, revision) =
+        week_row(&world.database_arg, world.user, "2026-10-19").unwrap_or((Value::Null, -1));
+    let sessions = blocks
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter(|block| block.get("assignment_id").is_some())
+                .count()
+        })
+        .unwrap_or(0);
+    assert_eq!(
+        sessions, 4,
+        "each add left its session in this week, got {blocks}"
+    );
+    assert_eq!(revision, 4, "four saves of a new week reach revision 4");
+}
+
+#[test]
+fn mixed_writes_sent_without_waiting_all_apply() {
+    let world = signed_in("batch-mixed");
+    seed_essay(&world, &[("2026-10-19", 4, json!([]))]);
+    club_week(&world);
+    let mut server = boot(&world);
+    server.handshake();
+    server.send_call("add_homework", add_args("op-mixed-add-1", "Lab report"), 10);
+    server.send_call(
+        "set_block_done",
+        json!({
+            "operation_id": "op-mixed-club",
+            "week_start": "2026-10-19",
+            "block_id": "club",
+            "day": 2,
+            "done": true
+        }),
+        11,
+    );
+    server.send_call(
+        "edit_homework",
+        json!({
+            "operation_id": "op-mixed-edit",
+            "id": "essay",
+            "expected_revision": 1,
+            "title": "Essay draft"
+        }),
+        12,
+    );
+    server.send_call("add_homework", add_args("op-mixed-add-2", "Reading"), 13);
+    let answers = server.answers(&[10, 11, 12, 13]);
+    for answer in &answers {
+        assert_eq!(
+            body_of(answer).get("ok"),
+            Some(&json!(true)),
+            "independent writes sent at once all apply, got {answer}"
+        );
+    }
+    assert_eq!(count_assignments(&world.database_arg, world.user), 3);
+    let (stored, _) = assignment_row(&world.database_arg, world.user, "essay").unwrap_or_default();
+    assert!(
+        stored.contains("Essay draft"),
+        "the edit landed, got {stored}"
+    );
+    let (blocks, revision) =
+        week_row(&world.database_arg, world.user, "2026-10-19").unwrap_or((Value::Null, -1));
+    let club = blocks
+        .as_array()
+        .and_then(|items| {
+            items
+                .iter()
+                .find(|block| block.get("id").and_then(Value::as_str) == Some("club"))
+        })
+        .cloned()
+        .unwrap_or(Value::Null);
+    assert_eq!(
+        club.get("completed"),
+        Some(&json!(true)),
+        "club is done, got {club}"
+    );
+    assert_eq!(revision, 8, "four saves of the week from revision 4");
+}
+
+#[test]
+fn two_edits_of_one_revision_sent_at_once_keep_one_and_refuse_the_other() {
+    let world = signed_in("batch-real-conflict");
+    seed_essay(
+        &world,
+        &[(
+            "2026-10-19",
+            4,
+            json!([essay_session("sess-essay", &[2], None)]),
+        )],
+    );
+    let mut server = boot(&world);
+    server.handshake();
+    for (id, title) in [(10, "First"), (11, "Second")] {
+        server.send_call(
+            "edit_homework",
+            json!({
+                "operation_id": format!("op-real-conflict-{id}"),
+                "id": "essay",
+                "expected_revision": 1,
+                "title": title
+            }),
+            id,
+        );
+    }
+    let bodies: Vec<Value> = server.answers(&[10, 11]).iter().map(body_of).collect();
+    let kept = bodies
+        .iter()
+        .filter(|body| body.get("ok") == Some(&json!(true)))
+        .count();
+    let refused: Vec<&Value> = bodies
+        .iter()
+        .filter(|body| body.get("error") == Some(&json!("conflict")))
+        .collect();
+    assert_eq!(kept, 1, "one edit of revision 1 is kept, got {bodies:?}");
+    assert_eq!(
+        refused,
+        vec![&json!({"error": "conflict", "current_revision": 2})],
+        "the other was made against a revision that has changed, got {bodies:?}"
+    );
+}
+
+#[test]
+fn set_homework_done_with_a_stale_expected_revision_writes_nothing() {
+    let world = signed_in("done-hw-stale");
+    seed_essay(
+        &world,
+        &[(
+            "2026-10-19",
+            4,
+            json!([essay_session("sess-essay", &[2], Some("16:00"))]),
+        )],
+    );
+    let mut server = boot(&world);
+    server.handshake();
+    let stale = server.call(
+        "set_homework_done",
+        json!({
+            "operation_id": "op-done-stale",
+            "id": "essay",
+            "done": true,
+            "expected_revision": 0
+        }),
+        2,
+    );
+    assert_eq!(
+        body_of(&stale),
+        json!({"error": "conflict", "current_revision": 1}),
+        "a stale revision is refused with the current one, got {stale}"
+    );
+    let (stored, revision) =
+        assignment_row(&world.database_arg, world.user, "essay").unwrap_or_default();
+    assert_eq!(revision, 1, "the homework was not written");
+    assert!(
+        stored.contains("\"completed\":false"),
+        "still not done, got {stored}"
+    );
+    let (_, week_revision) =
+        week_row(&world.database_arg, world.user, "2026-10-19").unwrap_or((Value::Null, -1));
+    assert_eq!(week_revision, 4, "the week was not written");
+    let current = server.call(
+        "set_homework_done",
+        json!({
+            "operation_id": "op-done-current",
+            "id": "essay",
+            "done": true,
+            "expected_revision": 1
+        }),
+        3,
+    );
+    assert_eq!(
+        body_of(&current).pointer("/result/assignment/completed"),
+        Some(&json!(true)),
+        "the current revision is accepted, got {current}"
+    );
+}
+
+#[test]
+fn set_block_done_with_a_stale_expected_revision_writes_nothing() {
+    let world = signed_in("done-block-stale");
+    seed_essay(&world, &[("2026-10-19", 4, json!([]))]);
+    club_week(&world);
+    let mut server = boot(&world);
+    server.handshake();
+    let stale = server.call(
+        "set_block_done",
+        json!({
+            "operation_id": "op-block-stale",
+            "week_start": "2026-10-19",
+            "block_id": "club",
+            "day": 2,
+            "done": true,
+            "expected_revision": 3
+        }),
+        2,
+    );
+    assert_eq!(
+        body_of(&stale),
+        json!({"error": "conflict", "current_revision": 4}),
+        "a stale week revision is refused with the current one, got {stale}"
+    );
     let (_, revision) =
         week_row(&world.database_arg, world.user, "2026-10-19").unwrap_or((Value::Null, -1));
-    assert_eq!(revision, 4, "a refusal writes nothing");
+    assert_eq!(revision, 4, "the week was not written");
+    let current = server.call(
+        "set_block_done",
+        json!({
+            "operation_id": "op-block-current",
+            "week_start": "2026-10-19",
+            "block_id": "club",
+            "day": 2,
+            "done": true,
+            "expected_revision": 4
+        }),
+        3,
+    );
+    assert_eq!(
+        body_of(&current).get("revision"),
+        Some(&json!(5)),
+        "the current revision is accepted, got {current}"
+    );
 }

@@ -1,12 +1,13 @@
 //! `move_block` calls `hand_move` and returns its words. `delete_block` calls
-//! `desk::blocks::delete_block`. School and activities are refused before either edit.
+//! `desk::blocks::delete_block`. Both read the week with School and Setup's activities merged in,
+//! as the app shows it; `every_week` also takes one of those out of the standing week.
 
-use flexweek_engine::desk::blocks::{self, SETUP_BLOCK};
+use flexweek_engine::desk::blocks;
 use flexweek_engine::desk::grid::is_setup_block;
 use flexweek_engine::desk::hand_move::{HandDrop, HandMove, WeekClock, hand_move};
 use flexweek_engine::time::hhmm_to_minutes;
 use flexweek_store::{
-    ApplyInput, AssignmentInput, Connection, WeekInput, list_assignment_rows, read_week,
+    ApplyInput, AssignmentInput, Connection, StandingInput, WeekInput, list_assignment_rows,
 };
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::schemars::JsonSchema;
@@ -14,6 +15,7 @@ use rmcp::{tool, tool_router};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
+use super::fixed::seen_week;
 use super::homework;
 use super::write::{self, REACHES_PHONE};
 use crate::session;
@@ -41,6 +43,10 @@ struct DeleteArgs {
     scope: String,
     #[serde(default)]
     day: Option<i64>,
+    /// School or a Setup activity only: take it out of this week and every week after. Without
+    /// it, it stays in this week missed on its days, as the app does.
+    #[serde(default)]
+    every_week: Option<bool>,
 }
 
 fn assignment_map(conn: &Connection, user_id: i64) -> Result<Map<String, Value>, String> {
@@ -141,21 +147,11 @@ fn perform_move(app: &crate::App, args: &MoveArgs) -> Result<Value, String> {
     {
         return saved_week(&saved);
     }
-    let Some((text, _)) = read_week(&opened.conn, opened.user_id, &args.week_start)
-        .map_err(session::storage_sentence)?
-    else {
-        return Err("week was not found".into());
-    };
-    let blocks = homework::parse_blocks(&text)?;
+    let (blocks, _) = seen_week(&opened.conn, opened.user_id, &args.week_start)?;
     let found = blocks
         .iter()
         .find(|block| block.get("id").and_then(Value::as_str) == Some(args.block_id.as_str()))
         .cloned();
-    if let Some(block) = &found
-        && is_setup_block(block).map_err(|err| err.message)?
-    {
-        return Err(SETUP_BLOCK.into());
-    }
     let to_day = args
         .day
         .or_else(|| found.as_ref().and_then(sole_day))
@@ -202,6 +198,7 @@ fn perform_move(app: &crate::App, args: &MoveArgs) -> Result<Value, String> {
     let applied = homework::run_apply(
         &opened.conn,
         opened.user_id,
+        "move_block",
         &operation_id,
         &digest,
         week_input(args.week_start.clone(), blocks, args.expected_revision),
@@ -219,6 +216,7 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
         &json!({
             "block_id": args.block_id,
             "day": args.day,
+            "every_week": args.every_week.unwrap_or(false),
             "expected_revision": args.expected_revision,
             "scope": args.scope,
             "week_start": args.week_start,
@@ -228,12 +226,32 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
     {
         return saved_week(&saved);
     }
-    let Some((text, revision)) = read_week(&opened.conn, opened.user_id, &args.week_start)
-        .map_err(session::storage_sentence)?
-    else {
-        return Err("week was not found".into());
+    let (blocks, revision) = seen_week(&opened.conn, opened.user_id, &args.week_start)?;
+    let every_week = args.every_week.unwrap_or(false);
+    let target = blocks
+        .iter()
+        .find(|block| block.get("id").and_then(Value::as_str) == Some(args.block_id.as_str()));
+    let setup = match target {
+        Some(block) => is_setup_block(block).map_err(|err| err.message)?,
+        None => false,
     };
-    let blocks = homework::parse_blocks(&text)?;
+    if every_week && !setup {
+        return Err(
+            "Only School and Setup's activities stand in every week, so every_week does not apply."
+                .into(),
+        );
+    }
+    // The app asks "this week or every week" only when the whole block goes
+    // (`window.py` `_delete_block`); one day of it is this week only.
+    let days = target
+        .and_then(|block| block.get("days"))
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
+    if every_week && args.scope == "occurrence" && days > 1 {
+        return Err(
+            "every_week takes the whole block out; one day of it is this week only.".into(),
+        );
+    }
     let assignments = assignment_map(&opened.conn, opened.user_id)?;
     let deletion = blocks::delete_block(
         &blocks,
@@ -244,6 +262,7 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
         args.day,
         &app.today,
         app.minute,
+        every_week,
     )?;
     if deletion.label.is_none() {
         let answer = json!({
@@ -274,16 +293,24 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
             "reaches_phone": REACHES_PHONE,
         }));
     }
+    let mut input = week_input(
+        args.week_start.clone(),
+        deletion.blocks,
+        args.expected_revision,
+    );
+    if every_week {
+        input.standing = Some(StandingInput {
+            week_start: args.week_start.clone(),
+            blocks: vec![json!({"id": args.block_id, "stop": true})],
+        });
+    }
     let applied = homework::run_apply(
         &opened.conn,
         opened.user_id,
+        "delete_block",
         &operation_id,
         &digest,
-        week_input(
-            args.week_start.clone(),
-            deletion.blocks,
-            args.expected_revision,
-        ),
+        input,
         &homework::clock_of(app),
     )?;
     saved_week(&applied)

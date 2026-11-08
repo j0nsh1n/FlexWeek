@@ -55,6 +55,14 @@ Item {
         popup.x = spot.x
         popup.y = spot.y + tall > room - 8 ? Math.max(8, spot.y - root.height - tall) : spot.y
         popup.open()
+        centreChosen()
+    }
+
+    // The list opens on the chosen row, not at its top, so a long list (every quarter hour) needs no scrolling.
+    function centreChosen() {
+        var rowHeight = 44
+        var wanted = list.currentIndex * rowHeight - (list.height - rowHeight) / 2
+        list.contentY = Math.max(0, Math.min(list.contentHeight - list.height, wanted))
     }
 
     function choose(index) {
@@ -137,8 +145,15 @@ Item {
         if (!root.enabled)
             return
         if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter
-                || event.key === Qt.Key_Down) {
+                || (event.key === Qt.Key_Down && (event.modifiers & Qt.AltModifier))) {
             root.openList()
+            event.accepted = true
+        } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+            // The closed field steps through its options, as a native select does.
+            var next = event.key === Qt.Key_Up ? currentIndex - 1 : currentIndex + 1
+            if (currentIndex < 0)
+                next = event.key === Qt.Key_Up ? count - 1 : 0
+            root.choose(next)
             event.accepted = true
         }
     }
@@ -155,6 +170,7 @@ Item {
             border.width: root.highContrast ? 1.5 : 0
             border.color: pal.outline
         }
+        onOpened: root.centreChosen()
         onClosed: root.forceActiveFocus()
         contentItem: ListView {
             id: list
