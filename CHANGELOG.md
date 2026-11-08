@@ -39,6 +39,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- Material Edit homework: the Pinned time list opens on the chosen time (for example 7:00 PM) instead of at 12:00 AM, and Up and Down on the closed field move the time by a quarter hour. Alt+Down, Space and Enter still open the list.
 - Material Day's month panel is as wide as the mini month, so no weekday column is cut off at Larger text.
 - Material Day and Week hide an hour label that would be only partly shown at the top of the hours pane, Day's zoom control never covers an hour label, and Day leaves a small gap between the Now card and the hours.
 - A click or a drag over empty time on Material Week and Day opens a small menu at that spot, Add homework here and Add fixed time here, each opening its sheet with that day and time (a click gives an hour from the nearest quarter hour); before, a click did nothing and the fixed-time sheet could not be reached. Clicking the snackbar over the grid no longer opens that menu, Esc closes it and gives the focus back, and a card that takes the focus while it is open keeps it.
