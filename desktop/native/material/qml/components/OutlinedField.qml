@@ -49,7 +49,7 @@ FocusScope {
             text: root.label
             color: input.activeFocus ? palette.primary : (root.enabled ? palette.inkMuted : palette.disabledInk)
             font.family: M3Font.family
-            font.pixelSize: 12
+            font.pixelSize: M3Font.px(12)
             font.weight: 400
         }
     }
@@ -64,7 +64,7 @@ FocusScope {
         text: root.text
         color: root.enabled ? palette.inkSurface : palette.disabledInk
         font.family: M3Font.family
-        font.pixelSize: 16
+        font.pixelSize: M3Font.px(16)
         font.weight: 400
         enabled: root.enabled
         clip: true
@@ -94,7 +94,7 @@ FocusScope {
         text: root.suffix
         color: palette.inkMuted
         font.family: M3Font.family
-        font.pixelSize: 16
+        font.pixelSize: M3Font.px(16)
         font.weight: 400
     }
 

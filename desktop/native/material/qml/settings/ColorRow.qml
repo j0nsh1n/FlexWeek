@@ -35,7 +35,7 @@ Item {
         text: root.title
         color: palette.inkSurface
         font.family: M3Font.family
-        font.pixelSize: 16
+        font.pixelSize: M3Font.px(16)
         font.weight: 500
     }
     Rectangle {
@@ -80,6 +80,6 @@ Item {
         text: "Use a colour like #1a1c20."
         color: palette.error
         font.family: M3Font.family
-        font.pixelSize: 12
+        font.pixelSize: M3Font.px(12)
     }
 }

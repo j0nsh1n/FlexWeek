@@ -23,7 +23,7 @@ Column {
         text: "Now"
         color: palette.inkMuted
         font.family: M3Font.family
-        font.pixelSize: 12
+        font.pixelSize: M3Font.px(12)
         font.weight: 500
         Accessible.role: Accessible.StaticText
         Accessible.name: text
@@ -59,7 +59,7 @@ Column {
                     wrapMode: Text.WordWrap
                     color: palette.inkPrimaryContainer
                     font.family: M3Font.family
-                    font.pixelSize: 24
+                    font.pixelSize: M3Font.px(24)
                     font.weight: 400
                 }
                 Text {
@@ -68,7 +68,7 @@ Column {
                     text: root.line
                     color: palette.inkPrimaryContainer
                     font.family: M3Font.family
-                    font.pixelSize: 16
+                    font.pixelSize: M3Font.px(16)
                     font.weight: 400
                 }
             }

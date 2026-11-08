@@ -80,7 +80,7 @@ Item {
                         text: modelData.label
                         color: root.rowInk
                         font.family: M3Font.family
-                        font.pixelSize: 14
+                        font.pixelSize: M3Font.px(14)
                         font.weight: 400
                         elide: Text.ElideRight
                     }

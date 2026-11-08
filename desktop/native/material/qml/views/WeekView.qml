@@ -19,7 +19,7 @@ Item {
     // A block's or a card's menu is open: the zoom keys leave the grid behind it alone.
     readonly property bool menuOpen: hoursPane.menuOpen || drawer.menuOpen
     readonly property int scrollClearance: phone ? 96 : 0
-    readonly property int gutter: 68
+    readonly property int gutter: M3Font.px(68)
     readonly property int drawerWidth: 320
     readonly property real gridWidth: phone ? width : Math.max(0, width - drawerWidth)
     property alias drawer: drawer
@@ -28,7 +28,6 @@ Item {
     readonly property real dayWidth: Math.max(48, (gridWidth - gutter) / columns)
     // The shell clears `bridge` while the page is torn down. These stay readable then.
     readonly property int row: bridge ? bridge.hourRow : 56
-    readonly property real typeScale: (theme && theme.typeScale) ? theme.typeScale : 1
 
     M3Palette { id: m3; theme: root.theme }
     readonly property var line: theme && theme.hourLines === "Clear"
@@ -225,7 +224,7 @@ Item {
                         text: model.name
                         color: m3.inkMuted
                         font.family: M3Font.family
-                        font.pixelSize: 12 * root.typeScale
+                        font.pixelSize: M3Font.px(12)
                         font.weight: 500
                     }
                     Rectangle {
@@ -242,7 +241,7 @@ Item {
                             text: model.date
                             color: parent.color.a > 0 ? m3.inkPrimary : m3.inkSurface
                             font.family: M3Font.family
-                            font.pixelSize: 14 * root.typeScale
+                            font.pixelSize: M3Font.px(14)
                             font.weight: model.today ? 700 : 500
                         }
                     }
@@ -321,7 +320,7 @@ Item {
             color: m3.inkPrimaryContainer
             elide: Text.ElideRight
             font.family: M3Font.family
-            font.pixelSize: 13
+            font.pixelSize: M3Font.px(13)
             font.weight: 500
         }
     }

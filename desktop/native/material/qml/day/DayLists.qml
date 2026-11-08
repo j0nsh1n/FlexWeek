@@ -25,7 +25,7 @@ Column {
         text: "Up next"
         color: root.muted
         font.family: M3Font.family
-        font.pixelSize: 12
+        font.pixelSize: M3Font.px(12)
         font.weight: 500
         Accessible.role: Accessible.StaticText
         Accessible.name: text
@@ -42,7 +42,7 @@ Column {
         text: "Nothing planned"
         color: root.muted
         font.family: M3Font.family
-        font.pixelSize: 14
+        font.pixelSize: M3Font.px(14)
         Accessible.role: Accessible.StaticText
         Accessible.name: text
     }
@@ -52,7 +52,7 @@ Column {
         text: "Done"
         color: root.muted
         font.family: M3Font.family
-        font.pixelSize: 12
+        font.pixelSize: M3Font.px(12)
         font.weight: 500
         Accessible.role: Accessible.StaticText
         Accessible.name: text
@@ -69,7 +69,7 @@ Column {
         text: "Nothing planned"
         color: root.muted
         font.family: M3Font.family
-        font.pixelSize: 14
+        font.pixelSize: M3Font.px(14)
         Accessible.role: Accessible.StaticText
         Accessible.name: text
     }

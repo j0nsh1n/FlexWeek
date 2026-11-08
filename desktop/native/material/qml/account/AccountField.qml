@@ -66,7 +66,7 @@ FocusScope {
             text: root.label
             color: root.bad ? palette.error : (input.activeFocus ? palette.primary : palette.inkMuted)
             font.family: M3Font.family
-            font.pixelSize: 12
+            font.pixelSize: M3Font.px(12)
             font.weight: 400
         }
     }
@@ -85,7 +85,7 @@ FocusScope {
         selectionColor: palette.primary
         selectedTextColor: palette.inkPrimary
         font.family: M3Font.family
-        font.pixelSize: 16
+        font.pixelSize: M3Font.px(16)
         font.weight: 400
         echoMode: root.secret && !root.revealed ? TextInput.Password : TextInput.Normal
         inputMethodHints: root.inputMethodHints
@@ -147,7 +147,7 @@ FocusScope {
         wrapMode: Text.WordWrap
         color: root.bad ? palette.error : palette.inkMuted
         font.family: M3Font.family
-        font.pixelSize: 12
+        font.pixelSize: M3Font.px(12)
         font.weight: 400
     }
 }

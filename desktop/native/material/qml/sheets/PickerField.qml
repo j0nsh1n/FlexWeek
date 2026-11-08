@@ -90,7 +90,7 @@ Item {
             text: root.label
             color: root.activeFocus || popup.opened ? pal.primary : (root.enabled ? pal.inkMuted : pal.disabledInk)
             font.family: M3Font.family
-            font.pixelSize: 12
+            font.pixelSize: M3Font.px(12)
             font.weight: 400
         }
     }
@@ -106,7 +106,7 @@ Item {
         elide: Text.ElideRight
         color: root.enabled ? (root.currentIndex >= 0 ? pal.inkSurface : pal.inkMuted) : pal.disabledInk
         font.family: M3Font.family
-        font.pixelSize: 16
+        font.pixelSize: M3Font.px(16)
         font.weight: 400
     }
     SIcon {
@@ -189,7 +189,7 @@ Item {
                     elide: Text.ElideRight
                     color: row.chosen ? pal.inkSecondaryContainer : pal.inkSurface
                     font.family: M3Font.family
-                    font.pixelSize: 14
+                    font.pixelSize: M3Font.px(14)
                     font.weight: row.chosen ? 500 : 400
                 }
                 HoverHandler { id: hoverRow }
