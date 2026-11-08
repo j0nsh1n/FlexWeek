@@ -222,12 +222,12 @@ class FocusBridge(QObject):
 
     @Slot()
     def finish(self) -> None:
-        """Finish and Back both end the session. One that has begun asks first."""
+        """Finish ends the session. One that has begun asks first."""
         self._leave()
 
     @Slot()
     def back(self) -> None:
-        self._leave()
+        self.hide()
 
     def _leave(self) -> None:
         if self.active:
