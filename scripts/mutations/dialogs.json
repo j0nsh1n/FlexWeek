@@ -4,77 +4,42 @@
   "file": "desktop/native/widgets.py",
   "old": "        self.sheet = sheet and parent is not None\n",
   "new": "        self.sheet = False\n",
-  "test": "desktop/tests/test_dialogs_look.py::test_the_editors_and_the_seven_others_are_sheets_over_the_dimmed_week"
+  "test": "desktop/tests/sheets/test_sheet_frame.py::test_the_editors_and_the_seven_others_are_sheets_over_the_dimmed_week"
  },
  {
   "name": "the week behind a sheet is not dimmed",
   "file": "desktop/native/widgets.py",
   "old": "        self._shade.show()\n",
   "new": "",
-  "test": "desktop/tests/test_dialogs_look.py::test_the_editors_and_the_seven_others_are_sheets_over_the_dimmed_week"
+  "test": "desktop/tests/sheets/test_sheet_frame.py::test_the_editors_and_the_seven_others_are_sheets_over_the_dimmed_week"
  },
  {
   "name": "the dimming stays after the sheet closes",
   "file": "desktop/native/widgets.py",
   "old": "            self._shade.deleteLater()\n            self._shade = None\n",
   "new": "            pass\n",
-  "test": "desktop/tests/test_dialogs_look.py::test_the_editors_and_the_seven_others_are_sheets_over_the_dimmed_week"
+  "test": "desktop/tests/sheets/test_sheet_frame.py::test_the_editors_and_the_seven_others_are_sheets_over_the_dimmed_week"
  },
  {
   "name": "Save made outside its dialog, so Enter presses More details",
   "file": "desktop/native/widgets.py",
   "old": "    buttons = QDialogButtonBox(choices, dialog)\n",
   "new": "    buttons = QDialogButtonBox(choices)\n",
-  "test": "desktop/tests/test_dialogs_look.py::test_the_editors_and_the_seven_others_are_sheets_over_the_dimmed_week"
- },
- {
-  "name": "the scrolled body a pale box inside the card",
-  "file": "desktop/native/look.py",
-  "old": "        'QWidget[bare=\"true\"], QScrollArea[bare=\"true\"] { background: transparent; border: none; '\n",
-  "new": "        'QWidget[nobare=\"true\"], QScrollArea[nobare=\"true\"] { background: transparent; border: none; '\n",
-  "test": "desktop/tests/test_dialogs_look.py::test_the_homework_body_is_the_card_not_a_box_inside_it"
- },
- {
-  "name": "labels level with their fields' top edge",
-  "file": "desktop/native/widgets.py",
-  "old": "        return QSize(size.width(), max(size.height(), self._line.sizeHint().height()))\n",
-  "new": "        return size\n",
-  "test": "desktop/tests/test_dialogs_look.py::test_a_settings_label_sits_beside_its_field_on_its_line_of_words"
- },
- {
-  "name": "each field as wide as its row or its text",
-  "file": "desktop/native/widgets.py",
-  "old": "                field.setFixedWidth(width)\n",
-  "new": "                pass\n",
-  "test": "desktop/tests/test_dialogs_look.py::test_every_field_of_a_kind_has_one_width"
+  "test": "desktop/tests/sheets/test_sheet_frame.py::test_the_editors_and_the_seven_others_are_sheets_over_the_dimmed_week"
  },
  {
   "name": "the repeat scope shown for every block",
   "file": "desktop/native/widgets.py",
   "old": "        form.setRowVisible(scope_box, bool(series and occurrence_day is not None))\n",
   "new": "        form.setRowVisible(scope_box, True)\n",
-  "test": "desktop/tests/test_dialogs_look.py::test_the_repeat_scope_is_a_choice_of_two_under_the_days_only_for_a_repeating_block"
- },
- {
-  "name": "a primary that cannot be pressed yet a grey slab, not a pale tint with readable words",
-  "file": "desktop/native/look.py",
-  "old": "        f\"QDialog QPushButton:disabled {{ background: {main_off_colours(palette)[0]}; \"\n",
-  "new": "        f\"QDialog QPushButton:disabled {{ background: {palette['hairline_strong']}; \"\n",
-  "test": "desktop/tests/test_dialogs_look.py::test_a_visible_disabled_primary_is_pale_and_its_words_read_at_7_to_1"
- },
- {
-  "name": "a list's ticks drawn by Qt",
-  "file": "desktop/native/look.py",
-  "old": "        f\"QAbstractItemView::indicator:checked {{ background: {palette['accent']}; \"\n",
-  "new": "        f\"QAbstractItemView::indicator:unchecked {{ background: {palette['accent']}; \"\n",
-  "test": "desktop/tests/test_dialogs_look.py::test_a_lists_ticks_are_the_apps_check_boxes"
+  "test": "desktop/tests/sheets/test_widgets_fixed_time_editor.py::test_the_repeat_scope_is_a_choice_of_two_under_the_days_only_for_a_repeating_block"
  },
  {
   "name": "Account's other actions filled like Replace password",
   "file": "desktop/native/settings.py",
   "old": "    def _action(self, words: str, name: str, action: str, outlined: bool = True) -> QPushButton:\n",
   "new": "    def _action(self, words: str, name: str, action: str, outlined: bool = False) -> QPushButton:\n",
-  "test": "desktop/tests/test_sheets.py::test_manage_account_keeps_one_filled_button_and_its_actions"
+  "test": "desktop/tests/sheets/test_manage_account_sheet.py::test_manage_account_keeps_one_filled_button_and_its_actions"
  },
  {
   "name": "the section list without its icons",

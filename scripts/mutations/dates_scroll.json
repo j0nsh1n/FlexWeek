@@ -18,7 +18,7 @@
   "file": "desktop/native/hours/month.py",
   "old": "        today = today_iso or wall_clock.today().isoformat()\n",
   "new": "        today = wall_clock.today().isoformat()\n",
-  "test": "desktop/tests/test_hours_month.py::test_the_month_marks_the_today_it_is_given_not_the_clocks"
+  "test": "desktop/tests/month/test_month_dates.py::test_the_month_marks_the_today_it_is_given_not_the_clocks"
  },
  {
   "name": "Month discards the picked day",

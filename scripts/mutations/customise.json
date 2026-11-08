@@ -144,6 +144,6 @@
   "name": "the saved looks not written to the look file",
   "old": "                \"saved_looks\": self._saved_looks,\n",
   "new": "",
-  "test": "desktop/tests/test_layouts_window.py::test_a_custom_look_dresses_the_window_and_is_kept_with_the_saved_looks"
+  "test": "desktop/tests/settings/test_look_and_layout_kept_on_the_device.py::test_a_custom_look_is_kept_with_the_saved_looks"
  }
 ]
