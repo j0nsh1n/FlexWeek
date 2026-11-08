@@ -39,6 +39,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- Material: Ctrl+Z now undoes the last change, so it takes back Place now, a drag, an add, a delete and a finish, just as the Undo button does; Ctrl+Shift+Z and Ctrl+Y redo. They stay off while you type in a field or have a sheet open. When Place now finds nothing to change, its message no longer offers Undo, which would have undone an earlier change.
 - Material Day's month panel is as wide as the mini month, so no weekday column is cut off at Larger text.
 - Material Day and Week hide an hour label that would be only partly shown at the top of the hours pane, Day's zoom control never covers an hour label, and Day leaves a small gap between the Now card and the hours.
 - A click or a drag over empty time on Material Week and Day opens a small menu at that spot, Add homework here and Add fixed time here, each opening its sheet with that day and time (a click gives an hour from the nearest quarter hour); before, a click did nothing and the fixed-time sheet could not be reached. Clicking the snackbar over the grid no longer opens that menu, Esc closes it and gives the focus back, and a card that takes the focus while it is open keeps it.

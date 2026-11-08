@@ -313,7 +313,8 @@ class WeekBridge(QObject):
             return
         asked, self._said_plan = self._said_plan, 0.0
         if time.monotonic() - asked < PLAN_WINDOW_S:
-            self._note(message)
+            # Nothing was changed, so there is nothing to undo; UNDO would take back an earlier change.
+            self._note(message, action="")
             self.planFinished.emit()
 
     @Slot(str)
@@ -363,6 +364,7 @@ class WeekBridge(QObject):
             None,
         )
         if target:
+            self._said_plan = time.monotonic()
             session.solve(only={target})
 
     @Slot(str)

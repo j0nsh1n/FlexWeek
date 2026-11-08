@@ -294,6 +294,125 @@ def test_the_top_bar_undo_also_restores_a_plan(qapp: QApplication, window: Nativ
     assert _qml(root, "planHomework").property("enabled") is True
 
 
+def _place_now(window: NativeWindow, qapp: QApplication, root: QObject, key: str, title: str) -> None:
+    """Place now on one card: the card menu's call, until the session has put it on the week."""
+    due = (_week_monday(window) + timedelta(days=6)).isoformat()
+    _homework(window, key, title, 30, due)
+    settled(qapp, window)
+    _pump(qapp)
+    assert _qml(root, "homeworkCount").property("text") == "1"
+    _bridge(window).week.planOne(key)
+    wait_until(qapp, lambda: _snack(window).startswith("Placed") and not window.session.busy)
+    _pump(qapp)
+    assert _qml(root, "homeworkCount").property("text") == "0"
+    assert next(b for b in window.session.blocks if b.get("assignment_id") == key).get("start")
+
+
+def _press(
+    window: NativeWindow, key: Qt.Key, modifiers: Qt.KeyboardModifier = Qt.KeyboardModifier.NoModifier
+) -> None:
+    QTest.keyClick(window._material_page._quick, key, modifiers)
+    _pump(QApplication.instance())
+
+
+def _waiting_again(window: NativeWindow, qapp: QApplication, root: QObject, key: str) -> None:
+    wait_until(qapp, lambda: not window.session.busy and _qml(root, "homeworkCount").property("text") == "1")
+    assert not next(b for b in window.session.blocks if b.get("assignment_id") == key).get("start")
+
+
+def test_ctrl_z_undoes_place_now_like_the_snackbar_undo(qapp: QApplication, window: NativeWindow) -> None:
+    root = _reset(window, qapp)
+    _place_now(window, qapp, root, "sheet", "Math worksheet")
+    _press(window, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+    _waiting_again(window, qapp, root, "sheet")
+    assert _snack(window) == ""
+    assert window.session.can_redo()
+
+
+@pytest.mark.parametrize(
+    ("key", "modifiers"),
+    [
+        (Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier),
+        (Qt.Key.Key_Y, Qt.KeyboardModifier.ControlModifier),
+    ],
+)
+def test_ctrl_shift_z_and_ctrl_y_redo_what_ctrl_z_undid(
+    qapp: QApplication, window: NativeWindow, key: Qt.Key, modifiers: Qt.KeyboardModifier
+) -> None:
+    root = _reset(window, qapp)
+    _place_now(window, qapp, root, "sheet", "Math worksheet")
+    _press(window, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+    _waiting_again(window, qapp, root, "sheet")
+    _press(window, key, modifiers)
+    wait_until(qapp, lambda: not window.session.busy and _qml(root, "homeworkCount").property("text") == "0")
+    assert next(b for b in window.session.blocks if b.get("assignment_id") == "sheet").get("start")
+    assert not window.session.can_redo()
+
+
+def test_ctrl_z_still_undoes_with_the_one_letter_shortcuts_off(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    path = look_file()
+    path.write_text(json.dumps({"material": {"shortcuts": False}}))
+    window._material_page.publish()
+    _pump(qapp)
+    assert _bridge(window).property("shortcuts") is False
+    _place_now(window, qapp, root, "sheet", "Math worksheet")
+    _press(window, Qt.Key.Key_Z)
+    _pump(qapp)
+    assert not window.session.can_redo()
+    _press(window, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+    _waiting_again(window, qapp, root, "sheet")
+
+
+def test_ctrl_z_in_a_text_field_leaves_the_schedule_alone(qapp: QApplication, window: NativeWindow) -> None:
+    root = _reset(window, qapp)
+    _place_now(window, qapp, root, "sheet", "Math worksheet")
+    _bridge(window).addHomework()
+    wait_until(qapp, lambda: _bridge(window).sheets.kind == "homework")
+    _pump(qapp)
+    title = _qml(root, "homeworkTitle")
+    title.forceActiveFocus()
+    _pump(qapp)
+    for key, modifiers in (
+        (Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier),
+        (Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier),
+        (Qt.Key.Key_Y, Qt.KeyboardModifier.ControlModifier),
+    ):
+        _press(window, key, modifiers)
+    _pump(qapp, 6)
+    assert not window.session.busy
+    assert next(b for b in window.session.blocks if b.get("assignment_id") == "sheet").get("start")
+    assert window.session.can_undo()
+    # A sheet that is open but whose focus is on a button, not a field, still keeps the keys: undoing
+    # behind it would change the week under a form the student is filling in.
+    window._material_page._quick.quickWindow().contentItem().forceActiveFocus()
+    _pump(qapp)
+    assert _bridge(window).sheets.kind == "homework"
+    _press(window, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+    _pump(qapp, 6)
+    assert not window.session.busy
+    assert next(b for b in window.session.blocks if b.get("assignment_id") == "sheet").get("start")
+    _bridge(window).sheets.forceClose()
+
+
+def test_place_now_that_changes_nothing_does_not_offer_undo(qapp: QApplication, window: NativeWindow) -> None:
+    root = _reset(window, qapp)
+    _place_now(window, qapp, root, "sheet", "Math worksheet")
+    bridge = _bridge(window)
+    bridge._clear_snack(bridge._snack)
+    assert _snack(window) == ""
+    # The same card again: the plan finds the same time, so nothing changes. UNDO here would take back
+    # the first Place now, which the student did not just do.
+    before = [dict(b) for b in window.session.blocks]
+    bridge.week.planOne("sheet")
+    wait_until(qapp, lambda: not window.session.busy and _snack(window) != "")
+    _pump(qapp, 6)
+    assert [dict(b) for b in window.session.blocks] == before
+    assert str(bridge.property("snackAction")) == "", _snack(window)
+
+
 def test_a_same_day_spread_says_so_in_the_snackbar(qapp: QApplication, window: NativeWindow) -> None:
     root = _reset(window, qapp)
     due = (_week_monday(window) + timedelta(days=6)).isoformat()

@@ -603,6 +603,21 @@ Item {
         enabled: !modalActive && bridge.shortcuts !== false
         onActivated: bridge.undo()
     }
+    // Ctrl chords are not one-letter shortcuts, so the Settings switch leaves them on. They end in the
+    // same bridge.undo() and bridge.redo() as the snackbar's UNDO and the top bar. A text field or a
+    // sheet (`typing`), Focus, sign-in and the Settings prompt keep their own keys through modalActive.
+    Shortcut {
+        sequence: "Ctrl+Z"
+        context: Qt.WindowShortcut
+        enabled: !modalActive
+        onActivated: bridge.undo()
+    }
+    Shortcut {
+        sequences: ["Ctrl+Shift+Z", "Ctrl+Y"]
+        context: Qt.WindowShortcut
+        enabled: !modalActive
+        onActivated: bridge.redo()
+    }
     Shortcut {
         sequence: "F"
         context: Qt.WindowShortcut
