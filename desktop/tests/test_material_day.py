@@ -604,6 +604,28 @@ def _run_out(qapp: QApplication, window: NativeWindow, root: QObject, *, quick: 
     return focus
 
 
+def _add_bystander(qapp: QApplication, window: NativeWindow) -> None:
+    """A second open homework with a block later today, so the Now card stays after the first is finished."""
+    session = window.session
+    session.add_homework(
+        {
+            "id": "bystander",
+            "title": "Maths sheet",
+            "due": sunday_due(session.week_start),
+            "estimate_min": 30,
+            "revision": 0,
+        }
+    )
+    session.save()
+    settled(qapp, window)
+    work = next(block for block in session.blocks if block.get("assignment_id") == "bystander")
+    work.update({"start": "20:00", "days": [3], "duration_min": 30})
+    session.add_block(work)
+    session.save()
+    settled(qapp, window)
+    assert not session.assignments["bystander"].get("completed")
+
+
 def _leave_focus(window: NativeWindow, qapp: QApplication, root: QObject) -> None:
     window.session.reset_focus()
     _bridge(root).property("focus").hide()
@@ -641,12 +663,14 @@ def test_mark_finished_on_the_now_card_marks_the_homework_done_and_clears_the_ti
         _run_out(qapp, window, root)
         homework = session.focus["assignmentId"]
         assert not session.assignments[homework].get("completed")
+        _add_bystander(qapp, window)
         bridge.showPage("myday")
         _pump(qapp)
         _qml(root, "myDayMarkFinished").clicked.emit()
         settled(qapp, window)
         _pump(qapp)
         assert session.assignments[homework]["completed"] is True
+        assert not session.assignments["bystander"].get("completed")
         assert session.focus is None
         assert not bridge.property("focus").property("open")
         assert _qml(root, "myDayStartFocus").property("text") != "Start again"
@@ -658,6 +682,47 @@ def test_mark_finished_on_the_now_card_marks_the_homework_done_and_clears_the_ti
     finally:
         _leave_focus(window, qapp, root)
         # The fixture's window is shared with the tests after this one: give the homework back.
+        if "bystander" in session.assignments:
+            session.delete_homework("bystander")
+            settled(qapp, window)
+        if homework:
+            session.complete_homework(homework, False)
+            settled(qapp, window)
+
+
+def test_mark_finished_from_the_keyboard_leaves_focus_on_a_visible_button(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Mark finished hides itself, so keyboard focus must move to the card's button that stays."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    session = window.session
+    root = _show_material(qapp, window)
+    bridge = _bridge(root)
+    scene = window._material_page._quick.quickWindow()
+    homework = ""
+    try:
+        _run_out(qapp, window, root)
+        homework = session.focus["assignmentId"]
+        _add_bystander(qapp, window)
+        bridge.showPage("myday")
+        _pump(qapp)
+        _qml(root, "myDayMarkFinished").forceActiveFocus()
+        _pump(qapp)
+        assert scene.activeFocusItem().objectName() == "myDayMarkFinished"
+        QTest.keyClick(window._material_page._quick, Qt.Key.Key_Space)
+        settled(qapp, window)
+        _pump(qapp)
+        assert session.focus is None
+        held = scene.activeFocusItem()
+        assert held is not None and held.property("visible") is True
+        assert held.objectName() == "myDayStartFocus"
+    finally:
+        _leave_focus(window, qapp, root)
+        if "bystander" in session.assignments:
+            session.delete_homework("bystander")
+            settled(qapp, window)
         if homework:
             session.complete_homework(homework, False)
             settled(qapp, window)

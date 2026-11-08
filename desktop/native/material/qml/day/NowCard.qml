@@ -99,9 +99,11 @@ Column {
                     icon: "check"
                     accessName: text
                     activeFocusOnTab: !root.passive
-                    onClicked: { forceActiveFocus(); root.markFinished() }
+                    // This button hides once the timer clears, so keyboard focus moves to the one that stays.
+                    onClicked: { forceActiveFocus(); root.markFinished(); startButton.forceActiveFocus() }
                 }
                 Button {
+                    id: startButton
                     objectName: root.scope + "StartFocus"
                     theme: root.theme
                     density: root.density
