@@ -154,6 +154,24 @@ def test_a_squeezed_homework_block_keeps_a_done_circle_that_finishes_it_and_undo
     assert _block_named(root, "Pinned reading").property("done") is False
 
 
+def test_a_squeezed_blocks_title_never_runs_past_its_column_and_shows_it_is_cut(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    _soccer_and_a_pinned_reading(window, qapp, minutes=150)
+    grid = _qml(root, "weekScroller")
+    row = int(_bridge(window).property("hourRow"))
+    grid.setProperty("contentY", float(15 * row))
+    _pump(qapp, 4)
+    reading = _block_named(root, "Pinned reading")
+    assert reading.property("circleBelow") is True
+    title = _named(reading, "title")[0]
+    # The column is narrower than the word "Pinned": the word breaks inside itself, no line is wider
+    # than the column (so the block's edge never cuts a letter), and the cut title says so with "...".
+    assert float(title.property("contentWidth")) <= float(title.property("width")) + 0.5
+    assert title.property("truncated") is True
+
+
 def test_a_wide_homework_block_keeps_its_circle_where_it_was(
     qapp: QApplication, window: NativeWindow
 ) -> None:

@@ -173,7 +173,7 @@ Item {
                 text: root.title
                 color: root.textInk
                 opacity: 1
-                wrapMode: Text.WordWrap
+                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                 maximumLineCount: !root.fitToHeight || 2 * root.titleLine + root.detailLine <= root.room ? 2 : 1
                 elide: Text.ElideRight
                 font.family: M3Font.family
