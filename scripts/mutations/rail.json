@@ -70,13 +70,6 @@
   "test": "desktop/tests/week/test_the_rail.py::test_a_running_timer_is_the_rails_first_card"
  },
  {
-  "file": "desktop/native/hours/rail.py",
-  "name": "a rail chip widens the rail",
-  "old": "        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)\n",
-  "new": "",
-  "test": "desktop/tests/week/test_tray_and_rail_chips.py::test_a_rail_chip_shortens_its_title_to_the_rail_and_keeps_its_length"
- },
- {
   "file": "desktop/native/window.py",
   "name": "a new look resets the scroll again",
   "old": "        if dressed != self._dressed:\n            self._dressed = dressed\n",

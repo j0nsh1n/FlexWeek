@@ -157,6 +157,22 @@ def test_the_icon_gives_way_before_a_name_is_left_with_fewer_than_three_letters(
     assert "09:00" in [line.text for line in lay]
 
 
+def test_a_short_first_word_keeps_its_name_on_one_line_and_drops_the_icon() -> None:
+    """With room for "PE kit" on one line but not the icon beside it, the block says "PE kit" on one
+    line and leaves the icon out, rather than the icon and "PE" with "kit" pushed to a second line."""
+    load_fonts()
+    title, small = BlockPainter(resolved_palette("system", False, None)).fonts(QFont("Inter", 12))
+    tm = QFontMetricsF(title)
+    drawn = Drawn("pe", "PE kit", "class", False, Span(1, 9 * 60, 10 * 60), 0, 1)
+    icon = 16 + 3
+    # Halfway between room for the name and room for the icon and the name.
+    width = tm.horizontalAdvance("PE kit") + icon / 2
+    assert icon + tm.horizontalAdvance("PE") <= width, "room for the icon and the first word"
+    assert width < icon + tm.horizontalAdvance("PE kit"), "no room for the icon and the whole name"
+    lay = block_layout(drawn, title, small, QRectF(0, 0, width, tm.lineSpacing() * 4), book=True)
+    assert [(line.text, line.book) for line in lay if line.title] == [("PE kit", False)]
+
+
 def test_a_short_block_at_large_text_keeps_its_time_range_whole() -> None:
     """At Large text a 45-minute block on the week has room for one line. The range "19:00–19:45"
     stays whole (T-W35): beside it there is no room for "Piano lesson" or "Math worksheet", so the

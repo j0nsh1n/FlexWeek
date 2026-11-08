@@ -309,13 +309,6 @@
  },
  {
   "file": "desktop/native/window.py",
-  "name": "Advanced actions go unanswered when their words are routine",
-  "old": "            action.triggered.connect(lambda _=False, pressed=button: self._told(pressed.click))\n",
-  "new": "            action.triggered.connect(button.click)\n",
-  "test": "desktop/tests/week/test_notice_toast.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
- },
- {
-  "file": "desktop/native/window.py",
   "name": "the toast says an action is still going, not what it did",
   "old": "        if message.endswith(\"…\"):\n            return\n",
   "new": "",

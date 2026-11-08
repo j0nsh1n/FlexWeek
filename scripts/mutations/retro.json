@@ -32,7 +32,7 @@
   "name": "the icon outranks the first three letters of a name",
   "old": "        letters = min(len(titled[0].rstrip(\"…\")), 3) if titled else 0\n",
   "new": "        letters = 0\n",
-  "test": "desktop/tests/week/test_block_words_fit.py::test_the_icon_gives_way_before_a_name_is_left_with_fewer_than_three_letters"
+  "test": "desktop/tests/week/test_block_words_fit.py::test_a_short_first_word_keeps_its_name_on_one_line_and_drops_the_icon"
  },
  {
   "file": "desktop/native/layouts/retro.py",

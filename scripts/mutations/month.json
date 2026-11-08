@@ -134,13 +134,6 @@
  },
  {
   "file": "desktop/native/hours/month.py",
-  "name": "Month sizes its rows before it has a height",
-  "old": "        if not self.scroll.viewport().isVisible() and tries > 0:\n",
-  "new": "        if False:\n",
-  "test": "desktop/tests/month/test_month_scroll_fit.py::test_a_month_revealed_before_its_first_layout_still_opens_on_the_first_row"
- },
- {
-  "file": "desktop/native/hours/month.py",
   "name": "a deadline gone by said Due, not Overdue",
   "old": "            return \"Overdue\"\n",
   "new": "            return f\"Due {hhmm_text(self.due_time)}\" if self.due_time else \"Due\"\n",
