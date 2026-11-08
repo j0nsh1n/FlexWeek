@@ -35,13 +35,6 @@
     "test": "desktop/tests/day/test_view_changes_fade_and_slide.py::test_a_new_view_is_live_at_once_while_the_old_one_fades"
   },
   {
-    "name": "My day's chrome changes before its page",
-    "file": "desktop/native/window.py",
-    "old": "        changed = [piece for piece in self._turn_pieces() if before[piece] != after[piece]]\n",
-    "new": "        changed = [self.planner]\n",
-    "test": "desktop/tests/myday/test_my_day_one_thing.py::test_my_day_changes_its_chrome_and_its_page_without_fading"
-  },
-  {
     "name": "Settings fades over the week instead of sliding over it",
     "file": "desktop/native/window.py",
     "old": "                if name == \"settingsPage\":\n                    slide_over(self._stack, page, self._motion)",

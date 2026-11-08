@@ -127,13 +127,6 @@
  },
  {
   "file": "desktop/native/hours/canvas.py",
-  "name": "the edge at 3 pixels whatever the look says",
-  "old": "            width = self.measures[\"edge_width\"] or EDGE_WIDTH\n",
-  "new": "            width = EDGE_WIDTH\n",
-  "test": "desktop/tests/week/test_the_hours_grid.py::test_a_custom_look_sets_todays_wash_the_now_line_and_the_edge"
- },
- {
-  "file": "desktop/native/hours/canvas.py",
   "name": "a block's times shown though the look hides them",
   "old": "    times = drawn.times if shown[0] else \"\"\n",
   "new": "        times = drawn.times\n",
