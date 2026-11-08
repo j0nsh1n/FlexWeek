@@ -151,7 +151,7 @@
   "name": "sign-in says what went wrong before asking",
   "old": "    if not password:\n        return SIGN_IN_NO_PASSWORD\n",
   "new": "",
-  "test": "desktop/tests/test_account_words.py::test_sign_in_says_what_went_wrong"
+  "test": "desktop/tests/account/test_wrong_sign_in_and_sign_up_words.py::test_sign_in_says_what_went_wrong"
  },
  {
   "file": "desktop/native/window.py",
@@ -165,7 +165,7 @@
   "name": "deleting the account asks a last time",
   "old": "if confirm(self, \"Delete account\", question, f\"Delete {name}\"):",
   "new": "if True:",
-  "test": "desktop/tests/test_account_words.py::test_delete_account_names_the_account_and_keeps_it_when_refused"
+  "test": "desktop/tests/account/test_sign_out_and_delete_account.py::test_delete_account_names_the_account_and_keeps_it_when_refused"
  },
  {
   "file": "desktop/native/menus.py",

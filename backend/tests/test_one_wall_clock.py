@@ -15,9 +15,8 @@ SCANNED = ("backend", "desktop", "conftest.py")
 ALLOWED = {
     ("backend/clock.py", "time.time"),
     ("desktop/native/updater.py", "time.time"),
-    ("desktop/tests/test_audit_0190_updates.py", "time.time"),
     ("desktop/native/devices.py", "datetime.now"),
-    ("backend/tests/test_engine_sync.py", "time.time"),
+    ("backend/tests/test_sync_pairing_and_removal.py", "time.time"),
 }
 # Python calls that return the current date or time, by the last two names of what is called.
 WALL_CLOCK = {

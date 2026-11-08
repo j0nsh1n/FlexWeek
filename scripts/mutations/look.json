@@ -116,7 +116,7 @@
   "name": "the Linux build leaves the assets behind",
   "old": "    --include-data-dir=\"$ROOT/desktop/assets=desktop/assets\" \\\n",
   "new": "",
-  "test": "desktop/tests/test_native_packaging.py::test_both_builds_ship_the_icon_and_the_fonts_where_the_app_looks_for_them"
+  "test": "desktop/tests/updater/test_packaged_app_contents.py::test_both_builds_ship_the_icon_and_the_fonts_where_the_app_looks_for_them"
  },
  {
   "file": "desktop/native/hours/canvas.py",
@@ -229,13 +229,6 @@
   "old": "border-left: 4px solid {category_paint('assignments', palette)[1]};",
   "new": "border-left: 4px solid #ef4444;",
   "test": "desktop/tests/test_look.py::test_a_tray_chip_is_edged_in_homeworks_colour_not_in_red"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "recovery codes left in red",
-  "old": "f\"QLabel#recoveryCount {{ color: {palette['muted']}; }}\"",
-  "new": "f\"QLabel#recoveryCount {{ color: {palette['error']}; }}\"",
-  "test": "desktop/tests/test_account_words.py::test_the_recovery_codes_left_are_an_ordinary_fact_until_none_are"
  },
  {
   "file": "desktop/native/look.py",
