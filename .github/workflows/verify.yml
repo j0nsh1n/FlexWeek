@@ -94,7 +94,7 @@ jobs:
         run: cargo fmt --check
       - name: fwtest lint
         working-directory: tools/fwtest
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
       - name: fwtest tests
         working-directory: tools/fwtest
         run: cargo test
