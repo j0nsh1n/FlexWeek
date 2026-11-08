@@ -38,9 +38,24 @@ it with the assistant, for example:
     ./FlexWeek --mcp --read-only
 
 With --read-only it can look at your schedule but never change anything.
-Without --read-only it can also change homework and blocks, the way you do in
-FlexWeek itself. The helper uses the FlexWeek account kept signed in on this
+Without --read-only it can also plan your day for you, the way you do in
+FlexWeek itself: add and plan homework with FlexWeek's own Plan, add breaks,
+meals and events, and change school or activity times (a day off, a moved
+activity). The helper uses the FlexWeek account kept signed in on this
 computer. It opens no connection to the internet.
+
+Before each change the assistant makes, FlexWeek saves a restore point named
+"Before assistant ...". To undo the change, pick that point under Copies of
+this week in FlexWeek, or ask the assistant to restore it. Restoring the point
+from before its first change undoes everything it did after that.
+
+To add it to an assistant that reads an MCP config, give the full path of the
+FlexWeek file in this folder as the command and --mcp as its argument:
+
+    {"mcpServers": {"flexweek": {"command": "/full/path/to/FlexWeek",
+                                 "args": ["--mcp"]}}}
+
+Add "--read-only" after "--mcp" to let it look but not change anything.
 
 This download carries the helper. The Windows download does not include it.
 

@@ -6,6 +6,8 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- The assistant helper (`FlexWeek --mcp`) can plan a day: `plan_homework` runs FlexWeek's own Plan my homework for a week or one day and says what it placed and what it could not; `add_block` and `edit_block` add and change breaks, meals, events and other fixed time; `skip_block_day` takes a day off one block. School and activities may now be moved, changed, skipped or deleted for this week, or from this week on.
+- Every change the assistant makes saves a restore point first ("Before assistant ..."), and `restore_point` brings the schedule back to one in a single step, as Restore in the app does. The assistant keeps at most 10 of the 20 restore points.
 - Material Week zooms the hour grid like Widgets: Ctrl+= and Ctrl++ zoom in, Ctrl+- zoom out, Ctrl+0 restores the density height, Ctrl+wheel zooms about the pointer, and a − + pill sits in the corner above the hour labels.
 - Dragging across empty time on the Material Week grid draws a snapped range and opens Add homework pinned to that day and time.
 - Settings → Computer has Get developer builds: this copy also gets developer test builds, and still moves to each official release when it is newer.
