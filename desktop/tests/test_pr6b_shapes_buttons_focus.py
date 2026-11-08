@@ -21,7 +21,7 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QPointF, Qt
+    from PySide6.QtCore import QObject, QPointF, Qt
     from PySide6.QtGui import QColor, QGuiApplication
     from PySide6.QtQml import QQmlProperty
     from PySide6.QtTest import QTest
@@ -173,7 +173,6 @@ def test_a_mouse_click_shows_no_ring_and_tab_does(
     button = _find(root, "filledMeasure")
     ring = _child(button, "focusRing")
     field = _find(root, "fieldMeasure")
-    field_ring = _child(field, "focusRing")
     dest = _find(root, "destMeasure")
     dest_ring = _child(dest, "focusRing")
 
@@ -197,12 +196,11 @@ def test_a_mouse_click_shows_no_ring_and_tab_does(
     QGuiApplication.processEvents()
     assert ring.property("shown") is True
 
-    # The first click into a field focuses it with no ring.
+    # A click into a field focuses it; the field marks focus with its own border, not a ring.
     _click(view, field)
     assert field.property("activeFocus") or any(
         child.hasActiveFocus() for child in field.findChildren(type(field))
     )
-    assert field_ring.property("shown") is False
 
     # Focus given from code after a click (a mouse-opened sheet's first field) stays quiet too.
     dest.forceActiveFocus(Qt.OtherFocusReason)
@@ -238,24 +236,22 @@ def test_the_selected_nav_item_has_a_tint_and_no_outline(
 def test_a_focused_field_draws_one_border(
     gallery: tuple,
 ) -> None:
-    """OutlinedField focused: own border stays 1px palette.outline; only the outer ring shows."""
+    """OutlinedField focused, Material 3 (Jonathan 2026-11-07): its own border turns the accent and
+    2 px, and there is no outer ring."""
     _view, root = gallery
     field = _find(root, "fieldMeasure")
     shape = _child(field, "shape")
     input_item = _child(field, "fieldInput")
-    ring = _child(field, "focusRing")
 
     assert _border_width(shape) == 1
-    assert ring.property("shown") is False
+    assert _border_color(shape).name() == "#64748b"
+    assert not field.findChildren(QObject, "focusRing")
 
     input_item.forceActiveFocus(Qt.TabFocusReason)
     QGuiApplication.processEvents()
 
-    assert _border_width(shape) == 1
-    assert _border_color(shape).name() == "#64748b"
-    assert ring.property("shown") is True
-    assert _border_width(ring) == 2
-    assert QColor(ring.property("ring")).name() == "#3d6fc4"
+    assert _border_width(shape) == 2
+    assert _border_color(shape).name() == "#3d6fc4"
 
 
 def _prompt_button_lists() -> list[tuple[str, list[dict]]]:

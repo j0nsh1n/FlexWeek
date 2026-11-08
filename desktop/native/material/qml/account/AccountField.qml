@@ -49,8 +49,9 @@ FocusScope {
         height: root.boxHeight
         radius: 6
         color: "transparent"
-        border.width: root.highContrast || root.bad ? 1.5 : 1
-        border.color: root.enabled ? root.line : palette.disabledInk
+        // Material 3: focus thickens the field's own border; the label sits in its notch.
+        border.width: input.activeFocus ? 2 : (root.highContrast || root.bad ? 1.5 : 1)
+        border.color: !root.enabled ? palette.disabledInk : (input.activeFocus && !root.bad ? palette.primary : root.line)
     }
     Rectangle {
         visible: root.label !== "" && !root.compact
@@ -132,14 +133,6 @@ FocusScope {
         text: root.revealed ? "Hide" : "Show"
         accessName: root.revealed ? "Hide password" : "Show password"
         onClicked: root.revealed = !root.revealed
-    }
-    M3FocusRing {
-        anchors.fill: shape
-        anchors.margins: -4
-        extra: root.theme !== undefined
-        target: input
-        ring: palette.focusRing
-        ringRadius: 10
     }
     Text {
         id: support
