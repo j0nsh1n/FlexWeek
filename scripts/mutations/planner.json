@@ -39,41 +39,41 @@
   "name": "a plan is not told when now is",
   "old": "    out.insert(\"earliest\".into(), json!(earliest));\n",
   "new": "",
-  "test": "desktop/tests/test_homework_plan.py::test_plan_sends_earliest_from_not_before_not_a_stored_session_field"
+  "test": "cargo:flexweek-engine:desk_plan_start:test_plan_sends_earliest_from_not_before_not_a_stored_session_field"
  },
  {
   "file": "engine/engine/src/desk/planning.rs",
   "name": "days already gone stay open, so the reason is wrong",
   "old": "    let mut days = Vec::new();\n    for item in iterate(subscript(session, \"days\")?)? {\n        if compare(Cmp::Ge, &item, &day)? {\n            days.push(item);\n        }\n    }\n    if days.is_empty() {\n        days.push(day.clone());\n    }\n",
   "new": "    let mut days = Vec::new();\n    for item in iterate(subscript(session, \"days\")?)? {\n        days.push(item);\n    }\n",
-  "test": "desktop/tests/test_homework_plan.py::test_plan_on_a_thursday_leaves_monday_to_wednesday_and_the_hours_before_now_alone"
+  "test": "desktop/tests/sheets/test_plan_homework.py::test_plan_on_a_thursday_leaves_monday_to_wednesday_and_the_hours_before_now_alone"
  },
  {
   "file": "engine/engine/src/desk/planning.rs",
   "name": "Replan all moves homework whose time has come",
   "old": "        let kept = planned\n            && (truthy(get(&block, \"pinned\")?) || begun(&block, not_before, not_before_is_list)?);\n",
   "new": "        let _ = begun(&block, not_before, not_before_is_list)?;\n        let kept = planned && truthy(get(&block, \"pinned\")?);\n",
-  "test": "desktop/tests/test_homework_plan.py::test_replan_all_leaves_homework_whose_time_has_passed"
+  "test": "desktop/tests/sheets/test_plan_homework.py::test_replan_all_leaves_homework_whose_time_has_passed"
  },
  {
   "file": "engine/engine/src/desk/planning.rs",
   "name": "now rounded down to the quarter hour",
   "old": "    let minute = -((-minute).div_euclid(SLOT_MIN)) * SLOT_MIN;\n",
   "new": "    let minute = minute.div_euclid(SLOT_MIN) * SLOT_MIN;\n",
-  "test": "desktop/tests/test_homework_plan.py::test_a_plan_starts_at_now_rounded_up_to_the_next_quarter_hour"
+  "test": "cargo:flexweek-engine:desk_plan_start:test_a_plan_starts_at_now_rounded_up_to_the_next_quarter_hour"
  },
  {
   "file": "desktop/native/controller.py",
   "name": "a week that is over is planned",
   "old": "        if start is not None and start[0] > 6:\n            self._say(WEEK_OVER)\n            return\n        if _prepared_weeks is None:\n",
   "new": "        if False:\n            self._say(WEEK_OVER)\n            return\n        if _prepared_weeks is None:\n",
-  "test": "desktop/tests/test_homework_plan.py::test_plan_on_a_week_that_is_over_does_not_ask_the_solver"
+  "test": "desktop/tests/sheets/test_plan_homework.py::test_plan_on_a_week_that_is_over_does_not_ask_the_solver"
  },
  {
   "file": "desktop/native/controller.py",
   "name": "a plan's Undo is not offered",
   "old": "            if planned:\n                self.planned.emit(self.message)\n",
   "new": "",
-  "test": "desktop/tests/test_homework_plan.py::test_plan_says_what_it_did_with_an_undo_that_takes_it_all_back"
+  "test": "desktop/tests/sheets/test_plan_undo.py::test_plan_says_what_it_did_with_an_undo_that_takes_it_all_back"
  }
 ]

@@ -77,59 +77,24 @@
   "test": "desktop/tests/test_sheets.py::test_manage_account_keeps_one_filled_button_and_its_actions"
  },
  {
-  "name": "the cards against the left",
-  "file": "desktop/native/settings.py",
-  "old": "    around.addStretch(1)\n    around.addWidget(column, 1000)\n",
-  "new": "    around.addWidget(column, 1000)\n",
-  "test": "desktop/tests/test_settings_look.py::test_the_column_of_cards_is_centred_up_to_960"
- },
- {
   "name": "the section list without its icons",
   "file": "desktop/native/settings.py",
   "old": "            self.nav.item(row).setIcon(made)\n",
   "new": "            pass\n",
-  "test": "desktop/tests/test_settings_look.py::test_each_section_has_its_icon_and_the_chosen_one_an_accent_bar"
- },
- {
-  "name": "no bar on the chosen section",
-  "file": "desktop/native/look.py",
-  "old": "        f\"border-left: 3px solid {palette['accent']}; font-weight: {WEIGHT_STRONG}; }}\"\n",
-  "new": "        f\"font-weight: {WEIGHT_STRONG}; }}\"\n",
-  "test": "desktop/tests/test_settings_look.py::test_each_section_has_its_icon_and_the_chosen_one_an_accent_bar"
+  "test": "desktop/tests/settings/test_settings_look_choices.py::test_each_section_has_its_icon"
  },
  {
   "name": "a segment keeps claiming a look chosen under More looks",
   "file": "desktop/native/settings.py",
   "old": "        self.main.setCurrentIndex(self.main.findData(token))\n",
   "new": "",
-  "test": "desktop/tests/test_settings_look.py::test_look_is_light_dark_or_system_and_the_other_looks_are_under_more_looks"
- },
- {
-  "name": "the swatches all grey",
-  "file": "desktop/native/widgets.py",
-  "old": "            button.fill, button.ink = colours.get(data, (button.fill, button.ink))\n",
-  "new": "",
-  "test": "desktop/tests/test_settings_look.py::test_the_accent_is_swatches_in_the_looks_own_colours"
- },
- {
-  "name": "number boxes each their own width",
-  "file": "desktop/native/settings.py",
-  "old": "            even_fields(self.stack.widget(index))\n",
-  "new": "            pass\n",
-  "test": "desktop/tests/test_settings_look.py::test_every_number_box_on_a_page_is_one_width"
- },
- {
-  "name": "nothing ends the page above the footer",
-  "file": "desktop/native/look.py",
-  "old": "        f\"QWidget#settingsFooter {{ background: {palette['window']}; border-top: {footer_line}; }}\"\n",
-  "new": "        f\"QWidget#settingsFooter {{ background: {palette['window']}; }}\"\n",
-  "test": "desktop/tests/test_settings_look.py::test_a_hairline_ends_the_page_above_the_footer"
+  "test": "desktop/tests/settings/test_settings_look_choices.py::test_light_dark_or_system_and_the_other_looks_are_under_more_looks"
  },
  {
   "name": "High contrast silent about its own yellow",
   "file": "desktop/native/settings.py",
   "old": "        own_accent = custom is None and self._look[\"preset\"] in OWN_ACCENT\n",
   "new": "        own_accent = False\n",
-  "test": "desktop/tests/test_settings_look.py::test_high_contrast_says_it_keeps_its_own_yellow"
+  "test": "desktop/tests/settings/test_settings_look_choices.py::test_high_contrast_says_it_keeps_its_own_yellow_and_black"
  }
 ]

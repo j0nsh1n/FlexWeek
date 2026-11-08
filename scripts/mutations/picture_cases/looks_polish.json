@@ -1,0 +1,50 @@
+[
+ {
+  "name": "Now reuses the chosen blue without enough block contrast",
+  "file": "desktop/native/look.py",
+  "old": "    palette[\"selection\"] = palette[\"now\"]",
+  "new": "    palette[\"now\"] = palette[\"accent\"]\n    palette[\"selection\"] = palette[\"now\"]",
+  "test": "desktop/tests/test_looks_polish.py::test_chosen_blue_stays_exact_with_readable_now_and_selection",
+  "screen": "none: now a picture (screens settings.look_*, \"Now line and selection reach 3 to 1\"); nearest behaviour: desktop/tests/settings/test_look_character.py::test_the_chosen_blue_is_exact_and_now_and_selection_share_it"
+ },
+ {
+  "name": "Dark selected segment loses its ring",
+  "file": "desktop/native/look.py",
+  "old": "selected_ring = palette[\"accent\"] if dark and not contrast_look else \"transparent\"",
+  "new": "selected_ring = \"transparent\"",
+  "test": "desktop/tests/test_looks_polish.py::test_dark_selected_segment_has_a_lighter_chip_and_a_one_pixel_ring",
+  "screen": "none: now a picture (screen settings.top_bar_choice, dark variant)"
+ },
+ {
+  "name": "Look cards lose room for their large titles",
+  "file": "desktop/native/settings.py",
+  "old": "        width = round(LOOK_TILE * scale)\n",
+  "new": "        width = LOOK_TILE\n",
+  "test": "desktop/tests/test_settings_finding.py::test_the_looks_stand_three_in_a_row_and_widen_with_large_text",
+  "screen": "none: now a picture (settings.high_contrast_cards_at_large_text)"
+ },
+ {
+  "name": "Look cards are 160 px at normal text",
+  "file": "desktop/native/settings.py",
+  "old": "LOOK_TILE = 160\n",
+  "new": "LOOK_TILE = 200\n",
+  "test": "desktop/tests/test_settings_look.py::test_a_look_tile_is_160_pixels_and_only_the_worn_one_gets_the_accent_edge",
+  "screen": "none: now a picture (settings.look_cards)"
+ },
+ {
+  "name": "Icons are drawn in the text ink again",
+  "file": "desktop/native/hours/canvas.py",
+  "old": "        return QColor(fit_lightness(edge.name(), (paper.name(),), AA_TEXT))\n",
+  "new": "        return ink\n",
+  "test": "desktop/tests/test_looks_polish.py::test_category_icons_are_their_marks_at_4_5_to_1_on_each_block_style",
+  "screen": "none: now a picture (screens settings.look_*: \"a category icon is its category's mark\"); nearest behaviour: desktop/tests/settings/test_block_words_and_icons.py::test_only_free_time_has_no_icon_colour_in_every_look_and_block_style (does not see the colour)"
+ },
+ {
+  "name": "Icons are fitted to only 3 to 1 again",
+  "file": "desktop/native/hours/canvas.py",
+  "old": "        return QColor(fit_lightness(edge.name(), (paper.name(),), AA_TEXT))\n",
+  "new": "        return QColor(fit_lightness(edge.name(), (paper.name(),), 3.0))\n",
+  "test": "desktop/tests/test_looks_polish.py::test_category_icons_are_their_marks_at_4_5_to_1_on_each_block_style",
+  "screen": "none: now a picture (screens settings.look_*: \"4.5 to 1 on its own block\")"
+ }
+]

@@ -39,6 +39,6 @@
   "name": "setup writes the old timed stamp",
   "old": "                    \"due\": row.due.value(),",
   "new": "                    \"due\": row.due.value() if row.due.timed.isChecked() else row.due.value() + \"T23:59\",",
-  "test": "desktop/tests/test_setup_wizard.py::test_a_first_homework_due_at_a_set_time_keeps_it_and_one_without_has_none"
+  "test": "desktop/tests/setup/test_setup_answers.py::test_a_first_homework_due_at_a_set_time_keeps_it_and_one_without_has_none"
  }
 ]

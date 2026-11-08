@@ -25,7 +25,7 @@
   "name": "Filled blocks the default again",
   "old": "    (\"font\", \"sans\"),\n    (\"blocks\", \"edge\"),\n    (\"density\", \"comfortable\"),\n",
   "new": "    (\"font\", \"sans\"),\n    (\"blocks\", \"filled\"),\n    (\"density\", \"comfortable\"),\n",
-  "test": "desktop/tests/test_look_widgets.py::test_an_edge_block_is_its_category_fill_with_the_strong_colour_down_its_left"
+  "test": "desktop/tests/settings/test_look_blocks.py::test_an_edge_block_is_its_category_fill_with_the_strong_colour_down_its_left"
  },
  {
   "file": "engine/engine/src/desk/weekmodel.rs",
