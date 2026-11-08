@@ -190,7 +190,9 @@ LARGE = (
     "none cut off sideways or underneath (a wrapped label is as tall as its words need at its width, any "
     "other part at least as large as it asks for), and the card is as wide as its words, 420 px times the "
     "text scale, not the 420 px of Normal text. The card keeps the plain panel colour (High contrast was "
-    "not carried)."
+    "not carried). This is the card in front of the student while they sign in: it keeps this size, text "
+    "and style until the week replaces it, with no resize or flash to the account's own look first (judged "
+    "from the sign-in video, as a still cannot show a change)."
 )
 HIGH_CONTRAST = (
     "The text is Large and the card wears High contrast's panel colour (not the plain one), with sharp "

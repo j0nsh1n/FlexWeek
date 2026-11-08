@@ -93,7 +93,8 @@ def test_setup_keeps_each_step_in_order_and_what_was_answered(
     # Reminders
     bridge.setReminders(True)
     bridge.setLead(20)
-    tone = next(row["value"] for row in bridge.tones if row["value"] != "spotify")
+    # Not the default tone: the server leaves a default out of the preferences it answers with.
+    tone = next(row["value"] for row in bridge.tones if row["value"] not in {"spotify", "chime"})
     bridge.setTone(tone)
     bridge.setupNext()
     seen.append(bridge.setupStep)

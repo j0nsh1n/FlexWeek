@@ -13,7 +13,6 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtGui import QColor, QGuiApplication, QPalette
-from PySide6.QtWidgets import QApplication
 
 from desktop.native.look import sanitize_look
 from desktop.native.window import ENTRY_PAGES, NativeWindow
@@ -185,57 +184,6 @@ def test_deleting_an_account_leaves_a_look_that_another_account_wore(qapp, compu
 
 
 # Signing in.
-
-
-def test_the_sign_in_card_does_not_resize_or_flash_while_the_account_look_loads(
-    qapp: QApplication, computer: Computer
-) -> None:
-    """Relative to the card before the click, so it states no size: the card, its text and its style
-    sheet stay as they were in front of the student until the week replaces them."""
-    first = computer.launch()
-    computer.create_account(first, "carry_eight")
-    computer.sign_out(first)
-    first.hide()
-    # What the last student left: Large and High contrast. This account's own look is the plain one.
-    computer.kept.carry_look("someone-else", "large", True)
-    w = computer.relaunch(first)
-    large = sanitize_look(LARGE_HIGH_CONTRAST)
-    assert w._worn_look() == large
-    card = w.username.parentWidget()
-
-    def text_height() -> int:
-        w.username.ensurePolished()
-        return w.username.fontMetrics().height()
-
-    def seen() -> tuple:
-        # The card's height also grows by the "Signing in…" line while that shows, which is not the look.
-        height = None if w.auth_status.isVisible() else card.height()
-        return (card.width(), height, text_height(), w.styleSheet(), repr(w._worn_look()))
-
-    before = seen()
-    samples: list[tuple] = []
-    w.username.setText("carry_eight")
-    w.password.setText(PASSWORD)
-    w.sign_in_button.click()
-
-    def week_shown() -> bool:
-        if page(w) == "authPage":
-            samples.append(seen())
-        return page(w) == "weekPage" and not w.session.busy
-
-    wait_until(qapp, week_shown)
-    assert samples, "the card was never on screen while signing in"
-    names = ("width", "height", "text height", "style sheet", "worn look")
-    changed = {
-        names[i]
-        for sample in samples
-        for i in range(len(names))
-        if sample[i] is not None and sample[i] != before[i]
-    }
-    assert not changed, f"the card changed in front of the student: {sorted(changed)}"
-    pump()
-    assert w._worn_look() is w._look, "the week does not wear the account's own look"
-    assert w._worn_look() != large
 
 
 def test_after_sign_in_the_week_wears_the_accounts_look_not_the_carried_one(
