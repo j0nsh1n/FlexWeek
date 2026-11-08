@@ -40,7 +40,7 @@ FocusScope {
                 text: "Set up FlexWeek"
                 color: m3Palette.inkSurface
                 font.family: M3Font.family
-                font.pixelSize: 22
+                font.pixelSize: M3Font.px(22)
                 font.weight: 500
                 bottomPadding: 16
             }
@@ -100,7 +100,7 @@ FocusScope {
                             text: String(railRow.index + 1)
                             color: railRow.current ? m3Palette.primary : m3Palette.inkMuted
                             font.family: M3Font.family
-                            font.pixelSize: 12
+                            font.pixelSize: M3Font.px(12)
                             font.weight: 500
                         }
                     }
@@ -114,7 +114,7 @@ FocusScope {
                         elide: Text.ElideRight
                         color: railRow.current ? m3Palette.inkSecondaryContainer : m3Palette.inkSurface
                         font.family: M3Font.family
-                        font.pixelSize: 14
+                        font.pixelSize: M3Font.px(14)
                         font.weight: 500
                     }
                     HoverHandler { id: railHover }
@@ -165,7 +165,7 @@ FocusScope {
                     text: "Step " + Math.min(root.step + 1, 6) + " of 6"
                     color: m3Palette.inkMuted
                     font.family: M3Font.family
-                    font.pixelSize: 12
+                    font.pixelSize: M3Font.px(12)
                     font.weight: 500
                 }
                 Text {
@@ -175,7 +175,7 @@ FocusScope {
                     wrapMode: Text.WordWrap
                     color: m3Palette.inkSurface
                     font.family: M3Font.family
-                    font.pixelSize: root.phone ? 24 : 28
+                    font.pixelSize: M3Font.px(root.phone ? 24 : 28)
                     font.weight: 400
                     Accessible.role: Accessible.Heading
                     Accessible.name: text
@@ -187,7 +187,7 @@ FocusScope {
                     wrapMode: Text.WordWrap
                     color: m3Palette.inkMuted
                     font.family: M3Font.family
-                    font.pixelSize: 14
+                    font.pixelSize: M3Font.px(14)
                 }
             }
 
@@ -232,7 +232,7 @@ FocusScope {
                     wrapMode: Text.WordWrap
                     color: m3Palette.error
                     font.family: M3Font.family
-                    font.pixelSize: 14
+                    font.pixelSize: M3Font.px(14)
                     Accessible.role: Accessible.StaticText
                     Accessible.name: text
                 }

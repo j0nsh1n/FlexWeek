@@ -43,7 +43,7 @@ SheetFrame {
                     text: modelData.label
                     color: modelData.on ? pal.inkSecondaryContainer : pal.inkMuted
                     font.family: M3Font.family
-                    font.pixelSize: 14
+                    font.pixelSize: M3Font.px(14)
                     font.weight: 500
                 }
                 M3FocusRing { anchors.fill: parent; anchors.margins: -4; ring: pal.focusRing; ringRadius: parent.height / 2 + 4 }
@@ -64,7 +64,7 @@ SheetFrame {
         text: root.f.prompt ? root.f.prompt : ""
         color: pal.inkSurface
         font.family: M3Font.family
-        font.pixelSize: 14
+        font.pixelSize: M3Font.px(14)
     }
 
     // What
@@ -98,7 +98,7 @@ SheetFrame {
             visible: !!root.f.showScope
             width: parent.width
             spacing: 6
-            Text { text: "Apply to"; color: pal.inkMuted; font.family: M3Font.family; font.pixelSize: 12 }
+            Text { text: "Apply to"; color: pal.inkMuted; font.family: M3Font.family; font.pixelSize: M3Font.px(12) }
             SegmentedButton {
                 objectName: "editScope"
                 theme: root.theme
@@ -114,7 +114,7 @@ SheetFrame {
         Column {
             width: parent.width
             spacing: 6
-            Text { text: "Days"; color: pal.inkMuted; font.family: M3Font.family; font.pixelSize: 12 }
+            Text { text: "Days"; color: pal.inkMuted; font.family: M3Font.family; font.pixelSize: M3Font.px(12) }
             Flow {
                 objectName: "blockDays"
                 width: parent.width
@@ -146,7 +146,7 @@ SheetFrame {
                             text: modelData.label + "\n" + modelData.date
                             color: !day.enabled ? pal.disabledInk : (modelData.on ? pal.inkSecondaryContainer : pal.inkSurface)
                             font.family: M3Font.family
-                            font.pixelSize: 11
+                            font.pixelSize: M3Font.px(11)
                             font.weight: 500
                             lineHeight: 0.9
                         }
@@ -203,13 +203,13 @@ SheetFrame {
         }
         Row {
             spacing: 8
-            Text { text: "Duration"; color: pal.inkMuted; font.family: M3Font.family; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+            Text { text: "Duration"; color: pal.inkMuted; font.family: M3Font.family; font.pixelSize: M3Font.px(12); anchors.verticalCenter: parent.verticalCenter }
             Text {
                 objectName: "blockDurationLine"
                 text: root.f.durationLine ? root.f.durationLine : ""
                 color: root.f.durationIsProblem ? pal.error : pal.inkSurface
                 font.family: M3Font.family
-                font.pixelSize: 14
+                font.pixelSize: M3Font.px(14)
                 font.weight: 500
                 anchors.verticalCenter: parent.verticalCenter
                 Accessible.role: Accessible.StaticText
@@ -244,7 +244,7 @@ SheetFrame {
             text: root.f.missedLabel ? root.f.missedLabel : ""
             color: pal.inkSurface
             font.family: M3Font.family
-            font.pixelSize: 16
+            font.pixelSize: M3Font.px(16)
             wrapMode: Text.WordWrap
         }
         Switch {

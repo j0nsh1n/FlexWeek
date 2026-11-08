@@ -43,7 +43,7 @@ SheetFrame {
                     text: modelData.label
                     color: modelData.on ? pal.inkSecondaryContainer : pal.inkMuted
                     font.family: M3Font.family
-                    font.pixelSize: 14
+                    font.pixelSize: M3Font.px(14)
                     font.weight: 500
                 }
                 M3FocusRing { anchors.fill: parent; anchors.margins: -4; ring: pal.focusRing; ringRadius: parent.height / 2 + 4 }
@@ -64,7 +64,7 @@ SheetFrame {
         text: root.f.prompt ? root.f.prompt : ""
         color: pal.inkSurface
         font.family: M3Font.family
-        font.pixelSize: 14
+        font.pixelSize: M3Font.px(14)
     }
 
     // What
@@ -148,7 +148,7 @@ SheetFrame {
                 text: "When"
                 color: pal.inkMuted
                 font.family: M3Font.family
-                font.pixelSize: 12
+                font.pixelSize: M3Font.px(12)
             }
             SegmentedButton {
                 objectName: "homeworkWhen"
@@ -239,7 +239,7 @@ SheetFrame {
                 text: "Sessions"
                 color: pal.inkMuted
                 font.family: M3Font.family
-                font.pixelSize: 12
+                font.pixelSize: M3Font.px(12)
             }
             SegmentedButton {
                 objectName: "homeworkSpread"
@@ -266,7 +266,7 @@ SheetFrame {
             text: "Finished"
             color: pal.inkSurface
             font.family: M3Font.family
-            font.pixelSize: 16
+            font.pixelSize: M3Font.px(16)
         }
         Switch {
             objectName: "homeworkCompleted"
@@ -380,7 +380,7 @@ SheetFrame {
                     text: "Notes"
                     color: notes.activeFocus ? pal.primary : pal.inkMuted
                     font.family: M3Font.family
-                    font.pixelSize: 12
+                    font.pixelSize: M3Font.px(12)
                 }
             }
             TextEdit {
@@ -392,7 +392,7 @@ SheetFrame {
                 text: root.f.notes ? root.f.notes : ""
                 color: pal.inkSurface
                 font.family: M3Font.family
-                font.pixelSize: 16
+                font.pixelSize: M3Font.px(16)
                 wrapMode: TextEdit.Wrap
                 clip: true
                 selectByMouse: true

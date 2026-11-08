@@ -504,3 +504,66 @@ def test_week_preview_completion_is_inert_and_has_no_qml_error(
             qInstallMessageHandler(previous_handler)
         panel.closeAdvanced()
         _pump(qapp)
+
+
+QML_ROOT = Path(__file__).resolve().parents[1] / "native" / "material" / "qml"
+# The component gallery is a test page; the zoom pill's − and + sit in a fixed pill; the Focus
+# clock already sizes from the window.
+FIXED_SIZE_ALLOWED = {
+    ("components/Gallery.qml", "24"),
+    ("week/ZoomPill.qml", "14"),
+    ("focus/FocusScreen.qml", "Math.round(88 * root.scale)"),
+}
+
+
+def test_every_material_text_size_goes_through_the_students_text_size() -> None:
+    """V24: a fixed font.pixelSize never grows with Large text, so every one reads M3Font.px()."""
+    fixed: list[str] = []
+    for path in sorted(QML_ROOT.rglob("*.qml")):
+        rel = path.relative_to(QML_ROOT).as_posix()
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if "font.pixelSize:" not in line:
+                continue
+            value = line.split("font.pixelSize:", 1)[1].strip()
+            if value.startswith("M3Font.px(") or (rel, value) in FIXED_SIZE_ALLOWED:
+                continue
+            fixed.append(f"{rel}:{number}: {value}")
+    assert fixed == []
+
+
+def _sizes_on_each_screen(qapp: QApplication, window: NativeWindow, root: QObject) -> dict[str, int]:
+    bridge = _bridge(window)
+    sizes: dict[str, int] = {}
+    # A Settings row title sits inside the Settings screen; "title" alone names other things too.
+    for screen, scope, name in (
+        ("day", "", "dayNowTitle"),
+        ("month", "", "monthDayNumber"),
+        ("settings", "materialSettings", "title"),
+    ):
+        bridge.showPage(screen)
+        _pump(qapp, 40)
+        found = _named(_qml(root, scope) if scope else root, name)
+        assert found, name
+        sizes[name] = found[0].property("font").pixelSize()
+    bridge.showPage("week")
+    window._open_focus_screen()
+    _pump(qapp, 40)
+    sizes["focusTitle"] = _qml(root, "focusTitle").property("font").pixelSize()
+    bridge.focus.hide()
+    _pump(qapp)
+    return sizes
+
+
+def test_larger_text_reaches_day_month_settings_and_focus(qapp: QApplication, window: NativeWindow) -> None:
+    root = _show_material(qapp, window)
+    settings = _bridge(window).settingsBridge
+    try:
+        before = _sizes_on_each_screen(qapp, window, root)
+        settings.setTextSize("larger")
+        _pump(qapp)
+        after = _sizes_on_each_screen(qapp, window, root)
+        assert after == {name: round(size * 1.6) for name, size in before.items()}
+    finally:
+        settings.setTextSize("normal")
+        _bridge(window).showPage("week")
+        _pump(qapp)

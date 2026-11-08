@@ -15,7 +15,7 @@ Item {
     property bool passive: false
     property bool phone: false
     property int row: 56
-    property int gutter: 68
+    property int gutter: hourGutter
     property int columns: 1
     property real dayWidth: Math.max(48, (width - gutter) / Math.max(1, columns))
     property int filterDay: -1
@@ -45,6 +45,24 @@ Item {
     property bool zooming: false
 
     readonly property real typeScale: (theme && theme.typeScale) ? theme.typeScale : 1
+    // The hour column is as wide as its widest label at this text size, as the Widgets grid's
+    // hour_gutter is, and never under the 68 px the layout was drawn for.
+    FontMetrics {
+        id: hourFont
+        font.family: M3Font.family
+        font.pixelSize: M3Font.px(11)
+        font.weight: 500
+    }
+    readonly property int hourGutter: {
+        var labels = (root.bridge && root.bridge.hourLabels) ? root.bridge.hourLabels : ["10:00 AM", "12:00 PM"]
+        var widest = 0
+        for (var i = 0; i < labels.length; i++)
+            widest = Math.max(widest, hourFont.advanceWidth(labels[i]))
+        return Math.max(68, Math.ceil(widest) + 8 + 6)
+    }
+    // A new text size or density moves the time now on the grid, so the week shows it again.
+    onTypeScaleChanged: if (root.followNow) Qt.callLater(root.revealNow)
+    onDensityChanged: if (root.followNow) Qt.callLater(root.revealNow)
     readonly property int blockRightInset: root.weekMode ? 3 : 16
 
     function openingAbove(view) {
@@ -115,7 +133,7 @@ Item {
         var view = scroller.height
         if (!bridge || view < 40 || bridge.nowDay < 0)
             return
-        var key = bridge.nowDay + ":" + (bridge.week ? bridge.week.columns : 7)
+        var key = bridge.nowDay + ":" + (bridge.week ? bridge.week.columns : 7) + ":" + root.typeScale + ":" + root.density
         if (revealedKey === key)
             return
         revealedKey = key
@@ -401,7 +419,7 @@ Item {
                     text: model.label
                     color: m3.inkMuted
                     font.family: M3Font.family
-                    font.pixelSize: 11 * root.typeScale
+                    font.pixelSize: M3Font.px(11)
                     font.weight: 500
                 }
             }
@@ -430,13 +448,17 @@ Item {
                     z: 2
                     passive: root.passive
                     dayOpen: !root.weekMode
-                    x: root.weekMode
-                       ? root.gutter + model.day * root.dayWidth + 3
-                       : root.gutter + 3
+                    // Blocks sharing time split their day's lane side by side (spec: overlaps are drawn
+                    // side by side). A preview model without the roles keeps the whole lane.
+                    readonly property int lanes: Math.max(1, model.columns || 1)
+                    readonly property real laneSpan: root.weekMode
+                                                     ? root.dayWidth - 6
+                                                     : hours.width - root.gutter - 3 - root.blockRightInset
+                    readonly property real laneStep: (laneSpan + 3) / lanes
+                    x: (root.weekMode ? root.gutter + model.day * root.dayWidth + 3 : root.gutter + 3)
+                       + (model.column || 0) * laneStep
                     y: model.start / 60 * root.row
-                    width: root.weekMode
-                           ? Math.max(8, root.dayWidth - 6)
-                           : Math.max(8, hours.width - root.gutter - 3 - root.blockRightInset)
+                    width: Math.max(8, laneStep - 3)
                     height: Math.max(36, (model.end - model.start) / 60 * root.row - 2)
                     theme: root.theme
                     density: root.density

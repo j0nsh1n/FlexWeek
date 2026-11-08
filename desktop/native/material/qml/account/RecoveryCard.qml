@@ -51,7 +51,7 @@ FocusScope {
                     wrapMode: Text.WordWrap
                     color: palette.inkSurface
                     font.family: M3Font.family
-                    font.pixelSize: 24
+                    font.pixelSize: M3Font.px(24)
                     Accessible.role: Accessible.Heading
                     Accessible.name: text
                 }
@@ -63,7 +63,7 @@ FocusScope {
                     wrapMode: Text.WordWrap
                     color: palette.inkMuted
                     font.family: M3Font.family
-                    font.pixelSize: 14
+                    font.pixelSize: M3Font.px(14)
                 }
 
                 Rectangle {
@@ -80,7 +80,7 @@ FocusScope {
                         text: bridge ? bridge.recoveryCodes : ""
                         color: palette.inkSurface
                         font.family: "monospace"
-                        font.pixelSize: 16
+                        font.pixelSize: M3Font.px(16)
                         font.weight: 500
                         lineHeight: 1.4
                         wrapMode: Text.WrapAnywhere
@@ -125,7 +125,7 @@ FocusScope {
                     wrapMode: Text.WordWrap
                     color: palette.error
                     font.family: M3Font.family
-                    font.pixelSize: 14
+                    font.pixelSize: M3Font.px(14)
                     Accessible.role: Accessible.StaticText
                     Accessible.name: text
                 }
@@ -150,7 +150,7 @@ FocusScope {
                         wrapMode: Text.WordWrap
                         color: palette.inkSurface
                         font.family: M3Font.family
-                        font.pixelSize: 14
+                        font.pixelSize: M3Font.px(14)
                         font.weight: 500
                         MouseArea {
                             anchors.fill: parent
@@ -178,7 +178,7 @@ FocusScope {
                     text: bridge ? bridge.recoveryWait : ""
                     color: palette.inkMuted
                     font.family: M3Font.family
-                    font.pixelSize: 12
+                    font.pixelSize: M3Font.px(12)
                 }
             }
         }

@@ -14,6 +14,9 @@ Item {
     property string accessName: ""
     property int rightInset: 0
     property alias trailingInset: root.rightInset
+    // Week and Day set a block's height from its time. Its words then fit that height: the title
+    // gives up its second line first, then the time line goes, so nothing is drawn past the border.
+    property bool fitToHeight: false
 
     // Absent keys keep the block default: radius 6, pad 6, no shadow, an edge bar.
     readonly property int pad: (theme && theme.cardPad !== undefined) ? theme.cardPad : 6
@@ -39,6 +42,11 @@ Item {
     height: implicitHeight
 
     M3Palette { id: palette; theme: root.theme }
+    FontMetrics { id: titleFont; font: title.font }
+    FontMetrics { id: detailFont; font: detail.font }
+    readonly property real titleLine: Math.ceil(titleFont.height * title.lineHeight)
+    readonly property real detailLine: root.detail !== "" ? Math.ceil(detailFont.height) : 0
+    readonly property real room: root.height - root.pad - (root.highContrast ? 2 : 1)
 
     readonly property bool darkSurface: {
         var tone = palette.surface
@@ -164,10 +172,10 @@ Item {
                 color: root.textInk
                 opacity: 1
                 wrapMode: Text.WordWrap
-                maximumLineCount: 2
+                maximumLineCount: !root.fitToHeight || 2 * root.titleLine + root.detailLine <= root.room ? 2 : 1
                 elide: Text.ElideRight
                 font.family: M3Font.family
-                font.pixelSize: 12 * ((root.theme && root.theme.typeScale) ? root.theme.typeScale : 1)
+                font.pixelSize: M3Font.px(12)
                 font.weight: 600
                 lineHeight: 1.25
                 lineHeightMode: Text.ProportionalHeight
@@ -176,12 +184,12 @@ Item {
                 id: detail
                 objectName: "detail"
                 width: parent.width
-                visible: root.detail !== ""
+                visible: root.detail !== "" && (!root.fitToHeight || title.height + root.detailLine <= root.room)
                 text: root.detail
                 color: root.textInk
                 opacity: 1
                 font.family: M3Font.family
-                font.pixelSize: 11
+                font.pixelSize: M3Font.px(11)
                 font.weight: 400
                 elide: Text.ElideRight
             }

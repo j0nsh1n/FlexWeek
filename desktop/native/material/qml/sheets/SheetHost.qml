@@ -88,10 +88,8 @@ Item {
             })
         }
     }
-    onKindChanged: {
-        if (kind !== "" && loader.item)
-            Qt.callLater(function () { if (loader.item) loader.item.focusFirst() })
-    }
+    // The Loader builds the new sheet in this same change, so look for it a turn later.
+    onKindChanged: Qt.callLater(function () { if (root.kind !== "" && loader.item) loader.item.focusFirst() })
     onMenuChanged: if (menu) remember()
 
     Connections {

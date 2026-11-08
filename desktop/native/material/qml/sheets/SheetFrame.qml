@@ -109,7 +109,7 @@ FocusScope {
             text: root.heading
             color: pal.inkSurface
             font.family: M3Font.family
-            font.pixelSize: 24
+            font.pixelSize: M3Font.px(24)
             font.weight: 400
             wrapMode: Text.WordWrap
         }

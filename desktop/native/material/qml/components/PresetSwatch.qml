@@ -16,7 +16,7 @@ Item {
     signal clicked()
 
     implicitWidth: 64
-    implicitHeight: 48 + (label === "" ? 0 : 24)
+    implicitHeight: 48 + (label === "" ? 0 : M3Font.px(24))
     width: implicitWidth
     height: implicitHeight
 
@@ -92,7 +92,7 @@ Item {
         text: root.label
         color: palette.inkSurface
         font.family: M3Font.family
-        font.pixelSize: 12
+        font.pixelSize: M3Font.px(12)
         font.weight: 500
     }
     M3StateLayer {
