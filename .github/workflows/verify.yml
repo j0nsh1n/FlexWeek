@@ -218,7 +218,7 @@ jobs:
         # collected even when conftest's collect_ignore lists its folder. A test still running
         # after 300 s dumps every thread's stack, so a hang names itself before the shard times out.
         run: |
-          mapfile -t files < <(git ls-files -- 'desktop/tests/*.py' 'scripts/rig/*.py' \
+          mapfile -t files < <(git ls-files -- 'desktop/tests/*.py' 'scripts/rig/*.py' 'scripts/pictures/*.py' \
             | grep -E '/test_[^/]*\.py$' | grep -vE '^desktop/tests/regress(184|190)/' \
             | sort | awk -v k="$SHARD" 'NR % 4 == k % 4')
           if (( ${#files[@]} == 0 )); then

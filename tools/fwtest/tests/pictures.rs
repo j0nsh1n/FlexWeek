@@ -117,8 +117,10 @@ fn a_moved_block_is_changed_and_its_difference_marks_exactly_those_pixels() {
     let diff = compare::read_png(&root.join("out").join(entry.diff.as_ref().unwrap())).unwrap();
     let marked = diff
         .rgba
-        .chunks_exact(4)
-        .filter(|p| *p == [255, 0, 170, 255])
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .filter(|p| **p == [255, 0, 170, 255])
         .count();
     assert_eq!(marked, 12);
     assert_eq!(
@@ -136,7 +138,7 @@ fn anti_aliasing_noise_within_the_tolerance_is_not_a_change() {
     let root = scratch("noise");
     let before = plain(16, 16, [100, 100, 100, 255]);
     let mut after = before.clone();
-    for value in after.rgba.chunks_exact_mut(4) {
+    for value in after.rgba.as_chunks_mut::<4>().0 {
         value[0] = 100 + compare::DEFAULT_TOLERANCE;
     }
     drawing(
