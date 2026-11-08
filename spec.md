@@ -113,9 +113,12 @@ Contract for the finished app:
   rows.
 - A later week reviews unfinished homework using the original assignment ID,
   exact deadline and progress. Repeated planning and request retries cannot
-  duplicate or over-plan it. Homework left unfinished in an earlier week shows
-  under More > Unfinished and, after a plan, as "N unfinished from last week"
-  with Plan them and I did these.
+  duplicate or over-plan it. Homework left unfinished in an earlier week, and
+  homework past its deadline, shows under More > Unfinished with its reason,
+  "Overdue" or "Left from last week". Above the week a line says "N overdue · N
+  left from last week" with Plan into this week and Mark as finished; Plan opens
+  "Before planning" with the same two choices and Not now. Mark as finished says
+  "Marked <title> finished." and offers Undo.
 - Account-owned restore points snapshot weeks and assignments. Clear week,
   routine application and restore preserve the replaced schedule first; a
   stale restore preview returns 409 and no failure stores partial state. The UI
@@ -607,6 +610,11 @@ nothing loops.
   Never downgrade.
 - Current languages: Python, Rust, and SQL for account storage. The client is
   PySide6 Qt widgets; see DESKTOP.md.
+- Material 3 is a whole window beside the Widgets styles, not a seventh design
+  card. In the Widgets Settings its button is labelled "Material 3" (spoken and
+  shown in its tooltip as "Back to Material"), and More has a "Back to
+  Material" row on its own line. Material's own Settings has "Widgets styles" to
+  go the other way. Switching keeps the week and homework.
 - The engine (`engine/`, contract in `docs/engine/contract.md`) is Rust: the
   backend's logic and storage and the desktop's Qt-free logic. It is built
   into the Python module `flexweek_engine` by maturin (pinned in
@@ -700,15 +708,19 @@ nothing loops.
   in-process on a loopback port, so they need no separate server and no Python
   install; the database sits in the user data directory. `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) points that window
   at a hosted deployment instead, and an invalid value is an error rather than a
-  silent fall back to local. The Windows installers are built on GitHub
-  Actions (`.github/workflows/release-windows.yml`), which installs, opens and
-  uninstalls each one; running them on a real PC is unverified here. Production requires HTTPS via FLEXWEEK_ORIGIN and
+  silent fall back to local. The Windows installers and the Linux download are
+  built on GitHub Actions (`.github/workflows/release-windows.yml`), which
+  installs, opens and uninstalls each Windows installer; a run started by hand
+  without a tag builds and tests everything but uploads nothing; running them on
+  a real PC is unverified here. Production requires HTTPS via FLEXWEEK_ORIGIN and
   persistent SQLite storage.
 - GitHub Actions: `.github/workflows/verify.yml` is the source gate (mypy, not
-  pyright); its second job, `rig`, installs Xvfb, Openbox and xdotool, runs
-  Today's app's Day and Week with a real pointer on a hidden display, and
-  uploads the screenshots, videos and results. `.github/workflows/codeql.yml`
-  runs CodeQL on Python.
+  pyright). Its jobs are `engine`, `verify-engine`, `verify-python`, `desktop`,
+  `rig`, `mutate` and `mutate-python`. `rig` runs once for Day and once for Week
+  on Today's app with a real pointer on a hidden display (Xvfb, Openbox,
+  xdotool) and uploads the frames and results; CI has no ffmpeg, so there is no
+  video. `.github/workflows/codeql.yml` runs CodeQL on Python.
+  `.github/workflows/dev-build.yml` publishes the developer build.
   The generic kit `ci.yml` is not installed: it ran pyright and looked for
   `tests/` at the repo root. Dependabot stays off.
 
@@ -832,9 +844,12 @@ thread's stack. `verify-engine` runs the harness's and the engine's cargo checks
 the Day and Week tabs under Xvfb (without ffmpeg: the rig keeps its frames and skips the video). On pull requests and
 by hand, `mutate` builds its own engine module and runs the mutation cases under `engine/` over four shards, and
 `mutate-python` runs the rest over six. `verify-python` and `desktop` set `FLEXWEEK_SILENT=1` and upload their flaky
-log as an artifact. `.github/workflows/dev-build.yml`, started by hand
-(`scripts/dev-release.sh`), builds the Linux tarball, replaces the `dev` pre-release and keeps the build it replaces
-as `dev-<its commit>`; none of these is ever marked latest.
+log as an artifact. `.github/workflows/dev-build.yml`, started by hand (`scripts/dev-release.sh`), builds the Linux
+tarball from `main` as `<version>.<UTC date and minute>` and publishes it as the `dev` pre-release titled `Developer
+build <version> (<commit7>)`. The build it replaces is kept first as a pre-release tagged `dev-<its commit7>` and
+titled `Developer build <its version> (<its commit7>)`; the kept tag points at the new run's commit, and the old
+commit is named in its tag, title and notes. `dev` is deleted only once that copy is published with both files. None
+of these is ever marked latest, and the updater never offers the kept copies.
 
 The commands it runs, each of which must exit 0:
 
