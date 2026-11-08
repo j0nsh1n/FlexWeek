@@ -11,14 +11,14 @@
   "name": "a repeating block's day wipes the other week",
   "old": "        let mut dest_out = dest_items;\n        dest_out.push(for_date(&occurrence)?);\n        return Ok(Some((source_out, Some(dest_out), made)));\n",
   "new": "        let dest_out = vec![for_date(&occurrence)?];\n        return Ok(Some((source_out, Some(dest_out), made)));\n",
-  "test": "desktop/tests/test_logic_move_date.py::test_a_move_into_a_week_that_already_has_blocks_keeps_them"
+  "test": "desktop/tests/e2e/test_move_a_block_to_another_date.py::test_a_move_into_a_week_that_already_has_blocks_keeps_them"
  },
  {
   "file": "engine/engine/src/desk/grid.rs",
   "name": "a plain block wipes the other week",
   "old": "    let mut dest_out = dest_items;\n    dest_out.push(for_date(&block)?);\n    Ok(Some((source_out, Some(dest_out), block_id.clone())))\n",
   "new": "    let dest_out = vec![for_date(&block)?];\n    Ok(Some((source_out, Some(dest_out), block_id.clone())))\n",
-  "test": "desktop/tests/test_logic_move_date.py::test_a_move_into_a_week_that_already_has_blocks_keeps_them"
+  "test": "desktop/tests/e2e/test_move_a_block_to_another_date.py::test_a_move_into_a_week_that_already_has_blocks_keeps_them"
  },
  {
   "file": "engine/engine/src/time.rs",
