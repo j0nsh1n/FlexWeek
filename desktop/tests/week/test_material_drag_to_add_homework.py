@@ -693,11 +693,17 @@ def test_escape_during_a_drag_cancels_it(qapp: QApplication, window: NativeWindo
 
 
 def test_the_mouse_wheel_still_scrolls_the_grid(qapp: QApplication, window: NativeWindow) -> None:
+    """The wheel scrolls the hours down. The grid first scrolls itself to now, once, when it has its
+    height; that is waited for, so only the wheel can move it after. The wheel's scroll is animated:
+    it is waited for, never a fixed time, which ran out under four workers before the first frame."""
     root = _reset(window, qapp)
     grid = _qml(root, "weekScroller")
+    pane = grid.parentItem()
+    wait_until(qapp, lambda: bool(pane.property("revealedKey")), what="the hours scrolling to now")
     grid.setProperty("contentY", 100.0)
     _pump(qapp, 4)
     initial_y = float(grid.property("contentY"))
+    assert initial_y == 100.0
 
     quick = window._material_page._quick
     win = quick.quickWindow()
@@ -715,6 +721,6 @@ def test_the_mouse_wheel_still_scrolls_the_grid(qapp: QApplication, window: Nati
     QGuiApplication.sendEvent(win, event)
     wait_until(
         qapp,
-        lambda: float(grid.property("contentY")) != initial_y,
-        what="the wheel moved the grid",
+        lambda: float(grid.property("contentY")) > initial_y,
+        what=lambda: f"the grid scrolling down from {initial_y}; it is at {grid.property('contentY')}",
     )
