@@ -12,7 +12,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QWidget
 
 from desktop.native.weekmodel import set_clock_24h
-from desktop.tests.waiting import wait_until
+from desktop.tests.waiting import exposed, wait_until
 
 
 @pytest.fixture()
@@ -29,7 +29,7 @@ def show_and_focus(app: QApplication, widget: QWidget) -> None:
     """Show `widget` and give its window the keyboard, so typed keys reach it."""
     widget.show()
     handle = widget.window().windowHandle()
-    wait_until(app, handle.isExposed)
+    wait_until(app, exposed(handle))
     widget.window().activateWindow()
     app.processEvents()
 

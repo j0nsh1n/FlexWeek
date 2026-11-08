@@ -14,6 +14,19 @@ DEFAULTS = ("classic", "dial")
 SCALES = {"small": 0.85, "normal": 1.0, "large": 1.2}
 
 
+@pytest.fixture(autouse=True)
+def every_style_is_drawn(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests plan the whole set; only the test of what is drawn for now keeps DRAWN_STYLES."""
+    if "for_now" not in request.node.name:
+        monkeypatch.setattr(render, "DRAWN_STYLES", None)
+
+
+def test_for_now_only_material_3_is_drawn_and_a_widgets_only_screen_not_at_all():
+    assert {variant.style for variant in render.plan_variants("week", True, (), DESIGNS)} == {"material"}
+    assert len(render.plan_variants("week", True, (), DESIGNS)) == 3
+    assert render.plan_variants("week", False, ("widgets",), DESIGNS) == []
+
+
 def test_a_screen_is_drawn_in_every_main_view_and_material_light_and_dark():
     variants = render.plan_variants("week", False, (), DESIGNS)
     assert [variant.name for variant in variants] == [

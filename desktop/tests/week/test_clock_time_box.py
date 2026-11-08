@@ -17,7 +17,7 @@ from PySide6.QtWidgets import QApplication, QLineEdit, QWidget
 
 from desktop.native.fields import ClockField
 from desktop.native.weekmodel import set_clock_24h
-from desktop.tests.waiting import wait_until
+from desktop.tests.waiting import exposed, wait_until
 from desktop.tests.window_support import free, host, qapp  # noqa: F401
 
 CTRL, SHIFT = Qt.KeyboardModifier.ControlModifier, Qt.KeyboardModifier.ShiftModifier
@@ -35,7 +35,7 @@ def shown(field: ClockField, qapp: QApplication, host: QWidget) -> ClockField:
         layout = QVBoxLayout(host)
     layout.addWidget(field)
     host.show()
-    wait_until(qapp, host.isExposed, what="the box's window on screen")
+    wait_until(qapp, exposed(host), what="the box's window on screen")
     host.activateWindow()
     field.setFocus()
     qapp.processEvents()

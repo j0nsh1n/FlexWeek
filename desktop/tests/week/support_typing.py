@@ -27,7 +27,7 @@ from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.setup import WEEK, SetupPage, SetupState
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import open_light  # noqa: F401
-from desktop.tests.waiting import wait_until
+from desktop.tests.waiting import exposed, wait_until
 
 DESIGNS = ("classic", "timeline", "mission", "bento", "retro", "clay")
 # Thursday 15:40 of the week beginning 2026-10-12.
@@ -102,7 +102,7 @@ def enter(field: ClockField, how: str) -> None:
 
 def up(qapp: QApplication, widget: QWidget) -> QWidget:
     widget.show()
-    wait_until(qapp, widget.isExposed, what="the widget being on screen")
+    wait_until(qapp, exposed(widget), what="the widget being on screen")
     widget.activateWindow()
     qapp.processEvents()
     return widget
@@ -127,7 +127,7 @@ def shown(field: ClockField, qapp: QApplication, host: QWidget) -> ClockField:
         layout = QVBoxLayout(host)
     layout.addWidget(field)
     host.show()
-    wait_until(qapp, host.isExposed, what="the host being on screen")
+    wait_until(qapp, exposed(host), what="the host being on screen")
     host.activateWindow()
     field.setFocus()
     qapp.processEvents()

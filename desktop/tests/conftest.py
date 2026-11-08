@@ -210,6 +210,9 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QStandardPaths
 
     QStandardPaths.setTestModeEnabled(True)
+    # Every desktop test file can ask for light windows (desktop/tests/light_app.py) without importing
+    # them, so a shared fixture built on open_light works in whichever file uses it.
+    from desktop.tests.light_app import open_light  # noqa: F401,E402
 
 
 def forget_this_computer() -> None:

@@ -50,6 +50,9 @@ SETS = ("full", "touched")
 INDEX_VERSION = 1
 # A screen of the My day area is drawn in the day-screen designs; every other area in the main views.
 DAY_AREAS = ("myday",)
+# The styles drawn for now: Material 3 only, the one being built (Jonathan, 2026-11-07). The Widgets
+# designs come back by adding them here; None draws every style a screen names.
+DRAWN_STYLES: tuple[str, ...] | None = (MATERIAL,)
 
 
 @dataclass(frozen=True)
@@ -88,7 +91,7 @@ def plan_variants(area: str, main: bool, styles: tuple[str, ...], designs: dict[
     chosen: list[str] = []
     for style in styles or default_styles(area, designs):
         for one in role_designs(area, designs) if style == WIDGETS else (style,):
-            if one not in chosen:
+            if one not in chosen and (DRAWN_STYLES is None or one in DRAWN_STYLES):
                 chosen.append(one)
     variants = [Variant(style, mode, "normal", FULL_SIZE) for style in chosen for mode in MODES]
     if main:
@@ -578,6 +581,11 @@ def render(root: Path, out: Path, chosen: list[str] | None, which: str) -> int:
             index["pictures"].append({**entry_base, "variant": "", "error": str(wrong)})
             failed = True
             continue
+        if not variants:
+            index["pictures"].append(
+                {**entry_base, "variant": "", "error": None, "not_drawn": "its styles are not drawn yet"}
+            )
+            continue
         for variant in variants:
             relative = f"{screen.id}/{variant.name}.png"
             entry = {
@@ -602,6 +610,8 @@ def render(root: Path, out: Path, chosen: list[str] | None, which: str) -> int:
                 failed = True
             count += 1
             index["pictures"].append(entry)
+            # Kept up to date after every picture, so a run stopped part way still says what it drew.
+            (out / "index.json").write_text(json.dumps(index, indent=1) + "\n", encoding="utf-8")
             print(f"{relative}: {'failed' if entry['error'] else 'drawn'}", flush=True)
     (out / "index.json").write_text(json.dumps(index, indent=1) + "\n", encoding="utf-8")
     drawn = sum(1 for entry in index["pictures"] if entry.get("picture"))

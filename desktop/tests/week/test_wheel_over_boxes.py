@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (  # noqa: E402
 from desktop.native.settings import SettingsPage  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests import light_app, window_support  # noqa: E402
-from desktop.tests.waiting import wait_until  # noqa: E402
+from desktop.tests.waiting import exposed, wait_until  # noqa: E402
 
 # Fixtures are found by their name in the test module. The window installs the app-wide wheel filter,
 # so the first two tests open one although they never use it.
@@ -60,7 +60,7 @@ def settled(app: QApplication, widget: QWidget) -> None:
     it, and a wheel event aimed through the window then lands beside the box it was meant for: alone in
     a fresh process this test rolled over nothing and the page stayed put."""
     top = widget.window()
-    wait_until(app, top.isExposed, what="the window being exposed")
+    wait_until(app, exposed(top), what="the window being exposed")
     top.activateWindow()
     seen: list[tuple] = []
 

@@ -39,6 +39,9 @@ def homework(
     classic Week has one early block on Monday, since a week with nothing in it shows a button in place
     of the hours."""
     classic_week(qapp, window)
+    # Wednesday at NOW from the start, as the old grid window was, so 16:00 is still ahead when the
+    # essay is put there.
+    hold_clock(window, WEDNESDAY, NOW)
     session = window.session
     session.add_block(
         {

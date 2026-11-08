@@ -32,7 +32,7 @@ from desktop.native.look import resolved_palette
 from desktop.native.menus import Menu
 from desktop.native.weekmodel import Occurrence, build_week
 from desktop.native.window import NativeWindow
-from desktop.tests.waiting import wait_until
+from desktop.tests.waiting import exposed, wait_until
 from desktop.tests.window_support import free, settled
 
 
@@ -380,7 +380,7 @@ def classic_window(qapp: QApplication, window: NativeWindow) -> NativeWindow:
     window.findChild(QAbstractButton, "viewWeek").click()
     settled(qapp, window)
     window.show()
-    wait_until(qapp, window.isExposed)
+    wait_until(qapp, exposed(window))
     window.activateWindow()
     wait_until(qapp, window.isActiveWindow)
     hold_clock(window, WEDNESDAY, 14 * 60 + 7)
