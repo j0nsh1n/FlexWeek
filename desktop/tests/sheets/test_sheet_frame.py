@@ -11,7 +11,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QStandardPaths, Qt
+from PySide6.QtCore import QEvent, QStandardPaths, Qt
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton, QScrollArea, QWidget
 
 from desktop.native.settings import AboutDialog, HelpDialog
@@ -85,9 +85,9 @@ def test_the_editors_and_the_seven_others_are_sheets_over_the_dimmed_week(
         check()
         assert seen == [dialog], name
         qapp.processEvents()
-        assert not any(item.isVisible() for item in window.findChildren(QWidget, "sheetShade")), (
-            f"{name}: the dimming goes with the sheet"
-        )
+        QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        # Gone, not only hidden, while the sheet itself is still kept.
+        assert window.findChildren(QWidget, "sheetShade") == [], f"{name}: the dimming goes with the sheet"
         free(dialog)
     assert window.findChild(QWidget, "sheetShade") is None
 

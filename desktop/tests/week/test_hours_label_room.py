@@ -10,22 +10,25 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from datetime import datetime
+from itertools import pairwise
 
 import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtGui import QFontMetricsF
+from PySide6.QtCore import QRectF
+from PySide6.QtGui import QFont, QFontMetricsF, QImage, QPainter
 from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import CLOCK
-from desktop.native.fonts import at_scale, time_font, weighted
-from desktop.native.hours.geometry import Axis
+from desktop.native.fonts import at_scale, load_fonts, time_font, weighted
+from desktop.native.hours.geometry import Axis, LinearTrack
 from desktop.native.hours.zoom import HoursScroll
-from desktop.native.layouts.registry import sanitize_layout
-from desktop.native.look import sanitize_look
+from desktop.native.layouts.mission import MissionPainter
+from desktop.native.layouts.registry import MATCH, sanitize_layout, tokens_for
+from desktop.native.look import resolved_palette, sanitize_look
 from desktop.native.tokens import WEIGHT_STRONG
-from desktop.native.weekmodel import clock_label
+from desktop.native.weekmodel import clock_label, set_clock_24h
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import open_light  # noqa: F401
 from desktop.tests.waiting import wait_until
@@ -255,3 +258,54 @@ def test_mission_names_fewer_hours_when_the_words_are_wide(
     assert narrow, "Mission wrote no hours"
     assert wide, "Mission wrote no hours at Large on the 12-hour clock"
     assert len(wide) < len(narrow), (narrow, wide)
+
+
+def mission_hours_written(now: int | None) -> list[int]:
+    """The hours Mission writes over a whole day at 14 points on the 12-hour clock, where every other
+    hour's words would run together, in the order it writes them."""
+    load_fonts()
+    painting = MissionPainter(tokens_for("mission", MATCH, resolved_palette("light-frost", False, None)))
+    painting.now_minute = now
+    words: list[str] = []
+
+    class Marks(QPainter):
+        def drawText(self, box, flags, text):  # noqa: N802
+            words.append(text)
+            return super().drawText(box, flags, text)
+
+    track = LinearTrack(0, QRectF(60, 60, 400, 300), first=0, last=24 * 60)
+    picture = QImage(600, 400, QImage.Format.Format_ARGB32)
+    paint = Marks(picture)
+    paint.setFont(QFont("Inter", 14))
+    set_clock_24h(False)
+    try:
+        painting.hour_labels(paint, track, 56)
+    finally:
+        paint.end()
+        set_clock_24h(True)
+    hours: list[int] = []
+    for text in words:
+        clock, _, half = text.partition(" ")
+        if not clock.endswith(":00"):
+            continue  # the pill's minute, not an hour
+        hour = int(clock.split(":")[0]) % 12 + (12 if half == "PM" else 0)
+        while hours and hour <= hours[-1]:
+            hour += 24
+        hours.append(hour)
+    return hours
+
+
+@pytest.mark.parametrize("now", [None, 10 * 60 + 20], ids=["no pill", "pill at 10:20"])
+def test_mission_writes_its_hours_at_one_even_step_when_the_words_are_wide(
+    qapp: QApplication, now: int | None
+) -> None:
+    """Every other hour, or every fourth, sixth or twelfth when the words would run together: the
+    hours written keep that one step through the day, before and after the pill, never 8 AM, 2 PM."""
+    hours = mission_hours_written(now)
+    assert len(hours) >= 2, hours
+    gaps = [later - earlier for earlier, later in pairwise(hours)]
+    # The pill may take the place of one hour, so one gap may be two steps.
+    assert any(
+        all(hour % step == 0 for hour in hours) and all(gap in (step, 2 * step) for gap in gaps)
+        for step in (2, 4, 6, 12)
+    ), hours

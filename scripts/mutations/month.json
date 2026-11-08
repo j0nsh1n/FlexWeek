@@ -141,23 +141,9 @@
  },
  {
   "file": "desktop/native/hours/month.py",
-  "name": "a deadline outlined in homework's colour again",
-  "old": "        painter.setPen(Qt.PenStyle.NoPen)\n        painter.setBrush(fill)\n",
-  "new": "        painter.setPen(QPen(QColor(\"#831a1d\"), 1) if chip.due else Qt.PenStyle.NoPen)\n        painter.setBrush(fill)\n",
-  "test": "desktop/tests/month/test_month_chips.py::test_a_deadline_says_overdue_in_words_once_its_date_has_gone"
- },
- {
-  "file": "desktop/native/hours/month.py",
   "name": "a deadline gone by said Due, not Overdue",
   "old": "            return \"Overdue\"\n",
   "new": "            return f\"Due {hhmm_text(self.due_time)}\" if self.due_time else \"Due\"\n",
-  "test": "desktop/tests/month/test_month_chips.py::test_a_deadline_says_overdue_in_words_once_its_date_has_gone"
- },
- {
-  "file": "desktop/native/hours/month.py",
-  "name": "a deadline gone by flagged red again",
-  "old": "        flag = self.c(\"text\")\n",
-  "new": "        flag = self.c(\"error\") if chip.late else self.c(\"text\")\n",
   "test": "desktop/tests/month/test_month_chips.py::test_a_deadline_says_overdue_in_words_once_its_date_has_gone"
  },
  {

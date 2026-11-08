@@ -92,6 +92,54 @@ def test_narrow_week_blocks_still_include_their_times(
         assert any(words.startswith(clock_label(480)) for words in written), (width, written)
 
 
+def test_a_narrow_week_still_gives_a_long_name_its_two_lines(
+    qapp: QApplication, hours_window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Below 1150 pixels the blocks of a full column keep two lines for their name, as at 1280: a
+    two-hour Science poster says "Science" and "poster", not "Science…"."""
+    from desktop.native.hours import canvas
+
+    window = hours_window
+    session = window.session
+    session.add_block(
+        {
+            "id": "poster",
+            "title": "Science poster",
+            "kind": "locked",
+            "category": "extra",
+            "start": "15:00",
+            "duration_min": 120,
+            "days": [5],
+        }
+    )
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    window._layout = sanitize_layout({"main": "classic"})
+    window._look = sanitize_look({"preset": "default"})
+    window._apply_appearance()
+    window._on_week()
+    window.findChild(QAbstractButton, "viewWeek").click()
+    titled: list[str] = []
+    original = canvas._paint_layout
+
+    def record(painter, lay, *args, **kwargs) -> None:
+        titled.extend(line.text for line in lay if line.title)
+        original(painter, lay, *args, **kwargs)
+
+    monkeypatch.setattr(canvas, "_paint_layout", record)
+    for width in (1280, 1000):
+        window.resize(width, 800)
+        for _ in range(4):
+            qapp.processEvents()
+        assert window.width() == width
+        scroll = hours(window)
+        scroll.canvas.reveal(5, 15 * 60, 17 * 60)
+        qapp.processEvents()
+        titled.clear()
+        assert not scroll.canvas.grab().isNull()
+        assert "Science" in titled and "poster" in titled, (width, titled)
+
+
 def test_new_recovery_codes_are_listed_one_to_a_line(hours_window: NativeWindow) -> None:
     """The codes' page is gone once the week is open, and made again when new codes come. The face
     they are written in is checked in a picture (week.recovery-codes-in-mono)."""

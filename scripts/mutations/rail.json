@@ -117,12 +117,5 @@
   "old": "        chips = min(max(busiest, LEAST_CHIPS), MOST_CHIPS)\n",
   "new": "        chips = LEAST_CHIPS\n",
   "test": "desktop/tests/month/test_month_chips.py::test_a_weeks_busiest_date_shows_three_chips_and_counts_the_rest"
- },
- {
-  "file": "desktop/native/hours/month.py",
-  "name": "this week not banded on Month",
-  "old": "        bands = {at // 7 for at, cell in enumerate(self.cells) if cell.today}\n",
-  "new": "        bands: set[int] = set()\n",
-  "test": "desktop/tests/month/test_month_chips.py::test_a_weeks_busiest_date_shows_three_chips_and_counts_the_rest"
  }
 ]

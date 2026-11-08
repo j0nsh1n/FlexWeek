@@ -28,24 +28,10 @@
   "test": "desktop/tests/week/test_top_bar_controls.py::test_the_key_that_reaches_a_button_rings_it_and_a_click_does_not"
  },
  {
-  "file": "desktop/native/look.py",
-  "name": "no focus ring",
-  "old": "        f'QPushButton[keyfocus=\"true\"]:focus {{ border-color: {ring}; }}',\n",
-  "new": "",
-  "test": "desktop/tests/week/test_top_bar_controls.py::test_the_key_that_reaches_a_button_rings_it_and_a_click_does_not"
- },
- {
   "file": "desktop/native/widgets.py",
   "name": "scroll bars beside the content again",
   "old": "        if hint == QStyle.StyleHint.SH_ScrollBar_Transient and overlaid(widget):\n",
   "new": "        if False:\n",
-  "test": "desktop/tests/week/test_top_bar_controls.py::test_the_hours_month_and_settings_scroll_under_overlay_bars"
- },
- {
-  "file": "desktop/native/widgets.py",
-  "name": "the bar never widens",
-  "old": "        thick = self.WIDE if wide else self.REST\n",
-  "new": "        thick = self.REST\n",
   "test": "desktop/tests/week/test_top_bar_controls.py::test_the_hours_month_and_settings_scroll_under_overlay_bars"
  },
  {

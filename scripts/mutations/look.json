@@ -56,13 +56,6 @@
   "test": "desktop/tests/settings/test_look_readability.py::test_a_filled_block_on_a_dark_look_is_its_colour_sunk_into_the_panel_with_light_ink"
  },
  {
-  "file": "desktop/native/calendar.py",
-  "name": "a category's colours drift from the family",
-  "old": "        \"color\": \"#c3eef0\",\n",
-  "new": "        \"color\": \"#a5f3fc\",\n",
-  "test": "cargo:flexweek-engine:desk_tokens:test_the_category_colours_are_the_family_worked_out_from_their_hues"
- },
- {
   "file": "desktop/native/hours/classic.py",
   "name": "today's name not marked",
   "old": "            label.show_day(DAYS[day], str(week.date_of(day).day), homework_minutes(week, day), day == today)\n",

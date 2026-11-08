@@ -18,7 +18,7 @@
     "file": "desktop/native/window.py",
     "old": "        self.week_table.set_narrow(False)",
     "new": "        self.week_table.set_narrow(self.width() < NARROW_WIDTH)",
-    "test": "desktop/tests/week/test_week_dates_and_times_at_every_width.py::test_narrow_week_blocks_still_include_their_times"
+    "test": "desktop/tests/week/test_week_dates_and_times_at_every_width.py::test_a_narrow_week_still_gives_a_long_name_its_two_lines"
   },
   {
     "name": "Narrow blocks omit their stacked start and end",

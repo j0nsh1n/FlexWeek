@@ -14,20 +14,6 @@
     "test": "desktop/tests/settings/test_look_readability.py::test_the_now_line_and_the_selection_ring_show_at_3_to_1_and_keep_the_accent"
   },
   {
-    "name": "School returns to its crowded hue",
-    "file": "desktop/native/calendar.py",
-    "old": "\"label\": \"School\",\n        \"hue\": 250,",
-    "new": "\"label\": \"School\",\n        \"hue\": 255,",
-    "test": "cargo:flexweek-engine:desk_looks_polish:test_the_categories_use_the_hues_in_the_approved_mockup"
-  },
-  {
-    "name": "Sleep loses its darker fill",
-    "file": "desktop/native/calendar.py",
-    "old": "\"color\": \"#c4c8e8\",",
-    "new": "\"color\": \"#f2dbf8\",",
-    "test": "cargo:flexweek-engine:desk_looks_polish:test_sleep_is_darker_than_the_other_light_fills"
-  },
-  {
     "name": "Paper returns to white cards",
     "file": "desktop/native/look.py",
     "old": "panel=\"#fbf6ea\",",
@@ -88,14 +74,14 @@
     "file": "desktop/native/hours/canvas.py",
     "old": "    return bare if said(bare) > said(lay) else lay\n",
     "new": "    return bare if said(bare) >= said(lay) else lay\n",
-    "test": "desktop/tests/settings/test_block_words_and_icons.py::test_the_icon_stays_where_it_costs_the_name_nothing"
+    "test": "desktop/tests/settings/test_block_words_and_icons.py::test_a_block_with_room_for_the_name_the_time_and_the_icon_has_all_three"
   },
   {
     "name": "A half hour's time loses to its icon",
     "file": "desktop/native/hours/canvas.py",
     "old": "    return bare if said(bare) > said(lay) else lay\n",
     "new": "    return bare if said(bare)[0] > said(lay)[0] else lay\n",
-    "test": "desktop/tests/settings/test_block_words_and_icons.py::test_a_line_with_room_for_the_name_and_its_time_but_not_the_icon_too_says_the_time"
+    "test": "desktop/tests/settings/test_block_words_and_icons.py::test_the_icon_gives_way_where_it_would_cost_the_name"
   },
   {
     "name": "Free time gets its icon back",

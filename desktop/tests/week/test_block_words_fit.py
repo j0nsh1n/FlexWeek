@@ -20,6 +20,7 @@ pytestmark = [
 from PySide6.QtCore import QRectF  # noqa: E402
 from PySide6.QtGui import QFont, QFontMetricsF, QImage  # noqa: E402
 
+from desktop.native.fonts import load_fonts  # noqa: E402
 from desktop.native.hours.canvas import (  # noqa: E402
     TEXT_LEFT,
     TEXT_RIGHT,
@@ -142,6 +143,8 @@ def test_a_word_too_wide_for_its_block_is_shortened_only_when_nothing_else_fits(
 def test_the_icon_gives_way_before_a_name_is_left_with_fewer_than_three_letters() -> None:
     """The name, then its start, then the icon: with room for "Sch…" and the start but not the icon
     as well, the block says those, not the icon and "Sc…"."""
+    # The bundled Inter, not whatever the computer has: CI has no Inter and fits "Scho…".
+    load_fonts()
     title, small = BlockPainter(resolved_palette("system", False, None)).fonts(QFont("Inter", 12))
     tm, sm = QFontMetricsF(title), QFontMetricsF(small)
     drawn = Drawn("school", "Schoolwork", "class", False, Span(1, 9 * 60, 10 * 60), 0, 1)

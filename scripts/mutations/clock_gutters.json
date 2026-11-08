@@ -46,6 +46,6 @@
   "file": "desktop/native/layouts/mission.py",
   "old": "        step = next((span for span in (120, 240, 360) if track.offset(span) - track.offset(0) >= room), 720)\n",
   "new": "        step = 120\n",
-  "test": "desktop/tests/week/test_hours_label_room.py::test_mission_names_fewer_hours_when_the_words_are_wide"
+  "test": "desktop/tests/week/test_hours_label_room.py::test_mission_writes_its_hours_at_one_even_step_when_the_words_are_wide"
  }
 ]

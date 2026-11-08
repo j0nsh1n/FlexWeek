@@ -14,6 +14,7 @@ from PySide6.QtGui import QFont, QImage, QPainter
 from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton
 
 from desktop.native.calendar import sunday_due
+from desktop.native.fonts import load_fonts
 from desktop.native.hours import classic
 from desktop.native.hours.geometry import LinearTrack
 from desktop.native.layouts.clay import ClayPainter
@@ -102,9 +103,10 @@ def test_running_school_has_no_agenda_now_row(qapp: QApplication, hours_window: 
     assert view.hours.now_min == 620
 
 
-def test_clays_now_pill_takes_the_place_of_the_hour_label_under_it() -> None:
+def test_clays_now_pill_takes_the_place_of_the_hour_label_under_it(qapp: QApplication) -> None:
     """The pill left of the hours lies where their labels are. At 10:20 on hours 40 pixels each, the
     10:00 label was written and the pill drawn over it; 11:00, clear of the pill, stays."""
+    load_fonts()
     painting = ClayPainter(tokens_for("clay", MATCH, resolved_palette("light-frost", False, None)), full=True)
     painting.now_minute = 10 * 60 + 20
     pills: list[QRectF] = []

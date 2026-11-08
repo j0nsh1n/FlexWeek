@@ -10,6 +10,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QRectF
 from PySide6.QtGui import QFont, QFontMetricsF, QImage
 
+from desktop.native.fonts import load_fonts
 from desktop.native.hours.canvas import (
     TEXT_LEFT,
     TEXT_RIGHT,
@@ -27,6 +28,8 @@ from desktop.tests.window_support import qapp  # noqa: F401
 
 
 def _fonts(look: dict | None = None) -> tuple[QFont, QFont]:
+    # The bundled Inter, not whatever the computer has: CI has no Inter and fits other words.
+    load_fonts()
     painter = BlockPainter(resolved_palette("system", False, look), look)
     return painter.fonts(QFont("Inter", 12))
 
