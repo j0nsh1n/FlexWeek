@@ -1,8 +1,10 @@
 # flexweek-mcp
 
 `flexweek-mcp` is a stdio MCP server for the FlexWeek account that is kept
-signed in on this computer. It reads that account's schedule. It does not
-open a port.
+signed in on this computer. An assistant can read that account's schedule and,
+unless the server runs with `--read-only`, change it: add and plan homework, add
+fixed time, change school and activity times. Every change saves a restore point
+first, so it can be undone in one step. It does not open a port.
 
 ## Build
 
@@ -56,31 +58,73 @@ or a path.
 
 ## Client
 
-Point the client's MCP config at the built binary. No arguments are required
-when FlexWeek's data folder is the default above.
+A student uses the helper packaged with FlexWeek, not a build from this folder.
+In the Linux download it is started through the launcher with `--mcp`; every
+argument after `--mcp` goes to the helper. For example, in a client's MCP config:
 
 ```json
 {
   "mcpServers": {
     "flexweek": {
-      "command": "/absolute/path/to/flexweek-mcp"
+      "command": "/home/you/FlexWeek/FlexWeek",
+      "args": ["--mcp"]
     }
   }
 }
 ```
 
-The read tools are `whoami`, `get_today`, `get_week`, `get_month`,
-`list_homework`, `list_routines`, and `list_restore_points`.
+With the AppImage the command is the AppImage itself, with the same `--mcp`
+argument. Add `"--read-only"` after `"--mcp"` for an assistant that may look but
+never change anything. No other argument is needed when FlexWeek's data folder is
+the default above. A developer may point `command` at a binary built here instead.
 
-The write tools are `add_homework`, `edit_homework`, `delete_homework`,
-`set_homework_done`, `set_block_done`, `move_block` and `delete_block`. Each takes an
-`operation_id` (8 to 80 characters): the same id with the same arguments returns the
-first answer and changes nothing, and the same id with other arguments is refused.
-Edits carry the revision they were read at; a stale one returns
-`{"error": "conflict", "current_revision": N}` and changes nothing.
+## Tools
+
+Read tools (always served):
+
+| Tool | What it returns |
+|---|---|
+| `whoami` | Who is signed in, when the session ends |
+| `get_today` | One day (optional `date`): due soon, sessions, fixed blocks, next action, workload |
+| `get_week` | One week (`week_start`, a Monday) with School and activities merged in, and its revision |
+| `get_month` | One month (`month`, `YYYY-MM`): the grid, deadlines, overdue work |
+| `list_homework` | Homework with planned and unplanned minutes (`week_start`, `include_completed`) |
+| `list_routines` | Saved routines |
+| `list_restore_points` | Restore points, newest first |
+
+Write tools (not served with `--read-only`):
+
+| Tool | What it changes |
+|---|---|
+| `add_homework` | New homework and one open session this week |
+| `edit_homework` | Homework, with its sessions kept in step |
+| `delete_homework` | Homework and its sessions (destructive) |
+| `set_homework_done` | Homework done or not, and its sessions |
+| `set_block_done` | One block on one day done or not |
+| `plan_homework` | Runs FlexWeek's own planner, as Plan my homework does, for a week or one `day`; returns `placed` and `not_placed` (with the planner's reason) |
+| `add_block` | Fixed time that is not homework on one or more `days`: `category` is `free` (a break or rest), `meals`, `extra` (an event or activity, the default), `exercise`, `sleep` or `class` |
+| `edit_block` | Fixed time's title, start, end, days or category, for the series or one day (`scope: "occurrence"`, `day`) |
+| `move_block` | A block to a day and time, as dragging it does |
+| `skip_block_day` | Fixed time skipped on one day (a day off): it stays shown as missed and its time is free to plan |
+| `delete_block` | A block, or one day of it (destructive) |
+| `restore_point` | The whole schedule back to a restore point (destructive; it saves one of its own first) |
+
+The rules are the app's: an end after its start, no new or moved start in the
+past, fixed time may sit beside other blocks (the reply names one in `beside`),
+and Plan never places homework before now or after it is due. School and Setup's
+activities change in this week only, as in the app's block editor; `every_week`
+on `edit_block` or `delete_block` changes them from this week on, as the app's
+School hours and "This week and later" do. Taken out of this week alone, School
+stays in it missed on its days, as in the app.
+
+Each write takes an `operation_id` (8 to 80 characters): the same id with the
+same arguments returns the first answer and changes nothing, and the same id with
+other arguments is refused. Edits carry the revision they were read at; a stale
+one returns `{"error": "conflict", "current_revision": N}` and changes nothing.
+
 `set_homework_done` and `set_block_done` take an optional `expected_revision`
 (the homework's revision, or the week's from `get_week`), checked the same way
-when it is given. School and activities are changed in the app, not here.
+when it is given.
 
 Several writes can be sent at once without waiting for each answer. Each one
 reads what it changes and saves it under one database lock, so changes to
@@ -91,3 +135,18 @@ While FlexWeek is open on this computer it shows a write within a few seconds,
 without a restart. If the student has edits there that are not saved yet, they
 are kept, and the week is marked as changed elsewhere until the student chooses
 More > Reload this week.
+
+### Undo
+
+Before each change the helper saves the whole schedule as a restore point named
+"Before assistant <tool> — <time>". `list_restore_points` shows them, and
+`restore_point` with one's `id` brings the schedule back to how it was before
+that change, in one step, the same way Restore in the app does. Restoring the
+point made before an assistant's first change undoes everything it did after.
+The restore saves a "Before restore" point first, so it can be undone too.
+FlexWeek keeps 20 restore points. The assistant keeps at most 10 of its own, and
+fewer when the student's points leave less room, so its changes never push out
+a point the student made: with 15 of the student's, it keeps its newest 5. Only
+when the student alone has 20 does a change drop their oldest, as any save in
+the app does. A change that is refused (a stale revision, for example) changes
+nothing, its restore points included.

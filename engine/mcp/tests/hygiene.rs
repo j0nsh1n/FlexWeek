@@ -1,6 +1,6 @@
 //! stdout is protocol only. stderr names the tool and the outcome, and nothing about the person.
 //! The server opens no socket. The tool list is the allow-list: reads stay read-only, and
-//! delete_homework and delete_block are destructive.
+//! delete_homework, delete_block and restore_point are destructive.
 
 mod common;
 
@@ -23,9 +23,11 @@ const READ_ONLY: &[&str] = &[
     "whoami",
 ];
 const ALLOWED: &[&str] = &[
+    "add_block",
     "add_homework",
     "delete_block",
     "delete_homework",
+    "edit_block",
     "edit_homework",
     "get_month",
     "get_today",
@@ -34,10 +36,15 @@ const ALLOWED: &[&str] = &[
     "list_restore_points",
     "list_routines",
     "move_block",
+    "plan_homework",
+    "restore_point",
     "set_block_done",
     "set_homework_done",
+    "skip_block_day",
     "whoami",
 ];
+/// Writes that take away what is there: a delete, or a restore that replaces every later change.
+const DESTRUCTIVE: &[&str] = &["delete_block", "delete_homework", "restore_point"];
 
 fn signed_in(name: &str) -> (String, String) {
     let dir = scratch(name);
@@ -109,7 +116,7 @@ fn tools_list_is_the_read_allow_list() {
             .get("annotations")
             .and_then(|notes| notes.get("destructiveHint"))
             .and_then(Value::as_bool);
-        if name == "delete_homework" || name == "delete_block" {
+        if DESTRUCTIVE.contains(&name) {
             assert_eq!(
                 destructive,
                 Some(true),

@@ -1,6 +1,9 @@
 mod blocks;
+mod fixed;
 mod homework;
+mod plan;
 mod read;
+mod restore;
 mod write;
 
 pub(crate) fn router(
@@ -9,7 +12,12 @@ pub(crate) fn router(
     if read_only {
         return crate::App::read_tools();
     }
-    crate::App::read_tools() + crate::App::homework_tools() + crate::App::block_tools()
+    crate::App::read_tools()
+        + crate::App::homework_tools()
+        + crate::App::block_tools()
+        + crate::App::fixed_tools()
+        + crate::App::plan_tools()
+        + crate::App::restore_tools()
 }
 
 #[rmcp::tool_handler(router = crate::tools::router(self.read_only))]
