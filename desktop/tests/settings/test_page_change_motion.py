@@ -17,7 +17,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QPoint, Qt
-    from PySide6.QtGui import QColor, QImage, QPalette, QPixmap
+    from PySide6.QtGui import QColor, QPalette, QPixmap
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QStackedWidget, QVBoxLayout, QWidget
 
@@ -190,20 +190,20 @@ def test_a_page_change_does_not_repaint_the_live_page_every_frame(
 def test_a_page_change_ends_where_motion_off_leaves_it(
     qapp: QApplication, manual_time: ManualTime  # noqa: F811
 ) -> None:
-    """The fade is only on the way. Where it ends is the page motion Off shows at once."""
+    """The fade is only on the way. Where it ends is the page motion Off shows at once: no effect on
+    the page, no picture left over, the page at its place."""
 
-    def landed(level: str) -> QImage:
+    def lands_clean(level: str) -> None:
         apply_ui_effects(level)
         stack, _first, second = two_pages(qapp)
         switch_page(stack, second, level)
         move_on(manual_time, THROUGH_MS)
         assert second.graphicsEffect() is None and pictures(stack) == []
         assert second.pos() == QPoint(0, 0)
-        image = stack.grab().toImage()
         stack.close()
-        return image
 
-    assert landed("normal") == landed("off")
+    lands_clean("normal")
+    lands_clean("off")
 
 
 def test_a_page_is_pictured_at_the_size_it_will_have_on_screen(

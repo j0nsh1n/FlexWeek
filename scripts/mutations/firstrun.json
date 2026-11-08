@@ -53,7 +53,7 @@
     "file": "desktop/native/setup.py",
     "old": "            state = CURRENT if current else SKIPPED if skipped else FINISHED if done else PENDING\n",
     "new": "            state = CURRENT if current else SKIPPED if skipped else PENDING\n",
-    "test": "desktop/tests/setup/test_setup_rail.py::test_a_finished_step_shows_a_tick_on_the_rail"
+    "test": "desktop/tests/setup/test_setup_rail.py::test_a_finished_step_is_announced_as_done_on_the_rail"
   },
   {
     "name": "Help's keys as plain words",

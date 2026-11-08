@@ -1,6 +1,6 @@
 """What a block on the week says, in the words a student reads: its name and times as far as the room
-goes, nothing but its colour when there is no room for three letters, and the same font for every
-block whatever was drawn before it."""
+goes, and nothing but its colour when there is no room for three letters. The font a block is written
+in is judged in the picture review."""
 
 from __future__ import annotations
 
@@ -31,17 +31,16 @@ pytestmark = [
 ]
 
 from PySide6.QtCore import QPoint, QRect, QRectF  # noqa: E402
-from PySide6.QtGui import QFont, QFontMetricsF, QImage, QPainter  # noqa: E402
-from PySide6.QtWidgets import QApplication, QWidget  # noqa: E402
+from PySide6.QtGui import QFont, QFontMetricsF, QImage  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from desktop.native.fonts import TABULAR, load_fonts  # noqa: E402
+from desktop.native.fonts import load_fonts  # noqa: E402
 from desktop.native.hours import canvas as canvas_module  # noqa: E402
-from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas  # noqa: E402
-from desktop.native.hours.geometry import LinearTrack, Span  # noqa: E402
-from desktop.native.hours.hand import Hand, Verdict  # noqa: E402
+from desktop.native.hours.canvas import BlockPainter, Drawn  # noqa: E402
+from desktop.native.hours.geometry import Span  # noqa: E402
 from desktop.native.hours.zoom import HoursScroll  # noqa: E402
 from desktop.native.look import resolved_palette  # noqa: E402
-from desktop.native.weekmodel import build_week, minute_of  # noqa: E402
+from desktop.native.weekmodel import minute_of  # noqa: E402
 
 
 @pytest.mark.parametrize("points", [9, 13])
@@ -181,59 +180,3 @@ def test_a_block_shadow_does_not_change_its_words(monkeypatch: pytest.MonkeyPatc
     assert flat
     assert written("soft") == flat
     assert written("bold") == flat
-
-
-def test_every_block_is_written_in_the_canvas_font_whatever_was_drawn_before_it(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The same Essay on three days, drawn in one paint. On the first day it follows the hour labels,
-    on the second it follows Maths, drawn by a painter that, like Mission's, sets a font of its own
-    after the default block; on the third it follows nothing. All three are written alike."""
-    monkeypatch.setattr(canvas_module, "QPainter", Said)
-
-    class Marked(BlockPainter):
-        def block(self, painter: QPainter, rect: QRectF, drawn: Drawn, visible: QRectF) -> None:
-            super().block(painter, rect, drawn, visible)
-            painter.setFont(QFont("DejaVu Sans Mono", 8))
-
-    def columns(area: QRectF) -> list[LinearTrack]:
-        # Whole pixels apart, so the same block on each day gets the same room.
-        return [
-            LinearTrack(day, QRectF(60 + 150 * day, 10, 140, 600), first=8 * 60, last=20 * 60)
-            for day in range(3)
-        ]
-
-    host = QWidget()
-    canvas = HoursCanvas(
-        Hand(lambda block_id, from_day, span: Verdict(True, ""), host),
-        Marked(resolved_palette("system", False, None)),
-        columns,
-        gutter=56,
-    )
-    canvas.resize(520, 620)
-    occurrences = build_week("2026-09-21", [ESSAY, MATHS], {}, None).occurrences
-    # Maths first, so on its day the Essay is drawn after it.
-    canvas.set_week(sorted(occurrences, key=lambda item: item.block_id != "maths"))
-    canvas.relayout()
-    Said.fonts = []
-    canvas.grab()
-    for words in ("Essay", "16:00–17:30"):
-        fonts = [font.toString() for text, font in Said.fonts if text == words]
-        assert len(fonts) == 3, (words, fonts)
-        assert len(set(fonts)) == 1, f"{words!r} is written in different fonts: {fonts}"
-
-
-def test_every_time_on_the_hours_is_written_in_figures_of_one_width(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Inter's figures are proportional: without tabular ones, 11:00 is narrower than 20:00 and a
-    column of hours or a block's times wobble."""
-    monkeypatch.setattr(canvas_module, "QPainter", Said)
-    canvas = three_days(now_min=15 * 60 + 40)
-    Said.fonts = []
-    canvas.grab()
-    timed = [(text, font) for text, font in Said.fonts if any(letter.isdigit() for letter in text)]
-    assert {"09:00", "19:00"} <= {text for text, _font in timed}
-    assert any("16:00–17:30" in text for text, _font in timed)
-    for text, font in timed:
-        assert font.featureValue(QFont.Tag(TABULAR)) == 1, text

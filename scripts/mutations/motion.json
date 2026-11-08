@@ -39,7 +39,7 @@
     "file": "desktop/native/window.py",
     "old": "        changed = [piece for piece in self._turn_pieces() if before[piece] != after[piece]]\n",
     "new": "        changed = [self.planner]\n",
-    "test": "desktop/tests/myday/test_my_day_one_thing.py::test_my_day_changes_its_chrome_and_its_page_in_the_same_frame"
+    "test": "desktop/tests/myday/test_my_day_one_thing.py::test_my_day_changes_its_chrome_and_its_page_without_fading"
   },
   {
     "name": "Settings fades over the week instead of sliding over it",

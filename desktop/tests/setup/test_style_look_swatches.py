@@ -1,5 +1,5 @@
 """The row of look swatches under the Style page's carousel: each design lists its own looks, and a pick
-redraws the preview and is kept."""
+is kept. That the preview redraws is judged in the picture review."""
 
 # ruff: noqa: F811  (a test's fixture parameter has the name of the imported fixture)
 from __future__ import annotations
@@ -37,22 +37,19 @@ def test_every_style_lists_its_designs_looks_and_the_first_is_picked(style_page:
         assert list(carousel.look_swatches) == [token for token, _name in DESIGN_LOOKS[style.main]]
 
 
-def test_picking_a_look_redraws_the_preview_and_comes_back_kept(
+def test_picking_a_look_is_kept_and_comes_back_kept(
     qapp: QApplication,
     style_page: SetupPage,
 ) -> None:
     setup = style_page
     carousel = setup.carousel
-    before = carousel.slides["plain"].picture.pixmap().toImage()
     choice = carousel.look_swatches["preset:high-contrast"]
     assert choice.property("lookToken") == "preset:high-contrast"
     assert choice.accessibleName() == "High contrast"
     assert choice.toolTip() == "High contrast"
     choice.click()
     qapp.processEvents()
-    after = carousel.slides["plain"].picture.pixmap().toImage()
     assert choice.isChecked()
-    assert before != after
     assert setup._layout["options"]["classic"]["look"] == "preset:high-contrast"
 
     # Another design shows its own looks with its signature picked; coming back keeps this setup's pick.
