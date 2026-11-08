@@ -147,6 +147,7 @@ from desktop.native.motion import (
     switch_page,
     trim_picture,
 )
+from desktop.native.outside import OutsideWatch, differs
 from desktop.native.remind import REMINDER_POLL_MS, clock_parts
 from desktop.native.reuse import (
     due_point,
@@ -235,6 +236,9 @@ TRAVEL_WAIT_MS = 900
 # milliseconds, and greying for them flashed the whole top bar (Grok Bot's 0.17.0 audit, T7). They
 # take no clicks, keys or shortcuts from the moment it is busy (BusyGuard).
 BUSY_LOOK_MS = 250
+# How often the window looks for another program's change to its database: one small file read each
+# time, and a look inside only after a commit.
+OUTSIDE_CHECK_MS = 2000
 # Boxes that keep Ctrl+Z for the text typed in them.
 EDITABLE = (QLineEdit, QPlainTextEdit, QAbstractSpinBox, QComboBox)
 BUSY_BUTTONS = (
@@ -607,6 +611,13 @@ class NativeWindow(QMainWindow):
             # The window owns its host, so Qt, not the garbage collector, frees it with the window.
             sync.setParent(self)
             sync.started.connect(self._sync_started)
+        # Another program's changes to this database, such as the assistant's, shown without a restart.
+        self._outside: OutsideWatch | None = None
+        self._outside_timer = QTimer(self)
+        self._outside_timer.setInterval(OUTSIDE_CHECK_MS)
+        self._outside_timer.timeout.connect(self._outside_tick)
+        if sync is not None:
+            self.watch_database(sync.database)
         if icon is not None:
             self.setWindowIcon(icon)
         self.resize(*WINDOW_SIZE)
@@ -5412,6 +5423,32 @@ class NativeWindow(QMainWindow):
         names = [row["name"] for row in self._linked_phones()]
         who = names[0] if len(names) == 1 else "a linked phone"
         return self.session.accept_remote_week(who)
+
+    def watch_database(self, database: Path) -> None:
+        """Show changes another program makes to `database`, the one the local server keeps."""
+        self._outside = OutsideWatch(database)
+        self._outside_timer.start()
+
+    def _outside_tick(self) -> None:
+        """Every few seconds: the week loaded again after another program, such as the assistant, changed
+        this account's schedule. With unsaved edits here it marks the week as changed instead, as a
+        phone's edits do. It waits while a sheet is open, a request is in flight, or a phone's edits are
+        still to be shown, and a change this window saved itself is never taken for another's."""
+        watch, session = self._outside, self.session
+        account = session.account
+        if watch is None or account is None or session.busy or QApplication.activeModalWidget() is not None:
+            return
+        if self._sync is not None and self._sync.generation() != self._sync_generation:
+            return
+        stored = watch.look(int(account["id"]), session.week_start)
+        if stored is None:
+            return
+        assistant = watch.assistant_wrote(stored)
+        unsaved = session.dirty_assignments
+        changed = assistant or differs(stored, session.revision, session.assignments, unsaved)
+        if changed and not session.accept_remote_week("your assistant" if assistant else "another program"):
+            return
+        watch.settle(stored)
 
     def _attach_settings_page(self, page: SettingsPage) -> None:
         if self._settings is not None:
