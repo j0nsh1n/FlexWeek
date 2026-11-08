@@ -128,4 +128,3 @@ def held_solves(window: NativeWindow) -> tuple[list[dict], list[Callable[[], Non
 
     window.session.client.request = request  # type: ignore[method-assign]
     return sent, waiting
-

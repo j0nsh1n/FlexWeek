@@ -174,12 +174,16 @@ pub fn read_png(path: &Path) -> Result<Image, String> {
     let rgba = match info.color_type {
         png::ColorType::Rgba => buffer,
         png::ColorType::Rgb => buffer
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .flat_map(|p| [p[0], p[1], p[2], 255])
             .collect(),
         png::ColorType::Grayscale => buffer.iter().flat_map(|&g| [g, g, g, 255]).collect(),
         png::ColorType::GrayscaleAlpha => buffer
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .flat_map(|p| [p[0], p[0], p[0], p[1]])
             .collect(),
         png::ColorType::Indexed => {
@@ -238,7 +242,13 @@ pub fn difference(before: &Image, after: &Image, tolerance: u8) -> Difference {
     }
     let mut rgba = Vec::with_capacity(after.rgba.len());
     let mut differing = 0;
-    for (one, two) in before.rgba.chunks_exact(4).zip(after.rgba.chunks_exact(4)) {
+    for (one, two) in before
+        .rgba
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(after.rgba.as_chunks::<4>().0)
+    {
         let apart = one.iter().zip(two).any(|(a, b)| a.abs_diff(*b) > tolerance);
         if apart {
             differing += 1;

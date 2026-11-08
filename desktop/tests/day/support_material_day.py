@@ -188,4 +188,3 @@ def scroll_block_into_view(qapp: QApplication, day: QObject, block: QObject) -> 
     scroller = qml(day, "dayScroller")
     scroller.setProperty("contentY", max(0.0, float(block.property("y")) - 16.0))
     pump(qapp)
-

@@ -42,4 +42,3 @@ def test_the_status_dot_is_hidden_until_a_phone_is_linked(light_desk: NativeWind
     devices_panel(light_desk)
     light_desk._sync_tick()
     assert light_desk.sync_dot.isHidden()
-

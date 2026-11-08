@@ -96,4 +96,3 @@ def test_stock_accents_have_no_readability_warning(accent: str | None) -> None:
     if accent is not None:
         custom["accent"] = accent
     assert not [problem for problem in readability(custom) if problem.field == ("accent",)]
-

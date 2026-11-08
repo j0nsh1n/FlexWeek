@@ -133,4 +133,3 @@ def bridge(window: NativeWindow) -> QObject:
 
 def snack(window: NativeWindow) -> str:
     return str(bridge(window).property("snackText"))
-

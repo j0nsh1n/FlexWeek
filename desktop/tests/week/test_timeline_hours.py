@@ -136,4 +136,3 @@ def test_a_block_rested_at_the_top_of_the_hours_scrolls_them_back(qapp: QApplica
         send(QEvent.Type.MouseMove, grab + (edge - grab) * step / 8, True)
     wait_until(qapp, lambda: bar.value() < before, what="the hours scrolling back")
     view.hand.cancel()
-

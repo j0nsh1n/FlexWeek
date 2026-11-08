@@ -188,4 +188,3 @@ def test_a_block_save_and_delete_wait_while_a_save_is_pending(
             original(*held.pop(0))
         settle(qapp, shell)
         sheets.forceClose()
-

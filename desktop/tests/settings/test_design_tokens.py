@@ -237,4 +237,3 @@ def test_the_material_theme_cache_keeps_thirty_two_schemes() -> None:
     """One scheme a time thrashed the cache while the shell crossed screens; thirty-two holds every
     preset in both modes at once."""
     assert _schemes.cache_info().maxsize == 32
-

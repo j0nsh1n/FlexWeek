@@ -233,4 +233,3 @@ def test_a_look_chosen_in_the_window_reaches_the_calendar_not_only_the_styleshee
     assert edge is None
     assert fill != PALE
     assert "border: 1px solid" in window.styleSheet()
-

@@ -158,4 +158,3 @@ def test_at_one_day_on_the_right_both_notes_and_every_due_line_are_listed(qapp: 
     assert len(notes) == 2
     when = [item for item in view.findChildren(QLabel, "timelineDueWhen") if item.isVisible()]
     assert len(when) == 5
-

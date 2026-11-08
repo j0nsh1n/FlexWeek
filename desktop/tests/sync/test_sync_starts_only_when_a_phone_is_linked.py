@@ -128,4 +128,3 @@ def test_pressing_pair_starts_the_service_once_and_opens_the_pairing_sheet(
     assert panel.dialog.findChild(QLineEdit, "pairQr") is None
     assert panel.dialog.status.text().startswith("Code works for ")
     panel.dialog.reject()
-

@@ -195,4 +195,3 @@ def start(window: NativeWindow, block: dict) -> bool:
 
 def block_named(window: NativeWindow, block_id: str) -> dict:
     return next(block for block in window.session.blocks if block["id"] == block_id)
-

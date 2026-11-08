@@ -159,4 +159,3 @@ def blank_like(image):  # type: ignore[no-untyped-def]
     blank = QImage(image.size(), image.format())
     blank.fill(image.pixelColor(0, image.height() - 1))
     return blank
-

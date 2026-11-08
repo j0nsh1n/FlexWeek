@@ -164,4 +164,3 @@ def test_reveal_brings_a_day_to_the_front_and_its_time_into_view(qapp: QApplicat
     hours = front(view)
     assert hours.track_for(5, 9 * 60) is not None
     assert hours.in_view(5, 9 * 60) and hours.in_view(5, 10 * 60)
-
