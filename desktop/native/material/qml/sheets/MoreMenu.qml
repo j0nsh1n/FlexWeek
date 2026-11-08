@@ -89,7 +89,7 @@ FocusScope {
                         text: modelData.heading
                         color: pal.inkMuted
                         font.family: M3Font.family
-                        font.pixelSize: 12
+                        font.pixelSize: M3Font.px(12)
                         font.weight: 500
                     }
                     SIcon {
@@ -110,7 +110,7 @@ FocusScope {
                         elide: Text.ElideRight
                         color: modelData.enabled ? pal.inkSurface : pal.disabledInk
                         font.family: M3Font.family
-                        font.pixelSize: 14
+                        font.pixelSize: M3Font.px(14)
                     }
                     Text {
                         id: detail
@@ -121,7 +121,7 @@ FocusScope {
                         text: modelData.detail
                         color: modelData.enabled ? pal.inkMuted : pal.disabledInk
                         font.family: M3Font.family
-                        font.pixelSize: 12
+                        font.pixelSize: M3Font.px(12)
                     }
                     M3FocusRing {
                         anchors.fill: parent

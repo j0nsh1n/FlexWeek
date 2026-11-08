@@ -59,7 +59,7 @@ Item {
             text: root.text
             color: root.enabled ? palette.primary : palette.disabledInk
             font.family: M3Font.family
-            font.pixelSize: 14
+            font.pixelSize: M3Font.px(14)
             font.weight: 500
             anchors.verticalCenter: parent.verticalCenter
         }

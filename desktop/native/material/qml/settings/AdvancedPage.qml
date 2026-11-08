@@ -45,7 +45,7 @@ Item {
             text: "Advanced settings"
             color: palette.inkSurface
             font.family: M3Font.family
-            font.pixelSize: 22
+            font.pixelSize: M3Font.px(22)
             font.weight: 500
         }
     }
@@ -82,7 +82,7 @@ Item {
                           + ". Basic settings stay in Look."
                     color: palette.inkPrimaryContainer
                     font.family: M3Font.family
-                    font.pixelSize: 14
+                    font.pixelSize: M3Font.px(14)
                     wrapMode: Text.WordWrap
                 }
             }
@@ -316,7 +316,7 @@ Item {
                 text: root.st.dirty ? "Draft. Done applies it." : "Same as the preset"
                 color: palette.inkMuted
                 font.family: M3Font.family
-                font.pixelSize: 12
+                font.pixelSize: M3Font.px(12)
             }
             Button {
                 objectName: "advancedDone"

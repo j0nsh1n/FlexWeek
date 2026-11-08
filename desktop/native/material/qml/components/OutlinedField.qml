@@ -32,8 +32,9 @@ FocusScope {
         anchors.topMargin: 8
         radius: 6
         color: "transparent"
-        border.width: root.highContrast ? 1.5 : 1
-        border.color: root.enabled ? palette.outline : palette.disabledInk
+        // Material 3: focus thickens the field's own border in the accent; the label sits in its notch.
+        border.width: input.activeFocus ? 2 : (root.highContrast ? 1.5 : 1)
+        border.color: !root.enabled ? palette.disabledInk : (input.activeFocus ? palette.primary : palette.outline)
     }
     Rectangle {
         visible: root.label !== ""
@@ -48,7 +49,7 @@ FocusScope {
             text: root.label
             color: input.activeFocus ? palette.primary : (root.enabled ? palette.inkMuted : palette.disabledInk)
             font.family: M3Font.family
-            font.pixelSize: 12
+            font.pixelSize: M3Font.px(12)
             font.weight: 400
         }
     }
@@ -63,7 +64,7 @@ FocusScope {
         text: root.text
         color: root.enabled ? palette.inkSurface : palette.disabledInk
         font.family: M3Font.family
-        font.pixelSize: 16
+        font.pixelSize: M3Font.px(16)
         font.weight: 400
         enabled: root.enabled
         clip: true
@@ -93,15 +94,8 @@ FocusScope {
         text: root.suffix
         color: palette.inkMuted
         font.family: M3Font.family
-        font.pixelSize: 16
+        font.pixelSize: M3Font.px(16)
         font.weight: 400
-    }
-    M3FocusRing {
-        anchors.fill: shape
-        anchors.margins: -4
-        target: input
-        ring: palette.focusRing
-        ringRadius: 10
     }
 
     Accessible.role: Accessible.EditableText

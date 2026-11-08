@@ -62,7 +62,7 @@ FocusScope {
                         text: "FlexWeek"
                         color: palette.primary
                         font.family: M3Font.family
-                        font.pixelSize: 22
+                        font.pixelSize: M3Font.px(22)
                         font.weight: 600
                     }
                 }
@@ -75,7 +75,7 @@ FocusScope {
                     wrapMode: Text.WordWrap
                     color: palette.inkSurface
                     font.family: M3Font.family
-                    font.pixelSize: 24
+                    font.pixelSize: M3Font.px(24)
                     font.weight: 400
                     Accessible.role: Accessible.Heading
                     Accessible.name: text
@@ -89,7 +89,7 @@ FocusScope {
                     wrapMode: Text.WordWrap
                     color: palette.inkMuted
                     font.family: M3Font.family
-                    font.pixelSize: 14
+                    font.pixelSize: M3Font.px(14)
                 }
 
                 AccountField {
@@ -194,7 +194,7 @@ FocusScope {
                         wrapMode: Text.WordWrap
                         color: palette.inkSurface
                         font.family: M3Font.family
-                        font.pixelSize: 14
+                        font.pixelSize: M3Font.px(14)
                         font.weight: 500
                         MouseArea {
                             anchors.fill: parent
@@ -212,7 +212,7 @@ FocusScope {
                     wrapMode: Text.WordWrap
                     color: palette.inkMuted
                     font.family: M3Font.family
-                    font.pixelSize: 14
+                    font.pixelSize: M3Font.px(14)
                     Accessible.role: Accessible.StaticText
                     Accessible.name: text
                 }

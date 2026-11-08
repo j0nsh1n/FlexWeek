@@ -37,7 +37,10 @@ Item {
     property int extra: 0
 
     // Chips are 16px with 2px between, under the day number. What does not fit becomes "and N more".
-    readonly property int rowsFit: Math.max(1, Math.min(4, Math.floor((height - 34) / 18)))
+    readonly property int rowsFit: Math.max(1, Math.min(4, Math.floor((height - dot - 10) / (chipHeight + 2))))
+    // The date circle and the chips grow with the student's text size.
+    readonly property int dot: M3Font.px(24)
+    readonly property int chipHeight: M3Font.px(16)
 
     function _refreshChips() {
         var all = []
@@ -173,9 +176,9 @@ Item {
         visible: root.today
         x: 6
         y: 4
-        width: 24
-        height: 24
-        radius: 12
+        width: root.dot
+        height: root.dot
+        radius: root.dot / 2
         color: tones.primary
     }
 
@@ -184,30 +187,30 @@ Item {
         opacity: root.fade
         x: 6
         y: 4
-        width: 24
-        height: 24
+        width: root.dot
+        height: root.dot
         text: root.day
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         color: root.today ? tones.inkPrimary : tones.inkSurface
         font.family: M3Font.family
-        font.pixelSize: 13
+        font.pixelSize: M3Font.px(13)
         font.weight: 500
     }
 
     Text {
         objectName: "monthMore"
         visible: !root.narrow && root.extra > 0 && root.rowsFit === 1
-        x: 32
+        x: root.dot + 8
         y: 4
-        height: 24
-        width: Math.max(0, parent.width - 36)
+        height: root.dot
+        width: Math.max(0, parent.width - root.dot - 12)
         text: "and " + root.extra + " more"
         elide: Text.ElideRight
         verticalAlignment: Text.AlignVCenter
         color: root.studyShown ? tones.inkSurface : tones.inkMuted
         font.family: M3Font.family
-        font.pixelSize: 11
+        font.pixelSize: M3Font.px(11)
         font.weight: 500
     }
 
@@ -217,7 +220,7 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.topMargin: 32
+        anchors.topMargin: root.dot + 8
         anchors.bottom: parent.bottom
         anchors.leftMargin: 4
         anchors.rightMargin: 4
@@ -241,7 +244,7 @@ Item {
                     : (due ? homeworkClass.ink : tones.inkMuted)
                 readonly property string chipIcon: overdue ? "warning" : (due ? "edit_note" : "")
                 width: parent.width
-                height: 16
+                height: root.chipHeight
                 radius: height / 2
                 color: chipFill
 
@@ -277,13 +280,13 @@ Item {
                     Text {
                         objectName: "monthChipText"
                         width: Math.max(0, chipRow.width - (chipBody.chipIcon !== "" ? 14 : 0))
-                        height: 16
+                        height: root.chipHeight
                         text: modelData.text
                         elide: Text.ElideRight
                         verticalAlignment: Text.AlignVCenter
                         color: chipBody.chipInk
                         font.family: M3Font.family
-                        font.pixelSize: 11
+                        font.pixelSize: M3Font.px(11)
                         font.weight: 500
                     }
                 }
@@ -300,7 +303,7 @@ Item {
             text: "and " + root.extra + " more"
             color: root.studyShown ? tones.inkSurface : tones.inkMuted
             font.family: M3Font.family
-            font.pixelSize: 11
+            font.pixelSize: M3Font.px(11)
             font.weight: 500
         }
     }

@@ -42,7 +42,7 @@ Item {
         text: root.title
         color: palette.inkSurface
         font.family: M3Font.family
-        font.pixelSize: 16
+        font.pixelSize: M3Font.px(16)
         font.weight: 500
         lineHeight: 24
         lineHeightMode: Text.FixedHeight
@@ -58,7 +58,7 @@ Item {
         text: root.subtitle
         color: palette.inkMuted
         font.family: M3Font.family
-        font.pixelSize: 14
+        font.pixelSize: M3Font.px(14)
         font.weight: 400
         lineHeight: 20
         lineHeightMode: Text.FixedHeight

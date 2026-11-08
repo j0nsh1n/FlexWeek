@@ -50,7 +50,7 @@ Item {
     FontMetrics {
         id: hourFont
         font.family: M3Font.family
-        font.pixelSize: 11 * root.typeScale
+        font.pixelSize: M3Font.px(11)
         font.weight: 500
     }
     readonly property int hourGutter: {
@@ -414,7 +414,7 @@ Item {
                     text: model.label
                     color: m3.inkMuted
                     font.family: M3Font.family
-                    font.pixelSize: 11 * root.typeScale
+                    font.pixelSize: M3Font.px(11)
                     font.weight: 500
                 }
             }

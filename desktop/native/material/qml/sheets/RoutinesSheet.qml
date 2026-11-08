@@ -15,7 +15,7 @@ SheetFrame {
         text: root.f.intro ? root.f.intro : ""
         color: pal.inkMuted
         font.family: M3Font.family
-        font.pixelSize: 14
+        font.pixelSize: M3Font.px(14)
         wrapMode: Text.WordWrap
     }
     Text {
@@ -25,7 +25,7 @@ SheetFrame {
         text: root.f.empty ? root.f.empty : ""
         color: pal.inkSurface
         font.family: M3Font.family
-        font.pixelSize: 16
+        font.pixelSize: M3Font.px(16)
     }
     Repeater {
         model: root.f.rows ? root.f.rows : []
@@ -47,7 +47,7 @@ SheetFrame {
         visible: !!root.f.selected
         width: parent.width
         spacing: 6
-        Text { text: "Copy to"; color: pal.inkMuted; font.family: M3Font.family; font.pixelSize: 12 }
+        Text { text: "Copy to"; color: pal.inkMuted; font.family: M3Font.family; font.pixelSize: M3Font.px(12) }
         Flow {
             width: parent.width
             spacing: 8
@@ -77,7 +77,7 @@ SheetFrame {
                         text: modelData.label + "\n" + modelData.date
                         color: modelData.on ? pal.inkSecondaryContainer : pal.inkSurface
                         font.family: M3Font.family
-                        font.pixelSize: 11
+                        font.pixelSize: M3Font.px(11)
                         font.weight: 500
                         lineHeight: 0.9
                     }

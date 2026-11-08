@@ -15,7 +15,7 @@ SheetFrame {
         text: root.f.intro ? root.f.intro : ""
         color: pal.inkMuted
         font.family: M3Font.family
-        font.pixelSize: 14
+        font.pixelSize: M3Font.px(14)
         wrapMode: Text.WordWrap
     }
     Text {
@@ -25,7 +25,7 @@ SheetFrame {
         text: root.f.empty ? root.f.empty : ""
         color: pal.inkSurface
         font.family: M3Font.family
-        font.pixelSize: 16
+        font.pixelSize: M3Font.px(16)
     }
     Repeater {
         model: root.f.rows ? root.f.rows : []
@@ -46,7 +46,7 @@ SheetFrame {
                     text: modelData.title
                     color: pal.inkSurface
                     font.family: M3Font.family
-                    font.pixelSize: 16
+                    font.pixelSize: M3Font.px(16)
                     font.weight: 500
                     elide: Text.ElideRight
                 }
@@ -55,7 +55,7 @@ SheetFrame {
                     text: modelData.detail
                     color: modelData.overdue ? pal.error : pal.inkMuted
                     font.family: M3Font.family
-                    font.pixelSize: 12
+                    font.pixelSize: M3Font.px(12)
                     wrapMode: Text.WordWrap
                     Accessible.role: Accessible.StaticText
                     Accessible.name: modelData.title + ", " + text
