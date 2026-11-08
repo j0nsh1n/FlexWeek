@@ -46,6 +46,9 @@ def attach_sync(window: NativeWindow, host: SyncHost) -> None:
     host.started.connect(window._sync_started)
     if host.service is not None:
         window._sync_started(host.service)
+    # The light app builds Settings in the background right after opening, before this host existed;
+    # a Devices card built then has no host. Settings is built again, with it, the next time it opens.
+    window._discard_settings_page()
 
 
 def stop_sync_timer(window: NativeWindow) -> None:
