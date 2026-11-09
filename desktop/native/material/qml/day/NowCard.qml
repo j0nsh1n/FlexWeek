@@ -22,6 +22,8 @@ Column {
     property string line: ""
     // The homework Start focus opens; the free-time card does not name it anywhere else.
     property string focusTitle: ""
+    // A fixed block such as Soccer is on: the card says until when and what is next, and starts nothing.
+    property bool busy: false
     signal startFocus()
     signal markFinished()
     signal startAgain()
@@ -42,7 +44,8 @@ Column {
     // Qt takes focus off a button as it hides, which can come before or after shownChanged reaches
     // this card, so both the card and its buttons hand focus on; whichever runs second finds it done.
     function handFocusToHeading() {
-        if (!root.shown && root.pageHeading)
+        // Also when the card stays but its Start button hides, as the clock moves into a fixed block.
+        if ((!root.shown || !startButton.visible) && root.pageHeading)
             root.pageHeading.forceActiveFocus()
     }
     onShownChanged: if (startButton.activeFocus || markButton.activeFocus) handFocusToHeading()
@@ -101,7 +104,7 @@ Column {
                     font.weight: 400
                 }
             }
-            Item { width: 1; height: 12 }
+            Item { width: 1; height: 12; visible: startButton.visible || markButton.visible }
             Flow {
                 width: parent.width
                 spacing: 8
@@ -126,6 +129,9 @@ Column {
                 Button {
                     id: startButton
                     objectName: root.scope + "StartFocus"
+                    visible: !root.busy || root.timerTitle !== "" || root.timerEnded || root.timerDone
+                    // Qt keeps focus on a button that hides inside a card that stays, so hand it on here.
+                    onVisibleChanged: if (!visible && activeFocus) root.handFocusToHeading()
                     theme: root.theme
                     density: root.density
                     reduceMotion: root.reduceMotion

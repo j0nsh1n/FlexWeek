@@ -90,6 +90,7 @@ Item {
                 scope: "myDay"
                 title: root.board ? root.board.nowTitle : ""
                 focusTitle: root.board ? root.board.focusTitle : ""
+                busy: !!(root.board && root.board.nowBusy)
                 line: root.board ? root.board.nowLine : ""
                 onStartFocus: if (root.board) root.board.startFocus()
                 onMarkFinished: if (root.board) root.board.markFinished()
