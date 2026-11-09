@@ -776,6 +776,97 @@ def test_mark_finished_from_the_keyboard_leaves_focus_on_a_visible_button(
             settled(qapp, window)
 
 
+def _assert_focus_on_a_visible_page_item(root: QObject, scene: object) -> None:
+    held = scene.activeFocusItem()  # type: ignore[attr-defined]
+    assert held is not None, "keyboard focus is nowhere"
+    assert held.property("visible") is True, f"focus stayed on hidden {held.objectName()!r}"
+    assert held.objectName() not in (
+        "myDayStartFocus",
+        "myDayMarkFinished",
+        "dayStartFocus",
+        "dayMarkFinished",
+    )
+
+
+def test_mark_finished_on_the_days_last_homework_hides_the_card_and_focus_moves_to_something_visible(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """With nothing else today the whole Now card goes away: focus must not stay on its hidden button."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    session = window.session
+    root = _show_material(qapp, window)
+    bridge = _bridge(root)
+    scene = window._material_page._quick.quickWindow()
+    homework = ""
+    try:
+        _run_out(qapp, window, root)
+        homework = session.focus["assignmentId"]
+        for page in ("myday", "day"):
+            bridge.showPage(page)
+            _pump(qapp)
+            scope = "myDay" if page == "myday" else "day"
+            _qml(root, scope + "MarkFinished").forceActiveFocus()
+            _pump(qapp)
+            assert scene.activeFocusItem().objectName() == scope + "MarkFinished"
+            QTest.keyClick(window._material_page._quick, Qt.Key.Key_Space)
+            settled(qapp, window)
+            _pump(qapp)
+            assert session.focus is None
+            assert _qml(root, scope + "Now").property("visible") is False
+            _assert_focus_on_a_visible_page_item(root, scene)
+            session.complete_homework(homework, False)
+            settled(qapp, window)
+            _run_out(qapp, window, root)
+    finally:
+        _leave_focus(window, qapp, root)
+        if homework:
+            session.complete_homework(homework, False)
+            settled(qapp, window)
+
+
+def test_ok_on_a_finished_session_hides_the_card_and_focus_moves_to_something_visible(
+    qapp: QApplication, window: NativeWindow, keep_on_replace: None
+) -> None:
+    """OK clears the timer; with nothing else today the card hides, so focus must leave its button."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    session = window.session
+    root = _show_material(qapp, window)
+    bridge = _bridge(root)
+    scene = window._material_page._quick.quickWindow()
+    homework = ""
+    try:
+        _run_out(qapp, window, root)
+        homework = session.focus["assignmentId"]
+        session.complete_homework(homework, True)
+        settled(qapp, window)
+        for page, scope in (("myday", "myDay"), ("day", "day")):
+            bridge.showPage(page)
+            wait_until(qapp, lambda scope=scope: _card(root, scope)[1] == "Finished")
+            _qml(root, scope + "StartFocus").forceActiveFocus()
+            _pump(qapp)
+            assert scene.activeFocusItem().objectName() == scope + "StartFocus"
+            QTest.keyClick(window._material_page._quick, Qt.Key.Key_Space)
+            settled(qapp, window)
+            _pump(qapp)
+            assert session.focus is None
+            assert _qml(root, scope + "Now").property("visible") is False
+            _assert_focus_on_a_visible_page_item(root, scene)
+            session.complete_homework(homework, False)
+            settled(qapp, window)
+            _run_out(qapp, window, root)
+            session.complete_homework(homework, True)
+            settled(qapp, window)
+    finally:
+        _leave_focus(window, qapp, root)
+        if homework:
+            session.complete_homework(homework, False)
+            settled(qapp, window)
+
+
 def test_start_again_on_the_now_card_starts_a_new_timer_on_the_same_homework_without_asking(
     qapp: QApplication, window: NativeWindow, keep_on_replace: None
 ) -> None:

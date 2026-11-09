@@ -94,8 +94,8 @@ class DayBridge(QObject):
         # Day asked for today while another week was loading; that load lands later and moves the day.
         self._want_today = False
         # The focus timer, as the Now card names it: (title, time left or "Session finished", ended, homework
-        # still open), or blank.
-        self._timer: tuple[str, str, bool, bool] = ("", "", False, False)
+        # still open, homework already done), or blank.
+        self._timer: tuple[str, str, bool, bool, bool] = ("", "", False, False, False)
         self._today = False
         session = getattr(window, "session", None)
         timer = getattr(session, "focus_changed", None)

@@ -32,6 +32,21 @@ Column {
 
     M3Palette { id: palette; theme: root.theme }
 
+    // The whole card hides once the timer clears and nothing else is on today. Keyboard focus must not
+    // stay on its hidden button: it goes to the first visible item the page's Tab order reaches.
+    onVisibleChanged: {
+        if (visible || !(startButton.activeFocus || markButton.activeFocus))
+            return
+        var item = startButton.nextItemInFocusChain(true)
+        for (var i = 0; item && i < 200; i++) {
+            if (item.visible && item.activeFocusOnTab && !card.contains(card.mapFromItem(item, 0, 0)) && item !== startButton) {
+                item.forceActiveFocus()
+                return
+            }
+            item = item.nextItemInFocusChain(true)
+        }
+    }
+
     Text {
         objectName: root.scope + "NowLabel"
         text: "Now"
@@ -91,6 +106,7 @@ Column {
                 width: parent.width
                 spacing: 8
                 Button {
+                    id: markButton
                     objectName: root.scope + "MarkFinished"
                     visible: root.timerEnded && root.timerCanFinish
                     theme: root.theme
@@ -102,8 +118,9 @@ Column {
                     icon: "check"
                     accessName: text
                     activeFocusOnTab: !root.passive
-                    // This button hides once the timer clears, so keyboard focus moves to the one that stays.
-                    onClicked: { forceActiveFocus(); root.markFinished(); startButton.forceActiveFocus() }
+                    // This button hides once the timer clears, so keyboard focus moves to the one that stays
+                    // before the card can hide (and hand focus on to the page) in markFinished().
+                    onClicked: { startButton.forceActiveFocus(); root.markFinished() }
                 }
                 Button {
                     id: startButton
