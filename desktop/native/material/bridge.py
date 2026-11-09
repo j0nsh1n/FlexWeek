@@ -248,16 +248,26 @@ class MaterialBridge(QObject):
         return stroke_for(self._contrast)
 
     def _px_for(self, scale: Scale, key: str) -> int:
+        """The zoom level, before the text size: what the zoom buttons step through."""
         zoom = getattr(self._window, "_zoom", None)
         if isinstance(zoom, dict) and key in zoom:
             return scale.nearest(zoom[key])
+        return hour_row_px(self._density, {**self._advanced, "scale": None})
+
+    def _drawn_px(self, scale: Scale, key: str) -> int:
+        """The row as drawn: the zoom level grown by the text size, so a zoomed row grows too."""
+        factor = self._advanced.get("scale")
+        grow = factor if isinstance(factor, (int, float)) and factor > 0 else 1.0
+        zoom = getattr(self._window, "_zoom", None)
+        if isinstance(zoom, dict) and key in zoom:
+            return int(round(scale.nearest(zoom[key]) * grow))
         return hour_row_px(self._density, self._advanced)
 
     def _hour_row(self) -> int:
-        return self._px_for(WEEK_ZOOM, "material.week")
+        return self._drawn_px(WEEK_ZOOM, "material.week")
 
     def _day_hour_row(self) -> int:
-        return self._px_for(DAY_ZOOM, "material.day")
+        return self._drawn_px(DAY_ZOOM, "material.day")
 
     def _screen_zoom(self) -> tuple[Scale, str] | None:
         if self._screen == "week":
