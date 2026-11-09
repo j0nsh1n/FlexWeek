@@ -326,7 +326,8 @@ class WeekBridge(QObject):
             return
         asked, self._said_plan = self._said_plan, 0.0
         if time.monotonic() - asked < PLAN_WINDOW_S:
-            self._note(message)
+            # Nothing was changed, so there is nothing to undo; UNDO would take back an earlier change.
+            self._note(message, action="")
             self.planFinished.emit()
 
     @Slot(str)
@@ -366,7 +367,7 @@ class WeekBridge(QObject):
 
     @Slot(str)
     def planOne(self, identifier: str) -> None:
-        """The keyboard's way to give one card a time: plan only that homework, as Find a new time does."""
+        """Place now, and Enter on a card: that homework at the first free gap from now that fits it."""
         session = self._window.session  # type: ignore[attr-defined]
         target = next(
             (
@@ -377,7 +378,8 @@ class WeekBridge(QObject):
             None,
         )
         if target:
-            session.solve(only={target})
+            self._said_plan = time.monotonic()
+            session.solve(only={target}, earliest_first=True)
 
     @Slot(str)
     def toggleDone(self, assignment_id: str) -> None:

@@ -17,6 +17,7 @@ from backend.slots import hhmm_to_minutes
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
     DAY_FULL,
+    DAYS,
     apply_block_edit,
     date_for_day,
     days_through,
@@ -111,6 +112,7 @@ from desktop.native.weekmodel import (
     WeekModel,
     build_week,
     due_label,
+    hhmm_text,
     homework_time_sentence,
     length_label,
     minute_of,
@@ -292,6 +294,8 @@ class NativeSession(QObject):
         self.plan_counts: tuple[int, int] = (0, 0)
         # The day and minute of the first homework the last plan gave a time, to scroll to.
         self.plan_first: tuple[int, int] | None = None
+        # Place now's answer once it placed the block: "Placed Math worksheet on Thu 5:45 PM."
+        self.placed_where = ""
         self.needs_time: dict[str, str] = {}
         # Registered in this sitting, so setup can open before the account's preferences arrive.
         self.new_account = False
@@ -2143,6 +2147,7 @@ class NativeSession(QObject):
         everything: bool = False,
         only: set[str] | None = None,
         join: bool = False,
+        earliest_first: bool = False,
         _prepared_weeks: dict[str, dict] | None = None,
         _overdue: set[str] | None = None,
         _new_left: set[str] | None = None,
@@ -2150,7 +2155,8 @@ class NativeSession(QObject):
         """Plan my homework. Homework that already has a time keeps it.
 
         `everything` is Replan all my homework. `only` finds new times for named work. Nothing is
-        placed before now.
+        placed before now. `earliest_first` (Place now) puts each named block at the first gap that
+        fits all of it, instead of the planner's usual order, and says where it went in `placed_where`.
         """
         if self.planning:
             self._say("Planning… one moment.")
@@ -2166,6 +2172,7 @@ class NativeSession(QObject):
             self._say("Saving your last change… Plan will work in a moment.")
             return
         self.plan_asked_week = self.week_start
+        self.placed_where = ""
         # Plan can move the block the outline is on, so the outline does not stay on it.
         self.select_block(None, None)
         start = plan_start(self.week_start, datetime.fromtimestamp(self.now_ms() / 1000))
@@ -2191,6 +2198,7 @@ class NativeSession(QObject):
                                 everything=everything,
                                 only=only,
                                 join=join,
+                                earliest_first=earliest_first,
                                 _prepared_weeks=fetched,
                             )
                         return
@@ -2247,6 +2255,10 @@ class NativeSession(QObject):
             payload, targets = solve_request(
                 week, self.assignments, self.week_start, only=targets & kept, not_before=start
             )
+        if earliest_first:
+            payload = [
+                {**block, "prefer_earliest": True} if block["id"] in targets else block for block in payload
+            ]
         if not targets:
             # The window keeps a visible Undo toast when this is only Plan finding nothing new.
             self._plan_idle = True
@@ -2361,6 +2373,11 @@ class NativeSession(QObject):
                     self._pending_step["id"] = str(uuid4())
                     self._plan_step_id = self._pending_step["id"]
             placed_note = plan_sentence(placed, waiting)
+            if earliest_first and len(targets) == 1:
+                only_block = sources.get(next(iter(targets)), {})
+                placed_note = self._place_now_sentence(only_block)
+                if only_block.get("start"):
+                    self.placed_where = placed_note
             if split_note:
                 placed_note += split_note
             if not changed and not self.dirty and not self.dirty_assignments:
@@ -2393,6 +2410,14 @@ class NativeSession(QObject):
             ok,
             err,
         )
+
+    @staticmethod
+    def _place_now_sentence(block: dict) -> str:
+        """Where Place now put one block, or that it found no room this week."""
+        title = block.get("title") or "this homework"
+        if not (block.get("start") and block.get("days")):
+            return f"No free time this week for {title}."
+        return f"Placed {title} on {DAYS[block['days'][0]]} {hhmm_text(block['start'])}."
 
     def _apply_auto_split(self, trace: dict, sources: list[dict] | None = None) -> str:
         """Turn each placed homework block into focus chunks and breaks, when the student asked for

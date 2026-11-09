@@ -357,8 +357,18 @@ says after an action (a move, a plan, a deletion, a reminder) is one toast at
 the bottom right of the page, with Undo when the step can be undone. It goes after a few seconds (at least 10
 when it offers Undo, held while the pointer or the keyboard is on it, with a
 thin line showing the time left), on a change of week, or when its Undo is
-used; a switch of view or design keeps it, and Plan finding nothing new leaves
-an Undo toast up. Add is the only filled top-bar action; Plan uses accent text.
+used; a switch of view or design keeps it, and in the classic styles Plan
+finding nothing new leaves an Undo toast up. In Material a message about a
+change that changed nothing (Plan my homework finding nothing new, Place now
+finding the same time) offers no Undo. Add is the only filled top-bar action; Plan uses accent text.
+Material's Week drawer also offers Place now on a homework card (its menu, or Enter on
+the card): that homework goes at the earliest free time from now that fits all of
+it, inside Study hours and around fixed time and the usual gaps, on the next day
+with room when today has none. The message names the day and time ("Placed Math
+worksheet on Thu 5:45 PM."), or says there is no free time this week. In Material
+Ctrl+Z undoes the last change and Ctrl+Shift+Z or Ctrl+Y redoes it, also with the
+one-letter shortcuts off, but not while a field has the keyboard or a sheet or
+Focus is open.
 The rail uses type and spacing to separate its sections. Next and overdue are
 not repeated in a status row above the calendar; overdue homework stays available
 through Unfinished. More > Week as a list and Ctrl+Shift+L open a list of the

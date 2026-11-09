@@ -19,7 +19,7 @@ SectionPage {
         ToggleRow {
             key: "shortcuts"
             title: "Keyboard shortcuts"
-            subtitle: "P plans, Z undoes, 1 to 5 switch views. Off while you type."
+            subtitle: "P plans, Z undoes, 1 to 5 switch views. Off while you type. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redoes, even with this off."
             isOn: !!page.st.shortcuts
             onFlipped: (value) => page.panel.setShortcuts(value)
         }
