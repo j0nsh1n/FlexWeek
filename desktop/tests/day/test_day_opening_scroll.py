@@ -134,3 +134,48 @@ def test_opening_a_date_in_the_next_week_waits_for_that_week(
         lambda: abs(14 * row - float(scroller.property("contentY")) - _opening_above(view_h, row)) < 2,
         what="Day scrolled to the Monday's first block",
     )
+
+
+def test_a_block_in_progress_opens_with_its_top_in_view(qapp: QApplication, open_light) -> None:
+    """The History essay (18:45-19:45) is on at 19:40: now is 55 minutes past its start, so opening
+    45 minutes above now would cut its top and its done circle. It opens with the block's top, and the
+    hour label for its start, in view instead, with now still on screen."""
+    window = seed_thursday(qapp, open_light((1280, 800)), hour=19, minute=40)
+    root = open_day_page(qapp, window)
+    scroller = qml(day_item(root), "dayScroller")
+    row = int(bridge_of(window).property("dayHourRow"))
+    content_y = float(scroller.property("contentY"))
+    view_h = float(scroller.property("height"))
+    essay_y = 18.75 * row
+    now_y = (19 * 60 + 40) / 60 * row
+    above = _opening_above(view_h, row)
+    assert content_y <= essay_y - above + 2
+    assert content_y <= 18 * row
+    assert content_y <= now_y <= content_y + view_h
+
+
+def test_a_long_block_in_progress_does_not_pull_now_off_the_top(qapp: QApplication, open_light) -> None:
+    """School (08:00-14:30) is on at 14:00: its top is far above, so Day still opens 45 minutes above now."""
+    window = seed_thursday(qapp, open_light((1280, 800)), hour=14)
+    root = open_day_page(qapp, window)
+    scroller = qml(day_item(root), "dayScroller")
+    row = int(bridge_of(window).property("dayHourRow"))
+    content_y = float(scroller.property("contentY"))
+    view_h = float(scroller.property("height"))
+    assert abs((14 * row - content_y) - _opening_above(view_h, row)) < 2
+
+
+def test_a_block_starting_on_the_hour_keeps_its_start_label_clear_of_the_zoom_buttons(
+    qapp: QApplication, open_light
+) -> None:
+    """Soccer (16:00-17:30) is on at 16:11: opening 45 minutes above now puts the 4:00 PM line 34 px under
+    the top, where its label hides behind the zoom buttons. It opens 45 minutes above the block instead."""
+    window = seed_thursday(qapp, open_light((1280, 800)), hour=16, minute=11, soccer=True)
+    root = open_day_page(qapp, window)
+    scroller = qml(day_item(root), "dayScroller")
+    row = int(bridge_of(window).property("dayHourRow"))
+    content_y = float(scroller.property("contentY"))
+    view_h = float(scroller.property("height"))
+    assert abs((16 * row - content_y) - _opening_above(view_h, row)) < 2
+    now_y = (16 * 60 + 11) / 60 * row
+    assert content_y <= now_y <= content_y + view_h
