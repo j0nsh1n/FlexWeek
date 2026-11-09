@@ -506,7 +506,8 @@ def test_where_even_the_start_would_be_cut_beside_the_corner_circle_the_circle_h
         detail = next(d for d in _named(essay, "detail") if d.property("visible"))
         assert detail.property("truncated") is False
         assert float(detail.property("width")) == float(content.property("lineRoom"))
-        assert _time_line(essay) in ("6:45 PM", "6:45\u20137:45 PM")
+        # About 57 px of line: the range does not fit even the whole width, so the start alone shows.
+        assert _time_line(essay) == "6:45 PM"
         name = QAccessible.queryAccessibleInterface(essay).text(QAccessible.Text.Name)
         assert name == "Edit History essay, 6:45\u20137:45 PM"
     finally:
