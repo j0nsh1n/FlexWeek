@@ -101,9 +101,7 @@ def test_a_pinned_time_on_a_day_ahead_is_not_told_it_has_passed(qapp, shell, she
     assert sheets.form["whenProblem"] == ""
 
 
-def test_switching_away_from_and_back_to_the_same_pinned_time_is_not_a_mistake(
-    qapp, shell, sheets
-) -> None:
+def test_switching_away_from_and_back_to_the_same_pinned_time_is_not_a_mistake(qapp, shell, sheets) -> None:
     """The essay is pinned at 18:45, which is before the 19:00 clock; picking "Plan it for me" and then
     "At a set time" again leaves the time exactly as it was, so there is nothing to refuse."""
     work = next(b for b in shell.session.blocks if b.get("assignment_id") == "essay")
