@@ -54,6 +54,8 @@ class DayBoard:
     now_title: str
     now_minutes: int
     now_line: str
+    # A fixed block such as Soccer is on: the card names it and what is next, and starts nothing.
+    now_busy: bool
     ring_count: int
     ring_caption: str
     ring_share: float
@@ -90,9 +92,10 @@ def board_for(
 
     `when` is `today`, `past`, or `future`. The Now card shows only on today
     while nudges are on. It names homework that is happening at `minute`, with
-    its time left; otherwise it gives the free time from `minute` to the next
-    block that still occupies time, and that block. A finished homework block
-    does not occupy that gap.
+    its time left; while a fixed block is on, that block, when it ends and what
+    is next; otherwise it gives the free time from `minute` to the next block
+    that still occupies time, and that block. A finished homework block does
+    not occupy that gap.
     Slack uses `now` when the caller has the real clock; otherwise the viewed
     day's `minute`.
     """
@@ -102,16 +105,19 @@ def board_for(
     gap = _gap(ordered, minute, when, nudges)
     focus = next((item for item in up if item.work and item.assignment_id), None)
     doing = _doing(up, minute, when, nudges)
+    busy = None if doing is not None else _busy(ordered, minute, when, nudges)
+    after = None if busy is None else _next_after(ordered, minute)
     total = len(ordered)
     count = len(up)
     moment = now if now is not None else datetime.combine(on, datetime.min.time()) + timedelta(minutes=minute)
     return DayBoard(
         left_line=_left_line(count, when == "today"),
         left_count=count,
-        show_now=doing is not None or gap is not None,
-        now_title=_now_title(doing, gap, minute),
-        now_minutes=_now_minutes(doing, gap, minute),
-        now_line=_now_line(doing, gap, minute),
+        show_now=doing is not None or busy is not None or gap is not None,
+        now_title=_busy_title(busy) if busy is not None else _now_title(doing, gap, minute),
+        now_minutes=int(busy.end) - minute if busy is not None else _now_minutes(doing, gap, minute),
+        now_line=_next_line(after) if busy is not None else _now_line(doing, gap, minute),
+        now_busy=busy is not None,
         ring_count=count,
         ring_caption="thing left" if count == 1 else "things left",
         ring_share=0.0 if total == 0 else (total - count) / total,
@@ -152,6 +158,28 @@ def _doing(up: Sequence[object], minute: int, when: str, nudges: bool) -> object
         return None
     homework = (item for item in up if item.work and item.assignment_id)
     return next((item for item in homework if int(item.start) <= minute < int(item.end)), None)
+
+
+def _busy(items: Sequence[object], minute: int, when: str, nudges: bool) -> object | None:
+    """The fixed block on at `minute`, the earliest-starting one when several are."""
+    if not nudges or when != "today":
+        return None
+    return next(
+        (item for item in items if not item.work and int(item.start) <= minute < int(item.end)),
+        None,
+    )
+
+
+def _next_after(items: Sequence[object], minute: int) -> object | None:
+    return next((item for item in items if _live(item) and int(item.start) > minute), None)
+
+
+def _busy_title(busy: object) -> str:
+    return f"{busy.title} until {clock_text(int(busy.end))}"
+
+
+def _next_line(after: object | None) -> str:
+    return "" if after is None else f"Next: {after.title} at {clock_text(int(after.start))}"
 
 
 def _now_minutes(doing: object | None, gap: object | None, minute: int) -> int:

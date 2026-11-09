@@ -240,9 +240,8 @@ def test_nothing_left_today_has_no_now_card() -> None:
     assert board.now_title == "" and board.now_line == ""
 
 
-def test_no_now_card_inside_a_block_after_the_last_one_or_off_today() -> None:
+def test_no_now_card_after_the_last_one_or_off_today() -> None:
     day = [_block("School", *SCHOOL), _block("Soccer", *SOCCER)]
-    assert _board(day, 10 * 60).show_now is False
     assert _board(day, 18 * 60).show_now is False
     assert _board(day, 13 * 60, when="future").show_now is False
     assert _board(day, 13 * 60, when="past").show_now is False
@@ -322,3 +321,41 @@ def test_start_focus_falls_back_to_the_widgets_start(qapp: QApplication) -> None
     bridge._publish(_board([_block("Essay", *ESSAY, work=True, assignment="a1")], 9 * 60))
     bridge.startFocus()
     assert heard == [("widgets", "essay", 3)]
+
+
+def test_inside_a_fixed_block_the_card_says_until_when_and_what_is_next() -> None:
+    """Jonathan, 2026-11-09: while Soccer or School is on, the card names it and its end, then what is
+    next; it starts nothing, so the screens show no Start button."""
+    essay = _block("Essay", *ESSAY, work=True, assignment="a1")
+    day = [_block("School", *SCHOOL), _block("Soccer", *SOCCER, category="exercise"), essay]
+    board = _board(day, 16 * 60 + 11)
+    assert board.show_now is True
+    assert board.now_busy is True
+    assert board.now_title == "Soccer until 17:30"
+    assert board.now_line == "Next: Essay at 18:45"
+    assert board.now_minutes == 79
+
+    school = _board(day, 10 * 60)
+    assert school.now_title == "School until 12:00"
+    assert school.now_line == "Next: Soccer at 16:00"
+
+    last = _board([_block("Soccer", *SOCCER)], 16 * 60 + 11)
+    assert last.now_title == "Soccer until 17:30"
+    assert last.now_line == ""
+
+    # Free time and homework that is happening keep their own card.
+    free = _board(day, 17 * 60 + 40)
+    assert (free.now_busy, free.now_title) == (False, "Free for 1 h 5 min")
+    over = _block("Maths", 16 * 60 + 30, 17 * 60, work=True, assignment="a2")
+    doing = _board([*day, over], 16 * 60 + 40)
+    assert (doing.now_busy, doing.now_title) == (False, "Maths")
+
+
+def test_a_finished_homework_block_inside_soccer_leaves_the_soccer_card() -> None:
+    """recheck-5 R3: Science poster finished at 16:11 during Soccer; the card names Soccer."""
+    poster = _block("Science poster", 16 * 60, 16 * 60 + 30, work=True, done=True, assignment="a3")
+    board = _board(
+        [poster, _block("Soccer", *SOCCER), _block("Essay", *ESSAY, work=True, assignment="a1")], 16 * 60 + 11
+    )
+    assert board.now_title == "Soccer until 17:30"
+    assert board.now_line == "Next: Essay at 18:45"
