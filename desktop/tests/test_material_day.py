@@ -432,6 +432,8 @@ def test_day_screen_reads_the_real_day(qapp: QApplication, window: NativeWindow)
         assert str(myday.property("nowTitle")) == "Free for 1 h 45 min"
     finally:
         window.session.reset_focus()
+        # The Focus screen this opened would otherwise stay up for the next test on this worker.
+        _bridge(root).property("focus").hide()
         _pump(qapp)
     window._use_widgets_styles()
 
