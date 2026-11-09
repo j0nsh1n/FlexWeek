@@ -1,0 +1,46 @@
+{
+ "setup": {
+  "seed": "rig",
+  "look": "light-frost",
+  "size": [
+   1280,
+   800
+  ],
+  "clock_24h": false
+ },
+ "steps": [
+  {
+   "click": "settingsGear"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "click": "chooseMaterial"
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "see": "materialRail"
+  },
+  {
+   "drag": [
+    "weekBlock",
+    [
+     760,
+     520
+    ]
+   ]
+  },
+  {
+   "wait": 800
+  },
+  {
+   "see": "materialUndo"
+  },
+  {
+   "shot": "dropped"
+  }
+ ]
+}

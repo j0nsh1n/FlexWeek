@@ -1,0 +1,45 @@
+{
+ "setup": {
+  "seed": "rig",
+  "look": "light-frost",
+  "size": [
+   1280,
+   800
+  ],
+  "clock_24h": false
+ },
+ "steps": [
+  {
+   "click": "viewMyDay"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "click": {
+    "text": "Start focus"
+   }
+  },
+  {
+   "wait": 600
+  },
+  {
+   "see": "focusPage"
+  },
+  {
+   "shot": "running"
+  },
+  {
+   "advance_clock": 25
+  },
+  {
+   "click": "focusFinished"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "shot": "finished"
+  }
+ ]
+}

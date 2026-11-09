@@ -1,0 +1,61 @@
+{
+ "setup": {
+  "seed": "rig",
+  "look": "light-frost",
+  "size": [
+   1280,
+   800
+  ],
+  "clock_24h": false
+ },
+ "steps": [
+  {
+   "click": "settingsGear"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "click": "chooseMaterial"
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "see": "materialRail"
+  },
+  {
+   "click": "materialMore"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "more_runningLate"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "see": "lateSheet"
+  },
+  {
+   "click": "latePreview"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "shot": "preview"
+  },
+  {
+   "click": "lateAccept"
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "shot": "moved"
+  }
+ ]
+}

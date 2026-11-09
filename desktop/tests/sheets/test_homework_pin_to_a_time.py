@@ -1,0 +1,422 @@
+"""Under Due, Add and Edit homework asks "FlexWeek picks the time" or "Pin to a time" a day and time.
+Pinning the homework's time means no plan moves it; the other choice frees it. A drop on the grid pins
+too, and reopening the homework shows where it was put."""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+import pytest
+
+pytest.importorskip("PySide6")
+
+from PySide6.QtCore import QDate, QTime
+from PySide6.QtWidgets import QApplication, QDialog, QWidget
+
+from desktop.native.widgets import NO_TIME_LEFT, ChooseTimeDialog, HomeworkDialog
+from desktop.native.window import NativeWindow
+from desktop.tests.light_app import open_light  # noqa: F401
+from desktop.tests.sheets.support_homework import go_when
+from desktop.tests.sheets.support_homework import host as clocked_host
+from desktop.tests.sheets.support_homework_week import (  # noqa: F401
+    homework_window,
+    opened_with,
+    session_of,
+    settled,
+)
+from desktop.tests.window_support import free, qapp  # noqa: F401
+
+WEEK = "2026-09-14"
+MONDAY_AT_NOON = datetime(2026, 9, 14, 12, 0)
+
+
+def host(*sessions: dict, now: datetime = MONDAY_AT_NOON) -> QWidget:
+    return clocked_host(*sessions, now=now)
+
+
+def session(**more: object) -> dict:
+    return {
+        "id": "s1",
+        "title": "History essay",
+        "kind": "flexible",
+        "assignment_id": "essay",
+        "duration_min": 60,
+        "days": [3],
+        "start": "17:00",
+        **more,
+    }
+
+
+def homework(due: str = "2026-09-20") -> dict:
+    return {
+        "id": "essay",
+        "title": "History essay",
+        "due": due,
+        "estimate_min": 60,
+        "category": "assignments",
+        "revision": 0,
+    }
+
+
+def opened(parent: QWidget, *, assignment: dict | None = None) -> HomeworkDialog:
+    dialog = HomeworkDialog(parent, assignment, WEEK)
+    dialog.show()
+    QApplication.processEvents()
+    return dialog
+
+
+def chosen_day(dialog: HomeworkDialog) -> list[int]:
+    return dialog.when_day.days()
+
+
+def test_new_homework_asks_who_picks_the_time_and_starts_with_flexweek(qapp: QApplication) -> None:  # noqa: F811
+    parent = host()
+    dialog = opened(parent)
+    go_when(dialog)
+    assert [dialog.when.itemText(i) for i in range(dialog.when.count())] == [
+        "FlexWeek picks the time",
+        "Pin to a time",
+    ]
+    assert dialog.when.currentData() == "plan"
+    assert not dialog.when_day.isVisible() and not dialog.when_time.isVisible()
+    assert not dialog.when_note.isVisible(), "the sheet is tall enough already; the choice's name says it"
+    free(dialog)
+    free(parent)
+
+
+def test_the_pinned_time_and_its_error_are_named_for_screen_readers(qapp: QApplication) -> None:  # noqa: F811
+    parent = host()
+    dialog = opened(parent)
+    go_when(dialog)
+    dialog.when.setCurrentIndex(1)
+    assert dialog.when_time.accessibleName() == "Pinned time"
+    assert dialog.when_problem.accessibleName() == "Pinned time error"
+    free(dialog)
+    free(parent)
+
+
+def test_the_planning_help_says_pinned_homework_keeps_its_time() -> None:
+    from desktop.native.settings import HELP_PLANNING
+
+    assert HELP_PLANNING == (
+        "Add homework with its due date and length. Press Plan my homework and FlexWeek finds free time for "
+        "it in your study hours, around your fixed times, before it's due. Homework that already has a time "
+        "keeps it. Replan all starts fresh but keeps pinned homework. Anything that doesn't "
+        "fit stays under Not placed yet, and Details says why. From the keyboard, press Ctrl+K and type Plan."
+    )
+
+
+def test_pin_to_a_time_shows_one_day_and_a_time_and_says_where_it_stays(qapp: QApplication) -> None:  # noqa: F811
+    parent = host()
+    dialog = opened(parent)
+    go_when(dialog)
+    dialog.when.setCurrentIndex(1)
+    assert dialog.when_day.isVisible() and dialog.when_time.isVisible()
+    dialog.when_day.set_days([3])
+    dialog.when_time.setTime(QTime(17, 0))
+    assert dialog.when_note.text() == "Pinned to Thu at 17:00. Plan won't move it."
+    free(dialog)
+    free(parent)
+
+
+def test_pin_to_a_time_starts_today_at_the_next_sensible_time(qapp: QApplication) -> None:  # noqa: F811
+    noon = host()
+    dialog = opened(noon)
+    go_when(dialog)
+    dialog.when.setCurrentIndex(1)
+    assert chosen_day(dialog) == [0], "Monday is today"
+    assert dialog.when_time.time() == QTime(16, 0), "after school, not at noon"
+    free(dialog)
+    free(noon)
+
+    evening = host(now=datetime(2026, 9, 14, 17, 10))
+    late = opened(evening)
+    go_when(late)
+    late.when.setCurrentIndex(1)
+    assert late.when_time.time() == QTime(17, 15), "never in the past"
+    free(late)
+    free(evening)
+
+
+def test_only_one_day_can_be_picked(qapp: QApplication) -> None:  # noqa: F811
+    parent = host()
+    dialog = opened(parent)
+    go_when(dialog)
+    dialog.when.setCurrentIndex(1)
+    dialog.when_day.buttons[3].setChecked(True)
+    assert chosen_day(dialog) == [3], "ticking Thursday unticks Monday"
+    dialog.when_day.buttons[3].setChecked(False)
+    assert chosen_day(dialog) == [3], "a day stays picked"
+    free(dialog)
+    free(parent)
+
+
+def test_saving_a_pinned_time_hands_over_the_day_and_time(qapp: QApplication) -> None:  # noqa: F811
+    parent = host()
+    dialog = opened(parent)
+    dialog.title.setText("History essay")
+    go_when(dialog)
+    dialog.due.date.setDate(QDate(2026, 9, 20))
+    dialog.when.setCurrentIndex(1)
+    dialog.when_day.buttons[4].setChecked(True)
+    dialog.when_time.setTime(QTime(16, 30))
+    dialog.accept()
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    assert dialog.assignment()["fixed_at"] == {"day": 4, "start": "16:30"}
+    free(dialog)
+    free(parent)
+
+
+def test_leaving_the_choice_alone_hands_over_nothing(qapp: QApplication) -> None:  # noqa: F811
+    parent = host(session(pinned=True))
+    placed = opened(parent, assignment=homework())
+    placed.accept()
+    assert "fixed_at" not in placed.assignment(), "a pin the student did not touch is not sent again"
+    free(placed)
+    free(parent)
+
+    planned_parent = host(session())
+    planned = opened(planned_parent, assignment=homework())
+    planned.accept()
+    assert "fixed_at" not in planned.assignment()
+    free(planned)
+    free(planned_parent)
+
+
+def test_homework_with_a_pinned_time_opens_on_pin_to_a_time_with_that_day_and_time(
+    qapp: QApplication,  # noqa: F811
+) -> None:
+    parent = host(session(pinned=True, days=[3], start="17:00"))
+    dialog = opened(parent, assignment=homework())
+    assert dialog.when.currentData() == "fixed"
+    assert chosen_day(dialog) == [3]
+    assert dialog.when_time.time() == QTime(17, 0)
+    assert dialog.when_note.text() == "Pinned to Thu at 17:00. Plan won't move it."
+    free(dialog)
+    free(parent)
+
+
+def test_homework_flexweek_planned_opens_on_flexweek_picks_the_time(qapp: QApplication) -> None:  # noqa: F811
+    parent = host(session())
+    dialog = opened(parent, assignment=homework())
+    assert dialog.when.currentData() == "plan"
+    free(dialog)
+    free(parent)
+
+
+def test_choosing_flexweek_picks_on_pinned_homework_hands_over_a_release(
+    qapp: QApplication,  # noqa: F811
+) -> None:
+    parent = host(session(pinned=True))
+    dialog = opened(parent, assignment=homework())
+    dialog.when.setCurrentIndex(0)
+    dialog.accept()
+    assert "fixed_at" in dialog.assignment() and dialog.assignment()["fixed_at"] is None
+    free(dialog)
+    free(parent)
+
+
+def test_homework_spread_over_several_times_keeps_the_spread_way(qapp: QApplication) -> None:  # noqa: F811
+    parent = host(session(), session(id="s2", days=[4]))
+    dialog = opened(parent, assignment=homework())
+    assert not dialog.when.isVisible(), "which of its times would Pin to a time mean?"
+    dialog.accept()
+    assert "fixed_at" not in dialog.assignment()
+    free(dialog)
+    free(parent)
+
+
+def test_a_pinned_time_after_it_is_due_is_refused_in_words(qapp: QApplication) -> None:  # noqa: F811
+    parent = host()
+    dialog = opened(parent, assignment=homework(due="2026-09-16T14:00"))
+    dialog.when.setCurrentIndex(1)
+    dialog.when_day.buttons[3].setChecked(True)
+    dialog.when_time.setTime(QTime(17, 0))
+    dialog.accept()
+    assert dialog.result() != QDialog.DialogCode.Accepted
+    assert dialog.when_problem.isVisible()
+    assert dialog.when_problem.text() == "That ends after it's due."
+    free(dialog)
+    free(parent)
+
+
+def test_a_pinned_time_that_has_passed_focuses_the_time_and_announces_one_description(
+    qapp: QApplication,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from desktop.native import widgets as widgets_module
+    from desktop.native.weekmodel import set_clock_24h
+
+    set_clock_24h(False)
+    said = []
+    monkeypatch.setattr(
+        widgets_module,
+        "announce",
+        lambda field, words, *, assertive=False: said.append((field, words, assertive)),
+    )
+    parent = host()
+    dialog = opened(parent)
+    go_when(dialog)
+    dialog.when.setCurrentIndex(1)
+    dialog.when_day.set_days([0])
+    dialog.when_time.setTime(QTime(10, 0))
+    dialog.accept()
+    message = dialog.when_problem.text()
+    # Monday 12:00 (the held clock): the next quarter hour today is 12:00 PM.
+    assert message == "That time has passed. Choose 12:00 PM or later today, or another day."
+    assert dialog.when_time.accessibleDescription() == message
+    assert dialog.when_problem.accessibleName() == message
+    assert dialog.when_time.hasFocus() or dialog.when_time.lineEdit().hasFocus()
+    line = dialog.when_time.lineEdit()
+    assert line.selectedText() == line.text()
+    assert said == [(dialog.when_time, message, True)]
+    free(dialog)
+    free(parent)
+
+
+def test_a_missing_title_on_save_focuses_the_title_and_announces_once(
+    qapp: QApplication,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from desktop.native import widgets as widgets_module
+
+    said = []
+    monkeypatch.setattr(
+        widgets_module,
+        "announce",
+        lambda field, words, *, assertive=False: said.append((field, words, assertive)),
+    )
+    parent = host()
+    dialog = opened(parent)
+    dialog.title.clear()
+    dialog.accept()
+    message = dialog.title_problem.text()
+    assert message == "Give the homework a title."
+    assert dialog.title.accessibleDescription() == message
+    assert dialog.title_problem.accessibleName() == message
+    assert dialog.title.hasFocus()
+    assert said == [(dialog.title, message, True)]
+    free(dialog)
+    free(parent)
+
+
+# Through the window and its session
+
+
+def test_a_new_homework_saved_with_a_pinned_time_is_pinned_there(
+    qapp: QApplication,  # noqa: F811
+    homework_window: NativeWindow,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = homework_window
+
+    def act(dialog: HomeworkDialog) -> int:
+        dialog.title.setText("Chemistry lab")
+        dialog.due.date.setDate(dialog.due.date.date().addDays(3))
+        dialog.when.setCurrentIndex(1)
+        dialog.when_day.buttons[4].setChecked(True)
+        dialog.when_time.setTime(QTime(16, 0))
+        dialog.accept()
+        return QDialog.DialogCode.Accepted
+
+    opened_with(monkeypatch, act)
+    window._add_homework()
+    settled(qapp, window)
+    made = next(a for a in window.session.assignments.values() if a["title"] == "Chemistry lab")
+    block = session_of(window, made["id"])
+    assert (block["days"], block["start"], block.get("pinned")) == ([4], "16:00", True)
+
+
+def test_pin_to_a_time_pins_planned_homework_and_flexweek_picks_frees_it_again(
+    qapp: QApplication,  # noqa: F811
+    homework_window: NativeWindow,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = homework_window
+    window.session.unpin_assignment("essay")
+    window.session.save()
+    settled(qapp, window)
+    assert not session_of(window, "essay").get("pinned"), "the History essay starts planned, not pinned"
+
+    def pin(dialog: HomeworkDialog) -> int:
+        dialog.when.setCurrentIndex(1)
+        dialog.when_day.buttons[4].setChecked(True)
+        dialog.when_time.setTime(QTime(18, 0))
+        dialog.accept()
+        return QDialog.DialogCode.Accepted
+
+    opened_with(monkeypatch, pin)
+    window._edit_homework("essay")
+    settled(qapp, window)
+    block = session_of(window, "essay")
+    assert (block["days"], block["start"], block.get("pinned")) == ([4], "18:00", True)
+
+    def free_it(dialog: HomeworkDialog) -> int:
+        assert dialog.when.currentData() == "fixed", "reopened, it says where it was put"
+        dialog.when.setCurrentIndex(0)
+        dialog.accept()
+        return QDialog.DialogCode.Accepted
+
+    opened_with(monkeypatch, free_it)
+    window._edit_homework("essay")
+    settled(qapp, window)
+    block = session_of(window, "essay")
+    assert not block.get("pinned"), "FlexWeek picks the time clears the pin"
+
+
+def test_a_drop_on_the_grid_pins_the_homework_and_reopening_shows_where(
+    qapp: QApplication,  # noqa: F811
+    homework_window: NativeWindow,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = homework_window
+    window.session.unpin_assignment("essay")
+    window.session.save()
+    settled(qapp, window)
+    block = session_of(window, "essay")
+    assert not block.get("pinned")
+    # Friday 16:00 to 17:00, dropped by hand.
+    window._move_block(block["id"], block["days"][0], 4, 16 * 60, 17 * 60)
+    settled(qapp, window)
+    moved = session_of(window, "essay")
+    assert (moved["days"], moved["start"], moved.get("pinned")) == ([4], "16:00", True)
+
+    seen = opened_with(monkeypatch, lambda dialog: QDialog.DialogCode.Rejected)
+    window._edit_homework("essay")
+    dialog = seen[-1]
+    assert dialog.when.currentData() == "fixed"
+    assert chosen_day(dialog) == [4]
+    assert dialog.when_time.time() == QTime(16, 0)
+
+
+def test_no_time_left_this_week_says_to_close_and_go_to_next_week(
+    qapp: QApplication,  # noqa: F811
+) -> None:
+    assert NO_TIME_LEFT == (
+        "No time is left this week. Close this, go to next week, then choose a time there."
+    )
+    waiting = {
+        "id": "essay",
+        "title": "History essay",
+        "duration_min": 60,
+        "days": [6],
+    }
+    dialog = ChooseTimeDialog(None, waiting, WEEK, [6], [], None, today=6, minute=23 * 60 + 50)
+    dialog.show()
+    QApplication.processEvents()
+    assert dialog.problem.text() == NO_TIME_LEFT
+    assert dialog.problem.isVisible()
+    free(dialog)
+
+
+def test_undoing_an_unpin_says_undid_unpinning_the_homework(
+    qapp: QApplication,  # noqa: F811
+    homework_window: NativeWindow,  # noqa: F811
+) -> None:
+    window = homework_window
+    window.session.unpin_assignment("essay")
+    window.session.save()
+    settled(qapp, window)
+    window.session.undo()
+    settled(qapp, window)
+    assert window.session.message == "Undid unpinning History essay."

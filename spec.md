@@ -114,9 +114,12 @@ Contract for the finished app:
   rows.
 - A later week reviews unfinished homework using the original assignment ID,
   exact deadline and progress. Repeated planning and request retries cannot
-  duplicate or over-plan it. Homework left unfinished in an earlier week shows
-  under More > Unfinished and, after a plan, as "N unfinished from last week"
-  with Plan them and I did these.
+  duplicate or over-plan it. Homework left unfinished in an earlier week, and
+  homework past its deadline, shows under More > Unfinished with its reason,
+  "Overdue" or "Left from last week". Above the week a line says "N overdue · N
+  left from last week" with Plan into this week and Mark as finished; Plan opens
+  "Before planning" with the same two choices and Not now. Mark as finished says
+  "Marked <title> finished." and offers Undo.
 - Account-owned restore points snapshot weeks and assignments. Clear week,
   routine application, restore and every assistant (MCP) change preserve the
   replaced schedule first; a stale restore preview returns 409 and no failure stores partial state. The UI
@@ -618,6 +621,11 @@ nothing loops.
   Never downgrade.
 - Current languages: Python, Rust, and SQL for account storage. The client is
   PySide6 Qt widgets; see DESKTOP.md.
+- Material 3 is a whole window beside the Widgets styles, not a seventh design
+  card. In the Widgets Settings its button is labelled "Material 3" (spoken and
+  shown in its tooltip as "Back to Material"), and More has a "Back to
+  Material" row on its own line. Material's own Settings has "Widgets styles" to
+  go the other way. Switching keeps the week and homework.
 - The engine (`engine/`, contract in `docs/engine/contract.md`) is Rust: the
   backend's logic and storage and the desktop's Qt-free logic. It is built
   into the Python module `flexweek_engine` by maturin (pinned in
@@ -716,15 +724,19 @@ nothing loops.
   in-process on a loopback port, so they need no separate server and no Python
   install; the database sits in the user data directory. `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) points that window
   at a hosted deployment instead, and an invalid value is an error rather than a
-  silent fall back to local. The Windows installers are built on GitHub
-  Actions (`.github/workflows/release-windows.yml`), which installs, opens and
-  uninstalls each one; running them on a real PC is unverified here. Production requires HTTPS via FLEXWEEK_ORIGIN and
+  silent fall back to local. The Windows installers and the Linux download are
+  built on GitHub Actions (`.github/workflows/release-windows.yml`), which
+  installs, opens and uninstalls each Windows installer; a run started by hand
+  without a tag builds and tests everything but uploads nothing; running them on
+  a real PC is unverified here. Production requires HTTPS via FLEXWEEK_ORIGIN and
   persistent SQLite storage.
 - GitHub Actions: `.github/workflows/verify.yml` is the source gate (mypy, not
-  pyright); its second job, `rig`, installs Xvfb, Openbox and xdotool, runs
-  Today's app's Day and Week with a real pointer on a hidden display, and
-  uploads the screenshots, videos and results. `.github/workflows/codeql.yml`
-  runs CodeQL on Python.
+  pyright). Its jobs are `engine`, `verify-engine`, `verify-python`, `desktop`,
+  `rig`, `mutate` and `mutate-python`. `rig` runs once for Day and once for Week
+  on Today's app with a real pointer on a hidden display (Xvfb, Openbox,
+  xdotool) and uploads the frames and results; CI has no ffmpeg, so there is no
+  video. `.github/workflows/codeql.yml` runs CodeQL on Python.
+  `.github/workflows/dev-build.yml` publishes the developer build.
   The generic kit `ci.yml` is not installed: it ran pyright and looked for
   `tests/` at the repo root. Dependabot stays off.
 
@@ -822,18 +834,44 @@ tools/fwtest/target/release/fwtest gate
 Before the test step the gate checks that every case in `scripts/mutations/`
 still finds its `old` text exactly once in its file, and fails naming any that
 do not.
+While working, run only what the change touches (Testing structure rule 7):
+`fwtest gate --touched` runs the gate's steps on the tests the changed paths
+select, plus `cargo test` for the selected engine or fwtest packages, and
+`fwtest run --touched -- .venv/bin/python -m pytest -q` adds the selected test
+paths to a pytest command. `fwtest select` prints what a change selects (areas,
+pytest paths, cargo packages, mutation cases, picture areas) without running
+anything. The changed paths are the differences from the merge base with
+`origin/main` plus untracked files; `--base REF` or `--paths-from FILE` give
+others. The map from paths to areas is `tools/fwtest/areas.toml`; a path it
+does not know selects every area. A full local gate is not required before a
+push.
+A test that fails in a gate or a pytest `fwtest run` is rerun alone once (when
+more than ten fail, none is: that is a real break). A pass alone is logged as
+flaky (`~/.flexweek-ui-harness/scratch/fwtest/flaky.jsonl`, or
+`$FWTEST_FLAKY_LOG`) and does not fail the run; a second failure does.
+`fwtest flaky` lists the logged tests, most frequent first. A test logged as
+flaky is fixed or reported, not left.
 `fwtest mutate [SPEC]` runs the mutation specs in `scripts/mutations/`,
 `fwtest rig ...` runs `scripts/rig/drive.py`, `fwtest run -- CMD` runs any
 other suite or script, and `fwtest clean` stops what a killed run left.
 Run every local suite, mutation run and rig through `fwtest` rather than
 bare Python, so runs queue behind each other and leave nothing running.
-`.github/workflows/verify.yml` runs on every push and pull request (Python 3.14, Rust stable, `contents: read`). An
-`engine` job builds the engine wheel once; the other jobs install that wheel. `verify-python` runs the Python gate,
-`verify-engine` the harness's and the engine's cargo checks, `rig` runs the real-pointer rig for the Day and Week
-tabs under Xvfb (without ffmpeg: the rig keeps its frames and skips the video), and `mutate` runs every mutation
-case on pull requests, split over four shards. `.github/workflows/dev-build.yml`, started by hand
-(`scripts/dev-release.sh`), builds the Linux tarball, replaces the `dev` pre-release and keeps the build it replaces
-as `dev-<its commit>`; none of these is ever marked latest.
+`.github/workflows/verify.yml` runs on every push and pull request (Python 3.14, Rust stable, `contents: read`) and
+is the gate: everything runs there except pictures. An `engine` job builds the engine wheel and fwtest once;
+`verify-python`, `desktop`, `rig` and `mutate-python` install them. `verify-python` runs `fwtest gate --backend-only`
+(lint, types, mutation patterns, backend tests, diff checks). `desktop` runs every test file under `desktop/tests`,
+`scripts/rig` and `scripts/pictures` offscreen over four shards, and leaves out the opt-in regression suites
+(regress184 and regress190, which run only with `FLEXWEEK_REGRESS=1`); a test still running after 300 s prints every
+thread's stack. `verify-engine` runs the harness's and the engine's cargo checks. `rig` runs the real-pointer rig for
+the Day and Week tabs under Xvfb (without ffmpeg: the rig keeps its frames and skips the video). On pull requests and
+by hand, `mutate` builds its own engine module and runs the mutation cases under `engine/` over four shards, and
+`mutate-python` runs the rest over six. `verify-python` and `desktop` set `FLEXWEEK_SILENT=1` and upload their flaky
+log as an artifact. `.github/workflows/dev-build.yml`, started by hand (`scripts/dev-release.sh`), builds the Linux
+tarball from `main` as `<version>.<UTC date and minute>` and publishes it as the `dev` pre-release titled `Developer
+build <version> (<commit7>)`. The build it replaces is kept first as a pre-release tagged `dev-<its commit7>` and
+titled `Developer build <its version> (<its commit7>)`; the kept tag points at the new run's commit, and the old
+commit is named in its tag, title and notes. `dev` is deleted only once that copy is published with both files. None
+of these is ever marked latest, and the updater never offers the kept copies.
 
 The commands it runs, each of which must exit 0:
 
@@ -855,7 +893,7 @@ The commands it runs, each of which must exit 0:
 - The Rust test harness in `tools/fwtest` (Rust approved for it on 2026-09-28;
   contract in `docs/tooling/fwtest.md`) has its own checks, run from
   `tools/fwtest`, each of which must exit 0: `cargo fmt --check`,
-  `cargo clippy -- -D warnings` and `cargo test`. The Rust version is the one
+  `cargo clippy --all-targets -- -D warnings` and `cargo test`. The Rust version is the one
   `rustup` installs as stable; the crate uses the 2024 edition.
 - The engine in `engine/` (Rust approved for it on 2026-09-30) has its own
   checks, run from `engine/`, each of which must exit 0: `cargo fmt --check`,
@@ -877,8 +915,8 @@ The commands it runs, each of which must exit 0:
 Every rule below applies to new tests now and to each product area as it moves (see roadmap R3).
 
 1. What tests check. Code tests check behaviour: what happens on a click, key, drag, save, undo or sync, the state
-   that results, and accessible names. They do not assert colours, pixel positions or sizes. Looks are checked with
-   pictures and video (rule 6).
+   that results, and accessible names. They do not assert colours, pixel positions or sizes. Looks are judged in
+   visual review (rule 6), not asserted in tests or mutation cases.
 2. One clock. Every test runs on the shared fake clock, which starts at a fixed moment (a Thursday at 19:00 in a fixed
    week) and moves only when a test moves it. A test that reads the real clock fails.
 3. Clean state. Every test starts with no look file, default preferences and the 24-hour clock. Waiting is done with
@@ -890,24 +928,24 @@ Every rule below applies to new tests now and to each product area as it moves (
    - A small end-to-end set keeps the local server and sign-in: accounts, sync, and save and undo round trips.
 5. Layout. Tests are grouped by product area (week, day, month, my day, focus, settings, sheets, setup, account,
    sync, updater, planner) and named after the behaviour they check, not after the PR or audit that added them.
-6. Pictures and video.
-   - Pictures are rendered off-screen in one fixed setup (fonts, clock, data). The full set is about 100: every
-     screen in every style at 1280x800, Normal text, light and dark; plus each main screen at 1024x640 with Large text
-     and in High contrast, light.
-   - A pull request renders only the screens its changed files touch, once from main and once from the pull request,
-     and the review page shows what changed (before, after, difference). No reference pictures are stored.
-   - Video comes from the real-display rig: the actions meant to behave the same in Widgets and Material 3 (add
-     homework, tick done and Undo, open and edit, drag a block, Plan my homework, Running late, Focus, switching
-     Day / Week / Month, changing the look) and the animations, with Animations on and off. The review page shows
-     each clip as a strip of frames with the video linked.
-   - Review: Kimi annotates; Gemini (with Jonathan's OK for that run) or Claude decides. Contrast, words that do not
-     fit and the focus ring are judged by the reviewer; the page shows the measurements.
-   - Pictures and videos are kept until the pull request merges, then deleted.
+6. Visual review. Testing and review are separate: tests are automated pass or fail on behaviour, and review is
+   judgement. A look is never asserted in a test or in a mutation case, and there are no pictures in CI or on pull
+   requests.
+   - The review is done on this computer by a reviewer model that is blind: it is not told who changed what.
+   - It works in one live session of the app (the rig's live mode: `fwtest rig --play` with `"live": true`; step
+     files go in, answers and PNGs come out), within a time limit.
+   - It reports what it finds as bugs. A finding's cause is investigated only after the report, with Jonathan's
+     approval.
+   - Material 3 is reviewed first, the other styles later.
+   - What a removed look check covered is listed for the reviewer.
+   - The picture renderer (`scripts/pictures`, `fwtest pictures`) stays as a local aid, not a gate. Video from the
+     real-display rig stays available for motion.
 7. Where tests run. Locally, only the tests for the area a change touches (picked by `fwtest` from the changed
-   paths). CI runs everything (Python, Rust, pictures, mutations, rigs) and is the gate; a full local run is not
-   required before a push.
-8. Tools. The picture comparer, the review page, test selection by changed paths and the flaky-test log are Rust,
-   in `tools/fwtest` (approved by Jonathan 2026-11-06). App tests stay Python.
+   paths). CI runs everything except pictures (Python, Rust, mutations, the rig) and is the gate; a full local run is
+   not required before a push.
+8. Tools. Test selection by changed paths and the flaky-test log are Rust, in `tools/fwtest`; so are the picture
+   comparer and the review page, which stay there as local aids (approved by Jonathan 2026-11-06). App tests stay
+   Python.
 
 ## Branches and Storage
 Decided by Jonathan on 2026-10-08, so old worktrees and their build output do
@@ -940,8 +978,9 @@ The numbers the Machine Resources rules in AGENTS.md use for this project.
   and keep watching while it runs; warn below 6 GB available or when swap
   climbs, stop the job below 3 GB.
 - Runs only in CI: CodeQL, the Windows and Linux packaging and installer checks
-  (`release-windows.yml`). The rig runs in CI too, but not in the local gate,
-  so run `fwtest rig` before pushing UI changes.
+  (`release-windows.yml`), the whole desktop suite, every mutation case and the
+  rig. Locally, `fwtest gate --touched` runs the touched areas; a full local
+  gate or rig run before a push is not required (Testing structure rule 7).
 - Scratch folder: `~/.flexweek-ui-harness/scratch`.
 - Silent switch for tests: `FLEXWEEK_SILENT=1`.
 - Names `fwtest` watches for (do not reuse for helpers): `mutate.py`,
