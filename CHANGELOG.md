@@ -42,6 +42,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- Material Add and Edit homework: the Pinned time list for today starts at the earliest time still allowed (the one the note under it names) instead of offering times that have passed. Other days keep the whole list, and a past time the homework already has stays.
 - Material menus: choosing a row with the mouse, such as Place now on a drawer card, no longer also opens the card or block under the menu, and a click outside the card menu only closes it.
 - Material Settings: row help lines wrap instead of being cut off, so the keyboard shortcuts line shows Ctrl+Y.
 - Material Add homework at Larger text: a long due date such as "Tomorrow · Fri 6 Nov" wraps to two lines instead of being cut off.
