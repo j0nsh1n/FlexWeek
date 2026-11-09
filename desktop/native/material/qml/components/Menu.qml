@@ -85,7 +85,9 @@ Item {
                         elide: Text.ElideRight
                     }
                     HoverHandler { id: hover }
+                    // Takes the press, so the click that picks a row never reaches what is under the menu.
                     TapHandler {
+                        gesturePolicy: TapHandler.WithinBounds
                         onTapped: {
                             root.cursor = index
                             root.chosen(index, modelData.label)
