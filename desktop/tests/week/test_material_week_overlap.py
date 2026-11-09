@@ -2,8 +2,8 @@
 
 Expected values come from Jonathan's picks of 2026-11-08 (the earlier item keeps the day's width, a
 later one lies on it, shifted right, every block at its own time, and the covered item's name shows
-below the one on top or, without room there, on its side in its uncovered strip), from spec.md (ranges
-are half-open, so back to back is not an overlap) and from the account's own blocks.
+above or below the one on top or, without room there, on its side in its uncovered strip), from
+spec.md (ranges are half-open, so back to back is not an overlap) and from the account's own blocks.
 """
 
 # ruff: noqa: F811
@@ -45,9 +45,9 @@ from desktop.tests.window_support import qapp, settled  # noqa: F401
 
 
 def _soccer_and_a_pinned_reading(
-    window: NativeWindow, qapp: QApplication, minutes: int = 60, soccer: int = 90
+    window: NativeWindow, qapp: QApplication, minutes: int = 60, soccer: int = 90, at: str = "16:00"
 ) -> None:
-    """Soccer Thursday 16:00 for `soccer` minutes, Reading pinned over it 16:00 for `minutes`, Snack
+    """Soccer Thursday 16:00 for `soccer` minutes, Reading pinned over it at `at` for `minutes`, Snack
     for half an hour right after Soccer. Soccer and Snack end by 18:45, where the History essay sits."""
     session = window.session
     session.add_block(
@@ -77,7 +77,7 @@ def _soccer_and_a_pinned_reading(
     due = (_week_monday(window) + timedelta(days=6)).isoformat()
     _homework(window, "reading", "Pinned reading", minutes, due)
     work = next(block for block in session.blocks if block.get("assignment_id") == "reading")
-    work.update({"start": "16:00", "days": [NOW_DAY], "duration_min": minutes, "pinned": True})
+    work.update({"start": at, "days": [NOW_DAY], "duration_min": minutes, "pinned": True})
     session.add_block(work)
     session.save()
     settled(qapp, window)
@@ -401,6 +401,27 @@ def test_every_block_that_shares_time_starts_at_its_own_time(
     for title, minute in (("Soccer", 960), ("Pinned reading", 960), ("Math worksheet", 975)):
         top = float(_block_named(root, title).property("y"))
         assert top == pytest.approx(minute / 60 * row, abs=0.5), title
+
+
+def test_a_covered_items_name_shows_above_the_one_on_top_when_that_starts_later(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    # Soccer 16:00 to 17:30 and the reading pinned 16:45 to 17:15: Soccer's first 45 minutes are free,
+    # more than a name line, so its name goes there, above the reading.
+    _soccer_and_a_pinned_reading(window, qapp, minutes=30, soccer=90, at="16:45")
+    _show_thursday_afternoon(root, window, qapp)
+    soccer, reading = _block_named(root, "Soccer"), _block_named(root, "Pinned reading")
+    name = _name_whole_and_clear(soccer, [reading])
+    assert name.property("objectName") == "title"
+    assert _rect(name).bottom() <= _rect(reading).top()
+    _click(window, name)
+    sheets = window._material_page.bridge.sheets
+    try:
+        assert (sheets.kind, sheets.form["title"]) == ("block", "Soccer")
+    finally:
+        sheets.forceClose()
+        _pump(qapp)
 
 
 def test_a_covered_items_name_shows_below_the_shorter_one_on_top(
