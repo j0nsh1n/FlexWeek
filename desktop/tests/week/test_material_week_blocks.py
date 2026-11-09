@@ -13,7 +13,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QObject, QPointF, QRectF, Qt
-from PySide6.QtGui import QFontMetricsF
+from PySide6.QtGui import QAccessible, QFontMetricsF
 from PySide6.QtTest import QTest
 
 from desktop.native.weekmodel import clock_label
@@ -23,6 +23,7 @@ from desktop.tests.week.support_material import (
     _block_named,
     _bridge,
     _click,
+    _give_the_essay_two_lines,
     _homework,
     _look,
     _named,
@@ -33,6 +34,7 @@ from desktop.tests.week.support_material import (
     _reset,
     _show_material,
     _snack,
+    _text_size,
     _week_monday,
     material_window,  # noqa: F401
 )
@@ -186,6 +188,59 @@ def _a_title_the_circle_would_cut(block: QObject) -> str:
     fit = [word for word in words if beside + 4 < metrics.horizontalAdvance(word) < whole - 4]
     assert len(fit) >= 2, (width, {word: metrics.horizontalAdvance(word) for word in words})
     return f"{fit[0]} {fit[1]}"
+
+
+def _time_line(block: QObject) -> str:
+    """The words of the block's time line as the student reads them, "" when it is not shown."""
+    for detail in _named(block, "detail"):
+        if detail.property("visible"):
+            return str(detail.property("text"))
+    return ""
+
+
+def test_a_one_hour_homework_at_large_text_shows_its_start_only_beside_the_corner_circle(
+    qapp, window
+) -> None:
+    """Jonathan, 2026-11-08 (option 1): where the corner circle sits beside the time line and the range
+    does not fit beside it, the line reads "18:45", never "18:45-..."."""
+    root = _reset(window, qapp)
+    with _text_size(window, qapp, "large"):
+        essay = _block_named(root, "History essay")
+        finish = _named(essay, "weekBlockFinish")[0]
+        assert finish.property("visible") is True
+        assert essay.property("circleBesideTime") is True
+        assert _time_line(essay) == "18:45"
+        detail = next(d for d in _named(essay, "detail") if d.property("visible"))
+        assert detail.property("truncated") is False
+
+
+def test_a_time_line_keeps_its_whole_range_where_it_fits_or_the_circle_is_not_beside_it(qapp, window) -> None:
+    root = _reset(window, qapp)
+    # 90 minutes at Normal text: the circle stays on the title row, the line has the whole width.
+    _give_the_essay_two_lines(window, qapp)
+    essay = _block_named(root, "History essay")
+    assert _time_line(essay) == "18:45\u201320:15"
+
+    # A tall block whose circle sits below the time line: the circle takes nothing from the line.
+    row = int(_bridge(window).property("hourRow"))
+    _qml(root, "weekScroller").setProperty("contentY", float(14 * row))
+    _pump(qapp, 4)
+    title = _a_title_the_circle_would_cut(essay)
+    _pin_on_thursday(window, qapp, "long", title, "15:00", 120)
+    long = _block_named(root, title)
+    assert long.property("circleCorner") is True
+    assert _named(long, "weekBlockFinish")[0].property("visible") is True
+    assert long.property("circleBesideTime") is False
+    assert _time_line(long) == "15:00\u201317:00"
+
+
+def test_the_start_only_time_line_is_still_read_out_whole(qapp, window) -> None:
+    root = _reset(window, qapp)
+    with _text_size(window, qapp, "large"):
+        essay = _block_named(root, "History essay")
+        assert _time_line(essay) == "18:45"
+        name = QAccessible.queryAccessibleInterface(essay).text(QAccessible.Text.Name)
+        assert name == "Edit History essay, 18:45\u201319:45"
 
 
 def test_a_homework_block_that_shares_no_time_moves_or_hides_its_circle_rather_than_cut_its_title(

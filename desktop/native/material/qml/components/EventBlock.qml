@@ -15,6 +15,8 @@ Item {
     property int rightInset: 0
     // Room kept free at the right of the time line, for a circle that lies beside it.
     property int detailInset: 0
+    // The time line when its whole range does not fit beside that circle: the start alone.
+    property string detailStart: ""
     property alias trailingInset: root.rightInset
     // Week and Day set a block's height from its time. Its words then fit that height: the title
     // gives up its second line first, then the time line goes, so nothing is drawn past the border.
@@ -51,6 +53,10 @@ Item {
     M3Palette { id: palette; theme: root.theme }
     FontMetrics { id: titleFont; font: title.font }
     FontMetrics { id: detailFont; font: detail.font }
+    TextMetrics { id: wholeDetail; font: detail.font; text: root.detail }
+    // The column's width does not depend on the lines in it, so this cannot loop with the circle's room.
+    readonly property bool detailCut: root.detailInset > 0 && root.detailStart !== ""
+                                      && wholeDetail.advanceWidth > body.width - root.detailInset
     readonly property real titleLine: Math.ceil(titleFont.height * title.lineHeight)
     readonly property real detailLine: root.detail !== "" ? Math.ceil(detailFont.height) : 0
     readonly property real room: (root.wordsRoom >= 0 ? root.wordsRoom : root.height) - root.pad
@@ -199,7 +205,7 @@ Item {
                 objectName: "detail"
                 width: Math.max(0, parent.width - root.detailInset)
                 visible: root.detail !== "" && (!root.fitToHeight || title.height + root.detailLine <= root.room)
-                text: root.detail
+                text: root.detailCut ? root.detailStart : root.detail
                 color: root.textInk
                 opacity: 1
                 font.family: M3Font.family

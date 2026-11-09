@@ -12,6 +12,7 @@ Item {
     property string category: "homework"
     property string title: ""
     property string detail: ""
+    property string detailStart: ""
     property bool past: false
     property bool done: false
     property bool fresh: false
@@ -94,6 +95,7 @@ Item {
         category: cell.category
         title: cell.title
         detail: cell.detail
+        detailStart: cell.detailStart
         past: cell.past
         accessName: cell.title
         rightInset: cell.homework && !cell.circleCorner && cell.circleFits ? 28 : 0
@@ -251,7 +253,7 @@ Item {
     onActiveFocusChanged: if (activeFocus) cell.focused()
     Accessible.role: cell.canOpen ? Accessible.Button : Accessible.StaticText
     Accessible.name: cell.canOpen
-                     ? ("Edit " + title)
+                     ? ("Edit " + title + (detail !== "" ? ", " + detail : ""))
                      : title + (detail !== "" ? ", " + detail : "")
     Accessible.onPressAction: if (cell.canOpen) cell.opened()
     Keys.onPressed: (event) => {

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -282,6 +283,27 @@ def _give_the_essay_two_lines(window: NativeWindow, qapp: QApplication) -> None:
     session.save()
     settled(qapp, window)
     _pump(qapp)
+
+
+@contextmanager
+def _text_size(window: NativeWindow, qapp: QApplication, size: str) -> Iterator[None]:
+    """The account's text size (normal, large, larger) for the block, Week on screen and settled;
+    Normal again afterwards."""
+    bridge = _bridge(window)
+
+    def use(name: str) -> None:
+        bridge.showPage("settings")
+        _pump(qapp, 5)
+        bridge._settings_bridge.setTextSize(name)
+        _pump(qapp, 15)
+        bridge.showPage("week")
+        _pump(qapp, 15)
+
+    use(size)
+    try:
+        yield
+    finally:
+        use("normal")
 
 
 def _week_monday(window: NativeWindow) -> date:

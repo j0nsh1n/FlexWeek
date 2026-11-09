@@ -39,6 +39,7 @@ from desktop.tests.week.support_material import (
     _qml,
     _reset,
     _snack,
+    _text_size,
     _week_monday,
     material_window,  # noqa: F401
 )
@@ -562,6 +563,60 @@ def test_a_deep_stacks_done_circles_never_stick_out_of_their_blocks(
                 assert _rect(block).adjusted(-0.5, -0.5, 0.5, 0.5).contains(_rect(finish)), title
             else:
                 assert finish.property("activeFocusOnTab") is False, title
+
+
+def _visible_time_line(block: QObject) -> QObject:
+    shown = [d for d in _named(block, "detail") if d.property("visible")]
+    assert len(shown) == 1, block.property("title")
+    return shown[0]
+
+
+def test_a_homework_over_soccer_shows_its_start_only_beside_the_corner_circle(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Jonathan, 2026-11-08 (option 1): a one-hour reading at 16:30 over a 90-minute Soccer is squeezed;
+    its corner circle lies beside the time line, which reads "16:30", not "16:30-..."."""
+    root = _reset(window, qapp)
+    _soccer_and_a_pinned_reading(window, qapp, minutes=60, soccer=90, at="16:30")
+    _show_thursday_afternoon(root, window, qapp)
+    reading = _block_named(root, "Pinned reading")
+    assert _named(reading, "weekBlockFinish")[0].property("visible") is True
+    assert reading.property("circleBesideTime") is True
+    line = _visible_time_line(reading)
+    assert line.property("text") == "16:30"
+    assert line.property("truncated") is False
+
+
+def _the_time_line_clears_the_circle(block: QObject) -> None:
+    """Where the corner circle and the time line share a row, the line's words end before the circle
+    begins, with a gap."""
+    circle = _rect(_named(block, "weekBlockFinish")[0])
+    line = _visible_time_line(block)
+    box = _rect(line)
+    if box.bottom() <= circle.top() or box.top() >= circle.bottom():
+        return
+    words_right = box.left() + min(float(line.property("contentWidth")), float(line.property("width")))
+    assert words_right <= circle.left() - 4, (block.property("title"), words_right, circle.left())
+
+
+def test_the_time_line_never_runs_under_the_corner_circle(qapp: QApplication, window: NativeWindow) -> None:
+    root = _reset(window, qapp)
+    _soccer_and_a_pinned_reading(window, qapp, minutes=60, soccer=90, at="16:30")
+    _show_thursday_afternoon(root, window, qapp)
+    reading = _block_named(root, "Pinned reading")
+    assert reading.property("circleBesideTime") is True
+    _the_time_line_clears_the_circle(reading)
+    for size in ("large", "larger"):
+        with _text_size(window, qapp, size):
+            for title in ("Pinned reading", "History essay"):
+                block = _block_named(root, title)
+                finish = _named(block, "weekBlockFinish")[0]
+                if finish.property("visible") and _named(block, "detail")[0].property("visible"):
+                    _the_time_line_clears_the_circle(block)
+    with _text_size(window, qapp, "large"):
+        essay = _block_named(root, "History essay")
+        assert essay.property("circleBesideTime") is True
+        _the_time_line_clears_the_circle(essay)
 
 
 def test_a_covered_homeworks_done_circle_is_whole_and_clear_or_hidden(

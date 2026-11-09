@@ -24,6 +24,7 @@ from desktop.native.weekmodel import (
     length_label,
     range_label,
     set_clock_24h,
+    short_clock,
 )
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -37,6 +38,7 @@ BLOCK_ROLES = (
     "ink",
     "category",
     "detail",
+    "detailStart",
     "past",
     "blockId",
     "assignmentId",
@@ -61,6 +63,7 @@ def occurrence_row(item: Any, mode: str, *, dim: bool, gone: bool, fresh: bool) 
         "ink": ink,
         "category": event_category(item.category),
         "detail": range_label(int(item.start), end),
+        "detailStart": short_clock(int(item.start)),
         "past": dim and (gone or bool(item.done)),
         "blockId": item.block_id,
         "assignmentId": item.assignment_id or "",

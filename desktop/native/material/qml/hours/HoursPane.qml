@@ -599,8 +599,10 @@ Item {
                     highContrast: root.highContrast
                     category: model.category
                     title: model.title
-                    detail: {
-                        var text = (root.theme && root.theme.showTimes === false) ? "" : model.detail
+                    detail: blockCell.timeLine(model.detail)
+                    detailStart: blockCell.timeLine(model.detailStart)
+                    function timeLine(time) {
+                        var text = (root.theme && root.theme.showTimes === false) ? "" : time
                         if (root.theme && root.theme.showLengths)
                             text = (text ? text + " · " : "") + (model.end - model.start) + "m"
                         return text
