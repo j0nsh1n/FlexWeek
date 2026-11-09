@@ -466,6 +466,13 @@ def test_undo_on_the_snackbar_over_free_time_opens_no_add_menu(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root = _reset(window, qapp)
+    # 90 minutes: room for the essay's title on two lines beside its done circle, which then shows (at
+    # 60 minutes the circle would cut the one-line title, so it hides).
+    work = next(block for block in window.session.blocks if block.get("assignment_id") == "essay")
+    work.update({"duration_min": 90})
+    window.session.add_block(work)
+    window.session.save()
+    settled(qapp, window)
     hours_item, row, _gutter, _day_width, _saturday = _grid_geometry(root, window)
     _qml(root, "weekScroller").setProperty("contentY", float(14 * row))
     _pump(qapp)

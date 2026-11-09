@@ -12,7 +12,8 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QObject, QPointF, QRectF, Qt
+from PySide6.QtGui import QFontMetricsF
 from PySide6.QtTest import QTest
 
 from desktop.native.weekmodel import clock_label
@@ -22,6 +23,8 @@ from desktop.tests.week.support_material import (
     _block_named,
     _bridge,
     _click,
+    _give_the_essay_two_lines,
+    _homework,
     _look,
     _named,
     _pref,
@@ -39,6 +42,7 @@ from desktop.tests.window_support import look_file, qapp, settled  # noqa: F401
 
 def test_clicking_homework_finishes_it_and_undo_opens_it_again(qapp, window) -> None:
     root = _reset(window, qapp)
+    _give_the_essay_two_lines(window, qapp)
     essay = _block_named(root, "History essay")
     assert essay.property("homework") is True
     assert window.session.assignments["essay"].get("completed") in (None, False)
@@ -98,6 +102,97 @@ def test_in_week_a_fixed_block_opens_on_click_and_enter_and_is_a_tab_stop(qapp, 
         assert schools[NOW_DAY].property("activeFocus") is True
     finally:
         sheets.forceClose()
+        _pump(qapp)
+
+
+def _rect(item: QObject) -> QRectF:
+    return item.mapRectToScene(item.boundingRect())
+
+
+def _pin_on_thursday(window, qapp, key: str, title: str, start: str, minutes: int) -> None:
+    session = window.session
+    due = (_week_monday(window) + timedelta(days=6)).isoformat()
+    _homework(window, key, title, minutes, due)
+    work = next(block for block in session.blocks if block.get("assignment_id") == key)
+    work.update({"start": start, "days": [NOW_DAY], "duration_min": minutes, "pinned": True})
+    session.add_block(work)
+    session.save()
+    settled(qapp, window)
+    _pump(qapp)
+
+
+def _a_title_the_circle_would_cut(block: QObject) -> str:
+    """Two words that each fit the whole title column of a lone Week block (its width less 12 px and
+    8 px padding) but not the column a circle on the title row leaves (28 px less): beside the circle
+    the title needs more than its two lines and is cut."""
+    metrics = QFontMetricsF(_named(block, "title")[0].property("font"))
+    width = float(block.property("width"))
+    whole, beside = width - 20, width - 48
+    words = [
+        "Algebra",
+        "Biology",
+        "Chemistry",
+        "Geography",
+        "Literature",
+        "Vocabulary",
+        "Mathematics",
+        "Trigonometry",
+        "Shakespeare",
+        "Photosynthesis",
+    ]
+    fit = [word for word in words if beside + 4 < metrics.horizontalAdvance(word) < whole - 4]
+    assert len(fit) >= 2, (width, {word: metrics.horizontalAdvance(word) for word in words})
+    return f"{fit[0]} {fit[1]}"
+
+
+def test_a_homework_block_that_shares_no_time_moves_or_hides_its_circle_rather_than_cut_its_title(
+    qapp, window
+) -> None:
+    """Jonathan, 2026-11-08: the done-circle rule holds for every Week block, not only blocks that share
+    time. When the circle on the title row would cut the title, it moves under the time, or hides on a
+    block too short for that, where the menu still finishes the homework."""
+    root = _reset(window, qapp)
+    row = int(_bridge(window).property("hourRow"))
+    _qml(root, "weekScroller").setProperty("contentY", float(14 * row))
+    _pump(qapp, 4)
+    title = _a_title_the_circle_would_cut(_block_named(root, "History essay"))
+    short_title = title + " notes"
+    # Thursday 15:00 to 17:00 and 17:30 to 18:00: after School, before the essay at 18:45.
+    _pin_on_thursday(window, qapp, "long", title, "15:00", 120)
+    _pin_on_thursday(window, qapp, "short", short_title, "17:30", 30)
+    rows = _bridge(window).property("week").property("blockRows")
+    for name in (title, short_title):
+        mine = next(r for r in rows if r["title"] == name)
+        assert (mine["day"], mine["indent"], list(mine["under"])) == (NOW_DAY, 0, []), name
+    for name in (title, short_title):
+        assert all(r["title"] != name for r in rows if r["day"] == NOW_DAY and list(r["under"]))
+
+    long = _block_named(root, title)
+    long_title, finish = _named(long, "title")[0], _named(long, "weekBlockFinish")[0]
+    assert long_title.property("truncated") is False
+    assert finish.property("visible") is True
+    assert _rect(long).contains(_rect(finish))
+    assert not _rect(finish).intersects(_rect(long_title))
+    _click(window, finish)
+    wait_until(
+        qapp, lambda: not window.session.busy and bool(window.session.assignments["long"].get("completed"))
+    )
+
+    short = _block_named(root, short_title)
+    short_finish = _named(short, "weekBlockFinish")[0]
+    assert short_finish.property("visible") is False
+    assert short_finish.property("activeFocusOnTab") is False
+    quick = window._material_page._quick
+    menu = _named(root, "blockMenu")[0]
+    short.forceActiveFocus()
+    _pump(qapp)
+    QTest.keyClick(quick, Qt.Key.Key_F10, Qt.KeyboardModifier.ShiftModifier)
+    _pump(qapp)
+    try:
+        assert menu.property("open") is True
+        assert "Mark finished" in [e["label"] for e in menu.property("entries").toVariant()]
+    finally:
+        QTest.keyClick(quick, Qt.Key.Key_Escape)
         _pump(qapp)
 
 

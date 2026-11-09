@@ -31,6 +31,7 @@ from desktop.tests.week.support_material import (
     _centre,
     _click,
     _drag,
+    _give_the_essay_two_lines,
     _homework,
     _named,
     _pref,
@@ -325,9 +326,12 @@ def test_a_wide_homework_block_keeps_its_circle_where_it_was(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root = _reset(window, qapp)
+    # Room for the title beside the circle: the circle stays on the title row and cuts nothing.
+    _give_the_essay_two_lines(window, qapp)
     essay = _block_named(root, "History essay")
     assert essay.property("circleBelow") is False
     assert _named(essay, "weekBlockFinish")[0].property("visible") is True
+    assert _named(essay, "title")[0].property("truncated") is False
 
 
 def test_in_day_both_blocks_that_share_time_open_and_take_tab_in_time_order(

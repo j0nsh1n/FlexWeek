@@ -40,9 +40,8 @@ Item {
 
     // The title's column is the block minus its 12 px left and 8 px right padding. When the circle on
     // the title row would leave it less than three wide letters, the circle moves under the time so
-    // the title keeps the whole column. A block that shares time with another is narrower by its step
-    // or has its words squeezed into the part that shows, so there the circle also moves when it would
-    // cut the title short (recheck M7: "Scie...").
+    // the title keeps the whole column. It also moves on any block where it would cut the title short,
+    // whether or not the block shares time (recheck M7: "Scie..."; Jonathan, 2026-11-08).
     FontMetrics {
         id: titleMetrics
         font.family: M3Font.family
@@ -63,7 +62,7 @@ Item {
     }
     readonly property bool circleBelow: cell.homework
                                         && (cell.width - 20 - 28 < titleMetrics.advanceWidth("MMM")
-                                            || ((cell.raised || cell.wordsRoom >= 0) && besideCircle.truncated))
+                                            || besideCircle.truncated)
     // The circle shows whole where the words show, or not at all: a block too short for it under its
     // words, or one whose name is on its side, hides it. Edit, the right-click menu and Shift+F10 still
     // finish the homework.

@@ -271,6 +271,19 @@ def _clean(window: NativeWindow, qapp: QApplication) -> None:
     settled(qapp, window)
 
 
+def _give_the_essay_two_lines(window: NativeWindow, qapp: QApplication) -> None:
+    """The essay made 90 minutes long: room for "History" and "essay" on two lines beside the done
+    circle, so the circle stays on the title row. At 60 minutes the title has one line, which the circle
+    would cut, so the circle hides there (Jonathan, 2026-11-08)."""
+    session = window.session
+    work = next(block for block in session.blocks if block.get("assignment_id") == "essay")
+    work.update({"duration_min": 90})
+    session.add_block(work)
+    session.save()
+    settled(qapp, window)
+    _pump(qapp)
+
+
 def _week_monday(window: NativeWindow) -> date:
     return date.fromisoformat(window.session.week_start)
 
