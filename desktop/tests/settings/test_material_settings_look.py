@@ -210,14 +210,14 @@ def test_planning_cutoff_labels_follow_the_clock(qapp: QApplication, window: Nat
     set_clock_24h(False)
     panel._publish()
     twelve = [item["label"] for item in panel.state["cutoffChoices"]]
-    assert twelve == [hhmm_text(item) for item in WIDGET_CUTOFFS]
-    assert twelve[0] == "8:00 PM"
+    assert twelve == ["No limit", *(hhmm_text(item) for item in WIDGET_CUTOFFS)]
+    assert twelve[1] == "8:00 PM"
     assert twelve[-1] == "11:00 PM"
     set_clock_24h(True)
     panel._publish()
     twenty_four = [item["label"] for item in panel.state["cutoffChoices"]]
-    assert twenty_four == list(WIDGET_CUTOFFS)
-    assert twenty_four[0] == "20:00"
+    assert twenty_four == ["No limit", *WIDGET_CUTOFFS]
+    assert twenty_four[1] == "20:00"
 
 
 def test_the_look_file_keeps_the_material_object_when_the_widgets_look_saves(
@@ -229,3 +229,21 @@ def test_the_look_file_keeps_the_material_object_when_the_widgets_look_saves(
     assert _material_file()["density"] == "compact"
     window._save_look()
     assert _material_file()["density"] == "compact"
+
+
+def test_planning_cutoff_always_has_a_choice_that_is_the_current_value(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """With no cutoff set the row still marks "No limit", and a saved cutoff marks its own time."""
+    _open_settings(qapp, window, "planning")
+    panel = _panel(window)
+    values = [item["value"] for item in panel.state["cutoffChoices"]]
+    assert panel.state["cutoff"] == ""
+    assert panel.state["cutoff"] in values
+    assert next(i["label"] for i in panel.state["cutoffChoices"] if i["value"] == "") == "No limit"
+    panel.setCutoff("21:00")
+    wait_until(qapp, lambda: panel.state["cutoff"] == "21:00")
+    assert panel.state["cutoff"] in values
+    panel.setCutoff("")
+    wait_until(qapp, lambda: panel.state["cutoff"] == "")
+    assert panel.state["cutoff"] in values

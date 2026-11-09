@@ -42,6 +42,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- Material Settings > Planning: Study window cutoff now has a "No limit" choice, so the current setting is always marked.
 - Material Edit and Add homework: a pinned time that has already passed today shows "That time has passed. Choose ... or later today, or another day." as soon as it is picked, and Save still refuses it.
 - Material: Ctrl+Z now undoes the last change, so it takes back Place now, a drag, an add, a delete and a finish, just as the Undo button does; Ctrl+Shift+Z and Ctrl+Y redo. They stay off while you type in a field or have a sheet open. In Material, when Place now or Plan my homework finds nothing to change, its message no longer offers Undo, which would have undone an earlier change.
 - Material: Place now, and Enter on a homework card, puts the homework at the first free time from now that fits all of it, inside Study hours and around fixed time and the usual gaps, on the next day that has room when today has none. The message says where: "Placed Math worksheet on Thu 5:45 PM." When there is no room anywhere this week it says so, with no Undo. Where Plan my homework puts homework is unchanged. Material Settings lists Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y beside the one-letter shortcuts.

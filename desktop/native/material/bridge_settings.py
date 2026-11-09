@@ -895,7 +895,10 @@ class SettingsBridge(QObject):
             "pomodoro": work == 25 and rest == 5,
             "split": bool(prefs.get(_SPLIT)) if _SPLIT else False,
             "cutoff": cutoff if cutoff in CUTOFFS else "",
-            "cutoffChoices": [{"label": hhmm_text(item), "value": item} for item in CUTOFFS],
+            "cutoffChoices": [
+                {"label": "No limit", "value": ""},
+                *({"label": hhmm_text(item), "value": item} for item in CUTOFFS),
+            ],
             "buffer": (0 if prefs.get(_BUFFER) == 0 else int(prefs.get(_BUFFER) or 15)) if _BUFFER else 15,
             "urgent": bool(prefs.get(_URGENT, True)) if _URGENT else False,
             "weekendFree": bool(prefs.get(_WEEKEND_FREE)) if _WEEKEND_FREE else False,
