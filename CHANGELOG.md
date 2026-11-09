@@ -42,6 +42,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- Material Settings: row help lines wrap instead of being cut off, so the keyboard shortcuts line shows Ctrl+Y.
 - Material Add homework at Larger text: a long due date such as "Tomorrow · Fri 6 Nov" wraps to two lines instead of being cut off.
 - Material: leaving a sheet you changed asks "Discard your changes?" (it said "Discard what you typed?" even after only picking a time or a date).
 - Material Week: dropping a homework card on a time that has passed says "That time has passed..." in the snackbar instead of doing nothing.
