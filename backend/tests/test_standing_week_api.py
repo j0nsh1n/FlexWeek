@@ -1,4 +1,4 @@
-"""The standing week (fix-specs item 1): School and activities from Setup are in every week from Setup's
+"""The standing week: School and activities from Setup are in every week from Setup's
 week on, in Week, Day and Month alike; a change reaches the open week on and leaves earlier weeks as they
 were; an export carries it; an account from 0.18 gets one built from its weeks."""
 

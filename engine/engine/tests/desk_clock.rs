@@ -1,4 +1,4 @@
-//! Rust twin of the Qt-free tests in `desktop/tests/test_clock.py`: the 12-hour clock.
+//! Rust twin of the Qt-free tests in `desktop/tests/week/test_twelve_hour_clock.py`: the 12-hour clock.
 //!
 //! The other tests in that file write times through widgets and dialogs (`BlockDialog`, `LateDialog`,
 //! `QuarterTime`, `Drawn`, `MonthChip`, the window walk) and stay Python. Every test here switches the

@@ -21,8 +21,14 @@ class ManualTime:
         """Move the time `ms` on, and give every clock that is running the frame it would have had."""
         self.now += ms
         for clock in list(motion._RUNNING):
+            try:
+                active = clock._timer.isActive()
+            except RuntimeError:
+                # Its widget was freed by an earlier test; the clock will never tick again.
+                motion._RUNNING.discard(clock)
+                continue
             # A paused clock has stopped its timer, so no frame comes for it.
-            if clock._timer.isActive():
+            if active:
                 clock._tick()
 
 

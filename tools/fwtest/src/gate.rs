@@ -3,11 +3,41 @@
 //! The success line is the one `verify.py` prints, including the backend-only
 //! wording. Each step is one contained command. The per-step limit is 2400
 //! seconds unless `FWTEST_STEP_TIMEOUT_SECS` is set (tests use a few seconds).
+//!
+//! `--touched` runs the same steps on what the changed paths select (select.rs): pytest on the
+//! selected paths, then `cargo test` on the selected packages. A failed test is rerun alone
+//! once (flaky.rs).
 
 use std::path::Path;
 use std::process::Command;
 
 use crate::contain::{self, half_cpus};
+use crate::select::{self, Change, Plan, Pytest};
+
+/// What the gate covers.
+pub enum Scope {
+    Full,
+    BackendOnly,
+    Touched(Box<Plan>),
+}
+
+impl Scope {
+    fn needs_desktop(&self) -> bool {
+        match self {
+            Self::Full => true,
+            Self::BackendOnly => false,
+            Self::Touched(plan) => match &plan.pytest {
+                Pytest::Nothing => false,
+                Pytest::Everything(_) => true,
+                Pytest::Paths(paths) => paths.iter().any(|path| !path.starts_with("backend/")),
+            },
+        }
+    }
+
+    fn runs_pytest(&self) -> bool {
+        !matches!(self, Self::Touched(plan) if plan.pytest == Pytest::Nothing)
+    }
+}
 
 const VERIFIED_TAIL: &str = "Packaged binaries and other platforms need separate checks.";
 
@@ -18,6 +48,18 @@ pub fn verified_line(backend_only: bool) -> String {
         "Backend and desktop"
     };
     format!("\nVERIFIED: {scope}. {VERIFIED_TAIL}")
+}
+
+/// The success line of `gate --touched`. It never claims the whole suite: CI runs that.
+pub fn touched_line(plan: &Plan) -> String {
+    let areas = if plan.selection.everything {
+        "every area".to_string()
+    } else if plan.selection.areas.is_empty() {
+        "no test area".to_string()
+    } else {
+        plan.selection.areas.join(", ")
+    };
+    format!("\nVERIFIED: Touched areas only ({areas}); CI runs everything. {VERIFIED_TAIL}")
 }
 
 pub fn default_workers() -> u32 {
@@ -32,7 +74,12 @@ pub fn step_timeout_secs() -> u64 {
         .unwrap_or(2400)
 }
 
-pub fn run(backend_only: bool, workers: Option<u32>, python: Option<&Path>) -> u8 {
+pub fn run(
+    backend_only: bool,
+    workers: Option<u32>,
+    python: Option<&Path>,
+    touched: Option<&Change>,
+) -> u8 {
     let workers = workers.unwrap_or_else(default_workers);
     if workers == 0 {
         eprintln!("--workers must be at least 1");
@@ -44,6 +91,22 @@ pub fn run(backend_only: bool, workers: Option<u32>, python: Option<&Path>) -> u
             eprintln!("{message}");
             return 2;
         }
+    };
+    let scope = match touched {
+        Some(change) => match select::plan(&checkout, change) {
+            Ok(plan) => {
+                // The gate does not run mutation cases; listing them says which to run by hand.
+                let cases = select::mutation_cases(&checkout, &plan.selection).unwrap_or_default();
+                print!("{}", select::describe(&plan, &cases));
+                Scope::Touched(Box::new(plan))
+            }
+            Err(message) => {
+                eprintln!("{message}");
+                return 2;
+            }
+        },
+        None if backend_only => Scope::BackendOnly,
+        None => Scope::Full,
     };
     let python = match crate::state::resolve_python(python, &checkout) {
         Ok(path) => path,
@@ -60,7 +123,7 @@ pub fn run(backend_only: bool, workers: Option<u32>, python: Option<&Path>) -> u
         eprintln!("Verification needs the project's Python 3.14 interpreter.");
         return 1;
     }
-    if !backend_only && !pyside_present(&python) {
+    if scope.needs_desktop() && !pyside_present(&python) {
         eprintln!(
             "Full verification needs requirements-desktop.txt. --backend-only omits desktop explicitly."
         );
@@ -87,17 +150,23 @@ pub fn run(backend_only: bool, workers: Option<u32>, python: Option<&Path>) -> u
     }
     let junit = report_dir.join("pytest.xml");
     let timeout = step_timeout_secs();
-    for (name, command) in steps(&python, workers, backend_only, &junit, &base) {
-        if name == "Python behavior"
-            && let Err(message) = mutation_patterns(&checkout)
-        {
-            eprintln!("FAILED: Mutation patterns:\n{message}");
-            let _ = std::fs::remove_dir_all(&report_dir);
-            return 1;
+    let mut patterns_checked = false;
+    for (name, command) in steps(&python, workers, &scope, &junit, &base) {
+        let past_lint = name != "Python lint" && name != "Backend types";
+        if past_lint && !patterns_checked {
+            patterns_checked = true;
+            if let Err(message) = mutation_patterns(&checkout) {
+                eprintln!("FAILED: Mutation patterns:\n{message}");
+                let _ = std::fs::remove_dir_all(&report_dir);
+                return 1;
+            }
         }
         println!("\n{name}");
         let _ = std::io::Write::flush(&mut std::io::stdout());
         let code = match session.run_in(&command, Some(timeout), &checkout) {
+            Ok(1) if name == "Python behavior" => {
+                crate::flaky::settle(&session, &checkout, &command, &junit, Some(timeout))
+            }
             Ok(code) => code,
             Err(error) => {
                 eprintln!("FAILED: {name}: {error}");
@@ -117,6 +186,7 @@ pub fn run(backend_only: bool, workers: Option<u32>, python: Option<&Path>) -> u
         }
     }
     match junit_totals(&junit) {
+        _ if !scope.runs_pytest() => {}
         Ok((count, skipped)) if count > 0 && skipped == 0 => {}
         Ok((count, skipped)) => {
             eprintln!("FAILED: Python suite ran {count} tests with {skipped} skipped.");
@@ -131,7 +201,10 @@ pub fn run(backend_only: bool, workers: Option<u32>, python: Option<&Path>) -> u
         }
     }
     let _ = std::fs::remove_dir_all(&report_dir);
-    println!("{}", verified_line(backend_only));
+    match &scope {
+        Scope::Touched(plan) => println!("{}", touched_line(plan)),
+        _ => println!("{}", verified_line(backend_only)),
+    }
     0
 }
 
@@ -156,7 +229,7 @@ fn mutation_patterns(checkout: &Path) -> Result<(), String> {
 pub fn steps(
     python: &Path,
     workers: u32,
-    backend_only: bool,
+    scope: &Scope,
     junit: &Path,
     base: &str,
 ) -> Vec<(String, Vec<String>)> {
@@ -168,12 +241,40 @@ pub fn steps(
         "-q".to_string(),
         "-n".to_string(),
         workers.to_string(),
-        format!("--junitxml={}", junit.display()),
     ];
-    if backend_only {
-        pytest.push("backend/tests".to_string());
+    pytest.extend(crate::flaky::report_args(junit));
+    let mut tests = Vec::new();
+    match scope {
+        Scope::Full => tests.push(("Python behavior".to_string(), pytest)),
+        Scope::BackendOnly => {
+            pytest.push("backend/tests".to_string());
+            tests.push(("Python behavior".to_string(), pytest));
+        }
+        Scope::Touched(plan) => {
+            match &plan.pytest {
+                Pytest::Nothing => {}
+                Pytest::Everything(_) => tests.push(("Python behavior".to_string(), pytest)),
+                Pytest::Paths(paths) => {
+                    pytest.extend(paths.iter().cloned());
+                    tests.push(("Python behavior".to_string(), pytest));
+                }
+            }
+            for (dir, packages) in &plan.selection.cargo {
+                let mut cargo = vec![
+                    "cargo".to_string(),
+                    "test".to_string(),
+                    "--manifest-path".to_string(),
+                    format!("{dir}/Cargo.toml"),
+                ];
+                for package in packages {
+                    cargo.push("-p".to_string());
+                    cargo.push(package.clone());
+                }
+                tests.push((format!("Rust tests ({dir})"), cargo));
+            }
+        }
     }
-    vec![
+    let mut steps = vec![
         (
             "Python lint".to_string(),
             vec![
@@ -193,7 +294,9 @@ pub fn steps(
                 "backend".to_string(),
             ],
         ),
-        ("Python behavior".to_string(), pytest),
+    ];
+    steps.extend(tests);
+    steps.extend([
         (
             "Working diff whitespace".to_string(),
             vec!["git".to_string(), "diff".to_string(), "--check".to_string()],
@@ -216,7 +319,8 @@ pub fn steps(
                 format!("{base}...HEAD"),
             ],
         ),
-    ]
+    ]);
+    steps
 }
 
 fn python_is_314(python: &Path) -> bool {

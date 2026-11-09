@@ -1,0 +1,67 @@
+{
+ "setup": {
+  "seed": "rig",
+  "look": "light-frost",
+  "size": [
+   1280,
+   800
+  ],
+  "clock_24h": false
+ },
+ "steps": [
+  {
+   "click": "settingsGear"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "click": "chooseMaterial"
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "see": "materialRail"
+  },
+  {
+   "click": "materialFab"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "see": "homeworkSheet"
+  },
+  {
+   "click": "homeworkTitle"
+  },
+  {
+   "type": "Chemistry lab"
+  },
+  {
+   "click": "homeworkNext"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "homeworkNext"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "homeworkNext"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "see": "Added Chemistry lab"
+  },
+  {
+   "shot": "added"
+  }
+ ]
+}

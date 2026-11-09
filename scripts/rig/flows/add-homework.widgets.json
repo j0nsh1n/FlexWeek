@@ -1,0 +1,48 @@
+{
+ "setup": {
+  "seed": "rig",
+  "look": "light-frost",
+  "size": [
+   1280,
+   800
+  ],
+  "clock_24h": false
+ },
+ "steps": [
+  {
+   "click": "addButton"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "addHomework"
+  },
+  {
+   "wait": 500
+  },
+  {
+   "see": "homeworkDialog"
+  },
+  {
+   "click": "homeworkTitle"
+  },
+  {
+   "type": "Chemistry lab"
+  },
+  {
+   "click": {
+    "text": "Save"
+   }
+  },
+  {
+   "wait": 800
+  },
+  {
+   "see": "Chemistry lab"
+  },
+  {
+   "shot": "added"
+  }
+ ]
+}

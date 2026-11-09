@@ -1,0 +1,47 @@
+{
+ "setup": {
+  "seed": "rig",
+  "look": "light-frost",
+  "size": [
+   1280,
+   800
+  ],
+  "clock_24h": false
+ },
+ "steps": [
+  {
+   "double_click": {
+    "text": "Math worksheet"
+   }
+  },
+  {
+   "wait": 600
+  },
+  {
+   "see": "homeworkDialog"
+  },
+  {
+   "click": "homeworkTitle"
+  },
+  {
+   "key": "ctrl+a"
+  },
+  {
+   "type": "Math worksheet 2"
+  },
+  {
+   "click": {
+    "text": "Save"
+   }
+  },
+  {
+   "wait": 800
+  },
+  {
+   "see": "Math worksheet 2"
+  },
+  {
+   "shot": "edited"
+  }
+ ]
+}
