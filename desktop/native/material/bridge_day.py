@@ -406,6 +406,10 @@ class DayBridge(QObject):
     def nowLine(self) -> str:
         return self._board.now_line
 
+    @Property(bool, notify=changed)
+    def nowBusy(self) -> bool:
+        return self._board.now_busy
+
     @Property(int, notify=changed)
     def ringCount(self) -> int:
         return self._board.ring_count
