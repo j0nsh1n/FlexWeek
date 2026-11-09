@@ -32,20 +32,20 @@ Column {
 
     M3Palette { id: palette; theme: root.theme }
 
-    // The whole card hides once the timer clears and nothing else is on today. Keyboard focus must not
-    // stay on its hidden button: it goes to the first visible item the page's Tab order reaches.
-    onVisibleChanged: {
-        if (visible || !(startButton.activeFocus || markButton.activeFocus))
-            return
-        var item = startButton.nextItemInFocusChain(true)
-        for (var i = 0; item && i < 200; i++) {
-            if (item.visible && item.activeFocusOnTab && !card.contains(card.mapFromItem(item, 0, 0)) && item !== startButton) {
-                item.forceActiveFocus()
-                return
-            }
-            item = item.nextItemInFocusChain(true)
-        }
+    // Whether the card has something to show. The card hides once the timer clears and nothing else is
+    // on today; a page that is merely not on screen does not count.
+    property bool shown: true
+    // The page's heading: keyboard focus goes there when the card goes away while one of its buttons holds it.
+    property Item pageHeading: null
+    visible: shown
+
+    // Qt takes focus off a button as it hides, which can come before or after shownChanged reaches
+    // this card, so both the card and its buttons hand focus on; whichever runs second finds it done.
+    function handFocusToHeading() {
+        if (!root.shown && root.pageHeading)
+            root.pageHeading.forceActiveFocus()
     }
+    onShownChanged: if (startButton.activeFocus || markButton.activeFocus) handFocusToHeading()
 
     Text {
         objectName: root.scope + "NowLabel"
@@ -121,6 +121,7 @@ Column {
                     // This button hides once the timer clears, so keyboard focus moves to the one that stays
                     // before the card can hide (and hand focus on to the page) in markFinished().
                     onClicked: { startButton.forceActiveFocus(); root.markFinished() }
+                    onActiveFocusChanged: if (!activeFocus) root.handFocusToHeading()
                 }
                 Button {
                     id: startButton
@@ -135,6 +136,7 @@ Column {
                     icon: root.timerDone ? "check" : "play_arrow"
                     accessName: text
                     activeFocusOnTab: !root.passive
+                    onActiveFocusChanged: if (!activeFocus) root.handFocusToHeading()
                     // The button that was used holds the keyboard, so whatever it opens hands focus back to it.
                     onClicked: {
                         forceActiveFocus()

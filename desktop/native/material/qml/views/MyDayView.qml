@@ -7,6 +7,8 @@ Item {
     objectName: "materialMyDay"
     property var bridge
     property bool phone: false
+    // The shell's page heading, where keyboard focus goes when the Now card goes away holding it.
+    property Item pageHeading: null
 
     readonly property var board: bridge && bridge.myday ? bridge.myday : null
     readonly property var theme: bridge && bridge.theme ? bridge.theme : ({})
@@ -74,7 +76,8 @@ Item {
 
             NowCard {
                 width: column.width
-                visible: root.board && root.board.showNow
+                shown: !!(root.board && root.board.showNow)
+                pageHeading: root.pageHeading
                 theme: root.theme
                 density: root.density
                 reduceMotion: root.reduceMotion

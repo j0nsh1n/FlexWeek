@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
+from datetime import timedelta
 
 import pytest
 
@@ -22,9 +23,10 @@ from PySide6.QtCore import QObject, QPointF, Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
+from backend.tests.fake_clock import CLOCK  # noqa: E402
 from desktop.native.calendar import sunday_due  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
-from desktop.tests.day.support_material_day import root_bridge, seed_thursday  # noqa: E402
+from desktop.tests.day.support_material_day import click, root_bridge, seed_thursday  # noqa: E402
 from desktop.tests.light_app import open_light  # noqa: E402, F401
 from desktop.tests.material_support import pump, qml, show_material  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
@@ -384,3 +386,77 @@ def test_clicking_the_now_cards_button_puts_keyboard_focus_on_it(
     QTest.mouseClick(window._material_page._quick, Qt.MouseButton.LeftButton, pos=centre)
     pump(qapp)
     assert scene.activeFocusItem().objectName() == "myDayStartFocus"
+
+
+def _press(
+    window: NativeWindow, key: Qt.Key, modifier: Qt.KeyboardModifier = Qt.KeyboardModifier.NoModifier
+) -> None:
+    QTest.keyClick(window._material_page._quick, key, modifier)
+    pump(QApplication.instance())
+
+
+def _finish_the_last_homework_as_the_reviewer_did(
+    qapp: QApplication, window: NativeWindow, root: QObject, scope: str, *, keyboard: bool
+) -> None:
+    """The reviewer's steps on the day's last homework: a click on Start, Esc out of the Focus screen,
+    the session runs out on the clock, then Shift+Tab to Mark finished and Space (or a click on it)."""
+    session = window.session
+    click(window, qml(root, scope + "StartFocus"))
+    assert root_bridge(root).property("focus").property("open") is True
+    _press(window, Qt.Key.Key_Escape)
+    assert root_bridge(root).property("focus").property("open") is False
+    CLOCK.set(CLOCK.now() + timedelta(minutes=61))
+    session.tick_focus()
+    settled(qapp, window)
+    pump(qapp)
+    assert _card(root, scope) == ("History essay", "Session finished", "Start again")
+    if keyboard:
+        _press(window, Qt.Key.Key_Backtab, Qt.KeyboardModifier.ShiftModifier)
+        scene = window._material_page._quick.quickWindow()
+        assert scene.activeFocusItem().objectName() == scope + "MarkFinished"
+        _press(window, Qt.Key.Key_Space)
+    else:
+        click(window, qml(root, scope + "MarkFinished"))
+    settled(qapp, window)
+    pump(qapp)
+    assert session.focus is None
+    assert session.assignments["essay"]["completed"] is True
+    assert qml(root, scope + "Now").property("visible") is False
+
+
+@pytest.mark.parametrize(
+    ("page", "scope", "keyboard"),
+    [
+        ("myday", "myDay", True),
+        ("day", "day", True),
+        ("myday", "myDay", False),
+    ],
+)
+def test_when_the_now_card_goes_away_holding_focus_focus_goes_to_the_page_heading(
+    qapp: QApplication, window: NativeWindow, page: str, scope: str, keyboard: bool
+) -> None:
+    """Mark finished on the day's last homework hides the whole card. Keyboard focus goes to the page's
+    heading at the top of the page, which shows the focus ring after a key, and the next Tab moves on from
+    there to the top bar's next button instead of starting over at the rail's add button."""
+    root = show_material(qapp, window)
+    root_bridge(root).showPage(page)
+    settled(qapp, window)
+    pump(qapp)
+    scene = window._material_page._quick.quickWindow()
+    _finish_the_last_homework_as_the_reviewer_did(qapp, window, root, scope, keyboard=keyboard)
+    assert QApplication.focusWidget() is window._material_page._quick
+    held = scene.activeFocusItem()
+    assert held is not None, "keyboard focus is nowhere"
+    chain = []
+    item = held
+    while item is not None:
+        chain.append(f"{type(item).__name__}:{item.objectName()}:{item.metaObject().className()}")
+        item = item.parentItem()
+    assert held.objectName() == "materialTitle", f"focus is on {' < '.join(chain)}, not the heading"
+    assert held.property("text") == root_bridge(root).property("title")
+    if page == "myday":
+        assert held.property("text") == "My day"
+    ring = next(child for child in held.childItems() if child.objectName() == "focusRing")
+    assert ring.property("visible") is keyboard
+    _press(window, Qt.Key.Key_Tab)
+    assert scene.activeFocusItem().objectName() == "materialUndo"
