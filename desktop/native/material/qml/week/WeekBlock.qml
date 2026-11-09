@@ -74,11 +74,14 @@ Item {
     readonly property bool circleFits: !cell.nameSide
                                        && (cell.circleCorner
                                            ? cell.cornerTop >= blockContent.titleBottom
+                                             && cell.width >= cell.cornerSize + 8
                                            : cell.wordsTop + 4 + finishButton.height + 2 <= cell.wordsEnd)
     // The corner circle lies beside the time line, which then gives up its right end rather than run
-    // under the circle; where the circle sits below the time line it takes nothing from it.
+    // under the circle; where the circle sits below the time line it takes nothing from it. This reads
+    // the title's bottom and the line's height, never the column's own height: that height changes with
+    // the time line's width, which this sets, and the two would chase each other.
     readonly property bool circleBesideTime: cell.circleCorner && cell.circleFits
-                                             && cell.cornerTop < blockContent.contentBottom
+                                             && cell.cornerTop < blockContent.titleBottom + blockContent.detailLine
 
     EventBlock {
         id: blockContent

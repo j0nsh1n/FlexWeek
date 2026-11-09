@@ -17,7 +17,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QObject, QPoint, QPointF, QRectF, Qt
+from PySide6.QtCore import QObject, QPoint, QPointF, QRectF, Qt, QtMsgType, qInstallMessageHandler
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -490,18 +490,78 @@ def test_with_three_items_each_covered_name_reads_whole_and_clear(
             _name_whole_and_clear(reading, [sheet])
 
 
-def test_a_deep_stack_stays_inside_its_day(qapp: QApplication, window: NativeWindow) -> None:
-    root = _reset(window, qapp)
+_STACK = ("Pinned reading", "Stack 0", "Stack 1", "Stack 2", "Stack 3")
+
+
+def _a_deep_stack(window: NativeWindow, qapp: QApplication) -> None:
+    """Soccer with the pinned reading and four more homework blocks, each 5 minutes after the last, so
+    each lies on the ones before it and the later ones are only a few pixels wide."""
     _soccer_and_a_pinned_reading(window, qapp, soccer=120)
     for at, start in enumerate(("16:05", "16:10", "16:15", "16:20")):
         _pinned(window, qapp, f"stack{at}", f"Stack {at}", start, 60)
+
+
+@contextmanager
+def _qt_messages() -> Iterator[list[str]]:
+    """Every message Qt prints while the block runs. A layout that cannot settle is only a warning on
+    stderr, which a passing test hides, so a test has to read it."""
+    seen: list[str] = []
+
+    def keep(_kind: QtMsgType, _context: object, message: str) -> None:
+        seen.append(message)
+
+    previous = qInstallMessageHandler(keep)
+    try:
+        yield seen
+    finally:
+        qInstallMessageHandler(previous)
+
+
+def test_a_deep_stack_stays_inside_its_day(qapp: QApplication, window: NativeWindow) -> None:
+    root = _reset(window, qapp)
+    _a_deep_stack(window, qapp)
     with _narrow_window(window, qapp):
         _show_thursday_afternoon(root, window, qapp)
         soccer = _block_named(root, "Soccer")
         lane = _rect(soccer)
-        for title in ("Pinned reading", "Stack 0", "Stack 1", "Stack 2", "Stack 3"):
+        for title in _STACK:
             block = _rect(_block_named(root, title))
             assert block.left() >= lane.left() and block.right() <= lane.right() + 0.5, title
+
+
+def test_a_deep_stack_lays_its_blocks_out_without_a_loop(qapp: QApplication, window: NativeWindow) -> None:
+    """On a block 36 to 48 px wide the room kept for the corner circle once took the whole time line,
+    which changed the line's height, which moved the circle, and so on until Qt gave up with "possible
+    QQuickItem::polish() loop" (160 times here)."""
+    with _qt_messages() as messages:
+        root = _reset(window, qapp)
+        _a_deep_stack(window, qapp)
+        with _narrow_window(window, qapp):
+            _show_thursday_afternoon(root, window, qapp)
+            QTest.qWait(300)
+            _pump(qapp, 10)
+    loops = [message for message in messages if "polish()" in message]
+    assert loops == []
+
+
+def test_a_deep_stacks_done_circles_never_stick_out_of_their_blocks(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """A block a few pixels wide has no room for a circle: it hides it (the menu still finishes the
+    homework) rather than draw one off its edge, over the blocks beside it."""
+    root = _reset(window, qapp)
+    _a_deep_stack(window, qapp)
+    with _narrow_window(window, qapp):
+        _show_thursday_afternoon(root, window, qapp)
+        widths = {title: _rect(_block_named(root, title)).width() for title in _STACK}
+        assert min(widths.values()) < 20, widths
+        for title in _STACK:
+            block = _block_named(root, title)
+            finish = _named(block, "weekBlockFinish")[0]
+            if finish.property("visible"):
+                assert _rect(block).adjusted(-0.5, -0.5, 0.5, 0.5).contains(_rect(finish)), title
+            else:
+                assert finish.property("activeFocusOnTab") is False, title
 
 
 def test_a_covered_homeworks_done_circle_is_whole_and_clear_or_hidden(
