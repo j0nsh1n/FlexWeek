@@ -107,7 +107,6 @@ Item {
         accessName: cell.title
         rightInset: cell.homework && !cell.circleCorner && cell.circleFits ? 28 : 0
         detailInset: cell.circleBesideTime ? cell.cornerSize + 8 : 0
-        startWhenCut: cell.circleWouldCutStart
         fitToHeight: true
         wordsTop: cell.wordsTop
         wordsRoom: cell.wordsRoom

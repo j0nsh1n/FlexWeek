@@ -17,8 +17,6 @@ Item {
     property int detailInset: 0
     // The time line when its whole range does not fit beside that circle: the start alone.
     property string detailStart: ""
-    // The start alone even with no circle beside the line, when the whole range does not fit.
-    property bool startWhenCut: false
     property alias trailingInset: root.rightInset
     // Week and Day set a block's height from its time. Its words then fit that height: the title
     // gives up its second line first, then the time line goes, so nothing is drawn past the border.
@@ -57,15 +55,20 @@ Item {
     FontMetrics { id: detailFont; font: detail.font }
     TextMetrics { id: wholeDetail; font: detail.font; text: root.detail }
     TextMetrics { id: startDetail; font: detail.font; text: root.detailStart }
-    // The column's width does not depend on the lines in it, so this cannot loop with the circle's room.
-    readonly property bool detailCut: (root.detailInset > 0 || root.startWhenCut) && root.detailStart !== ""
+    // A time line is never cut part-way (Jonathan, 2026-11-09): where the whole range does not fit the
+    // line, it reads as the start alone. The column's width does not depend on the lines in it, so this
+    // cannot loop with the circle's room.
+    readonly property bool detailCut: root.detailStart !== ""
                                       && wholeDetail.advanceWidth > body.width - root.detailInset
+    // Where even the start alone does not fit the whole column, the line is left out; the time is still
+    // read out and shown in Edit. This reads the column, never the circle's room, so it cannot loop.
+    readonly property bool detailLost: root.detailStart !== "" && startDetail.advanceWidth > body.width
     // So a block can tell whether the start alone would fit beside something it puts at the line's end.
     readonly property real startWidth: startDetail.advanceWidth
     readonly property real lineRoom: body.width
     readonly property bool detailShown: detail.visible
     readonly property real titleLine: Math.ceil(titleFont.height * title.lineHeight)
-    readonly property real detailLine: root.detail !== "" ? Math.ceil(detailFont.height) : 0
+    readonly property real detailLine: root.detail !== "" && !root.detailLost ? Math.ceil(detailFont.height) : 0
     readonly property real room: (root.wordsRoom >= 0 ? root.wordsRoom : root.height) - root.pad
                                  - (root.highContrast ? 2 : 1)
     // How many lines the title may take: two when they and the time line fit, else one.
@@ -211,7 +214,7 @@ Item {
                 id: detail
                 objectName: "detail"
                 width: Math.max(0, parent.width - root.detailInset)
-                visible: root.detail !== "" && (!root.fitToHeight || title.height + root.detailLine <= root.room)
+                visible: root.detail !== "" && !root.detailLost && (!root.fitToHeight || title.height + root.detailLine <= root.room)
                 text: root.detailCut ? root.detailStart : root.detail
                 color: root.textInk
                 opacity: 1
