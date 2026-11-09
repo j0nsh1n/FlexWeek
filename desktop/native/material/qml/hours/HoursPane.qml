@@ -279,6 +279,22 @@ Item {
         var y = (root.openingMinute / 60) * root.row
         var above = openingAbove(view)
         var wanted = Math.max(0, y - above)
+        // A block that is on at the opening minute shows its top, its done circle and its start label too:
+        // when its top would be cut, or the hour label at its start would sit under the zoom buttons, the
+        // pane opens `above` higher than the block instead. A block that began so long ago that this would
+        // push the opening minute out of the pane's top 60 % leaves now where the rule puts it.
+        var blocks = root.blockList || []
+        var clear = zoomPill.visible ? zoomPill.y + zoomPill.height + 4 : 0
+        for (var i = 0; i < blocks.length; i++) {
+            var from = blocks[i].start
+            if (from >= root.openingMinute || blocks[i].end <= root.openingMinute)
+                continue
+            var blockTop = from / 60 * root.row
+            var top = Math.max(0, blockTop - above)
+            var labelHidden = from % 60 === 0 && blockTop - wanted < clear
+            if ((blockTop < wanted || labelHidden) && top < wanted && y - top <= view * 0.6)
+                wanted = top
+        }
         var limit = Math.max(0, scroller.contentHeight - view)
         scroller.contentY = Math.min(wanted, limit)
     }
