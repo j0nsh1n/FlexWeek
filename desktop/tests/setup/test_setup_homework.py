@@ -15,9 +15,10 @@ from PySide6.QtCore import QModelIndex, QPoint, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QTableView
 
+from desktop.native.previews import Previews
 from desktop.native.setup import DONE, FIRST, next_school_day
 from desktop.tests.setup.support_wizard import opened
-from desktop.tests.waiting import wait_until
+from desktop.tests.waiting import _run_until, wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
 
 # The clock starts on Thursday 5 November 2026: the next school day is Friday the 6th, and the next
@@ -116,4 +117,28 @@ def test_the_calendar_in_setup_opens_on_the_due_month_with_every_day_of_it(qapp:
     }
     assert set(range(1, 31)) <= shown, "every day of November is in the grid"
     month.parentWidget().hide()
+    setup.close()
+
+
+def test_pictures_drawn_in_the_background_leave_an_open_calendar_open(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The look pictures setup draws behind the page each show a window of their own, and Qt closes
+    any open popup when one is shown: a student who opened the due-date calendar before they were
+    drawn saw it vanish. Run alone, nothing has drawn them yet, so this is the case in every run."""
+    monkeypatch.setattr(Previews, "_kept", {})
+    setup = opened(qapp)
+    setup._show(FIRST)
+    field = setup.homework_rows[0].due.date
+    QTest.mouseClick(
+        field,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+        QPoint(field.width() - 6, field.height() // 2),
+    )
+    popup = field.calendarWidget().parentWidget()
+    assert popup.isVisible(), "the calendar opens on the click"
+    gone = _run_until(lambda: not popup.isVisible(), 0.5)
+    assert not gone, "still open after the background pictures had their turns"
+    popup.hide()
     setup.close()

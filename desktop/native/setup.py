@@ -1830,7 +1830,9 @@ class SetupPage(QWidget):
     def _draw_next_picture(self) -> None:
         if not self._pending_pictures:
             return
-        if busy():
+        # Each picture shows a window of its own, and Qt closes an open popup (a date's calendar) when
+        # a window is shown, so the pictures wait for it as they wait for an animation.
+        if busy() or QApplication.activePopupWidget() is not None:
             self._warm.setInterval(50)
             self._warm.start()
             return
