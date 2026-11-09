@@ -130,6 +130,30 @@ def test_on_timeline_day_at_large_text_plan_and_more_keep_whole_words(
     assert window.solve_button.text() in PLAN_WORDS
 
 
+def test_large_text_fits_the_bar_again_once_its_buttons_have_their_new_size(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Large text reaches Plan and More after the window has fitted the bar, so the bar is fitted again
+    on the next turn, once they have grown. Counts the fits: the ones made inside the change itself are
+    not enough, one must follow after it has settled. Whatever the width, so it does not depend on it."""
+    settled(qapp, window)
+    layout_settles(qapp)
+    window.__dict__.pop("_bar_refit_timer", None)
+    fits: list[int] = []
+    real = NativeWindow._fit_plan_and_more
+
+    def counting(self: NativeWindow, total_width: int | None = None) -> None:
+        fits.append(1)
+        real(self, total_width)
+
+    monkeypatch.setattr(NativeWindow, "_fit_plan_and_more", counting)
+    text_size(window, "large")
+    during_the_change = len(fits)
+    layout_settles(qapp)
+    assert during_the_change > 0
+    assert len(fits) > during_the_change
+
+
 def test_retry_save_shows_only_after_a_save_fails(qapp: QApplication, planned_week: NativeWindow) -> None:
     """A save on its way is not a failed one. Month's own fetch landing while the week saved drew the
     week with Retry save showing. A save that failed keeps Retry showing, greyed, while it is tried
