@@ -108,8 +108,9 @@ Contract for the finished app:
   activity asks once, naming the days: "This day only" (when opened from one
   day), "This week only" or "This week and later"; earlier weeks keep it, and
   this week and later rewrites the saved later weeks in the same save
-  (`standing` in `/api/changes`) and can't be undone; only the open week's part
-  has Undo. Restore points and account exports carry the standing
+  (`standing` in `/api/changes`) and can't be undone with Undo; only the open
+  week's part has Undo (an assistant's change of this kind is undone with the
+  restore point it saved first). Restore points and account exports carry the standing
   rows.
 - A later week reviews unfinished homework using the original assignment ID,
   exact deadline and progress. Repeated planning and request retries cannot
@@ -120,8 +121,8 @@ Contract for the finished app:
   "Before planning" with the same two choices and Not now. Mark as finished says
   "Marked <title> finished." and offers Undo.
 - Account-owned restore points snapshot weeks and assignments. Clear week,
-  routine application and restore preserve the replaced schedule first; a
-  stale restore preview returns 409 and no failure stores partial state. The UI
+  routine application, restore and every assistant (MCP) change preserve the
+  replaced schedule first; a stale restore preview returns 409 and no failure stores partial state. The UI
   labels backups as local-device or hosted-server data.
 - New accounts receive eight one-time recovery codes, shown once. A forgotten
   password is recovered with a username, an unused code and a new password, not
@@ -650,14 +651,19 @@ nothing loops.
     explanations, and the desktop's Qt-free logic (`desk/`). No files, clock,
     network or database; it takes them as arguments.
   - `engine/store`. SQLite: schema, start-up migrations, transactions, password
-    hashing, sessions and throttling. The only code that opens the database.
+    hashing, sessions and throttling. The only code that writes the database;
+    the desktop may open it read-only to notice another program's changes and
+    to check for a linked phone.
   - `engine/py`. The `flexweek_engine` module that Python imports.
   - `engine/mcp`. The `flexweek-mcp` binary (from 1.1): a Model Context
     Protocol server over stdio, built on the Rust SDK `rmcp` (pinned
     `=3.5.1`), that lets an assistant the student runs on this computer read
-    and change the signed-in account's schedule. It holds no rules: every tool
-    calls the engine, the store or `engine/ffi`. It opens the database file,
-    not the HTTP API, and listens on no port.
+    and change the signed-in account's schedule. Its rules come from the
+    engine and the store; its Plan follows the same steps as the phone's
+    `plan_week`. It opens the database file,
+    not the HTTP API, and listens on no port. The open desktop app notices
+    its changes within a few seconds and shows them without a restart,
+    keeping any edits the student has not saved.
   - `backend/solver.py`. Adapter to the engine's synchronous CSP placement. No
     HTTP knowledge.
   - `backend/explain.py`. Adapter: reason code and slack status to English string.
@@ -747,10 +753,16 @@ nothing loops.
 - The MCP server (`flexweek-mcp`) acts as the account kept signed in on this
   computer. It reads the kept session file, refuses a file readable by anyone
   but its owner, checks the session in the database on every call and refuses
-  an expired or ended one. It is given no password. It cannot change the
-  password, read or replace recovery codes, delete the account, export or
-  import an account, pair or remove a phone, or change preferences, and it
-  never returns a session token, a password hash or a recovery-code hash. It
+  an expired or ended one. It is given no password. It can add, edit, move,
+  finish and delete homework and fixed time (breaks, meals, rest, events),
+  change School and activities (this week, or from this week on), run Plan
+  and restore a restore point. Before every change it saves a restore point;
+  it keeps at most 10 of its own and never drops the student's points to keep
+  its own; only when the student alone has 20 does a change drop their
+  oldest, as any save in the app does. It cannot change the password, read or
+  replace recovery codes, delete the account, export or import an account,
+  pair or remove a phone, or change preferences, and it never returns a
+  session token, a password hash or a recovery-code hash. It
   listens on no port and logs only tool names and outcomes.
 - Device sync keeps a private key on this computer, in a file with mode 0600
   in `sync/` beside the database; a file readable by others is refused. Its

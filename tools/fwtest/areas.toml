@@ -332,6 +332,11 @@ areas = ["account", "e2e"]
 paths = ["desktop/native/devices.py", "desktop/server.py"]
 areas = ["sync", "account", "e2e"]
 
+# Another program's saves (the assistant's) reaching the open window.
+[[rule]]
+paths = ["desktop/native/outside.py"]
+areas = ["sync"]
+
 # --- Updater, packaging and release workflows.
 [[rule]]
 paths = [

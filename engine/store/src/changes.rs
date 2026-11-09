@@ -111,6 +111,31 @@ pub fn apply(
     }
 }
 
+/// `apply` for a caller that already holds the write lock (`begin_immediate`), so what it read to
+/// build `input` cannot change before the batch is saved. A refused batch writes nothing, and the
+/// caller still ends its own transaction.
+pub fn apply_within(
+    conn: &Connection,
+    user_id: i64,
+    input: &ApplyInput,
+    clock: &ApplyClock,
+) -> Result<Value, ApplyFailure> {
+    conn.execute("SAVEPOINT apply_within", [])
+        .map_err(StoreError::from)?;
+    match apply_tx(conn, user_id, input, clock) {
+        Ok(value) => {
+            conn.execute("RELEASE apply_within", [])
+                .map_err(StoreError::from)?;
+            Ok(value)
+        }
+        Err(error) => {
+            let _ = conn.execute("ROLLBACK TO apply_within", []);
+            let _ = conn.execute("RELEASE apply_within", []);
+            Err(error)
+        }
+    }
+}
+
 fn apply_tx(
     conn: &Connection,
     user_id: i64,
