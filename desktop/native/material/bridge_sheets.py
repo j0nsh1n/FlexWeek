@@ -33,7 +33,7 @@ WAIT_SAVE = "Saving your last change… Save will work in a moment."
 WAIT_DELETE = "Saving your last change… Delete will work in a moment."
 DISCARD = {
     "id": "discard",
-    "title": "Discard what you typed?",
+    "title": "Discard your changes?",
     "body": "Your changes will be lost.",
     "answers": [
         {"id": "keep", "label": "Keep editing", "kind": "text"},

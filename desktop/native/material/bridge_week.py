@@ -366,6 +366,12 @@ class WeekBridge(QObject):
         if length <= 0:
             return
         start = max(0, min(snap(start, self._drag_step), DAY_MIN - length))
+        if not session.busy:
+            answer = session.judge_hand_move(block_id, -1, day, start, start + length)
+            if not answer["moved"]:
+                # Nothing is changed, so there is nothing for UNDO to take back.
+                self._note(answer["problem"], action="")
+                return
         session.place_block(block_id, -1, day, start, start + length)
 
     @Slot(str)

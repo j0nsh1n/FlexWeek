@@ -116,6 +116,7 @@ SheetFrame {
                 objectName: "homeworkDueTime"
                 visible: !root.phone
                 width: (parent.width - 12) * 0.4
+                height: dueField.height
                 theme: root.theme
                 density: root.density
                 reduceMotion: root.reduceMotion

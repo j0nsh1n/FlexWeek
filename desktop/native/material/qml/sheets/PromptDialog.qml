@@ -1,7 +1,7 @@
 import QtQuick
 import components 1.0
 
-// A question with buttons: "Discard what you typed?", a delete that asks first.
+// A question with buttons: "Discard your changes?", a delete that asks first.
 SheetFrame {
     id: root
     property var sheets

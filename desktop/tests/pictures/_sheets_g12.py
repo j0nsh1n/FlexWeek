@@ -101,7 +101,7 @@ SCREENS: list[Screen] = [
         area="sheets",
         prepare=_discard_question,
         checks=(
-            "The question 'Discard what you typed?' with 'Your changes will be lost.' over the Add "
+            "The question 'Discard your changes?' with 'Your changes will be lost.' over the Add "
             "homework sheet. The dialog card has an 8 px radius and sits over a dimmed sheet. Keep "
             "editing and Discard are both readable, and at most one of them is filled."
         ),

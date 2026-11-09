@@ -1,4 +1,4 @@
-"""Material's Add homework sheet asks "Discard what you typed?" only when the student leaves it: Esc, Cancel
+"""Material's Add homework sheet asks "Discard your changes?" only when the student leaves it: Esc, Cancel
 or a click on the scrim. Clicks inside the sheet never ask. Keep editing takes one click and puts the
 keyboard back where it was."""
 
@@ -15,12 +15,12 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import pump
+from desktop.tests.material_support import pump, show_material
 from desktop.tests.sheets.support_material_sheets import find, open_typed_homework
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
 
-DISCARD = "Discard what you typed?"
+DISCARD = "Discard your changes?"
 
 
 def click_item(quick, item, qapp: QApplication) -> None:
@@ -148,3 +148,19 @@ def test_a_click_on_the_prompt_backdrop_does_not_reach_the_sheet_underneath(
     pump(qapp, 40)
 
     assert sheets.form["step"] == 0
+
+
+def test_changing_only_the_pinned_time_counts_as_a_change_to_discard(qapp, window: NativeWindow) -> None:
+    """The prompt is for any unsaved edit, so its words are about changes, not typing."""
+    show_material(qapp, window)
+    sheets = window._material_page.bridge.sheets
+    sheets.openHomework()
+    pump(qapp, 40)
+    sheets.closeSheet()
+    assert sheets.ask == {}, "nothing was changed yet, so Cancel just closes"
+    sheets.openHomework()
+    sheets.setText("when", "fixed")
+    sheets.setText("whenTime", "21:00")
+    sheets.closeSheet()
+    wait_until(qapp, lambda: asked_to_discard(sheets))
+    assert sheets.ask["title"] == DISCARD

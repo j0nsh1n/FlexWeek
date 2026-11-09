@@ -18,8 +18,9 @@ Item {
     readonly property int count: options ? options.length : 0
     signal picked(var value)
 
-    implicitHeight: 56
-    height: 56
+    // A long choice ("Tomorrow · Fri 6 Nov" at Larger text) wraps onto a second line and the field grows.
+    implicitHeight: Math.max(56, valueText.implicitHeight + 8 + 24)
+    height: implicitHeight
     implicitWidth: 200
 
     M3Palette { id: pal; theme: root.theme }
@@ -103,6 +104,7 @@ Item {
         }
     }
     Text {
+        id: valueText
         objectName: "pickerValue"
         anchors.left: parent.left
         anchors.leftMargin: 16
@@ -111,7 +113,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         anchors.verticalCenterOffset: 4
         text: root.shown
-        elide: Text.ElideRight
+        wrapMode: Text.WordWrap
         color: root.enabled ? (root.currentIndex >= 0 ? pal.inkSurface : pal.inkMuted) : pal.disabledInk
         font.family: M3Font.family
         font.pixelSize: M3Font.px(16)

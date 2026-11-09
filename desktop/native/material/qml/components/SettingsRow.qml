@@ -62,7 +62,7 @@ Item {
         font.weight: 400
         lineHeight: 20
         lineHeightMode: Text.FixedHeight
-        elide: Text.ElideRight
+        wrapMode: Text.WordWrap
     }
     Item {
         id: slot
