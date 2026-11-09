@@ -42,6 +42,8 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- Material Day opens with the block that is on now shown whole: its top, its done circle and the hour label at its start are no longer cut or hidden behind the zoom buttons (unless the block began hours ago).
+- Material Week and Day: the hour rows grow with Text size also after you have zoomed the hours. Before, a zoomed row stayed the same at Large and Larger, so one-hour blocks kept cut titles and no time line. Zoom still steps through its own levels; the row is drawn that level times the text size (1.3 at Large, 1.6 at Larger).
 - Material Settings: row help lines wrap instead of being cut off, so the keyboard shortcuts line shows Ctrl+Y.
 - Material Add homework at Larger text: a long due date such as "Tomorrow · Fri 6 Nov" wraps to two lines instead of being cut off.
 - Material: leaving a sheet you changed asks "Discard your changes?" (it said "Discard what you typed?" even after only picking a time or a date).
