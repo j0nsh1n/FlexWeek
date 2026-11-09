@@ -296,6 +296,7 @@ class AccountBridge(QObject):
         self._activities: list[dict[str, Any]] = [_blank_activity()]
         self._week_opened: tuple = ()
         self._cutoff = ""
+        self._saved_cutoff = ""
         self._planning = "suggest"
         self._drag = 5
         self._windows: list[dict[str, Any]] = []
@@ -685,7 +686,7 @@ class AccountBridge(QObject):
 
     @Slot(str)
     def setCutoff(self, value: str) -> None:  # noqa: N802 — QML slot
-        self._cutoff = value if value in CUTOFFS else ""
+        self._cutoff = value if value in CUTOFFS or (value and value == self._saved_cutoff) else ""
         self.changed.emit()
 
     @Slot(str)
@@ -1258,9 +1259,11 @@ class AccountBridge(QObject):
     def cutoff(self) -> str:
         return self._cutoff
 
-    @Property("QVariantList", constant=True)  # type: ignore[arg-type]
+    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
     def cutoffChoices(self) -> list:  # noqa: N802 — QML name
-        times = ({"value": item, "label": hhmm_text(item)} for item in CUTOFFS)
+        # A time saved before the list was shortened stays on it, as in Widgets' fill_cutoff.
+        kept = [self._saved_cutoff] if self._saved_cutoff else []
+        times = ({"value": item, "label": hhmm_text(item)} for item in sorted({*CUTOFFS, *kept}))
         return [{"value": "", "label": "No limit"}, *times]
 
     @Property("QVariantList", constant=True)  # type: ignore[arg-type]
@@ -1600,7 +1603,8 @@ class AccountBridge(QObject):
             self._activities.append(_blank_activity())
         self._week_opened = self._week_fingerprint()
         cutoff = prefs.get("day_cutoff")
-        self._cutoff = cutoff if isinstance(cutoff, str) and cutoff in CUTOFFS else ""
+        self._cutoff = cutoff if isinstance(cutoff, str) else ""
+        self._saved_cutoff = self._cutoff
         planning = prefs.get("planning_style") or "suggest"
         self._planning = planning if planning in {item[0] for item in PLANNING_STYLES} else "suggest"
         self._drag = drag_step(prefs.get("drag_step_min"))

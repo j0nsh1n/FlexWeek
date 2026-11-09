@@ -247,3 +247,16 @@ def test_planning_cutoff_always_has_a_choice_that_is_the_current_value(
     panel.setCutoff("")
     wait_until(qapp, lambda: panel.state["cutoff"] == "")
     assert panel.state["cutoff"] in values
+
+
+def test_planning_cutoff_not_on_the_list_is_shown_as_its_own_time(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """A saved 22:15 is not one of the usual times; it must be marked as itself, never as "No limit"."""
+    _open_settings(qapp, window, "planning")
+    panel = _panel(window)
+    window.session.preferences["day_cutoff"] = "22:15"
+    panel._publish()
+    state = panel.state
+    marked = [item["label"] for item in state["cutoffChoices"] if item["value"] == state["cutoff"]]
+    assert marked == [hhmm_text("22:15")]
