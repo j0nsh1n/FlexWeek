@@ -249,6 +249,35 @@ Item {
                     font.weight: 500
                     elide: Text.ElideRight
                     verticalAlignment: Text.AlignVCenter
+                    // Not a Tab stop: Day and My day hand keyboard focus here when the item holding it goes
+                    // away (the Now card), so focus stays on the page and the next Tab moves on from the top.
+                    activeFocusOnTab: false
+                    Accessible.role: Accessible.Heading
+                    Accessible.name: text
+                    Accessible.focusable: true
+                    // Qt moves on with Tab only from a Tab stop; from here it would start over at the rail.
+                    Keys.onTabPressed: (event) => {
+                        var next = title.nextItemInFocusChain(true)
+                        if (next)
+                            next.forceActiveFocus(Qt.TabFocusReason)
+                        event.accepted = true
+                    }
+                    Keys.onBacktabPressed: (event) => {
+                        var previous = title.nextItemInFocusChain(false)
+                        if (previous)
+                            previous.forceActiveFocus(Qt.BacktabFocusReason)
+                        event.accepted = true
+                    }
+
+                    M3Palette { id: titlePalette; theme: root.theme }
+                    M3FocusRing {
+                        x: -8
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.min(title.paintedWidth, title.width) + 16
+                        height: title.paintedHeight + 12
+                        ring: titlePalette.focusRing
+                        ringRadius: 8
+                    }
                 }
 
                 Row {
@@ -378,6 +407,7 @@ Item {
                         Layout.fillHeight: true
                         bridge: root.bridge
                         phone: root.phone
+                        pageHeading: title
                     }
                     WeekView {
                         id: weekView
@@ -401,6 +431,7 @@ Item {
                         Layout.fillHeight: true
                         bridge: root.bridge
                         phone: root.phone
+                        pageHeading: title
                     }
                     SettingsView { Layout.fillWidth: true; Layout.fillHeight: true; bridge: root.bridge }
                 }

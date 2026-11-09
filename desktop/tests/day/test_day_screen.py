@@ -73,6 +73,8 @@ def test_start_focus_on_the_day_screen_opens_the_next_homework(
         assert str(day.property("nowTitle")) == "Free for 1 h 45 min"
     finally:
         window.session.reset_focus()
+        # The Focus screen this opened would otherwise stay up.
+        window._material_page.bridge.focus.hide()
         pump(qapp)
 
 
