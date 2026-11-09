@@ -19,9 +19,16 @@ Item {
     property bool passive: false
     // Day sets this: there Space finishes homework, in Week it opens it.
     property bool dayOpen: false
-    // Drawn over a block it shares time with: an opaque base and a light shadow keep the one under it
-    // from showing through.
+    // Drawn over a block it shares time with: an opaque base keeps the one under it from showing
+    // through, and a light shadow (an outline on a dark surface, where a shadow does not show) sets it
+    // apart.
     property bool raised: false
+    // Another block lies on this one. Its words go where they show (wordsTop, within wordsRoom), or,
+    // with nowhere to go, its name runs up its uncovered strip, `sideStrip` wide, on its side.
+    property bool nameSide: false
+    property real sideStrip: 0
+    property real wordsTop: 0
+    property real wordsRoom: -1
     readonly property bool keyFocus: finishButton.activeFocus
     readonly property bool canOpen: !cell.passive
     signal toggled()
@@ -33,19 +40,38 @@ Item {
 
     // The title's column is the block minus its 12 px left and 8 px right padding. When the circle on
     // the title row would leave it less than three wide letters, the circle moves under the time so
-    // the title keeps the whole column.
+    // the title keeps the whole column. A block that shares time with another is narrower by its step
+    // or has its words squeezed into the part that shows, so there the circle also moves when it would
+    // cut the title short (recheck M7: "Scie...").
     FontMetrics {
         id: titleMetrics
         font.family: M3Font.family
         font.pixelSize: M3Font.px(12)
         font.weight: 600
     }
+    Text {
+        id: besideCircle
+        visible: false
+        width: Math.max(0, cell.width - 20 - 28)
+        text: cell.title
+        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+        maximumLineCount: blockContent.titleLines
+        elide: Text.ElideRight
+        font: titleMetrics.font
+        lineHeight: 1.25
+        lineHeightMode: Text.ProportionalHeight
+    }
     readonly property bool circleBelow: cell.homework
-                                        && cell.width - 20 - 28 < titleMetrics.advanceWidth("MMM")
-    // A narrow block too short for the circle under its words hides it: Edit, the right-click menu and
-    // Shift+F10 still finish the homework.
-    readonly property bool circleFits: !cell.circleBelow
-                                       || blockContent.contentBottom + 2 + finishButton.height + 4 <= cell.height
+                                        && (cell.width - 20 - 28 < titleMetrics.advanceWidth("MMM")
+                                            || ((cell.raised || cell.wordsRoom >= 0) && besideCircle.truncated))
+    // The circle shows whole where the words show, or not at all: a block too short for it under its
+    // words, or one whose name is on its side, hides it. Edit, the right-click menu and Shift+F10 still
+    // finish the homework.
+    readonly property real wordsEnd: cell.wordsRoom >= 0 ? cell.wordsTop + cell.wordsRoom : cell.height
+    readonly property bool circleFits: !cell.nameSide
+                                       && (cell.circleBelow
+                                           ? blockContent.contentBottom + 2 + finishButton.height + 4 <= cell.wordsEnd
+                                           : cell.wordsTop + 4 + finishButton.height + 2 <= cell.wordsEnd)
 
     EventBlock {
         id: blockContent
@@ -60,14 +86,34 @@ Item {
         detail: cell.detail
         past: cell.past
         accessName: cell.title
-        rightInset: cell.homework && !cell.circleBelow ? 28 : 0
+        rightInset: cell.homework && !cell.circleBelow && cell.circleFits ? 28 : 0
         fitToHeight: true
+        wordsTop: cell.wordsTop
+        wordsRoom: cell.wordsRoom
+        showWords: !cell.nameSide
+    }
+
+    // The name on its side, reading upward in the strip left of the block that lies on this one.
+    Text {
+        objectName: "sideName"
+        visible: cell.nameSide
+        transformOrigin: Item.TopLeft
+        rotation: -90
+        x: 4 + 3
+        y: cell.height - blockContent.pad
+        width: Math.max(0, cell.height - 2 * blockContent.pad)
+        height: Math.ceil(titleMetrics.height)
+        text: cell.title
+        elide: Text.ElideRight
+        verticalAlignment: Text.AlignVCenter
+        color: blockContent.textInk
+        font: titleMetrics.font
     }
 
     Rectangle {
         objectName: "overlapShadow"
         z: -2
-        visible: cell.raised
+        visible: cell.raised && !blockContent.darkSurface
         x: -1
         y: 1
         width: cell.width + 2
@@ -83,6 +129,16 @@ Item {
         anchors.fill: parent
         radius: blockContent.cornerRadius
         color: m3.surfaceContainerLowest
+    }
+
+    Rectangle {
+        objectName: "overlapOutline"
+        visible: cell.raised && blockContent.darkSurface
+        anchors.fill: parent
+        radius: blockContent.cornerRadius
+        color: "transparent"
+        border.width: 1
+        border.color: m3.outline
     }
 
     function findTitle(item) {
@@ -114,7 +170,7 @@ Item {
         width: 24
         height: 24
         x: cell.circleBelow ? 12 : cell.width - width - 4
-        y: cell.circleBelow ? blockContent.contentBottom + 2 : 4
+        y: cell.circleBelow ? blockContent.contentBottom + 2 : cell.wordsTop + 4
         activeFocusOnTab: !cell.passive && cell.homework && cell.circleFits
         onActiveFocusChanged: if (activeFocus) cell.focused()
         Accessible.role: Accessible.Button

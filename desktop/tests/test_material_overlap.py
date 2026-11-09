@@ -1,8 +1,9 @@
 """Material Week and Day: blocks that share time overlap, each one visible and clickable.
 
-Expected values come from Jonathan's pick of 2026-11-08 (the earlier item keeps the day's width, a
-later one lies on it, shifted right, and both names read), from spec.md (ranges are half-open, so
-back to back is not an overlap) and from the account's own blocks.
+Expected values come from Jonathan's picks of 2026-11-08 (the earlier item keeps the day's width, a
+later one lies on it, shifted right, every block at its own time, and the covered item's name shows
+below the one on top or, without room there, on its side in its uncovered strip), from spec.md (ranges
+are half-open, so back to back is not an overlap) and from the account's own blocks.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ pytest.importorskip("PySide6")
 
 pytest_plugins = ["desktop.tests.test_material_week"]
 
-from PySide6.QtCore import QObject, QPoint, QRectF, Qt  # noqa: E402
+from PySide6.QtCore import QObject, QPoint, QPointF, QRectF, Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -33,7 +34,9 @@ from desktop.tests.test_material_week import (  # noqa: E402
     _bridge,
     _centre,
     _click,
+    _drag,
     _homework,
+    _pref,
     _pump,
     _qml,
     _reset,
@@ -87,6 +90,42 @@ def _rect(item: QObject) -> QRectF:
     return item.mapRectToScene(item.boundingRect())
 
 
+def _pinned(window: NativeWindow, qapp: QApplication, key: str, title: str, start: str, minutes: int) -> None:
+    """A homework pinned on Thursday at `start` for `minutes`."""
+    session = window.session
+    due = (_week_monday(window) + timedelta(days=6)).isoformat()
+    _homework(window, key, title, minutes, due)
+    work = next(block for block in session.blocks if block.get("assignment_id") == key)
+    work.update({"start": start, "days": [NOW_DAY], "duration_min": minutes, "pinned": True})
+    session.add_block(work)
+    session.save()
+    settled(qapp, window)
+    _pump(qapp)
+
+
+def _shown_name(block: QObject) -> QObject:
+    """The one place the block's name is drawn: its title row, or its side strip. Never both."""
+    title, side = _named(block, "title")[0], _named(block, "sideName")[0]
+    shown = [item for item in (title, side) if item.property("visible")]
+    assert len(shown) == 1, f"{block.property('title')}: name shown {len(shown)} times"
+    return shown[0]
+
+
+def _name_whole_and_clear(block: QObject, over: list[QObject]) -> QObject:
+    """The covered block's name reads in full, inside the block, under none of the blocks over it; its
+    time line, when it shows, is whole and clear too (recheck M5: a lone "4" peeked out)."""
+    name = _shown_name(block)
+    assert name.property("truncated") is False
+    assert _rect(block).adjusted(-0.5, -0.5, 0.5, 0.5).contains(_rect(name))
+    for top in over:
+        assert not _rect(top).intersects(_rect(name)), (block.property("title"), top.property("title"))
+    detail = _named(block, "detail")[0]
+    if detail.property("visible"):
+        assert _rect(block).adjusted(-0.5, -0.5, 0.5, 0.5).contains(_rect(detail))
+        assert all(not _rect(top).intersects(_rect(detail)) for top in over)
+    return name
+
+
 @contextmanager
 def _narrow_window(window: NativeWindow, qapp: QApplication) -> Iterator[None]:
     """1000 px wide: a day of the Week is about 76 px, so a block over another is still narrow."""
@@ -97,6 +136,11 @@ def _narrow_window(window: NativeWindow, qapp: QApplication) -> Iterator[None]:
     finally:
         window.resize(1280, 800)
         _pump(qapp, 6)
+
+
+@contextmanager
+def _nothing() -> Iterator[None]:
+    yield
 
 
 def _show_thursday_afternoon(root: QObject, window: NativeWindow, qapp: QApplication) -> None:
@@ -127,11 +171,15 @@ def test_items_that_share_time_come_in_time_order_and_each_later_one_steps_past_
         "Middle": 2,
         "After": 0,
     }
-    # Short starts with Long, so it sits at least one name strip below Long's top; Middle covers both,
-    # so at least two strips below their 16:00.
-    assert [960, 1] in by_title["Short"]["lifts"]
-    assert [960, 2] in by_title["Middle"]["lifts"]
-    assert by_title["After"]["lifts"] == [[1050, 0]]
+    # `under` names, by place in the list, the items each one lies on: what QML needs to keep their
+    # names in sight. Long is at 1 and Short at 2.
+    assert {title: row["under"] for title, row in by_title.items()} == {
+        "Monday": [],
+        "Long": [],
+        "Short": [1],
+        "Middle": [1, 2],
+        "After": [],
+    }
 
 
 def test_the_rows_given_to_qml_put_the_pinned_reading_over_soccer(
@@ -162,14 +210,17 @@ def test_in_week_the_later_block_lies_over_soccer_with_both_names_whole_and_open
     _show_thursday_afternoon(root, window, qapp)
 
     soccer, reading = _block_named(root, "Soccer"), _block_named(root, "Pinned reading")
-    reading_title, soccer_title = _named(reading, "title")[0], _named(soccer, "title")[0]
+    reading_title = _named(reading, "title")[0]
     # Normal text, the 1280 px window: the top item's title reads in full, and Soccer's name is not
     # under the block that lies on it.
     assert reading_title.property("truncated") is False
-    assert soccer_title.property("truncated") is False
-    assert not _rect(reading).intersects(_rect(soccer_title))
-    # With room on the title row, the done circle is back beside the title.
-    assert reading.property("circleBelow") is False
+    _name_whole_and_clear(soccer, [reading])
+    # The done circle shows whole, inside the block, and leaves the title its room: on the title row
+    # when the title fits beside it, under it otherwise.
+    finish = _named(reading, "weekBlockFinish")[0]
+    assert finish.property("visible") is True
+    assert _rect(reading).contains(_rect(finish))
+    assert not _rect(finish).intersects(_rect(reading_title))
 
     _click(window, reading)
     sheets = window._material_page.bridge.sheets
@@ -308,9 +359,9 @@ def test_in_day_both_blocks_that_share_time_open_and_take_tab_in_time_order(
         assert (sheets.kind, sheets.form["title"]) == ("homework", "Pinned reading")
         sheets.forceClose()
         _pump(qapp)
-        # Soccer, underneath, opens on its name above the reading and on its edge left of it.
-        soccer_name = _named(soccer, "title")[0]
-        _click(window, soccer_name, dx=-int(_rect(soccer_name).width() / 2) + 4)
+        # Soccer, underneath, opens on its name where it shows and on its edge left of the reading.
+        soccer_name = _name_whole_and_clear(soccer, [reading])
+        _click(window, soccer_name)
         assert (sheets.kind, sheets.form["title"]) == ("block", "Soccer")
         sheets.forceClose()
         _pump(qapp)
@@ -337,3 +388,164 @@ def test_in_day_both_blocks_that_share_time_open_and_take_tab_in_time_order(
         sheets.forceClose()
         _bridge(window).showPage("week")
         _pump(qapp, 4)
+
+
+def test_every_block_that_shares_time_starts_at_its_own_time(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    # Jonathan, 2026-11-08: no block is lowered to keep a name in sight; the recheck read the drop as
+    # "starts half an hour late".
+    root = _reset(window, qapp)
+    _soccer_and_a_pinned_reading(window, qapp)
+    _pinned(window, qapp, "sheet", "Math worksheet", "16:15", 60)
+    _show_thursday_afternoon(root, window, qapp)
+    row = float(_bridge(window).property("hourRow"))
+    for title, minute in (("Soccer", 960), ("Pinned reading", 960), ("Math worksheet", 975)):
+        top = float(_block_named(root, title).property("y"))
+        assert top == pytest.approx(minute / 60 * row, abs=0.5), title
+
+
+def test_a_covered_items_name_shows_below_the_shorter_one_on_top(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    # The reading (an hour) lies on Soccer (an hour and three quarters): Soccer's last 45 minutes are
+    # free, so its name goes there, below the reading.
+    _soccer_and_a_pinned_reading(window, qapp, soccer=105)
+    _show_thursday_afternoon(root, window, qapp)
+    soccer, reading = _block_named(root, "Soccer"), _block_named(root, "Pinned reading")
+    name = _name_whole_and_clear(soccer, [reading])
+    assert name.property("objectName") == "title"
+    assert _rect(name).top() >= _rect(reading).bottom()
+    _click(window, name)
+    sheets = window._material_page.bridge.sheets
+    try:
+        assert (sheets.kind, sheets.form["title"]) == ("block", "Soccer")
+    finally:
+        sheets.forceClose()
+        _pump(qapp)
+
+
+def test_a_covered_items_name_runs_up_its_strip_when_the_one_on_top_leaves_no_room_below(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    # The reading covers Soccer to within a quarter hour of its end: no room for a name below it. An
+    # hour and a quarter is long enough for "Soccer" on its side.
+    _soccer_and_a_pinned_reading(window, qapp, minutes=60, soccer=75)
+    _show_thursday_afternoon(root, window, qapp)
+    soccer, reading = _block_named(root, "Soccer"), _block_named(root, "Pinned reading")
+    name = _name_whole_and_clear(soccer, [reading])
+    assert name.property("objectName") == "sideName"
+    assert name.property("text") == "Soccer"
+    # Turned on its side, left of the reading.
+    assert abs(float(name.property("rotation"))) == 90
+    assert _rect(name).right() <= _rect(reading).left()
+    _click(window, name)
+    sheets = window._material_page.bridge.sheets
+    try:
+        assert (sheets.kind, sheets.form["title"]) == ("block", "Soccer")
+    finally:
+        sheets.forceClose()
+        _pump(qapp)
+
+
+def test_with_three_items_each_covered_name_reads_whole_and_clear(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    # The recheck's shape: one item at Soccer's start and one a quarter hour later, both on Soccer,
+    # each long enough for the name it covers to read whole on its side.
+    _soccer_and_a_pinned_reading(window, qapp, minutes=120, soccer=135)
+    _pinned(window, qapp, "sheet", "Math worksheet", "16:15", 120)
+    for wide in (True, False):
+        with _narrow_window(window, qapp) if not wide else _nothing():
+            _show_thursday_afternoon(root, window, qapp)
+            soccer, reading = _block_named(root, "Soccer"), _block_named(root, "Pinned reading")
+            sheet = _block_named(root, "Math worksheet")
+            _name_whole_and_clear(soccer, [reading, sheet])
+            _name_whole_and_clear(reading, [sheet])
+
+
+
+def test_a_deep_stack_stays_inside_its_day(qapp: QApplication, window: NativeWindow) -> None:
+    root = _reset(window, qapp)
+    _soccer_and_a_pinned_reading(window, qapp, soccer=120)
+    for at, start in enumerate(("16:05", "16:10", "16:15", "16:20")):
+        _pinned(window, qapp, f"stack{at}", f"Stack {at}", start, 60)
+    with _narrow_window(window, qapp):
+        _show_thursday_afternoon(root, window, qapp)
+        soccer = _block_named(root, "Soccer")
+        lane = _rect(soccer)
+        for title in ("Pinned reading", "Stack 0", "Stack 1", "Stack 2", "Stack 3"):
+            block = _rect(_block_named(root, title))
+            assert block.left() >= lane.left() and block.right() <= lane.right() + 0.5, title
+
+
+def test_a_covered_homeworks_done_circle_is_whole_and_clear_or_hidden(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    # The reading (two and a half hours) is longer than Soccer (an hour) at the same start, so Soccer,
+    # and Snack after it, lie on it.
+    _soccer_and_a_pinned_reading(window, qapp, minutes=150, soccer=60)
+    _show_thursday_afternoon(root, window, qapp)
+    reading, soccer = _block_named(root, "Pinned reading"), _block_named(root, "Soccer")
+    snack = _block_named(root, "Snack")
+    _name_whole_and_clear(reading, [soccer, snack])
+    finish = _named(reading, "weekBlockFinish")[0]
+    if finish.property("visible"):
+        assert _rect(reading).contains(_rect(finish))
+        assert not _rect(soccer).intersects(_rect(finish))
+        assert not _rect(snack).intersects(_rect(finish))
+
+
+def test_in_week_a_drop_over_the_overlap_lands_on_the_students_step(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _reset(window, qapp)
+    # Friday, after the clock's Thursday 19:00, so the drop is not in the past: Tennis 16:00-17:30.
+    friday = NOW_DAY + 1
+    window.session.add_block(
+        {
+            "id": "tennis",
+            "title": "Tennis",
+            "kind": "locked",
+            "category": "exercise",
+            "start": "16:00",
+            "duration_min": 90,
+            "days": [friday],
+        }
+    )
+    window.session.save()
+    settled(qapp, window)
+    week = _qml(root, "materialWeek")
+    row = float(_bridge(window).property("hourRow"))
+    gutter, day_width = float(week.property("gutter")), float(week.property("dayWidth"))
+    grid = _qml(root, "weekScroller")
+    hours_item = next(child for child in grid.childItems()[0].childItems() if child.property("width"))
+    try:
+        # The second drop lands over Tennis and the first poster.
+        for step, expected in ((15, "16:15"), (5, "16:20")):
+            _pref(window, drag_step_min=step)
+            window._material_page.publish()
+            _pump(qapp)
+            due = (_week_monday(window) + timedelta(days=6)).isoformat()
+            key = f"poster{step}"
+            _homework(window, key, f"Poster {step}", 30, due)
+            _pump(qapp)
+            _show_thursday_afternoon(root, window, qapp)
+            # The poster is the one card waiting; the earlier poster is placed.
+            cards = _named(root, "homeworkCard")
+            assert len(cards) == 1
+            # Let go at 16:20 over Tennis: on a 15-minute step that is 16:15, on a 5-minute one 16:20.
+            x = gutter + friday * day_width + day_width / 2
+            spot = hours_item.mapToScene(QPointF(x, (16 + 1 / 3) * row + 1))
+            _drag(window, cards[0], QPoint(int(spot.x()), int(spot.y())))
+            wait_until(qapp, lambda key=key: not window.session.busy and not window.session.dirty)
+            placed = next(block for block in window.session.blocks if block.get("assignment_id") == key)
+            assert (placed["start"], placed["days"]) == (expected, [friday]), step
+    finally:
+        (window.session.preferences or {}).pop("drag_step_min", None)
+        window._material_page.publish()
+        _pump(qapp)

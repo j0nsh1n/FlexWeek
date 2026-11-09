@@ -17,6 +17,11 @@ Item {
     // Week and Day set a block's height from its time. Its words then fit that height: the title
     // gives up its second line first, then the time line goes, so nothing is drawn past the border.
     property bool fitToHeight: false
+    // When another block lies on part of this one, the words go where they show: `wordsTop` down from
+    // the block's top, within `wordsRoom` (-1: the whole height). `showWords` false leaves them out.
+    property real wordsTop: 0
+    property real wordsRoom: -1
+    property bool showWords: true
 
     // Absent keys keep the block default: radius 6, pad 6, no shadow, an edge bar.
     readonly property int pad: (theme && theme.cardPad !== undefined) ? theme.cardPad : 6
@@ -46,7 +51,10 @@ Item {
     FontMetrics { id: detailFont; font: detail.font }
     readonly property real titleLine: Math.ceil(titleFont.height * title.lineHeight)
     readonly property real detailLine: root.detail !== "" ? Math.ceil(detailFont.height) : 0
-    readonly property real room: root.height - root.pad - (root.highContrast ? 2 : 1)
+    readonly property real room: (root.wordsRoom >= 0 ? root.wordsRoom : root.height) - root.pad
+                                 - (root.highContrast ? 2 : 1)
+    // How many lines the title may take: two when they and the time line fit, else one.
+    readonly property int titleLines: !root.fitToHeight || 2 * root.titleLine + root.detailLine <= root.room ? 2 : 1
     // Where the last drawn line ends, so a block can place something below its words.
     readonly property real contentBottom: body.y + body.height
 
@@ -159,11 +167,12 @@ Item {
         objectName: "words"
         anchors.fill: parent
         clip: true
+        visible: root.showWords
         Column {
             id: body
             objectName: "body"
             x: 12
-            y: root.pad
+            y: root.wordsTop + root.pad
             width: parent.width - 20
             spacing: 0
             Text {
@@ -174,7 +183,7 @@ Item {
                 color: root.textInk
                 opacity: 1
                 wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                maximumLineCount: !root.fitToHeight || 2 * root.titleLine + root.detailLine <= root.room ? 2 : 1
+                maximumLineCount: root.titleLines
                 elide: Text.ElideRight
                 font.family: M3Font.family
                 font.pixelSize: M3Font.px(12)

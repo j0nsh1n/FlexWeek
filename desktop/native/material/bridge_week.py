@@ -44,7 +44,7 @@ BLOCK_ROLES = (
     "done",
     "fresh",
     "indent",
-    "lifts",
+    "under",
 )
 
 
@@ -68,7 +68,7 @@ def occurrence_row(item: Any, mode: str, *, dim: bool, gone: bool, fresh: bool) 
         "done": bool(item.done),
         "fresh": fresh,
         "indent": 0,
-        "lifts": [[int(item.start), 0]],
+        "under": [],
     }
 
 
@@ -77,18 +77,18 @@ def overlapped(rows: list[dict]) -> list[dict]:
 
     Rows come back in time order, the longer first on a tie, which is also their Tab order and the
     order they are drawn in, so a later item lies on top of the earlier ones it shares time with.
-    `indent` is how many steps right it sits: one past the deepest item it covers. `lifts` are
-    [minute, names] pairs: its top sits at the lowest of `minute` plus that many name strips, so the
-    names of the items it covers still show above it."""
+    Every item keeps its own time. `indent` is how many steps right it sits: one past the deepest item
+    it covers. `under` lists, by place in the returned list, the items it lies on, so the view can keep
+    their names in sight and step this one past their uncovered strips."""
     rows.sort(key=lambda row: (row["day"], row["start"], row["start"] - row["end"]))
     for at, row in enumerate(rows):
-        under = [other for other in rows[:at] if other["day"] == row["day"] and other["end"] > row["start"]]
-        row["indent"] = max((other["indent"] + 1 for other in under), default=0)
-        lifts = {0: row["start"]}
-        for other in under:
-            for minute, names in other["lifts"]:
-                lifts[names + 1] = max(lifts.get(names + 1, minute), minute)
-        row["lifts"] = [[minute, names] for names, minute in sorted(lifts.items())]
+        under = [
+            place
+            for place, other in enumerate(rows[:at])
+            if other["day"] == row["day"] and other["end"] > row["start"]
+        ]
+        row["indent"] = max((rows[place]["indent"] + 1 for place in under), default=0)
+        row["under"] = under
     return rows
 
 

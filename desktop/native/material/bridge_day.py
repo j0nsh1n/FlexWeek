@@ -387,6 +387,11 @@ class DayBridge(QObject):
     def blocks(self) -> QObject:
         return self._blocks
 
+    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
+    def blockRows(self) -> list:
+        """The blocks as a list, in the model's order, so the hours can place each against the others."""
+        return self._block_rows
+
     @Property(int, notify=changed)
     def year(self) -> int:
         return self._year
