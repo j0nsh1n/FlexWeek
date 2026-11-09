@@ -482,3 +482,33 @@ def test_on_the_12_hour_clock_the_start_only_line_reads_6_45_pm_where_the_range_
     assert detail.property("truncated") is False
     name = QAccessible.queryAccessibleInterface(essay).text(QAccessible.Text.Name)
     assert name == "Edit History essay, 6:45\u20137:45 PM"
+
+
+def test_where_even_the_start_would_be_cut_beside_the_corner_circle_the_circle_hides(qapp, window) -> None:
+    """Jonathan, 2026-11-09 (option 1): on the 12-hour clock in a 1050 px window the one-hour essay's line
+    beside the corner circle is narrower than "6:45 PM", so the circle hides and the line takes the whole
+    width, still the start alone where the range does not fit. Edit and the menu still finish it."""
+    root = _reset(window, qapp)
+    _pref(window, clock_24h=False)
+    window._material_page.publish()
+    _pump(qapp)
+    window.resize(1050, 800)
+    _pump(qapp, 6)
+    try:
+        essay = _block_named(root, "History essay")
+        content = next(c for c in essay.childItems() if c.property("lineRoom") is not None)
+        beside = float(content.property("lineRoom")) - float(essay.property("cornerSize")) - 8
+        assert essay.property("circleCorner") is True
+        assert float(content.property("startWidth")) > beside
+        assert essay.property("circleWouldCutStart") is True
+        assert _named(essay, "weekBlockFinish")[0].property("visible") is False
+        assert essay.property("circleBesideTime") is False
+        detail = next(d for d in _named(essay, "detail") if d.property("visible"))
+        assert detail.property("truncated") is False
+        assert float(detail.property("width")) == float(content.property("lineRoom"))
+        assert _time_line(essay) in ("6:45 PM", "6:45\u20137:45 PM")
+        name = QAccessible.queryAccessibleInterface(essay).text(QAccessible.Text.Name)
+        assert name == "Edit History essay, 6:45\u20137:45 PM"
+    finally:
+        window.resize(1280, 800)
+        _pump(qapp, 6)

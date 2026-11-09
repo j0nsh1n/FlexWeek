@@ -68,21 +68,28 @@ Item {
     // The corner circle is sized with the text, never under 20 px so it stays a clear click target.
     readonly property real cornerSize: Math.max(20, Math.ceil(blockContent.titleLine))
     // The circle shows whole where the words show, or not at all: a block too short for it below its
-    // title, or one whose name is on its side, hides it. Edit, the right-click menu and Shift+F10 still
-    // finish the homework.
+    // title, one whose name is on its side, or one whose start time it would cut beside it, hides it.
+    // Edit, the right-click menu and Shift+F10 still finish the homework.
     readonly property real wordsEnd: cell.wordsRoom >= 0 ? cell.wordsTop + cell.wordsRoom : cell.height
     readonly property real cornerTop: cell.wordsEnd - cell.cornerSize - 3
     readonly property bool circleFits: !cell.nameSide
                                        && (cell.circleCorner
                                            ? cell.cornerTop >= blockContent.titleBottom
                                              && cell.width >= cell.cornerSize + 8
+                                             && !cell.circleWouldCutStart
                                            : cell.wordsTop + 4 + finishButton.height + 2 <= cell.wordsEnd)
     // The corner circle lies beside the time line, which then gives up its right end rather than run
     // under the circle; where the circle sits below the time line it takes nothing from it. This reads
     // the title's bottom and the line's height, never the column's own height: that height changes with
     // the time line's width, which this sets, and the two would chase each other.
-    readonly property bool circleBesideTime: cell.circleCorner && cell.circleFits
+    readonly property bool cornerBesideTime: cell.circleCorner && blockContent.detailShown
                                              && cell.cornerTop < blockContent.titleBottom + blockContent.detailLine
+    // Jonathan, 2026-11-09 (option 1): the time is what a block is read for, so where even its start
+    // would be cut beside the circle, the circle hides and the line takes the whole width.
+    readonly property bool circleWouldCutStart: cell.cornerBesideTime
+                                                && blockContent.startWidth
+                                                   > blockContent.lineRoom - cell.cornerSize - 8
+    readonly property bool circleBesideTime: cell.cornerBesideTime && cell.circleFits
 
     EventBlock {
         id: blockContent
@@ -100,6 +107,7 @@ Item {
         accessName: cell.title
         rightInset: cell.homework && !cell.circleCorner && cell.circleFits ? 28 : 0
         detailInset: cell.circleBesideTime ? cell.cornerSize + 8 : 0
+        startWhenCut: cell.circleWouldCutStart
         fitToHeight: true
         wordsTop: cell.wordsTop
         wordsRoom: cell.wordsRoom
