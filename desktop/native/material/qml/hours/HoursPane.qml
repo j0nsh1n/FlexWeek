@@ -30,7 +30,7 @@ Item {
     property var host: null
 
     property int dropDay: -1
-    property int dropHour: -1
+    property int dropMinute: -1
     property int dragRangeDay: -1
     property int dragRangeStartMin: 0
     property int dragRangeEndMin: 0
@@ -441,7 +441,7 @@ Item {
                 z: 4
                 visible: root.weekMode && root.dropDay >= 0
                 x: root.gutter + Math.max(0, root.dropDay) * root.dayWidth + 3
-                y: Math.max(0, root.dropHour) * root.row
+                y: Math.max(0, root.dropMinute) / 60 * root.row
                 width: root.dayWidth - 6
                 height: root.row - 2
                 radius: 6

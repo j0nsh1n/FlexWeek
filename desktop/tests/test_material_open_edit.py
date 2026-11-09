@@ -254,7 +254,8 @@ def test_clicking_a_drawer_card_opens_edit_and_dragging_it_still_places_it(
     friday = 4
     grid.setProperty("contentY", float(16 * row - 100))
     _pump(qapp)
-    inside = hours_item.mapToScene(QPointF(gutter + friday * day_width + day_width / 2, 16 * row + 10))
+    # Two pixels past 16:00: a card lands on the nearest drag step under the pointer, 16:00.
+    inside = hours_item.mapToScene(QPointF(gutter + friday * day_width + day_width / 2, 16 * row + 2))
     _drag(window, card, QPoint(int(inside.x()), int(inside.y())))
     wait_until(
         qapp,

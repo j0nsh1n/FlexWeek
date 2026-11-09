@@ -506,7 +506,8 @@ def test_dragging_an_existing_block_or_card_does_not_open_add(
     _settle(qapp, window)
     _pump(qapp, 4)
     card = _named(root, "homeworkCard")[0]
-    sat_14 = hours_item.mapToScene(QPointF(gutter + saturday * day_width + day_width / 2, 14 * row + 10))
+    # Two pixels past 14:00: a card lands on the nearest drag step under the pointer, 14:00.
+    sat_14 = hours_item.mapToScene(QPointF(gutter + saturday * day_width + day_width / 2, 14 * row + 2))
     _drag(window, card, QPoint(int(sat_14.x()), int(sat_14.y())))
     _settle(qapp, window)
 

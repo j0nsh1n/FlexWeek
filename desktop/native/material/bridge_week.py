@@ -14,6 +14,7 @@ from typing import Any, Protocol
 
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
+from desktop.native.hours.geometry import drag_step, snap
 from desktop.native.material.bridge_rows import Labels, Rows
 from desktop.native.material.theme import event_category, paint_for_category
 from desktop.native.weekmodel import (
@@ -158,6 +159,7 @@ class WeekBridge(QObject):
         self._now_day = -1
         self._now_minute = 0
         self._columns = 7
+        self._drag_step = drag_step(None)
         self._week_key = ""
         self._seen: set[tuple[str, int]] = set()
         self._fresh_until: dict[tuple[str, int], float] = {}
@@ -192,6 +194,7 @@ class WeekBridge(QObject):
         set_clock_24h(bool(prefs.get("clock_24h")))
         self._hour_labels = [clock_label(hour * 60) for hour in range(24)]
         self._columns = 7 if _bool_pref(prefs, "show_weekends", True) else 5
+        self._drag_step = drag_step(prefs.get("drag_step_min"))
         dim = _bool_pref(prefs, "dim_completed", True)
         block_rows: list[dict] = []
         homework_rows: list[dict] = []
@@ -349,7 +352,8 @@ class WeekBridge(QObject):
 
     @Slot(str, int, int)
     def placeHomework(self, block_id: str, day: int, start: int) -> None:
-        """A drawer card let go on `day` at minute `start`: the same hand move the Widgets week makes."""
+        """A drawer card let go on `day` at minute `start`: the same hand move the Widgets week makes,
+        on the student's drag step."""
         session = self._window.session  # type: ignore[attr-defined]
         block = next((item for item in session.blocks if item["id"] == block_id), None)
         if block is None or not 0 <= day < self._columns:
@@ -357,7 +361,7 @@ class WeekBridge(QObject):
         length = int(block.get("duration_min") or 0)
         if length <= 0:
             return
-        start = max(0, min(start, DAY_MIN - length))
+        start = max(0, min(snap(start, self._drag_step), DAY_MIN - length))
         session.place_block(block_id, -1, day, start, start + length)
 
     @Slot(str)
@@ -520,6 +524,10 @@ class WeekBridge(QObject):
     @Property(int, notify=changed)
     def columns(self) -> int:
         return self._columns
+
+    @Property(int, notify=changed)
+    def dragStep(self) -> int:
+        return self._drag_step
 
     @Property(int, notify=changed)
     def nowDay(self) -> int:
