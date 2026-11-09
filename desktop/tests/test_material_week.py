@@ -366,6 +366,13 @@ def test_ctrl_z_still_undoes_with_the_one_letter_shortcuts_off(
     _waiting_again(window, qapp, root, "sheet")
 
 
+_UNDO_REDO_KEYS = (
+    (Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier),
+    (Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier),
+    (Qt.Key.Key_Y, Qt.KeyboardModifier.ControlModifier),
+)
+
+
 def test_ctrl_z_in_a_text_field_leaves_the_schedule_alone(qapp: QApplication, window: NativeWindow) -> None:
     root = _reset(window, qapp)
     _place_now(window, qapp, root, "sheet", "Math worksheet")
@@ -375,16 +382,13 @@ def test_ctrl_z_in_a_text_field_leaves_the_schedule_alone(qapp: QApplication, wi
     title = _qml(root, "homeworkTitle")
     title.forceActiveFocus()
     _pump(qapp)
-    for key, modifiers in (
-        (Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier),
-        (Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier),
-        (Qt.Key.Key_Y, Qt.KeyboardModifier.ControlModifier),
-    ):
+    # Each key is checked on its own: an undo followed by a redo would end where it started.
+    for key, modifiers in _UNDO_REDO_KEYS:
         _press(window, key, modifiers)
-    _pump(qapp, 6)
-    assert not window.session.busy
-    assert next(b for b in window.session.blocks if b.get("assignment_id") == "sheet").get("start")
-    assert window.session.can_undo()
+        _pump(qapp, 6)
+        assert not window.session.busy
+        assert next(b for b in window.session.blocks if b.get("assignment_id") == "sheet").get("start"), key
+        assert window.session.can_undo() and not window.session.can_redo(), key
     # A sheet that is open but whose focus is on a button, not a field, still keeps the keys: undoing
     # behind it would change the week under a form the student is filling in.
     cancel = _qml(root, "homeworkCancel")
@@ -394,17 +398,12 @@ def test_ctrl_z_in_a_text_field_leaves_the_schedule_alone(qapp: QApplication, wi
     assert held is not None and held.objectName() != "fieldInput", held
     assert _bridge(window).sheets.kind == "homework"
     before = [dict(b) for b in window.session.blocks]
-    for key, modifiers in (
-        (Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier),
-        (Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier),
-        (Qt.Key.Key_Y, Qt.KeyboardModifier.ControlModifier),
-    ):
+    for key, modifiers in _UNDO_REDO_KEYS:
         _press(window, key, modifiers)
-    _pump(qapp, 6)
-    assert not window.session.busy
-    assert [dict(b) for b in window.session.blocks] == before
-    assert window.session.can_undo()
-    assert not window.session.can_redo()
+        _pump(qapp, 6)
+        assert not window.session.busy
+        assert [dict(b) for b in window.session.blocks] == before, key
+        assert window.session.can_undo() and not window.session.can_redo(), key
     _bridge(window).sheets.forceClose()
 
 
