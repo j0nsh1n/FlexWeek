@@ -8,6 +8,7 @@ from typing import Any, Protocol
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from desktop.native.calendar import monday_of
+from desktop.native.focus import remaining_ms
 from desktop.native.hours.zoom import OPENS, opening_minute
 from desktop.native.material.bridge_rows import Rows
 from desktop.native.material.bridge_week import BLOCK_ROLES, occurrence_row, overlapped
@@ -19,7 +20,7 @@ from desktop.native.material.day_board import (
     board_for,
     read_flag,
 )
-from desktop.native.weekmodel import set_clock_24h
+from desktop.native.weekmodel import length_label, set_clock_24h
 
 ROW_ROLES = (
     "title",
@@ -92,7 +93,14 @@ class DayBridge(QObject):
         self._load_started = False
         # Day asked for today while another week was loading; that load lands later and moves the day.
         self._want_today = False
+        # The focus timer, as the Now card names it: (title, time left or "Session finished", ended, homework
+        # still open, homework already done), or blank.
+        self._timer: tuple[str, str, bool, bool, bool] = ("", "", False, False, False)
+        self._today = False
         session = getattr(window, "session", None)
+        timer = getattr(session, "focus_changed", None)
+        if timer is not None and hasattr(timer, "connect"):
+            timer.connect(self._on_timer)
         busy = getattr(session, "busy_changed", None)
         if today_only and busy is not None:
             busy.connect(self._on_busy)
@@ -159,6 +167,8 @@ class DayBridge(QObject):
                 if callable(on_day):
                     items = on_day(self._day_index)
         when = "today" if viewed == today else ("past" if viewed < today else "future")
+        self._today = when == "today"
+        self._timer = _timer_words(session)
         minute = now_minute if when == "today" else 0
         self._opening_minute = _opening_minute(
             week_model, viewed, today, minute if when == "today" else None, self._day_index
@@ -200,6 +210,13 @@ class DayBridge(QObject):
             self._block_rows = list(rows)
             self._blocks.set_rows(rows)
         self.changed.emit()
+
+    def _on_timer(self) -> None:
+        """The timer ticks twice a second; the card changes only when its words do."""
+        words = _timer_words(self._window.session)  # type: ignore[attr-defined]
+        if words != self._timer:
+            self._timer = words
+            self.changed.emit()
 
     def _say(self, text: str) -> None:
         note = getattr(self.parent(), "note", None)
@@ -288,9 +305,35 @@ class DayBridge(QObject):
         self._open(target.isoformat())
 
     @Slot()
-    def startFocus(self) -> None:
-        """The Focus lane's hook when it has one, otherwise the Widgets Start focus path."""
+    def markFinished(self) -> None:
+        """The Now card's Mark finished: the finished timer's homework is done, and the timer is cleared."""
+        self._window.session.finish_focused_homework()  # type: ignore[attr-defined]
+
+    @Slot()
+    def startAgain(self) -> None:
+        """The Now card's Start again: a new timer on the same homework, never asking to replace."""
         window = self._window
+        if window.session.restart_finished_focus():  # type: ignore[attr-defined]
+            opener = getattr(window, "_open_focus_screen", None)
+            if callable(opener):
+                opener()
+
+    @Slot()
+    def dismissFinished(self) -> None:
+        """The Now card's OK on a finished session whose homework is already done: clear the timer."""
+        session = self._window.session  # type: ignore[attr-defined]
+        state = getattr(session, "focus", None)
+        if isinstance(state, dict) and state.get("phase") == "ended":
+            session.reset_focus()
+
+    @Slot()
+    def startFocus(self) -> None:
+        """Back to a running timer; else the Focus lane's hook, otherwise the Widgets Start focus path."""
+        window = self._window
+        opener = getattr(window, "_open_focus_screen", None)
+        if self._today and self._timer[0] and callable(opener):
+            opener()
+            return
         block_id = self._board.focus_block_id
         day = self._board.focus_day
         hook = getattr(window, "start_material_focus", None)
@@ -345,7 +388,7 @@ class DayBridge(QObject):
 
     @Property(bool, notify=changed)
     def showNow(self) -> bool:
-        return self._board.show_now
+        return self._board.show_now or bool(self._timer[0] and self._today)
 
     @Property(str, notify=changed)
     def nowTitle(self) -> str:
@@ -416,6 +459,28 @@ class DayBridge(QObject):
     def focusBlockId(self) -> str:
         return self._board.focus_block_id
 
+    @Property(str, notify=changed)
+    def timerTitle(self) -> str:
+        return self._timer[0] if self._today else ""
+
+    @Property(str, notify=changed)
+    def timerLine(self) -> str:
+        return self._timer[1] if self._today else ""
+
+    @Property(bool, notify=changed)
+    def timerEnded(self) -> bool:
+        return bool(self._today and self._timer[0] and self._timer[2])
+
+    @Property(bool, notify=changed)
+    def timerDone(self) -> bool:
+        """Time is up on homework that is already done: only OK is left to offer."""
+        return bool(self.timerEnded and self._timer[4])
+
+    @Property(bool, notify=changed)
+    def timerCanFinish(self) -> bool:
+        """Time is up on homework that is still open, which a quick focus never has."""
+        return bool(self.timerEnded and self._timer[3])
+
 
 def _opening_minute(week: object, viewed: date, today: date, now: int | None, day_index: int) -> int:
     """Now on today, else the day's first block, else 08:00. QML only scrolls."""
@@ -423,6 +488,26 @@ def _opening_minute(week: object, viewed: date, today: date, now: int | None, da
         return now if viewed == today and now is not None else OPENS
     today_index = day_index if viewed == today else None
     return opening_minute(week, today_index, now, day_index)  # type: ignore[arg-type]
+
+
+def _timer_words(session: object) -> tuple[str, str, bool, bool, bool]:
+    """The timer's homework and its time left, or "Session finished" once it has run out and has not
+    been cleared ("Finished" when its homework was already done); blank when there is none. The last
+    three say it has ended, its homework is open, and its homework is already done."""
+    state = getattr(session, "focus", None)
+    if not isinstance(state, dict):
+        return ("", "", False, False, False)
+    title = str(state.get("title") or "Quick focus")
+    if state.get("phase") == "ended":
+        homework = (getattr(session, "assignments", None) or {}).get(state.get("assignmentId"))
+        if homework is not None and homework.get("completed"):
+            return (title, "Finished", True, False, True)
+        return (title, "Session finished", True, homework is not None, False)
+    left = max(1, -(-remaining_ms(state, session.now_ms()) // 60_000))  # type: ignore[attr-defined]
+    words = f"{length_label(left)} left"
+    if state.get("phase") in ("break", "long_break"):
+        words = f"Break, {words}"
+    return (title, words, False, False, False)
 
 
 def _chosen_day(session: object, today: date) -> date:

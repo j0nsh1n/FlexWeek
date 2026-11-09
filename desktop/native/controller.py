@@ -197,6 +197,17 @@ ROUTINE_STATUS = frozenset(
 )
 
 
+def _same_timer(running: dict, target: dict) -> bool:
+    """Starting the homework (or block) whose timer is already going is going back to it, not a replace."""
+    if running.get("phase") == "ended":
+        return False
+    homework = target.get("assignmentId")
+    if homework:
+        return homework == running.get("assignmentId")
+    block = target.get("blockId")
+    return bool(block) and block == running.get("blockId")
+
+
 def _late_summary(moved: int) -> str:
     if not moved:
         return "Nothing needs to move."
@@ -3503,6 +3514,8 @@ class NativeSession(QObject):
                     "start": placed["start"],
                     "title": block["title"],
                 }
+        if self.focus is not None and not replace and _same_timer(self.focus, target):
+            return True
         if self.focus is not None and not replace:
             self._pending_focus = {**target, "quick": quick, "block_id": block_id, "day": day}
             self.focus_replace_needed.emit(self.focus["title"], target["title"])
@@ -3755,6 +3768,22 @@ class NativeSession(QObject):
         self.complete_homework(assignment_id, True)
         self._reset_focus()
         self.save()
+        return True
+
+    def restart_finished_focus(self) -> bool:
+        """Start again on a timer that has run out: a new session on the same homework (or a quick
+        one), taking the place of the finished timer without asking to replace it."""
+        state = self.focus
+        if state is None or state.get("phase") != "ended" or self.busy or self._focus_busy:
+            return False
+        target = {
+            key: state.get(key) for key in ("weekStart", "blockId", "assignmentId", "day", "start", "title")
+        }
+        self.focus = begin_state(target, self.preferences, self.now_ms())
+        self._pending_focus = None
+        self._persist_focus()
+        self.focus_changed.emit()
+        self._open_focus_spotify()
         return True
 
     def add_focus_time(self, minutes: int) -> bool:
