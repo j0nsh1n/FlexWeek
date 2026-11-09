@@ -662,8 +662,10 @@ Item {
             id: menuDim
             anchors.fill: parent
             color: "transparent"
+            // Takes the tap, so a click outside the menu only closes it: the block under it does not open.
             TapHandler {
                 enabled: blockMenu.open
+                gesturePolicy: TapHandler.WithinBounds
                 onTapped: root.closeBlockMenu()
             }
         }

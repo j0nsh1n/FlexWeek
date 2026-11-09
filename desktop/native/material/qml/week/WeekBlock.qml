@@ -1,7 +1,8 @@
 import QtQuick
 import components 1.0
 
-// One block on the grid. Day sets dayOpen so every block opens; Week keeps homework-only.
+// One block on the grid. Every block opens, in Week as in Day (Jonathan, 2026-11-08); Day sets dayOpen
+// so Space finishes homework there.
 Item {
     id: cell
     property var theme
@@ -16,13 +17,13 @@ Item {
     property bool fresh: false
     property bool homework: false
     property bool passive: false
-    // Day sets this so School and Soccer open like homework; Week leaves it off.
+    // Day sets this: there Space finishes homework, in Week it opens it.
     property bool dayOpen: false
     // Drawn over a block it shares time with: an opaque base and a light shadow keep the one under it
     // from showing through.
     property bool raised: false
     readonly property bool keyFocus: finishButton.activeFocus
-    readonly property bool canOpen: !cell.passive && (cell.homework || cell.dayOpen)
+    readonly property bool canOpen: !cell.passive
     signal toggled()
     signal opened()
     signal menuAsked(real x, real y)

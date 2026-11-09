@@ -488,14 +488,47 @@ def test_clicking_homework_finishes_it_and_undo_opens_it_again(
     assert _block_named(root, "History essay").property("done") is False
 
 
-def test_a_fixed_block_is_not_a_button(qapp: QApplication, window: NativeWindow) -> None:
+def test_in_week_a_fixed_block_opens_on_click_and_enter_and_is_a_tab_stop(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    # Jonathan, 2026-11-08: in Week, School and activities open on click and Enter and take Tab, as
+    # they do in Day.
     root = _reset(window, qapp)
-    school = _block_named(root, "School")
-    assert school.property("homework") is False
-    assert school.property("activeFocusOnTab") is False
-    _click(window, school)
-    _pump(qapp)
-    assert _snack(window) == ""
+    sheets = window._material_page.bridge.sheets
+    quick = window._material_page._quick
+    row = int(_bridge(window).property("hourRow"))
+    _qml(root, "weekScroller").setProperty("contentY", float(8 * row))
+    _pump(qapp, 4)
+    schools = sorted(
+        (block for block in _named(root, "weekBlock") if block.property("title") == "School"),
+        key=lambda block: block.mapToScene(QPointF(0, 0)).x(),
+    )
+    assert len(schools) == 5
+    try:
+        _click(window, schools[0])
+        assert (sheets.kind, sheets.form["title"]) == ("block", "School")
+        sheets.forceClose()
+        _pump(qapp)
+
+        schools[0].forceActiveFocus()
+        _pump(qapp)
+        QTest.keyClick(quick, Qt.Key.Key_Return)
+        _pump(qapp)
+        assert (sheets.kind, sheets.form["title"]) == ("block", "School")
+        sheets.forceClose()
+        _pump(qapp)
+
+        # Tab runs in time order through the week: Thursday's School comes just before the essay that
+        # evening.
+        essay = _block_named(root, "History essay")
+        essay.forceActiveFocus()
+        _pump(qapp)
+        QTest.keyClick(quick, Qt.Key.Key_Tab, Qt.KeyboardModifier.ShiftModifier)
+        _pump(qapp)
+        assert schools[NOW_DAY].property("activeFocus") is True
+    finally:
+        sheets.forceClose()
+        _pump(qapp)
 
 
 def test_past_blocks_are_dimmed_by_the_clock(qapp: QApplication, window: NativeWindow) -> None:
