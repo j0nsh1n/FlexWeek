@@ -883,7 +883,7 @@ The commands it runs, each of which must exit 0:
 - The Rust test harness in `tools/fwtest` (Rust approved for it on 2026-09-28;
   contract in `docs/tooling/fwtest.md`) has its own checks, run from
   `tools/fwtest`, each of which must exit 0: `cargo fmt --check`,
-  `cargo clippy -- -D warnings` and `cargo test`. The Rust version is the one
+  `cargo clippy --all-targets -- -D warnings` and `cargo test`. The Rust version is the one
   `rustup` installs as stable; the crate uses the 2024 edition.
 - The engine in `engine/` (Rust approved for it on 2026-09-30) has its own
   checks, run from `engine/`, each of which must exit 0: `cargo fmt --check`,
