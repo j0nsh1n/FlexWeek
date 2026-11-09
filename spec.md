@@ -171,8 +171,10 @@ Contract for the finished app:
   student's step, 5 minutes or 15 (the `drag_step_min` preference, 5 unless
   chosen otherwise in setup or Settings > Planning), with its times beside it
   while held; a typed time keeps any minute; an end drags to resize;
-  empty time drags to create; overlaps are allowed, drawn side by side and
-  named; a block moved by hand is pinned; a refusal leaves the block where it
+  empty time drags to create; overlaps are allowed and each is named: Material
+  draws them overlapped with an offset, each at its own time, the covered
+  item's name below or beside the one on top, and the classic styles side by
+  side; a block moved by hand is pinned; a refusal leaves the block where it
   was and says why before it is let go.
 - Day view lists one date: homework due soon, that day's work sessions and fixed
   commitments, one next action, and a workload summary that separates scheduled
@@ -377,8 +379,9 @@ its sessions from every week (`DELETE` in `/api/changes`) and says which it
 removed, so one Undo writes the homework and each of those sessions back. Hours have
 no half-hour rules; the now line and its time are in the accent, today's date
 is an accent chip, and Week washes today's column with 3 % of the text colour.
-After a plan, blocks slide to their new places. Blocks may overlap; they sit side by
-side, each marked. A drop
+After a plan, blocks slide to their new places. Blocks may overlap, each marked: the
+classic styles set them side by side; Material lays the later one over the earlier with
+an offset, the covered one's name below or beside it. A drop
 is refused only outside the day's hours or when homework would end after it is
 due. Dragging one day of a repeating block moves that day only. Dragging works
 in every design: a block can be picked up wherever a design shows it, and every
@@ -1011,7 +1014,8 @@ Decided by Jonathan on 2026-10-20. These add to the Releases rules in AGENTS.md.
 - [ ] A new account skips or finishes setup, and setup does not come back;
       quitting mid-way resumes on the same page.
 - [ ] In every design, a student drags homework and blocks to a time on any
-      day, a drop beside another block is allowed and shown side by side, and
+      day, a drop on another block's time is allowed and both show (overlapped
+      with an offset in Material, side by side in the classic styles), and
       the design refuses what the week calendar refuses, in the same words.
 - [ ] Download names are `FlexWeek-Windows-x64-Setup.exe` (with
       `FlexWeek-Windows-x64.msi` for schools) and
