@@ -82,3 +82,36 @@ def test_a_pinned_time_that_was_already_past_when_opened_is_left_alone(qapp, she
     sheets.save()
     settle(qapp, shell)
     assert sheets.kind != "homework", "the sheet closed: it saved without a refusal"
+
+
+def test_finished_homework_is_not_told_its_pinned_time_has_passed(qapp, shell, sheets) -> None:
+    sheets.editHomework("essay")
+    sheets.setFlag("completed", True)
+    sheets.setText("when", "fixed")
+    sheets.setNumber("whenDay", 3)
+    sheets.setText("whenTime", "18:30")
+    assert sheets.form["whenProblem"] == ""
+
+
+def test_a_pinned_time_on_a_day_ahead_is_not_told_it_has_passed(qapp, shell, sheets) -> None:
+    sheets.editHomework("essay")
+    sheets.setText("when", "fixed")
+    sheets.setNumber("whenDay", 4)
+    sheets.setText("whenTime", "18:30")
+    assert sheets.form["whenProblem"] == ""
+
+
+def test_switching_away_from_and_back_to_the_same_pinned_time_is_not_a_mistake(
+    qapp, shell, sheets
+) -> None:
+    """The essay is pinned at 18:45, which is before the 19:00 clock; picking "Plan it for me" and then
+    "At a set time" again leaves the time exactly as it was, so there is nothing to refuse."""
+    work = next(b for b in shell.session.blocks if b.get("assignment_id") == "essay")
+    work.update({"pinned": True})
+    shell.session.add_block(work)
+    shell.session.save()
+    settle(qapp, shell)
+    sheets.editHomework("essay")
+    sheets.setText("when", "plan")
+    sheets.setText("when", "fixed")
+    assert sheets.form["whenProblem"] == ""
