@@ -8,7 +8,8 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QPoint, QPointF, QTime  # noqa: E402
+from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QTime  # noqa: E402
+from PySide6.QtGui import QWindow  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
@@ -73,11 +74,37 @@ def settled(app: QApplication, widget: QWidget) -> None:
     wait_until(app, still, what="the window to stop moving and become active")
 
 
-def roll(area: QScrollArea, over: QWidget) -> None:
+class Arrival(QObject):
+    """Sees a wheel reach the window, which happens before the window passes it to a widget."""
+
+    def __init__(self, window: QWindow) -> None:
+        super().__init__()
+        self.window = window
+        self.arrived = False
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if watched is self.window and event.type() == QEvent.Type.Wheel:
+            self.arrived = True
+        return False
+
+
+def send_wheel(app: QApplication, window: QWindow, at: QPointF) -> None:
+    """One notch down, through the window, and wait until the window has handled it. The system queues
+    the event and a single processEvents may return before it is dispatched: on a loaded machine the
+    page was checked first and had not scrolled yet, one run in three."""
+    arrival = Arrival(window)
+    app.installEventFilter(arrival)
+    try:
+        QTest.wheelEvent(window, at, QPoint(0, -120))
+        wait_until(app, lambda: arrival.arrived, what="the wheel reaching the window")
+    finally:
+        app.removeEventFilter(arrival)
+
+
+def roll(app: QApplication, area: QScrollArea, over: QWidget) -> None:
     """One notch down, from the system, as a real mouse sends it: through the window."""
     at = QPointF(over.mapTo(area.window(), QPoint(12, over.height() // 2)))
-    QTest.wheelEvent(area.window().windowHandle(), at, QPoint(0, -120))
-    QApplication.processEvents()
+    send_wheel(app, area.window().windowHandle(), at)
 
 
 def test_the_wheel_over_a_box_the_student_is_not_in_scrolls_the_page(
@@ -91,7 +118,7 @@ def test_the_wheel_over_a_box_the_student_is_not_in_scrolls_the_page(
         typing.setFocus()
         bar.setValue(0)
         before = value()
-        roll(area, box)
+        roll(qapp, area, box)
         assert value() == before, f"{type(box).__name__} changed under a passing wheel"
         assert bar.value() > 0, f"the page did not scroll over the {type(box).__name__}"
         assert not box.hasFocus(), "the wheel is not a click; it must not take the keyboard"
@@ -104,7 +131,7 @@ def test_the_wheel_still_changes_a_box_the_student_clicked_into(
     host.show()
     settled(qapp, area)
     spin.setFocus()
-    roll(area, spin)
+    roll(qapp, area, spin)
     assert spin.value() == 49
 
 
@@ -119,7 +146,6 @@ def test_scrolling_down_settings_leaves_the_focus_minutes_alone(
     dialog.nav.setFocus()
     before = dialog.work.value()
     at = QPointF(dialog.work.mapTo(window, QPoint(12, dialog.work.height() // 2)))
-    QTest.wheelEvent(window.windowHandle(), at, QPoint(0, -120))
-    qapp.processEvents()
+    send_wheel(qapp, window.windowHandle(), at)
     assert dialog.work.value() == before
     dialog.close_page()
