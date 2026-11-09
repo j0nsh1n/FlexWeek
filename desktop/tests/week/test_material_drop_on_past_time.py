@@ -18,7 +18,8 @@ from desktop.tests.week.support_material import (
 )
 from desktop.tests.window_support import qapp, settled  # noqa: F401
 
-PAST = "That time has passed. Choose 19:00 or later today, or another day."  # _reset puts the clock on 24-hour
+# _reset puts the clock on 24-hour.
+PAST = "That time has passed. Choose 19:00 or later today, or another day."
 
 
 def waiting_card(window) -> dict:
