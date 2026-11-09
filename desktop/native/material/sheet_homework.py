@@ -338,6 +338,7 @@ class HomeworkDraft:
             self.when_problem = self._past_when_problem()
         elif name == "completed":
             self.completed = bool(value)
+            self.when_problem = self._past_when_problem()
         elif name == "course":
             self.course = str(value)
         elif name == "priority":

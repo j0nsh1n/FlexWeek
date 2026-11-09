@@ -115,3 +115,13 @@ def test_switching_away_from_and_back_to_the_same_pinned_time_is_not_a_mistake(
     sheets.setText("when", "plan")
     sheets.setText("when", "fixed")
     assert sheets.form["whenProblem"] == ""
+
+
+def test_ticking_finished_clears_the_message_about_a_time_that_has_passed(qapp, shell, sheets) -> None:
+    sheets.editHomework("essay")
+    sheets.setText("when", "fixed")
+    sheets.setNumber("whenDay", 3)
+    sheets.setText("whenTime", "18:30")
+    assert sheets.form["whenProblem"] == PAST
+    sheets.setFlag("completed", True)
+    assert sheets.form["whenProblem"] == ""

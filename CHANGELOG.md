@@ -46,6 +46,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Material Add homework at Larger text: a long due date such as "Tomorrow · Fri 6 Nov" wraps to two lines instead of being cut off.
 - Material: leaving a sheet you changed asks "Discard your changes?" (it said "Discard what you typed?" even after only picking a time or a date).
 - Material Week: dropping a homework card on a time that has passed says "That time has passed..." in the snackbar instead of doing nothing.
+- Material Add/Edit homework: ticking "finished" clears the "That time has passed" message, since a finished task is not held to the clock.
 - Material Settings > Planning: Study window cutoff now has a "No limit" choice, so the current setting is always marked. A saved cutoff that is not one of the usual times (for example 10:15 PM) is shown as itself in Settings and kept when Setup is run again, instead of showing "No limit" or being reset.
 - Material Edit and Add homework: a pinned time that has already passed today shows "That time has passed. Choose ... or later today, or another day." as soon as it is picked, and Save still refuses it.
 - Material: Ctrl+Z now undoes the last change, so it takes back Place now, a drag, an add, a delete and a finish, just as the Undo button does; Ctrl+Shift+Z and Ctrl+Y redo. They stay off while you type in a field or have a sheet open. In Material, when Place now or Plan my homework finds nothing to change, its message no longer offers Undo, which would have undone an earlier change.
