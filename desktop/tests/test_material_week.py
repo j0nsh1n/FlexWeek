@@ -387,13 +387,24 @@ def test_ctrl_z_in_a_text_field_leaves_the_schedule_alone(qapp: QApplication, wi
     assert window.session.can_undo()
     # A sheet that is open but whose focus is on a button, not a field, still keeps the keys: undoing
     # behind it would change the week under a form the student is filling in.
-    window._material_page._quick.quickWindow().contentItem().forceActiveFocus()
+    cancel = _qml(root, "homeworkCancel")
+    cancel.forceActiveFocus()
     _pump(qapp)
+    held = window._material_page._quick.quickWindow().activeFocusItem()
+    assert held is not None and held.objectName() != "fieldInput", held
     assert _bridge(window).sheets.kind == "homework"
-    _press(window, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+    before = [dict(b) for b in window.session.blocks]
+    for key, modifiers in (
+        (Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier),
+        (Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier),
+        (Qt.Key.Key_Y, Qt.KeyboardModifier.ControlModifier),
+    ):
+        _press(window, key, modifiers)
     _pump(qapp, 6)
     assert not window.session.busy
-    assert next(b for b in window.session.blocks if b.get("assignment_id") == "sheet").get("start")
+    assert [dict(b) for b in window.session.blocks] == before
+    assert window.session.can_undo()
+    assert not window.session.can_redo()
     _bridge(window).sheets.forceClose()
 
 
