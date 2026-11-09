@@ -1,0 +1,374 @@
+"""Ctrl+K: type a few letters, press Enter, and it is done or open."""
+
+# ruff: noqa: F811  (pytest fixtures imported by name)
+from __future__ import annotations
+
+from collections.abc import Callable, Iterator
+from datetime import datetime, timedelta
+
+import pytest
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import (
+    QAbstractButton,
+    QApplication,
+    QDialog,
+    QGraphicsDropShadowEffect,
+)
+
+from backend.tests.fake_clock import CLOCK
+from desktop.native.calendar import sunday_due
+from desktop.native.command_bar import (
+    KEY_ROLE,
+    KEYS_ROLE,
+    Command,
+    grouped,
+    match_rank,
+    match_span,
+    ranked,
+)
+from desktop.native.motion import settle
+from desktop.native.settings import HELP_KEYS
+from desktop.native.widgets import ChooseTimeDialog, HomeworkDialog
+from desktop.native.window import NativeWindow
+from desktop.tests.light_app import open_light  # noqa: F401
+from desktop.tests.waiting import wait_until
+from desktop.tests.week.support_drag import plant_block, qapp, settled  # noqa: F401
+
+CTRL = Qt.KeyboardModifier.ControlModifier
+
+
+@pytest.fixture()
+def window(qapp: QApplication, open_light: Callable[..., NativeWindow]) -> Iterator[NativeWindow]:  # noqa: F811
+    """Today's app's Week with a History essay and a Math worksheet, neither with a time yet."""
+    made = open_light((1280, 860))
+    session = made.session
+    thursday = datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=10)
+    CLOCK.set(thursday)
+    due = sunday_due(session.week_start)
+    for key, title in (("essay", "History essay"), ("math", "Math worksheet")):
+        session.add_homework({"id": key, "title": title, "due": due, "estimate_min": 60, "revision": 0})
+    session.save()
+    settled(qapp, made)
+    made.findChild(QAbstractButton, "viewWeek").click()
+    settled(qapp, made)
+    made.week_table.hours.setFocus()
+    yield made
+
+
+def open_bar(window: NativeWindow) -> None:
+    QTest.keyClick(window.week_table.hours, Qt.Key.Key_K, CTRL)
+    assert window.command_bar.isVisible()
+
+
+def test_typing_filters_by_letters_in_order_then_by_first_letters() -> None:
+    commands = [
+        Command(key, words)
+        for key, words in (
+            ("a", "Add homework"),
+            ("m", "Month"),
+            ("p", "Plan my homework"),
+            ("math", "Math worksheet"),
+        )
+    ]
+    assert [command.key for command in ranked("", commands)] == ["a", "m", "p", "math"]
+    assert [command.key for command in ranked("ma", commands)] == ["math"]
+    assert [command.key for command in ranked("mo", commands)] == ["m"]
+    assert [command.key for command in ranked("home", commands)] == ["a", "p"]
+    assert [command.key for command in ranked("pmh", commands)] == ["p"]
+    assert [command.key for command in ranked("orks", commands)] == ["math"]
+    assert match_rank("zz", "Math worksheet") is None
+
+
+def test_match_span_marks_initials_as_themselves_and_word_starts() -> None:
+    """#89: "pmh" was (5, 9) "my h"; initials must not mark one run across words."""
+    assert match_span("pmh", "Plan my homework") == [(0, 1), (5, 6), (8, 9)]
+    assert match_span("pmh", "Plan my homework") != (5, 9)
+    assert match_span("aft", "Add fixed time") == [(0, 1), (4, 5), (10, 11)]
+    assert match_span("aft", "Add fixed time") != [(4, 11)]
+    assert match_span("plan", "Plan my homework") == [(0, 4)]
+    assert match_span("home", "Plan my homework") == [(8, 12)]
+    assert match_span("home", "Add homework") == [(4, 8)]
+
+
+def test_the_group_with_the_best_match_comes_first_so_enter_runs_it() -> None:
+    commands = [
+        Command("school", "School hours", group="Add"),
+        Command("chem", "Chem lab report", group="Homework"),
+        Command("month", "Month", group="Go to"),
+    ]
+    assert [group for group, _rows in grouped("", commands)] == ["Add", "Go to", "Homework"]
+    found = grouped("ch", commands)
+    assert [(group, [row.key for row in rows]) for group, rows in found] == [
+        ("Homework", ["chem"]),
+        ("Add", ["school"]),
+    ], "Chem starts with ch; School only holds it"
+
+
+def test_help_lists_both_keys() -> None:
+    assert ("[Ctrl]+[K]", "Command bar") in HELP_KEYS
+    assert ("[F]", "Focus screen") in HELP_KEYS
+    assert ("[F1]", "Help") in HELP_KEYS
+    assert ("[Ctrl]+[N]", "Add homework") in HELP_KEYS
+
+
+def test_ctrl_k_opens_a_box_listing_what_can_be_done_and_escape_closes_it(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    open_bar(window)
+    bar = window.command_bar
+    assert window.focusWidget() is bar.input, "typing goes straight into the box"
+    assert bar.shown_groups() == ["Add", "Go to", "Settings", "Homework"]
+    assert bar.shown_words() == [
+        "Add homework",
+        "Add fixed time",
+        "School hours",
+        "Day",
+        "Week",
+        "Month",
+        "My day",
+        "Focus screen",
+        "Settings",
+        "Help",
+        "Look",
+        "Edit look…",
+        "Planning settings",
+        "Focus settings",
+        "Alerts",
+        "This computer",
+        "Plan my homework",
+        "Choose a time…",
+        "History essay",
+        "Math worksheet",
+    ]
+    QTest.keyClick(bar.input, Qt.Key.Key_Escape)
+    assert bar.isVisible() is False
+
+
+def test_ma_then_enter_opens_math_worksheet(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    opened: list[str] = []
+
+    def look(dialog: HomeworkDialog) -> int:
+        opened.append(dialog.title.text())
+        return QDialog.DialogCode.Rejected
+
+    monkeypatch.setattr(HomeworkDialog, "exec", look)
+    open_bar(window)
+    bar = window.command_bar
+    QTest.keyClicks(bar.input, "ma")
+    assert bar.shown_words() == ["Math worksheet"]
+    QTest.keyClick(bar.input, Qt.Key.Key_Return)
+    assert opened == ["Math worksheet"]
+    assert bar.isVisible() is False
+
+
+def test_resizing_the_window_keeps_the_focused_row(qapp: QApplication, window: NativeWindow) -> None:
+    open_bar(window)
+    bar = window.command_bar
+    QTest.keyClick(bar.input, Qt.Key.Key_Down)
+    QTest.keyClick(bar.input, Qt.Key.Key_Down)
+    focused = bar.list.currentItem()
+    assert focused is not None
+    words = focused.text()
+    assert words != "Add homework"
+    window.resize(window.width() - 80, window.height() - 120)
+    qapp.processEvents()
+    assert bar.list.currentItem() is focused
+    assert bar.list.currentItem().text() == words
+
+
+def test_arrows_choose_and_enter_runs_what_is_chosen(qapp: QApplication, window: NativeWindow) -> None:
+    open_bar(window)
+    bar = window.command_bar
+    QTest.keyClicks(bar.input, "d")
+    assert bar.shown_words()[:2] == ["Day", "My day"]
+    QTest.keyClick(bar.input, Qt.Key.Key_Down)
+    QTest.keyClick(bar.input, Qt.Key.Key_Return)
+    assert window._day_mode is True, "My day, the second row, ran"
+
+    open_bar(window)
+    QTest.keyClicks(bar.input, "mon")
+    QTest.keyClick(bar.input, Qt.Key.Key_Up)
+    QTest.keyClick(bar.input, Qt.Key.Key_Return)
+    wait_until(qapp, lambda: window.session.planner_view == "month" and not window.session.busy)
+    assert window._day_mode is False
+    assert window.planner.currentWidget() is window.month_grid
+
+
+def test_a_click_outside_the_box_closes_it_and_nothing_matching_runs_nothing(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    open_bar(window)
+    bar = window.command_bar
+    QTest.keyClicks(bar.input, "xyzzy")
+    assert bar.shown_words() == []
+    assert bar.nothing.isVisible()
+    QTest.keyClick(bar.input, Qt.Key.Key_Return)
+    assert bar.isVisible(), "Enter with nothing to run keeps the box"
+    QTest.mouseClick(bar, Qt.MouseButton.LeftButton, pos=QPoint(10, window.height() - 10))
+    assert bar.isVisible() is False
+    assert window.session.planner_view == "week"
+
+
+def test_a_click_on_a_row_runs_it(qapp: QApplication, window: NativeWindow) -> None:
+    open_bar(window)
+    bar = window.command_bar
+    QTest.keyClicks(bar.input, "focus scr")
+    assert bar.shown_words() == ["Focus screen"]
+    rows = [bar.list.item(row) for row in range(bar.list.count())]
+    focus = next(item for item in rows if item.text() == "Focus screen")
+    row = bar.list.visualItemRect(focus).center()
+    QTest.mouseClick(bar.list.viewport(), Qt.MouseButton.LeftButton, pos=row)
+    assert window._stack.currentWidget() is window.focus_screen
+
+
+def test_choose_a_time_with_nothing_waiting_says_so(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    waiting = [
+        block for block in window.session.blocks if block.get("assignment_id") and not block.get("start")
+    ]
+    for index, block in enumerate(waiting):
+        plant_block(
+            window.session, block["id"], 2 + index, 16 * 60, 16 * 60 + block["duration_min"], pinned=True
+        )
+    window.session.save()
+    settled(qapp, window)
+
+    def must_not_open(self: ChooseTimeDialog) -> int:
+        raise AssertionError("Choose a time should not open")
+
+    monkeypatch.setattr(ChooseTimeDialog, "exec", must_not_open)
+    open_bar(window)
+    bar = window.command_bar
+    QTest.keyClicks(bar.input, "choose a time")
+    assert bar.shown_words() == ["Choose a time…"]
+    QTest.keyClick(bar.input, Qt.Key.Key_Return)
+    qapp.processEvents()
+    # Decision: sidebar / leftover copy is "Everything has a time." when every item has a time.
+    assert window.toast.text() == "Everything has a time."
+
+
+def test_plan_says_suggest_times_for_a_student_who_plans_by_hand(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    window.session.preferences = {**(window.session.preferences or {}), "planning_style": "manual"}
+    open_bar(window)
+    assert "Suggest times" in window.command_bar.shown_words()
+    assert "Plan my homework" not in window.command_bar.shown_words()
+
+
+def test_every_row_has_an_icon_and_the_views_their_keys(qapp: QApplication, window: NativeWindow) -> None:
+    open_bar(window)
+    bar = window.command_bar
+    rows = [bar.list.item(row) for row in range(bar.list.count())]
+    commands = [item for item in rows if item.data(KEY_ROLE)]
+    labels = [item for item in rows if not item.data(KEY_ROLE)]
+    assert all(not item.icon().isNull() for item in commands)
+    assert all(item.flags() == Qt.ItemFlag.NoItemFlags for item in labels), "a label cannot be chosen"
+    keys = {item.text(): item.data(KEYS_ROLE) for item in commands if item.data(KEYS_ROLE)}
+    assert keys == {
+        "Add homework": "Ctrl+N",
+        "Help": "F1",
+        "Day": "D",
+        "Week": "W",
+        "Month": "M",
+        "My day": "T",
+        "Focus screen": "F",
+    }
+    assert bar.list.currentItem().text() == "Add homework", "the first command, not the label over it"
+    QTest.keyClick(bar.input, Qt.Key.Key_Up)
+    assert bar.list.currentItem().text() == "Math worksheet", "Up from the top goes round, past the label"
+    for _ in range(2):
+        QTest.keyClick(bar.input, Qt.Key.Key_Down)
+    assert bar.list.currentItem().text() == "Add fixed time", "Down steps over the Add label"
+    QTest.keyClick(bar.input, Qt.Key.Key_Down)
+    QTest.keyClick(bar.input, Qt.Key.Key_Down)
+    assert bar.list.currentItem().text() == "Day", "and over the Go to label"
+
+
+def test_the_box_rises_into_place_as_the_window_dims_and_not_at_all_under_reduce(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Decision 31 of 0.17: Ctrl+K fades and rises; under Reduce it only fades. Grok Bot's 0.17.0 audit
+    (A6) saw no rise at 8 pixels, over the same time the window dims. The animation is ended where it
+    would have ended, so the distance it rose is read without waiting for it."""
+    for level, rise in (("normal", 16), ("extra", 21), ("reduce", 0)):
+        window.session.preferences = {**(window.session.preferences or {}), "motion": level}
+        window._apply_appearance()
+        open_bar(window)
+        bar = window.command_bar
+        first = bar.box.y()
+        assert bar.graphicsEffect() is not None, "the dimmed window fades in"
+        settle(bar)
+        settle(bar.box)
+        assert bar.graphicsEffect() is None, "nothing is left on the window's dimming once it has faded"
+        assert first - bar.box.y() == rise, level
+        bar.close_bar()
+
+
+def test_the_box_is_lifted_with_a_shadow_the_fade_leaves_alone(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    open_bar(window)
+    bar = window.command_bar
+    shadow = bar.box.graphicsEffect()
+    assert isinstance(shadow, QGraphicsDropShadowEffect)
+    assert bar.graphicsEffect() is not None
+    settle(bar)
+    assert bar.graphicsEffect() is None
+    assert bar.box.graphicsEffect() is shadow, "the fade leaves the box's shadow alone"
+
+
+def test_a_notice_said_while_ctrl_k_is_open_goes_under_its_dimming(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Grok Bot's 0.17.0 audit (A6): "Moved… Undo" stayed bright over Ctrl+K's dimmed window. The notice
+    is said when its save comes back, after the bar has opened, and a notice raises itself."""
+    open_bar(window)
+    bar = window.command_bar
+    window.toast.show_message("Moved Essay-1.", "Undo", lambda: None)
+    order = window.children()
+    assert order.index(bar) > order.index(window.toast), "the notice is under the dimming"
+    assert order.index(bar) > order.index(window.toast.button), "and so is its button"
+    bar.close_bar()
+    window.toast.show_message("Moved Essay-1.", "Undo", lambda: None)
+    order = window.children()
+    assert order.index(window.toast) > order.index(bar), "with nothing over the window, it is on top"
+
+
+def test_look_finds_the_look_and_opens_settings_where_it_is(qapp: QApplication, window: NativeWindow) -> None:
+    """Grok Bot's 0.17.0 audit (X1): "look" found nothing in Ctrl+K."""
+    open_bar(window)
+    bar = window.command_bar
+    QTest.keyClicks(bar.input, "look")
+    assert bar.shown_words()[:2] == ["Look", "Edit look…"]
+    QTest.keyClick(bar.input, Qt.Key.Key_Return)
+    settings = window._settings
+    assert settings is not None and window._stack.currentWidget() is settings
+    assert settings.nav.currentRow() == 0, "Appearance, where Colours comes first"
+    settings.close_page()
+    open_bar(window)
+    QTest.keyClicks(bar.input, "alerts")
+    QTest.keyClick(bar.input, Qt.Key.Key_Return)
+    assert window._settings.nav.currentRow() == 3
+    window._settings.close_page()
+
+
+def test_the_command_bar_and_settings_name_the_look_the_same_way(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """#101: the look was "Look and colours" in the command bar and "Appearance & layout" in Settings,
+    and its editor "Customise…" in one and "Edit your own look…" in the other. One name for each."""
+    open_bar(window)
+    bar = window.command_bar
+    QTest.keyClicks(bar.input, "look")
+    look_entry, editor_entry = bar.shown_words()[:2]
+    QTest.keyClick(bar.input, Qt.Key.Key_Return)
+    settings = window._settings
+    assert settings is not None
+    assert settings.nav.item(0).text() == look_entry == "Look"
+    assert settings.customise.text() == editor_entry == "Edit look…"
+    settings.close_page()

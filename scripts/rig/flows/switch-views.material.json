@@ -1,0 +1,55 @@
+{
+ "setup": {
+  "seed": "rig",
+  "look": "light-frost",
+  "size": [
+   1280,
+   800
+  ],
+  "clock_24h": false
+ },
+ "steps": [
+  {
+   "click": "settingsGear"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "click": "chooseMaterial"
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "see": "materialRail"
+  },
+  {
+   "click": "navDay"
+  },
+  {
+   "see": "materialDay"
+  },
+  {
+   "shot": "day"
+  },
+  {
+   "click": "navMonth"
+  },
+  {
+   "see": "materialMonth"
+  },
+  {
+   "shot": "month"
+  },
+  {
+   "click": "navWeek"
+  },
+  {
+   "see": "School"
+  },
+  {
+   "shot": "week"
+  }
+ ]
+}

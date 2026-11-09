@@ -1,0 +1,40 @@
+{
+ "setup": {
+  "seed": "rig",
+  "look": "light-frost",
+  "size": [
+   1280,
+   800
+  ],
+  "clock_24h": false
+ },
+ "steps": [
+  {
+   "click": "runningLate"
+  },
+  {
+   "wait": 500
+  },
+  {
+   "see": "lateDialog"
+  },
+  {
+   "click": "latePreview"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "shot": "preview"
+  },
+  {
+   "click": "lateAccept"
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "shot": "moved"
+  }
+ ]
+}

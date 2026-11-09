@@ -248,8 +248,8 @@ network.
 
 ## 8. Desktop completion checks — 2026-09-07
 
-The account flow is now exercised automatically by `desktop/tests/test_native.py`
-and `desktop/tests/test_smoke.py` against a real local API, using temporary
+The account flow is now exercised automatically by `desktop/tests/e2e/`
+(`test_the_app_starts_and_paints_its_first_screen.py`) against a real local API, using temporary
 databases and offscreen widgets. PySide6 is optional for the backend test
 environment; these tests skip explicitly when desktop dependencies are absent.
 

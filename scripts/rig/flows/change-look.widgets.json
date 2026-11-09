@@ -1,0 +1,47 @@
+{
+ "setup": {
+  "seed": "rig",
+  "look": "light-frost",
+  "size": [
+   1280,
+   800
+  ],
+  "clock_24h": false
+ },
+ "steps": [
+  {
+   "click": "settingsGear"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "click": {
+    "text": "Look"
+   }
+  },
+  {
+   "wait": 400
+  },
+  {
+   "click": {
+    "text": "Dark"
+   }
+  },
+  {
+   "wait": 600
+  },
+  {
+   "shot": "dark"
+  },
+  {
+   "click": "settingsDone"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "shot": "week-dark"
+  }
+ ]
+}

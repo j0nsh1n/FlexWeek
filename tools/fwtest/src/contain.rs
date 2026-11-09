@@ -821,7 +821,7 @@ fn job_id(pid: u32) -> String {
     if nth == 0 { id } else { format!("{id}-{nth}") }
 }
 
-fn utc_now() -> String {
+pub(crate) fn utc_now() -> String {
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs() as i64)

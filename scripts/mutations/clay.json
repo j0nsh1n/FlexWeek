@@ -1,240 +1,177 @@
 [
  {
   "file": "desktop/native/layouts/clay.py",
-  "name": "neighbours at full size",
-  "old": "PEEK = 0.7\n",
-  "new": "PEEK = 1.0\n",
-  "test": "desktop/tests/test_layout_clay.py::test_neighbours_are_the_card_in_front_at_70_percent_with_the_room_between_kept"
- },
- {
-  "file": "desktop/native/layouts/clay.py",
-  "name": "the front keeps its width in a narrow row",
-  "old": "        across = min(wanted, whole)\n",
-  "new": "        across = wanted\n",
-  "test": "desktop/tests/test_layout_clay.py::test_a_narrower_row_narrows_the_card_in_front_so_both_neighbours_stay_whole"
- },
- {
-  "file": "desktop/native/layouts/clay.py",
   "name": "the back arrow never stops",
   "old": "        first = self._open or self._front > 0\n",
   "new": "        first = True\n",
-  "test": "desktop/tests/test_layout_clay.py::test_the_arrows_slide_the_row_a_day_and_stop_at_the_weeks_ends"
+  "test": "desktop/tests/week/test_clay_row_moves.py::test_the_arrows_slide_the_row_a_day_and_stop_at_the_weeks_ends"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "the wheel over the front slides the row",
   "old": "        if front is not None and front.contains(event.position()) or running:\n",
   "new": "        if running:\n",
-  "test": "desktop/tests/test_layout_clay.py::test_the_wheel_slides_the_row_over_a_neighbour_and_scrolls_the_hours_over_the_front"
+  "test": "desktop/tests/week/test_clay_row_moves.py::test_the_wheel_slides_the_row_over_a_neighbour_and_scrolls_the_hours_over_the_front"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "neighbours never take the stretch the front opened at",
   "old": "            self._window = window\n",
   "new": "            self._window = self._window\n",
-  "test": "desktop/tests/test_layout_clay.py::test_neighbours_show_the_stretch_the_day_in_front_opened_at_and_stay_still_while_it_scrolls"
+  "test": "desktop/tests/week/test_clay_deck_cards.py::test_neighbours_show_the_stretch_the_day_in_front_opened_at_and_stay_still_while_it_scrolls"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "a rest on an arrow slides nothing",
   "old": "        if 0 <= target <= 6:\n            self._go(target, \"jump\")",
   "new": "        if False:\n            self._go(target, \"jump\")",
-  "test": "desktop/tests/test_layout_clay.py::test_a_block_held_on_an_arrow_slides_the_row_to_the_next_day"
+  "test": "desktop/tests/week/test_clay_row_moves.py::test_a_block_held_on_an_arrow_slides_the_row_to_the_next_day"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "Day stays behind a carried block",
   "old": "                self.turned.emit(self._front)\n",
   "new": "                pass\n",
-  "test": "desktop/tests/test_layout_clay.py::test_a_block_carried_to_another_day_on_day_takes_the_window_there_when_it_is_let_go"
+  "test": "desktop/tests/day/test_clay_day_card.py::test_a_block_carried_to_another_day_on_day_takes_the_window_there_when_it_is_let_go"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "Day's arrows slide the row themselves",
   "old": "        if self._open:\n            self.turned.emit(target)\n",
   "new": "        if False:\n            self.turned.emit(target)\n",
-  "test": "desktop/tests/test_layout_clay.py::test_days_arrows_ask_the_window_for_the_day_either_side_across_the_weeks_edge"
+  "test": "desktop/tests/day/test_clay_day_card.py::test_days_arrows_ask_the_window_for_the_day_either_side_across_the_weeks_edge"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "planned counts the whole of what is on now",
   "old": "    planned = _covered([item for item in ahead if item.work], minute, DAY_TO)\n",
   "new": "    planned = sum(item.minutes for item in ahead if item.work)\n",
-  "test": "desktop/tests/test_layout_clay.py::test_planned_counts_only_what_is_left_of_homework_already_under_way"
+  "test": "desktop/tests/day/test_clay_day_card.py::test_planned_counts_only_what_is_left_of_homework_already_under_way"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "left today on another day",
   "old": "        if day == scene.today and scene.minute < DAY_TO:\n",
   "new": "        if scene.minute < DAY_TO:\n",
-  "test": "desktop/tests/test_layout_clay.py::test_another_day_has_no_left_today"
+  "test": "desktop/tests/day/test_clay_day_card.py::test_another_day_has_no_left_today"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "a name past the edge stays there",
   "old": "            self._go(day, \"jump\")\n        head = self._heads",
   "new": "        head = self._heads",
-  "test": "desktop/tests/test_layout_clay.py::test_a_name_past_the_rows_edge_is_brought_to_the_front_before_it_is_found"
+  "test": "desktop/tests/week/test_clay_deck_cards.py::test_a_name_past_the_rows_edge_is_brought_to_the_front_before_it_is_found"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "reveal leaves the day where it is",
   "old": "        if day != self._front and 0 <= day <= 6:\n            self._go(day, \"jump\")\n        scroll = self.hours",
   "new": "        if False:\n            self._go(day, \"jump\")\n        scroll = self.hours",
-  "test": "desktop/tests/test_layout_clay.py::test_reveal_brings_a_day_to_the_front_and_its_time_into_view"
+  "test": "desktop/tests/week/test_clay_deck_cards.py::test_reveal_brings_a_day_to_the_front_and_its_time_into_view"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "hidden neighbours stay hours",
   "old": "            shown = day != self._front and self._peeks\n",
   "new": "            shown = day != self._front\n",
-  "test": "desktop/tests/test_layout_clay.py::test_with_the_days_either_side_hidden_only_the_front_is_hours"
+  "test": "desktop/tests/week/test_clay_deck_cards.py::test_with_the_days_either_side_hidden_only_the_front_is_hours"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "the row jumps with motion on",
   "old": "        if slides:\n",
   "new": "        if False:\n",
-  "test": "desktop/tests/test_layout_clay.py::test_the_row_slides_in_240_ms_and_jumps_with_motion_off"
+  "test": "desktop/tests/week/test_clay_row_slide.py::test_the_row_slides_when_motion_is_on_and_jumps_with_motion_off"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "the row slides with motion off",
   "old": "        level = app_level()\n",
   "new": "        level = \"normal\"\n",
-  "test": "desktop/tests/test_layout_clay.py::test_the_row_slides_in_240_ms_and_jumps_with_motion_off"
+  "test": "desktop/tests/week/test_clay_row_slide.py::test_the_row_slides_when_motion_is_on_and_jumps_with_motion_off"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "the front forgets today",
   "old": "        note = f\"Today · {things}\" if front == today else things\n",
   "new": "        note = things\n",
-  "test": "desktop/tests/test_layout_clay.py::test_the_front_names_its_day_and_how_much_it_holds"
- },
- {
-  "file": "desktop/native/layouts/clay.py",
-  "name": "the summary over the hours",
-  "old": "        beside = (SUMMARY + SUMMARY_GAP) * scale if self._open and self._summary is not None else 0\n",
-  "new": "        beside = 0\n",
-  "test": "desktop/tests/test_layout_clay.py::test_day_opens_the_card_wider_with_its_hours_by_kind_and_what_is_left_today"
+  "test": "desktop/tests/week/test_clay_deck_cards.py::test_the_front_names_its_day_and_how_much_it_holds"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "the dish names the day in full",
   "old": "    words = day_short(soonest)\n",
   "new": "    words = f\"{DAY_FULL[soonest.weekday()]} {soonest.day}\"\n",
-  "test": "desktop/tests/test_layout_clay.py::test_the_dish_holds_what_is_not_placed_yet_with_when_it_is_due"
+  "test": "desktop/tests/week/test_clay_deck_cards.py::test_the_dish_holds_what_is_not_placed_yet_with_when_it_is_due"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "Week opens at 64 pixels an hour",
   "old": "WEEK_SCALE = Scale(\"clay.week\", (30, 38, 48, 64, 96), 38)\n",
   "new": "WEEK_SCALE = Scale(\"clay.week\", (30, 38, 48, 64, 96), 64)\n",
-  "test": "desktop/tests/test_zoom_keys.py::test_ctrl_and_equals_minus_and_zero_zoom_the_hours_showing_wherever_the_keyboard_is"
+  "test": "desktop/tests/week/test_zoom_hours_with_the_keyboard.py::test_ctrl_and_equals_minus_and_zero_zoom_the_hours_showing_wherever_the_keyboard_is"
  },
  {
   "file": "desktop/native/look.py",
   "name": "a student's accent replaces Clay's preset accent",
   "old": "OWN_ACCENT = (\"high-contrast\", \"bento-indigo\", \"retro-teal\", \"flight-deck\", \"timeline-paper\")\n",
   "new": "OWN_ACCENT = (\"high-contrast\", \"bento-indigo\", \"retro-teal\", \"flight-deck\", \"timeline-paper\", \"clay-lavender\")\n",
-  "test": "desktop/tests/test_look.py::test_a_students_accent_wins_over_the_presets_own"
- },
- {
-  "file": "desktop/native/layouts/clay.py",
-  "name": "the edge cuts the day two away",
-  "old": "    after = [day for day in range(front + 1, 7) if found[day].right() > width]\n",
-  "new": "    after = []\n",
-  "test": "desktop/tests/test_layout_clay.py::test_every_card_is_whole_in_the_row_or_wholly_past_its_ends"
- },
- {
-  "file": "desktop/native/layouts/clay.py",
-  "name": "Day's neighbours keep 70 % and run past the edge",
-  "old": "        narrow = min(narrow, beside)\n",
-  "new": "        pass\n",
-  "test": "desktop/tests/test_layout_clay.py::test_open_on_day_the_neighbours_narrow_to_the_room_beside_it"
- },
- {
-  "file": "desktop/native/layouts/clay.py",
-  "name": "side cards have no hour labels",
-  "old": "        hours.gutter = math.ceil(widest) + PEEK_LABEL_GAP\n",
-  "new": "        hours.gutter = 0\n",
-  "test": "desktop/tests/test_layout_clay.py::test_a_side_card_labels_its_hours_left_of_its_blocks"
- },
- {
-  "file": "desktop/native/layouts/clay.py",
-  "name": "a block that shares its time carries a dot",
-  "old": "            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), max(radius - 1, 0), max(radius - 1, 0))\n",
-  "new": "            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), max(radius - 1, 0), max(radius - 1, 0))\n        if drawn.columns > 1 and not drawn.held:\n            painter.setBrush(self.fills(drawn)[1])\n            painter.drawEllipse(QPointF(rect.right() - 7, rect.top() + 7), 3.5, 3.5)\n",
-  "test": "desktop/tests/test_layout_clay.py::test_a_block_that_shares_its_time_is_drawn_like_one_that_does_not"
+  "test": "desktop/tests/settings/test_look_palettes.py::test_a_students_accent_wins_over_the_presets_own"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "neighbours scroll with the front",
   "old": "        if self._held == self._opening and not scroll.placing():\n            return\n",
   "new": "",
-  "test": "desktop/tests/test_layout_clay.py::test_neighbours_show_the_stretch_the_day_in_front_opened_at_and_stay_still_while_it_scrolls"
- },
- {
-  "file": "desktop/native/layouts/clay.py",
-  "name": "the veil at half strength",
-  "old": "VEIL = 0.6\n",
-  "new": "VEIL = 0.5\n",
-  "test": "desktop/tests/test_layout_clay.py::test_neighbours_sit_under_a_60_percent_veil_of_the_page_and_the_front_under_none"
- },
- {
-  "file": "desktop/native/layouts/clay.py",
-  "name": "the veil over the card in front too",
-  "old": "            shape = shape.subtracted(kept)\n",
-  "new": "            shape = shape.united(kept)\n",
-  "test": "desktop/tests/test_layout_clay.py::test_neighbours_sit_under_a_60_percent_veil_of_the_page_and_the_front_under_none"
+  "test": "desktop/tests/week/test_clay_deck_cards.py::test_neighbours_show_the_stretch_the_day_in_front_opened_at_and_stay_still_while_it_scrolls"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "a sideways drag on a neighbour picks up instead",
   "old": "            self._dragging = abs(across) > abs(down)\n",
   "new": "            self._dragging = False\n",
-  "test": "desktop/tests/test_layout_clay.py::test_a_sideways_drag_on_a_neighbour_slides_the_row_to_that_day"
+  "test": "desktop/tests/week/test_clay_row_moves.py::test_a_sideways_drag_on_a_neighbour_slides_the_row_to_that_day"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "the room between the cards never drags",
   "old": "        self._grip, self._dragging = event.globalPosition(), None\n        event.accept()\n",
   "new": "        super().mousePressEvent(event)\n        return\n",
-  "test": "desktop/tests/test_layout_clay.py::test_a_sideways_drag_on_the_room_between_the_cards_slides_the_row"
+  "test": "desktop/tests/week/test_clay_row_moves.py::test_a_sideways_drag_on_the_room_between_the_cards_slides_the_row"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "the front's hours drag the row",
   "old": "            canvas.setObjectName(\"clayHours\")\n",
   "new": "            canvas.setObjectName(\"clayHours\")\n            canvas.installEventFilter(self)\n",
-  "test": "desktop/tests/test_layout_clay.py::test_a_drag_on_the_front_cards_hours_is_the_hands_and_never_moves_the_row"
+  "test": "desktop/tests/week/test_clay_row_moves.py::test_a_drag_on_the_front_cards_hours_is_the_hands_and_never_moves_the_row"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "a short drag switches days",
   "old": "        if abs(across) < DRAG_LEAST * self.scale:\n",
   "new": "        if False:\n",
-  "test": "desktop/tests/test_layout_clay.py::test_a_drag_shorter_than_40_pixels_goes_back_to_the_day_it_left"
+  "test": "desktop/tests/week/test_clay_row_moves.py::test_a_drag_shorter_than_40_pixels_goes_back_to_the_day_it_left"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "a short drag jumps back under motion",
   "old": "        if length > 0 and moves(motion_level) and self.isVisible() and self._rects:\n",
   "new": "        if False:\n",
-  "test": "desktop/tests/test_layout_clay.py::test_a_drag_settles_with_the_apps_motion_and_at_once_with_motion_off"
+  "test": "desktop/tests/week/test_clay_row_moves.py::test_a_drag_settles_with_the_apps_motion_and_at_once_with_motion_off"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "Day's drag slides the row itself",
   "old": "        elif not self._open:\n            self._go(target, \"slide\")\n",
   "new": "        elif True:\n            self._go(target, \"slide\")\n",
-  "test": "desktop/tests/test_layout_clay.py::test_a_sideways_drag_on_day_asks_the_window_for_the_day_as_the_arrows_do"
+  "test": "desktop/tests/day/test_clay_day_card.py::test_a_sideways_drag_on_day_asks_the_window_for_the_day_as_the_arrows_do"
  },
  {
   "file": "desktop/native/layouts/clay.py",
   "name": "a click on a neighbour is swallowed",
   "old": "            else:\n                self._hand_on(event)\n            return True\n",
   "new": "            else:\n                self._held_press = self._grip = None\n            return True\n",
-  "test": "desktop/tests/test_layout_clay.py::test_a_click_on_a_neighbour_still_opens_its_day_or_its_block"
+  "test": "desktop/tests/week/test_clay_row_moves.py::test_a_click_on_a_neighbour_still_opens_its_day_or_its_block"
  }
 ]

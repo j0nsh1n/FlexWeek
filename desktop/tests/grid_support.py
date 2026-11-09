@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -19,6 +20,7 @@ from desktop.native import window as window_module
 from desktop.native.hours.canvas import HoursCanvas
 from desktop.native.menus import Menu
 from desktop.native.window import NativeWindow
+from desktop.tests.light_app import LightWindows
 from desktop.tests.light_app import window as signed_in  # noqa: F401
 from desktop.tests.window_support import (  # noqa: F401
     qapp,
@@ -48,9 +50,20 @@ def hold_clock(window: NativeWindow, day: int, minute: int) -> None:
 
 
 @pytest.fixture()
-def window(qapp: QApplication, signed_in: NativeWindow) -> Iterator[NativeWindow]:
+def window(
+    qapp: QApplication, tmp_path_factory: pytest.TempPathFactory, tmp_path: Path
+) -> Iterator[NativeWindow]:
     """The classic Week on Wednesday 14:07 of the open week, with one early block on Monday: a week
-    with nothing in it shows a button in place of the hours."""
+    with nothing in it shows a button in place of the hours. Opened here, so a test file needs only
+    this fixture and qapp."""
+    windows = LightWindows(qapp, tmp_path_factory.getbasetemp(), tmp_path)
+    try:
+        yield from _classic_week(qapp, windows.open())
+    finally:
+        windows.close()
+
+
+def _classic_week(qapp: QApplication, signed_in: NativeWindow) -> Iterator[NativeWindow]:
     signed_in.resize(1280, 860)
     signed_in._layout = {"main": "classic", "day": "one", "options": {}}
     signed_in.session.add_block({**PIANO, "id": "early", "title": "Early", "start": "06:00", "days": [0]})

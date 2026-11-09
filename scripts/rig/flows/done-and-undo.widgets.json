@@ -1,0 +1,44 @@
+{
+ "setup": {
+  "seed": "rig",
+  "look": "light-frost",
+  "size": [
+   1280,
+   800
+  ],
+  "clock_24h": false
+ },
+ "steps": [
+  {
+   "click": "viewMyDay"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "click": {
+    "text": "Done"
+   }
+  },
+  {
+   "wait": 500
+  },
+  {
+   "see": "Undo"
+  },
+  {
+   "shot": "done"
+  },
+  {
+   "click": {
+    "text": "Undo"
+   }
+  },
+  {
+   "wait": 500
+  },
+  {
+   "shot": "undone"
+  }
+ ]
+}

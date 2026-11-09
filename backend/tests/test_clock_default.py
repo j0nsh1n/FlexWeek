@@ -1,7 +1,7 @@
-"""The clock is 12-hour for a new account, and 24-hour for every account that never chose before 0.18.5.
+"""The clock is 12-hour for a new account, and 24-hour for every account that never chose before the clock choice existed.
 
-Until 0.18.5 a 24-hour clock was the default and was never stored, so "never chose" and "new" looked
-the same. The update stamps 24-hour onto each existing account once.
+A 24-hour clock used to be the default and was never stored, so "never chose" and "new" looked the same.
+The update stamps 24-hour onto each existing account once.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ def save_clock(client: TestClient, on: bool) -> None:
     assert saved.status_code == 200, saved.text
 
 
-def as_made_by_0_18_4(database: Path, username: str, comfort: dict | None) -> None:
+def as_saved_before_the_clock_choice(database: Path, username: str, comfort: dict | None) -> None:
     """Put the account back as the previous version left it: version 1, and a comfort text that only
     holds the clock when the student had saved Settings (which writes every comfort key)."""
     with sqlite3.connect(database) as db:
@@ -74,7 +74,7 @@ def test_an_account_that_never_chose_before_the_update_keeps_24_hour(tmp_path: P
     database = tmp_path / "old.db"
     with client_for(database) as client:
         register(client, "veteran")
-    as_made_by_0_18_4(database, "veteran", None)
+    as_saved_before_the_clock_choice(database, "veteran", None)
 
     initialize(database)
 
@@ -89,8 +89,8 @@ def test_an_old_account_that_chose_12_hour_keeps_it_and_the_stamp_is_applied_onc
         register(client, "twelve")
         client.post("/api/auth/logout", headers=WRITE)
         register(client, "never")
-    as_made_by_0_18_4(database, "twelve", {"clock_24h": False, "end_chime": True})
-    as_made_by_0_18_4(database, "never", None)
+    as_saved_before_the_clock_choice(database, "twelve", {"clock_24h": False, "end_chime": True})
+    as_saved_before_the_clock_choice(database, "never", None)
 
     initialize(database)
     initialize(database)

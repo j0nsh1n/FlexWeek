@@ -10,7 +10,7 @@ A backend wrapper is one of three classes.
 
 `limits`, `slots`, and `weeks` define no functions. They re-export engine names and constants. `storage.SESSION_SECONDS` stays in Python because `backend/app.py` imports it for the cookie lifetime. Adding that many seconds to the clock reading happens in `open_session`.
 
-The desktop tables use the same three classes. Those modules live in `desktop/native/`. `look.py` is paint; only its four engine helpers are in the table. `test_engine_adapters.py` reads every STAYS row and every row whose class is exactly LOGIC. A row marked `LOGIC, moved` is not exempt: the wrapper has to be clean.
+The desktop tables use the same three classes. Those modules live in `desktop/native/`. `look.py` is paint; only its four engine helpers are in the table. `test_wrappers_hold_no_engine_logic.py` reads every STAYS row and every row whose class is exactly LOGIC. A row marked `LOGIC, moved` is not exempt: the wrapper has to be clean.
 
 ## Backend
 
@@ -464,7 +464,7 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 
 ## Known logic the guard allows for now
 
-`test_engine_adapters.py` also flags a type test (`isinstance` or `type`), `x or default`, a conditional expression, and `if name` / `if not name`. These wrappers already hold one of those, so the guard names them and still fails on any new one. An older shape (a loop, arithmetic, a comparison, a sort) is not in this list.
+`test_wrappers_hold_no_engine_logic.py` also flags a type test (`isinstance` or `type`), `x or default`, a conditional expression, and `if name` / `if not name`. These wrappers already hold one of those, so the guard names them and still fails on any new one. An older shape (a loop, arithmetic, a comparison, a sort) is not in this list.
 
 | Wrapper | Shape | What it holds |
 | --- | --- | --- |

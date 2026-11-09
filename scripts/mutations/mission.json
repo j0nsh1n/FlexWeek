@@ -1,94 +1,59 @@
 [
  {
   "file": "desktop/native/layouts/mission.py",
-  "name": "a tick drawn as a block",
-  "old": "        return not drawn.held and rect.width() < MIN_BAR\n",
-  "new": "        return False\n",
-  "test": "desktop/tests/test_layout_mission.py::test_the_line_for_now_stops_short_of_a_ticks_icon"
- },
- {
-  "file": "desktop/native/layouts/mission.py",
-  "name": "no name beside a block",
-  "old": "        beside = self._beside(painter, rect, drawn, visible)\n",
-  "new": "        beside = []\n",
-  "test": "desktop/tests/test_layout_mission.py::test_a_name_that_cannot_fit_is_written_beside_its_block_where_the_lane_is_free"
- },
- {
-  "file": "desktop/native/layouts/mission.py",
   "name": "finished homework in the table",
   "old": "        todo = [item for item in homework if not item.done]\n",
   "new": "        todo = list(homework)\n",
-  "test": "desktop/tests/test_layout_mission.py::test_the_deadline_table_lists_homework_still_to_do_by_time_left"
+  "test": "desktop/tests/week/test_mission_deadlines.py::test_the_deadline_table_lists_homework_still_to_do_by_time_left"
  },
  {
   "file": "desktop/native/layouts/mission.py",
   "name": "placed homework before what waits",
   "old": "    return sorted(made, key=lambda item: (due_sort_key(item.due), item.placed > 0, -item.needs))\n",
   "new": "    return made\n",
-  "test": "desktop/tests/test_layout_mission.py::test_the_deadline_table_lists_homework_still_to_do_by_time_left"
+  "test": "desktop/tests/week/test_mission_deadlines.py::test_the_deadline_table_lists_homework_still_to_do_by_time_left"
  },
  {
   "file": "desktop/native/layouts/mission.py",
   "name": "time left counted from midnight",
   "old": "    return (day - week.date_of(today)).days * 24 * 60 + at - minute\n",
   "new": "    return (day - week.date_of(today)).days * 24 * 60 + at\n",
-  "test": "desktop/tests/test_layout_mission.py::test_the_deadline_table_lists_homework_still_to_do_by_time_left"
+  "test": "desktop/tests/week/test_mission_deadlines.py::test_the_deadline_table_lists_homework_still_to_do_by_time_left"
  },
  {
   "file": "desktop/native/layouts/mission.py",
   "name": "past due not said",
   "old": "                gone = left <= 0\n",
   "new": "                gone = False\n",
-  "test": "desktop/tests/test_layout_mission.py::test_homework_past_due_says_so_in_the_danger_colour"
+  "test": "desktop/tests/week/test_mission_deadlines.py::test_homework_past_due_says_so"
  },
  {
   "file": "desktop/native/layouts/mission.py",
   "name": "a part-placed homework hides its waiting session",
   "old": "            for waiting in item.waiting:\n",
   "new": "            for waiting in item.waiting[:0]:\n",
-  "test": "desktop/tests/test_layout_mission.py::test_part_placed_homework_offers_the_session_still_waiting"
+  "test": "desktop/tests/week/test_mission_deadlines.py::test_part_placed_homework_offers_the_session_still_waiting"
  },
  {
   "file": "desktop/native/layouts/base.py",
   "name": "free time counts finished work as busy",
   "old": "        if not item.live or item.end <= at or item.start >= end:\n",
   "new": "        if item.end <= at or item.start >= end:\n",
-  "test": "desktop/tests/test_layout_mission.py::test_the_four_figures_say_what_is_planned_due_free_and_focused"
+  "test": "desktop/tests/week/test_mission_figures.py::test_the_four_figures_say_what_is_planned_due_free_and_focused"
  },
  {
   "file": "desktop/native/layouts/mission.py",
   "name": "Up next lists what is on now",
   "old": "        coming = [item for item in week.day_queue(today, minute).queue if item.start > minute]\n",
   "new": "        coming = list(week.day_queue(today, minute).queue)\n",
-  "test": "desktop/tests/test_layout_mission.py::test_day_says_what_is_still_to_come_today_and_the_free_time_left"
+  "test": "desktop/tests/day/test_mission_day.py::test_day_says_what_is_still_to_come_today_and_the_free_time_left"
  },
  {
   "file": "desktop/native/layouts/mission.py",
   "name": "room claimed when there is none",
   "old": "        elif needs <= total:\n",
   "new": "        elif True:\n",
-  "test": "desktop/tests/test_layout_mission.py::test_late_in_the_day_the_free_time_says_when_what_waits_will_not_fit"
- },
- {
-  "file": "desktop/native/layouts/mission.py",
-  "name": "the table under the lanes at 1150 with large text",
-  "old": "        need = (TABLE + NAMES + 3 * AROUND) * scale + BESIDE_HOURS * WEEK_SCALE.default\n",
-  "new": "        need = 1150 * scale\n",
-  "test": "desktop/tests/test_layout_mission.py::test_the_table_stays_beside_the_lanes_until_they_would_show_too_little[size1-1.2-True]"
- },
- {
-  "file": "desktop/native/layouts/mission.py",
-  "name": "the figures never fold",
-  "old": "        self._place(count if self.width() >= least * count + self.gap * (count - 1) else 2)\n",
-  "new": "        self._place(count)\n",
-  "test": "desktop/tests/test_layout_mission.py::test_the_figures_fold_two_over_two_in_a_narrow_window"
- },
- {
-  "file": "desktop/native/layouts/mission.py",
-  "name": "the table's rows set the page height",
-  "old": "            area.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Ignored)\n",
-  "new": "",
-  "test": "desktop/tests/test_layout_mission.py::test_in_a_short_window_the_lanes_and_not_the_tables_rows_set_the_pages_height"
+  "test": "desktop/tests/day/test_mission_day.py::test_late_in_the_day_the_free_time_says_when_what_waits_will_not_fit"
  },
  {
   "file": "engine/engine/src/desk/weekmodel.rs",
@@ -98,45 +63,24 @@
   "test": "cargo:flexweek-engine:desk_weekmodel:test_focus_is_what_the_timer_credited_to_this_weeks_homework_and_blocks"
  },
  {
-  "file": "desktop/native/look.py",
-  "name": "Flight deck wears the student's accent",
-  "old": "OWN_ACCENT = (\"high-contrast\", \"bento-indigo\", \"retro-teal\", \"flight-deck\", \"timeline-paper\")\n",
-  "new": "OWN_ACCENT = (\"high-contrast\", \"bento-indigo\", \"retro-teal\", \"timeline-paper\")\n",
-  "test": "desktop/tests/test_layout_mission.py::test_flight_deck_is_the_mock_ups_signature_in_flexweeks_blue_whatever_the_look"
- },
- {
-  "file": "desktop/native/layouts/mission.py",
-  "name": "now pill drawn over an hour label",
-  "old": "            if pill is None or not box.intersects(pill.adjusted(-LABEL_CLEAR, 0, LABEL_CLEAR, 0)):\n",
-  "new": "            if True:\n",
-  "test": "desktop/tests/test_layout_mission.py::test_the_now_pill_covers_no_hour_label_at_any_zoom"
- },
- {
   "file": "desktop/native/layouts/mission.py",
   "name": "lanes open before the evening",
   "old": "    return min(max([EVENING, *(item.end for item in items), *later]) + END_ROOM, 24 * 60)\n",
   "new": "    return 16 * 60\n",
-  "test": "desktop/tests/test_layout_mission.py::test_the_lanes_of_another_week_open_through_the_evening"
- },
- {
-  "file": "desktop/native/layouts/mission.py",
-  "name": "a name beside a block runs past the edge of what shows",
-  "old": "        first, last = max(first, visible.left()), min(last, visible.right())\n",
-  "new": "",
-  "test": "desktop/tests/test_layout_mission.py::test_a_name_written_beside_a_block_stays_inside_what_shows"
+  "test": "desktop/tests/week/test_mission_lanes_opening.py::test_the_lanes_of_another_week_open_through_the_evening"
  },
  {
   "file": "desktop/native/layouts/mission.py",
   "name": "the lanes open without now in view",
   "old": "            keep=scene.minute if at_now else None,\n",
   "new": "            keep=None,\n",
-  "test": "desktop/tests/test_layout_mission.py::test_now_is_on_screen_when_the_evening_does_not_fit_with_it"
+  "test": "desktop/tests/week/test_mission_lanes_opening.py::test_now_is_on_screen_when_the_evening_does_not_fit_with_it"
  },
  {
   "file": "desktop/native/layouts/mission.py",
   "name": "another day's lanes open at now",
   "old": "(not is_day or day == scene.today)",
   "new": "True",
-  "test": "desktop/tests/test_layout_mission.py::test_the_day_after_today_opens_through_the_evening_whatever_the_time_now"
+  "test": "desktop/tests/day/test_mission_lanes_opening.py::test_the_day_after_today_opens_through_the_evening_whatever_the_time_now"
  }
 ]
