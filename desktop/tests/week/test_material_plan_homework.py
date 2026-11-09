@@ -443,7 +443,7 @@ def test_status_tags_say_how_much_room_the_homework_has(qapp, window) -> None:
     )
 
 
-def test_dragging_a_card_onto_the_grid_gives_it_that_hour(qapp, window) -> None:
+def test_dragging_a_card_onto_the_grid_gives_it_the_time_under_the_pointer(qapp, window) -> None:
     root = _reset(window, qapp)
     due = (_week_monday(window) + timedelta(days=6)).isoformat()
     _homework(window, "sheet", "Math worksheet", 30, due)
@@ -456,14 +456,15 @@ def test_dragging_a_card_onto_the_grid_gives_it_that_hour(qapp, window) -> None:
     gutter = int(_qml(root, "materialWeek").property("gutter"))
     day_width = float(_qml(root, "materialWeek").property("dayWidth"))
     friday = 4
-    # 16:00 on Friday: the 17th hour row, a few pixels inside it.
     grid.setProperty("contentY", float(16 * row - 100))
     _pump(qapp)
-    inside = hours_item.mapToScene(QPointF(gutter + friday * day_width + day_width / 2, 16 * row + 10))
+    # Let go two pixels past 16:15 on Friday: in the default 5-minute step the nearest is 16:15, so
+    # the card lands there, not on the hour (recheck M3: a 16:15 drop landed at 16:00).
+    inside = hours_item.mapToScene(QPointF(gutter + friday * day_width + day_width / 2, 16.25 * row + 2))
     _drag(window, card, QPoint(int(inside.x()), int(inside.y())))
     wait_until(qapp, lambda: not window.session.busy and not window.session.dirty)
     placed = next(block for block in window.session.blocks if block.get("assignment_id") == "sheet")
-    assert placed["start"] == "16:00"
+    assert placed["start"] == "16:15"
     assert placed["days"] == [friday]
     _pump(qapp)
     assert _qml(root, "homeworkCount").property("text") == "0"

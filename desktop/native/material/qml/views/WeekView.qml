@@ -37,7 +37,9 @@ Item {
 
     // Where a held card would land: -1 when it is not over the grid.
     property int dropDay: -1
-    property int dropHour: -1
+    property int dropMinute: -1
+    // A card lands on the student's drag step, as a block moved by hand does.
+    readonly property int dragStep: bridge && bridge.week && bridge.week.dragStep > 0 ? bridge.week.dragStep : 5
     property string heldTitle: ""
     property point heldAt: Qt.point(0, 0)
     property bool holding: false
@@ -48,10 +50,10 @@ Item {
             return null
         var spot = hours.mapFromItem(null, scene.x, scene.y)
         var day = Math.floor((spot.x - gutter) / dayWidth)
-        var hour = Math.floor(spot.y / row)
-        if (day < 0 || day >= columns || hour < 0 || hour > 23)
+        if (day < 0 || day >= columns || spot.y < 0 || spot.y >= 24 * row)
             return null
-        return { day: day, hour: hour }
+        var minute = Math.round(spot.y / row * 60 / dragStep) * dragStep
+        return { day: day, minute: Math.max(0, Math.min(24 * 60 - dragStep, minute)) }
     }
 
     function follow(scene) {
@@ -59,16 +61,16 @@ Item {
         heldAt = Qt.point(local.x, local.y)
         var slot = slotAt(scene)
         dropDay = slot ? slot.day : -1
-        dropHour = slot ? slot.hour : -1
+        dropMinute = slot ? slot.minute : -1
     }
 
     function release(blockId, scene) {
         var slot = slotAt(scene)
         holding = false
         dropDay = -1
-        dropHour = -1
+        dropMinute = -1
         if (slot && bridge)
-            bridge.week.placeHomework(blockId, slot.day, slot.hour * 60)
+            bridge.week.placeHomework(blockId, slot.day, slot.minute)
     }
 
     // Drag across empty grid time to add homework.
@@ -276,7 +278,7 @@ Item {
         scrollerName: "weekScroller"
         host: root
         dropDay: root.dropDay
-        dropHour: root.dropHour
+        dropMinute: root.dropMinute
     }
 
     HomeworkDrawer {

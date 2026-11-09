@@ -1,7 +1,8 @@
 import QtQuick
 import components 1.0
 
-// One block on the grid. Day sets dayOpen so every block opens; Week keeps homework-only.
+// One block on the grid. Every block opens, in Week as in Day (Jonathan, 2026-11-08); Day sets dayOpen
+// so Space finishes homework there.
 Item {
     id: cell
     property var theme
@@ -11,20 +12,84 @@ Item {
     property string category: "homework"
     property string title: ""
     property string detail: ""
+    property string detailStart: ""
     property bool past: false
     property bool done: false
     property bool fresh: false
     property bool homework: false
     property bool passive: false
-    // Day sets this so School and Soccer open like homework; Week leaves it off.
+    // Day sets this: there Space finishes homework, in Week it opens it.
     property bool dayOpen: false
-    readonly property bool canOpen: !cell.passive && (cell.homework || cell.dayOpen)
+    // Drawn over a block it shares time with: an opaque base keeps the one under it from showing
+    // through, and a light shadow (an outline on a dark surface, where a shadow does not show) sets it
+    // apart.
+    property bool raised: false
+    // Another block lies on this one. Its words go where they show (wordsTop, within wordsRoom), or,
+    // with nowhere to go, its name runs up its uncovered strip, `sideStrip` wide, on its side.
+    property bool nameSide: false
+    property real sideStrip: 0
+    property real wordsTop: 0
+    property real wordsRoom: -1
+    readonly property bool keyFocus: finishButton.activeFocus
+    readonly property bool canOpen: !cell.passive
     signal toggled()
     signal opened()
     signal menuAsked(real x, real y)
     signal focused()
 
     M3Palette { id: m3; theme: cell.theme }
+
+    // The title's column is the block minus its 12 px left and 8 px right padding. When the circle on
+    // the title row would leave it less than three wide letters, the circle moves to the block's
+    // bottom-right corner so the title keeps the whole column. It also moves on any block where it
+    // would cut the title short, whether or not the block shares time (recheck M7: "Scie..."; Jonathan,
+    // 2026-11-08, option A: a corner circle, never hidden unless the block is too short for it).
+    FontMetrics {
+        id: titleMetrics
+        font.family: M3Font.family
+        font.pixelSize: M3Font.px(12)
+        font.weight: 600
+    }
+    Text {
+        id: besideCircle
+        visible: false
+        width: Math.max(0, cell.width - 20 - 28)
+        text: cell.title
+        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+        maximumLineCount: blockContent.titleLines
+        elide: Text.ElideRight
+        font: titleMetrics.font
+        lineHeight: 1.25
+        lineHeightMode: Text.ProportionalHeight
+    }
+    readonly property bool circleCorner: cell.homework
+                                        && (cell.width - 20 - 28 < titleMetrics.advanceWidth("MMM")
+                                            || besideCircle.truncated)
+    // The corner circle is sized with the text, never under 20 px so it stays a clear click target.
+    readonly property real cornerSize: Math.max(20, Math.ceil(blockContent.titleLine))
+    // The circle shows whole where the words show, or not at all: a block too short for it below its
+    // title, one whose name is on its side, or one whose start time it would cut beside it, hides it.
+    // Edit, the right-click menu and Shift+F10 still finish the homework.
+    readonly property real wordsEnd: cell.wordsRoom >= 0 ? cell.wordsTop + cell.wordsRoom : cell.height
+    readonly property real cornerTop: cell.wordsEnd - cell.cornerSize - 3
+    readonly property bool circleFits: !cell.nameSide
+                                       && (cell.circleCorner
+                                           ? cell.cornerTop >= blockContent.titleBottom
+                                             && cell.width >= cell.cornerSize + 8
+                                             && !cell.circleWouldCutStart
+                                           : cell.wordsTop + 4 + finishButton.height + 2 <= cell.wordsEnd)
+    // The corner circle lies beside the time line, which then gives up its right end rather than run
+    // under the circle; where the circle sits below the time line it takes nothing from it. This reads
+    // the title's bottom and the line's height, never the column's own height: that height changes with
+    // the time line's width, which this sets, and the two would chase each other.
+    readonly property bool cornerBesideTime: cell.circleCorner && blockContent.detailShown
+                                             && cell.cornerTop < blockContent.titleBottom + blockContent.detailLine
+    // Jonathan, 2026-11-09 (option 1): the time is what a block is read for, so where even its start
+    // would be cut beside the circle, the circle hides and the line takes the whole width.
+    readonly property bool circleWouldCutStart: cell.cornerBesideTime
+                                                && blockContent.startWidth
+                                                   > blockContent.lineRoom - cell.cornerSize - 8
+    readonly property bool circleBesideTime: cell.cornerBesideTime && cell.circleFits
 
     EventBlock {
         id: blockContent
@@ -37,10 +102,64 @@ Item {
         category: cell.category
         title: cell.title
         detail: cell.detail
+        detailStart: cell.detailStart
         past: cell.past
         accessName: cell.title
-        rightInset: cell.homework ? 28 : 0
+        rightInset: cell.homework && !cell.circleCorner && cell.circleFits ? 28 : 0
+        detailInset: cell.circleBesideTime ? cell.cornerSize + 8 : 0
+        startWhenCut: cell.circleWouldCutStart
         fitToHeight: true
+        wordsTop: cell.wordsTop
+        wordsRoom: cell.wordsRoom
+        showWords: !cell.nameSide
+    }
+
+    // The name on its side, reading upward in the strip left of the block that lies on this one.
+    Text {
+        objectName: "sideName"
+        visible: cell.nameSide
+        transformOrigin: Item.TopLeft
+        rotation: -90
+        x: 4 + 3
+        y: cell.height - blockContent.pad
+        width: Math.max(0, cell.height - 2 * blockContent.pad)
+        height: Math.ceil(titleMetrics.height)
+        text: cell.title
+        elide: Text.ElideRight
+        verticalAlignment: Text.AlignVCenter
+        color: blockContent.textInk
+        font: titleMetrics.font
+    }
+
+    Rectangle {
+        objectName: "overlapShadow"
+        z: -2
+        visible: cell.raised && !blockContent.darkSurface
+        x: -1
+        y: 1
+        width: cell.width + 2
+        height: cell.height + 2
+        radius: blockContent.cornerRadius + 1
+        color: "#000000"
+        opacity: 0.16
+    }
+
+    Rectangle {
+        z: -1
+        visible: cell.raised
+        anchors.fill: parent
+        radius: blockContent.cornerRadius
+        color: m3.surfaceContainerLowest
+    }
+
+    Rectangle {
+        objectName: "overlapOutline"
+        visible: cell.raised && blockContent.darkSurface
+        anchors.fill: parent
+        radius: blockContent.cornerRadius
+        color: "transparent"
+        border.width: 1
+        border.color: m3.outline
     }
 
     function findTitle(item) {
@@ -68,13 +187,12 @@ Item {
     Item {
         id: finishButton
         objectName: "weekBlockFinish"
-        visible: cell.homework
-        width: 24
-        height: 24
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.margins: 4
-        activeFocusOnTab: !cell.passive && cell.homework
+        visible: cell.homework && cell.circleFits
+        width: cell.circleCorner ? cell.cornerSize : 24
+        height: width
+        x: cell.width - width - 4
+        y: cell.circleCorner ? cell.cornerTop : cell.wordsTop + 4
+        activeFocusOnTab: !cell.passive && cell.homework && cell.circleFits
         onActiveFocusChanged: if (activeFocus) cell.focused()
         Accessible.role: Accessible.Button
         Accessible.name: cell.done ? "Open " + cell.title + " again" : "Mark " + cell.title + " finished"
@@ -92,8 +210,8 @@ Item {
         M3Icon {
             anchors.centerIn: parent
             name: "check"
-            width: 16
-            height: 16
+            width: cell.circleCorner ? 14 : 16
+            height: width
             color: cell.done ? m3.inkPrimary : m3.inkMuted
         }
 
@@ -102,7 +220,7 @@ Item {
             anchors.margins: -4
             target: finishButton
             ring: m3.focusRing
-            ringRadius: 14
+            ringRadius: finishButton.width / 2 + 4
         }
 
         HoverHandler {
@@ -130,10 +248,12 @@ Item {
     }
 
     HoverHandler { enabled: cell.canOpen; cursorShape: Qt.PointingHandCursor }
-    TapHandler { enabled: cell.canOpen; onTapped: cell.opened() }
+    // A block can lie over another: the one on top takes the tap, so the one under it does not open too.
+    TapHandler { enabled: cell.canOpen; gesturePolicy: TapHandler.WithinBounds; onTapped: cell.opened() }
     TapHandler {
         acceptedButtons: Qt.RightButton
         enabled: cell.homework
+        gesturePolicy: TapHandler.WithinBounds
         onTapped: (point) => cell.menuAsked(point.position.x, point.position.y)
     }
 
@@ -141,7 +261,7 @@ Item {
     onActiveFocusChanged: if (activeFocus) cell.focused()
     Accessible.role: cell.canOpen ? Accessible.Button : Accessible.StaticText
     Accessible.name: cell.canOpen
-                     ? ("Edit " + title)
+                     ? ("Edit " + title + (detail !== "" ? ", " + detail : ""))
                      : title + (detail !== "" ? ", " + detail : "")
     Accessible.onPressAction: if (cell.canOpen) cell.opened()
     Keys.onPressed: (event) => {

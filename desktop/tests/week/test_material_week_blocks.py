@@ -12,6 +12,10 @@ import pytest
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import QObject, QPointF, QRectF, Qt
+from PySide6.QtGui import QAccessible, QFontMetricsF
+from PySide6.QtTest import QTest
+
 from desktop.native.weekmodel import clock_label
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material import (
@@ -19,6 +23,8 @@ from desktop.tests.week.support_material import (
     _block_named,
     _bridge,
     _click,
+    _give_the_essay_two_lines,
+    _homework,
     _look,
     _named,
     _pref,
@@ -28,6 +34,7 @@ from desktop.tests.week.support_material import (
     _reset,
     _show_material,
     _snack,
+    _text_size,
     _week_monday,
     material_window,  # noqa: F401
 )
@@ -57,14 +64,241 @@ def test_clicking_homework_finishes_it_and_undo_opens_it_again(qapp, window) -> 
     assert _block_named(root, "History essay").property("done") is False
 
 
-def test_a_fixed_block_is_not_a_button(qapp, window) -> None:
+def test_a_default_one_hour_homework_in_week_has_its_done_circle_in_its_corner_off_the_title(
+    qapp, window
+) -> None:
+    """Jonathan, 2026-11-08 (option A): when the circle on the title row would cut the title, it sits in
+    the block's bottom-right corner instead of hiding, never over the title, and still finishes the
+    homework on a click and takes Tab."""
     root = _reset(window, qapp)
-    school = _block_named(root, "School")
-    assert school.property("homework") is False
-    assert school.property("activeFocusOnTab") is False
-    _click(window, school)
+    essay = _block_named(root, "History essay")
+    work = next(b for b in window.session.blocks if b.get("assignment_id") == "essay")
+    assert work["duration_min"] == 60
+    finish = _named(essay, "weekBlockFinish")[0]
+    assert finish.property("visible") is True
+    block, circle = _rect(essay), _rect(finish)
+    assert block.contains(circle)
+    assert circle.width() >= 20 and circle.height() >= 20
+    assert circle.center().x() > block.center().x() and circle.center().y() > block.center().y()
+    assert not circle.intersects(_rect(_named(essay, "title")[0]))
+    for detail in _named(essay, "detail"):
+        if detail.property("visible"):
+            assert not circle.intersects(_rect(detail))
+
+    quick = window._material_page._quick
+    essay.forceActiveFocus()
     _pump(qapp)
-    assert _snack(window) == ""
+    QTest.keyClick(quick, Qt.Key.Key_Tab)
+    _pump(qapp)
+    assert finish.property("activeFocus") is True
+
+    _click(window, finish)
+    wait_until(
+        qapp, lambda: not window.session.busy and bool(window.session.assignments["essay"].get("completed"))
+    )
+    wait_until(qapp, lambda: _snack(window) == "Finished History essay.")
+    _pump(qapp)
+    assert _block_named(root, "History essay").property("done") is True
+    bar = _qml(root, "materialSnackbar")
+    _click(window, bar, dx=int(bar.property("width")) // 2 - 30)
+    wait_until(
+        qapp,
+        lambda: not window.session.busy and not window.session.assignments["essay"].get("completed"),
+    )
+    _pump(qapp)
+    assert _block_named(root, "History essay").property("done") is False
+
+
+def test_in_week_a_fixed_block_opens_on_click_and_enter_and_is_a_tab_stop(qapp, window) -> None:
+    # Jonathan, 2026-11-08: in Week, School and activities open on click and Enter and take Tab, as
+    # they do in Day.
+    root = _reset(window, qapp)
+    sheets = window._material_page.bridge.sheets
+    quick = window._material_page._quick
+    row = int(_bridge(window).property("hourRow"))
+    _qml(root, "weekScroller").setProperty("contentY", float(8 * row))
+    _pump(qapp, 4)
+    schools = sorted(
+        (block for block in _named(root, "weekBlock") if block.property("title") == "School"),
+        key=lambda block: block.mapToScene(QPointF(0, 0)).x(),
+    )
+    assert len(schools) == 5
+    try:
+        _click(window, schools[0])
+        assert (sheets.kind, sheets.form["title"]) == ("block", "School")
+        sheets.forceClose()
+        _pump(qapp)
+
+        schools[0].forceActiveFocus()
+        _pump(qapp)
+        QTest.keyClick(quick, Qt.Key.Key_Return)
+        _pump(qapp)
+        assert (sheets.kind, sheets.form["title"]) == ("block", "School")
+        sheets.forceClose()
+        _pump(qapp)
+
+        # Tab runs in time order through the week: Thursday's School comes just before the essay that
+        # evening.
+        essay = _block_named(root, "History essay")
+        essay.forceActiveFocus()
+        _pump(qapp)
+        QTest.keyClick(quick, Qt.Key.Key_Tab, Qt.KeyboardModifier.ShiftModifier)
+        _pump(qapp)
+        assert schools[NOW_DAY].property("activeFocus") is True
+    finally:
+        sheets.forceClose()
+        _pump(qapp)
+
+
+def _rect(item: QObject) -> QRectF:
+    return item.mapRectToScene(item.boundingRect())
+
+
+def _pin_on_thursday(window, qapp, key: str, title: str, start: str, minutes: int) -> None:
+    session = window.session
+    due = (_week_monday(window) + timedelta(days=6)).isoformat()
+    _homework(window, key, title, minutes, due)
+    work = next(block for block in session.blocks if block.get("assignment_id") == key)
+    work.update({"start": start, "days": [NOW_DAY], "duration_min": minutes, "pinned": True})
+    session.add_block(work)
+    session.save()
+    settled(qapp, window)
+    _pump(qapp)
+
+
+def _a_title_the_circle_would_cut(block: QObject) -> str:
+    """Two words that each fit the whole title column of a lone Week block (its width less 12 px and
+    8 px padding) but not the column a circle on the title row leaves (28 px less): beside the circle
+    the title needs more than its two lines and is cut."""
+    metrics = QFontMetricsF(_named(block, "title")[0].property("font"))
+    width = float(block.property("width"))
+    whole, beside = width - 20, width - 48
+    words = [
+        "Algebra",
+        "Biology",
+        "Chemistry",
+        "Geography",
+        "Literature",
+        "Vocabulary",
+        "Mathematics",
+        "Trigonometry",
+        "Shakespeare",
+        "Photosynthesis",
+    ]
+    fit = [word for word in words if beside + 4 < metrics.horizontalAdvance(word) < whole - 4]
+    assert len(fit) >= 2, (width, {word: metrics.horizontalAdvance(word) for word in words})
+    return f"{fit[0]} {fit[1]}"
+
+
+def _time_line(block: QObject) -> str:
+    """The words of the block's time line as the student reads them, "" when it is not shown."""
+    for detail in _named(block, "detail"):
+        if detail.property("visible"):
+            return str(detail.property("text"))
+    return ""
+
+
+def test_a_one_hour_homework_at_large_text_shows_its_start_only_beside_the_corner_circle(
+    qapp, window
+) -> None:
+    """Jonathan, 2026-11-08 (option 1): where the corner circle sits beside the time line and the range
+    does not fit beside it, the line reads "18:45", never "18:45-..."."""
+    root = _reset(window, qapp)
+    with _text_size(window, qapp, "large"):
+        essay = _block_named(root, "History essay")
+        finish = _named(essay, "weekBlockFinish")[0]
+        assert finish.property("visible") is True
+        assert essay.property("circleBesideTime") is True
+        assert _time_line(essay) == "18:45"
+        detail = next(d for d in _named(essay, "detail") if d.property("visible"))
+        assert detail.property("truncated") is False
+
+
+def test_a_time_line_keeps_its_whole_range_where_it_fits_or_the_circle_is_not_beside_it(qapp, window) -> None:
+    root = _reset(window, qapp)
+    # The ordinary one-hour essay at Normal text, 1280 px, 24-hour clock: the circle is beside the line
+    # and the whole range still fits beside it, so the range stays (the start alone is for when it does not).
+    plain = _block_named(root, "History essay")
+    assert _named(plain, "weekBlockFinish")[0].property("visible") is True
+    assert plain.property("circleBesideTime") is True
+    assert _time_line(plain) == "18:45\u201319:45"
+
+    # 90 minutes at Normal text: the circle stays on the title row, the line has the whole width.
+    _give_the_essay_two_lines(window, qapp)
+    essay = _block_named(root, "History essay")
+    assert _time_line(essay) == "18:45\u201320:15"
+
+    # A tall block whose circle sits below the time line: the circle takes nothing from the line.
+    row = int(_bridge(window).property("hourRow"))
+    _qml(root, "weekScroller").setProperty("contentY", float(14 * row))
+    _pump(qapp, 4)
+    title = _a_title_the_circle_would_cut(essay)
+    _pin_on_thursday(window, qapp, "long", title, "15:00", 120)
+    long = _block_named(root, title)
+    assert long.property("circleCorner") is True
+    assert _named(long, "weekBlockFinish")[0].property("visible") is True
+    assert long.property("circleBesideTime") is False
+    assert _time_line(long) == "15:00\u201317:00"
+
+
+def test_the_start_only_time_line_is_still_read_out_whole(qapp, window) -> None:
+    root = _reset(window, qapp)
+    with _text_size(window, qapp, "large"):
+        essay = _block_named(root, "History essay")
+        assert _time_line(essay) == "18:45"
+        name = QAccessible.queryAccessibleInterface(essay).text(QAccessible.Text.Name)
+        assert name == "Edit History essay, 18:45\u201319:45"
+
+
+def test_a_homework_block_that_shares_no_time_moves_or_hides_its_circle_rather_than_cut_its_title(
+    qapp, window
+) -> None:
+    """Jonathan, 2026-11-08: the done-circle rule holds for every Week block, not only blocks that share
+    time. When the circle on the title row would cut the title, it moves to the block's corner, or hides
+    on a block too short for that, where the menu still finishes the homework."""
+    root = _reset(window, qapp)
+    row = int(_bridge(window).property("hourRow"))
+    _qml(root, "weekScroller").setProperty("contentY", float(14 * row))
+    _pump(qapp, 4)
+    title = _a_title_the_circle_would_cut(_block_named(root, "History essay"))
+    short_title = title + " notes"
+    # Thursday 15:00 to 17:00 and 17:30 to 18:00: after School, before the essay at 18:45.
+    _pin_on_thursday(window, qapp, "long", title, "15:00", 120)
+    _pin_on_thursday(window, qapp, "short", short_title, "17:30", 30)
+    rows = _bridge(window).property("week").property("blockRows")
+    for name in (title, short_title):
+        mine = next(r for r in rows if r["title"] == name)
+        assert (mine["day"], mine["indent"], list(mine["under"])) == (NOW_DAY, 0, []), name
+    for name in (title, short_title):
+        assert all(r["title"] != name for r in rows if r["day"] == NOW_DAY and list(r["under"]))
+
+    long = _block_named(root, title)
+    long_title, finish = _named(long, "title")[0], _named(long, "weekBlockFinish")[0]
+    assert long_title.property("truncated") is False
+    assert finish.property("visible") is True
+    assert _rect(long).contains(_rect(finish))
+    assert not _rect(finish).intersects(_rect(long_title))
+    _click(window, finish)
+    wait_until(
+        qapp, lambda: not window.session.busy and bool(window.session.assignments["long"].get("completed"))
+    )
+
+    short = _block_named(root, short_title)
+    short_finish = _named(short, "weekBlockFinish")[0]
+    assert short_finish.property("visible") is False
+    assert short_finish.property("activeFocusOnTab") is False
+    quick = window._material_page._quick
+    menu = _named(root, "blockMenu")[0]
+    short.forceActiveFocus()
+    _pump(qapp)
+    QTest.keyClick(quick, Qt.Key.Key_F10, Qt.KeyboardModifier.ShiftModifier)
+    _pump(qapp)
+    try:
+        assert menu.property("open") is True
+        assert "Mark finished" in [e["label"] for e in menu.property("entries").toVariant()]
+    finally:
+        QTest.keyClick(quick, Qt.Key.Key_Escape)
+        _pump(qapp)
 
 
 def test_past_blocks_are_marked_by_the_clock(qapp, window) -> None:
@@ -229,3 +463,53 @@ def test_the_now_line_passes_behind_blocks_and_the_dot_stays_on_top(qapp, window
         assert line_z < block_z, (line_z, block_z)
         assert dot_z > block_z, (dot_z, block_z)
     assert float(_qml(root, "dropSlot").property("z")) > line_z
+
+
+def test_on_the_12_hour_clock_the_start_only_line_reads_6_45_pm_where_the_range_does_not_fit(
+    qapp, window
+) -> None:
+    """The one-hour essay at Normal text and 1280 px on the 12-hour clock: the line beside the circle is
+    about 62 px, the range "6:45\u20137:45 PM" is wider, "6:45 PM" fits whole."""
+    root = _reset(window, qapp)
+    _pref(window, clock_24h=False)
+    window._material_page.publish()
+    _pump(qapp)
+    essay = _block_named(root, "History essay")
+    assert _named(essay, "weekBlockFinish")[0].property("visible") is True
+    assert essay.property("circleBesideTime") is True
+    assert _time_line(essay) == "6:45 PM"
+    detail = next(d for d in _named(essay, "detail") if d.property("visible"))
+    assert detail.property("truncated") is False
+    name = QAccessible.queryAccessibleInterface(essay).text(QAccessible.Text.Name)
+    assert name == "Edit History essay, 6:45\u20137:45 PM"
+
+
+def test_where_even_the_start_would_be_cut_beside_the_corner_circle_the_circle_hides(qapp, window) -> None:
+    """Jonathan, 2026-11-09 (option 1): on the 12-hour clock in a 1050 px window the one-hour essay's line
+    beside the corner circle is narrower than "6:45 PM", so the circle hides and the line takes the whole
+    width, still the start alone where the range does not fit. Edit and the menu still finish it."""
+    root = _reset(window, qapp)
+    _pref(window, clock_24h=False)
+    window._material_page.publish()
+    _pump(qapp)
+    window.resize(1050, 800)
+    _pump(qapp, 6)
+    try:
+        essay = _block_named(root, "History essay")
+        content = next(c for c in essay.childItems() if c.property("lineRoom") is not None)
+        beside = float(content.property("lineRoom")) - float(essay.property("cornerSize")) - 8
+        assert essay.property("circleCorner") is True
+        assert float(content.property("startWidth")) > beside
+        assert essay.property("circleWouldCutStart") is True
+        assert _named(essay, "weekBlockFinish")[0].property("visible") is False
+        assert essay.property("circleBesideTime") is False
+        detail = next(d for d in _named(essay, "detail") if d.property("visible"))
+        assert detail.property("truncated") is False
+        assert float(detail.property("width")) == float(content.property("lineRoom"))
+        # About 57 px of line: the range does not fit even the whole width, so the start alone shows.
+        assert _time_line(essay) == "6:45 PM"
+        name = QAccessible.queryAccessibleInterface(essay).text(QAccessible.Text.Name)
+        assert name == "Edit History essay, 6:45\u20137:45 PM"
+    finally:
+        window.resize(1280, 800)
+        _pump(qapp, 6)

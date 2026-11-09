@@ -13,10 +13,21 @@ Item {
     property bool past: false
     property string accessName: ""
     property int rightInset: 0
+    // Room kept free at the right of the time line, for a circle that lies beside it.
+    property int detailInset: 0
+    // The time line when its whole range does not fit beside that circle: the start alone.
+    property string detailStart: ""
+    // The start alone even with no circle beside the line, when the whole range does not fit.
+    property bool startWhenCut: false
     property alias trailingInset: root.rightInset
     // Week and Day set a block's height from its time. Its words then fit that height: the title
     // gives up its second line first, then the time line goes, so nothing is drawn past the border.
     property bool fitToHeight: false
+    // When another block lies on part of this one, the words go where they show: `wordsTop` down from
+    // the block's top, within `wordsRoom` (-1: the whole height). `showWords` false leaves them out.
+    property real wordsTop: 0
+    property real wordsRoom: -1
+    property bool showWords: true
 
     // Absent keys keep the block default: radius 6, pad 6, no shadow, an edge bar.
     readonly property int pad: (theme && theme.cardPad !== undefined) ? theme.cardPad : 6
@@ -44,9 +55,24 @@ Item {
     M3Palette { id: palette; theme: root.theme }
     FontMetrics { id: titleFont; font: title.font }
     FontMetrics { id: detailFont; font: detail.font }
+    TextMetrics { id: wholeDetail; font: detail.font; text: root.detail }
+    TextMetrics { id: startDetail; font: detail.font; text: root.detailStart }
+    // The column's width does not depend on the lines in it, so this cannot loop with the circle's room.
+    readonly property bool detailCut: (root.detailInset > 0 || root.startWhenCut) && root.detailStart !== ""
+                                      && wholeDetail.advanceWidth > body.width - root.detailInset
+    // So a block can tell whether the start alone would fit beside something it puts at the line's end.
+    readonly property real startWidth: startDetail.advanceWidth
+    readonly property real lineRoom: body.width
+    readonly property bool detailShown: detail.visible
     readonly property real titleLine: Math.ceil(titleFont.height * title.lineHeight)
     readonly property real detailLine: root.detail !== "" ? Math.ceil(detailFont.height) : 0
-    readonly property real room: root.height - root.pad - (root.highContrast ? 2 : 1)
+    readonly property real room: (root.wordsRoom >= 0 ? root.wordsRoom : root.height) - root.pad
+                                 - (root.highContrast ? 2 : 1)
+    // How many lines the title may take: two when they and the time line fit, else one.
+    readonly property int titleLines: !root.fitToHeight || 2 * root.titleLine + root.detailLine <= root.room ? 2 : 1
+    // Where the last drawn line ends, so a block can place something below its words.
+    readonly property real contentBottom: body.y + body.height
+    readonly property real titleBottom: body.y + title.height
 
     readonly property bool darkSurface: {
         var tone = palette.surface
@@ -157,11 +183,12 @@ Item {
         objectName: "words"
         anchors.fill: parent
         clip: true
+        visible: root.showWords
         Column {
             id: body
             objectName: "body"
             x: 12
-            y: root.pad
+            y: root.wordsTop + root.pad
             width: parent.width - 20
             spacing: 0
             Text {
@@ -171,8 +198,8 @@ Item {
                 text: root.title
                 color: root.textInk
                 opacity: 1
-                wrapMode: Text.WordWrap
-                maximumLineCount: !root.fitToHeight || 2 * root.titleLine + root.detailLine <= root.room ? 2 : 1
+                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                maximumLineCount: root.titleLines
                 elide: Text.ElideRight
                 font.family: M3Font.family
                 font.pixelSize: M3Font.px(12)
@@ -183,9 +210,9 @@ Item {
             Text {
                 id: detail
                 objectName: "detail"
-                width: parent.width
+                width: Math.max(0, parent.width - root.detailInset)
                 visible: root.detail !== "" && (!root.fitToHeight || title.height + root.detailLine <= root.room)
-                text: root.detail
+                text: root.detailCut ? root.detailStart : root.detail
                 color: root.textInk
                 opacity: 1
                 font.family: M3Font.family

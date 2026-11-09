@@ -11,7 +11,7 @@ from desktop.native.calendar import monday_of
 from desktop.native.focus import remaining_ms
 from desktop.native.hours.zoom import OPENS, opening_minute
 from desktop.native.material.bridge_rows import Rows
-from desktop.native.material.bridge_week import BLOCK_ROLES, occurrence_row, side_by_side
+from desktop.native.material.bridge_week import BLOCK_ROLES, occurrence_row, overlapped
 from desktop.native.material.day_board import (
     DIM_KEYS,
     NUDGE_KEYS,
@@ -198,7 +198,7 @@ class DayBridge(QObject):
                 on=viewed,
                 now=moment,
             ),
-            side_by_side(block_rows),
+            overlapped(block_rows),
         )
 
     def _publish(self, board: DayBoard, block_rows: list[dict] | None = None) -> None:
@@ -429,6 +429,11 @@ class DayBridge(QObject):
     @Property(QObject, constant=True)
     def blocks(self) -> QObject:
         return self._blocks
+
+    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
+    def blockRows(self) -> list:
+        """The blocks as a list, in the model's order, so the hours can place each against the others."""
+        return self._block_rows
 
     @Property(int, notify=changed)
     def year(self) -> int:

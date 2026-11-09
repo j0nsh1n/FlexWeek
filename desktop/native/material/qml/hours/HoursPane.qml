@@ -30,7 +30,7 @@ Item {
     property var host: null
 
     property int dropDay: -1
-    property int dropHour: -1
+    property int dropMinute: -1
     property int dragRangeDay: -1
     property int dragRangeStartMin: 0
     property int dragRangeEndMin: 0
@@ -71,6 +71,69 @@ Item {
     onTypeScaleChanged: if (root.followNow) Qt.callLater(root.revealNow)
     onDensityChanged: if (root.followNow) Qt.callLater(root.revealNow)
     readonly property int blockRightInset: root.weekMode ? 3 : 16
+    // Blocks that share time (Jonathan, 2026-11-08): each sits at its own time; a later one lies on the
+    // earlier ones a step right. The step leaves the covered block's edge in sight, or, when its name
+    // runs up that edge on its side, room for the name. Both grow with the text size.
+    readonly property real overlapStep: M3Font.px(16)
+    FontMetrics {
+        id: nameFont
+        font.family: M3Font.family
+        font.pixelSize: M3Font.px(12)
+        font.weight: 600
+    }
+    // The 4 px edge bar, the name's line on its side, and a margin each side of it.
+    readonly property real sideStrip: 4 + 3 + Math.ceil(nameFont.height) + 3
+    // The least height that shows a block's title line whole, as EventBlock lays it out.
+    readonly property real nameRoom: ((root.theme && root.theme.cardPad !== undefined) ? root.theme.cardPad : 6)
+                                     + Math.ceil(nameFont.height * 1.25) + (root.highContrast ? 2 : 1)
+    readonly property var blockList: root.weekMode
+                                     ? (root.bridge && root.bridge.blockRows ? root.bridge.blockRows : [])
+                                     : (root.bridge && root.bridge.day && root.bridge.day.blockRows
+                                        ? root.bridge.day.blockRows : [])
+    readonly property var placement: root.placeBlocks(root.blockList, root.row, root.nameRoom,
+                                                      root.overlapStep, root.sideStrip)
+
+    // Where each block's words go and how far right it steps, by its place in the model. A block that
+    // others lie on keeps its name where it shows: above them when they start a line or more later,
+    // else below them when they end a line or more before it, else on its side up its uncovered strip.
+    function placeBlocks(rows, row, room, step, side) {
+        var n = rows ? rows.length : 0
+        var top = [], bottom = [], coverTop = [], coverBottom = [], spots = []
+        var i, k
+        for (i = 0; i < n; i++) {
+            top.push(rows[i].start / 60 * row)
+            bottom.push(top[i] + Math.max(36, (rows[i].end - rows[i].start) / 60 * row - 2))
+            coverTop.push(Infinity)
+            coverBottom.push(-Infinity)
+        }
+        for (i = 0; i < n; i++) {
+            var lies = rows[i].under || []
+            for (k = 0; k < lies.length; k++) {
+                coverTop[lies[k]] = Math.min(coverTop[lies[k]], top[i])
+                coverBottom[lies[k]] = Math.max(coverBottom[lies[k]], bottom[i])
+            }
+        }
+        for (i = 0; i < n; i++) {
+            var spot = { offset: 0, side: false, wordsTop: 0, wordsRoom: -1 }
+            if (coverTop[i] !== Infinity) {
+                if (coverTop[i] - top[i] >= room) {
+                    spot.wordsRoom = coverTop[i] - top[i]
+                } else if (bottom[i] - coverBottom[i] >= room) {
+                    spot.wordsTop = coverBottom[i] - top[i]
+                    spot.wordsRoom = bottom[i] - coverBottom[i]
+                } else {
+                    spot.side = true
+                }
+            }
+            var beneath = rows[i].under || []
+            for (k = 0; k < beneath.length; k++) {
+                var below = spots[beneath[k]]
+                spot.offset = Math.max(spot.offset, below.offset + (below.side ? side : step))
+            }
+            spots.push(spot)
+        }
+        return spots
+    }
 
     function snapToQuarter(y) {
         var snapped = Math.round((y / root.row) * 60 / 15) * 15
@@ -430,7 +493,7 @@ Item {
                 z: 4
                 visible: root.weekMode && root.dropDay >= 0
                 x: root.gutter + Math.max(0, root.dropDay) * root.dayWidth + 3
-                y: Math.max(0, root.dropHour) * root.row
+                y: Math.max(0, root.dropMinute) / 60 * root.row
                 width: root.dayWidth - 6
                 height: root.row - 2
                 radius: 6
@@ -506,20 +569,29 @@ Item {
                 WeekBlock {
                     id: blockCell
                     objectName: "weekBlock"
-                    z: 2
+                    // Model order is time order, so a later block lies on the earlier ones it shares time
+                    // with; a focused block comes to the front so its focus ring shows whole.
+                    z: activeFocus || keyFocus ? 3 : 2
                     passive: root.passive
                     dayOpen: !root.weekMode
-                    // Blocks sharing time split their day's lane side by side (spec: overlaps are drawn
-                    // side by side). A preview model without the roles keeps the whole lane.
-                    readonly property int lanes: Math.max(1, model.columns || 1)
+                    // Blocks sharing time overlap (Jonathan, 2026-11-08): the earliest keeps the whole lane,
+                    // each later one sits a step right, all at their own time. A deep stack stops at the
+                    // lane's right edge rather than run into the next day.
                     readonly property real laneSpan: root.weekMode
                                                      ? root.dayWidth - 6
                                                      : hours.width - root.gutter - 3 - root.blockRightInset
-                    readonly property real laneStep: (laneSpan + 3) / lanes
-                    x: (root.weekMode ? root.gutter + model.day * root.dayWidth + 3 : root.gutter + 3)
-                       + (model.column || 0) * laneStep
+                    readonly property var spot: root.placement.length === weekBlocks.count
+                                                ? root.placement[index] : null
+                    readonly property real indentX: Math.max(0, Math.min(
+                        spot ? spot.offset : (model.indent || 0) * root.overlapStep, laneSpan - 8))
+                    raised: (model.indent || 0) > 0
+                    nameSide: !!spot && spot.side
+                    sideStrip: root.sideStrip
+                    wordsTop: spot ? spot.wordsTop : 0
+                    wordsRoom: spot ? spot.wordsRoom : -1
+                    x: (root.weekMode ? root.gutter + model.day * root.dayWidth + 3 : root.gutter + 3) + indentX
                     y: model.start / 60 * root.row
-                    width: Math.max(8, laneStep - 3)
+                    width: Math.max(8, laneSpan - indentX)
                     height: Math.max(36, (model.end - model.start) / 60 * root.row - 2)
                     theme: root.theme
                     density: root.density
@@ -527,8 +599,10 @@ Item {
                     highContrast: root.highContrast
                     category: model.category
                     title: model.title
-                    detail: {
-                        var text = (root.theme && root.theme.showTimes === false) ? "" : model.detail
+                    detail: blockCell.timeLine(model.detail)
+                    detailStart: blockCell.timeLine(model.detailStart)
+                    function timeLine(time) {
+                        var text = (root.theme && root.theme.showTimes === false) ? "" : time
                         if (root.theme && root.theme.showLengths)
                             text = (text ? text + " · " : "") + (model.end - model.start) + "m"
                         return text
@@ -643,8 +717,10 @@ Item {
             id: menuDim
             anchors.fill: parent
             color: "transparent"
+            // Takes the tap, so a click outside the menu only closes it: the block under it does not open.
             TapHandler {
                 enabled: blockMenu.open
+                gesturePolicy: TapHandler.WithinBounds
                 onTapped: root.closeBlockMenu()
             }
         }

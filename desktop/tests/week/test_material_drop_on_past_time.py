@@ -10,6 +10,7 @@ from desktop.tests.week.support_material import (
     NOW_DAY,
     _bridge,
     _homework,
+    _pref,
     _pump,
     _reset,
     _snack,
@@ -48,3 +49,30 @@ def test_dropping_a_card_on_a_time_still_ahead_places_it(qapp, window) -> None:
     again = next(b for b in window.session.blocks if b["id"] == card["id"])
     assert again["start"] == "21:00"
     assert _snack(window) != PAST
+
+
+def _drop_on_step(qapp, window, step: int, minute: int) -> dict:
+    _reset(window, qapp)
+    _pref(window, drag_step_min=step)
+    window._material_page.publish()
+    _pump(qapp)
+    card = waiting_card(window)
+    _bridge(window).week.placeHomework(card["id"], NOW_DAY, minute)
+    settled(qapp, window)
+    _pump(qapp)
+    return next(b for b in window.session.blocks if b["id"] == card["id"])
+
+
+def test_a_drop_that_snaps_up_to_now_is_placed(qapp, window) -> None:
+    # 18:53 is past, but on a 15-minute step the card takes 19:00, which is now.
+    again = _drop_on_step(qapp, window, 15, 18 * 60 + 53)
+    assert again["start"] == "19:00"
+    assert _snack(window) != PAST
+
+
+def test_a_drop_that_snaps_down_into_the_past_is_refused(qapp, window) -> None:
+    # 18:52 snaps to 18:45, a time that has passed: judged on the time the card would take.
+    again = _drop_on_step(qapp, window, 15, 18 * 60 + 52)
+    assert _snack(window) == PAST
+    assert not again.get("start")
+    assert str(_bridge(window).property("snackAction")) == ""
