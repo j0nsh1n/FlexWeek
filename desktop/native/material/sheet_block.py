@@ -34,7 +34,6 @@ from desktop.native.widgets import (
     REPEAT_NOTE,
     _block_problem,
     _preset_locked,
-    beside_words,
     day_range_and_words,
     guess_locked_category,
 )
@@ -251,13 +250,14 @@ class BlockDraft:
         return self._span_problem() or self._past_problem()
 
     def clash(self) -> str:
-        """The words for another block sitting at this time. Both show side by side, so it is a note."""
+        """The words for another block sitting at this time. Both show, so it is a note. Material draws
+        them overlapped, one a step over the other (Jonathan, 2026-11-08), not side by side."""
         if self._span() <= 0:
             return ""
         for day in self.days:
             found = span_clash(self.session.blocks, self.original["id"], day, self.start, self.end)
             if found:
-                return beside_words(found)
+                return f"{found} is at that time too. Both will show, one slightly over the other."
         return ""
 
     def candidate(self) -> dict | None:
