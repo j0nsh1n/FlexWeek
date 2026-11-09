@@ -176,7 +176,7 @@ Contract for the finished app:
   while held; a typed time keeps any minute; an end drags to resize;
   empty time drags to create; overlaps are allowed and each is named: Material
   draws them overlapped with an offset, each at its own time, the covered
-  item's name below or beside the one on top, and the classic styles side by
+  item's name above, below or beside the one on top, and the classic styles side by
   side; a block moved by hand is pinned; a refusal leaves the block where it
   was and says why before it is let go.
 - Day view lists one date: homework due soon, that day's work sessions and fixed
@@ -384,7 +384,7 @@ no half-hour rules; the now line and its time are in the accent, today's date
 is an accent chip, and Week washes today's column with 3 % of the text colour.
 After a plan, blocks slide to their new places. Blocks may overlap, each marked: the
 classic styles set them side by side; Material lays the later one over the earlier with
-an offset, the covered one's name below or beside it. A drop
+an offset, the covered one's name above, below or beside it. A drop
 is refused only outside the day's hours or when homework would end after it is
 due. Dragging one day of a repeating block moves that day only. Dragging works
 in every design: a block can be picked up wherever a design shows it, and every
