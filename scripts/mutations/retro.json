@@ -4,111 +4,69 @@
   "name": "the taskbar never puts the window in front away",
   "old": "        elif self._shown_front() == key:\n",
   "new": "        elif False:\n",
-  "test": "desktop/tests/test_layout_retro.py::test_a_taskbar_button_brings_its_window_forward_or_puts_the_one_in_front_away"
+  "test": "desktop/tests/week/test_retro_desktop_windows.py::test_a_taskbar_button_brings_its_window_forward_or_puts_the_one_in_front_away"
  },
  {
   "file": "desktop/native/layouts/retro.py",
   "name": "a maximised window stays where it was",
   "old": "            if window.maximised:\n",
   "new": "            if False:\n",
-  "test": "desktop/tests/test_layout_retro.py::test_minimise_hides_a_window_and_maximise_fills_the_desktop_and_restores_it"
+  "test": "desktop/tests/week/test_retro_desktop_windows.py::test_minimise_hides_a_window_and_maximise_fills_the_desktop_and_restores_it"
  },
  {
   "file": "desktop/native/layouts/retro.py",
   "name": "Start asks for nothing",
   "old": "self.menu_requested.emit(start.mapToGlobal(QPoint(0, 0)))",
   "new": "None",
-  "test": "desktop/tests/test_layout_retro.py::test_start_opens_the_apps_own_menu_from_its_corner"
+  "test": "desktop/tests/week/test_retro_desktop_windows.py::test_start_opens_the_apps_own_menu_from_its_corner"
  },
  {
   "file": "desktop/native/layouts/retro.py",
   "name": "the icons keep their room however narrow Week.exe gets",
   "old": "    icons_shown = width - ICONS_WIDE - side - 2 * MARGIN >= round(WEEK_ROOMY * scale)\n",
   "new": "    icons_shown = True\n",
-  "test": "desktop/tests/test_layout_retro.py::test_the_icons_give_way_before_week_exe_gets_narrow"
- },
- {
-  "file": "desktop/native/layouts/retro.py",
-  "name": "Retro's narrow blocks keep their full margins",
-  "old": "    trims_narrow = True\n",
-  "new": "    trims_narrow = False\n",
-  "test": "desktop/tests/test_layout_retro.py::test_a_week_block_at_the_smallest_window_names_itself_and_says_when_it_starts"
+  "test": "desktop/tests/week/test_retro_desktop_windows.py::test_the_icons_give_way_before_week_exe_gets_narrow"
  },
  {
   "file": "desktop/native/hours/canvas.py",
   "name": "the icon outranks the first three letters of a name",
   "old": "        letters = min(len(titled[0].rstrip(\"…\")), 3) if titled else 0\n",
   "new": "        letters = 0\n",
-  "test": "desktop/tests/test_hours_painter.py::test_the_icon_gives_way_before_a_name_is_left_with_fewer_than_three_letters"
- },
- {
-  "file": "desktop/native/layouts/retro.py",
-  "name": "High contrast in Windows 98's greys",
-  "old": "    if high_contrast(tokens):\n",
-  "new": "    if False:\n",
-  "test": "desktop/tests/test_layout_retro.py::test_high_contrast_is_windows_98s_high_contrast_black"
- },
- {
-  "file": "desktop/native/layouts/registry.py",
-  "name": "Your look keeps the look's page for a Retro desktop",
-  "old": "            \"bg\": palette[\"window\"],\n",
-  "new": "            \"bg\": palette[\"panel\"],\n",
-  "test": "desktop/tests/test_layout_retro.py::test_match_my_look_puts_the_accent_on_the_desktop_and_the_title_bars"
+  "test": "desktop/tests/week/test_block_words_fit.py::test_a_short_first_word_keeps_its_name_on_one_line_and_drops_the_icon"
  },
  {
   "file": "desktop/native/layouts/retro.py",
   "name": "each day name shortens on its own",
   "old": "if all(DayHead._row_fits(row))",
   "new": "if self._fits()",
-  "test": "desktop/tests/test_layout_retro.py::test_a_narrow_week_names_every_day_alike"
- },
- {
-  "file": "desktop/native/layouts/retro.py",
-  "name": "a status cell lets its frame cut its words",
-  "old": "        if len(self.choices) > 1:\n",
-  "new": "        if False:\n",
-  "test": "desktop/tests/test_layout_retro.py::test_the_status_bar_says_less_rather_than_cutting_its_words"
+  "test": "desktop/tests/week/test_retro_week_exe.py::test_a_narrow_week_names_every_day_alike"
  },
  {
   "file": "desktop/native/layouts/retro.py",
   "name": "a length breaks over two lines",
   "old": "    return words.replace(\" \", \"\\u00a0\")\n",
   "new": "    return words\n",
-  "test": "desktop/tests/test_layout_retro.py::test_ok_dismisses_up_next_and_it_says_what_is_coming"
+  "test": "desktop/tests/week/test_retro_desktop_windows.py::test_ok_dismisses_up_next_and_it_says_what_is_coming"
  },
  {
   "file": "desktop/native/layouts/retro.py",
   "name": "Windows 98's bar scrolls nothing",
   "old": "        shown.valueChanged.connect(self._moved)\n",
   "new": "",
-  "test": "desktop/tests/test_layout_retro.py::test_the_week_scrolls_on_windows_98s_bar_in_step_with_the_hours"
+  "test": "desktop/tests/week/test_retro_week_exe.py::test_the_week_scrolls_on_windows_98s_bar_in_step_with_the_hours"
  },
  {
   "file": "desktop/native/layouts/retro.py",
   "name": "Notepad's title column never gives way",
   "old": "    return max(min(title, chars - length - when - 4), 0), length\n",
   "new": "    return title, length\n",
-  "test": "desktop/tests/test_layout_retro.py::test_notepads_columns_and_their_fallbacks"
+  "test": "desktop/tests/week/test_retro_notepad.py::test_notepads_columns_and_their_fallbacks"
  },
  {
   "file": "desktop/native/layouts/retro.py",
   "name": "Windows 98's bar writes its cut value back to the hours",
   "old": "        if not self._copying:\n",
   "new": "        if True:\n",
-  "test": "desktop/tests/test_layout_retro.py::test_windows_98s_bar_leaves_a_cut_value_for_the_hours_to_keep"
- },
- {
-  "file": "desktop/native/hours/canvas.py",
-  "name": "a narrow block keeps the full margins",
-  "old": "        trim = SHARED_TRIM if drawn.columns > 1 or (self.trims_narrow and rect.width() < NARROW_BLOCK) else 0\n",
-  "new": "        trim = SHARED_TRIM if drawn.columns > 1 else 0\n",
-  "test": "desktop/tests/test_layout_retro.py::test_a_week_block_at_the_smallest_window_names_itself_and_says_when_it_starts"
- },
- {
-  "file": "desktop/native/layouts/retro.py",
-  "name": "a block that shares its time carries a dot",
-  "old": "            frame_in(painter, box.adjusted(1, 1, -1, -1), ring, ring)\n",
-  "new": "            frame_in(painter, box.adjusted(1, 1, -1, -1), ring, ring)\n        if drawn.columns > 1 and not drawn.held:\n            painter.setBrush(self.fills(drawn)[1])\n            painter.drawEllipse(QPointF(box.right() - 6, box.top() + 6), 3, 3)\n",
-  "test": "desktop/tests/test_layout_retro.py::test_a_block_that_shares_its_time_is_drawn_like_one_that_does_not"
+  "test": "desktop/tests/week/test_retro_week_exe.py::test_windows_98s_bar_leaves_a_cut_value_for_the_hours_to_keep"
  }
 ]

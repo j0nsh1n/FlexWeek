@@ -1,4 +1,4 @@
-"""A week that repeats a block id is refused by the store, not only by the request model (R10)."""
+"""A week that repeats a block id is refused by the store, not only by the request model."""
 
 from __future__ import annotations
 

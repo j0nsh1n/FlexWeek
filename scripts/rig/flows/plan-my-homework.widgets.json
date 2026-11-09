@@ -1,0 +1,33 @@
+{
+ "setup": {
+  "seed": "rig",
+  "look": "light-frost",
+  "size": [
+   1280,
+   800
+  ],
+  "clock_24h": false
+ },
+ "steps": [
+  {
+   "click": {
+    "text": "Plan my homework"
+   }
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "see": "planReview"
+  },
+  {
+   "shot": "planned"
+  },
+  {
+   "click": "planReviewDismiss"
+  },
+  {
+   "wait": 400
+  }
+ ]
+}

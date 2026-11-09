@@ -277,3 +277,10 @@ def test_undo_countdown_reads_the_held_clock():
     host.removeEventFilter(toast)
     toast.hide()
     host.hide()
+    # This test sits outside the desktop conftest, which frees windows after each test. The toast and
+    # its host keep each other alive in a reference cycle, and the collector would otherwise free them
+    # during a later test on this worker.
+    from PySide6.QtCore import QEvent
+
+    host.deleteLater()
+    app.sendPostedEvents(None, QEvent.Type.DeferredDelete)

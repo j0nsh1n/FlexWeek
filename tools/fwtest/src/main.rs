@@ -1,12 +1,36 @@
 //! fwtest: FlexWeek's test harness. The contract is docs/tooling/fwtest.md.
 
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "fwtest", about = "Run FlexWeek checks one job at a time")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
+}
+
+/// Where `--touched` takes the changed paths from.
+#[derive(Args, Default)]
+struct ChangeArgs {
+    /// Compare with this ref's merge base. Default: origin/main, then main.
+    #[arg(long, value_name = "REF", conflicts_with = "paths_from")]
+    base: Option<String>,
+    /// Read the changed paths from this file, one per line, instead of git.
+    #[arg(long, value_name = "FILE")]
+    paths_from: Option<std::path::PathBuf>,
+}
+
+impl ChangeArgs {
+    fn change(self) -> fwtest::select::Change {
+        fwtest::select::Change {
+            base: self.base,
+            paths_from: self.paths_from,
+        }
+    }
+
+    fn given(&self) -> bool {
+        self.base.is_some() || self.paths_from.is_some()
+    }
 }
 
 #[derive(Subcommand)]
@@ -16,8 +40,13 @@ enum Command {
     /// Run ruff, mypy, pytest and the diff whitespace checks.
     Gate {
         /// Skip the desktop import check and run only backend/tests.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "touched")]
         backend_only: bool,
+        /// Run only the tests the changed paths select (see `fwtest select`).
+        #[arg(long)]
+        touched: bool,
+        #[command(flatten)]
+        change: ChangeArgs,
         /// Pytest workers. Default is half the cores, and at least 2.
         #[arg(long)]
         workers: Option<u32>,
@@ -50,6 +79,11 @@ enum Command {
         /// Spec files. Default is every scripts/mutations/*.json in the checkout.
         specs: Vec<std::path::PathBuf>,
     },
+    /// Draw, compare and review pictures of the app, and record its flows as clips.
+    Pictures {
+        #[command(subcommand)]
+        command: fwtest::pictures::Command,
+    },
     /// Start the hidden session, run the rig driver, then stop that session.
     Rig {
         /// Python interpreter. Overrides FWTEST_PYTHON and .venv/bin/python.
@@ -59,15 +93,40 @@ enum Command {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
-    /// Run a command as one contained job.
+    /// Run a command as one contained job. A pytest command reruns a failed test alone once.
     Run {
         /// Stop the job after this many seconds (exit 124).
         #[arg(long)]
         timeout: Option<u64>,
+        /// Add the test paths the changed paths select to the pytest command.
+        #[arg(long)]
+        touched: bool,
+        #[command(flatten)]
+        change: ChangeArgs,
         /// Command to run. Put it after `--`.
         #[arg(last = true, required = true, num_args = 1..)]
         command: Vec<String>,
     },
+    /// Print what the changed paths select: test areas, pytest paths, cargo packages,
+    /// mutation cases and picture areas.
+    Select {
+        #[command(flatten)]
+        change: ChangeArgs,
+    },
+    /// Summarise the flaky-test log, most frequent first.
+    Flaky {
+        /// Log file. Overrides FWTEST_FLAKY_LOG and the scratch folder's log.
+        #[arg(long)]
+        log: Option<std::path::PathBuf>,
+    },
+}
+
+fn needs_touched(touched: bool, change: &ChangeArgs) -> Option<u8> {
+    if !touched && change.given() {
+        eprintln!("--base and --paths-from go with --touched");
+        return Some(2);
+    }
+    None
 }
 
 fn main() {
@@ -82,9 +141,17 @@ fn main() {
         Command::Clean => fwtest::clean::run().0,
         Command::Gate {
             backend_only,
+            touched,
+            change,
             workers,
             python,
-        } => fwtest::gate::run(backend_only, workers, python.as_deref()),
+        } => match needs_touched(touched, &change) {
+            Some(code) => code,
+            None => {
+                let change = touched.then(|| change.change());
+                fwtest::gate::run(backend_only, workers, python.as_deref(), change.as_ref())
+            }
+        },
         Command::Mutate {
             case,
             python,
@@ -102,8 +169,22 @@ fn main() {
             engine_only,
             shard,
         ),
+        Command::Pictures { command } => fwtest::pictures::run(command),
         Command::Rig { python, args } => fwtest::rig::run(&args, python.as_deref()),
-        Command::Run { timeout, command } => fwtest::contain::execute(&command, timeout),
+        Command::Run {
+            timeout,
+            touched,
+            change,
+            command,
+        } => match needs_touched(touched, &change) {
+            Some(code) => code,
+            None => {
+                let change = touched.then(|| change.change());
+                fwtest::select_run::run(&command, timeout, change.as_ref())
+            }
+        },
+        Command::Select { change } => fwtest::select::run(&change.change()),
+        Command::Flaky { log } => fwtest::flaky::run(log.as_deref()),
     };
     std::process::exit(i32::from(code));
 }

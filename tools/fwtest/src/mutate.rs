@@ -889,9 +889,9 @@ mod tests {
         let mut seen = vec![0u32; cases];
         for index in 1..=count {
             let shard = Shard { index, count };
-            for position in 0..cases {
+            for (position, hits) in seen.iter_mut().enumerate() {
                 if case_in_shard(position, shard) {
-                    seen[position] += 1;
+                    *hits += 1;
                 }
             }
         }

@@ -1,0 +1,435 @@
+# Which tests a changed path selects, for `fwtest select`, `fwtest gate --touched` and
+# `fwtest run --touched` (docs/tooling/fwtest.md, "Test selection").
+#
+# An [[area]] is a set of tests: pytest paths (a folder ends in "/", and "*" in the last part
+# matches any run of characters), cargo packages in one workspace, and whether the area has
+# picture screens. Picture areas are exactly the names in desktop/tests/pictures/screen.py's AREAS.
+#
+# A [[rule]] maps product paths to areas. Paths are checked against the rules in order and the
+# first rule that matches decides; put a specific rule before a general one. A pattern ending in
+# "/" matches everything under that folder; otherwise it is one path, where "*" matches any run of
+# characters within one path part. `everything = true` selects every area. `areas = []` marks a
+# path as known that no test checks (prose docs).
+#
+# An [[also]] rule adds its areas on top of whatever the first matching rule chose, but does not
+# make a path known: a path no [[rule]] matches selects every area, never nothing.
+#
+# A path selects the areas whose behaviour it is mainly about. Shared plumbing selects every
+# area. CI runs everything, so a local selection that misses a test is caught there.
+
+# ---------------------------------------------------------------------------------------------
+# Areas with picture screens (desktop/tests/pictures/screen.py AREAS)
+
+[[area]]
+name = "week"
+tests = ["desktop/tests/week/"]
+pictures = true
+
+[[area]]
+name = "day"
+tests = ["desktop/tests/day/"]
+pictures = true
+
+[[area]]
+name = "month"
+tests = ["desktop/tests/month/"]
+pictures = true
+
+[[area]]
+name = "myday"
+tests = ["desktop/tests/myday/"]
+pictures = true
+
+[[area]]
+name = "focus"
+tests = ["desktop/tests/focus/"]
+pictures = true
+
+[[area]]
+name = "settings"
+tests = ["desktop/tests/settings/"]
+pictures = true
+
+[[area]]
+name = "sheets"
+tests = ["desktop/tests/sheets/"]
+pictures = true
+
+[[area]]
+name = "setup"
+tests = ["desktop/tests/setup/"]
+pictures = true
+
+[[area]]
+name = "account"
+tests = ["desktop/tests/account/"]
+pictures = true
+
+[[area]]
+name = "sync"
+tests = ["desktop/tests/sync/"]
+pictures = true
+
+[[area]]
+name = "updater"
+tests = ["desktop/tests/updater/"]
+pictures = true
+
+[[area]]
+name = "planner"
+tests = ["desktop/tests/planner/"]
+pictures = true
+
+# ---------------------------------------------------------------------------------------------
+# Areas without screens
+
+[[area]]
+name = "backend"
+tests = ["backend/tests/"]
+
+[[area]]
+name = "e2e"
+tests = ["desktop/tests/e2e/"]
+
+# The desktop test files that have not moved into an area folder yet. They run whenever anything
+# under desktop/ or in backend's own code changes (see the [[also]] rules at the end). A pattern that matches
+# nothing in the checkout is left out, so this area empties itself as the files move.
+[[area]]
+name = "unmoved"
+# Not the Regression Tester's suites: they run only with FLEXWEEK_REGRESS=1 (desktop/tests/conftest.py).
+tests = ["desktop/tests/test_*.py"]
+
+[[area]]
+name = "rig"
+tests = ["scripts/rig/"]
+
+[[area]]
+name = "fwtest"
+cargo = { dir = "tools/fwtest", packages = ["fwtest"] }
+
+[[area]]
+name = "engine"
+cargo = { dir = "engine", packages = [
+  "flexweek-engine", "flexweek-store", "flexweek-py", "flexweek-sync", "flexweek-ffi",
+  "flexweek-mcp", "uniffi-bindgen",
+] }
+
+[[area]]
+name = "engine-sync"
+cargo = { dir = "engine", packages = ["flexweek-sync", "flexweek-py", "flexweek-ffi", "flexweek-mcp"] }
+
+[[area]]
+name = "engine-mcp"
+cargo = { dir = "engine", packages = ["flexweek-mcp"] }
+
+[[area]]
+name = "engine-ffi"
+cargo = { dir = "engine", packages = ["flexweek-ffi", "uniffi-bindgen"] }
+
+# =============================================================================================
+# Rules. First match wins.
+
+# --- Shared test foundations and project-wide settings: every area.
+[[rule]]
+paths = [
+  "conftest.py", "pytest.ini", "ruff.toml", "rust-toolchain.toml", ".python-version",
+  "requirements.txt", "requirements-dev.txt", "requirements-desktop.txt",
+  "desktop/tests/__init__.py", "desktop/tests/conftest.py", "desktop/tests/light_app.py",
+  "desktop/tests/waiting.py", "desktop/tests/fontconfig.conf", "desktop/tests/logic_support.py",
+  "desktop/tests/pictures/screen.py", "desktop/tests/pictures/__init__.py",
+  "backend/tests/__init__.py", "backend/tests/conftest.py", "backend/tests/fake_clock.py",
+  "scripts/pictures/", "scripts/brand.py", "scripts/instance_fonts.py",
+]
+everything = true
+
+# --- Tests and their own support files select their own area.
+[[rule]]
+paths = ["desktop/tests/week/", "desktop/tests/pictures/screens_week.py"]
+areas = ["week"]
+
+[[rule]]
+paths = ["desktop/tests/day/", "desktop/tests/pictures/screens_day.py"]
+areas = ["day"]
+
+[[rule]]
+paths = ["desktop/tests/month/", "desktop/tests/pictures/screens_month.py"]
+areas = ["month"]
+
+[[rule]]
+paths = ["desktop/tests/myday/", "desktop/tests/pictures/screens_myday.py"]
+areas = ["myday"]
+
+[[rule]]
+paths = ["desktop/tests/focus/", "desktop/tests/pictures/screens_focus.py"]
+areas = ["focus"]
+
+[[rule]]
+paths = ["desktop/tests/settings/", "desktop/tests/pictures/screens_settings.py"]
+areas = ["settings"]
+
+[[rule]]
+paths = ["desktop/tests/sheets/", "desktop/tests/pictures/screens_sheets.py"]
+areas = ["sheets"]
+
+[[rule]]
+paths = ["desktop/tests/setup/", "desktop/tests/pictures/screens_setup.py"]
+areas = ["setup"]
+
+[[rule]]
+paths = ["desktop/tests/account/", "desktop/tests/pictures/screens_account.py"]
+areas = ["account"]
+
+[[rule]]
+paths = ["desktop/tests/sync/", "desktop/tests/pictures/screens_sync.py"]
+areas = ["sync"]
+
+[[rule]]
+paths = ["desktop/tests/updater/", "desktop/tests/pictures/screens_updater.py"]
+areas = ["updater"]
+
+[[rule]]
+paths = ["desktop/tests/planner/", "desktop/tests/pictures/screens_planner.py"]
+areas = ["planner"]
+
+[[rule]]
+paths = ["desktop/tests/e2e/"]
+areas = ["e2e"]
+
+# An unmoved test file selects the unmoved set. The old helper modules beside them are imported
+# by moved tests too, so they select every area.
+[[rule]]
+paths = ["desktop/tests/test_*.py", "desktop/tests/regress184/", "desktop/tests/regress190/"]
+areas = ["unmoved"]
+
+[[rule]]
+paths = ["desktop/tests/"]
+everything = true
+
+[[rule]]
+paths = ["backend/tests/"]
+areas = ["backend"]
+
+# --- Desktop plumbing every screen goes through: every area.
+[[rule]]
+paths = [
+  "desktop/__init__.py", "desktop/main.py", "desktop/assets/",
+  "desktop/native/__init__.py", "desktop/native/__main__.py",
+  "desktop/native/window.py", "desktop/native/controller.py", "desktop/native/widgets.py",
+  "desktop/native/look.py", "desktop/native/tokens.py", "desktop/native/weekmodel.py",
+  "desktop/native/calendar.py", "desktop/native/settings.py", "desktop/native/fonts.py",
+  "desktop/native/fields.py", "desktop/native/motion.py", "desktop/native/menus.py",
+  "desktop/native/feel.py", "desktop/native/icons.py", "desktop/native/client.py",
+  "desktop/native/wire.py", "desktop/native/history.py", "desktop/native/elevation.py",
+  "desktop/native/files.py", "desktop/native/collector.py",
+  "desktop/native/layouts/__init__.py", "desktop/native/layouts/base.py",
+  "desktop/native/layouts/registry.py",
+  "desktop/native/hours/__init__.py", "desktop/native/hours/canvas.py",
+  "desktop/native/hours/geometry.py",
+  "desktop/native/material/__init__.py", "desktop/native/material/bridge.py",
+  "desktop/native/material/theme.py", "desktop/native/material/host.py",
+  "desktop/native/material/tokens.json", "desktop/native/material/bridge_rows.py",
+  "desktop/native/material/qml/Main.qml", "desktop/native/material/qml/components/",
+  "desktop/native/material/qml/icons/",
+]
+everything = true
+
+# --- Week: the hours grid, its designs and the Week screen.
+[[rule]]
+paths = [
+  "desktop/native/hours/classic.py", "desktop/native/hours/chips.py",
+  "desktop/native/layouts/bento.py", "desktop/native/layouts/clay.py",
+  "desktop/native/layouts/mission.py", "desktop/native/layouts/retro.py",
+  "desktop/native/layouts/timeline.py", "desktop/native/layouts/views.py",
+  "desktop/native/layouts/empty.py",
+]
+areas = ["week", "day"]
+
+[[rule]]
+paths = ["desktop/native/hours/zoom.py", "desktop/native/hours/hand.py"]
+areas = ["week", "day", "month"]
+
+[[rule]]
+paths = ["desktop/native/hours/rail.py"]
+areas = ["week", "planner"]
+
+[[rule]]
+paths = ["desktop/native/material/bridge_week.py", "desktop/native/material/qml/week/"]
+areas = ["week"]
+
+[[rule]]
+paths = ["desktop/native/material/qml/hours/", "desktop/native/material/qml/views/"]
+areas = ["week", "day", "month"]
+
+# --- Day and My day.
+[[rule]]
+paths = [
+  "desktop/native/material/bridge_day.py", "desktop/native/material/day_board.py",
+  "desktop/native/material/qml/day/",
+]
+areas = ["day"]
+
+[[rule]]
+paths = [
+  "desktop/native/layouts/one_thing.py", "desktop/native/layouts/dial.py",
+  "desktop/native/material/bridge_myday.py",
+]
+areas = ["myday", "day"]
+
+# --- Month.
+[[rule]]
+paths = [
+  "desktop/native/hours/month.py", "desktop/native/material/bridge_month.py",
+  "desktop/native/material/qml/month/",
+]
+areas = ["month"]
+
+# --- Focus.
+[[rule]]
+paths = [
+  "desktop/native/focus.py", "desktop/native/focus_screen.py", "desktop/native/pomodoro.py",
+  "desktop/native/ambient.py", "desktop/native/ring.py", "desktop/native/sound.py",
+  "desktop/native/tones.py", "desktop/native/spotify.py",
+  "desktop/native/material/bridge_focus.py", "desktop/native/material/focus_visible.py",
+  "desktop/native/material/qml/focus/",
+]
+areas = ["focus"]
+
+# --- Settings and the look editor.
+[[rule]]
+paths = [
+  "desktop/native/custom_look.py", "desktop/native/look_editor.py",
+  "desktop/native/look_preview.py", "desktop/native/style_preview.py",
+  "desktop/native/previews.py", "desktop/native/layouts/dialog.py",
+  "desktop/native/autostart.py", "desktop/native/remind.py",
+  "desktop/native/material/bridge_settings.py", "desktop/native/material/dynamic_color.py",
+  "desktop/native/material/qml/settings/",
+]
+areas = ["settings"]
+
+# --- Sheets: every form, dialog and sheet.
+[[rule]]
+paths = [
+  "desktop/native/reuse.py", "desktop/native/work_windows.py", "desktop/native/command_bar.py",
+  "desktop/native/material/bridge_sheets.py", "desktop/native/material/sheet_block.py",
+  "desktop/native/material/sheet_homework.py", "desktop/native/material/qml/sheets/",
+]
+areas = ["sheets"]
+
+# --- Setup.
+[[rule]]
+paths = ["desktop/native/setup.py", "desktop/native/material/qml/setup/"]
+areas = ["setup"]
+
+# --- Account and sync.
+[[rule]]
+paths = [
+  "desktop/native/kept.py", "desktop/native/material/bridge_account.py",
+  "desktop/native/material/qml/account/",
+]
+areas = ["account", "e2e"]
+
+[[rule]]
+paths = ["desktop/native/devices.py", "desktop/server.py"]
+areas = ["sync", "account", "e2e"]
+
+# Another program's saves (the assistant's) reaching the open window.
+[[rule]]
+paths = ["desktop/native/outside.py"]
+areas = ["sync"]
+
+# --- Updater, packaging and release workflows.
+[[rule]]
+paths = [
+  "desktop/native/update.py", "desktop/native/updater.py", "desktop/native/version.py",
+  "desktop/linux/", "desktop/windows/", "desktop/build_linux.sh", "desktop/build_windows.ps1",
+  "desktop/check_bundle.py", "desktop/finish_linux_bundle.sh", "desktop/package_linux.sh",
+  "desktop/smoke_linux_containers.sh", "desktop/smoke_mcp.py", "desktop/readme.py",
+  "desktop/origin.py", "packaging/", "README.md", "scripts/dev-release.sh",
+  ".github/workflows/dev-build.yml", ".github/workflows/release-windows.yml",
+]
+areas = ["updater"]
+
+# --- Backend. The light app runs on the backend's app and storage, so those select every area.
+[[rule]]
+paths = [
+  "backend/__init__.py", "backend/app.py", "backend/storage.py", "backend/models.py",
+  "backend/clock.py", "backend/limits.py", "backend/weeks.py", "backend/data/",
+]
+everything = true
+
+[[rule]]
+paths = [
+  "backend/solver.py", "backend/slots.py", "backend/availability.py", "backend/comfort.py",
+  "backend/explain.py",
+]
+areas = ["backend", "planner"]
+
+[[rule]]
+paths = ["backend/day.py"]
+areas = ["backend", "day"]
+
+[[rule]]
+paths = ["backend/month.py"]
+areas = ["backend", "month"]
+
+[[rule]]
+paths = ["backend/assignments.py"]
+areas = ["backend", "sheets", "planner"]
+
+[[rule]]
+paths = ["backend/transfer.py", "backend/recovery.py", "backend/restore.py"]
+areas = ["backend", "account", "sync", "e2e"]
+
+# --- Engine. The core crate, the store and the Python binding feed every screen.
+[[rule]]
+paths = [
+  "engine/Cargo.toml", "engine/Cargo.lock", "engine/engine/", "engine/store/", "engine/py/",
+]
+everything = true
+
+[[rule]]
+paths = ["engine/sync/"]
+areas = ["engine-sync", "sync", "account", "e2e"]
+
+[[rule]]
+paths = ["engine/mcp/"]
+areas = ["engine-mcp", "updater"]
+
+# Android's own tests (./gradlew testDebugUnitTest in android/) are not run by fwtest.
+[[rule]]
+paths = ["engine/ffi/", "engine/uniffi-bindgen/"]
+areas = ["engine-ffi"]
+
+[[rule]]
+paths = ["engine/tools/", "engine/clippy.toml"]
+areas = ["engine"]
+
+# --- The rig and the harness.
+[[rule]]
+paths = ["scripts/rig/"]
+areas = ["rig"]
+
+[[rule]]
+paths = ["tools/fwtest/", ".github/workflows/verify.yml"]
+areas = ["fwtest"]
+
+# A mutation spec's cases are selected through the spec itself (see the docs); no pytest area.
+[[rule]]
+paths = ["scripts/mutations/"]
+areas = []
+
+# --- Prose and Android: known, no test here checks them.
+[[rule]]
+paths = [
+  "docs/", "android/", "scripts/android/", "AGENTS.md", "ARCHITECTURE.md", "CHANGELOG.md",
+  "DESKTOP.md", "PHASES.md", "context.md", "roadmap.md", "spec.md", "LICENSE", "FlexWeek.png",
+  ".gitignore", ".gitattributes", ".github/workflows/codeql.yml",
+]
+areas = []
+
+# =============================================================================================
+# Added on top of the first match. These never make a path known.
+
+[[also]]
+paths = ["desktop/", "backend/*.py", "backend/data/"]
+areas = ["unmoved"]
