@@ -513,3 +513,73 @@ def test_where_even_the_start_would_be_cut_beside_the_corner_circle_the_circle_h
     finally:
         window.resize(1280, 800)
         _pump(qapp, 6)
+
+
+def _soccer_with_three_homeworks_over_it(window, qapp) -> None:
+    """Jonathan's footage of 2026-11-09: Soccer 16:00-17:30 on Thursday with three homework blocks over
+    it, the last one 16:50, so the later blocks are squeezed narrow by the stack."""
+    session = window.session
+    session.add_block(
+        {
+            "id": "soccer",
+            "title": "Soccer",
+            "kind": "locked",
+            "category": "exercise",
+            "start": "16:00",
+            "duration_min": 90,
+            "days": [NOW_DAY],
+        }
+    )
+    session.save()
+    settled(qapp, window)
+    _pin_on_thursday(window, qapp, "read", "Read chapter", "16:00", 60)
+    _pin_on_thursday(window, qapp, "poster", "Science poster", "16:00", 60)
+    _pin_on_thursday(window, qapp, "math", "Math worksheet", "16:50", 60)
+
+
+def _every_time_line_is_whole_or_the_start_alone(root: QObject) -> dict[str, str]:
+    """Jonathan, 2026-11-09: a time line is never cut part-way. Each Week block shows its whole range,
+    the start alone, or no line; returns what each block shows ("" for no line)."""
+    shown = {}
+    for block in _named(root, "weekBlock"):
+        name = str(block.property("title"))
+        line = _time_line(block)
+        shown[name] = line
+        if line == "":
+            continue
+        assert line in (block.property("detail"), block.property("detailStart")), (name, line)
+        detail = next(d for d in _named(block, "detail") if d.property("visible"))
+        assert detail.property("truncated") is False, (name, line)
+        assert float(detail.property("contentWidth")) <= float(detail.property("width")), (name, line)
+    return shown
+
+
+def test_a_squeezed_blocks_time_line_is_the_start_alone_or_gone_never_cut_part_way(qapp, window) -> None:
+    root = _reset(window, qapp)
+    _pref(window, clock_24h=False)
+    window._material_page.publish()
+    _pump(qapp)
+    _soccer_with_three_homeworks_over_it(window, qapp)
+    shown = _every_time_line_is_whole_or_the_start_alone(root)
+    narrow = shown["Math worksheet"]
+    assert narrow in ("", "4:50 PM"), shown
+    # The stack really squeezes a block until its range cannot fit, so the check above is not vacuous.
+    whole = _block_named(root, "Math worksheet").property("detail")
+    assert narrow != whole, shown
+
+
+def test_in_a_narrow_window_at_larger_text_no_time_line_is_cut_part_way(qapp, window) -> None:
+    root = _reset(window, qapp)
+    _pref(window, clock_24h=False)
+    window._material_page.publish()
+    _pump(qapp)
+    _soccer_with_three_homeworks_over_it(window, qapp)
+    window.resize(1050, 800)
+    _pump(qapp, 6)
+    try:
+        with _text_size(window, qapp, "larger"):
+            shown = _every_time_line_is_whole_or_the_start_alone(root)
+            assert any(line == "" or "–" not in line for line in shown.values()), shown
+    finally:
+        window.resize(1280, 800)
+        _pump(qapp, 6)

@@ -19,6 +19,14 @@ Column {
 
     M3Palette { id: palette; theme: root.theme }
     readonly property color muted: palette.inkMuted
+    // The done circle is sized as the one on a Week block: its title line tall, never under 20 px.
+    FontMetrics {
+        id: circleMetrics
+        font.family: M3Font.family
+        font.pixelSize: M3Font.px(12)
+        font.weight: 600
+    }
+    readonly property int circle: Math.max(20, Math.ceil(circleMetrics.height * 1.25))
 
     Text {
         objectName: root.scope + "UpNext"
@@ -140,6 +148,7 @@ Column {
                     reduceMotion: root.reduceMotion
                     highContrast: root.highContrast
                     icon: "check"
+                    ring: root.circle
                     accessName: "Mark " + line.title + " finished"
                     activeFocusOnTab: !root.passive
                     onClicked: root.finish(line.assignmentId)
