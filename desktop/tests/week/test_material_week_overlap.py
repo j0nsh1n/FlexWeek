@@ -215,7 +215,7 @@ def test_in_week_the_later_block_lies_over_soccer_with_both_names_whole_and_open
     assert reading_title.property("truncated") is False
     _name_whole_and_clear(soccer, [reading])
     # The done circle shows whole, inside the block, and leaves the title its room: on the title row
-    # when the title fits beside it, under it otherwise.
+    # when the title fits beside it, in the block's corner otherwise.
     finish = _named(reading, "weekBlockFinish")[0]
     assert finish.property("visible") is True
     assert _rect(reading).contains(_rect(finish))
@@ -239,8 +239,8 @@ def test_a_squeezed_homework_block_keeps_a_done_circle_that_finishes_it_and_undo
         _show_thursday_afternoon(root, window, qapp)
         reading = _block_named(root, "Pinned reading")
         # Over Soccer in a 1000 px window, its title has no room beside a circle on the title row.
-        # What the student relies on is where the circle is: below the title's last line, inside the block's
-        # border, so a click on it marks the homework done instead of opening the title.
+        # What the student relies on is where the circle is: in the corner, below the title's last line,
+        # inside the block's border, so a click on it marks the homework done instead of opening the title.
         finish = _named(reading, "weekBlockFinish")[0]
         assert finish.property("visible") is True
         assert finish.property("activeFocusOnTab") is True
@@ -285,8 +285,8 @@ def test_a_squeezed_block_too_short_for_the_circle_hides_it_and_the_menu_still_f
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root = _reset(window, qapp)
-    # The default 60 minutes: narrow over Soccer, the block is too short for the circle under its words.
-    _soccer_and_a_pinned_reading(window, qapp)
+    # Thirty minutes: narrow over Soccer, the block is too short for even the corner circle below its title.
+    _soccer_and_a_pinned_reading(window, qapp, minutes=30)
     with _narrow_window(window, qapp):
         _show_thursday_afternoon(root, window, qapp)
         reading = _block_named(root, "Pinned reading")
@@ -329,7 +329,7 @@ def test_a_wide_homework_block_keeps_its_circle_where_it_was(
     # Room for the title beside the circle: the circle stays on the title row and cuts nothing.
     _give_the_essay_two_lines(window, qapp)
     essay = _block_named(root, "History essay")
-    assert essay.property("circleBelow") is False
+    assert essay.property("circleCorner") is False
     assert _named(essay, "weekBlockFinish")[0].property("visible") is True
     assert _named(essay, "title")[0].property("truncated") is False
 

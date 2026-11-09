@@ -274,7 +274,7 @@ def _clean(window: NativeWindow, qapp: QApplication) -> None:
 def _give_the_essay_two_lines(window: NativeWindow, qapp: QApplication) -> None:
     """The essay made 90 minutes long: room for "History" and "essay" on two lines beside the done
     circle, so the circle stays on the title row. At 60 minutes the title has one line, which the circle
-    would cut, so the circle hides there (Jonathan, 2026-11-08)."""
+    would cut, so the circle sits in the block's corner instead (Jonathan, 2026-11-08)."""
     session = window.session
     work = next(block for block in session.blocks if block.get("assignment_id") == "essay")
     work.update({"duration_min": 90})

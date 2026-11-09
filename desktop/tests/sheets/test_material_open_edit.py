@@ -25,7 +25,6 @@ from desktop.tests.sheets.support_material_sheets import (
     centre,
     click,
     drag,
-    give_the_essay_two_lines,
     material_week,
     snack,
     week_monday,
@@ -97,7 +96,6 @@ def test_enter_or_space_on_a_focused_block_opens_edit(qapp, window: NativeWindow
 
 def test_the_finish_button_marks_it_finished_and_offers_undo(qapp, window: NativeWindow) -> None:
     root = material_week(qapp, window)
-    give_the_essay_two_lines(qapp, window)
     finish = named(block_named(root, "History essay"), "weekBlockFinish")[0]
     click(window, finish)
     sheets = bridge(window).sheets
@@ -115,7 +113,6 @@ def test_the_finish_button_marks_it_finished_and_offers_undo(qapp, window: Nativ
 
 def test_the_finish_button_is_its_own_tab_stop_with_its_name(qapp, window: NativeWindow) -> None:
     root = material_week(qapp, window)
-    give_the_essay_two_lines(qapp, window)
     essay = block_named(root, "History essay")
     assert essay.property("activeFocusOnTab") is True
     finish = named(essay, "weekBlockFinish")[0]

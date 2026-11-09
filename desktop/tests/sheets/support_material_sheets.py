@@ -120,19 +120,6 @@ def material_week(qapp: QApplication, window: NativeWindow) -> QObject:
     return root
 
 
-def give_the_essay_two_lines(qapp: QApplication, window: NativeWindow) -> None:
-    """The essay made 90 minutes long: room for "History" and "essay" on two lines beside the done
-    circle, so the circle stays on the title row. At 60 minutes the title has one line, which the circle
-    would cut, so the circle hides there (Jonathan, 2026-11-08)."""
-    session = window.session
-    work = next(block for block in session.blocks if block.get("assignment_id") == "essay")
-    work.update({"duration_min": 90})
-    session.add_block(work)
-    session.save()
-    settled(qapp, window)
-    pump(qapp)
-
-
 def block_named(root: QObject, title: str) -> QObject:
     for block in named(root, "weekBlock"):
         if any(str(label.property("text")) == title for label in named(block, "title")):

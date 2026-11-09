@@ -39,9 +39,10 @@ Item {
     M3Palette { id: m3; theme: cell.theme }
 
     // The title's column is the block minus its 12 px left and 8 px right padding. When the circle on
-    // the title row would leave it less than three wide letters, the circle moves under the time so
-    // the title keeps the whole column. It also moves on any block where it would cut the title short,
-    // whether or not the block shares time (recheck M7: "Scie..."; Jonathan, 2026-11-08).
+    // the title row would leave it less than three wide letters, the circle moves to the block's
+    // bottom-right corner so the title keeps the whole column. It also moves on any block where it
+    // would cut the title short, whether or not the block shares time (recheck M7: "Scie..."; Jonathan,
+    // 2026-11-08, option A: a corner circle, never hidden unless the block is too short for it).
     FontMetrics {
         id: titleMetrics
         font.family: M3Font.family
@@ -60,17 +61,24 @@ Item {
         lineHeight: 1.25
         lineHeightMode: Text.ProportionalHeight
     }
-    readonly property bool circleBelow: cell.homework
+    readonly property bool circleCorner: cell.homework
                                         && (cell.width - 20 - 28 < titleMetrics.advanceWidth("MMM")
                                             || besideCircle.truncated)
-    // The circle shows whole where the words show, or not at all: a block too short for it under its
-    // words, or one whose name is on its side, hides it. Edit, the right-click menu and Shift+F10 still
+    // The corner circle is sized with the text, never under 20 px so it stays a clear click target.
+    readonly property real cornerSize: Math.max(20, Math.ceil(blockContent.titleLine))
+    // The circle shows whole where the words show, or not at all: a block too short for it below its
+    // title, or one whose name is on its side, hides it. Edit, the right-click menu and Shift+F10 still
     // finish the homework.
     readonly property real wordsEnd: cell.wordsRoom >= 0 ? cell.wordsTop + cell.wordsRoom : cell.height
+    readonly property real cornerTop: cell.wordsEnd - cell.cornerSize - 3
     readonly property bool circleFits: !cell.nameSide
-                                       && (cell.circleBelow
-                                           ? blockContent.contentBottom + 2 + finishButton.height + 4 <= cell.wordsEnd
+                                       && (cell.circleCorner
+                                           ? cell.cornerTop >= blockContent.titleBottom
                                            : cell.wordsTop + 4 + finishButton.height + 2 <= cell.wordsEnd)
+    // The corner circle lies beside the time line, which then gives up its right end rather than run
+    // under the circle; where the circle sits below the time line it takes nothing from it.
+    readonly property bool circleBesideTime: cell.circleCorner && cell.circleFits
+                                             && cell.cornerTop < blockContent.contentBottom
 
     EventBlock {
         id: blockContent
@@ -85,7 +93,8 @@ Item {
         detail: cell.detail
         past: cell.past
         accessName: cell.title
-        rightInset: cell.homework && !cell.circleBelow && cell.circleFits ? 28 : 0
+        rightInset: cell.homework && !cell.circleCorner && cell.circleFits ? 28 : 0
+        detailInset: cell.circleBesideTime ? cell.cornerSize + 8 : 0
         fitToHeight: true
         wordsTop: cell.wordsTop
         wordsRoom: cell.wordsRoom
@@ -166,10 +175,10 @@ Item {
         id: finishButton
         objectName: "weekBlockFinish"
         visible: cell.homework && cell.circleFits
-        width: 24
-        height: 24
-        x: cell.circleBelow ? 12 : cell.width - width - 4
-        y: cell.circleBelow ? blockContent.contentBottom + 2 : cell.wordsTop + 4
+        width: cell.circleCorner ? cell.cornerSize : 24
+        height: width
+        x: cell.width - width - 4
+        y: cell.circleCorner ? cell.cornerTop : cell.wordsTop + 4
         activeFocusOnTab: !cell.passive && cell.homework && cell.circleFits
         onActiveFocusChanged: if (activeFocus) cell.focused()
         Accessible.role: Accessible.Button
@@ -188,8 +197,8 @@ Item {
         M3Icon {
             anchors.centerIn: parent
             name: "check"
-            width: 16
-            height: 16
+            width: cell.circleCorner ? 14 : 16
+            height: width
             color: cell.done ? m3.inkPrimary : m3.inkMuted
         }
 
@@ -198,7 +207,7 @@ Item {
             anchors.margins: -4
             target: finishButton
             ring: m3.focusRing
-            ringRadius: 14
+            ringRadius: finishButton.width / 2 + 4
         }
 
         HoverHandler {

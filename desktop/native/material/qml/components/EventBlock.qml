@@ -13,6 +13,8 @@ Item {
     property bool past: false
     property string accessName: ""
     property int rightInset: 0
+    // Room kept free at the right of the time line, for a circle that lies beside it.
+    property int detailInset: 0
     property alias trailingInset: root.rightInset
     // Week and Day set a block's height from its time. Its words then fit that height: the title
     // gives up its second line first, then the time line goes, so nothing is drawn past the border.
@@ -57,6 +59,7 @@ Item {
     readonly property int titleLines: !root.fitToHeight || 2 * root.titleLine + root.detailLine <= root.room ? 2 : 1
     // Where the last drawn line ends, so a block can place something below its words.
     readonly property real contentBottom: body.y + body.height
+    readonly property real titleBottom: body.y + title.height
 
     readonly property bool darkSurface: {
         var tone = palette.surface
@@ -194,7 +197,7 @@ Item {
             Text {
                 id: detail
                 objectName: "detail"
-                width: parent.width
+                width: Math.max(0, parent.width - root.detailInset)
                 visible: root.detail !== "" && (!root.fitToHeight || title.height + root.detailLine <= root.room)
                 text: root.detail
                 color: root.textInk

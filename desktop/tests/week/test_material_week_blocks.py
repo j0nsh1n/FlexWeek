@@ -23,7 +23,6 @@ from desktop.tests.week.support_material import (
     _block_named,
     _bridge,
     _click,
-    _give_the_essay_two_lines,
     _homework,
     _look,
     _named,
@@ -42,11 +41,55 @@ from desktop.tests.window_support import look_file, qapp, settled  # noqa: F401
 
 def test_clicking_homework_finishes_it_and_undo_opens_it_again(qapp, window) -> None:
     root = _reset(window, qapp)
-    _give_the_essay_two_lines(window, qapp)
     essay = _block_named(root, "History essay")
     assert essay.property("homework") is True
     assert window.session.assignments["essay"].get("completed") in (None, False)
     finish = _named(essay, "weekBlockFinish")[0]
+    _click(window, finish)
+    wait_until(
+        qapp, lambda: not window.session.busy and bool(window.session.assignments["essay"].get("completed"))
+    )
+    wait_until(qapp, lambda: _snack(window) == "Finished History essay.")
+    _pump(qapp)
+    assert _block_named(root, "History essay").property("done") is True
+    bar = _qml(root, "materialSnackbar")
+    _click(window, bar, dx=int(bar.property("width")) // 2 - 30)
+    wait_until(
+        qapp,
+        lambda: not window.session.busy and not window.session.assignments["essay"].get("completed"),
+    )
+    _pump(qapp)
+    assert _block_named(root, "History essay").property("done") is False
+
+
+def test_a_default_one_hour_homework_in_week_has_its_done_circle_in_its_corner_off_the_title(
+    qapp, window
+) -> None:
+    """Jonathan, 2026-11-08 (option A): when the circle on the title row would cut the title, it sits in
+    the block's bottom-right corner instead of hiding, never over the title, and still finishes the
+    homework on a click and takes Tab."""
+    root = _reset(window, qapp)
+    essay = _block_named(root, "History essay")
+    work = next(b for b in window.session.blocks if b.get("assignment_id") == "essay")
+    assert work["duration_min"] == 60
+    finish = _named(essay, "weekBlockFinish")[0]
+    assert finish.property("visible") is True
+    block, circle = _rect(essay), _rect(finish)
+    assert block.contains(circle)
+    assert circle.width() >= 20 and circle.height() >= 20
+    assert circle.center().x() > block.center().x() and circle.center().y() > block.center().y()
+    assert not circle.intersects(_rect(_named(essay, "title")[0]))
+    for detail in _named(essay, "detail"):
+        if detail.property("visible"):
+            assert not circle.intersects(_rect(detail))
+
+    quick = window._material_page._quick
+    essay.forceActiveFocus()
+    _pump(qapp)
+    QTest.keyClick(quick, Qt.Key.Key_Tab)
+    _pump(qapp)
+    assert finish.property("activeFocus") is True
+
     _click(window, finish)
     wait_until(
         qapp, lambda: not window.session.busy and bool(window.session.assignments["essay"].get("completed"))
@@ -149,8 +192,8 @@ def test_a_homework_block_that_shares_no_time_moves_or_hides_its_circle_rather_t
     qapp, window
 ) -> None:
     """Jonathan, 2026-11-08: the done-circle rule holds for every Week block, not only blocks that share
-    time. When the circle on the title row would cut the title, it moves under the time, or hides on a
-    block too short for that, where the menu still finishes the homework."""
+    time. When the circle on the title row would cut the title, it moves to the block's corner, or hides
+    on a block too short for that, where the menu still finishes the homework."""
     root = _reset(window, qapp)
     row = int(_bridge(window).property("hourRow"))
     _qml(root, "weekScroller").setProperty("contentY", float(14 * row))
