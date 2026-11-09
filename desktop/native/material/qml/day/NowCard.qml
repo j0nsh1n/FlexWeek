@@ -104,7 +104,7 @@ Column {
                     font.weight: 400
                 }
             }
-            Item { width: 1; height: 12 }
+            Item { width: 1; height: 12; visible: startButton.visible || markButton.visible }
             Flow {
                 width: parent.width
                 spacing: 8
@@ -130,6 +130,8 @@ Column {
                     id: startButton
                     objectName: root.scope + "StartFocus"
                     visible: !root.busy || root.timerTitle !== "" || root.timerEnded || root.timerDone
+                    // Qt keeps focus on a button that hides inside a card that stays, so hand it on here.
+                    onVisibleChanged: if (!visible && activeFocus) root.handFocusToHeading()
                     theme: root.theme
                     density: root.density
                     reduceMotion: root.reduceMotion

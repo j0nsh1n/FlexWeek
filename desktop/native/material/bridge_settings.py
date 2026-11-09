@@ -220,6 +220,10 @@ class PassiveDayBridge(QObject):
     def nowLine(self) -> str:
         return str(self._live.nowLine)  # type: ignore[attr-defined]
 
+    @Property(bool, notify=changed)
+    def nowBusy(self) -> bool:
+        return bool(self._live.nowBusy)  # type: ignore[attr-defined]
+
     @Property(int, notify=changed)
     def ringCount(self) -> int:
         return int(self._live.ringCount)  # type: ignore[attr-defined]

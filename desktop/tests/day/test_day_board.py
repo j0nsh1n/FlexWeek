@@ -359,3 +359,14 @@ def test_a_finished_homework_block_inside_soccer_leaves_the_soccer_card() -> Non
     )
     assert board.now_title == "Soccer until 17:30"
     assert board.now_line == "Next: Essay at 18:45"
+
+
+def test_inside_a_fixed_block_no_card_on_other_days_or_with_nudges_off_and_12_hour_words() -> None:
+    day = [_block("Soccer", *SOCCER), _block("Essay", *ESSAY, work=True, assignment="a1")]
+    at = 16 * 60 + 11
+    assert _board(day, at, when="past").show_now is False
+    assert _board(day, at, when="future").show_now is False
+    assert _board(day, at, nudges=False).show_now is False
+    board = _board_12h(day, at)
+    assert board.now_title == "Soccer until 5:30 PM"
+    assert board.now_line == "Next: Essay at 6:45 PM"
