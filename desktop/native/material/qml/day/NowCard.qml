@@ -8,17 +8,44 @@ Column {
     property bool reduceMotion: false
     property bool highContrast: false
     property bool passive: false
+    // A running focus timer: the card names it and its button goes back to it.
+    property string timerTitle: ""
+    property string timerLine: ""
+    // The timer has run out and is not cleared: the card says so and offers Mark finished (when the
+    // homework is still open) and Start again.
+    property bool timerEnded: false
+    property bool timerCanFinish: false
+    // The timer has run out on homework that is already done: the one button is OK, which clears it.
+    property bool timerDone: false
     property string scope: "day"
     property string title: ""
     property string line: ""
     // The homework Start focus opens; the free-time card does not name it anywhere else.
     property string focusTitle: ""
     signal startFocus()
+    signal markFinished()
+    signal startAgain()
+    signal dismissFinished()
 
     spacing: 8
     width: parent ? parent.width : implicitWidth
 
     M3Palette { id: palette; theme: root.theme }
+
+    // Whether the card has something to show. The card hides once the timer clears and nothing else is
+    // on today; a page that is merely not on screen does not count.
+    property bool shown: true
+    // The page's heading: keyboard focus goes there when the card goes away while one of its buttons holds it.
+    property Item pageHeading: null
+    visible: shown
+
+    // Qt takes focus off a button as it hides, which can come before or after shownChanged reaches
+    // this card, so both the card and its buttons hand focus on; whichever runs second finds it done.
+    function handFocusToHeading() {
+        if (!root.shown && root.pageHeading)
+            root.pageHeading.forceActiveFocus()
+    }
+    onShownChanged: if (startButton.activeFocus || markButton.activeFocus) handFocusToHeading()
 
     Text {
         objectName: root.scope + "NowLabel"
@@ -40,7 +67,7 @@ Column {
         radius: 8
         color: palette.primaryContainer
         Accessible.role: Accessible.Grouping
-        Accessible.name: root.title + ", " + root.line
+        Accessible.name: (root.timerTitle || root.title) + ", " + (root.timerTitle ? root.timerLine : root.line)
 
         readonly property int pad: root.density === "compact" ? 16 : 24
 
@@ -57,7 +84,7 @@ Column {
                 Text {
                     objectName: root.scope + "NowTitle"
                     width: parent.width
-                    text: root.title
+                    text: root.timerTitle || root.title
                     wrapMode: Text.WordWrap
                     color: palette.inkPrimaryContainer
                     font.family: M3Font.family
@@ -67,7 +94,7 @@ Column {
                 Text {
                     objectName: root.scope + "NowLine"
                     width: parent.width
-                    text: root.line
+                    text: root.timerTitle ? root.timerLine : root.line
                     color: palette.inkPrimaryContainer
                     font.family: M3Font.family
                     font.pixelSize: M3Font.px(16)
@@ -75,18 +102,49 @@ Column {
                 }
             }
             Item { width: 1; height: 12 }
-            Button {
-                objectName: root.scope + "StartFocus"
-                theme: root.theme
-                density: root.density
-                reduceMotion: root.reduceMotion
-                highContrast: root.highContrast
-                kind: "filled"
-                text: root.focusTitle ? "Start " + root.focusTitle : "Start focus"
-                icon: "play_arrow"
-                accessName: text
-                activeFocusOnTab: !root.passive
-                onClicked: root.startFocus()
+            Flow {
+                width: parent.width
+                spacing: 8
+                Button {
+                    id: markButton
+                    objectName: root.scope + "MarkFinished"
+                    visible: root.timerEnded && root.timerCanFinish
+                    theme: root.theme
+                    density: root.density
+                    reduceMotion: root.reduceMotion
+                    highContrast: root.highContrast
+                    kind: "filled"
+                    text: "Mark finished"
+                    icon: "check"
+                    accessName: text
+                    activeFocusOnTab: !root.passive
+                    // This button hides once the timer clears, so keyboard focus moves to the one that stays
+                    // before the card can hide (and hand focus on to the page) in markFinished().
+                    onClicked: { startButton.forceActiveFocus(); root.markFinished() }
+                    onActiveFocusChanged: if (!activeFocus) root.handFocusToHeading()
+                }
+                Button {
+                    id: startButton
+                    objectName: root.scope + "StartFocus"
+                    theme: root.theme
+                    density: root.density
+                    reduceMotion: root.reduceMotion
+                    highContrast: root.highContrast
+                    kind: root.timerEnded && root.timerCanFinish ? "outlined" : "filled"
+                    text: root.timerDone ? "OK" : root.timerEnded ? "Start again"
+                        : (root.timerTitle ? "Back to " + root.timerTitle : (root.focusTitle ? "Start " + root.focusTitle : "Start focus"))
+                    icon: root.timerDone ? "check" : "play_arrow"
+                    accessName: text
+                    activeFocusOnTab: !root.passive
+                    onActiveFocusChanged: if (!activeFocus) root.handFocusToHeading()
+                    // The button that was used holds the keyboard, so whatever it opens hands focus back to it.
+                    onClicked: {
+                        forceActiveFocus()
+                        if (root.timerDone) root.dismissFinished()
+                        else if (root.timerEnded) root.startAgain()
+                        else root.startFocus()
+                    }
+                }
             }
         }
     }

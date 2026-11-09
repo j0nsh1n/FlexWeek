@@ -9,9 +9,11 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QObject, Qt, QTimer
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from desktop.native.widgets import ConfirmSheet
 from desktop.native.window import NativeWindow
 from desktop.tests.focus.support_focus_screen import (  # noqa: F401
     homework,
@@ -207,3 +209,147 @@ def test_start_material_focus_opens_the_screen_on_that_homework(
     assert text_of(root, "focusTitle") == "History"
     assert qml(root, "focusPause").property("visible") is True
     assert text_of(root, "focusPause") == "Pause"
+
+
+def keep_on_replace(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Every "Replace timer" question the window asks, answered Keep current timer (no modal wait)."""
+    import desktop.native.window as window_module
+
+    questions: list[str] = []
+
+    class Keep:
+        def __init__(
+            self, _parent: object, _title: str, question: str, *_rest: object, **_options: object
+        ) -> None:
+            questions.append(question)
+            self.answer = ""
+
+        def exec(self) -> int:
+            self.answer = "keep"
+            return 0
+
+    monkeypatch.setattr(window_module, "ConfirmSheet", Keep)
+    return questions
+
+
+def test_starting_the_homework_whose_timer_runs_opens_that_timer_without_asking(
+    qapp: QApplication, material_focus_window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window = material_focus_window
+    only = homework(qapp, window, "geography", 1)[0]
+    show_material(qapp, window)
+    focus = window._material_page.bridge.focus
+    asked = keep_on_replace(monkeypatch)
+    window.start_material_focus(only["id"], only["days"][0])
+    pump(qapp)
+    running = dict(window.session.focus)
+    focus.hide()
+    pump(qapp)
+    window.start_material_focus(only["id"], only["days"][0])
+    pump(qapp)
+    assert asked == []
+    assert focus.open
+    assert window.session.focus == running
+    focus.hide()
+    assert window.session.start_focus("geography") is True  # the same homework, named by its id
+    assert asked == [] and window.session.focus == running
+
+
+def test_keep_current_timer_leaves_my_day_as_it_was_with_the_card_on_that_timer(
+    qapp: QApplication, material_focus_window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window = material_focus_window
+    first = homework(qapp, window, "biology", 1)[0]
+    other = homework(qapp, window, "chemistry", 1)[0]
+    questions = keep_on_replace(monkeypatch)
+    root = show_material(qapp, window)
+    bridge = window._material_page.bridge
+    focus = bridge.focus
+    window.start_material_focus(first["id"], first["days"][0])
+    pump(qapp)
+    running = dict(window.session.focus)
+    focus.hide()
+    bridge.showPage("myday")
+    pump(qapp)
+    window.start_material_focus(other["id"], other["days"][0])
+    pump(qapp)
+    assert questions == ["Stop the timer for Biology and start Chemistry instead?"]
+    assert not focus.open
+    assert bridge.screen == "myday"
+    assert window.session.focus == running
+    assert text_of(root, "myDayStartFocus") == "Back to Biology"
+    assert text_of(root, "myDayNowTitle") == "Biology"
+
+
+def _press_escape_on_the_replace_question(qapp: QApplication, seen: list[tuple[ConfirmSheet, bool]]) -> None:
+    """The real keyboard path: Esc goes to the question's focused button. The question closed or not
+    is noted in `seen`; one still open is answered Keep, so a failing test ends instead of hanging."""
+    shown = [s for s in qapp.topLevelWidgets() if isinstance(s, ConfirmSheet) and s.isVisible()]
+    if not shown:
+        QTimer.singleShot(20, lambda: _press_escape_on_the_replace_question(qapp, seen))
+        return
+    sheet = shown[0]
+    sheet.activateWindow()
+    qapp.processEvents()
+    QTest.keyClick(QApplication.focusWidget() or sheet, Qt.Key.Key_Escape)
+    qapp.processEvents()
+    seen.append((sheet, sheet.isVisible()))
+    if sheet.isVisible():
+        sheet.buttons["keep"].click()
+
+
+def test_escape_closes_the_replace_timer_question_and_changes_nothing(
+    qapp: QApplication, material_focus_window: NativeWindow
+) -> None:
+    window = material_focus_window
+    first = homework(qapp, window, "physics", 1)[0]
+    other = homework(qapp, window, "economics", 1)[0]
+    root = show_material(qapp, window)
+    bridge = window._material_page.bridge
+    focus = bridge.focus
+    seen: list[tuple[ConfirmSheet, bool]] = []
+    window.start_material_focus(first["id"], first["days"][0])
+    pump(qapp)
+    running = dict(window.session.focus)
+    focus.hide()
+    bridge.showPage("myday")
+    pump(qapp)
+    QTimer.singleShot(20, lambda: _press_escape_on_the_replace_question(qapp, seen))
+    window.start_material_focus(other["id"], other["days"][0])
+    pump(qapp)
+    assert len(seen) == 1
+    sheet, still_open = seen[0]
+    assert not still_open, "Esc left the Replace timer question open"
+    assert sheet.answer in (None, "keep")
+    assert window.session.focus == running
+    assert not focus.open
+    assert bridge.screen == "myday"
+    assert text_of(root, "myDayStartFocus") == "Back to Physics"
+    assert QApplication.focusWidget() is window._material_page._quick, "focus went back to the page"
+
+
+def test_after_escape_closes_the_replace_timer_question_focus_is_back_on_the_button_that_opened_it(
+    qapp: QApplication, material_focus_window: NativeWindow
+) -> None:
+    window = material_focus_window
+    first = homework(qapp, window, "latin", 1)[0]
+    other = homework(qapp, window, "greek", 1)[0]
+    root = show_material(qapp, window)
+    bridge = window._material_page.bridge
+    focus = bridge.focus
+    scene = window._material_page._quick.quickWindow()
+    seen: list[tuple[ConfirmSheet, bool]] = []
+    window.start_material_focus(first["id"], first["days"][0])
+    pump(qapp)
+    focus.hide()
+    bridge.showPage("myday")
+    pump(qapp)
+    qml(root, "myDayStartFocus").forceActiveFocus()
+    pump(qapp)
+    assert scene.activeFocusItem().objectName() == "myDayStartFocus"
+    QTimer.singleShot(20, lambda: _press_escape_on_the_replace_question(qapp, seen))
+    window.start_material_focus(other["id"], other["days"][0])
+    pump(qapp)
+    assert [still_open for _sheet, still_open in seen] == [False]
+    assert scene.activeFocusItem() is not None
+    assert scene.activeFocusItem().objectName() == "myDayStartFocus"

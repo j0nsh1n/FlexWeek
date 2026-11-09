@@ -55,7 +55,13 @@ def test_each_screen_has_at_most_one_filled_button() -> None:
 
     now_card_text = (QML / "day" / "NowCard.qml").read_text(encoding="utf-8")
     assert len(_BUTTON_FILLED.findall(now_card_text)) == 1
-    assert 'text: root.focusTitle ? "Start " + root.focusTitle : "Start focus"' in now_card_text
+    assert 'text: root.timerDone ? "OK" : root.timerEnded ? "Start again"' in now_card_text
+    assert (
+        ': (root.timerTitle ? "Back to " + root.timerTitle'
+        ' : (root.focusTitle ? "Start " + root.focusTitle : "Start focus"))'
+    ) in now_card_text
+    # Start again is outlined whenever Mark finished shows, so only one filled button is visible at a time.
+    assert 'kind: root.timerEnded && root.timerCanFinish ? "outlined" : "filled"' in now_card_text
 
     day_lists_text = (QML / "day" / "DayLists.qml").read_text(encoding="utf-8")
     assert _BUTTON_FILLED.findall(day_lists_text) == []

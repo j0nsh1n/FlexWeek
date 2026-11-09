@@ -7,6 +7,8 @@ Item {
     objectName: "materialMyDay"
     property var bridge
     property bool phone: false
+    // The shell's page heading, where keyboard focus goes when the Now card goes away holding it.
+    property Item pageHeading: null
 
     readonly property var board: bridge && bridge.myday ? bridge.myday : null
     readonly property var theme: bridge && bridge.theme ? bridge.theme : ({})
@@ -74,16 +76,25 @@ Item {
 
             NowCard {
                 width: column.width
-                visible: root.board && root.board.showNow
+                shown: !!(root.board && root.board.showNow)
+                pageHeading: root.pageHeading
                 theme: root.theme
                 density: root.density
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
+                timerTitle: root.board ? root.board.timerTitle : ""
+                timerLine: root.board ? root.board.timerLine : ""
+                timerEnded: root.board ? root.board.timerEnded : false
+                timerCanFinish: root.board ? root.board.timerCanFinish : false
+                timerDone: root.board ? root.board.timerDone : false
                 scope: "myDay"
                 title: root.board ? root.board.nowTitle : ""
                 focusTitle: root.board ? root.board.focusTitle : ""
                 line: root.board ? root.board.nowLine : ""
                 onStartFocus: if (root.board) root.board.startFocus()
+                onMarkFinished: if (root.board) root.board.markFinished()
+                onStartAgain: if (root.board) root.board.startAgain()
+                onDismissFinished: if (root.board) root.board.dismissFinished()
             }
 
             DayLists {
