@@ -216,6 +216,13 @@ def test_a_one_hour_homework_at_large_text_shows_its_start_only_beside_the_corne
 
 def test_a_time_line_keeps_its_whole_range_where_it_fits_or_the_circle_is_not_beside_it(qapp, window) -> None:
     root = _reset(window, qapp)
+    # The ordinary one-hour essay at Normal text, 1280 px, 24-hour clock: the circle is beside the line
+    # and the whole range still fits beside it, so the range stays (the start alone is for when it does not).
+    plain = _block_named(root, "History essay")
+    assert _named(plain, "weekBlockFinish")[0].property("visible") is True
+    assert plain.property("circleBesideTime") is True
+    assert _time_line(plain) == "18:45\u201319:45"
+
     # 90 minutes at Normal text: the circle stays on the title row, the line has the whole width.
     _give_the_essay_two_lines(window, qapp)
     essay = _block_named(root, "History essay")
@@ -456,3 +463,22 @@ def test_the_now_line_passes_behind_blocks_and_the_dot_stays_on_top(qapp, window
         assert line_z < block_z, (line_z, block_z)
         assert dot_z > block_z, (dot_z, block_z)
     assert float(_qml(root, "dropSlot").property("z")) > line_z
+
+
+def test_on_the_12_hour_clock_the_start_only_line_reads_6_45_pm_where_the_range_does_not_fit(
+    qapp, window
+) -> None:
+    """The one-hour essay at Normal text and 1280 px on the 12-hour clock: the line beside the circle is
+    about 62 px, the range "6:45\u20137:45 PM" is wider, "6:45 PM" fits whole."""
+    root = _reset(window, qapp)
+    _pref(window, clock_24h=False)
+    window._material_page.publish()
+    _pump(qapp)
+    essay = _block_named(root, "History essay")
+    assert _named(essay, "weekBlockFinish")[0].property("visible") is True
+    assert essay.property("circleBesideTime") is True
+    assert _time_line(essay) == "6:45 PM"
+    detail = next(d for d in _named(essay, "detail") if d.property("visible"))
+    assert detail.property("truncated") is False
+    name = QAccessible.queryAccessibleInterface(essay).text(QAccessible.Text.Name)
+    assert name == "Edit History essay, 6:45\u20137:45 PM"

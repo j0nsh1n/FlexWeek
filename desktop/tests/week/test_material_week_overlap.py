@@ -588,15 +588,17 @@ def test_a_homework_over_soccer_shows_its_start_only_beside_the_corner_circle(
 
 
 def _the_time_line_clears_the_circle(block: QObject) -> None:
-    """Where the corner circle and the time line share a row, the line's words end before the circle
-    begins, with a gap."""
+    """Where the corner circle and the time line share a row, the space given to the line (its own box,
+    not only the words painted in it) ends before the circle begins, with a gap."""
     circle = _rect(_named(block, "weekBlockFinish")[0])
     line = _visible_time_line(block)
-    box = _rect(line)
-    if box.bottom() <= circle.top() or box.top() >= circle.bottom():
+    # A Text's boundingRect is its painted words, so the space given is its own x and width.
+    origin = line.mapToScene(QPointF(0, 0))
+    top, bottom = origin.y(), origin.y() + float(line.property("height"))
+    if bottom <= circle.top() or top >= circle.bottom():
         return
-    words_right = box.left() + min(float(line.property("contentWidth")), float(line.property("width")))
-    assert words_right <= circle.left() - 4, (block.property("title"), words_right, circle.left())
+    right = origin.x() + float(line.property("width"))
+    assert right <= circle.left() - 4, (block.property("title"), right, circle.left())
 
 
 def test_the_time_line_never_runs_under_the_corner_circle(qapp: QApplication, window: NativeWindow) -> None:
