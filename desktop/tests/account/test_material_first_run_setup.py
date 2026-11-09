@@ -21,6 +21,7 @@ from PySide6.QtQuickWidgets import QQuickWidget
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.setup import COLOURS, DONE, FIRST, HOMEWORK, LOOK, REMINDERS, STYLE, WEEK
+from desktop.native.weekmodel import hhmm_text
 from desktop.tests.account.support import (
     LightLaunches,
     account,
@@ -316,3 +317,19 @@ def test_setup_focus_and_tab_ownership_stays_on_visible_material_controls(
         assert item is not None
         assert window.focusWidget() is quick
         assert window.setup_page.carousel.hasFocus() is False
+
+
+def test_setup_keeps_a_saved_cutoff_that_is_not_on_the_list(
+    qapp: QApplication, material_launches: LightLaunches
+) -> None:
+    """Running setup again must show a saved 22:15 as itself and save it back, not reset it to no limit."""
+    window = material_launches.launch()
+    bridge = account(window)
+    create(qapp, window, "cutoff_student")
+    through_recovery(qapp, window)
+    bridge._state.preferences["day_cutoff"] = "22:15"
+    bridge._load_fields()
+    marked = [row["label"] for row in bridge.cutoffChoices if row["value"] == bridge.cutoff]
+    assert marked == [hhmm_text("22:15")]
+    bridge._step = WEEK
+    assert bridge._answer()["day_cutoff"] == "22:15"

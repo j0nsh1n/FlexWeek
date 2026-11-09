@@ -32,7 +32,7 @@ from desktop.tests.material_support import named, show_material  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
 
 QML = Path(__file__).resolve().parents[2] / "native" / "material" / "qml"
-DISCARD = "Discard what you typed?"
+DISCARD = "Discard your changes?"
 
 
 @pytest.fixture(scope="module")

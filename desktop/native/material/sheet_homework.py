@@ -253,6 +253,16 @@ class HomeworkDraft:
             return False
         return (day, minute) < (self.now.date(), self.now.hour * 60 + self.now.minute)
 
+    def _past_when_problem(self) -> str:
+        """The refusal for a pinned time that is already over today, shown as soon as one is picked. A time
+        the homework already had, or finished homework, is left alone."""
+        fixed = self._fixed_at()
+        week = self.session.week_start
+        if fixed is None or week is None or self.completed or not self._when_changed():
+            return ""
+        now_minute = self.now.hour * 60 + self.now.minute
+        return past_problem(week, fixed["day"], hhmm_to_minutes(fixed["start"]), self.today, now_minute) or ""
+
     def _fixed_problem(self, fixed: dict, due: str) -> str:
         week = self.session.week_start
         if week is None:
@@ -319,15 +329,16 @@ class HomeworkDraft:
             self.spread = "spread" if value == "spread" else "one"
         elif name == "when":
             self.when = "fixed" if value == "fixed" else "plan"
-            self.when_problem = ""
+            self.when_problem = self._past_when_problem()
         elif name == "whenDay":
             self.when_day = int(value)
-            self.when_problem = ""
+            self.when_problem = self._past_when_problem()
         elif name == "whenTime":
             self.when_time = str(value)
-            self.when_problem = ""
+            self.when_problem = self._past_when_problem()
         elif name == "completed":
             self.completed = bool(value)
+            self.when_problem = self._past_when_problem()
         elif name == "course":
             self.course = str(value)
         elif name == "priority":

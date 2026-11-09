@@ -42,6 +42,13 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- Material Settings: row help lines wrap instead of being cut off, so the keyboard shortcuts line shows Ctrl+Y.
+- Material Add homework at Larger text: a long due date such as "Tomorrow · Fri 6 Nov" wraps to two lines instead of being cut off.
+- Material: leaving a sheet you changed asks "Discard your changes?" (it said "Discard what you typed?" even after only picking a time or a date).
+- Material Week: dropping a homework card on a time that has passed says "That time has passed..." in the snackbar instead of doing nothing.
+- Material Add/Edit homework: ticking "finished" clears the "That time has passed" message, since a finished task is not held to the clock.
+- Material Settings > Planning: Study window cutoff now has a "No limit" choice, so the current setting is always marked. A saved cutoff that is not one of the usual times (for example 10:15 PM) is shown as itself in Settings and kept when Setup is run again, instead of showing "No limit" or being reset.
+- Material Edit and Add homework: a pinned time that has already passed today shows "That time has passed. Choose ... or later today, or another day." as soon as it is picked, and Save still refuses it.
 - In Material, Esc closes the "Replace timer" question like Keep current timer: nothing changes and you stay where you were.
 - While a focus timer runs, Material's Now card on Day and My day names it with its time left ("History essay", "13 min left") and its button reads "Back to History essay", opening that timer. Starting focus on the homework whose timer is already running opens that timer instead of asking to replace it with itself.
 - When a focus timer runs out, Material's Now card on Day and My day keeps the homework's title with "Session finished" and two buttons until you choose: Mark finished marks that homework done and clears the timer, and Start again starts a new timer on the same homework without asking to replace the finished one. A finished Quick focus is named "Quick focus" and has no Mark finished. After either button, or when the timer is cleared another way, the card goes back to its usual text.
