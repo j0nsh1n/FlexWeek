@@ -161,13 +161,12 @@ def _doing(up: Sequence[object], minute: int, when: str, nudges: bool) -> object
 
 
 def _busy(items: Sequence[object], minute: int, when: str, nudges: bool) -> object | None:
-    """The fixed block on at `minute`, the earliest-starting one when several are."""
+    """The fixed block on at `minute`. Where several are, the one that ends last, so the card says when the
+    student is actually free (Jonathan, 2026-11-09)."""
     if not nudges or when != "today":
         return None
-    return next(
-        (item for item in items if not item.work and int(item.start) <= minute < int(item.end)),
-        None,
-    )
+    on = [item for item in items if not item.work and int(item.start) <= minute < int(item.end)]
+    return max(on, key=lambda item: int(item.end), default=None)
 
 
 def _next_after(items: Sequence[object], minute: int) -> object | None:

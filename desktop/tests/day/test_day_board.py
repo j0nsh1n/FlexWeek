@@ -370,3 +370,13 @@ def test_inside_a_fixed_block_no_card_on_other_days_or_with_nudges_off_and_12_ho
     board = _board_12h(day, at)
     assert board.now_title == "Soccer until 5:30 PM"
     assert board.now_line == "Next: Essay at 6:45 PM"
+
+
+def test_where_fixed_blocks_overlap_the_card_names_the_one_that_ends_last() -> None:
+    """Jonathan, 2026-11-09: with A 08:00-09:00 and B 08:30-12:00, at 08:45 the card says when the student
+    is actually free: "B until 12:00"."""
+    day = [_block("A", 8 * 60, 9 * 60), _block("B", 8 * 60 + 30, 12 * 60), _block("Soccer", *SOCCER)]
+    board = _board(day, 8 * 60 + 45)
+    assert board.now_title == "B until 12:00"
+    assert board.now_line == "Next: Soccer at 16:00"
+    assert board.now_minutes == 3 * 60 + 15
