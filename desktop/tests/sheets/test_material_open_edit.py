@@ -277,6 +277,87 @@ def test_escape_on_the_card_menu_returns_focus_to_the_card_and_enter_opens_edit(
     assert sheets.form["title"] == "Math worksheet"
 
 
+def row_centre(menu: QObject, label: str) -> QPoint:
+    """The middle of one menu row, in window coordinates, found from the entries and the row height."""
+    entries = [e["label"] for e in menu.property("entries").toVariant()]
+    top = menu.mapToScene(QPointF(0, 0))
+    return QPoint(int(top.x()) + 130, int(top.y()) + 8 + entries.index(label) * 44 + 22)
+
+
+def test_choosing_place_now_with_the_mouse_does_not_also_open_the_card_under_the_menu(
+    qapp, window: NativeWindow
+) -> None:
+    """The menu opens over the next card; the click that picks a row must not reach that card."""
+    root = material_week(qapp, window)
+    due = (week_monday(window) + timedelta(days=6)).isoformat()
+    add_homework(window, "poster", "Science poster", 30, due)
+    add_homework(window, "sheet", "Math worksheet", 30, due)
+    pump(qapp)
+    first, second = named(root, "homeworkCard")[:2]
+    QTest.mouseClick(quick_of(window), Qt.MouseButton.RightButton, pos=centre(first))
+    pump(qapp)
+    menu = named(root, "cardMenu")[0]
+    assert menu.property("open") is True
+    spot = row_centre(menu, "Place now")
+    below = second.mapToScene(second.boundingRect().topLeft())
+    assert below.y() < spot.y() < below.y() + second.property("height"), "the row sits over the second card"
+    QTest.mouseClick(quick_of(window), Qt.MouseButton.LeftButton, pos=spot)
+    pump(qapp)
+    sheets = bridge(window).sheets
+    wait_until(qapp, lambda: not window.session.busy and qml(root, "homeworkCount").property("text") == "1")
+    pump(qapp)
+    assert sheets.kind == "", "no sheet opens: the click only picked the menu row"
+    assert not sheets.active
+
+
+def test_clicking_a_card_outside_the_card_menu_only_closes_the_menu(qapp, window: NativeWindow) -> None:
+    root = material_week(qapp, window)
+    due = (week_monday(window) + timedelta(days=6)).isoformat()
+    add_homework(window, "poster", "Science poster", 30, due)
+    add_homework(window, "sheet", "Math worksheet", 30, due)
+    pump(qapp)
+    first, second = named(root, "homeworkCard")[:2]
+    QTest.mouseClick(quick_of(window), Qt.MouseButton.RightButton, pos=centre(first))
+    pump(qapp)
+    menu = named(root, "cardMenu")[0]
+    assert menu.property("open") is True
+    left = second.mapToScene(second.boundingRect().topLeft())
+    spot = QPoint(int(left.x()) + 6, int(left.y()) + int(second.property("height")) // 2)
+    menu_left = menu.mapToScene(QPointF(0, 0)).x()
+    assert spot.x() < menu_left, "the click is outside the menu, over the second card"
+    QTest.mouseClick(quick_of(window), Qt.MouseButton.LeftButton, pos=spot)
+    pump(qapp)
+    assert menu.property("open") is False
+    assert bridge(window).sheets.kind == "", "the card under the click did not open"
+
+
+def test_choosing_a_block_menu_row_with_the_mouse_does_not_also_open_the_block_under_it(
+    qapp, window: NativeWindow
+) -> None:
+    root = material_week(qapp, window)
+    work = next(b for b in window.session.blocks if b.get("assignment_id") == "essay")
+    work.update({"duration_min": 180, "pinned": True})
+    window.session.add_block(work)
+    window.session.save()
+    settled(qapp, window)
+    pump(qapp)
+    qml(root, "weekScroller").setProperty("contentY", float(15 * int(bridge(window).property("hourRow"))))
+    pump(qapp)
+    essay = block_named(root, "History essay")
+    top = essay.mapToScene(essay.boundingRect().topLeft())
+    inside = QPoint(int(top.x()) + 20, int(top.y()) + 4)
+    QTest.mouseClick(quick_of(window), Qt.MouseButton.RightButton, pos=inside)
+    pump(qapp)
+    menu = named(root, "blockMenu")[0]
+    assert menu.property("open") is True
+    spot = row_centre(menu, "Mark finished")
+    assert top.y() < spot.y() < top.y() + essay.property("height"), "the row sits over the essay block"
+    QTest.mouseClick(quick_of(window), Qt.MouseButton.LeftButton, pos=spot)
+    pump(qapp)
+    wait_until(qapp, lambda: finished(window, True))
+    assert bridge(window).sheets.kind == "", "no editor opened: the click only picked Mark finished"
+
+
 def test_clicking_a_day_block_opens_edit_and_its_tick_still_finishes(qapp, window: NativeWindow) -> None:
     """Day draws its hours with Week's blocks: a click opens the homework, and the tick finishes it with
     Undo, as on Week."""

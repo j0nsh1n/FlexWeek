@@ -44,6 +44,8 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Fixed
 - On Material My day, the done tick on each Up next homework row sits in the same round outline as the done circle on Week and Day blocks (same size rule, light and dark colours, focus ring and pointer), with the same click target and name.
 - A time on a Material Week or Day block is never cut part-way. When the whole range does not fit (a narrow block in a stack of three, or a narrow window at larger text) the line shows the start alone, such as "4:45 PM", and when even that does not fit the line is left out; the time is still read out and shown in Edit.
+- Material Add and Edit homework: the Pinned time list for today starts at the earliest time still allowed (the one the note under it names) instead of offering times that have passed. Other days keep the whole list, and a past time the homework already has stays.
+- Material menus: choosing a row with the mouse, such as Place now on a drawer card, no longer also opens the card or block under the menu, and a click outside the card menu only closes it.
 - Material Day opens with the block that is on now shown whole: its top, its done circle and the hour label at its start are no longer cut or hidden behind the zoom buttons (unless the block began hours ago).
 - Material Week and Day: the hour rows grow with Text size also after you have zoomed the hours. Before, a zoomed row stayed the same at Large and Larger, so one-hour blocks kept cut titles and no time line. Zoom still steps through its own levels; the row is drawn that level times the text size (1.3 at Large, 1.6 at Larger).
 - Material Settings: row help lines wrap instead of being cut off, so the keyboard shortcuts line shows Ctrl+Y.
