@@ -219,8 +219,10 @@ Rectangle {
             id: cardMenuDim
             anchors.fill: parent
             color: "transparent"
+            // Takes the tap, so a click outside the menu only closes it: the card under it does not open.
             TapHandler {
                 enabled: cardMenu.open
+                gesturePolicy: TapHandler.WithinBounds
                 onTapped: drawer.closeCardMenu()
             }
         }

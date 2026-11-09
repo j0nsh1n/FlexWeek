@@ -343,10 +343,12 @@ def test_unfinished_from_more_takes_the_keyboard(qapp: QApplication, shell: Nati
     assert "unfinishedSheet" in _press(qapp, shell, Qt.Key.Key_Tab)
 
 
-def _open_pinned_time_field(qapp: QApplication, shell: NativeWindow, sheets) -> QObject:
+def _open_pinned_time_field(qapp: QApplication, shell: NativeWindow, sheets, day: int = 4) -> QObject:
+    """Friday by default: today's list starts at the clock (19:00), so a whole list needs a day ahead."""
     sheets.editHomework("essay")
     pump(qapp)
     sheets.setText("when", "fixed")
+    sheets.setNumber("whenDay", day)
     sheets.setText("whenTime", "19:00")
     pump(qapp)
     root = shell._material_page._quick.rootObject()
@@ -384,6 +386,20 @@ def test_pinned_time_moves_with_up_and_down_on_the_closed_field(
     pump(qapp, 5)
     assert sheets.form["whenTime"] == "18:45"
     QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Down)
+    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Down)
+    pump(qapp, 5)
+    assert sheets.form["whenTime"] == "19:15"
+    sheets.forceClose()
+    pump(qapp, 5)
+
+
+def test_up_on_todays_pinned_time_stops_at_the_earliest_time_allowed(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    _open_pinned_time_field(qapp, shell, sheets, day=3)
+    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Up)
+    pump(qapp, 5)
+    assert sheets.form["whenTime"] == "19:00", "the clock reads 19:00: nothing earlier is offered today"
     QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Down)
     pump(qapp, 5)
     assert sheets.form["whenTime"] == "19:15"

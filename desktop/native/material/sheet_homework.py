@@ -28,6 +28,7 @@ from desktop.native.calendar import (
     sunday_due,
 )
 from desktop.native.fields import QUICK_LENGTHS
+from desktop.native.hours.geometry import next_slot
 from desktop.native.reuse import due_point
 from desktop.native.weekmodel import clock_text, due_label, hhmm_text, length_label
 from desktop.native.widgets import (
@@ -531,6 +532,20 @@ class HomeworkDraft:
             return ""
         return today_from_words(self.now.hour * 60 + self.now.minute)
 
+    def _pinned_time_options(self) -> list[dict]:
+        """Every quarter hour, less the ones already over when the pinned day is today. A time the homework
+        already had on that day stays, as does everything for finished homework, as the refusal allows."""
+        options = quarter_hours()
+        week = self.session.week_start
+        today_is_shown = week is not None and monday_of(self.today) == week
+        if self.completed or not today_is_shown or self.when_day != self.now.weekday():
+            return options
+        ahead, earliest = next_slot(self.now.hour * 60 + self.now.minute, first=0, last=24 * 60 - SLOT_MIN)
+        if ahead:
+            return options
+        saved = self.placed[1] if self.placed and self.placed[0] == self.when_day else None
+        return [o for o in options if hhmm_to_minutes(o["value"]) >= earliest or o["value"] == saved]
+
     def form(self) -> dict:
         week = self.session.week_start
         monday = date.fromisoformat(week) if week else None
@@ -574,7 +589,7 @@ class HomeworkDraft:
             "dueTime": self.due_time,
             "dueOptions": self._due_options(),
             "timeOptions": [{"value": "", "label": "End of day"}, *quarter_hours()],
-            "pinnedTimeOptions": quarter_hours(),
+            "pinnedTimeOptions": self._pinned_time_options(),
             "dueProblem": self.due_problem,
             "whenChoices": [{"value": value, "label": label} for value, label in WHEN_CHOICES],
             "when": self.when,
