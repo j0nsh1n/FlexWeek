@@ -21,9 +21,11 @@ RUN curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-too
 # The same CPython build actions/setup-python installs on the runner. It matters: its _zstd
 # module links the system libzstd, which is how the bundle gets the libzstd Qt also needs.
 # Keep the version in step with what the workflow's "3.14" resolves to.
+ARG PYTHON_VERSION=3.14.10
+ARG PYTHON_RELEASE=3.14.10-40336797752
 ENV AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache
 RUN mkdir -p /tmp/py && cd /tmp/py \
-    && curl -sSfL https://github.com/actions/python-versions/releases/download/3.14.10-40336797752/python-3.14.10-linux-24.04-x64.tar.gz | tar -xz \
+    && curl -sSfL "https://github.com/actions/python-versions/releases/download/${PYTHON_RELEASE}/python-${PYTHON_VERSION}-linux-24.04-x64.tar.gz" | tar -xz \
     && bash ./setup.sh && cd / && rm -rf /tmp/py
-ENV PATH=/opt/hostedtoolcache/Python/3.14.10/x64/bin:$PATH
+ENV PATH=/opt/hostedtoolcache/Python/${PYTHON_VERSION}/x64/bin:$PATH
 COPY --from=ghcr.io/astral-sh/uv:0.9.5 /uv /usr/local/bin/uv

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Build the Linux tarball on this computer, inside an Ubuntu 24.04 container, so it keeps
-# the glibc 2.38 promise however new this computer's own system is. Same steps as the
-# Developer build workflow; GitHub still publishes developer builds and releases.
+# the glibc 2.38 promise however new this computer's own system is. The Developer build
+# workflow's build and smoke steps, without its developer version stamp; GitHub still
+# publishes developer builds and releases. Replaces dist/FlexWeek and dist/release.
 #
 #   scripts/build-linux-local.sh            # -> dist/release/FlexWeek-Linux-x86_64.tar.gz
 #   scripts/build-linux-local.sh --smoke    # and run the workflow's smoke tests on it
@@ -34,7 +35,7 @@ fi
 
 mkdir -p "$CACHE/uv" "$CACHE/nuitka" "$CACHE/ccache" "$CACHE/cargo-registry" "$CACHE/cargo-target"
 # Rootless podman cannot pin cores here (no cpuset controller), so --cpus caps CPU time instead.
-nice podman run --rm --cpus "$CPUS" --memory "$MEMORY" --security-opt label=disable \
+nice podman run --rm --cpus "$CPUS" --memory "$MEMORY" --memory-swap "$MEMORY" --security-opt label=disable \
     -e JOBS="$CPUS" -e SMOKE="$SMOKE" -e FLEXWEEK_SILENT=1 \
     -v "$ROOT:/src" -v "$CACHE:/cache" -v "$CACHE/cargo-target:/src/engine/target" -v "$CACHE/cargo-registry:/opt/cargo/registry" \
     -v "$HERE/inside.sh:/inside.sh:ro" \

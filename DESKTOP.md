@@ -176,9 +176,11 @@ scripts/build-linux-local.sh          # -> dist/release/FlexWeek-Linux-x86_64.ta
 scripts/build-linux-local.sh --smoke  # and run the Developer build workflow's smoke tests
 ```
 
-It runs the same steps as `.github/workflows/dev-build.yml` with the same CPython
-build the runner gets (`desktop/linux/build-container/Containerfile`); keep that
-version in step with the workflow. Caps: `BUILD_CPUS` (8) and `BUILD_MEMORY` (10g).
+It runs the build and smoke steps of `.github/workflows/dev-build.yml` with the same
+CPython build the runner gets (`desktop/linux/build-container/Containerfile`; keep
+its `PYTHON_VERSION` in step with what the workflow's `3.14` resolves to). It does not
+stamp a developer version, so the app reports the plain version from the checkout,
+and it replaces `dist/FlexWeek` and `dist/release`. Caps: `BUILD_CPUS` (8) and `BUILD_MEMORY` (10g).
 The venv and the compile caches stay in `BUILD_CACHE`
 (`~/.flexweek-ui-harness/build-cache`), so the checkout's own `.venv` and
 `engine/target` are untouched. Measured on 2026-11-09 with 8 cores: about 5½ minutes

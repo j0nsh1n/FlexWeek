@@ -10,17 +10,26 @@ export UV_CACHE_DIR=/cache/uv NUITKA_CACHE_DIR=/cache/nuitka CCACHE_DIR=/cache/c
        CARGO_BUILD_JOBS="$JOBS" FLEXWEEK_BUILD_JOBS="$JOBS"
 step() { local name="$1" start; shift; start=$(date +%s); echo "== $name"; "$@"; echo "== $name done in $(( $(date +%s) - start ))s"; }
 
-python=/opt/hostedtoolcache/Python/3.14.10/x64/bin/python3.14
+python="$(command -v python3.14)"
+# A fresh venv whenever the requirements or the Python change, so a package dropped from the
+# requirements is gone here too, as in the workflow's fresh venv.
 venv() {
-    if [ ! -x "$VENV/bin/python" ] || ! "$VENV/bin/python" -c 'import sys; sys.exit(sys.version_info[:2] != (3, 14))'; then
+    local want have=""
+    want="$( (cat requirements.txt requirements-desktop.txt requirements-dev.txt; "$python" -VV) | sha256sum | cut -c1-16)"
+    [ -f "$VENV/.requirements" ] && have="$(cat "$VENV/.requirements")"
+    if [ "$want" != "$have" ] || [ ! -x "$VENV/bin/python" ]; then
         rm -rf "$VENV" && uv venv -q -p "$python" "$VENV"
+        uv pip install -q -p "$VENV/bin/python" -r requirements.txt -r requirements-desktop.txt -r requirements-dev.txt
+        echo "$want" > "$VENV/.requirements"
     fi
-    uv pip install -q -p "$VENV/bin/python" -r requirements.txt -r requirements-desktop.txt -r requirements-dev.txt
 }
+step rust rustup toolchain install stable --profile minimal --no-self-update
 step venv venv
 step engine "$VENV/bin/python" -m maturin develop --release --manifest-path engine/py/Cargo.toml
-rm -rf dist/FlexWeek dist/release
+# build_linux.sh keeps each run's Nuitka staging in build/linux.*; a run here needs none of the old ones.
+rm -rf dist/FlexWeek dist/release build/linux.*
 step bundle ./desktop/build_linux.sh
+rm -rf build/linux.*
 step package ./desktop/package_linux.sh dist/FlexWeek dist/release
 
 if [ "${SMOKE:-0}" = 1 ]; then
@@ -36,6 +45,10 @@ if [ "${SMOKE:-0}" = 1 ]; then
             xvfb-run -a -s "-screen 0 1280x800x24" dist/stage/FlexWeek/FlexWeek --smoke-test dist/packaged-smoke.json
         "$python" -c 'import json,sys; r=json.load(open("dist/packaged-smoke.json")); print(r); sys.exit(0 if r.get("ok") and r.get("stage") == "week shown after setup Solve" else 1)'
         "$python" desktop/smoke_mcp.py dist/stage/FlexWeek/FlexWeek --timeout 60
+        if grep -q "/" dist/release/FlexWeek-Linux-x86_64.tar.gz.sha256; then
+            echo "The checksum file names a directory, not just the file." >&2
+            return 1
+        fi
         (cd dist/release && sha256sum -c FlexWeek-Linux-x86_64.tar.gz.sha256)
     }
     step smoke smoke
