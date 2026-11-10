@@ -4872,6 +4872,10 @@ class NativeWindow(QMainWindow):
         self._late_waiting = (block["id"], late_locked_line(block, moved))
 
     def _on_save_finished(self, stored: bool, said: str) -> None:
+        if not stored:
+            # The retry wait starts at a failure, whoever started the save: one started by a button
+            # left the timer's last try long ago, and it tried again on its very next tick.
+            self._last_try_ms = int(time.monotonic() * 1000)
         change, self._change_saving = self._change_saving, None
         if stored and change is not None:
             self._change_saved = change
