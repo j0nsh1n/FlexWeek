@@ -80,8 +80,9 @@ def test_msi_shortcut_opens_the_installed_app_from_its_folder() -> None:
 def test_workflow_builds_tests_and_uploads_both_installers_and_no_zip() -> None:
     assert "packaging\\windows\\flexweek.iss" in WORKFLOW
     assert f"-o dist\\{MSI}" in WORKFLOW
-    upload = WORKFLOW.split('gh release upload "$env:TAG"', 1)[1].split("--clobber", 1)[0]
-    assert re.findall(r"dist\\(\S+)", upload) == [SETUP_EXE, f"{SETUP_EXE}.sha256", MSI, f"{MSI}.sha256"]
+    assert 'gh release upload "$env:TAG" $file' in WORKFLOW
+    upload = WORKFLOW.split("$files = @(", 1)[1].split(")", 1)[0]
+    assert re.findall(r'dist\\([^",\s]+)', upload) == [SETUP_EXE, f"{SETUP_EXE}.sha256", MSI, f"{MSI}.sha256"]
     # The install test runs the app through each shortcut and the workflow makes no shortcut itself.
     assert "Install, open and uninstall each installer" in WORKFLOW
     assert "$link.TargetPath" in WORKFLOW

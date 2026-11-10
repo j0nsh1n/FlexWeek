@@ -32,3 +32,55 @@ Optional. `FlexWeek-Windows-x64-Setup.exe.sha256`, `FlexWeek-Windows-x64.msi.sha
 ## First open
 The first screen is Sign in. Choose "New here? Create an account" under it. Setup then goes a page at a time: a style, your week, how homework gets a time, reminders and the alarm sound, and your first homework. You can skip any page.
 ```
+
+## Release checklist
+
+The steps for a release, in order. The block above is the release body only.
+
+Before the tag
+
+1. Merge the fixes planned for the release. Every pull request has green checks.
+2. Run "Release packages" by hand on main with no tag. It builds and tests every
+   package and uploads nothing. Both jobs must pass. If anyone can try the Windows
+   installers from the run's artifacts on a real PC, do; otherwise say in the notes
+   that they were not tried.
+3. Open a developer build for an hour (`scripts/dev-release.sh`) and note its memory
+   use. Decide whether to fix, name it under Known limits, or close it.
+4. Open the release pull request: `desktop/native/version.py` VERSION, the CHANGELOG
+   heading `## [X.Y.Z] - <date>` over a new empty `## [Unreleased]`, Android
+   `versionName` and `versionCode` (up by one), `docs/release-notes-vX.Y.Z.md`,
+   `context.md`, `roadmap.md` and `README.md` up to date. Comment `@coderabbitai review`.
+   Run Verify by hand on the branch so every mutation shard runs. Merge when the
+   reviewer passes and every check is green.
+5. Use a developer build of the merged main, and try every visible control once in
+   Material and in Today's app. What turns up becomes fixes before the tag.
+
+Cutting the release
+
+6. Tag the merged commit `vX.Y.Z` and push the tag. The tag must equal VERSION:
+   `python scripts/check_release_tag.py --tag vX.Y.Z` says so, and the packaging
+   workflow runs the same check first and stops when they differ.
+7. Create the GitHub release for `vX.Y.Z` as a draft, titled "FlexWeek X.Y.Z", with
+   the body above and the release notes. Not a pre-release.
+8. Run "Release packages" by hand with the tag. It builds from the tag, smoke-tests
+   each package and the packaged assistant helper, and uploads eight files:
+   `FlexWeek-Windows-x64-Setup.exe`, `FlexWeek-Windows-x64.msi`,
+   `FlexWeek-Linux-x86_64.tar.gz`, `FlexWeek-x86_64.AppImage` and a `.sha256` for each.
+9. Android, on the machine that holds the key: from `android/`, run
+   `./gradlew testDebugUnitTest`, then the release build. Sign it with
+   `scripts/android/sign-release.sh` and the key in `~/.config/flexweek-android/`.
+   Name it `FlexWeek-Android-X.Y.Z.apk`, write `FlexWeek-Android-X.Y.Z.apk.sha256`
+   naming only that file, and upload both. `apksigner verify --print-certs` must show
+   the same certificate as the previous release's APK.
+10. Check all ten files are on the draft and every checksum matches: download each and
+    run `sha256sum -c`.
+11. Publish as latest. Publishing starts "Release packages" again; its upload steps skip
+    every file already on the release, so the checked files stay as they are. Cancel
+    that run if you do not need it. To replace a file on purpose, delete it from the
+    release first.
+12. After publishing, check that `/releases/latest` returns the new tag; a previous
+    tarball install and a developer-build install are each offered it; the phone on the
+    previous version is offered and installs the new APK, then pairs and syncs both
+    ways; and the `dev` pre-release is still there and not marked latest.
+13. Housekeeping: list the branches, worktrees and local files that belong to releases
+    older than the previous one, with sizes, and delete them after approval.
