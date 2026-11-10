@@ -156,6 +156,10 @@ def test_help_in_material_lists_the_number_keys_by_default_and_no_letter_keys(
     # Keys the Widgets looks answer to and Material does not.
     for key in ("T", "B or Esc", "F1", "Ctrl+N", "Ctrl+K", "Delete"):
         assert key not in rows, key
+    # Ctrl+Shift+L is switched off in Material, and Esc does not put a held card back there.
+    for key in ("Ctrl+Shift+L", "Esc while dragging"):
+        assert key not in rows, key
+    assert "Ctrl+= - 0" in rows and "Ctrl and the mouse wheel" in rows
 
 
 def test_help_in_material_lists_the_letter_keys_only_when_their_switch_is_on(

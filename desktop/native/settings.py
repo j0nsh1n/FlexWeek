@@ -2477,16 +2477,15 @@ def _line(words: str, name: str) -> QLabel:
 
 
 # The Widgets rows that are also true in Material. Its window answers none of the others: F1, Ctrl+N,
-# Ctrl+K, T and B, copy, paste, duplicate and Delete do nothing there.
+# Ctrl+K, T and B, copy, paste, duplicate and Delete do nothing there. Ctrl+Shift+L is switched off while
+# Material shows (it is the Widgets week list's key), and Esc does not put a held card back.
 _MATERIAL_KEPT_KEYS = frozenset(
     {
-        "[Ctrl]+[Shift]+[L]",
         "[Ctrl]+[Z]",
         "[Ctrl]+[Y] or [Ctrl]+[Shift]+[Z]",
         "[Ctrl]+[S]",
         "[Ctrl]+[=] [-] [0]",
         "[Ctrl] and the mouse wheel",
-        "[Esc] while dragging",
     }
 )
 
