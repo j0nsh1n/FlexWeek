@@ -394,8 +394,12 @@ class BlockDraft:
             for index, name in enumerate(STEPS)
         ]
         locked = self.scope == "occurrence" and self.occurrence_day is not None
-        start_options = [{"value": _clock(m), "label": clock_text(m)} for m in range(0, DAY_END, SLOT_MIN)]
-        end_options = [{"value": m, "label": clock_text(m)} for m in range(SLOT_MIN, DAY_END + 1, SLOT_MIN)]
+        # A time off the quarter hour (the plain look's 5-minute drag makes them) is listed too, in order, so
+        # the field can show it and Up and Down step from it instead of from the top of the list.
+        starts = sorted({*range(0, DAY_END, SLOT_MIN), self._opened_as[2], self.start})
+        ends = sorted({*range(SLOT_MIN, DAY_END + 1, SLOT_MIN), self._opened_as[3], self.end})
+        start_options = [{"value": _clock(m), "label": clock_text(m)} for m in starts]
+        end_options = [{"value": m, "label": clock_text(m)} for m in ends]
         categories = [{"value": "", "label": "None"}] + [
             {"value": key, "label": info["label"]} for key, info in CATEGORIES.items()
         ]
