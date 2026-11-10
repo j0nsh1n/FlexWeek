@@ -12,6 +12,7 @@ From the [latest GitHub Release](https://github.com/j0nsh1n/FlexWeek/releases/la
 
 - **Download for Windows.** `FlexWeek-Windows-x64-Setup.exe`
 - **Download for Linux.** `FlexWeek-Linux-x86_64.tar.gz`
+- **Download for Android.** `FlexWeek-Android-<version>.apk` (the version is part of the file name), on the same page. See [Phone app](#phone-app).
 
 Checksum files (`.sha256`) sit next to those downloads if you want to confirm the file is complete. You can ignore them and still open FlexWeek.
 
@@ -56,6 +57,12 @@ On Debian or Ubuntu without a full desktop, such as a container or a minimal ins
 
 FlexWeek also runs on an Android phone (Android 8.0 or newer). Pair it with your computer in Settings > This computer > Devices: the computer shows an 8-digit code, you type it on the phone, and the code works once and lasts 5 minutes. The phone runs the same engine as your computer and syncs your real homework both ways. When your computer isn't on the same Wi-Fi, FlexWeek uses a public relay run by n0. It sees that two devices are talking, not what they send. With no phone linked, the computer opens no network connection and contacts no relay. How to build the app is in [docs/android.md](docs/android.md).
 
+**Get it.** Download `FlexWeek-Android-<version>.apk` from the [latest GitHub Release](https://github.com/j0nsh1n/FlexWeek/releases/latest), open it on the phone and allow installs from your browser or file manager when Android asks. The app is signed with the project's own key, not Google Play's. After that, the app offers each new release itself (Settings), and installing it over the old one keeps your data. The phone shows Today, a list of the week and your reminders, and syncs; it does not have Month or Day screens yet.
+
+## Assistant helper
+
+The Linux downloads include a helper that lets an AI assistant you already use (any program that speaks MCP, such as a desktop chat app) work with your FlexWeek schedule. Start it with `./FlexWeek --mcp --read-only` from the extracted tarball, or `./FlexWeek-x86_64.AppImage --mcp --read-only`, and point the assistant at that command. With `--read-only` the assistant can only look. Without it, the assistant can plan homework for a day or a week, add and change breaks and events, mark things done, and bring back an earlier version of the schedule. Before each change the helper saves a restore point, and a change that clashes with something you changed is refused rather than written over. It works for the account that is signed in to FlexWeek on this computer (it says "Please sign in" when none is) and runs on your computer. FlexWeek itself has no chatbot and calls no AI service; the helper only passes your assistant's requests to the same planner the app uses. The Windows and Android downloads do not include it.
+
 ## Screenshots
 
 | First-week setup | Dark theme |
@@ -98,7 +105,10 @@ finds any action or homework by typing. Every change saves to your account on
 its own; planning previews placement without replacing what you entered.
 
 The look starts on System, which follows your device's light or dark setting,
-in Today's app with Day dial as the day screen. The gear opens Settings in
+in Today's app with Day dial as the day screen. Material 3 is one more style, chosen
+from a card under Settings > Look: it opens its own window with Day, Week, Month,
+My day, Focus and Settings, takes a seed colour, a palette style and a contrast, and
+choosing another style swaps back with no restart. The gear opens Settings in
 place of the week, where look and layout live together; Timeline is the other
 standard design, and the rest are under Experimental styles. Every design can
 be dark: Today's app through its look, the others through a dark colourway of
@@ -165,12 +175,14 @@ spec.md under Validation & Tooling.
 
 ## Progress
 
-Phases 3 and 4 are complete: accounts, saved weeks and Daily Scheduler themes
-are verified in the native desktop app. See the [roadmap](roadmap.md) for
-the separate desktop app, calendar interaction port, later design work and
-contest delivery. Windows/Linux are desktop targets. Windows packages are
-built on GitHub Actions when a release is published; a Windows machine still
-needs a person to run the installer and click through SmartScreen.
+FlexWeek is a native desktop app for Windows and Linux with an Android phone app that syncs
+with it. [CHANGELOG.md](CHANGELOG.md) lists what each version changed, and the
+[roadmap](roadmap.md) lists what is being worked on and what is waiting. Developer builds
+of the newest work are published on GitHub as a pre-release named `dev` (Linux tarball only);
+turn them on with Settings > Computer > Get developer builds. Windows packages are
+built on GitHub Actions when a release is made; nobody has yet run the installers on a
+real Windows PC for this project, so a first install there still needs a person to
+click through SmartScreen and report back.
 
 A Linux desktop build exists: a native Qt window with the FastAPI backend
 bundled inside it. It needs no separate server, no Python install and no

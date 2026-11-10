@@ -43,7 +43,7 @@ from the extracted tarball. Drop `--read-only` to let it change your schedule.
 
 - Windows and Android do not include the assistant helper.
 - Developer builds are a Linux tarball only.
-- The Android app does not have Month, Day or Week screens.
+- The Android app does not have Month or Day screens.
 - Material is an added style. Today's app is still the default.
 - Sync uses the same Wi-Fi network or the public n0 relay and needs FlexWeek
   open on the computer.
