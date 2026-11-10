@@ -176,7 +176,13 @@ from desktop.native.sound import Bell
 from desktop.native.spotify import LISTENING, STARTING, SpotifyPlayer, open_in_app
 from desktop.native.tokens import SHADOW_LARGE, SHADOW_SMALL, SPACING
 from desktop.native.tones import FALLBACK
-from desktop.native.update import RELEASE_PAGE, due_for_check, offers_developer_builds, sanitize_updates
+from desktop.native.update import (
+    RELEASE_PAGE,
+    due_for_check,
+    install_kind,
+    offers_developer_builds,
+    sanitize_updates,
+)
 from desktop.native.updater import Updater, apply_update
 from desktop.native.version import VERSION
 from desktop.native.weekmodel import (
@@ -5577,7 +5583,7 @@ class NativeWindow(QMainWindow):
             page = self._settings
             assert page is not None
         # Material's Settings can flip the same switch while this page is kept; show what is saved.
-        page.developer_builds.setVisible(offers_developer_builds())
+        page.developer_builds.setVisible(offers_developer_builds(install_kind()))
         page.developer_builds.blockSignals(True)
         page.developer_builds.setChecked(bool(self._updates.get("developer_builds")))
         page.developer_builds.blockSignals(False)

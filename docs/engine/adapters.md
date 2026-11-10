@@ -492,7 +492,6 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | reuse.due_point | branch | the engine's None answer stays None |
 | reuse.block_occurs_on_day | branch | None placed blocks stay None on the way in |
 | reuse.row_conflict | branch | the engine's None answer stays None |
-| update.offers_developer_builds | branch | no kind given reads this install's kind before the engine call |
 | update.available | branch | the engine's None answer stays None |
 | update.release_from_page | branch | the engine's None answer stays None |
 | weekmodel.WeekModel._engine | default, type test | either tuple missing skips the handle cache |

@@ -50,7 +50,7 @@ from desktop.native.material.theme import (
     store_material,
     theme_object,
 )
-from desktop.native.update import offers_developer_builds
+from desktop.native.update import install_kind, offers_developer_builds
 from desktop.native.version import CHANNEL, VERSION
 from desktop.native.weekmodel import hhmm_text
 
@@ -915,7 +915,7 @@ class SettingsBridge(QObject):
             "reduceMotion": motion in ("reduce", "off"),
             "shortcuts": self._shortcuts,
             "developerBuilds": self._window._updates.get("developer_builds") is True,
-            "developerBuildsOffered": offers_developer_builds(),
+            "developerBuildsOffered": offers_developer_builds(install_kind()),
             "version": (
                 f"FlexWeek {VERSION} (developer build)" if CHANNEL == "dev" else f"FlexWeek {VERSION}"
             ),
