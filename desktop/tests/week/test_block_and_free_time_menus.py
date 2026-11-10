@@ -103,10 +103,18 @@ def test_a_click_opens_a_block_once_even_as_part_of_a_double_click(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     opened = opened_dialogs(monkeypatch, BlockDialog, HomeworkDialog)
-    hours = window.week_table.hours
-    click(hours, centre(window, "school", 1))
-    assert opened == ["BlockDialog"]
-    click(hours, centre(window, essay_id(window), 2), double=True)
+    # The editor here returns at once, so the app's "second click of the same double-click" window is
+    # measured over the time it takes to build the editor. On a slow runner that is longer than the real
+    # interval. The test is about what happens inside the window, so the window is made long.
+    interval = QApplication.doubleClickInterval()
+    QApplication.setDoubleClickInterval(60_000)
+    try:
+        hours = window.week_table.hours
+        click(hours, centre(window, "school", 1))
+        assert opened == ["BlockDialog"]
+        click(hours, centre(window, essay_id(window), 2), double=True)
+    finally:
+        QApplication.setDoubleClickInterval(interval)
     assert opened == ["BlockDialog", "HomeworkDialog"], "one editor for a double-click, not two"
     assert window.session.selected_block_id == essay_id(window)
 
