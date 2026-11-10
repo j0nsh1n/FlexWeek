@@ -68,6 +68,11 @@ def install_kind(
     return str(flexweek_engine.update_install_kind(system, image or "", mount or "", running))
 
 
+def offers_developer_builds(kind: str) -> bool:
+    """Developer builds are published as a Linux tarball only, so no other install can use them."""
+    return bool(flexweek_engine.update_offers_developer_builds(kind))
+
+
 def asset_name(kind: str) -> str:
     return str(flexweek_engine.update_asset_name(kind))
 

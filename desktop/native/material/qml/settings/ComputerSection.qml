@@ -47,6 +47,7 @@ SectionPage {
         }
         ToggleRow {
             objectName: "developerBuildsRow"
+            visible: !!page.st.developerBuildsOffered
             key: "developerBuilds"
             title: "Get developer builds"
             subtitle: "Test builds with the newest fixes. They can have bugs."
