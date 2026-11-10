@@ -16,12 +16,17 @@ struct App {
     data_dir: PathBuf,
     database: PathBuf,
     session_file: PathBuf,
-    now_unix: i64,
-    today: String,
-    minute: i64,
+    clock: host::ClockSource,
     started_as: Arc<Mutex<Option<i64>>>,
     /// `--read-only`: only the read tools are listed or served.
     read_only: bool,
+}
+
+impl App {
+    /// The time for this call. A student's helper runs for days, so nothing about the time is kept.
+    fn now(&self) -> Result<host::Clock, String> {
+        self.clock.now()
+    }
 }
 
 #[cfg(windows)]
@@ -45,15 +50,22 @@ async fn main() {
             std::process::exit(1);
         }
     };
-    let clock = match host::clock(launch.now_flag.as_deref()) {
+    let clock = match host::source(launch.now_flag.as_deref()) {
         Ok(clock) => clock,
         Err(reason) => {
             host::log_line(&format!("{version} refused: {reason}"));
             std::process::exit(1);
         }
     };
+    let started = match clock.now() {
+        Ok(now) => now,
+        Err(reason) => {
+            host::log_line(&format!("{version} refused: {reason}"));
+            std::process::exit(1);
+        }
+    };
     // Checked without renewing: starting the helper is not the student using FlexWeek.
-    let signed_in = session::peek(&launch.session_file, &launch.database, clock.unix);
+    let signed_in = session::peek(&launch.session_file, &launch.database, started.unix);
     match &signed_in {
         Ok(_) => host::log_line(&format!("{version} session ok")),
         Err(reason) => host::log_line(&format!("{version} refused: {reason}")),
@@ -62,9 +74,7 @@ async fn main() {
         data_dir: launch.data_dir,
         database: launch.database,
         session_file: launch.session_file,
-        now_unix: clock.unix,
-        today: clock.today,
-        minute: clock.minute,
+        clock,
         started_as: Arc::new(Mutex::new(signed_in.ok().map(|account| account.user_id))),
         read_only: launch.read_only,
     };

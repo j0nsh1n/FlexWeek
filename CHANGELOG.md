@@ -5,6 +5,9 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+- The assistant helper keeps the right time while it stays open: once your session runs out it refuses the next call, "today" follows the date, a restore point carries the time of its change, and past-time checks and Plan use the current time, instead of the minute the helper started.
+
 ## [1.3.0] - 2026-11-10
 
 ### Added
