@@ -53,7 +53,7 @@ trap 'cp -p "$SAVED" "$VERSION_FILE" && rm -f "$SAVED"' EXIT
 # Stopped by Ctrl+C or a kill: stop the container too, then the EXIT trap puts version.py back.
 # (If the container did not exist yet, end the podman client too, so nothing runs on after us.)
 PODMAN_PID=""
-trap 'podman stop -t 10 "$NAME" >/dev/null 2>&1 || true; [ -n "$PODMAN_PID" ] && kill "$PODMAN_PID" 2>/dev/null; wait 2>/dev/null; exit 130' INT TERM HUP
+trap 'podman stop -t 10 "$NAME" >/dev/null 2>&1 || true; if [ -n "$PODMAN_PID" ]; then kill "$PODMAN_PID" 2>/dev/null || true; fi; wait 2>/dev/null; exit 130' INT TERM HUP
 BASE="$(sed -n 's/^VERSION = "\(.*\)"/\1/p' "$VERSION_FILE")"
 [ -n "$BASE" ] || { echo "Could not read the version from $VERSION_FILE" >&2; exit 1; }
 DEVVERSION="$BASE.$(date -u +%Y%m%d%H%M)"
