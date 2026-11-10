@@ -18,6 +18,7 @@ from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from desktop.native.material import bridge_week
 from desktop.native.material.bridge_week import SLACK_TAGS, WeekBridge
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material import (
@@ -511,7 +512,10 @@ def test_a_card_can_be_given_a_time_from_the_keyboard(qapp, window) -> None:
     assert placed.get("start")
 
 
-def test_blocks_that_just_landed_are_marked_fresh_once(qapp, window) -> None:
+def test_blocks_that_just_landed_are_marked_fresh_once(qapp, window, monkeypatch) -> None:
+    # The mark lasts one second on the real clock, and a slow runner can take longer than that between
+    # the block landing and the rows being read. This test is about which blocks are marked, not how long.
+    monkeypatch.setattr(bridge_week, "FRESH_S", 3600.0)
     root = _reset(window, qapp)
     due = (_week_monday(window) + timedelta(days=6)).isoformat()
     _homework(window, "sheet", "Math worksheet", 30, due)
