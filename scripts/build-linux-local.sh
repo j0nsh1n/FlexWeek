@@ -40,23 +40,25 @@ mkdir -p "$CACHE/uv" "$CACHE/nuitka" "$CACHE/ccache" "$CACHE/cargo-registry" "$C
 # container cannot lose it). A stamp already there means an earlier run was killed before it
 # could put the file back; saving that as the original would keep the stamp for good.
 VERSION_FILE="$ROOT/desktop/native/version.py"
-SAVED="$CACHE/version.py.saved"
-if grep -q '^CHANNEL = "dev"' "$VERSION_FILE"; then
-    echo "$VERSION_FILE already says CHANNEL = \"dev\": an earlier run was stopped before putting it back." >&2
+if grep -q '^CHANNEL = "dev"' "$VERSION_FILE" || grep -Eq '^VERSION = "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]{12}"' "$VERSION_FILE"; then
+    echo "$VERSION_FILE already carries a developer stamp: an earlier run was stopped before putting it back." >&2
     echo "Put it back (git checkout -- desktop/native/version.py) and run again." >&2
     exit 1
 fi
+# One copy per run: two checkouts building at once share BUILD_CACHE.
+SAVED="$(mktemp "$CACHE/version.py.saved.XXXXXX")"
 cp -p "$VERSION_FILE" "$SAVED"
 NAME="flexweek-linux-build-$$"
-trap 'cp -p "$SAVED" "$VERSION_FILE"' EXIT
+trap 'cp -p "$SAVED" "$VERSION_FILE" && rm -f "$SAVED"' EXIT
 # Stopped by Ctrl+C or a kill: stop the container too, then the EXIT trap puts version.py back.
-trap 'podman stop -t 10 "$NAME" >/dev/null 2>&1; exit 130' INT TERM HUP
+trap 'podman stop -t 10 "$NAME" >/dev/null 2>&1 || true; exit 130' INT TERM HUP
 BASE="$(sed -n 's/^VERSION = "\(.*\)"/\1/p' "$VERSION_FILE")"
 [ -n "$BASE" ] || { echo "Could not read the version from $VERSION_FILE" >&2; exit 1; }
 DEVVERSION="$BASE.$(date -u +%Y%m%d%H%M)"
 sed -i "s/^VERSION = \".*\"/VERSION = \"$DEVVERSION\"/" "$VERSION_FILE"
 sed -i 's/^CHANNEL = "release"/CHANNEL = "dev"/' "$VERSION_FILE"
-grep -q "^VERSION = \"$DEVVERSION\"" "$VERSION_FILE" && grep -q '^CHANNEL = "dev"' "$VERSION_FILE"
+grep -q "^VERSION = \"$DEVVERSION\"" "$VERSION_FILE"
+grep -q '^CHANNEL = "dev"' "$VERSION_FILE"
 echo "Developer version $DEVVERSION"
 # Rootless podman cannot pin cores here (no cpuset controller), so --cpus caps CPU time instead.
 nice podman run --rm --init --name "$NAME" --cpus "$CPUS" --memory "$MEMORY" --memory-swap "$MEMORY" --security-opt label=disable \
