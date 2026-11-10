@@ -13,17 +13,17 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QEvent, QStandardPaths, Qt
+from PySide6.QtCore import QEvent, QStandardPaths, Qt, QTimer
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QWidget
 
-from desktop.native import motion
 from desktop.native import window as window_module
 from desktop.native.feel import set_current
 from desktop.native.motion import EASE_MS, apply_ui_effects, busy, duration
 from desktop.native.widgets import Dialog, HomeworkDialog, SheetShade, dim_window
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.motion_support import ManualTime, manual_time  # noqa: F401
 from desktop.tests.sheets.support_dialogs import when_open
 from desktop.tests.test_feel import _host
 from desktop.tests.waiting import wait_until
@@ -323,13 +323,17 @@ def test_every_on_demand_homework_sheet_dims_first(
 
 
 def test_a_slow_build_does_not_make_the_dim_jump_ahead(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch  # noqa: F811
+    qapp: QApplication,
+    window: NativeWindow,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+    manual_time: ManualTime,  # noqa: F811
 ) -> None:
     """The dim waits for the sheet: however long the build takes, the fade goes on from where its first
-    frame left it, rather than leaping by the build's length in one frame."""
+    frame left it, rather than leaping by the build's length in one frame. The time the animations read
+    is moved by hand, so a slow machine cannot add real time to the fade between the checks."""
     apply_ui_effects("normal")
     seen: list[dict] = []
-    real_now = motion.now_ms
+    first_frame_ms = 30
 
     class Slow(HomeworkDialog):
         def __init__(self, *args: object, **kwargs: object) -> None:
@@ -338,8 +342,7 @@ def test_a_slow_build_does_not_make_the_dim_jump_ahead(
             super().__init__(*args, **kwargs)
             # The build took longer than the whole fade: the time the animations read has moved on by
             # that much, as if the build had run that long. A clock left running would be at its end.
-            late = duration(EASE_MS) + 50
-            monkeypatch.setattr(motion, "now_ms", lambda: real_now() + late)
+            manual_time.now += duration(EASE_MS) + 50
 
     made: list[HomeworkDialog] = []
 
@@ -352,11 +355,14 @@ def test_a_slow_build_does_not_make_the_dim_jump_ahead(
             qapp.processEvents()
         (dim,) = shades(window)
         seen.append({"at_show": dim.dim_progress, "fading": dim.fading})
+        manual_time.advance(duration(EASE_MS))
         wait_until(qapp, lambda: not busy())
         return 0
 
     monkeypatch.setattr(window_module, "HomeworkDialog", Slow)
     monkeypatch.setattr(Slow, "exec", run)
+    # The dim's first frame, drawn while the build waits: the fade is first on screen 30 ms in.
+    QTimer.singleShot(0, lambda: manual_time.advance(first_frame_ms))
     window._add_homework()
     assert seen[0]["at_build"] > 0
     assert seen[1]["fading"], "the fade is still going when the sheet shows"
