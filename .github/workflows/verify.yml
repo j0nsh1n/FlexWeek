@@ -20,7 +20,8 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal --no-self-update
           rustup default stable
-      - uses: actions/cache@v6
+      - uses: actions/cache/restore@v6
+        id: engine-cache
         with:
           path: |
             ~/.cargo/registry/index
@@ -57,6 +58,18 @@ jobs:
           name: fwtest
           path: tools/fwtest/target/release/fwtest
           if-no-files-found: error
+      - uses: actions/cache/save@v6
+        # Only main saves (PR and branch runs restore main's): saved per branch, these filled
+        # GitHub's 10 GB cache and pushed the developer build's compile cache out.
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.engine-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            engine/target
+            tools/fwtest/target
+          key: ${{ steps.engine-cache.outputs.cache-primary-key }}
 
   verify-engine:
     runs-on: ubuntu-latest
@@ -78,7 +91,8 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt,clippy --no-self-update
           rustup default stable
-      - uses: actions/cache@v6
+      - uses: actions/cache/restore@v6
+        id: verify-cache
         with:
           path: |
             ~/.cargo/registry/index
@@ -107,6 +121,18 @@ jobs:
       - name: engine tests
         working-directory: engine
         run: cargo test --workspace
+      - uses: actions/cache/save@v6
+        # Only main saves (PR and branch runs restore main's): saved per branch, these filled
+        # GitHub's 10 GB cache and pushed the developer build's compile cache out.
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.verify-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            tools/fwtest/target
+            engine/target
+          key: ${{ steps.verify-cache.outputs.cache-primary-key }}
 
   verify-python:
     needs: engine
@@ -346,7 +372,8 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal --no-self-update
           rustup default stable
-      - uses: actions/cache@v6
+      - uses: actions/cache/restore@v6
+        id: mutate-cache
         with:
           path: |
             ~/.cargo/registry/index
@@ -354,7 +381,9 @@ jobs:
             ~/.cargo/git/db
             engine/target
             tools/fwtest/target
-          key: mutate-engine-${{ runner.os }}-shard${{ matrix.shard }}-${{ hashFiles('engine/Cargo.lock', 'engine/**/*.rs', 'engine/**/Cargo.toml') }}
+          # Named after the lockfile only, so one copy saved from a run on main serves every PR
+          # until the dependencies change (named after every .rs file it was new on almost every push).
+          key: mutate-engine-${{ runner.os }}-shard${{ matrix.shard }}-${{ hashFiles('engine/Cargo.lock') }}
           restore-keys: |
             mutate-engine-${{ runner.os }}-shard${{ matrix.shard }}-
             mutate-engine-${{ runner.os }}-
@@ -371,6 +400,18 @@ jobs:
           FLEXWEEK_SILENT: "1"
           FWTEST_ENGINE_PROFILE: mutant
         run: fwtest mutate --engine-only --shard ${{ matrix.shard }}/4
+      - uses: actions/cache/save@v6
+        # Only main saves (PR and branch runs restore main's): saved per branch, these filled
+        # GitHub's 10 GB cache and pushed the developer build's compile cache out.
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.mutate-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            engine/target
+            tools/fwtest/target
+          key: ${{ steps.mutate-cache.outputs.cache-primary-key }}
 
   mutate-python:
     # The mutation cases whose rule is in Python (about 500), on every pull request and by
