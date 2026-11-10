@@ -216,6 +216,7 @@ ALLOWED_FOR_NOW = {
     ("reuse.due_point", "branch"),  # the engine's None answer stays None
     ("reuse.block_occurs_on_day", "branch"),  # None placed blocks stay None on the way in
     ("reuse.row_conflict", "branch"),  # the engine's None answer stays None
+    ("update.offers_developer_builds", "branch"),  # no kind given reads this install's kind
     ("update.available", "branch"),  # the engine's None answer stays None
     ("update.release_from_page", "branch"),  # the engine's None answer stays None
     ("weekmodel.WeekModel._engine", "default"),  # either tuple missing skips the handle cache

@@ -70,7 +70,7 @@ def install_kind(
 
 def offers_developer_builds(kind: str | None = None) -> bool:
     """Developer builds are published as a Linux tarball only, so no other install can use them."""
-    return (install_kind() if kind is None else kind) == "tarball"
+    return bool(flexweek_engine.update_offers_developer_builds(install_kind() if kind is None else kind))
 
 
 def asset_name(kind: str) -> str:

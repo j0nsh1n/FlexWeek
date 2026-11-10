@@ -387,6 +387,7 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | Module | Function | Class | Reason |
 |---|---|---|---|
 | update | install_kind | STAYS | reads `sys.platform`, the environment and `sys.executable`, and resolves the executable and mount paths as the original did; the engine decides from the values |
+| update | offers_developer_builds | ADAPTER | one call, `update_offers_developer_builds`; the engine decides which install kind is offered developer builds |
 | update | asset_name | LOGIC, moved | the unknown-kind `KeyError` is raised by `update_asset_name` |
 | update | available | LOGIC, moved | a payload that is not a dict is no release: read by `update_available` |
 | update | release_from_page | ADAPTER | encodes, makes one engine call, decodes |
@@ -491,6 +492,7 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | reuse.due_point | branch | the engine's None answer stays None |
 | reuse.block_occurs_on_day | branch | None placed blocks stay None on the way in |
 | reuse.row_conflict | branch | the engine's None answer stays None |
+| update.offers_developer_builds | branch | no kind given reads this install's kind before the engine call |
 | update.available | branch | the engine's None answer stays None |
 | update.release_from_page | branch | the engine's None answer stays None |
 | weekmodel.WeekModel._engine | default, type test | either tuple missing skips the handle cache |
