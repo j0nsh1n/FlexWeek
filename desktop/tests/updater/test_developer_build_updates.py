@@ -188,3 +188,15 @@ def test_a_dev_title_may_carry_its_commit_after_the_number(qapp: QApplication, g
         GitHub.dev_body = json.dumps({**_dev_release("1.2.0.202611040300"), "name": name}).encode()
         kind, _update = outcome(qapp, made(), developer=True)
         assert kind == "none", name
+
+
+@pytest.mark.parametrize("kind", ["windows", "appimage"])
+def test_a_saved_switch_off_the_linux_tarball_never_asks_for_the_dev_build(
+    qapp: QApplication, github: str, kind: str
+) -> None:
+    """The setting can be saved as on from a tarball copy; a Windows or AppImage install has no developer
+    build to fetch, so it only gets the official answer."""
+    updater = made()
+    updater.kind = kind
+    outcome(qapp, updater, developer=True)
+    assert "/dev" not in GitHub.seen

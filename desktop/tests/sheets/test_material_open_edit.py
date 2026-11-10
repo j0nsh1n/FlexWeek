@@ -358,6 +358,43 @@ def test_choosing_a_block_menu_row_with_the_mouse_does_not_also_open_the_block_u
     assert bridge(window).sheets.kind == "", "no editor opened: the click only picked Mark finished"
 
 
+@pytest.mark.parametrize("tall", [False, True], ids=["block as planned", "block under the menu row"])
+def test_choosing_edit_in_the_block_menu_with_the_mouse_opens_the_edit_sheet(
+    qapp, window: NativeWindow, tall: bool
+) -> None:
+    """The footage lane saw "block right-click > Edit opened no sheet". The click that picks the row
+    must open Edit homework for that block, whether or not the row sits over the block itself."""
+    root = material_week(qapp, window)
+    if tall:
+        work = next(b for b in window.session.blocks if b.get("assignment_id") == "essay")
+        work.update({"duration_min": 180, "pinned": True})
+        window.session.add_block(work)
+        window.session.save()
+        settled(qapp, window)
+        pump(qapp)
+        qml(root, "weekScroller").setProperty("contentY", float(15 * int(bridge(window).property("hourRow"))))
+        pump(qapp)
+    essay = block_named(root, "History essay")
+    top = essay.mapToScene(essay.boundingRect().topLeft())
+    QTest.mouseClick(
+        quick_of(window), Qt.MouseButton.RightButton, pos=QPoint(int(top.x()) + 20, int(top.y()) + 4)
+    )
+    pump(qapp)
+    menu = named(root, "blockMenu")[0]
+    assert menu.property("open") is True
+    spot = row_centre(menu, "Edit")
+    if tall:
+        assert top.y() < spot.y() < top.y() + essay.property("height"), "the row sits over the essay block"
+    sheets = bridge(window).sheets
+    assert sheets.kind == ""
+    QTest.mouseClick(quick_of(window), Qt.MouseButton.LeftButton, pos=spot)
+    pump(qapp)
+    wait_until(qapp, lambda: open_sheet_is_homework(sheets))
+    assert sheets.form["heading"] == "Edit homework"
+    assert sheets.form["title"] == "History essay"
+    assert menu.property("open") is False
+
+
 def test_clicking_a_day_block_opens_edit_and_its_tick_still_finishes(qapp, window: NativeWindow) -> None:
     """Day draws its hours with Week's blocks: a click opens the homework, and the tick finishes it with
     Undo, as on Week."""

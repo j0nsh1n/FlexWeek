@@ -98,6 +98,11 @@ fn path_is_relative_to(path: &str, base: &str) -> bool {
     std::path::Path::new(path).starts_with(base)
 }
 
+/// Developer builds are published as a Linux tarball only, so no other install can use them.
+pub fn offers_developer_builds(kind: &str) -> bool {
+    kind == "tarball"
+}
+
 pub fn asset_name(kind: &str) -> Option<&'static str> {
     match kind {
         "windows" => Some(WINDOWS_SETUP),
@@ -389,7 +394,10 @@ mod sha256 {
 
 #[cfg(test)]
 mod tests {
-    use super::{expected_digest, install_kind, is_newer, parse_version, sanitize_updates};
+    use super::{
+        expected_digest, install_kind, is_newer, offers_developer_builds, parse_version,
+        sanitize_updates,
+    };
     use serde_json::json;
 
     #[test]
@@ -469,6 +477,14 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         assert_eq!(linked, "tarball");
         assert_eq!(direct, "appimage");
+    }
+
+    #[test]
+    fn developer_builds_are_offered_only_to_the_tarball_install() {
+        assert!(offers_developer_builds("tarball"));
+        for kind in ["appimage", "windows", "android", "", "Tarball"] {
+            assert!(!offers_developer_builds(kind), "{kind}");
+        }
     }
 
     #[test]

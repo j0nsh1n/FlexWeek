@@ -57,6 +57,8 @@ def test_smoke_mode_passes_once_setup_solve_paints_the_week(tmp_path: Path) -> N
     assert cast(int, report["painted_colors"]) >= PAINTED_MIN_COLORS
     assert report["window_visible"] is True
     assert report["window_icon_loaded"] is True
+    assert report["material_ok"] is True
+    assert cast(int, report["material_painted_colors"]) >= PAINTED_MIN_COLORS
     assert not (tmp_path / "data").exists() or not any((tmp_path / "data").rglob("flexweek.db"))
     assert list((tmp_path / "tmp").glob("flexweek-smoke-*")) == []
 
