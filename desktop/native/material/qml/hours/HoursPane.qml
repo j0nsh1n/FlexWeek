@@ -633,7 +633,8 @@ Item {
                         blockId: model.blockId,
                         assignmentId: model.assignmentId,
                         day: model.day,
-                        done: model.done
+                        done: model.done,
+                        homework: model.homework
                     }, mx, my)
                     onActiveFocusChanged: if (activeFocus) root.reveal(y, height)
                     onFocused: root.reveal(y, height)
@@ -663,16 +664,21 @@ Item {
             blockId: blockModel.blockId,
             assignmentId: blockModel.assignmentId,
             day: blockModel.day,
-            done: blockModel.done
+            done: blockModel.done,
+            homework: blockModel.homework
         }
         var mapped = item.mapToItem(root, mx, my)
         var menuX = Math.max(8, Math.min(mapped.x, root.width - blockMenu.width - 8))
         var menuY = Math.max(8, Math.min(mapped.y, root.height - blockMenu.height - 8))
         blockMenu.x = menuX
         blockMenu.y = menuY
-        blockMenu.entries = [
+        // A fixed time has nothing to finish.
+        blockMenu.entries = blockModel.homework ? [
             { label: "Edit", icon: "edit_note" },
             { label: blockModel.done ? "Open again" : "Mark finished", icon: "check" },
+            { label: "Delete", icon: "close" }
+        ] : [
+            { label: "Edit", icon: "edit_note" },
             { label: "Delete", icon: "close" }
         ]
         blockMenu.cursor = 0
@@ -775,7 +781,9 @@ Item {
                         root.bridge.week.toggleDone(target.assignmentId)
                 } else if (label === "Delete") {
                     if (root.bridge.sheets) {
-                        if (root.bridge.sheets.askDeleteHomework)
+                        if (!target.homework)
+                            root.bridge.sheets.askDeleteBlock(target.blockId, target.day)
+                        else if (root.bridge.sheets.askDeleteHomework)
                             root.bridge.sheets.askDeleteHomework(target.assignmentId)
                         else
                             root.bridge.sheets.askDeleteUnfinished(target.assignmentId)

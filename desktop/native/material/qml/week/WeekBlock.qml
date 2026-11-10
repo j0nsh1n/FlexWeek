@@ -251,7 +251,7 @@ Item {
     TapHandler { enabled: cell.canOpen; gesturePolicy: TapHandler.WithinBounds; onTapped: cell.opened() }
     TapHandler {
         acceptedButtons: Qt.RightButton
-        enabled: cell.homework
+        enabled: cell.canOpen
         gesturePolicy: TapHandler.WithinBounds
         onTapped: (point) => cell.menuAsked(point.position.x, point.position.y)
     }
@@ -274,10 +274,8 @@ Item {
             cell.opened()
             event.accepted = true
         } else if ((event.key === Qt.Key_F10 && (event.modifiers & Qt.ShiftModifier)) || event.key === Qt.Key_Menu) {
-            if (cell.homework) {
-                cell.menuAsked(width / 2, height / 2)
-                event.accepted = true
-            }
+            cell.menuAsked(width / 2, height / 2)
+            event.accepted = true
         }
     }
 

@@ -274,6 +274,17 @@ class SheetsBridge(QObject):
         self._block = BlockDraft(session, block, occurrence_day=day if day >= 0 else None)
         self._open("block")
 
+    @Slot(str, int)
+    def askDeleteBlock(self, block_id: str, day: int) -> None:
+        """Delete from a fixed time's menu: the Edit sheet's own question, with no sheet behind it."""
+        session = self._session
+        block = next((item for item in session.blocks if item["id"] == block_id), None) if session else None
+        if block is None or block.get("kind") != "locked" or block.get("assignment_id"):
+            return
+        self._block = BlockDraft(session, block, occurrence_day=day if day >= 0 else None)
+        self._ask = self._block.delete_question()
+        self._publish()
+
     def _new_event_values(self) -> tuple[int, str]:
         """The next quarter hour still ahead today, or the usual 16:00 on another week."""
         session = self._session
