@@ -534,7 +534,18 @@ class HomeworkDraft:
 
     def _pinned_time_options(self) -> list[dict]:
         """Every quarter hour, less the ones already over when the pinned day is today. A time the homework
-        already had on that day stays, as does everything for finished homework, as the refusal allows."""
+        already had on that day stays, as does everything for finished homework, as the refusal allows.
+        A time off the quarter hour (a pin made by a 5-minute drag) is listed too, in order, so the field
+        can show it and Up and Down step from it."""
+        options = self._quarter_options()
+        own = {self.when_time}
+        if self.placed and self.placed[0] == self.when_day:
+            own.add(self.placed[1])
+        off_grid = [hhmm for hhmm in own if hhmm and hhmm_to_minutes(hhmm) % SLOT_MIN]
+        extra = [{"value": hhmm, "label": hhmm_text(hhmm)} for hhmm in off_grid]
+        return sorted([*options, *extra], key=lambda item: hhmm_to_minutes(item["value"]))
+
+    def _quarter_options(self) -> list[dict]:
         options = quarter_hours()
         week = self.session.week_start
         today_is_shown = week is not None and monday_of(self.today) == week
