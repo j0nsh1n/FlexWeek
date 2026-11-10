@@ -27,7 +27,11 @@ Item {
     readonly property bool focusOpen: bridge ? bridge.focus.open : false
     readonly property bool settingsPromptOpen: bridge && bridge.settingsBridge
         ? bridge.settingsBridge.promptOpen : false
+    // Set by the window while one of its own dialogs (Help) is up over this one: its keys are not ours,
+    // and a Shortcut here still fires with that dialog active, so Esc never reached it.
+    property bool widgetsDialogOpen: false
     readonly property bool modalActive: typing || focusOpen || accountLayer.active || settingsPromptOpen
+        || widgetsDialogOpen
 
     function _field(item) {
         while (item) {
@@ -693,6 +697,7 @@ Item {
         context: Qt.WindowShortcut
         // An open Week or Day menu takes its own Escape, so it can close and give the focus back.
         enabled: !accountLayer.active && !focusOverlay.ending && !sheetHost.active && !settingsPromptOpen
+                 && !widgetsDialogOpen
                  && !(bridge.screen === "week" && weekView.menuOpen) && !(bridge.screen === "day" && dayView.menuOpen)
         onActivated: {
             if (bridge && bridge.settingsBridge && bridge.settingsBridge.page === "advanced")
