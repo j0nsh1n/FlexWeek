@@ -176,7 +176,13 @@ from desktop.native.sound import Bell
 from desktop.native.spotify import LISTENING, STARTING, SpotifyPlayer, open_in_app
 from desktop.native.tokens import SHADOW_LARGE, SHADOW_SMALL, SPACING
 from desktop.native.tones import FALLBACK
-from desktop.native.update import RELEASE_PAGE, due_for_check, sanitize_updates
+from desktop.native.update import (
+    RELEASE_PAGE,
+    due_for_check,
+    install_kind,
+    offers_developer_builds,
+    sanitize_updates,
+)
 from desktop.native.updater import Updater, apply_update
 from desktop.native.version import VERSION
 from desktop.native.weekmodel import (
@@ -4872,6 +4878,10 @@ class NativeWindow(QMainWindow):
         self._late_waiting = (block["id"], late_locked_line(block, moved))
 
     def _on_save_finished(self, stored: bool, said: str) -> None:
+        if not stored:
+            # The retry wait starts at a failure, whoever started the save: one started by a button
+            # left the timer's last try long ago, and it tried again on its very next tick.
+            self._last_try_ms = int(time.monotonic() * 1000)
         change, self._change_saving = self._change_saving, None
         if stored and change is not None:
             self._change_saved = change
@@ -5577,6 +5587,7 @@ class NativeWindow(QMainWindow):
             page = self._settings
             assert page is not None
         # Material's Settings can flip the same switch while this page is kept; show what is saved.
+        page.developer_builds.setVisible(offers_developer_builds(install_kind()))
         page.developer_builds.blockSignals(True)
         page.developer_builds.setChecked(bool(self._updates.get("developer_builds")))
         page.developer_builds.blockSignals(False)

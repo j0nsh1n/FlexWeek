@@ -13,12 +13,13 @@ pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.calendar import sunday_due  # noqa: E402
-from desktop.native.window import NativeWindow  # noqa: E402
+from desktop.native.window import AUTOSAVE_RETRY_MS, NativeWindow  # noqa: E402
 from desktop.tests.day.support_layouts_window import (  # noqa: E402
     qapp,  # noqa: F401
     wait_until,
     window,  # noqa: F401
 )
+from desktop.tests.logic_support import fail_once  # noqa: E402
 
 
 def test_the_week_saves_itself_without_anyone_pressing_save(qapp: QApplication, window: NativeWindow) -> None:
@@ -79,3 +80,32 @@ def test_autosave_does_not_pile_requests_on_a_busy_session(qapp: QApplication, w
     window._autosave_tick()
     window.session.busy = False
     assert posted == []
+
+
+def test_a_failed_save_waits_the_full_retry_time_before_autosave_tries_it_again(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """A save the student or a button started, not the timer, fails. The timer then waits its whole retry
+    time from that failure, so Retry save is not taken away half a second after it appears."""
+    session = window.session
+    session.add_homework(
+        {
+            "id": "late-fail",
+            "title": "Essay",
+            "due": sunday_due(session.week_start),
+            "estimate_min": 30,
+            "revision": 0,
+        }
+    )
+    window._last_try_ms = 0
+    fail_once(session, "POST", "/api/changes")
+    session.save()
+    wait_until(qapp, lambda: not session.busy)
+    assert session.pending_save is not None, "the save did not fail"
+    posted = []
+    session.save = lambda *a, **k: posted.append(1)
+    window._autosave_tick()
+    assert posted == [], "the failed save was tried again on the very next tick"
+    window._last_try_ms -= AUTOSAVE_RETRY_MS
+    window._autosave_tick()
+    assert posted == [1], "a failed save is never tried again"

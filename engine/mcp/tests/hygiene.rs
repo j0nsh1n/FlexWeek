@@ -142,7 +142,7 @@ fn stderr_names_the_call_and_omits_the_token_username_and_title() {
     let mut server = boot(&data_arg, &database_arg);
     server.handshake();
     let _ = server.call("whoami", json!({"title": "DistinctTitleZz"}), 2);
-    let err = server.stderr();
+    let err = server.stderr_with_any(&["whoami ok", "whoami error"]);
     assert!(
         err.contains("whoami ok") || err.contains("whoami error"),
         "each call is one stderr line naming the tool and ok or error, got {err}"

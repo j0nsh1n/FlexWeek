@@ -35,6 +35,7 @@ from desktop.native.update import (
     available,
     expected_digest,
     install_kind,
+    offers_developer_builds,
     release_from_page,
     verified,
 )
@@ -86,7 +87,7 @@ class Updater(QObject):
         if self._busy:
             return
         self._busy = True
-        self._want_developer = developer
+        self._want_developer = developer and offers_developer_builds(self.kind)
         self._latest_update = None
         self._get(RELEASES_URL, self._on_release, fallback=self._check_page)
 

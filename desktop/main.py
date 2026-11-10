@@ -142,6 +142,20 @@ def painted_colors(image: QImage, step: int = 8) -> int:
     return len(colors)
 
 
+def material_state(window: NativeWindow) -> tuple[str, int]:
+    """Whether the Material window, not the Widgets fallback, is the one on screen.
+
+    "fallback" means this build gave up on Material; "waiting" means it is not drawn yet.
+    """
+    if window._material_gave_up or window._material_failed:
+        return "fallback", 0
+    page = window._material_page
+    if page is None or not page._ready or window._stack.currentWidget() is not page:
+        return "waiting", 0
+    colors = painted_colors(page._quick.grabFramebuffer())
+    return ("shown" if colors >= PAINTED_MIN_COLORS else "waiting"), colors
+
+
 def origin_reachable(origin: str) -> bool:
     try:
         with urllib.request.urlopen(origin + "/api/health", timeout=2) as response:
@@ -159,6 +173,11 @@ class NativeSmoke:
         self._walk = walk_setup
         self._done = False
         self._stage = "first screen"
+        self._material_ok = False
+        self._material_colors = 0
+        # The saved style belongs to the computer, not to this run: it is put back before the quit.
+        self._style_before = window._surface
+        self._verdict: tuple[bool, str] | None = None
         self._poll = QTimer(window)
         self._poll.setInterval(SMOKE_POLL_MS)
         self._poll.timeout.connect(self._check)
@@ -249,7 +268,39 @@ class NativeSmoke:
                 self._finish(False, "window blank after setup Solve")
                 return
             self._facts_colors = painted_colors(window.grab().toImage())
-            self._finish(True, SMOKE_PASSED)
+            # The release is for Material too: switch to it and require the Material window itself.
+            window._back_to_material()
+            self._stage = "material window"
+            return
+        if self._stage == "material window":
+            state, colors = material_state(window)
+            if state == "waiting":
+                return
+            self._material_colors = colors
+            if state == "fallback":
+                self._verdict = (False, "Material 3 did not open: the fallback is showing")
+            else:
+                self._material_ok = True
+                self._verdict = (True, SMOKE_PASSED)
+            self._restore_style()
+            self._stage = "style restore"
+            return
+        if self._stage == "style restore" and self._verdict is not None and self._style_restored(page):
+            self._finish(*self._verdict)
+
+    def _restore_style(self) -> None:
+        window = self._window
+        if window._surface == self._style_before:
+            return
+        if self._style_before == "material":
+            window._back_to_material()
+        else:
+            window._use_widgets_styles()
+
+    def _style_restored(self, page: str) -> bool:
+        if self._window._surface != self._style_before:
+            return False
+        return self._style_before != "widgets" or page == "weekPage"
 
     def _finish(self, ok: bool, stage: str) -> None:
         if self._done:
@@ -257,21 +308,24 @@ class NativeSmoke:
         self._done = True
         self._poll.stop()
         window = self._window
+        self._restore_style()
         facts = {
-            "ok": ok,
+            "ok": ok and (self._material_ok or not self._walk),
             "stage": stage,
             "window_visible": window.isVisible(),
             "window_icon_loaded": not window.windowIcon().isNull(),
             "tray_icon_installed": window._tray_icon is not None,
             "block_count": len(window.session.blocks),
             "painted_colors": getattr(self, "_facts_colors", 0),
+            "material_ok": self._material_ok if self._walk else None,
+            "material_painted_colors": self._material_colors,
             "message": window.session.message,
         }
         self._report.write_text(json.dumps(facts, indent=2) + "\n")
         window.quit_app()
         application = QApplication.instance()
         if application is not None:
-            application.exit(0 if ok else 1)
+            application.exit(0 if facts["ok"] else 1)
 
 
 def main(argv: list[str] | None = None) -> int:

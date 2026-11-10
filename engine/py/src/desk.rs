@@ -818,6 +818,11 @@ fn update_install_kind(
 }
 
 #[pyfunction]
+fn update_offers_developer_builds(kind: &str) -> PyResult<bool> {
+    guard(|| Ok(update::offers_developer_builds(kind)))
+}
+
+#[pyfunction]
 fn update_asset_name(kind: &str) -> PyResult<String> {
     guard(|| {
         update::asset_name(kind)
@@ -961,6 +966,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         update_is_newer,
         update_install_kind,
         update_asset_name,
+        update_offers_developer_builds,
         update_available,
         update_verified,
         week_handle_of,

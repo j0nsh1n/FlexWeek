@@ -123,6 +123,10 @@ def test_quick_look_changes_draw_once_as_the_last_choice(qapp: QApplication) -> 
         reveal(picture)
 
     preview.redraw._show = spy
+    # The wait before a draw is real time, and a busy machine takes longer than it to get through the
+    # three changes. Held for the burst, then let go, so the test does not race it.
+    delay = preview.redraw._timer
+    delay.setInterval(60_000)
     for token in ("preset:high-contrast", "preset:paper", "pack:dark-frost"):
         index = box.findData(token)
         assert index >= 0, token
@@ -132,6 +136,8 @@ def test_quick_look_changes_draw_once_as_the_last_choice(qapp: QApplication) -> 
     assert page.layout_choice()["options"]["classic"]["look"] == "pack:dark-frost"
     assert shown == []
     assert image(preview) == before
+    delay.setInterval(0)
+    delay.start()
     wait_until(qapp, lambda: len(shown) == 1)
     assert shown == [image(preview)]
     burst = image(preview)
