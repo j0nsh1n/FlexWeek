@@ -41,6 +41,7 @@ from desktop.native.material.theme import (
     import_document,
     pack_material,
     read_advanced,
+    read_letter_keys,
     read_material_choice,
     read_saved_material,
     read_shortcuts,
@@ -768,6 +769,7 @@ class SettingsBridge(QObject):
         self._draft_choice = dict(self._choice)
         self._draft = copy.deepcopy(self._advanced)
         self._shortcuts = True
+        self._letter_keys = False
         self._saved: list[dict[str, Any]] = []
         self._dirty = False
         self._prompt = ""
@@ -803,6 +805,7 @@ class SettingsBridge(QObject):
         self._choice = read_material_choice(stored)
         self._advanced = read_advanced(stored)
         self._shortcuts = read_shortcuts(stored)
+        self._letter_keys = read_letter_keys(stored)
         self._saved = read_saved_material(stored)
         if not keep_draft:
             self._draft_choice = dict(self._choice)
@@ -914,6 +917,7 @@ class SettingsBridge(QObject):
             "startAtLogin": prefs.get("start_at_login") is True,
             "reduceMotion": motion in ("reduce", "off"),
             "shortcuts": self._shortcuts,
+            "letters": self._letter_keys,
             "developerBuilds": self._window._updates.get("developer_builds") is True,
             "developerBuildsOffered": offers_developer_builds(install_kind()),
             "version": (
@@ -1028,9 +1032,12 @@ class SettingsBridge(QObject):
 
     def _commit(self) -> None:
         path = self._window._look_path()
-        material = pack_material(self._choice, self._advanced, self._shortcuts, self._saved)
+        material = pack_material(
+            self._choice, self._advanced, self._shortcuts, self._letter_keys, self._saved
+        )
         store_material(path, material)
         self._bridge._shortcuts = self._shortcuts  # type: ignore[attr-defined]
+        self._bridge._letter_keys = self._letter_keys  # type: ignore[attr-defined]
         self._bridge.reload_material()  # type: ignore[attr-defined]
 
     def _set_choice(self, **parts: str) -> None:
@@ -1260,6 +1267,13 @@ class SettingsBridge(QObject):
     def setShortcuts(self, on: bool) -> None:
         self._shortcuts = bool(on)
         self._bridge._shortcuts = self._shortcuts  # type: ignore[attr-defined]
+        self._bridge.changed.emit()  # type: ignore[attr-defined]
+        self._commit()
+
+    @Slot(bool)
+    def setLetterKeys(self, on: bool) -> None:  # noqa: N802 - the name QML calls
+        self._letter_keys = bool(on)
+        self._bridge._letter_keys = self._letter_keys  # type: ignore[attr-defined]
         self._bridge.changed.emit()  # type: ignore[attr-defined]
         self._commit()
 
