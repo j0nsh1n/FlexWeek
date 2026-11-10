@@ -97,6 +97,17 @@ def github(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     server.shutdown()
 
 
+def installed_as(monkeypatch: pytest.MonkeyPatch, current: str = "1.2.0.202611040300") -> None:
+    """Pretend this copy is an older developer build, so a bump of the real VERSION cannot change what
+    these checks offer."""
+    real = updater_module.available
+    monkeypatch.setattr(
+        updater_module,
+        "available",
+        lambda release, kind, current=current: real(release, kind, current),
+    )
+
+
 def made() -> Updater:
     updater = Updater()
     updater.kind = "tarball"
@@ -123,7 +134,12 @@ def test_with_the_switch_off_the_dev_build_is_never_asked_for(qapp: QApplication
     assert "/dev" not in GitHub.seen
 
 
-def test_a_newer_dev_build_is_offered_with_the_switch_on(qapp: QApplication, github: str) -> None:
+def test_a_newer_dev_build_is_offered_with_the_switch_on(
+    qapp: QApplication,
+    github: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    installed_as(monkeypatch, "1.2.0.202611030300")
     updater = made()
     kind, update = outcome(qapp, updater, developer=True)
     assert kind == "found"
@@ -139,12 +155,7 @@ def test_a_newer_official_release_beats_an_older_dev_build(
 ) -> None:
     GitHub.latest_body = json.dumps(_release("v1.2.1")).encode()
     GitHub.dev_body = json.dumps(_dev_release("1.2.0.202611050300")).encode()
-    real = updater_module.available
-    monkeypatch.setattr(
-        updater_module,
-        "available",
-        lambda release, kind, current="1.2.0.202611040300": real(release, kind, current),
-    )
+    installed_as(monkeypatch)
     updater = made()
     kind, update = outcome(qapp, updater, developer=True)
     assert kind == "found"
@@ -172,9 +183,14 @@ def test_a_dev_release_without_a_version_in_its_title_is_not_offered(
     assert kind == "none"
 
 
-def test_a_dev_title_may_carry_its_commit_after_the_number(qapp: QApplication, github: str) -> None:
+def test_a_dev_title_may_carry_its_commit_after_the_number(
+    qapp: QApplication,
+    github: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Developer builds name their commit, "Developer build 1.2.0.202611040300 (4b3e1cd)"; the number
     still decides what is newer. Anything else after the number is not a developer build title."""
+    installed_as(monkeypatch, "1.2.0.202611030300")
     GitHub.dev_body = json.dumps(
         {**_dev_release("1.2.0.202611040300"), "name": "Developer build 1.2.0.202611040300 (4b3e1cd)"}
     ).encode()

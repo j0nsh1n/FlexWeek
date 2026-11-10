@@ -41,6 +41,14 @@ jobs:
         with:
           python-version: "3.14"
 
+      - name: Check the tag matches the version
+        # A tag that differs from VERSION builds an app that reports the wrong number and is
+        # offered its own release as an update. Fails before anything is built or uploaded.
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: python scripts/check_release_tag.py --tag="$env:TAG"
+        shell: pwsh
+
       - name: Create venv and install build + runtime deps
         # build_windows.ps1 insists on .venv\Scripts\python.exe (DESKTOP.md §9),
         # so the deps go into a fresh venv, not the runner's system Python.
@@ -227,13 +235,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        # A file already on the release was checked by hand and may already be offered by the
+        # updater, so it is never replaced. To replace one on purpose, delete it from the release first.
         run: |
-          gh release upload "$env:TAG" `
-            dist\FlexWeek-Windows-x64-Setup.exe `
-            dist\FlexWeek-Windows-x64-Setup.exe.sha256 `
-            dist\FlexWeek-Windows-x64.msi `
-            dist\FlexWeek-Windows-x64.msi.sha256 `
-            --clobber
+          $have = @(gh release view "$env:TAG" --json assets --jq '.assets[].name')
+          if ($LASTEXITCODE -ne 0) { throw "Could not list the files on release $env:TAG" }
+          $files = @(
+            "dist\FlexWeek-Windows-x64-Setup.exe",
+            "dist\FlexWeek-Windows-x64-Setup.exe.sha256",
+            "dist\FlexWeek-Windows-x64.msi",
+            "dist\FlexWeek-Windows-x64.msi.sha256"
+          )
+          foreach ($file in $files) {
+            $name = Split-Path $file -Leaf
+            if ($have -contains $name) { Write-Host "$name is already on the release; leaving it as it is"; continue }
+            gh release upload "$env:TAG" $file
+            if ($LASTEXITCODE -ne 0) { throw "Could not upload $name" }
+          }
 
   linux:
     runs-on: ubuntu-24.04
@@ -246,6 +264,11 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
+
+      - name: Check the tag matches the version
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: python scripts/check_release_tag.py --tag="$TAG"
 
       - name: Install bundle tools and xcb helpers to vendor
         run: |
@@ -371,10 +394,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        # A file already on the release was checked by hand and may already be offered by the
+        # updater, so it is never replaced. To replace one on purpose, delete it from the release first.
         run: |
-          gh release upload "$TAG" \
+          have=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+          for file in \
             dist/release/FlexWeek-Linux-x86_64.tar.gz \
             dist/release/FlexWeek-Linux-x86_64.tar.gz.sha256 \
             dist/release/FlexWeek-x86_64.AppImage \
-            dist/release/FlexWeek-x86_64.AppImage.sha256 \
-            --clobber
+            dist/release/FlexWeek-x86_64.AppImage.sha256; do
+            name=$(basename "$file")
+            if grep -qxF "$name" <<< "$have"; then
+              echo "$name is already on the release; leaving it as it is"
+              continue
+            fi
+            gh release upload "$TAG" "$file"
+          done

@@ -5,6 +5,8 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-10
+
 ### Added
 - The assistant helper (`FlexWeek --mcp`) can plan a day: `plan_homework` runs FlexWeek's own Plan my homework for a week or one day and says what it placed and what it could not; `add_block` and `edit_block` add and change breaks, meals, events and other fixed time; `skip_block_day` takes a day off one block. School and activities may now be moved, changed, skipped or deleted for this week, or from this week on.
 - Every change the assistant makes saves a restore point first ("Before assistant ..."), and `restore_point` brings the schedule back to one in a single step, as Restore in the app does. The assistant keeps at most 10 of the 20 restore points and never drops the student's to keep its own (only when the student alone has 20 does a change drop their oldest, as any save does), and a refused change, or a restore repeated with the same operation id, leaves every restore point as it was.

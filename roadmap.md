@@ -4,10 +4,21 @@ Phases, their complete-when conditions and status. Finished phases are removed; 
 history and in `CHANGELOG.md` (pruned 2026-11-06: Phase 8, 1.1.1, the 0.18.x series, 0.18.5 and the 1.0.0 running
 list, all shipped).
 
-## Where things stand (2026-11-06)
-- v1.2.0 is the latest release. Developer build 1.2.0.202611061702 (from main 33fe5eef) carries FIX-SPEC 1.3 and the
-  J lanes (J21 Material Week zoom, J22 Material Day hours, J23 Month study fill, J25 Look preview side by side).
-- Next: R1 (unblock releases); R3 (the testing rebuild) starts on Jonathan's go.
+## Where things stand (2026-11-10)
+- v1.2.0 is the latest release. Main (1425ebb4) is prepared as 1.3.0 on branch `release/1.3.0-prep` (not yet tagged):
+  Material 3 as a style, planner settings, the assistant's planning tools, developer builds, the testing rebuild.
+  Developer build 1.2.0.202611100207 (main 8533105b) is `dev`.
+- Next: the release steps in `docs/github-release.md`. The review of 2026-11-10 lists what comes first: hide the
+  developer-builds switch off the Linux tarball, add a Material step to the packaged smoke test, a by-hand "Release
+  packages" run, Material's memory measured, and Jonathan's call on Ctrl+wheel zoom in Material.
+
+### Release 1.3.0
+- Done 2026-11-10 on the prep branch: version 1.3.0 (app, changelog, phone), the tag-equals-version check, uploads
+  that never replace a file already on the release, the written checklist, draft notes, README, context.md.
+- Open: the four items above, the release pull request with a by-hand Verify, Jonathan's own try of a developer
+  build, the tag, the Windows, Linux and Android files, and the phone update check on a real phone.
+- Complete when: v1.3.0 is the latest release with all ten files and checked checksums.
+- Status: [ ] in preparation.
 
 ## After FIX-SPEC 1.3 (planned 2026-11-06)
 FIX-SPEC 1.3 and the J lanes (J21 Week zoom, J22 Day hours, J23 Month study fill, J25 Look preview side by side)
@@ -27,16 +38,21 @@ are on main (PRs #67-#83). In order:
   Material"), reason and notice wording. Proposal with exact text written 2026-11-07; waiting on Jonathan's approval.
 - Developer builds: the commit in the release title and the kept copy's tag (the number stays for ordering). Done
   (PRs #84, #86).
-- Complete when: a stable release builds on every platform and spec.md matches CI.
-- Status: [ ] open.
+- Done 2026-11-07 (#87): the imagehlp.dll and web-module fixes; the Windows job builds. No Windows or AppImage
+  package has been built since (329 commits of Material work); the 1.3.0 steps include a by-hand run on main.
+- Complete when: a stable release builds on every platform and spec.md matches CI. The 1.3.0 release is that test.
+- Status: [ ] open until v1.3.0 is released.
 
 ### R2 — Correctness
 - Two quick settings saves can overwrite each other (save_preferences).
 - The phone does not receive same-day `notices`.
 - Material memory growth (1.9 GB after 49 min on the tarball): measure, then fix or close.
 - The autostart entry is only rewritten when the switch changes; no check at startup.
-- Check and close or fix: the Undo notice 6 s against the spec's 10 s; planner spread around held pieces and
-  grouping that ignores "one piece".
+- Closed 2026-11-10: the Undo notice now stays at least 10 s (spec and CHANGELOG agree).
+- Check and close or fix: planner spread around held pieces and grouping that ignores "one piece".
+- Added 2026-11-10 (release review): eight tests logged flaky on main, two failing in the suite on nearly every run
+  (Retry save after a failed save and one editor on a double-click are among them); the assistant helper's stderr
+  test can fail once; Edit in a Material block's right-click menu needs one try on a real screen.
 - Complete when: each has a test that failed first, or is closed with a reason.
 - Status: [ ] open.
 
@@ -56,12 +72,13 @@ set, CI as the gate, Rust tools in fwtest. Draft: `~/.flexweek-ui-harness/scratc
   updater, planner). Complete when: no test file is named after a PR or audit and none reads the real clock.
 - R3.5 Test selection and the flaky log in fwtest; CI as the gate; spec.md and fwtest's contract updated. Complete
   when: a local run picks only the touched area and CI runs everything.
-- Status: [ ] approved 2026-11-06. R3.1 built 2026-11-07 on `test/r3-1-foundations`: the 65 Week files pass on the
-  one clock, a clean computer per test, the shared wait helper and the light app, in 898 s of test time against
-  main's 1,193 s; done when its pull request merges. Left for R3.2: Week's fixed waits for animations (drag results,
-  hours zoom, hours hand, Material week, bare end times), its focus tests' own session clock (`logic_support`), and
-  the module-wide Material windows. Left for R3.4: `test_layouts_window`'s overdue month card holds Saturday on the
-  session only (one shared clock keeps the Unfinished card shut there; not yet understood).
+- Status: R3.1, R3.2 and R3.5 merged 2026-11-08 in one pull request (#97), with a live rig mode for visual review in
+  place of R3.3's review page (CI keeps no pictures): tests by area
+  (`tools/fwtest/areas.toml`), the one clock, the light app, looks judged by review not by test, test selection and the
+  flaky log in fwtest, and the full desktop suite in four CI shards as the gate. [ ] R3.4 is not finished: 37 test
+  files at the top of `desktop/tests` are still named after pull requests or audits, and `hypothesis` is still an
+  unused dependency. `test_layouts_window`'s overdue month card holds Saturday on the session only (not yet
+  understood).
 
 ### R4 — Look and feel (Jonathan's calls)
 - Material Week: move an existing block by dragging (decide).
@@ -72,8 +89,8 @@ set, CI as the gate, Rust tools in fwtest. Draft: `~/.flexweek-ui-harness/scratc
 - Status: [ ] open.
 
 ### R5 — Bigger work (needs scope from Jonathan)
-- The setup rebuild and day-to-day changes (Nov 3), the power-user vs everyday settings split, the Material 3
-  style option.
+- The setup rebuild and day-to-day changes (Nov 3) and the power-user vs everyday settings split.
+- Done: the Material 3 style option (a style card, its own window and first-run setup; in 1.3.0).
 - Status: [ ] waiting on scope.
 
 ## Carried over (open items from older lists; triage with Jonathan)
@@ -122,7 +139,8 @@ Full wording is in this file's git history (before 2026-11-06).
   `backend/` and `desktop/`, and the focus phase advance in `controller.py` beside the phone's.
 - Phone screens not built: full-screen focus with breaks (8 A), Month (6 B), Day (7 A), Week C with drag (plans in
   `~/.flexweek-ui-harness/scratch/android-1.1/`).
-- Waiting on Jonathan: what shrinks on My day and One thing at 1024x640 Large; a device check of the phone updater.
+- Waiting on Jonathan: what shrinks on My day and One thing at 1024x640 Large; a device check of the phone updater
+  (1.2.0 to 1.3.0 is the chance for it).
 
 ## Later
 - Left for after 1.0.0: a camera scan of the pairing code, a restore copy of
