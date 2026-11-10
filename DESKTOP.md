@@ -166,6 +166,27 @@ machine also needs a C compiler (GCC), Python 3.14's development headers,
 `readelf` (binutils), `ldconfig`, and the six X11 helpers and two xkbcommon
 libraries listed below installed, because the build copies them in.
 
+**On a newer desktop.** A machine with a newer glibc than 2.38 (Fedora 42 and
+later, Nobara, Arch) cannot build a shippable tarball directly: the bundle picks up
+its own libraries and `desktop/check_bundle.py` refuses them. Build in the Ubuntu
+24.04 container instead (needs podman):
+
+```bash
+scripts/build-linux-local.sh          # -> dist/release/FlexWeek-Linux-x86_64.tar.gz
+scripts/build-linux-local.sh --smoke  # and run the Developer build workflow's smoke tests
+```
+
+It runs the build and smoke steps of `.github/workflows/dev-build.yml` with the same
+CPython build the runner gets (`desktop/linux/build-container/Containerfile`; keep
+its `PYTHON_VERSION` in step with what the workflow's `3.14` resolves to). It does not
+stamp a developer version, so the app reports the plain version from the checkout,
+and it replaces `dist/FlexWeek` and `dist/release`. Caps: `BUILD_CPUS` (8) and `BUILD_MEMORY` (10g).
+The venv and the compile caches stay in `BUILD_CACHE`
+(`~/.flexweek-ui-harness/build-cache`), so the checkout's own `.venv` and
+`engine/target` are untouched. Measured on 2026-11-09 with 8 cores: about 5½ minutes
+from empty caches, under 2 minutes after a small change. GitHub still publishes
+developer builds and releases.
+
 **Files**
 
 - `desktop/main.py` — `QApplication`, the bundled backend (section 7) unless
