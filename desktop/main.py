@@ -175,6 +175,9 @@ class NativeSmoke:
         self._stage = "first screen"
         self._material_ok = False
         self._material_colors = 0
+        # The saved style belongs to the computer, not to this run: it is put back before the quit.
+        self._style_before = window._surface
+        self._verdict: tuple[bool, str] | None = None
         self._poll = QTimer(window)
         self._poll.setInterval(SMOKE_POLL_MS)
         self._poll.timeout.connect(self._check)
@@ -275,10 +278,29 @@ class NativeSmoke:
                 return
             self._material_colors = colors
             if state == "fallback":
-                self._finish(False, "Material 3 did not open: the fallback is showing")
-                return
-            self._material_ok = True
-            self._finish(True, SMOKE_PASSED)
+                self._verdict = (False, "Material 3 did not open: the fallback is showing")
+            else:
+                self._material_ok = True
+                self._verdict = (True, SMOKE_PASSED)
+            self._restore_style()
+            self._stage = "style restore"
+            return
+        if self._stage == "style restore" and self._verdict is not None and self._style_restored(page):
+            self._finish(*self._verdict)
+
+    def _restore_style(self) -> None:
+        window = self._window
+        if window._surface == self._style_before:
+            return
+        if self._style_before == "material":
+            window._back_to_material()
+        else:
+            window._use_widgets_styles()
+
+    def _style_restored(self, page: str) -> bool:
+        if self._window._surface != self._style_before:
+            return False
+        return self._style_before != "widgets" or page == "weekPage"
 
     def _finish(self, ok: bool, stage: str) -> None:
         if self._done:
@@ -286,6 +308,7 @@ class NativeSmoke:
         self._done = True
         self._poll.stop()
         window = self._window
+        self._restore_style()
         facts = {
             "ok": ok and (self._material_ok or not self._walk),
             "stage": stage,

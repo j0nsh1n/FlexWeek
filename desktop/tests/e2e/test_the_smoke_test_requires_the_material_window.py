@@ -1,6 +1,9 @@
 # ruff: noqa: F811
 """The packaged smoke test also opens Material 3, and fails when the Widgets fallback is what shows.
 
+The smoke test also leaves the computer's saved style as it found it: the next smoke run on the same
+data folder must not open straight into Material.
+
 A release that installs but gives a Material 3 student the "could not open" fallback has to fail its
 smoke test. The report keeps its `ok` and `stage` fields; `material_ok` says which half failed."""
 
@@ -21,7 +24,7 @@ from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.material_support import faded_in
 from desktop.tests.waiting import wait_until
-from desktop.tests.window_support import qapp  # noqa: F401
+from desktop.tests.window_support import look_file, qapp  # noqa: F401
 
 
 def pump(qapp: QApplication, count: int = 30) -> None:
@@ -30,7 +33,11 @@ def pump(qapp: QApplication, count: int = 30) -> None:
 
 
 def last_stage_of_the_smoke(
-    qapp: QApplication, window: NativeWindow, report: Path, monkeypatch: pytest.MonkeyPatch
+    qapp: QApplication,
+    window: NativeWindow,
+    report: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    before: str = "widgets",
 ) -> dict[str, object]:
     """Run the smoke test's own Material stage on the signed-in window and read its report."""
     monkeypatch.setattr(window, "quit_app", lambda: None)
@@ -38,7 +45,7 @@ def last_stage_of_the_smoke(
     window.resize(1280, 800)
     window.show()
     pump(qapp)
-    window._surface = "widgets"
+    window._surface = before
     window._on_week()
     pump(qapp)
     smoke = NativeSmoke(window, report, True)
@@ -96,3 +103,36 @@ def test_material_state_tells_the_window_from_the_fallback(qapp: QApplication, w
     assert colors >= PAINTED_MIN_COLORS
     window._give_up_material()
     assert material_state(window) == ("fallback", 0)
+
+
+def saved_surface() -> object:
+    return json.loads(look_file().read_text()).get("surface")
+
+
+@pytest.mark.parametrize("break_load", [False, True])
+def test_the_smoke_puts_the_widgets_style_back_before_it_quits(
+    qapp: QApplication,
+    window: NativeWindow,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    break_load: bool,
+) -> None:
+    window._save_look()
+    assert saved_surface() == "widgets"
+    if break_load:
+        page = window._ensure_material()
+        assert page is not None
+        page.break_load = True
+    last_stage_of_the_smoke(qapp, window, tmp_path / "smoke.json", monkeypatch)
+    assert saved_surface() == "widgets"
+    assert window._surface == "widgets"
+    assert window._stack.currentWidget().objectName() == "weekPage"
+
+
+def test_the_smoke_leaves_a_material_computer_on_material(
+    qapp: QApplication, window: NativeWindow, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    facts = last_stage_of_the_smoke(qapp, window, tmp_path / "smoke.json", monkeypatch, before="material")
+    assert facts["ok"] is True
+    assert saved_surface() == "material"
+    assert window._surface == "material"
