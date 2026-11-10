@@ -145,6 +145,8 @@ class WeekBridge(QObject):
     blocksChanged = Signal()
     homeworkChanged = Signal()
     planFinished = Signal()
+    # Today was pressed, even when this week is already the one shown: the grid shows the line again.
+    todayAsked = Signal()
 
     def __init__(self, window: QObject, parent: QObject) -> None:
         super().__init__(parent)
@@ -444,6 +446,7 @@ class WeekBridge(QObject):
         moment = datetime.fromtimestamp(session.now_ms() / 1000).date()
         target = (moment - timedelta(days=moment.weekday())).isoformat()
         self._load_target(target)
+        self.todayAsked.emit()
 
     def _shift(self, days: int) -> None:
         session = self._window.session  # type: ignore[attr-defined]

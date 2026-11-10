@@ -2387,6 +2387,8 @@ class NativeWindow(QMainWindow):
     def _application_state_changed(self, state: Qt.ApplicationState) -> None:
         if state == Qt.ApplicationState.ApplicationActive:
             self._deadline_changed()
+            # Back from the background the line may be minutes behind: no waiting for the next tick.
+            self._tick_material_clock()
 
     def _rail_shown(self) -> bool:
         """Whether Today's app's rail is beside the planner: on its Day and Week."""

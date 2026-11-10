@@ -225,6 +225,8 @@ Item {
     }
 
     property string revealedKey: ""
+    // Today was pressed: show the line once this week has it, however the grid was scrolled before.
+    property bool nowAsked: false
 
     function revealNow() {
         if (!root.followNow || scroller.moving || scroller.dragging || root.zooming)
@@ -235,9 +237,10 @@ Item {
         if (!bridge || view < 40 || bridge.nowDay < 0)
             return
         var key = bridge.nowDay + ":" + (bridge.week ? bridge.week.columns : 7) + ":" + root.typeScale + ":" + root.density
-        if (revealedKey === key)
+        if (revealedKey === key && !nowAsked)
             return
         revealedKey = key
+        nowAsked = false
         var row = root.row
         var nowY = bridge.nowMinute / 60 * row
         var earliest = nowY
@@ -332,6 +335,9 @@ Item {
         clip: true
         boundsBehavior: Flickable.StopAtBounds
 
+        // The student's own scrolling ends a pending Today: the grid does not chase the line afterwards.
+        onMovingChanged: if (moving) root.nowAsked = false
+
         onHeightChanged: {
             if (root.followNow)
                 root.revealNow()
@@ -341,6 +347,14 @@ Item {
         onContentHeightChanged: {
             if (root.followOpening)
                 root.revealOpening(false)
+        }
+
+        Connections {
+            target: root.followNow && root.bridge ? root.bridge.week : null
+            function onTodayAsked() {
+                root.nowAsked = true
+                root.revealNow()
+            }
         }
 
         Connections {
@@ -506,7 +520,7 @@ Item {
 
             Rectangle {
                 objectName: "dropSlot"
-                z: 4
+                z: 6
                 visible: root.weekMode && root.dropDay >= 0
                 x: root.gutter + Math.max(0, root.dropDay) * root.dayWidth + 3
                 y: Math.max(0, root.dropMinute) / 60 * root.row
@@ -564,15 +578,17 @@ Item {
                 }
             }
 
+            // Today's column only, over every block (Jonathan, 2026-11-10): Day has the one column.
             Rectangle {
+                id: nowLine
                 objectName: "nowLine"
                 visible: root.showNowLine
-                x: root.gutter - 5
+                x: root.gutter + (root.weekMode && bridge ? Math.max(0, bridge.nowDay) : 0) * root.dayWidth
                 y: (bridge ? bridge.nowMinute : 0) / 60 * root.row
-                width: parent.width - root.gutter + 5
+                width: root.weekMode ? root.dayWidth : parent.width - root.gutter
                 height: 2
                 color: root.now
-                z: 1
+                z: 4
             }
 
             Repeater {
@@ -644,13 +660,13 @@ Item {
             Rectangle {
                 objectName: "nowDot"
                 visible: root.showNowLine
-                x: root.gutter - 5
+                x: nowLine.x - 5
                 y: (bridge ? bridge.nowMinute : 0) / 60 * root.row - 4
                 width: 10
                 height: 10
                 radius: 5
                 color: root.now
-                z: 3
+                z: 5
             }
         }
     }
