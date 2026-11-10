@@ -42,6 +42,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Refined the look of the existing styles: surfaces separate more clearly, calendar blocks carry a one-pixel shadow, and planning moves ease over 220 ms.
 
 ### Fixed
+- When a save you started with a button (Retry save, Plan and others) fails, FlexWeek now waits the full six seconds before it tries again by itself, instead of trying again half a second later and taking Retry save away.
 - Get developer builds shows only on the Linux tarball install, in Settings for both designs. Windows and AppImage installs have no developer builds, so the switch is hidden there and a saved setting no longer asks for one.
 - On Material My day, the done tick on each Up next homework row sits in the same round outline as the done circle on Week and Day blocks (same size rule, light and dark colours, focus ring and pointer), with the same click target and name.
 - A time on a Material Week or Day block is never cut part-way. When the whole range does not fit (a narrow block in a stack of three, or a narrow window at larger text) the line shows the start alone, such as "4:45 PM", and when even that does not fit the line is left out; the time is still read out and shown in Edit.

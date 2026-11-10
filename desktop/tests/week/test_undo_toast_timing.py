@@ -354,7 +354,13 @@ def test_a_notice_shown_again_under_a_still_pointer_waits(qapp: QApplication, wi
     sheets._say("New without moving the pointer", undo=True)
     pump(qapp, 10)
     assert notice.property("visible") is True
-    assert not sheets._timer.isActive(), "a hovered notice is counting down"
+    # Qt tells the notice the pointer is still over it on the next frame, not in the same turn, and a
+    # busy machine takes longer to get there. The hold has to come, not come within ten event turns.
+    wait_until(
+        qapp,
+        lambda: not sheets._timer.isActive(),
+        what="a hovered notice is counting down",
+    )
     QTest.mouseMove(quick, QPoint(2, 2))
     pump(qapp, 10)
     assert sheets._timer.isActive()

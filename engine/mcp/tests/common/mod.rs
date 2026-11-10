@@ -89,6 +89,22 @@ impl Server {
         self.stderr.lock().expect("stderr").clone()
     }
 
+    /// The stderr text once it contains one of `needles`, or whatever has arrived by the deadline.
+    /// The reader thread copies lines in on its own schedule, so a plain `stderr()` right after a
+    /// reply can be empty on a busy machine.
+    pub fn stderr_with_any(&self, needles: &[&str]) -> String {
+        let deadline = std::time::Instant::now() + Duration::from_secs(8);
+        loop {
+            let text = self.stderr();
+            if needles.iter().any(|needle| text.contains(needle))
+                || std::time::Instant::now() >= deadline
+            {
+                return text;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
     pub fn stdout_lines(&self) -> Vec<String> {
         self.stdout.lock().expect("stdout").clone()
     }
