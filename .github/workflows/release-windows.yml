@@ -41,6 +41,14 @@ jobs:
         with:
           python-version: "3.14"
 
+      - name: Check the tag matches the version
+        # A tag that differs from VERSION builds an app that reports the wrong number and is
+        # offered its own release as an update. Fails before anything is built or uploaded.
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: python scripts/check_release_tag.py --tag="$env:TAG"
+        shell: pwsh
+
       - name: Create venv and install build + runtime deps
         # build_windows.ps1 insists on .venv\Scripts\python.exe (DESKTOP.md §9),
         # so the deps go into a fresh venv, not the runner's system Python.
@@ -246,6 +254,11 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
+
+      - name: Check the tag matches the version
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: python scripts/check_release_tag.py --tag="$TAG"
 
       - name: Install bundle tools and xcb helpers to vendor
         run: |
