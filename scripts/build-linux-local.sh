@@ -51,7 +51,9 @@ cp -p "$VERSION_FILE" "$SAVED"
 NAME="flexweek-linux-build-$$"
 trap 'cp -p "$SAVED" "$VERSION_FILE" && rm -f "$SAVED"' EXIT
 # Stopped by Ctrl+C or a kill: stop the container too, then the EXIT trap puts version.py back.
-trap 'podman stop -t 10 "$NAME" >/dev/null 2>&1 || true; exit 130' INT TERM HUP
+# (If the container did not exist yet, end the podman client too, so nothing runs on after us.)
+PODMAN_PID=""
+trap 'podman stop -t 10 "$NAME" >/dev/null 2>&1 || true; [ -n "$PODMAN_PID" ] && kill "$PODMAN_PID" 2>/dev/null; wait 2>/dev/null; exit 130' INT TERM HUP
 BASE="$(sed -n 's/^VERSION = "\(.*\)"/\1/p' "$VERSION_FILE")"
 [ -n "$BASE" ] || { echo "Could not read the version from $VERSION_FILE" >&2; exit 1; }
 DEVVERSION="$BASE.$(date -u +%Y%m%d%H%M)"
@@ -66,6 +68,7 @@ nice podman run --rm --init --name "$NAME" --cpus "$CPUS" --memory "$MEMORY" --m
     -v "$ROOT:/src" -v "$CACHE:/cache" -v "$CACHE/cargo-target:/src/engine/target" -v "$CACHE/cargo-registry:/opt/cargo/registry" \
     -v "$HERE/inside.sh:/inside.sh:ro" \
     "$IMAGE" /inside.sh &
+PODMAN_PID=$!
 # Waiting in the background lets a signal reach the traps at once instead of after the build.
-wait $!
+wait "$PODMAN_PID"
 echo "Built: $ROOT/dist/release/FlexWeek-Linux-x86_64.tar.gz (developer version $DEVVERSION)"
