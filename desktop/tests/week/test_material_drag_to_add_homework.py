@@ -1,5 +1,7 @@
 """Material Week and Day: a click or a drag over empty time opens a menu at that spot, "Add homework
-here" and "Add fixed time here", each opening its sheet with that day and time (Jonathan, 2026-11-07)."""
+here" and "Add fixed time here", each opening its sheet with that day and time (Jonathan, 2026-11-07).
+A right-click on free time opens the same menu, and while something is copied it also offers "Paste here",
+which previews the copy on that day from that time (Jonathan, 2026-11-11)."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
@@ -10,10 +12,11 @@ import pytest
 from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QObject, QPoint, QPointF, Qt
 from PySide6.QtGui import QGuiApplication, QWheelEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDialog
 
 from backend.tests.fake_clock import CLOCK
 from desktop.native.weekmodel import set_clock_24h
+from desktop.native.widgets import PreviewDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import open_light  # noqa: F401
 from desktop.tests.material_support import faded_in
@@ -737,3 +740,132 @@ def test_the_mouse_wheel_still_scrolls_the_grid(qapp: QApplication, window: Nati
         lambda: float(grid.property("contentY")) > initial_y,
         what=lambda: f"the grid scrolling down from {initial_y}; it is at {grid.property('contentY')}",
     )
+
+
+PASTE = ["Add homework here", "Add fixed time here", "Paste here"]
+ADD_ONLY = PASTE[:2]
+# School is Monday to Friday 08:00 for 390 minutes: a copy with a length no default would give.
+SCHOOL_MINUTES = 390
+
+
+def _right_click_at(window: NativeWindow, hours_item: QObject, x: float, y: float) -> None:
+    spot = hours_item.mapToScene(QPointF(x, y))
+    QTest.mouseClick(
+        window._material_page._quick, Qt.MouseButton.RightButton, pos=QPoint(int(spot.x()), int(spot.y()))
+    )
+    _pump(QApplication.instance(), 4)
+
+
+def _ask_menu(window: NativeWindow, hours_item: QObject, how: str, x: float, y: float) -> None:
+    (_right_click_at if how == "right-click" else _click_at)(window, hours_item, x, y)
+
+
+def _saturday_menu(qapp: QApplication, window: NativeWindow, how: str, minutes_past_11: int = 5) -> QObject:
+    """The free-time menu on Saturday, asked for at 11:00 plus `minutes_past_11`."""
+    root = _reset(window, qapp)
+    hours_item, row, gutter, day_width, saturday = _grid_geometry(root, window)
+    _qml(root, "weekScroller").setProperty("contentY", float(9 * row))
+    _pump(qapp)
+    x = gutter + saturday * day_width + day_width / 2
+    _ask_menu(window, hours_item, how, x, 11 * row + row * minutes_past_11 / 60)
+    return root
+
+
+def _preview_rows(monkeypatch: pytest.MonkeyPatch) -> list[list[dict]]:
+    """The paste preview, turned away: what it was asked to show is what these tests read."""
+    seen: list[list[dict]] = []
+
+    def look(dialog: PreviewDialog) -> int:
+        seen.append(dialog.rows())
+        return int(QDialog.DialogCode.Rejected)
+
+    monkeypatch.setattr(PreviewDialog, "exec", look)
+    return seen
+
+
+@pytest.mark.parametrize("how", ["click", "right-click"])
+def test_free_time_asks_for_its_menu_by_click_or_right_click(
+    qapp: QApplication, window: NativeWindow, how: str
+) -> None:
+    root = _saturday_menu(qapp, window, how)
+    assert _slot_menu(root) == ADD_ONLY, "nothing copied, so no Paste here"
+    assert window._material_page.bridge.sheets.kind == ""
+
+
+@pytest.mark.parametrize("how", ["click", "right-click"])
+def test_paste_here_is_offered_while_something_is_copied_and_not_before_or_after(
+    qapp: QApplication, window: NativeWindow, how: str
+) -> None:
+    window.session.copy_block("school", 0)
+    root = _saturday_menu(qapp, window, how)
+    assert _slot_menu(root) == PASTE
+    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Escape)
+    _pump(qapp, 4)
+    window.session.clipboard = None
+    hours_item, row, gutter, day_width, saturday = _grid_geometry(root, window)
+    _ask_menu(window, hours_item, how, gutter + saturday * day_width + day_width / 2, 11 * row + row / 12)
+    assert _slot_menu(root) == ADD_ONLY
+
+
+@pytest.mark.parametrize("how", ["click", "right-click"])
+def test_paste_here_in_week_previews_the_copy_on_that_day_from_the_snapped_time_with_its_length(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, how: str
+) -> None:
+    window.session.copy_block("school", 0)
+    seen = _preview_rows(monkeypatch)
+    root = _saturday_menu(qapp, window, how, minutes_past_11=20)
+    _choose(window, root, "Paste here")
+    assert len(seen) == 1, "the plain look's preview opened once"
+    block = seen[0][0]["block"]
+    # 11:20 is nearer 11:15 than 11:30, as Add fixed time here would take it.
+    assert (block["days"], block["start"], block["duration_min"]) == ([5], "11:15", SCHOOL_MINUTES)
+    assert _slot_menu(root) == [], "the menu closed"
+
+
+@pytest.mark.parametrize("how", ["click", "right-click"])
+def test_paste_here_in_day_previews_the_copy_on_the_day_shown_from_the_snapped_time(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, how: str
+) -> None:
+    _reset(window, qapp)
+    window.session.copy_block("school", 0)
+    seen = _preview_rows(monkeypatch)
+    thursday = (_week_monday(window) + timedelta(days=NOW_DAY)).isoformat()
+    window.session.open_day(thursday)
+    settled(qapp, window)
+    bridge = window._material_page.bridge
+    bridge.showPage("day")
+    _pump(qapp, 6)
+    try:
+        root = window._material_page.root
+        scroller = _qml(root, "dayScroller")
+        hours_item = scroller.childItems()[0].childItems()[0]
+        day_pane = scroller.parentItem()
+        gutter = int(day_pane.property("gutter"))
+        row = int(day_pane.property("row"))
+        scroller.setProperty("contentY", float(16 * row))
+        _pump(qapp, 4)
+
+        _ask_menu(window, hours_item, how, gutter + 200, 17 * row + row * 40 / 60)
+        assert _slot_menu(root) == PASTE
+        _choose(window, root, "Paste here")
+
+        assert len(seen) == 1
+        block = seen[0][0]["block"]
+        # 17:40 is nearer 17:45 than 17:30.
+        assert (block["days"], block["start"], block["duration_min"]) == ([NOW_DAY], "17:45", SCHOOL_MINUTES)
+    finally:
+        bridge.sheets.forceClose()
+        bridge.showPage("week")
+        _pump(qapp, 4)
+
+
+def test_escape_on_a_menu_with_paste_here_pastes_nothing(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window.session.copy_block("school", 0)
+    seen = _preview_rows(monkeypatch)
+    root = _saturday_menu(qapp, window, "right-click")
+    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Escape)
+    _pump(qapp, 4)
+    assert _slot_menu(root) == []
+    assert seen == []
