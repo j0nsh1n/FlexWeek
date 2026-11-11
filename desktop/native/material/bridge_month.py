@@ -16,6 +16,7 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 from desktop.native.fields import week_starts_on
 from desktop.native.hours.month import HOMEWORK, LOAD_CAP, LOAD_WORDS, MonthCell, month_cells
 from desktop.native.material.bridge_rows import Labels, Rows
+from desktop.native.material.theme import event_category
 from desktop.native.weekmodel import clock_label, length_label, set_clock_24h
 
 _WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -104,7 +105,10 @@ def _access(cell: MonthCell) -> str:
 
 
 def _row(cell: MonthCell) -> dict[str, Any]:
-    chips = [{"text": chip.words, "kind": _kind(chip)} for chip in cell.chips]
+    chips = [
+        {"text": chip.words, "kind": _kind(chip), "category": event_category(chip.category)}
+        for chip in cell.chips
+    ]
     lines = [pane_line(chip) for chip in cell.chips] or ["Nothing planned"]
     if cell.planned_min or cell.completed_min:
         planned = length_label(cell.planned_min) if cell.planned_min else "0"

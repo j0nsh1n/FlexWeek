@@ -236,6 +236,9 @@ Item {
                 required property var modelData
                 readonly property bool due: modelData.kind === "due"
                 readonly property bool overdue: modelData.kind === "overdue"
+                // The strip is the colour the same block or homework has in Week and Day.
+                readonly property string category: modelData.category || (due ? "assignments" : "other")
+                readonly property color stripColour: tones.classFor(category).bar
                 readonly property color chipFill: overdue
                     ? tones.statusOverdueTint
                     : (due ? homeworkClass.fill : tones.surfaceContainerHighest)
@@ -250,10 +253,9 @@ Item {
 
                 Rectangle {
                     objectName: "monthChipBar"
-                    visible: chipBody.due
                     width: 3
                     height: parent.height
-                    color: homeworkClass.bar
+                    color: chipBody.stripColour
                     topLeftRadius: parent.radius
                     bottomLeftRadius: parent.radius
                 }
@@ -263,7 +265,7 @@ Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    anchors.leftMargin: chipBody.due ? 5 : 4
+                    anchors.leftMargin: 5
                     anchors.rightMargin: 4
                     spacing: 2
 
