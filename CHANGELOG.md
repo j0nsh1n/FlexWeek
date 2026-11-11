@@ -9,6 +9,10 @@ All notable changes to FlexWeek are documented here. Format follows
 - Material's P, Z and F keys (plan, undo, Focus) have their own switch, Letter keys, in Settings → This computer, and it starts off, so none of them fires by accident. The 1 to 5 view keys keep their switch, now called Number keys, which stays on. Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y and the zoom keys work whatever either switch says.
 
 ### Fixed
+- In the Material style, the now line in Week runs through today's column only and is drawn over the blocks, with its dot on today's left edge; Day draws it the same way. Today brings the line back into view when this week is already open and was scrolled away, and when you come back from another week, and the line moves to the current time as soon as the app comes back to the front.
+- In the Material style, a fixed block has a menu with Edit and Delete on right-click, Shift+F10 and the Menu key, in Week and in Day. Delete asks the same question as the Edit fixed time sheet.
+- Edit fixed time, and the Pinned time in Edit homework, show a time that is not on a quarter hour (for example 4:55 PM from a 5-minute drag) instead of a blank field, and Up and Down step from it in time order instead of jumping to midnight.
+- In the Material style, tapping a row of an open list that hangs outside a sheet (a due date, for example) picks it instead of asking "Discard your changes?".
 - Help opened from Material now works from the keyboard: Esc closes it, Tab reaches the Close button with a focus ring, Space presses it, the keyboard goes back to Material afterwards, and Material's own keys no longer change the screen behind it. Its keyboard list shows the keys Material answers to (1 to 5 only while Number keys is on, P, Z and F only while Letter keys is on) instead of the Widgets styles' D, W and M.
 - The assistant helper keeps the right time while it stays open: once your session runs out it refuses the next call, "today" follows the date, a restore point carries the time of its change, and past-time checks and Plan use the current time, instead of the minute the helper started.
 

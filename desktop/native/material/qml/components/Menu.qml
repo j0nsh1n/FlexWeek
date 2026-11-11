@@ -39,10 +39,12 @@ Item {
         border.width: root.highContrast ? 1.5 : 0
         border.color: palette.outlineVariant
         clip: true
-        Column {
+        // Each row sets its own y. A Column places its rows only when the next frame is drawn, so a scripted
+        // click sent before that found every row at the top and chose the last one.
+        Item {
             y: 8
             width: parent.width
-            spacing: 0
+            height: root.entries.length * 44
             Repeater {
                 model: root.entries
                 delegate: Item {
@@ -56,6 +58,7 @@ Item {
                 root.chosen(index, modelData.label)
             }
                     id: row
+                    y: index * 44
                     width: 260
                     height: 44
                     readonly property bool hot: root.cursor === index

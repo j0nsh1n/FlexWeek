@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import components 1.0
 
 // The frame every sheet shares: a dialog in the middle on a desktop, a bottom sheet under 768.
@@ -27,6 +28,17 @@ FocusScope {
 
     function cycle(step) {
         FocusCycle.take(FocusCycle.nextItem([body, footer], step, Window.activeFocusItem), step)
+    }
+
+    // Whether a scene point lies on a popup that is open now (a picker's list).
+    function popupHolds(scenePoint) {
+        var kids = Overlay.overlay ? Overlay.overlay.children : []
+        for (var i = 0; i < kids.length; i++) {
+            var spot = kids[i].mapFromItem(null, scenePoint.x, scenePoint.y)
+            if (kids[i].visible && kids[i].contains(spot))
+                return true
+        }
+        return false
     }
 
     function focusTarget(item) {
@@ -59,7 +71,17 @@ FocusScope {
         color: "#000000"
         opacity: 0.32
         TapHandler {
+            id: scrimTap
+            // A picker's list is a non-modal popup, so a tap on it also reaches the scrim. A row can hang
+            // outside the card, so it is the press that says whether the tap began on an open list.
+            property bool onPopup: false
+            onPressedChanged: {
+                if (pressed)
+                    onPopup = root.popupHolds(point.scenePressPosition)
+            }
             onTapped: (eventPoint) => {
+                if (onPopup)
+                    return
                 var p = scrim.mapToItem(card, eventPoint.position.x, eventPoint.position.y)
                 if (p.x < 0 || p.x >= card.width || p.y < 0 || p.y >= card.height)
                     root.closeRequested()

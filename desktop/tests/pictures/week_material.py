@@ -391,9 +391,10 @@ SCREENS: list[Screen] = [
         area="week",
         prepare=lambda window: _material(window),
         checks=(
-            "The now line runs behind every block (inside a block's title row the pixel is the block fill) "
-            "and over empty grid it is the line colour; its dot stays on top of the blocks; a homework "
-            "held over a slot outlines it above the line."
+            "The now line runs through today's column only, in the line colour, and is drawn over every "
+            "block it crosses (a crossed block's pixel on the line is the line colour); its dot sits on "
+            "today's left edge, also over the blocks; a homework held over a slot outlines it above the "
+            "line. Whether the line over a block reads well is the reviewer's call."
         ),
         sources=MATERIAL,
         styles=("material",),

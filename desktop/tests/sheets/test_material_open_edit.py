@@ -395,6 +395,31 @@ def test_choosing_edit_in_the_block_menu_with_the_mouse_opens_the_edit_sheet(
     assert menu.property("open") is False
 
 
+def test_a_block_menu_row_clicked_before_the_menu_is_first_drawn_is_the_one_chosen(
+    qapp, window: NativeWindow
+) -> None:
+    """Scripted input can click a row in the same turn the menu opens, before any frame is drawn: the row
+    under the click is the one chosen, not the last row (Delete)."""
+    root = material_week(qapp, window)
+    essay = block_named(root, "History essay")
+    top = essay.mapToScene(essay.boundingRect().topLeft())
+    QTest.mouseClick(
+        quick_of(window), Qt.MouseButton.RightButton, pos=QPoint(int(top.x()) + 20, int(top.y()) + 4)
+    )
+    menu = named(root, "blockMenu")[0]
+    assert menu.property("open") is True
+    # No events are handled between the two clicks, so no frame is drawn in between.
+    QTest.mouseClick(quick_of(window), Qt.MouseButton.LeftButton, pos=row_centre(menu, "Edit"))
+    sheets = bridge(window).sheets
+    wait_until(
+        qapp,
+        lambda: open_sheet_is_homework(sheets),
+        what=lambda: f"sheet {sheets.kind!r}, question {sheets.ask.get('title')!r}",
+    )
+    assert sheets.form["title"] == "History essay"
+    assert sheets.ask == {}
+
+
 def test_clicking_a_day_block_opens_edit_and_its_tick_still_finishes(qapp, window: NativeWindow) -> None:
     """Day draws its hours with Week's blocks: a click opens the homework, and the tick finishes it with
     Undo, as on Week."""
