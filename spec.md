@@ -219,8 +219,9 @@ Contract for the finished app:
   week; plan them there." After a plan, the review
   names each day with more than 3 hours of homework on it ("Thursday has
   5 h 30 min of homework.") and moves nothing itself. A time already past is
-  refused for homework wherever a time is chosen (a drag, Choose a time, Do it
-  at): "That's in the past."; fixed time may start in the past. Details live in
+  refused wherever a time is chosen (a drag, Choose a time, Do it at): "That's
+  in the past."; one day of a fixed series already on a past day may still
+  change its start there. Details live in
   `docs/stage2-contract.md`.
 - Running late is a solve preview of a 15, 30 or 60 minute delay from a
   15-minute cutoff on one day of the open week. Fixed commitments and sleep stay
@@ -366,10 +367,9 @@ it, inside Study hours and around fixed time and the usual gaps, on the next day
 with room when today has none. The message names the day and time ("Placed Math
 worksheet on Thu 5:45 PM."), or says there is no free time this week. In Material
 Ctrl+Z undoes the last change and Ctrl+Shift+Z or Ctrl+Y redoes it, with the
-number keys (1 to 5, on by default) and the letter keys (T, D, W, M, J, K, C, P,
-Z and F, off by default) switched on or off, but not while a field has the keyboard
-or a sheet or Focus is open. Ctrl+Shift+F starts Quick focus whatever those
-switches say. The plain look uses the same keys and the same two switches.
+number keys (1 to 5, on by default) and the letter keys (P, Z and F, off by
+default) switched on or off, but not while a field has the keyboard or a sheet or
+Focus is open.
 The rail uses type and spacing to separate its sections. Next and overdue are
 not repeated in a status row above the calendar; overdue homework stays available
 through Unfinished. More > Week as a list and Ctrl+Shift+L open a list of the
@@ -378,7 +378,7 @@ Esc closes it and returns the keyboard to where it was. Opening or closing it
 never moves the grid. Month opens
 with the student's week as its first row. A new account with no homework sees
 "Nothing here yet." and one "Add your first homework" button in place of empty
-hours. A focus timer has a screen of its own (Start focus, Quick focus, Ctrl+Shift+F or F):
+hours. A focus timer has a screen of its own (Start focus, Quick focus or F):
 the countdown in a ring, the homework, Pause, Skip and Finish; Esc goes back and
 the timer keeps running.
 
