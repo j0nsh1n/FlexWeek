@@ -224,6 +224,9 @@ def test_this_day_only_hides_the_switch_because_it_would_repeat_just_that_day(
 def test_school_from_setup_has_no_switch_because_setup_owns_its_repeat(sheets) -> None:
     sheets.editBlock("school", 0)
     assert sheets.form["repeatShown"] is False
+    sheets.setText("scope", "series")
+    assert sheets.form["scope"] == "series"
+    assert sheets.form["repeatShown"] is False
 
 
 def test_the_switch_is_not_on_flexible_work(qapp: QApplication, shell: NativeWindow, sheets) -> None:
