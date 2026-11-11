@@ -10,13 +10,16 @@ Item {
     property bool reduceMotion: false
     property bool highContrast: false
     property string message: ""
+    // The most the card may take, so a long block name elides at the narrowest window instead of
+    // running past its edge. Zero means no limit.
+    property real availableWidth: 0
     signal snoozeClicked()
     signal closeClicked()
 
     implicitHeight: 56
     height: 56
     implicitWidth: Math.max(320, messageText.implicitWidth + actions.width + 48)
-    width: implicitWidth
+    width: availableWidth > 0 ? Math.min(implicitWidth, availableWidth) : implicitWidth
 
     M3Palette { id: pal; theme: root.theme }
 

@@ -570,6 +570,7 @@ Item {
                 visible: bridge.reminderText !== ""
                 z: 3
                 message: bridge.reminderText
+                availableWidth: parent.width - 32
                 onSnoozeClicked: bridge.snoozeReminder(bridge.reminderKey)
                 onCloseClicked: bridge.closeReminder(bridge.reminderKey)
                 anchors.horizontalCenter: parent.horizontalCenter

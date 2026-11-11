@@ -13,7 +13,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QObject, Qt
+from PySide6.QtCore import QObject, QPointF, Qt
 from PySide6.QtGui import QAccessible
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
@@ -192,3 +192,19 @@ def test_tab_walks_from_the_week_page_to_snooze_then_got_it_and_back(qapp: QAppl
     assert press(Qt.Key.Key_Backtab) is snooze
     assert press(Qt.Key.Key_Backtab) is before
     assert press(Qt.Key.Key_Tab) is snooze
+
+
+def test_a_long_block_name_keeps_the_card_inside_the_narrowest_window(qapp: QApplication, material) -> None:
+    window, root = material
+    window.resize(800, 800)
+    pump(qapp)
+    title = "Advanced piano and music theory rehearsal with the big bands"
+    assert len(title) == 60
+    add_practice(qapp, window, title=title)
+    beat(qapp, window, 40)
+    item = card(root)
+    assert shown(root).startswith(title)
+    left = item.mapToScene(QPointF(0, 0)).x()
+    assert left >= 0
+    assert left + item.width() <= root.width()
+    assert QAccessible.queryAccessibleInterface(item).text(QAccessible.Text.Name) == shown(root)
