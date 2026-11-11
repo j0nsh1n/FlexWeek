@@ -24,7 +24,10 @@ def seen(opened: NativeWindow) -> dict:
     return {
         "page": opened._stack.currentWidget().objectName(),
         "username": (session.account or {}).get("username"),
-        "preferences": session.preferences,
+        # The shared light account is pinned to 5-minute steps; a real new account starts on 15.
+        "preferences": None
+        if session.preferences is None
+        else {key: value for key, value in session.preferences.items() if key != "drag_step_min"},
         "blocks": session.blocks,
         "assignments": session.assignments,
         "week": session.week_start,

@@ -79,7 +79,8 @@ def test_every_page_is_kept_when_the_student_leaves_it(
     assert window.session.preferences["day_cutoff"] == "22:00"
 
     setup.planning_buttons["auto"].setChecked(True)
-    assert setup.drag_buttons[5].isChecked(), "five minutes unless the student picks fifteen"
+    assert setup.drag_buttons[15].isChecked(), "fifteen minutes for a new account, unless five is picked"
+    setup.drag_buttons[5].setChecked(True)
     setup.drag_buttons[15].setChecked(True)
     setup.work_editor.set_windows([{"days": [0, 1, 2, 3, 4], "start": "19:00", "end": "21:00"}])
     setup.next.click()
