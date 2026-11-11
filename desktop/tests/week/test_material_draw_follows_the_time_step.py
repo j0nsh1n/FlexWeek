@@ -132,3 +132,23 @@ def test_a_draw_one_step_short_of_a_quarter_hour_still_offers_to_add_on_five_min
 
     form = window._material_page.bridge.sheets.form
     assert (form["start"], form["end"]) == ("10:10", 10 * 60 + 20)
+
+
+def test_a_draw_too_short_for_homework_only_offers_fixed_time(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Homework is planned in quarter hours, so a 10-minute draw on 5-minute steps offers only what it can
+    add: fixed time. Every choice in the menu opens something."""
+    from desktop.tests.week.test_material_drag_to_add_homework import _slot_menu
+
+    root = _reset(window, qapp)
+    _use_step(window, qapp, 5)
+    hours_item, row, gutter, day_width, saturday = _grid_geometry(root, window)
+    _qml(root, "weekScroller").setProperty("contentY", 0.0)
+    _pump(qapp)
+    x = gutter + saturday * day_width + day_width / 2
+    p1 = hours_item.mapToScene(QPointF(x, _minute_y(row, 10, 10)))
+    p2 = hours_item.mapToScene(QPointF(x, _minute_y(row, 10, 20)))
+    _drag_pos(window, p1.toPoint(), p2.toPoint())
+
+    assert _slot_menu(root) == ["Add fixed time here"]

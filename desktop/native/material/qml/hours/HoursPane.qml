@@ -716,10 +716,11 @@ Item {
         menuOriginItem = hours
         menuTargetModel = { slot: true, day: day, start: start, end: end }
         var mapped = hours.mapToItem(root, hx, hy)
-        blockMenu.entries = [
-            { label: "Add homework here", icon: "edit_note" },
-            { label: "Add fixed time here", icon: "schedule" }
-        ]
+        var entries = [{ label: "Add fixed time here", icon: "schedule" }]
+        // Homework is planned in quarter hours, so a shorter range offers fixed time only.
+        if (end - start >= 15)
+            entries.unshift({ label: "Add homework here", icon: "edit_note" })
+        blockMenu.entries = entries
         blockMenu.x = Math.max(8, Math.min(mapped.x, root.width - blockMenu.width - 8))
         blockMenu.y = Math.max(8, Math.min(mapped.y, root.height - blockMenu.height - 8))
         blockMenu.cursor = 0
