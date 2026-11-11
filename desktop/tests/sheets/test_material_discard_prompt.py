@@ -1,6 +1,7 @@
-"""Material's Add homework sheet asks "Discard your changes?" only when the student leaves it: Esc, Cancel
-or a click on the scrim. Clicks inside the sheet never ask. Keep editing takes one click and puts the
-keyboard back where it was."""
+"""Material's Add homework sheet asks "Discard your changes?" only when the student leaves it: Cancel or a
+click on the scrim. (Esc on a new sheet with typing closes it at once and keeps the typing: see
+test_material_escape_keeps_the_typing.py.) Clicks inside the sheet never ask. Keep editing takes one click
+and puts the keyboard back where it was."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
@@ -27,6 +28,10 @@ def click_item(quick, item, qapp: QApplication) -> None:
     centre = item.mapToScene(QPointF(item.width() / 2, item.height() / 2)).toPoint()
     QTest.mouseClick(quick, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, centre)
     pump(qapp, 40)
+
+
+def press_cancel(root, quick, qapp: QApplication) -> None:
+    click_item(quick, find(root, "homeworkCancel"), qapp)
 
 
 def asked_to_discard(sheets) -> bool:
@@ -77,16 +82,16 @@ def test_a_click_on_the_first_pixel_past_the_sheets_edge_asks_to_discard(qapp, w
     wait_until(qapp, lambda: asked_to_discard(sheets))
 
 
-def test_escape_with_text_typed_asks_to_discard(qapp, window: NativeWindow) -> None:
-    _root, quick, sheets = open_typed_homework(qapp, window)
-    QTest.keyClick(quick, Qt.Key.Key_Escape)
+def test_cancel_with_text_typed_asks_to_discard(qapp, window: NativeWindow) -> None:
+    root, quick, sheets = open_typed_homework(qapp, window)
+    press_cancel(root, quick, qapp)
     wait_until(qapp, lambda: asked_to_discard(sheets))
     assert sheets.ask.get("title") == DISCARD
 
 
 def test_the_prompt_says_your_changes_will_be_lost(qapp, window: NativeWindow) -> None:
-    _root, quick, sheets = open_typed_homework(qapp, window)
-    QTest.keyClick(quick, Qt.Key.Key_Escape)
+    root, quick, sheets = open_typed_homework(qapp, window)
+    press_cancel(root, quick, qapp)
     wait_until(qapp, lambda: asked_to_discard(sheets))
     assert sheets.ask["title"] == DISCARD
     assert sheets.ask["body"] == "Your changes will be lost."
@@ -101,7 +106,7 @@ def test_keep_editing_closes_the_prompt_with_one_click_and_returns_focus_to_the_
     pump(qapp, 20)
     assert field_input.property("activeFocus") is True
 
-    QTest.keyClick(quick, Qt.Key.Key_Escape)
+    press_cancel(root, quick, qapp)
     wait_until(qapp, lambda: asked_to_discard(sheets))
 
     click_item(quick, find(find(root, "sheetPrompt"), "prompt_keep"), qapp)
@@ -121,7 +126,7 @@ def test_enter_after_keep_editing_does_not_change_the_step(qapp, window: NativeW
     pump(qapp, 20)
     assert due_field.property("activeFocus") is True
 
-    QTest.keyClick(quick, Qt.Key.Key_Escape)
+    press_cancel(root, quick, qapp)
     wait_until(qapp, lambda: asked_to_discard(sheets))
     click_item(quick, find(find(root, "sheetPrompt"), "prompt_keep"), qapp)
     assert sheets.ask == {}
@@ -139,7 +144,7 @@ def test_a_click_on_the_prompt_backdrop_does_not_reach_the_sheet_underneath(
     root, quick, sheets = open_typed_homework(qapp, window)
     assert sheets.form["step"] == 0
 
-    QTest.keyClick(quick, Qt.Key.Key_Escape)
+    press_cancel(root, quick, qapp)
     wait_until(qapp, lambda: asked_to_discard(sheets))
 
     next_btn = find(root, "homeworkNext")
