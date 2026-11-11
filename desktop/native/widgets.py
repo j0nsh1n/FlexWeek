@@ -4258,9 +4258,14 @@ class BlockDialog(Dialog):
     def _delete(self) -> None:
         name = self._original.get("title") or "this fixed time"
         days = self._original.get("days") or []
-        occurrence = self.scope() == "occurrence" and self._occurrence_day is not None
         week_start = getattr(getattr(self.parent(), "session", None), "week_start", None)
         setup = is_standing_block(self._original)
+        # One day of a block that has one day is the whole block, so it is not asked as "this day only".
+        occurrence = (
+            self.scope() == "occurrence"
+            and self._occurrence_day is not None
+            and not (setup and len(days) <= 1)
+        )
         if occurrence:
             if not isinstance(week_start, str):
                 week_start = monday_of(wall_clock.today().isoformat())

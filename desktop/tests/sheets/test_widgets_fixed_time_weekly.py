@@ -199,7 +199,8 @@ def test_deleting_a_weekly_fixed_time_asks_this_week_only_or_this_week_and_later
 
     monkeypatch.setattr(widgets, "ConfirmSheet", Answer)
     block = {**soccer(), "id": "weekly-soccer", "days": [SATURDAY]}
-    dialog = BlockDialog(host, block)
+    # Opened from its one day, as a double-click on the week does: "this day only" is the whole block.
+    dialog = BlockDialog(host, block, occurrence_day=SATURDAY)
     dialog.show()
     dialog.delete_button.click()
     assert asked == [
