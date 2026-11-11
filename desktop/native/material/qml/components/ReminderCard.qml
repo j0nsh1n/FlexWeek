@@ -18,7 +18,7 @@ Item {
     implicitWidth: Math.max(320, messageText.implicitWidth + actions.width + 48)
     width: implicitWidth
 
-    M3Palette { id: palette; theme: root.theme }
+    M3Palette { id: pal; theme: root.theme }
 
     Accessible.role: Accessible.AlertMessage
     Accessible.name: root.message
@@ -27,7 +27,7 @@ Item {
         objectName: "shape"
         anchors.fill: parent
         radius: 4
-        color: palette.inverseSurface
+        color: pal.inverseSurface
         // Takes the presses on the card so a click on it never reaches the Week grid underneath.
         TapHandler { gesturePolicy: TapHandler.WithinBounds }
     }
@@ -40,7 +40,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         text: root.message
         elide: Text.ElideRight
-        color: palette.inverseOnSurface
+        color: pal.inverseOnSurface
         font.family: M3Font.family
         font.pixelSize: M3Font.px(14)
         font.weight: 400
@@ -76,7 +76,7 @@ Item {
                     id: label
                     anchors.centerIn: parent
                     text: modelData.label
-                    color: palette.inversePrimary
+                    color: pal.inversePrimary
                     font.family: M3Font.family
                     font.pixelSize: M3Font.px(14)
                     font.weight: 500
@@ -84,12 +84,12 @@ Item {
                 M3StateLayer {
                     anchors.fill: parent
                     radius: 18
-                    color: palette.inversePrimary
+                    color: pal.inversePrimary
                     hovered: hover.hovered
                     down: tap.pressed || action.keyDown
                     reduceMotion: root.reduceMotion
                 }
-                M3FocusRing { anchors.fill: parent; anchors.margins: -4; target: action; ring: palette.focusRing; ringRadius: 22 }
+                M3FocusRing { anchors.fill: parent; anchors.margins: -4; target: action; ring: pal.focusRing; ringRadius: 22 }
                 HoverHandler { id: hover }
                 TapHandler { id: tap; onTapped: action.press() }
                 Keys.onPressed: (event) => {
