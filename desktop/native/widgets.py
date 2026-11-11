@@ -3227,6 +3227,9 @@ class Dialog(QDialog):
     _pin_top = False
     # Where the keyboard was when the sheet opened, and goes back to when it closes.
     _came_from: QWidget | None = None
+    # Set when Esc closed a new Add sheet with typing in it: the window keeps it for the next plain Add.
+    kept_on_escape = False
+    _reopened = False
 
     def __init__(self, parent: QWidget | None = None, *, sheet: bool = False) -> None:
         super().__init__(parent)
@@ -3242,8 +3245,27 @@ class Dialog(QDialog):
             self.setProperty("sheet", True)
 
     def _close_asked(self) -> None:
-        """What Esc, Cancel and the close button do; a dialog that must ask first overrides this."""
+        """What Cancel and the close button do; a dialog that must ask first overrides this."""
         self.reject()
+
+    def _typed(self) -> bool:
+        """Whether the student has typed into this sheet since it opened; only Add sheets can say."""
+        return False
+
+    def _escape(self) -> None:
+        """Esc. A new Add sheet with typing closes at once and is marked for the window to keep; any
+        other sheet does what Cancel does."""
+        if getattr(self, "_add_step", None) is not None and self._typed():
+            self.kept_on_escape = True
+            self.reject()
+            return
+        self._close_asked()
+
+    def reopen(self) -> None:
+        """A kept sheet shown again: it fades in as a new one does, and Esc can keep it a second time."""
+        self.kept_on_escape = False
+        self._reopened = True
+        self._appeared = False
 
     def return_focus_to(self, widget: QWidget) -> None:
         """Put the keyboard on `widget` when the sheet closes, in place of where it was when the sheet
@@ -3777,7 +3799,7 @@ class BlockDialog(Dialog):
         else:
             buttons.accepted.connect(self._add_primary)
         buttons.rejected.connect(self._close_asked)
-        QShortcut(QKeySequence(Qt.Key.Key_Escape), self, self._close_asked)
+        QShortcut(QKeySequence(Qt.Key.Key_Escape), self, self._escape)
         row.addWidget(buttons)
         layout.addLayout(row)
         self._sync_scope()
@@ -3910,6 +3932,9 @@ class BlockDialog(Dialog):
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
         self.title.setFocus(Qt.FocusReason.OtherFocusReason)
+        if self._reopened:
+            # Typing on goes after the kept words, not over them.
+            self.title.deselect()
         if not hasattr(self, "_opened_as"):
             self._opened_as = self._typed_picture()
 
@@ -3924,10 +3949,14 @@ class BlockDialog(Dialog):
             self.scope_choice.currentIndex() if hasattr(self, "scope_choice") else 0,
         )
 
+    def _typed(self) -> bool:
+        return getattr(self, "_opened_as", None) is not None and self._typed_picture() != self._opened_as
+
     def _close_asked(self) -> None:
-        """Esc, Cancel and the close button ask before dropping typed words; an untouched sheet closes
-        at once. Closing from code (reject, close) never asks: nothing is there to answer it."""
-        if getattr(self, "_opened_as", None) is not None and self._typed_picture() != self._opened_as:
+        """Cancel and the close button ask before dropping typed words; an untouched sheet closes at
+        once. Esc on a new Add sheet keeps the words instead (`_escape`). Closing from code (reject,
+        close) never asks: nothing is there to answer it."""
+        if self._typed():
             sheet = ConfirmSheet(
                 self,
                 "Discard what you typed?",
@@ -3943,7 +3972,7 @@ class BlockDialog(Dialog):
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         if event.key() == Qt.Key.Key_Escape:
             event.accept()
-            self._close_asked()
+            self._escape()
             return
         super().keyPressEvent(event)
 
@@ -4798,6 +4827,9 @@ class HomeworkDialog(Dialog):
         if not self.sheet:
             fit_scroll_dialog(self)
         self.title.setFocus(Qt.FocusReason.OtherFocusReason)
+        if self._reopened:
+            # Typing on goes after the kept words, not over them.
+            self.title.deselect()
         if not hasattr(self, "_opened_as"):
             self._opened_as = self._typed_picture()
 
@@ -4819,10 +4851,14 @@ class HomeworkDialog(Dialog):
             self.completed.isChecked() if hasattr(self, "completed") else False,
         )
 
+    def _typed(self) -> bool:
+        return getattr(self, "_opened_as", None) is not None and self._typed_picture() != self._opened_as
+
     def _close_asked(self) -> None:
-        """Esc, Cancel and the close button ask before dropping typed words; an untouched sheet closes
-        at once. Closing from code (reject, close) never asks: nothing is there to answer it."""
-        if getattr(self, "_opened_as", None) is not None and self._typed_picture() != self._opened_as:
+        """Cancel and the close button ask before dropping typed words; an untouched sheet closes at
+        once. Esc on a new Add sheet keeps the words instead (`_escape`). Closing from code (reject,
+        close) never asks: nothing is there to answer it."""
+        if self._typed():
             sheet = ConfirmSheet(
                 self,
                 "Discard what you typed?",
@@ -4838,7 +4874,7 @@ class HomeworkDialog(Dialog):
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         if event.key() == Qt.Key.Key_Escape:
             event.accept()
-            self._close_asked()
+            self._escape()
             return
         super().keyPressEvent(event)
 
