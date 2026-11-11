@@ -344,7 +344,9 @@ def test_unfinished_from_more_takes_the_keyboard(qapp: QApplication, shell: Nati
 
 
 def _open_pinned_time_field(qapp: QApplication, shell: NativeWindow, sheets, day: int = 4) -> QObject:
-    """Friday by default: today's list starts at the clock (19:00), so a whole list needs a day ahead."""
+    """Friday by default: today's list starts at the clock (19:00), so a whole list needs a day ahead. The
+    student drags in quarter hours here, so the list is quarter hours."""
+    shell.session.preferences = {**(shell.session.preferences or {}), "drag_step_min": 15}
     sheets.editHomework("essay")
     pump(qapp)
     sheets.setText("when", "fixed")

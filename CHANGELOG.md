@@ -11,6 +11,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Changed
 - Material's P, Z and F keys (plan, undo, Focus) have their own switch, Letter keys, in Settings → This computer, and it starts off, so none of them fires by accident. The 1 to 5 view keys keep their switch, now called Number keys, which stays on. Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y and the zoom keys work whatever either switch says.
 - In the Material style, drawing or clicking on empty time in Week and Day lands on the Dragging step you chose (every 5 minutes or every quarter hour) instead of always on a quarter hour.
+- In the Material style, the start and end time lists in Add and Edit fixed time, and the due time and Pinned time lists in Add and Edit homework, follow the Dragging step: every 5 minutes on 5, quarter hours on 15. A time already on the block stays listed, and today still hides times already over.
 
 ### Fixed
 - In the Material style, the now line in Week runs through today's column only and is drawn over the blocks, with its dot on today's left edge; Day draws it the same way. Today brings the line back into view when this week is already open and was scrolled away, and when you come back from another week, and the line moves to the current time as soon as the app comes back to the front.

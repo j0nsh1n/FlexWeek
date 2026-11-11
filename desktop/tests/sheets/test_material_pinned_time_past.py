@@ -4,6 +4,8 @@ app uses for a past time, and save nothing. The one clock reads Thursday 19:00 o
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
 
+import pytest
+
 from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: F401
     open_light,
     qapp,
@@ -11,6 +13,13 @@ from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: F401
     sheets,
     shell,
 )
+
+
+@pytest.fixture(autouse=True)
+def quarter_hours(shell) -> None:
+    """These lists are quarter hours: the student drags in quarter hours."""
+    shell.session.preferences = {**(shell.session.preferences or {}), "drag_step_min": 15}
+
 
 PAST = "That time has passed. Choose 7:00 PM or later today, or another day."
 
