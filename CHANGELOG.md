@@ -7,6 +7,7 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ### Changed
 - Material's P, Z and F keys (plan, undo, Focus) have their own switch, Letter keys, in Settings → This computer, and it starts off, so none of them fires by accident. The 1 to 5 view keys keep their switch, now called Number keys, which stays on. Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y and the zoom keys work whatever either switch says.
+- One key set in both looks. The plain look has the same two switches as Material, Number keys and Letter keys, in Settings → This computer, saved in the same place, so a switch turned over in one look is turned over in the other. With Number keys on (the default), 1 to 5 open Day, Week, Month, My day and Settings in both looks. With Letter keys on (it starts off), T goes to today, D, W and M open Day, Week and Month, J and K step to the next and previous week, day or month, C adds homework, and P, Z and F plan, undo and open Focus, in both looks. In the plain look D, W, M, T and F no longer work without Letter keys, and T goes to today instead of opening My day (4 does that). No key of the set works while you type or while a sheet is open, and Help lists only the keys that work.
 - Add fixed time and Edit fixed time accept a start that has already passed, today or on an earlier day of the week, in both looks, and a fixed time can be dragged to an earlier time today or an earlier day. The assistant helper follows the same rule. Homework still cannot be planned or pinned into the past.
 
 ### Fixed

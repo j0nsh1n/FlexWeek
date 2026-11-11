@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -22,6 +23,18 @@ from desktop.tests.waiting import wait_until  # noqa: F401
 
 PASSWORD = "a-long-test-password"
 USERNAME = "words_student"
+
+
+def turn_on_letter_keys() -> None:
+    """Letter keys is a saved setting that starts off. Write it the way Settings does, in the look file's
+    material object, which both looks read."""
+    path = look_file()
+    try:
+        stored = json.loads(path.read_text())
+    except (OSError, ValueError):
+        stored = {}
+    stored["material"] = {**stored.get("material", {}), "letters": True}
+    path.write_text(json.dumps(stored))
 
 
 @pytest.fixture(scope="module")

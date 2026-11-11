@@ -23,7 +23,7 @@ from desktop.tests.focus.support_focus_screen import (  # noqa: F401
     visible_buttons,
 )
 from desktop.tests.waiting import wait_until
-from desktop.tests.window_support import qapp  # noqa: F401
+from desktop.tests.window_support import qapp, turn_on_letter_keys  # noqa: F401
 
 
 def test_quick_focus_fills_the_window_and_esc_comes_back(
@@ -89,6 +89,7 @@ def test_start_focus_on_my_day_opens_it(qapp: QApplication, focus_window: Native
 
 def test_f_opens_it_ready_to_start_unless_typing(qapp: QApplication, focus_window: NativeWindow) -> None:
     window = focus_window
+    turn_on_letter_keys()
     field = QLineEdit(window.findChild(QPushButton, "solveButton").parentWidget())
     field.show()
     field.setFocus()

@@ -80,9 +80,6 @@ def test_help_explains_each_screen_and_the_keys_and_promises_nothing(
         "What is on now and what comes next, to follow once your plan is made.",
         "Ctrl+K",
         "Command bar",
-        "Focus screen",
-        "D W M",
-        "Day, Week, Month",
         "Ctrl+Z",
         "Undo",
         "Ctrl+Y or Ctrl+Shift+Z",
@@ -101,16 +98,16 @@ def test_help_draws_each_shortcut_as_keycaps(qapp: QApplication, host: QWidget) 
     """Each key its own cap, and the words between keys plain, so Ctrl+K reads as two keys."""
     dialog = settings.HelpDialog(host)
     rows = dialog.findChildren(QWidget, "helpKey")
-    said = [settings.keys_words(key) for key, _what in settings.HELP_KEYS]
+    said = [settings.keys_words(key) for key, _what in settings.help_keys(True, False)]
     assert [row.accessibleName() for row in rows] == said
 
     def parts(row: QWidget) -> list[tuple[str, str]]:
         return [(label.objectName(), label.text()) for label in row.findChildren(QLabel)]
 
-    assert parts(rows[4]) == [("helpKeycap", "F1")]
-    assert parts(rows[5]) == [("helpKeycap", "Ctrl"), ("helpKeyJoin", "+"), ("helpKeycap", "N")]
-    assert parts(rows[6]) == [("helpKeycap", "Ctrl"), ("helpKeyJoin", "+"), ("helpKeycap", "K")]
-    assert parts(rows[2]) == [("helpKeycap", "B"), ("helpKeyJoin", "or"), ("helpKeycap", "Esc")]
+    assert parts(rows[2]) == [("helpKeycap", "F1")]
+    assert parts(rows[3]) == [("helpKeycap", "Ctrl"), ("helpKeyJoin", "+"), ("helpKeycap", "N")]
+    assert parts(rows[4]) == [("helpKeycap", "Ctrl"), ("helpKeyJoin", "+"), ("helpKeycap", "K")]
+    assert parts(rows[1]) == [("helpKeycap", "B"), ("helpKeyJoin", "or"), ("helpKeycap", "Esc")]
     assert parts(rows[-1]) == [("helpKeycap", "Esc"), ("helpKeyJoin", "while dragging")]
 
 

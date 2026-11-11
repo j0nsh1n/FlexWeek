@@ -20,7 +20,7 @@ from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.material_support import pump, show_material
 from desktop.tests.waiting import wait_until
-from desktop.tests.window_support import look_file, qapp  # noqa: F401
+from desktop.tests.window_support import look_file, qapp, turn_on_letter_keys  # noqa: F401
 
 # A sheet that does not close ends the test instead of hanging it.
 GIVE_UP_MS = 2500
@@ -166,8 +166,9 @@ def test_help_in_material_lists_the_letter_keys_only_when_their_switch_is_on(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     rows = _help_in_material(qapp, window, letters=True)
-    for letter in ("P", "Z", "F"):
+    for letter in ("T", "D W M", "J K", "C", "P", "Z", "F"):
         assert letter in rows, letter
+    assert "1 to 5" in rows, "each group follows its own switch"
 
 
 def test_help_in_material_leaves_out_the_number_keys_when_their_switch_is_off(
@@ -176,15 +177,27 @@ def test_help_in_material_leaves_out_the_number_keys_when_their_switch_is_off(
     rows = _help_in_material(qapp, window, shortcuts=False)
     assert "1 to 5" not in rows
     assert "D W M" not in rows
+    rows = _help_in_material(qapp, window, shortcuts=False, letters=True)
+    assert "1 to 5" not in rows and "D W M" in rows, "a group whose switch is off is left out"
 
 
-def test_help_in_the_widgets_looks_keeps_its_list(qapp: QApplication, window: NativeWindow) -> None:
-    seen: list[str] = []
+def test_help_in_the_widgets_looks_follows_its_two_switches(qapp: QApplication, window: NativeWindow) -> None:
+    def rows() -> list[str]:
+        seen: list[str] = []
 
-    def read(dialog: settings.HelpDialog, _seen: dict) -> None:
-        seen.extend(_spoken_keys(dialog))
-        dialog.reject()
+        def read(dialog: settings.HelpDialog, _seen: dict) -> None:
+            seen.extend(_spoken_keys(dialog))
+            dialog.reject()
 
-    _with_help_open(qapp, window, read)
-    assert "D W M" in seen and "1 to 5" not in seen
-    assert [row for row in seen if row in ("P", "Z")] == []
+        _with_help_open(qapp, window, read)
+        return seen
+
+    by_default = rows()
+    assert "1 to 5" in by_default and "D W M" not in by_default
+    for letter in ("T", "J K", "C", "P", "Z", "F"):
+        assert letter not in by_default, letter
+    assert "F1" in by_default and "Ctrl+K" in by_default
+    turn_on_letter_keys()
+    with_letters = rows()
+    for key in ("1 to 5", "T", "D W M", "J K", "C", "P", "Z", "F"):
+        assert key in with_letters, key

@@ -6,7 +6,7 @@ neither. Expected values come from the decision, not from what the QML does."""
 from __future__ import annotations
 
 import json
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 
@@ -160,3 +160,107 @@ def test_the_letter_keys_are_on_only_when_the_look_file_says_true(stored, expect
     from desktop.native.material.theme import read_letter_keys
 
     assert read_letter_keys(stored) is expected
+
+
+SHIFT = Qt.KeyboardModifier.ShiftModifier
+
+
+def _screen(window) -> str:
+    return str(_bridge(window).property("screen"))
+
+
+def test_with_the_letter_keys_on_d_w_and_m_open_day_week_and_month(qapp, window) -> None:
+    _reset(window, qapp)
+    _look(window, letters=True)
+    for key, screen in ((Qt.Key.Key_D, "day"), (Qt.Key.Key_M, "month"), (Qt.Key.Key_W, "week")):
+        _press(window, key)
+        assert _screen(window) == screen, key
+
+
+def test_with_the_letter_keys_on_j_and_k_step_the_week_the_day_and_the_month(qapp, window) -> None:
+    _reset(window, qapp)
+    _look(window, letters=True)
+    session = window.session
+    bridge = _bridge(window)
+    week = _week_monday(window)
+    _press(window, Qt.Key.Key_J)
+    wait_until(qapp, lambda: session.week_start == (week + timedelta(days=7)).isoformat())
+    _press(window, Qt.Key.Key_K)
+    wait_until(qapp, lambda: session.week_start == week.isoformat())
+
+    _press(window, Qt.Key.Key_D)
+    shown = str(bridge.day.property("iso"))
+    _press(window, Qt.Key.Key_J)
+    wait_until(qapp, lambda: bridge.day.property("iso") != shown)
+    following = date.fromisoformat(shown) + timedelta(days=1)
+    assert bridge.day.property("iso") == following.isoformat()
+    _press(window, Qt.Key.Key_K)
+    wait_until(qapp, lambda: bridge.day.property("iso") == shown)
+
+    _press(window, Qt.Key.Key_M)
+    month = session.selected_month
+    _press(window, Qt.Key.Key_J)
+    wait_until(qapp, lambda: session.selected_month != month)
+    _press(window, Qt.Key.Key_K)
+    wait_until(qapp, lambda: session.selected_month == month)
+
+
+def test_with_the_letter_keys_on_t_comes_back_to_today(qapp, window) -> None:
+    _reset(window, qapp)
+    _look(window, letters=True)
+    session = window.session
+    home = session.week_start
+    _press(window, Qt.Key.Key_J)
+    wait_until(qapp, lambda: session.week_start != home)
+    _press(window, Qt.Key.Key_T)
+    wait_until(qapp, lambda: session.week_start == home)
+    assert _screen(window) == "week"
+    _press(window, Qt.Key.Key_M)
+    _press(window, Qt.Key.Key_T)
+    assert _screen(window) == "day", "from another screen T opens Day, which opens on today"
+
+
+def test_with_the_letter_keys_on_c_opens_add_homework(qapp, window) -> None:
+    _reset(window, qapp)
+    _look(window, letters=True)
+    sheets = _bridge(window).sheets
+    assert sheets.property("kind") == ""
+    _press(window, Qt.Key.Key_C)
+    assert sheets.property("kind") == "homework"
+
+
+def test_with_the_letter_keys_off_none_of_the_new_letters_does_anything(qapp, window) -> None:
+    _reset(window, qapp)
+    session = window.session
+    home = session.week_start
+    for key in (Qt.Key.Key_D, Qt.Key.Key_M, Qt.Key.Key_J, Qt.Key.Key_K, Qt.Key.Key_T, Qt.Key.Key_C):
+        _press(window, key)
+        assert _screen(window) == "week", key
+        assert _bridge(window).sheets.property("kind") == "", key
+        assert session.week_start == home, key
+
+
+def test_a_letter_with_shift_or_ctrl_is_not_one_of_the_letter_keys(qapp, window) -> None:
+    _reset(window, qapp)
+    _look(window, letters=True)
+    session = window.session
+    home = session.week_start
+    for key in (Qt.Key.Key_D, Qt.Key.Key_M, Qt.Key.Key_J, Qt.Key.Key_C, Qt.Key.Key_F, Qt.Key.Key_P):
+        for modifiers in (SHIFT, CTRL):
+            _press(window, key, modifiers)
+            assert _screen(window) == "week", (key, modifiers)
+            assert _bridge(window).sheets.property("kind") == "", (key, modifiers)
+            assert not _bridge(window).focus.open, (key, modifiers)
+    assert session.week_start == home
+
+
+def test_the_letter_keys_wait_while_a_sheet_is_open(qapp, window) -> None:
+    _reset(window, qapp)
+    _look(window, letters=True)
+    bridge = _bridge(window)
+    _press(window, Qt.Key.Key_C)
+    assert bridge.sheets.property("kind") == "homework"
+    for key in (Qt.Key.Key_D, Qt.Key.Key_M, Qt.Key.Key_J, Qt.Key.Key_T):
+        _press(window, key)
+        assert _screen(window) == "week", key
+    assert bridge.sheets.property("kind") == "homework"

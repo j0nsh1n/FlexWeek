@@ -344,7 +344,7 @@ class MaterialBridge(QObject):
 
     @Property(bool, notify=changed)
     def letterKeys(self) -> bool:  # noqa: N802 - the name QML reads
-        """P plans, Z undoes and F opens Focus, only when Settings turned that on. It starts off."""
+        """T, D, W, M, J, K, C, P, Z and F, only when Settings turned that on. It starts off."""
         return self._letter_keys
 
     @Property(bool, constant=True)
