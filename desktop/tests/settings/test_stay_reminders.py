@@ -102,6 +102,48 @@ def test_snooze_hides_it_and_it_comes_back_at_the_start_as_starts_now_not_a_minu
     assert said == ["Guitar practice starts soon", "Guitar practice starts now"]
 
 
+def practice(window: NativeWindow) -> dict:
+    return next(block for block in window.session.blocks if block["id"] == "practice")
+
+
+def test_a_kept_reminder_goes_when_its_block_moves_to_another_time(
+    qapp: QApplication, no_service: NativeWindow
+) -> None:
+    window = no_service
+    ready(qapp, window)
+    tick(qapp, window, 40)
+    assert shown(window) == SOON
+    window.session.add_block({**practice(window), "start": "19:30"})
+    tick(qapp, window, 41)
+    assert shown(window) == ""
+    assert window.session.visible_reminders() == []
+    tick(qapp, window, 45)
+    assert window.toast.text() != NOW
+
+
+def test_a_kept_reminder_goes_when_its_block_is_deleted(qapp: QApplication, no_service: NativeWindow) -> None:
+    window = no_service
+    ready(qapp, window)
+    tick(qapp, window, 40)
+    assert shown(window) == SOON
+    window.session.delete_block("practice")
+    tick(qapp, window, 41)
+    assert shown(window) == ""
+    tick(qapp, window, 45)
+    assert window.toast.text() != NOW
+
+
+def test_a_kept_reminder_stays_when_its_block_changes_in_a_way_that_leaves_the_start_alone(
+    qapp: QApplication, no_service: NativeWindow
+) -> None:
+    window = no_service
+    ready(qapp, window)
+    tick(qapp, window, 40)
+    window.session.add_block({**practice(window), "duration_min": 45})
+    tick(qapp, window, 41)
+    assert shown(window) == SOON
+
+
 def test_with_a_lead_of_fifteen_a_snooze_comes_back_five_minutes_later_and_is_gone_at_the_start(
     qapp: QApplication, no_service: NativeWindow
 ) -> None:

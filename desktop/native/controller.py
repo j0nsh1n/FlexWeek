@@ -79,6 +79,7 @@ from desktop.native.remind import (
     reminder_start_ms,
     reminder_stays,
     snooze_until,
+    todays_starts,
 )
 from desktop.native.reuse import (
     MAX_WEEK_BLOCKS,
@@ -3831,6 +3832,22 @@ class NativeSession(QObject):
         if changed:
             self._after_stay_change()
 
+    def _drop_reminders_of_changed_blocks(self, clock: dict) -> None:
+        """A kept reminder names a block and its start. Once the block moves or goes, the card would
+        count down to a start that no longer happens, so it goes too."""
+        if not self._stayed:
+            return
+        source = self._today_reminder_source(monday_of(clock["iso"]))
+        if source is None:
+            return
+        current = {row[3] for row in todays_starts(source[0], source[1], clock["iso"])}
+        gone = [key for key in self._stayed if key not in current]
+        for key in gone:
+            del self._stayed[key]
+            self.snoozed_reminders.pop(key, None)
+        if gone:
+            self._after_stay_change()
+
     def _after_stay_change(self) -> None:
         """Tell the screen, and wake at the next moment one of them changes by itself."""
         self.stay_changed.emit()
@@ -4083,6 +4100,7 @@ class NativeSession(QObject):
             return
         clock = self._clock()
         self._tick_reminders(clock["now_ms"])
+        self._drop_reminders_of_changed_blocks(clock)
         notices: list[dict] = []
         songs: list[dict] = []
         prefs = self.preferences or {}
