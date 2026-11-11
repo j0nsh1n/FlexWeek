@@ -134,3 +134,32 @@ def test_an_export_always_says_the_clock_so_a_12_hour_file_is_not_read_as_old(tm
         save_clock(client, True)
         exported = client.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()
         assert exported["preferences"]["clock_24h"] is True
+
+
+def step_of(client: TestClient) -> int:
+    """15 minutes is the default, so it is left off the wire."""
+    return client.get("/api/preferences").json().get("drag_step_min", 15)
+
+
+def test_an_older_account_whose_saved_settings_hold_a_5_minute_step_moves_to_15_once(tmp_path: Path) -> None:
+    """Before the 15-minute default, saving any setting wrote a 5-minute step down, chosen or not. The
+    update moves each stored 5 to 15 once; picking 5 in Settings afterwards sticks through a restart."""
+    database = tmp_path / "old-step.db"
+    with client_for(database) as client:
+        register(client, "saver")
+    with sqlite3.connect(database) as db:
+        db.execute(
+            "UPDATE preferences SET prefs_version = 4, comfort_json = ? "
+            "WHERE user_id = (SELECT id FROM users WHERE username = ?)",
+            (json.dumps({"end_chime": True, "drag_step_min": 5}), "saver"),
+        )
+    with client_for(database) as client:
+        log_in(client, "saver")
+        assert step_of(client) == 15
+        assert client.get("/api/preferences").json()["end_chime"] is True
+        prefs = client.get("/api/preferences").json()
+        saved = client.put("/api/preferences", json={**prefs, "drag_step_min": 5}, headers=WRITE)
+        assert saved.status_code == 200, saved.text
+    with client_for(database) as client:
+        log_in(client, "saver")
+        assert step_of(client) == 5

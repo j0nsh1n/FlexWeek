@@ -483,6 +483,7 @@ pub fn upgrade_preferences(db: &Connection) -> StoreResult<()> {
     keep_24_hour_clock(db)?;
     adopt_standing_weeks(db)?;
     adopt_fifteen_minute_buffer(db)?;
+    adopt_fifteen_minute_step(db)?;
     db.execute_batch("COMMIT")?;
     Ok(())
 }
@@ -557,6 +558,35 @@ fn adopt_fifteen_minute_buffer(db: &Connection) -> StoreResult<()> {
         [],
     )?;
     restamp_buffer_sync_baseline(db, &moved)?;
+    Ok(())
+}
+
+/// Version 5: the time step is 15 minutes for an account that never chose one. Until then a missing
+/// step read as 5 and saving any setting wrote that 5 down, so a stored 5 does not say the student
+/// picked it: every stored 5 becomes 15 once. After this, a 5 chosen in Settings is kept. The step
+/// is kept per device and never synced, so there is no sync baseline to restamp.
+fn adopt_fifteen_minute_step(db: &Connection) -> StoreResult<()> {
+    let rows = db
+        .prepare("SELECT user_id, comfort_json FROM preferences WHERE prefs_version < 5")?
+        .query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    for (user_id, text) in rows {
+        if let Ok(Value::Object(mut comfort)) = serde_json::from_str::<Value>(&text)
+            && comfort.get("drag_step_min") == Some(&json!(5))
+        {
+            comfort.insert("drag_step_min".into(), json!(15));
+            db.execute(
+                "UPDATE preferences SET comfort_json = ?1 WHERE user_id = ?2",
+                params![Value::Object(comfort).to_string(), user_id],
+            )?;
+        }
+    }
+    db.execute(
+        "UPDATE preferences SET prefs_version = 5 WHERE prefs_version < 5",
+        [],
+    )?;
     Ok(())
 }
 
