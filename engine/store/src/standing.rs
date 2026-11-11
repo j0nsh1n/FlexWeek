@@ -1,7 +1,7 @@
 //! Standing-week rows: one per standing block and the week it starts standing from. A row with no
 //! body stops that block from its week on, so weeks before a change keep what stood then.
 
-use flexweek_engine::desk::grid::is_setup_block;
+use flexweek_engine::desk::grid::is_standing_block;
 use flexweek_engine::snapshot::canonical;
 use flexweek_engine::standing::{derive_standing, restand, standing_body, with_standing};
 use rusqlite::{Connection, params};
@@ -64,7 +64,9 @@ pub fn week_with_standing(
 ) -> StoreResult<String> {
     let stored = parse_list(blocks)?;
     let standing = standing_blocks(conn, user_id, week_start)?;
-    Ok(canonical(&Value::Array(with_standing(&stored, &standing))))
+    Ok(canonical(&Value::Array(with_standing(
+        &stored, &standing, week_start,
+    )?)))
 }
 
 fn insert_row(
@@ -158,7 +160,7 @@ pub fn set_standing(
                 updated.push(block.clone());
                 continue;
             };
-            if !is_setup_block(block)? {
+            if !is_standing_block(block)? {
                 updated.push(block.clone());
                 continue;
             }
@@ -166,6 +168,7 @@ pub fn set_standing(
                 updated.extend(restand(
                     std::slice::from_ref(block),
                     std::slice::from_ref(body),
+                    &week_start,
                 )?);
             }
         }

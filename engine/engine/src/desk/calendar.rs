@@ -25,6 +25,8 @@ pub const LAST_MONTH: &str = "2099-12";
 pub const SERIES_DRAG_MESSAGE: &str = "{title} repeats on {count} days, so dragging it is ambiguous. Edit the occurrence or the series.";
 pub const SETUP_SCHOOL_ID: &str = "school";
 pub const SETUP_ACTIVITY_PREFIX: &str = "activity-";
+/// A fixed time the student made repeat every week. Not a Setup block: running Setup again leaves it.
+pub const WEEKLY_PREFIX: &str = "weekly-";
 
 pub fn category_title(category: Option<&str>) -> &'static str {
     CATEGORIES

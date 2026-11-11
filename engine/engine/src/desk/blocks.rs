@@ -2,9 +2,43 @@
 
 use serde_json::{Map, Value, json};
 
+use super::datetext::day_short;
+use super::pydate::from_iso;
 use super::{grid, planning};
+use crate::EngineResult;
 use crate::model;
-use crate::stored::truthy;
+use crate::stored::{add_days, truthy};
+
+/// Why a weekly block's `until` cannot be saved from the week starting `week_start`, or `None` when
+/// it can (no `until` at all included). The first day is the earliest day the block holds in that
+/// week; `today` only decides whether the date in the sentence carries a year.
+pub fn until_problem(block: &Value, week_start: &str, today: &str) -> EngineResult<Option<String>> {
+    let Some(until) = block
+        .get("until")
+        .and_then(Value::as_str)
+        .filter(|text| !text.is_empty())
+    else {
+        return Ok(None);
+    };
+    let Ok(until) = from_iso(until) else {
+        return Ok(Some("Until isn't a date we can read.".to_string()));
+    };
+    let Some(first) = block
+        .get("days")
+        .and_then(Value::as_array)
+        .and_then(|days| days.iter().filter_map(Value::as_i64).min())
+    else {
+        return Ok(None);
+    };
+    let first = add_days(from_iso(week_start)?, first)?;
+    if until >= first {
+        return Ok(None);
+    }
+    Ok(Some(format!(
+        "Until can't be before the first day, {}.",
+        day_short(first, from_iso(today)?)
+    )))
+}
 
 pub struct BlockDeletion {
     pub blocks: Vec<Value>,
@@ -44,13 +78,13 @@ pub fn delete_block(
         grid::delete_occurrence(&Value::Array(blocks.to_vec()), &json!(block_id), &day_value)
             .map_err(|err| err.message)?
     };
-    // School or a Setup activity stands in every week, so taking it out of this week alone keeps
+    // School, a Setup activity or a weekly fixed time stands in every week, so taking it out of this week alone keeps
     // it here missed on every day, or the standing week would bring it back. `every_week` is the
     // caller's to take out of the standing week too.
     let gone = !removed
         .iter()
         .any(|item| item.get("id").and_then(Value::as_str) == Some(block_id));
-    if gone && !every_week && grid::is_setup_block(block).map_err(|err| err.message)? {
+    if gone && !every_week && grid::is_standing_block(block).map_err(|err| err.message)? {
         let mut missed = block.clone();
         let days = block.get("days").cloned().unwrap_or_else(|| json!([]));
         if let Some(fields) = missed.as_object_mut() {

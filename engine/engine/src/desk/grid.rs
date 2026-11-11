@@ -765,6 +765,15 @@ pub fn is_setup_block(block: &Value) -> EngineResult<bool> {
         || id.starts_with(crate::desk::calendar::SETUP_ACTIVITY_PREFIX))
 }
 
+/// A block that stands in every week: one Setup made, or a fixed time the student made repeat.
+pub fn is_standing_block(block: &Value) -> EngineResult<bool> {
+    if is_setup_block(block)? {
+        return Ok(true);
+    }
+    let id = py_str(&or_default(get(block, "id")?, json!("")));
+    Ok(id.starts_with(crate::desk::calendar::WEEKLY_PREFIX))
+}
+
 pub fn span_problem(
     day: i64,
     start_min: i64,

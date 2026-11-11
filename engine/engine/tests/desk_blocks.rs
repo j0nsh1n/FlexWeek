@@ -180,6 +180,35 @@ fn school_and_activities_this_week_stay_missed_and_every_week_go() {
     }
 }
 
+/// A weekly fixed time stands like School does, so it answers the same three ways.
+#[test]
+fn a_weekly_block_this_week_stays_missed_and_every_week_goes() {
+    let block = json!({
+        "id": "weekly-piano",
+        "title": "Piano",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [1, 3],
+        "start": "16:00",
+        "until": "2026-12-12"
+    });
+    let mut missed = block.clone();
+    missed["missed_days"] = json!([1, 3]);
+    assert_eq!(
+        show(delete(
+            std::slice::from_ref(&block),
+            "weekly-piano",
+            "series",
+            None
+        )),
+        Ok(json!({"label": "deleting Piano", "blocks": [missed], "lost": []}))
+    );
+    assert_eq!(
+        show(delete_every(&[block], "weekly-piano", "series", None, true)),
+        Ok(json!({"label": "deleting Piano", "blocks": [], "lost": []}))
+    );
+}
+
 /// controller.py:1559 calls _touch, so a session that no longer fits loses its start.
 #[test]
 fn deleting_runs_settle() {

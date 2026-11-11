@@ -35,6 +35,7 @@ pub struct TimeBlock {
     pub completed: bool,
     pub completed_day: Option<i64>,
     pub missed_days: Vec<i64>,
+    pub until: Option<String>,
     pub spotify_url: Option<String>,
     pub focus_sessions: i64,
     pub focus_minutes: i64,
@@ -125,6 +126,7 @@ pub fn time_block(value: &Value) -> Result<TimeBlock, String> {
         completed: bool_default(map, "completed", false)?,
         completed_day: opt_int(map, "completed_day", Some(0), Some(6))?,
         missed_days: missed_days_of(map)?,
+        until: until_of(map)?,
         spotify_url: spotify_of(map)?,
         focus_sessions: int_default(map, "focus_sessions", 0, None, Some(0), Some(9999))?,
         focus_minutes: int_default(map, "focus_minutes", 0, None, Some(0), Some(71400))?,
@@ -260,6 +262,7 @@ impl TimeBlock {
         if !self.missed_days.is_empty() {
             put_ints(&mut map, "missed_days", &self.missed_days);
         }
+        put_some_str(&mut map, "until", &self.until);
         put_some_str(&mut map, "spotify_url", &self.spotify_url);
         if self.focus_sessions != 0 {
             put_i64(&mut map, "focus_sessions", self.focus_sessions);
@@ -459,6 +462,20 @@ fn missed_days_of(map: &Map<String, Value>) -> Result<Vec<i64>, String> {
         return Err("missed_days must be unique values in 0..6".into());
     }
     Ok(days)
+}
+
+/// The last day a weekly block stands, written `YYYY-MM-DD`. Empty means no end, as unset does.
+fn until_of(map: &Map<String, Value>) -> Result<Option<String>, String> {
+    let Some(text) = opt_str(map, "until", 10)? else {
+        return Ok(None);
+    };
+    if text.is_empty() {
+        return Ok(None);
+    }
+    if !crate::time::is_calendar_date(&text) || text.len() != 10 {
+        return Err("until must be a date written YYYY-MM-DD".into());
+    }
+    Ok(Some(text))
 }
 
 fn spotify_of(map: &Map<String, Value>) -> Result<Option<String>, String> {
