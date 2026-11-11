@@ -756,6 +756,16 @@ Item {
                 focusDestination()
         }
     }
+    // Paste what Copy in a block's menu put on the clipboard, as the plain look's Ctrl+V does: into the day
+    // on view in Day, into today in Week.
+    Shortcut {
+        sequence: "Ctrl+V"
+        context: Qt.WindowShortcut
+        enabled: !modalActive && (bridge.screen === "week" || bridge.screen === "day")
+                 && !(bridge.screen === "week" && (weekView.menuOpen || weekView.handing))
+                 && !(bridge.screen === "day" && (dayView.menuOpen || dayView.handing))
+        onActivated: bridge.week.pasteCopied()
+    }
 
     // Sign in, recovery codes and first-run setup cover the shell until the student is in.
     Loader {

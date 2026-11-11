@@ -804,6 +804,8 @@ Item {
                         blockId: model.blockId,
                         assignmentId: model.assignmentId,
                         day: model.day,
+                        start: model.start,
+                        end: model.end,
                         done: model.done,
                         homework: model.homework
                     }, mx, my)
@@ -828,6 +830,36 @@ Item {
 
     property Item menuOriginItem: null
     property var menuTargetModel: null
+    // "block": the block's own items. "days": Move to day...'s list of the week's days.
+    property string menuMode: "block"
+
+    function blockEntries(target) {
+        var rows = [
+            { label: "Edit", icon: "edit_note" },
+            { label: "Duplicate", icon: "add" },
+            { label: "Move to day...", icon: "calendar_view_week" },
+            { label: "Copy", icon: "content_copy" }
+        ]
+        // A fixed time has nothing to finish.
+        if (target.homework)
+            rows.push({ label: target.done ? "Open again" : "Mark finished", icon: "check" })
+        rows.push({ label: "Delete", icon: "close" })
+        return rows
+    }
+
+    // A new list of rows changes the menu's height: keep it whole inside the pane.
+    function fitMenu() {
+        blockMenu.y = Math.max(8, Math.min(blockMenu.y, root.height - blockMenu.height - 8))
+    }
+
+    // The week's days as the headers name them, today marked as a header's reader hears it.
+    function dayEntries() {
+        var days = (root.bridge && root.bridge.week && root.bridge.week.dayRows) ? root.bridge.week.dayRows : []
+        var rows = []
+        for (var i = 0; i < days.length; i++)
+            rows.push({ label: days[i].label + (days[i].today ? ", today" : ""), icon: "" })
+        return rows
+    }
 
     function openBlockMenu(item, blockModel, mx, my) {
         menuOriginItem = item
@@ -835,18 +867,13 @@ Item {
             blockId: blockModel.blockId,
             assignmentId: blockModel.assignmentId,
             day: blockModel.day,
+            start: blockModel.start,
+            end: blockModel.end,
             done: blockModel.done,
             homework: blockModel.homework
         }
-        // A fixed time has nothing to finish.
-        blockMenu.entries = blockModel.homework ? [
-            { label: "Edit", icon: "edit_note" },
-            { label: blockModel.done ? "Open again" : "Mark finished", icon: "check" },
-            { label: "Delete", icon: "close" }
-        ] : [
-            { label: "Edit", icon: "edit_note" },
-            { label: "Delete", icon: "close" }
-        ]
+        menuMode = "block"
+        blockMenu.entries = blockEntries(menuTargetModel)
         // Placed after the rows are in: the menu's height is its rows, so earlier it was 16 px and the
         // first menu near the bottom ran off the window.
         var mapped = item.mapToItem(root, mx, my)
@@ -880,6 +907,7 @@ Item {
 
     function closeBlockMenu(giveFocusBack) {
         slotDay = -1
+        menuMode = "block"
         if (!blockMenu.open && !menuOriginItem && !menuTargetModel)
             return
         blockMenu.open = false
@@ -934,6 +962,20 @@ Item {
             highContrast: root.highContrast
             onChosen: (index, label) => {
                 var target = root.menuTargetModel
+                if (target && !target.slot && root.menuMode === "block" && label === "Move to day...") {
+                    // A second list in the same menu: the week's days, Esc back to the block's items.
+                    root.menuMode = "days"
+                    blockMenu.entries = root.dayEntries()
+                    root.fitMenu()
+                    blockMenu.cursor = Math.max(0, Math.min(target.day, blockMenu.entries.length - 1))
+                    return
+                }
+                if (target && !target.slot && root.menuMode === "days") {
+                    root.closeBlockMenu()
+                    if (root.bridge && root.bridge.week && index !== target.day)
+                        root.bridge.week.moveBlock(target.blockId, target.day, index, target.start, target.end)
+                    return
+                }
                 root.closeBlockMenu()
                 if (!root.bridge || !target)
                     return
@@ -947,6 +989,12 @@ Item {
                 } else if (label === "Edit") {
                     if (root.bridge.sheets)
                         root.bridge.sheets.editBlock(target.blockId, target.day)
+                } else if (label === "Duplicate") {
+                    if (root.bridge.week)
+                        root.bridge.week.duplicateBlock(target.blockId, target.day)
+                } else if (label === "Copy") {
+                    if (root.bridge.week)
+                        root.bridge.week.copyBlock(target.blockId, target.day)
                 } else if (label === "Mark finished" || label === "Open again") {
                     if (root.bridge.week)
                         root.bridge.week.toggleDone(target.assignmentId)
@@ -961,7 +1009,19 @@ Item {
                     }
                 }
             }
-            onDismissed: root.closeBlockMenu()
+            onDismissed: {
+                if (root.menuMode === "days" && root.menuTargetModel) {
+                    // Esc in the days list goes back to the block's own items.
+                    root.menuMode = "block"
+                    blockMenu.entries = root.blockEntries(root.menuTargetModel)
+                    root.fitMenu()
+                    blockMenu.cursor = 0
+                    blockMenu.open = true
+                    blockMenu.forceActiveFocus()
+                    return
+                }
+                root.closeBlockMenu()
+            }
         }
     }
 

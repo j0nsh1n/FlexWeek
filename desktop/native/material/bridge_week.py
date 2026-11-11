@@ -376,6 +376,11 @@ class WeekBridge(QObject):
                 return
         session.place_block(block_id, -1, day, start, start + length)
 
+    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
+    def dayRows(self) -> list:
+        """The shown days as the headers name them, for Move to day...'s list."""
+        return self._day_rows
+
     @Slot(str, int, int, int, int)
     def moveBlock(self, block_id: str, from_day: int, day: int, start: int, end: int) -> None:
         """A block let go by the mouse, or sent by Move to day..., on `day` from `start` to `end`: the one
@@ -391,6 +396,29 @@ class WeekBridge(QObject):
                 self._note(answer["problem"], action="")
                 return
         session.place_block(block_id, from_day, day, start, end)
+
+    @Slot(str, int)
+    def duplicateBlock(self, block_id: str, day: int) -> None:
+        """The plain look's Duplicate for this block: its preview, then the copy saved as one Undo step."""
+        window = self._window
+        session = window.session  # type: ignore[attr-defined]
+        kept = (session.selected_block_id, session.selected_occurrence_day)
+        session.selected_block_id = block_id
+        session.selected_occurrence_day = day if day >= 0 else None
+        try:
+            window._duplicate_selected()  # type: ignore[attr-defined]
+        finally:
+            session.selected_block_id, session.selected_occurrence_day = kept
+
+    @Slot(str, int)
+    def copyBlock(self, block_id: str, day: int) -> None:
+        """The plain look's Copy: the block goes on the clipboard, for Ctrl+V."""
+        self._window.session.copy_block(block_id, day if day >= 0 else None)  # type: ignore[attr-defined]
+
+    @Slot()
+    def pasteCopied(self) -> None:
+        """Ctrl+V: the plain look's Paste, into the day on view (Day) or today (Week)."""
+        self._window._paste_clipboard()  # type: ignore[attr-defined]
 
     @Slot(str)
     def planOne(self, identifier: str) -> None:
