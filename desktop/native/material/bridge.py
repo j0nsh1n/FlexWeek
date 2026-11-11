@@ -49,8 +49,8 @@ from desktop.native.weekmodel import clock_label
 # Keys 1–5, and the StackLayout order. Week is the screen a new shell opens on.
 SCREENS = ("day", "week", "month", "myday", "settings")
 SNACK_MS = 10000
-WEEK_ZOOM = Scale("material.week", (32, 44, 56, 72, 96, 128), 56)
-DAY_ZOOM = Scale("material.day", (32, 44, 56, 72, 96, 128), 56)
+WEEK_ZOOM = Scale("material.week", (32, 44, 56, 72, 96, 128, 192, 256), 56)
+DAY_ZOOM = Scale("material.day", (32, 44, 56, 72, 96, 128, 192, 256), 56)
 
 
 class _Session(Protocol):

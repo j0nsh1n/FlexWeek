@@ -376,6 +376,50 @@ class WeekBridge(QObject):
                 return
         session.place_block(block_id, -1, day, start, start + length)
 
+    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
+    def dayRows(self) -> list:
+        """The shown days as the headers name them, for Move to day...'s list."""
+        return self._day_rows
+
+    @Slot(str, int, int, int, int)
+    def moveBlock(self, block_id: str, from_day: int, day: int, start: int, end: int) -> None:
+        """A block let go by the mouse, or sent by Move to day..., on `day` from `start` to `end`: the one
+        hand-move rule the plain look uses, one Undo step, and the same words in the notice."""
+        session = self._window.session  # type: ignore[attr-defined]
+        block = next((item for item in session.blocks if item["id"] == block_id), None)
+        if block is None or not 0 <= day < len(DAYS) or end <= start:
+            return
+        if not session.busy:
+            answer = session.judge_hand_move(block_id, from_day, day, start, end)
+            if not answer["moved"]:
+                # Nothing is changed, so there is nothing for UNDO to take back.
+                self._note(answer["problem"], action="")
+                return
+        session.place_block(block_id, from_day, day, start, end)
+
+    @Slot(str, int)
+    def duplicateBlock(self, block_id: str, day: int) -> None:
+        """The plain look's Duplicate for this block: its preview, then the copy saved as one Undo step."""
+        window = self._window
+        session = window.session  # type: ignore[attr-defined]
+        kept = (session.selected_block_id, session.selected_occurrence_day)
+        session.selected_block_id = block_id
+        session.selected_occurrence_day = day if day >= 0 else None
+        try:
+            window._duplicate_selected()  # type: ignore[attr-defined]
+        finally:
+            session.selected_block_id, session.selected_occurrence_day = kept
+
+    @Slot(str, int)
+    def copyBlock(self, block_id: str, day: int) -> None:
+        """The plain look's Copy: the block goes on the clipboard, for Ctrl+V."""
+        self._window.session.copy_block(block_id, day if day >= 0 else None)  # type: ignore[attr-defined]
+
+    @Slot()
+    def pasteCopied(self) -> None:
+        """Ctrl+V: the plain look's Paste, into the day on view (Day) or today (Week)."""
+        self._window._paste_clipboard()  # type: ignore[attr-defined]
+
     @Slot(str)
     def planOne(self, identifier: str) -> None:
         """Place now, and Enter on a card: that homework at the first free gap from now that fits it."""
@@ -413,6 +457,25 @@ class WeekBridge(QObject):
     @Slot()
     def next(self) -> None:
         self._shift(7)
+
+    @Slot(result=str)
+    def pickerAnchor(self) -> str:
+        """The Monday of the week on view: the month the Go to date picker opens on."""
+        session = self._window.session  # type: ignore[attr-defined]
+        return self._target_week or session.week_start or ""
+
+    @Slot(result=str)
+    def todayIso(self) -> str:
+        return str(self._window.session.today_iso())  # type: ignore[attr-defined]
+
+    @Slot(str)
+    def goToDate(self, iso: str) -> None:
+        """A day picked in the Go to date month: the week that holds it."""
+        try:
+            picked = date.fromisoformat(iso)
+        except ValueError:
+            return
+        self._load_target((picked - timedelta(days=picked.weekday())).isoformat())
 
     @Slot()
     def toggleWeekends(self) -> None:

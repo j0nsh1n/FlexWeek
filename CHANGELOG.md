@@ -5,12 +5,22 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- In the Material style, a block's menu in Week and Day (right-click, Shift+F10, the Menu key) has Duplicate, Move to day... and Copy, for fixed times and homework. Duplicate and Copy work as in the Widgets styles; Move to day... opens a list of the week's days with today marked, and the block goes to that day at the same time, with Undo. Ctrl+V pastes what Copy took, into today in Week or the day on view in Day.
+- In the Material style, Week and Day blocks can be dragged: press and drag a block to move it to another time (and, in Week, another day), or drag its top or bottom edge to change its start or end, for fixed times and homework alike. It snaps to 15 minutes, saves the way the Widgets styles' drag does, and shows the Undo notice; Esc during the drag puts the block back and saves nothing.
+
 ### Changed
 - Material's P, Z and F keys (plan, undo, Focus) have their own switch, Letter keys, in Settings → This computer, and it starts off, so none of them fires by accident. The 1 to 5 view keys keep their switch, now called Number keys, which stays on. Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y and the zoom keys work whatever either switch says.
 - One key set in both looks. The plain look has the same two switches as Material, Number keys and Letter keys, in Settings → This computer, saved in the same place, so a switch turned over in one look is turned over in the other. With Number keys on (the default), 1 to 5 open Day, Week, Month, My day and Settings in both looks. With Letter keys on (it starts off), T goes to today, D, W and M open Day, Week and Month, J and K step to the next and previous week, day or month, C adds homework, and P, Z and F plan, undo and open Focus, in both looks. In the plain look D, W, M, T and F no longer work without Letter keys, and T goes to today instead of opening My day (4 does that). No key of the set works while you type or while a sheet is open, and Help lists only the keys that work.
 - Ctrl+Shift+F starts Quick focus in both looks, the same as the Quick focus button. It does nothing while you type or while a sheet or dialog is open, and Ctrl+F does nothing for now. Help lists it.
 - Quick focus offers your homework. When a homework is on now, or is the next one today, the Quick focus screen names it in both looks and the session counts toward it, with a Just a timer choice beside Start that starts a timer tied to nothing. With no homework left today it stays a plain timer.
 - Add fixed time and Edit fixed time accept a start that has already passed, today or on an earlier day of the week, in both looks, and a fixed time can be dragged to an earlier time today or an earlier day. The assistant helper follows the same rule. Homework still cannot be planned or pinned into the past.
+- Material Week and Day zoom in two levels closer, to 192 and 256 px an hour. The far end (32) and the default (56) are unchanged, and a zoom you saved before keeps its size.
+- Material Month entries have the same coloured left strip a block or homework has in Week and Day, in the same colour, instead of only the due-date chips having one.
+- In the Material style, clicking the Week or Month title opens a small month to go to a date: a day jumps to that day's week (Week) or month (Month). The title takes Tab, Enter or Space opens it, the arrows move in the month, Page Up and Page Down change month, Enter picks and Esc closes and goes back to the title.
+- In the Material style, Esc on a new Add fixed time or Add homework sheet with something typed closes it at once, and the next Add of the same kind opens with what you typed. Cancel and a tap on the dimmed area still ask "Discard your changes?", Edit sheets are unchanged, and the typing is forgotten after a Save, a Discard or when the app closes.
+- In the Material style, pressing and dragging the mouse no longer pans the Day and Week grid, so it cannot fight dragging across free time to add something. The wheel, a touchpad, the scroll bar, the keyboard and a touchscreen still scroll it.
+- In the Material style, Week and Day show the current time in the hour column at the now line's height, in the line's colour, in your 12- or 24-hour clock. A screen reader says "Current time, 12:17 PM". An hour number the label lands on is hidden while it does.
 
 ### Fixed
 - In the Material style with Letter keys on, T goes to today in the view you are on: Day shows today again and Month shows this month, as Week already did.
@@ -20,6 +30,8 @@ All notable changes to FlexWeek are documented here. Format follows
 - In the Material style, tapping a row of an open list that hangs outside a sheet (a due date, for example) picks it instead of asking "Discard your changes?".
 - Help opened from Material now works from the keyboard: Esc closes it, Tab reaches the Close button with a focus ring, Space presses it, the keyboard goes back to Material afterwards, and Material's own keys no longer change the screen behind it. Its keyboard list shows the keys Material answers to (1 to 5 only while Number keys is on, P, Z and F only while Letter keys is on) instead of the Widgets styles' D, W and M.
 - The assistant helper keeps the right time while it stays open: once your session runs out it refuses the next call, "today" follows the date, a restore point carries the time of its change, and past-time checks and Plan use the current time, instead of the minute the helper started.
+- In the Material style, the first menu on a block opened near the bottom of the window no longer runs off the bottom edge.
+- In the Material style, the Duplicate and paste preview that opens over Material now takes the keyboard: Esc closes it and adds nothing, and the number keys no longer change the screen behind it. Every other window of the Widgets kind that opens over Material (the same pattern as Help) holds Material's keys the same way.
 
 ## [1.3.0] - 2026-11-10
 

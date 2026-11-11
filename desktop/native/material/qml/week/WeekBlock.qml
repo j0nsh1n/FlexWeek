@@ -17,6 +17,11 @@ Item {
     property bool done: false
     property bool fresh: false
     property bool homework: false
+    // The block's own time, which HoursPane reads when the mouse takes hold of it.
+    property string blockId: ""
+    property int blockDay: 0
+    property int blockStart: 0
+    property int blockEnd: 0
     property bool passive: false
     // Day sets this: there Space finishes homework, in Week it opens it.
     property bool dayOpen: false
