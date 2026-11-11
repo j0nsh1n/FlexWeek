@@ -564,6 +564,23 @@ Item {
                 highContrast: root.highContrast
             }
 
+            ReminderCard {
+                id: reminderCard
+                objectName: "materialReminder"
+                visible: bridge.reminderText !== ""
+                z: 3
+                message: bridge.reminderText
+                onSnoozeClicked: bridge.snoozeReminder(bridge.reminderKey)
+                onCloseClicked: bridge.closeReminder(bridge.reminderKey)
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: (root.phone ? 96 : 24) + (materialSnackbar.visible ? materialSnackbar.height + 8 : 0)
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+            }
+
             Connections {
                 target: bridge && bridge.week ? bridge.week : null
                 function onPlanFinished() {

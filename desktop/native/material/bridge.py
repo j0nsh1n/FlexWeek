@@ -18,6 +18,7 @@ from typing import Any, Protocol, cast
 
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
+from desktop.native.fields import announce
 from desktop.native.hours.zoom import Scale
 from desktop.native.material.bridge_account import AccountBridge
 from desktop.native.material.bridge_day import DayBridge
@@ -127,6 +128,13 @@ class MaterialBridge(QObject):
         if changed is not None and hasattr(changed, "connect"):
             changed.connect(self._follow_week)
             self._week_follow = changed
+        # Reminders the session keeps on screen when there is no notification service.
+        self._announced_reminders: set[str] = set()
+        stay = getattr(self._window.session, "stay_changed", None)
+        self._stay_follow = None
+        if stay is not None and hasattr(stay, "connect"):
+            stay.connect(self._follow_reminders)
+            self._stay_follow = stay
 
     def set_appearance(self, mode: str, _worn_contrast: str) -> None:
         """Apply the saved Material look. `mode` is the worn light or dark axis.
@@ -187,6 +195,11 @@ class MaterialBridge(QObject):
         if changed is not None:
             with contextlib.suppress(RuntimeError, TypeError):
                 changed.disconnect(self._follow_week)
+        stay = getattr(self, "_stay_follow", None)
+        self._stay_follow = None
+        if stay is not None:
+            with contextlib.suppress(RuntimeError, TypeError):
+                stay.disconnect(self._follow_reminders)
 
     def _publish_theme(self) -> None:
         self._reduce_motion = self._motion_reduced() or self._advanced.get("motion") == "Off"
@@ -383,6 +396,53 @@ class MaterialBridge(QObject):
     @Property(str, notify=changed)
     def snackAction(self) -> str:
         return self._snack_action
+
+    def _kept_reminders(self) -> list[dict]:
+        return list(getattr(self._window.session, "visible_reminders", lambda: [])())
+
+    @Property(str, notify=changed)
+    def reminderKey(self) -> str:
+        """The reminder the card shows (the first one the session keeps), or "" when there is none."""
+        kept = self._kept_reminders()
+        return str(kept[0].get("key")) if kept else ""
+
+    @Property(str, notify=changed)
+    def reminderText(self) -> str:
+        kept = self._kept_reminders()
+        if not kept:
+            return ""
+        first = kept[0]
+        body = first.get("body") or ""
+        words = f"{first.get('title') or 'FlexWeek'}{' — ' + body if body else ''}"
+        return words + (f"  (+{len(kept) - 1} more)" if len(kept) > 1 else "")
+
+    @Slot()
+    def _follow_reminders(self) -> None:
+        kept = self._kept_reminders()
+        keys = {str(item.get("key")) for item in kept}
+        spoken = getattr(self._window, "_toast_reads", "")
+        fresh = [
+            words
+            for words in (
+                f"{item.get('title') or 'FlexWeek'}{' — ' + item['body'] if item.get('body') else ''}"
+                for item in kept
+                if str(item.get("key")) not in self._announced_reminders
+            )
+            if words not in spoken
+        ]
+        self._announced_reminders = keys
+        self.changed.emit()
+        if fresh and getattr(self._window, "_surface", "") == "material":
+            # Said once, politely, without moving the keyboard. The toast reads a new reminder itself.
+            announce(cast("Any", self._window), "; ".join(fresh))
+
+    @Slot(str)
+    def snoozeReminder(self, key: str) -> None:
+        self._window.session.snooze_reminder(key)
+
+    @Slot(str)
+    def closeReminder(self, key: str) -> None:
+        self._window.session.close_reminder(key)
 
     @Property(str, notify=changed)
     def title(self) -> str:
