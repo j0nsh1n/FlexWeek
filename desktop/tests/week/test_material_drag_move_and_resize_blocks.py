@@ -219,3 +219,76 @@ def test_a_plain_click_still_opens_the_block_and_a_tiny_wiggle_moves_nothing(
     assert sheets.form["title"] == "Club"
     sheets.forceClose()
     assert club(window)["start"] == "16:00"
+
+
+def _add_locked(qapp, window: NativeWindow, block_id: str, title: str, day: int, start: str) -> None:
+    window.session.add_block(
+        {
+            "id": block_id,
+            "title": title,
+            "kind": "locked",
+            "category": "extra",
+            "start": start,
+            "duration_min": 60,
+            "days": [day],
+        }
+    )
+    window.session.save()
+    settled(qapp, window)
+    pump(qapp, 10)
+
+
+def _start_of(window: NativeWindow, block_id: str) -> str:
+    return next(item for item in window.session.blocks if item["id"] == block_id)["start"]
+
+
+@pytest.mark.parametrize("weekends", [True, False], ids=["weekends shown", "weekends hidden"])
+def test_a_drag_on_day_moves_a_saturday_block_whether_week_shows_weekends(
+    qapp, window: NativeWindow, weekends: bool
+) -> None:
+    saturday = 5
+    root = material_week(qapp, window)
+    _add_locked(qapp, window, "gym", "Gym", saturday, "16:00")
+    if not weekends:
+        bridge(window).week.toggleWeekends()
+        settled(qapp, window)
+        pump(qapp, 10)
+    window.session.open_day((week_monday(window) + timedelta(days=saturday)).isoformat())
+    bridge(window).open_page("day", today=False)
+    pump(qapp)
+    wait_until(qapp, lambda: root.findChild(QObject, "materialDay") is not None)
+    page = qml(root, "materialDay")
+    wait_until(
+        qapp,
+        lambda: any(
+            any(str(label.property("text")) == "Gym" for label in named(block, "title"))
+            for block in named(page, "weekBlock")
+        ),
+    )
+    start = body_of(block_on(page, "Gym"))
+    drag(qapp, window, start, QPoint(start.x(), start.y() + 2 * ROW))
+
+    assert _start_of(window, "gym") == "18:00"
+
+
+@pytest.mark.parametrize("focused", [False, True], ids=["later block on top", "focused block on top"])
+def test_a_hold_on_overlapping_blocks_moves_the_one_drawn_on_top(
+    qapp, window: NativeWindow, focused: bool
+) -> None:
+    """A block with the keyboard is drawn over the later one, so a press where they overlap takes it."""
+    root = material_week(qapp, window)
+    _add_locked(qapp, window, "a", "Alpha", FRIDAY, "16:00")
+    _add_locked(qapp, window, "b", "Beta", FRIDAY, "16:30")
+    page = qml(root, "materialWeek")
+    alpha = block_on(page, "Alpha")
+    beta = block_on(page, "Beta")
+    if focused:
+        alpha.forceActiveFocus()
+        pump(qapp, 5)
+    point = scene_point(beta, 10, 14)
+    drag(qapp, window, point, QPoint(point.x(), point.y() + 2 * ROW))
+
+    moved, kept = ("a", "b") if focused else ("b", "a")
+    starts = {"a": "16:00", "b": "16:30"}
+    assert _start_of(window, moved) != starts[moved], "the block drawn on top did not move"
+    assert _start_of(window, kept) == starts[kept], "a block not held moved"

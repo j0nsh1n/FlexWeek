@@ -590,6 +590,8 @@ Item {
                         bridge.month.goToDate(iso)
                 }
                 onClosed: title.forceActiveFocus()
+                readonly property string screenShown: bridge.screen
+                onScreenShownChanged: open = false
             }
 
             Snackbar {

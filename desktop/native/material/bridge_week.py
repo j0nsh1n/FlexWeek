@@ -387,7 +387,7 @@ class WeekBridge(QObject):
         hand-move rule the plain look uses, one Undo step, and the same words in the notice."""
         session = self._window.session  # type: ignore[attr-defined]
         block = next((item for item in session.blocks if item["id"] == block_id), None)
-        if block is None or not 0 <= day < self._columns or end <= start:
+        if block is None or not 0 <= day < len(DAYS) or end <= start:
             return
         if not session.busy:
             answer = session.judge_hand_move(block_id, from_day, day, start, end)

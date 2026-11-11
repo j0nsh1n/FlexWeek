@@ -189,3 +189,16 @@ def test_escape_in_the_month_picker_returns_the_focus_to_the_title(qapp, window:
     assert not is_open(root)
     assert title_of(root).property("activeFocus") is True
     assert window.session.selected_month == "2026-11"
+
+
+def test_the_picker_closes_when_the_rail_changes_the_screen(qapp, window: NativeWindow) -> None:
+    """Left open over Day, a pick would quietly change another screen's date and keep keys switched off."""
+    root = on_week(qapp, window)
+    click(window, title_of(root))
+    pump(qapp, 10)
+    assert is_open(root)
+    click(window, qml(root, "navDay"))
+    pump(qapp, 20)
+
+    assert bridge(window).screen == "day"
+    assert not is_open(root)

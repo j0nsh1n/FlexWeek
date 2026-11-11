@@ -154,13 +154,14 @@ Item {
 
     // The topmost block under a point of the grid, as the block its hold needs to know.
     function blockAt(x, y) {
-        for (var i = weekBlocks.count - 1; i >= 0; i--) {
+        var found = null
+        for (var i = 0; i < weekBlocks.count; i++) {
             var block = weekBlocks.itemAt(i)
             if (block && block.visible && x >= block.x && x <= block.x + block.width
-                    && y >= block.y && y <= block.y + block.height)
-                return block
+                    && y >= block.y && y <= block.y + block.height && (!found || block.z >= found.z))
+                found = block
         }
-        return null
+        return found
     }
 
     function startHand(block, x, y) {
