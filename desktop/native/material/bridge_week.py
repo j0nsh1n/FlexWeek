@@ -414,6 +414,25 @@ class WeekBridge(QObject):
     def next(self) -> None:
         self._shift(7)
 
+    @Slot(result=str)
+    def pickerAnchor(self) -> str:
+        """The Monday of the week on view: the month the Go to date picker opens on."""
+        session = self._window.session  # type: ignore[attr-defined]
+        return self._target_week or session.week_start or ""
+
+    @Slot(result=str)
+    def todayIso(self) -> str:
+        return str(self._window.session.today_iso())  # type: ignore[attr-defined]
+
+    @Slot(str)
+    def goToDate(self, iso: str) -> None:
+        """A day picked in the Go to date month: the week that holds it."""
+        try:
+            picked = date.fromisoformat(iso)
+        except ValueError:
+            return
+        self._load_target((picked - timedelta(days=picked.weekday())).isoformat())
+
     @Slot()
     def toggleWeekends(self) -> None:
         session = self._window.session  # type: ignore[attr-defined]

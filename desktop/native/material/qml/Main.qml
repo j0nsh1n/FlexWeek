@@ -31,7 +31,7 @@ Item {
     // and a Shortcut here still fires with that dialog active, so Esc never reached it.
     property bool widgetsDialogOpen: false
     readonly property bool modalActive: typing || focusOpen || accountLayer.active || settingsPromptOpen
-        || widgetsDialogOpen
+        || widgetsDialogOpen || datePicker.open
 
     function _field(item) {
         while (item) {
@@ -256,12 +256,39 @@ Item {
                     font.weight: 500
                     elide: Text.ElideRight
                     verticalAlignment: Text.AlignVCenter
-                    // Not a Tab stop: Day and My day hand keyboard focus here when the item holding it goes
-                    // away (the Now card), so focus stays on the page and the next Tab moves on from the top.
-                    activeFocusOnTab: false
-                    Accessible.role: Accessible.Heading
+                    // Week and Month titles open the Go to date month, so they are Tab stops. Day and My day
+                    // hand keyboard focus here when the item holding it goes away (the Now card), so focus
+                    // stays on the page and the next Tab moves on from the top.
+                    readonly property bool pickable: bridge.screen === "week" || bridge.screen === "month"
+                    activeFocusOnTab: pickable
+                    Accessible.role: pickable ? Accessible.Button : Accessible.Heading
                     Accessible.name: text
+                    Accessible.description: pickable ? "Opens a month to go to a date" : ""
                     Accessible.focusable: true
+                    Accessible.onPressAction: if (pickable) title.openPicker()
+
+                    function openPicker() {
+                        var source = bridge.screen === "week" ? bridge.week : bridge.month
+                        if (source)
+                            datePicker.show(source.pickerAnchor(), source.todayIso())
+                    }
+
+                    HoverHandler {
+                        enabled: title.pickable
+                        cursorShape: Qt.PointingHandCursor
+                    }
+                    TapHandler {
+                        enabled: title.pickable
+                        gesturePolicy: TapHandler.WithinBounds
+                        onTapped: title.openPicker()
+                    }
+                    Keys.onPressed: (event) => {
+                        if (title.pickable && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter
+                                               || event.key === Qt.Key_Space)) {
+                            title.openPicker()
+                            event.accepted = true
+                        }
+                    }
                     // Qt moves on with Tab only from a Tab stop; from here it would start over at the rail.
                     Keys.onTabPressed: (event) => {
                         var next = title.nextItemInFocusChain(true)
@@ -545,6 +572,26 @@ Item {
                 onClicked: bridge.addHomework()
             }
 
+            // Go to date: a month under the Week or Month title.
+            DatePicker {
+                id: datePicker
+                objectName: "datePicker"
+                z: 5
+                anchors.fill: parent
+                anchors.topMargin: topBar.height
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                onPicked: (iso) => {
+                    if (bridge.screen === "week")
+                        bridge.week.goToDate(iso)
+                    else
+                        bridge.month.goToDate(iso)
+                }
+                onClosed: title.forceActiveFocus()
+            }
+
             Snackbar {
                 id: materialSnackbar
                 objectName: "materialSnackbar"
@@ -697,7 +744,7 @@ Item {
         context: Qt.WindowShortcut
         // An open Week or Day menu takes its own Escape, so it can close and give the focus back.
         enabled: !accountLayer.active && !focusOverlay.ending && !sheetHost.active && !settingsPromptOpen
-                 && !widgetsDialogOpen
+                 && !widgetsDialogOpen && !datePicker.open
                  && !(bridge.screen === "week" && weekView.menuOpen) && !(bridge.screen === "day" && dayView.menuOpen)
         onActivated: {
             if (bridge && bridge.settingsBridge && bridge.settingsBridge.page === "advanced")

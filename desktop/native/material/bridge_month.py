@@ -287,6 +287,29 @@ class MonthBridge(QObject):
         if show is not None:
             show("day", today=False)
 
+    @Slot(result=str)
+    def pickerAnchor(self) -> str:
+        """The first day of the month on view: the month the Go to date picker opens on."""
+        session = self._session()
+        month = session.selected_month or session.today_iso()[:7]
+        return month + "-01"
+
+    @Slot(result=str)
+    def todayIso(self) -> str:
+        return self._session().today_iso()
+
+    @Slot(str)
+    def goToDate(self, iso: str) -> None:
+        """A day picked in the Go to date month: that month."""
+        try:
+            picked = date.fromisoformat(iso)
+        except ValueError:
+            return
+        session = self._session()
+        if session.account is None:
+            return
+        session.open_month(f"{picked.year:04d}-{picked.month:02d}")
+
     @Slot()
     def previousMonth(self) -> None:
         self._shift(-1)
