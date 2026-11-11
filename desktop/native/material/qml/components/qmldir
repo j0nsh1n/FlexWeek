@@ -28,4 +28,5 @@ Menu 1.0 Menu.qml
 Snackbar 1.0 Snackbar.qml
 ReminderCard 1.0 ReminderCard.qml
 MiniMonth 1.0 MiniMonth.qml
+DatePicker 1.0 DatePicker.qml
 Gallery 1.0 Gallery.qml

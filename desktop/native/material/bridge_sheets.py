@@ -79,6 +79,9 @@ class SheetsBridge(QObject):
         self._notice_undo = False
         self._homework: HomeworkDraft | None = None
         self._block: BlockDraft | None = None
+        # What was typed into a new Add sheet that Esc closed, kept for the next Add of that kind.
+        self._kept_homework: HomeworkDraft | None = None
+        self._kept_block: BlockDraft | None = None
         self._late_minutes = 30
         self._late_from: datetime | None = None
         self._late_from_start = ""
@@ -106,6 +109,14 @@ class SheetsBridge(QObject):
             busy = getattr(session, "busy_changed", None)
             if busy is not None:
                 busy.connect(self._on_busy)
+            account = getattr(session, "account_changed", None)
+            if account is not None:
+                account.connect(self._drop_kept)
+
+    def _drop_kept(self, _account: object = None) -> None:
+        """Typing kept after Esc belongs to the account that typed it."""
+        self._kept_homework = None
+        self._kept_block = None
 
     def _on_twins(self, title: str, week_starts: list) -> None:
         """A new weekly fixed time shows twice in weeks the student copied it into by hand: a prompt with
@@ -227,7 +238,8 @@ class SheetsBridge(QObject):
         category = session.armed_category
         if category not in FLEX_CATEGORIES:
             category = "assignments"
-        self._homework = HomeworkDraft(session, category=category)
+        kept, self._kept_homework = self._kept_homework, None
+        self._homework = kept or HomeworkDraft(session, category=category)
         self._open("homework")
 
     @Slot(int, int, int)
@@ -272,7 +284,8 @@ class SheetsBridge(QObject):
             return
         day, start = self._new_event_values()
         category = session.armed_category
-        self._block = BlockDraft(
+        kept, self._kept_block = self._kept_block, None
+        self._block = kept or BlockDraft(
             session, day=day, start=start, category=None if category in FLEX_CATEGORIES else category
         )
         self._open("block")
@@ -353,6 +366,26 @@ class SheetsBridge(QObject):
             self._publish()
             return
         self._close()
+
+    @Slot()
+    def escapeSheet(self) -> None:
+        """Esc. A new Add sheet with typed work closes at once and keeps it for the next Add of its kind;
+        anything else (Cancel, a tap on the scrim, an Edit sheet) goes through closeSheet."""
+        draft = self._draft()
+        if (
+            draft is not None
+            and not draft.existing
+            and draft.dirty()
+            and not self._drag_range_active
+            and not self._ask
+        ):
+            if self._kind == "homework":
+                self._kept_homework = self._homework
+            else:
+                self._kept_block = self._block
+            self._close()
+            return
+        self.closeSheet()
 
     @Slot()
     def forceClose(self) -> None:

@@ -1,0 +1,183 @@
+"""Esc on a new Add homework or Add fixed time sheet with typing closes it at once, with no question, and
+the next Add of the same kind opens with what was typed (Jonathan, 2026-11-10). Cancel and a tap on the dim
+area still ask "Discard your changes?"; Edit sheets are unchanged; Save and Discard end what was kept.
+
+Expected values come from the requirement. The one clock reads Thursday 19:00.
+"""
+
+# ruff: noqa: F811  (pytest fixtures imported by name)
+from __future__ import annotations
+
+import pytest
+
+pytest.importorskip("PySide6")
+
+from PySide6.QtCore import QPoint, Qt  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
+
+from desktop.tests.material_support import named, pump  # noqa: E402
+from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: E402,F401
+    open_light,
+    qapp,
+    settle,
+    sheets,
+    shell,
+)
+from desktop.tests.waiting import wait_until  # noqa: E402
+
+OPEN = {"homework": "openHomework", "block": "openBlock"}
+CANCEL = {"homework": "homeworkCancel", "block": "blockCancel"}
+KINDS = ["homework", "block"]
+
+
+def open_add(sheets, kind: str) -> None:
+    getattr(sheets, OPEN[kind])()
+    pump(QApplication.instance(), 20)
+    assert sheets.kind == kind
+
+
+def title_now(sheets) -> str:
+    return str(sheets.form["title"])
+
+
+def type_title(sheets, text: str) -> None:
+    sheets.setText("title", text)
+
+
+def press_escape(shell) -> None:
+    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Escape)
+    pump(QApplication.instance(), 30)
+
+
+@pytest.fixture()
+def focused(shell, sheets):
+    shell.activateWindow()
+    shell._material_page._quick.setFocus()
+    pump(QApplication.instance(), 20)
+    return sheets
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_escape_with_typing_closes_at_once_and_the_next_add_shows_it(qapp, shell, focused, kind: str) -> None:
+    sheets = focused
+    open_add(sheets, kind)
+    type_title(sheets, "Piano lesson")
+    press_escape(shell)
+    assert sheets.kind == ""
+    assert sheets.ask == {}
+    open_add(sheets, kind)
+    assert title_now(sheets) == "Piano lesson"
+
+
+@pytest.mark.parametrize("kind, other", [("homework", "block"), ("block", "homework")])
+def test_the_other_kinds_add_opens_empty(qapp, shell, focused, kind: str, other: str) -> None:
+    sheets = focused
+    open_add(sheets, kind)
+    type_title(sheets, "Piano lesson")
+    press_escape(shell)
+    open_add(sheets, other)
+    assert title_now(sheets) == ""
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_escape_with_nothing_typed_closes_and_keeps_nothing(qapp, shell, focused, kind: str) -> None:
+    sheets = focused
+    open_add(sheets, kind)
+    press_escape(shell)
+    assert sheets.kind == ""
+    assert sheets.ask == {}
+    open_add(sheets, kind)
+    assert title_now(sheets) == ""
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_cancel_still_asks_and_discard_leaves_the_next_add_empty(qapp, shell, focused, kind: str) -> None:
+    sheets = focused
+    open_add(sheets, kind)
+    type_title(sheets, "Piano lesson")
+    sheets.closeSheet()  # what the Cancel button calls
+    assert sheets.ask.get("id") == "discard"
+    sheets.answer("discard")
+    assert sheets.kind == ""
+    open_add(sheets, kind)
+    assert title_now(sheets) == ""
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_the_cancel_button_asks_while_something_is_typed(qapp, shell, focused, kind: str) -> None:
+    sheets = focused
+    root = shell._material_page.root
+    open_add(sheets, kind)
+    type_title(sheets, "Piano lesson")
+    pump(QApplication.instance(), 40)
+    button = named(root, CANCEL[kind])[0]
+    centre = button.mapToScene(button.boundingRect().center()).toPoint()
+    quick = shell._material_page._quick
+    QTest.mouseClick(quick, Qt.MouseButton.LeftButton, pos=QPoint(centre.x(), centre.y()))
+    wait_until(None, lambda: sheets.ask.get("id") == "discard", what="the Discard question")
+    assert sheets.kind == kind
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_a_tap_on_the_dim_area_still_asks(qapp, shell, focused, kind: str) -> None:
+    sheets = focused
+    open_add(sheets, kind)
+    type_title(sheets, "Piano lesson")
+    pump(QApplication.instance(), 40)
+    QTest.mouseClick(shell._material_page._quick, Qt.MouseButton.LeftButton, pos=QPoint(10, 10))
+    wait_until(None, lambda: sheets.ask.get("id") == "discard", what="the Discard question")
+
+
+def test_after_a_save_the_next_add_homework_is_empty(qapp, shell, focused) -> None:
+    sheets = focused
+    open_add(sheets, "homework")
+    type_title(sheets, "Lab report")
+    press_escape(shell)
+    open_add(sheets, "homework")
+    assert title_now(sheets) == "Lab report"
+    sheets.save()
+    settle(qapp, shell)
+    assert sheets.kind == ""
+    open_add(sheets, "homework")
+    assert title_now(sheets) == ""
+
+
+def test_after_a_save_the_next_add_fixed_time_is_empty(qapp, shell, focused) -> None:
+    sheets = focused
+    open_add(sheets, "block")
+    type_title(sheets, "Piano lesson")
+    press_escape(shell)
+    open_add(sheets, "block")
+    assert title_now(sheets) == "Piano lesson"
+    for _ in range(6):
+        if sheets.kind != "block":
+            break
+        sheets.save() if sheets.form["step"] in (-1, 2, 3) else sheets.next()
+        settle(qapp, shell)
+    assert sheets.kind == "", "the fixed time saved"
+    open_add(sheets, "block")
+    assert title_now(sheets) == ""
+
+
+def test_an_edit_sheet_still_asks_on_escape_and_keeps_nothing(qapp, shell, focused) -> None:
+    sheets = focused
+    sheets.editHomework("essay")
+    pump(QApplication.instance(), 20)
+    type_title(sheets, "History essay, second draft")
+    press_escape(shell)
+    wait_until(None, lambda: sheets.ask.get("id") == "discard", what="the Discard question")
+    assert sheets.kind == "homework"
+    sheets.answer("discard")
+    open_add(sheets, "homework")
+    assert title_now(sheets) == ""
+
+
+def test_a_new_account_does_not_see_the_typing_of_the_last(qapp, shell, focused) -> None:
+    sheets = focused
+    open_add(sheets, "homework")
+    type_title(sheets, "Piano lesson")
+    press_escape(shell)
+    shell.session.account_changed.emit(None)
+    open_add(sheets, "homework")
+    assert title_now(sheets) == ""
