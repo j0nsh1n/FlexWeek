@@ -102,16 +102,24 @@ Contract for the finished app:
 - Account-owned weekly routines contain fixed commitments only. Applying one
   to a Monday-keyed destination week previews every occurrence and lets the
   student omit or adjust one-week exceptions without changing the routine.
-- School and Setup's activities make the account's standing week: one row per
-  block, keyed by its Setup id and the week it stands from, so every week shows
-  them unless that week has its own copy. Deleting School or an
-  activity asks once, naming the days: "This day only" (when opened from one
+- School, Setup's activities and the fixed times a student makes repeat make the
+  account's standing week: one row per block, keyed by its id (a repeating
+  fixed time's starts `weekly-`) and the week it stands from, so every week shows
+  them unless that week has its own copy. A fixed time repeats when its sheet's
+  "Repeats every week" switch is on, from the open week, up to and including an
+  optional Until date; Until before the first day is refused. Deleting School, an
+  activity or a repeating fixed time asks once, naming the days: "This day only" (when opened from one
   day), "This week only" or "This week and later"; earlier weeks keep it, and
   this week and later rewrites the saved later weeks in the same save
   (`standing` in `/api/changes`) and can't be undone with Undo; only the open
   week's part has Undo (an assistant's change of this kind is undone with the
-  restore point it saved first). Restore points and account exports carry the standing
-  rows.
+  restore point it saved first). Saving a changed repeating fixed time asks
+  "This week only" or "This week and later" the same way, unless only the switch
+  or Until changed (those apply from the open week on) or the change is to one day.
+  An account holds at most 200 standing blocks. Turning a repeat on for a fixed time
+  the student copied by hand into later saved weeks tells them which weeks now show it twice
+  (`standing_twin_weeks` in the save's answer) and removes nothing. Restore points
+  and account exports carry the standing rows.
 - A later week reviews unfinished homework using the original assignment ID,
   exact deadline and progress. Repeated planning and request retries cannot
   duplicate or over-plan it. Homework left unfinished in an earlier week, and
@@ -553,7 +561,12 @@ lengths, `auto_split_pomodoro`, `default_spotify_url`, and a list of alarms.
 Reminders are on unless the student turns them off; an account from before 0.15
 had them turned on once (`prefs_version` 1), and a later choice stands. A block
 reminds from the moment its lead begins until it starts, once, so a block saved
-inside its lead reminds at once. A block with its own Spotify link plays it at
+inside its lead reminds at once. On a computer that shows no system notifications
+the desktop app keeps the reminder in the window, in both styles, until the student
+closes it (Got it) or the block starts, with Snooze, which brings it back after
+5 minutes and never after the start; at the start the usual "starts now" notice
+replaces it, once. A kept reminder goes if its block moves or is deleted and takes
+the new name if the block is renamed. A block with its own Spotify link plays it at
 its start, as an alarm plays its song, with the same Dismiss and Snooze. On desktop, `reminder_dnd_override`
 tags the Notification `flexweek-stay` so the tray presenter skips the 10-second
 auto-close. Unchecked alerts still close at 10 seconds. Qt has no
