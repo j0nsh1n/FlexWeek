@@ -10,7 +10,7 @@ layout's relations: the hour column ends where the first day's blocks begin.
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -133,3 +133,76 @@ def test_there_is_no_label_in_the_settings_preview_without_a_line(qapp, window: 
     pump(qapp, 20)
     for label in named(root, "nowLabel"):
         assert label.property("visible") is False
+
+
+def hour_labels(page: QObject) -> list[QObject]:
+    found = named(page, "hourLabel")
+    assert len(found) == 24, len(found)
+    return found
+
+
+def shown(item: QObject) -> bool:
+    """What the student sees: the hour numbers are hidden by opacity, not by the visible flag."""
+    return item.property("visible") is True and float(item.property("opacity")) > 0
+
+
+def uncovered(page: QObject) -> list[tuple[int, QObject]]:
+    """Hour numbers the zoom pill does not sit on (it hides those by its own rule, not the label's)."""
+    pills = [scene_rect(pill) for pill in named(page, "weekZoom")]
+    margin = 2
+    out = []
+    for index, number in enumerate(hour_labels(page)):
+        left, top, right, bottom = scene_rect(number)
+        if not any(
+            overlap((left - margin, top - margin, right + margin, bottom + margin), pill) for pill in pills
+        ):
+            out.append((index, number))
+    assert len(out) >= 20, "the pill hides too many numbers for this test to prove anything"
+    return out
+
+
+def overlap(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> bool:
+    return not (a[2] <= b[0] or b[2] <= a[0] or a[3] <= b[1] or b[3] <= a[1])
+
+
+def clock_at(qapp, window: NativeWindow, page: QObject, scroller: str, hour: int, minute: int) -> QObject:
+    """Move the clock, scroll to the top so only the label can hide an hour number, and return the label."""
+    CLOCK.set(datetime(2026, 11, 5, hour, minute))
+    window._tick_material_clock()
+    label = label_of(page)
+    wait_until(qapp, lambda: words(label) == f"{hour}:{minute:02d}", what="the label to show the new time")
+    qml(page, scroller).setProperty("contentY", 0)
+    pump(qapp, 20)
+    return label
+
+
+@pytest.mark.parametrize("screen", SCREENS)
+@pytest.mark.parametrize(("hour", "minute"), [(11, 0), (10, 58), (11, 3)])
+def test_the_hour_number_under_the_label_is_hidden_and_the_others_stay(
+    qapp, window: NativeWindow, screen: str, hour: int, minute: int
+) -> None:
+    """Hour 11's number is 14 px tall and starts 8 px above its line; the label is about 21 px tall and
+    centred on the time's line. At 10:58, 11:00 and 11:03 the two overlap, so only that number goes."""
+    page = on_screen(qapp, window, screen)
+    scroller = "weekScroller" if screen == "week" else "dayScroller"
+    label = clock_at(qapp, window, page, scroller, hour, minute)
+    assert shown(label)
+    numbers = hour_labels(page)
+    assert str(numbers[11].property("text")) == "11:00"
+    assert overlap(scene_rect(label), scene_rect(numbers[11])), "the fixture no longer overlaps"
+    assert not shown(numbers[11]), "the hour number under the label is still drawn"
+    for index, number in uncovered(page):
+        if index != 11:
+            assert shown(number), f"the number for {index}:00 was hidden"
+
+
+@pytest.mark.parametrize("screen", SCREENS)
+def test_every_hour_number_shows_when_the_label_is_between_two_hours(
+    qapp, window: NativeWindow, screen: str
+) -> None:
+    page = on_screen(qapp, window, screen)
+    scroller = "weekScroller" if screen == "week" else "dayScroller"
+    label = clock_at(qapp, window, page, scroller, 11, 30)
+    for _index, number in uncovered(page):
+        assert not overlap(scene_rect(label), scene_rect(number)), "the fixture overlaps an hour number"
+        assert shown(number), f"the number {number.property('text')} was hidden"

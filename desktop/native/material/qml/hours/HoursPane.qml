@@ -688,9 +688,14 @@ Item {
                     x: 0
                     y: Math.max(0, index * root.row - 8)
                     readonly property real viewY: y - scroller.contentY
+                    // The time label is drawn over an hour number it lands on; the number goes so the two
+                    // are never read together.
+                    readonly property bool underNowLabel: nowLabel.visible && y < nowLabel.y + nowLabel.height
+                                                          && y + height > nowLabel.y
                     // Whole or not at all: hide a label cut by the pane's top edge or covered by the zoom pill.
-                    opacity: viewY >= 0 && !(zoomPill.visible && viewY < zoomPill.y + zoomPill.height + 2
-                                             && viewY + height > zoomPill.y - 2) ? 1 : 0
+                    opacity: viewY >= 0 && !underNowLabel
+                             && !(zoomPill.visible && viewY < zoomPill.y + zoomPill.height + 2
+                                  && viewY + height > zoomPill.y - 2) ? 1 : 0
                     width: root.gutter - 8
                     horizontalAlignment: Text.AlignRight
                     text: model.label
@@ -715,7 +720,7 @@ Item {
             }
 
             // The time now, in the hour column at the line's height. It lives in the column, so it never
-            // covers a block; where it lands on an hour number it is drawn over it.
+            // covers a block; an hour number it lands on is hidden (see hourLabel).
             Rectangle {
                 id: nowLabel
                 objectName: "nowLabel"
