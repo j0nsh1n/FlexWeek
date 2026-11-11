@@ -85,7 +85,7 @@ from desktop.native.calendar import (
     FLEX_CATEGORIES,
     date_for_day,
     is_series,
-    is_setup_block,
+    is_standing_block,
     monday_of,
     sunday_due,
 )
@@ -3522,7 +3522,13 @@ class NativeWindow(QMainWindow):
             )
             return
         before = {item["id"] for item in self.session.blocks}
-        self.session.add_block(dialog.block(), scope=dialog.scope(), day=dialog.occurrence_day())
+        self.session.add_block(
+            dialog.block(),
+            scope=dialog.scope(),
+            day=dialog.occurrence_day(),
+            weekly=dialog.weekly(),
+            until=dialog.until_value(),
+        )
         day = dialog.occurrence_day()
         if dialog.recover_missed() and day is not None:
             # "This day only" splits the series and gives that day a new id. recover_missed returns
@@ -3709,8 +3715,8 @@ class NativeWindow(QMainWindow):
     ) -> None:
         title = block.get("title") or "this fixed time"
         whole = scope != "occurrence" or len(block.get("days") or []) <= 1
-        if every_week is None and whole and is_setup_block(block):
-            # School and Setup's activities are in every week, so taking one out asks which.
+        if every_week is None and whole and is_standing_block(block):
+            # School, Setup's activities and weekly fixed times are in every week: taking one out asks which.
             sheet = ConfirmSheet(
                 self,
                 f"Delete {title}?",
@@ -4436,7 +4442,7 @@ class NativeWindow(QMainWindow):
     def _delete_from_block_menu(self, block: dict, assignment: dict | None, on: int | None) -> None:
         if assignment is None:
             one_day = is_series(block) and on is not None
-            if is_setup_block(block) and not (one_day and len(block.get("days") or []) > 1):
+            if is_standing_block(block) and not (one_day and len(block.get("days") or []) > 1):
                 # _delete_block asks this week or every week.
                 self._delete_block(block, "occurrence" if one_day else "series", on)
                 return

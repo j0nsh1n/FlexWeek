@@ -125,6 +125,7 @@ from desktop.native.calendar import (
     date_for_day,
     is_series,
     is_setup_block,
+    is_standing_block,
     local_stamp,
     monday_of,
     past_problem,
@@ -3698,6 +3699,45 @@ class BlockDialog(Dialog):
         form.addRow("", note)
         repeating = existing and len(self._original.get("days") or []) > 1
         form.setRowVisible(note, repeating and scope_box.isHidden())
+        # "Repeats every week" stands the block in this week and every week after; Until ends it. School
+        # and Setup's activities are not offered it: Setup owns their repeat.
+        self._owns_repeat = bool(existing and is_setup_block(self._original))
+        was_weekly = bool(existing and is_standing_block(self._original) and not self._owns_repeat)
+        was_until = (self._original.get("until") or "") if was_weekly else ""
+        self.repeat = Switch("Repeats every week")
+        self.repeat.setObjectName("blockRepeat")
+        self.repeat.setChecked(was_weekly)
+        form.addRow("", self.repeat)
+        self.until_on = Switch("Stop on a date")
+        self.until_on.setObjectName("blockUntilOn")
+        self.until_on.setAccessibleName("Repeat until a date")
+        self.until_on.setChecked(bool(was_until))
+        self.until = DateField()
+        self.until.setObjectName("blockUntil")
+        self.until.setAccessibleName("Until date")
+        self.until.setDisplayFormat(DUE_DATE_FORMAT)
+        self.until.setMinimumDate(QDate(2000, 1, 1))
+        self.until.setMaximumDate(QDate(2099, 12, 31))
+        self.until.week_steps = True
+        self._until_touched = bool(was_until)
+        self.until.setDate(
+            QDate.fromString(was_until, "yyyy-MM-dd") if was_until else self._default_until()
+        )
+        self.until.setEnabled(bool(was_until))
+        self._until_field = bare(QWidget())
+        until_row = QHBoxLayout(self._until_field)
+        until_row.setContentsMargins(0, 0, 0, 0)
+        until_row.addWidget(self.until_on)
+        until_row.addWidget(self.until)
+        until_row.addStretch(1)
+        form.addRow("Until", self._until_field)
+        self.until_problem = _error_label()
+        self.until_problem.setObjectName("blockUntilProblem")
+        self.until_problem.setVisible(False)
+        form.addRow("", self.until_problem)
+        self.repeat.toggled.connect(self._sync_repeat_rows)
+        self.until_on.toggled.connect(self._until_switched)
+        self.until.dateChanged.connect(self._until_changed)
         self.scope_choice.currentIndexChanged.connect(self._sync_scope)
         self.start = ClockField(QTime.fromString(self._original.get("start") or start, "HH:mm"))
         self.start.setObjectName("blockStart")
@@ -3904,6 +3944,7 @@ class BlockDialog(Dialog):
         self.back_button.setVisible(step > 0)
         self._save.setText("Save" if step >= 2 else "Next")
         self._hiding_add = False
+        self._sync_repeat_rows()
         if self.isVisible():
             self.refit()
 
@@ -3922,6 +3963,8 @@ class BlockDialog(Dialog):
             self.category.currentData() if hasattr(self, "category") else None,
             self.missed.isChecked() if hasattr(self, "missed") else False,
             self.scope_choice.currentIndex() if hasattr(self, "scope_choice") else 0,
+            self.repeat.isChecked() if hasattr(self, "repeat") else False,
+            self.until_value() if hasattr(self, "until_on") else "",
         )
 
     def _close_asked(self) -> None:
@@ -3982,6 +4025,7 @@ class BlockDialog(Dialog):
             self._series_days = None
         self.repeat_note.setVisible(not occurrence)
         self._sync_scope_label()
+        self._sync_repeat_rows()
 
     def _sync_scope_label(self) -> None:
         if self.scope_occurrence.isChecked():
@@ -4132,6 +4176,61 @@ class BlockDialog(Dialog):
         self.duration_line.style().unpolish(self.duration_line)
         self.duration_line.style().polish(self.duration_line)
 
+    def _first_day(self) -> date:
+        """The first date the block occurs in the open week (the Monday when no day is ticked)."""
+        week_start = getattr(getattr(self.parent(), "session", None), "week_start", None)
+        if not isinstance(week_start, str):
+            week_start = monday_of(wall_clock.today().isoformat())
+        ticked = [index for index, check in enumerate(self.days) if check.isChecked()]
+        return date.fromisoformat(week_start) + timedelta(days=min(ticked or [0]))
+
+    def _default_until(self) -> QDate:
+        """Four weeks after the first day: a date to start from once Until is switched on."""
+        day = self._first_day() + timedelta(days=28)
+        return QDate(day.year, day.month, day.day)
+
+    def _repeat_available(self) -> bool:
+        occurrence = self.scope_occurrence.isChecked() and self._occurrence_day is not None
+        return self._original.get("kind") == "locked" and not self._owns_repeat and not occurrence
+
+    def _sync_repeat_rows(self, *_checked: object) -> None:
+        if not hasattr(self, "_until_field"):
+            return
+        on_step = self._add_step is None or self._add_step == 1
+        shown = on_step and self._repeat_available()
+        self._form.setRowVisible(self.repeat, shown)
+        until = shown and self.repeat.isChecked()
+        self._form.setRowVisible(self._until_field, until)
+        self._form.setRowVisible(self.until_problem, until and bool(self.until_problem.text()))
+        if self.isVisible() and not self._hiding_add:
+            self.refit()
+
+    def _until_switched(self, on: bool) -> None:
+        self.until.setEnabled(on)
+        if on and not self._until_touched:
+            self.until.setDate(self._default_until())
+            self._until_touched = False
+        self._clear_until_problem()
+
+    def _until_changed(self) -> None:
+        self._until_touched = True
+        self._clear_until_problem()
+
+    def _clear_until_problem(self) -> None:
+        self.until_problem.setText("")
+        self.until_problem.setVisible(False)
+        self._form.setRowVisible(self.until_problem, False)
+
+    def weekly(self) -> bool | None:
+        """What the "Repeats every week" switch says, or None when this sheet offers none for the block."""
+        return self.repeat.isChecked() if self._repeat_available() else None
+
+    def until_value(self) -> str:
+        """The last day it repeats, written YYYY-MM-DD, or "" for no end."""
+        if not (self._repeat_available() and self.repeat.isChecked() and self.until_on.isChecked()):
+            return ""
+        return self.until.date().toString("yyyy-MM-dd")
+
     def scope(self) -> str:
         if self.scope_occurrence.isChecked() and self._occurrence_day is not None:
             return "occurrence"
@@ -4161,7 +4260,7 @@ class BlockDialog(Dialog):
         days = self._original.get("days") or []
         occurrence = self.scope() == "occurrence" and self._occurrence_day is not None
         week_start = getattr(getattr(self.parent(), "session", None), "week_start", None)
-        setup = is_setup_block(self._original)
+        setup = is_standing_block(self._original)
         if occurrence:
             if not isinstance(week_start, str):
                 week_start = monday_of(wall_clock.today().isoformat())
@@ -4242,8 +4341,30 @@ class BlockDialog(Dialog):
         except ValidationError as error:
             self.error.setText(_block_problem(error))
             return
+        refused = self._until_refused(candidate)
+        if refused:
+            self._show_until_problem(refused)
+            return
         self._result = candidate
         super().accept()
+
+    def _until_refused(self, candidate: dict) -> str | None:
+        session = getattr(self.parent(), "session", None)
+        until = self.until_value()
+        if not until or session is None:
+            return None
+        return session.weekly_problem(candidate, until)
+
+    def _show_until_problem(self, words: str) -> None:
+        if self._add_step is not None and self._add_step != 1:
+            self._add_step = 1
+            self._apply_add_step()
+        self.until_problem.setText(words)
+        self.until_problem.setAccessibleName(words)
+        self.until_problem.setVisible(True)
+        self._form.setRowVisible(self.until_problem, True)
+        self.until.setFocus(Qt.FocusReason.OtherFocusReason)
+        announce(self.until, words, assertive=True)
 
     def block(self) -> dict:
         return deepcopy(self._result if self._result is not None else self._original)
