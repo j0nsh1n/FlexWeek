@@ -74,6 +74,53 @@ def test_the_card_stays_until_the_block_starts_and_the_start_notice_replaces_it(
     assert said == ["Guitar practice starts soon", "Guitar practice starts now"]
 
 
+def surfaces(window: NativeWindow, root: QObject) -> list[str]:
+    """Which reminder surfaces the student can see: Material's card, the plain look's toast and strip."""
+    visible = []
+    if shown(root):
+        visible.append("card")
+    if window.toast.isVisible():
+        visible.append("toast")
+    if window.alert_strip.isVisible():
+        visible.append("strip")
+    return visible
+
+
+def test_only_the_card_shows_the_reminder_through_snooze_and_the_toast_comes_back_for_starts_now(
+    qapp: QApplication, material
+) -> None:
+    window, root = material
+    choose(qapp, window, reminder_lead_min=15)
+    beat(qapp, window, 30)
+    assert surfaces(window, root) == ["card"]
+    beat(qapp, window, 31)
+    material_bridge = window._material_page.bridge
+    material_bridge.snoozeReminder(material_bridge.property("reminderKey"))
+    pump(qapp)
+    assert surfaces(window, root) == []
+    for minute in (32, 33, 34, 35):
+        beat(qapp, window, minute)
+        assert surfaces(window, root) == [], f"something showed at 18:{minute}"
+    beat(qapp, window, 36)
+    assert surfaces(window, root) == ["card"]
+    beat(qapp, window, 44)
+    assert surfaces(window, root) == ["card"]
+    beat(qapp, window, 45)
+    assert surfaces(window, root) == ["toast"]
+    assert window.toast.text() == NOW
+
+
+def test_a_reminder_with_the_card_hidden_by_settings_still_has_the_toast(
+    qapp: QApplication, material
+) -> None:
+    window, root = material
+    window._open_settings_at(0)
+    pump(qapp)
+    assert window._stack.currentWidget() is window._settings
+    beat(qapp, window, 40)
+    assert window.toast.isVisible() and window.toast.text() == SOON
+
+
 def test_snooze_hides_the_card_and_it_comes_back_at_the_start_as_starts_now(
     qapp: QApplication, material
 ) -> None:

@@ -73,6 +73,16 @@ def test_the_reminder_stays_on_screen_until_the_block_starts_and_the_start_notic
     assert said == ["Guitar practice starts soon", "Guitar practice starts now"]
 
 
+def test_the_plain_look_alone_shows_both_its_strip_and_its_toast(
+    qapp: QApplication, no_service: NativeWindow
+) -> None:
+    window = no_service
+    ready(qapp, window)
+    tick(qapp, window, 40)
+    assert shown(window) == SOON
+    assert window.toast.isVisible() and window.toast.text() == SOON
+
+
 def test_snooze_hides_it_and_it_comes_back_at_the_start_as_starts_now_not_a_minute_later(
     qapp: QApplication, no_service: NativeWindow
 ) -> None:

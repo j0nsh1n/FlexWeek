@@ -5181,6 +5181,13 @@ class NativeWindow(QMainWindow):
                 own = str(focus[0].get("tone") or FALLBACK)
                 self._bell.once(own if tone is None else short, prefs.get("alert_volume", 80))
         tray = self._tray_icon if self._tray_icon is not None and self._tray_icon.supportsMessages() else None
+        # With no notification service the window is the only place a reminder can be, so it stays, as
+        # it does when the student asked for that.
+        keep = tray is None or bool(prefs.get("reminder_dnd_override"))
+        # Material's card is that reminder when Material is on screen, so the toast would say it twice.
+        on_card = (
+            keep and self._material_page is not None and self._stack.currentWidget() is self._material_page
+        )
         reminders = []
         for notice in notices:
             title = notice.get("title") or "FlexWeek"
@@ -5189,7 +5196,8 @@ class NativeWindow(QMainWindow):
             if tray is not None:
                 tray.showMessage(title, body, QSystemTrayIcon.MessageIcon.Information, 8000)
             if notice.get("kind") == "reminder":
-                reminders.append(words)
+                if not (on_card and notice.get("stays")):
+                    reminders.append(words)
             elif tray is None:
                 self.session._say(words)
         if reminders:
@@ -5197,15 +5205,12 @@ class NativeWindow(QMainWindow):
             # says it as well, wherever the student is.
             self._reminder_said = "; ".join(reminders)
             self._say_in_toast(self._reminder_said)
-        # With no notification service the window is the only place a reminder can be, so it stays, as
-        # it does when the student asked for that.
-        keep = tray is None or bool(prefs.get("reminder_dnd_override"))
         if keep:
             # A tray message is gone in eight seconds and a machine may suppress it outright. This
             # one sits in the window until it is dealt with, which is what the setting promises. A
             # reminder ahead of its block can be snoozed and ends when the block starts; the rest
             # (a block found already started, a focus notice) stay until Got it, as before.
-            self._toast_reads = self._reminder_said
+            self._toast_reads = "; ".join(reminders)
             try:
                 plain = [
                     notice
