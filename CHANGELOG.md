@@ -6,10 +6,18 @@ All notable changes to FlexWeek are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- In the Material style, a block's menu in Week and Day (right-click, Shift+F10, the Menu key) has Duplicate, Move to day... and Copy, for fixed times and homework. Duplicate and Copy work as in the Widgets styles; Move to day... opens a list of the week's days with today marked, and the block goes to that day at the same time, with Undo. Ctrl+V pastes what Copy took, into today in Week or the day on view in Day.
+- In the Material style, Week and Day blocks can be dragged: press and drag a block to move it to another time (and, in Week, another day), or drag its top or bottom edge to change its start or end, for fixed times and homework alike. It snaps to 15 minutes, saves the way the Widgets styles' drag does, and shows the Undo notice; Esc during the drag puts the block back and saves nothing.
 - Material Settings → Planning has a Dragging step choice, 5 min or 15 min. It is the same setting as Dragging in Widgets Settings and the planning page of Setup, so a pick in one shows in the others.
 
 ### Changed
 - Material's P, Z and F keys (plan, undo, Focus) have their own switch, Letter keys, in Settings → This computer, and it starts off, so none of them fires by accident. The 1 to 5 view keys keep their switch, now called Number keys, which stays on. Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y and the zoom keys work whatever either switch says.
+- Material Week and Day zoom in two levels closer, to 192 and 256 px an hour. The far end (32) and the default (56) are unchanged, and a zoom you saved before keeps its size.
+- Material Month entries have the same coloured left strip a block or homework has in Week and Day, in the same colour, instead of only the due-date chips having one.
+- In the Material style, clicking the Week or Month title opens a small month to go to a date: a day jumps to that day's week (Week) or month (Month). The title takes Tab, Enter or Space opens it, the arrows move in the month, Page Up and Page Down change month, Enter picks and Esc closes and goes back to the title.
+- In the Material style, Esc on a new Add fixed time or Add homework sheet with something typed closes it at once, and the next Add of the same kind opens with what you typed. Cancel and a tap on the dimmed area still ask "Discard your changes?", Edit sheets are unchanged, and the typing is forgotten after a Save, a Discard or when the app closes.
+- In the Material style, pressing and dragging the mouse no longer pans the Day and Week grid, so it cannot fight dragging across free time to add something. The wheel, a touchpad, the scroll bar, the keyboard and a touchscreen still scroll it.
+- In the Material style, Week and Day show the current time in the hour column at the now line's height, in the line's colour, in your 12- or 24-hour clock. A screen reader says "Current time, 12:17 PM". An hour number the label lands on is hidden while it does.
 - In the Material style, drawing or clicking on empty time in Week and Day lands on the Dragging step you chose (every 5 minutes or every quarter hour) instead of always on a quarter hour.
 - In the Material style, the start and end time lists in Add and Edit fixed time, and the due time and Pinned time lists in Add and Edit homework, follow the Dragging step: every 5 minutes on 5, quarter hours on 15. A time already on the block stays listed, and today still hides times already over.
 - In the Widgets style, clicking or right-clicking free time, and pressing to draw a new block, land on the Dragging step you chose instead of always on a quarter hour.
@@ -22,6 +30,8 @@ All notable changes to FlexWeek are documented here. Format follows
 - In the Material style, tapping a row of an open list that hangs outside a sheet (a due date, for example) picks it instead of asking "Discard your changes?".
 - Help opened from Material now works from the keyboard: Esc closes it, Tab reaches the Close button with a focus ring, Space presses it, the keyboard goes back to Material afterwards, and Material's own keys no longer change the screen behind it. Its keyboard list shows the keys Material answers to (1 to 5 only while Number keys is on, P, Z and F only while Letter keys is on) instead of the Widgets styles' D, W and M.
 - The assistant helper keeps the right time while it stays open: once your session runs out it refuses the next call, "today" follows the date, a restore point carries the time of its change, and past-time checks and Plan use the current time, instead of the minute the helper started.
+- In the Material style, the first menu on a block opened near the bottom of the window no longer runs off the bottom edge.
+- In the Material style, the Duplicate and paste preview that opens over Material now takes the keyboard: Esc closes it and adds nothing, and the number keys no longer change the screen behind it. Every other window of the Widgets kind that opens over Material (the same pattern as Help) holds Material's keys the same way.
 
 ## [1.3.0] - 2026-11-10
 

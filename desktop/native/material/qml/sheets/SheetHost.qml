@@ -160,7 +160,7 @@ Item {
         sequence: "Escape"
         context: Qt.WindowShortcut
         enabled: root.active
-        onActivated: root.menu ? root.sheets.closeMore() : root.sheets.closeSheet()
+        onActivated: root.menu ? root.sheets.closeMore() : root.sheets.escapeSheet()
     }
 
     Snackbar {

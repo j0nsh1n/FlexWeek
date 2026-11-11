@@ -1,7 +1,8 @@
-"""A fixed block in Material Week and Day has a menu, as homework has: Edit and Delete, opened by a
-right-click, Shift+F10 or the Menu key. Arrow keys move in it, Esc closes it with the keyboard back on the
-block, Edit opens Edit fixed time, and Delete asks the same question the Edit sheet asks and deletes the
-same way. Homework's menu is unchanged (sheets/test_material_open_edit.py).
+"""A fixed block in Material Week and Day has a menu, as homework has: Edit and Delete, with Duplicate,
+Move to day... and Copy between them (tests/week/test_material_block_menu_more.py), opened by a right-click,
+Shift+F10 or the Menu key. Arrow keys move in it, Esc closes it with the keyboard back on the block, Edit
+opens Edit fixed time, and Delete asks the same question the Edit sheet asks and deletes the same way.
+Homework's menu is unchanged (sheets/test_material_open_edit.py).
 
 Expected values come from the block seeded here: Club, Thursday 17:30 for an hour.
 """
@@ -118,7 +119,7 @@ def test_a_fixed_block_opens_a_menu_with_edit_and_delete_and_escape_returns_to_i
     _root, block = club_on(qapp, window, screen)
     menu = open_menu(qapp, window, block, how)
     assert menu.property("open") is True
-    assert entries(menu) == ["Edit", "Delete"]
+    assert entries(menu) == ["Edit", "Duplicate", "Move to day...", "Copy", "Delete"]
     QTest.keyClick(quick_of(window), Qt.Key.Key_Escape)
     pump(qapp)
     assert menu.property("open") is False
@@ -166,7 +167,8 @@ def test_delete_asks_the_edit_sheets_question_then_deletes_the_same_way(
     expected = edit_sheets_delete_question(qapp, window)
     assert expected["title"] == "Delete fixed time"
     menu = open_menu(qapp, window, block, "right-click")
-    QTest.keyClick(quick_of(window), Qt.Key.Key_Down)
+    for _ in range(entries(menu).index("Delete")):
+        QTest.keyClick(quick_of(window), Qt.Key.Key_Down)
     QTest.keyClick(quick_of(window), Qt.Key.Key_Return)
     pump(qapp)
     assert menu.property("open") is False
@@ -177,7 +179,8 @@ def test_delete_asks_the_edit_sheets_question_then_deletes_the_same_way(
     assert any(item["id"] == "club" for item in window.session.blocks), "Cancel deletes nothing"
     assert sheets.ask == {}
     menu = open_menu(qapp, window, block, "shift-f10")
-    QTest.keyClick(quick_of(window), Qt.Key.Key_Down)
+    for _ in range(entries(menu).index("Delete")):
+        QTest.keyClick(quick_of(window), Qt.Key.Key_Down)
     QTest.keyClick(quick_of(window), Qt.Key.Key_Return)
     pump(qapp)
     sheets.answer("delete")

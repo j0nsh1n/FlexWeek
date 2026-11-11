@@ -77,62 +77,9 @@ Item {
     readonly property real contentBottom: body.y + body.height
     readonly property real titleBottom: body.y + title.height
 
-    readonly property bool darkSurface: {
-        var tone = palette.surface
-        return tone.r * 0.2126 + tone.g * 0.7152 + tone.b * 0.0722 < 0.4
-    }
+    readonly property bool darkSurface: palette.dark
 
-    readonly property var defaultClasses: {
-        var dark = darkSurface
-        return {
-            "class": {
-                bar: "#3d6fc4",
-                fill: dark ? "#1e2c44" : "#e4ebf7",
-                ink: dark ? "#ececec" : "#0f172a"
-            },
-            "exercise": {
-                bar: "#2b9665",
-                fill: dark ? "#1a352e" : "#e1f0e9",
-                ink: dark ? "#ececec" : "#0f172a"
-            },
-            "extra": {
-                bar: "#0f8a8a",
-                fill: dark ? "#133336" : "#ddefef",
-                ink: dark ? "#ececec" : "#0f172a"
-            },
-            "assignments": {
-                bar: "#a87512",
-                fill: dark ? "#382e1a" : "#f3ecde",
-                ink: dark ? "#ececec" : "#0f172a"
-            },
-            "study": {
-                bar: "#c2557a",
-                fill: dark ? "#3e2633" : "#f6e7ec",
-                ink: dark ? "#ececec" : "#0f172a"
-            },
-            "other": {
-                bar: "#64748b",
-                fill: dark ? "#272d37" : "#e9ecef",
-                ink: dark ? "#ececec" : "#0f172a"
-            }
-        }
-    }
-
-    readonly property var classData: {
-        var cls = (theme && theme.classes) ? theme.classes : palette.classes
-        var key = category
-        if (key === "school") key = "class"
-        else if (key === "sports") key = "exercise"
-        else if (key === "homework") key = "assignments"
-        else if (key === "clubs") key = "extra"
-        if (cls && cls[key])
-            return cls[key]
-        if (cls && cls["other"])
-            return cls["other"]
-        if (defaultClasses[key])
-            return defaultClasses[key]
-        return defaultClasses["other"]
-    }
+    readonly property var classData: palette.classFor(category)
     readonly property color classBar: classData ? classData.bar : "#64748b"
     readonly property color classFill: classData ? classData.fill : (darkSurface ? "#272d37" : "#e9ecef")
     readonly property color classInk: classData ? classData.ink : (darkSurface ? "#ececec" : "#0f172a")

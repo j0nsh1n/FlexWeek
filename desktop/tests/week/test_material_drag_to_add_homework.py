@@ -625,7 +625,7 @@ def test_dragging_an_existing_block_or_card_does_not_open_add(
     grid.setProperty("contentY", float(14 * row - 100))
     _pump(qapp)
 
-    # 1. Drag an existing block on the grid
+    # 1. Drag an existing block on the grid: it moves (test_material_drag_move_and_resize_blocks.py); no Add
     essay_block = _block_named(root, "History essay")
     essay_block.forceActiveFocus()
     _pump(qapp)
@@ -634,8 +634,10 @@ def test_dragging_an_existing_block_or_card_does_not_open_add(
     _pump(qapp, 4)
     sheets = window._material_page.bridge.sheets
     assert sheets.kind == ""
-    # The rejected creation drag leaves the block its keyboard focus, so Enter still opens it.
-    assert essay_block.property("activeFocus") is True
+    # The hand move saved and the week was drawn again: take the block up afresh, and Enter opens it.
+    _settle(qapp, window)
+    _block_named(root, "History essay").forceActiveFocus()
+    _pump(qapp)
     QTest.keyClick(window._material_page._quick, Qt.Key.Key_Return)
     _pump(qapp, 6)
     assert sheets.kind == "homework"

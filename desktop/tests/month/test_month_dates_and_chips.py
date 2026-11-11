@@ -91,14 +91,19 @@ def test_chips_use_the_24_hour_clock(week_start) -> None:
     assert chips(rows, "2026-11-06")[0]["text"] == "08:00 School"
 
 
+def words_and_kinds(found: list[dict]) -> list[dict]:
+    """A chip's words and kind; its accent colour is checked with the Month strip tests."""
+    return [{"text": chip["text"], "kind": chip["kind"]} for chip in found]
+
+
 def test_a_deadline_on_a_date_that_has_gone_says_overdue(week_start) -> None:
     session = FakeSession("2026-11", deadlines())
     session.today = "2026-11-04"
     rows, _ = read_cells(session)
-    assert chips(rows, "2026-11-03") == [{"text": "Overdue Reading", "kind": "overdue"}]
+    assert words_and_kinds(chips(rows, "2026-11-03")) == [{"text": "Overdue Reading", "kind": "overdue"}]
     session.today = "2026-11-03"
     rows, _ = read_cells(session)
-    assert chips(rows, "2026-11-03") == [{"text": "Due Reading", "kind": "due"}]
+    assert words_and_kinds(chips(rows, "2026-11-03")) == [{"text": "Due Reading", "kind": "due"}]
 
 
 def test_a_finished_deadline_is_not_overdue(week_start) -> None:
@@ -107,7 +112,7 @@ def test_a_finished_deadline_is_not_overdue(week_start) -> None:
     session = FakeSession("2026-11", data)
     session.today = "2026-11-04"
     rows, _ = read_cells(session)
-    assert chips(rows, "2026-11-03") == [{"text": "Due Reading", "kind": "due"}]
+    assert words_and_kinds(chips(rows, "2026-11-03")) == [{"text": "Due Reading", "kind": "due"}]
 
 
 def test_study_time_shares_are_minutes_over_three_hours(week_start) -> None:
