@@ -1,11 +1,15 @@
 //! Standing-week rows: one per standing block and the week it starts standing from. A row with no
 //! body stops that block from its week on, so weeks before a change keep what stood then.
 
+use flexweek_engine::desk::calendar::WEEKLY_PREFIX;
 use flexweek_engine::desk::grid::is_standing_block;
 use flexweek_engine::snapshot::canonical;
-use flexweek_engine::standing::{derive_standing, restand, restated, standing_body, with_standing};
+use flexweek_engine::standing::{
+    derive_standing, restand, restated, standing_body, twin_in_week, with_standing,
+};
 use rusqlite::{Connection, params};
 use serde_json::{Value, json};
+use std::collections::HashSet;
 
 use crate::{StoreError, StoreResult, defer_write};
 
@@ -190,6 +194,83 @@ pub fn set_standing(
         }
     }
     Ok(changed)
+}
+
+/// The most blocks that stand at once in one account: School, Setup's activities and weekly fixed times
+/// together. An export keeps each block's place in a list that stops at `MAX_STANDING` in the backend.
+pub const MAX_STANDING_BLOCKS: usize = 200;
+
+/// Why saving `blocks` from `from_week` would leave the account with more than `MAX_STANDING_BLOCKS`
+/// standing blocks, or None when it fits. Edits to blocks that already stand never count again.
+pub fn standing_limit_problem(
+    conn: &Connection,
+    user_id: i64,
+    from_week: &str,
+    blocks: &str,
+) -> StoreResult<Option<String>> {
+    let mut standing: HashSet<String> = standing_blocks(conn, user_id, from_week)?
+        .iter()
+        .filter_map(|block| block["id"].as_str().map(str::to_string))
+        .collect();
+    for change in parse_list(blocks)? {
+        let id = change["id"].as_str().unwrap_or_default().to_string();
+        if change["stop"] == json!(true) {
+            standing.remove(&id);
+        } else {
+            standing.insert(id);
+        }
+    }
+    Ok((standing.len() > MAX_STANDING_BLOCKS).then(|| {
+        format!(
+            "FlexWeek keeps at most {MAX_STANDING_BLOCKS} weekly blocks (School, activities and weekly \
+             fixed times) in one account. Stop one before adding another."
+        )
+    }))
+}
+
+/// The saved weeks after `from_week` that already hold a copy of a weekly fixed time `blocks` makes
+/// repeat for the first time, which the repeat would then show twice (`twin_in_week`), oldest first.
+/// Read before `set_standing`: a block that already stood is not new, and nothing is removed.
+pub fn standing_twin_weeks(
+    conn: &Connection,
+    user_id: i64,
+    from_week: &str,
+    blocks: &str,
+) -> StoreResult<Vec<String>> {
+    let standing = standing_blocks(conn, user_id, from_week)?;
+    let new: Vec<Value> = parse_list(blocks)?
+        .into_iter()
+        .filter(|change| {
+            change["stop"] != json!(true)
+                && change["id"]
+                    .as_str()
+                    .is_some_and(|id| id.starts_with(WEEKLY_PREFIX))
+                && !standing.iter().any(|block| block["id"] == change["id"])
+        })
+        .collect();
+    if new.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut stmt = conn.prepare(
+        "SELECT week_start, blocks FROM weeks WHERE user_id = ?1 AND week_start > ?2
+        ORDER BY week_start",
+    )?;
+    let later = stmt
+        .query_map(params![user_id, from_week], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut doubled = Vec::new();
+    for (week_start, text) in later {
+        let stored = parse_list(&text)?;
+        for change in &new {
+            if twin_in_week(change, &week_start, &stored)? {
+                doubled.push(week_start);
+                break;
+            }
+        }
+    }
+    Ok(doubled)
 }
 
 /// Every standing row, for an account export: `[{id, from_week, position, body}]`, body null for a stop.

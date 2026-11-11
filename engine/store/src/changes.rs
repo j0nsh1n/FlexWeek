@@ -10,7 +10,8 @@ use crate::{
     Adopted, AssignmentDelete, AssignmentSave, Recall, Relay, StoreError, WeekSave,
     adopt_legacy_deadlines, begin_immediate, create_restore_point, delete_assignment,
     own_assignment_rows, payload_digest, read_week, recall_operation, remember_operation,
-    rewrite_blocks, save_assignment, save_week, set_standing, week_with_standing,
+    rewrite_blocks, save_assignment, save_week, set_standing, standing_limit_problem,
+    standing_twin_weeks, week_with_standing,
 };
 
 const MAX_ASSIGNMENTS: i64 = 1000;
@@ -166,7 +167,7 @@ fn apply_tx(
     }
     let assignments = apply_assignments(conn, user_id, &input.assignments)?;
     let mut weeks = apply_weeks(conn, user_id, &input.weeks)?;
-    let standing_changed = apply_standing(conn, user_id, input.standing.as_ref())?;
+    let (standing_changed, twin_weeks) = apply_standing(conn, user_id, input.standing.as_ref())?;
     for week in &mut weeks {
         // The standing change can rewrite a week this batch saved (days `until` had cut come back).
         if standing_changed
@@ -188,6 +189,11 @@ fn apply_tx(
         && let Some(object) = result.as_object_mut()
     {
         object.insert("standing_changed_weeks".into(), json!(changed));
+    }
+    if !twin_weeks.is_empty()
+        && let Some(object) = result.as_object_mut()
+    {
+        object.insert("standing_twin_weeks".into(), json!(twin_weeks));
     }
     if let Some(operation_id) = &input.operation_id {
         remember_operation(
@@ -338,13 +344,17 @@ fn apply_week(conn: &Connection, user_id: i64, week: &WeekInput) -> Result<WeekO
     })
 }
 
+/// The weeks the standing change rewrote, and the later saved weeks that would now show a weekly fixed
+/// time twice (read before the write, while the block is still new).
+type StandingOutcome = (Option<Vec<String>>, Vec<String>);
+
 fn apply_standing(
     conn: &Connection,
     user_id: i64,
     standing: Option<&StandingInput>,
-) -> Result<Option<Vec<String>>, ApplyFailure> {
+) -> Result<StandingOutcome, ApplyFailure> {
     let Some(standing) = standing else {
-        return Ok(None);
+        return Ok((None, Vec::new()));
     };
     let encoded =
         serde_json::to_string(&Value::Array(standing.blocks.clone())).map_err(|error| {
@@ -353,12 +363,12 @@ fn apply_standing(
                 error,
             })
         })?;
-    Ok(Some(set_standing(
-        conn,
-        user_id,
-        &standing.week_start,
-        &encoded,
-    )?))
+    if let Some(problem) = standing_limit_problem(conn, user_id, &standing.week_start, &encoded)? {
+        return Err(refuse(&problem));
+    }
+    let twins = standing_twin_weeks(conn, user_id, &standing.week_start, &encoded)?;
+    let changed = set_standing(conn, user_id, &standing.week_start, &encoded)?;
+    Ok((Some(changed), twins))
 }
 
 fn week_value(week: &WeekOut) -> Value {

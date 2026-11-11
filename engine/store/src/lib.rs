@@ -205,8 +205,8 @@ pub use rules::{
     rewrite_stored_blocks, solve_availability,
 };
 pub use standing::{
-    adopt_standing, replace_standing, set_standing, standing_blocks, standing_rows,
-    week_with_standing,
+    MAX_STANDING_BLOCKS, adopt_standing, replace_standing, set_standing, standing_blocks,
+    standing_limit_problem, standing_rows, standing_twin_weeks, week_with_standing,
 };
 pub use views::{day_view, homework_list, month_view, restore_point_list, routine_list, week_view};
 pub use weeks::{WeekSave, list_account_weeks, read_week, save_week, week_blocks, week_starts};

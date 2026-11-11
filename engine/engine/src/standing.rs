@@ -17,6 +17,10 @@ fn id_of(block: &Value) -> Option<&str> {
     block.get("id").and_then(Value::as_str)
 }
 
+fn text_of<'a>(block: &'a Value, key: &str) -> &'a str {
+    block.get(key).and_then(Value::as_str).unwrap_or_default()
+}
+
 fn days_of(block: &Value) -> Vec<i64> {
     block
         .get("days")
@@ -87,6 +91,33 @@ pub fn restated(before: &Value, change: &Value, from_week: &str) -> EngineResult
         fields.insert("days".into(), days.clone());
     }
     Ok(body)
+}
+
+/// Whether the week starting `week_start`, holding `stored`, has a copy the student made by hand of the
+/// repeat `block`: an ordinary fixed time (not one that stands by itself) with a start, the same title
+/// (trimmed, ignoring case), start and length, on a day the repeat really has in that week. Turning the
+/// repeat on would show it twice there.
+pub fn twin_in_week(block: &Value, week_start: &str, stored: &[Value]) -> EngineResult<bool> {
+    let Some(repeat) = trim_until(block, week_start)? else {
+        return Ok(false);
+    };
+    let repeat_days = days_of(&repeat);
+    let title = text_of(&repeat, "title").trim().to_lowercase();
+    for copy in stored {
+        if copy.get("kind").and_then(Value::as_str) != Some("locked")
+            || is_standing_block(copy)?
+            || text_of(copy, "start").is_empty()
+            || text_of(copy, "start") != text_of(&repeat, "start")
+            || copy.get("duration_min") != repeat.get("duration_min")
+            || text_of(copy, "title").trim().to_lowercase() != title
+        {
+            continue;
+        }
+        if days_of(copy).iter().any(|day| repeat_days.contains(day)) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// A week as the student sees it: its own blocks, then each standing block it has no version of, cut

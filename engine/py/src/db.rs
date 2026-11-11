@@ -737,6 +737,34 @@ impl PyConn {
         })
     }
 
+    fn standing_limit_problem(
+        &self,
+        py: Python<'_>,
+        user_id: i64,
+        from_week: &str,
+        blocks: &str,
+    ) -> PyResult<Option<String>> {
+        let from_week = from_week.to_string();
+        let blocks = blocks.to_string();
+        self.store(py, move |conn| {
+            flexweek_store::standing_limit_problem(conn, user_id, &from_week, &blocks)
+        })
+    }
+
+    fn standing_twin_weeks(
+        &self,
+        py: Python<'_>,
+        user_id: i64,
+        from_week: &str,
+        blocks: &str,
+    ) -> PyResult<Vec<String>> {
+        let from_week = from_week.to_string();
+        let blocks = blocks.to_string();
+        self.store(py, move |conn| {
+            flexweek_store::standing_twin_weeks(conn, user_id, &from_week, &blocks)
+        })
+    }
+
     fn standing_rows(&self, py: Python<'_>, user_id: i64) -> PyResult<String> {
         self.store(py, move |conn| flexweek_store::standing_rows(conn, user_id))
     }

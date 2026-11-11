@@ -6,8 +6,8 @@ mod common;
 use common::scratch;
 use flexweek_store::{
     create_restore_point, delete_account, initialize, insert_preferences, open_connection,
-    replace_standing, restore_point_body, set_standing, standing_blocks, standing_rows,
-    week_with_standing,
+    replace_standing, restore_point_body, set_standing, standing_blocks, standing_limit_problem,
+    standing_rows, standing_twin_weeks, week_with_standing,
 };
 use rusqlite::{Connection, params};
 use serde_json::{Value, json};
@@ -543,4 +543,137 @@ fn an_ordinary_change_leaves_the_open_weeks_saved_copy_to_the_client() {
     assert_eq!(dec_7, json!([piano(None), gym()]));
     let (dec_14, _) = week_row(&conn, user_id, DEC_14);
     assert_eq!(dec_14, json!([later, gym()]));
+}
+
+/// A copy of Piano the student made by hand: no `weekly-` id, so it stands in its week alone.
+fn hand_copy(days: &[i64]) -> Value {
+    json!({"category": "extra", "days": days, "duration_min": 60, "id": "copy-1",
+           "kind": "locked", "start": "16:00", "title": "Piano"})
+}
+
+fn twins(conn: &Connection, user_id: i64, from_week: &str, change: &Value) -> Vec<String> {
+    standing_twin_weeks(conn, user_id, from_week, &text(&json!([change]))).unwrap()
+}
+
+#[test]
+fn a_new_repeat_names_the_later_saved_weeks_that_hold_a_copy() {
+    let (conn, user_id) = fresh_account("twins-new");
+    add_week(&conn, user_id, FIRST_WEEK, &json!([hand_copy(&[1])]));
+    add_week(&conn, user_id, DEC_7, &json!([hand_copy(&[3])]));
+    add_week(&conn, user_id, DEC_14, &json!([gym(), hand_copy(&[1, 3])]));
+    // The week of 21 December holds a Piano at another hour, which is not the same block.
+    let mut later_hour = hand_copy(&[1]);
+    later_hour["start"] = json!("17:00");
+    add_week(&conn, user_id, "2026-12-21", &json!([later_hour]));
+    // Only weeks after the open one count: the open week's own copy is the client's to save.
+    assert_eq!(
+        twins(&conn, user_id, FIRST_WEEK, &piano(None)),
+        vec![DEC_7.to_string(), DEC_14.to_string()]
+    );
+}
+
+#[test]
+fn until_decides_which_weeks_the_repeat_really_reaches() {
+    let (conn, user_id) = fresh_account("twins-until");
+    add_week(&conn, user_id, DEC_7, &json!([hand_copy(&[3])]));
+    add_week(&conn, user_id, DEC_14, &json!([hand_copy(&[1])]));
+    // Until Wednesday 9 December: the week of 7 December keeps Tuesday only, and 14 December nothing.
+    assert!(twins(&conn, user_id, FIRST_WEEK, &piano(Some("2026-12-09"))).is_empty());
+    // Until Tuesday 15 December: 7 December has Thursday the 10th, which the copy sits on.
+    assert_eq!(
+        twins(&conn, user_id, FIRST_WEEK, &piano(Some("2026-12-15"))),
+        vec![DEC_7.to_string(), DEC_14.to_string()]
+    );
+}
+
+#[test]
+fn a_repeat_that_already_stands_is_never_news() {
+    let (conn, user_id) = fresh_account("twins-existing");
+    add_week(&conn, user_id, DEC_14, &json!([hand_copy(&[1])]));
+    set_standing(&conn, user_id, FIRST_WEEK, &text(&json!([piano(None)]))).unwrap();
+    assert!(twins(&conn, user_id, FIRST_WEEK, &piano(None)).is_empty());
+    let mut edited = piano(None);
+    edited["title"] = json!("Piano");
+    edited["duration_min"] = json!(60);
+    assert!(twins(&conn, user_id, DEC_7, &edited).is_empty());
+}
+
+#[test]
+fn a_stop_or_a_setup_block_has_no_twins() {
+    let (conn, user_id) = fresh_account("twins-others");
+    add_week(&conn, user_id, DEC_14, &json!([hand_copy(&[1])]));
+    let stop = json!({"id": "weekly-piano", "stop": true});
+    assert!(twins(&conn, user_id, FIRST_WEEK, &stop).is_empty());
+    let mut activity = piano(None);
+    activity["id"] = json!("activity-4");
+    assert!(twins(&conn, user_id, FIRST_WEEK, &activity).is_empty());
+}
+
+#[test]
+fn finding_twins_changes_nothing() {
+    let (conn, user_id) = fresh_account("twins-read-only");
+    add_week(&conn, user_id, DEC_14, &json!([hand_copy(&[1])]));
+    twins(&conn, user_id, FIRST_WEEK, &piano(None));
+    assert_eq!(
+        week_row(&conn, user_id, DEC_14),
+        (json!([hand_copy(&[1])]), 1)
+    );
+    assert_eq!(text(&standing_rows_json(&conn, user_id)), "[]");
+}
+
+fn standing_rows_json(conn: &Connection, user_id: i64) -> Value {
+    serde_json::from_str(&standing_rows(conn, user_id).unwrap()).unwrap()
+}
+
+fn weekly(n: usize) -> Value {
+    json!({"category": "extra", "days": [5], "duration_min": 30, "id": format!("weekly-{n}"),
+           "kind": "locked", "start": "09:00", "title": format!("Club {n}")})
+}
+
+fn account_holding(name: &str, count: usize) -> (Connection, i64) {
+    let (conn, user_id) = fresh_account(name);
+    let blocks: Vec<Value> = (0..count).map(weekly).collect();
+    set_standing(&conn, user_id, FIRST_WEEK, &text(&Value::Array(blocks))).unwrap();
+    (conn, user_id)
+}
+
+fn limit(conn: &Connection, user_id: i64, week: &str, changes: &[Value]) -> Option<String> {
+    standing_limit_problem(conn, user_id, week, &text(&json!(changes))).unwrap()
+}
+
+#[test]
+fn the_account_holds_at_most_two_hundred_standing_blocks() {
+    let (conn, user_id) = account_holding("limit-account", 200);
+    // Over several saves: the 201st block is refused whichever save brings it.
+    let refused = limit(&conn, user_id, DEC_7, &[weekly(200)]).expect("201 blocks");
+    assert!(refused.contains("200"), "{refused}");
+    assert_eq!(limit(&conn, user_id, DEC_7, &[]), None);
+    // Editing one that stands is not adding one, and a stop makes room for a new one.
+    assert_eq!(limit(&conn, user_id, DEC_7, &[weekly(7)]), None);
+    let stop = json!({"id": "weekly-3", "stop": true});
+    assert_eq!(
+        limit(&conn, user_id, DEC_7, &[stop.clone(), weekly(200)]),
+        None
+    );
+    // Stopping a block that does not stand frees nothing.
+    let stray = json!({"id": "weekly-999", "stop": true});
+    assert!(limit(&conn, user_id, DEC_7, &[stray, weekly(200)]).is_some());
+    // The 200th block still fits.
+    let (conn, user_id) = account_holding("limit-199", 199);
+    assert_eq!(limit(&conn, user_id, DEC_7, &[weekly(199)]), None);
+    assert!(limit(&conn, user_id, DEC_7, &[weekly(199), weekly(200)]).is_some());
+}
+
+#[test]
+fn an_account_at_the_limit_exports_every_block() {
+    let (conn, user_id) = account_holding("limit-export", 200);
+    let rows = standing_rows_json(&conn, user_id);
+    let mut positions: Vec<i64> = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["position"].as_i64().unwrap())
+        .collect();
+    positions.sort_unstable();
+    assert_eq!(positions, (0..200).collect::<Vec<i64>>());
 }

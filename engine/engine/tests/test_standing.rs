@@ -4,7 +4,7 @@
 use flexweek_engine::desk::blocks::until_problem;
 use flexweek_engine::desk::grid::{is_setup_block, is_standing_block};
 use flexweek_engine::standing::{
-    derive_standing, restand, restated, standing_body, trim_until, with_standing,
+    derive_standing, restand, restated, standing_body, trim_until, twin_in_week, with_standing,
 };
 use flexweek_engine::validate;
 use serde_json::{Value, json};
@@ -372,4 +372,81 @@ fn a_change_sent_after_until_has_passed_is_kept_as_sent() {
     let before = piano_on(&[1, 3], Some("2026-12-09"));
     let again = piano_on(&[1], None);
     assert_eq!(restated(&before, &again, "2026-12-14").unwrap(), again);
+}
+
+// A copy the student made by hand before the block repeated: an ordinary fixed time in a later week.
+// 14 December 2026 is a Monday, so its Tuesday is the 15th and its Thursday the 17th.
+const LATER: &str = "2026-12-14";
+
+fn copy_of_piano(days: &[i64]) -> Value {
+    json!({"id": "b1", "title": "Piano", "kind": "locked", "category": "extra", "start": "16:00",
+           "duration_min": 60, "days": days})
+}
+
+fn twin(repeat: &Value, copy: Value) -> bool {
+    twin_in_week(repeat, LATER, &[gym(), copy]).unwrap()
+}
+
+#[test]
+fn a_hand_made_copy_on_a_day_the_repeat_has_is_a_twin() {
+    assert!(twin(&piano_on(&[1, 3], None), copy_of_piano(&[1])));
+    // One shared day among several is enough.
+    assert!(twin(&piano_on(&[3], None), copy_of_piano(&[1, 3])));
+}
+
+#[test]
+fn a_twin_needs_the_same_title_start_and_length() {
+    let repeat = piano_on(&[1, 3], None);
+    let mut spaced = copy_of_piano(&[1]);
+    spaced["title"] = json!("  piaNO ");
+    assert!(
+        twin(&repeat, spaced),
+        "the title is compared trimmed, ignoring case"
+    );
+    let mut renamed = copy_of_piano(&[1]);
+    renamed["title"] = json!("Violin");
+    assert!(!twin(&repeat, renamed));
+    let mut later = copy_of_piano(&[1]);
+    later["start"] = json!("16:15");
+    assert!(!twin(&repeat, later));
+    let mut longer = copy_of_piano(&[1]);
+    longer["duration_min"] = json!(90);
+    assert!(!twin(&repeat, longer));
+    assert!(!twin(&repeat, copy_of_piano(&[0, 2])), "no shared day");
+}
+
+#[test]
+fn only_an_ordinary_fixed_time_with_a_start_is_a_twin() {
+    let repeat = piano_on(&[1, 3], None);
+    for id in ["weekly-other", "school", "sport", "activity-3"] {
+        let mut standing = copy_of_piano(&[1]);
+        standing["id"] = json!(id);
+        assert!(!twin(&repeat, standing), "{id} stands by itself");
+    }
+    let mut flexible = copy_of_piano(&[1]);
+    flexible["kind"] = json!("flexible");
+    assert!(!twin(&repeat, flexible));
+    let mut no_start = copy_of_piano(&[1]);
+    no_start["start"] = Value::Null;
+    assert!(!twin(&repeat, no_start));
+}
+
+#[test]
+fn a_twin_must_sit_on_a_day_the_repeat_has_before_its_until() {
+    // Until Tuesday 15 December leaves Piano on Tuesday only in the week of 14 December.
+    let repeat = piano_on(&[1, 3], Some("2026-12-15"));
+    assert!(twin(&repeat, copy_of_piano(&[1])));
+    assert!(
+        !twin(&repeat, copy_of_piano(&[3])),
+        "Thursday the 17th is past Until"
+    );
+    // Until Sunday 13 December leaves nothing in that week.
+    let over = piano_on(&[1, 3], Some("2026-12-13"));
+    assert!(!twin(&over, copy_of_piano(&[1])));
+}
+
+#[test]
+fn a_week_with_no_copy_has_no_twin() {
+    assert!(!twin_in_week(&piano_on(&[1], None), LATER, &[gym()]).unwrap());
+    assert!(!twin_in_week(&piano_on(&[1], None), LATER, &[]).unwrap());
 }

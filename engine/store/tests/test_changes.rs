@@ -649,3 +649,65 @@ fn a_standing_change_that_rewrites_the_saved_week_answers_with_the_stored_week()
     assert_eq!(answer["weeks"][0]["revision"], json!(2));
     assert_eq!(week_revision(&conn, user_id, WEEK), 2);
 }
+
+fn weekly_piano() -> Value {
+    json!({"category": "extra", "days": [1, 3], "duration_min": 60, "id": "weekly-piano",
+           "kind": "locked", "start": "16:00", "title": "Piano"})
+}
+
+fn standing_input(blocks: Vec<Value>) -> ApplyInput {
+    let mut input = empty_input();
+    input.standing = Some(StandingInput {
+        week_start: WEEK.into(),
+        blocks,
+    });
+    input
+}
+
+/// A new repeat doubles the copy the student made by hand in a later week: the answer names the week,
+/// once, and only the first time. A save that doubles nothing keeps its answer exactly as it was.
+#[test]
+fn a_new_repeat_names_the_later_weeks_that_already_hold_a_copy() {
+    let (conn, user_id) = account("standing-twins");
+    // Monday 26 October 2026 is the week after WEEK.
+    let copy = json!([{"category": "extra", "days": [3], "duration_min": 60, "id": "copy-1",
+                       "kind": "locked", "start": "16:00", "title": "piano"}]);
+    conn.execute(
+        "INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?1, '2026-10-26', ?2, 1)",
+        params![user_id, copy.to_string()],
+    )
+    .unwrap();
+    let answer = apply_shown(&conn, user_id, &standing_input(vec![weekly_piano()])).unwrap();
+    assert_eq!(answer["standing_twin_weeks"], json!(["2026-10-26"]));
+    assert_eq!(
+        week_blocks(&conn, user_id, "2026-10-26"),
+        copy.to_string().replace(" ", ""),
+        "nothing is removed"
+    );
+    let again = apply_shown(&conn, user_id, &standing_input(vec![weekly_piano()])).unwrap();
+    assert!(again.get("standing_twin_weeks").is_none(), "{again}");
+    let school = apply_shown(&conn, user_id, &standing_input(vec![school_block()])).unwrap();
+    assert!(school.get("standing_twin_weeks").is_none(), "{school}");
+}
+
+/// The cap holds for the whole account, not each save: the 201st standing block is refused and
+/// nothing of that batch is written.
+#[test]
+fn the_201st_standing_block_is_refused_whichever_save_brings_it() {
+    let (conn, user_id) = account("standing-cap");
+    let weekly = |n: usize| {
+        json!({"category": "extra", "days": [5], "duration_min": 30, "id": format!("weekly-{n}"),
+               "kind": "locked", "start": "09:00", "title": format!("Club {n}")})
+    };
+    for first in [0, 100] {
+        let blocks = (first..first + 100).map(weekly).collect();
+        apply_shown(&conn, user_id, &standing_input(blocks)).unwrap();
+    }
+    assert_eq!(count_rows(&conn, "standing_blocks", user_id), 200);
+    settle(&conn);
+    let refused = apply_shown(&conn, user_id, &standing_input(vec![weekly(200)])).unwrap_err();
+    assert!(refused.contains("at most 200 weekly blocks"), "{refused}");
+    assert_eq!(count_rows(&conn, "standing_blocks", user_id), 200);
+    settle(&conn);
+    apply_shown(&conn, user_id, &standing_input(vec![weekly(7)])).unwrap();
+}
