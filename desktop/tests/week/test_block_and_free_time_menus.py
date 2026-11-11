@@ -417,6 +417,7 @@ def test_day_has_the_free_time_menu_at_its_own_day(
     window.findChild(QAbstractButton, "viewDay").click()
     settled(qapp, window)
     hours = window.day_view.hours
+    window.hand.step = 15
     day = date.fromisoformat(window.session.selected_day).weekday()
     hours.reveal(day, 17 * 60, 17 * 60 + 30)
     qapp.processEvents()
