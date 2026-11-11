@@ -78,7 +78,7 @@ fn perform(app: &crate::App, args: &RestoreArgs) -> Result<Value, String> {
     let digest =
         write::argument_digest("restore_point", &args.operation_id, &json!({"id": args.id}));
     let (conn, user_id) = (&opened.conn, opened.user_id);
-    let now = homework::clock_of(app).now;
+    let now = homework::clock_of(app)?.now;
     // A replay or a clashing reuse of the operation id is answered before the prune, so it changes
     // nothing, not even an old assistant restore point.
     let early = match recall_operation(conn, user_id, &operation_id, &digest).map_err(stored_error)

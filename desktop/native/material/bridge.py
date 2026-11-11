@@ -35,6 +35,7 @@ from desktop.native.material.theme import (
     dress_theme,
     hour_row_px,
     read_advanced,
+    read_letter_keys,
     read_material_choice,
     read_shortcuts,
     resolved_mode,
@@ -107,6 +108,7 @@ class MaterialBridge(QObject):
         self._reduce_motion = False
         self._advanced = advanced_default()
         self._shortcuts = True
+        self._letter_keys = False
         self._colours = scheme(DEFAULT_PRESET, "light", DEFAULT_CONTRAST)
         self._theme = theme_object(self._colours, self._density, False, False)
         self._week = WeekBridge(window, self)
@@ -137,6 +139,7 @@ class MaterialBridge(QObject):
         choice = read_material_choice(stored)
         self._advanced = read_advanced(stored)
         self._shortcuts = read_shortcuts(stored)
+        self._letter_keys = read_letter_keys(stored)
         worn_dark = mode == "dark"
         resolved = resolved_mode(choice["mode"], worn_dark)
         try:
@@ -336,8 +339,13 @@ class MaterialBridge(QObject):
 
     @Property(bool, notify=changed)
     def shortcuts(self) -> bool:
-        """P plans, Z undoes, and 1–5 switch screens, unless Settings turned that off."""
+        """The number keys 1–5 switch screens, unless Settings turned that off."""
         return self._shortcuts
+
+    @Property(bool, notify=changed)
+    def letterKeys(self) -> bool:  # noqa: N802 - the name QML reads
+        """P plans, Z undoes and F opens Focus, only when Settings turned that on. It starts off."""
+        return self._letter_keys
 
     @Property(bool, constant=True)
     def later(self) -> bool:

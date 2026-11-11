@@ -18,10 +18,17 @@ SectionPage {
         }
         ToggleRow {
             key: "shortcuts"
-            title: "Keyboard shortcuts"
-            subtitle: "P plans, Z undoes, 1 to 5 switch views. Off while you type. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redoes, even with this off."
+            title: "Number keys"
+            subtitle: "1 to 5 open Day, Week, Month, My day and Settings. Off while you type."
             isOn: !!page.st.shortcuts
             onFlipped: (value) => page.panel.setShortcuts(value)
+        }
+        ToggleRow {
+            key: "letters"
+            title: "Letter keys"
+            subtitle: "P plans your homework, Z undoes and F opens Focus. Off while you type. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redoes with this on or off."
+            isOn: !!page.st.letters
+            onFlipped: (value) => page.panel.setLetterKeys(value)
         }
         ToggleRow {
             key: "reduceMotion"

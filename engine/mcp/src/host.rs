@@ -1,4 +1,4 @@
-//! Where this computer keeps FlexWeek, and the clock a test can hold still.
+//! Where this computer keeps FlexWeek, and the clock: live for a student, or held still for a test.
 //!
 //! `--now` holds a timestamp; an explicit offset keeps its own wall date and minute.
 
@@ -19,6 +19,7 @@ pub struct Launch {
     pub read_only: bool,
 }
 
+#[derive(Clone)]
 pub struct Clock {
     pub unix: i64,
     pub today: String,
@@ -87,26 +88,73 @@ pub fn folder_name(data_dir: &Path) -> String {
         .unwrap_or_default()
 }
 
-pub fn clock(now_flag: Option<&str>) -> Result<Clock, String> {
-    let Some(text) = now_flag else {
-        let unix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| "the clock went backwards".to_string())?
-            .as_secs();
-        let unix = i64::try_from(unix).map_err(|_| "the clock went backwards".to_string())?;
-        let local = chrono::Local::now();
-        let today = format!(
-            "{:04}-{:02}-{:02}",
-            local.year(),
-            local.month(),
-            local.day()
-        );
-        return Ok(Clock {
-            unix,
-            today,
-            minute: i64::from(local.hour()) * 60 + i64::from(local.minute()),
-        });
-    };
+/// Where the helper reads the time from. A student's helper is `Live`: every call reads the clock, so
+/// a session that expires, a day that changes and a restore point's time are all current. `--now`
+/// holds one moment for the tests.
+#[derive(Clone)]
+pub enum ClockSource {
+    Fixed(Clock),
+    Live,
+}
+
+pub fn source(now_flag: Option<&str>) -> Result<ClockSource, String> {
+    match now_flag {
+        Some(text) => parse_fixed(text).map(ClockSource::Fixed),
+        None => Ok(ClockSource::Live),
+    }
+}
+
+impl ClockSource {
+    pub fn now(&self) -> Result<Clock, String> {
+        match self {
+            ClockSource::Fixed(clock) => Ok(clock.clone()),
+            ClockSource::Live => live(),
+        }
+    }
+}
+
+/// The tests' way to move a running helper's clock without waiting. The variable names a file holding
+/// an RFC 3339 timestamp that is read on every call. It exists only in a debug build: the helper a
+/// student runs is a release build, where nothing reads the variable, so it cannot be reached by accident.
+#[cfg(debug_assertions)]
+fn moved_by_test() -> Option<Result<Clock, String>> {
+    let path = std::env::var_os("FLEXWEEK_MCP_TEST_CLOCK_FILE")?;
+    Some(
+        std::fs::read_to_string(path)
+            .map_err(|_| "the test clock file can't be read".to_string())
+            .and_then(|text| parse_fixed(text.trim())),
+    )
+}
+
+#[cfg(not(debug_assertions))]
+fn moved_by_test() -> Option<Result<Clock, String>> {
+    None
+}
+
+fn live() -> Result<Clock, String> {
+    if let Some(moved) = moved_by_test() {
+        return moved;
+    }
+    let unix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "the clock went backwards".to_string())?
+        .as_secs();
+    let unix = i64::try_from(unix).map_err(|_| "the clock went backwards".to_string())?;
+    let local = chrono::Local::now();
+    let today = format!(
+        "{:04}-{:02}-{:02}",
+        local.year(),
+        local.month(),
+        local.day()
+    );
+    Ok(Clock {
+        unix,
+        today,
+        minute: i64::from(local.hour()) * 60 + i64::from(local.minute()),
+    })
+}
+
+fn parse_fixed(text: &str) -> Result<Clock, String> {
     let (unix, today, minute) = if let Ok(parsed) = DateTime::parse_from_rfc3339(text) {
         (
             parsed.timestamp(),
@@ -240,7 +288,7 @@ mod tests {
 
     #[test]
     fn held_offset_clock_keeps_its_wall_date_and_minute() {
-        let clock = super::clock(Some("2026-10-21T20:00:00-05:00")).expect("clock");
+        let clock = super::parse_fixed("2026-10-21T20:00:00-05:00").expect("clock");
         assert_eq!(clock.today, "2026-10-21");
         assert_eq!(clock.minute, 1200);
         assert_eq!(clock.unix, 1792630800);

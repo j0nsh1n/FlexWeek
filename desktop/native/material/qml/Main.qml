@@ -27,7 +27,11 @@ Item {
     readonly property bool focusOpen: bridge ? bridge.focus.open : false
     readonly property bool settingsPromptOpen: bridge && bridge.settingsBridge
         ? bridge.settingsBridge.promptOpen : false
+    // Set by the window while one of its own dialogs (Help) is up over this one: its keys are not ours,
+    // and a Shortcut here still fires with that dialog active, so Esc never reached it.
+    property bool widgetsDialogOpen: false
     readonly property bool modalActive: typing || focusOpen || accountLayer.active || settingsPromptOpen
+        || widgetsDialogOpen
 
     function _field(item) {
         while (item) {
@@ -54,27 +58,30 @@ Item {
     }
 
     function takeKey(event) {
-        if (modalActive || bridge.shortcuts === false)
+        if (modalActive)
             return
         var key = event.key
         var plain = !(event.modifiers & (Qt.ControlModifier | Qt.MetaModifier | Qt.AltModifier))
-        if (key === Qt.Key_1)
+        // 1 to 5 and the letters answer to their own Settings switches.
+        var numbers = bridge.shortcuts !== false
+        var letters = bridge.letterKeys === true
+        if (numbers && key === Qt.Key_1)
             bridge.showPage("day")
-        else if (key === Qt.Key_2)
+        else if (numbers && key === Qt.Key_2)
             bridge.showPage("week")
-        else if (key === Qt.Key_3)
+        else if (numbers && key === Qt.Key_3)
             bridge.showPage("month")
-        else if (key === Qt.Key_4)
+        else if (numbers && key === Qt.Key_4)
             bridge.showPage("myday")
-        else if (key === Qt.Key_5)
+        else if (numbers && key === Qt.Key_5)
             bridge.showPage("settings")
-        else if (key === Qt.Key_Z && plain)
+        else if (letters && key === Qt.Key_Z && plain)
             bridge.undo()
-        else if (key === Qt.Key_F)
+        else if (letters && key === Qt.Key_F)
             bridge.focus.show()
-        else if (key === Qt.Key_P && plain)
+        else if (letters && key === Qt.Key_P && plain)
             bridge.plan()
-        else if (key === Qt.Key_Escape)
+        else if (numbers && key === Qt.Key_Escape)
             focusDestination()
         else
             return
@@ -631,10 +638,10 @@ Item {
     Shortcut {
         sequence: "Z"
         context: Qt.WindowShortcut
-        enabled: !modalActive && bridge.shortcuts !== false
+        enabled: !modalActive && bridge.letterKeys === true
         onActivated: bridge.undo()
     }
-    // Ctrl chords are not one-letter shortcuts, so the Settings switch leaves them on. They end in the
+    // Ctrl chords are not one-letter shortcuts, so neither Settings switch touches them. They end in the
     // same bridge.undo() and bridge.redo() as the snackbar's UNDO and the top bar. A text field or a
     // sheet (`typing`), Focus, sign-in and the Settings prompt keep their own keys through modalActive.
     Shortcut {
@@ -652,13 +659,13 @@ Item {
     Shortcut {
         sequence: "F"
         context: Qt.WindowShortcut
-        enabled: !modalActive && bridge.shortcuts !== false
+        enabled: !modalActive && bridge.letterKeys === true
         onActivated: bridge.focus.show()
     }
     Shortcut {
         sequence: "P"
         context: Qt.WindowShortcut
-        enabled: !modalActive && bridge.shortcuts !== false
+        enabled: !modalActive && bridge.letterKeys === true
         onActivated: bridge.plan()
     }
     Shortcut {
@@ -690,6 +697,7 @@ Item {
         context: Qt.WindowShortcut
         // An open Week or Day menu takes its own Escape, so it can close and give the focus back.
         enabled: !accountLayer.active && !focusOverlay.ending && !sheetHost.active && !settingsPromptOpen
+                 && !widgetsDialogOpen
                  && !(bridge.screen === "week" && weekView.menuOpen) && !(bridge.screen === "day" && dayView.menuOpen)
         onActivated: {
             if (bridge && bridge.settingsBridge && bridge.settingsBridge.page === "advanced")

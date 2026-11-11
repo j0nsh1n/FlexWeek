@@ -2476,6 +2476,36 @@ def _line(words: str, name: str) -> QLabel:
     return made
 
 
+# The Widgets rows that are also true in Material. Its window answers none of the others: F1, Ctrl+N,
+# Ctrl+K, T and B, copy, paste, duplicate and Delete do nothing there. Ctrl+Shift+L is switched off while
+# Material shows (it is the Widgets week list's key), and Esc does not put a held card back.
+_MATERIAL_KEPT_KEYS = frozenset(
+    {
+        "[Ctrl]+[Z]",
+        "[Ctrl]+[Y] or [Ctrl]+[Shift]+[Z]",
+        "[Ctrl]+[S]",
+        "[Ctrl]+[=] [-] [0]",
+        "[Ctrl] and the mouse wheel",
+    }
+)
+
+
+def material_help_keys(numbers: bool, letters: bool) -> tuple[tuple[str, str], ...]:
+    """Help's keys as Material answers to them: 1 to 5 for the views only while their switch is on, P, Z
+    and F only while theirs is, and of the rest only the rows that work there."""
+    rows: list[tuple[str, str]] = []
+    for key, what in HELP_KEYS:
+        if key == "[D] [W] [M]":
+            if numbers:
+                rows.append(("[1] to [5]", "Day, Week, Month, My day, Settings"))
+        elif key == "[F]":
+            if letters:
+                rows += [("[P]", "Plan my homework"), ("[Z]", "Undo"), (key, what)]
+        elif key in _MATERIAL_KEPT_KEYS:
+            rows.append((key, what))
+    return tuple(rows)
+
+
 def keys_words(marked: str) -> str:
     """A shortcut as it is said: its keys without their brackets."""
     return marked.replace("[", "").replace("]", "")
@@ -2600,9 +2630,14 @@ class HelpDialog(Dialog):
 
     _pin_top = True
 
-    def __init__(self, parent: QWidget | None) -> None:
+    def __init__(self, parent: QWidget | None, material_keys: tuple[bool, bool] | None = None) -> None:
+        """`material_keys` is (number keys on, letter keys on) when Help is opened from Material, whose
+        keys differ from the Widgets looks'."""
         super().__init__(parent, sheet=True)
         layout = self.card_body("Help", SHEET_LIST)
+        # Close has no focus on a click (it would be where typing starts) but Tab reaches it, so the
+        # keyboard has somewhere to go and shows where it is.
+        self.findChild(QPushButton, "sheetClose").setFocusPolicy(Qt.FocusPolicy.TabFocus)
         body = QWidget()
         column = QVBoxLayout(body)
         column.setContentsMargins(0, 0, 0, 0)
@@ -2636,7 +2671,8 @@ class HelpDialog(Dialog):
         keys.setContentsMargins(0, 0, 0, 0)
         keys.setHorizontalSpacing(SECTION_GAP)
         keys.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
-        for key, what in HELP_KEYS:
+        shown = HELP_KEYS if material_keys is None else material_help_keys(*material_keys)
+        for key, what in shown:
             keys.addRow(keycaps(key), _line(what, "helpKeyDoes"))
         column.addWidget(key_list)
         column.addSpacing(SPACING[3])

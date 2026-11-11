@@ -49,8 +49,10 @@ that should see the schedule but never change it.
 
 `--now` holds the clock at a UTC (`...Z`) or RFC 3339 offset timestamp, for
 tests. An offset timestamp uses its own date and minute (for example,
-`--now 2026-10-21T08:00:00+09:00`). Without it, the date and minute use the
-computer's local clock.
+`--now 2026-10-21T08:00:00+09:00`). Without it, every call reads the
+computer's local clock, so a helper left open for days still checks the
+session expiry, "today", restore-point times and past-time rules against the
+time of that call.
 
 stdout is newline-delimited JSON-RPC. The start line and one line per call
 go to stderr. Those lines do not include the token, the username, a title,

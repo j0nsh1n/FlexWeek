@@ -109,7 +109,7 @@ pub(crate) fn open(app: &crate::App) -> Result<Opened, String> {
         app.started_as.as_ref(),
         &app.session_file,
         &app.database,
-        app.now_unix,
+        app.now()?.unix,
     )?;
     let conn = flexweek_store::open_connection(&app.database).map_err(session::storage_sentence)?;
     begin_immediate(&conn).map_err(session::storage_sentence)?;
@@ -123,11 +123,12 @@ fn stamp_of(today: &str, minute: i64) -> String {
     format!("{today}T{:02}:{:02}", minute / 60, minute % 60)
 }
 
-pub(crate) fn clock_of(app: &crate::App) -> ApplyClock {
-    ApplyClock {
-        now: stamp_of(&app.today, app.minute),
+pub(crate) fn clock_of(app: &crate::App) -> Result<ApplyClock, String> {
+    let now = app.now()?;
+    Ok(ApplyClock {
+        now: stamp_of(&now.today, now.minute),
         restore_token: String::new(),
-    }
+    })
 }
 
 fn derived_id(operation_id: &str, kind: &str) -> String {
@@ -501,15 +502,16 @@ impl crate::App {
             let session_id = derived_id(&args.operation_id, "session");
             let payload = add_payload(&args, &assignment_id);
             let assignments = load_assignments(&opened.conn, opened.user_id)?;
-            let weeks = weeks_touching(&opened.conn, opened.user_id, &assignment_id, &self.today)?;
+            let now = self.now()?;
+            let weeks = weeks_touching(&opened.conn, opened.user_id, &assignment_id, &now.today)?;
             let edited = edit_weeks(
                 weeks,
                 &assignments,
                 &payload,
                 args.spread.unwrap_or(false),
                 &session_id,
-                &self.today,
-                self.minute,
+                &now.today,
+                now.minute,
             )?;
             let input = homework_input(edited, 0)?;
             let applied = run_apply(
@@ -519,7 +521,7 @@ impl crate::App {
                 &operation_id,
                 &digest,
                 input,
-                &clock_of(self),
+                &clock_of(self)?,
             )?;
             saved_homework(&applied)
         })();
@@ -548,15 +550,16 @@ impl crate::App {
             };
             let payload = edit_payload(existing, &args)?;
             let session_id = derived_id(&args.operation_id, "session");
-            let weeks = weeks_touching(&opened.conn, opened.user_id, &args.id, &self.today)?;
+            let now = self.now()?;
+            let weeks = weeks_touching(&opened.conn, opened.user_id, &args.id, &now.today)?;
             let edited = edit_weeks(
                 weeks,
                 &assignments,
                 &payload,
                 args.spread.unwrap_or(false),
                 &session_id,
-                &self.today,
-                self.minute,
+                &now.today,
+                now.minute,
             )?;
             let input = homework_input(edited, args.expected_revision)?;
             let applied = run_apply(
@@ -566,7 +569,7 @@ impl crate::App {
                 &operation_id,
                 &digest,
                 input,
-                &clock_of(self),
+                &clock_of(self)?,
             )?;
             saved_homework(&applied)
         })();
@@ -614,7 +617,7 @@ impl crate::App {
                 &operation_id,
                 &digest,
                 input,
-                &clock_of(self),
+                &clock_of(self)?,
             )?;
             saved_delete(&applied)
         })();
@@ -674,13 +677,14 @@ impl crate::App {
                 revisions.insert(start.clone(), week_revision);
                 weeks.push((start, blocks));
             }
+            let now = self.now()?;
             let marked = mark_homework_done(
                 &args.id,
                 &existing,
                 &assignments,
                 &weeks,
                 args.done,
-                &stamp_of(&self.today, self.minute),
+                &stamp_of(&now.today, now.minute),
             )?;
             let input = ApplyInput {
                 weeks: marked
@@ -709,7 +713,7 @@ impl crate::App {
                 &operation_id,
                 &digest,
                 input,
-                &clock_of(self),
+                &clock_of(self)?,
             )?;
             saved_homework(&applied)
         })();
@@ -765,7 +769,7 @@ impl crate::App {
                 &operation_id,
                 &digest,
                 input,
-                &clock_of(self),
+                &clock_of(self)?,
             )?;
             saved_block(&applied)
         })();

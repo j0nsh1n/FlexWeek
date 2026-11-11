@@ -31,16 +31,13 @@
    "see": "materialDay"
   },
   {
-   "key": "F"
+   "click": "dayStartFocus"
   },
   {
    "wait": 400
   },
   {
    "see": "materialFocus"
-  },
-  {
-   "click": "focusStart"
   },
   {
    "wait": 400

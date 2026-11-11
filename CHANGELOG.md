@@ -5,6 +5,13 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+- Material's P, Z and F keys (plan, undo, Focus) have their own switch, Letter keys, in Settings → This computer, and it starts off, so none of them fires by accident. The 1 to 5 view keys keep their switch, now called Number keys, which stays on. Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y and the zoom keys work whatever either switch says.
+
+### Fixed
+- Help opened from Material now works from the keyboard: Esc closes it, Tab reaches the Close button with a focus ring, Space presses it, the keyboard goes back to Material afterwards, and Material's own keys no longer change the screen behind it. Its keyboard list shows the keys Material answers to (1 to 5 only while Number keys is on, P, Z and F only while Letter keys is on) instead of the Widgets styles' D, W and M.
+- The assistant helper keeps the right time while it stays open: once your session runs out it refuses the next call, "today" follows the date, a restore point carries the time of its change, and past-time checks and Plan use the current time, instead of the minute the helper started.
+
 ## [1.3.0] - 2026-11-10
 
 ### Added

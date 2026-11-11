@@ -37,6 +37,9 @@ def _lineage(item: QObject | None) -> list[str]:
 def _assert_shortcuts_blocked(qapp: QApplication, window: NativeWindow, root: QObject) -> None:
     bridge = _bridge(window)
     quick = window._material_page._quick
+    # The letter keys start off; with them on, a prompt must still keep them.
+    bridge._letter_keys = True
+    bridge.changed.emit()
     before = bridge.property("screen")
     for key in (
         Qt.Key.Key_1,

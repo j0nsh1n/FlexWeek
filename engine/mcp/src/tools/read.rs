@@ -69,7 +69,7 @@ impl crate::App {
                 self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
-                self.now_unix,
+                self.now()?.unix,
             )?;
             Ok(json!({
                 "username": account.username,
@@ -91,13 +91,13 @@ impl crate::App {
                 self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
-                self.now_unix,
+                self.now()?.unix,
             )?;
             let conn = open_connection(&self.database).map_err(session::storage_sentence)?;
-            let date = args
-                .date
-                .filter(|date| !date.is_empty())
-                .unwrap_or_else(|| self.today.clone());
+            let date = match args.date.filter(|date| !date.is_empty()) {
+                Some(date) => date,
+                None => self.now()?.today,
+            };
             let view = day_view(&conn, account_id(&account), &date).map_err(view_error)?;
             Ok(view.to_string())
         })();
@@ -114,7 +114,7 @@ impl crate::App {
                 self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
-                self.now_unix,
+                self.now()?.unix,
             )?;
             let conn = open_connection(&self.database).map_err(session::storage_sentence)?;
             let view =
@@ -134,7 +134,7 @@ impl crate::App {
                 self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
-                self.now_unix,
+                self.now()?.unix,
             )?;
             let conn = open_connection(&self.database).map_err(session::storage_sentence)?;
             let view = month_view(&conn, account_id(&account), &args.month).map_err(view_error)?;
@@ -156,7 +156,7 @@ impl crate::App {
                 self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
-                self.now_unix,
+                self.now()?.unix,
             )?;
             let conn = open_connection(&self.database).map_err(session::storage_sentence)?;
             let view = homework_list(
@@ -178,7 +178,7 @@ impl crate::App {
                 self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
-                self.now_unix,
+                self.now()?.unix,
             )?;
             let conn = open_connection(&self.database).map_err(session::storage_sentence)?;
             let view = routine_list(&conn, account_id(&account)).map_err(view_error)?;
@@ -194,7 +194,7 @@ impl crate::App {
                 self.started_as.as_ref(),
                 &self.session_file,
                 &self.database,
-                self.now_unix,
+                self.now()?.unix,
             )?;
             let conn = open_connection(&self.database).map_err(session::storage_sentence)?;
             let view = restore_point_list(&conn, account_id(&account)).map_err(view_error)?;
