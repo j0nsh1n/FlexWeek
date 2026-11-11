@@ -285,3 +285,166 @@ def test_the_switch_is_not_on_flexible_work(qapp: QApplication, shell: NativeWin
     sheets.editBlock(work["id"], 3)
     assert sheets.kind == "homework"
     assert "repeatShown" not in sheets.form
+
+
+def weekly_saturday_piano(qapp: QApplication, shell: NativeWindow, sheets) -> str:
+    saturday_piano(sheets, repeats=True)
+    settle(qapp, shell)
+    return piano(shell)["id"]
+
+
+def piano_title_in(qapp: QApplication, shell: NativeWindow, week: str) -> str:
+    go_to(qapp, shell, week)
+    return next(item for item in shell.session.blocks if item["id"].startswith("weekly-"))["title"]
+
+
+def test_saving_a_changed_weekly_fixed_time_asks_this_week_only_or_this_week_and_later(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    block_id = weekly_saturday_piano(qapp, shell, sheets)
+    sheets.editBlock(block_id, SATURDAY)
+    sheets.setText("title", "Piano lesson")
+    sheets.save()
+    ask = sheets.ask
+    assert ask["id"] == "edit-block"
+    assert ask["title"] == "Change Piano?"
+    labels = [answer["label"] for answer in ask["answers"]]
+    assert labels == ["Cancel", "This week only", "This week and later"]
+    assert sheets.kind == "block", "the sheet stays open under the question"
+    assert piano(shell)["title"] == "Piano", "nothing is saved before the answer"
+
+
+def test_cancelling_the_which_weeks_question_returns_to_the_sheet_with_the_typing_intact(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    block_id = weekly_saturday_piano(qapp, shell, sheets)
+    sheets.editBlock(block_id, SATURDAY)
+    sheets.setText("title", "Piano lesson")
+    sheets.save()
+    sheets.answer("stay")
+    assert sheets.ask == {} and sheets.kind == "block"
+    assert sheets.form["title"] == "Piano lesson"
+    assert piano(shell)["title"] == "Piano"
+    # Esc on the question does the same.
+    sheets.save()
+    assert sheets.ask["id"] == "edit-block"
+    sheets.closeSheet()
+    assert sheets.ask == {} and sheets.kind == "block"
+    assert sheets.form["title"] == "Piano lesson"
+    assert piano(shell)["title"] == "Piano"
+
+
+def test_this_week_only_changes_this_week_and_leaves_later_weeks(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    block_id = weekly_saturday_piano(qapp, shell, sheets)
+    sheets.editBlock(block_id, SATURDAY)
+    sheets.setText("title", "Piano lesson")
+    sheets.save()
+    sheets.answer("week")
+    settle(qapp, shell)
+    assert sheets.kind == "" and piano_title_in(qapp, shell, NEXT_WEEK) == "Piano"
+    go_to(qapp, shell, "2026-11-02")
+    assert any(item["title"] == "Piano lesson" for item in shell.session.blocks)
+
+
+def test_this_week_and_later_changes_every_later_week_too(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    block_id = weekly_saturday_piano(qapp, shell, sheets)
+    go_to(qapp, shell, WEEK_AFTER)
+    go_to(qapp, shell, "2026-11-02")
+    sheets.editBlock(block_id, SATURDAY)
+    sheets.setText("title", "Piano lesson")
+    sheets.save()
+    sheets.answer("every")
+    settle(qapp, shell)
+    assert piano_title_in(qapp, shell, NEXT_WEEK) == "Piano lesson"
+    assert piano_title_in(qapp, shell, WEEK_AFTER) == "Piano lesson"
+
+
+def test_nothing_changed_or_only_the_repeat_changed_asks_nothing(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    block_id = weekly_saturday_piano(qapp, shell, sheets)
+    sheets.editBlock(block_id, SATURDAY)
+    sheets.save()
+    assert sheets.ask == {} and sheets.kind == ""
+    settle(qapp, shell)
+    sheets.editBlock(block_id, SATURDAY)
+    sheets.setText("until", "2026-11-14")
+    sheets.save()
+    assert sheets.ask == {} and sheets.kind == ""
+    settle(qapp, shell)
+    assert piano(shell)["until"] == "2026-11-14"
+    sheets.editBlock(piano(shell)["id"], SATURDAY)
+    sheets.setFlag("repeats", False)
+    sheets.save()
+    assert sheets.ask == {} and sheets.kind == ""
+
+
+def test_one_day_of_a_two_day_weekly_fixed_time_asks_only_after_every_day_is_chosen(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    sheets.openBlockAt(SATURDAY, 10 * 60, 11 * 60)
+    sheets.setText("title", "Piano")
+    sheets.next()
+    sheets.toggleDay(6)
+    sheets.setFlag("repeats", True)
+    sheets.next()
+    sheets.next()
+    settle(qapp, shell)
+    sheets.editBlock(piano(shell)["id"], SATURDAY)
+    assert sheets.form["scope"] == "occurrence"
+    sheets.setText("title", "Piano lesson")
+    sheets.save()
+    assert sheets.ask == {} and sheets.kind == "", "this day only is this day of this week"
+    settle(qapp, shell)
+    sheets.editBlock(next(i for i in shell.session.blocks if i["title"] == "Piano")["id"], SATURDAY)
+    sheets.setText("scope", "series")
+    sheets.setText("title", "Piano class")
+    sheets.save()
+    assert sheets.ask["id"] == "edit-block"
+
+
+def test_a_new_repeat_that_doubles_a_hand_made_copy_in_a_later_week_gets_an_alert_until_ok(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    go_to(qapp, shell, NEXT_WEEK)
+    saturday_piano(sheets, repeats=False)
+    settle(qapp, shell)
+    go_to(qapp, shell, "2026-11-02")
+    saturday_piano(sheets, repeats=True)
+    wait_until(qapp, lambda: sheets.ask.get("id") == "twin-weeks", what="the alert")
+    ask = sheets.ask
+    assert ask["title"] == "Piano is already in later weeks"
+    assert ask["body"] == (
+        "Piano also sits on its own in the week of 9 Nov, so it shows twice there. "
+        "Delete the extra one in that week if you don't want both."
+    )
+    assert [answer["label"] for answer in ask["answers"]] == ["OK"]
+    for _ in range(3):
+        qapp.processEvents()
+    assert sheets.ask["id"] == "twin-weeks", "it does not close by itself"
+    sheets.answer("ok")
+    assert sheets.ask == {}
+    go_to(qapp, shell, NEXT_WEEK)
+    assert sum(1 for item in shell.session.blocks if item["title"] == "Piano") == 2, "nothing was removed"
+
+
+def test_the_twin_alert_stays_up_when_a_sheet_is_opened_over_it_and_waits_behind_a_question(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    sheets._on_twins("Piano", ["2026-11-09"])
+    assert sheets.ask["id"] == "twin-weeks"
+    sheets.openBlockAt(SATURDAY, 10 * 60, 11 * 60)
+    assert sheets.ask["id"] == "twin-weeks", "opening a sheet is not an answer"
+    sheets.answer("ok")
+    assert sheets.ask == {}
+    sheets.setText("title", "Piano")
+    sheets.closeSheet()
+    assert sheets.ask["id"] == "discard"
+    sheets._on_twins("Piano", ["2026-11-09"])
+    assert sheets.ask["id"] == "discard", "a question is never replaced"
+    sheets.answer("stay")
+    assert sheets.ask["id"] == "twin-weeks", "it comes after the question is answered"

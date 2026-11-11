@@ -144,6 +144,19 @@ def test_a_kept_reminder_stays_when_its_block_changes_in_a_way_that_leaves_the_s
     assert shown(window) == SOON
 
 
+def test_a_kept_reminder_takes_the_new_name_when_its_block_is_renamed(
+    qapp: QApplication, no_service: NativeWindow
+) -> None:
+    window = no_service
+    ready(qapp, window)
+    tick(qapp, window, 40)
+    assert shown(window) == SOON
+    window.session.add_block({**practice(window), "title": "Violin practice"})
+    tick(qapp, window, 41)
+    assert shown(window) == "Violin practice starts soon — 6:45 PM · Thu"
+    assert [item["title"] for item in window.session.visible_reminders()] == ["Violin practice starts soon"]
+
+
 def test_with_a_lead_of_fifteen_a_snooze_comes_back_five_minutes_later_and_is_gone_at_the_start(
     qapp: QApplication, no_service: NativeWindow
 ) -> None:

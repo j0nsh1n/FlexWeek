@@ -418,6 +418,24 @@ class BlockDraft:
             ],
         }
 
+    def edit_question(self) -> dict:
+        """What saving asks for a block that repeats every week and was changed in some other way: this
+        week only, or this week and every week after. Delete asks it in the same words."""
+        name = self.original.get("title") or "this fixed time"
+        return {
+            "id": "edit-block",
+            "title": f"Change {name}?",
+            "body": (
+                f"Change {name} for this week only, or for this week and every week after? "
+                "Earlier weeks keep it. This week and later can't be undone."
+            ),
+            "answers": [
+                {"id": "stay", "label": "Cancel", "kind": "text"},
+                {"id": "week", "label": "This week only", "kind": "tonal"},
+                {"id": "every", "label": "This week and later", "kind": "filled"},
+            ],
+        }
+
     # What the sheet shows ---------------------------------------------------------------
 
     def _scope_choices(self) -> list[dict]:

@@ -249,3 +249,134 @@ def test_deleting_a_weekly_fixed_time_asks_this_week_only_or_this_week_and_later
         )
     ]
     assert dialog.deleted() is False
+
+
+class Asked:
+    """Stands in for ConfirmSheet: records what was asked and answers with `answer`."""
+
+    answer = "stay"
+    seen: list[tuple[str, str, list[str]]] = []
+
+    def __init__(self, parent, title, question, answers, **kwargs) -> None:
+        type(self).seen.append((title, question, [label for _key, label, _kind in answers]))
+        self.answer = type(self).answer
+
+    def exec(self) -> int:
+        return 0
+
+
+def asking(monkeypatch: pytest.MonkeyPatch, answer: str) -> list[tuple[str, str, list[str]]]:
+    made = type("Answering", (Asked,), {"answer": answer, "seen": []})
+    monkeypatch.setattr(widgets, "ConfirmSheet", made)
+    monkeypatch.setattr("desktop.native.window.ConfirmSheet", made)
+    return made.seen
+
+
+def weekly_piano(qapp: QApplication, window: NativeWindow) -> dict:
+    window.session.add_block(dict(soccer(), title="Piano", days=[SATURDAY]), weekly=True, until="")
+    window.session.save()
+    settled(qapp, window)
+    return piano(window)
+
+
+def retitled(window: NativeWindow, block: dict) -> BlockDialog:
+    dialog = BlockDialog(window, block)
+    dialog.show()
+    dialog.title.setText("Piano lesson")
+    return dialog
+
+
+def title_in(qapp: QApplication, window: NativeWindow, week: str) -> str:
+    go_to(qapp, window, week)
+    return next(item for item in window.session.blocks if item["id"].startswith("weekly-"))["title"]
+
+
+def test_saving_a_changed_weekly_fixed_time_asks_which_weeks_and_this_week_only_leaves_later_weeks(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch  # noqa: F811
+) -> None:
+    block = weekly_piano(qapp, window)
+    seen = asking(monkeypatch, "week")
+    run_and_commit(window, retitled(window, block), monkeypatch)
+    settled(qapp, window)
+    assert seen == [
+        (
+            "Change Piano?",
+            "Change Piano for this week only, or for this week and every week after? Earlier weeks keep it.",
+            ["Cancel", "This week only", "This week and later"],
+        )
+    ]
+    assert piano(window) is None and any(i["title"] == "Piano lesson" for i in window.session.blocks)
+    assert title_in(qapp, window, NEXT_WEEK) == "Piano"
+
+
+def test_this_week_and_later_changes_the_later_weeks_too(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch  # noqa: F811
+) -> None:
+    block = weekly_piano(qapp, window)
+    go_to(qapp, window, "2026-11-16")
+    go_to(qapp, window, "2026-11-02")
+    asking(monkeypatch, "every")
+    run_and_commit(window, retitled(window, block), monkeypatch)
+    settled(qapp, window)
+    assert title_in(qapp, window, NEXT_WEEK) == "Piano lesson"
+    assert title_in(qapp, window, "2026-11-16") == "Piano lesson"
+
+
+def test_cancelling_the_which_weeks_question_keeps_the_sheet_open_with_the_typing(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch  # noqa: F811
+) -> None:
+    block = weekly_piano(qapp, window)
+    seen = asking(monkeypatch, "stay")
+    dialog = retitled(window, block)
+    dialog.accept()
+    assert len(seen) == 1
+    assert dialog.result() == 0 and dialog.isVisible(), "the sheet is still up"
+    assert dialog.title.text() == "Piano lesson"
+    assert piano(window) is not None
+
+
+def test_nothing_changed_the_repeat_changed_or_this_day_only_ask_nothing(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch  # noqa: F811
+) -> None:
+    block = weekly_piano(qapp, window)
+    seen = asking(monkeypatch, "week")
+    dialog = BlockDialog(window, block)
+    dialog.show()
+    dialog.accept()
+    assert dialog.result() == 1 and seen == []
+    dialog = retitled(window, block)
+    dialog.until_on.setChecked(True)
+    dialog.until.setDate(QDate(2026, 11, 14))
+    dialog.accept()
+    assert dialog.result() == 1 and seen == [], "a changed Until is a change to the repeat"
+    dialog = retitled(window, block)
+    dialog.repeat.setChecked(False)
+    dialog.accept()
+    assert dialog.result() == 1 and seen == []
+    two_days = {**block, "days": [SATURDAY, 6]}
+    dialog = BlockDialog(window, two_days, occurrence_day=SATURDAY)
+    dialog.show()
+    dialog.title.setText("Piano lesson")
+    dialog.accept()
+    assert dialog.scope() == "occurrence" and dialog.result() == 1 and seen == []
+
+
+def test_a_new_repeat_that_doubles_a_hand_made_copy_gets_an_alert_with_one_ok(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch  # noqa: F811
+) -> None:
+    go_to(qapp, window, NEXT_WEEK)
+    window.session.add_block(dict(soccer(), title="Piano", days=[SATURDAY]))
+    window.session.save()
+    settled(qapp, window)
+    go_to(qapp, window, "2026-11-02")
+    seen = asking(monkeypatch, "ok")
+    weekly_piano(qapp, window)
+    wait_until(qapp, lambda: bool(seen), what="the alert")
+    assert seen == [
+        (
+            "Piano is already in later weeks",
+            "Piano also sits on its own in the week of 9 Nov, so it shows twice there. "
+            "Delete the extra one in that week if you don't want both.",
+            ["OK"],
+        )
+    ]

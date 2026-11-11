@@ -105,7 +105,7 @@ from desktop.native.client import (
     sign_up_problem,
 )
 from desktop.native.command_bar import Command, CommandBar
-from desktop.native.controller import ROUTINE_STATUS, NativeSession, _late_summary
+from desktop.native.controller import ROUTINE_STATUS, NativeSession, _late_summary, twin_alert_words
 from desktop.native.custom_look import sanitize_saved
 from desktop.native.devices import SyncDot, SyncHost, live_phones, run_off_ui, sync_state
 from desktop.native.elevation import flatten, lift
@@ -756,6 +756,7 @@ class NativeWindow(QMainWindow):
         self.session.plan_conflicts.connect(self._on_plan_conflicts)
         self.session.planned.connect(self._on_planned)
         self._late_dialog: LateDialog | None = None
+        self._twin_alerts: list[tuple[str, str]] = []
         # The late start accepted but not stored yet, and the sentence its save will confirm.
         self._late_waiting: tuple[str, str] | None = None
         self._quitting = False
@@ -781,6 +782,7 @@ class NativeWindow(QMainWindow):
         self.session.focus_changed.connect(self._on_focus)
         self.session.focus_replace_needed.connect(self._confirm_replace_focus)
         self.session.alerts.connect(self._present_alerts)
+        self.session.standing_twins.connect(self._present_twins)
         self.session.alarm_due.connect(self._on_alarm)
         self._focus_tick = QTimer(self)
         self._focus_tick.setInterval(500)
@@ -3537,6 +3539,7 @@ class NativeWindow(QMainWindow):
             day=dialog.occurrence_day(),
             weekly=dialog.weekly(),
             until=dialog.until_value(),
+            every_week=dialog.every_week(),
         )
         day = dialog.occurrence_day()
         if dialog.recover_missed() and day is not None:
@@ -4905,6 +4908,30 @@ class NativeWindow(QMainWindow):
         # "Is now locked" waits for the save that stores it. Said at once, it stood on screen for six
         # seconds even when that save failed and the late start was never kept.
         self._late_waiting = (block["id"], late_locked_line(block, moved))
+
+    def _present_twins(self, title: str, week_starts: list) -> None:
+        """A new weekly fixed time shows twice in weeks the student copied it into by hand. The plain
+        look says so in a sheet that stays until OK; Material says it in its own prompt."""
+        if self._material_owns():
+            return
+        self._twin_alerts.append(twin_alert_words(title, week_starts, int(self._today()[:4])))
+        QTimer.singleShot(0, self._show_twin_alert)
+
+    def _show_twin_alert(self) -> None:
+        """One at a time, and not over another sheet: the student may be typing in it, so this waits
+        until that sheet is closed."""
+        if not self._twin_alerts:
+            return
+        if QApplication.activeModalWidget() is not None:
+            QTimer.singleShot(500, self._show_twin_alert)
+            return
+        title, words = self._twin_alerts.pop(0)
+        keyboard = self._last_input.keyboard
+        ConfirmSheet(self, title, words, (("ok", "OK", ""),), default="ok").exec()
+        self._last_input.keyboard = keyboard
+        self._focus_week()
+        if self._twin_alerts:
+            QTimer.singleShot(0, self._show_twin_alert)
 
     def _on_save_finished(self, stored: bool, said: str) -> None:
         if not stored:

@@ -162,6 +162,26 @@ SETUP_ALREADY_HERE = (
 )
 
 
+def twin_alert_words(title: str, week_starts: list[str], year: int) -> tuple[str, str]:
+    """The alert's heading and sentence when a new weekly fixed time shows twice in weeks the student
+    copied it into by hand. At most three weeks are named, then "and N more"."""
+
+    def short(week: str) -> str:
+        stamp = date.fromisoformat(week)
+        return f"{stamp.day} {stamp.strftime('%b')}" + (f" {stamp.year}" if stamp.year != year else "")
+
+    named = [short(week) for week in week_starts[:3]]
+    if len(week_starts) > 3:
+        named.append(f"{len(week_starts) - 3} more")
+    where = ", ".join(named[:-1]) + (" and " if len(named) > 1 else "") + named[-1]
+    many = len(week_starts) > 1
+    return (
+        f"{title} is already in later weeks",
+        f"{title} also sits on its own in the {'weeks' if many else 'week'} of {where}, so it shows twice "
+        f"there. Delete the extra one in {'those weeks' if many else 'that week'} if you don't want both.",
+    )
+
+
 def _assignment_write(item_id: str, item: dict | None, revision: int) -> dict:
     if item is None:
         return {"id": item_id, "assignment": None, "revision": revision}
@@ -230,6 +250,8 @@ class NativeSession(QObject):
     status = Signal(str)
     # Each save's outcome, for words that must wait for it: (stored, what the status line says).
     save_finished = Signal(bool, str)
+    # A new weekly fixed time doubles a copy the student made by hand: its name and the weeks' starts.
+    standing_twins = Signal(str, list)
     # Toast words for a hand move that has just been saved, including one that waited out a save.
     hand_placed = Signal(str)
     plan_conflicts = Signal(list)
@@ -1183,6 +1205,26 @@ class NativeSession(QObject):
             self.blocks = [item for item in self.blocks if item["id"] != block["id"]]
             self._save_block_edit(kept, scope, day)
             self.stand_open_week([{"id": block["id"], "stop": True}])
+
+    def edit_asks_which_weeks(
+        self, block: dict, *, scope: str, weekly: bool | None, until: str | None
+    ) -> bool:
+        """Whether saving `block` has to ask "this week only" or "this week and later": it changes a
+        block that already repeats every week, the repeat itself (the switch and Until) is left as it
+        was, and something else about the block changed. One day of a series is always this week alone.
+        School and Setup's activities keep their own way of saving."""
+        if weekly is not True or scope != "series":
+            return False
+        original = next((item for item in self.blocks if item["id"] == block["id"]), None)
+        if original is None or is_setup_block(original) or not is_standing_block(original):
+            return False
+        if (until or None) != (original.get("until") or None):
+            return False
+
+        def held(item: dict) -> dict:
+            return {key: value for key, value in item.items() if value not in (None, [], "")}
+
+        return held(block) != held(original)
 
     def weekly_problem(self, block: dict, until: str | None) -> str | None:
         """Why this block cannot repeat until `until` from the open week, or None."""
@@ -2176,6 +2218,12 @@ class NativeSession(QObject):
                 if week_start != self.week_start:
                     self._drafts.pop(week_start, None)
             self.save_finished.emit(True, self.message)
+            twin_weeks = data.get("standing_twin_weeks")
+            if twin_weeks:
+                made = (payload.get("standing") or {}).get("blocks") or []
+                new = [item for item in made if str(item.get("id", "")).startswith(WEEKLY_PREFIX)]
+                title = next((item["title"] for item in new if item.get("title")), "This fixed time")
+                self.standing_twins.emit(str(title), list(twin_weeks))
             if planned:
                 self.planned.emit(self.message)
             if destination is not None:
@@ -3836,18 +3884,27 @@ class NativeSession(QObject):
 
     def _drop_reminders_of_changed_blocks(self, clock: dict) -> None:
         """A kept reminder names a block and its start. Once the block moves or goes, the card would
-        count down to a start that no longer happens, so it goes too."""
+        count down to a start that no longer happens, so it goes too; once it is renamed, the card
+        takes the new name."""
         if not self._stayed:
             return
         source = self._today_reminder_source(monday_of(clock["iso"]))
         if source is None:
             return
-        current = {row[3] for row in todays_starts(source[0], source[1], clock["iso"])}
+        current = {row[3]: row[0] for row in todays_starts(source[0], source[1], clock["iso"])}
         gone = [key for key in self._stayed if key not in current]
         for key in gone:
             del self._stayed[key]
             self.snoozed_reminders.pop(key, None)
-        if gone:
+        renamed = False
+        for key, notice in self._stayed.items():
+            # The card says "<name> starts soon": a block renamed since then is called by its new name.
+            ending = notice["title"].rfind(" starts ")
+            title = f"{current[key].get('title')}{notice['title'][ending:]}" if ending >= 0 else None
+            if title is not None and title != notice["title"]:
+                self._stayed[key] = {**notice, "title": title}
+                renamed = True
+        if gone or renamed:
             self._after_stay_change()
 
     def _after_stay_change(self) -> None:

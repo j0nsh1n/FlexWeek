@@ -74,6 +74,16 @@ def test_the_card_stays_until_the_block_starts_and_the_start_notice_replaces_it(
     assert said == ["Guitar practice starts soon", "Guitar practice starts now"]
 
 
+def test_the_card_takes_the_new_name_when_its_block_is_renamed(qapp: QApplication, material) -> None:
+    window, root = material
+    beat(qapp, window, 40)
+    assert shown(root) == SOON
+    block = next(item for item in window.session.blocks if item["id"] == "practice")
+    window.session.add_block({**block, "title": "Violin practice"})
+    beat(qapp, window, 41)
+    assert shown(root) == "Violin practice starts soon — 6:45 PM · Thu"
+
+
 def surfaces(window: NativeWindow, root: QObject) -> list[str]:
     """Which reminder surfaces the student can see: Material's card, the plain look's toast and strip."""
     visible = []

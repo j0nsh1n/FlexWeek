@@ -3615,6 +3615,7 @@ class BlockDialog(Dialog):
         self._result: dict | None = None
         self._deleted = False
         self._delete_every_week = False
+        self._every_week = False
         self._occurrence_day = occurrence_day
         self._series_days: list[bool] | None = None
         self._syncing_scope_days = False
@@ -4245,6 +4246,10 @@ class BlockDialog(Dialog):
     def delete_every_week(self) -> bool:
         return self._delete_every_week
 
+    def every_week(self) -> bool:
+        """The answer to the which-weeks question on saving: True for this week and later."""
+        return self._every_week
+
     def recover_missed(self) -> bool:
         # The window asks after exec() returns. isVisible() is false for every child of a closed dialog,
         # so it made this box do nothing; isHidden() only says whether the box was ever offered.
@@ -4350,8 +4355,38 @@ class BlockDialog(Dialog):
         if refused:
             self._show_until_problem(refused)
             return
+        if not self._weeks_chosen(candidate):
+            return
         self._result = candidate
         super().accept()
+
+    def _weeks_chosen(self, candidate: dict) -> bool:
+        """Ask which weeks when this saves a change to a block that already repeats every week. False when
+        the student backs out, so the sheet stays as it is."""
+        session = getattr(self.parent(), "session", None)
+        if session is None or not session.edit_asks_which_weeks(
+            candidate, scope=self.scope(), weekly=self.weekly(), until=self.until_value()
+        ):
+            return True
+        name = self._original.get("title") or "this fixed time"
+        sheet = ConfirmSheet(
+            self,
+            f"Change {name}?",
+            f"Change {name} for this week only, or for this week and every week after? "
+            "Earlier weeks keep it.",
+            (
+                ("stay", "Cancel", "outlined"),
+                ("week", "This week only", "tonal"),
+                ("every", "This week and later", ""),
+            ),
+            default="week",
+            note="This week and later can't be undone.",
+        )
+        sheet.exec()
+        if sheet.answer not in ("week", "every"):
+            return False
+        self._every_week = sheet.answer == "every"
+        return True
 
     def _until_refused(self, candidate: dict) -> str | None:
         session = getattr(self.parent(), "session", None)

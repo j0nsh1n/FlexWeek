@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QAbstractButton
 
 from backend.slots import DAY_END_MIN, SLOT_MIN, hhmm_to_minutes
 from desktop.native.calendar import DAY_FULL, DAYS, FLEX_CATEGORIES, monday_of, sunday_due
+from desktop.native.controller import twin_alert_words
 from desktop.native.hours.geometry import next_slot
 from desktop.native.material.sheet_block import BlockDraft
 from desktop.native.material.sheet_homework import HomeworkDraft
@@ -70,6 +71,8 @@ class SheetsBridge(QObject):
         self._kind = ""
         self._form: dict = {}
         self._ask: dict = {}
+        # Notes that must be answered, waiting for the prompt that is up to be.
+        self._queued_asks: list[dict] = []
         self._more = False
         self._drag_range_active = False
         self._notice = ""
@@ -97,9 +100,38 @@ class SheetsBridge(QObject):
         if session is not None:
             session.status.connect(self._on_status)
             session.save_finished.connect(self._on_saved)
+            twins = getattr(session, "standing_twins", None)
+            if twins is not None:
+                twins.connect(self._on_twins)
             busy = getattr(session, "busy_changed", None)
             if busy is not None:
                 busy.connect(self._on_busy)
+
+    def _on_twins(self, title: str, week_starts: list) -> None:
+        """A new weekly fixed time shows twice in weeks the student copied it into by hand: a prompt with
+        one OK, which stays until answered. Over a prompt that is already up it waits, so it never
+        replaces a question, and over a sheet it leaves the typing as it is."""
+        owns = getattr(self._window, "_material_owns", None)
+        if owns is not None and not owns():
+            return
+        today = self._session.today_iso()
+        heading, words = twin_alert_words(title, week_starts, int(today[:4]))
+        ask = {
+            "id": "twin-weeks",
+            "title": heading,
+            "body": words,
+            "answers": [{"id": "ok", "label": "OK", "kind": "filled"}],
+        }
+        if self._ask:
+            self._queued_asks.append(ask)
+            return
+        self._ask = ask
+        self._publish()
+
+    def _next_queued_ask(self) -> None:
+        if not self._ask and self._queued_asks:
+            self._ask = self._queued_asks.pop(0)
+            self._publish()
 
     @property
     def _session(self) -> Any:
@@ -162,16 +194,22 @@ class SheetsBridge(QObject):
 
     # Opening and closing ----------------------------------------------------------------
 
+    def _drop_ask(self) -> None:
+        """A sheet opening or closing takes its own question with it, never the note that has to be
+        answered."""
+        if self._ask.get("id") != "twin-weeks":
+            self._ask = {}
+
     def _open(self, kind: str) -> None:
         self._kind = kind
         self._more = False
-        self._ask = {}
+        self._drop_ask()
         self._publish()
 
     def _close(self) -> None:
         late = self._kind == "late"
         self._kind = ""
-        self._ask = {}
+        self._drop_ask()
         self._drag_range_active = False
         self._homework = None
         self._block = None
@@ -307,6 +345,7 @@ class SheetsBridge(QObject):
         if self._ask:
             self._ask = {}
             self._publish()
+            self._next_queued_ask()
             return
         draft = self._homework if self._kind == "homework" else self._block if self._kind == "block" else None
         if draft is not None and draft.dirty():
@@ -442,7 +481,8 @@ class SheetsBridge(QObject):
         self._close()
         self._say(words, undo=True)
 
-    def _save_block(self) -> None:
+    def _save_block(self, every_week: bool | None = None) -> None:
+        """`every_week` is the answer to the which-weeks question: None while it has not been asked."""
         draft, session = self._block, self._session
         if draft is None or session is None:
             return
@@ -452,9 +492,20 @@ class SheetsBridge(QObject):
         if made is None:
             self._publish()
             return
+        if every_week is None and session.edit_asks_which_weeks(
+            made, scope=draft.scope, weekly=draft.weekly_arg(), until=draft.until
+        ):
+            self._ask = draft.edit_question()
+            self._publish()
+            return
         before = {item["id"] for item in session.blocks}
         session.add_block(
-            made, scope=draft.scope, day=draft.occurrence_day, weekly=draft.weekly_arg(), until=draft.until
+            made,
+            scope=draft.scope,
+            day=draft.occurrence_day,
+            weekly=draft.weekly_arg(),
+            until=draft.until,
+            every_week=bool(every_week),
         )
         day = draft.occurrence_day
         if draft.recover_missed() and day is not None:
@@ -473,7 +524,8 @@ class SheetsBridge(QObject):
         self._close()
         # Later weeks change with no Undo (as for School's hours), so the notice offers none.
         self._say(
-            f"Saved {made['title']}" if existed else added_words(made), undo=not draft.repeat_changed()
+            f"Saved {made['title']}" if existed else added_words(made),
+            undo=not (draft.repeat_changed() or every_week),
         )
 
     @Slot()
@@ -514,6 +566,10 @@ class SheetsBridge(QObject):
     @Slot(str)
     def answer(self, choice: str) -> None:
         """A button on the prompt that is up."""
+        self._answer(choice)
+        self._next_queued_ask()
+
+    def _answer(self, choice: str) -> None:
         asked = self._ask.get("id", "") if self._ask else ""
         self._ask = {}
         if asked == "discard":
@@ -525,6 +581,9 @@ class SheetsBridge(QObject):
             return
         elif asked == "delete-block" and choice in ("delete", "day", "week", "every"):
             self._delete_block(choice)
+            return
+        elif asked == "edit-block" and choice in ("week", "every"):
+            self._save_block(every_week=choice == "every")
             return
         elif asked == "delete-unfinished" and choice == "delete":
             self._delete_unfinished(self._pending_delete)
@@ -1013,7 +1072,7 @@ class SheetsBridge(QObject):
         if self._session is None:
             return
         self._kind = ""
-        self._ask = {}
+        self._drop_ask()
         self._more = True
         self._publish()
 

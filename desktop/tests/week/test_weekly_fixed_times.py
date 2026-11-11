@@ -328,3 +328,103 @@ def test_every_path_that_means_stands_in_every_week_treats_these_ids_alike(
     assert session._fixed_copy_rows({"blocks": [block]}) is None
     session.delete_block(block_id)
     assert next(b for b in session.blocks if b["id"] == block_id)["missed_days"] == [1, 3]
+
+
+def test_until_before_the_first_day_cannot_leave_an_existing_repeat_with_no_day_in_the_week(
+    qapp, window
+) -> None:
+    """The sheets refuse an Until before the first day, and so does add_block, so the open week's copy never
+    reaches a state with no day left in it (that would be a block that must leave the week)."""
+    session = window.session
+    made = make_weekly(qapp, session)
+    refused = session.weekly_problem(made, "2026-11-02")
+    assert refused == "Until can't be before the first day, Tue 3 Nov."
+    session.add_block({**made, "title": "Piano 2"}, weekly=True, until="2026-11-02", every_week=True)
+    assert [b["title"] for b in session.blocks if b["id"] == made["id"]] == ["Piano"]
+    assert session.dirty is False
+
+
+@pytest.mark.parametrize(
+    ("change", "kwargs", "asks"),
+    [
+        ({"title": "Piano lesson"}, {}, True),
+        ({"start": "17:00"}, {}, True),
+        ({"duration_min": 45}, {}, True),
+        ({"days": [1]}, {}, True),
+        ({"category": "class"}, {}, True),
+        ({}, {}, False),
+        ({"title": "Piano lesson"}, {"until": "2026-12-01"}, False),
+        ({"title": "Piano lesson"}, {"weekly": False}, False),
+        ({"title": "Piano lesson"}, {"weekly": None}, False),
+        ({"title": "Piano lesson"}, {"scope": "occurrence"}, False),
+    ],
+)
+def test_an_edit_asks_which_weeks_only_for_a_changed_block_whose_repeat_is_left_alone(
+    qapp, window, change, kwargs, asks
+) -> None:
+    session = window.session
+    made = make_weekly(qapp, session)
+    options = {"scope": "series", "weekly": True, "until": None} | kwargs
+    assert session.edit_asks_which_weeks({**made, **change}, **options) is asks
+
+
+def test_school_and_blocks_that_do_not_repeat_never_ask_which_weeks(qapp, window) -> None:
+    session = window.session
+    session.add_block(dict(SCHOOL))
+    session.stand_open_week([dict(SCHOOL)])
+    save_and_settle(qapp, session)
+    school = next(b for b in session.blocks if b["id"] == "school")
+    options = {"scope": "series", "weekly": True, "until": None}
+    assert session.edit_asks_which_weeks({**school, "start": "09:00"}, **options) is False
+    session.add_block(dict(PIANO))
+    save_and_settle(qapp, session)
+    plain = next(b for b in session.blocks if b["id"] == "piano")
+    assert session.edit_asks_which_weeks({**plain, "start": "17:00"}, **options) is False
+    assert session.edit_asks_which_weeks({"id": "new", "title": "X", **PIANO}, **options) is False
+
+
+# Twin alert. A copy of Piano made by hand on Thursday 12 Nov 2026 (week of Mon 9 Nov), before Piano repeats.
+COPY = {**PIANO, "id": "copy", "days": [3]}
+
+
+def twin_calls(session: NativeSession) -> list[tuple[str, list[str]]]:
+    heard: list[tuple[str, list[str]]] = []
+    session.standing_twins.connect(lambda title, weeks: heard.append((title, list(weeks))))
+    return heard
+
+
+class NoSheet:
+    """The plain look answers the signal with a sheet that waits for OK; a test has nobody to press it."""
+
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        pass
+
+    def exec(self) -> int:
+        return 0
+
+
+def test_a_new_repeat_tells_the_session_which_later_weeks_already_hold_a_copy(
+    qapp, window, monkeypatch
+) -> None:
+    monkeypatch.setattr("desktop.native.window.ConfirmSheet", NoSheet)
+    session = window.session
+    go_to(qapp, session, week_after(1))
+    session.add_block(dict(COPY))
+    save_and_settle(qapp, session)
+    go_to(qapp, session, FIRST_WEEK)
+    heard = twin_calls(session)
+    make_weekly(qapp, session)
+    wait_until(qapp, lambda: bool(heard))
+    assert heard == [("Piano", [week_after(1)])]
+    go_to(qapp, session, week_after(1))
+    assert "copy" in {b["id"] for b in session.blocks}, "nothing is removed"
+
+
+def test_changing_an_existing_repeat_or_a_week_with_no_copy_tells_nothing(qapp, window) -> None:
+    session = window.session
+    heard = twin_calls(session)
+    made = make_weekly(qapp, session)
+    session.add_block({**made, "title": "Piano lesson"}, weekly=True, until="", every_week=True)
+    save_and_settle(qapp, session)
+    qapp.processEvents()
+    assert heard == []
