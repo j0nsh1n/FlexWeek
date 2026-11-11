@@ -140,6 +140,7 @@ from desktop.native.look import (
     text_scale,
     toast_colours,
 )
+from desktop.native.material.theme import kept_material, read_letter_keys, read_shortcuts, store_material
 from desktop.native.menus import Menu, mark, menu_colours
 from desktop.native.motion import (
     DRIFT_PX,
@@ -5943,8 +5944,6 @@ class NativeWindow(QMainWindow):
             if self._material_failed:
                 body["material_failed"] = self._material_failed
             # Settings writes the material object into this file. Keep it when the widgets look saves.
-            from desktop.native.material.theme import kept_material
-
             material = kept_material(path)
             if material is not None:
                 body["material"] = material
@@ -6300,10 +6299,6 @@ class NativeWindow(QMainWindow):
         else:
             stamp = (info.st_mtime_ns, info.st_size)
         if stamp != self._key_stamp:
-            import json
-
-            from desktop.native.material.theme import read_letter_keys, read_shortcuts
-
             try:
                 stored = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
@@ -6315,8 +6310,6 @@ class NativeWindow(QMainWindow):
     def _set_key_switch(self, name: str, on: bool) -> None:
         """Write one of the two key switches into the look file's material object and leave the rest of
         it as it was."""
-        from desktop.native.material.theme import kept_material, store_material
-
         path = self._look_path()
         store_material(path, {**(kept_material(path) or {}), name: bool(on)})
 
