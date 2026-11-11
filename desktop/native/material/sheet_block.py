@@ -95,8 +95,8 @@ class BlockDraft:
         self.missed = occurrence_day in (original.get("missed_days") or [])
         # Setup owns the repeat of School and its activities, so they get no switch.
         self.owns_repeat = bool(self.existing and is_setup_block(original))
-        self.was_weekly = bool(self.existing and is_standing_block(original) and not self.owns_repeat)
-        self.was_until: str = original.get("until") or "" if self.was_weekly else ""
+        self.was_weekly = bool(self.existing and (is_standing_block(original) and not self.owns_repeat))
+        self.was_until: str = (original.get("until") or "") if self.was_weekly else ""
         self.weekly: bool = self.was_weekly
         self.until: str = self.was_until
         self.until_problem = ""

@@ -433,7 +433,7 @@ class MaterialBridge(QObject):
         self._announced_reminders = keys
         self.changed.emit()
         if fresh and getattr(self._window, "_surface", "") == "material":
-            # Said once, politely, without moving the keyboard. The toast reads a new reminder itself.
+            # Said once, politely, without moving the keyboard. The card shows the reminder, so it reads it.
             announce(cast("Any", self._window), "; ".join(fresh))
 
     @Slot(str)
