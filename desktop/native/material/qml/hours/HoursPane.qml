@@ -683,11 +683,6 @@ Item {
             done: blockModel.done,
             homework: blockModel.homework
         }
-        var mapped = item.mapToItem(root, mx, my)
-        var menuX = Math.max(8, Math.min(mapped.x, root.width - blockMenu.width - 8))
-        var menuY = Math.max(8, Math.min(mapped.y, root.height - blockMenu.height - 8))
-        blockMenu.x = menuX
-        blockMenu.y = menuY
         // A fixed time has nothing to finish.
         blockMenu.entries = blockModel.homework ? [
             { label: "Edit", icon: "edit_note" },
@@ -697,6 +692,11 @@ Item {
             { label: "Edit", icon: "edit_note" },
             { label: "Delete", icon: "close" }
         ]
+        // Placed after the rows are in: the menu's height is its rows, so earlier it was 16 px and the
+        // first menu near the bottom ran off the window.
+        var mapped = item.mapToItem(root, mx, my)
+        blockMenu.x = Math.max(8, Math.min(mapped.x, root.width - blockMenu.width - 8))
+        blockMenu.y = Math.max(8, Math.min(mapped.y, root.height - blockMenu.height - 8))
         blockMenu.cursor = 0
         blockMenu.open = true
         blockMenu.forceActiveFocus()
