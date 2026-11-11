@@ -174,6 +174,48 @@ SheetFrame {
             FieldNote { theme: root.theme; text: root.f.seriesNote ? root.f.seriesNote : "" }
         }
         Row {
+            visible: !!root.f.repeatShown
+            width: parent.width
+            spacing: 16
+            Text {
+                width: parent.width - 52 - 16
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.f.repeatLabel ? root.f.repeatLabel : ""
+                color: pal.inkSurface
+                font.family: M3Font.family
+                font.pixelSize: M3Font.px(16)
+                wrapMode: Text.WordWrap
+            }
+            Switch {
+                objectName: "blockRepeats"
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                accessName: root.f.repeatLabel ? root.f.repeatLabel : "Repeats every week"
+                checked: !!root.f.repeats
+                onToggled: (on) => root.sheets.setFlag("repeats", on)
+            }
+        }
+        Column {
+            visible: !!root.f.untilShown
+            width: parent.width
+            spacing: 4
+            PickerField {
+                objectName: "blockUntil"
+                width: parent.width
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                label: root.f.untilLabel ? root.f.untilLabel : "Until"
+                options: root.f.untilOptions ? root.f.untilOptions : []
+                value: root.f.until
+                onPicked: (v) => root.sheets.setText("until", v)
+            }
+            FieldNote { objectName: "blockUntilProblem"; theme: root.theme; problem: true; text: root.f.untilProblem ? root.f.untilProblem : "" }
+        }
+        Row {
             width: parent.width
             spacing: 12
             PickerField {

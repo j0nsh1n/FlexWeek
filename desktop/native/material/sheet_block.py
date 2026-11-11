@@ -23,6 +23,7 @@ from desktop.native.calendar import (
     date_for_day,
     is_series,
     is_setup_block,
+    is_standing_block,
     monday_of,
     past_problem,
     span_clash,
@@ -41,6 +42,8 @@ from desktop.native.widgets import (
 STEPS = ("What", "When", "Category")
 PROMPTS = ("What is it?", "When is it?", "What category is it?")
 DAY_END = 24 * 60
+# Until's list runs this many days from the block's first day: half a year of weeks.
+UNTIL_DAYS_AHEAD = 182
 
 
 def _clock(minute: int) -> str:
@@ -90,6 +93,13 @@ class BlockDraft:
             self.series_days = list(self.days)
             self.days = [occurrence_day] if occurrence_day is not None else self.days
         self.missed = occurrence_day in (original.get("missed_days") or [])
+        # Setup owns the repeat of School and its activities, so they get no switch.
+        self.owns_repeat = bool(self.existing and is_setup_block(original))
+        self.was_weekly = bool(self.existing and is_standing_block(original) and not self.owns_repeat)
+        self.was_until: str = original.get("until") or "" if self.was_weekly else ""
+        self.weekly: bool = self.was_weekly
+        self.until: str = self.was_until
+        self.until_problem = ""
         self.moved = ""
         self.title_problem = ""
         self.days_problem = ""
@@ -106,6 +116,8 @@ class BlockDraft:
             self.category,
             self.scope,
             self.missed,
+            self.weekly,
+            self.until,
         )
 
     def dirty(self) -> bool:
@@ -134,6 +146,12 @@ class BlockDraft:
             self._set_scope("occurrence" if value == "occurrence" else "series")
         elif name == "missed":
             self.missed = bool(value)
+        elif name == "repeats":
+            self.weekly = bool(value)
+            self.until_problem = ""
+        elif name == "until":
+            self.until = str(value)
+            self.until_problem = ""
 
     def toggle_day(self, day: int) -> None:
         if self.scope == "occurrence" and self.occurrence_day is not None:
@@ -207,6 +225,8 @@ class BlockDraft:
             if not self.days:
                 self.days_problem = BLOCK_PROBLEMS["days"]
                 return False
+            if self._until_refused():
+                return False
         self.step += 1
         return False
 
@@ -245,6 +265,47 @@ class BlockDraft:
             if past:
                 return past
         return ""
+
+    def repeat_shown(self) -> bool:
+        """The switch is for a fixed time of its own, not School or a Setup activity, and not for one day of
+        a series (that day alone would repeat)."""
+        return self.original.get("kind") == "locked" and not self.owns_repeat and self.scope == "series"
+
+    def weekly_arg(self) -> bool | None:
+        """What the switch says, or None when this sheet has none to say."""
+        return self.weekly if self.repeat_shown() else None
+
+    def repeat_changed(self) -> bool:
+        """The switch or Until changed what stands in later weeks, which Undo does not take back."""
+        if not self.repeat_shown():
+            return False
+        return self.weekly != self.was_weekly or (self.weekly and self.until != self.was_until)
+
+    def _until_refused(self) -> bool:
+        """True with the engine's reason under the Until field when the date is before the first day."""
+        if not (self.repeat_shown() and self.weekly and self.until):
+            return False
+        problem = self.session.weekly_problem({"days": list(self.days)}, self.until)
+        self.until_problem = problem or ""
+        if problem and self.step is not None:
+            self.step = 1
+        return bool(problem)
+
+    def _until_options(self) -> list[dict]:
+        week = self.session.week_start
+        if not isinstance(week, str):
+            return [{"value": "", "label": "No end"}]
+        first = date.fromisoformat(week) + timedelta(days=min(self.days or [0]))
+        days = {first + timedelta(days=offset) for offset in range(UNTIL_DAYS_AHEAD)}
+        if self.until:
+            days.add(date.fromisoformat(self.until))
+        options = [{"value": "", "label": "No end"}]
+        for day in sorted(days):
+            words = f"{DAYS[day.weekday()]} {day.day} {day.strftime('%b')}"
+            if day.year != self.now.year:
+                words += f" {day.year}"
+            options.append({"value": day.isoformat(), "label": words})
+        return options
 
     def _time_problem(self) -> str:
         return self._span_problem() or self._past_problem()
@@ -291,6 +352,8 @@ class BlockDraft:
             return None
         if self.scope == "occurrence" and self.series_days is not None:
             made["days"] = sorted(self.series_days)
+        if self._until_refused():
+            return None
         try:
             WeekRequest(blocks=[TimeBlock.model_validate(made)])
         except ValidationError as error:
@@ -317,8 +380,8 @@ class BlockDraft:
     # Delete -----------------------------------------------------------------------------
 
     def delete_question(self) -> dict:
-        """What Delete asks, with the answers that apply. A block from Setup is in every week, so those
-        offer this week only, or this week and later."""
+        """What Delete asks, with the answers that apply. A block from Setup, or a weekly fixed time, is in
+        every week, so those offer this week only, or this week and later."""
         name = self.original.get("title") or "this fixed time"
         occurrence = self.scope == "occurrence" and self.occurrence_day is not None
         week = self.session.week_start
@@ -333,7 +396,7 @@ class BlockDraft:
             question = (
                 f"Delete {name} on every {day_range_and_words(self.original.get('days') or [])} this week?"
             )
-        if is_setup_block(self.original):
+        if is_standing_block(self.original):
             answers = [{"id": "stay", "label": "Cancel", "kind": "text"}]
             if occurrence:
                 answers.append({"id": "day", "label": "This day only", "kind": "tonal"})
@@ -448,6 +511,14 @@ class BlockDraft:
             "categoryOptions": categories,
             "missed": self.missed,
             "showMissed": bool(self.existing and self.occurrence_day is not None),
+            "repeatShown": self.repeat_shown(),
+            "repeatLabel": "Repeats every week",
+            "repeats": self.weekly,
+            "untilShown": bool(self.repeat_shown() and self.weekly),
+            "untilLabel": "Until",
+            "until": self.until,
+            "untilOptions": self._until_options() if self.repeat_shown() and self.weekly else [],
+            "untilProblem": self.until_problem,
             "missedLabel": (
                 "I missed it"
                 if self.occurrence_day is None

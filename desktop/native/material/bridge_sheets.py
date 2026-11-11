@@ -453,7 +453,9 @@ class SheetsBridge(QObject):
             self._publish()
             return
         before = {item["id"] for item in session.blocks}
-        session.add_block(made, scope=draft.scope, day=draft.occurrence_day)
+        session.add_block(
+            made, scope=draft.scope, day=draft.occurrence_day, weekly=draft.weekly_arg(), until=draft.until
+        )
         day = draft.occurrence_day
         if draft.recover_missed() and day is not None:
             # "This day only" splits the series and gives that day a new id.
@@ -469,7 +471,10 @@ class SheetsBridge(QObject):
         session.save()
         existed = made["id"] in before
         self._close()
-        self._say(f"Saved {made['title']}" if existed else added_words(made), undo=True)
+        # Later weeks change with no Undo (as for School's hours), so the notice offers none.
+        self._say(
+            f"Saved {made['title']}" if existed else added_words(made), undo=not draft.repeat_changed()
+        )
 
     @Slot()
     def unpin(self) -> None:

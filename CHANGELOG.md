@@ -5,6 +5,9 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- Add fixed time and Edit fixed time have a Repeats every week switch, in both styles, with an optional Until date: the fixed time shows in every week from the open one on, up to and including that day. Deleting a repeating fixed time asks This week only or This week and later; Until before the first day is refused with the date in the message. Running Setup again leaves a repeating fixed time alone. An older phone shows the fixed time past its Until date until it is updated.
+
 ### Changed
 - Material's P, Z and F keys (plan, undo, Focus) have their own switch, Letter keys, in Settings → This computer, and it starts off, so none of them fires by accident. The 1 to 5 view keys keep their switch, now called Number keys, which stays on. Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y and the zoom keys work whatever either switch says.
 

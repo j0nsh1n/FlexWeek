@@ -18,6 +18,7 @@ from backend.weeks import current_week_start
 from desktop.native.calendar import (
     DAY_FULL,
     DAYS,
+    WEEKLY_PREFIX,
     apply_block_edit,
     date_for_day,
     days_through,
@@ -27,6 +28,7 @@ from desktop.native.calendar import (
     hand_move,
     is_series,
     is_setup_block,
+    is_standing_block,
     local_stamp,
     monday_of,
     month_anchor_date,
@@ -35,6 +37,7 @@ from desktop.native.calendar import (
     relocate_block,
     shifted_month,
     span_problem,
+    until_problem,
 )
 from desktop.native.client import SESSION_ENDED, ApiError, NativeClient, auth_error
 from desktop.native.files import (
@@ -1112,11 +1115,66 @@ class NativeSession(QObject):
             "explanations": [{"block_id": key, "message": value} for key, value in self.needs_time.items()],
         }
 
-    def add_block(self, block: dict, *, scope: str = "series", day: int | None = None) -> None:
+    def add_block(
+        self,
+        block: dict,
+        *,
+        scope: str = "series",
+        day: int | None = None,
+        weekly: bool | None = None,
+        until: str | None = None,
+    ) -> None:
+        """Add or edit a block. `weekly` is what the sheet's "Repeats every week" switch says (None: the
+        sheet had no switch for this block) and `until` its optional last day. Turning it on stands the
+        block in this week and every week after; changing Until does the same from this week; turning it
+        off keeps this week's block and ends the repeat from next week."""
+        if weekly is None or scope != "series":
+            self._save_block_edit(block, scope, day)
+            return
+        until = until or None
+        original = next((item for item in self.blocks if item["id"] == block["id"]), None)
+        if original is not None and is_setup_block(original):
+            self._save_block_edit(block, scope, day)
+            return
+        was = original is not None and is_standing_block(original)
+        if not weekly and not was:
+            self._save_block_edit(block, scope, day)
+            return
+        if weekly and self.weekly_problem(block, until):
+            return
+        if weekly and not was:
+            made = {**block, "id": WEEKLY_PREFIX + str(uuid4()), "until": until}
+            self.blocks = [item for item in self.blocks if item["id"] != block["id"]]
+            self._save_block_edit(made, scope, day)
+            self.stand_open_week([self._saved_block(made["id"])])
+        elif weekly:
+            made = {key: value for key, value in block.items() if key != "until"}
+            if until:
+                made["until"] = until
+            self._save_block_edit(made, scope, day)
+            if until != (original or {}).get("until"):
+                self.stand_open_week([self._saved_block(made["id"])])
+        else:
+            kept = {key: value for key, value in block.items() if key != "until"}
+            kept["id"] = str(uuid4())
+            self.blocks = [item for item in self.blocks if item["id"] != block["id"]]
+            self._save_block_edit(kept, scope, day)
+            self.stand_open_week([{"id": block["id"], "stop": True}])
+
+    def weekly_problem(self, block: dict, until: str | None) -> str | None:
+        """Why this block cannot repeat until `until` from the open week, or None."""
+        if not until:
+            return None
+        return until_problem({**block, "until": until}, self.week_start, self.today_iso())
+
+    def _save_block_edit(self, block: dict, scope: str, day: int | None) -> None:
         validated = TimeBlock.model_validate(block).model_dump(mode="json")
         verb = "editing " if any(item["id"] == validated["id"] for item in self.blocks) else "adding "
         self.blocks = apply_block_edit(self.blocks, validated, scope=scope, day=day)
         self._touch(verb + validated["title"], keep={validated["id"]})
+
+    def _saved_block(self, block_id: str) -> dict:
+        return next(item for item in self.blocks if item["id"] == block_id)
 
     def add_homework(
         self, assignment: dict, *, days: list[int] | None = None, spread: bool = False
@@ -1366,7 +1424,7 @@ class NativeSession(QObject):
         blocks = [
             item
             for item in source.get("blocks") or []
-            if item.get("kind") == "locked" and item.get("start") and not is_setup_block(item)
+            if item.get("kind") == "locked" and item.get("start") and not is_standing_block(item)
         ]
         if not blocks:
             return None
@@ -1765,8 +1823,9 @@ class NativeSession(QObject):
     def delete_block(
         self, block_id: str, *, scope: str = "series", day: int | None = None, every_week: bool = False
     ) -> None:
-        """Delete a block. School or an activity from Setup stands in every week, so taking it out of
-        this week alone keeps it here missed on every day, or the standing week would bring it back;
+        """Delete a block. School, an activity from Setup or a weekly fixed time stands in every week, so
+        taking it out of this week alone keeps it here missed on every day, or the standing week would
+        bring it back;
         `every_week` takes it out of the standing week too."""
         block = next((item for item in self.blocks if item["id"] == block_id), None)
         if block is None:
@@ -1775,7 +1834,7 @@ class NativeSession(QObject):
             self.blocks = [item for item in self.blocks if item["id"] != block_id]
         else:
             self.blocks = delete_occurrence(self.blocks, block_id, day)
-        if is_setup_block(block) and not any(item["id"] == block_id for item in self.blocks):
+        if is_standing_block(block) and not any(item["id"] == block_id for item in self.blocks):
             if every_week:
                 self.stand_open_week([{"id": block_id, "stop": True}])
             else:
