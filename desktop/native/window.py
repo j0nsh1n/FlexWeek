@@ -718,6 +718,9 @@ class NativeWindow(QMainWindow):
         self._telling = False
         # The last reminder the toast said, so Got it on the same reminder takes it away.
         self._reminder_said = ""
+        # The words the toast is reading to a screen reader right now, while a new reminder is kept on
+        # screen: the strip and the Material card do not read them a second time.
+        self._toast_reads = ""
         self._month_revealed: tuple | None = None
         self._changed_ms = 0
         self._last_try_ms = 0
@@ -2060,6 +2063,9 @@ class NativeWindow(QMainWindow):
         self.plan_review.allow_split_requested.connect(self.session.allow_splitting)
         self.alert_strip = AlertStrip()
         self.alert_strip.handled.connect(self._reminder_handled)
+        self.alert_strip.snooze_asked.connect(self.session.snooze_reminder)
+        self.alert_strip.closed.connect(self.session.close_reminder)
+        self.session.stay_changed.connect(self._sync_kept_reminders)
         column.addWidget(self.alert_strip)
         self.planner = QStackedWidget()
         self.planner.setObjectName("plannerStack")
@@ -3199,6 +3205,9 @@ class NativeWindow(QMainWindow):
         if message == self._reminder_said:
             return False
         return not any(part in message for part in ("Try again", "Wait a moment", "could not", "Couldn't"))
+
+    def _sync_kept_reminders(self) -> None:
+        self.alert_strip.set_reminders(self.session.visible_reminders(), self._toast_reads)
 
     def _reminder_handled(self) -> None:
         """Got it on a reminder left on screen: the toast saying the same goes too."""
@@ -5188,10 +5197,25 @@ class NativeWindow(QMainWindow):
             # says it as well, wherever the student is.
             self._reminder_said = "; ".join(reminders)
             self._say_in_toast(self._reminder_said)
-        if notices and prefs.get("reminder_dnd_override"):
+        # With no notification service the window is the only place a reminder can be, so it stays, as
+        # it does when the student asked for that.
+        keep = tray is None or bool(prefs.get("reminder_dnd_override"))
+        if keep:
             # A tray message is gone in eight seconds and a machine may suppress it outright. This
-            # one sits in the window until it is dealt with, which is what the setting promises.
-            self.alert_strip.add(notices)
+            # one sits in the window until it is dealt with, which is what the setting promises. A
+            # reminder ahead of its block can be snoozed and ends when the block starts; the rest
+            # (a block found already started, a focus notice) stay until Got it, as before.
+            self._toast_reads = self._reminder_said
+            try:
+                plain = [
+                    notice
+                    for notice in notices
+                    if not (notice.get("kind") == "reminder" and self.session.stay_reminder(notice))
+                ]
+            finally:
+                self._toast_reads = ""
+            if prefs.get("reminder_dnd_override"):
+                self.alert_strip.add(plain)
 
     def _on_alarm(self, alarm: object) -> None:
         if not isinstance(alarm, dict):

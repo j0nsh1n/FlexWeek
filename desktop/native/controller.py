@@ -74,6 +74,9 @@ from desktop.native.remind import (
     due_reminders,
     due_songs,
     reminder_lead_min,
+    reminder_snooze_until,
+    reminder_start_ms,
+    reminder_stays,
     snooze_until,
 )
 from desktop.native.reuse import (
@@ -232,6 +235,8 @@ class NativeSession(QObject):
     focus_changed = Signal()
     focus_replace_needed = Signal(str, str)
     alerts = Signal(list)
+    # The reminders kept on screen, or the ones snoozed, changed.
+    stay_changed = Signal()
     alarm_due = Signal(object)
 
     def __init__(self, origin: str, parent: QObject | None = None, kept: KeptSession | None = None) -> None:
@@ -326,6 +331,13 @@ class NativeSession(QObject):
         self._credits_waiting: list[tuple[dict, int]] = []
         self._record_history = True
         self.fired_reminders: set[str] = set()
+        # Reminders kept on screen until closed or the block starts, by key; and when each snoozed one
+        # comes back (milliseconds). Python only holds them: the engine says how long they stay.
+        self._stayed: dict[str, dict] = {}
+        self.snoozed_reminders: dict[str, int] = {}
+        self._stay_timer = QTimer(self)
+        self._stay_timer.setSingleShot(True)
+        self._stay_timer.timeout.connect(self.check_alerts)
         self.fired_alarms: set[str] = set()
         self.snoozed_alarms: dict[str, int] = {}
         self.last_alarm_check: int | None = None
@@ -471,6 +483,11 @@ class NativeSession(QObject):
         self._reset_focus(persist=False)
         self._held_alerts.clear()
         self.fired_reminders.clear()
+        self._stay_timer.stop()
+        if self._stayed or self.snoozed_reminders:
+            self._stayed.clear()
+            self.snoozed_reminders.clear()
+            self.stay_changed.emit()
         self.fired_alarms.clear()
         self.snoozed_alarms.clear()
         self.last_alarm_check = None
@@ -3752,6 +3769,64 @@ class NativeSession(QObject):
             and state.get("phase") == "work"
         )
 
+    def stay_reminder(self, notice: dict) -> bool:
+        """Keep a reminder on screen until it is closed or its block starts. False when it has started
+        already, so there is nothing to keep (a reminder Focus held back can arrive that late)."""
+        key, start_ms = notice.get("key"), notice.get("start_ms")
+        if not isinstance(key, str) or not isinstance(start_ms, int):
+            return False
+        if not reminder_stays(start_ms, self.now_ms()):
+            return False
+        self._stayed[key] = notice
+        self.snoozed_reminders.pop(key, None)
+        self._after_stay_change()
+        return True
+
+    def visible_reminders(self) -> list[dict]:
+        """The reminders on screen now: those kept and not snoozed."""
+        return [notice for key, notice in self._stayed.items() if key not in self.snoozed_reminders]
+
+    def snooze_reminder(self, key: str) -> None:
+        """Hide a kept reminder for five minutes, or until its block starts when that comes sooner."""
+        notice = self._stayed.get(key)
+        if notice is None:
+            return
+        self.snoozed_reminders[key] = reminder_snooze_until(self.now_ms(), notice["start_ms"])
+        self._after_stay_change()
+
+    def close_reminder(self, key: str) -> None:
+        """Close a kept reminder for good. Its key stays fired, so it never comes back."""
+        self._stayed.pop(key, None)
+        self.snoozed_reminders.pop(key, None)
+        self._after_stay_change()
+
+    def _tick_reminders(self, now_ms: int) -> None:
+        """Bring back snoozed reminders that are due, and end those whose block has started. An ended one
+        is unfired, so the poll that follows says "starts now" for it, once, the way a block found at its
+        start is."""
+        changed = False
+        for key, notice in list(self._stayed.items()):
+            if not reminder_stays(notice["start_ms"], now_ms):
+                del self._stayed[key]
+                self.snoozed_reminders.pop(key, None)
+                self.fired_reminders.discard(key)
+                changed = True
+            elif key in self.snoozed_reminders and self.snoozed_reminders[key] <= now_ms:
+                del self.snoozed_reminders[key]
+                changed = True
+        if changed:
+            self._after_stay_change()
+
+    def _after_stay_change(self) -> None:
+        """Tell the screen, and wake at the next moment one of them changes by itself."""
+        self.stay_changed.emit()
+        moments = [notice["start_ms"] for notice in self._stayed.values()]
+        moments.extend(self.snoozed_reminders.values())
+        if not moments:
+            self._stay_timer.stop()
+            return
+        self._stay_timer.start(max(1, min(moments) - self.now_ms()) + 200)
+
     def hold_alerts(self, notices: list[dict]) -> list[dict]:
         """The notices to show now. Focus's own are always shown; reminders are kept until focus
         leaves its work phase. Alarms the student set do not come through here and still ring."""
@@ -3923,7 +3998,17 @@ class NativeSession(QObject):
         )
         for item in due:
             self.fired_reminders.add(item["key"])
-            notices.append({"title": item["title"], "body": item["body"], "kind": "reminder"})
+            start_ms = reminder_start_ms(item["key"], clock["midnight_ms"])
+            notices.append(
+                {
+                    "title": item["title"],
+                    "body": item["body"],
+                    "kind": "reminder",
+                    "key": item["key"],
+                    "start_ms": start_ms,
+                    "stays": reminder_stays(start_ms, clock["now_ms"]),
+                }
+            )
         songs = due_songs(
             blocks=blocks,
             trace=trace,
@@ -3983,6 +4068,7 @@ class NativeSession(QObject):
         if self.account is None:
             return
         clock = self._clock()
+        self._tick_reminders(clock["now_ms"])
         notices: list[dict] = []
         songs: list[dict] = []
         prefs = self.preferences or {}

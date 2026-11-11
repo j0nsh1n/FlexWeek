@@ -5958,23 +5958,37 @@ class AlertStrip(QWidget):
     """Alerts that stay put until the student deals with them.
 
     A tray message is gone in eight seconds, and on a machine that suppresses notifications it is
-    never seen at all. "Leave reminders on screen" promises the opposite, so when it is on the alert is
-    also shown here, in the window, where nothing outside the app can take it away.
+    never seen at all. "Leave reminders on screen" promises the opposite, and a computer with no
+    notification service has nothing else, so the alert is also shown here, in the window, where nothing
+    outside the app can take it away.
+
+    A block's reminder kept here can also be snoozed, and the session ends it when the block starts. It
+    never takes the keyboard: typing goes on where it was.
     """
 
     # The student has dealt with every alert it held.
     handled = Signal()
+    # Snooze or Got it on a reminder the session keeps, by its key.
+    snooze_asked = Signal(str)
+    closed = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("alertStrip")
         self._notices: list[dict] = []
+        self._reminders: list[dict] = []
+        self._announced: set[str] = set()
         layout = QHBoxLayout(self)
         self.text = QLabel()
         self.text.setObjectName("alertStripText")
         self.text.setWordWrap(True)
         layout.addWidget(self.text, 1)
-        self.dismiss = QPushButton("Got it")
+        self.snooze = _StripButton("Snooze")
+        self.snooze.setObjectName("alertStripSnooze")
+        self.snooze.setAccessibleName("Snooze this reminder for 5 minutes")
+        self.snooze.clicked.connect(self._snooze)
+        layout.addWidget(self.snooze)
+        self.dismiss = _StripButton("Got it")
         self.dismiss.setObjectName("alertStripDismiss")
         self.dismiss.clicked.connect(self._drop)
         layout.addWidget(self.dismiss)
@@ -5984,30 +5998,78 @@ class AlertStrip(QWidget):
         self._notices.extend(notices)
         self._render()
 
+    def set_reminders(self, reminders: list[dict], spoken: str = "") -> None:
+        """The reminders the session keeps on screen now. One that is new here is read out once, unless
+        `spoken` (the toast's words, which a screen reader reads itself) already says it."""
+        self._reminders = list(reminders)
+        keys = {str(item.get("key")) for item in reminders}
+        fresh = [
+            self._words(item)
+            for item in reminders
+            if str(item.get("key")) not in self._announced and self._words(item) not in spoken
+        ]
+        self._announced = keys
+        self._render()
+        # Not while Material is the surface: its own card reads them there.
+        if fresh and self.isVisible():
+            announce(self.text, "; ".join(fresh))
+
     def clear(self) -> None:
         self._notices.clear()
+        self._reminders = []
+        self._announced = set()
         self._render()
 
     def pending(self) -> int:
-        return len(self._notices)
+        return len(self._notices) + len(self._reminders)
+
+    def _first(self) -> dict | None:
+        everything = [*self._reminders, *self._notices]
+        return everything[0] if everything else None
+
+    def _kept(self) -> bool:
+        return bool(self._reminders)
+
+    def _snooze(self) -> None:
+        if self._kept():
+            self.snooze_asked.emit(str(self._reminders[0].get("key")))
 
     def _drop(self) -> None:
         """One at a time, so a second alert that arrived while the first sat there is still seen."""
-        if self._notices:
+        if self._kept():
+            self.closed.emit(str(self._reminders[0].get("key")))
+        elif self._notices:
             self._notices.pop(0)
         self._render()
-        if not self._notices:
+        if not self._reminders and not self._notices:
             self.handled.emit()
 
+    @staticmethod
+    def _words(notice: dict) -> str:
+        body = notice.get("body") or ""
+        return f"{notice.get('title') or 'FlexWeek'}{' — ' + body if body else ''}"
+
     def _render(self) -> None:
-        self.setVisible(bool(self._notices))
-        if not self._notices:
+        notice = self._first()
+        self.setVisible(notice is not None)
+        self.snooze.setVisible(self._kept())
+        if notice is None:
             self.text.clear()
             return
-        notice = self._notices[0]
-        body = notice.get("body") or ""
-        more = f"  (+{len(self._notices) - 1} more)" if len(self._notices) > 1 else ""
-        self.text.setText(f"{notice.get('title') or 'FlexWeek'}{' — ' + body if body else ''}{more}")
+        more = f"  (+{self.pending() - 1} more)" if self.pending() > 1 else ""
+        self.text.setText(f"{self._words(notice)}{more}")
+
+
+class _StripButton(QPushButton):
+    """A button on the alert strip: Space presses it, and so does Enter, which a button outside a dialog
+    leaves alone."""
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802 - Qt virtual
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.click()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
 
 def overfull_days(trace: dict) -> list[tuple[int, int]]:

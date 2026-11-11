@@ -159,7 +159,10 @@ def test_a_block_saved_before_its_lead_reminds_when_the_lead_begins(
     assert window.toast.isVisible() and window.toast.text() == REMINDER
     for minute in range(36, 50):
         tick(qapp, window, minute)
-    assert window._bell.once_rung == ["chime"]
+    # With no tray the reminder is kept on screen, and the start replaces it with "starts now", which
+    # chimes once more; nothing else rings.
+    assert window._bell.once_rung == ["chime", "chime"]
+    assert window.toast.text() == "Guitar practice starts now — 6:45 PM · Thu"
 
 
 def test_a_new_account_reminds_without_being_asked(qapp: QApplication, new_window: NativeWindow) -> None:
