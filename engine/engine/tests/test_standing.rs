@@ -3,7 +3,9 @@
 
 use flexweek_engine::desk::blocks::until_problem;
 use flexweek_engine::desk::grid::{is_setup_block, is_standing_block};
-use flexweek_engine::standing::{derive_standing, restand, standing_body, with_standing};
+use flexweek_engine::standing::{
+    derive_standing, restand, standing_body, trim_until, with_standing,
+};
 use flexweek_engine::validate;
 use serde_json::{Value, json};
 
@@ -159,6 +161,37 @@ fn until_on_a_wednesday_leaves_only_the_tuesday_of_that_week() {
 fn until_on_the_last_day_still_shows_that_day() {
     let standing = [piano(Some("2026-12-10"))];
     assert_eq!(days_in("2026-12-07", &standing), Some(json!([1, 3])));
+}
+
+#[test]
+fn trim_until_cuts_the_days_after_until_in_the_given_week_and_keeps_the_rest_of_the_block() {
+    let trimmed = trim_until(&piano(Some("2026-12-08")), "2026-12-07")
+        .unwrap()
+        .unwrap();
+    assert_eq!(trimmed["days"], json!([1]));
+    assert_eq!(trimmed["until"], json!("2026-12-08"));
+    assert_eq!(trimmed["start"], json!("16:00"));
+}
+
+#[test]
+fn trim_until_leaves_a_block_with_no_until_or_with_every_day_inside_it_as_it_is() {
+    assert_eq!(
+        trim_until(&piano(None), "2026-12-07").unwrap(),
+        Some(piano(None))
+    );
+    let whole = piano(Some("2026-12-10"));
+    assert_eq!(
+        trim_until(&whole, "2026-12-07").unwrap(),
+        Some(whole.clone())
+    );
+}
+
+#[test]
+fn trim_until_drops_the_block_when_no_day_is_left_in_that_week() {
+    assert_eq!(
+        trim_until(&piano(Some("2026-12-09")), "2026-12-14").unwrap(),
+        None
+    );
 }
 
 #[test]

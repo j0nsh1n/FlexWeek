@@ -347,6 +347,12 @@ def until_problem(block: dict, week_start: str, today_iso: str) -> str | None:
     return flexweek_engine.calendar_until_problem(json.dumps(block), week_start, today_iso)
 
 
+def trim_until(block: dict, week_start: str) -> dict | None:
+    """The block as the week starting `week_start` holds it once its Until cuts it: only the days on or
+    before Until, or None when none is left."""
+    return json.loads(flexweek_engine.calendar_trim_until(json.dumps(block), week_start))
+
+
 def past_problem(
     week_start: str, day: int, start_min: int, now_iso: str, now_min: int
 ) -> str | None:

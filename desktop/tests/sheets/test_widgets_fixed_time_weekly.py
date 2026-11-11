@@ -137,6 +137,44 @@ def test_with_the_switch_off_the_fixed_time_stays_in_the_open_week(
     assert piano(window) is None
 
 
+def test_an_until_inside_the_open_week_removes_its_later_days_when_added(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch  # noqa: F811
+) -> None:
+    go_to(qapp, window, NEXT_WEEK)
+    dialog = saturday_dialog(window)
+    for index, check in enumerate(dialog.days):
+        check.setChecked(index in (1, 3))
+    dialog._add_step = 2
+    dialog._apply_add_step()
+    dialog.repeat.setChecked(True)
+    dialog.until_on.setChecked(True)
+    dialog.until.setDate(QDate(2026, 11, 10))
+    run_and_commit(window, dialog, monkeypatch)
+    settled(qapp, window)
+    go_to(qapp, window, "2026-11-16")
+    go_to(qapp, window, NEXT_WEEK)
+    assert sorted(piano(window)["days"]) == [1]
+
+
+def test_changing_until_to_a_day_inside_the_open_week_removes_its_later_days_when_edited(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch  # noqa: F811
+) -> None:
+    window.session.add_block(dict(soccer(), title="Piano", days=[1, 3]), weekly=True, until="")
+    window.session.save()
+    settled(qapp, window)
+    go_to(qapp, window, NEXT_WEEK)
+    assert sorted(piano(window)["days"]) == [1, 3]
+    dialog = BlockDialog(window, piano(window))
+    dialog.show()
+    dialog.until_on.setChecked(True)
+    dialog.until.setDate(QDate(2026, 11, 10))
+    run_and_commit(window, dialog, monkeypatch)
+    settled(qapp, window)
+    go_to(qapp, window, "2026-11-16")
+    go_to(qapp, window, NEXT_WEEK)
+    assert sorted(piano(window)["days"]) == [1]
+
+
 def test_editing_a_weekly_fixed_time_shows_the_switch_on_with_its_until(
     qapp: QApplication, window: NativeWindow  # noqa: F811
 ) -> None:

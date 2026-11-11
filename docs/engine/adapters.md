@@ -199,6 +199,7 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | calendar | is_setup_block | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | is_standing_block | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | until_problem | ADAPTER | encodes, makes one engine call, decodes |
+| calendar | trim_until | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | span_problem | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | span_clash | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | category_icon | ADAPTER | encodes, makes one engine call, decodes |

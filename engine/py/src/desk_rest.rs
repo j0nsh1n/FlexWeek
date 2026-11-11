@@ -6,7 +6,7 @@ use ::flexweek_engine::desk::{
     blocks, calendar, clipboard, custom_look, files, focus, grid, hand_move, planning, reuse,
     update,
 };
-use ::flexweek_engine::{EngineError, EngineResult};
+use ::flexweek_engine::{EngineError, EngineResult, standing};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use serde_json::{Map, Value, json};
@@ -308,6 +308,16 @@ fn calendar_standing_block(block: &str) -> PyResult<bool> {
 fn calendar_until_problem(block: &str, week_start: &str, today: &str) -> PyResult<Option<String>> {
     let block = parse(block)?;
     guard(|| blocks::until_problem(&block, week_start, today).map_err(crate::raise))
+}
+
+#[pyfunction]
+fn calendar_trim_until(block: &str, week_start: &str) -> PyResult<String> {
+    let block = parse(block)?;
+    guard(|| {
+        standing::trim_until(&block, week_start)
+            .map(|cut| dump(&cut.unwrap_or(Value::Null)))
+            .map_err(crate::raise)
+    })
 }
 
 #[pyfunction]
@@ -1476,6 +1486,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         calendar_setup_block,
         calendar_standing_block,
         calendar_until_problem,
+        calendar_trim_until,
         calendar_span_problem,
         calendar_past_problem,
         calendar_span_clash,

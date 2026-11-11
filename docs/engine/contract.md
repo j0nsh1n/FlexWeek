@@ -221,7 +221,9 @@ back unchanged. The engine cuts the block at the places it is shown or rewritten
 week changes) keep only the days on or before `until` in that week and drop the block when none are
 left, so a later week opened before does not keep the block past the date. `until_problem` refuses an
 `until` before the first day the block occurs in the week it is saved from, with a sentence that
-names that day.
+names that day. The week a student saves an `until` from holds its own copy, which is shown as
+stored, so the save cuts that copy with the engine's `trim_until` (the same cut `with_standing` makes);
+the standing row keeps every day.
 
 ## Not in scope
 

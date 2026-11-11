@@ -34,6 +34,12 @@ NEXT_WEEK = "2026-11-09"
 WEEK_AFTER = "2026-11-16"
 
 
+PIANO_TUE_THU = {
+    "id": "piano", "title": "Piano", "kind": "locked", "category": "extra", "start": "16:00",
+    "duration_min": 60, "days": [1, 3],
+}
+
+
 def go_to(qapp: QApplication, shell: NativeWindow, week: str) -> None:
     shell.session.load_week(week)
     wait_until(qapp, lambda: shell.session.week_start == week and not shell.session.busy)
@@ -95,6 +101,51 @@ def test_until_on_the_friday_before_ends_it_before_next_saturday(
     settle(qapp, shell)
     go_to(qapp, shell, NEXT_WEEK)
     assert piano(shell) is None
+
+
+def piano_days(shell: NativeWindow) -> list[int] | None:
+    found = piano(shell)
+    return sorted(found["days"]) if found else None
+
+
+def reload_week(qapp: QApplication, shell: NativeWindow) -> None:
+    week = shell.session.week_start
+    go_to(qapp, shell, WEEK_AFTER)
+    go_to(qapp, shell, week)
+
+
+def test_an_until_inside_the_open_week_removes_its_later_days_when_added(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    go_to(qapp, shell, NEXT_WEEK)
+    sheets.openBlockAt(1, 16 * 60, 17 * 60)
+    sheets.setText("title", "Piano")
+    sheets.next()
+    sheets.toggleDay(3)
+    sheets.setFlag("repeats", True)
+    sheets.setText("until", "2026-11-10")
+    sheets.next()
+    sheets.next()
+    settle(qapp, shell)
+    reload_week(qapp, shell)
+    assert piano_days(shell) == [1]
+
+
+def test_changing_until_to_a_day_inside_the_open_week_removes_its_later_days_when_edited(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    shell.session.add_block({**PIANO_TUE_THU}, weekly=True, until="")
+    shell.session.save()
+    settle(qapp, shell)
+    go_to(qapp, shell, NEXT_WEEK)
+    assert piano_days(shell) == [1, 3]
+    sheets.editBlock(piano(shell)["id"], 1)
+    sheets.setText("scope", "series")
+    sheets.setText("until", "2026-11-10")
+    sheets.save()
+    settle(qapp, shell)
+    reload_week(qapp, shell)
+    assert piano_days(shell) == [1]
 
 
 def test_with_the_switch_off_the_fixed_time_is_only_in_the_open_week(

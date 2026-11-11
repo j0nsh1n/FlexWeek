@@ -36,7 +36,7 @@ pub fn standing_body(block: &Value) -> Value {
 
 /// The block as it stands in the week starting `week_start`: only the days on or before its `until`
 /// date, and nothing when none is left. A block with no `until` stands whole.
-fn trim_until(block: &Value, week_start: &str) -> EngineResult<Option<Value>> {
+pub fn trim_until(block: &Value, week_start: &str) -> EngineResult<Option<Value>> {
     let Some(until) = block
         .get("until")
         .and_then(Value::as_str)

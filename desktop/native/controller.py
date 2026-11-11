@@ -37,6 +37,7 @@ from desktop.native.calendar import (
     relocate_block,
     shifted_month,
     span_problem,
+    trim_until,
     until_problem,
 )
 from desktop.native.client import SESSION_ENDED, ApiError, NativeClient, auth_error
@@ -1164,6 +1165,7 @@ class NativeSession(QObject):
             self.blocks = [item for item in self.blocks if item["id"] != block["id"]]
             self._save_block_edit(made, scope, day)
             self.stand_open_week([self._saved_block(made["id"])])
+            self._cut_at_until(made["id"])
         elif weekly:
             made = {key: value for key, value in block.items() if key != "until"}
             if until:
@@ -1171,6 +1173,7 @@ class NativeSession(QObject):
             self._save_block_edit(made, scope, day)
             if until != (original or {}).get("until"):
                 self.stand_open_week([self._saved_block(made["id"])])
+            self._cut_at_until(made["id"])
         else:
             kept = {key: value for key, value in block.items() if key != "until"}
             kept["id"] = str(uuid4())
@@ -1189,6 +1192,17 @@ class NativeSession(QObject):
         verb = "editing " if any(item["id"] == validated["id"] for item in self.blocks) else "adding "
         self.blocks = apply_block_edit(self.blocks, validated, scope=scope, day=day)
         self._touch(verb + validated["title"], keep={validated["id"]})
+
+    def _cut_at_until(self, block_id: str) -> None:
+        """The open week shows its own copy of a standing block as stored, whatever its date, so an Until
+        that falls inside this week has to cut the copy here; later weeks are cut where they are read."""
+        saved = self._saved_block(block_id)
+        if not saved.get("until"):
+            return
+        cut = trim_until(saved, self.week_start)
+        if cut is not None and cut != saved:
+            self.blocks = [cut if item["id"] == block_id else item for item in self.blocks]
+            self.week_changed.emit()
 
     def _saved_block(self, block_id: str) -> dict:
         return next(item for item in self.blocks if item["id"] == block_id)

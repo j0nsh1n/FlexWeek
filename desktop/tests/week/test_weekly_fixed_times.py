@@ -116,6 +116,46 @@ def test_a_later_week_opened_before_does_not_keep_the_block_past_until(qapp, win
     assert [b["title"] for b in session.blocks] == ["Gym"]
 
 
+def reload_week(qapp: QApplication, session: NativeSession) -> None:
+    week = session.week_start
+    go_to(qapp, session, week_after(5))
+    go_to(qapp, session, week)
+
+
+def test_an_until_inside_the_open_week_removes_the_later_days_of_that_week(qapp, window) -> None:
+    session = window.session
+    make_weekly(qapp, session, until="2026-11-03")
+    reload_week(qapp, session)
+    assert piano_days(session) == [1]
+    assert piano_in(qapp, session, 1) is None
+
+
+def test_changing_until_to_a_day_inside_the_open_week_cuts_that_week_too(qapp, window) -> None:
+    session = window.session
+    make_weekly(qapp, session)
+    go_to(qapp, session, week_after(1))
+    piano = next(b for b in session.blocks if b["title"] == "Piano")
+    session.add_block(piano, weekly=True, until="2026-11-10")
+    save_and_settle(qapp, session)
+    reload_week(qapp, session)
+    assert piano_days(session) == [1]
+    assert piano_in(qapp, session, 2) is None
+    assert piano_in(qapp, session, 0) == [1, 3]
+
+
+def test_an_until_in_a_later_week_leaves_the_open_week_whole_and_cuts_that_week(qapp, window) -> None:
+    session = window.session
+    make_weekly(qapp, session)
+    go_to(qapp, session, week_after(1))
+    piano = next(b for b in session.blocks if b["title"] == "Piano")
+    session.add_block(piano, weekly=True, until="2026-11-17")
+    save_and_settle(qapp, session)
+    reload_week(qapp, session)
+    assert piano_days(session) == [1, 3]
+    assert piano_in(qapp, session, 2) == [1]
+    assert piano_in(qapp, session, 3) is None
+
+
 def test_turning_the_repeat_off_keeps_this_week_and_ends_it_from_next_week(qapp, window) -> None:
     session = window.session
     made = make_weekly(qapp, session)
