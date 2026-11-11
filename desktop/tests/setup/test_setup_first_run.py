@@ -86,7 +86,7 @@ def test_every_page_is_kept_when_the_student_leaves_it(
     setup.next.click()
     written(qapp, window)
     assert window.session.preferences["planning_style"] == "auto"
-    assert window.session.preferences["drag_step_min"] == 15
+    assert window.session.preferences.get("drag_step_min", 15) == 15
     assert window.hand.step == 15
     assert window.session.preferences["work_windows"] == [
         {"days": [0, 1, 2, 3, 4], "start": "19:00", "end": "21:00"}

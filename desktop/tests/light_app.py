@@ -173,10 +173,6 @@ def account(qapp: QApplication, root: Path) -> Account:
         window.recovery_ack.setChecked(True)
         window.recovery_continue.click()
         past_setup(qapp, window)
-        # Skipping setup leaves a new account on 15-minute steps. The week tests are written on fives, so
-        # this shared account is the older kind that never chose; tests of the new default sign up themselves.
-        window.session.save_preferences({"drag_step_min": 5})
-        wait_until(qapp, lambda: not window.session.busy)
         assert window.session.account is not None, "signing up left no account"
         user_id = int(window.session.account["id"])
         look = look_file().read_bytes() if look_file().exists() else None

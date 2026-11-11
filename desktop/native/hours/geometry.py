@@ -22,8 +22,10 @@ from PySide6.QtGui import QTransform
 from backend.slots import DAY_END_MIN, DAY_START_MIN, SLOT_MIN
 
 FIRST, LAST = DAY_START_MIN, DAY_END_MIN
-# The minutes a student can have a drag move by; the first is what an account starts with.
+# The minutes a student can have a drag move by, in the order they are shown.
 DRAG_STEPS = (5, 15)
+# What an account that never chose reads as; the engine fills the same number for a missing key.
+DEFAULT_DRAG_STEP = 15
 # Space between blocks that share a time, and between a block and its track's sides.
 GAP = 2.0
 # Space between a block and the next one back to back with it.
@@ -58,8 +60,8 @@ def next_slot(minute: int, first: int = FIRST, last: int = LAST - SLOT_MIN) -> t
 
 
 def drag_step(chosen: object) -> int:
-    """The step a preference names, or the first one for anything else."""
-    return chosen if isinstance(chosen, int) and chosen in DRAG_STEPS else DRAG_STEPS[0]
+    """The step a preference names, or the default for anything else."""
+    return chosen if isinstance(chosen, int) and chosen in DRAG_STEPS else DEFAULT_DRAG_STEP
 
 
 class Track(Protocol):

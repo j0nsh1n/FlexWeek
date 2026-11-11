@@ -246,8 +246,6 @@ from desktop.native.widgets import (
 )
 
 WINDOW_SIZE = (1280, 800)
-# The time step an account made in this sitting starts with. An account from before that never chose keeps 5.
-NEW_ACCOUNT_DRAG_STEP = 15
 # The smallest window FlexWeek is for: at 800 the top bar still fits and nothing is cut in half.
 WINDOW_MIN_WIDTH = 800
 # The longest the old week's picture waits for the next one before it fades anyway.
@@ -2686,8 +2684,6 @@ class NativeWindow(QMainWindow):
     def _setup_state(self, first_run: bool) -> SetupState:
         session = self.session
         prefs = session.preferences or {}
-        if session.new_account and not session.drag_step_chosen:
-            prefs = {**prefs, "drag_step_min": prefs.get("drag_step_min", NEW_ACCOUNT_DRAG_STEP)}
         courses = {str(item.get("course") or "").strip() for item in session.assignments.values()}
         return SetupState(
             pack=str(prefs.get("theme_pack") or "system"),
@@ -2814,10 +2810,7 @@ class NativeWindow(QMainWindow):
             self._new_look_notice_exempt.add(str(self.session.account["id"]))
             self._save_look()
         self._setup_active = False
-        kept: dict = {"setup": progress}
-        if self.session.new_account and not self.session.drag_step_chosen:
-            kept["drag_step_min"] = NEW_ACCOUNT_DRAG_STEP
-        self.session.keep_setup(kept)
+        self.session.keep_setup({"setup": progress})
         self._sync_chrome()
         self._on_week()
 

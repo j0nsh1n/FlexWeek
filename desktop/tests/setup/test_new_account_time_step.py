@@ -1,8 +1,7 @@
-"""A new account starts with a 15-minute time step; an account that never chose one keeps dragging in fives.
+"""An account that never chose a time step uses 15 minutes, a new account included.
 
-A new account is one made in this sitting. Its setup shows 15 on the planning page, skipping setup keeps
-15, and picking 5 there keeps 5. Accounts from before (signed in, not just made) are left as they were.
-"""
+Its setup shows 15 on the planning page, skipping setup keeps 15, and picking 5 there keeps 5, also when the
+account signs in again. The server leaves 15 out of the preferences it sends, so 15 is a missing key."""
 
 # ruff: noqa: F811
 # Fixtures are imported by name, so a test taking one as an argument redefines it.
@@ -46,7 +45,7 @@ def test_a_new_accounts_planning_page_opens_on_15_minutes_and_keeps_it(
     assert setup.drag_buttons[15].isChecked()
     setup.next.click()
     written(qapp, window)
-    assert window.session.preferences["drag_step_min"] == 15
+    assert window.session.preferences.get("drag_step_min", 15) == 15
     assert window.hand.step == 15
 
 
@@ -57,11 +56,11 @@ def test_a_new_account_that_skips_setup_still_ends_on_15_minutes(
     window.setup_page.skip_all.click()
     written(qapp, window)
     assert page(window) == "weekPage"
-    assert window.session.preferences["drag_step_min"] == 15
+    assert window.session.preferences.get("drag_step_min", 15) == 15
     assert window.hand.step == 15
 
 
-def test_a_new_account_that_picks_5_keeps_5_and_is_dragged_in_fives_when_it_signs_in_again(
+def test_an_account_that_picks_5_keeps_5_and_is_dragged_in_fives_when_it_signs_in_again(
     qapp: QApplication, launcher: Launcher
 ) -> None:
     window = new_account(qapp, launcher, "step_five")
@@ -71,17 +70,17 @@ def test_a_new_account_that_picks_5_keeps_5_and_is_dragged_in_fives_when_it_sign
     written(qapp, window)
     window.setup_page.skip_all.click()
     written(qapp, window)
-    # The server leaves 5 out of what it sends back, as it does for an account that never chose.
-    assert window.session.preferences.get("drag_step_min", 5) == 5
+    # A chosen 5 is the value the server sends, so it is kept apart from an account that never chose.
+    assert window.session.preferences["drag_step_min"] == 5
     assert window.hand.step == 5
     launcher.quit(window)
 
     again = sign_in(qapp, launcher, "step_five")
-    assert again.session.preferences.get("drag_step_min", 5) == 5
+    assert again.session.preferences["drag_step_min"] == 5
     assert again.hand.step == 5
     # Running setup again for an account that is not new shows what it has: 5.
-    assert again._setup_state(False).preferences.get("drag_step_min", 5) == 5
+    assert again._setup_state(False).preferences["drag_step_min"] == 5
     again._run_setup_again()
     again.setup_page.skip_all.click()
     written(qapp, again)
-    assert again.session.preferences.get("drag_step_min", 5) == 5
+    assert again.session.preferences["drag_step_min"] == 5

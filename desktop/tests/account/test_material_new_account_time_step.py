@@ -1,5 +1,5 @@
-"""Material's first-run setup: a new account's planning step opens on a 15-minute time step, and an account
-that skips setup still ends on 15."""
+"""Material's first-run setup: the planning step opens on the 15-minute default time step, and an account
+that skips setup still ends on 15. The server leaves 15 out of the preferences it sends."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 
@@ -40,7 +40,7 @@ def test_a_new_accounts_planning_step_opens_on_15_minutes(
     assert bridge.dragStep == 15
     bridge.setupNext()
     settle(qapp, window)
-    assert window.session.preferences["drag_step_min"] == 15
+    assert window.session.preferences.get("drag_step_min", 15) == 15
 
 
 def test_a_new_account_that_skips_setup_in_material_ends_on_15_minutes(
@@ -50,5 +50,5 @@ def test_a_new_account_that_skips_setup_in_material_ends_on_15_minutes(
     create(qapp, window, "step_material_skip")
     through_recovery(qapp, window)
     skip_setup(qapp, window)
-    assert window.session.preferences["drag_step_min"] == 15
+    assert window.session.preferences.get("drag_step_min", 15) == 15
     assert window.hand.step == 15

@@ -310,9 +310,6 @@ class NativeSession(QObject):
         self.needs_time: dict[str, str] = {}
         # Registered in this sitting, so setup can open before the account's preferences arrive.
         self.new_account = False
-        # Setup has been told a time step. The server leaves a step of 5 out of the preferences it sends
-        # back, so a missing key cannot say whether the student picked 5.
-        self.drag_step_chosen = False
         self.focus_store: dict[int, dict | None] = {}
         self.look: dict = sanitize_look(None)
         self.now_ms = wall_clock.now_ms
@@ -461,7 +458,6 @@ class NativeSession(QObject):
         self.saved_weeks = []
         self.preferences = None
         self.new_account = False
-        self.drag_step_chosen = False
         self.late_preview = None
         self.spread_preview = None
         self._seen_unfinished.clear()
@@ -1276,8 +1272,6 @@ class NativeSession(QObject):
         save_week: bool = False,
     ) -> None:
         """Remember what a setup page answered. The write goes out one request at a time."""
-        if "drag_step_min" in updates:
-            self.drag_step_chosen = True
         self.setup_prefs.update(updates)
         if work_windows is not None:
             self.setup_work_windows = deepcopy(work_windows)
