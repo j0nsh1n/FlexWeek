@@ -171,7 +171,7 @@ Contract for the finished app:
   beside the hours. Each surface's level is remembered per device in the look
   file. Every design draws its own Day and Week on one shared gesture engine
   (the 0.15 architecture, `docs/0.15/architecture.md` in git history): a block moves with the pointer in the
-  student's step, 5 minutes or 15 (the `drag_step_min` preference, 5 unless
+  student's step, 5 minutes or 15 (the `drag_step_min` preference, 15 unless
   chosen otherwise in setup or Settings > Planning), with its times beside it
   while held; a typed time keeps any minute; an end drags to resize;
   empty time drags to create; overlaps are allowed and each is named: Material

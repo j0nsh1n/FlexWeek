@@ -13,7 +13,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - In the Material style, drawing or clicking on empty time in Week and Day lands on the Dragging step you chose (every 5 minutes or every quarter hour) instead of always on a quarter hour.
 - In the Material style, the start and end time lists in Add and Edit fixed time, and the due time and Pinned time lists in Add and Edit homework, follow the Dragging step: every 5 minutes on 5, quarter hours on 15. A time already on the block stays listed, and today still hides times already over.
 - In the Widgets style, clicking or right-clicking free time, and pressing to draw a new block, land on the Dragging step you chose instead of always on a quarter hour.
-- New accounts start with a Dragging step of 15 minutes: setup shows 15 picked, and skipping setup keeps 15. Accounts that never chose a step still drag in 5s.
+- An account that never chose a Dragging step now uses 15 minutes, new accounts included: setup shows 15 picked, and skipping setup keeps 15. 5 minutes is one pick away in Settings → Planning. An account that has saved its settings before keeps the step it has.
 
 ### Fixed
 - In the Material style, the now line in Week runs through today's column only and is drawn over the blocks, with its dot on today's left edge; Day draws it the same way. Today brings the line back into view when this week is already open and was scrolled away, and when you come back from another week, and the line moves to the current time as soon as the app comes back to the front.
