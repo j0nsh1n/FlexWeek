@@ -104,8 +104,8 @@ def test_f_opens_it_ready_to_start_unless_typing(qapp: QApplication, focus_windo
     assert window.session.focus is None, "F shows the timer; it does not start one"
     assert screen.phase.text() == READY
     assert screen.time_text() == format_countdown(phase_duration_ms("work", window.session.preferences))
-    assert visible_buttons(screen) == ["Back", "Start"]
-    QTest.mouseClick(screen.start, LEFT)
+    assert visible_buttons(screen) == ["Back", "Start", "Just a timer"], "the essay is on now"
+    QTest.mouseClick(screen.just_timer, LEFT)
     assert window.session.focus is not None and window.session.focus["title"] == "Quick focus"
     assert visible_buttons(screen) == ["Back", "Pause", "Skip", "Finish"]
 

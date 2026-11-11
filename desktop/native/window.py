@@ -4995,6 +4995,10 @@ class NativeWindow(QMainWindow):
         self._open_focus_screen()
 
     def _start_quick_focus(self) -> None:
+        if self.session.start_focus_on_offer():
+            self._open_focus_screen()
+
+    def _start_just_a_timer(self) -> None:
         if self.session.start_quick_focus():
             self._open_focus_screen()
 
@@ -5015,6 +5019,7 @@ class NativeWindow(QMainWindow):
         screen = self.focus_screen
         screen.back_requested.connect(self._close_focus_screen)
         screen.start_requested.connect(self._start_quick_focus)
+        screen.timer_requested.connect(self._start_just_a_timer)
         screen.pause_requested.connect(self.session.toggle_focus_pause)
         screen.skip_requested.connect(lambda: self.session.advance_focus(False))
         screen.stop_requested.connect(self._stop_focus)

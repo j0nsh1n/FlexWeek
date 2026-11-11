@@ -493,6 +493,23 @@ fn focus_candidates(
 }
 
 #[pyfunction]
+fn focus_quick_homework(
+    blocks: &str,
+    assignments: &str,
+    trace: &str,
+    week_start: &str,
+    now: &str,
+) -> PyResult<String> {
+    let (blocks, assignments, trace) = (parse(blocks)?, parse(assignments)?, parse(trace)?);
+    guard(|| {
+        Ok(dump(
+            &focus::quick_focus_homework(&blocks, &assignments, &trace, week_start, now)
+                .map_err(crate::raise)?,
+        ))
+    })
+}
+
+#[pyfunction]
 fn focus_now_next(blocks: &str, day: &str, minute: i64) -> PyResult<String> {
     let (blocks, day) = (parse(blocks)?, parse(day)?);
     guard(|| {
@@ -1483,6 +1500,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         focus_break_phase,
         focus_credit,
         focus_candidates,
+        focus_quick_homework,
         focus_now_next,
         focus_now_next_line,
         reuse_restore_label,
