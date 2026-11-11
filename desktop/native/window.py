@@ -7,7 +7,7 @@ import json
 import logging
 import time
 import weakref
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -3488,6 +3488,26 @@ class NativeWindow(QMainWindow):
         monday = date.fromisoformat(self.session.week_start) + timedelta(days=days)
         self.session.load_week(monday.isoformat())
 
+    @contextlib.contextmanager
+    def _material_keys_held(self) -> Iterator[None]:
+        """While a dialog of this window is up over the Material page, Material's window-wide keys wait:
+        their Shortcuts stay live under it and took Esc and the number keys first. The keyboard goes back
+        to Material afterwards."""
+        current = self._stack.currentWidget()
+        page = self._material_page
+        root = page.root if page is not None and current is page else None
+        if root is None or not isValid(root):
+            yield
+            return
+        was_open = root.property("widgetsDialogOpen")
+        root.setProperty("widgetsDialogOpen", True)
+        try:
+            yield
+        finally:
+            if isValid(root):
+                root.setProperty("widgetsDialogOpen", was_open)
+                QMetaObject.invokeMethod(root, "focusDestination")
+
     def _run_sheet(self, dialog: QDialog) -> bool:
         """Open a sheet and wait for it. Once it is closed the keyboard is back on the week, not on the
         button that opened it."""
@@ -3495,7 +3515,8 @@ class NativeWindow(QMainWindow):
         # the keyboard, not the pointer, took them to the sheet.
         keyboard = self._last_input.keyboard
         try:
-            accepted = dialog.exec() == QDialog.DialogCode.Accepted
+            with self._material_keys_held():
+                accepted = dialog.exec() == QDialog.DialogCode.Accepted
         finally:
             # A dim made for this sheet that it never took, because it could not open.
             drop_waiting_dim(self)
@@ -5710,16 +5731,9 @@ class NativeWindow(QMainWindow):
             HelpDialog(self).exec()
             return
         bridge = page.bridge
-        root = page.root
         dialog = HelpDialog(self, (bridge.shortcuts, bridge.letterKeys))
-        # Material's window-wide keys stay live under a dialog of this window, and Esc went to them.
-        root.setProperty("widgetsDialogOpen", True)
-        try:
+        with self._material_keys_held():
             dialog.exec()
-        finally:
-            if isValid(root):
-                root.setProperty("widgetsDialogOpen", False)
-                QMetaObject.invokeMethod(root, "focusDestination")
 
     def _open_about(self) -> None:
         AboutDialog(self, self.session.storage_info, str(self._look_path().parent)).exec()
