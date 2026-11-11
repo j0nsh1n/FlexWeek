@@ -6,7 +6,7 @@
 //! unless `every_week` stands the change from this week on, as the app's School hours do.
 
 use flexweek_engine::desk::calendar::{FLEX_CATEGORIES, LOCKED_CATEGORIES};
-use flexweek_engine::desk::grid::{apply_block_edit, is_setup_block, past_problem, span_clash};
+use flexweek_engine::desk::grid::{apply_block_edit, is_standing_block, past_problem, span_clash};
 use flexweek_engine::desk::weekmodel::clock_text;
 use flexweek_engine::time::{clock_to_minutes, hhmm_to_minutes, minutes_to_hhmm};
 use flexweek_store::{
@@ -25,8 +25,7 @@ use crate::session;
 
 const FLEXIBLE: &str = "Use the homework editor for flexible work.";
 const NOT_IN_WEEK: &str = "That block is not in this week, so nothing changed.";
-const NOT_STANDING: &str =
-    "Only School and Setup's activities stand in every week, so every_week does not apply.";
+const NOT_STANDING: &str = "Only School, Setup's activities and weekly fixed times stand in every week, so every_week does not apply.";
 const DAYS_RULE: &str = "days must name at least one day, 0 (Monday) to 6 (Sunday), once each";
 const DEFAULT_CATEGORY: &str = "extra";
 
@@ -374,7 +373,7 @@ fn perform_edit(app: &crate::App, args: &EditArgs) -> Result<Value, String> {
     if original["kind"] != json!("locked") {
         return Err(FLEXIBLE.into());
     }
-    let setup = is_setup_block(&original).map_err(|err| err.message)?;
+    let setup = is_standing_block(&original).map_err(|err| err.message)?;
     let every_week = args.every_week.unwrap_or(false);
     if every_week && (!setup || occurrence) {
         return Err(NOT_STANDING.into());

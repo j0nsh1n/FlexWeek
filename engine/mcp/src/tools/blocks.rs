@@ -3,7 +3,7 @@
 //! as the app shows it; `every_week` also takes one of those out of the standing week.
 
 use flexweek_engine::desk::blocks;
-use flexweek_engine::desk::grid::is_setup_block;
+use flexweek_engine::desk::grid::is_standing_block;
 use flexweek_engine::desk::hand_move::{HandDrop, HandMove, WeekClock, hand_move};
 use flexweek_engine::time::hhmm_to_minutes;
 use flexweek_store::{
@@ -233,12 +233,12 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
         .iter()
         .find(|block| block.get("id").and_then(Value::as_str) == Some(args.block_id.as_str()));
     let setup = match target {
-        Some(block) => is_setup_block(block).map_err(|err| err.message)?,
+        Some(block) => is_standing_block(block).map_err(|err| err.message)?,
         None => false,
     };
     if every_week && !setup {
         return Err(
-            "Only School and Setup's activities stand in every week, so every_week does not apply."
+            "Only School, Setup's activities and weekly fixed times stand in every week, so every_week does not apply."
                 .into(),
         );
     }

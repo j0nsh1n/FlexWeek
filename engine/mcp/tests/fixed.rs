@@ -585,6 +585,63 @@ fn school_moved_on_one_day_changes_this_week_only() {
     assert_eq!(by_id(&next, "school")["days"], json!([0, 1, 2, 3, 4]));
 }
 
+fn piano_stands(world: &World, until: Option<&str>) {
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let mut piano = json!({
+        "id": "weekly-piano", "title": "Piano", "kind": "locked", "duration_min": 60,
+        "days": [1, 3], "start": "16:00", "category": "extra"
+    });
+    if let Some(until) = until {
+        piano["until"] = json!(until);
+    }
+    set_standing(&conn, world.user, WEEK, &json!([piano]).to_string()).expect("piano stands");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+}
+
+#[test]
+fn a_weekly_fixed_time_edited_every_week_stands_from_this_week_on_and_keeps_its_until() {
+    let world = signed_in("weekly-every-week");
+    // Mon 26 Oct is the next week; Until Wed 28 Oct keeps Tuesday and drops Thursday there.
+    piano_stands(&world, Some("2026-10-28"));
+    let mut server = boot(&world);
+    let edited = server.call(
+        "edit_block",
+        json!({"operation_id": "op-piano-later", "week_start": WEEK, "expected_revision": 0,
+            "block_id": "weekly-piano", "start": "17:00", "end": "18:00", "every_week": true}),
+        2,
+    );
+    assert_eq!(body_of(&edited)["ok"], json!(true), "got {edited}");
+    let next = seen(&mut server, NEXT, 3);
+    let piano = by_id(&next, "weekly-piano");
+    assert_eq!(piano["start"], json!("17:00"), "got {next}");
+    assert_eq!(
+        piano["days"],
+        json!([1]),
+        "Until still cuts Thursday, got {next}"
+    );
+    assert_eq!(piano["until"], json!("2026-10-28"));
+}
+
+#[test]
+fn every_week_on_an_ordinary_block_is_refused_with_the_sentence_that_names_weekly_times() {
+    let world = signed_in("ordinary-every-week");
+    seed_week(&world, json!([club(&[1], "16:00")]));
+    let mut server = boot(&world);
+    let refused = server.call(
+        "edit_block",
+        json!({"operation_id": "op-club-later", "week_start": WEEK,
+            "expected_revision": stored(&world, WEEK).1,
+            "block_id": "club", "start": "17:00", "end": "18:00", "every_week": true}),
+        2,
+    );
+    assert!(
+        tool_error_text(&refused).is_some_and(|text| text.contains("weekly fixed times")),
+        "got {refused}"
+    );
+}
+
 #[test]
 fn school_edited_every_week_stands_from_this_week_on() {
     let world = signed_in("school-every-week");
