@@ -16,6 +16,29 @@ Item {
     signal snoozeClicked()
     signal closeClicked()
 
+    // Where the keyboard was before it reached one of the actions. The card hides when an action is
+    // pressed, and focus left on a hidden button makes the next Tab start again from the page's top.
+    property Item cameFrom: null
+    function inCard(item) {
+        for (var up = item; up; up = up.parent)
+            if (up === root)
+                return true
+        return false
+    }
+    function giveFocusBack() {
+        var back = cameFrom && cameFrom.visible ? cameFrom : root.nextItemInFocusChain(false)
+        if (back && !inCard(back))
+            back.forceActiveFocus(Qt.TabFocusReason)
+    }
+    Connections {
+        target: root.Window.window
+        function onActiveFocusItemChanged() {
+            var item = root.Window.window.activeFocusItem
+            if (item && !root.inCard(item))
+                root.cameFrom = item
+        }
+    }
+
     implicitHeight: 56
     height: 56
     implicitWidth: Math.max(320, messageText.implicitWidth + actions.width + 48)
@@ -70,6 +93,8 @@ Item {
                 Accessible.name: modelData.access
                 Accessible.onPressAction: action.press()
                 function press() {
+                    if (action.activeFocus)
+                        root.giveFocusBack()
                     if (modelData.snooze)
                         root.snoozeClicked()
                     else

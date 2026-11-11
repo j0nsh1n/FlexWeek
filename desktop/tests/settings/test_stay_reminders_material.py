@@ -194,7 +194,7 @@ def test_a_screen_reader_is_told_the_reminder_once_politely_and_again_when_a_sno
     def hear(_widget: object, words: str, assertive: bool = False) -> None:
         heard.append((words, assertive))
 
-    # The toast reads a new reminder itself; the card reads it only when it comes back from a snooze.
+    # The card reads a new reminder once, and again when it comes back from a snooze.
     monkeypatch.setattr(widgets, "announce", hear)
     monkeypatch.setattr(bridge_module, "announce", hear)
     choose(qapp, window, reminder_lead_min=15)
@@ -239,6 +239,41 @@ def test_tab_walks_from_the_week_page_to_snooze_then_got_it_and_back(qapp: QAppl
     assert press(Qt.Key.Key_Backtab) is snooze
     assert press(Qt.Key.Key_Backtab) is before
     assert press(Qt.Key.Key_Tab) is snooze
+
+
+@pytest.mark.parametrize("action", ["reminderSnooze", "reminderClose"])
+def test_after_snooze_or_got_it_by_keyboard_focus_goes_back_where_it_was_not_to_the_page_start(
+    qapp: QApplication, material, action: str
+) -> None:
+    window, root = material
+    beat(qapp, window, 40)
+    quick = window._material_page._quick
+    scene = quick.quickWindow()
+    snooze = named(root, "reminderSnooze")[0]
+    pressed = named(root, action)[0]
+
+    def press(key: Qt.Key) -> object:
+        QTest.keyClick(quick, key)
+        pump(qapp)
+        return scene.activeFocusItem()
+
+    named(root, "toggleWeekends")[0].forceActiveFocus()
+    pump(qapp)
+    stops = []
+    for _ in range(80):
+        stops.append(press(Qt.Key.Key_Tab))
+        if stops[-1] is snooze:
+            break
+    assert stops[-1] is snooze
+    before = stops[-2]
+    if action == "reminderClose":
+        assert press(Qt.Key.Key_Tab) is pressed
+    assert press(Qt.Key.Key_Space) is before
+    assert shown(root) == ""
+    assert before.property("visible") is True
+    after = press(Qt.Key.Key_Tab)
+    assert after is not None and after.property("visible") is True
+    assert after is not before
 
 
 def test_a_long_block_name_keeps_the_card_inside_the_narrowest_window(qapp: QApplication, material) -> None:
