@@ -318,10 +318,80 @@ def test_an_account_with_many_weekly_fixed_times_exports_and_imports(alice: Test
     assert shown == ["school", *(f"weekly-{n}" for n in range(weeklies))]
 
 
-def test_one_save_takes_more_than_nine_standing_changes_but_not_a_runaway_list(alice: TestClient) -> None:
+def test_one_save_takes_more_than_nine_standing_changes(alice: TestClient) -> None:
     stand(alice, SETUP_WEEK, [SCHOOL, *(weekly_block(n) for n in range(12))])
     assert len(week(alice, NEXT_WEEK)["blocks"]) == 13
-    assert stand_request(alice, SETUP_WEEK, [weekly_block(n % 20) for n in range(500)]).status_code == 422
+
+
+def a_stop(n: int) -> dict:
+    return {"id": f"weekly-{n}", "stop": True}
+
+
+def test_one_request_holds_at_most_200_standing_changes(alice: TestClient) -> None:
+    # Stops of blocks that do not stand add nothing to the account, so only the request's own bound can
+    # refuse the 201st. The ids are all different, or the list would be refused for repeating one.
+    assert stand_request(alice, SETUP_WEEK, [a_stop(n) for n in range(200)]).status_code == 200
+    refused = stand_request(alice, SETUP_WEEK, [a_stop(n) for n in range(201)])
+    assert refused.status_code == 422, refused.text
+
+
+def numbered_weekly(n: int) -> dict:
+    return {"id": f"weekly-{n}", "title": f"Club {n}", "kind": "locked", "category": "extra",
+            "start": f"{6 + n // 60:02d}:{n % 60:02d}", "duration_min": 30, "days": [5]}
+
+
+def test_an_account_keeps_at_most_200_standing_blocks_over_several_saves(alice: TestClient) -> None:
+    stand(alice, SETUP_WEEK, [numbered_weekly(n) for n in range(100)])
+    stand(alice, SETUP_WEEK, [numbered_weekly(n) for n in range(100, 200)])
+    refused = stand_request(alice, SETUP_WEEK, [numbered_weekly(200)])
+    assert refused.status_code == 422, refused.text
+    assert "at most 200 weekly blocks" in refused.json()["detail"]
+    assert len(week(alice, NEXT_WEEK)["blocks"]) == 200
+    # Editing one that stands is not adding one, and stopping one makes room for another.
+    assert stand_request(alice, SETUP_WEEK, [{**numbered_weekly(7), "title": "Chess"}]).status_code == 200
+    assert stand_request(alice, SETUP_WEEK, [a_stop(3), numbered_weekly(200)]).status_code == 200
+    # The same account exports and imports at its limit.
+    snapshot = alice.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()
+    assert import_snapshot(alice, snapshot).status_code == 200
+
+
+def test_a_refused_standing_save_saves_none_of_the_batch(alice: TestClient) -> None:
+    stand(alice, SETUP_WEEK, [numbered_weekly(n) for n in range(200)])
+    response = alice.post(
+        "/api/changes",
+        json={
+            "weeks": [{"week_start": NEXT_WEEK, "blocks": [GYM], "revision": 0}],
+            "standing": {"week_start": NEXT_WEEK, "blocks": [numbered_weekly(200)]},
+        },
+        headers=WRITE,
+    )
+    assert response.status_code == 422, response.text
+    assert "gym" not in [b["id"] for b in week(alice, NEXT_WEEK)["blocks"]]
+
+
+# A copy made by hand before Piano repeated: no `weekly-` id, so it stands in its own week alone.
+PIANO_COPY = {"id": "b1", "title": "piano ", "kind": "locked", "category": "extra", "start": "16:00",
+              "duration_min": 60, "days": [3]}
+
+
+def test_a_new_repeat_names_the_later_weeks_that_hold_a_copy_and_removes_nothing(alice: TestClient) -> None:
+    save(alice, NEXT_WEEK, [PIANO_COPY])
+    save(alice, WEEK_AFTER, [{**PIANO_COPY, "start": "17:00"}])
+    save(alice, "2026-10-26", [{**PIANO_COPY, "days": [4]}])
+    answer = stand(alice, SETUP_WEEK, [PIANO])
+    # 12 October (NEXT_WEEK) holds a Thursday copy at 16:00; 19 October's is an hour late and 26 October's
+    # sits on a Friday, which Piano (Tuesday and Thursday) does not have.
+    assert answer["standing_twin_weeks"] == [NEXT_WEEK]
+    assert [b["id"] for b in week(alice, NEXT_WEEK)["blocks"]] == ["b1", "weekly-piano"]
+
+
+def test_only_a_new_repeat_names_twins_and_other_answers_keep_their_shape(alice: TestClient) -> None:
+    save(alice, NEXT_WEEK, [PIANO_COPY])
+    assert "standing_twin_weeks" in stand(alice, SETUP_WEEK, [PIANO])
+    again = stand(alice, SETUP_WEEK, [{**PIANO, "title": "Piano lesson"}])
+    assert "standing_twin_weeks" not in again
+    assert "standing_twin_weeks" not in stand(alice, SETUP_WEEK, [SCHOOL])
+    assert "standing_twin_weeks" not in stand(alice, SETUP_WEEK, [{"id": "weekly-piano", "stop": True}])
 
 
 def test_moving_until_from_the_week_it_cut_brings_the_cut_days_back(alice: TestClient) -> None:

@@ -395,8 +395,8 @@ def a_week_start(value: str) -> str:
     return value
 
 
-# School, Setup's activities and weekly fixed times share one table with no limit of their own, so this is
-# only a guard against a runaway request: far more than a student keeps, well inside an export's 5000 rows.
+# School, Setup's activities and weekly fixed times share one table. The store refuses a save that leaves an
+# account with more than 200 of them standing; this bound also caps one request and an export row's position.
 MAX_STANDING = 200
 STANDING_RULE = (
     "Only School, Setup's activities and weekly fixed times stand in every week, "
@@ -1397,14 +1397,16 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                     {"week_start": week.week_start, "blocks": stored_blocks, "revision": revision}
                 )
             changed_weeks: list[str] = []
+            twin_weeks: list[str] = []
             if batch.standing is not None:
+                standing_blocks = json.dumps([block.model_dump() for block in batch.standing.blocks])
+                problem = db.standing_limit_problem(account["id"], batch.standing.week_start, standing_blocks)
+                if problem is not None:
+                    raise HTTPException(422, problem)
+                twin_weeks = db.standing_twin_weeks(account["id"], batch.standing.week_start, standing_blocks)
                 # Saved weeks after the open one take the change here; the open week is in `weeks`,
                 # so Undo takes back its part only.
-                changed_weeks = db.set_standing(
-                    account["id"],
-                    batch.standing.week_start,
-                    json.dumps([block.model_dump() for block in batch.standing.blocks]),
-                )
+                changed_weeks = db.set_standing(account["id"], batch.standing.week_start, standing_blocks)
             for entry in week_results:
                 # The standing change can rewrite a week this batch saved (days `until` had cut come back).
                 if entry["week_start"] in changed_weeks:
@@ -1417,6 +1419,8 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             result: dict = {"weeks": week_results, "assignments": assignment_results}
             if batch.standing is not None:
                 result["standing_changed_weeks"] = changed_weeks
+            if twin_weeks:
+                result["standing_twin_weeks"] = twin_weeks
             if batch.operation_id is not None:
                 remember_operation(db, account["id"], batch.operation_id, digest_value, result)
         return result
