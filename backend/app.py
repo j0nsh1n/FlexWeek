@@ -398,7 +398,8 @@ def a_week_start(value: str) -> str:
 # Setup's School and up to eight activities.
 MAX_STANDING = 9
 STANDING_RULE = (
-    "Only School and Setup's activities stand in every week, each with a start time and an id of its own"
+    "Only School, Setup's activities and weekly fixed times stand in every week, "
+    "each with a start time and an id of its own"
 )
 
 
@@ -409,7 +410,7 @@ class StandingStop(BaseModel):
 
 
 class StandingWeek(BaseModel):
-    """Setup blocks to change, or ids to stop, from `week_start` on."""
+    """Standing blocks (Setup's and weekly fixed times) to change, or ids to stop, from `week_start` on."""
 
     model_config = ConfigDict(extra="forbid")
     week_start: str
@@ -425,7 +426,7 @@ class StandingWeek(BaseModel):
             or (
                 block.kind == "locked"
                 and block.start
-                and flexweek_engine.calendar_setup_block(json.dumps(block.model_dump()))
+                and flexweek_engine.calendar_standing_block(json.dumps(block.model_dump()))
             )
             for block in self.blocks
         ):

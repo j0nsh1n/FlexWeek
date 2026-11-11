@@ -155,6 +155,8 @@ class TimeBlock(BaseModel):
         max_length=7,
         exclude_if=lambda value: not value,
     )
+    # The last day a weekly fixed time stands, inclusive. Unset repeats with no end.
+    until: str | None = Field(default=None, exclude_if=lambda value: not value)
     spotify_url: str | None = Field(default=None, max_length=500, exclude_if=lambda value: value is None)
     focus_sessions: int = Field(default=0, ge=0, le=9999, exclude_if=lambda value: value == 0)
     focus_minutes: int = Field(default=0, ge=0, le=71400, exclude_if=lambda value: value == 0)
@@ -178,6 +180,15 @@ class TimeBlock(BaseModel):
     def days_in_week(cls, value: list[int]) -> list[int]:
         if any(day < 0 or day > 6 for day in value):
             raise ValueError("days must be in 0..6 (Mon..Sun)")
+        return value
+
+    @field_validator("until")
+    @classmethod
+    def until_is_a_date(cls, value: str | None) -> str | None:
+        if value:
+            if not NAIVE_DATE.fullmatch(value):
+                raise ValueError("until must be a date written YYYY-MM-DD")
+            _iso_day(value)
         return value
 
     @field_validator("missed_days")

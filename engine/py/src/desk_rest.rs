@@ -3,7 +3,8 @@
 use std::cell::RefCell;
 
 use ::flexweek_engine::desk::{
-    calendar, clipboard, custom_look, files, focus, grid, hand_move, planning, reuse, update,
+    blocks, calendar, clipboard, custom_look, files, focus, grid, hand_move, planning, reuse,
+    update,
 };
 use ::flexweek_engine::{EngineError, EngineResult};
 use pyo3::exceptions::PyTypeError;
@@ -295,6 +296,18 @@ fn calendar_next_action(
 fn calendar_setup_block(block: &str) -> PyResult<bool> {
     let block = parse(block)?;
     guard(|| grid::is_setup_block(&block).map_err(crate::raise))
+}
+
+#[pyfunction]
+fn calendar_standing_block(block: &str) -> PyResult<bool> {
+    let block = parse(block)?;
+    guard(|| grid::is_standing_block(&block).map_err(crate::raise))
+}
+
+#[pyfunction]
+fn calendar_until_problem(block: &str, week_start: &str, today: &str) -> PyResult<Option<String>> {
+    let block = parse(block)?;
+    guard(|| blocks::until_problem(&block, week_start, today).map_err(crate::raise))
 }
 
 #[pyfunction]
@@ -1461,6 +1474,8 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         calendar_agenda,
         calendar_next_action,
         calendar_setup_block,
+        calendar_standing_block,
+        calendar_until_problem,
         calendar_span_problem,
         calendar_past_problem,
         calendar_span_clash,

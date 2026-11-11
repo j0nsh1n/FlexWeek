@@ -199,6 +199,30 @@ start, and its day. A half that did not fit is kept, with no start. The phone pl
 placed or waiting, under the original task's title, and accepting the plan keeps each half.
 Python encodes the row, calls the engine, and decodes the trace. It does not decide where a block goes.
 
+## The standing week
+
+A standing block is one that every week from the week it starts has without a copy: School and
+Setup's activities (ids `school`, `sport`, `activity-N`) and a fixed time the student made repeat
+every week (id `weekly-...`). `is_setup_block` is true only for the first kind, and Setup is the only
+thing that replaces them; `is_standing_block` is true for both, and every place that means "stands in
+every week" (the read path, `restand` and the store's later-weeks rewrite, deleting "this week and
+later", the assistant helper's `every_week`) asks it. Running Setup again therefore never touches a
+`weekly-` block.
+
+Rows live in `standing_blocks (user_id, id, from_week, position, body)`. A week shows, for each id,
+the row with the greatest `from_week` not after it; a row with no body stops the block from its
+week on. A week's own stored copy of a block wins over the standing one and is shown as stored,
+whatever its date; the standing block is shown only when the week holds no block with that id.
+
+A standing block may carry `until`, a date written `YYYY-MM-DD`, the last day it stands, that day
+included. It is stored after `missed_days` in the block, and a row saved without it reads and writes
+back unchanged. The engine cuts the block at the places it is shown or rewritten, never in Python:
+`with_standing` (the week being read) and `restand` (a saved later week rewritten when the standing
+week changes) keep only the days on or before `until` in that week and drop the block when none are
+left, so a later week opened before does not keep the block past the date. `until_problem` refuses an
+`until` before the first day the block occurs in the week it is saved from, with a sentence that
+names that day.
+
 ## Not in scope
 
 The interface and its tests stay in Python (tidied in T4). The full move to a Rust interface waits for

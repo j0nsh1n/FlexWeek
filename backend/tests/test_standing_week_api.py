@@ -25,6 +25,8 @@ SCHOOL = {"id": "school", "title": "School", "kind": "locked", "category": "clas
           "duration_min": 405, "days": [0, 1, 2, 3, 4]}
 SOCCER = {"id": "activity-1", "title": "Soccer", "kind": "locked", "category": "extra", "start": "16:00",
           "duration_min": 90, "days": [1, 3]}
+PIANO = {"id": "weekly-piano", "title": "Piano", "kind": "locked", "category": "extra", "start": "16:00",
+         "duration_min": 60, "days": [1, 3]}
 GYM = {"id": "gym", "title": "Gym", "kind": "locked", "start": "18:00", "duration_min": 60, "days": [2]}
 
 
@@ -262,3 +264,36 @@ def test_a_restore_point_from_before_the_standing_week_leaves_the_current_one(
     restore(alice, point)
     assert standing_of(alice) == changed
     assert times(week(alice, WEEK_AFTER)["blocks"]) == times([NEW_HOURS])
+
+
+def test_a_weekly_fixed_time_can_stand_and_ends_after_its_until_date(alice: TestClient) -> None:
+    # Until Wed 14 Oct keeps Tue 13 Oct and drops Thu 15 Oct in the week of 12 Oct; the week of 19 Oct has none.
+    stand(alice, SETUP_WEEK, [{**PIANO, "until": "2026-10-14"}])
+    assert [b["days"] for b in week(alice, SETUP_WEEK)["blocks"]] == [[1, 3]]
+    got = week(alice, NEXT_WEEK)["blocks"]
+    assert [(b["id"], b["days"], b["until"]) for b in got] == [("weekly-piano", [1], "2026-10-14")]
+    assert week(alice, WEEK_AFTER)["blocks"] == []
+
+
+def test_a_weekly_fixed_time_saved_in_a_later_week_is_cut_when_until_is_set(alice: TestClient) -> None:
+    stand(alice, SETUP_WEEK, [PIANO])
+    save(alice, WEEK_AFTER, [PIANO, GYM])
+    answer = stand(alice, SETUP_WEEK, [{**PIANO, "until": "2026-10-14"}])
+    assert answer["standing_changed_weeks"] == [WEEK_AFTER]
+    assert [b["id"] for b in week(alice, WEEK_AFTER)["blocks"]] == ["gym"]
+
+
+def test_an_until_that_is_not_a_date_is_refused(alice: TestClient) -> None:
+    for until in ("14 Oct", "2026-13-01", "2026-10-14T10:00"):
+        assert stand_request(alice, SETUP_WEEK, [{**PIANO, "until": until}]).status_code == 422, until
+
+
+def test_an_export_carries_a_weekly_fixed_time_with_its_until(database: Path, alice: TestClient) -> None:
+    stand(alice, SETUP_WEEK, [{**PIANO, "until": "2026-10-28"}])
+    snapshot = alice.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()
+    assert [row["body"]["until"] for row in snapshot["standing"]] == ["2026-10-28"]
+    alice.post("/api/auth/logout", headers=WRITE)
+    alice.post("/api/auth/register", json={"username": "bea", "password": PASSWORD}, headers=WRITE)
+    assert import_snapshot(alice, snapshot).status_code == 200
+    assert [b["days"] for b in week(alice, NEXT_WEEK)["blocks"]] == [[1, 3]]
+    assert [b["days"] for b in week(alice, "2026-10-26")["blocks"]] == [[1]]

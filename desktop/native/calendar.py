@@ -330,10 +330,21 @@ def next_action_for(
 # first-week card made before setup had pages.
 SETUP_SCHOOL_ID = "school"
 SETUP_ACTIVITY_PREFIX = "activity-"
+# A fixed time the student made repeat every week. Not a Setup block: running Setup again leaves it.
+WEEKLY_PREFIX = "weekly-"
 
 
 def is_setup_block(block: dict) -> bool:
     return bool(flexweek_engine.calendar_setup_block(json.dumps(block)))
+
+
+def is_standing_block(block: dict) -> bool:
+    return bool(flexweek_engine.calendar_standing_block(json.dumps(block)))
+
+
+def until_problem(block: dict, week_start: str, today_iso: str) -> str | None:
+    """Why this weekly block's Until cannot be saved from `week_start`, or None. `today_iso` is local."""
+    return flexweek_engine.calendar_until_problem(json.dumps(block), week_start, today_iso)
 
 
 def past_problem(
