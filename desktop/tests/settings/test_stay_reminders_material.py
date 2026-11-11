@@ -162,3 +162,33 @@ def test_a_screen_reader_is_told_the_reminder_once_politely_and_again_when_a_sno
     beat(qapp, window, 36)
     assert shown(root) == SOON
     assert heard == [(SOON, False), (SOON, False)]
+
+
+def test_tab_walks_from_the_week_page_to_snooze_then_got_it_and_back(qapp: QApplication, material) -> None:
+    window, root = material
+    beat(qapp, window, 40)
+    quick = window._material_page._quick
+    scene = quick.quickWindow()
+    snooze, close = named(root, "reminderSnooze")[0], named(root, "reminderClose")[0]
+
+    def press(key: Qt.Key) -> object:
+        QTest.keyClick(quick, key)
+        pump(qapp)
+        return scene.activeFocusItem()
+
+    # The card is last in the page's order: the Week's own controls come first, a block's chip is the stop
+    # just before it.
+    named(root, "toggleWeekends")[0].forceActiveFocus()
+    pump(qapp)
+    stops = []
+    for _ in range(80):
+        stops.append(press(Qt.Key.Key_Tab))
+        if stops[-1] is snooze:
+            break
+    assert stops[-1] is snooze, "Tab never reached Snooze from the Week's first control"
+    assert str(stops[-2].objectName()) == "weekBlock"
+    before = stops[-2]
+    assert press(Qt.Key.Key_Tab) is close
+    assert press(Qt.Key.Key_Backtab) is snooze
+    assert press(Qt.Key.Key_Backtab) is before
+    assert press(Qt.Key.Key_Tab) is snooze
