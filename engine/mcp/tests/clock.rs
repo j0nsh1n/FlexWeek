@@ -213,27 +213,44 @@ fn a_restore_point_carries_the_time_of_its_change() {
 #[test]
 fn the_past_time_check_uses_the_time_now() {
     let world = signed_in("clock-past", NOW_UNIX);
+    {
+        let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+        let study = json!({
+            "id": "study", "title": "Study", "kind": "flexible", "duration_min": 30,
+            "days": [2], "start": "20:00", "priority": 3, "energy": "medium"
+        });
+        conn.execute(
+            "INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?1, ?2, ?3, 4)",
+            (world.user, WEEK, json!([study]).to_string()),
+        )
+        .expect("week");
+        if !conn.is_autocommit() {
+            conn.execute_batch("COMMIT").expect("commit");
+        }
+    }
     let mut server = boot_live(&world, NOW_ISO);
-    let open = server.call(
-        "add_block",
-        fixed_block("op-five-pm", "Club", "17:00", "17:30"),
-        2,
-    );
+    let moved_to = |server: &mut Server, id: &str, (start, end): (&str, &str), revision: i64| {
+        server.call(
+            "move_block",
+            json!({
+                "operation_id": id, "week_start": WEEK, "expected_revision": revision,
+                "block_id": "study", "day": 2, "start": start, "end": end
+            }),
+            revision - 2,
+        )
+    };
+    let open = moved_to(&mut server, "op-five-pm", ("17:00", "17:30"), 4);
     assert_eq!(
-        body_of(&open)["ok"],
-        json!(true),
+        tool_error_text(&open),
+        None,
         "17:00 is still ahead at noon, got {open}"
     );
     set_clock(&world, "2026-10-21T18:00:00Z");
-    let late = server.call(
-        "add_block",
-        fixed_block("op-five-pm-again", "Study group", "17:00", "17:30"),
-        3,
-    );
+    let late = moved_to(&mut server, "op-four-pm", ("16:00", "16:30"), 5);
     let words = tool_error_text(&late).unwrap_or("");
     assert!(
         words.starts_with("That time has passed.") && words.contains("18:00"),
-        "at 18:00 a 17:00 start has passed, got {late}"
+        "at 18:00 a 16:00 homework start has passed, got {late}"
     );
 }
 

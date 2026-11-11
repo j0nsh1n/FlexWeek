@@ -1463,7 +1463,14 @@ class NativeSession(QObject):
             return "That's outside the hours FlexWeek plans in, so it stayed where it was."
         if block is None or not block.get("completed"):
             clock_now = clock_parts(self.now_ms())
-            past = past_problem(to_week, to_day, start_min, clock_now["iso"], int(clock_now["minute"]))
+            past = past_problem(
+                str((block or {}).get("kind") or ""),
+                to_week,
+                to_day,
+                start_min,
+                clock_now["iso"],
+                int(clock_now["minute"]),
+            )
             if past:
                 return past
         assignment = self.assignments.get(homework_id) or self.assignments.get(block_id)

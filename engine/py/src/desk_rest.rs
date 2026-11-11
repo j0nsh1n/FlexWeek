@@ -315,13 +315,16 @@ fn calendar_span_problem(
 
 #[pyfunction]
 fn calendar_past_problem(
+    kind: &str,
     week_start: &str,
     day: i64,
     start_min: i64,
     now_iso: &str,
     now_min: i64,
 ) -> PyResult<Option<String>> {
-    guard(|| grid::past_problem(week_start, day, start_min, now_iso, now_min).map_err(crate::raise))
+    guard(|| {
+        grid::past_problem(kind, week_start, day, start_min, now_iso, now_min).map_err(crate::raise)
+    })
 }
 
 #[pyfunction]
