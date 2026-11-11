@@ -6,7 +6,7 @@ SectionPage {
     objectName: "planningSection"
     readonly property var st: Ui.st
     readonly property var panel: Ui.settings
-    readonly property bool any: !!(st.showWeekendFree || st.showBuffer || st.showUrgent || st.showSplit || st.showCutoff)
+    readonly property bool any: !!(st.showWeekendFree || st.showBuffer || st.showUrgent || st.showSplit || st.showCutoff || st.showDragStep)
 
     Text {
         objectName: "planningEmpty"
@@ -61,6 +61,15 @@ SectionPage {
             choices: page.st.cutoffChoices ? page.st.cutoffChoices : []
             current: page.st.cutoff || ""
             onChosen: (value) => page.panel.setCutoff(value)
+        }
+        ChoiceRow {
+            key: "dragStep"
+            visible: !!page.st.showDragStep
+            title: "Dragging step"
+            subtitle: "How far blocks move when you drag them and the times offered in lists."
+            choices: [{ label: "5 min", value: "5" }, { label: "15 min", value: "15" }]
+            current: String(page.st.dragStep === undefined ? 5 : page.st.dragStep)
+            onChosen: (value) => page.panel.setDragStep(parseInt(value))
         }
     }
 }
