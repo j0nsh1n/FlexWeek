@@ -30,6 +30,21 @@ def song_due(start_min: int, now_min: int, lead: int) -> bool:
     return bool(flexweek_engine.remind_song_due(start_min, now_min, lead))
 
 
+def reminder_start_ms(key: str, midnight_ms: int) -> int:
+    """The moment the block a reminder key names starts today."""
+    return int(flexweek_engine.remind_start_ms(key, midnight_ms))
+
+
+def reminder_stays(start_ms: int, now_ms: int) -> bool:
+    """A reminder kept on screen stays until its block starts."""
+    return bool(flexweek_engine.remind_stays(start_ms, now_ms))
+
+
+def reminder_snooze_until(now_ms: int, start_ms: int) -> int:
+    """When a snoozed reminder comes back: five minutes on, never after the block starts."""
+    return int(flexweek_engine.remind_snooze_reminder_until(now_ms, start_ms))
+
+
 def reminder_key(week_start: str, block_id: str, day: int, start: str) -> str:
     return str(flexweek_engine.remind_key(week_start, block_id, day, start))
 

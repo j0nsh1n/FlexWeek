@@ -790,6 +790,21 @@ fn remind_snooze_until(now_ms: i64) -> PyResult<i64> {
 }
 
 #[pyfunction]
+fn remind_start_ms(key: &str, midnight_ms: i64) -> PyResult<i64> {
+    guard(|| remind::reminder_start_ms(key, midnight_ms).map_err(crate::raise))
+}
+
+#[pyfunction]
+fn remind_stays(start_ms: i64, now_ms: i64) -> PyResult<bool> {
+    guard(|| Ok(remind::reminder_stays(start_ms, now_ms)))
+}
+
+#[pyfunction]
+fn remind_snooze_reminder_until(now_ms: i64, start_ms: i64) -> PyResult<i64> {
+    guard(|| Ok(remind::reminder_snooze_until(now_ms, start_ms)))
+}
+
+#[pyfunction]
 fn update_parse_version(value: &str) -> PyResult<Option<Vec<i64>>> {
     guard(|| Ok(update::parse_version(value)))
 }
@@ -962,6 +977,9 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         remind_due,
         remind_songs,
         remind_snooze_until,
+        remind_start_ms,
+        remind_stays,
+        remind_snooze_reminder_until,
         update_parse_version,
         update_is_newer,
         update_install_kind,

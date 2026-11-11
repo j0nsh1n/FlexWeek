@@ -5,7 +5,8 @@ mod common;
 use common::desk::{utc_ms, with};
 use flexweek_engine::EngineResult;
 use flexweek_engine::desk::remind::{
-    self, ALARM_SNOOZE_MS, clock_parts, millis_of, seconds_of, snooze_until, start_alert_due,
+    self, ALARM_SNOOZE_MS, clock_parts, millis_of, reminder_key, reminder_snooze_until,
+    reminder_start_ms, reminder_stays, seconds_of, snooze_until, start_alert_due,
 };
 use serde_json::{Value, json};
 use std::collections::HashSet;
@@ -518,5 +519,49 @@ fn test_the_reminder_lead_default_is_five_minutes() {
     assert_eq!(
         remind::reminder_lead_min(&json!({}), remind::REMINDER_LEAD_DEFAULT_MIN).expect("lead"),
         5
+    );
+}
+
+// A reminder that stays on screen (no notification service): it lasts until its block starts, and a
+// snooze is five minutes but never past that start. Maths is at 16:00 on 2026-11-11.
+const MAIN_MIDNIGHT: (i32, u32, u32) = (2026, 11, 11);
+
+fn at(hour: i64, minute: i64) -> i64 {
+    utc_ms(MAIN_MIDNIGHT.0, MAIN_MIDNIGHT.1, MAIN_MIDNIGHT.2, 0, 0) + (hour * 60 + minute) * 60_000
+}
+
+fn maths_start_ms() -> i64 {
+    let key = reminder_key("2026-11-09", "maths", 2, "16:00");
+    reminder_start_ms(&key, at(0, 0)).expect("start")
+}
+
+#[test]
+fn a_reminders_start_comes_from_its_key() {
+    assert_eq!(maths_start_ms(), at(16, 0));
+    assert!(reminder_start_ms("not a key", at(0, 0)).is_err());
+}
+
+#[test]
+fn a_reminder_stays_until_the_minute_its_block_starts() {
+    let start = maths_start_ms();
+    assert!(reminder_stays(start, at(15, 55)));
+    assert!(reminder_stays(start, at(15, 58)));
+    assert!(reminder_stays(start, at(15, 59) + 59_000));
+    assert!(!reminder_stays(start, at(16, 0)));
+    assert!(!reminder_stays(start, at(16, 1)));
+}
+
+#[test]
+fn a_snooze_is_five_minutes_and_never_past_the_start() {
+    let start = maths_start_ms();
+    // Snooze at 15:56 would end 16:01: it comes back at the start instead.
+    assert_eq!(reminder_snooze_until(at(15, 56), start), at(16, 0));
+    // A lead of 15 minutes: Snooze at 15:46 comes back at 15:51.
+    assert_eq!(reminder_snooze_until(at(15, 46), start), at(15, 51));
+    // Exactly five minutes before the start comes back at the start, not later.
+    assert_eq!(reminder_snooze_until(at(15, 55), start), at(16, 0));
+    assert_eq!(
+        reminder_snooze_until(at(15, 55), start) - at(15, 55),
+        ALARM_SNOOZE_MS
     );
 }

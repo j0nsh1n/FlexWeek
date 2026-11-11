@@ -317,6 +317,9 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | remind | todays_starts | ADAPTER | rows to tuples, still a generator |
 | remind | due_alarms | ADAPTER | hands the engine `datetime.fromisoformat`, the container of fired keys as it is; the binding marks a real set |
 | remind | snooze_until | ADAPTER | encodes, makes one engine call, decodes |
+| remind | reminder_start_ms | ADAPTER | encodes, makes one engine call, decodes |
+| remind | reminder_stays | ADAPTER | encodes, makes one engine call, decodes |
+| remind | reminder_snooze_until | ADAPTER | encodes, makes one engine call, decodes |
 
 ## reuse
 

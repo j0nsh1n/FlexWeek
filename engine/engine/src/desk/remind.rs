@@ -376,6 +376,24 @@ pub fn snooze_until(now_ms: i64) -> i64 {
     now_ms + ALARM_SNOOZE_MS
 }
 
+/// The moment, in the caller's milliseconds, that the block a reminder key names starts today. The key
+/// is the one `reminder_key` made, so its last part is the start as "HH:MM".
+pub fn reminder_start_ms(key: &str, midnight_ms: i64) -> EngineResult<i64> {
+    let start = key.rsplit('|').next().unwrap_or("");
+    Ok(midnight_ms + hhmm_to_minutes(start)? * 60_000)
+}
+
+/// A reminder kept on screen stays until its block starts, and no timer ends it before then.
+pub fn reminder_stays(start_ms: i64, now_ms: i64) -> bool {
+    now_ms < start_ms
+}
+
+/// When a snoozed reminder comes back: the alarm snooze on, but never after the block starts. A
+/// snooze that would end later comes back at the start, where the start notice takes over.
+pub fn reminder_snooze_until(now_ms: i64, start_ms: i64) -> i64 {
+    snooze_until(now_ms).min(start_ms)
+}
+
 /// `now_ms / 1000.0`: the seconds the local clock is asked about.
 pub fn seconds_of(now_ms: i64) -> f64 {
     now_ms as f64 / 1000.0
