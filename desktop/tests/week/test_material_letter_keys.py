@@ -12,10 +12,12 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, QPoint, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from desktop.tests.material_support import named
+from desktop.tests.sheets.support_material_sheets import block_named, centre
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material import (
     _bridge,
@@ -315,3 +317,122 @@ def test_ctrl_shift_f_does_nothing_while_a_sheet_is_open(qapp, window) -> None:
     assert bridge.sheets.property("kind") == "homework"
     _press(window, Qt.Key.Key_F, CTRL | SHIFT)
     assert not bridge.focus.open
+
+
+THURSDAY = 3
+WHILE_HELD = {
+    "1": Qt.Key.Key_1,
+    "J": Qt.Key.Key_J,
+    "D": Qt.Key.Key_D,
+    "M": Qt.Key.Key_M,
+    "C": Qt.Key.Key_C,
+    "F": Qt.Key.Key_F,
+}
+
+
+def _where(window) -> tuple:
+    """Everything a window-wide key could change: the week, the screen, an open sheet, Focus."""
+    bridge = _bridge(window)
+    sheet = str(bridge.sheets.property("kind"))
+    return (window.session.week_start, _screen(window), sheet, bool(bridge.focus.open))
+
+
+def _club_on_thursday(window, qapp) -> tuple[QObject, QObject]:
+    """Material Week with Letter keys on and one fixed block, Club, Thursday 17:30 to 18:30."""
+    root = _reset(window, qapp)
+    window.session.add_block(
+        {
+            "id": "club",
+            "title": "Club",
+            "kind": "locked",
+            "category": "extra",
+            "start": "17:30",
+            "duration_min": 60,
+            "days": [THURSDAY],
+        }
+    )
+    window.session.save()
+    settled(qapp, window)
+    _pump(qapp)
+    _look(window, letters=True)
+    root = window._material_page.root
+    return root, block_named(root, "Club")
+
+
+def _open_block_menu(window, qapp, block: QObject) -> QObject:
+    block.forceActiveFocus()
+    _pump(qapp)
+    _press(window, Qt.Key.Key_F10, SHIFT)
+    menus = [menu for menu in named(window._material_page.root, "blockMenu") if menu.property("open")]
+    assert len(menus) == 1, "Shift+F10 on the block opened its menu"
+    return menus[0]
+
+
+@pytest.mark.parametrize("name", list(WHILE_HELD))
+def test_the_window_keys_wait_while_a_block_menu_is_open(qapp, window, name) -> None:
+    """J moved the week under the menu, which stayed open over a block no longer on screen; C and F opened
+    a sheet and Focus on top of it."""
+    _root, block = _club_on_thursday(window, qapp)
+    menu = _open_block_menu(window, qapp, block)
+    before = _where(window)
+    _press(window, WHILE_HELD[name])
+    assert _where(window) == before, name
+    assert menu.property("open"), "the menu is still the thing on screen"
+    _press(window, Qt.Key.Key_Escape)
+    assert not menu.property("open")
+
+
+def test_the_window_keys_work_again_once_the_block_menu_is_closed(qapp, window) -> None:
+    _root, block = _club_on_thursday(window, qapp)
+    menu = _open_block_menu(window, qapp, block)
+    _press(window, Qt.Key.Key_Escape)
+    assert not menu.property("open")
+    monday = window.session.week_start
+    _press(window, Qt.Key.Key_J)
+    assert window.session.week_start == (date.fromisoformat(monday) + timedelta(days=7)).isoformat()
+
+
+def test_the_window_keys_wait_while_move_to_day_is_open(qapp, window) -> None:
+    _root, block = _club_on_thursday(window, qapp)
+    menu = _open_block_menu(window, qapp, block)
+    labels = [entry["label"] for entry in menu.property("entries").toVariant()]
+    for _ in range(labels.index("Move to day...")):
+        _press(window, Qt.Key.Key_Down)
+    _press(window, Qt.Key.Key_Return)
+    assert menu.property("open"), "the list of days is open"
+    before = _where(window)
+    for key in (Qt.Key.Key_J, Qt.Key.Key_1, Qt.Key.Key_D):
+        _press(window, key)
+        assert _where(window) == before, key
+
+
+def test_ctrl_shift_f_waits_while_a_block_menu_is_open(qapp, window) -> None:
+    _root, block = _club_on_thursday(window, qapp)
+    menu = _open_block_menu(window, qapp, block)
+    _press(window, Qt.Key.Key_F, CTRL | SHIFT)
+    assert not _bridge(window).focus.open
+    assert menu.property("open")
+
+
+@pytest.mark.parametrize("name", ["J", "D", "1"])
+def test_the_window_keys_wait_while_a_block_is_held_by_the_mouse(qapp, window, name) -> None:
+    """D switched to Day with the block still held, and letting go still saved the move on a screen the
+    student had left. Held and moved 48 px down at 56 px an hour, Club lands 45 minutes later."""
+    root, block = _club_on_thursday(window, qapp)
+    quick = window._material_page._quick
+    start = centre(block)
+    QTest.mousePress(quick, Qt.MouseButton.LeftButton, pos=start)
+    _pump(qapp)
+    for step in range(1, 7):
+        QTest.mouseMove(quick, QPoint(start.x(), start.y() + 8 * step))
+        _pump(qapp)
+    assert [view.property("handing") for view in named(root, "materialWeek")] == [True], "the block is held"
+    before = _where(window)
+    _press(window, WHILE_HELD[name])
+    assert _where(window) == before, name
+    QTest.mouseRelease(quick, Qt.MouseButton.LeftButton, pos=QPoint(start.x(), start.y() + 48))
+    _pump(qapp)
+    settled(qapp, window)
+    club = next(item for item in window.session.blocks if item["id"] == "club")
+    assert (club["days"], club["start"]) == ([THURSDAY], "18:15"), "the drag itself still lands"
+    assert _where(window) == before

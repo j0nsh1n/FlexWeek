@@ -30,8 +30,13 @@ Item {
     // Set by the window while one of its own dialogs (Help) is up over this one: its keys are not ours,
     // and a Shortcut here still fires with that dialog active, so Esc never reached it.
     property bool widgetsDialogOpen: false
+    // A Week or Day block menu, or a block held by the mouse: a view change or a new week under it left the
+    // menu open on a block no longer shown, and a held block carried to another week.
+    readonly property bool gridHeld: bridge !== undefined && bridge !== null
+        && ((bridge.screen === "week" && (weekView.menuOpen || weekView.handing))
+            || (bridge.screen === "day" && (dayView.menuOpen || dayView.handing)))
     readonly property bool modalActive: typing || focusOpen || accountLayer.active || settingsPromptOpen
-        || widgetsDialogOpen || datePicker.open
+        || widgetsDialogOpen || datePicker.open || gridHeld
 
     function _field(item) {
         while (item) {
