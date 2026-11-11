@@ -329,3 +329,135 @@ fn a_restore_point_holds_the_standing_rows_it_was_made_with() {
     assert_eq!(body["standing"], rows);
     assert_eq!(rows.as_array().map(Vec::len), Some(3));
 }
+
+// Dec 2026: Mon 30 Nov, Mon 7 Dec, Tue 8 Dec, Wed 9 Dec, Thu 10 Dec, Sat 12 Dec, Mon 14 Dec.
+const FIRST_WEEK: &str = "2026-11-30";
+const DEC_7: &str = "2026-12-07";
+const DEC_14: &str = "2026-12-14";
+
+fn piano(until: Option<&str>) -> Value {
+    let mut block = json!({"category": "extra", "days": [1, 3], "duration_min": 60,
+                           "id": "weekly-piano", "kind": "locked", "start": "16:00",
+                           "title": "Piano"});
+    if let Some(until) = until {
+        block["until"] = json!(until);
+    }
+    block
+}
+
+fn days_in(conn: &Connection, user_id: i64, week_start: &str) -> Option<Value> {
+    seen(conn, user_id, week_start)
+        .into_iter()
+        .find(|block| block["id"] == "weekly-piano")
+        .map(|block| block["days"].clone())
+}
+
+#[test]
+fn a_weekly_block_shows_from_its_week_on_and_not_before() {
+    let (conn, user_id) = fresh_account("weekly-from");
+    set_standing(&conn, user_id, FIRST_WEEK, &text(&json!([piano(None)]))).unwrap();
+    assert_eq!(days_in(&conn, user_id, "2026-11-23"), None);
+    for week in [FIRST_WEEK, DEC_7, DEC_14, "2026-12-28"] {
+        assert_eq!(days_in(&conn, user_id, week), Some(json!([1, 3])), "{week}");
+    }
+}
+
+#[test]
+fn until_cuts_the_weeks_a_student_never_opened() {
+    let (conn, user_id) = fresh_account("weekly-until-unsaved");
+    set_standing(
+        &conn,
+        user_id,
+        FIRST_WEEK,
+        &text(&json!([piano(Some("2026-12-09"))])),
+    )
+    .unwrap();
+    assert_eq!(days_in(&conn, user_id, FIRST_WEEK), Some(json!([1, 3])));
+    assert_eq!(days_in(&conn, user_id, DEC_7), Some(json!([1])));
+    assert_eq!(days_in(&conn, user_id, DEC_14), None);
+}
+
+#[test]
+fn until_also_cuts_saved_later_weeks_that_hold_their_own_copy() {
+    let (conn, user_id) = fresh_account("weekly-until-saved");
+    set_standing(&conn, user_id, FIRST_WEEK, &text(&json!([piano(None)]))).unwrap();
+    add_week(&conn, user_id, DEC_7, &json!([piano(None), gym()]));
+    add_week(&conn, user_id, DEC_14, &json!([piano(None), gym()]));
+    let changed = set_standing(
+        &conn,
+        user_id,
+        FIRST_WEEK,
+        &text(&json!([piano(Some("2026-12-09"))])),
+    )
+    .unwrap();
+    assert_eq!(changed, vec![DEC_7.to_string(), DEC_14.to_string()]);
+    let (dec_7, _) = week_row(&conn, user_id, DEC_7);
+    let mut cut = piano(Some("2026-12-09"));
+    cut["days"] = json!([1]);
+    assert_eq!(dec_7, json!([cut, gym()]));
+    let (dec_14, _) = week_row(&conn, user_id, DEC_14);
+    assert_eq!(dec_14, json!([gym()]));
+}
+
+#[test]
+fn running_setup_again_changes_school_and_leaves_a_weekly_block_alone() {
+    let (conn, user_id) = fresh_account("weekly-setup-again");
+    set_standing(
+        &conn,
+        user_id,
+        FIRST_WEEK,
+        &text(&json!([school(), piano(None)])),
+    )
+    .unwrap();
+    add_week(&conn, user_id, DEC_7, &json!([school(), piano(None)]));
+    let mut later = school();
+    later["start"] = json!("09:00");
+    set_standing(&conn, user_id, FIRST_WEEK, &text(&json!([later.clone()]))).unwrap();
+    assert_eq!(days_in(&conn, user_id, DEC_14), Some(json!([1, 3])));
+    let (dec_7, _) = week_row(&conn, user_id, DEC_7);
+    assert_eq!(dec_7, json!([later, piano(None)]));
+}
+
+#[test]
+fn a_weekly_block_stopped_from_a_week_leaves_that_week_and_later_ones() {
+    let (conn, user_id) = fresh_account("weekly-stop");
+    set_standing(&conn, user_id, FIRST_WEEK, &text(&json!([piano(None)]))).unwrap();
+    add_week(&conn, user_id, DEC_14, &json!([piano(None)]));
+    set_standing(
+        &conn,
+        user_id,
+        DEC_7,
+        &text(&json!([{"id": "weekly-piano", "stop": true}])),
+    )
+    .unwrap();
+    assert_eq!(days_in(&conn, user_id, FIRST_WEEK), Some(json!([1, 3])));
+    assert_eq!(days_in(&conn, user_id, DEC_7), None);
+    assert_eq!(days_in(&conn, user_id, DEC_14), None);
+}
+
+#[test]
+fn rows_saved_without_until_read_and_export_exactly_as_they_were() {
+    let (conn, user_id) = fresh_account("weekly-old-rows");
+    set_standing(
+        &conn,
+        user_id,
+        SETUP_WEEK,
+        &text(&json!([school(), soccer()])),
+    )
+    .unwrap();
+    let rows = standing_rows(&conn, user_id).unwrap();
+    assert!(!rows.contains("until"), "{rows}");
+    assert_eq!(
+        standing_blocks(&conn, user_id, NEXT_WEEK).unwrap(),
+        vec![school(), soccer()]
+    );
+    let with_until = set_standing(
+        &conn,
+        user_id,
+        FIRST_WEEK,
+        &text(&json!([piano(Some("2026-12-12"))])),
+    );
+    assert!(with_until.is_ok());
+    let stored = standing_blocks(&conn, user_id, DEC_7).unwrap();
+    assert_eq!(stored.last().unwrap()["until"], json!("2026-12-12"));
+}
