@@ -13,6 +13,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Add fixed time and Edit fixed time accept a start that has already passed, today or on an earlier day of the week, in both looks, and a fixed time can be dragged to an earlier time today or an earlier day. The assistant helper follows the same rule. Homework still cannot be planned or pinned into the past.
 
 ### Fixed
+- In the Material style with Letter keys on, T goes to today in the view you are on: Day shows today again and Month shows this month, as Week already did.
 - In the Material style, the now line in Week runs through today's column only and is drawn over the blocks, with its dot on today's left edge; Day draws it the same way. Today brings the line back into view when this week is already open and was scrolled away, and when you come back from another week, and the line moves to the current time as soon as the app comes back to the front.
 - In the Material style, a fixed block has a menu with Edit and Delete on right-click, Shift+F10 and the Menu key, in Week and in Day. Delete asks the same question as the Edit fixed time sheet.
 - Edit fixed time, and the Pinned time in Edit homework, show a time that is not on a quarter hour (for example 4:55 PM from a 5-minute drag) instead of a blank field, and Up and Down step from it in time order instead of jumping to midnight.

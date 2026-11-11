@@ -57,11 +57,15 @@ Item {
         item.forceActiveFocus()
     }
 
-    // T: Today where the screen has one (Week), else Day, which opens on today.
+    // T: today in the view you are on (Week, Day, Month); My day and Settings open Day, which opens on today.
     function goToday() {
         if (bridge.screen === "week")
             bridge.week.today()
-        else if (bridge.screen !== "day")
+        else if (bridge.screen === "day")
+            bridge.day.today()
+        else if (bridge.screen === "month")
+            bridge.month.today()
+        else
             bridge.showPage("day")
     }
 

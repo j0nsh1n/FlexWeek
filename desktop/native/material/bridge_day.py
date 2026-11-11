@@ -286,6 +286,12 @@ class DayBridge(QObject):
             self.reload(self._mode)
 
     @Slot()
+    def today(self) -> None:
+        """Day's T key: show today again, as the rail's Day does."""
+        if not self._today_only:
+            self.ensure_today()
+
+    @Slot()
     def previousDay(self) -> None:
         self._shift(-1)
 

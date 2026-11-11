@@ -215,9 +215,37 @@ def test_with_the_letter_keys_on_t_comes_back_to_today(qapp, window) -> None:
     _press(window, Qt.Key.Key_T)
     wait_until(qapp, lambda: session.week_start == home)
     assert _screen(window) == "week"
-    _press(window, Qt.Key.Key_M)
+    _press(window, Qt.Key.Key_4)
+    assert _screen(window) == "myday"
     _press(window, Qt.Key.Key_T)
-    assert _screen(window) == "day", "from another screen T opens Day, which opens on today"
+    assert _screen(window) == "day", "from My day T opens Day, which opens on today"
+
+
+def test_with_the_letter_keys_on_t_on_day_shows_today_again(qapp, window) -> None:
+    _reset(window, qapp)
+    _look(window, letters=True)
+    bridge = _bridge(window)
+    _press(window, Qt.Key.Key_D)
+    today = str(bridge.day.property("iso"))
+    _press(window, Qt.Key.Key_J)
+    wait_until(qapp, lambda: bridge.day.property("iso") != today)
+    _press(window, Qt.Key.Key_T)
+    wait_until(qapp, lambda: bridge.day.property("iso") == today)
+    assert _screen(window) == "day"
+
+
+def test_with_the_letter_keys_on_t_on_month_shows_this_month_again(qapp, window) -> None:
+    _reset(window, qapp)
+    _look(window, letters=True)
+    session = window.session
+    _press(window, Qt.Key.Key_M)
+    wait_until(qapp, lambda: bool(session.selected_month))
+    this_month = date.fromisoformat(session.today_iso()).strftime("%Y-%m")
+    _press(window, Qt.Key.Key_J)
+    wait_until(qapp, lambda: session.selected_month != this_month)
+    _press(window, Qt.Key.Key_T)
+    wait_until(qapp, lambda: session.selected_month == this_month)
+    assert _screen(window) == "month", "T on Month stays on Month"
 
 
 def test_with_the_letter_keys_on_c_opens_add_homework(qapp, window) -> None:

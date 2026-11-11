@@ -13,6 +13,7 @@ from typing import Any, Protocol
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
+from desktop.native.calendar import month_for_view
 from desktop.native.fields import week_starts_on
 from desktop.native.hours.month import HOMEWORK, LOAD_CAP, LOAD_WORDS, MonthCell, month_cells
 from desktop.native.material.bridge_rows import Labels, Rows
@@ -282,6 +283,14 @@ class MonthBridge(QObject):
         show = getattr(self.parent(), "open_page", None)
         if show is not None:
             show("day", today=False)
+
+    @Slot()
+    def today(self) -> None:
+        """Month's T key: this month, through the same open the shell uses."""
+        session = self._session()
+        if session.account is None:
+            return
+        session.open_month(month_for_view(session.today_iso()))
 
     @Slot()
     def previousMonth(self) -> None:
