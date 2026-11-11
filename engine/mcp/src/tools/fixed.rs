@@ -155,7 +155,8 @@ fn span_of(start: &str, end: &str) -> Result<(i64, i64), String> {
 }
 
 fn past_of(app: &crate::App, week_start: &str, day: i64, start_min: i64) -> Result<(), String> {
-    match past_problem(week_start, day, start_min, &app.today, app.minute)
+    let now = app.now()?;
+    match past_problem(week_start, day, start_min, &now.today, now.minute)
         .map_err(|err| err.message)?
     {
         Some(words) => Err(words),
@@ -300,7 +301,7 @@ fn perform_add(app: &crate::App, args: &AddArgs) -> Result<Value, String> {
             edited,
             args.expected_revision.unwrap_or(revision),
         ),
-        &homework::clock_of(app),
+        &homework::clock_of(app)?,
     )?;
     saved(&applied, &block_id, &operation_id)
 }
@@ -460,7 +461,7 @@ fn perform_edit(app: &crate::App, args: &EditArgs) -> Result<Value, String> {
         &operation_id,
         &digest,
         input,
-        &homework::clock_of(app),
+        &homework::clock_of(app)?,
     )?;
     let shown = edited_id(&applied, args, occurrence);
     saved(&applied, &shown, &operation_id)
@@ -532,7 +533,7 @@ fn perform_skip(app: &crate::App, args: &SkipArgs) -> Result<Value, String> {
         &operation_id,
         &digest,
         week_input(&args.week_start, blocks, args.expected_revision),
-        &homework::clock_of(app),
+        &homework::clock_of(app)?,
     )?;
     saved(&applied, &args.block_id, &operation_id)
 }

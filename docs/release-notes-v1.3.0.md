@@ -1,5 +1,4 @@
-<!-- DRAFT: not final. Jonathan decides the marked lines under Known limits, and the release date is set on release day. Delete this note when it is final. -->
-# FlexWeek 1.3.0 release notes (DRAFT)
+# FlexWeek 1.3.0 release notes
 
 Places homework around school and sports. Download, open a window, create an account.
 
@@ -47,7 +46,7 @@ from the extracted tarball. Drop `--read-only` to let it change your schedule.
 - Material is an added style. Today's app is still the default.
 - Sync uses the same Wi-Fi network or the public n0 relay and needs FlexWeek
   open on the computer.
-- DECISION PENDING (Jonathan): Ctrl+mouse-wheel zoom in Material does not work on
-  some Linux desktops. Keep this line if it is not fixed before release.
-- DECISION PENDING (Jonathan): Material's memory use over a long session has not
-  been measured on this build. Keep, change or drop this line once it has.
+- In Material, Ctrl+mouse-wheel zoom may not work on some Linux desktops. Use Ctrl+=
+  and Ctrl+- or the zoom buttons above the hours instead.
+- Material can use more memory over a long session. If FlexWeek grows slow, close
+  and open it again.

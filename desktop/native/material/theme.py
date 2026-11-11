@@ -461,11 +461,18 @@ def read_advanced(stored: object) -> dict[str, Any]:
 
 
 def read_shortcuts(stored: object) -> bool:
-    """Keyboard shortcuts stay on unless the look file turns them off."""
+    """The number keys (1 to 5) stay on unless the look file turns them off."""
     material = stored.get("material") if isinstance(stored, dict) else None
     if isinstance(material, dict) and isinstance(material.get("shortcuts"), bool):
         return bool(material["shortcuts"])
     return True
+
+
+def read_letter_keys(stored: object) -> bool:
+    """The P, Z and F keys are off unless the look file turns them on. The number keys' own switch does
+    not carry over: nobody has used these keys yet, so none starts on."""
+    material = stored.get("material") if isinstance(stored, dict) else None
+    return isinstance(material, dict) and material.get("letters") is True
 
 
 def read_saved_material(stored: object) -> list[dict[str, Any]]:
@@ -512,6 +519,7 @@ def pack_material(
     choice: dict[str, str],
     advanced: dict[str, Any],
     shortcuts: bool,
+    letters: bool,
     saved: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """The `material` object written into the look file."""
@@ -521,6 +529,7 @@ def pack_material(
         "contrast": choice["contrast"],
         "density": choice["density"],
         "shortcuts": bool(shortcuts),
+        "letters": bool(letters),
         "advanced": advanced,
     }
     if saved:

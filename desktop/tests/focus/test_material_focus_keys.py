@@ -5,6 +5,8 @@ wait while it covers the window."""
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
 
+import json
+
 import pytest
 
 pytest.importorskip("PySide6")
@@ -17,7 +19,7 @@ from PySide6.QtWidgets import QApplication
 from desktop.native.window import NativeWindow
 from desktop.tests.focus.support_focus_screen import material_focus_window  # noqa: F401
 from desktop.tests.material_support import pump, qml, show_material
-from desktop.tests.window_support import qapp  # noqa: F401
+from desktop.tests.window_support import look_file, qapp  # noqa: F401
 
 
 def open_focus(qapp: QApplication, window: NativeWindow) -> tuple[QObject, QObject]:
@@ -56,6 +58,9 @@ def test_f_opens_the_screen_from_day(qapp: QApplication, material_focus_window: 
     root, focus = open_focus(qapp, window)
     focus.hide()
     pump(qapp)
+    # The letter keys start off; this student turned them on.
+    look_file().write_text(json.dumps({"material": {"letters": True}}))
+    window._material_page.publish()
     window._material_page.bridge.showPage("day")
     root.forceActiveFocus()
     pump(qapp)

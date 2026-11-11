@@ -263,8 +263,9 @@ fn run_plan(
     args: &PlanArgs,
 ) -> Result<Planned, String> {
     let week_start = args.week_start.as_str();
-    let hour = app.minute / 60;
-    let start = planning::plan_start_at(week_start, &app.today, hour, app.minute % 60, 0, 0)
+    let now = app.now()?;
+    let hour = now.minute / 60;
+    let start = planning::plan_start_at(week_start, &now.today, hour, now.minute % 60, 0, 0)
         .map_err(engine)?;
     let empty = |message: &str| Planned {
         message: message.to_string(),
@@ -548,7 +549,7 @@ fn perform(app: &crate::App, args: &PlanArgs) -> Result<Value, String> {
         &operation_id,
         &digest,
         input,
-        &homework::clock_of(app),
+        &homework::clock_of(app)?,
     )?;
     if applied.get("error").is_some() {
         return Ok(applied);

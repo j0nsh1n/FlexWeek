@@ -35,11 +35,17 @@ impl Drop for Server {
 #[allow(dead_code)]
 impl Server {
     pub fn spawn(args: &[&str]) -> Self {
+        Self::spawn_with_env(args, &[])
+    }
+
+    /// Like `spawn`, with environment variables set for the helper only.
+    pub fn spawn_with_env(args: &[&str], env: &[(&str, &str)]) -> Self {
         // The test process inherits this desktop's sockets. Mark them close-on-exec
         // so the child only shows descriptors it opened itself.
         cloexec_above_stdio();
         let mut child = Command::new(env!("CARGO_BIN_EXE_flexweek-mcp"))
             .args(args)
+            .envs(env.iter().copied())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

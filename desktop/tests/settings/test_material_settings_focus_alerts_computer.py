@@ -132,6 +132,33 @@ def test_this_computer_login_motion_and_shortcuts(
     assert bridge.property("screen") == "week"
 
 
+def test_this_computer_shows_a_switch_for_the_number_keys_and_one_for_the_letter_keys(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _open_settings(qapp, window, "computer")
+    bridge = _bridge(window)
+    numbers, letters = _named(root, "row_shortcuts")[0], _named(root, "row_letters")[0]
+    assert "1 to 5" in str(numbers.property("subtitle"))
+    for key in ("P", "Z", "F"):
+        assert key in str(letters.property("subtitle")).split(), key
+    assert bridge.property("shortcuts") is True and bridge.property("letterKeys") is False
+    assert _named(root, "letters")[0].property("checked") is False, "the letter switch starts off"
+
+    _click(qapp, window, _named(root, "letters")[0])
+    wait_until(qapp, lambda: bridge.property("letterKeys") is True)
+    assert _material_file()["letters"] is True
+    assert _material_file()["shortcuts"] is True, "the number switch was not touched"
+
+    _click(qapp, window, _named(root, "shortcuts")[0])
+    wait_until(qapp, lambda: bridge.property("shortcuts") is False)
+    assert _material_file()["shortcuts"] is False
+    assert _material_file()["letters"] is True, "the letter switch was not touched"
+
+    _click(qapp, window, _named(root, "letters")[0])
+    wait_until(qapp, lambda: bridge.property("letterKeys") is False)
+    assert _material_file()["letters"] is False
+
+
 def test_this_computer_account_setup_updates_and_pairing_are_wired(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:

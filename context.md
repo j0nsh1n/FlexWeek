@@ -1,27 +1,26 @@
 # context.md — FlexWeek
 
 ## Current State (2026-11-10)
-- Latest release: v1.2.0 (2026-10-27, all ten assets and checksums verified). 1.3.0 is prepared on branch
-  `release/1.3.0-prep` (version bump in `version.py` and Android, CHANGELOG heading dated 2026-11-10 and set again
-  on release day, draft notes in `docs/release-notes-v1.3.0.md`, tag check and no-replace upload in the release
-  workflow, release checklist in `docs/github-release.md`); not tagged.
-- Developer build 3 (`1.2.0.202611100207`, main 8533105b) is `dev`; the two before it stay as `dev-4e21fa5` and
-  `dev-f242d2f`. A Linux tarball can also be built on this computer in an Ubuntu 24.04 container
-  (`scripts/build-linux-local.sh`, #108/#109); GitHub still publishes the builds.
-- On main since 1.2.0: FIX-SPEC 1.3 (#67-#76), the J lanes (Material Week zoom, Day hours, Month study fill, Look
+- Latest release: v1.3.0, published 2026-11-10 from main d61235ee (PR #111, the version bump). The Linux tarball and
+  the Android APK were built on this computer (`scripts/build-linux-local.sh` in an Ubuntu 24.04 container; the APK
+  signed with the 1.2.0 key); the AppImage and the Windows installers came from the tagged "Release packages" run.
+  The previous release is v1.2.0 (2026-10-27).
+- Developer build 4 (`1.3.0.202611101403`) is `dev`; older builds stay as `dev-<commit>` pre-releases (`dev-4e21fa5`
+  and `dev-f242d2f` among them). GitHub publishes them; the Linux tarball can also be built here.
+- In 1.3.0 since 1.2.0: FIX-SPEC 1.3 (#67-#76), the J lanes (Material Week zoom, Day hours, Month study fill, Look
   preview), the assistant's planning tools and live reload (#91, #92), the testing rebuild (#97, 2026-11-08: tests by
-  area, light app, looks judged by review, CI as the gate), Material review fixes (#89-#96, #98-#105) and CI/build
-  work (#106-#109). The release review of main 1425ebb4 (2026-11-10) found it close to ready.
-- Checks: CI is the gate. Verify on 1425ebb4 passed (engine, verify-python, both rigs, four desktop shards); the
-  mutation jobs run on pull requests and passed on a by-hand run of 705bc0db. CodeQL has 0 open alerts. The Windows
-  and AppImage packages were last built on 2026-11-07 (`fix/r1-release-unblock`), before most of the Material work.
-- Known gaps (release review, 2026-11-10): the Get developer builds switch is shown on every install though only
-  the Linux tarball has developer builds; the packaged smoke test never opens the Material window, and no Windows
-  package has been tried with it; Material memory growth (1.9 GB after 49 min, 2026-11-05) is unmeasured; Ctrl+wheel
-  zoom in Material fails on Jonathan's Wayland desktop (parked probe in `scratch/ctrl-wheel`); eight tests are logged
-  flaky on main, two fail in the suite on nearly every run (list in the review report); the assistant helper's stderr
-  test (`engine/mcp/tests/hygiene.rs`) can fail once; one Edit click in a Material block's menu is unchecked on a real
-  screen; native AT-SPI delivery is unverified; the static audit's F1 and W3 are open.
+  area, light app, looks judged by review, CI as the gate), Material review fixes (#89-#96, #98-#105), CI/build work
+  (#106-#109) and the release blockers from the 2026-11-10 review (#110, #112, #113, #114: developer-builds switch
+  hidden off the tarball, the packaged smoke test opens Material, tag/version check, two flaky-test fixes).
+- 1.3.1 is in progress on local branches cut from the v1.3.0 tag, not pushed: `fix/131-helper-and-keys` (the
+  assistant helper's clock, Material's letter keys, Help from the keyboard) and `fix/131-material-week-sheets`.
+- Checks: CI is the gate (Verify: engine, verify-python, both rigs, four desktop shards; mutation jobs on pull
+  requests). CodeQL had 0 open alerts at the release review.
+- Known gaps: Ctrl+wheel zoom in Material fails on Jonathan's Wayland desktop (parked probe in `scratch/ctrl-wheel`;
+  named under Known limits in the 1.3.0 notes); Material memory growth (1.9 GB after 49 min, 2026-11-05) is unmeasured
+  (also named there); no Windows package has been tried with Material on a real PC; native AT-SPI delivery is
+  unverified; the static audit's F1 and W3 are open; `fwtest flaky` lists the tests still logged flaky; the assistant
+  helper's stderr test (`engine/mcp/tests/hygiene.rs`) was changed in 606ad095 to wait for its line.
 - Rust (`engine/`, contract `docs/engine/contract.md`, wrappers `docs/engine/adapters.md`): planner and solver,
   slots, weeks, day, month, explain, restore, recovery codes, the store's SQL helpers and connection, and the
   desktop's Qt-free logic (`desk`). Python calls it through `flexweek_engine`; the wrappers only encode, call and
@@ -93,11 +92,15 @@ preview. Recorded `operation_id` values make a retried write return the first re
   an older commit once main's workflows have changed (HTTP 403, 2026-11-06).
 - CI rigs install no ffmpeg (the Ubuntu mirror hung on its libraries); the rig keeps frames and skips the video.
 - The Android release key lives in `~/.config/flexweek-android/`, outside the repo; phone updates are signed with it.
+- Material's P, Z and F keys have their own switch (`material.letters` in the look file), off for everyone; 1 to 5
+  keep `material.shortcuts`, on by default. Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y and the zoom keys answer to neither.
+- The assistant helper reads the clock on every call; `--now` holds one moment for tests, and a debug build also reads
+  `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
-- 2026-11-10, branch `release/1.3.0-prep` from main 1425ebb4, not pushed. Done: version 1.3.0, tag/version check,
-  no-replace uploads, release checklist, draft notes, context/roadmap/README brought up to date. Next, in the order
-  of `docs/github-release.md`: hide the developer-builds switch off the tarball and add a Material step to the
-  packaged smoke test (review B2, B3), a by-hand "Release packages" run on main, Material's memory measured for an
-  hour (B4), Jonathan's call on Ctrl+wheel (S1), then the release pull request, his own try of a developer build,
-  and the tag on his word. Report: `~/.flexweek-ui-harness/scratch/afk-2026-11-10/fable-release-review.md.report`.
+- 2026-11-10, branch `fix/131-helper-and-keys` from the v1.3.0 tag (d61235ee), local only. Done: the helper's live
+  clock, the Material letter-keys switch, Help closing from the keyboard in Material, and this file and the 1.3.0
+  notes brought up to date. Next: review of this branch, then the other 1.3.1 branch, then the checks
+  left from the 1.3.0 checklist (a dev install offered 1.3.0, a phone updating from 1.2.0 and syncing both ways),
+  the Material memory measurement and Jonathan's call on Ctrl+wheel. Reports:
+  `~/.flexweek-ui-harness/scratch/fix-1.3.1/branch-B/REPORT.md`.

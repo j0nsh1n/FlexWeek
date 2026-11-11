@@ -366,8 +366,9 @@ the card): that homework goes at the earliest free time from now that fits all o
 it, inside Study hours and around fixed time and the usual gaps, on the next day
 with room when today has none. The message names the day and time ("Placed Math
 worksheet on Thu 5:45 PM."), or says there is no free time this week. In Material
-Ctrl+Z undoes the last change and Ctrl+Shift+Z or Ctrl+Y redoes it, also with the
-one-letter shortcuts off, but not while a field has the keyboard or a sheet or
+Ctrl+Z undoes the last change and Ctrl+Shift+Z or Ctrl+Y redoes it, with the
+number keys (1 to 5, on by default) and the letter keys (P, Z and F, off by
+default) switched on or off, but not while a field has the keyboard or a sheet or
 Focus is open.
 The rail uses type and spacing to separate its sections. Next and overdue are
 not repeated in a status row above the calendar; overdue homework stays available

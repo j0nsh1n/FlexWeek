@@ -178,10 +178,11 @@ fn perform_move(app: &crate::App, args: &MoveArgs) -> Result<Value, String> {
         start_min,
         end_min,
     };
+    let now = app.now()?;
     let clock = WeekClock {
         week_start: &args.week_start,
-        now_iso: &app.today,
-        now_min: app.minute,
+        now_iso: &now.today,
+        now_min: now.minute,
     };
     let blocks = match hand_move(
         &Value::Array(blocks),
@@ -202,7 +203,7 @@ fn perform_move(app: &crate::App, args: &MoveArgs) -> Result<Value, String> {
         &operation_id,
         &digest,
         week_input(args.week_start.clone(), blocks, args.expected_revision),
-        &homework::clock_of(app),
+        &homework::clock_of(app)?,
     )?;
     saved_week(&applied)
 }
@@ -253,6 +254,7 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
         );
     }
     let assignments = assignment_map(&opened.conn, opened.user_id)?;
+    let now = app.now()?;
     let deletion = blocks::delete_block(
         &blocks,
         &assignments,
@@ -260,8 +262,8 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
         &args.block_id,
         &args.scope,
         args.day,
-        &app.today,
-        app.minute,
+        &now.today,
+        now.minute,
         every_week,
     )?;
     if deletion.label.is_none() {
@@ -311,7 +313,7 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
         &operation_id,
         &digest,
         input,
-        &homework::clock_of(app),
+        &homework::clock_of(app)?,
     )?;
     saved_week(&applied)
 }

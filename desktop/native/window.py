@@ -13,7 +13,19 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from flexweek_engine import SyncService  # type: ignore[import-untyped]
-from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSize, QStandardPaths, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import (
+    QEvent,
+    QMetaObject,
+    QObject,
+    QPoint,
+    QRect,
+    QSize,
+    QStandardPaths,
+    Qt,
+    QTimer,
+    QUrl,
+    Signal,
+)
 from PySide6.QtGui import (
     QAction,
     QCloseEvent,
@@ -5692,7 +5704,22 @@ class NativeWindow(QMainWindow):
             self.session.logout()
 
     def _open_help(self) -> None:
-        HelpDialog(self).exec()
+        current = self._stack.currentWidget()
+        page = self._material_page if current is not None and current.objectName() == "materialPage" else None
+        if page is None or page.root is None:
+            HelpDialog(self).exec()
+            return
+        bridge = page.bridge
+        root = page.root
+        dialog = HelpDialog(self, (bridge.shortcuts, bridge.letterKeys))
+        # Material's window-wide keys stay live under a dialog of this window, and Esc went to them.
+        root.setProperty("widgetsDialogOpen", True)
+        try:
+            dialog.exec()
+        finally:
+            if isValid(root):
+                root.setProperty("widgetsDialogOpen", False)
+                QMetaObject.invokeMethod(root, "focusDestination")
 
     def _open_about(self) -> None:
         AboutDialog(self, self.session.storage_info, str(self._look_path().parent)).exec()
