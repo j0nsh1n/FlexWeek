@@ -9,6 +9,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Material's P, Z and F keys (plan, undo, Focus) have their own switch, Letter keys, in Settings → This computer, and it starts off, so none of them fires by accident. The 1 to 5 view keys keep their switch, now called Number keys, which stays on. Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y and the zoom keys work whatever either switch says.
 - Material Week and Day zoom in two levels closer, to 192 and 256 px an hour. The far end (32) and the default (56) are unchanged, and a zoom you saved before keeps its size.
 - Material Month entries have the same coloured left strip a block or homework has in Week and Day, in the same colour, instead of only the due-date chips having one.
+- In the Material style, pressing and dragging the mouse no longer pans the Day and Week grid, so it cannot fight dragging across free time to add something. The wheel, a touchpad, the scroll bar, the keyboard and a touchscreen still scroll it.
 
 ### Fixed
 - In the Material style, the now line in Week runs through today's column only and is drawn over the blocks, with its dot on today's left edge; Day draws it the same way. Today brings the line back into view when this week is already open and was scrolled away, and when you come back from another week, and the line moves to the current time as soon as the app comes back to the front.

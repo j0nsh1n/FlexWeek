@@ -334,6 +334,9 @@ Item {
                        + (root.followOpening ? Math.max(0, height - openingAbove(height)) : 0)
         clip: true
         boundsBehavior: Flickable.StopAtBounds
+        // A mouse press-and-drag must not pan the grid: it is drag-to-create's. The wheel, a touchpad, the
+        // scroll bar, the keys and a touchscreen still scroll it.
+        acceptedButtons: Qt.NoButton
 
         // The student's own scrolling ends a pending Today: the grid does not chase the line afterwards.
         onMovingChanged: if (moving) root.nowAsked = false
