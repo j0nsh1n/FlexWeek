@@ -93,11 +93,26 @@ def test_a_mouse_drag_on_the_hour_column_does_not_scroll(qapp, window: NativeWin
 
 @pytest.mark.parametrize("screen", SCREENS)
 def test_a_mouse_drag_that_starts_on_a_block_does_not_scroll(qapp, window: NativeWindow, screen: str) -> None:
+    """The drag takes hold of the block (it moves it: test_material_drag_move_and_resize_blocks.py); the
+    grid underneath stays where it was. Esc then puts the block back, so nothing else changes."""
     root, scroller = screen_scroller(qapp, window, screen)
     block = block_named(root, "School")
     inside = block.mapToScene(QPointF(block.width() / 2, 120))
     start = QPoint(int(inside.x()), int(inside.y()))
-    mouse_drag(window, start, -150)
+    quick = window._material_page._quick
+    app = QApplication.instance()
+    QTest.mouseMove(quick, start)
+    pump(app, 4)
+    QTest.mousePress(quick, Qt.MouseButton.LeftButton, pos=start)
+    pump(app, 4)
+    for step in range(1, 9):
+        QTest.mouseMove(quick, QPoint(start.x(), start.y() - 150 * step // 8))
+        pump(app, 2)
+    assert float(scroller.property("contentY")) == 300.0
+    QTest.keyClick(quick, Qt.Key.Key_Escape)
+    pump(app, 4)
+    QTest.mouseRelease(quick, Qt.MouseButton.LeftButton, pos=QPoint(start.x(), start.y() - 150))
+    pump(app, 6)
     assert float(scroller.property("contentY")) == 300.0
 
 

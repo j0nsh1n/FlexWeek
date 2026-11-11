@@ -46,6 +46,14 @@ Item {
     property int slotStart: 0
     property int slotEnd: 0
 
+    // A block held by the mouse: which, how (move, top, bottom), where it started, and where it would land.
+    property var held: null
+    property bool holdCanceled: false
+    property var landing: null
+    readonly property bool handing: held !== null
+    readonly property bool canHand: !root.passive && !!root.bridge && !!root.bridge.week
+                                    && !!root.bridge.week.moveBlock
+
     property alias scroller: scroller
     property alias hours: hours
     property int wheelAcc: 0
@@ -138,6 +146,76 @@ Item {
     function snapToQuarter(y) {
         var snapped = Math.round((y / root.row) * 60 / 15) * 15
         return Math.max(0, Math.min(24 * 60, snapped))
+    }
+
+    function snapQuarter(minute) {
+        return Math.round(minute / 15) * 15
+    }
+
+    // The topmost block under a point of the grid, as the block its hold needs to know.
+    function blockAt(x, y) {
+        for (var i = weekBlocks.count - 1; i >= 0; i--) {
+            var block = weekBlocks.itemAt(i)
+            if (block && block.visible && x >= block.x && x <= block.x + block.width
+                    && y >= block.y && y <= block.y + block.height)
+                return block
+        }
+        return null
+    }
+
+    function startHand(block, x, y) {
+        var edge = Math.min(8, block.height / 4)
+        var how = y - block.y <= edge ? "top" : (block.y + block.height - y <= edge ? "bottom" : "move")
+        root.holdCanceled = false
+        root.held = { blockId: block.blockId, day: block.blockDay, start: block.blockStart, end: block.blockEnd,
+                      how: how, pressY: y }
+        root.landing = { day: block.blockDay, start: block.blockStart, end: block.blockEnd }
+    }
+
+    // Where the held block lands for a pointer at (x, y) on the grid: moved by the pointer's travel and
+    // snapped to a quarter hour, or with one edge moved, never shorter than a quarter hour.
+    function landingFor(x, y) {
+        var held = root.held
+        var travel = (y - held.pressY) / root.row * 60
+        var day = held.day
+        var start = held.start
+        var end = held.end
+        if (held.how === "move") {
+            var length = held.end - held.start
+            start = Math.max(0, Math.min(24 * 60 - length, root.snapQuarter(held.start + travel)))
+            end = start + length
+            if (root.weekMode)
+                day = Math.max(0, Math.min(root.columns - 1, Math.floor((x - root.gutter) / root.dayWidth)))
+        } else if (held.how === "top") {
+            start = Math.max(0, Math.min(held.end - 15, root.snapQuarter(held.start + travel)))
+        } else {
+            end = Math.min(24 * 60, Math.max(held.start + 15, root.snapQuarter(held.end + travel)))
+        }
+        return { day: day, start: start, end: end }
+    }
+
+    function moveHand(x, y) {
+        if (root.held && !root.holdCanceled)
+            root.landing = root.landingFor(x, y)
+    }
+
+    function cancelHand() {
+        root.holdCanceled = true
+        root.landing = null
+    }
+
+    function dropHand() {
+        var held = root.held
+        var landing = root.landing
+        var canceled = root.holdCanceled
+        root.held = null
+        root.landing = null
+        root.holdCanceled = false
+        if (!held || canceled || !landing)
+            return
+        if (landing.day === held.day && landing.start === held.start && landing.end === held.end)
+            return
+        root.bridge.week.moveBlock(held.blockId, held.day, landing.day, landing.start, landing.end)
     }
 
     function dayAt(x) {
@@ -393,7 +471,12 @@ Item {
             height: 24 * root.row
             focus: true
             Keys.onEscapePressed: (event) => {
-                if (root.rangeHost.dragRangeActive) {
+                // A block held by the mouse goes back: nothing is saved when the button is let go. The
+                // shell's own Esc waits while a block is held, so the key reaches here.
+                if (root.handing) {
+                    root.cancelHand()
+                    event.accepted = true
+                } else if (root.rangeHost.dragRangeActive) {
                     root.rangeHost.cancelDragRange()
                     event.accepted = true
                 }
@@ -424,9 +507,24 @@ Item {
                 grabPermissions: PointerHandler.CanTakeOverFromItems | PointerHandler.CanTakeOverFromHandlersOfDifferentType
                 onActiveChanged: {
                     var range = root.rangeHost
+                    if (!active && root.held) {
+                        root.dropHand()
+                        return
+                    }
                     if (active) {
                         var px = centroid.pressPosition.x
                         var py = centroid.pressPosition.y
+                        var under = root.canHand ? root.blockAt(px, py) : null
+                        if (under) {
+                            range.dragRangeValid = false
+                            range.dragRangeActive = false
+                            root.startHand(under, px, py)
+                            // The block takes the keyboard focus, so Esc reaches the grid; the grid does not
+                            // scroll to it while it is held.
+                            under.forceActiveFocus()
+                            root.moveHand(centroid.position.x, centroid.position.y)
+                            return
+                        }
                         if (!range.emptyGridTimeAt(px, py)) {
                             range.dragRangeValid = false
                             range.dragRangeActive = false
@@ -468,6 +566,10 @@ Item {
                 }
                 onCentroidChanged: {
                     var range = root.rangeHost
+                    if (active && root.held) {
+                        root.moveHand(centroid.position.x, centroid.position.y)
+                        return
+                    }
                     if (active && range.dragRangeActive && range.dragRangeValid && !range.dragRangeCanceled) {
                         var m1 = range.snapToQuarter(range.dragRangePressY)
                         var m2 = range.snapToQuarter(centroid.position.y)
@@ -499,6 +601,24 @@ Item {
                 border.width: 2
                 border.color: m3.primary
                 z: 10
+            }
+
+            // Where the held block would land, while it is held.
+            Rectangle {
+                objectName: "handGhost"
+                visible: root.handing && !!root.landing
+                z: 10
+                x: root.weekMode ? root.gutter + (root.landing ? root.landing.day : 0) * root.dayWidth + 3
+                                 : root.gutter + 3
+                y: (root.landing ? root.landing.start : 0) / 60 * root.row
+                width: root.weekMode ? Math.max(8, root.dayWidth - 6)
+                                     : Math.max(8, hours.width - root.gutter - 3 - root.blockRightInset)
+                height: Math.max(4, ((root.landing ? root.landing.end - root.landing.start : 0) / 60) * root.row - 2)
+                radius: 6
+                color: m3.primaryContainer
+                opacity: 0.7
+                border.width: 2
+                border.color: m3.primary
             }
 
             Rectangle {
@@ -660,6 +780,10 @@ Item {
                     density: root.density
                     reduceMotion: root.reduceMotion
                     highContrast: root.highContrast
+                    blockId: model.blockId
+                    blockDay: model.day
+                    blockStart: model.start
+                    blockEnd: model.end
                     category: model.category
                     title: model.title
                     detail: blockCell.timeLine(model.detail)
@@ -683,8 +807,8 @@ Item {
                         done: model.done,
                         homework: model.homework
                     }, mx, my)
-                    onActiveFocusChanged: if (activeFocus) root.reveal(y, height)
-                    onFocused: root.reveal(y, height)
+                    onActiveFocusChanged: if (activeFocus && !root.handing) root.reveal(y, height)
+                    onFocused: if (!root.handing) root.reveal(y, height)
                 }
             }
 

@@ -376,6 +376,22 @@ class WeekBridge(QObject):
                 return
         session.place_block(block_id, -1, day, start, start + length)
 
+    @Slot(str, int, int, int, int)
+    def moveBlock(self, block_id: str, from_day: int, day: int, start: int, end: int) -> None:
+        """A block let go by the mouse, or sent by Move to day..., on `day` from `start` to `end`: the one
+        hand-move rule the plain look uses, one Undo step, and the same words in the notice."""
+        session = self._window.session  # type: ignore[attr-defined]
+        block = next((item for item in session.blocks if item["id"] == block_id), None)
+        if block is None or not 0 <= day < self._columns or end <= start:
+            return
+        if not session.busy:
+            answer = session.judge_hand_move(block_id, from_day, day, start, end)
+            if not answer["moved"]:
+                # Nothing is changed, so there is nothing for UNDO to take back.
+                self._note(answer["problem"], action="")
+                return
+        session.place_block(block_id, from_day, day, start, end)
+
     @Slot(str)
     def planOne(self, identifier: str) -> None:
         """Place now, and Enter on a card: that homework at the first free gap from now that fits it."""

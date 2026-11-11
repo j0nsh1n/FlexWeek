@@ -5,6 +5,9 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- In the Material style, Week and Day blocks can be dragged: press and drag a block to move it to another time (and, in Week, another day), or drag its top or bottom edge to change its start or end, for fixed times and homework alike. It snaps to 15 minutes, saves the way the Widgets styles' drag does, and shows the Undo notice; Esc during the drag puts the block back and saves nothing.
+
 ### Changed
 - Material's P, Z and F keys (plan, undo, Focus) have their own switch, Letter keys, in Settings → This computer, and it starts off, so none of them fires by accident. The 1 to 5 view keys keep their switch, now called Number keys, which stays on. Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y and the zoom keys work whatever either switch says.
 - Material Week and Day zoom in two levels closer, to 192 and 256 px an hour. The far end (32) and the default (56) are unchanged, and a zoom you saved before keeps its size.
