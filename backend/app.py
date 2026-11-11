@@ -395,8 +395,9 @@ def a_week_start(value: str) -> str:
     return value
 
 
-# Setup's School and up to eight activities.
-MAX_STANDING = 9
+# School, Setup's activities and weekly fixed times share one table with no limit of their own, so this is
+# only a guard against a runaway request: far more than a student keeps, well inside an export's 5000 rows.
+MAX_STANDING = 200
 STANDING_RULE = (
     "Only School, Setup's activities and weekly fixed times stand in every week, "
     "each with a start time and an id of its own"

@@ -297,3 +297,28 @@ def test_an_export_carries_a_weekly_fixed_time_with_its_until(database: Path, al
     assert import_snapshot(alice, snapshot).status_code == 200
     assert [b["days"] for b in week(alice, NEXT_WEEK)["blocks"]] == [[1, 3]]
     assert [b["days"] for b in week(alice, "2026-10-26")["blocks"]] == [[1]]
+
+
+def weekly_block(n: int) -> dict:
+    return {"id": f"weekly-{n}", "title": f"Club {n}", "kind": "locked", "category": "extra",
+            "start": f"{8 + n:02d}:00", "duration_min": 30, "days": [5]}
+
+
+@pytest.mark.parametrize("weeklies", [8, 12])
+def test_an_account_with_many_weekly_fixed_times_exports_and_imports(alice: TestClient, weeklies: int) -> None:
+    # 8 is the old limit (School + 8 = 9 rows); 12 is past it.
+    stand(alice, SETUP_WEEK, [SCHOOL])
+    for n in range(weeklies):
+        stand(alice, SETUP_WEEK, [weekly_block(n)])
+    snapshot = alice.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()
+    assert sorted(row["position"] for row in snapshot["standing"]) == list(range(weeklies + 1))
+    imported = import_snapshot(alice, snapshot)
+    assert imported.status_code == 200, imported.text
+    shown = [b["id"] for b in week(alice, NEXT_WEEK)["blocks"]]
+    assert shown == ["school", *(f"weekly-{n}" for n in range(weeklies))]
+
+
+def test_one_save_takes_more_than_nine_standing_changes_but_not_a_runaway_list(alice: TestClient) -> None:
+    stand(alice, SETUP_WEEK, [SCHOOL, *(weekly_block(n) for n in range(12))])
+    assert len(week(alice, NEXT_WEEK)["blocks"]) == 13
+    assert stand_request(alice, SETUP_WEEK, [weekly_block(n % 20) for n in range(500)]).status_code == 422
