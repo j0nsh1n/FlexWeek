@@ -183,6 +183,13 @@ def _reset(window: NativeWindow, qapp: QApplication) -> QObject:
     return root
 
 
+def _quarter_hour_step(window: NativeWindow, qapp: QApplication) -> None:
+    """The student drags in quarter hours, so a click a few minutes past a line lands on the line."""
+    window.session.preferences = {**(window.session.preferences or {}), "drag_step_min": 15}
+    window._material_page.publish()
+    _pump(qapp)
+
+
 def _settle(qapp: QApplication, window: NativeWindow) -> None:
     wait_until(qapp, lambda: not window.session.busy and not window.session.dirty)
 
@@ -365,6 +372,7 @@ def test_add_homework_here_from_a_click_opens_add_homework_at_that_day_and_time(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root = _reset(window, qapp)
+    _quarter_hour_step(window, qapp)
     hours_item, row, gutter, day_width, saturday = _grid_geometry(root, window)
     _qml(root, "weekScroller").setProperty("contentY", float(9 * row))
     _pump(qapp)
@@ -388,6 +396,7 @@ def test_add_fixed_time_here_from_a_click_opens_add_fixed_time_at_that_day_and_h
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root = _reset(window, qapp)
+    _quarter_hour_step(window, qapp)
     hours_item, row, gutter, day_width, saturday = _grid_geometry(root, window)
     _qml(root, "weekScroller").setProperty("contentY", float(9 * row))
     _pump(qapp)
@@ -576,6 +585,7 @@ def test_a_click_on_empty_time_in_day_offers_the_same_choices_for_that_day(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     _reset(window, qapp)
+    _quarter_hour_step(window, qapp)
     session = window.session
     thursday = (_week_monday(window) + timedelta(days=NOW_DAY)).isoformat()
     session.open_day(thursday)

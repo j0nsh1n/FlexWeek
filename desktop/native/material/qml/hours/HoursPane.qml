@@ -135,8 +135,11 @@ Item {
         return spots
     }
 
+    // The student's time step; a draw or click on empty time lands on its nearest mark.
+    readonly property int dragStep: bridge && bridge.week && bridge.week.dragStep > 0 ? bridge.week.dragStep : 5
+
     function snapToQuarter(y) {
-        var snapped = Math.round((y / root.row) * 60 / 15) * 15
+        var snapped = Math.round((y / root.row) * 60 / root.dragStep) * root.dragStep
         return Math.max(0, Math.min(24 * 60, snapped))
     }
 
