@@ -594,6 +594,34 @@ Item {
                 z: 4
             }
 
+            // The time now, in the hour column at the line's height. It lives in the column, so it never
+            // covers a block; where it lands on an hour number it is drawn over it.
+            Rectangle {
+                id: nowLabel
+                objectName: "nowLabel"
+                readonly property string time: (root.bridge && root.bridge.clockText) ? root.bridge.clockText : ""
+                visible: root.showNowLine && !root.passive && time !== ""
+                width: Math.min(root.gutter - 8, nowLabelText.implicitWidth + 12)
+                height: Math.ceil(nowLabelText.implicitHeight) + 6
+                x: root.gutter - 6 - width
+                y: (root.bridge ? root.bridge.nowMinute : 0) / 60 * root.row + nowLine.height / 2 - height / 2
+                radius: 4
+                color: root.now
+                z: 7
+                Accessible.role: Accessible.StaticText
+                Accessible.name: "Current time, " + nowLabel.time
+                Text {
+                    id: nowLabelText
+                    objectName: "nowLabelText"
+                    anchors.centerIn: parent
+                    text: nowLabel.time
+                    color: m3.inkError
+                    font.family: M3Font.family
+                    font.pixelSize: M3Font.px(11)
+                    font.weight: 600
+                }
+            }
+
             Repeater {
                 id: weekBlocks
                 objectName: "weekBlocks"
