@@ -399,8 +399,8 @@ Item {
                 }
             }
 
-            // A click on free time offers to add something there: an hour from the nearest quarter hour,
-            // as the Widgets grid places a click.
+            // A click on free time offers to add something there: an hour from the nearest mark of the
+            // student's time step, as the Widgets grid places a click.
             TapHandler {
                 objectName: "emptyTimeTap"
                 enabled: root.takesEmptyTime
@@ -455,7 +455,8 @@ Item {
                             range.dragRangeValid = false
                             var menuX = centroid.pressPosition.x
                             // After the release is delivered, so the menu keeps the focus it takes.
-                            if (end - start >= 15)
+                            // One step is the shortest block, as in the Widgets grid.
+                            if (end - start >= root.dragStep)
                                 Qt.callLater(root.openSlotMenu, day, start, end, menuX, end / 60 * root.row)
                         }
                         range.dragRangeActive = false
