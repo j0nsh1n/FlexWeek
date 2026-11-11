@@ -360,7 +360,7 @@ fn test_quick_focus_ignores_fixed_time_and_overdue_homework() {
             "id": "soccer", "kind": "locked", "title": "Soccer", "days": [3],
             "start": "15:00", "duration_min": 60
         },
-        session("essay-1", "essay", 3, "09:00", 30),
+        session("essay-1", "essay", 3, "16:00", 30),
     ]);
     let overdue = json!({
         "essay": {"id": "essay", "title": "Essay", "due": "2026-10-15T12:00", "completed": false}
