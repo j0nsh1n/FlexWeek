@@ -25,6 +25,12 @@ fn days_of(block: &Value) -> Vec<i64> {
         .unwrap_or_default()
 }
 
+fn sorted_days(block: &Value) -> Vec<i64> {
+    let mut days = days_of(block);
+    days.sort_unstable();
+    days
+}
+
 /// The block as it stands in every week: missed days belong to one week, never to the standing one.
 pub fn standing_body(block: &Value) -> Value {
     let mut body = block.clone();
@@ -62,6 +68,25 @@ pub fn trim_until(block: &Value, week_start: &str) -> EngineResult<Option<Value>
         fields.insert("days".into(), kept.into());
     }
     Ok(Some(trimmed))
+}
+
+/// The standing block a change sent from the week starting `from_week` makes of `before`, the block as
+/// it stood until now. A week that `before`'s `until` cut holds only the days left of it, so a change
+/// sent from that week names those days without the student having picked them: it keeps the days the
+/// block stood on, or moving `until` later would lose the cut days in every later week. Any other days
+/// are the student's own choice and are kept as sent.
+pub fn restated(before: &Value, change: &Value, from_week: &str) -> EngineResult<Value> {
+    let sent = sorted_days(change);
+    let cut = trim_until(before, from_week)?;
+    let left_by_until = cut.as_ref().is_some_and(|cut| sorted_days(cut) == sent);
+    if !left_by_until || sorted_days(before) == sent {
+        return Ok(change.clone());
+    }
+    let mut body = change.clone();
+    if let (Some(fields), Some(days)) = (body.as_object_mut(), before.get("days")) {
+        fields.insert("days".into(), days.clone());
+    }
+    Ok(body)
 }
 
 /// A week as the student sees it: its own blocks, then each standing block it has no version of, cut

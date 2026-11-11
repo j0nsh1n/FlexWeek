@@ -3,7 +3,7 @@
 
 use flexweek_engine::desk::grid::is_standing_block;
 use flexweek_engine::snapshot::canonical;
-use flexweek_engine::standing::{derive_standing, restand, standing_body, with_standing};
+use flexweek_engine::standing::{derive_standing, restand, restated, standing_body, with_standing};
 use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 
@@ -90,7 +90,9 @@ fn insert_row(
 
 /// The standing week from `from_week` on becomes `blocks` (a JSON list), replacing any change made
 /// for a later week. Saved weeks after `from_week` take the new days and times; the open week itself
-/// is the client's to save, so its change stays one Undo step. Returns the weeks rewritten.
+/// is the client's to save, so its change stays one Undo step. The one exception is a block that gets
+/// back days its `until` had cut (`restated`): the client never held those days, so the open week's
+/// saved copy takes them here. Returns the weeks rewritten.
 pub fn set_standing(
     conn: &Connection,
     user_id: i64,
@@ -105,7 +107,12 @@ pub fn set_standing(
         let standing = before
             .iter()
             .position(|block| block["id"].as_str() == Some(&id));
-        let body = (change["stop"] != json!(true)).then(|| standing_body(&change));
+        let sent = (change["stop"] != json!(true)).then(|| standing_body(&change));
+        let body = match (&sent, standing) {
+            (Some(sent), Some(at)) => Some(restated(&before[at], sent, from_week)?),
+            _ => sent.clone(),
+        };
+        let got_days_back = body != sent;
         // A stop for a block that does not stand has nothing to stop, and one that stands as sent
         // changes nothing: a change is only what it changed.
         let unchanged = match (&body, standing) {
@@ -120,9 +127,9 @@ pub fn set_standing(
             next_position += 1;
             next_position - 1
         });
-        changes.push((id, body, position));
+        changes.push((id, body, position, got_days_back));
     }
-    for (id, body, position) in &changes {
+    for (id, body, position, _) in &changes {
         defer_write(
             conn,
             "DELETE FROM standing_blocks WHERE user_id = ?1 AND id = ?2 AND from_week >= ?3",
@@ -139,7 +146,7 @@ pub fn set_standing(
         )?;
     }
     let mut stmt = conn.prepare(
-        "SELECT week_start, blocks FROM weeks WHERE user_id = ?1 AND week_start > ?2
+        "SELECT week_start, blocks FROM weeks WHERE user_id = ?1 AND week_start >= ?2
         ORDER BY week_start",
     )?;
     let later = stmt
@@ -153,10 +160,10 @@ pub fn set_standing(
         let mut updated = Vec::with_capacity(stored.len());
         for block in &stored {
             let id = block["id"].as_str();
-            let change = changes
-                .iter()
-                .find(|(changed_id, _, _)| Some(changed_id.as_str()) == id);
-            let Some((_, body, _)) = change else {
+            let change = changes.iter().find(|(changed_id, _, _, got_days_back)| {
+                Some(changed_id.as_str()) == id && (week_start != from_week || *got_days_back)
+            });
+            let Some((_, body, _, _)) = change else {
                 updated.push(block.clone());
                 continue;
             };

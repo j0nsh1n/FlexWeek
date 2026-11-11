@@ -168,6 +168,15 @@ fn apply_tx(
     let mut weeks = apply_weeks(conn, user_id, &input.weeks)?;
     let standing_changed = apply_standing(conn, user_id, input.standing.as_ref())?;
     for week in &mut weeks {
+        // The standing change can rewrite a week this batch saved (days `until` had cut come back).
+        if standing_changed
+            .as_ref()
+            .is_some_and(|changed| changed.contains(&week.week_start))
+            && let Some((blocks, revision)) = read_week(conn, user_id, &week.week_start)?
+        {
+            week.blocks = parse_json(&blocks)?;
+            week.revision = revision;
+        }
         let merged = week_with_standing(conn, user_id, &week.week_start, &canonical(&week.blocks))?;
         week.blocks = parse_json(&merged)?;
     }

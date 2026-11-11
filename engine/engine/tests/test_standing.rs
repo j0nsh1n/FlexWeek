@@ -4,7 +4,7 @@
 use flexweek_engine::desk::blocks::until_problem;
 use flexweek_engine::desk::grid::{is_setup_block, is_standing_block};
 use flexweek_engine::standing::{
-    derive_standing, restand, standing_body, trim_until, with_standing,
+    derive_standing, restand, restated, standing_body, trim_until, with_standing,
 };
 use flexweek_engine::validate;
 use serde_json::{Value, json};
@@ -320,4 +320,56 @@ fn until_is_written_right_after_missed_days_and_must_be_a_date() {
     let mut bad = piano(Some("12 Dec"));
     bad["until"] = json!("12 Dec");
     assert!(validate::time_block(&bad).is_err());
+}
+
+fn piano_on(days: &[i64], until: Option<&str>) -> Value {
+    let mut block = piano(until);
+    block["days"] = json!(days);
+    block
+}
+
+#[test]
+fn a_change_from_a_week_until_cut_keeps_the_days_the_block_stood_on() {
+    // Piano stands on Tuesday and Thursday until Wednesday 9 December, so the week of 7 December holds
+    // Tuesday alone. Moving Until to 15 December from that week sends Tuesday; Thursday must survive.
+    let before = piano_on(&[1, 3], Some("2026-12-09"));
+    let change = piano_on(&[1], Some("2026-12-15"));
+    assert_eq!(
+        restated(&before, &change, "2026-12-07").unwrap(),
+        piano_on(&[1, 3], Some("2026-12-15"))
+    );
+}
+
+#[test]
+fn a_change_from_a_cut_week_that_picks_other_days_keeps_them() {
+    let before = piano_on(&[1, 3], Some("2026-12-09"));
+    let change = piano_on(&[2], Some("2026-12-15"));
+    assert_eq!(restated(&before, &change, "2026-12-07").unwrap(), change);
+    let more = piano_on(&[1, 3, 4], Some("2026-12-15"));
+    assert_eq!(restated(&before, &more, "2026-12-07").unwrap(), more);
+}
+
+#[test]
+fn a_change_from_a_week_until_did_not_cut_is_kept_as_sent() {
+    // The week of 30 November has both days, so dropping Thursday there is the student's choice.
+    let before = piano_on(&[1, 3], Some("2026-12-09"));
+    let tuesday_only = piano_on(&[1], Some("2026-12-09"));
+    assert_eq!(
+        restated(&before, &tuesday_only, "2026-11-30").unwrap(),
+        tuesday_only
+    );
+    let open_ended = piano_on(&[1, 3], None);
+    let cut_short = piano_on(&[1], Some("2026-12-09"));
+    assert_eq!(
+        restated(&open_ended, &cut_short, "2026-12-07").unwrap(),
+        cut_short
+    );
+}
+
+#[test]
+fn a_change_sent_after_until_has_passed_is_kept_as_sent() {
+    // Nothing is left of the block in the week of 14 December, so no days there were cut from view.
+    let before = piano_on(&[1, 3], Some("2026-12-09"));
+    let again = piano_on(&[1], None);
+    assert_eq!(restated(&before, &again, "2026-12-14").unwrap(), again);
 }

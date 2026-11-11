@@ -1406,6 +1406,11 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                     json.dumps([block.model_dump() for block in batch.standing.blocks]),
                 )
             for entry in week_results:
+                # The standing change can rewrite a week this batch saved (days `until` had cut come back).
+                if entry["week_start"] in changed_weeks:
+                    row = db.read_week(account["id"], entry["week_start"])
+                    if row:
+                        entry["blocks"], entry["revision"] = json.loads(row[0]), row[1]
                 entry["blocks"] = week_with_standing(
                     db, account["id"], entry["week_start"], json.dumps(entry["blocks"])
                 )

@@ -322,3 +322,43 @@ def test_one_save_takes_more_than_nine_standing_changes_but_not_a_runaway_list(a
     stand(alice, SETUP_WEEK, [SCHOOL, *(weekly_block(n) for n in range(12))])
     assert len(week(alice, NEXT_WEEK)["blocks"]) == 13
     assert stand_request(alice, SETUP_WEEK, [weekly_block(n % 20) for n in range(500)]).status_code == 422
+
+
+def test_moving_until_from_the_week_it_cut_brings_the_cut_days_back(alice: TestClient) -> None:
+    """Piano stands on Tuesday and Thursday. Until Wednesday 14 October cuts Thursday out of that week, so
+    the week holds Tuesday alone. Moving Until to Tuesday 27 October from that same week sends Tuesday
+    only; Thursday must come back in that week and stay in the weeks after."""
+    stand(alice, SETUP_WEEK, [PIANO])
+    cut = {**PIANO, "days": [1], "until": "2026-10-14"}
+    first = alice.post(
+        "/api/changes",
+        json={
+            "weeks": [{"week_start": NEXT_WEEK, "blocks": [cut], "revision": 0}],
+            "standing": {"week_start": NEXT_WEEK, "blocks": [{**PIANO, "until": "2026-10-14"}]},
+        },
+        headers=WRITE,
+    )
+    assert first.status_code == 200, first.text
+    assert [block["days"] for block in week(alice, NEXT_WEEK)["blocks"]] == [[1]]
+    assert week(alice, WEEK_AFTER)["blocks"] == []
+
+    moved = {**cut, "until": "2026-10-27"}
+    second = alice.post(
+        "/api/changes",
+        json={
+            "weeks": [
+                {"week_start": NEXT_WEEK, "blocks": [moved], "revision": first.json()["weeks"][0]["revision"]}
+            ],
+            "standing": {"week_start": NEXT_WEEK, "blocks": [moved]},
+        },
+        headers=WRITE,
+    )
+    assert second.status_code == 200, second.text
+    answer = second.json()["weeks"][0]
+    assert [block["days"] for block in answer["blocks"]] == [[1, 3]]
+    stored = week(alice, NEXT_WEEK)
+    assert [block["days"] for block in stored["blocks"]] == [[1, 3]]
+    assert answer["revision"] == stored["revision"], "the app's next save must not be refused as stale"
+    assert [block["days"] for block in week(alice, WEEK_AFTER)["blocks"]] == [[1, 3]]
+    assert [block["days"] for block in week(alice, "2026-10-26")["blocks"]] == [[1]]
+    assert week(alice, "2026-11-02")["blocks"] == []

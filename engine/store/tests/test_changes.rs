@@ -615,3 +615,37 @@ fn an_assignment_id_must_match_and_must_belong_to_the_account() {
         assert_eq!(count_rows(&conn, "weeks", user_id), 0, "{name}");
     }
 }
+
+/// A standing change that gives the saved week back days `until` had cut answers with the week as it is
+/// stored after that, revision included, or the client's next save of it would be refused as stale.
+#[test]
+fn a_standing_change_that_rewrites_the_saved_week_answers_with_the_stored_week() {
+    let (conn, user_id) = account("standing-days-back");
+    let piano = |days: Value, until: &str| {
+        json!({"category": "extra", "days": days, "duration_min": 60, "id": "weekly-piano",
+               "kind": "locked", "start": "16:00", "title": "Piano", "until": until})
+    };
+    // Tuesday and Thursday until Wednesday 21 October: the week of 19 October holds Tuesday alone.
+    let mut first = empty_input();
+    first.standing = Some(StandingInput {
+        week_start: WEEK.into(),
+        blocks: vec![piano(json!([1, 3]), "2026-10-21")],
+    });
+    apply_shown(&conn, user_id, &first).unwrap();
+    let moved = piano(json!([1]), "2026-11-03");
+    let mut input = empty_input();
+    input.weeks.push(WeekInput {
+        week_start: WEEK.into(),
+        blocks: vec![moved.clone()],
+        revision: 0,
+    });
+    input.standing = Some(StandingInput {
+        week_start: WEEK.into(),
+        blocks: vec![moved],
+    });
+    let answer = apply_shown(&conn, user_id, &input).unwrap();
+    assert_eq!(answer["standing_changed_weeks"], json!([WEEK]));
+    assert_eq!(answer["weeks"][0]["blocks"][0]["days"], json!([1, 3]));
+    assert_eq!(answer["weeks"][0]["revision"], json!(2));
+    assert_eq!(week_revision(&conn, user_id, WEEK), 2);
+}

@@ -1142,11 +1142,13 @@ class NativeSession(QObject):
         day: int | None = None,
         weekly: bool | None = None,
         until: str | None = None,
+        every_week: bool = False,
     ) -> None:
         """Add or edit a block. `weekly` is what the sheet's "Repeats every week" switch says (None: the
         sheet had no switch for this block) and `until` its optional last day. Turning it on stands the
         block in this week and every week after; changing Until does the same from this week; turning it
-        off keeps this week's block and ends the repeat from next week."""
+        off keeps this week's block and ends the repeat from next week. Any other edit of a block that
+        already repeats changes this week alone, or with `every_week` this week and every week after."""
         if weekly is None or scope != "series":
             self._save_block_edit(block, scope, day)
             return
@@ -1172,7 +1174,7 @@ class NativeSession(QObject):
             if until:
                 made["until"] = until
             self._save_block_edit(made, scope, day)
-            if until != (original or {}).get("until"):
+            if every_week or until != (original or {}).get("until"):
                 self.stand_open_week([self._saved_block(made["id"])])
             self._cut_at_until(made["id"])
         else:

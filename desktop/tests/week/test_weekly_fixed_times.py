@@ -156,6 +156,81 @@ def test_an_until_in_a_later_week_leaves_the_open_week_whole_and_cuts_that_week(
     assert piano_in(qapp, session, 3) is None
 
 
+def test_moving_until_later_from_the_week_it_cut_brings_thursday_back_everywhere(qapp, window) -> None:
+    """Until Wed 11 Nov leaves the week of 9 Nov with Tuesday alone. Moving Until to Tue 24 Nov from that
+    same week must not make the repeat Tuesday-only: Thu 12 and Thu 19 Nov are inside Until again."""
+    session = window.session
+    make_weekly(qapp, session)
+    go_to(qapp, session, week_after(1))
+    block = next(b for b in session.blocks if b["title"] == "Piano")
+    session.add_block(block, weekly=True, until="2026-11-11")
+    save_and_settle(qapp, session)
+    assert piano_days(session) == [1]
+
+    block = next(b for b in session.blocks if b["title"] == "Piano")
+    session.add_block(block, weekly=True, until="2026-11-24")
+    save_and_settle(qapp, session)
+    assert piano_days(session) == [1, 3], "the open week gets Thursday back at once"
+    assert piano_in(qapp, session, 2) == [1, 3]
+    assert piano_in(qapp, session, 3) == [1]
+    assert piano_in(qapp, session, 4) is None
+    assert piano_in(qapp, session, 1) == [1, 3]
+
+    # The week was rewritten where it is stored; the app must hold its new revision to save it again.
+    block = next(b for b in session.blocks if b["title"] == "Piano")
+    session.add_block({**block, "start": "17:00"}, weekly=True, until="2026-11-24")
+    save_and_settle(qapp, session)
+    assert not session.conflict
+    assert piano_days(session) == [1, 3]
+
+
+def piano_start_in(qapp: QApplication, session: NativeSession, weeks: int) -> str:
+    go_to(qapp, session, week_after(weeks))
+    return next(b for b in session.blocks if b["title"] == "Piano")["start"]
+
+
+def test_an_edit_for_this_week_only_leaves_every_other_week_as_it_was(qapp, window) -> None:
+    session = window.session
+    make_weekly(qapp, session)
+    go_to(qapp, session, week_after(1))
+    block = next(b for b in session.blocks if b["title"] == "Piano")
+    session.add_block({**block, "start": "17:00"}, weekly=True, until="")
+    save_and_settle(qapp, session)
+    assert piano_start_in(qapp, session, 1) == "17:00"
+    assert piano_start_in(qapp, session, 0) == "16:00"
+    assert piano_start_in(qapp, session, 2) == "16:00"
+
+
+def test_an_edit_for_this_week_and_later_reaches_later_weeks_and_not_earlier_ones(qapp, window) -> None:
+    session = window.session
+    make_weekly(qapp, session)
+    go_to(qapp, session, week_after(2))
+    go_to(qapp, session, week_after(1))
+    block = next(b for b in session.blocks if b["title"] == "Piano")
+    session.add_block({**block, "start": "17:00"}, weekly=True, until="", every_week=True)
+    save_and_settle(qapp, session)
+    assert piano_start_in(qapp, session, 1) == "17:00"
+    assert piano_start_in(qapp, session, 2) == "17:00"
+    assert piano_start_in(qapp, session, 5) == "17:00"
+    assert piano_start_in(qapp, session, 0) == "16:00"
+
+
+def test_an_edit_for_this_week_and_later_from_a_week_until_cut_keeps_the_cut_days(qapp, window) -> None:
+    """Until Wed 18 Nov: the week of 16 Nov holds Tuesday alone. Moving the block to 17:00 for this week and
+    later from that week must leave Thursday in the weeks before Until that still have it."""
+    session = window.session
+    make_weekly(qapp, session, until="2026-11-18")
+    go_to(qapp, session, week_after(2))
+    assert piano_days(session) == [1]
+    block = next(b for b in session.blocks if b["title"] == "Piano")
+    session.add_block({**block, "start": "17:00"}, weekly=True, until="2026-11-18", every_week=True)
+    save_and_settle(qapp, session)
+    assert piano_days(session) == [1]
+    assert piano_in(qapp, session, 1) == [1, 3]
+    assert piano_start_in(qapp, session, 1) == "16:00"
+    assert piano_start_in(qapp, session, 2) == "17:00"
+
+
 def test_turning_the_repeat_off_keeps_this_week_and_ends_it_from_next_week(qapp, window) -> None:
     session = window.session
     made = make_weekly(qapp, session)
