@@ -420,6 +420,16 @@ class WeekBridge(QObject):
         """Ctrl+V: the plain look's Paste, into the day on view (Day) or today (Week)."""
         self._window._paste_clipboard()  # type: ignore[attr-defined]
 
+    @Slot(result=bool)
+    def hasCopied(self) -> bool:
+        """Something is on the clipboard, so the free-time menu offers Paste here."""
+        return self._window.session.clipboard is not None  # type: ignore[attr-defined]
+
+    @Slot(int, int)
+    def pasteHere(self, day: int, start_min: int) -> None:
+        """Paste here: the plain look's Paste, onto that day from that minute, through its preview."""
+        self._window._paste_at(day, start_min)  # type: ignore[attr-defined]
+
     @Slot(str)
     def planOne(self, identifier: str) -> None:
         """Place now, and Enter on a card: that homework at the first free gap from now that fits it."""
