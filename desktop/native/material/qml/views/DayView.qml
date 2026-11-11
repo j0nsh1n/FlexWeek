@@ -22,6 +22,7 @@ Item {
 
     // A block's menu is open on Day: the zoom keys wait, as on Week.
     readonly property bool menuOpen: hoursLoader.item ? hoursLoader.item.menuOpen : false
+    readonly property bool handing: hoursLoader.item ? hoursLoader.item.handing : false
 
     function zoomFromKeys(steps) {
         if (hoursLoader.item)

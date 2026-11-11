@@ -32,6 +32,7 @@ from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: E402
     shell,
     type_homework,
 )
+from desktop.tests.sheets.support_material_sheets import click  # noqa: E402
 
 
 def test_esc_closes_a_sheet_and_the_keyboard_goes_back_to_the_add_button(
@@ -58,6 +59,8 @@ def test_esc_closes_a_sheet_and_the_keyboard_goes_back_to_the_add_button(
 def test_the_discard_prompt_shows_in_qml_and_esc_keeps_editing(
     qapp: QApplication, shell: NativeWindow, sheets
 ) -> None:
+    """Cancel on typed work asks (Esc on an Add sheet closes it and keeps the typing, Jonathan 2026-11-10);
+    Esc on that question goes back to editing."""
     root = show_material(qapp, shell)
     quick = shell._material_page._quick
     shell.activateWindow()
@@ -65,7 +68,7 @@ def test_the_discard_prompt_shows_in_qml_and_esc_keeps_editing(
     sheets.openHomework()
     type_homework(sheets, "Typed")
     pump(qapp, 60)
-    QTest.keyClick(quick, Qt.Key.Key_Escape)
+    click(shell, qml(root, "homeworkCancel"))
     pump(qapp, 40)
     assert sheets.ask["title"] == DISCARD
     assert find_named(root, "prompt_keep") is not None

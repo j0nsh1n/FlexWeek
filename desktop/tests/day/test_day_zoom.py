@@ -163,3 +163,22 @@ def test_a_clock_tick_does_not_move_day_scroll_or_a_zoom_anchor(
     pump(qapp)
     after_tick = ((float(scroller.property("contentY")) + view_y) / row) * 60
     assert abs(after_tick - minute) < 1
+
+
+def test_day_steps_through_the_two_closer_levels_and_stops_at_256(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    open_day_page(qapp, window)
+    bridge = bridge_of(window)
+    quick = window._material_page._quick
+    quick.setFocus()
+    pump(qapp)
+    seen = [int(bridge.property("dayHourRow"))]
+    for _ in range(6):
+        _ctrl(window, Qt.Key.Key_Equal)
+        seen.append(int(bridge.property("dayHourRow")))
+    assert seen == [56, 72, 96, 128, 192, 256, 256]
+    assert bridge.property("canZoomIn") is False
+    for _ in range(8):
+        _ctrl(window, Qt.Key.Key_Minus)
+    assert int(bridge.property("dayHourRow")) == 32

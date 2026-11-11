@@ -18,6 +18,8 @@ Item {
     // The floating add button sits 96px up on a phone. The grid can scroll clear of it.
     // A block's or a card's menu is open: the zoom keys leave the grid behind it alone.
     readonly property bool menuOpen: hoursPane.menuOpen || drawer.menuOpen
+    // A block is held by the mouse: Esc puts it back, so the shell's Esc waits.
+    readonly property bool handing: hoursPane.handing
     readonly property int scrollClearance: phone ? 96 : 0
     readonly property int gutter: hoursPane.hourGutter
     readonly property int drawerWidth: 320

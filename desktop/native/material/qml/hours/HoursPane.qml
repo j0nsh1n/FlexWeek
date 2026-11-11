@@ -46,6 +46,14 @@ Item {
     property int slotStart: 0
     property int slotEnd: 0
 
+    // A block held by the mouse: which, how (move, top, bottom), where it started, and where it would land.
+    property var held: null
+    property bool holdCanceled: false
+    property var landing: null
+    readonly property bool handing: held !== null
+    readonly property bool canHand: !root.passive && !!root.bridge && !!root.bridge.week
+                                    && !!root.bridge.week.moveBlock
+
     property alias scroller: scroller
     property alias hours: hours
     property int wheelAcc: 0
@@ -138,6 +146,77 @@ Item {
     function snapToQuarter(y) {
         var snapped = Math.round((y / root.row) * 60 / 15) * 15
         return Math.max(0, Math.min(24 * 60, snapped))
+    }
+
+    function snapQuarter(minute) {
+        return Math.round(minute / 15) * 15
+    }
+
+    // The topmost block under a point of the grid, as the block its hold needs to know.
+    function blockAt(x, y) {
+        var found = null
+        for (var i = 0; i < weekBlocks.count; i++) {
+            var block = weekBlocks.itemAt(i)
+            if (block && block.visible && x >= block.x && x <= block.x + block.width
+                    && y >= block.y && y <= block.y + block.height && (!found || block.z >= found.z))
+                found = block
+        }
+        return found
+    }
+
+    function startHand(block, x, y) {
+        var edge = Math.min(8, block.height / 4)
+        var how = y - block.y <= edge ? "top" : (block.y + block.height - y <= edge ? "bottom" : "move")
+        root.holdCanceled = false
+        root.held = { blockId: block.blockId, day: block.blockDay, start: block.blockStart, end: block.blockEnd,
+                      how: how, pressY: y }
+        root.landing = { day: block.blockDay, start: block.blockStart, end: block.blockEnd }
+    }
+
+    // Where the held block lands for a pointer at (x, y) on the grid: moved by the pointer's travel and
+    // snapped to a quarter hour, or with one edge moved, never shorter than a quarter hour.
+    function landingFor(x, y) {
+        var held = root.held
+        var travel = (y - held.pressY) / root.row * 60
+        var day = held.day
+        var start = held.start
+        var end = held.end
+        if (held.how === "move") {
+            var length = held.end - held.start
+            start = Math.max(0, Math.min(24 * 60 - length, root.snapQuarter(held.start + travel)))
+            end = start + length
+            if (root.weekMode)
+                day = Math.max(0, Math.min(root.columns - 1, Math.floor((x - root.gutter) / root.dayWidth)))
+        } else if (held.how === "top") {
+            start = Math.max(0, Math.min(held.end - 15, root.snapQuarter(held.start + travel)))
+        } else {
+            end = Math.min(24 * 60, Math.max(held.start + 15, root.snapQuarter(held.end + travel)))
+        }
+        return { day: day, start: start, end: end }
+    }
+
+    function moveHand(x, y) {
+        if (root.held && !root.holdCanceled)
+            root.landing = root.landingFor(x, y)
+    }
+
+    function cancelHand() {
+        root.holdCanceled = true
+        root.landing = null
+    }
+
+    function dropHand() {
+        var held = root.held
+        var landing = root.landing
+        var canceled = root.holdCanceled
+        root.held = null
+        root.landing = null
+        root.holdCanceled = false
+        if (!held || canceled || !landing)
+            return
+        if (landing.day === held.day && landing.start === held.start && landing.end === held.end)
+            return
+        root.bridge.week.moveBlock(held.blockId, held.day, landing.day, landing.start, landing.end)
     }
 
     function dayAt(x) {
@@ -334,6 +413,9 @@ Item {
                        + (root.followOpening ? Math.max(0, height - openingAbove(height)) : 0)
         clip: true
         boundsBehavior: Flickable.StopAtBounds
+        // A mouse press-and-drag must not pan the grid: it is drag-to-create's. The wheel, a touchpad, the
+        // scroll bar, the keys and a touchscreen still scroll it.
+        acceptedButtons: Qt.NoButton
 
         // The student's own scrolling ends a pending Today: the grid does not chase the line afterwards.
         onMovingChanged: if (moving) root.nowAsked = false
@@ -390,7 +472,12 @@ Item {
             height: 24 * root.row
             focus: true
             Keys.onEscapePressed: (event) => {
-                if (root.rangeHost.dragRangeActive) {
+                // A block held by the mouse goes back: nothing is saved when the button is let go. The
+                // shell's own Esc waits while a block is held, so the key reaches here.
+                if (root.handing) {
+                    root.cancelHand()
+                    event.accepted = true
+                } else if (root.rangeHost.dragRangeActive) {
                     root.rangeHost.cancelDragRange()
                     event.accepted = true
                 }
@@ -421,9 +508,24 @@ Item {
                 grabPermissions: PointerHandler.CanTakeOverFromItems | PointerHandler.CanTakeOverFromHandlersOfDifferentType
                 onActiveChanged: {
                     var range = root.rangeHost
+                    if (!active && root.held) {
+                        root.dropHand()
+                        return
+                    }
                     if (active) {
                         var px = centroid.pressPosition.x
                         var py = centroid.pressPosition.y
+                        var under = root.canHand ? root.blockAt(px, py) : null
+                        if (under) {
+                            range.dragRangeValid = false
+                            range.dragRangeActive = false
+                            root.startHand(under, px, py)
+                            // The block takes the keyboard focus, so Esc reaches the grid; the grid does not
+                            // scroll to it while it is held.
+                            under.forceActiveFocus()
+                            root.moveHand(centroid.position.x, centroid.position.y)
+                            return
+                        }
                         if (!range.emptyGridTimeAt(px, py)) {
                             range.dragRangeValid = false
                             range.dragRangeActive = false
@@ -465,6 +567,10 @@ Item {
                 }
                 onCentroidChanged: {
                     var range = root.rangeHost
+                    if (active && root.held) {
+                        root.moveHand(centroid.position.x, centroid.position.y)
+                        return
+                    }
                     if (active && range.dragRangeActive && range.dragRangeValid && !range.dragRangeCanceled) {
                         var m1 = range.snapToQuarter(range.dragRangePressY)
                         var m2 = range.snapToQuarter(centroid.position.y)
@@ -496,6 +602,24 @@ Item {
                 border.width: 2
                 border.color: m3.primary
                 z: 10
+            }
+
+            // Where the held block would land, while it is held.
+            Rectangle {
+                objectName: "handGhost"
+                visible: root.handing && !!root.landing
+                z: 10
+                x: root.weekMode ? root.gutter + (root.landing ? root.landing.day : 0) * root.dayWidth + 3
+                                 : root.gutter + 3
+                y: (root.landing ? root.landing.start : 0) / 60 * root.row
+                width: root.weekMode ? Math.max(8, root.dayWidth - 6)
+                                     : Math.max(8, hours.width - root.gutter - 3 - root.blockRightInset)
+                height: Math.max(4, ((root.landing ? root.landing.end - root.landing.start : 0) / 60) * root.row - 2)
+                radius: 6
+                color: m3.primaryContainer
+                opacity: 0.7
+                border.width: 2
+                border.color: m3.primary
             }
 
             Rectangle {
@@ -565,9 +689,14 @@ Item {
                     x: 0
                     y: Math.max(0, index * root.row - 8)
                     readonly property real viewY: y - scroller.contentY
+                    // The time label is drawn over an hour number it lands on; the number goes so the two
+                    // are never read together.
+                    readonly property bool underNowLabel: nowLabel.visible && y < nowLabel.y + nowLabel.height
+                                                          && y + height > nowLabel.y
                     // Whole or not at all: hide a label cut by the pane's top edge or covered by the zoom pill.
-                    opacity: viewY >= 0 && !(zoomPill.visible && viewY < zoomPill.y + zoomPill.height + 2
-                                             && viewY + height > zoomPill.y - 2) ? 1 : 0
+                    opacity: viewY >= 0 && !underNowLabel
+                             && !(zoomPill.visible && viewY < zoomPill.y + zoomPill.height + 2
+                                  && viewY + height > zoomPill.y - 2) ? 1 : 0
                     width: root.gutter - 8
                     horizontalAlignment: Text.AlignRight
                     text: model.label
@@ -589,6 +718,34 @@ Item {
                 height: 2
                 color: root.now
                 z: 4
+            }
+
+            // The time now, in the hour column at the line's height. It lives in the column, so it never
+            // covers a block; an hour number it lands on is hidden (see hourLabel).
+            Rectangle {
+                id: nowLabel
+                objectName: "nowLabel"
+                readonly property string time: (root.bridge && root.bridge.clockText) ? root.bridge.clockText : ""
+                visible: root.showNowLine && !root.passive && time !== ""
+                width: Math.min(root.gutter - 8, nowLabelText.implicitWidth + 12)
+                height: Math.ceil(nowLabelText.implicitHeight) + 6
+                x: root.gutter - 6 - width
+                y: (root.bridge ? root.bridge.nowMinute : 0) / 60 * root.row + nowLine.height / 2 - height / 2
+                radius: 4
+                color: root.now
+                z: 7
+                Accessible.role: Accessible.StaticText
+                Accessible.name: "Current time, " + nowLabel.time
+                Text {
+                    id: nowLabelText
+                    objectName: "nowLabelText"
+                    anchors.centerIn: parent
+                    text: nowLabel.time
+                    color: m3.inkError
+                    font.family: M3Font.family
+                    font.pixelSize: M3Font.px(11)
+                    font.weight: 600
+                }
             }
 
             Repeater {
@@ -629,6 +786,10 @@ Item {
                     density: root.density
                     reduceMotion: root.reduceMotion
                     highContrast: root.highContrast
+                    blockId: model.blockId
+                    blockDay: model.day
+                    blockStart: model.start
+                    blockEnd: model.end
                     category: model.category
                     title: model.title
                     detail: blockCell.timeLine(model.detail)
@@ -649,11 +810,13 @@ Item {
                         blockId: model.blockId,
                         assignmentId: model.assignmentId,
                         day: model.day,
+                        start: model.start,
+                        end: model.end,
                         done: model.done,
                         homework: model.homework
                     }, mx, my)
-                    onActiveFocusChanged: if (activeFocus) root.reveal(y, height)
-                    onFocused: root.reveal(y, height)
+                    onActiveFocusChanged: if (activeFocus && !root.handing) root.reveal(y, height)
+                    onFocused: if (!root.handing) root.reveal(y, height)
                 }
             }
 
@@ -673,6 +836,36 @@ Item {
 
     property Item menuOriginItem: null
     property var menuTargetModel: null
+    // "block": the block's own items. "days": Move to day...'s list of the week's days.
+    property string menuMode: "block"
+
+    function blockEntries(target) {
+        var rows = [
+            { label: "Edit", icon: "edit_note" },
+            { label: "Duplicate", icon: "add" },
+            { label: "Move to day...", icon: "calendar_view_week" },
+            { label: "Copy", icon: "content_copy" }
+        ]
+        // A fixed time has nothing to finish.
+        if (target.homework)
+            rows.push({ label: target.done ? "Open again" : "Mark finished", icon: "check" })
+        rows.push({ label: "Delete", icon: "close" })
+        return rows
+    }
+
+    // A new list of rows changes the menu's height: keep it whole inside the pane.
+    function fitMenu() {
+        blockMenu.y = Math.max(8, Math.min(blockMenu.y, root.height - blockMenu.height - 8))
+    }
+
+    // The week's days as the headers name them, today marked as a header's reader hears it.
+    function dayEntries() {
+        var days = (root.bridge && root.bridge.week && root.bridge.week.dayRows) ? root.bridge.week.dayRows : []
+        var rows = []
+        for (var i = 0; i < days.length; i++)
+            rows.push({ label: days[i].label + (days[i].today ? ", today" : ""), icon: "" })
+        return rows
+    }
 
     function openBlockMenu(item, blockModel, mx, my) {
         menuOriginItem = item
@@ -680,23 +873,18 @@ Item {
             blockId: blockModel.blockId,
             assignmentId: blockModel.assignmentId,
             day: blockModel.day,
+            start: blockModel.start,
+            end: blockModel.end,
             done: blockModel.done,
             homework: blockModel.homework
         }
+        menuMode = "block"
+        blockMenu.entries = blockEntries(menuTargetModel)
+        // Placed after the rows are in: the menu's height is its rows, so earlier it was 16 px and the
+        // first menu near the bottom ran off the window.
         var mapped = item.mapToItem(root, mx, my)
-        var menuX = Math.max(8, Math.min(mapped.x, root.width - blockMenu.width - 8))
-        var menuY = Math.max(8, Math.min(mapped.y, root.height - blockMenu.height - 8))
-        blockMenu.x = menuX
-        blockMenu.y = menuY
-        // A fixed time has nothing to finish.
-        blockMenu.entries = blockModel.homework ? [
-            { label: "Edit", icon: "edit_note" },
-            { label: blockModel.done ? "Open again" : "Mark finished", icon: "check" },
-            { label: "Delete", icon: "close" }
-        ] : [
-            { label: "Edit", icon: "edit_note" },
-            { label: "Delete", icon: "close" }
-        ]
+        blockMenu.x = Math.max(8, Math.min(mapped.x, root.width - blockMenu.width - 8))
+        blockMenu.y = Math.max(8, Math.min(mapped.y, root.height - blockMenu.height - 8))
         blockMenu.cursor = 0
         blockMenu.open = true
         blockMenu.forceActiveFocus()
@@ -725,6 +913,7 @@ Item {
 
     function closeBlockMenu(giveFocusBack) {
         slotDay = -1
+        menuMode = "block"
         if (!blockMenu.open && !menuOriginItem && !menuTargetModel)
             return
         blockMenu.open = false
@@ -779,6 +968,20 @@ Item {
             highContrast: root.highContrast
             onChosen: (index, label) => {
                 var target = root.menuTargetModel
+                if (target && !target.slot && root.menuMode === "block" && label === "Move to day...") {
+                    // A second list in the same menu: the week's days, Esc back to the block's items.
+                    root.menuMode = "days"
+                    blockMenu.entries = root.dayEntries()
+                    root.fitMenu()
+                    blockMenu.cursor = Math.max(0, Math.min(target.day, blockMenu.entries.length - 1))
+                    return
+                }
+                if (target && !target.slot && root.menuMode === "days") {
+                    root.closeBlockMenu()
+                    if (root.bridge && root.bridge.week && index !== target.day)
+                        root.bridge.week.moveBlock(target.blockId, target.day, index, target.start, target.end)
+                    return
+                }
                 root.closeBlockMenu()
                 if (!root.bridge || !target)
                     return
@@ -792,6 +995,12 @@ Item {
                 } else if (label === "Edit") {
                     if (root.bridge.sheets)
                         root.bridge.sheets.editBlock(target.blockId, target.day)
+                } else if (label === "Duplicate") {
+                    if (root.bridge.week)
+                        root.bridge.week.duplicateBlock(target.blockId, target.day)
+                } else if (label === "Copy") {
+                    if (root.bridge.week)
+                        root.bridge.week.copyBlock(target.blockId, target.day)
                 } else if (label === "Mark finished" || label === "Open again") {
                     if (root.bridge.week)
                         root.bridge.week.toggleDone(target.assignmentId)
@@ -806,7 +1015,19 @@ Item {
                     }
                 }
             }
-            onDismissed: root.closeBlockMenu()
+            onDismissed: {
+                if (root.menuMode === "days" && root.menuTargetModel) {
+                    // Esc in the days list goes back to the block's own items.
+                    root.menuMode = "block"
+                    blockMenu.entries = root.blockEntries(root.menuTargetModel)
+                    root.fitMenu()
+                    blockMenu.cursor = 0
+                    blockMenu.open = true
+                    blockMenu.forceActiveFocus()
+                    return
+                }
+                root.closeBlockMenu()
+            }
         }
     }
 

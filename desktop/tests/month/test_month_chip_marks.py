@@ -1,5 +1,6 @@
-"""A Material month chip says what it is in an icon and a left bar, not in colour alone: a due chip has the
-edit icon and a bar, an overdue chip the warning icon and no bar, a planned time neither; a narrow day
+"""A Material month chip says what it is in an icon, not in colour alone: a due chip has the edit icon, an
+overdue chip the warning icon, a planned time neither. Every chip has the left strip of its category
+(tests/month/test_month_entries_carry_the_accent_strip.py compares the colour with Week's); a narrow day
 shows a dot for each kind instead of chips.
 
 How the chips and dots are coloured, and how they fade outside the month or sit on a picked date, is
@@ -70,7 +71,7 @@ def _show(cell: QQuickItem, chips: list[dict]) -> None:
 
 
 def test_due_and_overdue_month_chips_carry_their_icon_and_words(cell: QQuickItem) -> None:
-    for kind, icon, bar_shown in (("due", "edit_note", True), ("overdue", "warning", False)):
+    for kind, icon in (("due", "edit_note"), ("overdue", "warning")):
         _show(cell, [{"kind": kind, "text": f"{kind} History essay"}])
         text = _find(cell, "monthChipText")
         mark = _find(cell, "monthChipIcon")
@@ -78,20 +79,17 @@ def test_due_and_overdue_month_chips_carry_their_icon_and_words(cell: QQuickItem
         assert text is not None and text.property("text") == f"{kind} History essay"
         assert mark is not None and mark.property("visible") is True
         assert mark.property("name") == icon
-        if bar_shown:
-            assert bar is not None and bar.property("visible") is True
-        else:
-            assert bar is None or bar.property("visible") is False
+        assert bar is not None and bar.property("visible") is True
 
 
-def test_a_plain_month_chip_has_no_status_icon_and_no_bar(cell: QQuickItem) -> None:
+def test_a_plain_month_chip_has_no_status_icon_but_has_its_strip(cell: QQuickItem) -> None:
     _show(cell, [{"kind": "plain", "text": "8:00 AM School"}])
     text = _find(cell, "monthChipText")
     mark = _find(cell, "monthChipIcon")
     bar = _find(cell, "monthChipBar")
     assert text is not None and text.property("text") == "8:00 AM School"
     assert mark is None or mark.property("visible") is False or mark.property("name") == ""
-    assert bar is None or bar.property("visible") is False
+    assert bar is not None and bar.property("visible") is True
 
 
 def test_a_narrow_month_day_shows_a_dot_for_each_kind_of_chip(cell: QQuickItem) -> None:

@@ -1,9 +1,9 @@
 """Material Week hour zoom: remembered levels, keys, wheel, and the - + pill.
 
-Expected values come from the J21 brief (levels 32-128, density until a level is remembered) and from the
-account's own blocks, not from reading what the QML prints. Every test zooms and some leave a remembered
-level behind, so each one gets a fresh light window with School on weekday mornings and the History essay
-planned for 18:45 on Thursday (the clock starts on Thursday evening)."""
+Expected values come from the J21 brief (levels 32-128, density until a level is remembered; round 2 adds
+192 and 256) and from the account's own blocks, not from reading what the QML prints. Every test zooms
+and some leave a remembered level behind, so each one gets a fresh light window with School on weekday
+mornings and the History essay planned for 18:45 on Thursday (the clock starts on Thursday evening)."""
 
 from __future__ import annotations
 
@@ -118,11 +118,11 @@ def test_hour_row_follows_density_until_zoom_and_reset_forgets_it(
     for _ in range(8):
         bridge.zoomBy(1)
     pump(qapp)
-    assert row_of(window) == 128
+    assert row_of(window) == 256
     assert bridge.property("canZoomIn") is False
     assert bridge.property("canZoomOut") is True
     bridge.zoomBy(1)
-    assert row_of(window) == 128
+    assert row_of(window) == 256
 
     for _ in range(12):
         bridge.zoomBy(-1)
@@ -295,3 +295,74 @@ def test_zoom_keys_wait_while_a_homework_card_menu_is_open(
     QTest.keyClick(quick, Qt.Key.Key_Escape)
     pump(qapp)
     assert menu.property("open") is False
+
+
+def test_the_buttons_step_through_the_two_closer_levels_and_stop_at_256(
+    qapp: QApplication, material: NativeWindow
+) -> None:
+    window = material
+    week_on_screen(qapp, window)
+    bridge = bridge_of(window)
+    seen = [row_of(window)]
+    for _ in range(5):
+        bridge.zoomBy(1)
+        pump(qapp)
+        seen.append(row_of(window))
+    assert seen == [56, 72, 96, 128, 192, 256]
+    assert bridge.property("canZoomIn") is False
+    bridge.zoomBy(1)
+    assert row_of(window) == 256
+    for _ in range(12):
+        bridge.zoomBy(-1)
+    pump(qapp)
+    assert row_of(window) == 32
+    assert bridge.property("canZoomOut") is False
+
+
+def test_ctrl_equal_and_ctrl_minus_stop_at_the_new_closest_level_and_at_32(
+    qapp: QApplication, material: NativeWindow
+) -> None:
+    window = material
+    week_on_screen(qapp, window)
+    quick = window._material_page._quick
+    quick.setFocus()
+    pump(qapp)
+    for _ in range(9):
+        QTest.keyClick(quick, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
+        pump(qapp)
+    assert row_of(window) == 256
+    for _ in range(12):
+        QTest.keyClick(quick, Qt.Key.Key_Minus, Qt.KeyboardModifier.ControlModifier)
+        pump(qapp)
+    assert row_of(window) == 32
+
+
+@pytest.mark.parametrize("old", [32, 44, 56, 72, 96, 128])
+def test_a_level_remembered_before_the_closer_ones_keeps_its_size(
+    qapp: QApplication, material: NativeWindow, old: int
+) -> None:
+    window = material
+    week_on_screen(qapp, window)
+    window._zoom = sanitize_zoom({"material.week": old})
+    window._material_page.publish()
+    pump(qapp)
+    assert row_of(window) == old
+
+
+def test_a_block_and_the_now_line_keep_their_times_at_the_closest_level(
+    qapp: QApplication, material: NativeWindow
+) -> None:
+    """The History essay runs 18:45 to 19:45 and the clock reads 19:00: the line sits a quarter of an hour
+    below the block's top, and the block is an hour tall."""
+    window = material
+    root = week_on_screen(qapp, window)
+    bridge = bridge_of(window)
+    for _ in range(6):
+        bridge.zoomBy(1)
+    pump(qapp)
+    assert row_of(window) == 256
+    essay = block_named(root, "History essay")
+    line = named(root, "nowLine")[0]
+    row = row_of(window)
+    assert round((float(line.property("y")) - float(essay.property("y"))) / row * 60) == 15
+    assert round((float(essay.property("height")) + 2) / row * 60) == 60

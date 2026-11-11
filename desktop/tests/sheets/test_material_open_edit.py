@@ -129,7 +129,7 @@ def test_the_finish_button_is_its_own_tab_stop_with_its_name(qapp, window: Nativ
 
 
 @pytest.mark.parametrize("how", ["right-click", "shift-f10"])
-def test_the_block_menu_lists_edit_mark_finished_and_delete_and_escape_returns_to_the_block(
+def test_the_block_menu_lists_its_items_and_escape_returns_to_the_block(
     qapp, window: NativeWindow, how
 ) -> None:
     root = material_week(qapp, window)
@@ -143,7 +143,14 @@ def test_the_block_menu_lists_edit_mark_finished_and_delete_and_escape_returns_t
     pump(qapp)
     menu = named(root, "blockMenu")[0]
     assert menu.property("open") is True
-    assert [e["label"] for e in menu.property("entries").toVariant()] == ["Edit", "Mark finished", "Delete"]
+    assert [e["label"] for e in menu.property("entries").toVariant()] == [
+        "Edit",
+        "Duplicate",
+        "Move to day...",
+        "Copy",
+        "Mark finished",
+        "Delete",
+    ]
     QTest.keyClick(quick_of(window), Qt.Key.Key_Escape)
     pump(qapp)
     assert menu.property("open") is False
@@ -336,7 +343,7 @@ def test_choosing_a_block_menu_row_with_the_mouse_does_not_also_open_the_block_u
 ) -> None:
     root = material_week(qapp, window)
     work = next(b for b in window.session.blocks if b.get("assignment_id") == "essay")
-    work.update({"duration_min": 180, "pinned": True})
+    work.update({"duration_min": 240, "pinned": True})
     window.session.add_block(work)
     window.session.save()
     settled(qapp, window)
@@ -350,12 +357,12 @@ def test_choosing_a_block_menu_row_with_the_mouse_does_not_also_open_the_block_u
     pump(qapp)
     menu = named(root, "blockMenu")[0]
     assert menu.property("open") is True
-    spot = row_centre(menu, "Mark finished")
+    spot = row_centre(menu, "Copy")
     assert top.y() < spot.y() < top.y() + essay.property("height"), "the row sits over the essay block"
     QTest.mouseClick(quick_of(window), Qt.MouseButton.LeftButton, pos=spot)
     pump(qapp)
-    wait_until(qapp, lambda: finished(window, True))
-    assert bridge(window).sheets.kind == "", "no editor opened: the click only picked Mark finished"
+    wait_until(qapp, lambda: window.session.clipboard is not None)
+    assert bridge(window).sheets.kind == "", "no editor opened: the click only picked Copy"
 
 
 @pytest.mark.parametrize("tall", [False, True], ids=["block as planned", "block under the menu row"])
@@ -459,10 +466,11 @@ def open_delete_prompt(qapp, window: NativeWindow, root: QObject):
     pump(qapp)
     menu = named(root, "blockMenu")[0]
     assert menu.property("open") is True
-    for _ in range(2):
+    # Edit, Duplicate, Move to day..., Copy, Mark finished, then Delete.
+    for _ in range(5):
         QTest.keyClick(quick_of(window), Qt.Key.Key_Down)
         pump(qapp)
-    assert menu.property("cursor") == 2
+    assert menu.property("cursor") == 5
     QTest.keyClick(quick_of(window), Qt.Key.Key_Return)
     sheets = bridge(window).sheets
     wait_until(qapp, lambda: sheets.ask.get("title") == "Delete homework")
@@ -516,7 +524,14 @@ def test_block_menu_rows_are_menu_items_a_screen_reader_can_press(qapp, window: 
     interface = QAccessible.queryAccessibleInterface(menu)
     assert interface is not None
     items = menu_items(interface)
-    assert [item.text(QAccessible.Text.Name) for item in items] == ["Edit", "Mark finished", "Delete"]
+    assert [item.text(QAccessible.Text.Name) for item in items] == [
+        "Edit",
+        "Duplicate",
+        "Move to day...",
+        "Copy",
+        "Mark finished",
+        "Delete",
+    ]
     mark_finished = next(item for item in items if item.text(QAccessible.Text.Name) == "Mark finished")
     action = mark_finished.actionInterface()
     assert action is not None and "Press" in action.actionNames()
