@@ -273,6 +273,7 @@ HELP_LETTER_KEYS = (
 # Keys that answer to neither switch.
 HELP_OTHER_KEYS = (
     ("[B] or [Esc]", "Back from My day"),
+    ("[Ctrl]+[Shift]+[F]", "Quick focus"),
     ("[F1]", "Help"),
     ("[Ctrl]+[N]", "Add homework"),
     ("[Ctrl]+[K]", "Command bar"),
@@ -2511,6 +2512,7 @@ def _line(words: str, name: str) -> QLabel:
 # Material shows (it is the Widgets week list's key), and Esc does not put a held card back.
 _MATERIAL_OTHER_KEYS = frozenset(
     {
+        "[Ctrl]+[Shift]+[F]",
         "[Ctrl]+[Z]",
         "[Ctrl]+[Y] or [Ctrl]+[Shift]+[Z]",
         "[Ctrl]+[S]",

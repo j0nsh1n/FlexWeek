@@ -153,6 +153,7 @@ def test_help_in_material_lists_the_number_keys_by_default_and_no_letter_keys(
     for letter in ("P", "Z", "F"):
         assert letter not in rows, letter
     assert "Ctrl+Z" in rows and "Ctrl+Y or Ctrl+Shift+Z" in rows and "Ctrl+S" in rows
+    assert "Ctrl+Shift+F" in rows, "Quick focus answers to neither switch"
     # Keys the Widgets looks answer to and Material does not.
     for key in ("T", "B or Esc", "F1", "Ctrl+N", "Ctrl+K", "Delete"):
         assert key not in rows, key
@@ -196,7 +197,7 @@ def test_help_in_the_widgets_looks_follows_its_two_switches(qapp: QApplication, 
     assert "1 to 5" in by_default and "D W M" not in by_default
     for letter in ("T", "J K", "C", "P", "Z", "F"):
         assert letter not in by_default, letter
-    assert "F1" in by_default and "Ctrl+K" in by_default
+    assert "Ctrl+Shift+F" in by_default and "F1" in by_default and "Ctrl+K" in by_default
     turn_on_letter_keys()
     with_letters = rows()
     for key in ("1 to 5", "T", "D W M", "J K", "C", "P", "Z", "F"):

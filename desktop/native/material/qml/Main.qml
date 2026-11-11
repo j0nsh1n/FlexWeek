@@ -710,6 +710,14 @@ Item {
         enabled: !modalActive
         onActivated: bridge.redo()
     }
+    // Quick focus, the same as the Quick focus row in More. A Ctrl chord, so neither Settings switch
+    // touches it. Ctrl+F is left free for search.
+    Shortcut {
+        sequence: "Ctrl+Shift+F"
+        context: Qt.WindowShortcut
+        enabled: !modalActive
+        onActivated: bridge.focus.show()
+    }
     Shortcut {
         sequence: "Ctrl+="
         context: Qt.WindowShortcut

@@ -6455,6 +6455,10 @@ class NativeWindow(QMainWindow):
                 self._told(self.session.save)
                 event.accept()
                 return
+            if key == Qt.Key.Key_F and mods & Qt.KeyboardModifier.ShiftModifier and planning:
+                self._quick_focus()
+                event.accept()
+                return
             if key in ZOOM_KEYS:
                 for hours in self._hours_shown():
                     hours.zoom_by(ZOOM_KEYS[key])
@@ -6538,6 +6542,9 @@ class NativeWindow(QMainWindow):
         if (not control and key in (Qt.Key.Key_F1, Qt.Key.Key_Delete)) or (
             self._shared_key_action(event) is not None
         ):
+            self.keyPressEvent(event)
+            return True
+        if control and key == Qt.Key.Key_F and mods & Qt.KeyboardModifier.ShiftModifier:
             self.keyPressEvent(event)
             return True
         if control and key in (

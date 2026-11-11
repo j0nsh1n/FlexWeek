@@ -264,3 +264,26 @@ def test_the_letter_keys_wait_while_a_sheet_is_open(qapp, window) -> None:
         _press(window, key)
         assert _screen(window) == "week", key
     assert bridge.sheets.property("kind") == "homework"
+
+
+@pytest.mark.parametrize("letters", [False, True])
+def test_ctrl_shift_f_starts_quick_focus_whatever_the_switches_say(qapp, window, letters) -> None:
+    _reset(window, qapp)
+    _look(window, letters=letters)
+    bridge = _bridge(window)
+    assert not bridge.focus.open
+    _press(window, Qt.Key.Key_F, CTRL)
+    assert not bridge.focus.open, "Ctrl+F does nothing for now"
+    _press(window, Qt.Key.Key_F, CTRL | SHIFT)
+    assert bridge.focus.open, "Ctrl+Shift+F opened Quick focus"
+    assert window.session.focus is None, "it is ready to start, as the Quick focus row is"
+
+
+def test_ctrl_shift_f_does_nothing_while_a_sheet_is_open(qapp, window) -> None:
+    _reset(window, qapp)
+    bridge = _bridge(window)
+    bridge.addHomework()
+    _pump(qapp)
+    assert bridge.sheets.property("kind") == "homework"
+    _press(window, Qt.Key.Key_F, CTRL | SHIFT)
+    assert not bridge.focus.open

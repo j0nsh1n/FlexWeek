@@ -234,6 +234,29 @@ def test_ctrl_shortcuts_do_not_answer_to_either_switch(
     assert acted == ["undo"]
 
 
+def test_ctrl_shift_f_starts_quick_focus_and_ctrl_f_does_nothing(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    _press(window, Qt.Key.Key_F, CTRL)
+    pump(qapp)
+    assert _page(window) == "weekPage", "Ctrl+F does nothing for now"
+    _press(window, Qt.Key.Key_F, CTRL | SHIFT)
+    assert _page(window) == "focusPage"
+    assert window.session.focus is None, "it is ready to start, as the Quick focus button is"
+    QTest.keyClick(window, Qt.Key.Key_Escape)
+    assert _page(window) == "weekPage"
+
+
+def test_ctrl_shift_f_does_nothing_while_typing(qapp: QApplication, window: NativeWindow) -> None:
+    box = QLineEdit(window)
+    box.show()
+    box.setFocus()
+    QTest.keyClick(box, Qt.Key.Key_F, CTRL | SHIFT)
+    pump(qapp)
+    assert _page(window) == "weekPage"
+    box.deleteLater()
+
+
 def _open_settings(window: NativeWindow):
     window._open_settings()
     page = window._settings
