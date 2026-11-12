@@ -807,6 +807,28 @@ def test_paste_here_is_offered_while_something_is_copied_and_not_before_or_after
     assert _slot_menu(root) == ADD_ONLY
 
 
+def test_paste_here_is_not_offered_while_a_save_is_under_way(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """The plain look greys Paste while the week is saving; Material's menu leaves the row out."""
+    root = _saturday_menu(qapp, window, "right-click")
+    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Escape)
+    _pump(qapp, 4)
+    window.session.copy_block("school", 0)
+    hours_item, row, gutter, day_width, saturday = _grid_geometry(root, window)
+    spot = (gutter + saturday * day_width + day_width / 2, 11 * row + row / 12)
+    window.session.busy = True
+    try:
+        _ask_menu(window, hours_item, "right-click", *spot)
+        assert _slot_menu(root) == ADD_ONLY
+        QTest.keyClick(window._material_page._quick, Qt.Key.Key_Escape)
+        _pump(qapp, 4)
+    finally:
+        window.session.busy = False
+    _ask_menu(window, hours_item, "right-click", *spot)
+    assert _slot_menu(root) == PASTE
+
+
 @pytest.mark.parametrize("how", ["click", "right-click"])
 def test_paste_here_in_week_previews_the_copy_on_that_day_from_the_snapped_time_with_its_length(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, how: str

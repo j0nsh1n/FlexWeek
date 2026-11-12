@@ -422,8 +422,10 @@ class WeekBridge(QObject):
 
     @Slot(result=bool)
     def hasCopied(self) -> bool:
-        """Something is on the clipboard, so the free-time menu offers Paste here."""
-        return self._window.session.clipboard is not None  # type: ignore[attr-defined]
+        """Something is on the clipboard and no save is under way (the plain look greys Paste then), so
+        the free-time menu offers Paste here."""
+        session = self._window.session  # type: ignore[attr-defined]
+        return session.clipboard is not None and not session.busy
 
     @Slot(int, int)
     def pasteHere(self, day: int, start_min: int) -> None:
