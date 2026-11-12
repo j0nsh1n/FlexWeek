@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import pytest
 
+from backend.tests.fake_clock import FakeClock
 from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: F401
     open_light,
     qapp,
@@ -22,6 +23,22 @@ def quarter_hours(shell) -> None:
 
 
 PAST = "That time has passed. Choose 7:00 PM or later today, or another day."
+
+
+@pytest.mark.parametrize(("step", "offered"), [(5, "7:05 PM"), (15, "7:15 PM")])
+def test_the_refusal_names_the_next_time_on_the_students_step(
+    qapp, shell, sheets, clock: FakeClock, step: int, offered: str
+) -> None:
+    """At 19:02 the Pinned time list starts at the next mark: 19:05 on fives, 19:15 on quarter hours."""
+    shell.session.preferences = {**(shell.session.preferences or {}), "drag_step_min": step}
+    clock.move(minutes=2)
+    sheets.editHomework("essay")
+    sheets.setText("when", "fixed")
+    sheets.setNumber("whenDay", 3)
+    sheets.setText("whenTime", "18:30")
+    assert sheets.form["whenProblem"] == (
+        f"That time has passed. Choose {offered} or later today, or another day."
+    )
 
 
 def essay_start(shell) -> str:

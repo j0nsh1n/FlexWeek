@@ -98,3 +98,19 @@ def test_homework_start_that_has_passed_is_refused_in_the_calendars_words_and_no
     assert session.message == "That time has passed. Choose 12:00 or later today, or another day."
     held = next(item for item in session.blocks if item["id"] == block["id"])
     assert (held["days"], held["start"]) == ([MONDAY], "14:30")
+
+
+@pytest.mark.parametrize(("step", "offered"), [(5, "12:05"), (15, "12:15")])
+def test_a_refusal_for_a_passed_start_names_the_next_time_on_the_students_step(
+    qapp: QApplication, window: NativeWindow, clock: FakeClock, step: int, offered: str
+) -> None:
+    """At 12:02 the next mark is 12:05 on fives and 12:15 on quarter hours."""
+    session = window.session
+    at(window, clock, MONDAY, 8)
+    block = placed_homework(qapp, window)
+    at(window, clock, 2, 12)
+    clock.move(minutes=2)
+    session.preferences = {**(session.preferences or {}), "drag_step_min": step}
+    set_clock_24h(True)
+    assert session.hand_move(block["id"], MONDAY, 2, 11 * 60, 12 * 60 + HOMEWORK_MIN) is False
+    assert session.message == f"That time has passed. Choose {offered} or later today, or another day."

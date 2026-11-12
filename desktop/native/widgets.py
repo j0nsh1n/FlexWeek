@@ -142,7 +142,7 @@ from desktop.native.fields import (
     held_on_problem,
 )
 from desktop.native.fonts import caption, time_font, weighted
-from desktop.native.hours.geometry import next_slot
+from desktop.native.hours.geometry import DEFAULT_DRAG_STEP, drag_step, next_slot
 from desktop.native.icons import pixmap as icon_pixmap
 from desktop.native.look import (
     CONFLICT_TEXT,
@@ -4036,7 +4036,9 @@ class BlockDialog(Dialog):
         new_start = self.start.time().toString("HH:mm")
         if not self._existing:
             for day in chosen:
-                past = past_problem("locked", week, day, self.start.minutes(), now_iso, now_min)
+                past = past_problem(
+                    "locked", week, day, self.start.minutes(), now_iso, now_min, DEFAULT_DRAG_STEP
+                )
                 if past:
                     return past
             return ""
@@ -4046,7 +4048,9 @@ class BlockDialog(Dialog):
             start_moved = single and day in original_days and new_start != original_start
             if not added and not start_moved:
                 continue
-            past = past_problem("locked", week, day, self.start.minutes(), now_iso, now_min)
+            past = past_problem(
+                "locked", week, day, self.start.minutes(), now_iso, now_min, DEFAULT_DRAG_STEP
+            )
             if past:
                 return past
         return ""
@@ -5056,7 +5060,13 @@ class HomeworkDialog(Dialog):
         if not self.completed.isChecked():
             now = self._now()
             past = past_problem(
-                "flexible", week, fixed["day"], start, now.date().isoformat(), now.hour * 60 + now.minute
+                "flexible",
+                week,
+                fixed["day"],
+                start,
+                now.date().isoformat(),
+                now.hour * 60 + now.minute,
+                drag_step((getattr(session, "preferences", None) or {}).get("drag_step_min")),
             )
             if past:
                 return past
@@ -6203,6 +6213,9 @@ class ChooseTimeDialog(Dialog):
         self._block, self._blocks, self._due = block, blocks, due
         self._week = week_start
         self._now_parts = now
+        self._step = drag_step(
+            (getattr(getattr(parent, "session", None), "preferences", None) or {}).get("drag_step_min")
+        )
         if self._now_parts is None and parent is not None:
             session = getattr(parent, "session", None)
             if session is not None and callable(getattr(session, "now_ms", None)):
@@ -6311,7 +6324,13 @@ class ChooseTimeDialog(Dialog):
             if self._now_parts is not None:
                 now_iso, now_min = self._now_parts
                 problem = past_problem(
-                    str(self._block.get("kind") or ""), self._week, day, start, now_iso, now_min
+                    str(self._block.get("kind") or ""),
+                    self._week,
+                    day,
+                    start,
+                    now_iso,
+                    now_min,
+                    self._step,
                 )
             if problem is None:
                 problem = span_problem(self._blocks, self._block["id"], day, start, end, self._due)

@@ -945,6 +945,7 @@ fn hand_move_saved(conn: &Connection, revision: i64) -> flexweek_store::WeekSave
         week_start: HAND_WEEK,
         now_iso: HAND_WEEK,
         now_min: 8 * 60,
+        step_min: 15,
     };
     let assignments = json!({"algebra-4": {"id": "algebra-4", "due": "2026-10-23T23:59"}});
     let HandMove::Moved { blocks, .. } =

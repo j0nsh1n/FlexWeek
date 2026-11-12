@@ -16,9 +16,11 @@ use crate::error::{EngineError, EngineResult};
 use crate::stored::{attribute_error, py_int, py_str, text, truthy, type_name};
 use crate::time::{DAY_END_MIN, DAY_START_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm};
 
-/// The next quarter hour at or after `now_min`, or None when rounding up reaches midnight.
-fn next_choose_slot(now_min: i64) -> Option<i64> {
-    let slot = (-(-now_min).div_euclid(SLOT_MIN)) * SLOT_MIN;
+/// The next mark of the student's time step at or after `now_min`, or None when rounding up reaches
+/// midnight. A step that is not positive reads as a quarter hour, the default.
+fn next_choose_slot(now_min: i64, step_min: i64) -> Option<i64> {
+    let step = if step_min > 0 { step_min } else { SLOT_MIN };
+    let slot = (-(-now_min).div_euclid(step)) * step;
     (slot < DAY_END_MIN).then_some(slot)
 }
 
@@ -797,6 +799,7 @@ pub fn span_problem(
 /// A homework start before now (local date and minute) cannot be chosen. `now_iso` is that local date.
 /// `kind` is the block's own: a fixed time (`"locked"`) may start in the past, so it is never refused
 /// here. A bad date is not a past time: the caller already has its own check for a date it cannot read.
+/// `step_min` is the student's time step (5 or 15): the refusal names the next time on it.
 pub fn past_problem(
     kind: &str,
     week_start: &str,
@@ -804,6 +807,7 @@ pub fn past_problem(
     start_min: i64,
     now_iso: &str,
     now_min: i64,
+    step_min: i64,
 ) -> EngineResult<Option<String>> {
     if kind == "locked" {
         return Ok(None);
@@ -822,7 +826,7 @@ pub fn past_problem(
         let slot = if target < now {
             None
         } else {
-            next_choose_slot(now_min)
+            next_choose_slot(now_min, step_min)
         };
         let message = match slot {
             Some(slot) => format!(
@@ -930,43 +934,43 @@ mod tests {
         let at = 15 * 60 + 10;
         let refused = "That time has passed. Choose 15:15 or later today, or another day.";
         assert_eq!(
-            past_problem("flexible", week, 1, 16 * 60, thursday, at)
+            past_problem("flexible", week, 1, 16 * 60, thursday, at, 15)
                 .unwrap()
                 .as_deref(),
             Some("That time has passed. The day is over, so choose another day."),
             "Tuesday of this week is over, so it offers no time later today"
         );
         assert_eq!(
-            past_problem("flexible", week, 3, 15 * 60, thursday, at)
+            past_problem("flexible", week, 3, 15 * 60, thursday, at, 15)
                 .unwrap()
                 .as_deref(),
             Some(refused),
             "earlier today"
         );
         assert_eq!(
-            past_problem("flexible", week, 3, at, thursday, at).unwrap(),
+            past_problem("flexible", week, 3, at, thursday, at, 15).unwrap(),
             None,
             "this minute is not past"
         );
         assert_eq!(
-            past_problem("flexible", week, 3, 15 * 60 + 15, thursday, at).unwrap(),
+            past_problem("flexible", week, 3, 15 * 60 + 15, thursday, at, 15).unwrap(),
             None,
             "later today"
         );
         assert_eq!(
-            past_problem("flexible", "2026-09-28", 4, 18 * 60, thursday, at)
+            past_problem("flexible", "2026-09-28", 4, 18 * 60, thursday, at, 15)
                 .unwrap()
                 .as_deref(),
             Some("That time has passed. The day is over, so choose another day."),
             "last week is over"
         );
         assert_eq!(
-            past_problem("flexible", "2026-10-12", 0, 8 * 60, thursday, at).unwrap(),
+            past_problem("flexible", "2026-10-12", 0, 8 * 60, thursday, at, 15).unwrap(),
             None,
             "next week"
         );
         assert_eq!(
-            past_problem("flexible", "not a date", 0, 0, thursday, at).unwrap(),
+            past_problem("flexible", "not a date", 0, 0, thursday, at, 15).unwrap(),
             None
         );
     }
@@ -982,12 +986,12 @@ mod tests {
             ("2026-09-28", 4, 18 * 60),
         ] {
             assert_eq!(
-                past_problem("locked", week, day, start, thursday, at).unwrap(),
+                past_problem("locked", week, day, start, thursday, at, 15).unwrap(),
                 None,
                 "fixed time on day {day} of {week} at {start}"
             );
             assert!(
-                past_problem("flexible", week, day, start, thursday, at)
+                past_problem("flexible", week, day, start, thursday, at, 15)
                     .unwrap()
                     .is_some(),
                 "the same start is past for homework"

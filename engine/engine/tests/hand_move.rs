@@ -49,10 +49,22 @@ fn move_at(
     now_min: i64,
     assignments: &Value,
 ) -> HandMove {
+    move_at_step(blocks, drop, now_iso, now_min, 15, assignments)
+}
+
+fn move_at_step(
+    blocks: &[Value],
+    drop: &HandDrop<'_>,
+    now_iso: &str,
+    now_min: i64,
+    step_min: i64,
+    assignments: &Value,
+) -> HandMove {
     let clock = WeekClock {
         week_start: WEEK,
         now_iso,
         now_min,
+        step_min,
     };
     hand_move(&json!(blocks), drop, &clock, assignments, &mut fresh_ids()).expect("the rule runs")
 }
@@ -354,6 +366,26 @@ fn a_start_that_has_already_passed_is_refused_in_the_words_of_the_calendar() {
         words,
         "That time has passed. Choose 12:00 or later today, or another day."
     );
+}
+
+#[test]
+fn a_passed_start_names_the_next_time_on_the_students_step() {
+    // 12:02 on a Wednesday: the next mark is 12:05 on fives and 12:15 on quarter hours.
+    for (step, offered) in [(5, "12:05"), (15, "12:15")] {
+        let words = refusal(move_at_step(
+            &[homework()],
+            &drop_of("alg", MONDAY, 2, 11 * 60, 12 * 60 + 30),
+            "2026-10-21",
+            12 * 60 + 2,
+            step,
+            &assignments(),
+        ));
+        assert_eq!(
+            words,
+            format!("That time has passed. Choose {offered} or later today, or another day."),
+            "step {step}"
+        );
+    }
 }
 
 #[test]
