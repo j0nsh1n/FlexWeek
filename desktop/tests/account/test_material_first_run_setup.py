@@ -88,7 +88,7 @@ def test_setup_keeps_each_step_in_order_and_what_was_answered(
     seen.append(bridge.setupStep)
     wait_until(qapp, lambda: step_saved(REMINDERS))
     assert session.preferences["planning_style"] == "manual"
-    assert session.preferences["drag_step_min"] == 15
+    assert session.preferences.get("drag_step_min", 15) == 15
     settle(qapp, window)
     assert session.preferences["work_windows"][0]["start"] == "15:30"
     # Reminders

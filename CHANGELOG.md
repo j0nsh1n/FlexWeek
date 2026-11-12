@@ -8,6 +8,7 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Added
 - In the Material style, a block's menu in Week and Day (right-click, Shift+F10, the Menu key) has Duplicate, Move to day... and Copy, for fixed times and homework. Duplicate and Copy work as in the Widgets styles; Move to day... opens a list of the week's days with today marked, and the block goes to that day at the same time, with Undo. Ctrl+V pastes what Copy took, into today in Week or the day on view in Day.
 - In the Material style, Week and Day blocks can be dragged: press and drag a block to move it to another time (and, in Week, another day), or drag its top or bottom edge to change its start or end, for fixed times and homework alike. It snaps to 15 minutes, saves the way the Widgets styles' drag does, and shows the Undo notice; Esc during the drag puts the block back and saves nothing.
+- Material Settings → Planning has a Dragging step choice, 5 min or 15 min. It is the same setting as Dragging in Widgets Settings and the planning page of Setup, so a pick in one shows in the others.
 
 ### Changed
 - Material's P, Z and F keys (plan, undo, Focus) have their own switch, Letter keys, in Settings → This computer, and it starts off, so none of them fires by accident. The 1 to 5 view keys keep their switch, now called Number keys, which stays on. Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y and the zoom keys work whatever either switch says.
@@ -21,6 +22,10 @@ All notable changes to FlexWeek are documented here. Format follows
 - In the Material style, Esc on a new Add fixed time or Add homework sheet with something typed closes it at once, and the next Add of the same kind opens with what you typed. Cancel and a tap on the dimmed area still ask "Discard your changes?", Edit sheets are unchanged, and the typing is forgotten after a Save, a Discard or when the app closes.
 - In the Material style, pressing and dragging the mouse no longer pans the Day and Week grid, so it cannot fight dragging across free time to add something. The wheel, a touchpad, the scroll bar, the keyboard and a touchscreen still scroll it.
 - In the Material style, Week and Day show the current time in the hour column at the now line's height, in the line's colour, in your 12- or 24-hour clock. A screen reader says "Current time, 12:17 PM". An hour number the label lands on is hidden while it does.
+- In the Material style, drawing or clicking on empty time in Week and Day lands on the Dragging step you chose (every 5 minutes or every quarter hour) instead of always on a quarter hour.
+- In the Material style, the start and end time lists in Add and Edit fixed time, and the due time and Pinned time lists in Add and Edit homework, follow the Dragging step: every 5 minutes on 5, quarter hours on 15. A time already on the block stays listed, and today still hides times already over.
+- In the Widgets style, clicking or right-clicking free time, and pressing to draw a new block, land on the Dragging step you chose instead of always on a quarter hour.
+- An account that never chose a Dragging step now uses 15 minutes, new accounts included: setup shows 15 picked, and skipping setup keeps 15. 5 minutes is one pick away in Settings → Planning. An account already on 5 minutes moves to 15 once with this update, because saving any setting used to write 5 down whether or not you picked it; pick 5 again in Settings → Planning and it stays.
 
 ### Fixed
 - In the Material style with Letter keys on, T goes to today in the view you are on: Day shows today again and Month shows this month, as Week already did.

@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QAbstractButton
 
 from backend.slots import DAY_END_MIN, SLOT_MIN, hhmm_to_minutes
 from desktop.native.calendar import DAY_FULL, DAYS, FLEX_CATEGORIES, monday_of, sunday_due
-from desktop.native.hours.geometry import next_slot
+from desktop.native.hours.geometry import drag_step, next_slot
 from desktop.native.material.sheet_block import BlockDraft
 from desktop.native.material.sheet_homework import HomeworkDraft
 from desktop.native.reuse import (
@@ -259,7 +259,8 @@ class SheetsBridge(QObject):
         if session is None or session.account is None:
             return
         start_min, end_min = sorted((start_min, end_min))
-        if end_min - start_min < 15:
+        # One step is the shortest block a draw makes, as in the Widgets grid.
+        if end_min - start_min < drag_step((session.preferences or {}).get("drag_step_min")):
             return
         category = session.armed_category
         self._block = BlockDraft(

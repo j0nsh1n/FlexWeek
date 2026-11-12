@@ -152,6 +152,7 @@ def test_down_on_end_goes_to_the_next_time_in_order(qapp: QApplication, shell: N
 
 
 def test_a_quarter_hour_block_lists_no_extra_times(qapp: QApplication, shell: NativeWindow, sheets) -> None:
+    shell.session.preferences = {**(shell.session.preferences or {}), "drag_step_min": 15}
     sheets.editBlock("school", 0)
     pump(qapp)
     form = sheets.form

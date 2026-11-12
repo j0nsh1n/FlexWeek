@@ -15,6 +15,7 @@ from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from backend.app import Preferences
 from backend.models import valid_spotify_url
+from desktop.native.hours.geometry import DRAG_STEPS, drag_step
 from desktop.native.material.bridge_month import _ROLES, read_cells
 from desktop.native.material.bridge_rows import Labels, Rows
 from desktop.native.material.theme import (
@@ -911,6 +912,7 @@ class SettingsBridge(QObject):
                 ),
             ],
             "buffer": (0 if prefs.get(_BUFFER) == 0 else int(prefs.get(_BUFFER) or 15)) if _BUFFER else 15,
+            "dragStep": drag_step(prefs.get("drag_step_min")),
             "urgent": bool(prefs.get(_URGENT, True)) if _URGENT else False,
             "weekendFree": bool(prefs.get(_WEEKEND_FREE)) if _WEEKEND_FREE else False,
             "showWeekends": bool(prefs.get(_SHOW_WEEKENDS, True)) if _SHOW_WEEKENDS else True,
@@ -934,6 +936,7 @@ class SettingsBridge(QObject):
             "showSplit": _SPLIT is not None,
             "showCutoff": "day_cutoff" in _FIELDS,
             "showBuffer": _BUFFER is not None,
+            "showDragStep": "drag_step_min" in _FIELDS,
             "showUrgent": _URGENT is not None,
             "showWeekendFree": _WEEKEND_FREE is not None,
             "showWeekendsRow": _SHOW_WEEKENDS is not None,
@@ -1237,6 +1240,11 @@ class SettingsBridge(QObject):
         if _BUFFER is None or minutes not in (0, 15, 30):
             return
         self._write({_BUFFER: minutes})
+
+    @Slot(int)
+    def setDragStep(self, minutes: int) -> None:
+        if "drag_step_min" in _FIELDS and minutes in DRAG_STEPS:
+            self._write({"drag_step_min": minutes})
 
     @Slot(bool)
     def setUrgent(self, on: bool) -> None:

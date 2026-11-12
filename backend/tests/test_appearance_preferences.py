@@ -9,7 +9,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend.app import create_app
+from backend.app import Preferences, create_app
 
 PASSWORD = "a-long-test-password"
 WRITE = {"X-FlexWeek-Request": "1", "Origin": "http://testserver"}
@@ -169,7 +169,7 @@ def test_the_alarm_tone_planning_style_drag_step_and_setup_progress_round_trip(a
         **defaults(),
         "alarm_tone": "glass",
         "planning_style": "manual",
-        "drag_step_min": 15,
+        "drag_step_min": 5,
         "setup": {"version": 1, "step": 3, "finished_at": None},
     }
     saved = alice.put("/api/preferences", json=payload, headers=WRITE)
@@ -178,6 +178,41 @@ def test_the_alarm_tone_planning_style_drag_step_and_setup_progress_round_trip(a
     finished = {**payload, "setup": {"version": 1, "step": 6, "finished_at": "2026-09-22T16:30"}}
     assert alice.put("/api/preferences", json=finished, headers=WRITE).status_code == 200
     assert alice.get("/api/preferences").json()["setup"]["finished_at"] == "2026-09-22T16:30"
+
+
+def _step_read_back(client: TestClient) -> tuple[dict, int]:
+    """What the API sends, and the step a client reading it ends on (a missing key is the default)."""
+    body = client.get("/api/preferences").json()
+    return body, Preferences(**body).drag_step_min
+
+
+def test_an_account_that_never_chose_a_time_step_reads_15(alice: TestClient) -> None:
+    body, step = _step_read_back(alice)
+    assert "drag_step_min" not in body
+    assert step == 15
+
+
+def test_a_chosen_5_is_sent_back_and_survives_a_restart_while_a_chosen_15_reads_15(
+    database: Path, alice: TestClient
+) -> None:
+    five = {**defaults(), "drag_step_min": 5}
+    assert alice.put("/api/preferences", json=five, headers=WRITE).status_code == 200
+    body, step = _step_read_back(alice)
+    assert body["drag_step_min"] == 5 and step == 5
+
+    with TestClient(create_app(database=database, origin="http://testserver")) as restarted:
+        login = restarted.post(
+            "/api/auth/login", json={"username": "alice", "password": PASSWORD}, headers=WRITE
+        )
+        assert login.status_code == 200, login.text
+        body, step = _step_read_back(restarted)
+        assert body["drag_step_min"] == 5 and step == 5
+
+        fifteen = {**defaults(), "drag_step_min": 15}
+        assert restarted.put("/api/preferences", json=fifteen, headers=WRITE).status_code == 200
+        body, step = _step_read_back(restarted)
+        assert "drag_step_min" not in body
+        assert step == 15
 
 
 @pytest.mark.parametrize(

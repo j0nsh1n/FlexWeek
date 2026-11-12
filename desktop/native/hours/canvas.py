@@ -1668,9 +1668,10 @@ class HoursCanvas(QWidget):
         self.hand.press(self, held, at, tap=lambda: self._quick_create(track, anchor), home=(self, track))
 
     def _step_at(self, track: LinearTrack, point: QPointF) -> int:
-        """The quarter hour nearest the pointer, whatever the drag step: a click or a menu makes something
-        at a slot, and the start of the step the pointer was in put a click just short of 08:00 at 07:55."""
-        return min(max(snap(track.minute_at(point), SLOT_MIN), track.first), track.last - SLOT_MIN)
+        """The mark of the student's drag step nearest the pointer: a click or a menu makes something at a
+        slot, and the start of the step the pointer was in put a click just short of 08:00 at 07:55. The last
+        quarter hour of the day stays out of reach, as a block needs room to start."""
+        return min(max(snap(track.minute_at(point), self.hand.step), track.first), track.last - SLOT_MIN)
 
     def _edge_kind(self, rect: QRectF, upright: QPointF, track: LinearTrack) -> Gesture:
         """Resize from within a few pixels of the start or end edge of a block long enough to have

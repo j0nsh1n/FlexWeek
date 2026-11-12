@@ -86,7 +86,7 @@ Item {
 
     function snapToQuarter(y) {
         var rawMin = (y / root.row) * 60
-        var snapped = Math.round(rawMin / 15) * 15
+        var snapped = Math.round(rawMin / root.dragStep) * root.dragStep
         return Math.max(0, Math.min(24 * 60, snapped))
     }
 

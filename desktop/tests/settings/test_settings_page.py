@@ -87,9 +87,14 @@ def test_settings_saves_once_after_a_burst_and_closing_saves_it_at_once(
 def test_the_drag_step_is_chosen_in_settings_kept_by_the_account_and_given_to_the_hand(
     qapp: QApplication, window: NativeWindow
 ) -> None:
-    """Five minutes until the student says otherwise. Fifteen, picked in Settings, moves the hand at
-    once, is saved with the account and read back from it; five again is the default once more."""
-    assert window.hand.step == 5
+    """Fifteen minutes until the student says otherwise, and Settings shows it picked. Five, picked in
+    Settings, moves the hand at once, is saved with the account and read back from it; fifteen again is the
+    default once more, which the server leaves out."""
+    assert window.hand.step == 15
+    assert "drag_step_min" not in (window.session.preferences or {})
+    never_chose = open_settings(window)
+    assert never_chose.findChild(QRadioButton, "prefDragStep-15").isChecked()
+    never_chose.close_page()
 
     def stored() -> dict:
         got: dict = {}
@@ -99,13 +104,14 @@ def test_the_drag_step_is_chosen_in_settings_kept_by_the_account_and_given_to_th
         wait_until(qapp, lambda: bool(got))
         return got
 
-    for choice in (15, 5):
+    for choice in (5, 15):
         page = open_settings(window)
         page.findChild(QRadioButton, f"prefDragStep-{choice}").click()
         assert window.hand.step == choice, "applied while Settings is open"
         page.close_page()
         wait_until(qapp, lambda: not window.session.busy)
-        assert stored().get("drag_step_min", 5) == choice
+        assert stored().get("drag_step_min", 15) == choice
+        assert ("drag_step_min" in stored()) == (choice == 5)
         assert window.hand.step == choice
 
 

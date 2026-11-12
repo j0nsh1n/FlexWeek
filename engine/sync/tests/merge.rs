@@ -1374,7 +1374,7 @@ fn a_paired_account_keeps_none_after_reopening_twice() {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
     }
     flexweek_store::initialize(&path, "2026-10-12").unwrap();
     flexweek_store::initialize(&path, "2026-10-12").unwrap();

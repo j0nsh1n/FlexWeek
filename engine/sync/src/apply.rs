@@ -270,10 +270,11 @@ fn write_real(tx: &Connection, user_id: i64, record: &Record) -> SyncResult<()> 
         }
         "pref" => {
             if let Some(body) = body {
-                // Version 4 already ran the 0→15 move. A new row at 0 would be
-                // treated as an old default and changed on the next open.
+                // The row is made at the newest version: its one-time moves (0→15 gap, 5→15 time
+                // step) already ran, or a value chosen here would be treated as an old default and
+                // changed on the next open.
                 tx.execute(
-                    "INSERT INTO preferences(user_id, prefs_version) VALUES (?1, 4)
+                    "INSERT INTO preferences(user_id, prefs_version) VALUES (?1, 5)
                      ON CONFLICT(user_id) DO NOTHING",
                     [user_id],
                 )?;

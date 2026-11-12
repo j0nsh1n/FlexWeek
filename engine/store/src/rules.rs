@@ -297,7 +297,7 @@ pub fn preferences_fields(row: &Value) -> StoreResult<Value> {
         "planning_style".into(),
         kept("planning_style", json!("suggest")),
     );
-    fields.insert("drag_step_min".into(), kept("drag_step_min", json!(5)));
+    fields.insert("drag_step_min".into(), kept("drag_step_min", json!(15)));
     fields.insert("clock_24h".into(), switch("clock_24h", false));
     fields.insert("setup".into(), kept("setup", Value::Null));
     Ok(Value::Object(fields))
@@ -662,7 +662,7 @@ mod tests {
                 r#""start_at_login":false,"preferred_view":null,"sidebar_collapsed":false,"#,
                 r#""sidebar_width_px":null,"theme_pack":"system","accent":"default","#,
                 r#""accent_chips":false,"motion":null,"alarm_tone":"chime","#,
-                r#""planning_style":"suggest","drag_step_min":5,"clock_24h":false,"setup":null}"#
+                r#""planning_style":"suggest","drag_step_min":15,"clock_24h":false,"setup":null}"#
             )
         );
     }
@@ -683,6 +683,15 @@ mod tests {
         assert_eq!(fields["tray_notifications"], json!(false));
         assert_eq!(fields["drag_step_min"], json!(10));
         assert_eq!(fields["setup"], json!({"x": 1}));
+    }
+
+    #[test]
+    fn a_missing_time_step_reads_fifteen_and_a_stored_five_or_fifteen_is_kept() {
+        let step =
+            |comfort: &str| preferences_fields(&row("", comfort)).unwrap()["drag_step_min"].clone();
+        assert_eq!(step("{}"), json!(15));
+        assert_eq!(step(r#"{"drag_step_min": 5}"#), json!(5));
+        assert_eq!(step(r#"{"drag_step_min": 15}"#), json!(15));
     }
 
     #[test]

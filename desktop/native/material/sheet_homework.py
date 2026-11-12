@@ -28,7 +28,7 @@ from desktop.native.calendar import (
     sunday_due,
 )
 from desktop.native.fields import QUICK_LENGTHS
-from desktop.native.hours.geometry import next_slot
+from desktop.native.hours.geometry import drag_step
 from desktop.native.reuse import due_point
 from desktop.native.weekmodel import clock_text, due_label, hhmm_text, length_label
 from desktop.native.widgets import (
@@ -53,11 +53,11 @@ SPREAD_CHOICES = (("one", "In one go"), ("spread", "Spread over days"))
 DAYS_AHEAD = 28
 
 
-def quarter_hours(first: int = 0, last: int = 24 * 60 - SLOT_MIN) -> list[dict]:
-    """Every quarter hour from `first` to `last`, as the clock is written."""
+def quarter_hours(step: int = SLOT_MIN) -> list[dict]:
+    """Every mark of the day's time step (quarter hours on 15), as the clock is written."""
     return [
         {"value": f"{minute // 60:02d}:{minute % 60:02d}", "label": clock_text(minute)}
-        for minute in range(first, last + 1, SLOT_MIN)
+        for minute in range(0, 24 * 60, step)
     ]
 
 
@@ -536,26 +536,30 @@ class HomeworkDraft:
         return today_from_words(self.now.hour * 60 + self.now.minute)
 
     def _pinned_time_options(self) -> list[dict]:
-        """Every quarter hour, less the ones already over when the pinned day is today. A time the homework
-        already had on that day stays, as does everything for finished homework, as the refusal allows.
-        A time off the quarter hour (a pin made by a 5-minute drag) is listed too, in order, so the field
-        can show it and Up and Down step from it."""
+        """Every mark of the time step, less the ones already over when the pinned day is today. A time the
+        homework already had on that day stays, as does everything for finished homework, as the refusal
+        allows. A time off the step (a pin made before the step changed) is listed too, in order, so the
+        field can show it and Up and Down step from it."""
         options = self._quarter_options()
         own = {self.when_time}
         if self.placed and self.placed[0] == self.when_day:
             own.add(self.placed[1])
-        off_grid = [hhmm for hhmm in own if hhmm and hhmm_to_minutes(hhmm) % SLOT_MIN]
+        off_grid = [hhmm for hhmm in own if hhmm and hhmm_to_minutes(hhmm) % self._step()]
         extra = [{"value": hhmm, "label": hhmm_text(hhmm)} for hhmm in off_grid]
         return sorted([*options, *extra], key=lambda item: hhmm_to_minutes(item["value"]))
 
+    def _step(self) -> int:
+        return drag_step((self.session.preferences or {}).get("drag_step_min"))
+
     def _quarter_options(self) -> list[dict]:
-        options = quarter_hours()
+        step = self._step()
+        options = quarter_hours(step)
         week = self.session.week_start
         today_is_shown = week is not None and monday_of(self.today) == week
         if self.completed or not today_is_shown or self.when_day != self.now.weekday():
             return options
-        ahead, earliest = next_slot(self.now.hour * 60 + self.now.minute, first=0, last=24 * 60 - SLOT_MIN)
-        if ahead:
+        earliest = -(-(self.now.hour * 60 + self.now.minute) // step) * step
+        if earliest > 24 * 60 - step:
             return options
         saved = self.placed[1] if self.placed and self.placed[0] == self.when_day else None
         return [o for o in options if hhmm_to_minutes(o["value"]) >= earliest or o["value"] == saved]
@@ -602,7 +606,7 @@ class HomeworkDraft:
             "dueDate": self.due_date,
             "dueTime": self.due_time,
             "dueOptions": self._due_options(),
-            "timeOptions": [{"value": "", "label": "End of day"}, *quarter_hours()],
+            "timeOptions": [{"value": "", "label": "End of day"}, *quarter_hours(self._step())],
             "pinnedTimeOptions": self._pinned_time_options(),
             "dueProblem": self.due_problem,
             "whenChoices": [{"value": value, "label": label} for value, label in WHEN_CHOICES],

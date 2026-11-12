@@ -1,6 +1,6 @@
-"""A time made from where the pointer is lands on the nearest quarter hour: the free-time menu names that
-slot, a click opens New event on it, and a block made by dragging starts on it, whatever drag step the
-student chose."""
+"""A time made from where the pointer is lands on the nearest mark of the drag step the student chose (a
+quarter hour on 15, every five minutes on 5): the free-time menu names that slot, a click opens New event on
+it, and a block made by dragging starts on it."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
@@ -45,19 +45,23 @@ def opened_editors(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
     return seen
 
 
-@STEPS
 @pytest.mark.parametrize("twenty_four", [True, False])
 @pytest.mark.parametrize(
-    ("pointer", "slot", "twelve"),
+    ("step", "pointer", "slot", "twelve"),
     [
-        ("17:05", "17:00", "5:00 PM"),
-        ("17:20", "17:15", "5:15 PM"),
-        ("17:25", "17:30", "5:30 PM"),
-        ("16:57", "17:00", "5:00 PM"),
-        ("17:40", "17:45", "5:45 PM"),
+        (15, "17:05", "17:00", "5:00 PM"),
+        (15, "17:20", "17:15", "5:15 PM"),
+        (15, "17:25", "17:30", "5:30 PM"),
+        (15, "16:57", "17:00", "5:00 PM"),
+        (15, "17:40", "17:45", "5:45 PM"),
+        (5, "17:05", "17:05", "5:05 PM"),
+        (5, "17:20", "17:20", "5:20 PM"),
+        (5, "17:25", "17:25", "5:25 PM"),
+        (5, "16:55", "16:55", "4:55 PM"),
+        (5, "17:40", "17:40", "5:40 PM"),
     ],
 )
-def test_a_right_click_on_free_time_names_the_nearest_quarter_hour(
+def test_a_right_click_on_free_time_names_the_nearest_mark_of_the_step(
     qapp: QApplication,
     busy_week: NativeWindow,
     menus: dict,
@@ -78,11 +82,20 @@ def test_a_right_click_on_free_time_names_the_nearest_quarter_hour(
     assert menus["shown"][-1][0] == f"Add fixed time at {slot if twenty_four else twelve}"
 
 
-@STEPS
 @pytest.mark.parametrize(
-    ("pointer", "slot"), [("07:57", "08:00"), ("08:05", "08:00"), ("08:10", "08:15"), ("09:50", "09:45")]
+    ("step", "pointer", "slot"),
+    [
+        (15, "07:57", "08:00"),
+        (15, "08:05", "08:00"),
+        (15, "08:10", "08:15"),
+        (15, "09:50", "09:45"),
+        (5, "07:55", "07:55"),
+        (5, "08:05", "08:05"),
+        (5, "08:10", "08:10"),
+        (5, "09:50", "09:50"),
+    ],
 )
-def test_a_click_on_free_time_opens_new_event_on_the_nearest_quarter_hour(
+def test_a_click_on_free_time_opens_new_event_on_the_nearest_mark_of_the_step(
     qapp: QApplication,
     busy_week: NativeWindow,
     monkeypatch: pytest.MonkeyPatch,
@@ -100,9 +113,18 @@ def test_a_click_on_free_time_opens_new_event_on_the_nearest_quarter_hour(
     assert [start for start, _end in seen] == [slot]
 
 
-@STEPS
-@pytest.mark.parametrize(("pointer", "slot"), [("09:57", "10:00"), ("10:04", "10:00"), ("10:12", "10:15")])
-def test_a_block_made_by_dragging_starts_on_the_nearest_quarter_hour(
+@pytest.mark.parametrize(
+    ("step", "pointer", "slot"),
+    [
+        (15, "09:57", "10:00"),
+        (15, "10:04", "10:00"),
+        (15, "10:12", "10:15"),
+        (5, "09:55", "09:55"),
+        (5, "10:05", "10:05"),
+        (5, "10:10", "10:10"),
+    ],
+)
+def test_a_block_made_by_dragging_starts_on_the_nearest_mark_of_the_step(
     qapp: QApplication,
     busy_week: NativeWindow,
     monkeypatch: pytest.MonkeyPatch,

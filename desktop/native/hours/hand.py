@@ -30,7 +30,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QScrollArea, QWidget
 from shiboken6 import isValid
 
 from desktop.native.calendar import DAYS, day_short
-from desktop.native.hours.geometry import DRAG_STEPS, Span, Track, snap
+from desktop.native.hours.geometry import DEFAULT_DRAG_STEP, Span, Track, snap
 from desktop.native.weekmodel import clock_text, length_label
 
 # A drag near a scroll area's edge scrolls it only after resting there this long, so passing
@@ -190,7 +190,7 @@ class Hand(QObject):
         # cycle that only the garbage collector could free, at a moment of its choosing.
         self._judge = judge
         # Minutes a move, a resize or a new block lands on. The window sets it from the account.
-        self.step = DRAG_STEPS[0]
+        self.step = DEFAULT_DRAG_STEP
         self.preview: Preview | None = None
         self.selection: tuple[str, int] | None = None
         self.month_target: str | None = None

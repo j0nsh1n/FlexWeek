@@ -586,7 +586,8 @@ class Preferences(BaseModel):
         default="suggest", exclude_if=lambda value: value == "suggest"
     )
     # Minutes a dragged, resized or drawn block moves by. Typed times are any minute either way.
-    drag_step_min: Literal[5, 15] = Field(default=5, exclude_if=lambda value: value == 5)
+    # 15 unless chosen otherwise, so a chosen 5 is the one that is sent.
+    drag_step_min: Literal[5, 15] = Field(default=15, exclude_if=lambda value: value == 15)
     # Times on screen as 16:00 or as 4:00 PM. Stored and sent as HH:MM either way. 12-hour for a
     # new account; an account from before 0.18.5 that never chose is stamped 24-hour when the store
     # opens.
