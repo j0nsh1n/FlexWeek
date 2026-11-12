@@ -215,6 +215,7 @@ from desktop.native.widgets import (
     BlockDialog,
     ChooseTimeDialog,
     ConfirmSheet,
+    Dialog,
     EndsLayout,
     FittedLabel,
     FlowLayout,
@@ -729,6 +730,10 @@ class NativeWindow(QMainWindow):
         self._block_spare: BlockDialog | None = None
         self._block_spare_account: str | None = None
         self._block_prepare_scheduled = False
+        # What a student typed into a new Add sheet that Esc closed, by kind, for the next plain Add of that
+        # kind: plain values only (never a sheet), the days a drag gave a homework, and the account it is for.
+        self._kept_adds: dict[str, tuple[dict, list[int] | None]] = {}
+        self._kept_adds_account: str | None = None
         self._leaving: QTimer | None = None
         self._saved_to_leave = False
         # A chip let go on another date while a save is under way, moved once that save has landed.
@@ -2617,6 +2622,8 @@ class NativeWindow(QMainWindow):
         self._on_week()
 
     def _on_account(self, account: object) -> None:
+        if account is None or str(account["id"]) != self._kept_adds_account:  # type: ignore[index]
+            self._kept_adds.clear()
         if account is None:
             self._discard_block_spare()
             if self._settings is not None and self._stack.currentWidget() is self._settings:
@@ -3559,8 +3566,22 @@ class NativeWindow(QMainWindow):
             drop_waiting_dim(self)
             raise
 
+    def _keep_add(self, kind: str, dialog: Dialog, days: list[int] | None = None) -> None:
+        """Esc closed a new Add sheet with typing in it: keep what was typed, as plain values, and let the
+        sheet go. The next plain Add of this kind opens a new sheet filled in with it."""
+        self._kept_adds[kind] = (dialog.draft(), days)
+        self._kept_adds_account = self._account_id()
+        dialog.deleteLater()
+
+    def _take_kept_add(self, kind: str) -> tuple[dict | None, list[int] | None]:
+        """What Esc kept for this kind of Add, once, with the days a drag gave it; or nothing."""
+        kept = self._kept_adds.pop(kind, None)
+        return kept if kept is not None else (None, None)
+
     def _commit_block(self, dialog: BlockDialog) -> None:
         if not self._run_sheet(dialog):
+            if dialog.kept_on_escape:
+                self._keep_add("block", dialog)
             return
         if dialog.deleted():
             self._delete_block(
@@ -3601,6 +3622,8 @@ class NativeWindow(QMainWindow):
 
     def _commit_homework(self, dialog: HomeworkDialog, days: list[int] | None = None) -> None:
         if not self._run_sheet(dialog):
+            if dialog.kept_on_escape:
+                self._keep_add("homework", dialog, days)
             return
         if dialog.spread_requested():
             body = dialog.assignment()
@@ -3636,7 +3659,7 @@ class NativeWindow(QMainWindow):
         if category in FLEX_CATEGORIES:
             category = None
         day, start = self._new_event_values()
-        self._commit_new_block(day, start, category)
+        self._commit_new_block(day, start, category, draft=self._take_kept_add("block")[0])
 
     def _commit_new_block(
         self,
@@ -3646,6 +3669,7 @@ class NativeWindow(QMainWindow):
         duration_min: int = 60,
         *,
         from_range: bool = False,
+        draft: dict | None = None,
     ) -> None:
         try:
             self._commit_block(
@@ -3656,6 +3680,7 @@ class NativeWindow(QMainWindow):
                         category=category,
                         duration_min=duration_min,
                         from_range=from_range,
+                        draft=draft,
                     )
                 )
             )
@@ -3670,6 +3695,7 @@ class NativeWindow(QMainWindow):
         category: str | None,
         duration_min: int = 60,
         from_range: bool = False,
+        draft: dict | None = None,
     ) -> BlockDialog:
         spare = self._block_spare
         if spare is not None and self._block_spare_account == self._account_id() and isValid(spare):
@@ -3678,11 +3704,20 @@ class NativeWindow(QMainWindow):
             spare.fill_new(
                 day=day, start=start, category=category, duration_min=duration_min, from_range=from_range
             )
-            return spare
-        self._discard_block_spare()
-        return BlockDialog(
-            self, day=day, start=start, duration_min=duration_min, category=category, from_range=from_range
-        )
+            dialog = spare
+        else:
+            self._discard_block_spare()
+            dialog = BlockDialog(
+                self,
+                day=day,
+                start=start,
+                duration_min=duration_min,
+                category=category,
+                from_range=from_range,
+            )
+        if draft:
+            dialog.apply_draft(draft)
+        return dialog
 
     def _new_event_values(self) -> tuple[int, str]:
         """A new event opens on the next quarter hour still ahead today, or with none left, the first one
@@ -3823,9 +3858,15 @@ class NativeWindow(QMainWindow):
         category = self.session.armed_category
         if category not in FLEX_CATEGORIES:
             category = "assignments"
-        self._commit_homework(
-            self._sheet(lambda: HomeworkDialog(self, today=self._today(), category=category))
-        )
+        draft, days = self._take_kept_add("homework")
+
+        def build() -> HomeworkDialog:
+            dialog = HomeworkDialog(self, today=self._today(), category=category)
+            if draft:
+                dialog.apply_draft(draft)
+            return dialog
+
+        self._commit_homework(self._sheet(build), days)
 
     def _today(self) -> str:
         return clock_parts(self.session.now_ms())["iso"]
