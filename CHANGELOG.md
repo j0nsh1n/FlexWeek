@@ -7,7 +7,7 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ### Added
 - In the Material style, a block's menu in Week and Day (right-click, Shift+F10, the Menu key) has Duplicate, Move to day... and Copy, for fixed times and homework. Duplicate and Copy work as in the Widgets styles; Move to day... opens a list of the week's days with today marked, and the block goes to that day at the same time, with Undo. Ctrl+V pastes what Copy took, into today in Week or the day on view in Day.
-- In the Material style, Week and Day blocks can be dragged: press and drag a block to move it to another time (and, in Week, another day), or drag its top or bottom edge to change its start or end, for fixed times and homework alike. It snaps to 15 minutes, saves the way the Widgets styles' drag does, and shows the Undo notice; Esc during the drag puts the block back and saves nothing.
+- In the Material style, Week and Day blocks can be dragged: press and drag a block to move it to another time (and, in Week, another day), or drag its top or bottom edge to change its start or end, for fixed times and homework alike. It lands on your Dragging step (every 5 minutes or every quarter hour) and an edge never leaves a block shorter than one step; it saves the way the Widgets styles' drag does, and shows the Undo notice; Esc during the drag puts the block back and saves nothing.
 - Material Settings → Planning has a Dragging step choice, 5 min or 15 min. It is the same setting as Dragging in Widgets Settings and the planning page of Setup, so a pick in one shows in the others.
 
 ### Changed
