@@ -29,6 +29,7 @@ AROUND_RING = 260
 class FocusScreen(QWidget):
     back_requested = Signal()
     start_requested = Signal()
+    timer_requested = Signal()
     pause_requested = Signal()
     skip_requested = Signal()
     stop_requested = Signal()
@@ -62,6 +63,14 @@ class FocusScreen(QWidget):
         # Skip and Finish are outlined beside Pause; Take a break is a word.
         self.start = self._button("Start", "focusScreenStart", self.start_requested)
         self.start.setToolTip("Start a focus timer now, without picking homework.")
+        # Beside Start when homework is offered: the same timer, tied to nothing.
+        self.just_timer = self._button(
+            "Just a timer", "focusScreenJustTimer", self.timer_requested, quiet=True
+        )
+        self.just_timer.setToolTip("Start a focus timer that isn't tied to any homework.")
+        for choice in (self.start, self.just_timer):
+            # Enter presses the button with the keyboard on it, as Space does.
+            choice.setAutoDefault(True)
         self.pause = self._button("Pause", "focusScreenPause", self.pause_requested)
         self.skip = self._button("Skip", "focusScreenSkip", self.skip_requested, outlined=True)
         self.stop = self._button("Finish", "focusScreenFinish", self.stop_requested, outlined=True)
@@ -69,7 +78,15 @@ class FocusScreen(QWidget):
         self.finished = self._button("Finished", "focusScreenFinished", self.finished_requested)
         self.finished.setToolTip("Mark this homework as finished.")
         self.take_break = self._button("Take a break", "focusScreenBreak", self.break_requested, quiet=True)
-        for button in (self.start, self.pause, self.skip, self.stop, self.finished, self.take_break):
+        for button in (
+            self.start,
+            self.just_timer,
+            self.pause,
+            self.skip,
+            self.stop,
+            self.finished,
+            self.take_break,
+        ):
             buttons.addWidget(button)
         buttons.addStretch(1)
         layout.addLayout(buttons)
@@ -111,11 +128,13 @@ class FocusScreen(QWidget):
         phase = None if state is None else state.get("phase")
         ended = phase == "ended"
         running = state is not None and not ended
+        offer = session.quick_focus_offer() if state is None else None
         self.ring.set_waiting(state is None)
         if state is None:
             self.phase.setText(READY)
             self.ring.set_number(format_countdown(phase_duration_ms("work", prefs)))
-            self._task_words = QUICK_TITLE
+            # With homework on now or next today the screen names it, and Start counts toward it.
+            self._task_words = QUICK_TITLE if offer is None else str(offer["title"])
             self.ring.set_left(1.0)
         else:
             paused = running and not state.get("running")
@@ -128,6 +147,12 @@ class FocusScreen(QWidget):
         self._show_task()
         self._level_buttons()
         self.start.setVisible(state is None)
+        self.just_timer.setVisible(offer is not None)
+        self.start.setToolTip(
+            "Start a focus timer now, without picking homework."
+            if offer is None
+            else f"Start focusing on {offer['title']}. The time counts toward it."
+        )
         self.pause.setText("Pause" if state and state.get("running") else "Resume")
         self.skip.setToolTip(SKIP_TIPS.get(phase or "", ""))
         for button in (self.pause, self.skip, self.stop):
@@ -139,7 +164,15 @@ class FocusScreen(QWidget):
     def _level_buttons(self) -> None:
         """Every button as tall as the tallest, shown or not: the filled ones and the outlined ones
         differ by a few pixels, and the row's height moves the ring when one set replaces the other."""
-        everyone = (self.start, self.pause, self.skip, self.stop, self.finished, self.take_break)
+        everyone = (
+            self.start,
+            self.just_timer,
+            self.pause,
+            self.skip,
+            self.stop,
+            self.finished,
+            self.take_break,
+        )
         for button in everyone:
             button.setMinimumHeight(0)
             button.ensurePolished()

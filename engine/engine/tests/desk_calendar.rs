@@ -253,7 +253,7 @@ fn test_a_past_start_names_the_next_quarter_hour_today() {
     let thursday = "2026-10-08";
     let at = 15 * 60 + 10;
     assert_eq!(
-        past_problem(week, 3, 15 * 60, thursday, at)
+        past_problem("flexible", week, 3, 15 * 60, thursday, at)
             .expect("a verdict")
             .as_deref(),
         Some("That time has passed. Choose 15:15 or later today, or another day.")
@@ -265,7 +265,7 @@ fn test_a_past_start_rounds_the_clock_up_to_the_next_quarter_hour() {
     let week = "2026-10-05";
     let thursday = "2026-10-08";
     let refused_at = |now: i64, start: i64| {
-        past_problem(week, 3, start, thursday, now)
+        past_problem("flexible", week, 3, start, thursday, now)
             .expect("a verdict")
             .expect("a refusal")
     };
@@ -279,7 +279,7 @@ fn test_a_past_start_rounds_the_clock_up_to_the_next_quarter_hour() {
         "a clock already on the quarter hour is not rounded past it"
     );
     assert_eq!(
-        past_problem(week, 3, 15 * 60 + 15, thursday, 15 * 60 + 15).unwrap(),
+        past_problem("flexible", week, 3, 15 * 60 + 15, thursday, 15 * 60 + 15).unwrap(),
         None,
         "15:15 itself is not past"
     );
@@ -295,7 +295,7 @@ fn test_a_start_on_an_earlier_day_says_that_day_is_over() {
     let week = "2026-10-05";
     let thursday = "2026-10-08";
     assert_eq!(
-        past_problem(week, 1, 18 * 60, thursday, 9 * 60)
+        past_problem("flexible", week, 1, 18 * 60, thursday, 9 * 60)
             .expect("a verdict")
             .as_deref(),
         Some("That time has passed. The day is over, so choose another day."),
@@ -308,15 +308,37 @@ fn test_a_past_start_after_11_45_pm_says_the_day_is_over() {
     let week = "2026-10-05";
     let thursday = "2026-10-08";
     assert_eq!(
-        past_problem(week, 3, 23 * 60 + 30, thursday, 23 * 60 + 50)
+        past_problem("flexible", week, 3, 23 * 60 + 30, thursday, 23 * 60 + 50)
             .expect("a verdict")
             .as_deref(),
         Some("That time has passed. The day is over, so choose another day.")
     );
     assert_eq!(
-        past_problem(week, 3, 23 * 60 + 30, thursday, 23 * 60 + 45)
+        past_problem("flexible", week, 3, 23 * 60 + 30, thursday, 23 * 60 + 45)
             .expect("a verdict")
             .as_deref(),
         Some("That time has passed. Choose 23:45 or later today, or another day.")
+    );
+}
+
+#[test]
+fn test_a_fixed_time_may_start_in_the_past() {
+    let week = "2026-10-05";
+    let thursday = "2026-10-08";
+    assert_eq!(
+        past_problem("locked", week, 3, 15 * 60, thursday, 15 * 60 + 10).expect("a verdict"),
+        None,
+        "earlier today"
+    );
+    assert_eq!(
+        past_problem("locked", week, 1, 18 * 60, thursday, 9 * 60).expect("a verdict"),
+        None,
+        "an earlier day"
+    );
+    assert!(
+        past_problem("flexible", week, 3, 15 * 60, thursday, 15 * 60 + 10)
+            .expect("a verdict")
+            .is_some(),
+        "homework at the same start is still refused"
     );
 }

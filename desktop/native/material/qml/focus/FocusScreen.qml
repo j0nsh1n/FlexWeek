@@ -176,7 +176,7 @@ FocusScope {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 8
             function takeFocus() {
-                var order = [start, pause, finished]
+                var order = [start, justTimer, pause, finished]
                 for (var index = 0; index < order.length; index++) {
                     if (order[index].visible) {
                         order[index].forceActiveFocus()
@@ -198,6 +198,20 @@ FocusScope {
                 icon: "play_arrow"
                 text: "Start"
                 onClicked: root.focusBridge.begin()
+            }
+
+            Button {
+                id: justTimer
+                objectName: "focusJustTimer"
+                visible: root.focusBridge ? root.focusBridge.ready && root.focusBridge.offered : false
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                kind: "text"
+                text: "Just a timer"
+                accessName: "Start a timer that isn't tied to any homework"
+                onClicked: root.focusBridge.beginTimer()
             }
 
             Button {

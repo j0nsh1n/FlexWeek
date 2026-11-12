@@ -31,26 +31,21 @@ from desktop.tests.window_support import free, host, qapp  # noqa: F401
 
 
 @pytest.mark.usefixtures("twelve_hour_clock")
-def test_a_new_fixed_block_at_a_past_time_is_refused(
+def test_a_new_fixed_block_at_a_past_time_is_accepted(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
 ) -> None:
-    """New blocks are checked on every chosen day; Friday in the future still saves."""
+    """A fixed time may start on a day that is over or earlier today; no past-time line appears."""
     CLOCK.set(datetime.fromisoformat(window.session.week_start) + timedelta(days=3, hours=16, minutes=40))
-    dialog = BlockDialog(window, day=1, start="09:00")
-    dialog.title.setText("Early club")
-    go_when(dialog)
-    dialog.accept()
-    assert dialog.result() != QDialog.DialogCode.Accepted
-    # Tuesday seen on Thursday 4:40 PM: that day is over, so no "later today".
-    assert dialog.duration_line.text() == ("That time has passed. The day is over, so choose another day.")
-    dialog.close()
-    future = BlockDialog(window, day=4, start="09:00")
-    future.title.setText("Friday club")
-    go_when(future)
-    future.accept()
-    assert future.result() == QDialog.DialogCode.Accepted
-    future.close()
+    for day, start in ((1, "09:00"), (3, "09:00")):
+        dialog = BlockDialog(window, day=day, start=start)
+        dialog.title.setText("Early club")
+        go_when(dialog)
+        dialog.accept()
+        assert dialog.result() == QDialog.DialogCode.Accepted, (day, start)
+        assert "That time has passed" not in dialog.duration_line.text()
+        assert (dialog.block()["days"], dialog.block()["start"]) == ([day], start)
+        dialog.close()
 
 
 @pytest.mark.usefixtures("twelve_hour_clock")

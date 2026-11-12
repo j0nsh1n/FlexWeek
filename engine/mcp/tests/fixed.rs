@@ -20,8 +20,6 @@ use serde_json::{Value, json};
 const TOKEN: &str = "abcdefghijklmnopqrstuvwxyz012345";
 const WEEK: &str = "2026-10-19";
 const NEXT: &str = "2026-10-26";
-const PAST_TODAY: &str = "That time has passed. Choose 12:00 or later today, or another day.";
-const PAST_DAY: &str = "That time has passed. The day is over, so choose another day.";
 
 struct World {
     data_arg: String,
@@ -265,19 +263,44 @@ fn add_block_beside_school_is_allowed_and_named() {
 }
 
 #[test]
+fn add_block_accepts_a_start_that_has_already_passed() {
+    // Now is Wednesday 2026-10-21 12:00: 09:00 today and any time on Monday are behind us.
+    let world = signed_in("add-in-the-past");
+    seed_week(&world, json!([club(&[2], "16:00")]));
+    let mut server = boot(&world);
+    let today = add(
+        &mut server,
+        "op-add-past-today",
+        json!({"title": "Breakfast", "days": [2], "start": "09:00", "end": "10:00"}),
+        2,
+    );
+    assert_eq!(
+        body_of(&today)["ok"],
+        json!(true),
+        "a fixed time earlier today is accepted, got {today}"
+    );
+    let earlier_day = add(
+        &mut server,
+        "op-add-past-day",
+        json!({"title": "Practice", "days": [0], "start": "18:00", "end": "19:00"}),
+        3,
+    );
+    assert_eq!(
+        body_of(&earlier_day)["ok"],
+        json!(true),
+        "a fixed time on an earlier day is accepted, got {earlier_day}"
+    );
+    let week = seen(&mut server, WEEK, 4);
+    assert_eq!(titled(&week, "Breakfast").len(), 1, "got {week}");
+    assert_eq!(titled(&week, "Practice").len(), 1, "got {week}");
+}
+
+#[test]
 fn add_block_refuses_what_the_block_editor_refuses() {
     let world = signed_in("add-refusals");
     seed_week(&world, json!([club(&[2], "16:00")]));
     let mut server = boot(&world);
     let cases = [
-        (
-            json!({"days": [2], "start": "09:00", "end": "10:00"}),
-            Some(PAST_TODAY),
-        ),
-        (
-            json!({"days": [0], "start": "18:00", "end": "19:00"}),
-            Some(PAST_DAY),
-        ),
         (
             json!({"start": "18:00", "end": "18:00"}),
             Some("End needs to be later than Start (18:00)."),
@@ -442,7 +465,28 @@ fn edit_block_of_one_day_splits_it_off_the_series() {
 }
 
 #[test]
-fn edit_block_refuses_homework_and_past_starts() {
+fn edit_block_may_move_a_fixed_time_to_a_start_that_has_passed() {
+    // Now is Wednesday 2026-10-21 12:00.
+    let world = signed_in("edit-into-the-past");
+    seed_week(&world, json!([club(&[2], "16:00")]));
+    let mut server = boot(&world);
+    let response = server.call(
+        "edit_block",
+        json!({"operation_id": "op-edit-club-past", "week_start": WEEK, "expected_revision": 4,
+            "block_id": "club", "start": "10:00", "end": "11:00"}),
+        2,
+    );
+    assert_eq!(
+        body_of(&response)["ok"],
+        json!(true),
+        "an earlier start today is accepted, got {response}"
+    );
+    let (blocks, _) = stored(&world, WEEK);
+    assert_eq!(by_id(&blocks, "club")["start"], json!("10:00"));
+}
+
+#[test]
+fn edit_block_refuses_homework() {
     let world = signed_in("edit-refusals");
     seed_week(
         &world,
@@ -466,13 +510,6 @@ fn edit_block_refuses_homework_and_past_starts() {
         Some("Use the homework editor for flexible work."),
         "got {flexible}"
     );
-    let past = server.call(
-        "edit_block",
-        json!({"operation_id": "op-edit-club-past", "week_start": WEEK, "expected_revision": 4,
-            "block_id": "club", "start": "10:00", "end": "11:00"}),
-        3,
-    );
-    assert_eq!(tool_error_text(&past), Some(PAST_TODAY), "got {past}");
     let missing = server.call(
         "edit_block",
         json!({"operation_id": "op-edit-nope", "week_start": WEEK, "expected_revision": 4,

@@ -3,7 +3,7 @@
 use flexweek_engine::desk::focus::{
     begin_state, break_phase, credit_target, focus_candidates, focus_now, format_countdown,
     more_time_choices, now_and_next, now_next_line, pause_state, persist_payload,
-    phase_duration_ms, remaining_ms, restore_state, set_phase,
+    phase_duration_ms, quick_focus_homework, remaining_ms, restore_state, set_phase,
 };
 use serde_json::{Value, json};
 
@@ -261,5 +261,130 @@ fn test_focus_now_says_what_the_timer_is_doing() {
     assert_eq!(
         now(json!({"phase": "long_break", "running": false})),
         "break"
+    );
+}
+
+// Thursday 2026-10-15 is day 3 of the week that starts Monday 2026-10-12.
+const WEEK: &str = "2026-10-12";
+
+fn session(id: &str, assignment: &str, day: i64, start: &str, minutes: i64) -> Value {
+    json!({
+        "id": id, "assignment_id": assignment, "kind": "flexible", "title": id,
+        "days": [day], "start": start, "duration_min": minutes, "completed": false
+    })
+}
+
+fn assignments() -> Value {
+    json!({
+        "essay": {"id": "essay", "title": "Essay", "due": "2026-10-20", "completed": false},
+        "lab": {"id": "lab", "title": "Lab", "due": "2026-10-20", "completed": false},
+        "read": {"id": "read", "title": "Reading", "due": "2026-10-20", "completed": false}
+    })
+}
+
+fn offered(blocks: &Value, assignments: &Value, now: &str) -> Value {
+    quick_focus_homework(blocks, assignments, &json!({}), WEEK, now).expect("a verdict")
+}
+
+#[test]
+fn test_quick_focus_offers_the_homework_that_is_on_now() {
+    let blocks = json!([session("essay-1", "essay", 3, "14:30", 90)]);
+    let found = offered(&blocks, &assignments(), "2026-10-15T15:00");
+    assert_eq!(found["id"], "essay-1");
+    assert_eq!(found["day"], 3);
+    assert_eq!(found["now"], true, "it started at 14:30 and runs to 16:00");
+}
+
+#[test]
+fn test_quick_focus_offers_the_next_homework_later_today() {
+    let blocks = json!([
+        session("lab-1", "lab", 3, "17:00", 60),
+        session("essay-1", "essay", 3, "16:00", 60),
+    ]);
+    let found = offered(&blocks, &assignments(), "2026-10-15T15:00");
+    assert_eq!(
+        found["id"], "essay-1",
+        "the earlier of the two later sessions"
+    );
+    assert_eq!(found["now"], false);
+}
+
+#[test]
+fn test_quick_focus_prefers_the_homework_on_now_to_a_later_one() {
+    let blocks = json!([
+        session("lab-1", "lab", 3, "16:00", 60),
+        session("essay-1", "essay", 3, "14:30", 90),
+    ]);
+    let found = offered(&blocks, &assignments(), "2026-10-15T15:00");
+    assert_eq!(found["id"], "essay-1");
+    assert_eq!(found["now"], true);
+}
+
+#[test]
+fn test_quick_focus_offers_nothing_when_no_homework_is_left_today() {
+    let blocks = json!([
+        session("essay-1", "essay", 3, "09:00", 60),
+        session("lab-1", "lab", 4, "10:00", 60),
+        session("read-1", "read", 2, "16:00", 60),
+    ]);
+    let found = offered(&blocks, &assignments(), "2026-10-15T15:00");
+    assert!(
+        found.is_null(),
+        "one ended this morning, the others are on other days, got {found}"
+    );
+}
+
+#[test]
+fn test_quick_focus_skips_finished_homework() {
+    let mut done = assignments();
+    done["essay"]["completed"] = json!(true);
+    let blocks = json!([
+        session("essay-1", "essay", 3, "14:30", 90),
+        session("lab-1", "lab", 3, "17:00", 60),
+    ]);
+    let found = offered(&blocks, &done, "2026-10-15T15:00");
+    assert_eq!(found["id"], "lab-1", "the finished essay is not on now");
+    let mut finished_block = session("essay-1", "essay", 3, "14:30", 90);
+    finished_block["completed"] = json!(true);
+    let found = offered(&json!([finished_block]), &assignments(), "2026-10-15T15:00");
+    assert!(
+        found.is_null(),
+        "a finished session is not offered, got {found}"
+    );
+}
+
+#[test]
+fn test_quick_focus_ignores_fixed_time_and_overdue_homework() {
+    let blocks = json!([
+        {
+            "id": "soccer", "kind": "locked", "title": "Soccer", "days": [3],
+            "start": "15:00", "duration_min": 60
+        },
+        session("essay-1", "essay", 3, "16:00", 30),
+    ]);
+    let overdue = json!({
+        "essay": {"id": "essay", "title": "Essay", "due": "2026-10-15T12:00", "completed": false}
+    });
+    let found = offered(&blocks, &overdue, "2026-10-15T15:00");
+    assert!(
+        found.is_null(),
+        "fixed time is not homework and overdue homework has no time, got {found}"
+    );
+}
+
+#[test]
+fn test_quick_focus_offers_nothing_for_a_week_that_is_not_this_one() {
+    let blocks = json!([session("essay-1", "essay", 3, "16:00", 60)]);
+    let found = quick_focus_homework(
+        &blocks,
+        &assignments(),
+        &json!({}),
+        "2026-10-19",
+        "2026-10-15T15:00",
+    )
+    .expect("a verdict");
+    assert!(
+        found.is_null(),
+        "today is not in the week shown, got {found}"
     );
 }

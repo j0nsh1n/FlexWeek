@@ -21,6 +21,7 @@ from desktop.native.widgets import SegmentTrack
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.waiting import wait_until
+from desktop.tests.window_support import turn_on_letter_keys
 
 
 @pytest.fixture(scope="module")
@@ -94,7 +95,9 @@ def test_w_d_and_m_switch_views_while_the_calendar_has_the_keyboard(
 ) -> None:
     """A click in the calendar gives it the keyboard, and Qt sends keys to the widget that has it. Item
     views keep letter keys for their own type-ahead search, so W, D and M never reached the window. The
-    key goes to the calendar itself, as a student's does, not to the window."""
+    key goes to the calendar itself, as a student's does, not to the window. They are Letter keys, which a
+    student turns on."""
+    turn_on_letter_keys()
     session = window.session
     QTest.keyClick(window.week_table.hours, Qt.Key.Key_D)
     wait_until(qapp, lambda: session.planner_view == "day" and not session.busy)

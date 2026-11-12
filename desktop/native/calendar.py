@@ -337,10 +337,11 @@ def is_setup_block(block: dict) -> bool:
 
 
 def past_problem(
-    week_start: str, day: int, start_min: int, now_iso: str, now_min: int
+    kind: str, week_start: str, day: int, start_min: int, now_iso: str, now_min: int
 ) -> str | None:
-    """Why this start is already over, or None. `now_iso` and `now_min` are the local date and minute."""
-    return flexweek_engine.calendar_past_problem(week_start, day, start_min, now_iso, now_min)
+    """Why this start is already over, or None. `kind` is the block's own ("locked" for a fixed time,
+    which may start in the past); `now_iso` and `now_min` are the local date and minute."""
+    return flexweek_engine.calendar_past_problem(kind, week_start, day, start_min, now_iso, now_min)
 
 
 def span_problem(

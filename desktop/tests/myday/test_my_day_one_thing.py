@@ -88,21 +88,21 @@ def test_running_late_opens_the_products_own_running_late(
 
 
 def test_the_keyboard_reaches_my_day_and_back(qapp: QApplication, window: NativeWindow) -> None:
-    """The week grid keeps letter keys for type-ahead, so T has to be taken the way W, D and M are."""
+    """The week grid keeps letter keys for type-ahead, so 4 has to be taken the way the letters are."""
     one_thing(window)
-    QTest.keyClick(window.week_table, Qt.Key.Key_T)
+    QTest.keyClick(window.week_table, Qt.Key.Key_4)
     day = window.planner.currentWidget()
     assert isinstance(day, OneThingView)
     QTest.keyClick(day, Qt.Key.Key_B)
     assert window.planner.currentWidget() is window.week_table
-    QTest.keyClick(window.week_table, Qt.Key.Key_T)
+    QTest.keyClick(window.week_table, Qt.Key.Key_4)
     QTest.keyClick(window.planner.currentWidget(), Qt.Key.Key_Escape)
     assert window.planner.currentWidget() is window.week_table
-    QTest.keyClick(window.week_table, Qt.Key.Key_T)
-    QTest.keyClick(window.planner.currentWidget(), Qt.Key.Key_M)
+    QTest.keyClick(window.week_table, Qt.Key.Key_4)
+    QTest.keyClick(window.planner.currentWidget(), Qt.Key.Key_3)
     wait_until(qapp, lambda: window.planner.currentWidget() is window.month_grid)
     assert window.solve_button.isVisible() is True
-    QTest.keyClick(window.month_grid.canvas, Qt.Key.Key_T)
+    QTest.keyClick(window.month_grid.canvas, Qt.Key.Key_4)
     assert isinstance(window.planner.currentWidget(), OneThingView)
 
 

@@ -4036,7 +4036,7 @@ class BlockDialog(Dialog):
         new_start = self.start.time().toString("HH:mm")
         if not self._existing:
             for day in chosen:
-                past = past_problem(week, day, self.start.minutes(), now_iso, now_min)
+                past = past_problem("locked", week, day, self.start.minutes(), now_iso, now_min)
                 if past:
                     return past
             return ""
@@ -4046,7 +4046,7 @@ class BlockDialog(Dialog):
             start_moved = single and day in original_days and new_start != original_start
             if not added and not start_moved:
                 continue
-            past = past_problem(week, day, self.start.minutes(), now_iso, now_min)
+            past = past_problem("locked", week, day, self.start.minutes(), now_iso, now_min)
             if past:
                 return past
         return ""
@@ -5055,7 +5055,9 @@ class HomeworkDialog(Dialog):
         start = hhmm_to_minutes(fixed["start"])
         if not self.completed.isChecked():
             now = self._now()
-            past = past_problem(week, fixed["day"], start, now.date().isoformat(), now.hour * 60 + now.minute)
+            past = past_problem(
+                "flexible", week, fixed["day"], start, now.date().isoformat(), now.hour * 60 + now.minute
+            )
             if past:
                 return past
         sessions = self._open_sessions()
@@ -6308,7 +6310,9 @@ class ChooseTimeDialog(Dialog):
             problem = None
             if self._now_parts is not None:
                 now_iso, now_min = self._now_parts
-                problem = past_problem(self._week, day, start, now_iso, now_min)
+                problem = past_problem(
+                    str(self._block.get("kind") or ""), self._week, day, start, now_iso, now_min
+                )
             if problem is None:
                 problem = span_problem(self._blocks, self._block["id"], day, start, end, self._due)
         self.problem.setText((problem or "").replace(", so it stayed where it was", ""))
