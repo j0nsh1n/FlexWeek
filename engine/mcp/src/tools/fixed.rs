@@ -8,9 +8,10 @@
 use flexweek_engine::desk::calendar::{FLEX_CATEGORIES, LOCKED_CATEGORIES};
 use flexweek_engine::desk::grid::{apply_block_edit, is_setup_block, past_problem, span_clash};
 use flexweek_engine::desk::weekmodel::clock_text;
+use flexweek_engine::repeats::{apply_to_week, edit_intent};
 use flexweek_engine::time::{clock_to_minutes, hhmm_to_minutes, minutes_to_hhmm};
 use flexweek_store::{
-    ApplyInput, AssignmentInput, Connection, StandingInput, WeekInput, read_week,
+    ApplyInput, AssignmentInput, Connection, WeekInput, read_week, standing_blocks,
     week_with_standing,
 };
 use rmcp::handler::server::wrapper::Parameters;
@@ -207,7 +208,7 @@ fn week_input(week_start: &str, blocks: Vec<Value>, revision: i64) -> ApplyInput
         assignments: Vec::<AssignmentInput>::new(),
         operation_id: None,
         snapshot_label: None,
-        standing: None,
+        repeats: None,
         argument_digest: None,
     }
 }
@@ -440,22 +441,27 @@ fn perform_edit(app: &crate::App, args: &EditArgs) -> Result<Value, String> {
             .collect();
         fields.insert("missed_days".into(), Value::Array(missed));
     }
-    let mut fresh = fresh_ids(&args.operation_id);
-    let edited = apply_block_edit(
-        &Value::Array(blocks),
-        &candidate,
-        &json!(if occurrence { "occurrence" } else { "series" }),
-        &args.day.map_or(Value::Null, Value::from),
-        &mut fresh,
-    )
-    .map_err(|err| err.message)?;
-    let mut input = week_input(&args.week_start, edited, args.expected_revision);
-    if every_week {
-        input.standing = Some(StandingInput {
-            week_start: args.week_start.clone(),
-            blocks: vec![flexweek_engine::standing::standing_body(&candidate)],
-        });
-    }
+    let input = if every_week {
+        every_week_input(
+            &opened.conn,
+            opened.user_id,
+            args,
+            &blocks,
+            start_min,
+            end_min,
+        )?
+    } else {
+        let mut fresh = fresh_ids(&args.operation_id);
+        let edited = apply_block_edit(
+            &Value::Array(blocks),
+            &candidate,
+            &json!(if occurrence { "occurrence" } else { "series" }),
+            &args.day.map_or(Value::Null, Value::from),
+            &mut fresh,
+        )
+        .map_err(|err| err.message)?;
+        week_input(&args.week_start, edited, args.expected_revision)
+    };
     let applied = homework::run_apply(
         &opened.conn,
         opened.user_id,
@@ -467,6 +473,56 @@ fn perform_edit(app: &crate::App, args: &EditArgs) -> Result<Value, String> {
     )?;
     let shown = edited_id(&applied, args, occurrence);
     saved(&applied, &shown, &operation_id)
+}
+
+/// An `every_week` edit: only the arguments the assistant named change, from this week on, measured
+/// against the repeat rather than this week's copy, so what this week changed itself (a skipped day,
+/// a one-week name) neither spreads to later weeks nor is lost here.
+fn every_week_input(
+    conn: &Connection,
+    user_id: i64,
+    args: &EditArgs,
+    blocks: &[Value],
+    start_min: i64,
+    end_min: i64,
+) -> Result<ApplyInput, String> {
+    let repeats =
+        standing_blocks(conn, user_id, &args.week_start).map_err(session::storage_sentence)?;
+    let Some(repeat) = find(&repeats, &args.block_id) else {
+        return Err(NOT_STANDING.into());
+    };
+    let mut wanted = repeat.clone();
+    if let Some(fields) = wanted.as_object_mut() {
+        if let Some(title) = &args.title {
+            fields.insert("title".into(), json!(title.trim()));
+        }
+        if args.category.is_some() {
+            fields.insert(
+                "category".into(),
+                json!(category_of(args.category.as_deref())?),
+            );
+        }
+        if args.start.is_some() || args.end.is_some() {
+            fields.insert("start".into(), json!(minutes_to_hhmm(start_min)));
+            fields.insert("duration_min".into(), json!(end_min - start_min));
+        }
+        if let Some(days) = &args.days {
+            fields.insert("days".into(), json!(days_of(days)?));
+        }
+    }
+    let mut input = week_input(&args.week_start, blocks.to_vec(), args.expected_revision);
+    let Some(intent) = edit_intent(
+        &args.block_id,
+        &args.week_start,
+        Some(&repeat),
+        Some(&wanted),
+    ) else {
+        return Ok(input);
+    };
+    let (week, _) = apply_to_week(blocks, &repeats, std::slice::from_ref(&intent))?;
+    input.weeks[0].blocks = week;
+    input.repeats = Some(vec![intent.to_value()]);
+    Ok(input)
 }
 
 /// The block the edit left on the asked day: a day split off a series has an id of its own.

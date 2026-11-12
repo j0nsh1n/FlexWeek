@@ -12,8 +12,10 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
 use common::{NOW_ISO, NOW_UNIX, Server, scratch, session_path, tool_error_text, tool_ok_text};
+use flexweek_engine::repeats::edit_intent;
 use flexweek_store::{
-    initialize, insert_preferences, insert_user, open_connection, open_session, set_standing,
+    apply_repeat_intents, initialize, insert_preferences, insert_user, open_connection,
+    open_session,
 };
 use serde_json::{Value, json};
 
@@ -85,7 +87,8 @@ fn school_stands(world: &World) {
         "id": "school", "title": "School", "kind": "locked", "duration_min": 420,
         "days": [0, 1, 2, 3, 4], "start": "08:00", "category": "class"
     });
-    set_standing(&conn, world.user, WEEK, &json!([school]).to_string()).expect("school stands");
+    let intent = edit_intent("school", WEEK, None, Some(&school)).expect("new");
+    apply_repeat_intents(&conn, world.user, &[intent]).expect("school stands");
     if !conn.is_autocommit() {
         conn.execute_batch("COMMIT").expect("commit");
     }
@@ -664,6 +667,62 @@ fn school_edited_every_week_stands_from_this_week_on() {
         by_id(&next, "school")["start"],
         json!("08:30"),
         "without every_week next week stays"
+    );
+}
+
+/// Design study item 8 (P1 and P4 through the assistant): an `every_week` change names only what it
+/// changes, measured against the repeat, so this week's deleted Friday and one-week name stay this
+/// week's and the later weeks keep Friday and the name School.
+#[test]
+fn every_week_changes_only_the_named_fields_and_leaves_this_weeks_own_changes_here() {
+    let world = signed_in("school-every-week-own");
+    school_stands(&world);
+    let mut server = boot(&world);
+    let deleted = server.call(
+        "delete_block",
+        json!({"operation_id": "op-own-fri", "week_start": WEEK, "expected_revision": 0,
+            "block_id": "school", "scope": "occurrence", "day": 4}),
+        2,
+    );
+    assert_eq!(body_of(&deleted)["ok"], json!(true), "got {deleted}");
+    let renamed = server.call(
+        "edit_block",
+        json!({"operation_id": "op-own-trip", "week_start": WEEK,
+            "expected_revision": stored(&world, WEEK).1, "block_id": "school", "title": "School trip"}),
+        3,
+    );
+    assert_eq!(body_of(&renamed)["ok"], json!(true), "got {renamed}");
+    let later = server.call(
+        "edit_block",
+        json!({"operation_id": "op-own-end", "week_start": WEEK,
+            "expected_revision": stored(&world, WEEK).1, "block_id": "school", "end": "14:00",
+            "every_week": true}),
+        4,
+    );
+    assert_eq!(body_of(&later)["ok"], json!(true), "got {later}");
+    let week = seen(&mut server, WEEK, 5);
+    let school = by_id(&week, "school");
+    assert_eq!(
+        (&school["title"], &school["days"], &school["duration_min"]),
+        (&json!("School trip"), &json!([0, 1, 2, 3]), &json!(360)),
+        "got {week}"
+    );
+    let next = seen(&mut server, NEXT, 6);
+    let school = by_id(&next, "school");
+    assert_eq!(
+        (
+            &school["title"],
+            &school["days"],
+            &school["start"],
+            &school["duration_min"]
+        ),
+        (
+            &json!("School"),
+            &json!([0, 1, 2, 3, 4]),
+            &json!("08:00"),
+            &json!(360)
+        ),
+        "got {next}"
     );
 }
 

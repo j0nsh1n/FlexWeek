@@ -1,6 +1,7 @@
 """The standing week: School and activities from Setup are in every week from Setup's
-week on, in Week, Day and Month alike; a change reaches the open week on and leaves earlier weeks as they
-were; an export carries it; an account from 0.18 gets one built from its weeks."""
+week on, in Week, Day and Month alike; a change (sent as what it changes, from a date) reaches the open
+week on and leaves earlier weeks as they were; an export carries it; an account from 0.18 gets one built
+from its weeks."""
 
 from __future__ import annotations
 
@@ -45,17 +46,40 @@ def alice(database: Path) -> Iterator[TestClient]:
         yield client
 
 
-def stand_request(client: TestClient, week_start: str, blocks: list[dict]):
+def new(block: dict, from_date: str) -> dict:
+    """Setup making a repeat: everything it needs, from that date on."""
+    fields = ("title", "category", "start", "duration_min")
+    return {
+        "id": block["id"],
+        "scope": "from",
+        "from_date": from_date,
+        "set": {key: block[key] for key in fields if key in block},
+        "add_days": block["days"],
+    }
+
+
+def change(block_id: str, from_date: str, set_: dict | None = None, remove_days: tuple = ()) -> dict:
+    return {"id": block_id, "scope": "from", "from_date": from_date, "set": set_ or {},
+            "remove_days": list(remove_days)}
+
+
+def stop(block_id: str, from_date: str) -> dict:
+    return {"id": block_id, "scope": "from", "from_date": from_date, "stop": True}
+
+
+def stand_request(client: TestClient, intents: list[dict]):
     """The save Setup and School hours send: the open week's own blocks go in `weeks` (none here)."""
-    return client.post(
-        "/api/changes", json={"weeks": [], "standing": {"week_start": week_start, "blocks": blocks}}, headers=WRITE
-    )
+    return client.post("/api/changes", json={"weeks": [], "repeats": intents}, headers=WRITE)
 
 
-def stand(client: TestClient, week_start: str, blocks: list[dict]) -> dict:
-    response = stand_request(client, week_start, blocks)
+def stand(client: TestClient, intents: list[dict]) -> dict:
+    response = stand_request(client, intents)
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def set_up(client: TestClient, *blocks: dict) -> dict:
+    return stand(client, [new(block, SETUP_WEEK) for block in blocks])
 
 
 def week(client: TestClient, week_start: str) -> dict:
@@ -77,7 +101,7 @@ def times(blocks: list[dict]) -> dict[str, tuple]:
 
 
 def test_every_week_from_setups_week_on_has_school_and_soccer(alice: TestClient) -> None:
-    stand(alice, SETUP_WEEK, [SCHOOL, SOCCER])
+    set_up(alice, SCHOOL, SOCCER)
     for later in (SETUP_WEEK, NEXT_WEEK, "2026-11-02"):
         got = week(alice, later)
         assert [b["id"] for b in got["blocks"]] == ["school", "activity-1"], later
@@ -86,7 +110,7 @@ def test_every_week_from_setups_week_on_has_school_and_soccer(alice: TestClient)
 
 
 def test_day_and_month_see_the_standing_week(alice: TestClient) -> None:
-    stand(alice, SETUP_WEEK, [SCHOOL, SOCCER])
+    set_up(alice, SCHOOL, SOCCER)
     tuesday = alice.get("/api/day?date=2026-10-13").json()
     assert {b["id"] for b in tuesday["locked"]} == {"school", "activity-1"}
     month = alice.get("/api/month?month=2026-11").json()
@@ -98,7 +122,7 @@ def test_day_and_month_see_the_standing_week(alice: TestClient) -> None:
 
 
 def test_a_weeks_own_missed_day_stays_in_that_week_only(alice: TestClient) -> None:
-    stand(alice, SETUP_WEEK, [SCHOOL])
+    set_up(alice, SCHOOL)
     missed = {**SCHOOL, "missed_days": [2]}
     save(alice, NEXT_WEEK, [missed])
     assert times(week(alice, NEXT_WEEK)["blocks"])["school"][3] == [2]
@@ -106,11 +130,10 @@ def test_a_weeks_own_missed_day_stays_in_that_week_only(alice: TestClient) -> No
 
 
 def test_a_change_reaches_the_open_week_on_and_keeps_missed_days_still_school_days(alice: TestClient) -> None:
-    stand(alice, SETUP_WEEK, [SCHOOL, SOCCER])
+    set_up(alice, SCHOOL, SOCCER)
     save(alice, WEEK_AFTER, [{**SCHOOL, "missed_days": [2, 4]}, SOCCER, GYM])
-    later = {**SCHOOL, "start": "09:00", "duration_min": 360, "days": [0, 1, 2, 3]}
-    answer = stand(alice, NEXT_WEEK, [later])
-    assert answer["standing_changed_weeks"] == [WEEK_AFTER]
+    answer = stand(alice, [change("school", NEXT_WEEK, {"start": "09:00", "duration_min": 360}, (4,))])
+    assert answer["repeats"]["changed_weeks"] == [WEEK_AFTER]
     assert times(week(alice, SETUP_WEEK)["blocks"])["school"][:2] == ("08:30", 405)
     assert times(week(alice, NEXT_WEEK)["blocks"])["school"][:2] == ("09:00", 360)
     after = week(alice, WEEK_AFTER)
@@ -120,19 +143,29 @@ def test_a_change_reaches_the_open_week_on_and_keeps_missed_days_still_school_da
 
 
 def test_a_standing_update_changes_only_the_blocks_it_names(alice: TestClient) -> None:
-    stand(alice, SETUP_WEEK, [SCHOOL, SOCCER])
+    set_up(alice, SCHOOL, SOCCER)
     later = {**SCHOOL, "start": "09:00", "duration_min": 360}
-    stand(alice, NEXT_WEEK, [later])
+    stand(alice, [change("school", NEXT_WEEK, {"start": "09:00", "duration_min": 360})])
     assert times(week(alice, WEEK_AFTER)["blocks"]) == times([later, SOCCER])
-    stand(alice, NEXT_WEEK, [{"id": "activity-1", "stop": True}])
+    stand(alice, [stop("activity-1", NEXT_WEEK)])
     assert times(week(alice, WEEK_AFTER)["blocks"]) == times([later])
 
 
-def test_only_setups_locked_blocks_with_a_start_can_stand(alice: TestClient) -> None:
-    for blocks in ([GYM], [{**SCHOOL, "kind": "flexible", "start": None}], [SCHOOL, SCHOOL]):
-        assert stand_request(alice, SETUP_WEEK, blocks).status_code == 422, blocks
-    assert stand_request(alice, "2026-10-06", []).status_code == 422
+def test_only_setups_blocks_with_a_start_can_repeat_and_a_change_names_a_real_date(alice: TestClient) -> None:
+    refused = (
+        [new(GYM, SETUP_WEEK)],
+        [new({**SCHOOL, "start": None}, SETUP_WEEK)],
+        [new(SCHOOL, SETUP_WEEK), new(SCHOOL, SETUP_WEEK)],
+        [new(SCHOOL, "2026-10-32")],
+        [{**new(SCHOOL, SETUP_WEEK), "body": SCHOOL}],
+    )
+    for intents in refused:
+        assert stand_request(alice, intents).status_code == 422, intents
     assert week(alice, NEXT_WEEK)["blocks"] == []
+    # A change names the date it holds from; weeks still start on Monday, so a Tuesday's change
+    # holds from that week.
+    stand(alice, [new(SCHOOL, "2026-10-06")])
+    assert [b["id"] for b in week(alice, SETUP_WEEK)["blocks"]] == ["school"]
 
 
 def test_the_open_weeks_save_and_the_standing_week_land_together(alice: TestClient) -> None:
@@ -142,7 +175,7 @@ def test_the_open_weeks_save_and_the_standing_week_land_together(alice: TestClie
         "/api/changes",
         json={
             "weeks": [{"week_start": SETUP_WEEK, "blocks": [{**SCHOOL, "missed_days": [2]}, GYM], "revision": 0}],
-            "standing": {"week_start": SETUP_WEEK, "blocks": [{**SCHOOL, "missed_days": [2]}, SOCCER]},
+            "repeats": [new(SCHOOL, SETUP_WEEK), new(SOCCER, SETUP_WEEK)],
         },
         headers=WRITE,
     )
@@ -153,8 +186,8 @@ def test_the_open_weeks_save_and_the_standing_week_land_together(alice: TestClie
 
 
 def test_an_export_carries_the_standing_week_to_another_account(database: Path, alice: TestClient) -> None:
-    stand(alice, SETUP_WEEK, [SCHOOL, SOCCER])
-    stand(alice, WEEK_AFTER, [{"id": "activity-1", "stop": True}])
+    set_up(alice, SCHOOL, SOCCER)
+    stand(alice, [stop("activity-1", WEEK_AFTER)])
     snapshot = alice.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()
     assert len(snapshot["standing"]) == 3
     alice.post("/api/auth/logout", headers=WRITE)
@@ -231,10 +264,10 @@ NEW_HOURS = {**SCHOOL, "start": "09:00", "duration_min": 360}
 
 
 def test_a_restore_point_brings_back_the_standing_week_it_was_made_with(alice: TestClient) -> None:
-    stand(alice, SETUP_WEEK, [SCHOOL, SOCCER])
+    set_up(alice, SCHOOL, SOCCER)
     before = standing_of(alice)
     point = restore_point(alice, "Before new hours")
-    stand(alice, NEXT_WEEK, [NEW_HOURS, {"id": "activity-1", "stop": True}])
+    stand(alice, [change("school", NEXT_WEEK, {"start": "09:00", "duration_min": 360}), stop("activity-1", NEXT_WEEK)])
     assert set(times(week(alice, WEEK_AFTER)["blocks"])) == {"school"}
     changed = standing_of(alice)
     recovery = restore(alice, point)["recovery_id"]
@@ -249,7 +282,7 @@ def test_a_restore_point_brings_back_the_standing_week_it_was_made_with(alice: T
 def test_a_restore_point_from_before_the_standing_week_leaves_the_current_one(
     database: Path, alice: TestClient
 ) -> None:
-    stand(alice, SETUP_WEEK, [SCHOOL, SOCCER])
+    set_up(alice, SCHOOL, SOCCER)
     point = restore_point(alice, "Made by 0.18")
     # As 0.18.5 wrote a point: weeks and assignments, no standing rows.
     with sqlite3.connect(database) as db:
@@ -257,7 +290,7 @@ def test_a_restore_point_from_before_the_standing_week_leaves_the_current_one(
         snapshot = json.loads(body)
         snapshot.pop("standing", None)
         db.execute("UPDATE restore_points SET body = ? WHERE id = ?", (json.dumps(snapshot), point))
-    stand(alice, NEXT_WEEK, [NEW_HOURS, {"id": "activity-1", "stop": True}])
+    stand(alice, [change("school", NEXT_WEEK, {"start": "09:00", "duration_min": 360}), stop("activity-1", NEXT_WEEK)])
     changed = standing_of(alice)
     restore(alice, point)
     assert standing_of(alice) == changed

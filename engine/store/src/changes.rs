@@ -1,5 +1,6 @@
 //! `post_changes` (`backend/app.py`). The batch commits in one `BEGIN IMMEDIATE` or not at all.
 
+use flexweek_engine::repeats::parse_intents;
 use flexweek_engine::snapshot::canonical;
 use flexweek_engine::validate::{time_block, week_request};
 pub use rusqlite::Connection;
@@ -7,10 +8,11 @@ use rusqlite::{OptionalExtension, params};
 use serde_json::{Map, Value, json};
 
 use crate::{
-    Adopted, AssignmentDelete, AssignmentSave, Recall, Relay, StoreError, WeekSave,
-    adopt_legacy_deadlines, begin_immediate, create_restore_point, delete_assignment,
-    own_assignment_rows, payload_digest, read_week, recall_operation, remember_operation,
-    rewrite_blocks, save_assignment, save_week, set_standing, week_with_standing,
+    Adopted, AssignmentDelete, AssignmentSave, Recall, Relay, RepeatsFailure, StoreError, WeekSave,
+    adopt_legacy_deadlines, apply_repeat_intents, begin_immediate, create_restore_point,
+    delete_assignment, own_assignment_rows, payload_digest, read_week, recall_operation,
+    remember_operation, rewrite_blocks, save_assignment, save_week, standing_blocks,
+    week_with_standing,
 };
 
 const MAX_ASSIGNMENTS: i64 = 1000;
@@ -44,18 +46,14 @@ pub struct AssignmentInput {
 }
 
 #[derive(Debug)]
-pub struct StandingInput {
-    pub week_start: String,
-    pub blocks: Vec<Value>,
-}
-
-#[derive(Debug)]
 pub struct ApplyInput {
     pub weeks: Vec<WeekInput>,
     pub assignments: Vec<AssignmentInput>,
     pub operation_id: Option<String>,
     pub snapshot_label: Option<String>,
-    pub standing: Option<StandingInput>,
+    /// Changes to School and Setup's activities as the student meant them
+    /// (`flexweek_engine::repeats::Intent`), applied after the weeks are saved.
+    pub repeats: Option<Vec<Value>>,
     /// When set, the operation row is keyed by this digest instead of the batch.
     /// A tool passes a digest of the assistant's arguments so a retry still matches
     /// after the write has changed the stored week.
@@ -77,6 +75,15 @@ impl From<StoreError> for ApplyFailure {
     }
 }
 
+impl From<RepeatsFailure> for ApplyFailure {
+    fn from(failure: RepeatsFailure) -> Self {
+        match failure {
+            RepeatsFailure::Refused(message) => refuse(&message),
+            RepeatsFailure::Store(error) => Self::Store(error),
+        }
+    }
+}
+
 impl From<flexweek_engine::EngineError> for ApplyFailure {
     fn from(error: flexweek_engine::EngineError) -> Self {
         Self::Store(StoreError::Engine(error))
@@ -87,6 +94,7 @@ struct WeekOut {
     week_start: String,
     blocks: Value,
     revision: i64,
+    repeats: Value,
 }
 
 pub fn apply(
@@ -166,19 +174,26 @@ fn apply_tx(
     }
     let assignments = apply_assignments(conn, user_id, &input.assignments)?;
     let mut weeks = apply_weeks(conn, user_id, &input.weeks)?;
-    let standing_changed = apply_standing(conn, user_id, input.standing.as_ref())?;
+    let repeats = match &input.repeats {
+        Some(intents) => {
+            let parsed = parse_intents(&Value::Array(intents.clone())).map_err(|m| refuse(&m))?;
+            Some(apply_repeat_intents(conn, user_id, &parsed)?)
+        }
+        None => None,
+    };
     for week in &mut weeks {
         let merged = week_with_standing(conn, user_id, &week.week_start, &canonical(&week.blocks))?;
         week.blocks = parse_json(&merged)?;
+        week.repeats = Value::Array(standing_blocks(conn, user_id, &week.week_start)?);
     }
     let mut result = json!({
         "weeks": weeks.iter().map(week_value).collect::<Vec<_>>(),
         "assignments": assignments,
     });
-    if let Some(changed) = standing_changed
+    if let Some(outcome) = repeats
         && let Some(object) = result.as_object_mut()
     {
-        object.insert("standing_changed_weeks".into(), json!(changed));
+        object.insert("repeats".into(), outcome.to_value());
     }
     if let Some(operation_id) = &input.operation_id {
         remember_operation(
@@ -326,38 +341,26 @@ fn apply_week(conn: &Connection, user_id: i64, week: &WeekInput) -> Result<WeekO
         week_start: week.week_start.clone(),
         blocks: Value::Array(dumped),
         revision,
+        repeats: Value::Array(Vec::new()),
     })
-}
-
-fn apply_standing(
-    conn: &Connection,
-    user_id: i64,
-    standing: Option<&StandingInput>,
-) -> Result<Option<Vec<String>>, ApplyFailure> {
-    let Some(standing) = standing else {
-        return Ok(None);
-    };
-    let encoded =
-        serde_json::to_string(&Value::Array(standing.blocks.clone())).map_err(|error| {
-            ApplyFailure::Store(StoreError::Json {
-                text: String::new(),
-                error,
-            })
-        })?;
-    Ok(Some(set_standing(
-        conn,
-        user_id,
-        &standing.week_start,
-        &encoded,
-    )?))
 }
 
 fn week_value(week: &WeekOut) -> Value {
-    json!({
+    let mut value = json!({
         "week_start": week.week_start,
         "blocks": week.blocks,
         "revision": week.revision,
-    })
+    });
+    // As `GET /api/week`: the repeats standing that week, absent when nothing repeats.
+    if week
+        .repeats
+        .as_array()
+        .is_some_and(|repeats| !repeats.is_empty())
+        && let Some(fields) = value.as_object_mut()
+    {
+        fields.insert("repeats".into(), week.repeats.clone());
+    }
+    value
 }
 
 fn assignment_ids(blocks: &[Value]) -> Vec<String> {
@@ -388,10 +391,7 @@ fn batch_value(input: &ApplyInput) -> Value {
         })).collect::<Vec<_>>(),
         "operation_id": input.operation_id,
         "snapshot_label": input.snapshot_label,
-        "standing": input.standing.as_ref().map(|standing| json!({
-            "week_start": standing.week_start,
-            "blocks": standing.blocks,
-        })),
+        "repeats": input.repeats,
     })
 }
 

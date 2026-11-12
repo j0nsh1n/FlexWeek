@@ -3,8 +3,8 @@ mod common;
 
 use common::scratch;
 use flexweek_store::{
-    ApplyClock, ApplyFailure, ApplyInput, AssignmentInput, AssignmentSave, StandingInput,
-    WeekInput, apply, initialize, open_connection, save_assignment,
+    ApplyClock, ApplyFailure, ApplyInput, AssignmentInput, AssignmentSave, WeekInput, apply,
+    initialize, open_connection, save_assignment,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
@@ -106,17 +106,13 @@ fn invalid_week_rules_refuse_the_week_without_advancing_its_revision() {
     );
 }
 
-fn school_block() -> Value {
-    parsed(SCHOOL)
-}
-
 fn empty_input() -> ApplyInput {
     ApplyInput {
         weeks: Vec::new(),
         assignments: Vec::new(),
         operation_id: None,
         snapshot_label: None,
-        standing: None,
+        repeats: None,
         argument_digest: None,
     }
 }
@@ -525,9 +521,9 @@ fn a_restore_point_is_taken_before_the_edit() {
     assert_eq!(assignment_title(&conn, user_id, "essay"), "New");
 }
 
-/// app.py:1342 standing is saved, then each week in the answer includes it.
+/// app.py:1342 a new repeat is saved, then each week in the answer includes it and names it.
 #[test]
-fn a_standing_change_is_merged_into_the_week_response() {
+fn a_new_repeat_is_merged_into_the_week_response() {
     let (conn, user_id) = account("standing-merge");
     let mut input = empty_input();
     input.weeks.push(WeekInput {
@@ -535,17 +531,19 @@ fn a_standing_change_is_merged_into_the_week_response() {
         blocks: vec![math_block()],
         revision: 0,
     });
-    input.standing = Some(StandingInput {
-        week_start: WEEK.into(),
-        blocks: vec![school_block()],
-    });
+    input.repeats = Some(vec![json!({
+        "id": "school", "scope": "from", "from_date": WEEK,
+        "set": {"title": "School", "category": "class", "start": "08:30", "duration_min": 405},
+        "add_days": [0, 1, 2, 3, 4],
+    })]);
     assert_eq!(
         apply_shown(&conn, user_id, &input),
         Ok(json!({
             "assignments": [],
-            "standing_changed_weeks": [],
+            "repeats": {"changed_weeks": [], "kept": [], "notice": null},
             "weeks": [{
                 "blocks": [parsed(MATH), parsed(SCHOOL)],
+                "repeats": [parsed(SCHOOL)],
                 "revision": 1,
                 "week_start": WEEK
             }]

@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use ::flexweek_engine::desk::{
     calendar, clipboard, custom_look, files, focus, grid, hand_move, planning, reuse, update,
 };
+use ::flexweek_engine::repeats;
 use ::flexweek_engine::{EngineError, EngineResult};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
@@ -1456,11 +1457,63 @@ fn look_apply_fix(custom: &str, problem: &Bound<'_, PyAny>) -> PyResult<String> 
         .map_err(crate::raise)
 }
 
+fn intents_of(text: &str) -> PyResult<Vec<repeats::Intent>> {
+    let value = parse(text)?;
+    repeats::parse_intents(&value).map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
+#[pyfunction]
+#[pyo3(signature = (id, from_date, repeat, edited))]
+fn repeat_edit_intent(
+    id: &str,
+    from_date: &str,
+    repeat: Option<&str>,
+    edited: Option<&str>,
+) -> PyResult<Option<String>> {
+    let repeat = opt_value(repeat)?;
+    let edited = opt_value(edited)?;
+    guard(|| {
+        Ok(
+            repeats::edit_intent(id, from_date, repeat.as_ref(), edited.as_ref())
+                .map(|intent| dump(&intent.to_value())),
+        )
+    })
+}
+
+#[pyfunction]
+fn repeat_apply_to_week(blocks: &str, standing: &str, intents: &str) -> PyResult<(String, String)> {
+    let blocks = objects(blocks)?;
+    let standing = objects(standing)?;
+    let intents = intents_of(intents)?;
+    guard(|| {
+        repeats::apply_to_week(&blocks, &standing, &intents)
+            .map(|(week, after)| (array(week), array(after)))
+            .map_err(pyo3::exceptions::PyValueError::new_err)
+    })
+}
+
+#[pyfunction]
+fn repeat_this_week_line(week: &str, standing: &str, clock_24h: bool) -> PyResult<Option<String>> {
+    let week = objects(week)?;
+    let standing = objects(standing)?;
+    guard(|| Ok(repeats::this_week_line(&week, &standing, clock_24h)))
+}
+
+#[pyfunction]
+fn repeat_one_day_note(block: &str, day: i64, school_hours: bool) -> PyResult<Option<String>> {
+    let block = parse(block)?;
+    guard(|| repeats::one_day_note(&block, day, school_hours).map_err(crate::raise))
+}
+
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::export!(
         module,
         calendar_category_title,
         calendar_is_series,
+        repeat_edit_intent,
+        repeat_apply_to_week,
+        repeat_this_week_line,
+        repeat_one_day_note,
         calendar_monday_of,
         calendar_date_for_day,
         calendar_sunday_due,

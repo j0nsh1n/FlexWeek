@@ -4,9 +4,10 @@
 mod common;
 
 use common::scratch;
+use flexweek_engine::repeats::edit_intent;
 use flexweek_store::{
-    day_view, homework_list, initialize, insert_assignment, insert_user, month_view,
-    open_connection, restore_point_list, routine_list, set_standing, week_view,
+    apply_repeat_intents, day_view, homework_list, initialize, insert_assignment, insert_user,
+    month_view, open_connection, restore_point_list, routine_list, week_view,
 };
 use rusqlite::params;
 use serde_json::{Value, json};
@@ -84,11 +85,12 @@ fn fixture(name: &str) -> (rusqlite::Connection, i64) {
         params![user, "2026-10-19", text(&current)],
     )
     .expect("current week");
-    let standing = json!([{
+    let school = json!({
         "id": "school", "title": "School", "kind": "locked", "duration_min": 60,
         "days": [0], "start": "09:00", "category": "school"
-    }]);
-    set_standing(&conn, user, "2026-09-28", &text(&standing)).expect("standing");
+    });
+    let intent = edit_intent("school", "2026-09-28", None, Some(&school)).expect("new");
+    apply_repeat_intents(&conn, user, &[intent]).expect("standing");
     (conn, user)
 }
 

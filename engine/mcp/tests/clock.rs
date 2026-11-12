@@ -14,8 +14,10 @@ use std::path::{Path, PathBuf};
 use common::{
     KEPT_FOR, NOW_ISO, NOW_UNIX, Server, scratch, session_path, tool_error_text, tool_ok_text,
 };
+use flexweek_engine::repeats::edit_intent;
 use flexweek_store::{
-    initialize, insert_preferences, insert_user, open_connection, open_session, set_standing,
+    apply_repeat_intents, initialize, insert_preferences, insert_user, open_connection,
+    open_session,
 };
 use serde_json::{Value, json};
 
@@ -263,7 +265,8 @@ fn planning_never_places_homework_before_the_time_now() {
             "id": "school", "title": "School", "kind": "locked", "duration_min": 420,
             "days": [0, 1, 2, 3, 4], "start": "08:00", "category": "class"
         });
-        set_standing(&conn, world.user, WEEK, &json!([school]).to_string()).expect("standing");
+        let intent = edit_intent("school", WEEK, None, Some(&school)).expect("new");
+        apply_repeat_intents(&conn, world.user, &[intent]).expect("standing");
         if !conn.is_autocommit() {
             conn.execute_batch("COMMIT").expect("commit");
         }

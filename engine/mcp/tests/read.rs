@@ -8,9 +8,10 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
 use common::{NOW_ISO, NOW_UNIX, Server, scratch, session_path, tool_error_text, tool_ok_text};
+use flexweek_engine::repeats::edit_intent;
 use flexweek_store::{
-    RoutineWrite, create_restore_point, initialize, insert_assignment, insert_preferences,
-    insert_user, open_connection, open_session, save_routine, set_standing,
+    RoutineWrite, apply_repeat_intents, create_restore_point, initialize, insert_assignment,
+    insert_preferences, insert_user, open_connection, open_session, save_routine,
 };
 use serde_json::{Value, json};
 
@@ -78,12 +79,12 @@ fn fixture(name: &str) -> World {
         (user, "2026-10-19", current),
     )
     .expect("current week");
-    let standing = json!([{
+    let school = json!({
         "id": "school", "title": "School", "kind": "locked", "duration_min": 60,
         "days": [0], "start": "09:00", "category": "school"
-    }])
-    .to_string();
-    set_standing(&conn, user, "2026-09-28", &standing).expect("standing");
+    });
+    let intent = edit_intent("school", "2026-09-28", None, Some(&school)).expect("new");
+    apply_repeat_intents(&conn, user, &[intent]).expect("standing");
     save_routine(
         &conn,
         user,
