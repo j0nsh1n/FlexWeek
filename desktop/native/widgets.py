@@ -3865,8 +3865,11 @@ class BlockDialog(Dialog):
         self._following = False
         self._moved = ""
         self._preview = ""
-        self._settled_start_min = self.start.minutes()
-        self.start.setTime(QTime.fromString(self._original["start"], "HH:mm"))
+        start_time = QTime.fromString(self._original["start"], "HH:mm")
+        # The start this sheet opens on is not a move made in it: a sheet built ahead of time said
+        # "End moved to ..." where one built now says the length.
+        self._settled_start_min = start_time.hour() * 60 + start_time.minute()
+        self.start.setTime(start_time)
         self.end.setTime(
             self._minutes_clock(self.start.minutes() + self._original["duration_min"])
         )
@@ -4010,7 +4013,10 @@ class BlockDialog(Dialog):
         if "days" in draft:
             self.day_picker.set_days(draft["days"])
         if "start" in draft:
-            self.start.setTime(QTime.fromString(draft["start"], "HH:mm"))
+            start = QTime.fromString(draft["start"], "HH:mm")
+            # Not a move made in this sheet: the end follows without saying "End moved to".
+            self._settled_start_min = start.hour() * 60 + start.minute()
+            self.start.setTime(start)
             self._touched.add("start")
         if "length" in draft:
             self.end.setTime(self._minutes_clock(self.start.minutes() + draft["length"]))

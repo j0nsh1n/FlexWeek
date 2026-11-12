@@ -3569,7 +3569,12 @@ class NativeWindow(QMainWindow):
     def _keep_add(self, kind: str, dialog: Dialog, days: list[int] | None = None) -> None:
         """Esc closed a new Add sheet with typing in it: keep what was typed, as plain values, and let the
         sheet go. The next plain Add of this kind opens a new sheet filled in with it."""
-        self._kept_adds[kind] = (dialog.draft(), days)
+        draft = dialog.draft()
+        if days is not None and isinstance(dialog, HomeworkDialog):
+            # A drag gave the day, the due and the length together; the next sheet keeps all three.
+            fields = dialog._draft_fields()
+            draft = {"due": fields["due"], "estimate": fields["estimate"], **draft}
+        self._kept_adds[kind] = (draft, days)
         self._kept_adds_account = self._account_id()
         dialog.deleteLater()
 
@@ -3850,7 +3855,7 @@ class NativeWindow(QMainWindow):
         """Add adds homework, or the type picked in its menu for a drag, which the button then names."""
         armed = self.session.armed_category
         if armed:
-            self._add_from_chip(armed)
+            self._add_from_chip(armed, plain=True)
         else:
             self._add_homework()
 
@@ -4325,16 +4330,26 @@ class NativeWindow(QMainWindow):
         if ids:
             self.session.solve(only=ids)
 
-    def _add_from_chip(self, category: str) -> None:
+    def _add_from_chip(self, category: str, plain: bool = False) -> None:
+        """Add of this type. `plain` is the Add button (or C) with the type already picked: a plain Add,
+        so it opens on what Esc kept, as Ctrl+N does. A pick from the menu brings its own type and
+        leaves the kept typing for the next plain Add."""
         self.session.arm_category(category)
         self._sync_add_button()
         if category in FLEX_CATEGORIES:
-            self._commit_homework(
-                self._sheet(lambda: HomeworkDialog(self, today=self._today(), category=category))
-            )
+            draft, days = self._take_kept_add("homework") if plain else (None, None)
+
+            def build() -> HomeworkDialog:
+                dialog = HomeworkDialog(self, today=self._today(), category=category)
+                if draft:
+                    dialog.apply_draft(draft)
+                return dialog
+
+            self._commit_homework(self._sheet(build), days)
             return
         day, start = self._new_event_values()
-        self._commit_new_block(day, start, category)
+        draft = self._take_kept_add("block")[0] if plain else None
+        self._commit_new_block(day, start, category, draft=draft)
 
     def _create_by_drag(self, span: Span) -> None:
         before = {item["id"] for item in self.session.blocks}

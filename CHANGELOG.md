@@ -30,6 +30,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - An account that never chose a Dragging step now uses 15 minutes, new accounts included: setup shows 15 picked, and skipping setup keeps 15. 5 minutes is one pick away in Settings → Planning. An account already on 5 minutes moves to 15 once with this update, because saving any setting used to write 5 down whether or not you picked it; pick 5 again in Settings → Planning and it stays.
 
 ### Fixed
+- In the Widgets styles, a new Add fixed time sheet says its length ("1 h") under the times again; it could say "End moved to 8:15 PM to keep it 1 h." although nothing had been moved.
 - When a homework time has already passed, the message names the next time on your Dragging step: on 5 minutes at 7:02 PM it says "Choose 7:05 PM or later today" instead of 7:15 PM.
 - In the Material style with Letter keys on, T goes to today in the view you are on: Day shows today again and Month shows this month, as Week already did.
 - In the Material style, the now line in Week runs through today's column only and is drawn over the blocks, with its dot on today's left edge; Day draws it the same way. Today brings the line back into view when this week is already open and was scrolled away, and when you come back from another week, and the line moves to the current time as soon as the app comes back to the front.

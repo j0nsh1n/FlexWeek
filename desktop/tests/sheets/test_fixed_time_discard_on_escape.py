@@ -18,6 +18,7 @@ from PySide6.QtGui import QFocusEvent, QKeyEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox
 
+from backend.models import parse_due
 from backend.tests.fake_clock import CLOCK
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import BlockDialog, ConfirmSheet, HomeworkDialog
@@ -596,16 +597,35 @@ def test_homework_drawn_on_a_day_and_kept_by_esc_is_saved_on_that_day_from_the_n
     saved: list = []
 
     def record(body: dict, **how) -> None:
-        saved.append((body["title"], how.get("days")))
+        saved.append((body["title"], how.get("days"), body["due"], body["estimate_min"]))
+
+    def type_then_save(sheet: QDialog) -> int:
+        sheet.title.setText("Piano lesson")
+        return save(sheet)
 
     monkeypatch.setattr(quiet_commit.session, "add_homework", record)
     monkeypatch.setattr(quiet_commit.session, "armed_category", "assignments")
-    script = Script("homework", monkeypatch, type_then_escape, save)
-    quiet_commit._create_range(2, 16 * 60, 17 * 60)
+    script = Script("homework", monkeypatch, type_then_save, type_then_escape, save)
+    quiet_commit._create_range(2, 16 * 60, 18 * 60)
+    pump(qapp)
+    quiet_commit._create_range(2, 16 * 60, 18 * 60)
     pump(qapp)
     quiet_commit._add_homework()
-    assert script.titles == ["", "Piano lesson"]
-    assert saved == [("Piano lesson", [2])]
+    assert script.titles == ["", "", "Piano lesson"]
+    # The drag gave the day, the length (two hours) and the due (the end of the week) together. Kept
+    # with only the day, the homework was saved on Wednesday with tomorrow's due and one hour. Saved
+    # after Esc it must be what saving the drawn sheet straight away gives.
+    straight_away, after_esc = saved
+    assert (straight_away[1], straight_away[3]) == ([2], 120)
+    due_day, due_minute = parse_due(straight_away[2])
+    assert (due_day.weekday(), due_minute) == (6, 24 * 60), "due at the end of the Sunday that ends the week"
+    # "2026-11-08" and "2026-11-08T23:59" are the same due: the end of that day.
+    assert (after_esc[0], after_esc[1], parse_due(after_esc[2]), after_esc[3]) == (
+        straight_away[0],
+        straight_away[1],
+        parse_due(straight_away[2]),
+        straight_away[3],
+    )
 
 
 def test_the_day_a_drag_gave_stays_through_a_second_esc(
@@ -825,3 +845,58 @@ def test_typing_kept_before_a_12_or_24_hour_switch_comes_back_with_times_written
     title, text = seen[0]
     assert title == "Piano lesson"
     assert text.upper().endswith(("AM", "PM")), text
+
+
+@pytest.mark.parametrize("kind, picked", [("homework", "assignments"), ("block", "extra")])
+def test_the_add_button_with_a_type_picked_opens_with_what_esc_kept(
+    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str, picked: str
+) -> None:
+    """A type picked in the Add menu stays picked, and the Add button and C then add that type. They are
+    still the plain Add: with a type picked they opened empty while Ctrl+N brought the typing back, and
+    typing in that empty sheet then replaced what had been kept."""
+    quiet_commit.session.arm_category(picked)
+    script = Script(kind, monkeypatch, type_then_escape, only_look)
+    quiet_commit._add_now()
+    pump(qapp)
+    quiet_commit._add_now()
+    # A fixed time of a picked type opens on that type's own title ("Activity"), homework on none.
+    assert script.titles[0] != "Piano lesson"
+    assert script.titles[1] == "Piano lesson"
+
+
+@pytest.mark.parametrize("kind, picked", [("homework", "study"), ("block", "exercise")])
+def test_picking_a_type_in_the_add_menu_opens_empty_and_leaves_what_esc_kept(
+    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str, picked: str
+) -> None:
+    script = Script(kind, monkeypatch, type_then_escape, only_look, only_look)
+    getattr(quiet_commit, PLAIN_ADD[kind])()
+    pump(qapp)
+    quiet_commit._add_from_chip(picked)
+    pump(qapp)
+    quiet_commit._add_now()
+    assert len(script.titles) == 3
+    assert script.titles[1] != "Piano lesson", "the menu pick brought its own type and opened without it"
+    assert script.titles[2] == "Piano lesson"
+
+
+def test_a_fixed_time_reopened_with_its_kept_start_says_its_length_not_that_the_end_moved(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """The kept start is put into the new sheet by the app, not moved by the student in it, so the line
+    under the times says "1 h" as on any new sheet, not "End moved to 6:30 PM to keep it 1 h."."""
+    sheet = shown(qapp, BlockDialog(window, day=2, start="16:00", duration_min=60, category=None))
+    sheet.apply_draft({"title": "Piano lesson", "start": "17:30"})
+    assert sheet.duration_line.text() == "1 h"
+    free(sheet)
+
+
+def test_a_fixed_time_sheet_built_ahead_of_time_says_its_length_not_that_the_end_moved(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """The window builds one Add fixed time sheet ahead and fills it in when Add is pressed. Filling in
+    the start is not the student moving it."""
+    sheet = BlockDialog(window, day=0, start="09:00", duration_min=60, category=None)
+    sheet.fill_new(day=2, start="19:15", category=None)
+    shown(qapp, sheet)
+    assert sheet.duration_line.text() == "1 h"
+    free(sheet)
