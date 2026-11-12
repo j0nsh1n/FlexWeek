@@ -474,8 +474,9 @@ pub fn allow_system_theme(db: &Connection) -> StoreResult<()> {
     Ok(())
 }
 
-/// The newest preferences version: what a new account's row starts at, and what the last upgrade step
-/// stamps. Each account's row records the last one-time change it has had.
+/// The newest preferences version: what a new account's row starts at. Each account's row records the
+/// last one-time change it has had, and each upgrade step keeps its own number for good, so a later
+/// version cannot move an earlier step. `test_time_step_default.rs` holds the two together.
 pub const PREFS_VERSION: i64 = 5;
 
 pub fn upgrade_preferences(db: &Connection) -> StoreResult<()> {
@@ -571,8 +572,8 @@ fn adopt_fifteen_minute_buffer(db: &Connection) -> StoreResult<()> {
 /// is kept per device and never synced, so there is no sync baseline to restamp.
 fn adopt_fifteen_minute_step(db: &Connection) -> StoreResult<()> {
     let rows = db
-        .prepare("SELECT user_id, comfort_json FROM preferences WHERE prefs_version < ?1")?
-        .query_map([PREFS_VERSION], |row| {
+        .prepare("SELECT user_id, comfort_json FROM preferences WHERE prefs_version < 5")?
+        .query_map([], |row| {
             Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -588,8 +589,8 @@ fn adopt_fifteen_minute_step(db: &Connection) -> StoreResult<()> {
         }
     }
     db.execute(
-        "UPDATE preferences SET prefs_version = ?1 WHERE prefs_version < ?1",
-        [PREFS_VERSION],
+        "UPDATE preferences SET prefs_version = 5 WHERE prefs_version < 5",
+        [],
     )?;
     Ok(())
 }
