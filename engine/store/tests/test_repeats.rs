@@ -600,3 +600,71 @@ fn a_later_this_week_and_later_change_that_stays_is_named() {
     assert!(notice.contains("16 Nov"), "{notice}");
     assert!(notice.contains("10:00"), "{notice}");
 }
+
+#[test]
+fn a_later_version_and_that_weeks_own_copy_are_named_once_for_what_the_week_shows() {
+    // From 16 Nov School starts at 10:00 (this week and later); the saved week of 16 Nov also has its own
+    // 11:00 start. From 9 Nov School becomes 6 hours long. 16 Nov shows 11:00-17:00 and is named once,
+    // with that; 23 Nov on shows 10:00-16:00 from the later change.
+    let (conn, user_id) = account("repeats-version-and-copy", true);
+    set_up(&conn, user_id);
+    change_from_open_week(
+        &conn,
+        user_id,
+        NEXT_WEEK,
+        &[("school", Some(with(school(), json!({"start": "10:00"}))))],
+    );
+    save_week_as(
+        &conn,
+        user_id,
+        NEXT_WEEK,
+        vec![with(school(), json!({"start": "11:00"})), soccer()],
+    );
+    let answer = change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[("school", Some(with(school(), json!({"duration_min": 360}))))],
+    );
+    let here = block(&shown(&conn, user_id, NEXT_WEEK), "school")
+        .unwrap()
+        .clone();
+    assert_eq!(
+        (here["start"].clone(), here["duration_min"].clone()),
+        (json!("11:00"), json!(360))
+    );
+    let after = block(&shown(&conn, user_id, WEEK_AFTER), "school")
+        .unwrap()
+        .clone();
+    assert_eq!(
+        (after["start"].clone(), after["duration_min"].clone()),
+        (json!("10:00"), json!(360))
+    );
+    let kept = answer["repeats"]["kept"].as_array().unwrap();
+    let weeks: Vec<_> = kept.iter().map(|item| item["week_start"].clone()).collect();
+    assert_eq!(weeks, vec![json!(NEXT_WEEK)], "{kept:?}");
+    let notice = answer["repeats"]["notice"].as_str().unwrap();
+    assert!(notice.contains("11:00"), "{notice}");
+    assert!(!notice.contains("10:00"), "{notice}");
+}
+
+#[test]
+fn a_later_version_that_already_says_what_the_change_says_is_not_named() {
+    // From 16 Nov School starts at 10:00; then from 9 Nov School starts at 10:00 too. Nothing differs.
+    let (conn, user_id) = account("repeats-version-same", true);
+    set_up(&conn, user_id);
+    change_from_open_week(
+        &conn,
+        user_id,
+        NEXT_WEEK,
+        &[("school", Some(with(school(), json!({"start": "10:00"}))))],
+    );
+    let answer = change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[("school", Some(with(school(), json!({"start": "10:00"}))))],
+    );
+    assert_eq!(answer["repeats"]["kept"], json!([]));
+    assert_eq!(answer["repeats"]["notice"], json!(null));
+}

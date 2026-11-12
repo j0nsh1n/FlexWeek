@@ -215,13 +215,16 @@ pub fn apply_repeat_intents(
         }
         first_week.get_or_insert_with(|| week.clone());
         let new = rewritten(&old, &week, new_here.clone(), intent.stop);
-        // A later change that stays where this one would have set the same thing is named too.
+        // A later change that stays where this one would have set the same thing is named too, at the
+        // week it starts. A saved copy of that very week is named instead, against this change, below:
+        // the copy is what the week shows, so naming both would say two things about one week.
+        let mut later_versions: Vec<Kept> = Vec::new();
         if let Some(here) = &new_here {
             for (from, body) in new.iter().filter(|(from, _)| from.as_str() > week.as_str()) {
                 let Some(body) = body else { continue };
                 let changes = own_changes(body, here, std::slice::from_ref(body), h24);
                 if !changes.is_empty() {
-                    outcome.kept.push(Kept {
+                    later_versions.push(Kept {
                         week_start: from.clone(),
                         id: intent.id.clone(),
                         changes,
@@ -264,8 +267,19 @@ pub fn apply_repeat_intents(
                     updated.remove(held);
                 }
             }
+            let version_starts_here = later_versions
+                .iter()
+                .any(|kept| kept.week_start == week_start);
+            // Where a later version starts, the copy's own changes are measured against this change, as
+            // the version's would have been, so the week is named once for everything it keeps.
+            let measured_against = if version_starts_here {
+                new_here.as_ref()
+            } else {
+                now
+            };
+            later_versions.retain(|kept| kept.week_start != week_start);
             if week_start > week
-                && let (Some(now), Some(copy)) = (now, updated.get(held))
+                && let (Some(now), Some(copy)) = (measured_against, updated.get(held))
                 && copy.get("id") == now.get("id")
             {
                 let changes = own_changes(copy, now, &updated, h24);
@@ -289,8 +303,10 @@ pub fn apply_repeat_intents(
                 }
             }
         }
+        outcome.kept.append(&mut later_versions);
     }
     outcome.changed_weeks.sort();
+    outcome.kept.sort_by(|a, b| a.week_start.cmp(&b.week_start));
     if let Some(week) = first_week {
         outcome.notice = kept_notice(&titles, &week, &outcome.kept)?;
     }
