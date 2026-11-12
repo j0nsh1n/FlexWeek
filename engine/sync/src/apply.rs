@@ -274,9 +274,9 @@ fn write_real(tx: &Connection, user_id: i64, record: &Record) -> SyncResult<()> 
                 // step) already ran, or a value chosen here would be treated as an old default and
                 // changed on the next open.
                 tx.execute(
-                    "INSERT INTO preferences(user_id, prefs_version) VALUES (?1, 5)
+                    "INSERT INTO preferences(user_id, prefs_version) VALUES (?1, ?2)
                      ON CONFLICT(user_id) DO NOTHING",
-                    [user_id],
+                    params![user_id, flexweek_store::PREFS_VERSION],
                 )?;
                 let sql = format!("UPDATE preferences SET {}=?1 WHERE user_id=?2", record.key);
                 if let Some(number) = body.as_i64() {
