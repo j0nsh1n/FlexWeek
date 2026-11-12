@@ -6,17 +6,18 @@ replaced by a script, for Add homework and Add fixed time alike. Expected values
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtCore import QEvent, Qt, QTime, QTimer
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox
 
+from backend.tests.fake_clock import CLOCK
 from desktop.native.widgets import BlockDialog, ConfirmSheet, HomeworkDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
@@ -331,9 +332,16 @@ def run_real_add(window: NativeWindow, kind: str, act) -> None:
             modal.done(int(QDialog.DialogCode.Rejected)) if isinstance(modal, QDialog) else modal.close()
             QApplication.processEvents()
 
+    guard = QTimer()
+    guard.setSingleShot(True)
+    guard.timeout.connect(give_up)
+    guard.start(6000)
     QTimer.singleShot(50, inside)
-    QTimer.singleShot(6000, give_up)
-    getattr(window, PLAIN_ADD[kind])()
+    try:
+        getattr(window, PLAIN_ADD[kind])()
+    finally:
+        # A timer left running would close whatever modal a later test has open six seconds from now.
+        guard.stop()
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -408,3 +416,55 @@ def test_a_sheet_kept_before_the_day_the_clock_or_the_step_changed_is_not_brough
     add()
     assert script.titles == ["", ""]
     assert quiet_commit._kept_adds == {}
+
+
+def test_homework_kept_at_3_pm_and_reopened_at_7_pm_counts_from_7_pm(
+    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A homework sheet reads the time when it opens. Kept at 3 PM with a pin for 4 PM today and brought
+    back at 7 PM, it must say what a sheet opened at 7 PM says: today starts from 7 PM, and 4 PM is over."""
+    window = quiet_commit
+    today = date.fromisoformat(window._today())
+    midnight = datetime.combine(today, datetime.min.time())
+
+    def pin_today_at_4_pm(sheet: QDialog) -> None:
+        sheet.title.setText("Piano practice")
+        sheet.when.setCurrentIndex(1)
+        sheet.when_day.set_days([today.weekday()])
+        sheet._pick_day()
+        sheet.when_time.setTime(QTime(16, 0))
+        sheet._follow_when()
+
+    def pin_then_escape(sheet: QDialog) -> int:
+        pin_today_at_4_pm(sheet)
+        press_escape(sheet)
+        return int(sheet.result())
+
+    said: list[tuple] = []
+
+    def note(sheet: QDialog) -> None:
+        over = bool(sheet._fixed_problem(sheet._fixed_at(), sheet._chosen_due()))
+        said.append((sheet._now().hour, sheet.when_from.text(), over))
+
+    def look_at_the_kept_one(sheet: QDialog) -> int:
+        note(sheet)
+        return cancel_and_discard(monkeypatch)(sheet)
+
+    def look_at_a_new_one(sheet: QDialog) -> int:
+        pin_today_at_4_pm(sheet)
+        note(sheet)
+        return only_look(sheet)
+
+    script = Script("homework", monkeypatch, pin_then_escape, look_at_the_kept_one, look_at_a_new_one)
+    CLOCK.set(midnight.replace(hour=15))
+    window._add_homework()
+    pump(qapp)
+    CLOCK.set(midnight.replace(hour=19))
+    window._add_homework()
+    pump(qapp)
+    window._add_homework()
+    assert script.titles == ["", "Piano practice", ""]
+    kept, new = said
+    assert kept == new
+    assert kept[0] == 19 and kept[2], "a 4 PM pin is over at 7 PM"
+    assert "7:00 PM" in kept[1] or "19:00" in kept[1], kept[1]

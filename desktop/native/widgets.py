@@ -4561,12 +4561,10 @@ class HomeworkDialog(Dialog):
         )
         self._today = today
         self._clock = now
+        self._clock_given = now is not None
         # The time the sheet opened on, from the window's clock when none was given, so a test that
         # holds that clock is what "now" means here. The sheet does not ask the clock again.
-        if self._clock is None and parent is not None:
-            session = getattr(parent, "session", None)
-            if session is not None and callable(getattr(session, "now_ms", None)):
-                self._clock = datetime.fromtimestamp(session.now_ms() / 1000)
+        self._read_window_clock()
         self._result: dict | None = None
         self._spread = False
         # "choose" to pick a time for a session that needs one, "unpin" to let FlexWeek move it again.
@@ -5271,6 +5269,20 @@ class HomeworkDialog(Dialog):
         kept as it was stored, so opening and saving changes nothing."""
         chosen, before = self.due.value(), self._original["due"]
         return before if parse_due(chosen) == parse_due(before) else chosen
+
+    def _read_window_clock(self) -> None:
+        if self._clock_given:
+            return
+        session = getattr(self.parent(), "session", None)
+        if session is not None and callable(getattr(session, "now_ms", None)):
+            self._clock = datetime.fromtimestamp(session.now_ms() / 1000)
+
+    def reopen(self) -> None:
+        """Kept by Esc and shown again later: "now" is when it opens again, not when it was first built."""
+        super().reopen()
+        self._read_window_clock()
+        self._dress_when_days()
+        self._follow_when()
 
     def _now(self) -> datetime:
         """Now on one clock: the one given to the dialog, else the window's, else the dialog's today."""
