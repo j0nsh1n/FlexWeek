@@ -18,6 +18,7 @@ Rectangle {
     signal cardDragStarted(string title)
 
     readonly property int count: bridge ? bridge.week.homeworkCount : 0
+    readonly property string leftover: bridge ? bridge.week.leftoverWords : ""
     property alias planButton: planButton
 
     M3Palette { id: m3; theme: drawer.theme }
@@ -140,6 +141,18 @@ Rectangle {
                     onActiveFocusChanged: if (activeFocus) scroller.reveal(y, height)
                 }
             }
+
+            Text {
+                objectName: "homeworkLeftover"
+                visible: text !== ""
+                width: list.width
+                text: drawer.leftover
+                color: m3.inkMuted
+                wrapMode: Text.WordWrap
+                font.family: M3Font.family
+                font.pixelSize: M3Font.px(13)
+                font.weight: 400
+            }
         }
     }
 
@@ -164,7 +177,7 @@ Rectangle {
             objectName: "homeworkEmptyText"
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
-            text: "Everything has a time."
+            text: drawer.leftover !== "" ? drawer.leftover : "Everything has a time."
             color: m3.inkMuted
             font.family: M3Font.family
             font.pixelSize: M3Font.px(14)

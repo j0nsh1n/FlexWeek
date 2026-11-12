@@ -155,6 +155,7 @@ class WeekBridge(QObject):
         self._block_rows: list[dict] = []
         self._homework_rows: list[dict] = []
         self._day_rows: list[dict] = []
+        self._leftover_words = ""
         self._hour_labels: list[str] = [clock_label(hour * 60) for hour in range(24)]
         self._blocks = Rows(BLOCK_ROLES, self)
         self._homework = Rows(HOMEWORK_ROLES, self)
@@ -208,6 +209,7 @@ class WeekBridge(QObject):
         self._now_minute = 0
         if session.account is None or not session.week_start:
             self._block_rows, self._homework_rows, self._day_rows = [], [], []
+            self._leftover_words = ""
             self._seen = set()
             self._publish()
             return
@@ -275,6 +277,11 @@ class WeekBridge(QObject):
                     "reason": item.reason,
                 }
             )
+        remainders = getattr(session, "homework_remainders", None)
+        self._leftover_words = "\n".join(
+            f"{title} · {length_label(minutes)} with no time"
+            for title, minutes in (remainders() if remainders else [])
+        )
         self._week_key = session.week_start
         self._seen = keys
         self._fresh_until = {key: until for key, until in self._fresh_until.items() if until > clock}
@@ -617,3 +624,8 @@ class WeekBridge(QObject):
     @Property(int, notify=homeworkChanged)
     def homeworkCount(self) -> int:
         return len(self._homework_rows)
+
+    @Property(str, notify=homeworkChanged)
+    def leftoverWords(self) -> str:
+        """Homework with minutes no session holds, one line each: they have no card to drag."""
+        return self._leftover_words

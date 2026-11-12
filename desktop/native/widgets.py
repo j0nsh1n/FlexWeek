@@ -6113,6 +6113,7 @@ class PlanReview(QFrame):
         week_start: str,
         counts: tuple[int, int],
         assignments: dict | None = None,
+        remainders: list[tuple[str, int]] | None = None,
     ) -> None:
         """`counts` are the plan's own, homework it gave a time and homework it could not, the
         numbers the toast says. The trace's placed list holds every block with a time, School
@@ -6128,7 +6129,7 @@ class PlanReview(QFrame):
         placed, waiting = counts
         from desktop.native.controller import plan_sentence
 
-        self.heading.setText(plan_sentence(placed, waiting))
+        self.heading.setText(plan_sentence(placed, waiting, remainders or ()))
         self._fit_result_actions()
         for line in said:
             row = QListWidgetItem(line)
@@ -6154,7 +6155,7 @@ class PlanReview(QFrame):
         row = self.list.sizeHintForRow(0) if self.list.count() else 0
         self.list.setFixedHeight(min(row * len(said) + 2 * self.list.frameWidth() + 4, PLAN_REVIEW_MAX))
         # Open when something needs reading: homework with no time, or a day that is too full.
-        open_list = bool(waiting) or bool(overfull_days(trace or {}))
+        open_list = bool(waiting) or bool(remainders) or bool(overfull_days(trace or {}))
         self.details.setChecked(open_list)
         self._show_details(open_list)
         self.show()

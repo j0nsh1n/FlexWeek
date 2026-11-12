@@ -105,7 +105,7 @@ from desktop.native.client import (
     sign_up_problem,
 )
 from desktop.native.command_bar import Command, CommandBar
-from desktop.native.controller import ROUTINE_STATUS, NativeSession, _late_summary
+from desktop.native.controller import ROUTINE_STATUS, NativeSession, _late_summary, left_sentence
 from desktop.native.custom_look import sanitize_saved
 from desktop.native.devices import SyncDot, SyncHost, live_phones, run_off_ui, sync_state
 from desktop.native.elevation import flatten, lift
@@ -3102,6 +3102,7 @@ class NativeWindow(QMainWindow):
                     self.session.week_start,
                     self.session.plan_counts,
                     self.session.assignments,
+                    self.session.plan_remainders,
                 )
                 self._reveal_placed()
                 if self.plan_review.isVisible():
@@ -4239,6 +4240,8 @@ class NativeWindow(QMainWindow):
             else:
                 placed, waiting = self.session.plan_counts
                 said = f"Placed {placed} of {placed + waiting}"
+                if self.session.plan_remainders:
+                    said = f"{said}.{left_sentence(self.session.plan_remainders)}"
                 for item in (self.session.trace or {}).get("notices") or []:
                     if item.get("kind") == "spread_same_day" and item.get("message"):
                         said = f"{said}. {item['message']}"

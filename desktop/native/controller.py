@@ -108,6 +108,8 @@ from desktop.native.reuse import (
     settle_placements,
     solve_request,
     time_still_needed,
+    time_still_needed_parts,
+    uncovered_homework_minutes,
     week_label,
 )
 from desktop.native.weekmodel import (
@@ -135,15 +137,31 @@ def first_placed(trace: dict, targets: object) -> tuple[int, int] | None:
     return min(spots, default=None)
 
 
-def plan_sentence(placed: int, waiting: int) -> str:
-    """How much homework a plan placed, counting homework only."""
+LEFT_NAMED = 2
+
+
+def left_sentence(left: object) -> str:
+    """Homework with minutes the plan could not give a time, each named with its minutes: "History essay
+    still has 10 min with no time." Nothing for no homework, so a plan that left nothing says nothing."""
+    items = list(left or [])
+    said = "".join(
+        f" {title} still has {length_label(minutes)} with no time." for title, minutes in items[:LEFT_NAMED]
+    )
+    if len(items) > LEFT_NAMED:
+        said += f" And {len(items) - LEFT_NAMED} more."
+    return said
+
+
+def plan_sentence(placed: int, waiting: int, left: object = ()) -> str:
+    """How much homework a plan placed, counting homework only. `waiting` is homework whose sessions
+    found no room; `left` is homework with minutes no session holds, by title and minutes."""
     if placed == 0:
         said = "Nothing placed."
     else:
         said = f"Placed {placed} homework block{'s' if placed != 1 else ''}."
     if waiting:
         said += f" {waiting} with no time yet."
-    return said
+    return said + left_sentence(left)
 
 
 def spread_ready_sentence(title: str, minutes: int, due: str, today: str) -> str:
@@ -305,6 +323,7 @@ class NativeSession(QObject):
         self._fresh_plan = False
         # The last plan's homework given a time and still without one: what its toast and its bar say.
         self.plan_counts: tuple[int, int] = (0, 0)
+        self.plan_remainders: list[tuple[str, int]] = []
         # The day and minute of the first homework the last plan gave a time, to scroll to.
         self.plan_first: tuple[int, int] | None = None
         # Place now's answer once it placed the block: "Placed Math worksheet on Thu 5:45 PM."
@@ -2373,7 +2392,11 @@ class NativeSession(QObject):
                 elif block_id in reasons:
                     self.needs_time[block_id] = reasons[block_id]
             self._fresh_plan = True
-            waiting = len(self.homework_time_needed())
+            # Counted on the week as this plan left it, not on the server's number from before it: the
+            # sessions just given a time are already out of what is still needed.
+            needed = self._time_split()
+            waiting = sum(1 for item in needed if item["waiting_min"] and not item["uncovered_min"])
+            self.plan_remainders = self.homework_remainders()
             self.plan_counts = (placed, waiting)
             self.plan_first = first_placed(data, targets)
             split_note = self._apply_auto_split(data, week)
@@ -2397,7 +2420,7 @@ class NativeSession(QObject):
                     self._pending_step["weeks"].extend(deepcopy(prior_updates))
                     self._pending_step["id"] = str(uuid4())
                     self._plan_step_id = self._pending_step["id"]
-            placed_note = plan_sentence(placed, waiting)
+            placed_note = plan_sentence(placed, waiting, self.plan_remainders)
             if earliest_first and len(targets) == 1:
                 only_block = sources.get(next(iter(targets)), {})
                 placed_note = self._place_now_sentence(only_block)
@@ -2566,7 +2589,20 @@ class NativeSession(QObject):
         )
 
     def homework_time_needed(self) -> list[dict]:
-        return time_still_needed(self.assignments, self.blocks, self.week_start)
+        return time_still_needed(self.assignments, self.blocks, self.week_start, self._committed_blocks)
+
+    def _time_split(self) -> list[dict]:
+        return time_still_needed_parts(self.assignments, self.blocks, self.week_start, self._committed_blocks)
+
+    def homework_remainders(self) -> list[tuple[str, int]]:
+        """Homework with minutes that no session holds, by title and the minutes with no time in all."""
+        return [(item["title"], item["minutes"]) for item in self._time_split() if item["uncovered_min"]]
+
+    def minutes_left_for(self, assignment_id: str) -> int:
+        """Minutes of this homework that no session holds. `remaining_for` is what Plan can place of them."""
+        return uncovered_homework_minutes(
+            self.assignments.get(assignment_id), self.blocks, self._committed_blocks
+        )
 
     def built_week(self) -> WeekModel:
         """The week Material draws. The shell asks the session, not the builder."""
@@ -2670,7 +2706,7 @@ class NativeSession(QObject):
         if destination is None:
             self._say("Select a block or open Day view before pasting into this week.")
             return None
-        available = {item_id: self.remaining_for(item_id) for item_id in self.assignments}
+        available = {item_id: self.minutes_left_for(item_id) for item_id in self.assignments}
         return proposals_from_clipboard(
             self.clipboard["items"],
             kind=self.clipboard["kind"],
@@ -2966,11 +3002,20 @@ class NativeSession(QObject):
         self._seen_unfinished.add(self.week_start)
         return items
 
+    def _too_short_to_plan(self, item: dict | None, assignment_id: str) -> str:
+        """Said when Plan has nothing to place because what is left does not fill a quarter hour."""
+        left = self.minutes_left_for(assignment_id)
+        if item is None or not 0 < left < 15:
+            return ""
+        title = item.get("title") or "This homework"
+        return f"{title} has {length_label(left)} left, less than the 15 minutes Plan places."
+
     def plan_unfinished(self, assignment_id: str) -> list[dict] | None:
         item = self.assignments.get(assignment_id)
         minutes = self.remaining_for(assignment_id)
         if item is None or minutes < 15:
-            self._say("That homework is already fully planned.")
+            short = self._too_short_to_plan(item, assignment_id)
+            self._say(short or "That homework is already fully planned.")
             return None
         due_day = due_day_in_week(item.get("due"), self.week_start)
         days = days_through(due_day, first_plannable_day(self.week_start))
@@ -3008,6 +3053,7 @@ class NativeSession(QObject):
         made: set[str] = set()
         targets: set[str] = set()
         late_targets: set[str] = set()
+        short = ""
         for assignment_id in assignment_ids:
             item = self.assignments.get(assignment_id)
             if item is None or item.get("completed"):
@@ -3023,6 +3069,7 @@ class NativeSession(QObject):
                     late_targets.add(block["id"])
             minutes = self.remaining_for(assignment_id)
             if minutes < 15:
+                short = short or self._too_short_to_plan(item, assignment_id)
                 continue
             days = list(range(first_day, 7)) if late else days_through(
                 due_day_in_week(item.get("due"), self.week_start), first_day
@@ -3035,7 +3082,7 @@ class NativeSession(QObject):
             if late:
                 late_targets.add(block["id"])
         if not targets:
-            self._say("That homework already has a time.")
+            self._say(short or "That homework already has a time.")
             return
         if made:
             self._touch("planning unfinished homework")
