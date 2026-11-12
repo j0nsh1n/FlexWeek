@@ -3227,9 +3227,19 @@ class Dialog(QDialog):
     _pin_top = False
     # Where the keyboard was when the sheet opened, and goes back to when it closes.
     _came_from: QWidget | None = None
+    # The step of a new Add sheet; None for a sheet that edits. Only an Add sheet keeps its words on Esc.
+    _add_step: int | None = None
+    # Set when Esc closed a new Add sheet with typing in it: the window reads `draft()` and drops the sheet.
+    kept_on_escape = False
+    # Draft fields whose value a new sheet works out from the clock or from another field (a pin time, a
+    # category guessed from the start): kept only when the student set them, even to the value shown.
+    _BY_HAND: frozenset[str] = frozenset()
+    # Set once `apply_draft` has filled the sheet with words a student had typed.
+    _from_draft = False
 
     def __init__(self, parent: QWidget | None = None, *, sheet: bool = False) -> None:
         super().__init__(parent)
+        self._touched: set[str] = set()
         self.sheet = sheet and parent is not None
         self.card: QFrame | None = None
         self.card_width = SHEET_FORM
@@ -3242,8 +3252,56 @@ class Dialog(QDialog):
             self.setProperty("sheet", True)
 
     def _close_asked(self) -> None:
-        """What Esc, Cancel and the close button do; a dialog that must ask first overrides this."""
+        """What Cancel and the close button do; a dialog that must ask first overrides this."""
         self.reject()
+
+    def _typed_picture(self) -> tuple:
+        """Everything the student can change in the sheet, to tell whether they did."""
+        return ()
+
+    def _draft_fields(self) -> dict:
+        """The fields of a new Add sheet that `draft()` can keep, by name, as plain values."""
+        return {}
+
+    def _note_opening(self) -> None:
+        """Remember, once, what the sheet showed when it opened: `_typed` and `draft()` measure from it."""
+        if not hasattr(self, "_opened_as"):
+            self._opened_as = self._typed_picture()
+            self._fresh = self._draft_fields()
+            self._touched.clear()
+
+    def _typed(self) -> bool:
+        """Whether the student has typed or picked anything since the sheet opened."""
+        opened = getattr(self, "_opened_as", None)
+        return opened is not None and self._typed_picture() != opened
+
+    def draft(self) -> dict:
+        """What the student typed or picked in this new Add sheet, as plain values: the fields that differ
+        from what a fresh sheet showed when this one opened, and the `_BY_HAND` fields they set at all. A
+        field they never touched is left out, so the next sheet works out its own default for it from the
+        clock and the settings of that moment."""
+        now = self._draft_fields()
+        return {
+            name: value
+            for name, value in now.items()
+            if (name in self._touched if name in self._BY_HAND else value != self._fresh[name])
+        }
+
+    def _leave_words_unselected(self, field: QLineEdit) -> None:
+        """A sheet filled from a draft puts the cursor after the kept words. Qt gives the first field a
+        Tab focus-in after showEvent, which selects all of it, so the typing that follows would replace the
+        words; the deselect waits for that."""
+        if self._from_draft:
+            QTimer.singleShot(0, field, field.deselect)
+
+    def _escape(self) -> None:
+        """Esc. A new Add sheet with typing closes at once and is marked, so the window keeps what was typed
+        for the next Add; any other sheet does what Cancel does."""
+        if self._add_step is not None and self._typed():
+            self.kept_on_escape = True
+            self.reject()
+            return
+        self._close_asked()
 
     def return_focus_to(self, widget: QWidget) -> None:
         """Put the keyboard on `widget` when the sheet closes, in place of where it was when the sheet
@@ -3721,6 +3779,7 @@ class BlockDialog(Dialog):
         self._preview = ""
         self._settled_start_min = self.start.minutes()
         self.start.settled.connect(self._keep_length)
+        self.start.settled.connect(self._touch_start)
         self.start.timeChanged.connect(self._start_preview)
         self.end.settled.connect(self._end_settled)
         self.end.timeChanged.connect(self._end_changed)
@@ -3777,7 +3836,7 @@ class BlockDialog(Dialog):
         else:
             buttons.accepted.connect(self._add_primary)
         buttons.rejected.connect(self._close_asked)
-        QShortcut(QKeySequence(Qt.Key.Key_Escape), self, self._close_asked)
+        QShortcut(QKeySequence(Qt.Key.Key_Escape), self, self._escape)
         row.addWidget(buttons)
         layout.addLayout(row)
         self._sync_scope()
@@ -3806,8 +3865,11 @@ class BlockDialog(Dialog):
         self._following = False
         self._moved = ""
         self._preview = ""
-        self._settled_start_min = self.start.minutes()
-        self.start.setTime(QTime.fromString(self._original["start"], "HH:mm"))
+        start_time = QTime.fromString(self._original["start"], "HH:mm")
+        # The start this sheet opens on is not a move made in it: a sheet built ahead of time said
+        # "End moved to ..." where one built now says the length.
+        self._settled_start_min = start_time.hour() * 60 + start_time.minute()
+        self.start.setTime(start_time)
         self.end.setTime(
             self._minutes_clock(self.start.minutes() + self._original["duration_min"])
         )
@@ -3910,8 +3972,8 @@ class BlockDialog(Dialog):
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
         self.title.setFocus(Qt.FocusReason.OtherFocusReason)
-        if not hasattr(self, "_opened_as"):
-            self._opened_as = self._typed_picture()
+        self._leave_words_unselected(self.title)
+        self._note_opening()
 
     def _typed_picture(self) -> tuple:
         return (
@@ -3924,10 +3986,54 @@ class BlockDialog(Dialog):
             self.scope_choice.currentIndex() if hasattr(self, "scope_choice") else 0,
         )
 
+    def _touch_start(self, _by_hand: bool) -> None:
+        self._touched.add("start")
+
+    def _draft_fields(self) -> dict:
+        span = self._span()
+        return {
+            "title": self.title.text(),
+            "days": [index for index, check in enumerate(self.days) if check.isChecked()],
+            "start": self.start.time().toString("HH:mm"),
+            "length": span if span > 0 else self._length,
+            "end_by_hand": self._end_by_hand,
+            "category": self.category.currentData(),
+        }
+
+    # A new sheet picks its start from the clock and guesses the category from the start.
+    _BY_HAND = frozenset({"start", "category"})
+
+    def apply_draft(self, draft: dict) -> None:
+        """Fill this new sheet with what `draft()` of a closed one returned. Only those fields are set; the
+        rest are what this sheet worked out for itself when it opened. End is set as a length from the
+        start, so a start this sheet chose and a length the student chose still make sense together."""
+        self._note_opening()
+        if "title" in draft:
+            self.title.setText(draft["title"])
+        if "days" in draft:
+            self.day_picker.set_days(draft["days"])
+        if "start" in draft:
+            start = QTime.fromString(draft["start"], "HH:mm")
+            # Not a move made in this sheet: the end follows without saying "End moved to".
+            self._settled_start_min = start.hour() * 60 + start.minute()
+            self.start.setTime(start)
+            self._touched.add("start")
+        if "length" in draft:
+            self.end.setTime(self._minutes_clock(self.start.minutes() + draft["length"]))
+        if draft.get("end_by_hand"):
+            self._end_by_hand = True
+        index = self.category.findData(draft.get("category"))
+        if "category" in draft and index >= 0:
+            self.category.setCurrentIndex(index)
+            self._guessing = False
+            self._touched.add("category")
+        self._from_draft = True
+
     def _close_asked(self) -> None:
-        """Esc, Cancel and the close button ask before dropping typed words; an untouched sheet closes
-        at once. Closing from code (reject, close) never asks: nothing is there to answer it."""
-        if getattr(self, "_opened_as", None) is not None and self._typed_picture() != self._opened_as:
+        """Cancel and the close button ask before dropping typed words; an untouched sheet closes at
+        once. Esc on a new Add sheet keeps the words instead (`_escape`). Closing from code (reject,
+        close) never asks: nothing is there to answer it."""
+        if self._typed():
             sheet = ConfirmSheet(
                 self,
                 "Discard what you typed?",
@@ -3943,7 +4049,7 @@ class BlockDialog(Dialog):
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         if event.key() == Qt.Key.Key_Escape:
             event.accept()
-            self._close_asked()
+            self._escape()
             return
         super().keyPressEvent(event)
 
@@ -3951,6 +4057,7 @@ class BlockDialog(Dialog):
         if self._applying_guess:
             return
         self._guessing = False
+        self._touched.add("category")
 
     def _maybe_guess(self, *_args: object) -> None:
         if not self._guessing:
@@ -4802,8 +4909,8 @@ class HomeworkDialog(Dialog):
         if not self.sheet:
             fit_scroll_dialog(self)
         self.title.setFocus(Qt.FocusReason.OtherFocusReason)
-        if not hasattr(self, "_opened_as"):
-            self._opened_as = self._typed_picture()
+        self._leave_words_unselected(self.title)
+        self._note_opening()
 
     def _typed_picture(self) -> tuple:
         when = self.when.currentData() if hasattr(self, "when") else None
@@ -4823,10 +4930,53 @@ class HomeworkDialog(Dialog):
             self.completed.isChecked() if hasattr(self, "completed") else False,
         )
 
+    # A new sheet picks the pinned day and time from the clock.
+    _BY_HAND = frozenset({"pin_day", "pin_time"})
+
+    def _draft_fields(self) -> dict:
+        return {
+            "title": self.title.text(),
+            "due": self.due.value(),
+            "estimate": self.estimate.value(),
+            "when": self.when.currentData(),
+            "pin_day": self._day,
+            "pin_time": self.when_time.time().toString("HH:mm"),
+            "spread": self.spread_choice.currentData(),
+        }
+
+    def apply_draft(self, draft: dict) -> None:
+        """Fill this new sheet with what `draft()` of a closed one returned. Only those fields are set; the
+        rest are what this sheet worked out for itself when it opened. Add homework has no notes, course,
+        type, energy, links or checklist on its pages, so a draft holds none of them."""
+        self._note_opening()
+        if "title" in draft:
+            self.title.setText(draft["title"])
+        if "due" in draft:
+            self.due.set_value(draft["due"])
+        if "estimate" in draft:
+            self.estimate.setValue(draft["estimate"])
+        if "when" in draft:
+            self.when.setCurrentIndex(self.when.findData(draft["when"]))
+        # After the pin choice: Spread over days only shows for time FlexWeek picks.
+        if "spread" in draft:
+            self.spread_choice.setCurrentIndex(self.spread_choice.findData(draft["spread"]))
+        if "pin_day" in draft:
+            # Signals off: ticking one pill after unticking the other would read as "nothing picked".
+            self._day = draft["pin_day"]
+            self.when_day.blockSignals(True)
+            self.when_day.set_days([self._day])
+            self.when_day.blockSignals(False)
+            self._follow_when()
+        if "pin_time" in draft:
+            self.when_time.setTime(QTime.fromString(draft["pin_time"], "HH:mm"))
+        self._touched.update(name for name in draft if name in self._BY_HAND)
+        self._from_draft = True
+
     def _close_asked(self) -> None:
-        """Esc, Cancel and the close button ask before dropping typed words; an untouched sheet closes
-        at once. Closing from code (reject, close) never asks: nothing is there to answer it."""
-        if getattr(self, "_opened_as", None) is not None and self._typed_picture() != self._opened_as:
+        """Cancel and the close button ask before dropping typed words; an untouched sheet closes at
+        once. Esc on a new Add sheet keeps the words instead (`_escape`). Closing from code (reject,
+        close) never asks: nothing is there to answer it."""
+        if self._typed():
             sheet = ConfirmSheet(
                 self,
                 "Discard what you typed?",
@@ -4842,7 +4992,7 @@ class HomeworkDialog(Dialog):
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         if event.key() == Qt.Key.Key_Escape:
             event.accept()
-            self._close_asked()
+            self._escape()
             return
         super().keyPressEvent(event)
 
@@ -4964,6 +5114,7 @@ class HomeworkDialog(Dialog):
         self.when.currentIndexChanged.connect(self.refit)
         self.when_day.changed.connect(self._pick_day)
         self.when_time.timeChanged.connect(self._follow_when)
+        self.when_time.settled.connect(self._touch_pin_time)
 
     def _default_placement(self) -> tuple[int, int]:
         """Today if the week on screen has it, else Monday, at 16:00 or the next quarter hour after it."""
@@ -4975,8 +5126,12 @@ class HomeworkDialog(Dialog):
         quarter = (now.hour * 60 + now.minute) // 15 * 15 + 15
         return today.weekday(), min(max(16 * 60, quarter), 23 * 60 + 45)
 
+    def _touch_pin_time(self, _by_hand: bool) -> None:
+        self._touched.add("pin_time")
+
     def _pick_day(self) -> None:
         """One day only: ticking another unticks the first, and the last one cannot be unticked."""
+        self._touched.add("pin_day")
         days = self.when_day.days()
         fresh = [day for day in days if day != self._day]
         self._day = fresh[0] if fresh else self._day
