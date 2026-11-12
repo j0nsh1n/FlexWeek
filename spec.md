@@ -209,7 +209,9 @@ Contract for the finished app:
   window still has a free 15 minutes after now. An "In one go" homework is
   never shared out: it gets one gap of its full length before it is due, or
   stays in Not placed yet with "Doesn't fit in one go before Wed 21. Allow
-  splitting?". Whatever is not placed stays time that needs a place: the placed
+  splitting?". The sessions Allow splitting makes are all placed this week
+  where they fit, without a fair share. Whatever is not placed stays time
+  that needs a place: the placed
   part keeps its session and the rest is a second open session of the same
   homework. Before placing anything in a week, Plan and Replan give that week
   one session for each open homework with time still needed that is due on or
