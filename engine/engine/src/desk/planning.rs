@@ -699,6 +699,28 @@ pub fn time_still_needed_parts(
     Ok(result)
 }
 
+/// Homework with a session still waiting for a time (`open`), and of those the ones whose every minute
+/// is in a session (`waiting_only`). A homework with a waiting session and minutes no session holds is
+/// open but not waiting only: Plan names it by its minutes, so it is not also counted as waiting.
+pub fn plan_open_counts(
+    assignments: &serde_json::Map<String, Value>,
+    open_week_blocks: &[Value],
+    week_start: &str,
+    committed: &[Value],
+) -> EngineResult<(i64, i64)> {
+    let mut open = 0;
+    let mut waiting_only = 0;
+    for item in time_still_needed_parts(assignments, open_week_blocks, week_start, committed)? {
+        if item["waiting_min"].as_i64().unwrap_or(0) > 0 {
+            open += 1;
+            if item["uncovered_min"].as_i64().unwrap_or(0) == 0 {
+                waiting_only += 1;
+            }
+        }
+    }
+    Ok((open, waiting_only))
+}
+
 pub fn due_point(due: &Value, week_start: &str) -> EngineResult<Option<(i64, i64)>> {
     if !truthy(Some(due)) {
         return Ok(None);
@@ -1066,7 +1088,21 @@ fn uncovered_minutes(
             let focus = int_of(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
             (estimate - focus).max(0) - here
         }
-        Some(server) => py_int(server)? + committed - here,
+        Some(server) => {
+            // The server's number is floored at 0, so with sessions over the estimate it cannot say how far
+            // over they go, and `server + committed` overstates what the saved sessions held. What the
+            // sessions held never exceeds the estimate less focus done, which also catches focus time
+            // credited since the number was read.
+            let held = py_int(server)? + committed;
+            let held = match get(assignment, "estimate_min")? {
+                Some(estimate) if !estimate.is_null() => {
+                    let focus = int_of(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
+                    held.min((int_of(estimate)? - focus).max(0))
+                }
+                _ => held,
+            };
+            held - here
+        }
     };
     Ok(minutes.max(0))
 }

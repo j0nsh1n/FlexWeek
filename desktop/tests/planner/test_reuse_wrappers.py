@@ -6,6 +6,7 @@ from __future__ import annotations
 from desktop.native.reuse import (
     move_earlier_homework,
     open_rest_sessions,
+    plan_open_counts,
     proposals_from_clipboard,
     row_conflict,
     time_still_needed,
@@ -82,6 +83,22 @@ def test_time_still_needed_wrappers_return_the_minutes_the_engine_counts() -> No
     assert [(item["assignment_id"], item["minutes"]) for item in needed] == [("history", 10)]
     parts = time_still_needed_parts({"history": assignment}, [cut, rest], "2026-10-05", [cut])
     assert (parts[0]["waiting_min"], parts[0]["uncovered_min"]) == (0, 10)
+
+
+def test_plan_open_counts_wrapper_returns_the_engines_two_counts() -> None:
+    """A 585 min session waits and 10 more minutes are in no session (600 - 5 - 585): the homework is open
+    but is named by its minutes, not counted as waiting only."""
+    assignment = {
+        "id": "poster",
+        "title": "Poster",
+        "due": "2026-10-14T23:59",
+        "unplanned_min": 595,
+        "estimate_min": 600,
+    }
+    cut = {"id": "cut", "assignment_id": "poster", "duration_min": 5, "start": "18:45", "days": [3]}
+    rest = {"id": "rest", "assignment_id": "poster", "duration_min": 585, "days": [3]}
+    counts = plan_open_counts({"poster": assignment}, [cut, rest], "2026-10-05", [cut])
+    assert counts == {"open": 1, "waiting_only": 0}
 
 
 def test_earlier_homework_wrapper_returns_both_weeks_for_one_save() -> None:

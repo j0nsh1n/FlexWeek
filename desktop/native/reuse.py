@@ -263,6 +263,24 @@ def available_homework_minutes(
     )
 
 
+def plan_open_counts(
+    assignments: dict,
+    open_week_blocks: list[dict],
+    week_start: str,
+    committed_blocks: list[dict] | None = None,
+) -> dict:
+    """`open`: homework with a session still waiting for a time. `waiting_only`: those with no minutes
+    outside a session, the ones Plan counts as "with no time yet" rather than naming."""
+    return json.loads(
+        flexweek_engine.reuse_plan_open_counts(
+            json.dumps(assignments),
+            json.dumps(open_week_blocks),
+            week_start,
+            json.dumps(committed_blocks),
+        )
+    )
+
+
 def uncovered_homework_minutes(
     assignment: dict | None,
     blocks: list[dict],

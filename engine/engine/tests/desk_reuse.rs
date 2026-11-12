@@ -1563,3 +1563,89 @@ fn test_a_paste_that_cannot_fit_says_how_many_minutes_are_left() {
         "A pasted homework session needs at least 15 min, and this one is 5 min."
     );
 }
+
+fn uncovered(assignment: &Value, blocks: &[Value], committed: &[Value]) -> i64 {
+    planning::uncovered_homework_minutes(assignment, &json!(blocks), &json!(committed))
+        .expect("uncovered")
+}
+
+#[test]
+fn test_minutes_no_session_holds_never_go_below_zero() {
+    // The server's number is 0 and a 30 min session is new: 0 + 0 - 30 is -30 without the floor at 0.
+    let blocks = [session("extra", 30, Some("18:45"))];
+    assert_eq!(uncovered(&history(0), &blocks, &[]), 0);
+    assert!(still_needed(&history(0), &blocks, &[]).is_empty());
+}
+
+#[test]
+fn test_an_unsaved_cut_to_over_planned_homework_is_counted_from_the_estimate() {
+    // 60 min estimate with 45 + 45 = 90 saved. The server floors its number at 0, so it cannot say how
+    // far over 60 the saved sessions go; the estimate bounds it. Cut one session 45 -> 30, unsaved:
+    // 90 -> 75 minutes held, still over 60, so nothing is missing (the old sum said 0 + 90 - 75 = 15).
+    let saved = [
+        session("a", 45, Some("18:45")),
+        session("b", 45, Some("20:00")),
+    ];
+    let cut = [
+        session("a", 45, Some("18:45")),
+        session("b", 30, Some("20:00")),
+    ];
+    assert_eq!(uncovered(&history(0), &cut, &saved), 0);
+    assert!(still_needed(&history(0), &cut, &saved).is_empty());
+    // Cut that second session to 5 instead: 45 + 5 = 50 held, 60 - 50 = 10 have no session.
+    let short = [
+        session("a", 45, Some("18:45")),
+        session("b", 5, Some("20:00")),
+    ];
+    assert_eq!(uncovered(&history(0), &short, &saved), 10);
+    assert_eq!(still_needed(&history(0), &short, &saved)[0]["minutes"], 10);
+}
+
+#[test]
+fn test_a_server_number_from_before_a_focus_timer_is_bounded_by_the_estimate() {
+    // 60 min estimate, a 25 min timer just credited here, the server's number (60) not yet re-read:
+    // 60 - 25 = 35 have no session. With a 30 min session held: 5.
+    let timed = with(history(60), json!({"focus_minutes": 25}));
+    assert_eq!(uncovered(&timed, &[], &[]), 35);
+    let held = [session("one", 30, Some("18:45"))];
+    assert_eq!(uncovered(&timed, &held, &held), 5);
+}
+
+fn counts_of(assignments: Value, blocks: &[Value], committed: &[Value]) -> (i64, i64) {
+    planning::plan_open_counts(&object(assignments), blocks, "2026-09-07", committed)
+        .expect("counts")
+}
+
+#[test]
+fn test_homework_with_a_waiting_session_is_open_even_with_minutes_no_session_holds() {
+    // Poster: 600 min, one session cut to 5, the 585 min rest found no room: a session waits (open) and
+    // 10 min more have no session, so it is named by its minutes rather than counted as "waiting".
+    let poster = with(
+        history(595),
+        json!({"id": "poster", "title": "Science fair poster", "estimate_min": 600}),
+    );
+    let cut = |id: &str, minutes: i64, start: Option<&str>| {
+        with(
+            session(id, minutes, start),
+            json!({"assignment_id": "poster"}),
+        )
+    };
+    let committed = [cut("cut", 5, Some("18:45"))];
+    let blocks = [cut("cut", 5, Some("18:45")), cut("rest", 585, None)];
+    assert_eq!(
+        counts_of(json!({"poster": poster}), &blocks, &committed),
+        (1, 0)
+    );
+    // A homework whose only trouble is a waiting session is open and counted as waiting.
+    let waiting = [session("all", 60, None)];
+    assert_eq!(
+        counts_of(json!({"history": history(0)}), &waiting, &waiting),
+        (1, 1)
+    );
+    // Minutes with no session and nothing waiting: not open (Plan tried nothing it could not place).
+    let kept = [session("cut", 5, Some("18:45"))];
+    assert_eq!(
+        counts_of(json!({"history": history(55)}), &kept, &kept),
+        (0, 0)
+    );
+}

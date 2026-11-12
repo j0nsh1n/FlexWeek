@@ -689,6 +689,29 @@ fn reuse_time_still_needed_parts(
 }
 
 #[pyfunction]
+fn reuse_plan_open_counts(
+    assignments: &str,
+    open_week_blocks: &str,
+    week_start: &str,
+    committed_blocks: &str,
+) -> PyResult<String> {
+    let (assignments, blocks, committed) = (
+        parse(assignments)?,
+        parse(open_week_blocks)?,
+        parse(committed_blocks)?,
+    );
+    guard(|| {
+        let assignments = assignments.as_object().cloned().unwrap_or_default();
+        let blocks = blocks.as_array().cloned().unwrap_or_default();
+        let committed = committed.as_array().cloned().unwrap_or_default();
+        let (open, waiting_only) =
+            planning::plan_open_counts(&assignments, &blocks, week_start, &committed)
+                .map_err(crate::raise)?;
+        Ok(dump(&json!({"open": open, "waiting_only": waiting_only})))
+    })
+}
+
+#[pyfunction]
 fn reuse_uncovered_minutes(assignment: &str, blocks: &str, committed: &str) -> PyResult<i64> {
     let (assignment, blocks, committed) = (parse(assignment)?, parse(blocks)?, parse(committed)?);
     guard(|| {
@@ -1555,6 +1578,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         reuse_time_still_needed,
         reuse_time_still_needed_parts,
         reuse_uncovered_minutes,
+        reuse_plan_open_counts,
         reuse_planned,
         reuse_planning_days,
         reuse_apply_plan,
