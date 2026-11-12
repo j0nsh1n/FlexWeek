@@ -86,8 +86,8 @@
  {
   "file": "engine/engine/src/desk/planning.rs",
   "name": "the focus time is not taken off the minutes left",
-  "old": "        let left = floor_slot(estimate - focus - others);\n",
-  "new": "        let left = floor_slot(estimate - others);\n",
+  "old": "    let need = (int_of(estimate)? - focus).max(0);\n",
+  "new": "    let need = int_of(estimate)?.max(0);\n",
   "test": "cargo:flexweek-engine:replan_missed_sessions:test_a_session_partly_done_by_the_timer_is_replanned_for_what_is_left"
  },
  {
@@ -114,8 +114,8 @@
  {
   "file": "engine/engine/src/desk/planning.rs",
   "name": "the session of finished homework is moved",
-  "old": "        if truthy(get(assignment, \"completed\")?) {\n            continue;\n        }\n        let estimate",
-  "new": "        let estimate",
+  "old": "        if truthy(get(assignment, \"completed\")?) {\n            continue;\n        }\n        let part = this_weeks_part(assignment, link, &saved)?;\n",
+  "new": "        let part = this_weeks_part(assignment, link, &saved)?;\n",
   "test": "cargo:flexweek-engine:replan_missed_sessions:test_a_session_of_finished_homework_is_not_moved"
  },
  {
