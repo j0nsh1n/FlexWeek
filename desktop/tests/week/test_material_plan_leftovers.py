@@ -413,3 +413,132 @@ def test_plan_sizes_its_rest_by_the_week_the_held_number_was_read_with(
     placed = sorted(b["duration_min"] for b in essay)
     assert placed == [5, 45]
     assert _snack(window) == "Placed 1 of 1. History essay still has 10 min with no time."
+
+
+def _fail_saves(window, monkeypatch, status: int) -> dict:
+    """Make every save fail with `status` while `state["on"]` is true."""
+    session = window.session
+    real = session.client.request
+    state = {"on": True}
+
+    def request(method, path, payload, on_success, on_error):
+        if method == "POST" and path.startswith("/api/changes") and state["on"]:
+            on_error(ApiError(status, "down"))
+            return None
+        return real(method, path, payload, on_success, on_error)
+
+    monkeypatch.setattr(session.client, "request", request)
+    return state
+
+
+def _essay_counts(window) -> tuple[list[int], int, int]:
+    """The essay's session lengths, its minutes no session holds, and its time still needed."""
+    session = window.session
+    needed = {item["assignment_id"]: item["minutes"] for item in session.homework_time_needed()}
+    lengths = [b["duration_min"] for b in session.blocks if b.get("assignment_id") == "essay"]
+    return lengths, session.minutes_left_for("essay"), needed.get("essay", 0)
+
+
+def _cut_and_read(window, qapp, minutes: int) -> None:
+    """The essay's session cut to `minutes`, saved, and its numbers read again."""
+    _cut(window, qapp, "essay", minutes)
+    wait_until(qapp, lambda: window.session.assignments["essay"].get("planned_min") == minutes)
+    _pump(qapp)
+
+
+@pytest.mark.parametrize("status", [0, 500])
+def test_a_failed_undo_counts_the_week_it_goes_back_to(
+    qapp, window, monkeypatch, status: int
+) -> None:
+    """Essay 60, its session 60, then cut to 5, saved and read again (planned 5). Undo puts the 60 back but
+    its save fails, so the week goes back to the saved 5: 60 - 5 = 55 have no session. The copy it went back
+    to held the numbers read before the cut (planned 60), which against the newer saved week said
+    60 - (60 - 5) - 5 = 0."""
+    _reset(window, qapp)
+    _cut_and_read(window, qapp, 60)
+    _cut_and_read(window, qapp, 5)
+    assert _essay_counts(window) == ([5], 55, 55)
+    _fail_saves(window, monkeypatch, status)
+    window.session.undo()
+    settled(qapp, window)
+
+    assert _essay_counts(window) == ([5], 55, 55)
+
+
+def test_a_failed_redo_counts_the_week_it_goes_back_to(qapp, window, monkeypatch) -> None:
+    """Essay 60: cut to 5 and saved, undone (the 60 back, saved), read again (planned 60): 0 have no session.
+    Redo cuts to 5 again but its save fails, so the week goes back to the saved 60: still 0. The copy it went
+    back to held the numbers read after the cut (planned 5): 60 - (5 - 60) - 60 = 55 invented."""
+    _reset(window, qapp)
+    _cut_and_read(window, qapp, 60)
+    _cut_and_read(window, qapp, 5)
+    session = window.session
+    session.undo()
+    settled(qapp, window)
+    wait_until(qapp, lambda: session.assignments["essay"].get("planned_min") == 60)
+    _pump(qapp)
+    assert _essay_counts(window) == ([60], 0, 0)
+    _fail_saves(window, monkeypatch, 0)
+    session.redo()
+    settled(qapp, window)
+
+    assert _essay_counts(window) == ([60], 0, 0)
+
+
+def _delete_essay_with_forty(window, qapp) -> None:
+    """Essay 60, its session cut to 40 and read again (20 have no session), then deleted, and the read after
+    the delete landed: the essay is in neither the server's list nor the saved week."""
+    _cut_and_read(window, qapp, 40)
+    assert _essay_counts(window) == ([40], 20, 20)
+    session = window.session
+    assert session.delete_homework("essay")
+    settled(qapp, window)
+    wait_until(
+        qapp,
+        lambda: "essay" not in session.assignments
+        and not any(b.get("assignment_id") == "essay" for b in session._assignments_basis),
+    )
+    _pump(qapp)
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_undoing_a_homework_delete_keeps_its_minutes(qapp, window, monkeypatch, fail: bool) -> None:
+    """Undo brings the essay and its 40 back, with the numbers read before the delete (planned 40); the read
+    after the Undo is held back, or fails. 60 - 40 = 20 have no session, before that read and after it.
+    Counted against the saved week of after the delete, which has no essay, it said 60 - 40 - 40 < 0, so 0."""
+    _reset(window, qapp)
+    _delete_essay_with_forty(window, qapp)
+    real, held = _hold_the_assignments_reply(window, monkeypatch, fail=fail)
+    window.session.undo()
+    settled(qapp, window)
+
+    assert _essay_counts(window) == ([40], 20, 20)
+    if not fail:
+        path, payload, on_success, on_error = held[-1]
+        real("GET", path, payload, on_success, on_error)
+        settled(qapp, window)
+        assert _essay_counts(window) == ([40], 20, 20)
+
+
+def test_undoing_a_homework_delete_that_cannot_be_saved_then_can(qapp, window, monkeypatch) -> None:
+    """Undo of the essay's delete, its save failing: the essay stays deleted, as the server has it, and is
+    counted nowhere. Undo again, saved this time, with the read after it held back: 60 - 40 = 20 have no
+    session; after the read, still 20."""
+    _reset(window, qapp)
+    _delete_essay_with_forty(window, qapp)
+    session = window.session
+    state = _fail_saves(window, monkeypatch, 0)
+    session.undo()
+    settled(qapp, window)
+    assert "essay" not in session.assignments
+    assert _essay_counts(window) == ([], 0, 0)
+
+    state["on"] = False
+    real, held = _hold_the_assignments_reply(window, monkeypatch, fail=False)
+    session.undo()
+    settled(qapp, window)
+    assert _essay_counts(window) == ([40], 20, 20)
+    path, payload, on_success, on_error = held[-1]
+    real("GET", path, payload, on_success, on_error)
+    settled(qapp, window)
+    assert _essay_counts(window) == ([40], 20, 20)

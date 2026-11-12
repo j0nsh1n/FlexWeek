@@ -1889,7 +1889,13 @@ class NativeSession(QObject):
                 live = self.assignments.get(entry["id"])
                 restored = deepcopy(target)
                 restored["revision"] = int((live or {}).get("revision") or 0)
-                if live is not None:
+                if live is None:
+                    # Its numbers were read before the delete, with its sessions as this side has them.
+                    homework = entry["id"]
+                    self._assignments_basis = [
+                        block for block in self._assignments_basis if block.get("assignment_id") != homework
+                    ] + [deepcopy(block) for block in self.blocks if block.get("assignment_id") == homework]
+                else:
                     for key in ("unplanned_min", "planned_min"):
                         if key in live:
                             restored[key] = live[key]
@@ -2579,6 +2585,11 @@ class NativeSession(QObject):
                 return
             self._assignments_basis = basis
             for item in data.get("assignments") or []:
+                # The saved copy a failed Undo or Redo goes back to must hold the numbers read with `basis`.
+                saved = self._committed_assignments.get(item["id"])
+                if saved is not None:
+                    saved["unplanned_min"] = item.get("unplanned_min")
+                    saved["planned_min"] = item.get("planned_min")
                 if item["id"] in self.dirty_assignments:
                     local = self.assignments.get(item["id"])
                     if local is not None:
