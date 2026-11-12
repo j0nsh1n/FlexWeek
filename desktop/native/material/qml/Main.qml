@@ -30,8 +30,13 @@ Item {
     // Set by the window while one of its own dialogs (Help) is up over this one: its keys are not ours,
     // and a Shortcut here still fires with that dialog active, so Esc never reached it.
     property bool widgetsDialogOpen: false
+    // A Week or Day block menu, or a block held by the mouse: a view change or a new week under it left the
+    // menu open on a block no longer shown, and a held block carried to another week.
+    readonly property bool gridHeld: bridge !== undefined && bridge !== null
+        && ((bridge.screen === "week" && (weekView.menuOpen || weekView.handing))
+            || (bridge.screen === "day" && (dayView.menuOpen || dayView.handing)))
     readonly property bool modalActive: typing || focusOpen || accountLayer.active || settingsPromptOpen
-        || widgetsDialogOpen || datePicker.open
+        || widgetsDialogOpen || datePicker.open || gridHeld
 
     function _field(item) {
         while (item) {
@@ -57,14 +62,68 @@ Item {
         item.forceActiveFocus()
     }
 
+    // T: today in the view you are on (Week, Day, Month); My day and Settings open Day, which opens on today.
+    function goToday() {
+        if (bridge.screen === "week")
+            bridge.week.today()
+        else if (bridge.screen === "day")
+            bridge.day.today()
+        else if (bridge.screen === "month")
+            bridge.month.today()
+        else
+            bridge.showPage("day")
+    }
+
+    // J and K: the next or previous week, day or month, whichever is shown.
+    function step(direction) {
+        if (bridge.screen === "week")
+            direction > 0 ? bridge.week.next() : bridge.week.previous()
+        else if (bridge.screen === "day")
+            direction > 0 ? bridge.day.nextDay() : bridge.day.previousDay()
+        else if (bridge.screen === "month")
+            direction > 0 ? bridge.month.nextMonth() : bridge.month.previousMonth()
+    }
+
+    // The letter keys, behind Letter keys. True when `key` is one of them and did its work.
+    function letterKey(key) {
+        if (key === Qt.Key_T)
+            goToday()
+        else if (key === Qt.Key_D)
+            bridge.showPage("day")
+        else if (key === Qt.Key_W)
+            bridge.showPage("week")
+        else if (key === Qt.Key_M)
+            bridge.showPage("month")
+        else if (key === Qt.Key_J)
+            step(1)
+        else if (key === Qt.Key_K)
+            step(-1)
+        else if (key === Qt.Key_C)
+            bridge.addHomework()
+        else if (key === Qt.Key_P)
+            bridge.plan()
+        else if (key === Qt.Key_Z)
+            bridge.undo()
+        else if (key === Qt.Key_F)
+            bridge.focus.show()
+        else
+            return false
+        return true
+    }
+
     function takeKey(event) {
         if (modalActive)
             return
         var key = event.key
-        var plain = !(event.modifiers & (Qt.ControlModifier | Qt.MetaModifier | Qt.AltModifier))
+        // A letter key is the bare key: with Shift, Ctrl, Alt or Meta it is another shortcut.
+        var bare = !(event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier | Qt.MetaModifier | Qt.AltModifier))
         // 1 to 5 and the letters answer to their own Settings switches.
         var numbers = bridge.shortcuts !== false
         var letters = bridge.letterKeys === true
+        if (letters && bare && letterKey(key)) {
+            event.accepted = true
+            return
+        }
         if (numbers && key === Qt.Key_1)
             bridge.showPage("day")
         else if (numbers && key === Qt.Key_2)
@@ -75,12 +134,6 @@ Item {
             bridge.showPage("myday")
         else if (numbers && key === Qt.Key_5)
             bridge.showPage("settings")
-        else if (letters && key === Qt.Key_Z && plain)
-            bridge.undo()
-        else if (letters && key === Qt.Key_F)
-            bridge.focus.show()
-        else if (letters && key === Qt.Key_P && plain)
-            bridge.plan()
         else if (numbers && key === Qt.Key_Escape)
             focusDestination()
         else
@@ -702,12 +755,22 @@ Item {
         enabled: !modalActive && bridge.shortcuts !== false
         onActivated: bridge.showPage("settings")
     }
-    Shortcut {
-        sequence: "Z"
+    component LetterShortcut: Shortcut {
+        required property int letter
         context: Qt.WindowShortcut
-        enabled: !modalActive && bridge.letterKeys === true
-        onActivated: bridge.undo()
+        enabled: !root.modalActive && root.bridge.letterKeys === true
+        onActivated: root.letterKey(letter)
     }
+    LetterShortcut { sequence: "T"; letter: Qt.Key_T }
+    LetterShortcut { sequence: "D"; letter: Qt.Key_D }
+    LetterShortcut { sequence: "W"; letter: Qt.Key_W }
+    LetterShortcut { sequence: "M"; letter: Qt.Key_M }
+    LetterShortcut { sequence: "J"; letter: Qt.Key_J }
+    LetterShortcut { sequence: "K"; letter: Qt.Key_K }
+    LetterShortcut { sequence: "C"; letter: Qt.Key_C }
+    LetterShortcut { sequence: "P"; letter: Qt.Key_P }
+    LetterShortcut { sequence: "Z"; letter: Qt.Key_Z }
+    LetterShortcut { sequence: "F"; letter: Qt.Key_F }
     // Ctrl chords are not one-letter shortcuts, so neither Settings switch touches them. They end in the
     // same bridge.undo() and bridge.redo() as the snackbar's UNDO and the top bar. A text field or a
     // sheet (`typing`), Focus, sign-in and the Settings prompt keep their own keys through modalActive.
@@ -723,17 +786,13 @@ Item {
         enabled: !modalActive
         onActivated: bridge.redo()
     }
+    // Quick focus, the same as the Quick focus row in More. A Ctrl chord, so neither Settings switch
+    // touches it. Ctrl+F is left free for search.
     Shortcut {
-        sequence: "F"
+        sequence: "Ctrl+Shift+F"
         context: Qt.WindowShortcut
-        enabled: !modalActive && bridge.letterKeys === true
+        enabled: !modalActive
         onActivated: bridge.focus.show()
-    }
-    Shortcut {
-        sequence: "P"
-        context: Qt.WindowShortcut
-        enabled: !modalActive && bridge.letterKeys === true
-        onActivated: bridge.plan()
     }
     Shortcut {
         sequence: "Ctrl+="

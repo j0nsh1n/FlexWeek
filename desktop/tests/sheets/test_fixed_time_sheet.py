@@ -63,6 +63,28 @@ def test_add_fixed_time_steps_and_saves_through_the_session(
     settle(qapp, shell)
 
 
+def test_add_fixed_time_accepts_a_start_that_has_already_passed(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    """Thursday 19:00 is now: 09:00 today and Monday are behind us, and a fixed time may start there."""
+    sheets.openBlock()
+    sheets.setText("title", "Morning run")
+    sheets.next()
+    for day in [item["value"] for item in sheets.form["days"] if item["on"]]:
+        sheets.toggleDay(day)
+    sheets.toggleDay(0)
+    sheets.toggleDay(3)
+    sheets.setText("start", "09:00")
+    assert sheets.form["timeProblem"] == ""
+    sheets.next()
+    assert sheets.form["step"] == 2
+    sheets.next()
+    assert sheets.kind == ""
+    made = next(item for item in shell.session.blocks if item["title"] == "Morning run")
+    assert (made["days"], made["start"]) == ([0, 3], "09:00")
+    settle(qapp, shell)
+
+
 def test_fixed_time_checks_end_after_start_and_previews_a_clash(sheets) -> None:
     sheets.openBlock()
     sheets.setText("title", "Study hall")

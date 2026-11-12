@@ -251,7 +251,7 @@ class BlockDraft:
         original_start = self.original.get("start") or ""
         if not self.existing:
             for day in chosen:
-                past = past_problem(week, day, self.start, now_iso, now_min)
+                past = past_problem("locked", week, day, self.start, now_iso, now_min)
                 if past:
                     return past
             return ""
@@ -261,7 +261,7 @@ class BlockDraft:
             moved = single and day in original_days and _clock(self.start) != original_start
             if not added and not moved:
                 continue
-            past = past_problem(week, day, self.start, now_iso, now_min)
+            past = past_problem("locked", week, day, self.start, now_iso, now_min)
             if past:
                 return past
         return ""

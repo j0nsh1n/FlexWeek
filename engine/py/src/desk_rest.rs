@@ -338,13 +338,16 @@ fn calendar_span_problem(
 
 #[pyfunction]
 fn calendar_past_problem(
+    kind: &str,
     week_start: &str,
     day: i64,
     start_min: i64,
     now_iso: &str,
     now_min: i64,
 ) -> PyResult<Option<String>> {
-    guard(|| grid::past_problem(week_start, day, start_min, now_iso, now_min).map_err(crate::raise))
+    guard(|| {
+        grid::past_problem(kind, week_start, day, start_min, now_iso, now_min).map_err(crate::raise)
+    })
 }
 
 #[pyfunction]
@@ -509,6 +512,23 @@ fn focus_candidates(
         let found = focus::focus_candidates(&blocks, &assignments, &trace, week_start, now)
             .map_err(crate::raise)?;
         Ok(array(found))
+    })
+}
+
+#[pyfunction]
+fn focus_quick_homework(
+    blocks: &str,
+    assignments: &str,
+    trace: &str,
+    week_start: &str,
+    now: &str,
+) -> PyResult<String> {
+    let (blocks, assignments, trace) = (parse(blocks)?, parse(assignments)?, parse(trace)?);
+    guard(|| {
+        Ok(dump(
+            &focus::quick_focus_homework(&blocks, &assignments, &trace, week_start, now)
+                .map_err(crate::raise)?,
+        ))
     })
 }
 
@@ -1506,6 +1526,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         focus_break_phase,
         focus_credit,
         focus_candidates,
+        focus_quick_homework,
         focus_now_next,
         focus_now_next_line,
         reuse_restore_label,

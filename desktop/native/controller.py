@@ -60,6 +60,7 @@ from desktop.native.focus import (
     pause_state,
     persist_payload,
     phase_total_ms,
+    quick_focus_homework,
     remaining_ms,
     restore_state,
     set_phase,
@@ -1597,7 +1598,14 @@ class NativeSession(QObject):
             return "That's outside the hours FlexWeek plans in, so it stayed where it was."
         if block is None or not block.get("completed"):
             clock_now = clock_parts(self.now_ms())
-            past = past_problem(to_week, to_day, start_min, clock_now["iso"], int(clock_now["minute"]))
+            past = past_problem(
+                str((block or {}).get("kind") or ""),
+                to_week,
+                to_day,
+                start_min,
+                clock_now["iso"],
+                int(clock_now["minute"]),
+            )
             if past:
                 return past
         assignment = self.assignments.get(homework_id) or self.assignments.get(block_id)
@@ -3597,6 +3605,23 @@ class NativeSession(QObject):
 
     def start_quick_focus(self, *, replace: bool = False) -> bool:
         return self.start_focus(None, None, replace=replace, quick=True)
+
+    def quick_focus_offer(self) -> dict | None:
+        """The homework session the Quick focus screen offers: the one on now, or the next one today."""
+        if self.account is None or not self.week_start:
+            return None
+        now = datetime.fromtimestamp(self.now_ms() / 1000)
+        return quick_focus_homework(
+            self.blocks, self.assignments, self.trace, self.week_start, now.isoformat(timespec="minutes")
+        )
+
+    def start_focus_on_offer(self) -> bool:
+        """Start from the Quick focus screen: on the homework it names, counted toward it as when Day
+        starts focus on that block; a plain timer when nothing is offered."""
+        offer = self.quick_focus_offer()
+        if offer is None:
+            return self.start_quick_focus()
+        return self.start_focus(offer["id"], offer["day"])
 
     def start_focus(
         self,

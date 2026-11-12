@@ -28,6 +28,12 @@ class _Session(Protocol):
 
     def now_ms(self) -> int: ...
 
+    def quick_focus_offer(self) -> dict | None: ...
+
+    def start_focus_on_offer(self) -> bool: ...
+
+    def start_quick_focus(self) -> bool: ...
+
 
 class FocusBridge(QObject):
     changed = Signal()
@@ -98,7 +104,19 @@ class FocusBridge(QObject):
     @Property(str, notify=changed)
     def title(self) -> str:
         state = self._state()
-        return QUICK_TITLE if state is None else str(state.get("title") or QUICK_TITLE)
+        if state is None:
+            offer = self._offer()
+            return QUICK_TITLE if offer is None else str(offer["title"])
+        return str(state.get("title") or QUICK_TITLE)
+
+    def _offer(self) -> dict | None:
+        """The homework on now or next today, while Ready; a running timer has already chosen."""
+        return self._session().quick_focus_offer() if self._state() is None else None
+
+    @Property(bool, notify=changed)
+    def offered(self) -> bool:
+        """Ready with homework on now or next today: Start counts toward it and Just a timer does not."""
+        return self._offer() is not None
 
     @Property(str, notify=changed)
     def timeText(self) -> str:
@@ -187,7 +205,12 @@ class FocusBridge(QObject):
 
     @Slot()
     def begin(self) -> None:
-        """Start from Ready: a quick focus that is not tied to any homework."""
+        """Start from Ready: on the homework the screen names, or a plain timer when none is offered."""
+        self._session().start_focus_on_offer()
+
+    @Slot()
+    def beginTimer(self) -> None:  # noqa: N802 - the name QML calls
+        """Just a timer: a quick focus that is not tied to any homework."""
         self._session().start_quick_focus()
 
     @Slot(str, "QVariant", result=bool)

@@ -222,20 +222,41 @@ fn a_fixed_time_on_a_day_already_over_may_change_its_start_there() {
 }
 
 #[test]
-fn a_fixed_time_today_may_not_start_before_now() {
-    // Wednesday noon: today's School cannot be moved to start at 08:30, which has passed.
+fn a_fixed_time_may_be_moved_to_an_earlier_time_today() {
+    // Wednesday noon: today's School may be moved to start at 08:30, which has passed.
     let wednesday = 2;
-    let words = refusal(move_at(
-        &[school_on(wednesday)],
-        &drop_of("school", wednesday, wednesday, 8 * 60 + 30, 15 * 60),
-        "2026-10-21",
-        12 * 60,
-        &assignments(),
-    ));
-    assert_eq!(
-        words,
-        "That time has passed. Choose 12:00 or later today, or another day."
+    let block = landed(
+        move_at(
+            &[school_on(wednesday)],
+            &drop_of("school", wednesday, wednesday, 8 * 60 + 30, 15 * 60),
+            "2026-10-21",
+            12 * 60,
+            &assignments(),
+        ),
+        "school",
     );
+    assert_eq!(
+        block["start"],
+        json!("08:30"),
+        "School took the earlier start"
+    );
+}
+
+#[test]
+fn a_fixed_time_may_be_moved_to_an_earlier_day() {
+    // Wednesday noon: Wednesday's School may be dragged to Tuesday, a day that is over.
+    let wednesday = 2;
+    let block = landed(
+        move_at(
+            &[school_on(wednesday)],
+            &drop_of("school", wednesday, TUESDAY, 8 * 60, 14 * 60 + 30),
+            "2026-10-21",
+            12 * 60,
+            &assignments(),
+        ),
+        "school",
+    );
+    assert_eq!(block["days"], json!([TUESDAY]), "School moved to Tuesday");
 }
 
 #[test]

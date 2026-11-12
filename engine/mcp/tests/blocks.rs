@@ -72,7 +72,7 @@ fn boot_at(world: &World, now: &str) -> Server {
 #[test]
 fn move_block_uses_offset_clock_minute_for_past_check() {
     let world = signed_in("move-offset-past");
-    seed_week(&world, json!([club(&[2], "16:00")]));
+    seed_week(&world, json!([study(&[2], "16:00")]));
     let mut server = boot_at(&world, "2026-10-21T08:00:00+09:00");
     server.handshake();
     let response = server.call(
@@ -81,7 +81,7 @@ fn move_block_uses_offset_clock_minute_for_past_check() {
             "operation_id": "op-offset-past",
             "week_start": "2026-10-19",
             "expected_revision": 4,
-            "block_id": "club",
+            "block_id": "study",
             "day": 2,
             "start": "07:00",
             "end": "08:00"
@@ -132,6 +132,19 @@ fn club(days: &[i64], start: &str) -> Value {
         "id": "club",
         "title": "Club",
         "kind": "locked",
+        "duration_min": 60,
+        "days": days,
+        "start": start,
+        "priority": 3,
+        "energy": "medium"
+    })
+}
+
+fn study(days: &[i64], start: &str) -> Value {
+    json!({
+        "id": "study",
+        "title": "Study",
+        "kind": "flexible",
         "duration_min": 60,
         "days": days,
         "start": start,
@@ -286,9 +299,9 @@ fn move_block_puts_the_block_at_the_new_time() {
 }
 
 #[test]
-fn move_block_to_a_past_time_is_refused_in_hand_moves_words() {
+fn move_block_of_homework_to_a_past_time_is_refused_in_hand_moves_words() {
     let world = signed_in("move-past");
-    seed_week(&world, json!([club(&[2], "16:00")]));
+    seed_week(&world, json!([study(&[2], "16:00")]));
     let mut server = boot(&world);
     server.handshake();
     let response = server.call(
@@ -297,7 +310,7 @@ fn move_block_to_a_past_time_is_refused_in_hand_moves_words() {
             "operation_id": "op-move-past",
             "week_start": "2026-10-19",
             "expected_revision": 4,
-            "block_id": "club",
+            "block_id": "study",
             "day": 2,
             "start": "11:00",
             "end": "12:00"
@@ -313,9 +326,43 @@ fn move_block_to_a_past_time_is_refused_in_hand_moves_words() {
         week_row(&world.database_arg, world.user, "2026-10-19").unwrap_or((Value::Null, -1));
     assert_eq!(revision, 4, "a refused move writes nothing");
     assert_eq!(
-        find_block(&stored, "club").get("start"),
+        find_block(&stored, "study").get("start"),
         Some(&json!("16:00")),
-        "the block stays at 16:00"
+        "the homework stays at 16:00"
+    );
+}
+
+#[test]
+fn move_block_of_a_fixed_time_to_a_past_time_today_is_accepted() {
+    let world = signed_in("move-fixed-past");
+    seed_week(&world, json!([club(&[2], "16:00")]));
+    let mut server = boot(&world);
+    server.handshake();
+    let response = server.call(
+        "move_block",
+        json!({
+            "operation_id": "op-move-fixed-past",
+            "week_start": "2026-10-19",
+            "expected_revision": 4,
+            "block_id": "club",
+            "day": 2,
+            "start": "11:00",
+            "end": "12:00"
+        }),
+        2,
+    );
+    assert_eq!(
+        tool_error_text(&response),
+        None,
+        "a fixed time may move to a start before now, got {response}"
+    );
+    let (stored, revision) =
+        week_row(&world.database_arg, world.user, "2026-10-19").unwrap_or((Value::Null, -1));
+    assert_eq!(revision, 5, "the move was saved");
+    assert_eq!(
+        find_block(&stored, "club").get("start"),
+        Some(&json!("11:00")),
+        "the fixed time moved to 11:00"
     );
 }
 
