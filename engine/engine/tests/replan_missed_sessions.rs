@@ -4,9 +4,14 @@
 //! touched; and the count of homework that needs a time says so.
 //!
 //! The week is Monday 2 November 2026 and now is Thursday 5 November at 19:00, which a plan reads as
-//! the limit (day 3, minute 1140). The essay was planned on Tuesday 3 November, 16:00 to 17:00.
+//! the limit (day 3, minute 1140). The essay was planned on Tuesday 3 November, 16:00 to 17:00. A
+//! session counts as missed only once its end is at or before the real minute on the clock, never
+//! because the plan's limit is rounded up to the quarter hour.
 
-use flexweek_engine::desk::planning::{solve_request, time_still_needed, without_missed_times};
+use flexweek_engine::desk::planning::{
+    clock_point, missed_session_ids, solve_request, solve_request_at, time_still_needed,
+    without_missed_times,
+};
 use serde_json::{Map, Value, json};
 
 const WEEK: &str = "2026-11-02";
@@ -14,6 +19,17 @@ const NOW: (i64, i64) = (3, 19 * 60);
 
 fn not_before() -> Value {
     json!([NOW.0, NOW.1])
+}
+
+/// The real clock minute as a point of the week.
+fn clock(day: i64, hour: i64, minute: i64) -> Value {
+    json!([day, hour * 60 + minute])
+}
+
+/// What a plan reads at `clock`: the minute rounded up to the next quarter hour.
+fn limit_at(clock: &Value) -> Value {
+    let minute = clock[1].as_i64().expect("a minute");
+    json!([clock[0], (minute + 14) / 15 * 15])
 }
 
 /// A planned session of the essay: `day` (0 is Monday), start "HH:MM", length in minutes.
@@ -47,14 +63,24 @@ fn essay(estimate: i64, focus: i64, due: &str) -> Value {
 }
 
 fn request(blocks: Vec<Value>, assignments: &Value, everything: bool) -> (Vec<Value>, Vec<String>) {
-    let (payload, targets) = solve_request(
+    request_at(blocks, assignments, everything, &not_before())
+}
+
+fn request_at(
+    blocks: Vec<Value>,
+    assignments: &Value,
+    everything: bool,
+    now: &Value,
+) -> (Vec<Value>, Vec<String>) {
+    let (payload, targets) = solve_request_at(
         &Value::Array(blocks),
         assignments,
         WEEK,
         everything,
         None,
-        Some(&not_before()),
+        Some(&limit_at(now)),
         false,
+        Some(now),
     )
     .expect("a request");
     let targets = targets
@@ -71,8 +97,8 @@ fn sent<'a>(payload: &'a [Value], id: &str) -> &'a Value {
         .unwrap_or_else(|| panic!("{id} in the request"))
 }
 
-fn needed(blocks: &[Value], assignments: &Value, not_before: Option<&Value>) -> i64 {
-    let stripped = without_missed_times(blocks, assignments, not_before).expect("blocks");
+fn needed(blocks: &[Value], assignments: &Value, now: Option<&Value>) -> i64 {
+    let stripped = without_missed_times(blocks, assignments, now).expect("blocks");
     let map: &Map<String, Value> = assignments.as_object().expect("assignments");
     time_still_needed(map, &stripped, WEEK)
         .expect("a count")
@@ -235,9 +261,178 @@ fn test_the_count_reads_a_missed_session_as_time_that_needs_a_time() {
 }
 
 #[test]
-fn test_the_count_is_unchanged_with_no_clock_or_a_week_that_is_over() {
+fn test_the_count_is_unchanged_with_no_clock() {
     let assignments = essay(60, 0, "2026-11-07T23:59");
     let missed = vec![session("essay", 1, "16:00", 60)];
     assert_eq!(needed(&missed, &assignments, None), 0);
-    assert_eq!(needed(&missed, &assignments, Some(&json!([7, 0]))), 0);
+    let (_, targets) = solve_request(
+        &Value::Array(missed),
+        &assignments,
+        WEEK,
+        true,
+        None,
+        Some(&not_before()),
+        false,
+    )
+    .expect("a request");
+    assert!(
+        targets.is_empty(),
+        "without a clock nothing has passed: Replan all keeps the session that has begun"
+    );
+}
+
+#[test]
+fn test_the_clock_is_a_point_of_this_week_only() {
+    // Thursday 5 November 18:50 of the week of Monday 2 November is day 3, minute 1130, not rounded.
+    assert_eq!(
+        clock_point(WEEK, "2026-11-05", 18, 50).unwrap(),
+        Some((3, 1130))
+    );
+    assert_eq!(clock_point(WEEK, "2026-11-02", 0, 0).unwrap(), Some((0, 0)));
+    assert_eq!(
+        clock_point(WEEK, "2026-11-08", 23, 59).unwrap(),
+        Some((6, 1439))
+    );
+    assert_eq!(
+        clock_point(WEEK, "2026-11-01", 23, 59).unwrap(),
+        None,
+        "the week is ahead"
+    );
+    assert_eq!(
+        clock_point(WEEK, "2026-11-09", 0, 0).unwrap(),
+        None,
+        "the week is over"
+    );
+}
+
+#[test]
+fn test_a_session_ending_inside_the_current_quarter_hour_is_still_on() {
+    // Thursday 18:00-19:00 at 18:50. The plan's limit rounds up to 19:00, but the clock has not
+    // reached the end: the student is 50 minutes in. 18:44 is the control, and 19:00 is when it ends.
+    let assignments = essay(60, 0, "2026-11-07T23:59");
+    let on = vec![session("essay", 3, "18:00", 60)];
+    for minute in [44, 50, 59] {
+        let at = clock(3, 18, minute);
+        let (payload, targets) = request_at(on.clone(), &assignments, true, &at);
+        assert!(targets.is_empty(), "on at 18:{minute}");
+        assert_eq!(sent(&payload, "essay")["kind"], "locked");
+        assert_eq!(needed(&on, &assignments, Some(&at)), 0);
+        assert!(
+            missed_session_ids(&on, &assignments, Some(&at))
+                .unwrap()
+                .is_empty()
+        );
+    }
+    let at = clock(3, 19, 0);
+    let (_, over) = request_at(on.clone(), &assignments, true, &at);
+    assert_eq!(over, ["essay"], "over at 19:00");
+    assert_eq!(needed(&on, &assignments, Some(&at)), 60);
+}
+
+#[test]
+fn test_a_session_that_ended_in_the_quarter_hour_before_the_clock_has_passed() {
+    // Thursday 18:00-18:50 at 18:52, a plan limit of 19:00: it ended two minutes ago. It is missed
+    // although its end is later than the quarter hour before the limit (18:45). At 18:49 it is on.
+    let assignments = essay(50, 0, "2026-11-07T23:59");
+    let blocks = vec![session("essay", 3, "18:00", 50)];
+    let (_, moved) = request_at(blocks.clone(), &assignments, true, &clock(3, 18, 52));
+    assert_eq!(moved, ["essay"]);
+    let (_, on) = request_at(blocks, &assignments, true, &clock(3, 18, 49));
+    assert!(on.is_empty());
+}
+
+#[test]
+fn test_a_missed_session_never_comes_back_longer_than_itself() {
+    // 180 estimated, nothing else this week (the 120 min that sit next week are in another week's
+    // blocks, so this one does not see them): 180 are left, but the missed hour comes back as 60.
+    let assignments = essay(180, 0, "2026-11-07T23:59");
+    let blocks = vec![session("essay", 1, "16:00", 60)];
+    let (payload, targets) = request(blocks.clone(), &assignments, true);
+    assert_eq!(targets, ["essay"]);
+    assert_eq!(sent(&payload, "essay")["duration_min"], 60);
+    assert_eq!(needed(&blocks, &assignments, Some(&not_before())), 60);
+}
+
+#[test]
+fn test_focus_time_is_taken_off_once_with_two_missed_sessions() {
+    // 120 estimated and 60 of focus: 60 min are left, and two hours (Tuesday, Wednesday) have passed.
+    // The earlier one takes all 60; the later one has nothing left to do and stays as it is.
+    let assignments = essay(120, 60, "2026-11-07T23:59");
+    let blocks = vec![session("a", 1, "16:00", 60), session("b", 2, "16:00", 60)];
+    let (payload, targets) = request(blocks.clone(), &assignments, true);
+    assert_eq!(targets, ["a"]);
+    assert_eq!(sent(&payload, "a")["duration_min"], 60);
+    assert_eq!(sent(&payload, "b")["kind"], "locked");
+    assert_eq!(needed(&blocks, &assignments, Some(&not_before())), 60);
+}
+
+#[test]
+fn test_two_missed_sessions_share_the_minutes_left_in_time_order() {
+    // 120 estimated and 30 of focus: 90 min are left. Tuesday takes 60, Wednesday the other 30.
+    let assignments = essay(120, 30, "2026-11-07T23:59");
+    let blocks = vec![session("b", 2, "16:00", 60), session("a", 1, "16:00", 60)];
+    let (payload, targets) = request(blocks.clone(), &assignments, true);
+    assert_eq!(targets.len(), 2);
+    assert_eq!(sent(&payload, "a")["duration_min"], 60);
+    assert_eq!(sent(&payload, "b")["duration_min"], 30);
+    assert_eq!(needed(&blocks, &assignments, Some(&not_before())), 90);
+}
+
+#[test]
+fn test_one_missed_session_with_focus_comes_back_for_what_is_left() {
+    // The control of the two above: 60 estimated, 30 of focus, one missed hour: it comes back as 30.
+    let assignments = essay(60, 30, "2026-11-07T23:59");
+    let blocks = vec![session("essay", 1, "16:00", 60)];
+    let (payload, _) = request(blocks.clone(), &assignments, true);
+    assert_eq!(sent(&payload, "essay")["duration_min"], 30);
+    assert_eq!(needed(&blocks, &assignments, Some(&not_before())), 30);
+}
+
+#[test]
+fn test_a_screen_calls_a_session_missed_when_a_plan_would_move_it_or_it_is_pinned() {
+    let now = not_before();
+    let open = essay(60, 0, "2026-11-07T23:59");
+    let ids = |blocks: &[Value], assignments: &Value| {
+        missed_session_ids(blocks, assignments, Some(&now)).expect("ids")
+    };
+    // Unfinished and passed: missed.
+    assert_eq!(ids(&[session("a", 1, "16:00", 60)], &open), [json!("a")]);
+    // Still ahead, or finished: not.
+    assert!(ids(&[session("a", 4, "16:00", 60)], &open).is_empty());
+    let mut done = session("a", 1, "16:00", 60);
+    done["completed"] = json!(true);
+    assert!(ids(&[done], &open).is_empty());
+    // Covered by its homework's focus time: nothing is needed, so it is not missed.
+    assert!(
+        ids(
+            &[session("a", 1, "16:00", 60)],
+            &essay(60, 60, "2026-11-07T23:59")
+        )
+        .is_empty()
+    );
+    // Pinned: no plan moves it, and it is still missed on screen.
+    let mut pinned = session("a", 1, "16:00", 60);
+    pinned["pinned"] = json!(true);
+    assert_eq!(ids(&[pinned.clone()], &open), [json!("a")]);
+    let mut finished = essay(60, 0, "2026-11-07T23:59");
+    finished["essay-a"]["completed"] = json!(true);
+    assert!(ids(&[pinned], &finished).is_empty());
+    // No clock: none.
+    assert!(
+        missed_session_ids(&[session("a", 1, "16:00", 60)], &open, None)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_a_session_of_finished_homework_is_not_moved() {
+    // The homework is finished, though its Tuesday session was never ticked: nothing is left to plan.
+    let mut assignments = essay(60, 0, "2026-11-07T23:59");
+    assignments["essay-a"]["completed"] = json!(true);
+    let blocks = vec![session("essay", 1, "16:00", 60)];
+    let (payload, targets) = request(blocks.clone(), &assignments, true);
+    assert!(targets.is_empty());
+    assert_eq!(sent(&payload, "essay")["kind"], "locked");
+    assert_eq!(needed(&blocks, &assignments, Some(&not_before())), 0);
 }

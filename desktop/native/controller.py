@@ -94,6 +94,7 @@ from desktop.native.reuse import (
     late_id,
     left_over_items,
     merge_preview_rows,
+    missed_session_ids,
     move_earlier_homework,
     open_rest_sessions,
     plan_start,
@@ -2201,7 +2202,8 @@ class NativeSession(QObject):
         self.placed_where = ""
         # Plan can move the block the outline is on, so the outline does not stay on it.
         self.select_block(None, None)
-        start = plan_start(self.week_start, datetime.fromtimestamp(self.now_ms() / 1000))
+        clock = datetime.fromtimestamp(self.now_ms() / 1000)
+        start = plan_start(self.week_start, clock)
         if start is not None and start[0] > 6:
             self._say(WEEK_OVER)
             return
@@ -2260,7 +2262,13 @@ class NativeSession(QObject):
             planning_blocks, self.assignments, self.week_start, earlier_blocks
         )
         payload, targets = solve_request(
-            open_blocks, self.assignments, self.week_start, everything=everything, only=only, not_before=start
+            open_blocks,
+            self.assignments,
+            self.week_start,
+            everything=everything,
+            only=only,
+            not_before=start,
+            now=clock,
         )
         # Work due after Sunday gets its fair share of this week; the rest waits for next week's Plan.
         first_day = start[0] if start else 0
@@ -2279,7 +2287,7 @@ class NativeSession(QObject):
         if shares:
             kept = {block["id"] for block in week}
             payload, targets = solve_request(
-                week, self.assignments, self.week_start, only=targets & kept, not_before=start
+                week, self.assignments, self.week_start, only=targets & kept, not_before=start, now=clock
             )
         if earliest_first:
             payload = [
@@ -2568,9 +2576,14 @@ class NativeSession(QObject):
 
     def homework_time_needed(self) -> list[dict]:
         """Homework that needs a time. A session whose time has passed unfinished needs one again."""
-        start = plan_start(self.week_start, datetime.fromtimestamp(self.now_ms() / 1000))
-        week = without_missed_times(self.blocks, self.assignments, start)
+        clock = datetime.fromtimestamp(self.now_ms() / 1000)
+        week = without_missed_times(self.blocks, self.assignments, self.week_start, clock)
         return time_still_needed(self.assignments, week, self.week_start)
+
+    def missed_block_ids(self) -> frozenset[str]:
+        """The sessions every look calls missed: the planner's own answer, read at the clock now."""
+        clock = datetime.fromtimestamp(self.now_ms() / 1000)
+        return missed_session_ids(self.blocks, self.assignments, self.week_start, clock)
 
     def built_week(self) -> WeekModel:
         """The week Material draws. The shell asks the session, not the builder."""

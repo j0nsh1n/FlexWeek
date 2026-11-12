@@ -46,6 +46,8 @@ class Scene:
     today_iso: str = ""
     # Whose month this is, so a month still loading keeps only the same student's last grid.
     account: str | None = None
+    # The homework sessions to call missed, as the planner reads them, not a look's own clock test.
+    missed: frozenset[str] = frozenset()
 
     def px(self, size: float) -> int:
         """A size in pixels that follows the student's Text size knob."""

@@ -1101,6 +1101,7 @@ fn reuse_planner_title(
 /// read as the Python wrapper wrote them: `only` as the list of its members, `not_before` as it is,
 /// with a note of whether it was a list.
 #[pyfunction]
+#[pyo3(signature = (blocks, assignments, week_start, everything, only, not_before, now=None))]
 fn reuse_solve_request(
     blocks: &str,
     assignments: &str,
@@ -1108,6 +1109,7 @@ fn reuse_solve_request(
     everything: &Bound<'_, PyAny>,
     only: &Bound<'_, PyAny>,
     not_before: &Bound<'_, PyAny>,
+    now: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<(String, String)> {
     let (blocks, assignments) = (parse(blocks)?, parse(assignments)?);
     let everything = everything.is_truthy()?;
@@ -1123,8 +1125,9 @@ fn reuse_solve_request(
     } else {
         Some(parse(&dumps_of(not_before)?)?)
     };
+    let now = clock_point(week_start, now)?;
     guard(|| {
-        let (payload, targets) = planning::solve_request(
+        let (payload, targets) = planning::solve_request_at(
             &blocks,
             &assignments,
             week_start,
@@ -1132,30 +1135,68 @@ fn reuse_solve_request(
             only.as_ref(),
             not_before.as_ref(),
             held_a_list,
+            now.as_ref(),
         )
         .map_err(crate::raise)?;
         Ok((array(payload), array(targets)))
     })
 }
 
+/// The real current minute as (day, minute) of the week, from a datetime; `None` when `now` is not
+/// given or today is not in the week.
+fn clock_point(week_start: &str, now: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Value>> {
+    let Some(now) = now.filter(|moment| !moment.is_none()) else {
+        return Ok(None);
+    };
+    let today_iso = now
+        .call_method0("date")?
+        .call_method0("isoformat")?
+        .extract::<String>()?;
+    let hour = now.getattr("hour")?.extract::<i64>()?;
+    let minute = now.getattr("minute")?.extract::<i64>()?;
+    let point = guard(|| {
+        planning::clock_point(week_start, &today_iso, hour, minute).map_err(crate::raise)
+    })?;
+    Ok(point.map(|(day, minute)| json!([day, minute])))
+}
+
 /// The week with each session Replan all would move for having passed read as one with no time:
-/// what the count of homework that needs a time is taken on.
+/// what the count of homework that needs a time is taken on. `now` is a datetime.
 #[pyfunction]
-#[pyo3(signature = (blocks, assignments, not_before=None))]
+#[pyo3(signature = (blocks, assignments, week_start, now=None))]
 fn reuse_without_missed_times(
     blocks: &str,
     assignments: &str,
-    not_before: Option<&Bound<'_, PyAny>>,
+    week_start: &str,
+    now: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<String> {
     let (blocks, assignments) = (parse(blocks)?, parse(assignments)?);
-    let not_before = match not_before {
-        Some(limit) if !limit.is_none() => Some(parse(&dumps_of(limit)?)?),
-        _ => None,
-    };
+    let now = clock_point(week_start, now)?;
     guard(|| {
         let blocks = blocks.as_array().cloned().unwrap_or_default();
         Ok(dump(&Value::Array(
-            planning::without_missed_times(&blocks, &assignments, not_before.as_ref())
+            planning::without_missed_times(&blocks, &assignments, now.as_ref())
+                .map_err(crate::raise)?,
+        )))
+    })
+}
+
+/// The ids of the sessions a screen calls missed: the ones Replan all moves for having passed, and
+/// a pinned one that passed unfinished. `now` is a datetime.
+#[pyfunction]
+#[pyo3(signature = (blocks, assignments, week_start, now=None))]
+fn reuse_missed_session_ids(
+    blocks: &str,
+    assignments: &str,
+    week_start: &str,
+    now: Option<&Bound<'_, PyAny>>,
+) -> PyResult<String> {
+    let (blocks, assignments) = (parse(blocks)?, parse(assignments)?);
+    let now = clock_point(week_start, now)?;
+    guard(|| {
+        let blocks = blocks.as_array().cloned().unwrap_or_default();
+        Ok(dump(&Value::Array(
+            planning::missed_session_ids(&blocks, &assignments, now.as_ref())
                 .map_err(crate::raise)?,
         )))
     })
@@ -1573,6 +1614,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         reuse_planner_title,
         reuse_solve_request,
         reuse_without_missed_times,
+        reuse_missed_session_ids,
         reuse_settle_placements,
         files_export_input,
         files_referenced_ids,

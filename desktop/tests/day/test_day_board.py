@@ -67,9 +67,17 @@ def _block(
     )
 
 
-def _board(items: list[Occurrence], minute: int, when: str = "today", nudges: bool = True):
+def _board(
+    items: list[Occurrence],
+    minute: int,
+    when: str = "today",
+    nudges: bool = True,
+    missed: frozenset[str] = frozenset(),
+):
     set_clock_24h(True)
-    return board_for(items, minute=minute, when=when, nudges=nudges, dim=True, mode="light", on=TODAY)
+    return board_for(
+        items, minute=minute, when=when, nudges=nudges, dim=True, mode="light", on=TODAY, missed=missed
+    )
 
 
 SCHOOL = (8 * 60, 12 * 60)
@@ -172,6 +180,7 @@ def test_browsing_another_day_takes_its_tags_from_the_clock_not_from_that_day(qa
             selected_day="2026-11-06",
             now_ms=CLOCK.now_ms,
             built_week=lambda: SimpleNamespace(on_day=lambda _: (item,)),
+            missed_block_ids=frozenset,
             busy=False,
         )
 
@@ -382,12 +391,12 @@ def test_where_fixed_blocks_overlap_the_card_names_the_one_that_ends_last() -> N
     assert board.now_minutes == 3 * 60 + 15
 
 
-def test_homework_that_ended_unfinished_is_still_to_do_not_done() -> None:
-    """Thursday 19:00. The essay's 16:00 to 17:00 is over and it was not finished, so it is not in Done
-    and is not dimmed; School, over and fixed, and Maths, finished, are Done."""
+def test_homework_the_planner_calls_missed_is_still_to_do_not_done() -> None:
+    """Thursday 19:00. The essay's 16:00 to 17:00 is over and the planner calls it missed, so it is not in
+    Done and is not dimmed; School, over and fixed, and Maths, finished, are Done."""
     missed = _block("Essay", 16 * 60, 17 * 60, work=True, assignment="a1", due="2026-11-08T23:59")
     maths = _block("Maths", 17 * 60, 18 * 60, work=True, done=True, assignment="a2")
-    board = _board([_block("School", *SCHOOL), missed, maths], 19 * 60)
+    board = _board([_block("School", *SCHOOL), missed, maths], 19 * 60, missed=frozenset({"essay"}))
     assert [row.title for row in board.up_next] == ["Essay"]
     assert [row.title for row in board.done] == ["School", "Maths"]
     assert board.up_next[0].dim is False
@@ -396,9 +405,19 @@ def test_homework_that_ended_unfinished_is_still_to_do_not_done() -> None:
     assert board.left_line == "1 thing left today"
 
 
+def test_an_ended_session_the_planner_does_not_call_missed_is_done() -> None:
+    """The same essay, but its homework's time is all covered by focus, so the planner does not call it
+    missed (its id is not in `missed`): over is Done, as before the missed rule."""
+    covered = _block("Essay", 16 * 60, 17 * 60, work=True, assignment="a1", due="2026-11-08T23:59")
+    board = _board([covered], 19 * 60)
+    assert [row.title for row in board.done] == ["Essay"]
+    assert board.up_next == ()
+    assert board.left_line == "Nothing left today"
+
+
 def test_start_focus_stays_on_homework_that_is_not_over() -> None:
     """A missed session is still to do, but Start focus opens the next one, as it did."""
     missed = _block("Essay", 16 * 60, 17 * 60, work=True, assignment="a1")
     ahead = _block("Reading", 20 * 60, 21 * 60, work=True, assignment="a2")
-    board = _board([missed, ahead], 19 * 60)
+    board = _board([missed, ahead], 19 * 60, missed=frozenset({"essay"}))
     assert board.focus_title == "Reading"

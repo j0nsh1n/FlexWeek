@@ -52,7 +52,9 @@ BLOCK_ROLES = (
 )
 
 
-def occurrence_row(item: Any, mode: str, *, dim: bool, gone: bool, fresh: bool) -> dict:
+def occurrence_row(
+    item: Any, mode: str, *, dim: bool, gone: bool, fresh: bool, missed: bool = False
+) -> dict:
     """One QML block row from a week occurrence. Day and Week share this shape."""
     fill, ink = paint_for_category(item.category, mode)
     end = int(item.end)
@@ -66,8 +68,8 @@ def occurrence_row(item: Any, mode: str, *, dim: bool, gone: bool, fresh: bool) 
         "category": event_category(item.category),
         "detail": range_label(int(item.start), end),
         "detailStart": short_clock(int(item.start)),
-        # Homework is over once finished; one whose time went by unfinished is still to do.
-        "past": dim and (bool(item.done) or (gone and not item.work)),
+        # A session the planner calls missed is still to do, so it is not dimmed as over.
+        "past": dim and (bool(item.done) or (gone and not missed)),
         "blockId": item.block_id,
         "assignmentId": item.assignment_id or "",
         "homework": bool(item.work and item.assignment_id),
@@ -158,6 +160,7 @@ class WeekBridge(QObject):
         self._block_rows: list[dict] = []
         self._homework_rows: list[dict] = []
         self._time_words = EVERYTHING_TIMED
+        self._all_timed = True
         self._day_rows: list[dict] = []
         self._hour_labels: list[str] = [clock_label(hour * 60) for hour in range(24)]
         self._blocks = Rows(BLOCK_ROLES, self)
@@ -233,6 +236,7 @@ class WeekBridge(QObject):
                 }
             )
         week = session.built_week()
+        missed = session.missed_block_ids()
         # A week that ended is all past, a week ahead has nothing past, this week goes by the clock.
         keys: set[tuple[str, int]] = set()
         fresh_ok = self._week_key == session.week_start and bool(self._seen)
@@ -259,6 +263,7 @@ class WeekBridge(QObject):
                     dim=dim,
                     gone=gone,
                     fresh=self._fresh_until.get(key, 0.0) > clock,
+                    missed=item.block_id in missed,
                 )
             )
         for item in getattr(week, "waiting", ()):
@@ -280,7 +285,9 @@ class WeekBridge(QObject):
                 }
             )
         # The same count every screen reads, so a missed session is not "has a time" here either.
-        self._time_words = homework_time_sentence([], session.homework_time_needed())
+        needed = session.homework_time_needed()
+        self._time_words = homework_time_sentence([], needed)
+        self._all_timed = not needed
         self._week_key = session.week_start
         self._seen = keys
         self._fresh_until = {key: until for key, until in self._fresh_until.items() if until > clock}
@@ -643,4 +650,4 @@ class WeekBridge(QObject):
 
     @Property(bool, notify=homeworkChanged)
     def allTimed(self) -> bool:
-        return self._time_words == EVERYTHING_TIMED
+        return self._all_timed

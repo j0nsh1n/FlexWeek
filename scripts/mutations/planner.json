@@ -51,9 +51,86 @@
  {
   "file": "engine/engine/src/desk/planning.rs",
   "name": "Replan all moves homework whose time has come",
-  "old": "        let kept = planned\n            && (truthy(get(&block, \"pinned\")?) || begun(&block, not_before, not_before_is_list)?);\n",
-  "new": "        let _ = begun(&block, not_before, not_before_is_list)?;\n        let kept = planned && truthy(get(&block, \"pinned\")?);\n",
-  "test": "desktop/tests/sheets/test_plan_homework.py::test_replan_all_leaves_homework_whose_time_has_passed"
+  "old": "        let kept = planned\n            && minutes.is_none()\n            && (truthy(get(&block, \"pinned\")?) || begun(&block, not_before, not_before_is_list)?);\n",
+  "new": "        let _ = begun(&block, not_before, not_before_is_list)?;\n        let kept = planned && minutes.is_none() && truthy(get(&block, \"pinned\")?);\n",
+  "test": "cargo:flexweek-engine:replan_missed_sessions:test_replan_all_keeps_a_session_that_is_on_now"
+ },
+ {
+  "file": "engine/engine/src/desk/planning.rs",
+  "name": "a session over quarter of an hour early",
+  "old": "    if !compare(Cmp::Le, &json!([day, end]), now)? {\n        return Ok(None);\n    }\n",
+  "new": "    if !compare(Cmp::Le, &json!([day, end - SLOT_MIN]), now)? {\n        return Ok(None);\n    }\n",
+  "test": "cargo:flexweek-engine:replan_missed_sessions:test_a_session_ending_inside_the_current_quarter_hour_is_still_on"
+ },
+ {
+  "file": "engine/engine/src/desk/planning.rs",
+  "name": "a session ending exactly now is still on",
+  "old": "    if !compare(Cmp::Le, &json!([day, end]), now)? {\n        return Ok(None);\n    }\n",
+  "new": "    if !compare(Cmp::Lt, &json!([day, end]), now)? {\n        return Ok(None);\n    }\n",
+  "test": "cargo:flexweek-engine:replan_missed_sessions:test_a_session_that_ends_exactly_now_has_passed"
+ },
+ {
+  "file": "engine/engine/src/desk/planning.rs",
+  "name": "a missed session comes back longer than itself",
+  "old": "left.min(length)));",
+  "new": "left.min(length + left)));",
+  "test": "cargo:flexweek-engine:replan_missed_sessions:test_a_missed_session_never_comes_back_longer_than_itself"
+ },
+ {
+  "file": "engine/engine/src/desk/planning.rs",
+  "name": "a missed session takes the focus time twice",
+  "old": "                || passed[at].as_ref().is_some_and(|there| there >= here)\n",
+  "new": "",
+  "test": "cargo:flexweek-engine:replan_missed_sessions:test_focus_time_is_taken_off_once_with_two_missed_sessions"
+ },
+ {
+  "file": "engine/engine/src/desk/planning.rs",
+  "name": "the focus time is not taken off the minutes left",
+  "old": "        let left = floor_slot(estimate - focus - others);\n",
+  "new": "        let left = floor_slot(estimate - others);\n",
+  "test": "cargo:flexweek-engine:replan_missed_sessions:test_a_session_partly_done_by_the_timer_is_replanned_for_what_is_left"
+ },
+ {
+  "file": "engine/engine/src/desk/planning.rs",
+  "name": "a pinned session that passed is moved",
+  "old": "            Some((day, start)) if !truthy(get(block, \"pinned\")?) => {\n",
+  "new": "            Some((day, start)) => {\n",
+  "test": "cargo:flexweek-engine:replan_missed_sessions:test_replan_all_never_touches_a_pinned_session_that_passed"
+ },
+ {
+  "file": "engine/engine/src/desk/planning.rs",
+  "name": "a missed session is sent with its old length",
+  "old": "            if let Some(minutes) = minutes {\n                session.insert(\"duration_min\".into(), json!(minutes));\n            }\n",
+  "new": "",
+  "test": "cargo:flexweek-engine:replan_missed_sessions:test_a_session_partly_done_by_the_timer_is_replanned_for_what_is_left"
+ },
+ {
+  "file": "engine/engine/src/desk/planning.rs",
+  "name": "a missed session still has a time when counted",
+  "old": "                open.shift_remove(\"start\");\n                open.insert(\"duration_min\".into(), json!(minutes));\n                out.push",
+  "new": "                open.insert(\"duration_min\".into(), json!(minutes));\n                out.push",
+  "test": "cargo:flexweek-engine:replan_missed_sessions:test_the_count_reads_a_missed_session_as_time_that_needs_a_time"
+ },
+ {
+  "file": "engine/engine/src/desk/planning.rs",
+  "name": "the session of finished homework is moved",
+  "old": "        if truthy(get(assignment, \"completed\")?) {\n            continue;\n        }\n        let estimate",
+  "new": "        let estimate",
+  "test": "cargo:flexweek-engine:replan_missed_sessions:test_a_session_of_finished_homework_is_not_moved"
+ },
+ {
+  "file": "engine/engine/src/desk/planning.rs",
+  "name": "a pinned missed session is not called missed",
+  "old": "        if ended_session(block, now)?.is_none() || !truthy(get(block, \"pinned\")?) {\n            continue;\n        }\n",
+  "new": "        if true {\n            continue;\n        }\n",
+  "test": "cargo:flexweek-engine:replan_missed_sessions:test_a_screen_calls_a_session_missed_when_a_plan_would_move_it_or_it_is_pinned"
+ },
+ {
+  "file": "engine/engine/src/desk/planning.rs",
+  "name": "a week that is over has a clock point",
+  "old": "(0..=6).contains(&day)",
+  "new": "(0..=7).contains(&day)",
+  "test": "cargo:flexweek-engine:replan_missed_sessions:test_the_clock_is_a_point_of_this_week_only"
  },
  {
   "file": "engine/engine/src/desk/planning.rs",

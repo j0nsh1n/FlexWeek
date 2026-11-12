@@ -367,9 +367,38 @@ pub fn solve_request(
     not_before: Option<&Value>,
     not_before_is_list: bool,
 ) -> EngineResult<(Vec<Value>, Vec<Value>)> {
+    solve_request_at(
+        blocks,
+        assignments,
+        week_start,
+        everything,
+        only,
+        not_before,
+        not_before_is_list,
+        None,
+    )
+}
+
+/// `solve_request` that also knows the clock, `now` as (day, minute) of the real current minute. A
+/// homework session that ended by `now`, is not pinned and still has minutes to do is then moved by
+/// Replan all instead of kept for having begun. Without `now` no session counts as missed.
+pub fn solve_request_at(
+    blocks: &Value,
+    assignments: &Value,
+    week_start: &str,
+    everything: bool,
+    only: Option<&Value>,
+    not_before: Option<&Value>,
+    not_before_is_list: bool,
+    now: Option<&Value>,
+) -> EngineResult<(Vec<Value>, Vec<Value>)> {
     let mut payload = Vec::new();
     let mut targets: Vec<Value> = Vec::new();
     let all = iterate(blocks)?;
+    let missed = match now.filter(|value| !value.is_null()) {
+        Some(now) => missed_minutes(&all, assignments, now)?,
+        None => Vec::new(),
+    };
     for block in all.iter().cloned() {
         if !eq(get(&block, "kind")?.unwrap_or(null()), &json!("flexible"))
             || truthy(get(&block, "completed")?)
@@ -379,14 +408,13 @@ pub fn solve_request(
         }
         let planned = is_planned(&block)?;
         // A session whose time has passed is not "kept" for having begun: Replan all moves it.
-        let missed = match not_before.filter(|value| !value.is_null()) {
-            Some(limit) => {
-                missed_session_minutes(&block, &all, assignments, limit, not_before_is_list)?
-            }
-            None => None,
-        };
+        let id = subscript(&block, "id")?;
+        let minutes = missed
+            .iter()
+            .find(|(held, _)| eq(held, id))
+            .map(|(_, minutes)| *minutes);
         let kept = planned
-            && missed.is_none()
+            && minutes.is_none()
             && (truthy(get(&block, "pinned")?) || begun(&block, not_before, not_before_is_list)?);
         let wanted = match only.filter(|value| !value.is_null()) {
             Some(only) => contains(only, subscript(&block, "id")?)?,
@@ -404,7 +432,7 @@ pub fn solve_request(
                     Value::Array(planning_days(&block, assignments, week_start)?),
                 );
             }
-            if let Some(minutes) = missed {
+            if let Some(minutes) = minutes {
                 session.insert("duration_min".into(), json!(minutes));
             }
             let session = Value::Object(session);
@@ -424,86 +452,141 @@ pub fn solve_request(
     Ok((payload, targets))
 }
 
-/// What Replan all gives a homework session whose time has passed: the minutes it still needs.
-/// `None` when the session is not one a plan moves: not planned, pinned, finished, not homework,
-/// still ahead or on now (it ends after `not_before`, the plan's limit), or nothing of it is left.
-///
-/// The minutes left are the homework's estimate less its focus time, less what its other open
-/// sessions of this week already hold, on the quarter hour and never more than the session's own
-/// length. Focus time is kept on the homework, not on the session, so a session partly done by the
-/// timer comes back shorter.
-fn missed_session_minutes(
-    block: &Value,
-    blocks: &[Value],
-    assignments: &Value,
-    not_before: &Value,
-    held_a_list: bool,
-) -> EngineResult<Option<i64>> {
-    if !is_planned(block)?
-        || truthy(get(block, "pinned")?)
-        || !truthy(get(block, "assignment_id")?)
-        || !begun(block, Some(not_before), held_a_list)?
-    {
+/// Where a planned homework session stands against the clock: its (day, start) once it has ended by
+/// `now`, the real current minute as (day, minute). `None` for anything else, a session still on
+/// included. Rounding the plan's start up to the quarter hour is no part of this: a session ending
+/// inside the current quarter hour is over only once its end is reached.
+fn ended_session(block: &Value, now: &Value) -> EngineResult<Option<(i64, i64)>> {
+    if !is_planned(block)? || !truthy(get(block, "assignment_id")?) {
         return Ok(None);
     }
     let start = minutes_of(subscript(block, "start")?)?;
     let length = int_of(&or_default(get(block, "duration_min")?, json!(0)))?;
     let end = (start + length).min(DAY_END_MIN);
     let day = first_of(subscript(block, "days")?)?;
-    if !compare(Cmp::Le, &json!([day, end]), not_before)? {
+    if !compare(Cmp::Le, &json!([day, end]), now)? {
         return Ok(None);
     }
-    let link = subscript(block, "assignment_id")?;
-    let Some(assignment) = table_get(assignments, link)?.filter(|found| truthy(Some(found))) else {
-        return Ok(None);
-    };
-    if truthy(get(assignment, "completed")?) {
-        return Ok(None);
+    Ok(Some((int_of(&day)?, start)))
+}
+
+fn finished(block: &Value) -> bool {
+    block
+        .get("completed")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
+/// What Replan all gives each homework session whose time has passed: the minutes it still needs,
+/// as (session id, minutes). A session left out is not one a plan moves: not planned, pinned,
+/// finished, not homework, still ahead or on now, or none of its homework's time is left for it.
+///
+/// A homework's minutes still needed are its estimate less its focus time (kept on the homework, not
+/// on a session, so the timer does not tick sessions off) less what its other open sessions of this
+/// week hold, on the quarter hour. The passed sessions take them in time order, each no more than
+/// its own length: a passed session counts for the ones after it, not for those before it, so neither
+/// the focus time nor another passed session is taken off twice.
+fn missed_minutes(
+    blocks: &[Value],
+    assignments: &Value,
+    now: &Value,
+) -> EngineResult<Vec<(Value, i64)>> {
+    let mut passed = Vec::with_capacity(blocks.len());
+    for block in blocks {
+        let at = match ended_session(block, now)? {
+            Some((day, start)) if !truthy(get(block, "pinned")?) => {
+                let id = subscript(block, "id")?.as_str().unwrap_or_default();
+                Some((day, start, id.to_string()))
+            }
+            _ => None,
+        };
+        passed.push(at);
     }
-    let estimate = int_of(&or_default(get(assignment, "estimate_min")?, json!(0)))?;
-    let focus = int_of(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
-    let id = subscript(block, "id")?;
-    let others: i64 = blocks
-        .iter()
-        .filter(|other| {
-            other.get("assignment_id") == Some(link)
-                && other.get("id") != Some(id)
-                && !other
-                    .get("completed")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false)
-        })
-        .map(|other| {
-            other
+    let mut out = Vec::new();
+    for (index, block) in blocks.iter().enumerate() {
+        let Some(here) = &passed[index] else {
+            continue;
+        };
+        let link = subscript(block, "assignment_id")?;
+        let Some(assignment) = table_get(assignments, link)?.filter(|found| truthy(Some(found)))
+        else {
+            continue;
+        };
+        if truthy(get(assignment, "completed")?) {
+            continue;
+        }
+        let estimate = int_of(&or_default(get(assignment, "estimate_min")?, json!(0)))?;
+        let focus = int_of(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
+        let mut others = 0;
+        for (at, other) in blocks.iter().enumerate() {
+            if at == index
+                || other.get("assignment_id") != Some(link)
+                || finished(other)
+                || passed[at].as_ref().is_some_and(|there| there >= here)
+            {
+                continue;
+            }
+            others += other
                 .get("duration_min")
                 .and_then(Value::as_i64)
-                .unwrap_or(0)
-        })
-        .sum();
-    let left = floor_slot(estimate - focus - others);
-    Ok((left >= SLOT_MIN).then_some(left.min(length)))
+                .unwrap_or(0);
+        }
+        let left = floor_slot(estimate - focus - others);
+        if left >= SLOT_MIN {
+            let length = int_of(&or_default(get(block, "duration_min")?, json!(0)))?;
+            out.push((subscript(block, "id")?.clone(), left.min(length)));
+        }
+    }
+    Ok(out)
+}
+
+/// The ids of the sessions a screen calls missed: those Replan all moves for having passed, and a
+/// pinned one that passed unfinished, which no plan moves.
+pub fn missed_session_ids(
+    blocks: &[Value],
+    assignments: &Value,
+    now: Option<&Value>,
+) -> EngineResult<Vec<Value>> {
+    let Some(now) = now.filter(|value| !value.is_null()) else {
+        return Ok(Vec::new());
+    };
+    let mut ids: Vec<Value> = missed_minutes(blocks, assignments, now)?
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
+    for block in blocks {
+        if ended_session(block, now)?.is_none() || !truthy(get(block, "pinned")?) {
+            continue;
+        }
+        let link = subscript(block, "assignment_id")?;
+        let open = table_get(assignments, link)?
+            .filter(|found| truthy(Some(found)))
+            .is_some_and(|found| !truthy(found.get("completed")));
+        if open {
+            ids.push(subscript(block, "id")?.clone());
+        }
+    }
+    Ok(ids)
 }
 
 /// The week with each session Replan all would move for having passed read as one with no time (its
 /// start dropped, its length the minutes still needed), so the count of homework that needs a time
 /// does not call a missed session "has a time". The week as it is when there is no clock to read
-/// (`not_before` empty) or the week is over.
+/// (`now` empty).
 pub fn without_missed_times(
     blocks: &[Value],
     assignments: &Value,
-    not_before: Option<&Value>,
+    now: Option<&Value>,
 ) -> EngineResult<Vec<Value>> {
-    let Some(limit) = not_before.filter(|value| !value.is_null()) else {
+    let Some(now) = now.filter(|value| !value.is_null()) else {
         return Ok(blocks.to_vec());
     };
-    let (day, _) = unpack_pair(limit)?;
-    if compare(Cmp::Gt, &day, &json!(6))? {
-        return Ok(blocks.to_vec());
-    }
+    let missed = missed_minutes(blocks, assignments, now)?;
     let mut out = Vec::with_capacity(blocks.len());
     for block in blocks {
-        match missed_session_minutes(block, blocks, assignments, limit, false)? {
-            Some(minutes) => {
+        let id = subscript(block, "id")?;
+        match missed.iter().find(|(held, _)| eq(held, id)) {
+            Some((_, minutes)) => {
                 let mut open = py_dict(block)?;
                 open.shift_remove("start");
                 open.insert("duration_min".into(), json!(minutes));
@@ -513,6 +596,18 @@ pub fn without_missed_times(
         }
     }
     Ok(out)
+}
+
+/// The real current minute as (day, minute) of the week, or `None` when today is not in it: a week
+/// ahead has nothing gone by, and one over is left to the earlier-week rules.
+pub fn clock_point(
+    week_start: &str,
+    today_iso: &str,
+    hour: i64,
+    minute: i64,
+) -> EngineResult<Option<(i64, i64)>> {
+    let day = (from_iso(today_iso)? - from_iso(week_start)?).num_days();
+    Ok((0..=6).contains(&day).then_some((day, hour * 60 + minute)))
 }
 
 /// Add one open session for homework with time remaining and no open session in this week.
