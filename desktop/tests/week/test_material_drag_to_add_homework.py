@@ -857,6 +857,49 @@ def test_paste_here_in_the_last_hour_starts_where_it_was_asked_for_up_to_a_quart
     assert [rows[0]["block"]["start"] for rows in seen] == ["23:45"]
 
 
+@pytest.mark.parametrize(
+    "step, pressed, released, start",
+    [
+        (5, 10 * 60 + 21, 11 * 60 + 4, "10:20"),
+        (15, 10 * 60 + 21, 11 * 60 + 4, "10:15"),
+        (5, 11 * 60 + 4, 10 * 60 + 21, "10:20"),
+        (5, 23 * 60 + 51, 23 * 60 + 59, "23:45"),
+    ],
+)
+def test_paste_here_after_drawing_a_range_starts_where_the_range_starts(
+    qapp: QApplication,
+    window: NativeWindow,
+    monkeypatch: pytest.MonkeyPatch,
+    step: int,
+    pressed: int,
+    released: int,
+    start: str,
+) -> None:
+    """A range drawn from 10:21 to 11:04 runs 10:20 to 11:05 on fives and 10:15 to 11:00 on quarter hours;
+    the paste starts at its earlier end whichever way it was drawn. One drawn in the day's last ten
+    minutes still pastes no later than 23:45, as a click there does."""
+    root = _reset(window, qapp)
+    _on_step(window, qapp, step)
+    window.session.copy_block("school", 0)
+    seen = _preview_rows(monkeypatch)
+    hours_item, row, gutter, day_width, saturday = _grid_geometry(root, window)
+    scroller = _qml(root, "weekScroller")
+    if pressed > 20 * 60:
+        scroller.setProperty(
+            "contentY", float(scroller.property("contentHeight")) - float(scroller.property("height"))
+        )
+    else:
+        scroller.setProperty("contentY", float(9 * row))
+    _pump(qapp, 6)
+    x = gutter + saturday * day_width + day_width / 2
+    press = hours_item.mapToScene(QPointF(x, pressed / 60 * row)).toPoint()
+    release = hours_item.mapToScene(QPointF(x, released / 60 * row)).toPoint()
+    _drag_pos(window, press, release)
+    assert _slot_menu(root)[-1] == "Paste here"
+    _choose(window, root, "Paste here")
+    assert [rows[0]["block"]["start"] for rows in seen] == [start]
+
+
 def test_paste_here_is_not_offered_while_a_save_is_under_way(
     qapp: QApplication, window: NativeWindow
 ) -> None:

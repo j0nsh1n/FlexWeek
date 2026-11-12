@@ -922,7 +922,7 @@ Item {
         slotEnd = end
         menuOriginItem = hours
         menuTargetModel = { slot: true, day: day, start: start, end: end,
-                            pasteAt: pasteAt === undefined ? start : pasteAt }
+                            pasteAt: Math.min(24 * 60 - 15, pasteAt === undefined ? start : pasteAt) }
         var mapped = hours.mapToItem(root, hx, hy)
         var entries = [{ label: "Add fixed time here", icon: "schedule" }]
         // Homework is planned in quarter hours, so a shorter range offers fixed time only.
