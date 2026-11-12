@@ -274,6 +274,31 @@ def test_a_pinned_time_that_has_passed_focuses_the_time_and_announces_one_descri
     free(parent)
 
 
+@pytest.mark.parametrize("step, named", [(5, "12:05 PM"), (15, "12:15 PM"), (None, "12:15 PM")])
+def test_a_pinned_time_that_has_passed_names_the_next_time_on_the_students_step(
+    qapp: QApplication,  # noqa: F811
+    step: int | None,
+    named: str,
+) -> None:
+    """Monday at 12:02: the next time is 12:05 on fives and 12:15 on quarter hours, which is also what an
+    account that never chose a step gets."""
+    from desktop.native.weekmodel import set_clock_24h
+
+    set_clock_24h(False)
+    parent = host(now=datetime(2026, 9, 14, 12, 2))
+    parent.session.preferences = {} if step is None else {"drag_step_min": step}  # type: ignore[attr-defined]
+    dialog = opened(parent)
+    go_when(dialog)
+    dialog.when.setCurrentIndex(1)
+    dialog.when_day.set_days([0])
+    dialog.when_time.setTime(QTime(10, 0))
+    dialog.accept()
+    expected = f"That time has passed. Choose {named} or later today, or another day."
+    assert dialog.when_problem.text() == expected
+    free(dialog)
+    free(parent)
+
+
 def test_a_missing_title_on_save_focuses_the_title_and_announces_once(
     qapp: QApplication,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,

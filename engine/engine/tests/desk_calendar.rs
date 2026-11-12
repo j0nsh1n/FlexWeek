@@ -430,3 +430,19 @@ fn test_a_fixed_time_may_start_in_the_past() {
         "homework at the same start is still refused"
     );
 }
+
+#[test]
+fn test_a_step_that_is_not_positive_reads_as_a_quarter_hour() {
+    // A step of 0 would divide by zero, and nothing negative is a step: both name the next quarter hour.
+    let week = "2026-10-05";
+    let thursday = "2026-10-08";
+    for step in [0, -5] {
+        assert_eq!(
+            past_problem("flexible", week, 3, 18 * 60, thursday, 19 * 60 + 2, step)
+                .expect("a verdict")
+                .expect("a refusal"),
+            "That time has passed. Choose 19:15 or later today, or another day.",
+            "step {step}"
+        );
+    }
+}

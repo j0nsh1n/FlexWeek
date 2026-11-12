@@ -6239,9 +6239,10 @@ class ChooseTimeDialog(Dialog):
         latest = DAY_END_MIN - self._duration
         self.start.setMaximumTime(QTime(latest // 60, latest % 60))
         if today in days and minute is not None:
-            # The next quarter hour today, or the first one on the next day homework can go. With none
-            # left this week the dialog says so: the last slot today had often already passed.
-            ahead, slot = next_slot(minute, first=6 * 60, last=latest)
+            # The next mark of the student's step today (the time the refusal below would name), or the
+            # first one on the next day homework can go. With none left this week the dialog says so:
+            # the last slot today had often already passed.
+            ahead, slot = next_slot(minute, first=6 * 60, last=latest, step=self._step)
             if ahead and today + ahead in days:
                 self.day.set_days([today + ahead])
             elif ahead:
