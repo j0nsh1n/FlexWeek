@@ -3933,8 +3933,9 @@ class BlockDialog(Dialog):
         super().showEvent(event)
         self.title.setFocus(Qt.FocusReason.OtherFocusReason)
         if self._reopened:
-            # Typing on goes after the kept words, not over them.
-            self.title.deselect()
+            # Typing on goes after the kept words, not over them. QDialog.setVisible gives the title a Tab
+            # focus-in after this event, which selects all, so the deselect waits for it.
+            QTimer.singleShot(0, self.title, self.title.deselect)
         if not hasattr(self, "_opened_as"):
             self._opened_as = self._typed_picture()
 
@@ -4828,8 +4829,9 @@ class HomeworkDialog(Dialog):
             fit_scroll_dialog(self)
         self.title.setFocus(Qt.FocusReason.OtherFocusReason)
         if self._reopened:
-            # Typing on goes after the kept words, not over them.
-            self.title.deselect()
+            # Typing on goes after the kept words, not over them. QDialog.setVisible gives the title a Tab
+            # focus-in after this event, which selects all, so the deselect waits for it.
+            QTimer.singleShot(0, self.title, self.title.deselect)
         if not hasattr(self, "_opened_as"):
             self._opened_as = self._typed_picture()
 

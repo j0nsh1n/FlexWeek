@@ -704,8 +704,9 @@ class NativeWindow(QMainWindow):
         self._block_spare: BlockDialog | None = None
         self._block_spare_account: str | None = None
         self._block_prepare_scheduled = False
-        # New Add sheets that Esc closed with typing in them, by kind, for the next plain Add of that kind.
-        self._kept_adds: dict[str, QDialog] = {}
+        # New Add sheets that Esc closed with typing in them, by kind, for the next plain Add of that kind:
+        # the sheet, the days a drag gave its homework, and what it was built for (`_kept_for`).
+        self._kept_adds: dict[str, tuple[QDialog, list[int] | None, tuple]] = {}
         self._leaving: QTimer | None = None
         self._saved_to_leave = False
         # A chip let go on another date while a save is under way, moved once that save has landed.
@@ -3538,22 +3539,33 @@ class NativeWindow(QMainWindow):
             drop_waiting_dim(self)
             raise
 
-    def _keep_add(self, kind: str, dialog: QDialog) -> None:
-        old = self._kept_adds.pop(kind, None)
-        if old is not None and old is not dialog and isValid(old):
-            old.deleteLater()
-        self._kept_adds[kind] = dialog
+    def _kept_for(self) -> tuple:
+        """What a sheet is built for and does not follow afterwards: the day it counts "already over"
+        from, the clock its times are written in, and the step its time lists run in."""
+        prefs = self.session.preferences or {}
+        return (self._today(), prefs.get("clock_24h"), prefs.get("drag_step_min"))
 
-    def _take_kept_add(self, kind: str) -> QDialog | None:
-        """The sheet Esc kept for this kind of Add, shown again as it was left, or None."""
+    def _keep_add(self, kind: str, dialog: QDialog, days: list[int] | None = None) -> None:
+        old = self._kept_adds.pop(kind, None)
+        if old is not None and old[0] is not dialog and isValid(old[0]):
+            old[0].deleteLater()
+        self._kept_adds[kind] = (dialog, days, self._kept_for())
+
+    def _take_kept_add(self, kind: str) -> tuple[QDialog | None, list[int] | None]:
+        """The sheet Esc kept for this kind of Add, shown again as it was left, with the days a drag gave
+        it; or nothing. A sheet kept on another day, clock or step would show stale times, so it goes."""
         kept = self._kept_adds.pop(kind, None)
-        if kept is None or not isValid(kept):
-            return None
-        kept.reopen()  # type: ignore[attr-defined]
-        return kept
+        if kept is None or not isValid(kept[0]):
+            return None, None
+        dialog, days, built_for = kept
+        if built_for != self._kept_for():
+            dialog.deleteLater()
+            return None, None
+        dialog.reopen()  # type: ignore[attr-defined]
+        return dialog, days
 
     def _drop_kept_adds(self) -> None:
-        for kept in self._kept_adds.values():
+        for kept, _days, _built_for in self._kept_adds.values():
             if isValid(kept):
                 kept.deleteLater()
         self._kept_adds.clear()
@@ -3603,7 +3615,7 @@ class NativeWindow(QMainWindow):
     def _commit_homework(self, dialog: HomeworkDialog, days: list[int] | None = None) -> None:
         if not self._run_sheet(dialog):
             if dialog.kept_on_escape:
-                self._keep_add("homework", dialog)
+                self._keep_add("homework", dialog, days)
             return
         if dialog.spread_requested():
             body = dialog.assignment()
@@ -3679,7 +3691,7 @@ class NativeWindow(QMainWindow):
     ) -> BlockDialog:
         # A plain Add opens on what Esc kept; one that brings its own day and time leaves it for the next.
         if plain:
-            kept = self._take_kept_add("block")
+            kept, _days = self._take_kept_add("block")
             if kept is not None:
                 return kept
         spare = self._block_spare
@@ -3834,11 +3846,10 @@ class NativeWindow(QMainWindow):
         category = self.session.armed_category
         if category not in FLEX_CATEGORIES:
             category = "assignments"
+        kept, days = self._take_kept_add("homework")
         self._commit_homework(
-            self._sheet(
-                lambda: self._take_kept_add("homework")
-                or HomeworkDialog(self, today=self._today(), category=category)
-            )
+            self._sheet(lambda: kept or HomeworkDialog(self, today=self._today(), category=category)),
+            days,
         )
 
     def _today(self) -> str:

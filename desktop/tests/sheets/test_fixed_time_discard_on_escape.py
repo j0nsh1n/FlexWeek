@@ -6,12 +6,15 @@ replaced by a script, for Add homework and Add fixed time alike. Expected values
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QKeyEvent
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox
 
 from desktop.native.widgets import BlockDialog, ConfirmSheet, HomeworkDialog
@@ -306,3 +309,102 @@ def test_signing_out_or_switching_account_clears_the_kept_typing(
     pump(qapp)
     getattr(quiet_commit, PLAIN_ADD[kind])()
     assert script.titles == ["", ""]
+
+
+def run_real_add(window: NativeWindow, kind: str, act) -> None:
+    """The window's own plain Add with the real `exec`: `act(sheet)` runs once the sheet is the modal one
+    and has settled. Whatever is still open after six seconds is closed, so a failure cannot hang the run."""
+
+    def inside() -> None:
+        sheet = QApplication.activeModalWidget()
+        if sheet is None:
+            QTimer.singleShot(20, inside)
+            return
+        # The fade and the focus moves Qt queues when a dialog is shown have to land first.
+        QTimer.singleShot(600, lambda: act(sheet))
+
+    def give_up() -> None:
+        for _ in range(5):
+            modal = QApplication.activeModalWidget()
+            if modal is None:
+                return
+            modal.done(int(QDialog.DialogCode.Rejected)) if isinstance(modal, QDialog) else modal.close()
+            QApplication.processEvents()
+
+    QTimer.singleShot(50, inside)
+    QTimer.singleShot(6000, give_up)
+    getattr(window, PLAIN_ADD[kind])()
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_typing_on_in_a_sheet_the_window_reopened_adds_to_the_kept_words(
+    qapp: QApplication, quiet_commit: NativeWindow, kind: str
+) -> None:
+    """Through the real `exec`: Qt gives the title a Tab focus-in after the sheet is shown, which selects
+    everything in it, so the first key typed replaced "Biology lab" instead of following it."""
+
+    def type_then_escape_for_real(sheet: QDialog) -> None:
+        sheet.title.setFocus()
+        QTest.keyClicks(sheet.title, "Biology lab")
+        QTest.keyClick(sheet.title, Qt.Key.Key_Escape)
+
+    run_real_add(quiet_commit, kind, type_then_escape_for_real)
+    pump(qapp)
+    seen: dict = {}
+
+    def type_on(sheet: QDialog) -> None:
+        seen["selected"] = sheet.title.selectedText()
+        seen["has the keyboard"] = QApplication.focusWidget() is sheet.title
+        QTest.keyClicks(sheet.title, " report")
+        seen["title"] = sheet.title.text()
+        QTest.keyClick(sheet.title, Qt.Key.Key_Escape)
+
+    run_real_add(quiet_commit, kind, type_on)
+    pump(qapp)
+    assert seen == {"selected": "", "has the keyboard": True, "title": "Biology lab report"}
+
+
+def test_homework_drawn_on_a_day_and_kept_by_esc_is_saved_on_that_day_from_the_next_add(
+    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A drag across free time on Wednesday opens Add homework for that day. Esc keeps the sheet; saving it
+    from the next plain Add must still put the homework on Wednesday, not leave it without a day."""
+    saved: list = []
+
+    def record(body: dict, **how) -> None:
+        saved.append((body["title"], how.get("days")))
+
+    monkeypatch.setattr(quiet_commit.session, "add_homework", record)
+    monkeypatch.setattr(quiet_commit.session, "armed_category", "assignments")
+    script = Script("homework", monkeypatch, type_then_escape, save)
+    quiet_commit._create_range(2, 16 * 60, 17 * 60)
+    pump(qapp)
+    quiet_commit._add_homework()
+    assert script.titles == ["", "Piano lesson"]
+    assert saved == [("Piano lesson", [2])]
+
+
+@pytest.mark.parametrize("change", ["the next day", "the clock", "the time step"])
+@pytest.mark.parametrize("kind", KINDS)
+def test_a_sheet_kept_before_the_day_the_clock_or_the_step_changed_is_not_brought_back(
+    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str, change: str
+) -> None:
+    """A sheet is built for one day, one clock and one step: kept over midnight it would call times over
+    by yesterday's clock, and after a 12/24-hour switch it would still write its times the old way."""
+    script = Script(kind, monkeypatch, type_then_escape, only_look)
+    add = getattr(quiet_commit, PLAIN_ADD[kind])
+    add()
+    pump(qapp)
+    if change == "the next day":
+        tomorrow = (date.fromisoformat(quiet_commit._today()) + timedelta(days=1)).isoformat()
+        monkeypatch.setattr(quiet_commit, "_today", lambda: tomorrow)
+    else:
+        prefs = dict(quiet_commit.session.preferences or {})
+        if change == "the clock":
+            prefs["clock_24h"] = not prefs.get("clock_24h", False)
+        else:
+            prefs["drag_step_min"] = 5 if prefs.get("drag_step_min") != 5 else 15
+        monkeypatch.setattr(quiet_commit.session, "preferences", prefs)
+    add()
+    assert script.titles == ["", ""]
+    assert quiet_commit._kept_adds == {}
