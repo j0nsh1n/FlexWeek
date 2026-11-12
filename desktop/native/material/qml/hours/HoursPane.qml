@@ -496,13 +496,16 @@ Item {
                 enabled: root.takesEmptyTime
                 acceptedButtons: Qt.LeftButton
                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                onTapped: (eventPoint) => {
-                    var p = eventPoint.position
-                    if (!root.rangeHost.emptyGridTimeAt(p.x, p.y))
-                        return
-                    var start = Math.min(23 * 60, root.rangeHost.snapToQuarter(p.y))
-                    root.openSlotMenu(root.dayAt(p.x), start, Math.min(24 * 60, start + 60), p.x, p.y)
-                }
+                onTapped: (eventPoint) => root.askSlotMenuAt(eventPoint.position)
+            }
+
+            // A right-click on free time offers the same, as a right-click on a block offers its own.
+            TapHandler {
+                objectName: "emptyTimeRightTap"
+                enabled: root.takesEmptyTime
+                acceptedButtons: Qt.RightButton
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                onTapped: (eventPoint) => root.askSlotMenuAt(eventPoint.position)
             }
 
             DragHandler {
@@ -897,20 +900,36 @@ Item {
         blockMenu.forceActiveFocus()
     }
 
-    // Free time clicked or dragged over: add homework or a fixed time there (Jonathan, 2026-11-07).
-    function openSlotMenu(day, start, end, hx, hy) {
+    // Free time clicked: the menu for an hour from the nearest mark of the student's step, as the Widgets grid
+    // places a click.
+    function askSlotMenuAt(p) {
+        if (!root.rangeHost.emptyGridTimeAt(p.x, p.y))
+            return
+        var mark = root.rangeHost.snapToQuarter(p.y)
+        var start = Math.min(23 * 60, mark)
+        // Paste here starts on the mark clicked, as the plain look's menu does: up to 23:45, not 23:00.
+        root.openSlotMenu(root.dayAt(p.x), start, Math.min(24 * 60, start + 60), p.x, p.y,
+                          Math.min(24 * 60 - 15, mark))
+    }
+
+    // Free time clicked or dragged over: add homework or a fixed time there (Jonathan, 2026-11-07). With
+    // something copied it also offers to paste it there (Jonathan, 2026-11-11).
+    function openSlotMenu(day, start, end, hx, hy, pasteAt) {
         if (day < 0)
             return
         slotDay = day
         slotStart = start
         slotEnd = end
         menuOriginItem = hours
-        menuTargetModel = { slot: true, day: day, start: start, end: end }
+        menuTargetModel = { slot: true, day: day, start: start, end: end,
+                            pasteAt: Math.min(24 * 60 - 15, pasteAt === undefined ? start : pasteAt) }
         var mapped = hours.mapToItem(root, hx, hy)
         var entries = [{ label: "Add fixed time here", icon: "schedule" }]
         // Homework is planned in quarter hours, so a shorter range offers fixed time only.
         if (end - start >= 15)
             entries.unshift({ label: "Add homework here", icon: "edit_note" })
+        if (root.bridge && root.bridge.week && root.bridge.week.hasCopied && root.bridge.week.hasCopied())
+            entries.push({ label: "Paste here", icon: "content_paste" })
         blockMenu.entries = entries
         blockMenu.x = Math.max(8, Math.min(mapped.x, root.width - blockMenu.width - 8))
         blockMenu.y = Math.max(8, Math.min(mapped.y, root.height - blockMenu.height - 8))
@@ -1000,6 +1019,8 @@ Item {
                         root.bridge.sheets.openHomeworkAt(target.day, target.start, target.end)
                     else if (label === "Add fixed time here")
                         root.bridge.sheets.openBlockAt(target.day, target.start, target.end)
+                    else if (label === "Paste here" && root.bridge.week)
+                        root.bridge.week.pasteHere(target.day, target.pasteAt)
                 } else if (label === "Edit") {
                     if (root.bridge.sheets)
                         root.bridge.sheets.editBlock(target.blockId, target.day)
