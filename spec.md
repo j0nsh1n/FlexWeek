@@ -370,7 +370,8 @@ number keys (1 to 5, on by default) and the letter keys (T, D, W, M, J, K, C, P,
 Z and F, off by default) switched on or off, but not while a field has the keyboard,
 a sheet, Focus, Help, the Go to date month or a Week or Day block menu is open, or a
 block is held by the mouse. Ctrl+Shift+F starts Quick focus whatever those
-switches say, and waits in the same cases. The plain look uses the same keys and the same two switches.
+switches say, and waits in the same cases. The plain look uses the same keys and the same two switches; there the keys wait while a
+field has the keyboard or a sheet or dialog is open.
 The rail uses type and spacing to separate its sections. Next and overdue are
 not repeated in a status row above the calendar; overdue homework stays available
 through Unfinished. More > Week as a list and Ctrl+Shift+L open a list of the
