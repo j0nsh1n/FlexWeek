@@ -807,6 +807,56 @@ def test_paste_here_is_offered_while_something_is_copied_and_not_before_or_after
     assert _slot_menu(root) == ADD_ONLY
 
 
+def _on_step(window: NativeWindow, qapp: QApplication, step: int) -> None:
+    window.session.preferences = {**(window.session.preferences or {}), "drag_step_min": step}
+    window._material_page.publish()
+    _pump(qapp)
+
+
+@pytest.mark.parametrize("minutes_past_11, start", [(20, "11:20"), (22, "11:20"), (23, "11:25")])
+def test_paste_here_on_the_5_minute_step_starts_on_the_nearest_5_minute_mark(
+    qapp: QApplication,
+    window: NativeWindow,
+    monkeypatch: pytest.MonkeyPatch,
+    minutes_past_11: int,
+    start: str,
+) -> None:
+    """11:22 is nearer 11:20 than 11:25, and 11:23 nearer 11:25: the same mark the menu opened for."""
+    root = _reset(window, qapp)
+    _on_step(window, qapp, 5)
+    window.session.copy_block("school", 0)
+    seen = _preview_rows(monkeypatch)
+    hours_item, row, gutter, day_width, saturday = _grid_geometry(root, window)
+    _qml(root, "weekScroller").setProperty("contentY", float(9 * row))
+    _pump(qapp)
+    x = gutter + saturday * day_width + day_width / 2
+    _ask_menu(window, hours_item, "right-click", x, 11 * row + row * minutes_past_11 / 60)
+    _choose(window, root, "Paste here")
+    assert [rows[0]["block"]["start"] for rows in seen] == [start]
+
+
+@pytest.mark.parametrize("step", [5, 15])
+@pytest.mark.parametrize("minutes_past_23", [46, 58])
+def test_paste_here_in_the_last_hour_starts_where_it_was_asked_for_up_to_a_quarter_to_midnight(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, step: int, minutes_past_23: int
+) -> None:
+    """The Add entries open on 23:00 so their hour fits the day; a paste does not need the hour, so 23:46
+    pastes at 23:45 on either step, and 23:58 at 23:45 too, the last start the plain look's menu gives."""
+    root = _reset(window, qapp)
+    _on_step(window, qapp, step)
+    window.session.copy_block("school", 0)
+    seen = _preview_rows(monkeypatch)
+    hours_item, row, gutter, day_width, saturday = _grid_geometry(root, window)
+    scroller = _qml(root, "weekScroller")
+    bottom = float(scroller.property("contentHeight")) - float(scroller.property("height"))
+    scroller.setProperty("contentY", bottom)
+    _pump(qapp, 6)
+    x = gutter + saturday * day_width + day_width / 2
+    _ask_menu(window, hours_item, "right-click", x, 23 * row + row * minutes_past_23 / 60)
+    _choose(window, root, "Paste here")
+    assert [rows[0]["block"]["start"] for rows in seen] == ["23:45"]
+
+
 def test_paste_here_is_not_offered_while_a_save_is_under_way(
     qapp: QApplication, window: NativeWindow
 ) -> None:

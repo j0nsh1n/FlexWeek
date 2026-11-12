@@ -900,24 +900,29 @@ Item {
         blockMenu.forceActiveFocus()
     }
 
-    // Free time clicked: the menu for an hour from the nearest quarter hour, as the Widgets grid places a click.
+    // Free time clicked: the menu for an hour from the nearest mark of the student's step, as the Widgets grid
+    // places a click.
     function askSlotMenuAt(p) {
         if (!root.rangeHost.emptyGridTimeAt(p.x, p.y))
             return
-        var start = Math.min(23 * 60, root.rangeHost.snapToQuarter(p.y))
-        root.openSlotMenu(root.dayAt(p.x), start, Math.min(24 * 60, start + 60), p.x, p.y)
+        var mark = root.rangeHost.snapToQuarter(p.y)
+        var start = Math.min(23 * 60, mark)
+        // Paste here starts on the mark clicked, as the plain look's menu does: up to 23:45, not 23:00.
+        root.openSlotMenu(root.dayAt(p.x), start, Math.min(24 * 60, start + 60), p.x, p.y,
+                          Math.min(24 * 60 - 15, mark))
     }
 
     // Free time clicked or dragged over: add homework or a fixed time there (Jonathan, 2026-11-07). With
     // something copied it also offers to paste it there (Jonathan, 2026-11-11).
-    function openSlotMenu(day, start, end, hx, hy) {
+    function openSlotMenu(day, start, end, hx, hy, pasteAt) {
         if (day < 0)
             return
         slotDay = day
         slotStart = start
         slotEnd = end
         menuOriginItem = hours
-        menuTargetModel = { slot: true, day: day, start: start, end: end }
+        menuTargetModel = { slot: true, day: day, start: start, end: end,
+                            pasteAt: pasteAt === undefined ? start : pasteAt }
         var mapped = hours.mapToItem(root, hx, hy)
         var entries = [{ label: "Add fixed time here", icon: "schedule" }]
         // Homework is planned in quarter hours, so a shorter range offers fixed time only.
@@ -1015,7 +1020,7 @@ Item {
                     else if (label === "Add fixed time here")
                         root.bridge.sheets.openBlockAt(target.day, target.start, target.end)
                     else if (label === "Paste here" && root.bridge.week)
-                        root.bridge.week.pasteHere(target.day, target.start)
+                        root.bridge.week.pasteHere(target.day, target.pasteAt)
                 } else if (label === "Edit") {
                     if (root.bridge.sheets)
                         root.bridge.sheets.editBlock(target.blockId, target.day)
