@@ -119,13 +119,14 @@ def visible_buttons(widget) -> list[str]:
 
 
 def quick_focus(window: NativeWindow) -> None:
-    """More > Quick focus, then Start: Quick focus opens the screen ready, as F does (decision 19)."""
+    """More > Quick focus, then Just a timer: Quick focus opens the screen ready, as F does (decision 19).
+    The essay is on now in these windows, so the screen offers it and the timer is the second choice."""
     window.findChild(QPushButton, "quickFocusAction").click()
     assert window.session.focus is None, "Quick focus waits for Start"
     assert on_screen(window) == "focusPage"
-    assert visible_buttons(window.focus_screen) == ["Back", "Start"]
+    assert visible_buttons(window.focus_screen) == ["Back", "Start", "Just a timer"]
     assert window.focus_screen.ring._waiting, "set but not started"
-    QTest.mouseClick(window.focus_screen.start, LEFT)
+    QTest.mouseClick(window.focus_screen.just_timer, LEFT)
     assert window.session.focus is not None
     assert not window.focus_screen.ring._waiting
 

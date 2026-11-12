@@ -104,6 +104,16 @@ def focus_candidates(
     )
 
 
+def quick_focus_homework(
+    blocks: list[dict], assignments: dict, trace: dict | None, week_start: str, now: str
+) -> dict | None:
+    return json.loads(
+        flexweek_engine.focus_quick_homework(
+            json.dumps(blocks), json.dumps(assignments), json.dumps(trace), week_start, now
+        )
+    )
+
+
 def now_and_next(blocks: list[dict], day: int, minute: int) -> dict:
     return json.loads(flexweek_engine.focus_now_next(json.dumps(blocks), json.dumps(day), minute))
 

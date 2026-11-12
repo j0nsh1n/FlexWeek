@@ -140,6 +140,7 @@ from desktop.native.look import (
     text_scale,
     toast_colours,
 )
+from desktop.native.material.theme import kept_material, read_letter_keys, read_shortcuts, store_material
 from desktop.native.menus import Menu, mark, menu_colours
 from desktop.native.motion import (
     DRIFT_PX,
@@ -259,6 +260,27 @@ BUSY_LOOK_MS = 250
 OUTSIDE_CHECK_MS = 2000
 # Boxes that keep Ctrl+Z for the text typed in them.
 EDITABLE = (QLineEdit, QPlainTextEdit, QAbstractSpinBox, QComboBox)
+# A shared one-key shortcut is the bare key: with Shift, Ctrl, Alt or Meta it is something else.
+KEY_MODIFIERS = (
+    Qt.KeyboardModifier.ShiftModifier
+    | Qt.KeyboardModifier.ControlModifier
+    | Qt.KeyboardModifier.AltModifier
+    | Qt.KeyboardModifier.MetaModifier
+)
+# What leaves the focus screen for the week, as W, D, M and T always have.
+LEAVES_FOCUS_KEYS = frozenset(
+    {
+        Qt.Key.Key_1,
+        Qt.Key.Key_2,
+        Qt.Key.Key_3,
+        Qt.Key.Key_4,
+        Qt.Key.Key_5,
+        Qt.Key.Key_T,
+        Qt.Key.Key_D,
+        Qt.Key.Key_W,
+        Qt.Key.Key_M,
+    }
+)
 BUSY_BUTTONS = (
     "createAccount",
     "signIn",
@@ -664,6 +686,9 @@ class NativeWindow(QMainWindow):
         self.material_more = None
         self._day_mode = False
         self._opened_on_preference = False
+        # Number keys and Letter keys as the look file holds them, and the file's stamp when read.
+        self._key_stamp: tuple[int, int] | None = None
+        self._key_values = (True, False)
         self._views: dict[str, LayoutView] = {}
         self._entry_mode = SIGN_IN
         self._auth_mode_shown: str | None = None
@@ -4992,6 +5017,10 @@ class NativeWindow(QMainWindow):
         self._open_focus_screen()
 
     def _start_quick_focus(self) -> None:
+        if self.session.start_focus_on_offer():
+            self._open_focus_screen()
+
+    def _start_just_a_timer(self) -> None:
         if self.session.start_quick_focus():
             self._open_focus_screen()
 
@@ -5012,6 +5041,7 @@ class NativeWindow(QMainWindow):
         screen = self.focus_screen
         screen.back_requested.connect(self._close_focus_screen)
         screen.start_requested.connect(self._start_quick_focus)
+        screen.timer_requested.connect(self._start_just_a_timer)
         screen.pause_requested.connect(self.session.toggle_focus_pause)
         screen.skip_requested.connect(lambda: self.session.advance_focus(False))
         screen.stop_requested.connect(self._stop_focus)
@@ -5506,6 +5536,8 @@ class NativeWindow(QMainWindow):
         page.availability_requested.connect(self._open_availability)
         page.updates_requested.connect(lambda: self._check_updates(asked=True))
         page.developer_builds_changed.connect(self._set_developer_builds)
+        page.number_keys_changed.connect(lambda on: self._set_key_switch("shortcuts", on))
+        page.letter_keys_changed.connect(lambda on: self._set_key_switch("letters", on))
         page.setup_requested.connect(self._run_setup_again)
         page.closed.connect(self._close_settings)
         stored = page.updates()
@@ -5626,6 +5658,10 @@ class NativeWindow(QMainWindow):
         page.developer_builds.blockSignals(True)
         page.developer_builds.setChecked(bool(self._updates.get("developer_builds")))
         page.developer_builds.blockSignals(False)
+        for switch, saved in zip((page.number_keys, page.letter_keys), self._key_switches(), strict=True):
+            switch.blockSignals(True)
+            switch.setChecked(saved)
+            switch.blockSignals(False)
         if self._settings_unsaved is not None and self._settings_unsaved():
             page.motion_level = self._motion
             return
@@ -5728,10 +5764,10 @@ class NativeWindow(QMainWindow):
         current = self._stack.currentWidget()
         page = self._material_page if current is not None and current.objectName() == "materialPage" else None
         if page is None or page.root is None:
-            HelpDialog(self).exec()
+            HelpDialog(self, self._key_switches()).exec()
             return
         bridge = page.bridge
-        dialog = HelpDialog(self, (bridge.shortcuts, bridge.letterKeys))
+        dialog = HelpDialog(self, (bridge.shortcuts, bridge.letterKeys), material=True)
         with self._material_keys_held():
             dialog.exec()
 
@@ -5922,8 +5958,6 @@ class NativeWindow(QMainWindow):
             if self._material_failed:
                 body["material_failed"] = self._material_failed
             # Settings writes the material object into this file. Keep it when the widgets look saves.
-            from desktop.native.material.theme import kept_material
-
             material = kept_material(path)
             if material is not None:
                 body["material"] = material
@@ -6267,6 +6301,89 @@ class NativeWindow(QMainWindow):
             return not (line.document().isUndoAvailable() or line.document().isRedoAvailable())
         return True
 
+    def _key_switches(self) -> tuple[bool, bool]:
+        """Number keys and Letter keys: the two saved settings Material's Settings also writes
+        (`material.shortcuts` and `material.letters` in the look file), so a switch turned over in one look
+        is turned over in the other. Read again when the file changes."""
+        path = self._look_path()
+        try:
+            info = path.stat()
+        except OSError:
+            stamp = None
+        else:
+            stamp = (info.st_mtime_ns, info.st_size)
+        if stamp != self._key_stamp:
+            try:
+                stored = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                stored = None
+            self._key_values = (read_shortcuts(stored), read_letter_keys(stored))
+            self._key_stamp = stamp
+        return self._key_values
+
+    def _set_key_switch(self, name: str, on: bool) -> None:
+        """Write one of the two key switches into the look file's material object and leave the rest of
+        it as it was."""
+        path = self._look_path()
+        store_material(path, {**(kept_material(path) or {}), name: bool(on)})
+
+    def _shared_key_action(self, event: QKeyEvent) -> Callable[[], None] | None:
+        """What a bare 1 to 5 or letter does in the plain look, when its switch is on: the one key set
+        Material shares. None for any other key, a key with a modifier, or a page that is not the week or
+        the focus screen. Typing in a box and open dialogs are ruled out before this is asked."""
+        if event.modifiers() & KEY_MODIFIERS:
+            return None
+        current = self._stack.currentWidget()
+        if current is not self.focus_screen and current is not self.findChild(QWidget, "weekPage"):
+            return None
+        numbers, letters = self._key_switches()
+        views: dict[Qt.Key, Callable[[], None]] = {}
+        if numbers:
+            views |= {
+                Qt.Key.Key_1: lambda: self._choose_view("day"),
+                Qt.Key.Key_2: lambda: self._choose_view("week"),
+                Qt.Key.Key_3: lambda: self._choose_view("month"),
+                Qt.Key.Key_4: self._enter_day,
+                Qt.Key.Key_5: self._open_settings,
+            }
+        if letters:
+            views |= {
+                Qt.Key.Key_T: self._go_today,
+                Qt.Key.Key_D: lambda: self._choose_view("day"),
+                Qt.Key.Key_W: lambda: self._choose_view("week"),
+                Qt.Key.Key_M: lambda: self._choose_view("month"),
+                Qt.Key.Key_J: self._next_if_shown,
+                Qt.Key.Key_K: self._previous_if_shown,
+                Qt.Key.Key_C: self._add_now,
+                Qt.Key.Key_P: self._plan_with_left_over,
+                Qt.Key.Key_Z: lambda: self._told(self.session.undo),
+                Qt.Key.Key_F: self._open_focus_screen,
+            }
+        action = views.get(event.key())
+        if action is None:
+            return None
+        if current is self.focus_screen:
+            if event.key() == Qt.Key.Key_F:
+                return action
+            if event.key() not in LEAVES_FOCUS_KEYS:
+                return None
+
+            def leave_then() -> None:
+                self._close_focus_screen()
+                action()
+
+            return leave_then
+        return action
+
+    def _next_if_shown(self) -> None:
+        """J: the next week, day or month, whichever is shown. My day is today only."""
+        if not self._day_mode:
+            self._go_next()
+
+    def _previous_if_shown(self) -> None:
+        if not self._day_mode:
+            self._go_previous()
+
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if self.session.account is None or QApplication.activeModalWidget() is not None:
             super().keyPressEvent(event)
@@ -6310,13 +6427,10 @@ class NativeWindow(QMainWindow):
             event.accept()
             return
         planning = self._stack.currentWidget() in (self.focus_screen, self.findChild(QWidget, "weekPage"))
-        if self._stack.currentWidget() is self.focus_screen:
-            if key == Qt.Key.Key_Escape:
-                self._close_focus_screen()
-                event.accept()
-                return
-            if key in (Qt.Key.Key_W, Qt.Key.Key_D, Qt.Key.Key_M, Qt.Key.Key_T) and not mods:
-                self._close_focus_screen()
+        if self._stack.currentWidget() is self.focus_screen and key == Qt.Key.Key_Escape:
+            self._close_focus_screen()
+            event.accept()
+            return
         if mods & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier):
             if key == Qt.Key.Key_K and planning:
                 self._open_command_bar()
@@ -6353,6 +6467,10 @@ class NativeWindow(QMainWindow):
                 self._told(self.session.save)
                 event.accept()
                 return
+            if key == Qt.Key.Key_F and mods & Qt.KeyboardModifier.ShiftModifier and planning:
+                self._quick_focus()
+                event.accept()
+                return
             if key in ZOOM_KEYS:
                 for hours in self._hours_shown():
                     hours.zoom_by(ZOOM_KEYS[key])
@@ -6363,32 +6481,17 @@ class NativeWindow(QMainWindow):
                 self.session.save()
             event.accept()
             return
-        if key == Qt.Key.Key_T:
-            self._enter_day()
-            event.accept()
-            return
         if key == Qt.Key.Key_F1 and planning:
             self._open_help()
             event.accept()
             return
-        if key == Qt.Key.Key_F and planning:
-            self._open_focus_screen()
+        shared = self._shared_key_action(event)
+        if shared is not None:
+            shared()
             event.accept()
             return
         if self._day_mode and key in (Qt.Key.Key_B, Qt.Key.Key_Escape):
             self._leave_day()
-            event.accept()
-            return
-        if key == Qt.Key.Key_W:
-            self._choose_view("week")
-            event.accept()
-            return
-        if key == Qt.Key.Key_D:
-            self._choose_view("day")
-            event.accept()
-            return
-        if key == Qt.Key.Key_M:
-            self._choose_view("month")
             event.accept()
             return
         super().keyPressEvent(event)
@@ -6448,15 +6551,12 @@ class NativeWindow(QMainWindow):
         key = event.key()
         mods = event.modifiers()
         control = bool(mods & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier))
-        if not control and key in (
-            Qt.Key.Key_W,
-            Qt.Key.Key_D,
-            Qt.Key.Key_M,
-            Qt.Key.Key_T,
-            Qt.Key.Key_F,
-            Qt.Key.Key_F1,
-            Qt.Key.Key_Delete,
+        if (not control and key in (Qt.Key.Key_F1, Qt.Key.Key_Delete)) or (
+            self._shared_key_action(event) is not None
         ):
+            self.keyPressEvent(event)
+            return True
+        if control and key == Qt.Key.Key_F and mods & Qt.KeyboardModifier.ShiftModifier:
             self.keyPressEvent(event)
             return True
         if control and key in (

@@ -8,7 +8,6 @@ use crate::desk::grid::{
     apply_block_edit, apply_block_times, linked_homework, past_problem, span_clash, span_problem,
 };
 use crate::desk::planning::due_point;
-use crate::desk::pydate::from_iso;
 use crate::desk::pyops::{contains, get, iterate};
 use crate::error::{EngineError, EngineResult};
 use crate::stored::truthy;
@@ -76,8 +75,8 @@ fn id_of(block: &Value) -> Option<&str> {
 }
 
 /// Why a start is already past, in the calendar's words, or None. Finished homework may sit in the
-/// past, and a drag that leaves the start where it was (the end moved) is never refused for that.
-/// A fixed time already on a day before today may still change its start there.
+/// past, a drag that leaves the start where it was (the end moved) is never refused for that, and a
+/// fixed time may start in the past (`past_problem` knows the block's kind).
 fn past_words(
     block: &Value,
     clock: &WeekClock<'_>,
@@ -92,25 +91,14 @@ fn past_words(
     {
         return Ok(None);
     }
-    let Some(words) = past_problem(
+    past_problem(
+        get(block, "kind")?.and_then(Value::as_str).unwrap_or(""),
         clock.week_start,
         drop.to_day,
         drop.start_min,
         clock.now_iso,
         clock.now_min,
-    )?
-    else {
-        return Ok(None);
-    };
-    if get(block, "kind")?.and_then(Value::as_str) == Some("locked") && drop.from_day == drop.to_day
-    {
-        let Ok(monday) = from_iso(clock.week_start) else {
-            return Ok(Some(words));
-        };
-        let on = crate::stored::add_days(monday, drop.to_day)?;
-        return Ok((on >= from_iso(clock.now_iso)?).then_some(words));
-    }
-    Ok(Some(words))
+    )
 }
 
 fn replacing(all: Vec<Value>, id: &str, updated: Value) -> Vec<Value> {

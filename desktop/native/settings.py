@@ -259,11 +259,21 @@ HELP_PLANNING = (
     "fit stays under Not placed yet, and Details says why. From the keyboard, press Ctrl+K and type Plan."
 )
 # Each key in brackets is drawn as a keycap; the words between are drawn plain.
-HELP_KEYS = (
+# One group per Settings switch: Number keys, then Letter keys. A group whose switch is off is left out.
+HELP_NUMBER_KEYS = (("[1] to [5]", "Day, Week, Month, My day, Settings"),)
+HELP_LETTER_KEYS = (
+    ("[T]", "Go to today"),
     ("[D] [W] [M]", "Day, Week, Month"),
-    ("[T]", "My day"),
-    ("[B] or [Esc]", "Back from My day"),
+    ("[J] [K]", "Next and previous week, day or month"),
+    ("[C]", "Add homework"),
+    ("[P]", "Plan my homework"),
+    ("[Z]", "Undo"),
     ("[F]", "Focus screen"),
+)
+# Keys that answer to neither switch.
+HELP_OTHER_KEYS = (
+    ("[B] or [Esc]", "Back from My day"),
+    ("[Ctrl]+[Shift]+[F]", "Quick focus"),
     ("[F1]", "Help"),
     ("[Ctrl]+[N]", "Add homework"),
     ("[Ctrl]+[K]", "Command bar"),
@@ -277,6 +287,13 @@ HELP_KEYS = (
     ("[Ctrl]+[=] [-] [0]", "Zoom the hours in, out, or back to normal"),
     ("[Ctrl] and the mouse wheel", "Zoom the hours"),
     ("[Esc] while dragging", "Put the block back where it was"),
+)
+HELP_KEYS = HELP_NUMBER_KEYS + HELP_LETTER_KEYS + HELP_OTHER_KEYS
+NUMBER_KEYS_NOTE = "1 to 5 open Day, Week, Month, My day and Settings. Off while you type."
+LETTER_KEYS_NOTE = (
+    "T goes to today, D, W and M open Day, Week and Month, J and K go to the next and previous one, C adds "
+    "homework, P plans your homework, Z undoes and F opens Focus. Off while you type. Ctrl+Z undoes and "
+    "Ctrl+Shift+Z or Ctrl+Y redoes with this on or off."
 )
 FOCUS_RUNNING_NOTE = "Work on this until the timer ends. Pause if something interrupts you."
 FOCUS_ENDED_NOTE = "Time is up. Mark it finished, take a break, or give it more time."
@@ -931,6 +948,8 @@ class SettingsPage(QWidget):
     availability_requested = Signal()
     updates_requested = Signal()
     developer_builds_changed = Signal(bool)
+    number_keys_changed = Signal(bool)
+    letter_keys_changed = Signal(bool)
     setup_requested = Signal()
 
     def __init__(
@@ -1331,10 +1350,22 @@ class SettingsPage(QWidget):
         update_col.addWidget(check_updates)
         computer_form.addRow("Updates", update_col)
         self.computer_buttons = (open_account, run_setup, check_updates)
+        keys_card, keys_form = _card("Keyboard")
+        # The same two switches as Material's Settings > Computer; the window sets them and saves them.
+        self.number_keys = Switch("Number keys")
+        self.number_keys.setObjectName("prefNumberKeys")
+        self.number_keys.toggled.connect(self.number_keys_changed.emit)
+        keys_form.addRow(self.number_keys)
+        keys_form.addRow(_note(NUMBER_KEYS_NOTE, "prefNumberKeysNote"))
+        self.letter_keys = Switch("Letter keys")
+        self.letter_keys.setObjectName("prefLetterKeys")
+        self.letter_keys.toggled.connect(self.letter_keys_changed.emit)
+        keys_form.addRow(self.letter_keys)
+        keys_form.addRow(_note(LETTER_KEYS_NOTE, "prefLetterKeysNote"))
         devices_card, devices_form = _card("Devices")
         self.devices = DevicesPanel(sync, lambda: self.account_id or None)
         devices_form.addRow(self.devices)
-        computer = _section_page("This computer", (start_card, computer_card, devices_card))
+        computer = _section_page("This computer", (start_card, computer_card, keys_card, devices_card))
         # Their values start at one x, so each one's labels share a column.
         self._aligned = (focus, alerts, computer)
         rail = QWidget()
@@ -2476,11 +2507,12 @@ def _line(words: str, name: str) -> QLabel:
     return made
 
 
-# The Widgets rows that are also true in Material. Its window answers none of the others: F1, Ctrl+N,
-# Ctrl+K, T and B, copy, paste, duplicate and Delete do nothing there. Ctrl+Shift+L is switched off while
+# The "other" rows that are also true in Material. Its window answers none of the rest: F1, Ctrl+N,
+# Ctrl+K, B, copy, paste, duplicate and Delete do nothing there. Ctrl+Shift+L is switched off while
 # Material shows (it is the Widgets week list's key), and Esc does not put a held card back.
-_MATERIAL_KEPT_KEYS = frozenset(
+_MATERIAL_OTHER_KEYS = frozenset(
     {
+        "[Ctrl]+[Shift]+[F]",
         "[Ctrl]+[Z]",
         "[Ctrl]+[Y] or [Ctrl]+[Shift]+[Z]",
         "[Ctrl]+[S]",
@@ -2490,19 +2522,15 @@ _MATERIAL_KEPT_KEYS = frozenset(
 )
 
 
-def material_help_keys(numbers: bool, letters: bool) -> tuple[tuple[str, str], ...]:
-    """Help's keys as Material answers to them: 1 to 5 for the views only while their switch is on, P, Z
-    and F only while theirs is, and of the rest only the rows that work there."""
+def help_keys(numbers: bool, letters: bool, *, material: bool = False) -> tuple[tuple[str, str], ...]:
+    """Help's keys as the look answers to them: 1 to 5 only while Number keys is on, the letters only while
+    Letter keys is on, and of the rest only the rows that work in that look."""
     rows: list[tuple[str, str]] = []
-    for key, what in HELP_KEYS:
-        if key == "[D] [W] [M]":
-            if numbers:
-                rows.append(("[1] to [5]", "Day, Week, Month, My day, Settings"))
-        elif key == "[F]":
-            if letters:
-                rows += [("[P]", "Plan my homework"), ("[Z]", "Undo"), (key, what)]
-        elif key in _MATERIAL_KEPT_KEYS:
-            rows.append((key, what))
+    if numbers:
+        rows += HELP_NUMBER_KEYS
+    if letters:
+        rows += HELP_LETTER_KEYS
+    rows += (row for row in HELP_OTHER_KEYS if not material or row[0] in _MATERIAL_OTHER_KEYS)
     return tuple(rows)
 
 
@@ -2630,9 +2658,15 @@ class HelpDialog(Dialog):
 
     _pin_top = True
 
-    def __init__(self, parent: QWidget | None, material_keys: tuple[bool, bool] | None = None) -> None:
-        """`material_keys` is (number keys on, letter keys on) when Help is opened from Material, whose
-        keys differ from the Widgets looks'."""
+    def __init__(
+        self,
+        parent: QWidget | None,
+        switches: tuple[bool, bool] = (True, False),
+        *,
+        material: bool = False,
+    ) -> None:
+        """`switches` is (Number keys on, Letter keys on); `material` is True when Help is opened from
+        Material, whose keys differ from the Widgets looks'."""
         super().__init__(parent, sheet=True)
         layout = self.card_body("Help", SHEET_LIST)
         # Close has no focus on a click (it would be where typing starts) but Tab reaches it, so the
@@ -2671,8 +2705,7 @@ class HelpDialog(Dialog):
         keys.setContentsMargins(0, 0, 0, 0)
         keys.setHorizontalSpacing(SECTION_GAP)
         keys.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
-        shown = HELP_KEYS if material_keys is None else material_help_keys(*material_keys)
-        for key, what in shown:
+        for key, what in help_keys(*switches, material=material):
             keys.addRow(keycaps(key), _line(what, "helpKeyDoes"))
         column.addWidget(key_list)
         column.addSpacing(SPACING[3])

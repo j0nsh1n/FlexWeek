@@ -57,7 +57,7 @@ def test_homework_moved_by_hand_lands_on_the_new_day_and_stays_there(
     assert session.dirty
 
 
-def test_a_start_that_has_passed_is_refused_in_the_calendars_words_and_nothing_moves(
+def test_a_fixed_time_may_be_moved_to_an_earlier_time_today(
     qapp: QApplication, window: NativeWindow, clock: FakeClock
 ) -> None:
     session = window.session
@@ -66,9 +66,35 @@ def test_a_start_that_has_passed_is_refused_in_the_calendars_words_and_nothing_m
          "start": "08:00", "duration_min": 390}
     )
     at(window, clock, 2, 12)
+    assert session.hand_move("school", 2, 2, 7 * 60, 13 * 60 + 30) is True
+    school = next(item for item in session.blocks if item["id"] == "school")
+    assert (school["days"], school["start"]) == ([2], "07:00")
+
+
+def test_a_fixed_time_may_be_moved_to_an_earlier_day(
+    qapp: QApplication, window: NativeWindow, clock: FakeClock
+) -> None:
+    session = window.session
+    session.add_block(
+        {"id": "club", "title": "Club", "kind": "locked", "days": [2],
+         "start": "16:00", "duration_min": 60}
+    )
+    at(window, clock, 2, 12)
+    assert session.hand_move("club", 2, TUESDAY, 16 * 60, 17 * 60) is True
+    club = next(item for item in session.blocks if item["id"] == "club")
+    assert club["days"] == [TUESDAY]
+
+
+def test_homework_start_that_has_passed_is_refused_in_the_calendars_words_and_nothing_moves(
+    qapp: QApplication, window: NativeWindow, clock: FakeClock
+) -> None:
+    session = window.session
+    at(window, clock, MONDAY, 8)
+    block = placed_homework(qapp, window)
+    at(window, clock, 2, 12)
     # A new account reads the 12-hour clock; the words are checked in the 24-hour one.
     set_clock_24h(True)
-    assert session.hand_move("school", 2, 2, 8 * 60 + 30, 15 * 60) is False
+    assert session.hand_move(block["id"], MONDAY, 2, 11 * 60, 12 * 60 + HOMEWORK_MIN) is False
     assert session.message == "That time has passed. Choose 12:00 or later today, or another day."
-    school = next(item for item in session.blocks if item["id"] == "school")
-    assert school["start"] == "08:00"
+    held = next(item for item in session.blocks if item["id"] == block["id"])
+    assert (held["days"], held["start"]) == ([MONDAY], "14:30")
