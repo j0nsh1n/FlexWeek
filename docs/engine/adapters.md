@@ -136,6 +136,8 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 
 `backend/app.py` is the HTTP layer: routes, dependencies, status codes, the pydantic request and response models, and the mapping of an engine status onto an HTTP error stay in Python. The rows below are the helper functions whose decisions moved into the engine (`engine/store/src/rules.rs`); `test_app_helpers_keep_no_engine_logic` checks them with the same rule as the modules above. Route handlers are not checked.
 
+`post_changes` passes a batch's `repeats` to `db.apply_repeat_intents` (`flexweek_store::apply_repeat_intents`, the function `changes::apply` calls too) and maps its refusal onto a 422; it decides nothing about repeats. `GET /api/week` reads them with `db.standing_blocks`.
+
 | Module | Function | Class | Reason |
 | --- | --- | --- | --- |
 | app | adopt_legacy_deadlines | ADAPTER | One connection call. `adopt_legacy_deadlines` in the engine picks the blocks and enforces the cap. Python maps "over the cap" to the 422 and revalidates the blocks. |
