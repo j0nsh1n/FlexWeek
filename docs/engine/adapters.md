@@ -333,6 +333,7 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | reuse | held_in_place | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | plan_start | LOGIC, moved | hour and minute arithmetic and the half-minute rule: `planning::plan_start_at` |
 | reuse | solve_request | LOGIC, moved | `only`, `not_before` and `everything` are read as given by `reuse_solve_request`; the set of targets is a list to set |
+| reuse | without_missed_times | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | due_point | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | settle_placements | LOGIC, moved | `keep` is read as given by `reuse_settle_placements` |
 | reuse | occurrence_days | ADAPTER | encodes, makes one engine call, decodes |

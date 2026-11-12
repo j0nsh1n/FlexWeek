@@ -120,7 +120,8 @@ def solve_request(
     """What to send the solver, and which sessions its answer may place.
 
     By default planned homework keeps its time and only homework without one is placed around it.
-    `everything` places every unfinished session again, with every day up to its deadline open.
+    `everything` places every unfinished session again, with every day up to its deadline open. A
+    session whose time has passed moves too, unless it is pinned; one on now, or ahead, is as before.
     `only` places just those sessions around everything else, for work whose time stopped working.
     `not_before` (from `plan_start`) keeps every placement at or after now.
     """
@@ -128,6 +129,17 @@ def solve_request(
         json.dumps(blocks), json.dumps(assignments), week_start, everything, only, not_before
     )
     return json.loads(payload), set(json.loads(targets))
+
+
+def without_missed_times(
+    blocks: list[dict], assignments: dict, not_before: tuple[int, int] | None = None
+) -> list[dict]:
+    """The week with each unfinished, unpinned session whose time has passed read as one with no time,
+    so counting the homework that needs a time does not call it "has a time". `not_before` is
+    `plan_start`'s answer."""
+    return json.loads(
+        flexweek_engine.reuse_without_missed_times(json.dumps(blocks), json.dumps(assignments), not_before)
+    )
 
 
 def fair_share(

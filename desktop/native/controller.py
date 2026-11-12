@@ -109,6 +109,7 @@ from desktop.native.reuse import (
     solve_request,
     time_still_needed,
     week_label,
+    without_missed_times,
 )
 from desktop.native.weekmodel import (
     WeekModel,
@@ -2566,7 +2567,10 @@ class NativeSession(QObject):
         )
 
     def homework_time_needed(self) -> list[dict]:
-        return time_still_needed(self.assignments, self.blocks, self.week_start)
+        """Homework that needs a time. A session whose time has passed unfinished needs one again."""
+        start = plan_start(self.week_start, datetime.fromtimestamp(self.now_ms() / 1000))
+        week = without_missed_times(self.blocks, self.assignments, start)
+        return time_still_needed(self.assignments, week, self.week_start)
 
     def built_week(self) -> WeekModel:
         """The week Material draws. The shell asks the session, not the builder."""

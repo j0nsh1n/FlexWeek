@@ -1138,6 +1138,29 @@ fn reuse_solve_request(
     })
 }
 
+/// The week with each session Replan all would move for having passed read as one with no time:
+/// what the count of homework that needs a time is taken on.
+#[pyfunction]
+#[pyo3(signature = (blocks, assignments, not_before=None))]
+fn reuse_without_missed_times(
+    blocks: &str,
+    assignments: &str,
+    not_before: Option<&Bound<'_, PyAny>>,
+) -> PyResult<String> {
+    let (blocks, assignments) = (parse(blocks)?, parse(assignments)?);
+    let not_before = match not_before {
+        Some(limit) if !limit.is_none() => Some(parse(&dumps_of(limit)?)?),
+        _ => None,
+    };
+    guard(|| {
+        let blocks = blocks.as_array().cloned().unwrap_or_default();
+        Ok(dump(&Value::Array(
+            planning::without_missed_times(&blocks, &assignments, not_before.as_ref())
+                .map_err(crate::raise)?,
+        )))
+    })
+}
+
 /// Takes the time away from planned homework whose slot no longer works. `keep` is read as the
 /// Python wrapper wrote it: a set or frozenset as the list of its members, anything else as it is.
 #[pyfunction]
@@ -1549,6 +1572,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         reuse_left_over,
         reuse_planner_title,
         reuse_solve_request,
+        reuse_without_missed_times,
         reuse_settle_placements,
         files_export_input,
         files_referenced_ids,
