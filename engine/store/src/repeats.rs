@@ -248,7 +248,12 @@ pub fn apply_repeat_intents(
             .collect::<Result<Vec<_>, _>>()?;
         for (week_start, text) in saved {
             let (was, now) = (at(&old, &week_start), at(&new, &week_start));
-            if was == now {
+            let version_starts_here = later_versions
+                .iter()
+                .any(|kept| kept.week_start == week_start);
+            // A week this change does not reach is left as saved, but where a later version starts its
+            // copy may still say something of its own that the version's line would misstate.
+            if was == now && !version_starts_here {
                 continue;
             }
             let Value::Array(stored) = parse(&text)? else {
@@ -261,15 +266,14 @@ pub fn apply_repeat_intents(
                 continue;
             };
             let mut updated = stored.clone();
-            match restated_copy(was, now, &stored[held]) {
-                Some(copy) => updated[held] = copy,
-                None => {
-                    updated.remove(held);
+            if was != now {
+                match restated_copy(was, now, &stored[held]) {
+                    Some(copy) => updated[held] = copy,
+                    None => {
+                        updated.remove(held);
+                    }
                 }
             }
-            let version_starts_here = later_versions
-                .iter()
-                .any(|kept| kept.week_start == week_start);
             // Where a later version starts, the copy's own changes are measured against this change, as
             // the version's would have been, so the week is named once for everything it keeps.
             let measured_against = if version_starts_here {

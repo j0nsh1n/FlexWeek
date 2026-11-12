@@ -668,3 +668,55 @@ fn a_later_version_that_already_says_what_the_change_says_is_not_named() {
     assert_eq!(answer["repeats"]["kept"], json!([]));
     assert_eq!(answer["repeats"]["notice"], json!(null));
 }
+
+#[test]
+fn a_saved_copy_where_a_later_version_starts_is_named_for_what_it_shows_even_when_the_change_misses_it()
+ {
+    // From 16 Nov School is 5 hours (this week and later). The saved week of 16 Nov also starts at 11:00.
+    // From 9 Nov School becomes 6 hours: 16 Nov on keeps its own 5 hours, so the change does not reach
+    // the week of 16 Nov, which shows 11:00 for 5 hours (11:00-16:00). The notice must say that, not
+    // the version's 08:30-13:30.
+    let (conn, user_id) = account("repeats-version-copy-untouched", true);
+    set_up(&conn, user_id);
+    change_from_open_week(
+        &conn,
+        user_id,
+        NEXT_WEEK,
+        &[("school", Some(with(school(), json!({"duration_min": 300}))))],
+    );
+    save_week_as(
+        &conn,
+        user_id,
+        NEXT_WEEK,
+        vec![
+            with(school(), json!({"start": "11:00", "duration_min": 300})),
+            soccer(),
+        ],
+    );
+    let answer = change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[("school", Some(with(school(), json!({"duration_min": 360}))))],
+    );
+    let here = block(&shown(&conn, user_id, NEXT_WEEK), "school")
+        .unwrap()
+        .clone();
+    assert_eq!(
+        (here["start"].clone(), here["duration_min"].clone()),
+        (json!("11:00"), json!(300))
+    );
+    let weeks: Vec<_> = answer["repeats"]["kept"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["week_start"].clone())
+        .collect();
+    assert_eq!(weeks, vec![json!(NEXT_WEEK)]);
+    let notice = answer["repeats"]["notice"].as_str().unwrap();
+    assert!(
+        notice.contains("11:00") && notice.contains("16:00"),
+        "{notice}"
+    );
+    assert!(!notice.contains("08:30"), "{notice}");
+}
