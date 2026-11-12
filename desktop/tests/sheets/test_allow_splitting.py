@@ -210,16 +210,8 @@ def _lab_due_in_nine_days(app: QApplication, opener: Callable[..., NativeWindow]
     return window
 
 
-def test_a_failed_allow_splitting_save_forgets_its_sessions_and_plan_shares_them(
-    qapp: QApplication,  # noqa: F811
-    open_light: Callable[..., NativeWindow],  # noqa: F811
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The save that adds Allow splitting's three sessions fails, so those sessions were never made and no
-    promise is kept for them. Saved again and planned by hand, the lab gets its fair share:
-    180 x 5 / 8 = 112.5, a quarter hour up 120 this week (two 60 minute sessions), and 60 waits."""
-    window = _lab_due_in_nine_days(qapp, open_light)
-    session = window.session
+def _fail_the_second_save(session, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Allow splitting saves twice: the homework, then its sessions. The second save fails, once."""
     real = session.client.request
     saves: list[str] = []
 
@@ -233,20 +225,50 @@ def test_a_failed_allow_splitting_save_forgets_its_sessions_and_plan_shares_them
 
     monkeypatch.setattr(session.client, "request", request)
 
-    def pieces() -> list[dict]:
-        return [block for block in session.blocks if block.get("assignment_id") == "lab"]
 
+def _lab_pieces(session) -> list[dict]:
+    return [block for block in session.blocks if block.get("assignment_id") == "lab"]
+
+
+def _plan_by_hand(app: QApplication, window: NativeWindow) -> tuple[list[int], list[int]]:
+    """Plan my homework; the lab's placed and waiting session lengths."""
+    session = window.session
+    session.solve()
+    wait_until(
+        app,
+        lambda: not session.planning and not session.busy and not session.dirty,
+        timeout=20,
+        what="Plan finished",
+    )
+    settled(app, window)
+    pieces = _lab_pieces(session)
+    return (
+        sorted(block["duration_min"] for block in pieces if block.get("start")),
+        sorted(block["duration_min"] for block in pieces if not block.get("start")),
+    )
+
+
+def test_a_failed_allow_splitting_save_keeps_the_promise_after_retry(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The save that adds Allow splitting's three sessions fails; they stay in the app and Retry saves them.
+    No plan that includes them has been saved, so the next Plan by hand still places all three this week,
+    180 in all, with no fair share (which would give 180 x 5 / 8, a quarter hour up 120, and keep 60 back).
+    Once that plan is saved, the promise ends."""
+    window = _lab_due_in_nine_days(qapp, open_light)
+    session = window.session
+    _fail_the_second_save(session, monkeypatch)
     assert session.allow_splitting("lab")
     wait_until(
         qapp,
-        lambda: len(saves) == 2 and not session.busy,
+        lambda: session.message == "Not saved. down" and not session.busy,
         timeout=20,
-        what=lambda: f"{session.message!r}, saves {len(saves)}, pieces {pieces()}",
+        what=lambda: f"{session.message!r}, pieces {_lab_pieces(session)}",
     )
-    # Not `settled` yet: it saves what is pending, which is the retry below.
-    assert session.message == "Not saved. down"
-    assert session._split_whole == set()
-    assert session._plan_after_save == set()
+    # Not `settled` yet: it saves what is pending, which is the Retry below.
+    assert session._split_whole == {block["id"] for block in _lab_pieces(session)} != set()
 
     session.retry_save()
     wait_until(
@@ -256,18 +278,104 @@ def test_a_failed_allow_splitting_save_forgets_its_sessions_and_plan_shares_them
         what=lambda: f"{session.message!r}",
     )
     settled(qapp, window)
-    assert [bool(block.get("start")) for block in pieces()] == [False, False, False]
-    session.solve()
+    assert [bool(block.get("start")) for block in _lab_pieces(session)] == [False, False, False]
+    assert _plan_by_hand(qapp, window) == ([60, 60, 60], [])
+    assert session._split_whole == set()
+
+
+def test_ids_left_by_discarded_allow_splitting_sessions_are_harmless(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The save of Allow splitting's sessions fails and the student discards them (the week reloaded as
+    saved): their ids are still remembered but match no session. A Spread by hand afterwards (60 minute
+    sessions from today) is ordinary even where it makes sessions with those same ids: it starts no Plan,
+    none of its sessions is promised a place, and Plan by hand gives the fair share: 180 x 5 / 8 = 112.5, a
+    quarter hour up 120 (two 60 minute sessions), and 60 waits."""
+    window = _lab_due_in_nine_days(qapp, open_light)
+    session = window.session
+    _fail_the_second_save(session, monkeypatch)
+    assert session.allow_splitting("lab")
     wait_until(
         qapp,
-        lambda: not session.planning and not session.busy and not session.dirty,
+        lambda: session.message == "Not saved. down" and not session.busy,
         timeout=20,
-        what="Plan finished",
+        what=lambda: f"{session.message!r}",
+    )
+    stale = set(session._split_whole)
+    assert len(stale) == 3
+    session.load_week(session.week_start, discard=True)
+    settled(qapp, window)
+    assert _lab_pieces(session) == []
+    assert session._split_whole == stale
+
+    session.preview_spread("lab", 60, session.today_iso())
+    wait_until(qapp, lambda: session.spread_preview is not None, timeout=20, what="Spread preview")
+    assert session.confirm_spread()
+    wait_until(
+        qapp,
+        lambda: not session.busy and not session.dirty and len(_lab_pieces(session)) == 3,
+        timeout=20,
+        what=lambda: f"{session.message!r}, pieces {_lab_pieces(session)}",
     )
     settled(qapp, window)
-    placed = sorted(block["duration_min"] for block in pieces() if block.get("start"))
-    waiting = sorted(block["duration_min"] for block in pieces() if not block.get("start"))
-    assert (placed, waiting) == ([60, 60], [60]), pieces()
+    assert not session._split_whole & {block["id"] for block in _lab_pieces(session)}
+    assert [bool(block.get("start")) for block in _lab_pieces(session)] == [False, False, False]
+    assert _plan_by_hand(qapp, window) == ([60, 60], [60])
+
+
+@pytest.mark.parametrize("preview", ["fails", "comes back empty"])
+def test_an_ordinary_spread_after_allow_splitting_made_nothing_gets_the_fair_share(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+    preview: str,
+) -> None:
+    """Allow splitting's preview fails (FlexWeek cannot be reached) or comes back with no sessions, so Allow
+    splitting made nothing. The student then spreads the lab by hand (60 minute sessions from today). That is
+    an ordinary Spread: no Plan starts by itself and no session is promised a place, so Plan by hand gives the
+    fair share: 180 x 5 / 8 = 112.5, a quarter hour up 120 (two 60 minute sessions), and 60 waits."""
+    window = _lab_due_in_nine_days(qapp, open_light)
+    session = window.session
+    real = session.client.request
+    answered: list[str] = []
+
+    def request(method, path, payload, on_success, on_error):
+        if not answered and method == "POST" and path.endswith("/spread"):
+            answered.append(path)
+            if preview == "fails":
+                on_error(ApiError(0, "unreachable"))
+            else:
+                on_success({"sessions": [], "remaining_min": 0})
+            return None
+        return real(method, path, payload, on_success, on_error)
+
+    monkeypatch.setattr(session.client, "request", request)
+    assert session.allow_splitting("lab")
+    wait_until(
+        qapp,
+        lambda: bool(answered) and not session.busy and session.spread_preview is None,
+        timeout=20,
+        what=lambda: f"{session.message!r}",
+    )
+    settled(qapp, window)
+    assert session._allow_split_pending is None
+    assert _lab_pieces(session) == []
+
+    session.preview_spread("lab", 60, session.today_iso())
+    wait_until(qapp, lambda: session.spread_preview is not None, timeout=20, what="Spread preview")
+    assert session.confirm_spread()
+    wait_until(
+        qapp,
+        lambda: not session.busy and not session.dirty and len(_lab_pieces(session)) == 3,
+        timeout=20,
+        what=lambda: f"{session.message!r}, pieces {_lab_pieces(session)}",
+    )
+    settled(qapp, window)
+    assert [bool(block.get("start")) for block in _lab_pieces(session)] == [False, False, False]
+    assert session._split_whole == set()
+    assert _plan_by_hand(qapp, window) == ([60, 60], [60])
 
 
 def test_allow_splitting_refused_for_a_full_week_forgets_its_sessions(
