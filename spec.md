@@ -188,9 +188,10 @@ Contract for the finished app:
   "Choose a time myself" for anything more. "Plan my homework" places only
   homework that has no time yet and keeps the times already planned; "Replan
   all my homework", under More and in the plan review, plans every unfinished
-  session again, one whose time has passed unfinished included: it gets a time
-  from now on, or none when no room is left before its due, and only the
-  minutes still needed after focus time are planned. A session on now, a pinned
+  session again, one whose time has passed unfinished included (its end is at
+  or before the current minute): it gets a time from now on, or none when no
+  room is left before its due, and only the minutes still needed after focus
+  time are planned. A session on now, a pinned
   one and a finished one stay, and nothing is placed before now. The
   `planning_style` preference says when new homework gets a
   time: `suggest` (the default) waits for Plan my homework, `auto` plans each
