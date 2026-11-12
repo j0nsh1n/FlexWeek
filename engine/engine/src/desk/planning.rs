@@ -1093,15 +1093,21 @@ fn uncovered_minutes(
             // over they go, and `server + committed` overstates what the saved sessions held. What the
             // sessions held never exceeds the estimate less focus done, which also catches focus time
             // credited since the number was read.
-            let held = py_int(server)? + committed;
-            let held = match get(assignment, "estimate_min")? {
-                Some(estimate) if !estimate.is_null() => {
+            let estimate = get(assignment, "estimate_min")?.filter(|value| !value.is_null());
+            let planned = get(assignment, "planned_min")?.filter(|value| !value.is_null());
+            match (estimate, planned) {
+                // The server's `planned_min` is every saved session from this week on, so less this week's
+                // saved sessions it is what other weeks hold, which the floored number cannot say.
+                (Some(estimate), Some(planned)) => {
                     let focus = int_of(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
-                    held.min((int_of(estimate)? - focus).max(0))
+                    (int_of(estimate)? - focus).max(0) - (py_int(planned)? - committed) - here
                 }
-                _ => held,
-            };
-            held - here
+                (Some(estimate), None) => {
+                    let focus = int_of(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
+                    (py_int(server)? + committed).min((int_of(estimate)? - focus).max(0)) - here
+                }
+                _ => py_int(server)? + committed - here,
+            }
         }
     };
     Ok(minutes.max(0))

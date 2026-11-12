@@ -1649,3 +1649,57 @@ fn test_homework_with_a_waiting_session_is_open_even_with_minutes_no_session_hol
         (0, 0)
     );
 }
+
+#[test]
+fn test_minutes_no_session_holds_count_what_other_weeks_hold() {
+    let at = |unplanned: i64, planned: i64, extra: Value| {
+        with(
+            with(history(unplanned), json!({"planned_min": planned})),
+            extra,
+        )
+    };
+    // 45 here + 45 next week on 60: server 0, planned 90. Cut here 45 -> 30 unsaved: 75 held, 0 missing.
+    let saved = [session("a", 45, Some("18:45"))];
+    let cut = [session("a", 30, Some("18:45"))];
+    assert_eq!(uncovered(&at(0, 90, json!({})), &cut, &saved), 0);
+    // Same, cut to 5: 50 held, 10 missing.
+    assert_eq!(
+        uncovered(
+            &at(0, 90, json!({})),
+            &[session("a", 5, Some("18:45"))],
+            &saved
+        ),
+        10
+    );
+    let alone = [session("a", 5, Some("18:45"))];
+    // No other week (planned 45): cut to 5 leaves 55 missing; to 30 leaves 30.
+    assert_eq!(uncovered(&at(15, 45, json!({})), &alone, &saved), 55);
+    assert_eq!(uncovered(&at(15, 45, json!({})), &cut, &saved), 30);
+    // 30 here + 30 next week, estimate put back from 90 to 60 by Undo while the numbers read at 90 are held
+    // (server 30, planned 60): 0 missing. At 90 itself: 30 missing.
+    let thirty = [session("a", 30, Some("18:45"))];
+    assert_eq!(uncovered(&at(30, 60, json!({})), &thirty, &thirty), 0);
+    assert_eq!(
+        uncovered(&at(30, 60, json!({"estimate_min": 90})), &thirty, &thirty),
+        30
+    );
+    // A 25 minute timer credited since the read, 15 here + 30 next week: 60 - 25 - 45 < 0, nothing missing;
+    // with 10 next week: 60 - 25 - 25 = 10.
+    let fifteen = [session("a", 15, Some("18:45"))];
+    assert_eq!(
+        uncovered(
+            &at(15, 45, json!({"focus_minutes": 25})),
+            &fifteen,
+            &fifteen
+        ),
+        0
+    );
+    assert_eq!(
+        uncovered(
+            &at(35, 25, json!({"focus_minutes": 25})),
+            &fifteen,
+            &fifteen
+        ),
+        10
+    );
+}

@@ -280,3 +280,108 @@ def test_a_session_in_another_week_is_still_counted_between_a_save_and_the_reply
     settled(qapp, window)
     assert session.minutes_left_for("long") == 15
     assert _bridge(window).week.property("leftoverWords") == "Long homework · 15 min with no time"
+
+
+def _long_across_weeks(window, qapp, here: int, there: int, estimate: int = 60) -> None:
+    """`estimate` minutes of homework: `here` pinned Friday 10:00 this week, `there` next Monday, both saved,
+    and the server's numbers read again."""
+    session = window.session
+    home = session.week_start
+    due = (_week_monday(window) + timedelta(days=6)).isoformat()
+    _homework(window, "long", "Long homework", estimate, due)
+    block = next(item for item in session.blocks if item.get("assignment_id") == "long")
+    block.update(duration_min=here, pinned=True, start="10:00", days=[4])
+    session._touch()
+    session.save()
+    settled(qapp, window)
+    later = deepcopy(block)
+    later.update(id="later", days=[0], pinned=True, duration_min=there)
+    session.load_week((_week_monday(window) + timedelta(days=7)).isoformat())
+    settled(qapp, window)
+    session.add_block(later)
+    session.save()
+    settled(qapp, window)
+    session.load_week(home)
+    settled(qapp, window)
+    expected = max(0, estimate - here - there)
+    wait_until(qapp, lambda: session.assignments["long"].get("unplanned_min") == expected)
+    _pump(qapp)
+
+
+def test_an_unsaved_cut_to_homework_over_planned_across_weeks_shows_nothing_missing(qapp, window) -> None:
+    """60 minutes of homework, 45 this week and 45 next week: 90 held, the server's number floored at 0. The
+    student shortens this week's session to 30 and has not saved: 30 + 45 = 75 still held, more than 60, so
+    nothing is missing and Plan has nothing to add. Counting the floored number said 15."""
+    _reset(window, qapp)
+    session = window.session
+    _long_across_weeks(window, qapp, 45, 45)
+    block = next(item for item in session.blocks if item.get("assignment_id") == "long")
+    block["duration_min"] = 30
+    session._touch()
+    _pump(qapp)
+    assert session.minutes_left_for("long") == 0
+    needed = [(item["title"], item["minutes"]) for item in session.homework_time_needed()]
+    assert ("Long homework", 15) not in needed
+    assert _bridge(window).week.property("leftoverWords") == ""
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_saving_a_change_to_homework_with_sessions_in_other_weeks_shows_nothing_missing(
+    qapp, window, monkeypatch, fail: bool
+) -> None:
+    """60 minutes of homework, 30 this week and 30 next week: nothing missing. The student adds a note and
+    it is saved. The save's answer carries the homework without the server's numbers; counting without them
+    left out next week's 30 and said "30 min with no time" until the next read, or for good if it failed."""
+    _reset(window, qapp)
+    session = window.session
+    _long_across_weeks(window, qapp, 30, 30)
+    real, held = _hold_the_assignments_reply(window, monkeypatch, fail=fail)
+    session.assignments["long"]["notes"] = "bring the atlas"
+    session.dirty_assignments.add("long")
+    session._touch()
+    session.save()
+    settled(qapp, window)
+    _pump(qapp)
+    assert not session.dirty
+    assert session.minutes_left_for("long") == 0
+    assert _bridge(window).week.property("leftoverWords") == ""
+    if not fail:
+        path, payload, on_success, on_error = held[-1]
+        real("GET", path, payload, on_success, on_error)
+        settled(qapp, window)
+        _pump(qapp)
+        assert session.minutes_left_for("long") == 0
+        assert _bridge(window).week.property("leftoverWords") == ""
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_undoing_a_longer_estimate_on_homework_with_sessions_in_other_weeks(
+    qapp, window, monkeypatch, fail: bool
+) -> None:
+    """60 minutes of homework, 30 this week and 30 next week. The student raises it to 90 and saves: 90 - 60
+    = 30 have no session. Undo puts 60 back: nothing is missing, before the server is read again and if that
+    read fails. Undo put back the homework with the numbers read at 90, which still said 30."""
+    _reset(window, qapp)
+    session = window.session
+    _long_across_weeks(window, qapp, 30, 30)
+    session.assignments["long"]["estimate_min"] = 90
+    session.dirty_assignments.add("long")
+    session._touch("changing Long homework")
+    session.save()
+    settled(qapp, window)
+    wait_until(qapp, lambda: session.assignments["long"].get("unplanned_min") == 30)
+    _pump(qapp)
+    assert session.minutes_left_for("long") == 30
+    real, held = _hold_the_assignments_reply(window, monkeypatch, fail=fail)
+    session.undo()
+    settled(qapp, window)
+    _pump(qapp)
+    assert session.assignments["long"]["estimate_min"] == 60
+    assert session.minutes_left_for("long") == 0
+    assert _bridge(window).week.property("leftoverWords") == ""
+    if not fail:
+        path, payload, on_success, on_error = held[-1]
+        real("GET", path, payload, on_success, on_error)
+        settled(qapp, window)
+        _pump(qapp)
+        assert session.minutes_left_for("long") == 0

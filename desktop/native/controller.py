@@ -1890,6 +1890,9 @@ class NativeSession(QObject):
                 restored = deepcopy(target)
                 restored["revision"] = int((live or {}).get("revision") or 0)
                 if live is not None:
+                    for key in ("unplanned_min", "planned_min"):
+                        if key in live:
+                            restored[key] = live[key]
                     restored["focus_minutes"] = live.get("focus_minutes") or 0
                     restored["focus_sessions"] = live.get("focus_sessions") or 0
                 self.assignments[entry["id"]] = restored
@@ -2052,9 +2055,12 @@ class NativeSession(QObject):
                 if result.get("assignment"):
                     stored = dict(result["assignment"])
                     stored["revision"] = result["revision"]
-                    stored["session_weeks"] = list(
-                        self.assignments.get(result["id"], {}).get("session_weeks") or []
-                    )
+                    held_copy = self.assignments.get(result["id"], {})
+                    stored["session_weeks"] = list(held_copy.get("session_weeks") or [])
+                    # The save's echo has no server numbers; the held ones still match the saved-week copy.
+                    for key in ("unplanned_min", "planned_min"):
+                        if key in held_copy:
+                            stored[key] = held_copy[key]
                     self.assignments[result["id"]] = stored
                 else:
                     self.assignments.pop(result["id"], None)
