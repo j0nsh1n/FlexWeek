@@ -101,7 +101,10 @@ preview. Recorded `operation_id` values make a retried write return the first re
 - 2026-11-12, branch `fix/planner-counts-minutes` from main d7afedfe, local only. Done: a homework's time still
   needed is counted in minutes everywhere it is counted (engine `planning::time_still_needed_parts`,
   `uncovered_homework_minutes`); Plan rounds down to a quarter hour only where it makes the rest session; the
-  Plan notice, status line, Material drawer and More count name the minutes that have no time. Not built: how
+  Plan notice, status line, Material drawer and More count name the minutes that have no time. Later weeks are
+  read as the server's `planned_min` less the sessions of `saved_week` (the week that number was read with),
+  which the desktop, the phone and the helper all pass (cases in `engine/engine/tests/test_minutes_count.rs`;
+  redesign notes in `~/.flexweek-ui-harness/scratch/round2-fix2/planner-minutes/redesign/`). Not built: how
   the app asks the student what to do with such a remainder (options in
   `~/.flexweek-ui-harness/scratch/round2-fix2/planner-minutes/ASK-OPTIONS.md`, owner's pick pending). Next:
   review of this branch and the owner's pick.
