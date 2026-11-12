@@ -100,10 +100,11 @@ preview. Recorded `operation_id` values make a retried write return the first re
 ## Session Handoff
 - 2026-11-12, branch `fix/planner-counts-minutes` from main d7afedfe, local only. Done: a homework's time still
   needed is counted in minutes everywhere it is counted (engine `planning::time_still_needed_parts`,
-  `uncovered_homework_minutes`); Plan rounds down to a quarter hour only where it makes the rest session; the
-  Plan notice, status line, Material drawer and More count name the minutes that have no time. Later weeks are
-  read as the server's `planned_min` less the sessions of `saved_week` (the week that number was read with),
-  which the desktop, the phone and the helper all pass (cases in `engine/engine/tests/test_minutes_count.rs`;
+  `uncovered_homework_minutes`); counts are exact minutes, and only what can be placed is rounded down to a
+  quarter hour (Plan's rest session, a paste, a "Spread over days" share's `left`); the Plan notice, status
+  line, Material drawer and More count name the minutes that have no time. Later weeks are read as the server's `planned_min` less the sessions of `saved_week` (the week that number was read with),
+  which the desktop, the phone and the helper all pass; the desktop keeps the numbers it holds paired with that
+  week after a failed Undo or Redo and an Undo of a delete (cases in `engine/engine/tests/test_minutes_count.rs`;
   redesign notes in `~/.flexweek-ui-harness/scratch/round2-fix2/planner-minutes/redesign/`). Not built: how
   the app asks the student what to do with such a remainder (options in
   `~/.flexweek-ui-harness/scratch/round2-fix2/planner-minutes/ASK-OPTIONS.md`, owner's pick pending). Next:
