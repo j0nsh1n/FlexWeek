@@ -4238,8 +4238,8 @@ class NativeWindow(QMainWindow):
             if self.session.placed_where:
                 said = self.session.placed_where
             else:
-                placed, waiting = self.session.plan_counts
-                said = f"Placed {placed} of {placed + waiting}"
+                placed = self.session.plan_counts[0]
+                said = f"Placed {placed} of {placed + self.session.plan_open}"
                 if self.session.plan_remainders:
                     said = f"{said}.{left_sentence(self.session.plan_remainders)}"
                 for item in (self.session.trace or {}).get("notices") or []:
