@@ -1028,14 +1028,14 @@ def child_main(args: argparse.Namespace) -> int:
         unchanged(revision)
 
     def week_switch_away(r: Rig) -> Step:
-        """Held on Week, the student presses D for Day and lets go there: nothing moves."""
+        """Held on Week, the student presses 1 for Day and lets go there: nothing moves."""
         yield from r.tab("week")
         yield from r.reveal(3, 17 * 60 + 30, 20 * 60 + 30)
         revision = session.revision
         box = r.block_rect(ids["essay"], 3)
 
         def to_day() -> Step:
-            xdo("key", "d")
+            xdo("key", "1")
             yield ("wait", 500)
 
         yield from r.drag(middle(box), r.carried(middle(box), 19 * 60, 4, 18 * 60), held=to_day)

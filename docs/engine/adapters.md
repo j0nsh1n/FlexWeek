@@ -264,6 +264,7 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | focus | break_phase | ADAPTER | one engine call |
 | focus | credit_target | ADAPTER | one engine call; None passes through |
 | focus | focus_candidates | ADAPTER | one engine call |
+| focus | quick_focus_homework | ADAPTER | one engine call; None passes through |
 | focus | now_and_next | ADAPTER | one engine call |
 | focus | now_next_line | ADAPTER | one engine call |
 

@@ -475,6 +475,48 @@ pub fn focus_candidates(
     Ok(result)
 }
 
+/// The homework the Quick focus screen offers: the work session that is on now, or else the next one
+/// later today, with `"now"` saying which. Sessions come from `focus_candidates`, so finished and
+/// overdue homework and fixed time never count. Null when today is not in the week shown or no
+/// session is left today.
+pub fn quick_focus_homework(
+    blocks: &Value,
+    assignments: &Value,
+    trace: &Value,
+    week_start: &str,
+    now: &str,
+) -> EngineResult<Value> {
+    let (today, now_minute) = crate::model::parse_due(now)?;
+    let monday = crate::time::date_from_iso(week_start)?;
+    let mut earliest: Option<(i64, Value)> = None;
+    for item in focus_candidates(blocks, assignments, trace, week_start, now)? {
+        let (Some(index), Some(start)) = (
+            item.get("day").and_then(Value::as_i64),
+            item.get("start").and_then(Value::as_str),
+        ) else {
+            continue;
+        };
+        let on_today = u64::try_from(index)
+            .ok()
+            .and_then(|days| monday.checked_add_days(chrono::Days::new(days)))
+            == Some(today);
+        if !on_today {
+            continue;
+        }
+        let start = hhmm_to_minutes(start)?;
+        if earliest.as_ref().is_none_or(|(best, _)| start < *best) {
+            earliest = Some((start, item));
+        }
+    }
+    Ok(match earliest {
+        Some((start, mut item)) => {
+            item["now"] = json!(start <= now_minute);
+            item
+        }
+        None => Value::Null,
+    })
+}
+
 pub fn now_and_next(blocks: &Value, day: &Value, minute: i64) -> EngineResult<Value> {
     let mut active: Vec<(i64, Value)> = Vec::new();
     for block in iterate(&or_default(Some(blocks), json!([])))? {

@@ -1,4 +1,4 @@
-"""D, M and W switch the planner between Day, Month and Week."""
+"""With Letter keys on, D, M and W switch the planner between Day, Month and Week."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 
@@ -11,10 +11,11 @@ from PySide6.QtWidgets import QApplication
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.waiting import wait_until
-from desktop.tests.window_support import qapp  # noqa: F401
+from desktop.tests.window_support import qapp, turn_on_letter_keys  # noqa: F401
 
 
 def test_keyboard_switches_week_day_and_month(qapp: QApplication, window: NativeWindow) -> None:
+    turn_on_letter_keys()
     window.setFocus()
     QTest.keyClick(window, Qt.Key.Key_D)
     wait_until(qapp, lambda: window.session.planner_view == "day")

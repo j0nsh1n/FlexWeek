@@ -794,15 +794,20 @@ pub fn span_problem(
     Ok(None)
 }
 
-/// A start before now (local date and minute) cannot be chosen. `now_iso` is that local date.
-/// A bad date is not a past time: the caller already has its own check for a date it cannot read.
+/// A homework start before now (local date and minute) cannot be chosen. `now_iso` is that local date.
+/// `kind` is the block's own: a fixed time (`"locked"`) may start in the past, so it is never refused
+/// here. A bad date is not a past time: the caller already has its own check for a date it cannot read.
 pub fn past_problem(
+    kind: &str,
     week_start: &str,
     day: i64,
     start_min: i64,
     now_iso: &str,
     now_min: i64,
 ) -> EngineResult<Option<String>> {
+    if kind == "locked" {
+        return Ok(None);
+    }
     let Ok(monday) = from_iso(week_start) else {
         return Ok(None);
     };
@@ -925,45 +930,69 @@ mod tests {
         let at = 15 * 60 + 10;
         let refused = "That time has passed. Choose 15:15 or later today, or another day.";
         assert_eq!(
-            past_problem(week, 1, 16 * 60, thursday, at)
+            past_problem("flexible", week, 1, 16 * 60, thursday, at)
                 .unwrap()
                 .as_deref(),
             Some("That time has passed. The day is over, so choose another day."),
             "Tuesday of this week is over, so it offers no time later today"
         );
         assert_eq!(
-            past_problem(week, 3, 15 * 60, thursday, at)
+            past_problem("flexible", week, 3, 15 * 60, thursday, at)
                 .unwrap()
                 .as_deref(),
             Some(refused),
             "earlier today"
         );
         assert_eq!(
-            past_problem(week, 3, at, thursday, at).unwrap(),
+            past_problem("flexible", week, 3, at, thursday, at).unwrap(),
             None,
             "this minute is not past"
         );
         assert_eq!(
-            past_problem(week, 3, 15 * 60 + 15, thursday, at).unwrap(),
+            past_problem("flexible", week, 3, 15 * 60 + 15, thursday, at).unwrap(),
             None,
             "later today"
         );
         assert_eq!(
-            past_problem("2026-09-28", 4, 18 * 60, thursday, at)
+            past_problem("flexible", "2026-09-28", 4, 18 * 60, thursday, at)
                 .unwrap()
                 .as_deref(),
             Some("That time has passed. The day is over, so choose another day."),
             "last week is over"
         );
         assert_eq!(
-            past_problem("2026-10-12", 0, 8 * 60, thursday, at).unwrap(),
+            past_problem("flexible", "2026-10-12", 0, 8 * 60, thursday, at).unwrap(),
             None,
             "next week"
         );
         assert_eq!(
-            past_problem("not a date", 0, 0, thursday, at).unwrap(),
+            past_problem("flexible", "not a date", 0, 0, thursday, at).unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn a_fixed_time_is_never_in_the_past() {
+        let week = "2026-10-05";
+        let thursday = "2026-10-08";
+        let at = 15 * 60 + 10;
+        for (week, day, start) in [
+            (week, 3, 15 * 60),
+            (week, 1, 16 * 60),
+            ("2026-09-28", 4, 18 * 60),
+        ] {
+            assert_eq!(
+                past_problem("locked", week, day, start, thursday, at).unwrap(),
+                None,
+                "fixed time on day {day} of {week} at {start}"
+            );
+            assert!(
+                past_problem("flexible", week, day, start, thursday, at)
+                    .unwrap()
+                    .is_some(),
+                "the same start is past for homework"
+            );
+        }
     }
 
     #[test]
