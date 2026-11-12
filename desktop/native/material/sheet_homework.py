@@ -263,7 +263,7 @@ class HomeworkDraft:
             return ""
         now_minute = self.now.hour * 60 + self.now.minute
         start = hhmm_to_minutes(fixed["start"])
-        return past_problem("flexible", week, fixed["day"], start, self.today, now_minute) or ""
+        return past_problem("flexible", week, fixed["day"], start, self.today, now_minute, self._step()) or ""
 
     def _fixed_problem(self, fixed: dict, due: str) -> str:
         week = self.session.week_start
@@ -272,7 +272,13 @@ class HomeworkDraft:
         start = hhmm_to_minutes(fixed["start"])
         if not self.completed:
             past = past_problem(
-                "flexible", week, fixed["day"], start, self.today, self.now.hour * 60 + self.now.minute
+                "flexible",
+                week,
+                fixed["day"],
+                start,
+                self.today,
+                self.now.hour * 60 + self.now.minute,
+                self._step(),
             )
             if past:
                 return past

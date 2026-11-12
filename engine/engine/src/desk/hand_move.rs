@@ -33,11 +33,14 @@ pub struct HandDrop<'a> {
     pub end_min: i64,
 }
 
-/// The week being edited and the local date and minute it is now.
+/// The week being edited, the local date and minute it is now, and the student's time step in minutes
+/// (5 or 15; the phone and the assistant have none and pass 15), which a "time has passed" refusal
+/// uses to name the next time it offers.
 pub struct WeekClock<'a> {
     pub week_start: &'a str,
     pub now_iso: &'a str,
     pub now_min: i64,
+    pub step_min: i64,
 }
 
 pub enum HandMove {
@@ -98,6 +101,7 @@ fn past_words(
         drop.start_min,
         clock.now_iso,
         clock.now_min,
+        clock.step_min,
     )
 }
 

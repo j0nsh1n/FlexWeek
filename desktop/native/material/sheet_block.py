@@ -27,7 +27,7 @@ from desktop.native.calendar import (
     past_problem,
     span_clash,
 )
-from desktop.native.hours.geometry import drag_step
+from desktop.native.hours.geometry import DEFAULT_DRAG_STEP, drag_step
 from desktop.native.remind import clock_parts
 from desktop.native.weekmodel import clock_text, end_after_start_words, length_label
 from desktop.native.widgets import (
@@ -232,7 +232,7 @@ class BlockDraft:
         original_start = self.original.get("start") or ""
         if not self.existing:
             for day in chosen:
-                past = past_problem("locked", week, day, self.start, now_iso, now_min)
+                past = past_problem("locked", week, day, self.start, now_iso, now_min, DEFAULT_DRAG_STEP)
                 if past:
                     return past
             return ""
@@ -242,7 +242,7 @@ class BlockDraft:
             moved = single and day in original_days and _clock(self.start) != original_start
             if not added and not moved:
                 continue
-            past = past_problem("locked", week, day, self.start, now_iso, now_min)
+            past = past_problem("locked", week, day, self.start, now_iso, now_min, DEFAULT_DRAG_STEP)
             if past:
                 return past
         return ""

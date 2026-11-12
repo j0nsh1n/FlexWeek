@@ -170,7 +170,7 @@ fn calendar_hand_move(
     blocks: &str,
     assignments: &str,
     block_id: &str,
-    clock: (&str, &str, i64),
+    clock: (&str, &str, i64, i64),
     span: (i64, i64, i64, i64),
 ) -> PyResult<String> {
     let (blocks, assignments) = (parse(blocks)?, parse(assignments)?);
@@ -186,6 +186,7 @@ fn calendar_hand_move(
             week_start: clock.0,
             now_iso: clock.1,
             now_min: clock.2,
+            step_min: clock.3,
         };
         let answer =
             hand_move::hand_move(&blocks, &drop, &clock, &assignments, &mut || fresh_id(py))
@@ -321,9 +322,11 @@ fn calendar_past_problem(
     start_min: i64,
     now_iso: &str,
     now_min: i64,
+    step_min: i64,
 ) -> PyResult<Option<String>> {
     guard(|| {
-        grid::past_problem(kind, week_start, day, start_min, now_iso, now_min).map_err(crate::raise)
+        grid::past_problem(kind, week_start, day, start_min, now_iso, now_min, step_min)
+            .map_err(crate::raise)
     })
 }
 

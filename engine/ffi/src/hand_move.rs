@@ -71,6 +71,7 @@ pub(crate) fn hand_move(
         week_start,
         now_iso: &now_iso,
         now_min: i64::from(local.time().hour()) * 60 + i64::from(local.time().minute()),
+        step_min: 15,
     };
     let made = format!("b-hand-{}", hex_id(&week.host.random_bytes(8)));
     let answer = flexweek_engine::desk::hand_move::hand_move(

@@ -474,6 +474,11 @@ pub fn allow_system_theme(db: &Connection) -> StoreResult<()> {
     Ok(())
 }
 
+/// The newest preferences version: what a new account's row starts at. Each account's row records the
+/// last one-time change it has had, and each upgrade step keeps its own number for good, so a later
+/// version cannot move an earlier step. `test_time_step_default.rs` holds the two together.
+pub const PREFS_VERSION: i64 = 5;
+
 pub fn upgrade_preferences(db: &Connection) -> StoreResult<()> {
     db.execute_batch("BEGIN IMMEDIATE")?;
     db.execute(

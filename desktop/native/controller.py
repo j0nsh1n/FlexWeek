@@ -63,6 +63,7 @@ from desktop.native.focus import (
     work_minutes,
 )
 from desktop.native.history import capture_step, join_step, mark_stale, push_step
+from desktop.native.hours.geometry import drag_step
 from desktop.native.kept import KeptSession
 from desktop.native.look import pack_axis, sanitize_look
 from desktop.native.pomodoro import inflate_for_solve, split_solved
@@ -1207,6 +1208,10 @@ class NativeSession(QObject):
         session.update(start=fixed_at["start"], days=[fixed_at["day"]], pinned=True)
         self.needs_time.pop(session["id"], None)
 
+    def _time_step(self) -> int:
+        """The student's time step, 5 or 15 minutes."""
+        return drag_step((self.preferences or {}).get("drag_step_min"))
+
     def judge_hand_move(self, block_id: str, from_day: int, day: int, start: int, end: int) -> dict:
         """The hand-move rule's answer for letting `block_id` go here now, with nothing applied."""
         clock = clock_parts(self.now_ms())
@@ -1214,7 +1219,7 @@ class NativeSession(QObject):
             self.blocks,
             self.assignments,
             block_id,
-            (self.week_start, clock["iso"], int(clock["minute"])),
+            (self.week_start, clock["iso"], int(clock["minute"]), self._time_step()),
             (from_day, day, start, end),
         )
 
@@ -1471,6 +1476,7 @@ class NativeSession(QObject):
                 start_min,
                 clock_now["iso"],
                 int(clock_now["minute"]),
+                self._time_step(),
             )
             if past:
                 return past

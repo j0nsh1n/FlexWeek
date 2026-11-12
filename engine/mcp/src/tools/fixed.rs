@@ -156,8 +156,10 @@ fn span_of(start: &str, end: &str) -> Result<(i64, i64), String> {
 
 fn past_of(app: &crate::App, week_start: &str, day: i64, start_min: i64) -> Result<(), String> {
     let now = app.now()?;
-    match past_problem("locked", week_start, day, start_min, &now.today, now.minute)
-        .map_err(|err| err.message)?
+    match past_problem(
+        "locked", week_start, day, start_min, &now.today, now.minute, 15,
+    )
+    .map_err(|err| err.message)?
     {
         Some(words) => Err(words),
         None => Ok(()),

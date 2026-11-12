@@ -4,7 +4,7 @@
 mod common;
 
 use common::scratch;
-use flexweek_store::{initialize, insert_preferences, open_connection};
+use flexweek_store::{PREFS_VERSION, initialize, insert_preferences, open_connection};
 use rusqlite::params;
 use serde_json::{Value, json};
 
@@ -103,4 +103,14 @@ fn an_account_made_after_the_move_keeps_a_five_it_holds() {
     let user_id = user_with_comfort(&path, 5, r#"{"drag_step_min":5}"#);
     initialize(&path, WEEK).unwrap();
     assert_eq!(comfort_of(&path, user_id)["drag_step_min"], json!(5));
+}
+
+#[test]
+fn an_upgraded_row_ends_at_the_version_a_new_row_starts_at() {
+    // A new upgrade step without a new PREFS_VERSION, or the other way round, would leave new rows
+    // behind old ones or run a step on rows made after it.
+    let path = scratch("step-newest-version");
+    let user_id = user_with_comfort(&path, 0, "");
+    initialize(&path, WEEK).unwrap();
+    assert_eq!(comfort_and_version(&path, user_id).1, PREFS_VERSION);
 }

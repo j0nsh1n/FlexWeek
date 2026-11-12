@@ -151,8 +151,8 @@ Item {
         return Math.max(0, Math.min(24 * 60, snapped))
     }
 
-    function snapQuarter(minute) {
-        return Math.round(minute / 15) * 15
+    function snapToStep(minute) {
+        return Math.round(minute / root.dragStep) * root.dragStep
     }
 
     // The topmost block under a point of the grid, as the block its hold needs to know.
@@ -177,7 +177,8 @@ Item {
     }
 
     // Where the held block lands for a pointer at (x, y) on the grid: moved by the pointer's travel and
-    // snapped to a quarter hour, or with one edge moved, never shorter than a quarter hour.
+    // snapped to the student's step, or with one edge moved, never shorter than one step. As in the plain
+    // look, the new time lands on the step's own marks even when the block began off them.
     function landingFor(x, y) {
         var held = root.held
         var travel = (y - held.pressY) / root.row * 60
@@ -186,14 +187,16 @@ Item {
         var end = held.end
         if (held.how === "move") {
             var length = held.end - held.start
-            start = Math.max(0, Math.min(24 * 60 - length, root.snapQuarter(held.start + travel)))
+            start = Math.max(0, Math.min(24 * 60 - length, root.snapToStep(held.start + travel)))
             end = start + length
             if (root.weekMode)
                 day = Math.max(0, Math.min(root.columns - 1, Math.floor((x - root.gutter) / root.dayWidth)))
         } else if (held.how === "top") {
-            start = Math.max(0, Math.min(held.end - 15, root.snapQuarter(held.start + travel)))
+            var latest = Math.floor((held.end - root.dragStep) / root.dragStep) * root.dragStep
+            start = Math.max(0, Math.min(latest, root.snapToStep(held.start + travel)))
         } else {
-            end = Math.min(24 * 60, Math.max(held.start + 15, root.snapQuarter(held.end + travel)))
+            var earliest = Math.ceil((held.start + root.dragStep) / root.dragStep) * root.dragStep
+            end = Math.min(24 * 60, Math.max(earliest, root.snapToStep(held.end + travel)))
         }
         return { day: day, start: start, end: end }
     }

@@ -52,10 +52,13 @@ def snap(minute: float, step: int) -> int:
     return round(minute / step) * step
 
 
-def next_slot(minute: int, first: int = FIRST, last: int = LAST - SLOT_MIN) -> tuple[int, int]:
-    """Where a new thing starts when asked for at `minute`: (days ahead, minute) of the next quarter hour,
-    now rounded up, kept between `first` and `last`. With none left today, the first one tomorrow."""
-    slot = max(-(-minute // SLOT_MIN) * SLOT_MIN, first)
+def next_slot(
+    minute: int, first: int = FIRST, last: int = LAST - SLOT_MIN, step: int = SLOT_MIN
+) -> tuple[int, int]:
+    """Where a new thing starts when asked for at `minute`: (days ahead, minute) of the next mark of
+    `step` (a quarter hour unless given), now rounded up, kept between `first` and `last`. With none left
+    today, the first one tomorrow."""
+    slot = max(-(-minute // step) * step, first)
     return (0, slot) if slot <= last else (1, first)
 
 

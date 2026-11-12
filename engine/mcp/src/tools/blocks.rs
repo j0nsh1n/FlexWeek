@@ -183,6 +183,7 @@ fn perform_move(app: &crate::App, args: &MoveArgs) -> Result<Value, String> {
         week_start: &args.week_start,
         now_iso: &now.today,
         now_min: now.minute,
+        step_min: 15,
     };
     let blocks = match hand_move(
         &Value::Array(blocks),

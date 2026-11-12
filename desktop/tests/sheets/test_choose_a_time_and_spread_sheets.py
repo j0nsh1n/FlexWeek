@@ -5,6 +5,7 @@ clash line is coloured are looks: pictures/_sheets_g13.py."""
 from __future__ import annotations
 
 from collections.abc import Iterator
+from types import SimpleNamespace
 
 import pytest
 
@@ -105,4 +106,31 @@ def test_choose_a_times_conflict_line_names_the_clash_and_goes_when_there_is_non
         qapp.processEvents()
     assert not row.isVisible(), "no clash, no row"
     free(sheet)
+    free(parent)
+
+
+@pytest.mark.parametrize(
+    "step, offered, named",
+    [(5, QTime(19, 5), ("7:05 PM", "19:05")), (15, QTime(19, 15), ("7:15 PM", "19:15"))],
+)
+def test_choose_a_time_starts_on_the_next_mark_of_the_students_step_and_names_it_when_refusing(
+    qapp: QApplication, step: int, offered: QTime, named: tuple[str, str]
+) -> None:
+    """Tuesday 22 September at 19:02. On fives the next time is 19:05, on quarter hours 19:15: the time the
+    dialog opens on and the time its refusal names are the same one."""
+    parent, _palette = styled(qapp)
+    parent.session = SimpleNamespace(preferences={"drag_step_min": step})  # type: ignore[attr-defined]
+    waiting = {"id": "w", "title": "Essay", "kind": "flexible", "duration_min": 30, "days": [1, 2]}
+    now = 19 * 60 + 2
+    dialog = shown(
+        qapp, ChooseTimeDialog(parent, waiting, WEEK, [1, 2], [], None, 1, now, ("2026-09-22", now))
+    )
+    assert dialog.day.days() == [1]
+    assert dialog.start.time() == offered
+    assert not dialog.problem.isVisible()
+    dialog.start.setTime(QTime(18, 0))
+    words = dialog.problem.text()
+    assert words.startswith("That time has passed."), words
+    assert any(f"Choose {time} or later today" in words for time in named), words
+    free(dialog)
     free(parent)
