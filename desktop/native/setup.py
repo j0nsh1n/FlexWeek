@@ -60,9 +60,9 @@ from backend.models import valid_spotify_url
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm
 from desktop.native import icons
 from desktop.native.calendar import (
-    SETUP_ACTIVITY_PREFIX,
     SETUP_SCHOOL_ID,
     is_setup_block,
+    new_activity_id,
 )
 from desktop.native.fields import (
     END_OF_DAY,
@@ -275,6 +275,8 @@ class SetupState:
     blocks: list[dict]
     week_start: str
     subjects: list[str] = field(default_factory=list)
+    # "This week: no School on Wednesday." when the open week differs from the repeats in `blocks`.
+    this_week: str | None = None
     first_run: bool = True
     homework: list[str] = field(default_factory=list)
 
@@ -1120,8 +1122,11 @@ class ActivityRow(QFrame):
         self, title: str = "", days: list[int] | None = None, start: str = "15:30", minutes: int = 90,
         category: str = "extra",
         guess: bool = True,
+        block_id: str | None = None,
     ) -> None:
         super().__init__()
+        # The activity keeps its id whatever rows are removed around it, so its weeks stay its own.
+        self.block_id = block_id or new_activity_id()
         self.setObjectName("setupGroup")
         box = QVBoxLayout(self)
         box.setContentsMargins(12, 10, 12, 10)
@@ -1571,6 +1576,10 @@ class SetupPage(QWidget):
         # Said only when it is true: under a week of school days it read as a warning.
         self.school_hint = _label("No school days picked means no school on the calendar.", "setupHint")
         box.addWidget(self.school_hint)
+        # The page shows the usual week; what the open week does differently is said, not shown.
+        self.this_week = _label("", "setupHint")
+        self.this_week.setVisible(False)
+        box.addWidget(self.this_week)
         self.school_days.changed.connect(self._follow_school)
         self._section(box, "Sports, clubs and jobs")
         self.activity_box = QVBoxLayout()
@@ -1882,9 +1891,12 @@ class SetupPage(QWidget):
                     minutes=int(block["duration_min"]),
                     category=str(block.get("category") or "extra"),
                     guess=False,
+                    block_id=str(block["id"]),
                 )
         if not self.activities:
             self._add_activity()
+        self.this_week.setText(self._state.this_week or "")
+        self.this_week.setVisible(bool(self._state.this_week))
         fill_cutoff(self.cutoff, self._state.preferences.get("day_cutoff"))
         self._follow_school()
         self._week_as_opened = self._week_typed()
@@ -2337,10 +2349,11 @@ class SetupPage(QWidget):
         focus: bool = False,
         category: str = "extra",
         guess: bool = True,
+        block_id: str | None = None,
     ) -> None:
         if len(self.activities) >= MAX_ACTIVITIES:
             return
-        row = ActivityRow(title, days, start, minutes, category, guess=guess)
+        row = ActivityRow(title, days, start, minutes, category, guess=guess, block_id=block_id)
         row.removed.connect(self._remove_activity)
         self.activity_box.addWidget(row)
         self.activities.append(row)
@@ -2388,14 +2401,14 @@ class SetupPage(QWidget):
                     "days": days,
                 }
             )
-        for index, row in enumerate(self.activities):
+        for row in self.activities:
             days = row.days.days()
             start, minutes = row.times.span()
             if not days or minutes <= 0:
                 continue
             blocks.append(
                 {
-                    "id": f"{SETUP_ACTIVITY_PREFIX}{index + 1}",
+                    "id": row.block_id,
                     "title": row.name.text().strip() or SPORT_FALLBACK,
                     "kind": "locked",
                     "category": row.category.currentData(),

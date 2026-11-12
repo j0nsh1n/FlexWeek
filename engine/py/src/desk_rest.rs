@@ -1463,20 +1463,14 @@ fn intents_of(text: &str) -> PyResult<Vec<repeats::Intent>> {
 }
 
 #[pyfunction]
-#[pyo3(signature = (id, from_date, repeat, edited))]
-fn repeat_edit_intent(
-    id: &str,
-    from_date: &str,
-    repeat: Option<&str>,
-    edited: Option<&str>,
-) -> PyResult<Option<String>> {
-    let repeat = opt_value(repeat)?;
-    let edited = opt_value(edited)?;
+fn repeat_intents_between(before: &str, after: &str, from_date: &str) -> PyResult<String> {
+    let before = objects(before)?;
+    let after = objects(after)?;
     guard(|| {
-        Ok(
-            repeats::edit_intent(id, from_date, repeat.as_ref(), edited.as_ref())
-                .map(|intent| dump(&intent.to_value())),
-        )
+        let intents = repeats::intents_between(&before, &after, from_date);
+        Ok(array(
+            intents.iter().map(repeats::Intent::to_value).collect(),
+        ))
     })
 }
 
@@ -1510,7 +1504,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module,
         calendar_category_title,
         calendar_is_series,
-        repeat_edit_intent,
+        repeat_intents_between,
         repeat_apply_to_week,
         repeat_this_week_line,
         repeat_one_day_note,

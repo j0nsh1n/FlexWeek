@@ -200,6 +200,11 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | calendar | span_problem | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | span_clash | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | category_icon | ADAPTER | encodes, makes one engine call, decodes |
+| calendar | new_activity_id | STAYS | Draws randomness (`uuid4`) for an activity Setup adds; the engine never draws it. |
+| calendar | repeat_changes | ADAPTER | encodes both lists, one `repeats::intents_between` call, decodes |
+| calendar | apply_repeat_changes | ADAPTER | encodes, one `repeats::apply_to_week` call, decodes the pair |
+| calendar | this_week_line | ADAPTER | encodes, one `repeats::this_week_line` call, passes None through |
+| calendar | one_day_note | ADAPTER | encodes, one `repeats::one_day_note` call, passes None through |
 
 ## custom_look
 

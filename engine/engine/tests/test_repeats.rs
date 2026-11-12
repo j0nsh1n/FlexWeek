@@ -3,8 +3,8 @@
 //! Dates are real: Monday 9 November 2026 is the open week, 16 and 23 November are later weeks.
 
 use flexweek_engine::repeats::{
-    Intent, Kept, NEW_NEEDS_ALL, NOTHING_LEFT, RULE, apply_to_week, edit_intent, kept_notice,
-    one_day_note, own_changes, parse_intent, patched, restated_copy, restated_version,
+    Intent, Kept, NEW_NEEDS_ALL, NOTHING_LEFT, RULE, apply_to_week, edit_intent, intents_between,
+    kept_notice, one_day_note, own_changes, parse_intent, patched, restated_copy, restated_version,
     this_week_line, three_way,
 };
 use serde_json::{Value, json};
@@ -381,4 +381,26 @@ fn moving_one_day_of_a_repeat_says_only_that_day_changed_and_where_every_week_is
         Some("Only this Thursday changed. To change every week, run setup again from Settings.")
     );
     assert_eq!(one_day_note(&gym(), 2, true).unwrap(), None);
+}
+
+#[test]
+fn the_changes_between_two_lists_of_repeats_are_patches_new_repeats_and_stops() {
+    let piano = json!({"id": "activity-7c1e", "title": "Piano", "kind": "locked", "start": "17:00",
+                       "duration_min": 45, "days": [1]});
+    let later_school = with(school(), json!({"start": "09:00"}));
+    let made = intents_between(&[school(), soccer()], &[later_school, piano], OPEN_WEEK);
+    let values: Vec<Value> = made.iter().map(Intent::to_value).collect();
+    assert_eq!(
+        values,
+        vec![
+            json!({"id": "school", "scope": "from", "from_date": OPEN_WEEK, "set": {"start": "09:00"},
+                   "add_days": [], "remove_days": [], "stop": false}),
+            json!({"id": "activity-7c1e", "scope": "from", "from_date": OPEN_WEEK,
+                   "set": {"title": "Piano", "start": "17:00", "duration_min": 45},
+                   "add_days": [1], "remove_days": [], "stop": false}),
+            json!({"id": "activity-1", "scope": "from", "from_date": OPEN_WEEK, "set": {},
+                   "add_days": [], "remove_days": [], "stop": true}),
+        ]
+    );
+    assert!(intents_between(&[school()], &[school()], OPEN_WEEK).is_empty());
 }

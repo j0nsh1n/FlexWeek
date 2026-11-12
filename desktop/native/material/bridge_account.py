@@ -37,9 +37,9 @@ from backend.slots import hhmm_to_minutes, minutes_to_hhmm
 from desktop.native.calendar import (
     DAY_FULL,
     DAYS,
-    SETUP_ACTIVITY_PREFIX,
     SETUP_SCHOOL_ID,
     is_setup_block,
+    new_activity_id,
 )
 from desktop.native.client import (
     SESSION_ENDED,
@@ -173,6 +173,8 @@ def _clock(text: str, *, end: bool = False) -> str | None:
 
 def _blank_activity() -> dict[str, Any]:
     return {
+        # Kept for the life of the row, so removing another activity never renumbers this one.
+        "id": new_activity_id(),
         "title": "",
         "days": [],
         "start": "15:30",
@@ -1230,6 +1232,12 @@ class AccountBridge(QObject):
     def schoolHint(self) -> bool:  # noqa: N802 — QML name
         return not self._school_days
 
+    @Property(str, notify=changed)
+    def thisWeek(self) -> str:  # noqa: N802 — QML name
+        """The page shows the usual week; "This week: no School on Wednesday." says what the open week
+        does differently."""
+        return (self._state.this_week if self._state is not None else None) or ""
+
     @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
     def activities(self) -> list:
         return [
@@ -1591,6 +1599,7 @@ class AccountBridge(QObject):
                 end = minutes_to_hhmm(hhmm_to_minutes(start) + int(block["duration_min"]))
                 self._activities.append(
                     {
+                        "id": str(block["id"]),
                         "title": str(block.get("title") or ""),
                         "days": [int(day) for day in block.get("days") or []],
                         "start": start,
@@ -1702,13 +1711,13 @@ class AccountBridge(QObject):
                     "days": list(self._school_days),
                 }
             )
-        for index, row in enumerate(self._activities):
+        for row in self._activities:
             span = _minutes(row["start"], row["end"])
             if not row["days"] or span <= 0:
                 continue
             blocks.append(
                 {
-                    "id": f"{SETUP_ACTIVITY_PREFIX}{index + 1}",
+                    "id": row["id"],
                     "title": row["title"].strip() or SPORT_FALLBACK,
                     "kind": "locked",
                     "category": row["category"],

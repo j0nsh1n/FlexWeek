@@ -371,6 +371,30 @@ pub fn edit_intent(
     (!empty).then_some(intent)
 }
 
+/// Every change from the repeats standing in a week (`before`) to the ones a client now holds
+/// (`after`): what each form changed, a new repeat for an id `before` lacks, a stop for one `after`
+/// lacks. Order: `after`'s, then the stops.
+pub fn intents_between(before: &[Value], after: &[Value], from_date: &str) -> Vec<Intent> {
+    let find =
+        |list: &'_ [Value], id: &str| list.iter().find(|item| id_of(item) == Some(id)).cloned();
+    let mut intents = Vec::new();
+    for edited in after {
+        let Some(id) = id_of(edited) else { continue };
+        if let Some(intent) = edit_intent(id, from_date, find(before, id).as_ref(), Some(edited)) {
+            intents.push(intent);
+        }
+    }
+    for repeat in before {
+        let Some(id) = id_of(repeat) else { continue };
+        if find(after, id).is_none()
+            && let Some(intent) = edit_intent(id, from_date, Some(repeat), None)
+        {
+            intents.push(intent);
+        }
+    }
+    intents
+}
+
 /// What a week shows after `intents`, applied as the store applies them to a saved week, with the
 /// repeats as they stand in it afterwards. `blocks` is the week as shown (repeats merged in) and
 /// `repeats` the repeats standing in it before; the client calls this for the week it has open so
