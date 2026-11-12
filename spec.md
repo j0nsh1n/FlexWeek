@@ -214,11 +214,14 @@ Contract for the finished app:
   window still has a free 15 minutes after now. An "In one go" homework is
   never shared out: it gets one gap of its full length before it is due, or
   stays in Not placed yet with "Doesn't fit in one go before Wed 21. Allow
-  splitting?". Whatever is not placed stays time that needs a place: the placed
-  part keeps its session and the rest is a second open session of the same
-  homework. Before placing anything in a week, Plan and Replan give that week
-  one session for each open homework with time still needed that is due on or
-  after that week's Monday and has no open session there; unplaced time left in
+  splitting?". The sessions Allow splitting makes are all placed this week
+  where they fit, without a fair share, by the first plan that includes
+  them and is saved; later plans share them out as usual. Whatever is not
+  placed stays time that needs a place: the placed part keeps its session
+  and the rest is a second open session of the same homework. Before
+  placing anything in a week, Plan and Replan give that week one session
+  for each open homework with time still needed that is due on or after
+  that week's Monday and has no open session there; unplaced time left in
   an earlier week moves into it in the same save. Until placed it shows in Not
   placed yet with its amount ("History · 1 h left"). One engine count of the
   time still needed (this week, an earlier week, a later week; a session whose

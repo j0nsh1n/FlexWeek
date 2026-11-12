@@ -303,6 +303,10 @@ class NativeSession(QObject):
         self._join_step = False
         # New homework to give a time once its save lands, when the student plans as they add.
         self._plan_after_save: set[str] = set()
+        # Sessions Allow splitting made: a plan that includes them places them all this week, with no fair
+        # share, until one such plan is saved. `_split_planned` are those in the plan now being saved.
+        self._split_whole: set[str] = set()
+        self._split_planned: set[str] = set()
         self._replan_after_save = False
         self._spread_after_save: tuple[str, int, str] | None = None
         self._allow_split_pending: str | None = None
@@ -467,6 +471,8 @@ class NativeSession(QObject):
         self.dirty = False
         self.conflict = False
         self.pending_save = None
+        self._split_whole = set()
+        self._split_planned = set()
         self.repeats = []
         self._saved_repeats = []
         self.planner_view = "week"
@@ -989,6 +995,7 @@ class NativeSession(QObject):
             self.conflict = False
             self.pending_save = None
             self._pending_step = None
+            self._split_planned = set()
             self.trace = None
             self.assignments = {item["id"]: item for item in data["assignments"]}
             self.dirty_assignments.clear()
@@ -2133,6 +2140,8 @@ class NativeSession(QObject):
             spread_next, self._spread_after_save = self._spread_after_save, None
             if spread_next is not None:
                 QTimer.singleShot(0, lambda: self.preview_spread(*spread_next, then=self.confirm_spread))
+            self._split_whole -= self._split_planned
+            self._split_planned = set()
             planned_next, self._plan_after_save = self._plan_after_save, set()
             if planned_next:
                 # Plan it for me as I add it: the new homework's time, joined to the add in one step.
@@ -2171,6 +2180,8 @@ class NativeSession(QObject):
                 return
             # A plan waiting on this save must not fire after some later, unrelated one.
             self._plan_after_save = set()
+            # A plan that was not saved ends no promise; Allow splitting's sessions stay to be saved by Retry.
+            self._split_planned = set()
             self._replan_after_save = False
             self._spread_after_save = None
             self._allow_split_pending = None
@@ -2339,7 +2350,7 @@ class NativeSession(QObject):
             first_day,
             first_minute,
             self.preferences.get("work_windows") or [],
-            targets,
+            targets - self._split_whole,
         )
         if shares:
             kept = {block["id"] for block in week}
@@ -2497,6 +2508,7 @@ class NativeSession(QObject):
             self.week_changed.emit()
             self.dirty = self.dirty or changed
             self._plan_step_id = None
+            self._split_planned = targets & self._split_whole
             self.save(status=placed_note, join=join, plan=changed and not (join and only is not None))
 
         def err(error: ApiError) -> None:
@@ -3380,6 +3392,7 @@ class NativeSession(QObject):
     ) -> None:
         item = self.assignments.get(assignment_id)
         if item is None or item.get("completed"):
+            self._allow_split_pending = None
             return
         ticket = self._begin()
         self._say("Working out sessions…")
@@ -3397,6 +3410,8 @@ class NativeSession(QObject):
                 else:
                     self._say("All of this homework is already focused or planned.")
                 self.spread_preview = None
+                # Allow splitting made nothing, so a later Spread of this homework is an ordinary one.
+                self._allow_split_pending = None
                 return
             rows = []
             total = 0
@@ -3436,12 +3451,18 @@ class NativeSession(QObject):
             if then is not None:
                 then()
 
+        def failed(error: ApiError) -> None:
+            if self._alive(ticket):
+                # Allow splitting made nothing, so a later Spread of this homework is an ordinary one.
+                self._allow_split_pending = None
+            self._fail(ticket, error)
+
         self.client.request(
             "POST",
             f"/api/assignments/{quote(assignment_id, safe='')}/spread",
             {"session_min": session_min, "from_date": from_date},
             ok,
-            lambda error: self._fail(ticket, error),
+            failed,
         )
 
     def confirm_spread(self) -> bool:
@@ -3456,17 +3477,17 @@ class NativeSession(QObject):
         )
         operation_id = self._operation(key)
         groups = merge_preview_rows(preview["rows"], operation_id)
-        plan_ids = (
-            {
-                group["block"]["id"]
-                for group in groups
-                if group["week_start"] == self.week_start
-                and group["block"].get("assignment_id") == preview["assignment_id"]
-            }
-            if self._allow_split_pending == preview["assignment_id"]
-            else set()
-        )
+        made = {
+            group["block"]["id"]
+            for group in groups
+            if group["week_start"] == self.week_start
+            and group["block"].get("assignment_id") == preview["assignment_id"]
+        }
+        plan_ids = made if self._allow_split_pending == preview["assignment_id"] else set()
         self._plan_after_save |= plan_ids
+        # A Spread by hand of the same homework and length makes the same ids as discarded Allow splitting
+        # sessions (one operation per attempt); its sessions are not promised a place.
+        self._split_whole = (self._split_whole - made) | plan_ids
         ok = self.confirm_preview(
             preview["rows"],
             label="spreading " + title,
@@ -3478,6 +3499,8 @@ class NativeSession(QObject):
             self._allow_split_pending = None
         else:
             self._plan_after_save.difference_update(plan_ids)
+            # Refused (a full week): the sessions were never made.
+            self._split_whole -= plan_ids
             self._allow_split_pending = None
         return ok
 
