@@ -188,7 +188,11 @@ Contract for the finished app:
   "Choose a time myself" for anything more. "Plan my homework" places only
   homework that has no time yet and keeps the times already planned; "Replan
   all my homework", under More and in the plan review, plans every unfinished
-  session again. The `planning_style` preference says when new homework gets a
+  session again, one whose time has passed unfinished included: it gets a time
+  from now on, or none when no room is left before its due, and only the
+  minutes still needed after focus time are planned. A session on now, a pinned
+  one and a finished one stay, and nothing is placed before now. The
+  `planning_style` preference says when new homework gets a
   time: `suggest` (the default) waits for Plan my homework, `auto` plans each
   new homework as it is saved, in the same Undo step, and `manual` leaves it to
   the student, with the button reading Suggest times. Homework dragged onto a
@@ -210,9 +214,11 @@ Contract for the finished app:
   after that week's Monday and has no open session there; unplaced time left in
   an earlier week moves into it in the same save. Until placed it shows in Not
   placed yet with its amount ("History · 1 h left"). One engine count of the
-  time still needed (this week, an earlier week, a later week) feeds the plan
-  review, the message after Plan, Not placed yet and More; "All your homework
-  already has a time" and "Everything has a time" show only when it is 0. The
+  time still needed (this week, an earlier week, a later week; a session whose
+  time has passed unfinished, and is not pinned, counts as having no time) feeds
+  the plan review, the message after Plan, Not placed yet and More; "All your
+  homework already has a time" and "Everything has a time" show only when it is
+  0. The
   plan review hides when the week changes. The review says what was placed
   ("History: 1 h this week (Sun), 1 h left for next week"), or with nothing
   placed: "No homework time left this week. History, Math and Bio are due next
