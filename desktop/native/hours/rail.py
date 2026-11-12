@@ -131,6 +131,19 @@ def rail_title_lines(text: str, metrics: QFontMetricsF, width: float, most: int 
     return lines
 
 
+def rail_needed_line(item: dict) -> str:
+    """One homework of the rail's list: what it still needs, and in a week that is over what was missed,
+    since that time is planned from this week."""
+    missed = int(item.get("missed_min") or 0)
+    rest = int(item["minutes"]) - missed
+    parts = [item["title"]]
+    if rest:
+        parts.append(f"{length_label(rest)} left")
+    if missed:
+        parts.append(f"{length_label(missed)} missed")
+    return " · ".join(parts)
+
+
 def label(words: str, name: str, *, kind: str = "railLabel") -> QLabel:
     made = QLabel(words)
     made.setObjectName(name)
@@ -1035,9 +1048,7 @@ class Rail(QFrame):
         count = len(time_needed or [])
         self._time_needed_count = count
         if count:
-            words = "\n".join(
-                f"{item['title']} · {length_label(item['minutes'])} left" for item in time_needed or []
-            )
+            words = "\n".join(rail_needed_line(item) for item in time_needed or [])
         else:
             words = "Everything has a time."
         self.none_waiting.setText(words)

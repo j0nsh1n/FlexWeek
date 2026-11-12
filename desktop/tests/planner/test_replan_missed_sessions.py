@@ -374,3 +374,89 @@ def test_a_week_that_is_over_counts_its_missed_session_as_needing_a_time(
     assert session.missed_block_ids() == frozenset({work["id"]})
     assert [item["minutes"] for item in session.homework_time_needed()] == [60]
     assert _sentence(session) != EVERYTHING
+
+
+def test_a_week_that_is_over_says_its_missed_time_as_missed(
+    qapp: QApplication, open_light: Callable[..., NativeWindow], clock: FakeClock
+) -> None:
+    """The essay is due next Friday and its Tuesday hour was missed. On Thursday this week the hour still
+    needs a time here. Looked at on Monday of next week, this week is over and its make-up time is planned
+    from next week, so the status line and the plain look's list say the hour was missed instead."""
+    window = open_light()
+    session, _ = _essay_planned_on_tuesday(qapp, lambda: window, due="2026-11-13T23:59")
+    window._fill_classic()
+    assert _sentence(session) == "1 h still needs a time"
+    assert window.rail.none_waiting.text() == "History essay · 1 h left"
+    clock.set(datetime(2026, 11, 9, 10, 0))
+    window._fill_classic()
+    assert _sentence(session) == "1 h missed"
+    assert window.rail.none_waiting.text() == "History essay · 1 h missed"
+
+
+def test_minutes_no_session_holds_are_read_with_the_missed_session_counted_as_time_still_needed(
+    qapp: QApplication, open_light: Callable[..., NativeWindow], clock: FakeClock
+) -> None:
+    """60 min estimated, 10 of focus: 50 are needed. The missed Tuesday hour comes back as 45, a whole
+    number of quarter hours, so 5 min are in no session. Plan for unfinished homework and paste read that
+    one count: 5 min left, too short to place, as the drawer lists them; not "already fully planned"."""
+    session, work = _essay_planned_on_tuesday(qapp, open_light)
+    # A 10 minute timer, so the focus done is not a whole number of quarter hours.
+    session.preferences = {**(session.preferences or {}), "timer_work_min": 10}
+    _log_focus(qapp, session, work, clock, 10, 10)
+    assert [item["minutes"] for item in session.homework_time_needed()] == [50]
+    assert session.homework_remainders() == [("History essay", 5)]
+    assert session.minutes_left_for("essay") == 5
+    assert session.remaining_for("essay") == 0
+    assert session.plan_unfinished("essay") is None
+    assert session.message == "History essay has 5 min left, less than the 15 minutes Plan places."
+
+
+def test_replan_all_counts_a_missed_session_again_when_another_homework_gets_a_fair_share(
+    qapp: QApplication, open_light: Callable[..., NativeWindow], clock: FakeClock
+) -> None:
+    """A 2 h "Spread over days" project due in 16 days gets a fair share of this week, which plans the
+    week a second time. The missed essay hour, with 30 min of focus done, comes back as 30 in that plan
+    too, not as its old 60."""
+    session, work = _essay_planned_on_tuesday(qapp, open_light)
+    _log_focus(qapp, session, work, clock, 30, 30)
+    session.add_homework(
+        {
+            "id": "sci",
+            "title": "Science project",
+            "due": "2026-11-18T23:59",
+            "estimate_min": 120,
+            "revision": 0,
+            "spread": "spread",
+        }
+    )
+    session.save()
+    _settle(qapp, session)
+    session.solve(everything=True)
+    _settle(qapp, session)
+    assert (session.trace or {}).get("shares"), "the project was given a share, so the week was planned again"
+    assert [minutes for _, _, minutes in _placed(session)] == [30]
+
+
+def test_plan_counts_a_missed_session_as_homework_with_no_time_yet(
+    qapp: QApplication, open_light: Callable[..., NativeWindow]
+) -> None:
+    """Plan keeps the essay's missed Tuesday time and places the new maths sheet. Its count is the one
+    count: the essay's hour has no time, so the plan says 1 with no time yet, and Material's "Placed 1 of 2"
+    counts it."""
+    session, _ = _essay_planned_on_tuesday(qapp, open_light)
+    session.add_homework(
+        {
+            "id": "maths",
+            "title": "Maths sheet",
+            "due": due_on(session, 5, "23:59"),
+            "estimate_min": 30,
+            "revision": 0,
+        }
+    )
+    session.save()
+    _settle(qapp, session)
+    session.solve()
+    _settle(qapp, session)
+    assert session.plan_counts == (1, 1)
+    assert session.plan_open == 1
+    assert session.message == "Placed 1 homework block. 1 with no time yet."

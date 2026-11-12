@@ -18,6 +18,7 @@ from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from backend.tests.fake_clock import CLOCK
 from desktop.native.material import bridge_week
 from desktop.native.material.bridge_week import SLACK_TAGS, WeekBridge
 from desktop.tests.waiting import wait_until
@@ -383,6 +384,30 @@ def test_the_drawer_does_not_say_everything_has_a_time_for_a_missed_session(qapp
     _pump(qapp)
     assert _qml(root, "homeworkEmptyText").property("text") == "Everything has a time."
     assert _qml(root, "homeworkEmptyIcon").property("visible") is True
+
+
+def test_the_drawer_says_missed_time_as_missed_in_a_week_that_is_over(qapp, window) -> None:
+    """The essay's Tuesday 16:00 to 17:00 was not finished. On Thursday the drawer says the hour still needs
+    a time. On Monday of the next week this week is over and the make-up time is planned from the next
+    week, so the drawer names it as missed, with no success icon."""
+    root = _reset(window, qapp)
+    session = window.session
+    essay = next(block for block in session.blocks if block.get("assignment_id") == "essay")
+    session.add_block({**essay, "start": "16:00", "days": [1], "duration_min": 60})
+    session.save()
+    wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+    window._material_page.publish()
+    _pump(qapp)
+    assert _qml(root, "homeworkEmptyText").property("text") == "1 h still needs a time"
+    thursday = CLOCK.now()
+    try:
+        CLOCK.set(datetime.fromisoformat(session.week_start) + timedelta(days=7, hours=10))
+        window._material_page.publish()
+        _pump(qapp)
+        assert _qml(root, "homeworkEmptyText").property("text") == "History essay · 1 h missed"
+        assert _qml(root, "homeworkEmptyIcon").property("visible") is False
+    finally:
+        CLOCK.set(thursday)
 
 
 def test_plenty_of_time_is_never_due_within_24_hours() -> None:

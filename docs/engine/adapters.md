@@ -436,7 +436,7 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | weekmodel | short_clock | ADAPTER | encodes, makes one engine call, decodes |
 | weekmodel | range_label | ADAPTER | encodes, makes one engine call, decodes |
 | weekmodel | length_label | ADAPTER | encodes, makes one engine call, decodes |
-| weekmodel | homework_time_sentence | LOGIC | leftover counts and the "still needs a time" sentence from already-classified `left_over_state`; length words go through `length_label` |
+| weekmodel | homework_time_sentence | LOGIC | leftover counts and the "still needs a time" sentence from already-classified `left_over_state`; minutes an item gives as `missed_min` (a week that is over) are said as "missed" instead; length words go through `length_label` |
 | weekmodel | planned_line | ADAPTER | encodes, makes one engine call, decodes |
 | weekmodel | due_label | ADAPTER | encodes, makes one engine call, decodes |
 | weekmodel | due_in_minutes | ADAPTER | passes the due text and the clock reading to one engine call |

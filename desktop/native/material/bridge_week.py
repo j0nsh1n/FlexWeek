@@ -292,8 +292,18 @@ class WeekBridge(QObject):
         self._all_timed = not needed
         remainders = getattr(session, "homework_remainders", None)
         self._leftover_words = "\n".join(
-            f"{title} · {length_label(minutes)} with no time"
-            for title, minutes in (remainders() if remainders else [])
+            [
+                *(
+                    f"{title} · {length_label(minutes)} with no time"
+                    for title, minutes in (remainders() if remainders else [])
+                ),
+                # Only a week that is over has these: its missed time is planned from this week.
+                *(
+                    f"{item['title']} · {length_label(item['missed_min'])} missed"
+                    for item in needed
+                    if item.get("missed_min")
+                ),
+            ]
         )
         self._week_key = session.week_start
         self._seen = keys
