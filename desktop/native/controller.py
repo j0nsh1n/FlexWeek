@@ -301,8 +301,12 @@ class NativeSession(QObject):
         self._join_step = False
         # New homework to give a time once its save lands, when the student plans as they add.
         self._plan_after_save: set[str] = set()
-        # Sessions Allow splitting just made: that Plan gives each a time this week, with no fair share.
-        self._whole_after_save: set[str] = set()
+        # Sessions Allow splitting made: a plan that includes them places them all this week, with no fair
+        # share, until one such plan is saved. `_split_unsaved` are those whose own save has not landed, and
+        # `_split_planned` those in the plan now being saved.
+        self._split_whole: set[str] = set()
+        self._split_unsaved: set[str] = set()
+        self._split_planned: set[str] = set()
         self._replan_after_save = False
         self._spread_after_save: tuple[str, int, str] | None = None
         self._allow_split_pending: str | None = None
@@ -467,6 +471,9 @@ class NativeSession(QObject):
         self.dirty = False
         self.conflict = False
         self.pending_save = None
+        self._split_whole = set()
+        self._split_unsaved = set()
+        self._split_planned = set()
         self.repeats = []
         self._saved_repeats = []
         self.planner_view = "week"
@@ -989,6 +996,7 @@ class NativeSession(QObject):
             self.conflict = False
             self.pending_save = None
             self._pending_step = None
+            self._split_planned = set()
             self.trace = None
             self.assignments = {item["id"]: item for item in data["assignments"]}
             self.dirty_assignments.clear()
@@ -2133,11 +2141,13 @@ class NativeSession(QObject):
             spread_next, self._spread_after_save = self._spread_after_save, None
             if spread_next is not None:
                 QTimer.singleShot(0, lambda: self.preview_spread(*spread_next, then=self.confirm_spread))
+            self._split_unsaved = set()
+            self._split_whole -= self._split_planned
+            self._split_planned = set()
             planned_next, self._plan_after_save = self._plan_after_save, set()
-            whole_next, self._whole_after_save = self._whole_after_save, set()
             if planned_next:
                 # Plan it for me as I add it: the new homework's time, joined to the add in one step.
-                QTimer.singleShot(0, lambda: self.solve(only=planned_next, join=True, whole=whole_next))
+                QTimer.singleShot(0, lambda: self.solve(only=planned_next, join=True))
             replan_next, self._replan_after_save = self._replan_after_save, False
             if replan_next:
                 QTimer.singleShot(0, lambda: self.solve(everything=True))
@@ -2172,7 +2182,10 @@ class NativeSession(QObject):
                 return
             # A plan waiting on this save must not fire after some later, unrelated one.
             self._plan_after_save = set()
-            self._whole_after_save = set()
+            # Allow splitting's sessions that were never saved keep no promise; a plan not saved keeps it.
+            self._split_whole -= self._split_unsaved
+            self._split_unsaved = set()
+            self._split_planned = set()
             self._replan_after_save = False
             self._spread_after_save = None
             self._allow_split_pending = None
@@ -2234,14 +2247,11 @@ class NativeSession(QObject):
         only: set[str] | None = None,
         join: bool = False,
         earliest_first: bool = False,
-        whole: set[str] | None = None,
         _prepared_weeks: dict[str, dict] | None = None,
         _overdue: set[str] | None = None,
         _new_left: set[str] | None = None,
     ) -> None:
         """Plan my homework. Homework that already has a time keeps it.
-
-        `whole` names sessions this plan places without a fair share (those Allow splitting just made).
 
         `everything` is Replan all my homework. `only` finds new times for named work. Nothing is
         placed before now. `earliest_first` (Place now) puts each named block at the first gap that
@@ -2288,7 +2298,6 @@ class NativeSession(QObject):
                                 only=only,
                                 join=join,
                                 earliest_first=earliest_first,
-                                whole=whole,
                                 _prepared_weeks=fetched,
                             )
                         return
@@ -2337,7 +2346,7 @@ class NativeSession(QObject):
             first_day,
             first_minute,
             self.preferences.get("work_windows") or [],
-            targets - (whole or set()),
+            targets - self._split_whole,
         )
         if shares:
             kept = {block["id"] for block in week}
@@ -2487,6 +2496,7 @@ class NativeSession(QObject):
             self.week_changed.emit()
             self.dirty = self.dirty or changed
             self._plan_step_id = None
+            self._split_planned = targets & self._split_whole
             self.save(status=placed_note, join=join, plan=changed and not (join and only is not None))
 
         def err(error: ApiError) -> None:
@@ -3420,7 +3430,8 @@ class NativeSession(QObject):
             else set()
         )
         self._plan_after_save |= plan_ids
-        self._whole_after_save |= plan_ids
+        self._split_whole |= plan_ids
+        self._split_unsaved |= plan_ids
         ok = self.confirm_preview(
             preview["rows"],
             label="spreading " + title,
@@ -3432,7 +3443,8 @@ class NativeSession(QObject):
             self._allow_split_pending = None
         else:
             self._plan_after_save.difference_update(plan_ids)
-            self._whole_after_save.difference_update(plan_ids)
+            self._split_whole -= plan_ids
+            self._split_unsaved -= plan_ids
             self._allow_split_pending = None
         return ok
 

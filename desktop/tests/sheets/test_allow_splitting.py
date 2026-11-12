@@ -14,6 +14,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import CLOCK
+from desktop.native.client import ApiError
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import open_light  # noqa: F401
 from desktop.tests.sheets.support_homework_week import settled
@@ -184,3 +185,191 @@ def test_a_later_replan_all_gives_the_split_homework_its_fair_share(
     placed = sorted(block["duration_min"] for block in pieces() if block.get("start"))
     waiting = sorted(block["duration_min"] for block in pieces() if not block.get("start"))
     assert (placed, waiting) == ([60, 60], [60]), pieces()
+
+
+def _lab_due_in_nine_days(app: QApplication, opener: Callable[..., NativeWindow]) -> NativeWindow:
+    """Monday 16:30, evenings of two hours Mon to Fri, and the 180 minute "In one go" lab due 9 days out."""
+    CLOCK.set(MONDAY_16_30)
+    window = opener()
+    session = window.session
+    assert session.save_availability([], None, [WEEKDAYS])
+    settled(app, window)
+    session.selected_day = session.today_iso()
+    monday = date.fromisoformat(session.week_start)
+    session.add_homework(
+        {
+            "id": "lab",
+            "title": "Lab",
+            "estimate_min": 180,
+            "revision": 0,
+            "due": (monday + timedelta(days=9)).isoformat() + "T23:59",
+        }
+    )
+    session.save()
+    settled(app, window)
+    return window
+
+
+def test_a_failed_allow_splitting_save_forgets_its_sessions_and_plan_shares_them(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The save that adds Allow splitting's three sessions fails, so those sessions were never made and no
+    promise is kept for them. Saved again and planned by hand, the lab gets its fair share:
+    180 x 5 / 8 = 112.5, a quarter hour up 120 this week (two 60 minute sessions), and 60 waits."""
+    window = _lab_due_in_nine_days(qapp, open_light)
+    session = window.session
+    real = session.client.request
+    saves: list[str] = []
+
+    def request(method, path, payload, on_success, on_error):
+        if method == "POST" and path.startswith("/api/changes"):
+            saves.append(path)
+            if len(saves) == 2:
+                on_error(ApiError(500, "down"))
+                return None
+        return real(method, path, payload, on_success, on_error)
+
+    monkeypatch.setattr(session.client, "request", request)
+
+    def pieces() -> list[dict]:
+        return [block for block in session.blocks if block.get("assignment_id") == "lab"]
+
+    assert session.allow_splitting("lab")
+    wait_until(
+        qapp,
+        lambda: len(saves) == 2 and not session.busy,
+        timeout=20,
+        what=lambda: f"{session.message!r}, saves {len(saves)}, pieces {pieces()}",
+    )
+    # Not `settled` yet: it saves what is pending, which is the retry below.
+    assert session.message == "Not saved. down"
+    assert session._split_whole == set()
+    assert session._plan_after_save == set()
+
+    session.retry_save()
+    wait_until(
+        qapp,
+        lambda: not session.busy and not session.dirty and session.pending_save is None,
+        timeout=20,
+        what=lambda: f"{session.message!r}",
+    )
+    settled(qapp, window)
+    assert [bool(block.get("start")) for block in pieces()] == [False, False, False]
+    session.solve()
+    wait_until(
+        qapp,
+        lambda: not session.planning and not session.busy and not session.dirty,
+        timeout=20,
+        what="Plan finished",
+    )
+    settled(qapp, window)
+    placed = sorted(block["duration_min"] for block in pieces() if block.get("start"))
+    waiting = sorted(block["duration_min"] for block in pieces() if not block.get("start"))
+    assert (placed, waiting) == ([60, 60], [60]), pieces()
+
+
+def test_allow_splitting_refused_for_a_full_week_forgets_its_sessions(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+) -> None:
+    """A week of 98 blocks other than the lab: its three sessions would make 101, over the 100 a week
+    holds, so they are not added and nothing is saved. The ids its Plan would have placed with no fair share
+    are forgotten, with that Plan."""
+    window = _lab_due_in_nine_days(qapp, open_light)
+    session = window.session
+    others = [block for block in session.blocks if block.get("assignment_id") != "lab"]
+    for n in range(98 - len(others)):
+        session.add_block(
+            {
+                "id": f"note-{n}",
+                "title": "Note",
+                "kind": "locked",
+                "days": [6],
+                "start": f"{(5 * n) // 60:02d}:{(5 * n) % 60:02d}",
+                "duration_min": 5,
+            }
+        )
+    session.save()
+    settled(qapp, window)
+    assert len([block for block in session.blocks if block.get("assignment_id") != "lab"]) == 98
+
+    assert session.allow_splitting("lab")
+    wait_until(
+        qapp,
+        lambda: "would exceed 100 blocks" in session.message and not session.busy,
+        timeout=20,
+        what=lambda: f"{session.message!r}",
+    )
+    settled(qapp, window)
+    assert session._split_whole == set()
+    assert session._plan_after_save == set()
+
+
+@pytest.mark.parametrize("failure", ["planner unreachable", "plan save refused"])
+def test_when_the_plan_after_allow_splitting_fails_the_next_plan_places_all_three(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    """Allow splitting's three sessions are saved, but the Plan it starts fails: the planner cannot be
+    reached, or the plan's save is refused (another window changed the week) and the week is reloaded as
+    saved. No plan that includes them has been saved, so the next Plan by hand still places all three this
+    week, 180 in all, with no fair share (which would give 180 x 5 / 8, a quarter hour up 120, and keep 60
+    back)."""
+    window = _lab_due_in_nine_days(qapp, open_light)
+    session = window.session
+    real = session.client.request
+    failing = {"on": True}
+
+    def request(method, path, payload, on_success, on_error):
+        if failing["on"] and method == "POST":
+            if failure == "planner unreachable" and path.startswith("/api/solve"):
+                failing["on"] = False
+                on_error(ApiError(0, "unreachable"))
+                return None
+            if failure == "plan save refused" and path.startswith("/api/changes") and any(
+                block.get("start")
+                for week in payload.get("weeks") or []
+                for block in week.get("blocks") or []
+                if block.get("assignment_id") == "lab"
+            ):
+                failing["on"] = False
+                on_error(ApiError(409, "This week changed in another window."))
+                return None
+        return real(method, path, payload, on_success, on_error)
+
+    monkeypatch.setattr(session.client, "request", request)
+
+    def pieces() -> list[dict]:
+        return [block for block in session.blocks if block.get("assignment_id") == "lab"]
+
+    assert session.allow_splitting("lab")
+    wait_until(
+        qapp,
+        lambda: not failing["on"] and not session.busy and not session.planning,
+        timeout=20,
+        what=lambda: f"{session.message!r}, pieces {pieces()}",
+    )
+    if failure == "plan save refused":
+        assert session.conflict
+        session.load_week(session.week_start, discard=True)
+    settled(qapp, window)
+    assert len(pieces()) == 3
+    assert not any(block.get("start") for block in pieces()), pieces()
+
+    session.solve()
+    wait_until(
+        qapp,
+        lambda: not session.planning
+        and not session.busy
+        and not session.dirty
+        and all(block.get("start") for block in pieces()),
+        timeout=20,
+        what=lambda: f"{session.message!r}, pieces {pieces()}",
+    )
+    settled(qapp, window)
+    assert sorted(block["duration_min"] for block in pieces()) == [60, 60, 60], pieces()
+    assert session._split_whole == set()
