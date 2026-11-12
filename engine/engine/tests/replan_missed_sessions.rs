@@ -372,14 +372,17 @@ fn test_a_session_that_ended_in_the_quarter_hour_before_the_clock_has_passed() {
 
 #[test]
 fn test_a_missed_session_never_comes_back_longer_than_itself() {
-    // 180 estimated, nothing else this week (the 120 min that sit next week are in another week's
-    // blocks, so this one does not see them): 180 are left, but the missed hour comes back as 60.
-    let assignments = essay(180, 0, "2026-11-07T23:59");
+    // 180 estimated and all of it this week's: the server read 60 planned (this session) and 120 that
+    // never had a time. 180 are left, but the missed hour comes back as 60; the other 120 still need a
+    // time, so 180 are needed in all.
+    let mut assignments = essay(180, 0, "2026-11-07T23:59");
+    assignments["essay-a"]["planned_min"] = json!(60);
+    assignments["essay-a"]["unplanned_min"] = json!(120);
     let blocks = vec![session("essay", 1, "16:00", 60)];
     let (payload, targets) = request(blocks.clone(), &assignments, true);
     assert_eq!(targets, ["essay"]);
     assert_eq!(sent(&payload, "essay")["duration_min"], 60);
-    assert_eq!(needed(&blocks, &assignments, Some(&not_before())), 60);
+    assert_eq!(needed(&blocks, &assignments, Some(&not_before())), 180);
 }
 
 #[test]
