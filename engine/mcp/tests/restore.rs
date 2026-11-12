@@ -556,8 +556,9 @@ fn restore_point_brings_back_school_as_it_stood() {
         "days": [0, 1, 2, 3, 4], "start": "08:00", "category": "class"
     });
     let conn = open_connection(Path::new(&world.database_arg)).expect("open");
-    flexweek_store::set_standing(&conn, world.user, WEEK, &json!([school]).to_string())
-        .expect("school stands");
+    let intent =
+        flexweek_engine::repeats::edit_intent("school", WEEK, None, Some(&school)).expect("new");
+    flexweek_store::apply_repeat_intents(&conn, world.user, &[intent]).expect("school stands");
     if !conn.is_autocommit() {
         conn.execute_batch("COMMIT").expect("commit");
     }

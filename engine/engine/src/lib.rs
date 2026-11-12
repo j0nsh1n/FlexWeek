@@ -10,6 +10,7 @@ pub mod material;
 pub mod model;
 pub mod plan;
 pub mod pyprint;
+pub mod repeats;
 pub mod snapshot;
 pub mod solver;
 pub mod standing;

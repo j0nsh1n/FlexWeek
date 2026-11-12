@@ -4361,10 +4361,13 @@ class BlockDialog(Dialog):
 
 
 class SchoolHoursDialog(Dialog):
-    """School's days and times, asked as setup's Your week page asks them. `block()` is the School to
-    save, or None when no day is ticked: no school on the calendar."""
+    """School's days and times every week, asked as setup's Your week page asks them. `school` is the
+    usual School (the repeat), and `this_week` the line naming what the open week does differently.
+    `block()` is the School to save, or None when no day is ticked: no school on the calendar."""
 
-    def __init__(self, parent: QWidget | None, school: dict | None = None) -> None:
+    def __init__(
+        self, parent: QWidget | None, school: dict | None = None, this_week: str | None = None
+    ) -> None:
         super().__init__(parent, sheet=True)
         # Setup's own time box, imported here: setup imports this module.
         from desktop.native.setup import QuarterTime
@@ -4374,6 +4377,10 @@ class SchoolHoursDialog(Dialog):
         self.setObjectName("schoolHoursDialog")
         box = self.card_body("School hours")
         box.addWidget(sheet_note(SCHOOL_HOURS_NOTE))
+        # The form shows the usual week; a skipped or moved day is this week's own, said here.
+        self.this_week = sheet_note(this_week or "")
+        self.this_week.setVisible(bool(this_week))
+        box.addWidget(self.this_week)
         start = (school or {}).get("start") or "08:00"
         minutes = int((school or {}).get("duration_min") or 390)
         days = (school or {}).get("days") or ([] if school else [0, 1, 2, 3, 4])
@@ -4430,7 +4437,6 @@ class SchoolHoursDialog(Dialog):
             "category": "class",
         }
         school.update(days=days, start=start, duration_min=minutes)
-        school["missed_days"] = [day for day in school.get("missed_days", []) if day in days]
         try:
             WeekRequest(blocks=[TimeBlock.model_validate(school)])
         except ValidationError as error:

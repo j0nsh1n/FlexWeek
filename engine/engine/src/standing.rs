@@ -14,14 +14,6 @@ fn id_of(block: &Value) -> Option<&str> {
     block.get("id").and_then(Value::as_str)
 }
 
-fn days_of(block: &Value) -> Vec<i64> {
-    block
-        .get("days")
-        .and_then(Value::as_array)
-        .map(|days| days.iter().filter_map(Value::as_i64).collect())
-        .unwrap_or_default()
-}
-
 /// The block as it stands in every week: missed days belong to one week, never to the standing one.
 pub fn standing_body(block: &Value) -> Value {
     let mut body = block.clone();
@@ -42,47 +34,6 @@ pub fn with_standing(stored: &[Value], standing: &[Value]) -> Vec<Value> {
             .cloned(),
     );
     week
-}
-
-/// A saved week after the standing week changed to `standing`: each of its Setup blocks takes the new
-/// days and times, keeping the missed days that are still among them (a block missed on every day,
-/// which is how "just this week" removes one, stays missed on every day), and a Setup block that no
-/// longer stands is removed. Everything else in the week is left as it was.
-pub fn restand(stored: &[Value], standing: &[Value]) -> EngineResult<Vec<Value>> {
-    let mut week = Vec::with_capacity(stored.len());
-    for block in stored {
-        if !is_setup_block(block)? {
-            week.push(block.clone());
-            continue;
-        }
-        let Some(new) = standing.iter().find(|item| id_of(item) == id_of(block)) else {
-            continue;
-        };
-        let old_days = days_of(block);
-        let missed: Vec<i64> = block
-            .get("missed_days")
-            .and_then(Value::as_array)
-            .map(|days| days.iter().filter_map(Value::as_i64).collect())
-            .unwrap_or_default();
-        let new_days = days_of(new);
-        let every_day_missed = !old_days.is_empty() && old_days.iter().all(|d| missed.contains(d));
-        let kept: Vec<i64> = if every_day_missed {
-            new_days
-        } else {
-            new_days
-                .into_iter()
-                .filter(|d| missed.contains(d))
-                .collect()
-        };
-        let mut updated = standing_body(new);
-        if !kept.is_empty()
-            && let Some(fields) = updated.as_object_mut()
-        {
-            fields.insert("missed_days".into(), kept.into());
-        }
-        week.push(updated);
-    }
-    Ok(week)
 }
 
 /// An account from before the standing week: its Setup blocks are those of the newest saved week that

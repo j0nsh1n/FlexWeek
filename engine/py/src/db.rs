@@ -723,17 +723,41 @@ impl PyConn {
         })
     }
 
-    fn set_standing(
+    /// Changes to School and Setup's activities (`flexweek_engine::repeats::Intent`, a JSON list),
+    /// as `post_changes` and the assistant apply them. A change that is not one raises ValueError
+    /// with the sentence why.
+    fn apply_repeat_intents(
         &self,
         py: Python<'_>,
         user_id: i64,
-        from_week: &str,
-        blocks: &str,
-    ) -> PyResult<Vec<String>> {
-        let from_week = from_week.to_string();
-        let blocks = blocks.to_string();
+        intents: &str,
+    ) -> PyResult<String> {
+        let intents = intents.to_string();
+        guard(|| {
+            self.check(py)?;
+            self.with_conn(py, move |conn| {
+                let bad = |message: String| {
+                    Failure::Bind(pyo3::exceptions::PyValueError::new_err(message))
+                };
+                let value: serde_json::Value =
+                    serde_json::from_str(&intents).map_err(|e| bad(e.to_string()))?;
+                let parsed = flexweek_engine::repeats::parse_intents(&value).map_err(bad)?;
+                match flexweek_store::apply_repeat_intents(conn, user_id, &parsed) {
+                    Ok(outcome) => Ok(flexweek_engine::snapshot::canonical(&outcome.to_value())),
+                    Err(flexweek_store::RepeatsFailure::Refused(message)) => Err(bad(message)),
+                    Err(flexweek_store::RepeatsFailure::Store(error)) => Err(Failure::Store(error)),
+                }
+            })
+        })
+    }
+
+    /// The repeats standing in a week, as the week's School hours and Setup show them.
+    fn standing_blocks(&self, py: Python<'_>, user_id: i64, week_start: &str) -> PyResult<String> {
+        let week_start = week_start.to_string();
         self.store(py, move |conn| {
-            flexweek_store::set_standing(conn, user_id, &from_week, &blocks)
+            flexweek_store::standing_blocks(conn, user_id, &week_start).map(|blocks| {
+                flexweek_engine::snapshot::canonical(&serde_json::Value::Array(blocks))
+            })
         })
     }
 

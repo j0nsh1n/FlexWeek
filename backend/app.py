@@ -397,40 +397,11 @@ def a_week_start(value: str) -> str:
 
 # Setup's School and up to eight activities.
 MAX_STANDING = 9
+# One Setup run can stop every activity and add as many new ones.
+MAX_REPEAT_CHANGES = 2 * MAX_STANDING
 STANDING_RULE = (
     "Only School and Setup's activities stand in every week, each with a start time and an id of its own"
 )
-
-
-class StandingStop(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    id: str = Field(min_length=1, max_length=80)
-    stop: Literal[True]
-
-
-class StandingWeek(BaseModel):
-    """Setup blocks to change, or ids to stop, from `week_start` on."""
-
-    model_config = ConfigDict(extra="forbid")
-    week_start: str
-    blocks: list[TimeBlock | StandingStop] = Field(max_length=MAX_STANDING)
-
-    _week_start = field_validator("week_start")(a_week_start)
-
-    @model_validator(mode="after")
-    def blocks_are_setups(self) -> StandingWeek:
-        ids = [block.id for block in self.blocks]
-        if len(set(ids)) != len(ids) or not all(
-            isinstance(block, StandingStop)
-            or (
-                block.kind == "locked"
-                and block.start
-                and flexweek_engine.calendar_setup_block(json.dumps(block.model_dump()))
-            )
-            for block in self.blocks
-        ):
-            raise ValueError(STANDING_RULE)
-        return self
 
 
 class StandingRow(BaseModel):
@@ -465,8 +436,9 @@ class ChangesRequest(BaseModel):
     assignments: list[AssignmentChange] = Field(default_factory=list)
     operation_id: str | None = Field(default=None, min_length=1, max_length=80)
     snapshot_label: str | None = Field(default=None, min_length=1, max_length=80)
-    # Setup or School hours changed School and activities for every week from the open week on.
-    standing: StandingWeek | None = None
+    # Changes to School and Setup's activities as the student meant them, from a date on. The engine
+    # checks each (`flexweek_engine.repeats`); a refusal is a 422 with its sentence.
+    repeats: list[dict] | None = Field(default=None, max_length=MAX_REPEAT_CHANGES)
 
 
 class RestoreCreate(BaseModel):
@@ -1213,12 +1185,18 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 account["id"],
                 {block["assignment_id"] for block in blocks if block.get("assignment_id")},
             )
+            repeats = json.loads(db.standing_blocks(account["id"], start))
         # A week nobody has saved yet is empty, not missing: the client needs no create-then-fetch.
-        return {
+        answer = {
             "week_start": start,
             "blocks": rewrite_stored_blocks(blocks, owned),
             "revision": row[1] if row else 0,
         }
+        if repeats:
+            # School and the activities as they stand that week, for the forms that change every week;
+            # `blocks` is what the week shows, its own changes included. Absent when nothing repeats.
+            answer["repeats"] = repeats
+        return answer
 
     @app.get("/api/weeks")
     def get_weeks(account: Annotated[dict, Depends(user)]) -> dict:
@@ -1395,22 +1373,24 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 week_results.append(
                     {"week_start": week.week_start, "blocks": stored_blocks, "revision": revision}
                 )
-            changed_weeks: list[str] = []
-            if batch.standing is not None:
-                # Saved weeks after the open one take the change here; the open week is in `weeks`,
-                # so Undo takes back its part only.
-                changed_weeks = db.set_standing(
-                    account["id"],
-                    batch.standing.week_start,
-                    json.dumps([block.model_dump() for block in batch.standing.blocks]),
-                )
+            repeats: dict | None = None
+            if batch.repeats is not None:
+                # Saved weeks from the change's week on take it here; the open week is in `weeks`,
+                # already changed by the client, so Undo takes back its part only.
+                try:
+                    repeats = json.loads(db.apply_repeat_intents(account["id"], json.dumps(batch.repeats)))
+                except ValueError as error:
+                    raise HTTPException(422, str(error)) from error
             for entry in week_results:
                 entry["blocks"] = week_with_standing(
                     db, account["id"], entry["week_start"], json.dumps(entry["blocks"])
                 )
+                standing = json.loads(db.standing_blocks(account["id"], entry["week_start"]))
+                if standing:
+                    entry["repeats"] = standing
             result: dict = {"weeks": week_results, "assignments": assignment_results}
-            if batch.standing is not None:
-                result["standing_changed_weeks"] = changed_weeks
+            if repeats is not None:
+                result["repeats"] = repeats
             if batch.operation_id is not None:
                 remember_operation(db, account["id"], batch.operation_id, digest_value, result)
         return result
