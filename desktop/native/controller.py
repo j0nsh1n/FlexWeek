@@ -19,6 +19,7 @@ from desktop.native.calendar import (
     DAY_FULL,
     DAYS,
     apply_block_edit,
+    apply_repeat_changes,
     date_for_day,
     days_through,
     delete_occurrence,
@@ -31,8 +32,10 @@ from desktop.native.calendar import (
     monday_of,
     month_anchor_date,
     month_for_view,
+    one_day_note,
     past_problem,
     relocate_block,
+    repeat_changes,
     shifted_month,
     span_problem,
 )
@@ -245,6 +248,9 @@ class NativeSession(QObject):
     save_finished = Signal(bool, str)
     # Toast words for a hand move that has just been saved, including one that waited out a save.
     hand_placed = Signal(str)
+    # A change to School or an activity from this week on reached later weeks that kept a change of
+    # their own: the server's words for which and what, to show without blocking.
+    repeats_kept = Signal(str)
     plan_conflicts = Signal(list)
     planned = Signal(str)
     focus_changed = Signal()
@@ -369,8 +375,11 @@ class NativeSession(QObject):
         self._drafts: dict[str, dict] = {}
         # The week Plan was last asked for in: its answer may show homework left in an earlier week.
         self.plan_asked_week: str | None = None
-        # School and activities to stand in every week from a week on, sent with that week's next save.
-        self._standing: dict | None = None
+        # School and Setup's activities as they stand in the open week (`repeats`), and as the server
+        # last said (`_saved_repeats`). A form that changes every week edits `repeats`; the next save
+        # sends what differs as changes from this week on.
+        self.repeats: list[dict] = []
+        self._saved_repeats: list[dict] = []
         # One block let go while a save is in flight. The save's reply replaces the week, so the move
         # is applied on the next turn after that reply, not during it. A later let-go replaces it.
         self._hand_waiting: tuple[str, int, int, int, int] | None = None
@@ -456,7 +465,8 @@ class NativeSession(QObject):
         self.dirty = False
         self.conflict = False
         self.pending_save = None
-        self._standing = None
+        self.repeats = []
+        self._saved_repeats = []
         self.planner_view = "week"
         self.selected_day = wall_clock.today().isoformat()
         self.day_data = None
@@ -567,6 +577,8 @@ class NativeSession(QObject):
             "selected_day": self.selected_day,
             "selected_block_id": self.selected_block_id,
             "selected_occurrence_day": self.selected_occurrence_day,
+            "repeats": deepcopy(self.repeats),
+            "saved_repeats": deepcopy(self._saved_repeats),
         }
 
     def _restore_week(self, snap: dict) -> None:
@@ -589,6 +601,8 @@ class NativeSession(QObject):
         self.selected_day = snap["selected_day"]
         self.selected_block_id = snap["selected_block_id"]
         self.selected_occurrence_day = snap["selected_occurrence_day"]
+        self.repeats = deepcopy(snap["repeats"])
+        self._saved_repeats = deepcopy(snap["saved_repeats"])
 
     def _refresh_view(self) -> None:
         if self.planner_view == "day":
@@ -965,6 +979,9 @@ class NativeSession(QObject):
             self._drafts.pop(loaded, None)
             self.blocks = list(week["blocks"])
             self.revision = week["revision"]
+            # Absent when nothing repeats in that week.
+            self.repeats = list(week.get("repeats") or [])
+            self._saved_repeats = deepcopy(self.repeats)
             self.week_start = loaded
             self.dirty = False
             self.conflict = False
@@ -1286,6 +1303,11 @@ class NativeSession(QObject):
             return
         origin = from_day if from_day in block["days"] else day
         words = moved_words(block, origin, day, start, end)
+        # Material has no School hours, so its note points to Setup.
+        material = self.material_owns is not None and self.material_owns()
+        note = one_day_note(block, origin, not material)
+        if note:
+            words = f"{words} {note}"
         self.save()
         self.hand_placed.emit(words)
 
@@ -1336,32 +1358,20 @@ class NativeSession(QObject):
             self.save()
 
     def set_setup_blocks(self, blocks: list[dict]) -> None:
-        """Replace the school and activities setup made with `blocks`, as one Undo step. Anything the
-        student added another way stays where it is."""
-        previous = {
-            block["id"]: {key: value for key, value in block.items() if key != "missed_days"}
-            for block in self.blocks
-            if is_setup_block(block) and block.get("kind") == "locked" and block.get("start")
-        }
-        kept = [block for block in self.blocks if not is_setup_block(block)]
+        """School and activities as Setup now has them, from this week on, as one Undo step for this
+        week. Setup showed the repeats, so a block it leaves out stops and what this week changed
+        itself stays this week's. Anything the student added another way stays where it is."""
         made = [TimeBlock.model_validate(block).model_dump(mode="json") for block in blocks]
-        self.blocks = kept + made
-        self._touch("setting up your week")
-        updates = [
-            block
-            for block in made
-            if {key: value for key, value in block.items() if key != "missed_days"}
-            != previous.get(block["id"])
-        ]
-        gone = previous.keys() - {block["id"] for block in made}
-        updates.extend({"id": block_id, "stop": True} for block_id in gone)
-        self.stand_open_week(updates)
+        self.change_repeats(made, "setting up your week")
 
-    def stand_open_week(self, updates: list[dict]) -> None:
-        """Stand only the Setup blocks changed from this week on."""
-        pending = {change["id"]: change for change in (self._standing or {}).get("blocks", [])}
-        pending.update({change["id"]: change for change in updates})
-        self._standing = {"week_start": self.week_start, "blocks": list(pending.values())}
+    def change_repeats(self, after: list[dict], label: str) -> None:
+        """The repeats become `after` from this week on: the open week changes now by the rule the
+        store applies to later weeks, and the next save sends the changes."""
+        changes = repeat_changes(self.repeats, after, self.week_start)
+        if not changes:
+            return
+        self.blocks, self.repeats = apply_repeat_changes(self.blocks, self.repeats, changes)
+        self._touch(label)
 
     def plan_after_save(self, assignment_id: str) -> None:
         """Give this homework's sessions that need a time one once the save now under way lands."""
@@ -1820,7 +1830,7 @@ class NativeSession(QObject):
             self.blocks = delete_occurrence(self.blocks, block_id, day)
         if is_setup_block(block) and not any(item["id"] == block_id for item in self.blocks):
             if every_week:
-                self.stand_open_week([{"id": block_id, "stop": True}])
+                self.repeats = [item for item in self.repeats if item["id"] != block_id]
             else:
                 missed = {**block, "missed_days": list(block.get("days") or [])}
                 self.blocks = [*self.blocks, missed]
@@ -1995,9 +2005,9 @@ class NativeSession(QObject):
                 "assignments": writes,
                 "operation_id": operation_id or str(uuid4()),
             }
-            if self._standing is not None:
-                self.pending_save["standing"] = self._standing
-                self._standing = None
+            changes = repeat_changes(self._saved_repeats, self.repeats, self.week_start)
+            if changes:
+                self.pending_save["repeats"] = changes
             if snapshot_label:
                 self.pending_save["snapshot_label"] = snapshot_label
             if self._traveling is None and record_history:
@@ -2056,6 +2066,9 @@ class NativeSession(QObject):
                 self.revision = current["revision"]
                 self.dirty = False
                 self.conflict = False
+                if "repeats" in payload:
+                    self.repeats = list(current.get("repeats") or [])
+                    self._saved_repeats = deepcopy(self.repeats)
             for result in data.get("assignments", []):
                 self.dirty_assignments.discard(result["id"])
                 if result.get("assignment"):
@@ -2138,6 +2151,9 @@ class NativeSession(QObject):
                 if week_start != self.week_start:
                     self._drafts.pop(week_start, None)
             self.save_finished.emit(True, self.message)
+            kept = (data.get("repeats") or {}).get("notice")
+            if kept:
+                self.repeats_kept.emit(kept)
             if planned:
                 self.planned.emit(self.message)
             if destination is not None:

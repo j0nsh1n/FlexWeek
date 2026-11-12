@@ -353,7 +353,7 @@ fn homework_input(edited: Edited, revision: i64) -> Result<ApplyInput, String> {
         }],
         operation_id: None,
         snapshot_label: None,
-        standing: None,
+        repeats: None,
         argument_digest: None,
     })
 }
@@ -607,7 +607,7 @@ impl crate::App {
                 }],
                 operation_id: None,
                 snapshot_label: None,
-                standing: None,
+                repeats: None,
                 argument_digest: None,
             };
             let applied = run_apply(
@@ -703,7 +703,7 @@ impl crate::App {
                 }],
                 operation_id: None,
                 snapshot_label: None,
-                standing: None,
+                repeats: None,
                 argument_digest: None,
             };
             let applied = run_apply(
@@ -759,7 +759,7 @@ impl crate::App {
                 assignments: Vec::new(),
                 operation_id: None,
                 snapshot_label: None,
-                standing: None,
+                repeats: None,
                 argument_digest: None,
             };
             let applied = run_apply(

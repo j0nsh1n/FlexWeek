@@ -10,9 +10,10 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
 use common::{NOW_ISO, NOW_UNIX, Server, scratch, session_path, tool_ok_text};
+use flexweek_engine::repeats::edit_intent;
 use flexweek_store::{
-    initialize, insert_assignment, insert_preferences, insert_user, open_connection, open_session,
-    save_week, set_standing,
+    apply_repeat_intents, initialize, insert_assignment, insert_preferences, insert_user,
+    open_connection, open_session, save_week,
 };
 use serde_json::{Value, json};
 
@@ -71,7 +72,8 @@ fn school_stands(world: &World) {
         "id": "school", "title": "School", "kind": "locked", "duration_min": 420,
         "days": [0, 1, 2, 3, 4], "start": "08:00", "category": "class"
     });
-    set_standing(&conn, world.user, WEEK, &json!([school]).to_string()).expect("school stands");
+    let intent = edit_intent("school", WEEK, None, Some(&school)).expect("new");
+    apply_repeat_intents(&conn, world.user, &[intent]).expect("school stands");
     if !conn.is_autocommit() {
         conn.execute_batch("COMMIT").expect("commit");
     }

@@ -1,0 +1,124 @@
+{
+  "about": "Changes to repeating blocks run through both save handlers: the Rust one (store/tests/test_repeats.rs) and the backend's post_changes (backend/tests/test_repeat_intents_api.py). Each case's answer and what each week shows were worked out by hand from the owner's rules of 2026-11-12, with real dates: School and Soccer stand from Monday 2 November 2026. A handler that drifts from the other fails its own test. Week maps list every block the week shows: id -> [title, start, duration_min, days, missed_days].",
+  "school": {"id": "school", "title": "School", "kind": "locked", "category": "class", "start": "08:30", "duration_min": 405, "days": [0, 1, 2, 3, 4]},
+  "soccer": {"id": "activity-1", "title": "Soccer", "kind": "locked", "category": "extra", "start": "16:00", "duration_min": 90, "days": [1, 3]},
+  "setup": [
+    {"id": "school", "scope": "from", "from_date": "2026-11-02", "set": {"title": "School", "category": "class", "start": "08:30", "duration_min": 405}, "add_days": [0, 1, 2, 3, 4]},
+    {"id": "activity-1", "scope": "from", "from_date": "2026-11-02", "set": {"title": "Soccer", "category": "extra", "start": "16:00", "duration_min": 90}, "add_days": [1, 3]}
+  ],
+  "cases": [
+    {
+      "name": "P1 School hours after deleting Wednesday this week",
+      "clock_24h": true,
+      "steps": [
+        {"weeks": [{"week_start": "2026-11-09", "blocks": [{"id": "school", "title": "School", "kind": "locked", "category": "class", "start": "08:30", "duration_min": 405, "days": [0, 1, 3, 4]}, "soccer"]}]},
+        {"repeats": [{"id": "school", "scope": "from", "from_date": "2026-11-09", "set": {"duration_min": 360}}]}
+      ],
+      "answer_repeats": {"changed_weeks": ["2026-11-09"], "kept": [], "notice": null},
+      "shown": {
+        "2026-11-09": {"school": ["School", "08:30", 360, [0, 1, 3, 4], []], "activity-1": ["Soccer", "16:00", 90, [1, 3], []]},
+        "2026-11-16": {"school": ["School", "08:30", 360, [0, 1, 2, 3, 4], []], "activity-1": ["Soccer", "16:00", 90, [1, 3], []]},
+        "2026-11-30": {"school": ["School", "08:30", 360, [0, 1, 2, 3, 4], []], "activity-1": ["Soccer", "16:00", 90, [1, 3], []]}
+      }
+    },
+    {
+      "name": "P2 a Wednesday deleted in a later week stays deleted, and the student is told",
+      "clock_24h": true,
+      "steps": [
+        {"weeks": [{"week_start": "2026-11-16", "blocks": [{"id": "school", "title": "School", "kind": "locked", "category": "class", "start": "08:30", "duration_min": 405, "days": [0, 1, 3, 4]}, "soccer"]}]},
+        {"repeats": [{"id": "school", "scope": "from", "from_date": "2026-11-09", "set": {"duration_min": 360}}]}
+      ],
+      "answer_repeats": {
+        "changed_weeks": ["2026-11-16"],
+        "kept": [{"week_start": "2026-11-16", "id": "school", "changes": ["no School on Wednesday"]}],
+        "notice": "School changed from this week on. The week of 16 Nov keeps its own change: no School on Wednesday."
+      },
+      "shown": {
+        "2026-11-02": {"school": ["School", "08:30", 405, [0, 1, 2, 3, 4], []], "activity-1": ["Soccer", "16:00", 90, [1, 3], []]},
+        "2026-11-16": {"school": ["School", "08:30", 360, [0, 1, 3, 4], []], "activity-1": ["Soccer", "16:00", 90, [1, 3], []]},
+        "2026-11-23": {"school": ["School", "08:30", 360, [0, 1, 2, 3, 4], []], "activity-1": ["Soccer", "16:00", 90, [1, 3], []]}
+      }
+    },
+    {
+      "name": "P3 a Wednesday moved in a later week shows once",
+      "clock_24h": false,
+      "steps": [
+        {"weeks": [{"week_start": "2026-11-16", "blocks": [{"id": "school", "title": "School", "kind": "locked", "category": "class", "start": "08:30", "duration_min": 405, "days": [0, 1, 3, 4]}, {"id": "98f0907e", "title": "School", "kind": "locked", "category": "class", "start": "10:00", "duration_min": 120, "days": [2]}, "soccer"]}]},
+        {"repeats": [{"id": "school", "scope": "from", "from_date": "2026-11-09", "set": {"duration_min": 360}}]}
+      ],
+      "answer_repeats": {
+        "changed_weeks": ["2026-11-16"],
+        "kept": [{"week_start": "2026-11-16", "id": "school", "changes": ["School at 10:00 AM–12:00 PM on Wednesday"]}],
+        "notice": "School changed from this week on. The week of 16 Nov keeps its own change: School at 10:00 AM–12:00 PM on Wednesday."
+      },
+      "shown": {
+        "2026-11-16": {"school": ["School", "08:30", 360, [0, 1, 3, 4], []], "98f0907e": ["School", "10:00", 120, [2], []], "activity-1": ["Soccer", "16:00", 90, [1, 3], []]}
+      }
+    },
+    {
+      "name": "P4 a one-week rename is not the new School",
+      "clock_24h": true,
+      "steps": [
+        {"weeks": [{"week_start": "2026-11-09", "blocks": [{"id": "school", "title": "School trip", "kind": "locked", "category": "class", "start": "07:00", "duration_min": 405, "days": [0, 1, 2, 3, 4]}, "soccer"]}]},
+        {"repeats": [{"id": "school", "scope": "from", "from_date": "2026-11-09", "set": {"duration_min": 360}}]}
+      ],
+      "answer_repeats": {"changed_weeks": ["2026-11-09"], "kept": [], "notice": null},
+      "shown": {
+        "2026-11-09": {"school": ["School trip", "07:00", 360, [0, 1, 2, 3, 4], []], "activity-1": ["Soccer", "16:00", 90, [1, 3], []]},
+        "2026-11-23": {"school": ["School", "08:30", 360, [0, 1, 2, 3, 4], []], "activity-1": ["Soccer", "16:00", 90, [1, 3], []]}
+      }
+    },
+    {
+      "name": "P5 an activity ended from a later week stays ended",
+      "clock_24h": true,
+      "steps": [
+        {"repeats": [{"id": "activity-1", "scope": "from", "from_date": "2026-11-23", "stop": true}]},
+        {"repeats": [{"id": "activity-1", "scope": "from", "from_date": "2026-11-16", "set": {"start": "17:00"}}]}
+      ],
+      "answer_repeats": {"changed_weeks": [], "kept": [], "notice": null},
+      "shown": {
+        "2026-11-09": {"school": ["School", "08:30", 405, [0, 1, 2, 3, 4], []], "activity-1": ["Soccer", "16:00", 90, [1, 3], []]},
+        "2026-11-16": {"school": ["School", "08:30", 405, [0, 1, 2, 3, 4], []], "activity-1": ["Soccer", "17:00", 90, [1, 3], []]},
+        "2026-11-23": {"school": ["School", "08:30", 405, [0, 1, 2, 3, 4], []]},
+        "2026-11-30": {"school": ["School", "08:30", 405, [0, 1, 2, 3, 4], []]}
+      }
+    },
+    {
+      "name": "Item 7 Setup again keeps School deleted for this week only",
+      "clock_24h": true,
+      "steps": [
+        {"weeks": [{"week_start": "2026-11-09", "blocks": [{"id": "school", "title": "School", "kind": "locked", "category": "class", "start": "08:30", "duration_min": 405, "days": [0, 1, 2, 3, 4], "missed_days": [0, 1, 2, 3, 4]}, "soccer"]}]},
+        {"repeats": [{"id": "school", "scope": "from", "from_date": "2026-11-09", "set": {"start": "08:00", "duration_min": 435}}]}
+      ],
+      "answer_repeats": {"changed_weeks": ["2026-11-09"], "kept": [], "notice": null},
+      "shown": {
+        "2026-11-09": {"school": ["School", "08:00", 435, [0, 1, 2, 3, 4], [0, 1, 2, 3, 4]], "activity-1": ["Soccer", "16:00", 90, [1, 3], []]},
+        "2026-11-16": {"school": ["School", "08:00", 435, [0, 1, 2, 3, 4], []], "activity-1": ["Soccer", "16:00", 90, [1, 3], []]}
+      }
+    },
+    {
+      "name": "Setup changing two repeats names each later week that kept its own change",
+      "clock_24h": true,
+      "steps": [
+        {"weeks": [{"week_start": "2026-11-16", "blocks": [{"id": "school", "title": "School", "kind": "locked", "category": "class", "start": "08:30", "duration_min": 405, "days": [0, 1, 2, 3, 4], "missed_days": [0, 1, 2, 3, 4]}, "soccer"]}]},
+        {"weeks": [{"week_start": "2026-11-23", "blocks": ["school", {"id": "activity-1", "title": "Soccer", "kind": "locked", "category": "extra", "start": "16:00", "duration_min": 90, "days": [1, 3, 5]}]}]},
+        {"repeats": [
+          {"id": "school", "scope": "from", "from_date": "2026-11-09", "set": {"start": "08:00"}},
+          {"id": "activity-1", "scope": "from", "from_date": "2026-11-09", "set": {"start": "16:30"}}
+        ]}
+      ],
+      "answer_repeats": {
+        "changed_weeks": ["2026-11-16", "2026-11-23"],
+        "kept": [
+          {"week_start": "2026-11-16", "id": "school", "changes": ["no School that week"]},
+          {"week_start": "2026-11-23", "id": "activity-1", "changes": ["Soccer on Saturday too"]}
+        ],
+        "notice": "School and Soccer changed from this week on. The week of 16 Nov keeps its own change: no School that week. The week of 23 Nov keeps its own change: Soccer on Saturday too."
+      },
+      "shown": {
+        "2026-11-16": {"school": ["School", "08:00", 405, [0, 1, 2, 3, 4], [0, 1, 2, 3, 4]], "activity-1": ["Soccer", "16:30", 90, [1, 3], []]},
+        "2026-11-23": {"school": ["School", "08:00", 405, [0, 1, 2, 3, 4], []], "activity-1": ["Soccer", "16:30", 90, [1, 3, 5], []]}
+      }
+    }
+  ]
+}

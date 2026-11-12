@@ -167,6 +167,7 @@ mod assignments;
 mod changes;
 mod ledger;
 mod prefs;
+mod repeats;
 mod routines;
 mod rules;
 mod standing;
@@ -183,8 +184,8 @@ pub use assignments::{
     load_assignment_rows, save_assignment,
 };
 pub use changes::{
-    ApplyClock, ApplyFailure, ApplyInput, AssignmentInput, Connection, StandingInput, WeekInput,
-    apply, apply_within,
+    ApplyClock, ApplyFailure, ApplyInput, AssignmentInput, Connection, WeekInput, apply,
+    apply_within,
 };
 pub use ledger::{
     Recall, capture_account, insert_restore_point, list_restore_points, prune_operations,
@@ -195,6 +196,7 @@ pub use prefs::{
     availability_json, create_session_row, delete_account, insert_preferences, preference_row,
     write_preferences,
 };
+pub use repeats::{RepeatsFailure, RepeatsOutcome, apply_repeat_intents};
 pub use routines::{
     RoutineDelete, RoutineSave, RoutineWrite, delete_routine, list_routines, replace_routines,
     save_routine,
@@ -205,8 +207,7 @@ pub use rules::{
     rewrite_stored_blocks, solve_availability,
 };
 pub use standing::{
-    adopt_standing, replace_standing, set_standing, standing_blocks, standing_rows,
-    week_with_standing,
+    adopt_standing, replace_standing, standing_blocks, standing_rows, week_with_standing,
 };
 pub use views::{day_view, homework_list, month_view, restore_point_list, routine_list, week_view};
 pub use weeks::{WeekSave, list_account_weeks, read_week, save_week, week_blocks, week_starts};

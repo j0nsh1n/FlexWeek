@@ -95,6 +95,13 @@ Column {
         visible: bridge ? bridge.schoolHint : false
         text: "No school days picked means no school on the calendar."
     }
+    HelpText {
+        objectName: "setupThisWeek"
+        theme: page.theme
+        width: parent.width
+        visible: text.length > 0
+        text: bridge ? bridge.thisWeek : ""
+    }
 
     SectionTitle { theme: page.theme; text: "Sports, clubs and jobs" }
     Repeater {

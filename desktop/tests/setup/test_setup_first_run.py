@@ -70,10 +70,13 @@ def test_every_page_is_kept_when_the_student_leaves_it(
     setup.cutoff.setCurrentIndex(setup.cutoff.findData("22:00"))
     setup.next.click()
     written(qapp, window)
+    # Each activity keeps the id its row was given, never its row number (repeats design item 10).
+    soccer_id, band_id = (row.block_id for row in setup.activities)
+    assert soccer_id != band_id and soccer_id.startswith("activity-") and band_id.startswith("activity-")
     assert locked(window) == {
         "school": ("School", "08:00", (0, 1, 2, 3, 4), 390),
-        "activity-1": ("Soccer", "15:30", (1, 3), 90),
-        "activity-2": ("Band", "16:00", (0,), 60),
+        soccer_id: ("Soccer", "15:30", (1, 3), 90),
+        band_id: ("Band", "16:00", (0,), 60),
     }
     assert window.session.revision == 1
     assert window.session.preferences["day_cutoff"] == "22:00"

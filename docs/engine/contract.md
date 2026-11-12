@@ -199,6 +199,32 @@ start, and its day. A half that did not fit is kept, with no start. The phone pl
 placed or waiting, under the original task's title, and accepting the plan keeps each half.
 Python encodes the row, calls the engine, and decodes the trace. It does not decide where a block goes.
 
+## Repeating blocks
+
+Added 2026-11-12 (step 1 of the repeats rebuild, `scratch/repeats-design/REPEATS-DESIGN.md` option C).
+School and Setup's activities are repeats. A client never sends a repeat's body: it sends what the
+student meant, as changes (`flexweek_engine::repeats::Intent`):
+
+```text
+{"id": "school", "scope": "from", "from_date": "2026-11-09",
+ "set": {"start"?, "duration_min"?, "title"?, "category"?},
+ "add_days": [5], "remove_days": [2], "stop": false}
+```
+
+A new repeat is a change on nothing: `set` holds title, start and length, `add_days` its days. Storage
+is unchanged (one standing row per repeat and Monday, a copy of each repeat in every saved week), so a
+change holds from its date's Monday.
+
+| Rule | Where |
+|---|---|
+| Patch a repeat; three-way merge of a later version or a week's copy (what it shared with the old repeat follows the new one, what it changed itself stays); words for a week's own changes, the notice, and the one-day note | `engine/engine/src/repeats.rs` |
+| Apply changes: standing rows from that Monday (a later stop stays a stop), every saved week from that Monday on, the later weeks that kept their own change, and the notice in the account's 12- or 24-hour clock | `flexweek_store::apply_repeat_intents` (`engine/store/src/repeats.rs`) |
+| Save handlers | `changes::apply` (assistant) and `post_changes` (`backend/app.py`) both call that one function after saving the batch's weeks; the answer carries `repeats: {changed_weeks, kept, notice}`. `engine/store/tests/fixtures/repeat_cases.json` runs through both. |
+| Reads | `GET /api/week` and each week in the changes answer carry `repeats`, the bodies standing that week, when any stand |
+| Desktop | The session edits `repeats` and sends the differences (`repeats::intents_between`); the open week changes at once by `repeats::apply_to_week`, so its Undo step holds the change and the store's pass leaves it as sent |
+
+Step 2 keeps these writes and replaces the storage with repeat versions and per-date exceptions.
+
 ## Not in scope
 
 The interface and its tests stay in Python (tidied in T4). The full move to a Rust interface waits for

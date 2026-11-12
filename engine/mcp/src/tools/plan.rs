@@ -541,7 +541,7 @@ fn perform(app: &crate::App, args: &PlanArgs) -> Result<Value, String> {
         assignments: Vec::<AssignmentInput>::new(),
         operation_id: None,
         snapshot_label: None,
-        standing: None,
+        repeats: None,
         argument_digest: None,
     };
     let applied = homework::run_apply(

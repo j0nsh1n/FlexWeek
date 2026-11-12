@@ -103,7 +103,7 @@ def test_new_school_hours_say_every_week_and_offer_no_undo(qapp, window, monkeyp
     class Sheet:
         DialogCode = QDialog.DialogCode
 
-        def __init__(self, parent, school) -> None:
+        def __init__(self, parent, school, this_week=None) -> None:
             pass
 
         def exec(self) -> QDialog.DialogCode:

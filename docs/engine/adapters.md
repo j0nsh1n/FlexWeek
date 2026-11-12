@@ -136,6 +136,8 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 
 `backend/app.py` is the HTTP layer: routes, dependencies, status codes, the pydantic request and response models, and the mapping of an engine status onto an HTTP error stay in Python. The rows below are the helper functions whose decisions moved into the engine (`engine/store/src/rules.rs`); `test_app_helpers_keep_no_engine_logic` checks them with the same rule as the modules above. Route handlers are not checked.
 
+`post_changes` passes a batch's `repeats` to `db.apply_repeat_intents` (`flexweek_store::apply_repeat_intents`, the function `changes::apply` calls too) and maps its refusal onto a 422; it decides nothing about repeats. `GET /api/week` reads them with `db.standing_blocks`.
+
 | Module | Function | Class | Reason |
 | --- | --- | --- | --- |
 | app | adopt_legacy_deadlines | ADAPTER | One connection call. `adopt_legacy_deadlines` in the engine picks the blocks and enforces the cap. Python maps "over the cap" to the 422 and revalidates the blocks. |
@@ -200,6 +202,11 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | calendar | span_problem | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | span_clash | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | category_icon | ADAPTER | encodes, makes one engine call, decodes |
+| calendar | new_activity_id | STAYS | Draws randomness (`uuid4`) for an activity Setup adds; the engine never draws it. |
+| calendar | repeat_changes | ADAPTER | encodes both lists, one `repeats::intents_between` call, decodes |
+| calendar | apply_repeat_changes | ADAPTER | encodes, one `repeats::apply_to_week` call, decodes the pair |
+| calendar | this_week_line | ADAPTER | encodes, one `repeats::this_week_line` call, passes None through |
+| calendar | one_day_note | ADAPTER | encodes, one `repeats::one_day_note` call, passes None through |
 
 ## custom_look
 
