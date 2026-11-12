@@ -556,3 +556,47 @@ fn shared_cases_give_the_answers_worked_out_for_both_save_handlers() {
         }
     }
 }
+
+#[test]
+fn a_later_this_week_and_later_change_that_stays_is_named() {
+    // School stands from 2 Nov at 08:30. From 16 Nov the student moved it to 10:00, this week and later.
+    // Then, from 9 Nov, School becomes 6 hours long. 16 Nov on keeps its own 10:00 start and takes the new
+    // length (10:00 to 16:00); that kept start is named, as a later week's own change would be.
+    let (conn, user_id) = account("repeats-later-version", true);
+    set_up(&conn, user_id);
+    change_from_open_week(
+        &conn,
+        user_id,
+        NEXT_WEEK,
+        &[("school", Some(with(school(), json!({"start": "10:00"}))))],
+    );
+    let answer = change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[("school", Some(with(school(), json!({"duration_min": 360}))))],
+    );
+    let later = block(&shown(&conn, user_id, WEEK_AFTER), "school")
+        .unwrap()
+        .clone();
+    assert_eq!(
+        (later["start"].clone(), later["duration_min"].clone()),
+        (json!("10:00"), json!(360))
+    );
+    let opened = block(&shown(&conn, user_id, OPEN_WEEK), "school")
+        .unwrap()
+        .clone();
+    assert_eq!(
+        (opened["start"].clone(), opened["duration_min"].clone()),
+        (json!("08:30"), json!(360))
+    );
+    assert_eq!(answer["repeats"]["kept"][0]["week_start"], json!(NEXT_WEEK));
+    assert_eq!(answer["repeats"]["kept"][0]["id"], json!("school"));
+    let notice = answer["repeats"]["notice"].as_str().unwrap();
+    assert!(
+        notice.starts_with("School changed from this week on."),
+        "{notice}"
+    );
+    assert!(notice.contains("16 Nov"), "{notice}");
+    assert!(notice.contains("10:00"), "{notice}");
+}

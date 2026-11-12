@@ -214,7 +214,21 @@ pub fn apply_repeat_intents(
             titles.push(title);
         }
         first_week.get_or_insert_with(|| week.clone());
-        let new = rewritten(&old, &week, new_here, intent.stop);
+        let new = rewritten(&old, &week, new_here.clone(), intent.stop);
+        // A later change that stays where this one would have set the same thing is named too.
+        if let Some(here) = &new_here {
+            for (from, body) in new.iter().filter(|(from, _)| from.as_str() > week.as_str()) {
+                let Some(body) = body else { continue };
+                let changes = own_changes(body, here, std::slice::from_ref(body), h24);
+                if !changes.is_empty() {
+                    outcome.kept.push(Kept {
+                        week_start: from.clone(),
+                        id: intent.id.clone(),
+                        changes,
+                    });
+                }
+            }
+        }
         let position = match position {
             Some(position) => position,
             None => next_position(conn, user_id, &week)?,
