@@ -9,6 +9,8 @@ from desktop.native.reuse import (
     proposals_from_clipboard,
     row_conflict,
     time_still_needed,
+    time_still_needed_parts,
+    uncovered_homework_minutes,
 )
 
 
@@ -61,6 +63,25 @@ def test_remaining_time_wrappers_call_the_engine_and_return_decoded_values() -> 
             "period": "later",
         }
     ]
+
+
+def test_time_still_needed_wrappers_return_the_minutes_the_engine_counts() -> None:
+    """60 min estimate, a session cut to 5 and a 45 min rest session given a time since the last save:
+    60 - 5 - 45 = 10 minutes have no session. The server's number (55) is from before the plan."""
+    assignment = {
+        "id": "history",
+        "title": "History",
+        "due": "2026-10-14T23:59",
+        "unplanned_min": 55,
+        "estimate_min": 60,
+    }
+    cut = {"id": "cut", "assignment_id": "history", "duration_min": 5, "start": "18:45", "days": [3]}
+    rest = {"id": "rest", "assignment_id": "history", "duration_min": 45, "start": "19:00", "days": [3]}
+    assert uncovered_homework_minutes(assignment, [cut, rest], [cut]) == 10
+    needed = time_still_needed({"history": assignment}, [cut, rest], "2026-10-05", [cut])
+    assert [(item["assignment_id"], item["minutes"]) for item in needed] == [("history", 10)]
+    parts = time_still_needed_parts({"history": assignment}, [cut, rest], "2026-10-05", [cut])
+    assert (parts[0]["waiting_min"], parts[0]["uncovered_min"]) == (0, 10)
 
 
 def test_earlier_homework_wrapper_returns_both_weeks_for_one_save() -> None:

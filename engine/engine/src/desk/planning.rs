@@ -605,12 +605,52 @@ pub fn move_earlier_homework(
 }
 
 /// Count homework time that still needs a time, grouped by deadline week relative to this week.
+///
+/// Minutes, exactly: a remainder that does not fill a quarter hour is still time with no time. The
+/// four-field shape is what the screens read; `time_still_needed_parts` also splits the minutes.
+/// With no saved week given, every session of the week is read as unsaved.
 pub fn time_still_needed(
     assignments: &serde_json::Map<String, Value>,
     open_week_blocks: &[Value],
     week_start: &str,
 ) -> EngineResult<Vec<Value>> {
+    time_still_needed_since(assignments, open_week_blocks, week_start, &[])
+}
+
+/// `time_still_needed` against the week as last saved (`committed`).
+pub fn time_still_needed_since(
+    assignments: &serde_json::Map<String, Value>,
+    open_week_blocks: &[Value],
+    week_start: &str,
+    committed: &[Value],
+) -> EngineResult<Vec<Value>> {
+    Ok(
+        time_still_needed_parts(assignments, open_week_blocks, week_start, committed)?
+            .into_iter()
+            .map(|mut item| {
+                if let Some(fields) = item.as_object_mut() {
+                    fields.shift_remove("waiting_min");
+                    fields.shift_remove("uncovered_min");
+                }
+                item
+            })
+            .collect(),
+    )
+}
+
+/// The same count with its two parts: `waiting_min`, sessions of the week that have no start yet,
+/// and `uncovered_min`, minutes that no session holds at all (a remainder the planner could not
+/// place). The server's `unplanned_min` was read when the week was last saved, so the sessions
+/// added or changed since (`open_week_blocks` against `committed`) are applied to it here.
+pub fn time_still_needed_parts(
+    assignments: &serde_json::Map<String, Value>,
+    open_week_blocks: &[Value],
+    week_start: &str,
+    committed: &[Value],
+) -> EngineResult<Vec<Value>> {
     let monday = from_iso(week_start)?;
+    let here = Value::Array(open_week_blocks.to_vec());
+    let saved = Value::Array(committed.to_vec());
     let mut result = Vec::new();
     for (id, assignment) in assignments {
         if truthy(get(assignment, "completed")?) {
@@ -633,8 +673,8 @@ pub fn time_still_needed(
                     .unwrap_or(0)
             })
             .sum();
-        let unplanned = int_of(&or_default(get(assignment, "unplanned_min")?, json!(0)))?;
-        let minutes = floor_slot(unplanned.max(waiting));
+        let uncovered = uncovered_minutes(assignment, &json!(id), &here, &saved)?;
+        let minutes = waiting + uncovered;
         if minutes == 0 {
             continue;
         }
@@ -651,6 +691,8 @@ pub fn time_still_needed(
             "assignment_id": id,
             "title": assignment.get("title").cloned().unwrap_or(Value::Null),
             "minutes": minutes,
+            "waiting_min": waiting,
+            "uncovered_min": uncovered,
             "period": period
         }));
     }
@@ -997,7 +1039,9 @@ fn plannable_days(
     Ok((this_week, all_days))
 }
 
-pub fn available_homework_minutes(
+/// Minutes of the homework that no session holds, exactly. Sessions of this week that are unsaved
+/// (`blocks` against `committed`) are applied to the server's `unplanned_min`.
+pub fn uncovered_homework_minutes(
     assignment: &Value,
     blocks: &Value,
     committed: &Value,
@@ -1005,17 +1049,37 @@ pub fn available_homework_minutes(
     if !truthy(Some(assignment)) || truthy(get(assignment, "completed")?) {
         return Ok(0);
     }
-    let id = subscript(assignment, "id")?;
+    uncovered_minutes(assignment, subscript(assignment, "id")?, blocks, committed)
+}
+
+fn uncovered_minutes(
+    assignment: &Value,
+    id: &Value,
+    blocks: &Value,
+    committed: &Value,
+) -> EngineResult<i64> {
     let here = session_minutes(blocks, id)?;
     let committed = session_minutes(&or_default(Some(committed), json!([])), id)?;
-    match get(assignment, "unplanned_min")? {
+    let minutes = match get(assignment, "unplanned_min")? {
         None | Some(Value::Null) => {
             let estimate = int_of(subscript(assignment, "estimate_min")?)?;
             let focus = int_of(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
-            Ok(floor_slot((estimate - focus).max(0) - here))
+            (estimate - focus).max(0) - here
         }
-        Some(server) => Ok(floor_slot(py_int(server)? + committed - here)),
-    }
+        Some(server) => py_int(server)? + committed - here,
+    };
+    Ok(minutes.max(0))
+}
+
+/// What the planner can place: the uncovered minutes, down to a whole quarter hour.
+pub fn available_homework_minutes(
+    assignment: &Value,
+    blocks: &Value,
+    committed: &Value,
+) -> EngineResult<i64> {
+    Ok(floor_slot(uncovered_homework_minutes(
+        assignment, blocks, committed,
+    )?))
 }
 
 pub fn block_occurs_on_day(

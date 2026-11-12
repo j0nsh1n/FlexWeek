@@ -178,10 +178,35 @@ def move_earlier_homework(
     return result["blocks"], result["moved"], result["weeks"]
 
 
-def time_still_needed(assignments: dict, open_week_blocks: list[dict], week_start: str) -> list[dict]:
+def time_still_needed(
+    assignments: dict,
+    open_week_blocks: list[dict],
+    week_start: str,
+    committed_blocks: list[dict] | None = None,
+) -> list[dict]:
     return json.loads(
         flexweek_engine.reuse_time_still_needed(
-            json.dumps(assignments), json.dumps(open_week_blocks), week_start
+            json.dumps(assignments),
+            json.dumps(open_week_blocks),
+            week_start,
+            json.dumps(committed_blocks),
+        )
+    )
+
+
+def time_still_needed_parts(
+    assignments: dict,
+    open_week_blocks: list[dict],
+    week_start: str,
+    committed_blocks: list[dict] | None = None,
+) -> list[dict]:
+    """`time_still_needed` with each homework's `waiting_min` and `uncovered_min` beside its minutes."""
+    return json.loads(
+        flexweek_engine.reuse_time_still_needed_parts(
+            json.dumps(assignments),
+            json.dumps(open_week_blocks),
+            week_start,
+            json.dumps(committed_blocks),
         )
     )
 
@@ -231,6 +256,21 @@ def available_homework_minutes(
 ) -> int:
     return int(
         flexweek_engine.reuse_available_minutes(
+            json.dumps(assignment),
+            json.dumps(blocks),
+            json.dumps(committed_blocks),
+        )
+    )
+
+
+def uncovered_homework_minutes(
+    assignment: dict | None,
+    blocks: list[dict],
+    committed_blocks: list[dict] | None = None,
+) -> int:
+    """Minutes of the homework that no session holds, exactly (the planner places whole quarter hours)."""
+    return int(
+        flexweek_engine.reuse_uncovered_minutes(
             json.dumps(assignment),
             json.dumps(blocks),
             json.dumps(committed_blocks),

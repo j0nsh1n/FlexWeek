@@ -1352,3 +1352,214 @@ fn test_a_week_label_names_the_week_by_its_range_not_its_iso_date() {
         "Week of 28 Sep – 4 Oct"
     );
 }
+
+// Minutes that do not fill a quarter hour. A homework's time is counted in minutes everywhere; the
+// only rounding is in `open_rest_sessions`, where the planner decides what it can place on its grid.
+
+fn history(unplanned: i64) -> Value {
+    with(
+        essay(),
+        json!({"id": "history", "title": "History essay", "estimate_min": 60,
+               "unplanned_min": unplanned, "due": "2026-09-13T23:59"}),
+    )
+}
+
+fn session(id: &str, minutes: i64, start: Option<&str>) -> Value {
+    let mut block = json!({
+        "id": id, "assignment_id": "history", "title": "History essay", "kind": "flexible",
+        "duration_min": minutes, "days": [3], "completed": false,
+    });
+    if let Some(start) = start {
+        block["start"] = json!(start);
+    }
+    block
+}
+
+fn still_needed(assignment: &Value, blocks: &[Value], committed: &[Value]) -> Vec<Value> {
+    planning::time_still_needed_since(
+        &object(json!({"history": assignment})),
+        blocks,
+        "2026-09-07",
+        committed,
+    )
+    .expect("needed")
+}
+
+fn needed_in_parts(assignment: &Value, blocks: &[Value], committed: &[Value]) -> Vec<Value> {
+    planning::time_still_needed_parts(
+        &object(json!({"history": assignment})),
+        blocks,
+        "2026-09-07",
+        committed,
+    )
+    .expect("needed")
+}
+
+#[test]
+fn test_ten_minutes_with_no_session_are_still_needed_in_minutes() {
+    // 60 min estimate, one session cut by hand to 5, Plan placed a 45 min rest: 60 - 5 - 45 = 10.
+    // The server's number was read before the plan (60 - 5 = 55); the 45 min session is new.
+    let committed = [session("cut", 5, Some("18:45"))];
+    let blocks = [
+        session("cut", 5, Some("18:45")),
+        session("rest", 45, Some("19:00")),
+    ];
+    let needed = still_needed(&history(55), &blocks, &committed);
+    assert_eq!(needed.len(), 1);
+    assert_eq!(needed[0]["minutes"], 10);
+    let parts = needed_in_parts(&history(55), &blocks, &committed);
+    assert_eq!(
+        (
+            parts[0]["minutes"].as_i64(),
+            parts[0]["waiting_min"].as_i64(),
+            parts[0]["uncovered_min"].as_i64()
+        ),
+        (Some(10), Some(0), Some(10))
+    );
+}
+
+#[test]
+fn test_a_plan_that_gave_every_minute_a_time_leaves_nothing_needed() {
+    // The 15 minute step: a session cut to 15, a 45 min rest placed: 60 - 15 - 45 = 0. The server's
+    // number (45) was read before the plan and must not be counted again.
+    let committed = [session("cut", 15, Some("18:45"))];
+    let blocks = [
+        session("cut", 15, Some("18:45")),
+        session("rest", 45, Some("19:00")),
+    ];
+    assert_eq!(
+        still_needed(&history(45), &blocks, &committed),
+        Vec::<Value>::new()
+    );
+}
+
+#[test]
+fn test_a_waiting_session_and_a_remainder_add_up() {
+    // Cut to 5, the 45 min rest found no room (waiting), and 10 more minutes have no session: 55.
+    let committed = [session("cut", 5, Some("18:45"))];
+    let blocks = [session("cut", 5, Some("18:45")), session("rest", 45, None)];
+    let parts = needed_in_parts(&history(55), &blocks, &committed);
+    assert_eq!(
+        (
+            parts[0]["minutes"].as_i64(),
+            parts[0]["waiting_min"].as_i64(),
+            parts[0]["uncovered_min"].as_i64()
+        ),
+        (Some(55), Some(45), Some(10))
+    );
+}
+
+#[test]
+fn test_a_whole_waiting_session_counts_as_it_did() {
+    let blocks = [session("all", 60, None)];
+    let needed = still_needed(&history(0), &blocks, &blocks);
+    assert_eq!(needed[0]["minutes"], 60);
+}
+
+#[test]
+fn test_ten_minutes_left_by_a_fifty_minute_session_are_not_dropped() {
+    // c = 50: 60 - 50 = 10. No session can be made for it (under a quarter hour), and it stays counted.
+    let blocks = [session("cut", 50, Some("18:45"))];
+    assert_eq!(
+        still_needed(&history(10), &blocks, &blocks)[0]["minutes"],
+        10
+    );
+}
+
+#[test]
+fn test_the_rest_session_is_the_one_place_that_rounds_down() {
+    let assignment = history(55);
+    let made = planning::open_rest_sessions(
+        &[],
+        &object(json!({"history": assignment})),
+        "2026-09-07",
+        &[],
+    )
+    .expect("sessions");
+    assert_eq!(made.len(), 1);
+    assert_eq!(made[0]["duration_min"], 45);
+    let small = planning::open_rest_sessions(
+        &[],
+        &object(json!({"history": history(10)})),
+        "2026-09-07",
+        &[],
+    )
+    .expect("sessions");
+    assert!(small.is_empty());
+}
+
+#[test]
+fn test_overdue_homework_with_minutes_left_under_a_quarter_hour_is_listed() {
+    // 30 min estimate and a 25 min timer: 5 min left. 45 and 25: 20 left, not 15.
+    for (estimate, expected) in [(30, 5), (45, 20)] {
+        let assignment = with(
+            essay(),
+            json!({"estimate_min": estimate, "focus_minutes": 25, "unplanned_min": 0, "due": "2026-10-16"}),
+        );
+        let items = clipboard::left_over_items(
+            &json!({"essay": assignment}),
+            &json!([]),
+            "2026-10-12",
+            "2026-10-17T10:00",
+            &json!([]),
+            &json!([]),
+        )
+        .unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["remaining_min"], expected);
+    }
+}
+
+#[test]
+fn test_a_paste_that_cannot_fit_says_how_many_minutes_are_left() {
+    let assignment = essay();
+    let session = json!({
+        "id": "sess", "assignment_id": "essay", "title": "Essay", "kind": "flexible",
+        "duration_min": 60, "days": [1],
+    });
+    let item = |group: &str| json!({"block": session, "source_day": 1, "scope": "occurrence", "group_id": group});
+    let paste = |items: &[Value], left: i64| {
+        proposals_from_clipboard(
+            items,
+            "day",
+            "2026-09-07",
+            3,
+            None,
+            &object(json!({"essay": assignment})),
+            &object(json!({"essay": left})),
+        )
+    };
+    // 20 minutes left: the copy is cut to the 15 that fit, and the other 5 are named, not "none".
+    let rows = paste(&[item("g1"), item("g2")], 20);
+    assert_eq!(rows[0]["checked"], json!(true));
+    assert_eq!(rows[0]["block"]["duration_min"], 15);
+    assert_eq!(rows[1]["checked"], json!(false));
+    assert_eq!(
+        rows[1]["invalid"],
+        "Only 5 min of this homework is left to plan, and a pasted session needs at least 15."
+    );
+    // Nothing left at all keeps its sentence.
+    assert_eq!(
+        paste(&[item("g1")], 0)[0]["invalid"],
+        "No unplanned time remains for this homework."
+    );
+    // A copy of a 5 minute session is refused for its own length, not for lack of time.
+    let short = json!({
+        "id": "short", "assignment_id": "essay", "title": "Essay", "kind": "flexible",
+        "duration_min": 5, "days": [1],
+    });
+    let rows = proposals_from_clipboard(
+        &[json!({"block": short, "source_day": 1, "scope": "occurrence", "group_id": "g1"})],
+        "day",
+        "2026-09-07",
+        3,
+        None,
+        &object(json!({"essay": assignment})),
+        &object(json!({"essay": 90})),
+    );
+    assert_eq!(rows[0]["checked"], json!(false));
+    assert_eq!(
+        rows[0]["invalid"],
+        "A pasted homework session needs at least 15 min, and this one is 5 min."
+    );
+}

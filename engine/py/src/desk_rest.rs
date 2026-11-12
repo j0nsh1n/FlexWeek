@@ -647,14 +647,52 @@ fn reuse_time_still_needed(
     assignments: &str,
     open_week_blocks: &str,
     week_start: &str,
+    committed_blocks: &str,
 ) -> PyResult<String> {
-    let (assignments, blocks) = (parse(assignments)?, parse(open_week_blocks)?);
+    let (assignments, blocks, committed) = (
+        parse(assignments)?,
+        parse(open_week_blocks)?,
+        parse(committed_blocks)?,
+    );
     guard(|| {
         let assignments = assignments.as_object().cloned().unwrap_or_default();
         let blocks = blocks.as_array().cloned().unwrap_or_default();
+        let committed = committed.as_array().cloned().unwrap_or_default();
         Ok(dump(&Value::Array(
-            planning::time_still_needed(&assignments, &blocks, week_start).map_err(crate::raise)?,
+            planning::time_still_needed_since(&assignments, &blocks, week_start, &committed)
+                .map_err(crate::raise)?,
         )))
+    })
+}
+
+#[pyfunction]
+fn reuse_time_still_needed_parts(
+    assignments: &str,
+    open_week_blocks: &str,
+    week_start: &str,
+    committed_blocks: &str,
+) -> PyResult<String> {
+    let (assignments, blocks, committed) = (
+        parse(assignments)?,
+        parse(open_week_blocks)?,
+        parse(committed_blocks)?,
+    );
+    guard(|| {
+        let assignments = assignments.as_object().cloned().unwrap_or_default();
+        let blocks = blocks.as_array().cloned().unwrap_or_default();
+        let committed = committed.as_array().cloned().unwrap_or_default();
+        Ok(dump(&Value::Array(
+            planning::time_still_needed_parts(&assignments, &blocks, week_start, &committed)
+                .map_err(crate::raise)?,
+        )))
+    })
+}
+
+#[pyfunction]
+fn reuse_uncovered_minutes(assignment: &str, blocks: &str, committed: &str) -> PyResult<i64> {
+    let (assignment, blocks, committed) = (parse(assignment)?, parse(blocks)?, parse(committed)?);
+    guard(|| {
+        planning::uncovered_homework_minutes(&assignment, &blocks, &committed).map_err(crate::raise)
     })
 }
 
@@ -1515,6 +1553,8 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         reuse_open_rest,
         reuse_move_earlier_homework,
         reuse_time_still_needed,
+        reuse_time_still_needed_parts,
+        reuse_uncovered_minutes,
         reuse_planned,
         reuse_planning_days,
         reuse_apply_plan,
