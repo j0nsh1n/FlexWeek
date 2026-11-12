@@ -1032,14 +1032,16 @@ class DayDialView(LayoutView):
         time_width: int,
     ) -> QPushButton:
         px, tokens = scene.px, scene.tokens
-        past = not item.live or item.end <= over
+        # Homework that ended unfinished is still to do: it is Missed, not Done, and not drawn as over.
+        unfinished = item.work and item.live and item.end <= over
+        past = not item.live or (item.end <= over and not item.work)
         state = "now" if is_now else "past" if past else ""
         row = button("", f"dialRow{index}", "row")
         row.setProperty("state", state)
         row.setProperty("blockId", item.block_id)
         tag = (
             "Missed"
-            if item.missed
+            if item.missed or unfinished
             else "Done" if past else "Now" if is_now else "Up next" if is_primary else ""
         )
         pinned = "Pinned" if item.pinned else ""

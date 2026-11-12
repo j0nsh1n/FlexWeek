@@ -362,6 +362,29 @@ def test_plan_is_disabled_when_nothing_needs_a_time(qapp, window) -> None:
     assert _qml(root, "homeworkHeading").property("text") == "No time yet · drag onto a day"
 
 
+def test_the_drawer_does_not_say_everything_has_a_time_for_a_missed_session(qapp, window) -> None:
+    """Thursday 19:00. The essay's Tuesday 16:00 to 17:00 is over and it was not finished, so its 60 min
+    need a time again: the drawer says so, in the words the other screens use, and keeps its success icon
+    for when nothing is waiting."""
+    root = _reset(window, qapp)
+    session = window.session
+    essay = next(block for block in session.blocks if block.get("assignment_id") == "essay")
+    session.add_block({**essay, "start": "16:00", "days": [1], "duration_min": 60})
+    session.save()
+    wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+    window._material_page.publish()
+    _pump(qapp)
+    assert _qml(root, "homeworkEmptyText").property("text") == "1 h still needs a time"
+    assert _qml(root, "homeworkEmptyIcon").property("visible") is False
+    session.add_block({**essay, "start": "20:00", "days": [3], "duration_min": 60})
+    session.save()
+    wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+    window._material_page.publish()
+    _pump(qapp)
+    assert _qml(root, "homeworkEmptyText").property("text") == "Everything has a time."
+    assert _qml(root, "homeworkEmptyIcon").property("visible") is True
+
+
 def test_plenty_of_time_is_never_due_within_24_hours() -> None:
     start = date(2026, 11, 2)
     moment = datetime(2026, 11, 5, 19, 0)

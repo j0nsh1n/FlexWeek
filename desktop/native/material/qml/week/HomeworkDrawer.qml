@@ -18,6 +18,7 @@ Rectangle {
     signal cardDragStarted(string title)
 
     readonly property int count: bridge ? bridge.week.homeworkCount : 0
+    readonly property bool allTimed: bridge ? bridge.week.allTimed : true
     property alias planButton: planButton
 
     M3Palette { id: m3; theme: drawer.theme }
@@ -154,6 +155,8 @@ Rectangle {
         anchors.topMargin: 32
         spacing: 8
         M3Icon {
+            objectName: "homeworkEmptyIcon"
+            visible: drawer.allTimed
             anchors.horizontalCenter: parent.horizontalCenter
             name: "task_alt"
             width: 36
@@ -164,7 +167,7 @@ Rectangle {
             objectName: "homeworkEmptyText"
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
-            text: "Everything has a time."
+            text: drawer.bridge ? drawer.bridge.week.timeWords : "Everything has a time."
             color: m3.inkMuted
             font.family: M3Font.family
             font.pixelSize: M3Font.px(14)

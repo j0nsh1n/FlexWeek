@@ -380,3 +380,25 @@ def test_where_fixed_blocks_overlap_the_card_names_the_one_that_ends_last() -> N
     assert board.now_title == "B until 12:00"
     assert board.now_line == "Next: Soccer at 16:00"
     assert board.now_minutes == 3 * 60 + 15
+
+
+def test_homework_that_ended_unfinished_is_still_to_do_not_done() -> None:
+    """Thursday 19:00. The essay's 16:00 to 17:00 is over and it was not finished, so it is not in Done
+    and is not dimmed; School, over and fixed, and Maths, finished, are Done."""
+    missed = _block("Essay", 16 * 60, 17 * 60, work=True, assignment="a1", due="2026-11-08T23:59")
+    maths = _block("Maths", 17 * 60, 18 * 60, work=True, done=True, assignment="a2")
+    board = _board([_block("School", *SCHOOL), missed, maths], 19 * 60)
+    assert [row.title for row in board.up_next] == ["Essay"]
+    assert [row.title for row in board.done] == ["School", "Maths"]
+    assert board.up_next[0].dim is False
+    assert board.up_next[0].can_finish is True, "it can still be finished"
+    assert board.ring_count == 1
+    assert board.left_line == "1 thing left today"
+
+
+def test_start_focus_stays_on_homework_that_is_not_over() -> None:
+    """A missed session is still to do, but Start focus opens the next one, as it did."""
+    missed = _block("Essay", 16 * 60, 17 * 60, work=True, assignment="a1")
+    ahead = _block("Reading", 20 * 60, 21 * 60, work=True, assignment="a2")
+    board = _board([missed, ahead], 19 * 60)
+    assert board.focus_title == "Reading"

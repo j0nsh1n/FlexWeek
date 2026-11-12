@@ -100,11 +100,15 @@ def board_for(
     day's `minute`.
     """
     ordered = tuple(sorted(items, key=lambda item: (int(item.start), str(item.title))))
-    up = tuple(item for item in ordered if not _settled(item) and not _clock_past(item, minute, when))
+    # Homework is over only once it is finished: one that ended unfinished is still to do.
+    up = tuple(
+        item for item in ordered if not _settled(item) and (item.work or not _clock_past(item, minute, when))
+    )
+    ahead = tuple(item for item in up if not _clock_past(item, minute, when))
     finished = tuple(item for item in ordered if item not in up)
     gap = _gap(ordered, minute, when, nudges)
-    focus = next((item for item in up if item.work and item.assignment_id), None)
-    doing = _doing(up, minute, when, nudges)
+    focus = next((item for item in ahead if item.work and item.assignment_id), None)
+    doing = _doing(ahead, minute, when, nudges)
     busy = None if doing is not None else _busy(ordered, minute, when, nudges)
     after = None if busy is None else _next_after(ordered, minute)
     total = len(ordered)

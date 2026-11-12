@@ -21,6 +21,7 @@ from desktop.native.weekmodel import (
     clock_label,
     due_in_minutes,
     due_label,
+    homework_time_sentence,
     length_label,
     range_label,
     set_clock_24h,
@@ -28,6 +29,7 @@ from desktop.native.weekmodel import (
 )
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+EVERYTHING_TIMED = "Everything has a time."
 DAY_ROLES = ("label", "name", "date", "today")
 BLOCK_ROLES = (
     "title",
@@ -64,7 +66,8 @@ def occurrence_row(item: Any, mode: str, *, dim: bool, gone: bool, fresh: bool) 
         "category": event_category(item.category),
         "detail": range_label(int(item.start), end),
         "detailStart": short_clock(int(item.start)),
-        "past": dim and (gone or bool(item.done)),
+        # Homework is over once finished; one whose time went by unfinished is still to do.
+        "past": dim and (bool(item.done) or (gone and not item.work)),
         "blockId": item.block_id,
         "assignmentId": item.assignment_id or "",
         "homework": bool(item.work and item.assignment_id),
@@ -154,6 +157,7 @@ class WeekBridge(QObject):
         self._window = window
         self._block_rows: list[dict] = []
         self._homework_rows: list[dict] = []
+        self._time_words = EVERYTHING_TIMED
         self._day_rows: list[dict] = []
         self._hour_labels: list[str] = [clock_label(hour * 60) for hour in range(24)]
         self._blocks = Rows(BLOCK_ROLES, self)
@@ -275,6 +279,8 @@ class WeekBridge(QObject):
                     "reason": item.reason,
                 }
             )
+        # The same count every screen reads, so a missed session is not "has a time" here either.
+        self._time_words = homework_time_sentence([], session.homework_time_needed())
         self._week_key = session.week_start
         self._seen = keys
         self._fresh_until = {key: until for key, until in self._fresh_until.items() if until > clock}
@@ -629,3 +635,12 @@ class WeekBridge(QObject):
     @Property(int, notify=homeworkChanged)
     def homeworkCount(self) -> int:
         return len(self._homework_rows)
+
+    @Property(str, notify=homeworkChanged)
+    def timeWords(self) -> str:
+        """What the drawer says when no card is listed: whether any homework still needs a time."""
+        return self._time_words
+
+    @Property(bool, notify=homeworkChanged)
+    def allTimed(self) -> bool:
+        return self._time_words == EVERYTHING_TIMED

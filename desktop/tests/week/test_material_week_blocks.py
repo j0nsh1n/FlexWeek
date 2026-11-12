@@ -568,3 +568,26 @@ def test_in_a_narrow_window_at_larger_text_no_time_line_is_cut_part_way(qapp, wi
     finally:
         window.resize(1280, 800)
         _pump(qapp, 6)
+
+
+def test_homework_that_ended_unfinished_is_not_dimmed_like_finished_work() -> None:
+    """Thursday 19:00, so Tuesday 16:00 is over. A fixed block that is over and a finished session are
+    dimmed; an unfinished homework session is not, whether its time went by today or in an earlier week."""
+    from desktop.native.material.bridge_week import occurrence_row
+    from desktop.native.weekmodel import Occurrence
+
+    def item(title: str, *, work: bool, done: bool) -> Occurrence:
+        return Occurrence(
+            block_id=title, title=title, category="assignments", day=1, start=16 * 60, end=17 * 60,
+            work=work, done=done, missed=False, assignment_id="a" if work else None, due=None, slack=None,
+        )  # fmt: skip
+
+    def dimmed(row: Occurrence, gone: bool = True) -> bool:
+        return occurrence_row(row, "light", dim=True, gone=gone, fresh=False)["past"]
+
+    assert dimmed(item("School", work=False, done=False)) is True
+    assert dimmed(item("Maths", work=True, done=True)) is True
+    assert dimmed(item("Essay", work=True, done=False)) is False
+    assert dimmed(item("Essay", work=True, done=False), gone=False) is False
+    finished = item("Maths", work=True, done=True)
+    assert occurrence_row(finished, "light", dim=False, gone=True, fresh=False)["past"] is False
