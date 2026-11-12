@@ -338,6 +338,9 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | reuse | occurrence_days | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | session_minutes | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | available_homework_minutes | ADAPTER | encodes, makes one engine call, decodes |
+| reuse | uncovered_homework_minutes | ADAPTER | encodes, makes one engine call, decodes; the minutes no session holds, exactly (`planning::uncovered_homework_minutes`), where `available_homework_minutes` is the same rounded down to a quarter hour for what Plan can place |
+| reuse | time_still_needed | ADAPTER | encodes, makes one engine call, decodes; counts minutes, not quarter hours, and applies the sessions changed since the last save (`committed_blocks`) to the server's `unplanned_min` (`planning::time_still_needed_since`) |
+| reuse | time_still_needed_parts | ADAPTER | the same call with each homework's `waiting_min` and `uncovered_min` beside its minutes; the plan notice names the homework whose `uncovered_min` is not 0 |
 | reuse | copied_fixed_block | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | copied_homework_block | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | clipboard_item | ADAPTER | encodes, makes one engine call, decodes |

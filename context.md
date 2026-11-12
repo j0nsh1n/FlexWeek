@@ -98,9 +98,12 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
-- 2026-11-10, branch `fix/131-helper-and-keys` from the v1.3.0 tag (d61235ee), local only. Done: the helper's live
-  clock, the Material letter-keys switch, Help closing from the keyboard in Material, and this file and the 1.3.0
-  notes brought up to date. Next: review of this branch, then the other 1.3.1 branch, then the checks
-  left from the 1.3.0 checklist (a dev install offered 1.3.0, a phone updating from 1.2.0 and syncing both ways),
-  the Material memory measurement and Jonathan's call on Ctrl+wheel. Reports:
-  `~/.flexweek-ui-harness/scratch/fix-1.3.1/branch-B/REPORT.md`.
+- 2026-11-12, branch `fix/planner-counts-minutes` from main d7afedfe, local only. Done: a homework's time still
+  needed is counted in minutes everywhere it is counted (engine `planning::time_still_needed_parts`,
+  `uncovered_homework_minutes`); Plan rounds down to a quarter hour only where it makes the rest session; the
+  Plan notice, status line, Material drawer and More count name the minutes that have no time. Not built: how
+  the app asks the student what to do with such a remainder (options in
+  `~/.flexweek-ui-harness/scratch/round2-fix2/planner-minutes/ASK-OPTIONS.md`, owner's pick pending). Next:
+  review of this branch and the owner's pick.
+- 2026-11-10, branch `fix/131-helper-and-keys` from the v1.3.0 tag: helper live clock, Material letter-keys
+  switch, Help closing from the keyboard; the checks left from the 1.3.0 checklist are still open.
