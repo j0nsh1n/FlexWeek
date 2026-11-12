@@ -330,3 +330,24 @@ def test_a_pinned_session_that_passed_is_called_missed_but_not_counted(
     session, work = _essay_planned_on_tuesday(qapp, open_light, pinned=True)
     assert session.missed_block_ids() == frozenset({work["id"]})
     assert session.homework_time_needed() == []
+
+
+def test_an_unfinished_session_of_a_week_that_is_over_is_still_called_missed(
+    qapp: QApplication, open_light: Callable[..., NativeWindow], clock: FakeClock
+) -> None:
+    """The essay's Tuesday 16:00 session was never done. Looked at on Monday of the next week, that week
+    is over: the session must still be called missed, so no look files it under Done or dims it like
+    finished work. Finished work in that week is not called missed (the control)."""
+    session, work = _essay_planned_on_tuesday(qapp, open_light)
+    session.add_homework(
+        {"id": "maths", "title": "Maths sheet", "due": due_on(session, 5, "23:59"), "estimate_min": 60, "revision": 0}
+    )
+    session.save()
+    _settle(qapp, session)
+    maths = next(item for item in session.blocks if item.get("assignment_id") == "maths")
+    maths.update({"start": "18:00", "days": [1], "duration_min": 60, "completed": True})
+    session.add_block(maths)
+    session.save()
+    _settle(qapp, session)
+    clock.set(datetime(2026, 11, 9, 10, 0))
+    assert session.missed_block_ids() == frozenset({work["id"]})

@@ -1145,6 +1145,17 @@ fn reuse_solve_request(
 /// The real current minute as (day, minute) of the week, from a datetime; `None` when `now` is not
 /// given or today is not in the week.
 fn clock_point(week_start: &str, now: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Value>> {
+    point_with(week_start, now, planning::clock_point)
+}
+
+/// How a moment reads as a point of a week: `planning::clock_point` or `planning::screen_point`.
+type WeekPoint = fn(&str, &str, i64, i64) -> EngineResult<Option<(i64, i64)>>;
+
+fn point_with(
+    week_start: &str,
+    now: Option<&Bound<'_, PyAny>>,
+    read: WeekPoint,
+) -> PyResult<Option<Value>> {
     let Some(now) = now.filter(|moment| !moment.is_none()) else {
         return Ok(None);
     };
@@ -1154,9 +1165,7 @@ fn clock_point(week_start: &str, now: Option<&Bound<'_, PyAny>>) -> PyResult<Opt
         .extract::<String>()?;
     let hour = now.getattr("hour")?.extract::<i64>()?;
     let minute = now.getattr("minute")?.extract::<i64>()?;
-    let point = guard(|| {
-        planning::clock_point(week_start, &today_iso, hour, minute).map_err(crate::raise)
-    })?;
+    let point = guard(|| read(week_start, &today_iso, hour, minute).map_err(crate::raise))?;
     Ok(point.map(|(day, minute)| json!([day, minute])))
 }
 
@@ -1192,7 +1201,8 @@ fn reuse_missed_session_ids(
     now: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<String> {
     let (blocks, assignments) = (parse(blocks)?, parse(assignments)?);
-    let now = clock_point(week_start, now)?;
+    // A week that is over is read at its end, so its unfinished sessions still say missed.
+    let now = point_with(week_start, now, planning::screen_point)?;
     guard(|| {
         let blocks = blocks.as_array().cloned().unwrap_or_default();
         Ok(dump(&Value::Array(

@@ -9,8 +9,8 @@
 //! because the plan's limit is rounded up to the quarter hour.
 
 use flexweek_engine::desk::planning::{
-    clock_point, missed_session_ids, solve_request, solve_request_at, time_still_needed,
-    without_missed_times,
+    clock_point, missed_session_ids, screen_point, solve_request, solve_request_at,
+    time_still_needed, without_missed_times,
 };
 use serde_json::{Map, Value, json};
 
@@ -302,6 +302,33 @@ fn test_the_clock_is_a_point_of_this_week_only() {
         clock_point(WEEK, "2026-11-09", 0, 0).unwrap(),
         None,
         "the week is over"
+    );
+}
+
+#[test]
+fn test_a_screen_reads_a_week_that_is_over_at_its_end() {
+    // A screen showing an earlier week must still call its unfinished sessions missed, so it reads
+    // that week at its end (day 7, minute 0). This week reads like the clock; a week ahead reads none.
+    assert_eq!(
+        screen_point(WEEK, "2026-11-05", 18, 50).unwrap(),
+        Some((3, 1130))
+    );
+    assert_eq!(
+        screen_point(WEEK, "2026-11-09", 0, 0).unwrap(),
+        Some((7, 0))
+    );
+    assert_eq!(
+        screen_point(WEEK, "2026-12-01", 9, 0).unwrap(),
+        Some((7, 0))
+    );
+    assert_eq!(screen_point(WEEK, "2026-11-01", 23, 59).unwrap(), None);
+    // Read at the week's end, the essay's Tuesday session is missed.
+    // Two hours of essay, both sessions over by the week's end and neither done.
+    let open = essay(120, 0, "2026-11-08T23:59");
+    let blocks = [session("a", 1, "16:00", 60), session("b", 6, "22:00", 60)];
+    assert_eq!(
+        missed_session_ids(&blocks, &open, Some(&json!([7, 0]))).expect("ids"),
+        [json!("a"), json!("b")]
     );
 }
 

@@ -610,6 +610,23 @@ pub fn clock_point(
     Ok((0..=6).contains(&day).then_some((day, hour * 60 + minute)))
 }
 
+/// The point a screen reads missed sessions at: the real minute in this week, the week's end once the
+/// week is over (every session in it has ended), and none for a week still ahead. Replan all plans from
+/// `clock_point`; a screen showing an earlier week still has to say which of its sessions were missed.
+pub fn screen_point(
+    week_start: &str,
+    today_iso: &str,
+    hour: i64,
+    minute: i64,
+) -> EngineResult<Option<(i64, i64)>> {
+    let day = (from_iso(today_iso)? - from_iso(week_start)?).num_days();
+    Ok(match day {
+        0..=6 => Some((day, hour * 60 + minute)),
+        7.. => Some((7, 0)),
+        _ => None,
+    })
+}
+
 /// Add one open session for homework with time remaining and no open session in this week.
 /// The deterministic id makes applying the operation repeatedly safe.
 pub fn open_rest_sessions(
