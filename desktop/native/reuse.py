@@ -133,7 +133,7 @@ def solve_request(
 def fair_share(
     blocks: list[dict],
     assignments: dict,
-    committed: list[dict],
+    saved_week: list[dict],
     week_start: str,
     first_day: int,
     first_minute: int,
@@ -145,7 +145,7 @@ def fair_share(
     week, notes = flexweek_engine.reuse_fair_share(
         json.dumps(blocks),
         json.dumps(assignments),
-        json.dumps(committed),
+        json.dumps(saved_week),
         week_start,
         first_day,
         json.dumps({"first_minute": first_minute, "work_windows": work_windows}),
@@ -155,11 +155,20 @@ def fair_share(
 
 
 def open_rest_sessions(
-    blocks: list[dict], assignments: dict, week_start: str, earlier_blocks: tuple[dict, ...] | list[dict] = ()
+    blocks: list[dict],
+    assignments: dict,
+    week_start: str,
+    earlier_blocks: tuple[dict, ...] | list[dict] = (),
+    saved_week: list[dict] | None = None,
 ) -> list[dict]:
+    """`saved_week` is the week the homework's server numbers were read with; none means `blocks`."""
     return json.loads(
         flexweek_engine.reuse_open_rest(
-            json.dumps(blocks), json.dumps(assignments), week_start, json.dumps(earlier_blocks)
+            json.dumps(blocks),
+            json.dumps(assignments),
+            week_start,
+            json.dumps(earlier_blocks),
+            json.dumps(saved_week),
         )
     )
 

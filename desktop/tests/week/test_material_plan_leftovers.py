@@ -385,3 +385,31 @@ def test_undoing_a_longer_estimate_on_homework_with_sessions_in_other_weeks(
         settled(qapp, window)
         _pump(qapp)
         assert session.minutes_left_for("long") == 0
+
+
+def test_plan_sizes_its_rest_by_the_week_the_held_number_was_read_with(
+    qapp, window, monkeypatch
+) -> None:
+    """Essay 60, its session pinned whole (60) and saved; the server read it (unplanned 0). The student cuts
+    it to 5 and the save goes through, but the reply with the new number is held back. Plan counts against
+    the week that held number was read with ([60]): later weeks hold 60 - 60 = 0, 60 - 5 = 55 have no
+    session, so it adds a 45 minute rest and places it, and 60 - 5 - 45 = 10 are left. Read alone, the held
+    0 gave Plan nothing to place."""
+    root = _reset(window, qapp)
+    session = window.session
+    _cut(window, qapp, "essay", 60)
+    wait_until(qapp, lambda: session.assignments["essay"].get("unplanned_min") == 0)
+    _pump(qapp)
+    _hold_the_assignments_reply(window, monkeypatch, fail=False)
+    block = next(item for item in session.blocks if item.get("assignment_id") == "essay")
+    block["duration_min"] = 5
+    session._touch()
+    session.save()
+    settled(qapp, window)
+    assert session.assignments["essay"].get("unplanned_min") == 0, "the old number is still held"
+    _plan(window, qapp, root)
+
+    essay = [b for b in session.blocks if b.get("assignment_id") == "essay" and b.get("start")]
+    placed = sorted(b["duration_min"] for b in essay)
+    assert placed == [5, 45]
+    assert _snack(window) == "Placed 1 of 1. History essay still has 10 min with no time."

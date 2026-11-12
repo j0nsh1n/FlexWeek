@@ -2279,7 +2279,7 @@ class NativeSession(QObject):
             {"week_start": week_start, **saved}
             for week_start, saved in (_prepared_weeks or {}).items()
         ]
-        planning_blocks, moved_blocks, prior_updates = (
+        planning_blocks, _moved, prior_updates = (
             move_earlier_homework(self.blocks, prior_input, self.assignments, self.week_start)
             if only is None
             else (deepcopy(self.blocks), [], [])
@@ -2291,7 +2291,7 @@ class NativeSession(QObject):
             if block.get("start") and not block.get("completed")
         ]
         open_blocks = planning_blocks if only is not None else open_rest_sessions(
-            planning_blocks, self.assignments, self.week_start, earlier_blocks
+            planning_blocks, self.assignments, self.week_start, earlier_blocks, self._assignments_basis
         )
         payload, targets = solve_request(
             open_blocks, self.assignments, self.week_start, everything=everything, only=only, not_before=start
@@ -2299,11 +2299,10 @@ class NativeSession(QObject):
         # Work due after Sunday gets its fair share of this week; the rest waits for next week's Plan.
         first_day = start[0] if start else 0
         first_minute = start[1] if start else 0
-        share_committed = [*self._committed_blocks, *moved_blocks]
         week, shares = fair_share(
             open_blocks,
             self.assignments,
-            share_committed,
+            self._assignments_basis,
             self.week_start,
             first_day,
             first_minute,

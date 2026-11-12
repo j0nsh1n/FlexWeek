@@ -560,16 +560,16 @@ fn reuse_session_days(week_start: &str, due: &str) -> PyResult<Vec<i64>> {
 fn reuse_fair_share(
     blocks: &str,
     assignments: &str,
-    committed: &str,
+    saved_week: &str,
     week_start: &str,
     first_day: i64,
     planning_context: &str,
     targets: Vec<String>,
 ) -> PyResult<(String, String)> {
-    let (blocks, assignments, committed, planning_context) = (
+    let (blocks, assignments, saved_week, planning_context) = (
         parse(blocks)?,
         parse(assignments)?,
-        parse(committed)?,
+        parse(saved_week)?,
         parse(planning_context)?,
     );
     guard(|| {
@@ -587,7 +587,7 @@ fn reuse_fair_share(
         let (week, notes) = planning::fair_share(
             &blocks,
             &assignments,
-            &committed,
+            &saved_week,
             week_start,
             first_day,
             first_minute,
@@ -608,16 +608,31 @@ fn reuse_open_rest(
     assignments: &str,
     week_start: &str,
     earlier_blocks: &str,
+    saved_week: &str,
 ) -> PyResult<String> {
-    let (blocks, assignments, earlier_blocks) =
-        (parse(blocks)?, parse(assignments)?, parse(earlier_blocks)?);
+    let (blocks, assignments, earlier_blocks, saved_week) = (
+        parse(blocks)?,
+        parse(assignments)?,
+        parse(earlier_blocks)?,
+        parse(saved_week)?,
+    );
     guard(|| {
         let blocks = blocks.as_array().cloned().unwrap_or_default();
         let assignments = assignments.as_object().cloned().unwrap_or_default();
         let earlier_blocks = earlier_blocks.as_array().cloned().unwrap_or_default();
+        let saved_week = saved_week
+            .as_array()
+            .cloned()
+            .unwrap_or_else(|| blocks.clone());
         Ok(dump(&Value::Array(
-            planning::open_rest_sessions(&blocks, &assignments, week_start, &earlier_blocks)
-                .map_err(crate::raise)?,
+            planning::open_rest_sessions_since(
+                &blocks,
+                &assignments,
+                week_start,
+                &earlier_blocks,
+                &saved_week,
+            )
+            .map_err(crate::raise)?,
         )))
     })
 }

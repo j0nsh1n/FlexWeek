@@ -11,7 +11,8 @@ use std::path::Path;
 
 use common::{NOW_ISO, NOW_UNIX, Server, scratch, session_path, tool_ok_text};
 use flexweek_store::{
-    initialize, insert_preferences, insert_user, open_connection, open_session, set_standing,
+    initialize, insert_assignment, insert_preferences, insert_user, open_connection, open_session,
+    save_week, set_standing,
 };
 use serde_json::{Value, json};
 
@@ -427,4 +428,47 @@ fn plan_never_places_homework_in_time_that_has_passed() {
         Some(json!(essay)),
         "the essay waits, got {body}"
     );
+}
+
+#[test]
+fn plan_gives_homework_spread_over_days_its_share_of_this_week() {
+    // 180 min "Spread over days", due Wed 4 Nov, its one session saved on this week with no time. Now is
+    // Wed 21 Oct 12:00: this week's plannable days are Wed (after School) to Sun, 5; up to the 4th there
+    // are 5 + 7 (next week) + 3 (Mon-Wed) = 15. No later week holds any of it, so this week's part is
+    // 180, and the session being planned holds none of it yet: share = 180 x 5 / 15 = 60.
+    let world = signed_in("plan-spread-share");
+    school_stands(&world);
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    insert_assignment(
+        &conn,
+        world.user,
+        "poster",
+        r#"{"id":"poster","title":"Poster","due":"2026-11-04T21:00","estimate_min":180,"focus_minutes":0,"completed":false,"priority":2,"energy":"medium","spread":"spread"}"#,
+    )
+    .expect("homework");
+    let waiting = json!([{
+        "id": "poster-session", "title": "Poster", "kind": "flexible", "assignment_id": "poster",
+        "duration_min": 180, "days": [0, 1, 2, 3, 4, 5, 6], "priority": 2, "energy": "medium",
+        "category": "assignments"
+    }]);
+    save_week(&conn, world.user, WEEK, &waiting.to_string(), 0).expect("week");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+    let mut server = boot(&world);
+    let planned = server.call(
+        "plan_homework",
+        json!({"operation_id": "op-plan-spread", "week_start": WEEK}),
+        2,
+    );
+    let body = body_of(&planned);
+    let placed: Vec<(Value, Value)> = body["result"]["placed"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .map(|row| (row["assignment_id"].clone(), row["duration_min"].clone()))
+        .collect();
+    assert_eq!(placed, vec![(json!("poster"), json!(60))], "got {body}");
 }
