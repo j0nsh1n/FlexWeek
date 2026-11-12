@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import date, datetime
+from uuid import uuid4
 
 import flexweek_engine  # type: ignore[import-untyped]
 
@@ -335,6 +336,40 @@ SETUP_ACTIVITY_PREFIX = "activity-"
 
 def is_setup_block(block: dict) -> bool:
     return bool(flexweek_engine.calendar_setup_block(json.dumps(block)))
+
+
+def new_activity_id() -> str:
+    """An id for an activity Setup adds. A new one never takes a number an earlier activity had, so
+    removing or reordering activities leaves every other activity's id, and its weeks, as they were."""
+    return f"{SETUP_ACTIVITY_PREFIX}{uuid4().hex[:8]}"
+
+
+def repeat_changes(before: list[dict], after: list[dict], from_date: str) -> list[dict]:
+    """The changes from the repeats standing in a week to the ones the session now holds, as the save
+    sends them (`flexweek_engine::repeats`)."""
+    made = flexweek_engine.repeat_intents_between(json.dumps(before), json.dumps(after), from_date)
+    return json.loads(made)
+
+
+def apply_repeat_changes(
+    blocks: list[dict], repeats: list[dict], changes: list[dict]
+) -> tuple[list[dict], list[dict]]:
+    """The open week and its repeats after `changes`, by the rule the store applies to saved weeks."""
+    week, after = flexweek_engine.repeat_apply_to_week(
+        json.dumps(blocks), json.dumps(repeats), json.dumps(changes)
+    )
+    return json.loads(week), json.loads(after)
+
+
+def this_week_line(blocks: list[dict], repeats: list[dict], clock_24h: bool) -> str | None:
+    """'This week: no School on Wednesday.' for a form that shows the repeats, or None."""
+    return flexweek_engine.repeat_this_week_line(json.dumps(blocks), json.dumps(repeats), clock_24h)
+
+
+def one_day_note(block: dict, day: int, school_hours: bool) -> str | None:
+    """What moving one day of a repeating block adds to its notice; None for a block that does not
+    repeat."""
+    return flexweek_engine.repeat_one_day_note(json.dumps(block), day, school_hours)
 
 
 def past_problem(

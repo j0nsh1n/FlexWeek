@@ -113,6 +113,20 @@ pub fn row_conflict(
     Ok(None)
 }
 
+/// Why a copied homework session cannot be pasted, in minutes: nothing left, less than a quarter
+/// hour left, or a copy that is itself shorter than a quarter hour.
+fn unusable_paste_words(remaining: i64, asked: i64) -> String {
+    if remaining <= 0 {
+        "No unplanned time remains for this homework.".to_string()
+    } else if asked < SLOT_MIN {
+        format!("A pasted homework session needs at least 15 min, and this one is {asked} min.")
+    } else {
+        format!(
+            "Only {remaining} min of this homework is left to plan, and a pasted session needs at least 15."
+        )
+    }
+}
+
 pub fn preview_conflict_message(
     row: &Value,
     rows: &Value,
@@ -161,10 +175,13 @@ pub fn proposals_from_clipboard(
             let assignment = table_get(assignments, id)?;
             let remaining = left.get(id)?.cloned().unwrap_or_else(|| json!(0));
             let asked = Value::from(whole(subscript(source, "duration_min")?)?);
-            let duration = if compare(Cmp::Lt, &remaining, &asked)? {
-                remaining.clone()
+            // `available` is the minutes the homework has left, exactly. A pasted session is cut to the
+            // quarter hours that fit, so it never exceeds what is left.
+            let fits = Value::from(floor_slot(whole(&remaining)?));
+            let duration = if compare(Cmp::Lt, &fits, &asked)? {
+                fits
             } else {
-                asked
+                asked.clone()
             };
             let found = assignment.filter(|value| truthy(Some(value)));
             let usable = found.is_some() && compare(Cmp::Ge, &duration, &json!(SLOT_MIN))?;
@@ -179,14 +196,14 @@ pub fn proposals_from_clipboard(
                         &duration,
                         subscript(entry, "group_id")?,
                     )?,
-                    "",
+                    String::new(),
                 ),
                 _ => (
                     source.clone(),
                     if found.is_some() {
-                        "No unplanned time remains for this homework."
+                        unusable_paste_words(whole(&remaining)?, whole(&asked)?)
                     } else {
-                        "This homework did not load."
+                        "This homework did not load.".to_string()
                     },
                 ),
             };
@@ -539,8 +556,8 @@ pub fn left_over_items(
         let estimate = whole(&or_default(get(assignment, "estimate_min")?, json!(0)))?;
         let focus = whole(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
         let done = done_session_minutes(blocks, subscript(assignment, "id")?)?;
-        let remaining = floor_slot((estimate - focus - done).max(0));
-        if remaining < SLOT_MIN {
+        let remaining = (estimate - focus - done).max(0);
+        if remaining == 0 {
             continue;
         }
         let carried = if overdue {

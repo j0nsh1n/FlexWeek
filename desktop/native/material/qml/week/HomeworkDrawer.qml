@@ -19,6 +19,7 @@ Rectangle {
 
     readonly property int count: bridge ? bridge.week.homeworkCount : 0
     readonly property bool allTimed: bridge ? bridge.week.allTimed : true
+    readonly property string leftover: bridge ? bridge.week.leftoverWords : ""
     property alias planButton: planButton
 
     M3Palette { id: m3; theme: drawer.theme }
@@ -141,6 +142,18 @@ Rectangle {
                     onActiveFocusChanged: if (activeFocus) scroller.reveal(y, height)
                 }
             }
+
+            Text {
+                objectName: "homeworkLeftover"
+                visible: text !== ""
+                width: list.width
+                text: drawer.leftover
+                color: m3.inkMuted
+                wrapMode: Text.WordWrap
+                font.family: M3Font.family
+                font.pixelSize: M3Font.px(13)
+                font.weight: 400
+            }
         }
     }
 
@@ -156,7 +169,7 @@ Rectangle {
         spacing: 8
         M3Icon {
             objectName: "homeworkEmptyIcon"
-            visible: drawer.allTimed
+            visible: drawer.allTimed && drawer.leftover === ""
             anchors.horizontalCenter: parent.horizontalCenter
             name: "task_alt"
             width: 36
@@ -167,7 +180,7 @@ Rectangle {
             objectName: "homeworkEmptyText"
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
-            text: drawer.bridge ? drawer.bridge.week.timeWords : "Everything has a time."
+            text: drawer.leftover !== "" ? drawer.leftover : (drawer.bridge ? drawer.bridge.week.timeWords : "Everything has a time.")
             color: m3.inkMuted
             font.family: M3Font.family
             font.pixelSize: M3Font.px(14)

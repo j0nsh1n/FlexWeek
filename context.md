@@ -98,9 +98,22 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
-- 2026-11-10, branch `fix/131-helper-and-keys` from the v1.3.0 tag (d61235ee), local only. Done: the helper's live
-  clock, the Material letter-keys switch, Help closing from the keyboard in Material, and this file and the 1.3.0
-  notes brought up to date. Next: review of this branch, then the other 1.3.1 branch, then the checks
-  left from the 1.3.0 checklist (a dev install offered 1.3.0, a phone updating from 1.2.0 and syncing both ways),
-  the Material memory measurement and Jonathan's call on Ctrl+wheel. Reports:
-  `~/.flexweek-ui-harness/scratch/fix-1.3.1/branch-B/REPORT.md`.
+- 2026-11-12, branch `fix/replan-moves-missed-sessions` (#126) with `fix/planner-counts-minutes` (#125) merged in,
+  local only. A missed session's minutes are counted through `this_weeks_part` against the saved week
+  (`missed_minutes` takes `saved_week`), the desktop passes `_assignments_basis` to the solve request and to every
+  count, and every count of minutes still needed reads the week with missed sessions stripped (`_open_week`). The
+  "needs a time" count reads at `screen_point`, as `missed_block_ids` does, so a week that is over agrees with the
+  missed sessions. Next: review of the merged branch.
+- 2026-11-12, branch `fix/planner-counts-minutes` from main d7afedfe, local only. Done: a homework's time still
+  needed is counted in minutes everywhere it is counted (engine `planning::time_still_needed_parts`,
+  `uncovered_homework_minutes`); counts are exact minutes, and only what can be placed is rounded down to a
+  quarter hour (Plan's rest session, a paste, a "Spread over days" share's `left`); the Plan notice, status
+  line, Material drawer and More count name the minutes that have no time. Later weeks are read as the server's `planned_min` less the sessions of `saved_week` (the week that number was read with),
+  which the desktop, the phone and the helper all pass; the desktop keeps the numbers it holds paired with that
+  week after a failed Undo or Redo and an Undo of a delete (cases in `engine/engine/tests/test_minutes_count.rs`;
+  redesign notes in `~/.flexweek-ui-harness/scratch/round2-fix2/planner-minutes/redesign/`). Not built: how
+  the app asks the student what to do with such a remainder (options in
+  `~/.flexweek-ui-harness/scratch/round2-fix2/planner-minutes/ASK-OPTIONS.md`, owner's pick pending). Next:
+  review of this branch and the owner's pick.
+- 2026-11-10, branch `fix/131-helper-and-keys` from the v1.3.0 tag: helper live clock, Material letter-keys
+  switch, Help closing from the keyboard; the checks left from the 1.3.0 checklist are still open.

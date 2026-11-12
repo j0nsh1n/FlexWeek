@@ -211,10 +211,11 @@ def test_new_school_hours_reach_this_week_on_and_keep_a_later_missed_day(qapp, a
     after_setup.add_block({**school, "missed_days": [2]})
     save_and_settle(qapp, after_setup)
     go_to(qapp, after_setup, plus_weeks(setup_week, 1))
-    school = next(b for b in after_setup.blocks if b["id"] == "school")
-    later = {**school, "start": "09:00", "duration_min": 360}
-    after_setup.add_block(later)
-    after_setup.stand_open_week([later])
+    later = [
+        {**block, "start": "09:00", "duration_min": 360} if block["id"] == "school" else block
+        for block in after_setup.repeats
+    ]
+    after_setup.change_repeats(later, "editing School hours")
     save_and_settle(qapp, after_setup)
     assert standing(after_setup)["school"] == ("09:00", 360, [0, 1, 2, 3, 4])
     go_to(qapp, after_setup, plus_weeks(setup_week, 2))

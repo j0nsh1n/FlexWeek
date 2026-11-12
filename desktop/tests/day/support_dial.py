@@ -37,7 +37,7 @@ def shown(
     homework = homework or HOMEWORK
     week = build_week(WEEK, blocks, homework, TRACE)
     now = datetime(2026, 9, 17, *divmod(minute_of(clock), 60))
-    missed = missed_session_ids(blocks, homework, WEEK, now) if today == THURSDAY else frozenset()
+    missed = missed_session_ids(blocks, homework, WEEK, blocks, now) if today == THURSDAY else frozenset()
     view = DayDialView()
     view.resize(1300, 720)
     view.show_week(

@@ -104,11 +104,17 @@ Contract for the finished app:
   student omit or adjust one-week exceptions without changing the routine.
 - School and Setup's activities make the account's standing week: one row per
   block, keyed by its Setup id and the week it stands from, so every week shows
-  them unless that week has its own copy. Deleting School or an
+  them. A saved week holds its own copy, and what that week changed itself (a
+  skipped, deleted or moved day, a one-week name or time) is that week's own.
+  A change to them is sent as what it changes, from a date (`repeats` in
+  `/api/changes`), never as a copy of a week. Deleting School or an
   activity asks once, naming the days: "This day only" (when opened from one
   day), "This week only" or "This week and later"; earlier weeks keep it, and
-  this week and later rewrites the saved later weeks in the same save
-  (`standing` in `/api/changes`) and can't be undone with Undo; only the open
+  this week and later reaches the saved later weeks in the same save, except
+  what a later week changed itself, which stays and is named in a notice
+  ("The week of 16 Nov keeps its own change: no School on Wednesday."); an
+  ended activity stays ended when it is changed from an earlier week. This
+  week and later can't be undone with Undo; only the open
   week's part has Undo (an assistant's change of this kind is undone with the
   restore point it saved first). Restore points and account exports carry the standing
   rows.
@@ -346,7 +352,9 @@ student leaves it, so a quit resumes on the same page. Finishing or skipping is
 stored in `setup`, and setup never returns unless the student picks Run setup
 again in Settings. School hours stays for later under Add, in a dialog of its
 own that asks the days and the times, as setup does; no day ticked takes School
-off the calendar.
+off the calendar. School hours, and setup run again, show the usual week, not
+the open week's copy, with a line naming what the open week does differently
+("This week: no School on Wednesday."), and change it from this week on.
 
 The top bar is the week's arrows, Today and the title on the left; on the right, Day,
 Week, Month and My day as one segmented control, then Add, the one filled
@@ -405,7 +413,9 @@ After a plan, blocks slide to their new places. Blocks may overlap, each marked:
 classic styles set them side by side; Material lays the later one over the earlier with
 an offset, the covered one's name above, below or beside it. A drop
 is refused only outside the day's hours or when homework would end after it is
-due. Dragging one day of a repeating block moves that day only. Dragging works
+due. Dragging one day of a repeating block moves that day only, and its notice
+says so and where every week is changed ("Only this Wednesday changed. To
+change every week, open School hours."). Dragging works
 in every design: a block can be picked up wherever a design shows it, and every
 design's Day and Week are its own hours, which take the drop at the time under
 the pointer. Everywhere the drop says the

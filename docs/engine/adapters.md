@@ -136,6 +136,8 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 
 `backend/app.py` is the HTTP layer: routes, dependencies, status codes, the pydantic request and response models, and the mapping of an engine status onto an HTTP error stay in Python. The rows below are the helper functions whose decisions moved into the engine (`engine/store/src/rules.rs`); `test_app_helpers_keep_no_engine_logic` checks them with the same rule as the modules above. Route handlers are not checked.
 
+`post_changes` passes a batch's `repeats` to `db.apply_repeat_intents` (`flexweek_store::apply_repeat_intents`, the function `changes::apply` calls too) and maps its refusal onto a 422; it decides nothing about repeats. `GET /api/week` reads them with `db.standing_blocks`.
+
 | Module | Function | Class | Reason |
 | --- | --- | --- | --- |
 | app | adopt_legacy_deadlines | ADAPTER | One connection call. `adopt_legacy_deadlines` in the engine picks the blocks and enforces the cap. Python maps "over the cap" to the 422 and revalidates the blocks. |
@@ -200,6 +202,11 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | calendar | span_problem | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | span_clash | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | category_icon | ADAPTER | encodes, makes one engine call, decodes |
+| calendar | new_activity_id | STAYS | Draws randomness (`uuid4`) for an activity Setup adds; the engine never draws it. |
+| calendar | repeat_changes | ADAPTER | encodes both lists, one `repeats::intents_between` call, decodes |
+| calendar | apply_repeat_changes | ADAPTER | encodes, one `repeats::apply_to_week` call, decodes the pair |
+| calendar | this_week_line | ADAPTER | encodes, one `repeats::this_week_line` call, passes None through |
+| calendar | one_day_note | ADAPTER | encodes, one `repeats::one_day_note` call, passes None through |
 
 ## custom_look
 
@@ -332,14 +339,20 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | reuse | clear_stale_pins | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | held_in_place | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | plan_start | LOGIC, moved | hour and minute arithmetic and the half-minute rule: `planning::plan_start_at` |
-| reuse | solve_request | LOGIC, moved | `only`, `not_before` and `everything` are read as given by `reuse_solve_request`; the set of targets is a list to set; `now` is read as the real clock point by `reuse_solve_request` |
-| reuse | without_missed_times | ADAPTER | encodes, makes one engine call, decodes |
-| reuse | missed_session_ids | ADAPTER | encodes, makes one engine call, decodes to a frozenset |
+| reuse | solve_request | LOGIC, moved | `only`, `not_before` and `everything` are read as given by `reuse_solve_request`; the set of targets is a list to set; `now` is read as the real clock point by `reuse_solve_request`; `saved_week` is the week the server's numbers were read with, which a missed session's minutes are counted against (`this_weeks_part`) |
+| reuse | without_missed_times | ADAPTER | encodes, makes one engine call, decodes; `now` read at `planning::screen_point`, as `missed_session_ids` reads it; a missed session's minutes counted against `saved_week` |
+| reuse | missed_session_ids | ADAPTER | encodes, makes one engine call, decodes to a frozenset; minutes counted against `saved_week` |
 | reuse | due_point | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | settle_placements | LOGIC, moved | `keep` is read as given by `reuse_settle_placements` |
 | reuse | occurrence_days | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | session_minutes | ADAPTER | encodes, makes one engine call, decodes |
-| reuse | available_homework_minutes | ADAPTER | encodes, makes one engine call, decodes |
+| reuse | available_homework_minutes | ADAPTER | encodes, makes one engine call, decodes; `uncovered_homework_minutes` down to a quarter hour, what Plan and paste may place |
+| reuse | uncovered_homework_minutes | ADAPTER | encodes, makes one engine call, decodes; the minutes no session holds, exactly: the estimate less focus done less what later weeks hold (the server's `planned_min` less the sessions of `committed_blocks`, the week as saved when that number was read), less this week's not-finished sessions, never below 0 (`planning::uncovered_homework_minutes`) |
+| reuse | time_still_needed | ADAPTER | encodes, makes one engine call, decodes; counts minutes, not quarter hours: each homework's waiting sessions plus its minutes no session holds, counted as `uncovered_homework_minutes` counts them against `committed_blocks` (`planning::time_still_needed_since`) |
+| reuse | time_still_needed_parts | ADAPTER | the same call with each homework's `waiting_min` and `uncovered_min` beside its minutes; the plan notice names the homework whose `uncovered_min` is not 0 |
+| reuse | plan_open_counts | ADAPTER | encodes, makes one engine call, decodes; `open` is homework with a session still waiting for a time (Material's "Placed N of M"), `waiting_only` those with no minutes outside a session (`planning::plan_open_counts`) |
+| reuse | open_rest_sessions | ADAPTER | encodes, makes one engine call, decodes; `saved_week` is the week the server's numbers were read with, none meaning `blocks` (`planning::open_rest_sessions_since`); the rest session is the minutes no session holds down to a quarter hour |
+| reuse | fair_share | ADAPTER | encodes, makes one engine call, decodes; `saved_week` as for `open_rest_sessions`; the share is cut from all of this week's part, the sessions being planned holding none of it yet (`planning::fair_share`) |
 | reuse | copied_fixed_block | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | copied_homework_block | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | clipboard_item | ADAPTER | encodes, makes one engine call, decodes |

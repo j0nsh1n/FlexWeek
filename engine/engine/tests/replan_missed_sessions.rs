@@ -10,7 +10,7 @@
 
 use flexweek_engine::desk::planning::{
     clock_point, missed_session_ids, screen_point, solve_request, solve_request_at,
-    time_still_needed, without_missed_times,
+    time_still_needed_since, without_missed_times,
 };
 use serde_json::{Map, Value, json};
 
@@ -72,8 +72,9 @@ fn request_at(
     everything: bool,
     now: &Value,
 ) -> (Vec<Value>, Vec<String>) {
+    // The week as given is the week as saved, the one the homework's numbers were read with.
     let (payload, targets) = solve_request_at(
-        &Value::Array(blocks),
+        &Value::Array(blocks.clone()),
         assignments,
         WEEK,
         everything,
@@ -81,6 +82,7 @@ fn request_at(
         Some(&limit_at(now)),
         false,
         Some(now),
+        &blocks,
     )
     .expect("a request");
     let targets = targets
@@ -98,9 +100,9 @@ fn sent<'a>(payload: &'a [Value], id: &str) -> &'a Value {
 }
 
 fn needed(blocks: &[Value], assignments: &Value, now: Option<&Value>) -> i64 {
-    let stripped = without_missed_times(blocks, assignments, now).expect("blocks");
+    let stripped = without_missed_times(blocks, assignments, blocks, now).expect("blocks");
     let map: &Map<String, Value> = assignments.as_object().expect("assignments");
-    time_still_needed(map, &stripped, WEEK)
+    time_still_needed_since(map, &stripped, WEEK, blocks)
         .expect("a count")
         .iter()
         .map(|item| item["minutes"].as_i64().expect("minutes"))
@@ -327,7 +329,7 @@ fn test_a_screen_reads_a_week_that_is_over_at_its_end() {
     let open = essay(120, 0, "2026-11-08T23:59");
     let blocks = [session("a", 1, "16:00", 60), session("b", 6, "22:00", 60)];
     assert_eq!(
-        missed_session_ids(&blocks, &open, Some(&json!([7, 0]))).expect("ids"),
+        missed_session_ids(&blocks, &open, &blocks, Some(&json!([7, 0]))).expect("ids"),
         [json!("a"), json!("b")]
     );
 }
@@ -345,7 +347,7 @@ fn test_a_session_ending_inside_the_current_quarter_hour_is_still_on() {
         assert_eq!(sent(&payload, "essay")["kind"], "locked");
         assert_eq!(needed(&on, &assignments, Some(&at)), 0);
         assert!(
-            missed_session_ids(&on, &assignments, Some(&at))
+            missed_session_ids(&on, &assignments, &on, Some(&at))
                 .unwrap()
                 .is_empty()
         );
@@ -416,11 +418,26 @@ fn test_one_missed_session_with_focus_comes_back_for_what_is_left() {
 }
 
 #[test]
+fn test_a_missed_session_comes_back_for_this_weeks_part_only() {
+    // Two hours of essay, 30 minutes of focus done, due next Thursday. The server read it with this
+    // week saved as it is: 120 minutes planned, the missed Tuesday hour here and an hour next week,
+    // none unplanned. 90 minutes are still to do and next week's hour holds 60 of them, so this week's
+    // part is 30: the missed hour comes back as 30, and 30 is what still needs a time.
+    let mut assignments = essay(120, 30, "2026-11-12T23:59");
+    assignments["essay-a"]["planned_min"] = json!(120);
+    let blocks = vec![session("essay", 1, "16:00", 60)];
+    let (payload, targets) = request(blocks.clone(), &assignments, true);
+    assert_eq!(targets, ["essay"]);
+    assert_eq!(sent(&payload, "essay")["duration_min"], 30);
+    assert_eq!(needed(&blocks, &assignments, Some(&not_before())), 30);
+}
+
+#[test]
 fn test_a_screen_calls_a_session_missed_when_a_plan_would_move_it_or_it_is_pinned() {
     let now = not_before();
     let open = essay(60, 0, "2026-11-07T23:59");
     let ids = |blocks: &[Value], assignments: &Value| {
-        missed_session_ids(blocks, assignments, Some(&now)).expect("ids")
+        missed_session_ids(blocks, assignments, blocks, Some(&now)).expect("ids")
     };
     // Unfinished and passed: missed.
     assert_eq!(ids(&[session("a", 1, "16:00", 60)], &open), [json!("a")]);
@@ -446,7 +463,7 @@ fn test_a_screen_calls_a_session_missed_when_a_plan_would_move_it_or_it_is_pinne
     assert!(ids(&[pinned], &finished).is_empty());
     // No clock: none.
     assert!(
-        missed_session_ids(&[session("a", 1, "16:00", 60)], &open, None)
+        missed_session_ids(&[session("a", 1, "16:00", 60)], &open, &[], None)
             .unwrap()
             .is_empty()
     );

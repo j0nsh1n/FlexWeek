@@ -4361,10 +4361,13 @@ class BlockDialog(Dialog):
 
 
 class SchoolHoursDialog(Dialog):
-    """School's days and times, asked as setup's Your week page asks them. `block()` is the School to
-    save, or None when no day is ticked: no school on the calendar."""
+    """School's days and times every week, asked as setup's Your week page asks them. `school` is the
+    usual School (the repeat), and `this_week` the line naming what the open week does differently.
+    `block()` is the School to save, or None when no day is ticked: no school on the calendar."""
 
-    def __init__(self, parent: QWidget | None, school: dict | None = None) -> None:
+    def __init__(
+        self, parent: QWidget | None, school: dict | None = None, this_week: str | None = None
+    ) -> None:
         super().__init__(parent, sheet=True)
         # Setup's own time box, imported here: setup imports this module.
         from desktop.native.setup import QuarterTime
@@ -4374,6 +4377,10 @@ class SchoolHoursDialog(Dialog):
         self.setObjectName("schoolHoursDialog")
         box = self.card_body("School hours")
         box.addWidget(sheet_note(SCHOOL_HOURS_NOTE))
+        # The form shows the usual week; a skipped or moved day is this week's own, said here.
+        self.this_week = sheet_note(this_week or "")
+        self.this_week.setVisible(bool(this_week))
+        box.addWidget(self.this_week)
         start = (school or {}).get("start") or "08:00"
         minutes = int((school or {}).get("duration_min") or 390)
         days = (school or {}).get("days") or ([] if school else [0, 1, 2, 3, 4])
@@ -4430,7 +4437,6 @@ class SchoolHoursDialog(Dialog):
             "category": "class",
         }
         school.update(days=days, start=start, duration_min=minutes)
-        school["missed_days"] = [day for day in school.get("missed_days", []) if day in days]
         try:
             WeekRequest(blocks=[TimeBlock.model_validate(school)])
         except ValidationError as error:
@@ -6268,6 +6274,7 @@ class PlanReview(QFrame):
         week_start: str,
         counts: tuple[int, int],
         assignments: dict | None = None,
+        remainders: list[tuple[str, int]] | None = None,
     ) -> None:
         """`counts` are the plan's own, homework it gave a time and homework it could not, the
         numbers the toast says. The trace's placed list holds every block with a time, School
@@ -6283,7 +6290,7 @@ class PlanReview(QFrame):
         placed, waiting = counts
         from desktop.native.controller import plan_sentence
 
-        self.heading.setText(plan_sentence(placed, waiting))
+        self.heading.setText(plan_sentence(placed, waiting, remainders or ()))
         self._fit_result_actions()
         for line in said:
             row = QListWidgetItem(line)
@@ -6309,7 +6316,7 @@ class PlanReview(QFrame):
         row = self.list.sizeHintForRow(0) if self.list.count() else 0
         self.list.setFixedHeight(min(row * len(said) + 2 * self.list.frameWidth() + 4, PLAN_REVIEW_MAX))
         # Open when something needs reading: homework with no time, or a day that is too full.
-        open_list = bool(waiting) or bool(overfull_days(trace or {}))
+        open_list = bool(waiting) or bool(remainders) or bool(overfull_days(trace or {}))
         self.details.setChecked(open_list)
         self._show_details(open_list)
         self.show()

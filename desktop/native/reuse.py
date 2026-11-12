@@ -117,6 +117,7 @@ def solve_request(
     only: set[str] | None = None,
     not_before: tuple[int, int] | None = None,
     now: datetime | None = None,
+    saved_week: list[dict] | None = None,
 ) -> tuple[list[dict], set[str]]:
     """What to send the solver, and which sessions its answer may place.
 
@@ -126,35 +127,55 @@ def solve_request(
     `only` places just those sessions around everything else, for work whose time stopped working.
     `not_before` (from `plan_start`) keeps every placement at or after now. `now` is the real clock:
     a session counts as passed once its end is at or before the current minute, whatever `not_before`
-    was rounded to; without it no session counts as passed.
+    was rounded to; without it no session counts as passed. `saved_week` is the week the homework's
+    server numbers were read with: a passed session's minutes are counted against it, as every count of
+    minutes still needed is.
     """
     payload, targets = flexweek_engine.reuse_solve_request(
-        json.dumps(blocks), json.dumps(assignments), week_start, everything, only, not_before, now
+        json.dumps(blocks),
+        json.dumps(assignments),
+        week_start,
+        everything,
+        only,
+        not_before,
+        now,
+        json.dumps(saved_week),
     )
     return json.loads(payload), set(json.loads(targets))
 
 
 def without_missed_times(
-    blocks: list[dict], assignments: dict, week_start: str, now: datetime | None = None
+    blocks: list[dict],
+    assignments: dict,
+    week_start: str,
+    saved_week: list[dict],
+    now: datetime | None = None,
 ) -> list[dict]:
     """The week with each unfinished, unpinned session whose time has passed read as one with no time,
-    so counting the homework that needs a time does not call it "has a time". `now` is the real clock."""
+    so counting the homework that needs a time does not call it "has a time". `now` is the real clock,
+    read as `missed_session_ids` reads it, so a week that is over agrees with the missed sessions.
+    `saved_week` is the week the homework's server numbers were read with."""
     return json.loads(
         flexweek_engine.reuse_without_missed_times(
-            json.dumps(blocks), json.dumps(assignments), week_start, now
+            json.dumps(blocks), json.dumps(assignments), week_start, json.dumps(saved_week), now
         )
     )
 
 
 def missed_session_ids(
-    blocks: list[dict], assignments: dict, week_start: str, now: datetime | None = None
+    blocks: list[dict],
+    assignments: dict,
+    week_start: str,
+    saved_week: list[dict],
+    now: datetime | None = None,
 ) -> frozenset[str]:
     """The sessions a screen calls missed: the ones Replan all moves for having passed, and a pinned
-    one that passed unfinished. The planner and every look read this one answer."""
+    one that passed unfinished. The planner and every look read this one answer. `saved_week` is the
+    week the homework's server numbers were read with."""
     return frozenset(
         json.loads(
             flexweek_engine.reuse_missed_session_ids(
-                json.dumps(blocks), json.dumps(assignments), week_start, now
+                json.dumps(blocks), json.dumps(assignments), week_start, json.dumps(saved_week), now
             )
         )
     )
@@ -163,7 +184,7 @@ def missed_session_ids(
 def fair_share(
     blocks: list[dict],
     assignments: dict,
-    committed: list[dict],
+    saved_week: list[dict],
     week_start: str,
     first_day: int,
     first_minute: int,
@@ -175,7 +196,7 @@ def fair_share(
     week, notes = flexweek_engine.reuse_fair_share(
         json.dumps(blocks),
         json.dumps(assignments),
-        json.dumps(committed),
+        json.dumps(saved_week),
         week_start,
         first_day,
         json.dumps({"first_minute": first_minute, "work_windows": work_windows}),
@@ -185,11 +206,20 @@ def fair_share(
 
 
 def open_rest_sessions(
-    blocks: list[dict], assignments: dict, week_start: str, earlier_blocks: tuple[dict, ...] | list[dict] = ()
+    blocks: list[dict],
+    assignments: dict,
+    week_start: str,
+    earlier_blocks: tuple[dict, ...] | list[dict] = (),
+    saved_week: list[dict] | None = None,
 ) -> list[dict]:
+    """`saved_week` is the week the homework's server numbers were read with; none means `blocks`."""
     return json.loads(
         flexweek_engine.reuse_open_rest(
-            json.dumps(blocks), json.dumps(assignments), week_start, json.dumps(earlier_blocks)
+            json.dumps(blocks),
+            json.dumps(assignments),
+            week_start,
+            json.dumps(earlier_blocks),
+            json.dumps(saved_week),
         )
     )
 
@@ -208,10 +238,35 @@ def move_earlier_homework(
     return result["blocks"], result["moved"], result["weeks"]
 
 
-def time_still_needed(assignments: dict, open_week_blocks: list[dict], week_start: str) -> list[dict]:
+def time_still_needed(
+    assignments: dict,
+    open_week_blocks: list[dict],
+    week_start: str,
+    committed_blocks: list[dict] | None = None,
+) -> list[dict]:
     return json.loads(
         flexweek_engine.reuse_time_still_needed(
-            json.dumps(assignments), json.dumps(open_week_blocks), week_start
+            json.dumps(assignments),
+            json.dumps(open_week_blocks),
+            week_start,
+            json.dumps(committed_blocks),
+        )
+    )
+
+
+def time_still_needed_parts(
+    assignments: dict,
+    open_week_blocks: list[dict],
+    week_start: str,
+    committed_blocks: list[dict] | None = None,
+) -> list[dict]:
+    """`time_still_needed` with each homework's `waiting_min` and `uncovered_min` beside its minutes."""
+    return json.loads(
+        flexweek_engine.reuse_time_still_needed_parts(
+            json.dumps(assignments),
+            json.dumps(open_week_blocks),
+            week_start,
+            json.dumps(committed_blocks),
         )
     )
 
@@ -261,6 +316,39 @@ def available_homework_minutes(
 ) -> int:
     return int(
         flexweek_engine.reuse_available_minutes(
+            json.dumps(assignment),
+            json.dumps(blocks),
+            json.dumps(committed_blocks),
+        )
+    )
+
+
+def plan_open_counts(
+    assignments: dict,
+    open_week_blocks: list[dict],
+    week_start: str,
+    committed_blocks: list[dict] | None = None,
+) -> dict:
+    """`open`: homework with a session still waiting for a time. `waiting_only`: those with no minutes
+    outside a session, the ones Plan counts as "with no time yet" rather than naming."""
+    return json.loads(
+        flexweek_engine.reuse_plan_open_counts(
+            json.dumps(assignments),
+            json.dumps(open_week_blocks),
+            week_start,
+            json.dumps(committed_blocks),
+        )
+    )
+
+
+def uncovered_homework_minutes(
+    assignment: dict | None,
+    blocks: list[dict],
+    committed_blocks: list[dict] | None = None,
+) -> int:
+    """Minutes of the homework that no session holds, exactly (the planner places whole quarter hours)."""
+    return int(
+        flexweek_engine.reuse_uncovered_minutes(
             json.dumps(assignment),
             json.dumps(blocks),
             json.dumps(committed_blocks),

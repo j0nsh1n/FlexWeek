@@ -357,3 +357,20 @@ def test_an_unfinished_session_of_a_week_that_is_over_is_still_called_missed(
     _settle(qapp, session)
     clock.set(datetime(2026, 11, 9, 10, 0))
     assert session.missed_block_ids() == frozenset({work["id"]})
+
+
+def test_a_week_that_is_over_counts_its_missed_session_as_needing_a_time(
+    qapp: QApplication, open_light: Callable[..., NativeWindow], clock: FakeClock
+) -> None:
+    """Looked at on Monday of the next week, the essay's unfinished Tuesday hour is called missed, so the
+    count of homework needing a time agrees: the essay still needs its 60 minutes, and the status line does
+    not say "Everything has a time." On Tuesday at 16:30 the same hour is still on, so it has a time and
+    nothing is counted (the control)."""
+    session, work = _essay_planned_on_tuesday(qapp, open_light)
+    clock.set(datetime(2026, 11, 3, 16, 30))
+    assert session.missed_block_ids() == frozenset()
+    assert session.homework_time_needed() == []
+    clock.set(datetime(2026, 11, 9, 10, 0))
+    assert session.missed_block_ids() == frozenset({work["id"]})
+    assert [item["minutes"] for item in session.homework_time_needed()] == [60]
+    assert _sentence(session) != EVERYTHING

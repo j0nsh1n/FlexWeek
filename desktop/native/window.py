@@ -83,11 +83,13 @@ from desktop.native.calendar import (
     CATEGORIES,
     DAY_FULL,
     FLEX_CATEGORIES,
+    SETUP_SCHOOL_ID,
     date_for_day,
     is_series,
     is_setup_block,
     monday_of,
     sunday_due,
+    this_week_line,
 )
 from desktop.native.client import (
     PASSWORD_LENGTH_HINT,
@@ -105,7 +107,7 @@ from desktop.native.client import (
     sign_up_problem,
 )
 from desktop.native.command_bar import Command, CommandBar
-from desktop.native.controller import ROUTINE_STATUS, NativeSession, _late_summary
+from desktop.native.controller import ROUTINE_STATUS, NativeSession, _late_summary, left_sentence
 from desktop.native.custom_look import sanitize_saved
 from desktop.native.devices import SyncDot, SyncHost, live_phones, run_off_ui, sync_state
 from desktop.native.elevation import flatten, lift
@@ -780,6 +782,7 @@ class NativeWindow(QMainWindow):
         self.session.busy_changed.connect(self._on_busy)
         self.session.save_finished.connect(self._on_save_finished)
         self.session.hand_placed.connect(self._say_when_saved)
+        self.session.repeats_kept.connect(self._say_repeats_kept)
         self.session.plan_conflicts.connect(self._on_plan_conflicts)
         self.session.planned.connect(self._on_planned)
         self._late_dialog: LateDialog | None = None
@@ -2723,7 +2726,8 @@ class NativeWindow(QMainWindow):
             look=self._look,
             layout=self._layout,
             preferences=dict(prefs),
-            blocks=list(session.blocks),
+            blocks=list(session.repeats),
+            this_week=this_week_line(session.blocks, session.repeats, prefs.get("clock_24h") is True),
             week_start=session.week_start,
             subjects=sorted(course for course in courses if course),
             first_run=first_run,
@@ -3110,6 +3114,7 @@ class NativeWindow(QMainWindow):
                     self.session.week_start,
                     self.session.plan_counts,
                     self.session.assignments,
+                    self.session.plan_remainders,
                 )
                 self._reveal_placed()
                 if self.plan_review.isVisible():
@@ -3830,20 +3835,23 @@ class NativeWindow(QMainWindow):
         self._set_notice(f"Deleted {title} from this week.", "Undo", self._undo_from_notice)
 
     def _school_hours(self) -> None:
-        """School's days and times, asked as setup asks them: the student's School if they have one,
-        otherwise Monday to Friday 08:00-14:30 to start from. Saved as any edit of a block is; no day
-        ticked takes School off the calendar."""
-        locked = [item for item in self.session.blocks if item.get("kind") == "locked"]
-        school = next((item for item in locked if item["id"] == "school"), None) or next(
-            (item for item in locked if item.get("category") == "class"), None
-        )
-        dialog = SchoolHoursDialog(self, school)
+        """School's days and times every week, asked as setup asks them: the usual School (the repeat,
+        never this week's copy of it), with a line naming what this week does differently, or Monday
+        to Friday 08:00-14:30 to start from. Saved from this week on; no day ticked takes School off the
+        calendar."""
+        repeats = self.session.repeats
+        school = next((item for item in repeats if item["id"] == SETUP_SCHOOL_ID), None)
+        clock_24h = (self.session.preferences or {}).get("clock_24h") is True
+        line = this_week_line(self.session.blocks, [school], clock_24h) if school is not None else None
+        dialog = SchoolHoursDialog(self, school, this_week=line)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         made = dialog.block()
         if made is not None:
-            self.session.add_block(made)
-            self.session.stand_open_week([made])
+            after = [made if item["id"] == SETUP_SCHOOL_ID else item for item in repeats]
+            if school is None:
+                after = [made, *repeats]
+            self.session.change_repeats(after, "editing School hours")
             self.session.save()
             start = hhmm_text(made["start"])
             end = hhmm_text(minutes_to_hhmm(hhmm_to_minutes(made["start"]) + made["duration_min"]))
@@ -4254,6 +4262,15 @@ class NativeWindow(QMainWindow):
         self.session.undo()
         self._focus_week()
 
+    def _say_repeats_kept(self, words: str) -> None:
+        """Later weeks kept their own change when School or an activity changed from this week on: said
+        in the active surface's message area, without Undo (later weeks have none) and without blocking."""
+        if self._material_owns() and self._material_page is not None:
+            self.toast.hide()
+            self._material_page.bridge.note(words, action="")
+        else:
+            self.toast.show_message(words, "", None)
+
     def _say_when_saved(self, words: str) -> None:
         """`words` say what the save now on its way changes, once it lands, with Undo. A change that
         started no save says nothing."""
@@ -4284,8 +4301,10 @@ class NativeWindow(QMainWindow):
             if self.session.placed_where:
                 said = self.session.placed_where
             else:
-                placed, waiting = self.session.plan_counts
-                said = f"Placed {placed} of {placed + waiting}"
+                placed = self.session.plan_counts[0]
+                said = f"Placed {placed} of {placed + self.session.plan_open}"
+                if self.session.plan_remainders:
+                    said = f"{said}.{left_sentence(self.session.plan_remainders)}"
                 for item in (self.session.trace or {}).get("notices") or []:
                     if item.get("kind") == "spread_same_day" and item.get("message"):
                         said = f"{said}. {item['message']}"

@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use ::flexweek_engine::desk::{
     calendar, clipboard, custom_look, files, focus, grid, hand_move, planning, reuse, update,
 };
+use ::flexweek_engine::repeats;
 use ::flexweek_engine::{EngineError, EngineResult};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
@@ -560,16 +561,16 @@ fn reuse_session_days(week_start: &str, due: &str) -> PyResult<Vec<i64>> {
 fn reuse_fair_share(
     blocks: &str,
     assignments: &str,
-    committed: &str,
+    saved_week: &str,
     week_start: &str,
     first_day: i64,
     planning_context: &str,
     targets: Vec<String>,
 ) -> PyResult<(String, String)> {
-    let (blocks, assignments, committed, planning_context) = (
+    let (blocks, assignments, saved_week, planning_context) = (
         parse(blocks)?,
         parse(assignments)?,
-        parse(committed)?,
+        parse(saved_week)?,
         parse(planning_context)?,
     );
     guard(|| {
@@ -587,7 +588,7 @@ fn reuse_fair_share(
         let (week, notes) = planning::fair_share(
             &blocks,
             &assignments,
-            &committed,
+            &saved_week,
             week_start,
             first_day,
             first_minute,
@@ -608,16 +609,31 @@ fn reuse_open_rest(
     assignments: &str,
     week_start: &str,
     earlier_blocks: &str,
+    saved_week: &str,
 ) -> PyResult<String> {
-    let (blocks, assignments, earlier_blocks) =
-        (parse(blocks)?, parse(assignments)?, parse(earlier_blocks)?);
+    let (blocks, assignments, earlier_blocks, saved_week) = (
+        parse(blocks)?,
+        parse(assignments)?,
+        parse(earlier_blocks)?,
+        parse(saved_week)?,
+    );
     guard(|| {
         let blocks = blocks.as_array().cloned().unwrap_or_default();
         let assignments = assignments.as_object().cloned().unwrap_or_default();
         let earlier_blocks = earlier_blocks.as_array().cloned().unwrap_or_default();
+        let saved_week = saved_week
+            .as_array()
+            .cloned()
+            .unwrap_or_else(|| blocks.clone());
         Ok(dump(&Value::Array(
-            planning::open_rest_sessions(&blocks, &assignments, week_start, &earlier_blocks)
-                .map_err(crate::raise)?,
+            planning::open_rest_sessions_since(
+                &blocks,
+                &assignments,
+                week_start,
+                &earlier_blocks,
+                &saved_week,
+            )
+            .map_err(crate::raise)?,
         )))
     })
 }
@@ -647,14 +663,75 @@ fn reuse_time_still_needed(
     assignments: &str,
     open_week_blocks: &str,
     week_start: &str,
+    committed_blocks: &str,
 ) -> PyResult<String> {
-    let (assignments, blocks) = (parse(assignments)?, parse(open_week_blocks)?);
+    let (assignments, blocks, committed) = (
+        parse(assignments)?,
+        parse(open_week_blocks)?,
+        parse(committed_blocks)?,
+    );
     guard(|| {
         let assignments = assignments.as_object().cloned().unwrap_or_default();
         let blocks = blocks.as_array().cloned().unwrap_or_default();
+        let committed = committed.as_array().cloned().unwrap_or_default();
         Ok(dump(&Value::Array(
-            planning::time_still_needed(&assignments, &blocks, week_start).map_err(crate::raise)?,
+            planning::time_still_needed_since(&assignments, &blocks, week_start, &committed)
+                .map_err(crate::raise)?,
         )))
+    })
+}
+
+#[pyfunction]
+fn reuse_time_still_needed_parts(
+    assignments: &str,
+    open_week_blocks: &str,
+    week_start: &str,
+    committed_blocks: &str,
+) -> PyResult<String> {
+    let (assignments, blocks, committed) = (
+        parse(assignments)?,
+        parse(open_week_blocks)?,
+        parse(committed_blocks)?,
+    );
+    guard(|| {
+        let assignments = assignments.as_object().cloned().unwrap_or_default();
+        let blocks = blocks.as_array().cloned().unwrap_or_default();
+        let committed = committed.as_array().cloned().unwrap_or_default();
+        Ok(dump(&Value::Array(
+            planning::time_still_needed_parts(&assignments, &blocks, week_start, &committed)
+                .map_err(crate::raise)?,
+        )))
+    })
+}
+
+#[pyfunction]
+fn reuse_plan_open_counts(
+    assignments: &str,
+    open_week_blocks: &str,
+    week_start: &str,
+    committed_blocks: &str,
+) -> PyResult<String> {
+    let (assignments, blocks, committed) = (
+        parse(assignments)?,
+        parse(open_week_blocks)?,
+        parse(committed_blocks)?,
+    );
+    guard(|| {
+        let assignments = assignments.as_object().cloned().unwrap_or_default();
+        let blocks = blocks.as_array().cloned().unwrap_or_default();
+        let committed = committed.as_array().cloned().unwrap_or_default();
+        let (open, waiting_only) =
+            planning::plan_open_counts(&assignments, &blocks, week_start, &committed)
+                .map_err(crate::raise)?;
+        Ok(dump(&json!({"open": open, "waiting_only": waiting_only})))
+    })
+}
+
+#[pyfunction]
+fn reuse_uncovered_minutes(assignment: &str, blocks: &str, committed: &str) -> PyResult<i64> {
+    let (assignment, blocks, committed) = (parse(assignment)?, parse(blocks)?, parse(committed)?);
+    guard(|| {
+        planning::uncovered_homework_minutes(&assignment, &blocks, &committed).map_err(crate::raise)
     })
 }
 
@@ -1099,9 +1176,11 @@ fn reuse_planner_title(
 
 /// What to send the solver, and which sessions its answer may place. `only` and `not_before` are
 /// read as the Python wrapper wrote them: `only` as the list of its members, `not_before` as it is,
-/// with a note of whether it was a list.
+/// with a note of whether it was a list. `saved_week` is the week the homework's server numbers were
+/// read with, which the minutes of a missed session are counted against; none reads as no week.
 #[pyfunction]
-#[pyo3(signature = (blocks, assignments, week_start, everything, only, not_before, now=None))]
+#[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (blocks, assignments, week_start, everything, only, not_before, now=None, saved_week=None))]
 fn reuse_solve_request(
     blocks: &str,
     assignments: &str,
@@ -1110,8 +1189,10 @@ fn reuse_solve_request(
     only: &Bound<'_, PyAny>,
     not_before: &Bound<'_, PyAny>,
     now: Option<&Bound<'_, PyAny>>,
+    saved_week: Option<&str>,
 ) -> PyResult<(String, String)> {
     let (blocks, assignments) = (parse(blocks)?, parse(assignments)?);
+    let saved_week = saved_list(saved_week)?;
     let everything = everything.is_truthy()?;
     let only = if only.is_none() {
         None
@@ -1136,9 +1217,18 @@ fn reuse_solve_request(
             not_before.as_ref(),
             held_a_list,
             now.as_ref(),
+            &saved_week,
         )
         .map_err(crate::raise)?;
         Ok((array(payload), array(targets)))
+    })
+}
+
+/// A saved week sent as JSON, read as its sessions; none (or JSON null) is no sessions.
+fn saved_list(saved_week: Option<&str>) -> PyResult<Vec<Value>> {
+    Ok(match saved_week {
+        Some(text) => parse(text)?.as_array().cloned().unwrap_or_default(),
+        None => Vec::new(),
     })
 }
 
@@ -1170,43 +1260,50 @@ fn point_with(
 }
 
 /// The week with each session Replan all would move for having passed read as one with no time:
-/// what the count of homework that needs a time is taken on. `now` is a datetime.
+/// what the count of homework that needs a time is taken on. `now` is a datetime; `saved_week` is the
+/// week the homework's server numbers were read with.
 #[pyfunction]
-#[pyo3(signature = (blocks, assignments, week_start, now=None))]
+#[pyo3(signature = (blocks, assignments, week_start, saved_week, now=None))]
 fn reuse_without_missed_times(
     blocks: &str,
     assignments: &str,
     week_start: &str,
+    saved_week: &str,
     now: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<String> {
     let (blocks, assignments) = (parse(blocks)?, parse(assignments)?);
-    let now = clock_point(week_start, now)?;
+    let saved_week = saved_list(Some(saved_week))?;
+    // Read where a screen reads missed sessions, so a week that is over agrees with them.
+    let now = point_with(week_start, now, planning::screen_point)?;
     guard(|| {
         let blocks = blocks.as_array().cloned().unwrap_or_default();
         Ok(dump(&Value::Array(
-            planning::without_missed_times(&blocks, &assignments, now.as_ref())
+            planning::without_missed_times(&blocks, &assignments, &saved_week, now.as_ref())
                 .map_err(crate::raise)?,
         )))
     })
 }
 
 /// The ids of the sessions a screen calls missed: the ones Replan all moves for having passed, and
-/// a pinned one that passed unfinished. `now` is a datetime.
+/// a pinned one that passed unfinished. `now` is a datetime; `saved_week` is the week the homework's
+/// server numbers were read with.
 #[pyfunction]
-#[pyo3(signature = (blocks, assignments, week_start, now=None))]
+#[pyo3(signature = (blocks, assignments, week_start, saved_week, now=None))]
 fn reuse_missed_session_ids(
     blocks: &str,
     assignments: &str,
     week_start: &str,
+    saved_week: &str,
     now: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<String> {
     let (blocks, assignments) = (parse(blocks)?, parse(assignments)?);
+    let saved_week = saved_list(Some(saved_week))?;
     // A week that is over is read at its end, so its unfinished sessions still say missed.
     let now = point_with(week_start, now, planning::screen_point)?;
     guard(|| {
         let blocks = blocks.as_array().cloned().unwrap_or_default();
         Ok(dump(&Value::Array(
-            planning::missed_session_ids(&blocks, &assignments, now.as_ref())
+            planning::missed_session_ids(&blocks, &assignments, &saved_week, now.as_ref())
                 .map_err(crate::raise)?,
         )))
     })
@@ -1530,11 +1627,57 @@ fn look_apply_fix(custom: &str, problem: &Bound<'_, PyAny>) -> PyResult<String> 
         .map_err(crate::raise)
 }
 
+fn intents_of(text: &str) -> PyResult<Vec<repeats::Intent>> {
+    let value = parse(text)?;
+    repeats::parse_intents(&value).map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
+#[pyfunction]
+fn repeat_intents_between(before: &str, after: &str, from_date: &str) -> PyResult<String> {
+    let before = objects(before)?;
+    let after = objects(after)?;
+    guard(|| {
+        let intents = repeats::intents_between(&before, &after, from_date);
+        Ok(array(
+            intents.iter().map(repeats::Intent::to_value).collect(),
+        ))
+    })
+}
+
+#[pyfunction]
+fn repeat_apply_to_week(blocks: &str, standing: &str, intents: &str) -> PyResult<(String, String)> {
+    let blocks = objects(blocks)?;
+    let standing = objects(standing)?;
+    let intents = intents_of(intents)?;
+    guard(|| {
+        repeats::apply_to_week(&blocks, &standing, &intents)
+            .map(|(week, after)| (array(week), array(after)))
+            .map_err(pyo3::exceptions::PyValueError::new_err)
+    })
+}
+
+#[pyfunction]
+fn repeat_this_week_line(week: &str, standing: &str, clock_24h: bool) -> PyResult<Option<String>> {
+    let week = objects(week)?;
+    let standing = objects(standing)?;
+    guard(|| Ok(repeats::this_week_line(&week, &standing, clock_24h)))
+}
+
+#[pyfunction]
+fn repeat_one_day_note(block: &str, day: i64, school_hours: bool) -> PyResult<Option<String>> {
+    let block = parse(block)?;
+    guard(|| repeats::one_day_note(&block, day, school_hours).map_err(crate::raise))
+}
+
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::export!(
         module,
         calendar_category_title,
         calendar_is_series,
+        repeat_intents_between,
+        repeat_apply_to_week,
+        repeat_this_week_line,
+        repeat_one_day_note,
         calendar_monday_of,
         calendar_date_for_day,
         calendar_sunday_due,
@@ -1589,6 +1732,9 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         reuse_open_rest,
         reuse_move_earlier_homework,
         reuse_time_still_needed,
+        reuse_time_still_needed_parts,
+        reuse_uncovered_minutes,
+        reuse_plan_open_counts,
         reuse_planned,
         reuse_planning_days,
         reuse_apply_plan,

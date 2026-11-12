@@ -6,9 +6,7 @@ use flexweek_engine::desk::blocks;
 use flexweek_engine::desk::grid::is_setup_block;
 use flexweek_engine::desk::hand_move::{HandDrop, HandMove, WeekClock, hand_move};
 use flexweek_engine::time::hhmm_to_minutes;
-use flexweek_store::{
-    ApplyInput, AssignmentInput, Connection, StandingInput, WeekInput, list_assignment_rows,
-};
+use flexweek_store::{ApplyInput, AssignmentInput, Connection, WeekInput, list_assignment_rows};
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::schemars::JsonSchema;
 use rmcp::{tool, tool_router};
@@ -123,7 +121,7 @@ fn week_input(week_start: String, blocks: Vec<Value>, revision: i64) -> ApplyInp
         assignments: Vec::<AssignmentInput>::new(),
         operation_id: None,
         snapshot_label: None,
-        standing: None,
+        repeats: None,
         argument_digest: None,
     }
 }
@@ -302,10 +300,12 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
         args.expected_revision,
     );
     if every_week {
-        input.standing = Some(StandingInput {
-            week_start: args.week_start.clone(),
-            blocks: vec![json!({"id": args.block_id, "stop": true})],
-        });
+        input.repeats = Some(vec![json!({
+            "id": args.block_id,
+            "scope": "from",
+            "from_date": args.week_start,
+            "stop": true,
+        })]);
     }
     let applied = homework::run_apply(
         &opened.conn,
