@@ -83,3 +83,35 @@ def test_the_first_free_time_menu_opened_near_the_bottom_is_inside_the_window(
     menu = named(root, "blockMenu")[0]
     assert menu.property("open") is True
     lies_inside_the_window(window, menu)
+
+
+def test_the_free_time_menu_with_paste_here_opened_by_right_click_near_the_bottom_is_inside_the_window(
+    qapp, window: NativeWindow
+) -> None:
+    """The extra row makes the menu taller: it is still placed whole inside the window."""
+    root = material_week(qapp, window)
+    window.session.add_block(
+        {
+            "id": "club",
+            "title": "Club",
+            "kind": "locked",
+            "category": "extra",
+            "start": "17:30",
+            "duration_min": 60,
+            "days": [THURSDAY],
+        }
+    )
+    window.session.save()
+    settled(qapp, window)
+    assert window.session.copy_block("club", THURSDAY), "something is copied"
+    scroll_to_the_end(qapp, root)
+    scroller = qml(root, "weekScroller")
+    spot = scroller.mapToScene(QPointF(scroller.width() * 0.85, scroller.height() - 4))
+    QTest.mouseClick(
+        window._material_page._quick, Qt.MouseButton.RightButton, pos=QPoint(int(spot.x()), int(spot.y()))
+    )
+    pump(qapp)
+    menu = named(root, "blockMenu")[0]
+    assert menu.property("open") is True
+    assert [entry["label"] for entry in menu.property("entries").toVariant()][-1] == "Paste here"
+    lies_inside_the_window(window, menu)
