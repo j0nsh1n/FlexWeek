@@ -287,11 +287,33 @@ pub fn parse_deadline(latest: Option<&str>, days: &[i64]) -> EngineResult<Option
     deadline_with(latest, || Ok(days.iter().copied().max().unwrap_or(0)))
 }
 
+/// `parse_deadline` in a week whose day 0 is weekday `first_weekday` (0 Monday): a named day is
+/// that day of this week, counted from its first day.
+pub fn parse_deadline_from(
+    latest: Option<&str>,
+    days: &[i64],
+    first_weekday: i64,
+) -> EngineResult<Option<(i64, i64)>> {
+    deadline_in(
+        latest,
+        || Ok(days.iter().copied().max().unwrap_or(0)),
+        first_weekday,
+    )
+}
+
 /// `parse_deadline` with `max(days) if days else 0` left to the caller, which runs it where
 /// Python did: after the text is found non-empty, before the time is read.
 pub(crate) fn deadline_with<D: From<i64>>(
     latest: Option<&str>,
     last_day: impl FnOnce() -> EngineResult<D>,
+) -> EngineResult<Option<(D, i64)>> {
+    deadline_in(latest, last_day, 0)
+}
+
+fn deadline_in<D: From<i64>>(
+    latest: Option<&str>,
+    last_day: impl FnOnce() -> EngineResult<D>,
+    first_weekday: i64,
 ) -> EngineResult<Option<(D, i64)>> {
     let Some(latest) = latest else {
         return Ok(None);
@@ -322,7 +344,7 @@ pub(crate) fn deadline_with<D: From<i64>>(
             .into_iter()
             .find(|(key, _)| *key == name)
         {
-            day = D::from(index);
+            day = D::from((index - first_weekday).rem_euclid(7));
         }
     }
     Ok(Some((day, hhmm_to_minutes(time_part)?)))

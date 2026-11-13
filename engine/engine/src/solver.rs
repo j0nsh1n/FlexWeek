@@ -8,7 +8,7 @@ use serde_json::{Map, Value};
 use crate::error::{EngineError, EngineResult};
 use crate::time::{
     DAY_START_MIN, SLOT_MIN, SLOTS_PER_DAY, duration_to_slots, hhmm_to_minutes, occupancy_between,
-    occupancy_mask, parse_deadline, slot_to_hhmm,
+    occupancy_mask, parse_deadline_from, slot_to_hhmm,
 };
 
 pub const SOLVE_BUDGET_MS: f64 = 150.0;
@@ -1062,7 +1062,7 @@ pub fn solve_with_rules(
     let ids: Vec<String> = search_blocks.iter().map(|b| b.id.clone()).collect();
     let mut parsed_deadlines: Vec<Option<(i64, i64)>> = search_blocks
         .iter()
-        .map(|b| parse_deadline(b.latest.as_deref(), &b.days))
+        .map(|b| parse_deadline_from(b.latest.as_deref(), &b.days, rules.first_weekday))
         .collect::<EngineResult<Vec<_>>>()?;
     apply_deadline_overrides(&mut parsed_deadlines, &ids, overrides);
     copy_peer_deadlines(&mut parsed_deadlines, &search_blocks, overrides);
@@ -1073,7 +1073,7 @@ pub fn solve_with_rules(
 
     let earliest: Vec<Option<(i64, i64)>> = search_blocks
         .iter()
-        .map(|b| parse_deadline(b.earliest.as_deref(), &b.days))
+        .map(|b| parse_deadline_from(b.earliest.as_deref(), &b.days, rules.first_weekday))
         .collect::<EngineResult<Vec<_>>>()?;
 
     let lengths: Vec<i64> = search_blocks
