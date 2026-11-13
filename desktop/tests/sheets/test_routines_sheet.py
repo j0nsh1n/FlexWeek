@@ -67,3 +67,36 @@ def test_routines_apply_to_the_open_week_through_the_session(
     assert any(item["title"] == "Long walk" for item in shell.session.blocks)
     assert sheets.notice == "Added the Weekend routine."
     settle(qapp, shell)
+
+
+def test_a_routine_picked_in_a_week_from_wednesday_ticks_its_own_weekdays(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    from desktop.native import fields
+
+    # The clock is Thursday 5 November 2026: from Wednesday the week runs Wednesday 4 to Tuesday 10,
+    # so Saturday 7 is day 3 and Monday 9 day 5.
+    fields.save_week_starts_on("wednesday")
+    wait_until(qapp, lambda: shell.session.week_start == "2026-11-04" and not shell.session.busy)
+    settle(qapp, shell)
+    shell.session.routines["r-2"] = {
+        "id": "r-2",
+        "name": "Saturday and Monday",
+        "revision": 1,
+        "blocks": [
+            {
+                "template_id": "t1",
+                "title": "Long walk",
+                "days": [0, 5],
+                "start": "10:00",
+                "duration_min": 60,
+                "category": "exercise",
+            }
+        ],
+    }
+    sheets.openRoutines()
+    pump(qapp)
+    sheets.selectRoutine("r-2")
+    ticked = [day["label"] for day in sheets.form["days"] if day["on"]]
+    assert ticked == ["Sat", "Mon"]
+    assert [day["value"] for day in sheets.form["days"] if day["on"]] == [3, 5]

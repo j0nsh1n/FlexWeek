@@ -14,7 +14,15 @@ from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 from PySide6.QtWidgets import QAbstractButton
 
 from backend.slots import DAY_END_MIN, SLOT_MIN, hhmm_to_minutes
-from desktop.native.calendar import DAY_FULL, DAYS, FLEX_CATEGORIES, day_full_names, day_names, sunday_due
+from desktop.native.calendar import (
+    DAY_FULL,
+    DAYS,
+    FLEX_CATEGORIES,
+    day_full_names,
+    day_names,
+    routine_on_week,
+    sunday_due,
+)
 from desktop.native.hours.geometry import drag_step, next_slot
 from desktop.native.material.sheet_block import BlockDraft
 from desktop.native.material.sheet_homework import HomeworkDraft
@@ -950,6 +958,9 @@ class SheetsBridge(QObject):
         if routine is None:
             return
         self._routine_id = routine_id
+        if self._session.week_start:
+            # A routine keeps weekdays (0 Monday); the day buttons are the open week's days.
+            routine = routine_on_week(self._session.week_start, routine)
         days: set[int] = set()
         for block in routine.get("blocks") or []:
             days.update(int(day) for day in block.get("days") or [])
