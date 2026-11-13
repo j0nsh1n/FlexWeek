@@ -4,6 +4,7 @@ paints or measures: the tests built on it read words, rows, buttons and what a c
 from __future__ import annotations
 
 import math
+from datetime import datetime
 
 from PySide6.QtCore import QPointF
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton
@@ -12,6 +13,7 @@ from desktop.native.layouts.base import Scene
 from desktop.native.layouts.dial import DayDialView, DialFace
 from desktop.native.layouts.registry import options_for, tokens_for
 from desktop.native.look import resolved_palette
+from desktop.native.reuse import missed_session_ids
 from desktop.native.weekmodel import build_week, minute_of
 from desktop.native.widgets import FittedLabel
 from desktop.tests.test_weekmodel import BLOCKS, HOMEWORK, TRACE, WEEK
@@ -27,14 +29,26 @@ def shown(
     homework: dict | None = None,
     **chosen: str,
 ) -> DayDialView:
-    """The dial for Thursday of the test week at `clock`, shown at 1300 by 720."""
+    """The dial for Thursday of the test week at `clock`, shown at 1300 by 720. The sessions it calls
+    missed are the engine's answer for that clock, as the window asks it."""
     options = {**options_for(None, "dial"), **chosen}
     palette = resolved_palette("light-frost", False, None, "default")
-    week = build_week(WEEK, BLOCKS if blocks is None else blocks, homework or HOMEWORK, TRACE)
+    blocks = BLOCKS if blocks is None else blocks
+    homework = homework or HOMEWORK
+    week = build_week(WEEK, blocks, homework, TRACE)
+    now = datetime(2026, 9, 17, *divmod(minute_of(clock), 60))
+    missed = missed_session_ids(blocks, homework, WEEK, blocks, now) if today == THURSDAY else frozenset()
     view = DayDialView()
     view.resize(1300, 720)
     view.show_week(
-        Scene(week, today, minute_of(clock), options, tokens_for("dial", options["look"], palette))
+        Scene(
+            week,
+            today,
+            minute_of(clock),
+            options,
+            tokens_for("dial", options["look"], palette),
+            missed=missed,
+        )
     )
     view.show()
     qapp.processEvents()

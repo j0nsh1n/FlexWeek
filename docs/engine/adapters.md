@@ -339,7 +339,9 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | reuse | clear_stale_pins | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | held_in_place | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | plan_start | LOGIC, moved | hour and minute arithmetic and the half-minute rule: `planning::plan_start_at` |
-| reuse | solve_request | LOGIC, moved | `only`, `not_before` and `everything` are read as given by `reuse_solve_request`; the set of targets is a list to set |
+| reuse | solve_request | LOGIC, moved | `only`, `not_before` and `everything` are read as given by `reuse_solve_request`; the set of targets is a list to set; `now` is read as the real clock point by `reuse_solve_request`; `saved_week` is the week the server's numbers were read with, which a missed session's minutes are counted against (`this_weeks_part`) |
+| reuse | without_missed_times | ADAPTER | encodes, makes one engine call, decodes; `now` read at `planning::screen_point`, as `missed_session_ids` reads it; a missed session's minutes counted against `saved_week` |
+| reuse | missed_session_ids | ADAPTER | encodes, makes one engine call, decodes to a frozenset; minutes counted against `saved_week` |
 | reuse | due_point | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | settle_placements | LOGIC, moved | `keep` is read as given by `reuse_settle_placements` |
 | reuse | occurrence_days | ADAPTER | encodes, makes one engine call, decodes |
@@ -434,7 +436,7 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | weekmodel | short_clock | ADAPTER | encodes, makes one engine call, decodes |
 | weekmodel | range_label | ADAPTER | encodes, makes one engine call, decodes |
 | weekmodel | length_label | ADAPTER | encodes, makes one engine call, decodes |
-| weekmodel | homework_time_sentence | LOGIC | leftover counts and the "still needs a time" sentence from already-classified `left_over_state`; length words go through `length_label` |
+| weekmodel | homework_time_sentence | LOGIC | leftover counts and the "still needs a time" sentence from already-classified `left_over_state`; minutes an item gives as `missed_min` (a week that is over) are said as "missed" instead; length words go through `length_label` |
 | weekmodel | planned_line | ADAPTER | encodes, makes one engine call, decodes |
 | weekmodel | due_label | ADAPTER | encodes, makes one engine call, decodes |
 | weekmodel | due_in_minutes | ADAPTER | passes the due text and the clock reading to one engine call |

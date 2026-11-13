@@ -97,6 +97,7 @@ from desktop.native.reuse import (
     late_id,
     left_over_items,
     merge_preview_rows,
+    missed_session_ids,
     move_earlier_homework,
     open_rest_sessions,
     plan_open_counts,
@@ -115,6 +116,7 @@ from desktop.native.reuse import (
     time_still_needed_parts,
     uncovered_homework_minutes,
     week_label,
+    without_missed_times,
 )
 from desktop.native.weekmodel import (
     WeekModel,
@@ -2268,7 +2270,8 @@ class NativeSession(QObject):
         self.placed_where = ""
         # Plan can move the block the outline is on, so the outline does not stay on it.
         self.select_block(None, None)
-        start = plan_start(self.week_start, datetime.fromtimestamp(self.now_ms() / 1000))
+        clock = datetime.fromtimestamp(self.now_ms() / 1000)
+        start = plan_start(self.week_start, clock)
         if start is not None and start[0] > 6:
             self._say(WEEK_OVER)
             return
@@ -2327,7 +2330,14 @@ class NativeSession(QObject):
             planning_blocks, self.assignments, self.week_start, earlier_blocks, self._assignments_basis
         )
         payload, targets = solve_request(
-            open_blocks, self.assignments, self.week_start, everything=everything, only=only, not_before=start
+            open_blocks,
+            self.assignments,
+            self.week_start,
+            everything=everything,
+            only=only,
+            not_before=start,
+            now=clock,
+            saved_week=self._assignments_basis,
         )
         # Work due after Sunday gets its fair share of this week; the rest waits for next week's Plan.
         first_day = start[0] if start else 0
@@ -2345,7 +2355,13 @@ class NativeSession(QObject):
         if shares:
             kept = {block["id"] for block in week}
             payload, targets = solve_request(
-                week, self.assignments, self.week_start, only=targets & kept, not_before=start
+                week,
+                self.assignments,
+                self.week_start,
+                only=targets & kept,
+                not_before=start,
+                now=clock,
+                saved_week=self._assignments_basis,
             )
         if earliest_first:
             payload = [
@@ -2442,7 +2458,9 @@ class NativeSession(QObject):
             self._fresh_plan = True
             # Counted on the week as this plan left it, not on the server's number from before it: the
             # sessions just given a time are already out of what is still needed.
-            counts = plan_open_counts(self.assignments, self.blocks, self.week_start, self._assignments_basis)
+            counts = plan_open_counts(
+                self.assignments, self._open_week(), self.week_start, self._assignments_basis
+            )
             # A homework with minutes in no session is named with all it still needs, a session still waiting
             # included, so it is left out of the plain "with no time yet" count.
             self.plan_remainders = [
@@ -2645,16 +2663,53 @@ class NativeSession(QObject):
     def remaining_for(self, assignment_id: str) -> int:
         return available_homework_minutes(
             self.assignments.get(assignment_id),
-            self.blocks,
+            self._open_week(),
             self._assignments_basis,
         )
 
     def homework_time_needed(self) -> list[dict]:
-        return time_still_needed(self.assignments, self.blocks, self.week_start, self._assignments_basis)
+        """Homework that needs a time. A session whose time has passed unfinished needs one again. In a week
+        that is over, the minutes of its missed sessions are also given as `missed_min`."""
+        week = self._open_week()
+        needed = time_still_needed(self.assignments, week, self.week_start, self._assignments_basis)
+        missed = self._missed_minutes(week)
+        for item in needed:
+            if missed.get(item["assignment_id"]):
+                item["missed_min"] = missed[item["assignment_id"]]
+        return needed
+
+    def _missed_minutes(self, week: list[dict]) -> dict[str, int]:
+        """Each homework's minutes in missed sessions, by homework, in a week that is over and in no other:
+        their make-up time is planned from this week, so the week that is over says them as missed rather
+        than as still needing a time there. `week` is `_open_week()`, where a missed session has no time."""
+        today = datetime.fromtimestamp(self.now_ms() / 1000).date().isoformat()
+        if not self.week_start or monday_of(today) <= self.week_start:
+            return {}
+        had_time = {block["id"] for block in self.blocks if block.get("start")}
+        missed: dict[str, int] = {}
+        for block in week:
+            homework = block.get("assignment_id")
+            if homework and block["id"] in had_time and not block.get("start"):
+                missed[homework] = missed.get(homework, 0) + int(block.get("duration_min") or 0)
+        return missed
+
+    def _open_week(self) -> list[dict]:
+        """The week every count of minutes still needed reads: each missed session as one with no time."""
+        clock = datetime.fromtimestamp(self.now_ms() / 1000)
+        return without_missed_times(
+            self.blocks, self.assignments, self.week_start, self._assignments_basis, clock
+        )
+
+    def missed_block_ids(self) -> frozenset[str]:
+        """The sessions every look calls missed: the planner's own answer, read at the clock now."""
+        clock = datetime.fromtimestamp(self.now_ms() / 1000)
+        return missed_session_ids(
+            self.blocks, self.assignments, self.week_start, self._assignments_basis, clock
+        )
 
     def _time_split(self) -> list[dict]:
         return time_still_needed_parts(
-            self.assignments, self.blocks, self.week_start, self._assignments_basis
+            self.assignments, self._open_week(), self.week_start, self._assignments_basis
         )
 
     def homework_remainders(self) -> list[tuple[str, int]]:
@@ -2667,7 +2722,7 @@ class NativeSession(QObject):
     def minutes_left_for(self, assignment_id: str) -> int:
         """Minutes of this homework that no session holds. `remaining_for` is what Plan can place of them."""
         return uncovered_homework_minutes(
-            self.assignments.get(assignment_id), self.blocks, self._assignments_basis
+            self.assignments.get(assignment_id), self._open_week(), self._assignments_basis
         )
 
     def built_week(self) -> WeekModel:

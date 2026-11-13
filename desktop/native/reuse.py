@@ -116,18 +116,69 @@ def solve_request(
     everything: bool = False,
     only: set[str] | None = None,
     not_before: tuple[int, int] | None = None,
+    now: datetime | None = None,
+    saved_week: list[dict] | None = None,
 ) -> tuple[list[dict], set[str]]:
     """What to send the solver, and which sessions its answer may place.
 
     By default planned homework keeps its time and only homework without one is placed around it.
-    `everything` places every unfinished session again, with every day up to its deadline open.
+    `everything` places every unfinished session again, with every day up to its deadline open. A
+    session whose time has passed moves too, unless it is pinned; one on now, or ahead, is as before.
     `only` places just those sessions around everything else, for work whose time stopped working.
-    `not_before` (from `plan_start`) keeps every placement at or after now.
+    `not_before` (from `plan_start`) keeps every placement at or after now. `now` is the real clock:
+    a session counts as passed once its end is at or before the current minute, whatever `not_before`
+    was rounded to; without it no session counts as passed. `saved_week` is the week the homework's
+    server numbers were read with: a passed session's minutes are counted against it, as every count of
+    minutes still needed is.
     """
     payload, targets = flexweek_engine.reuse_solve_request(
-        json.dumps(blocks), json.dumps(assignments), week_start, everything, only, not_before
+        json.dumps(blocks),
+        json.dumps(assignments),
+        week_start,
+        everything,
+        only,
+        not_before,
+        now,
+        json.dumps(saved_week),
     )
     return json.loads(payload), set(json.loads(targets))
+
+
+def without_missed_times(
+    blocks: list[dict],
+    assignments: dict,
+    week_start: str,
+    saved_week: list[dict],
+    now: datetime | None = None,
+) -> list[dict]:
+    """The week with each unfinished, unpinned session whose time has passed read as one with no time,
+    so counting the homework that needs a time does not call it "has a time". `now` is the real clock,
+    read as `missed_session_ids` reads it, so a week that is over agrees with the missed sessions.
+    `saved_week` is the week the homework's server numbers were read with."""
+    return json.loads(
+        flexweek_engine.reuse_without_missed_times(
+            json.dumps(blocks), json.dumps(assignments), week_start, json.dumps(saved_week), now
+        )
+    )
+
+
+def missed_session_ids(
+    blocks: list[dict],
+    assignments: dict,
+    week_start: str,
+    saved_week: list[dict],
+    now: datetime | None = None,
+) -> frozenset[str]:
+    """The sessions a screen calls missed: the ones Replan all moves for having passed, and a pinned
+    one that passed unfinished. The planner and every look read this one answer. `saved_week` is the
+    week the homework's server numbers were read with."""
+    return frozenset(
+        json.loads(
+            flexweek_engine.reuse_missed_session_ids(
+                json.dumps(blocks), json.dumps(assignments), week_start, json.dumps(saved_week), now
+            )
+        )
+    )
 
 
 def fair_share(

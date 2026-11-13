@@ -87,6 +87,7 @@ def board_for(
     mode: str,
     on: date,
     now: datetime | None = None,
+    missed: frozenset[str] = frozenset(),
 ) -> DayBoard:
     """Up next, Done, the Now card, and the ring for one day.
 
@@ -96,15 +97,22 @@ def board_for(
     is next; otherwise it gives the free time from `minute` to the next block
     that still occupies time, and that block. A finished homework block does
     not occupy that gap.
+    `missed` is the ids the planner calls missed: those sessions stay under Up next.
     Slack uses `now` when the caller has the real clock; otherwise the viewed
     day's `minute`.
     """
     ordered = tuple(sorted(items, key=lambda item: (int(item.start), str(item.title))))
-    up = tuple(item for item in ordered if not _settled(item) and not _clock_past(item, minute, when))
+    # A session the planner calls missed is still to do, so it stays under Up next though its time went by.
+    up = tuple(
+        item
+        for item in ordered
+        if not _settled(item) and (item.block_id in missed or not _clock_past(item, minute, when))
+    )
+    ahead = tuple(item for item in up if not _clock_past(item, minute, when))
     finished = tuple(item for item in ordered if item not in up)
     gap = _gap(ordered, minute, when, nudges)
-    focus = next((item for item in up if item.work and item.assignment_id), None)
-    doing = _doing(up, minute, when, nudges)
+    focus = next((item for item in ahead if item.work and item.assignment_id), None)
+    doing = _doing(ahead, minute, when, nudges)
     busy = None if doing is not None else _busy(ordered, minute, when, nudges)
     after = None if busy is None else _next_after(ordered, minute)
     total = len(ordered)

@@ -78,10 +78,13 @@ def test_plan_on_a_thursday_leaves_monday_to_wednesday_and_the_hours_before_now_
     assert session.needs_time[chem["id"]] == TOO_LATE
 
 
-def test_replan_all_leaves_homework_whose_time_has_passed(
+def test_replan_all_moves_homework_whose_time_has_passed(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
 ) -> None:
+    """The clock is Thursday 10:00. Tuesday 15:00 was not done, so Replan all gives it a time from now on
+    (it used to leave a passed time alone, which spec.md's "plans every unfinished session again" does
+    not say)."""
     session = window.session
     math = session_of(window, "math")
     session.add_block({**math, "start": "15:00", "days": [1]})
@@ -91,7 +94,8 @@ def test_replan_all_leaves_homework_whose_time_has_passed(
     window.findChild(QPushButton, "replanAll").click()
     settled(qapp, window)
     math = session_of(window, "math")
-    assert (math["days"], math["start"]) == ([1], "15:00"), "Tuesday is gone; Replan all leaves it be"
+    assert math.get("start"), "there is room before the deadline"
+    assert (math["days"][0], math["start"]) >= (3, "10:00"), "Tuesday is gone; it is placed from now on"
 
 
 def test_plan_it_as_i_add_it_starts_no_earlier_than_now(

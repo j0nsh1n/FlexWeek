@@ -1176,8 +1176,11 @@ fn reuse_planner_title(
 
 /// What to send the solver, and which sessions its answer may place. `only` and `not_before` are
 /// read as the Python wrapper wrote them: `only` as the list of its members, `not_before` as it is,
-/// with a note of whether it was a list.
+/// with a note of whether it was a list. `saved_week` is the week the homework's server numbers were
+/// read with, which the minutes of a missed session are counted against; none reads as no week.
 #[pyfunction]
+#[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (blocks, assignments, week_start, everything, only, not_before, now=None, saved_week=None))]
 fn reuse_solve_request(
     blocks: &str,
     assignments: &str,
@@ -1185,8 +1188,11 @@ fn reuse_solve_request(
     everything: &Bound<'_, PyAny>,
     only: &Bound<'_, PyAny>,
     not_before: &Bound<'_, PyAny>,
+    now: Option<&Bound<'_, PyAny>>,
+    saved_week: Option<&str>,
 ) -> PyResult<(String, String)> {
     let (blocks, assignments) = (parse(blocks)?, parse(assignments)?);
+    let saved_week = saved_list(saved_week)?;
     let everything = everything.is_truthy()?;
     let only = if only.is_none() {
         None
@@ -1200,8 +1206,9 @@ fn reuse_solve_request(
     } else {
         Some(parse(&dumps_of(not_before)?)?)
     };
+    let now = clock_point(week_start, now)?;
     guard(|| {
-        let (payload, targets) = planning::solve_request(
+        let (payload, targets) = planning::solve_request_at(
             &blocks,
             &assignments,
             week_start,
@@ -1209,9 +1216,96 @@ fn reuse_solve_request(
             only.as_ref(),
             not_before.as_ref(),
             held_a_list,
+            now.as_ref(),
+            &saved_week,
         )
         .map_err(crate::raise)?;
         Ok((array(payload), array(targets)))
+    })
+}
+
+/// A saved week sent as JSON, read as its sessions; none (or JSON null) is no sessions.
+fn saved_list(saved_week: Option<&str>) -> PyResult<Vec<Value>> {
+    Ok(match saved_week {
+        Some(text) => parse(text)?.as_array().cloned().unwrap_or_default(),
+        None => Vec::new(),
+    })
+}
+
+/// The real current minute as (day, minute) of the week, from a datetime; `None` when `now` is not
+/// given or today is not in the week.
+fn clock_point(week_start: &str, now: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Value>> {
+    point_with(week_start, now, planning::clock_point)
+}
+
+/// How a moment reads as a point of a week: `planning::clock_point` or `planning::screen_point`.
+type WeekPoint = fn(&str, &str, i64, i64) -> EngineResult<Option<(i64, i64)>>;
+
+fn point_with(
+    week_start: &str,
+    now: Option<&Bound<'_, PyAny>>,
+    read: WeekPoint,
+) -> PyResult<Option<Value>> {
+    let Some(now) = now.filter(|moment| !moment.is_none()) else {
+        return Ok(None);
+    };
+    let today_iso = now
+        .call_method0("date")?
+        .call_method0("isoformat")?
+        .extract::<String>()?;
+    let hour = now.getattr("hour")?.extract::<i64>()?;
+    let minute = now.getattr("minute")?.extract::<i64>()?;
+    let point = guard(|| read(week_start, &today_iso, hour, minute).map_err(crate::raise))?;
+    Ok(point.map(|(day, minute)| json!([day, minute])))
+}
+
+/// The week with each session Replan all would move for having passed read as one with no time:
+/// what the count of homework that needs a time is taken on. `now` is a datetime; `saved_week` is the
+/// week the homework's server numbers were read with.
+#[pyfunction]
+#[pyo3(signature = (blocks, assignments, week_start, saved_week, now=None))]
+fn reuse_without_missed_times(
+    blocks: &str,
+    assignments: &str,
+    week_start: &str,
+    saved_week: &str,
+    now: Option<&Bound<'_, PyAny>>,
+) -> PyResult<String> {
+    let (blocks, assignments) = (parse(blocks)?, parse(assignments)?);
+    let saved_week = saved_list(Some(saved_week))?;
+    // Read where a screen reads missed sessions, so a week that is over agrees with them.
+    let now = point_with(week_start, now, planning::screen_point)?;
+    guard(|| {
+        let blocks = blocks.as_array().cloned().unwrap_or_default();
+        Ok(dump(&Value::Array(
+            planning::without_missed_times(&blocks, &assignments, &saved_week, now.as_ref())
+                .map_err(crate::raise)?,
+        )))
+    })
+}
+
+/// The ids of the sessions a screen calls missed: the ones Replan all moves for having passed, and
+/// a pinned one that passed unfinished. `now` is a datetime; `saved_week` is the week the homework's
+/// server numbers were read with.
+#[pyfunction]
+#[pyo3(signature = (blocks, assignments, week_start, saved_week, now=None))]
+fn reuse_missed_session_ids(
+    blocks: &str,
+    assignments: &str,
+    week_start: &str,
+    saved_week: &str,
+    now: Option<&Bound<'_, PyAny>>,
+) -> PyResult<String> {
+    let (blocks, assignments) = (parse(blocks)?, parse(assignments)?);
+    let saved_week = saved_list(Some(saved_week))?;
+    // A week that is over is read at its end, so its unfinished sessions still say missed.
+    let now = point_with(week_start, now, planning::screen_point)?;
+    guard(|| {
+        let blocks = blocks.as_array().cloned().unwrap_or_default();
+        Ok(dump(&Value::Array(
+            planning::missed_session_ids(&blocks, &assignments, &saved_week, now.as_ref())
+                .map_err(crate::raise)?,
+        )))
     })
 }
 
@@ -1675,6 +1769,8 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         reuse_left_over,
         reuse_planner_title,
         reuse_solve_request,
+        reuse_without_missed_times,
+        reuse_missed_session_ids,
         reuse_settle_placements,
         files_export_input,
         files_referenced_ids,

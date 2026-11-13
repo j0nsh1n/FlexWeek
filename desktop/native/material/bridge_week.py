@@ -21,6 +21,7 @@ from desktop.native.weekmodel import (
     clock_label,
     due_in_minutes,
     due_label,
+    homework_time_sentence,
     length_label,
     range_label,
     set_clock_24h,
@@ -28,6 +29,7 @@ from desktop.native.weekmodel import (
 )
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+EVERYTHING_TIMED = "Everything has a time."
 DAY_ROLES = ("label", "name", "date", "today")
 BLOCK_ROLES = (
     "title",
@@ -50,7 +52,9 @@ BLOCK_ROLES = (
 )
 
 
-def occurrence_row(item: Any, mode: str, *, dim: bool, gone: bool, fresh: bool) -> dict:
+def occurrence_row(
+    item: Any, mode: str, *, dim: bool, gone: bool, fresh: bool, missed: bool = False
+) -> dict:
     """One QML block row from a week occurrence. Day and Week share this shape."""
     fill, ink = paint_for_category(item.category, mode)
     end = int(item.end)
@@ -64,7 +68,8 @@ def occurrence_row(item: Any, mode: str, *, dim: bool, gone: bool, fresh: bool) 
         "category": event_category(item.category),
         "detail": range_label(int(item.start), end),
         "detailStart": short_clock(int(item.start)),
-        "past": dim and (gone or bool(item.done)),
+        # A session the planner calls missed is still to do, so it is not dimmed as over.
+        "past": dim and (bool(item.done) or (gone and not missed)),
         "blockId": item.block_id,
         "assignmentId": item.assignment_id or "",
         "homework": bool(item.work and item.assignment_id),
@@ -154,6 +159,8 @@ class WeekBridge(QObject):
         self._window = window
         self._block_rows: list[dict] = []
         self._homework_rows: list[dict] = []
+        self._time_words = EVERYTHING_TIMED
+        self._all_timed = True
         self._day_rows: list[dict] = []
         self._leftover_words = ""
         self._hour_labels: list[str] = [clock_label(hour * 60) for hour in range(24)]
@@ -231,6 +238,7 @@ class WeekBridge(QObject):
                 }
             )
         week = session.built_week()
+        missed = session.missed_block_ids()
         # A week that ended is all past, a week ahead has nothing past, this week goes by the clock.
         keys: set[tuple[str, int]] = set()
         fresh_ok = self._week_key == session.week_start and bool(self._seen)
@@ -257,6 +265,7 @@ class WeekBridge(QObject):
                     dim=dim,
                     gone=gone,
                     fresh=self._fresh_until.get(key, 0.0) > clock,
+                    missed=item.block_id in missed,
                 )
             )
         for item in getattr(week, "waiting", ()):
@@ -277,10 +286,24 @@ class WeekBridge(QObject):
                     "reason": item.reason,
                 }
             )
+        # The same count every screen reads, so a missed session is not "has a time" here either.
+        needed = session.homework_time_needed()
+        self._time_words = homework_time_sentence([], needed)
+        self._all_timed = not needed
         remainders = getattr(session, "homework_remainders", None)
         self._leftover_words = "\n".join(
-            f"{title} · {length_label(minutes)} with no time"
-            for title, minutes in (remainders() if remainders else [])
+            [
+                *(
+                    f"{title} · {length_label(minutes)} with no time"
+                    for title, minutes in (remainders() if remainders else [])
+                ),
+                # Only a week that is over has these: its missed time is planned from this week.
+                *(
+                    f"{item['title']} · {length_label(item['missed_min'])} missed"
+                    for item in needed
+                    if item.get("missed_min")
+                ),
+            ]
         )
         self._week_key = session.week_start
         self._seen = keys
@@ -636,6 +659,15 @@ class WeekBridge(QObject):
     @Property(int, notify=homeworkChanged)
     def homeworkCount(self) -> int:
         return len(self._homework_rows)
+
+    @Property(str, notify=homeworkChanged)
+    def timeWords(self) -> str:
+        """What the drawer says when no card is listed: whether any homework still needs a time."""
+        return self._time_words
+
+    @Property(bool, notify=homeworkChanged)
+    def allTimed(self) -> bool:
+        return self._all_timed
 
     @Property(str, notify=homeworkChanged)
     def leftoverWords(self) -> str:

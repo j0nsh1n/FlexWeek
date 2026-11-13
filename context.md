@@ -98,6 +98,16 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
+- 2026-11-12, branch `fix/replan-moves-missed-sessions` (#126) with `fix/planner-counts-minutes` (#125) merged in,
+  local only. A missed session's minutes are counted through `this_weeks_part` against the saved week
+  (`missed_minutes` takes `saved_week`), the desktop passes `_assignments_basis` to the solve request and to every
+  count, and every count of minutes still needed reads the week with missed sessions stripped (`_open_week`). The
+  "needs a time" count reads at `screen_point`, as `missed_block_ids` does, so a week that is over agrees with the
+  missed sessions. Next: review of the merged branch.
+  Fix round (2026-11-12): in a week that is over the missed minutes are `missed_min` on the needed items and are
+  said as "missed" (status line, rail list, Material drawer); `remaining_for` and `minutes_left_for` read
+  `_open_week()`. Open: Plan in the next week does not place last week's missed hour (`already_placed_earlier`);
+  the "Plan into this week" offer does.
 - 2026-11-12, branch `fix/planner-counts-minutes` from main d7afedfe, local only. Done: a homework's time still
   needed is counted in minutes everywhere it is counted (engine `planning::time_still_needed_parts`,
   `uncovered_homework_minutes`); counts are exact minutes, and only what can be placed is rounded down to a

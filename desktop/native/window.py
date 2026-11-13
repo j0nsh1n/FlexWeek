@@ -2358,6 +2358,7 @@ class NativeWindow(QMainWindow):
             focus=focus_now(session.focus),
             today_iso=clock["iso"],
             account=self._account_id(),
+            missed=session.missed_block_ids(),
         )
 
     def _week_with_history(self, week):

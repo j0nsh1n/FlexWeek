@@ -176,6 +176,7 @@ class DayBridge(QObject):
         self._waiting = False
         self._load_error = ""
         dim = read_flag(prefs, DIM_KEYS, True)
+        missed = session.missed_block_ids() if account is not None and week_start else frozenset()
         block_rows = []
         for item in items:
             end = int(item.end)
@@ -186,7 +187,11 @@ class DayBridge(QObject):
                 gone = False
             else:
                 gone = day < offset or (day == offset and end <= now_minute)
-            block_rows.append(occurrence_row(item, self._mode, dim=dim, gone=gone, fresh=False))
+            block_rows.append(
+                occurrence_row(
+                    item, self._mode, dim=dim, gone=gone, fresh=False, missed=item.block_id in missed
+                )
+            )
         self._publish(
             board_for(
                 items,
@@ -197,6 +202,7 @@ class DayBridge(QObject):
                 mode=self._mode,
                 on=viewed,
                 now=moment,
+                missed=missed,
             ),
             overlapped(block_rows),
         )

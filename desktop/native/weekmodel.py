@@ -99,8 +99,10 @@ def homework_time_sentence(left_over: list[dict], needed: list[dict]) -> str:
     overdue = sum(item.get("left_over_state") == "overdue" for item in left_over)
     carried = sum(item.get("left_over_state") == "left_from_last_week" for item in left_over)
     minutes = {item.get("assignment_id"): int(item.get("minutes", 0)) for item in needed}
-    total = sum(minutes.values())
-    if not overdue and not carried and not total:
+    # In a week that is over a missed session's minutes are said as missed: they are planned from this week.
+    missed = sum({item.get("assignment_id"): int(item.get("missed_min", 0)) for item in needed}.values())
+    total = sum(minutes.values()) - missed
+    if not overdue and not carried and not total and not missed:
         return "Everything has a time."
     words = []
     if overdue:
@@ -109,6 +111,8 @@ def homework_time_sentence(left_over: list[dict], needed: list[dict]) -> str:
         words.append(f"{carried} left from last week")
     if total:
         words.append(f"{length_label(total)} still needs a time")
+    if missed:
+        words.append(f"{length_label(missed)} missed")
     return " · ".join(words)
 
 
