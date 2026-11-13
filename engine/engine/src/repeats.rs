@@ -324,18 +324,34 @@ pub fn restated_copy(old: Option<&Value>, new: Option<&Value>, copy: &Value) -> 
     }
 }
 
+/// Whether `held` has every field of the repeat `old` as the repeat has it, so a change to the repeat
+/// reaches all of it. Days and missed days are the week's own, and a field only a saved week has (a
+/// saved block is filled with defaults) is not the repeat's.
+fn follows_on_every_field(old: &Value, held: &Value) -> bool {
+    old.as_object()
+        .into_iter()
+        .flatten()
+        .all(|(key, value)| SHAPE_FIELDS.contains(&key.as_str()) || held.get(key) == Some(value))
+}
+
 /// The pieces of one repeat in a week (School split at a seam is School on each side) after the
-/// repeat changed from `old` to `new`. A day the change adds goes to one piece only, the one with the
-/// repeat's own id, else the first, so it happens once; the other pieces keep the days they had.
+/// repeat changed from `old` to `new`. A day the change adds goes to one piece only, so it happens
+/// once: a piece the week did not change, so the day comes at the repeat's time, School's own id
+/// first; when every piece was changed, the one with the repeat's own id, else the first. The other
+/// pieces keep the days they had.
 pub fn restated_pieces(
     old: Option<&Value>,
     new: Option<&Value>,
     pieces: &[Value],
     id: &str,
 ) -> Vec<Option<Value>> {
+    let own = |piece: &Value| id_of(piece) == Some(id);
+    let follows = |piece: &Value| old.is_some_and(|old| follows_on_every_field(old, piece));
     let taker = pieces
         .iter()
-        .position(|piece| id_of(piece) == Some(id))
+        .position(|piece| own(piece) && follows(piece))
+        .or_else(|| pieces.iter().position(follows))
+        .or_else(|| pieces.iter().position(own))
         .unwrap_or(0);
     let widened = match (old, new) {
         (Some(old), Some(new)) => {

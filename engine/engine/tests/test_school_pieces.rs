@@ -219,6 +219,45 @@ fn a_day_added_to_school_in_two_pieces_is_school_once_that_day() {
 }
 
 #[test]
+fn a_day_added_to_school_takes_the_repeats_time_when_schools_own_piece_was_changed() {
+    // This time `school` is the piece the week changed (Monday and Tuesday at 10:00) and the tagged
+    // piece follows the repeat (Wednesday to Friday at 08:30). Saturday 14 November is School once,
+    // at the repeat's 08:30, and Monday and Tuesday keep their 10:00.
+    let mut changed = kept();
+    changed["start"] = json!("10:00");
+    let mut follows = piece();
+    follows["start"] = json!("08:30");
+    let saturday = parse_intent(&json!({"id": "school", "scope": "from",
+                                        "from_date": "2026-11-09", "add_days": [5]}))
+    .unwrap();
+    let (blocks, _) = apply_to_week(&[changed, follows], &[school()], &[saturday]).unwrap();
+    assert_eq!(school_days(&blocks), vec![0, 1, 2, 3, 4, 5], "{blocks:?}");
+    let own = by_id(&blocks, "school");
+    assert_eq!(
+        (&own["days"], &own["start"]),
+        (&json!([0, 1]), &json!("10:00"))
+    );
+    let tagged = by_id(&blocks, "school@20261111");
+    assert_eq!(
+        (&tagged["days"], &tagged["start"]),
+        (&json!([2, 3, 4, 5]), &json!("08:30"))
+    );
+    // When both pieces follow the repeat, School's own id takes the day wherever it sits in the week.
+    let mut follows = piece();
+    follows["start"] = json!("08:30");
+    let (blocks, _) = apply_to_week(
+        &[follows, kept()],
+        &[school()],
+        &[parse_intent(&json!({"id": "school", "scope": "from",
+                               "from_date": "2026-11-09", "add_days": [5]}))
+        .unwrap()],
+    )
+    .unwrap();
+    assert_eq!(by_id(&blocks, "school")["days"], json!([0, 1, 5]));
+    assert_eq!(by_id(&blocks, "school@20261111")["days"], json!([2, 3, 4]));
+}
+
+#[test]
 fn a_standing_school_built_from_pieces_keeps_every_day_at_the_time_most_of_them_have() {
     // School on Monday and Tuesday at 08:30 and on Wednesday to Friday at 10:00 stands on all five
     // days at 10:00, the time of the piece that holds the most days.

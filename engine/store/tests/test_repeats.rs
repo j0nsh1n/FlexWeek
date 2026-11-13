@@ -805,6 +805,52 @@ fn a_day_added_to_school_reaches_a_week_holding_two_pieces_once() {
 }
 
 #[test]
+fn a_day_added_to_school_takes_the_repeats_time_when_schools_own_piece_was_changed() {
+    // 16 November's week holds `school` changed to 10:00 on Monday and Tuesday and a piece that
+    // follows the repeat (08:30) on Wednesday to Friday. From 9 November School is on Saturday too:
+    // Saturday 21 November is School once at 08:30, and Monday and Tuesday keep their 10:00.
+    let (conn, user_id) = account("repeats-pieces-saturday-own-changed", true);
+    set_up(&conn, user_id);
+    let piece = json!({"category": "class", "days": [2, 3, 4], "duration_min": 405,
+                       "id": "school@20261118", "kind": "locked", "start": "08:30",
+                       "title": "School"});
+    save_week_as(
+        &conn,
+        user_id,
+        NEXT_WEEK,
+        vec![
+            with(school(), json!({"days": [0, 1], "start": "10:00"})),
+            piece,
+            soccer(),
+        ],
+    );
+    change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[(
+            "school",
+            Some(with(school(), json!({"days": [0, 1, 2, 3, 4, 5]}))),
+        )],
+    );
+    let next = shown(&conn, user_id, NEXT_WEEK);
+    let on_saturday: Vec<&Value> = next
+        .iter()
+        .filter(|block| {
+            block["title"] == json!("School")
+                && block["days"].as_array().unwrap().contains(&json!(5))
+        })
+        .collect();
+    assert_eq!(on_saturday.len(), 1, "{next:?}");
+    assert_eq!(on_saturday[0]["start"], json!("08:30"), "{next:?}");
+    let own = block(&next, "school").unwrap();
+    assert_eq!(
+        (&own["days"], &own["start"]),
+        (&json!([0, 1]), &json!("10:00"))
+    );
+}
+
+#[test]
 fn a_later_week_holding_only_a_piece_of_school_is_named_for_the_time_it_keeps() {
     // 16 November's week holds School only as a piece, at 10:00 on every School day. From 9 November
     // School is called Classes: the piece takes the name and keeps its 10:00, so that week is named,
