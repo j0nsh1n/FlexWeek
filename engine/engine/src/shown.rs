@@ -382,11 +382,13 @@ fn lay_out(shown_start: &str, offset: i64, first: &[Value], second: &[Value]) ->
                 continue;
             };
             let family = family_id(id_of(block)).to_string();
+            // One block holds one done day, so copies done on a day each stay apart.
             let same = groups.iter_mut().find(|group| {
                 placed(block)
                     && placed(&group.shown)
                     && group.family == family
                     && content(&group.shown) == content(block)
+                    && (completed_day(&group.shown).is_none() || completed_day(&copy).is_none())
             });
             if let Some(group) = same {
                 let held = &group.shown;
@@ -668,11 +670,13 @@ fn placed_blocks(
             order,
         });
     }
-    // Pieces of one family with the same content are one block.
+    // Pieces of one family with the same content are one block, unless each was done on a day.
     let mut groups: Vec<Vec<Piece>> = Vec::new();
     for piece in pieces {
         let same = groups.iter_mut().find(|group| {
-            group[0].family == piece.family && content(&group[0].body) == content(&piece.body)
+            group[0].family == piece.family
+                && content(&group[0].body) == content(&piece.body)
+                && (piece.done.is_none() || group.iter().all(|held| held.done.is_none()))
         });
         match same {
             Some(group) => group.push(piece),

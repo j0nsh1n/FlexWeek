@@ -586,3 +586,47 @@ fn a_routine_keeps_weekdays_whichever_day_the_week_starts_on() {
     assert_eq!(blocks_by_weekday(FIRST, &shown).unwrap(), shown);
     assert_eq!(routine_on_shown_week(FIRST, &routine).unwrap(), routine);
 }
+
+#[test]
+fn a_block_done_in_each_stored_week_keeps_both_done_marks_when_the_week_is_saved() {
+    // Read at 19:00, done on Thursday 12 November in the first stored week and on Monday 16 November
+    // in the second. Shown from Wednesday they are the same block, but one block holds one done day,
+    // so each keeps its own; adding another block and saving keeps both marks where they were.
+    let read = |days: &[i64], done: i64| {
+        json!({"id": "read", "title": "Read", "kind": "flexible", "duration_min": 30,
+               "start": "19:00", "days": days, "completed": true, "completed_day": done})
+    };
+    let first = vec![read(&[3, 4], 3)];
+    let second = vec![read(&[0, 1], 0)];
+    let mut shown = compose_shown_week(WED, &first, &second).unwrap();
+    let done: Vec<i64> = shown
+        .iter()
+        .filter_map(|block| block["completed_day"].as_i64())
+        .collect();
+    assert_eq!(done, vec![1, 5], "{shown:?}");
+    shown.push(fixed("club", "16:00", &[2]));
+    let (first_out, second_out) = split_shown_week(WED, &shown, &first, &second).unwrap();
+    assert_eq!(by_id(&first_out, "read"), Some(&read(&[3, 4], 3)));
+    assert_eq!(second_out, second);
+}
+
+#[test]
+fn a_block_done_on_a_hidden_day_and_marked_done_on_a_shown_day_keeps_both_marks() {
+    // Read at 19:00 on Monday 9 and Thursday 12 November, done on the Monday. The week from Wednesday
+    // shows only the Thursday; marking it done there keeps the Monday's mark too.
+    let read = json!({"id": "read", "title": "Read", "kind": "flexible", "duration_min": 30,
+                      "start": "19:00", "days": [0, 3], "completed": true, "completed_day": 0});
+    let mut shown = compose_shown_week(WED, std::slice::from_ref(&read), &[]).unwrap();
+    assert_eq!(days(&shown[0]), vec![1]);
+    assert_eq!(shown[0].get("completed_day"), None, "{shown:?}");
+    shown[0]["completed_day"] = json!(1);
+    let (first_out, second_out) = split_shown_week(WED, &shown, &[read], &[]).unwrap();
+    let mut done: Vec<(Vec<i64>, i64)> = first_out
+        .iter()
+        .filter(|block| block["title"] == "Read")
+        .map(|block| (days(block), block["completed_day"].as_i64().unwrap()))
+        .collect();
+    done.sort();
+    assert_eq!(done, vec![(vec![0], 0), (vec![3], 3)], "{first_out:?}");
+    assert!(second_out.is_empty());
+}
