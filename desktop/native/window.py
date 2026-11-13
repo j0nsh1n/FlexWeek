@@ -244,6 +244,7 @@ from desktop.native.widgets import (
     fit_buttons,
     keyboard_focus_rings,
     overdue_unfinished,
+    same_weekday,
     steady_wheel,
     swatch,
     use_app_style,
@@ -737,7 +738,8 @@ class NativeWindow(QMainWindow):
         self._block_prepare_scheduled = False
         # What a student typed into a new Add sheet that Esc closed, by kind, for the next plain Add of that
         # kind: plain values only (never a sheet), the days a drag gave a homework, and the account it is for.
-        self._kept_adds: dict[str, tuple[dict, list[int] | None]] = {}
+        # Each with the open week its day numbers count from.
+        self._kept_adds: dict[str, tuple[dict, list[int] | None, str]] = {}
         self._kept_adds_account: str | None = None
         self._leaving: QTimer | None = None
         self._saved_to_leave = False
@@ -3591,14 +3593,27 @@ class NativeWindow(QMainWindow):
             # A drag gave the day, the due and the length together; the next sheet keeps all three.
             fields = dialog._draft_fields()
             draft = {"due": fields["due"], "estimate": fields["estimate"], **draft}
-        self._kept_adds[kind] = (draft, days)
+        self._kept_adds[kind] = (draft, days, self.session.week_start)
         self._kept_adds_account = self._account_id()
         dialog.deleteLater()
 
     def _take_kept_add(self, kind: str) -> tuple[dict | None, list[int] | None]:
-        """What Esc kept for this kind of Add, once, with the days a drag gave it; or nothing."""
+        """What Esc kept for this kind of Add, once, with the days a drag gave it; or nothing. Its days keep
+        their weekdays when the open week now starts on another day."""
         kept = self._kept_adds.pop(kind, None)
-        return kept if kept is not None else (None, None)
+        if kept is None:
+            return None, None
+        draft, days, week = kept
+        open_now = self.session.week_start
+
+        def turned(day: int) -> int:
+            return same_weekday(day, week, open_now)
+
+        if "days" in draft:
+            draft = {**draft, "days": sorted(turned(day) for day in draft["days"])}
+        if isinstance(draft.get("pin_day"), int):
+            draft = {**draft, "pin_day": turned(draft["pin_day"])}
+        return draft, None if days is None else [turned(day) for day in days]
 
     def _commit_block(self, dialog: BlockDialog) -> None:
         if not self._run_sheet(dialog):

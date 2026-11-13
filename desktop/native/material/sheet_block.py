@@ -37,6 +37,7 @@ from desktop.native.widgets import (
     day_range_and_words,
     full_day_name,
     guess_locked_category,
+    same_weekday,
     short_day_name,
 )
 
@@ -100,6 +101,21 @@ class BlockDraft:
         self.time_problem = ""
         self.error = ""
         self._opened_as = self._picture()
+        # The open week the day numbers count from.
+        self._days_week = session.week_start or ""
+
+    def follow_week(self) -> None:
+        """A new sheet kept after Esc and opened again in a week that starts on another day: its days, and
+        the days it opened with, keep their weekdays."""
+        week = self.session.week_start or ""
+
+        def turned(days: Any) -> list[int]:
+            return sorted(same_weekday(day, self._days_week, week) for day in days)
+
+        self.days = turned(self.days)
+        title, opened_days, *rest = self._opened_as
+        self._opened_as = (title, tuple(turned(opened_days)), *rest)
+        self._days_week = week
 
     def _picture(self) -> tuple:
         return (

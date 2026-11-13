@@ -39,6 +39,7 @@ from desktop.native.widgets import (
     SLOT_HINT,
     SPREAD_MIN,
     _homework_problem,
+    same_weekday,
     spread_session_min,
     spread_words,
     today_from_words,
@@ -163,6 +164,18 @@ class HomeworkDraft:
         self.error = ""
         self.details_error = ""
         self._opened_as = self._picture()
+        # The open week the day numbers count from.
+        self._days_week = session.week_start or ""
+
+    def follow_week(self) -> None:
+        """A new sheet kept after Esc and opened again in a week that starts on another day: its pinned
+        day, and the one it opened with, keep their weekdays."""
+        week = self.session.week_start or ""
+        title, due_date, due_time, estimate, when, opened_day, *rest = self._opened_as
+        opened_day = same_weekday(opened_day, self._days_week, week)
+        self._opened_as = (title, due_date, due_time, estimate, when, opened_day, *rest)
+        self.when_day = same_weekday(self.when_day, self._days_week, week)
+        self._days_week = week
 
     # What is open -----------------------------------------------------------------------
 

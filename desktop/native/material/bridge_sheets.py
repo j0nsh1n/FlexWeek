@@ -211,6 +211,8 @@ class SheetsBridge(QObject):
         if category not in FLEX_CATEGORIES:
             category = "assignments"
         kept, self._kept_homework = self._kept_homework, None
+        if kept is not None:
+            kept.follow_week()
         self._homework = kept or HomeworkDraft(session, category=category)
         self._open("homework")
 
@@ -257,6 +259,8 @@ class SheetsBridge(QObject):
         day, start = self._new_event_values()
         category = session.armed_category
         kept, self._kept_block = self._kept_block, None
+        if kept is not None:
+            kept.follow_week()
         self._block = kept or BlockDraft(
             session, day=day, start=start, category=None if category in FLEX_CATEGORIES else category
         )
