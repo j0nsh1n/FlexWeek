@@ -231,6 +231,14 @@ def short_day_name(week_start: str, day: int) -> str:
     return (day_names(week_start) if week_start else DAYS)[day]
 
 
+def same_weekday(day: int, from_week: str, to_week: str) -> int:
+    """Day `day` of the week from `from_week` as the day of the week from `to_week` with its weekday: the
+    same date when that week holds it."""
+    if not from_week or not to_week or from_week == to_week:
+        return day
+    return day_in_week(date_for_day(from_week, day), to_week) % 7
+
+
 def full_day_name(week_start: str, day: int) -> str:
     """`short_day_name` written out: "Wednesday"."""
     return (day_full_names(week_start) if week_start else DAY_FULL)[day]

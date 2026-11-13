@@ -100,3 +100,49 @@ def test_a_routine_picked_in_a_week_from_wednesday_ticks_its_own_weekdays(
     ticked = [day["label"] for day in sheets.form["days"] if day["on"]]
     assert ticked == ["Sat", "Mon"]
     assert [day["value"] for day in sheets.form["days"] if day["on"]] == [3, 5]
+
+
+def test_days_ticked_in_the_routines_sheet_keep_their_weekdays_when_the_week_start_changes(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    from desktop.native import fields
+
+    # The clock is Thursday 5 November 2026. From Monday the week runs Monday 2 to Sunday 8; from
+    # Wednesday it runs Wednesday 4 to Tuesday 10. Wednesday 4 stays where it is (day 0); Monday 2 is
+    # not in the new week, so Monday is Monday 9 (day 5).
+    routine = {
+        "id": "r-3",
+        "name": "Monday and Wednesday",
+        "revision": 1,
+        "blocks": [
+            {
+                "template_id": "t1",
+                "title": "Long walk",
+                "days": [0, 2],
+                "start": "10:00",
+                "duration_min": 60,
+                "category": "exercise",
+            }
+        ],
+    }
+    shell.session.routines["r-3"] = routine
+    sheets.openRoutines()
+    pump(qapp)
+    sheets.selectRoutine("r-3")
+    ticked = [(day["label"], day["date"]) for day in sheets.form["days"] if day["on"]]
+    assert ticked == [("Mon", 2), ("Wed", 4)]
+    fields.save_week_starts_on("wednesday")
+    wait_until(qapp, lambda: shell.session.week_start == "2026-11-04" and not shell.session.busy)
+    settle(qapp, shell)
+    # The new week's read fetched the routines again, and this one was never saved to the server.
+    shell.session.routines["r-3"] = routine
+    pump(qapp)
+    assert sheets.kind == "routines"
+    ticked = [(day["value"], day["label"], day["date"]) for day in sheets.form["days"] if day["on"]]
+    assert ticked == [(0, "Wed", 4), (5, "Mon", 9)]
+    sheets.applyRoutine()
+    wait_until(qapp, lambda: sheets.kind == "", what=lambda: str(sheets.form.get("error")))
+    walk = [item for item in shell.session.blocks if item["title"] == "Long walk"]
+    assert sorted(day for item in walk for day in item["days"]) == [0, 5]
+    settle(qapp, shell)
+

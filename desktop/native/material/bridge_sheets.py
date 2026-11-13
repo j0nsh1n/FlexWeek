@@ -33,7 +33,7 @@ from desktop.native.reuse import (
     running_late_refusal,
 )
 from desktop.native.weekmodel import added_words, hhmm_text, length_label, range_label
-from desktop.native.widgets import LATE_WAIT, _late_move, _late_summary
+from desktop.native.widgets import LATE_WAIT, _late_move, _late_summary, same_weekday
 
 NOTHING_UNFINISHED = "None left"
 NOTICE_MS = 10000
@@ -96,6 +96,8 @@ class SheetsBridge(QObject):
         self._late_waiting: tuple[str, str] | None = None
         self._routine_id = ""
         self._routine_days: list[int] = []
+        # The open week the numbers in _routine_days count from.
+        self._routine_week = ""
         self._routine_error = ""
         self._paused = False
         self._held = False
@@ -908,7 +910,16 @@ class SheetsBridge(QObject):
 
     # Routines ---------------------------------------------------------------------------
 
+    def _keep_routine_days(self) -> None:
+        """Ticked days keep their weekdays when the open week now starts on another day."""
+        week = self._session.week_start or ""
+        if week != self._routine_week:
+            turned = (same_weekday(day, self._routine_week, week) for day in self._routine_days)
+            self._routine_days = sorted(turned)
+            self._routine_week = week
+
     def _routine_form(self) -> dict:
+        self._keep_routine_days()
         session = self._session
         routines = sorted(session.routines.values(), key=lambda item: str(item.get("name", "")).lower())
         monday = date.fromisoformat(session.week_start) if session.week_start else None
