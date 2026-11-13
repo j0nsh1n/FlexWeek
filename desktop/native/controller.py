@@ -769,11 +769,26 @@ class NativeSession(QObject):
         if self.account is None:
             self.week_start = self.shown_week_of(self.selected_day)
         elif changed:
+            self._rebase_focus()
             self._refollow_week = True
             self._follow_week()
         if self.planner_view == "month":
             self._fetch_month()
         self.week_changed.emit()
+
+    def _rebase_focus(self) -> None:
+        """The focus timer names its week and day: keep its date, in the week from the new first day."""
+        state = self.focus
+        if state is None or not state.get("weekStart"):
+            return
+        day = state.get("day")
+        anchor = date_for_day(state["weekStart"], day) if isinstance(day, int) else state["weekStart"]
+        week = self.shown_week_of(anchor)
+        moved = {**state, "weekStart": week}
+        if isinstance(day, int):
+            moved["day"] = day_in_week(anchor, week)
+        self.focus = moved
+        self._persist_focus()
 
     def _follow_week(self) -> None:
         """Open the week from the chosen first day once nothing is held; a save still going on calls
