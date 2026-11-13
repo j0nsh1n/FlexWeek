@@ -258,6 +258,64 @@ fn a_day_added_to_school_takes_the_repeats_time_when_schools_own_piece_was_chang
 }
 
 #[test]
+fn a_day_added_to_school_never_goes_to_a_piece_missed_on_every_day() {
+    // Week of Monday 9 November: Wednesday's piece was marked missed, School's own piece was changed
+    // to 10:00, and Friday's piece follows the repeat. Saturday and Sunday added for good come in live,
+    // at the repeat's 08:30, on Friday's piece, not hidden on the missed one.
+    let missed = json!({"id": "school@20261111", "title": "School", "kind": "locked",
+                        "category": "class", "start": "08:30", "duration_min": 405,
+                        "days": [2], "missed_days": [2]});
+    let mut changed = kept();
+    changed["days"] = json!([1, 3]);
+    changed["start"] = json!("10:00");
+    let friday = json!({"id": "school@20261112", "title": "School", "kind": "locked",
+                        "category": "class", "start": "08:30", "duration_min": 405, "days": [4]});
+    let weekend = parse_intent(&json!({"id": "school", "scope": "from",
+                                       "from_date": "2026-11-09", "add_days": [5, 6]}))
+    .unwrap();
+    let (blocks, _) = apply_to_week(&[missed, changed, friday], &[school()], &[weekend]).unwrap();
+    assert_eq!(
+        by_id(&blocks, "school@20261111")["days"],
+        json!([2]),
+        "{blocks:?}"
+    );
+    assert_eq!(by_id(&blocks, "school@20261111")["missed_days"], json!([2]));
+    let taker = by_id(&blocks, "school@20261112");
+    assert_eq!(
+        (&taker["days"], &taker["start"]),
+        (&json!([4, 5, 6]), &json!("08:30"))
+    );
+    assert!(
+        taker
+            .get("missed_days")
+            .is_none_or(|days| days == &json!([])),
+        "{taker:?}"
+    );
+}
+
+#[test]
+fn a_day_added_to_school_that_a_piece_already_holds_is_not_added_twice() {
+    // Saturday 14 November already has School at 10:00 on School's own piece (a "this week only"
+    // change). Adding Saturday to School for good leaves that one Saturday School as it is.
+    let mut own = kept();
+    own["days"] = json!([0, 1, 5]);
+    own["start"] = json!("10:00");
+    let mut follows = piece();
+    follows["start"] = json!("08:30");
+    let saturday = parse_intent(&json!({"id": "school", "scope": "from",
+                                        "from_date": "2026-11-09", "add_days": [5]}))
+    .unwrap();
+    let (blocks, _) = apply_to_week(&[own, follows], &[school()], &[saturday]).unwrap();
+    let saturdays: Vec<&Value> = blocks
+        .iter()
+        .filter(|block| block["days"].as_array().unwrap().contains(&json!(5)))
+        .collect();
+    assert_eq!(saturdays.len(), 1, "{blocks:?}");
+    assert_eq!(saturdays[0]["start"], "10:00");
+    assert_eq!(by_id(&blocks, "school@20261111")["days"], json!([2, 3, 4]));
+}
+
+#[test]
 fn a_standing_school_built_from_pieces_keeps_every_day_at_the_time_most_of_them_have() {
     // School on Monday and Tuesday at 08:30 and on Wednesday to Friday at 10:00 stands on all five
     // days at 10:00, the time of the piece that holds the most days.

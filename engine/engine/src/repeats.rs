@@ -346,33 +346,54 @@ pub fn restated_pieces(
     id: &str,
 ) -> Vec<Option<Value>> {
     let own = |piece: &Value| id_of(piece) == Some(id);
-    let follows = |piece: &Value| old.is_some_and(|old| follows_on_every_field(old, piece));
+    let live = |piece: &Value| {
+        let missed = missed_of(piece);
+        days_of(piece)
+            .into_iter()
+            .filter(move |day| !missed.contains(day))
+    };
+    // A piece missed on all its days would take the added day missed, so it is never the taker.
+    let follows = |piece: &Value| {
+        live(piece).next().is_some() && old.is_some_and(|old| follows_on_every_field(old, piece))
+    };
     let taker = pieces
         .iter()
         .position(|piece| own(piece) && follows(piece))
         .or_else(|| pieces.iter().position(follows))
         .or_else(|| pieces.iter().position(own))
         .unwrap_or(0);
-    let widened = match (old, new) {
-        (Some(old), Some(new)) => {
+    // The repeat's old days plus `extra`: a day in it is not new to the piece, so it is not added.
+    let widen = |extra: &[i64]| {
+        old.map(|old| {
             let mut days = days_of(old);
-            for day in days_of(new) {
-                if !days.contains(&day) {
-                    days.push(day);
+            let before = days.len();
+            for day in extra {
+                if !days.contains(day) {
+                    days.push(*day);
                 }
             }
             let mut widened = old.clone();
-            widened["days"] = json!(days);
-            Some(widened)
-        }
-        _ => None,
+            if days.len() != before {
+                widened["days"] = json!(days);
+            }
+            widened
+        })
     };
+    let widened = new.and_then(|new| widen(&days_of(new)));
+    // An added day another piece already holds live stays that piece's, so School is there once.
+    let held_elsewhere: Vec<i64> = pieces
+        .iter()
+        .enumerate()
+        .filter(|(at, _)| *at != taker)
+        .flat_map(|(_, piece)| live(piece))
+        .collect();
+    let taken = widen(&held_elsewhere);
     pieces
         .iter()
         .enumerate()
         .map(|(at, piece)| {
             let old = if at == taker {
-                old
+                taken.as_ref()
             } else {
                 widened.as_ref().or(old)
             };
