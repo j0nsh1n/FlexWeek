@@ -833,7 +833,12 @@ class NativeSession(QObject):
             self._say(error.message)
             self.week_changed.emit()
 
-        self.client.request("GET", f"/api/month?month={asked}&first_day={self.first_weekday}", None, ok, err)
+        self.client.request("GET", self._month_path(asked), None, ok, err)
+
+    def _month_path(self, month: str) -> str:
+        # A Monday start asks as it always did; the server's first day is Monday when none is named.
+        first = f"&first_day={self.first_weekday}" if self.first_weekday else ""
+        return f"/api/month?month={month}{first}"
 
     def _prefetch_open_week_month(self) -> None:
         """Warm the month most likely to be opened without holding up the week."""
@@ -860,7 +865,7 @@ class NativeSession(QObject):
         def err(_error: ApiError) -> None:
             self._month_prefetching.discard(key)
 
-        self.client.request("GET", f"/api/month?month={asked}&first_day={self.first_weekday}", None, ok, err)
+        self.client.request("GET", self._month_path(asked), None, ok, err)
 
     def _keep_session(self) -> None:
         if self.kept is None:

@@ -110,8 +110,7 @@ def test_open_week_month_is_prefetched_without_waiting_for_it(
     session._prefetch_open_week_month()
 
     assert len(requests) == 1
-    # The month is asked for with the computer's first day of the week: Monday on a clean computer.
-    assert requests[0][0:2] == ("GET", "/api/month?month=2026-10&first_day=0")
+    assert requests[0][0:2] == ("GET", "/api/month?month=2026-10")
     assert session.month_data is None
     requests[0][3]({"month": "2026-10"})
     assert session._month_cache[(str(session.account["id"]), "2026-10")]["month"] == "2026-10"
@@ -119,10 +118,28 @@ def test_open_week_month_is_prefetched_without_waiting_for_it(
     # The month kept is on screen at once, before any answer; it is asked for again all the same,
     # since another week may have changed, and the fresh answer replaces it.
     assert session.month_data == {"month": "2026-10"}
-    asked_again = [args for args in requests[1:] if args[1] == "/api/month?month=2026-10&first_day=0"]
+    asked_again = [args for args in requests[1:] if args[1] == "/api/month?month=2026-10"]
     assert len(asked_again) == 1
     asked_again[0][3]({"month": "2026-10", "days": [], "fresh": True})
     assert session.month_data.get("fresh") is True
+
+
+def test_a_week_from_wednesday_asks_for_the_month_from_wednesday(
+    qapp: QApplication, window: NativeWindow, monkeypatch
+) -> None:
+    session = window.session
+    CLOCK.set(datetime.fromisoformat("2026-10-15T15:40"))
+    session.follow_first_weekday(2)
+    wait_until(qapp, lambda: not session.busy)
+    assert session.week_start == "2026-10-14"
+    session._month_cache.clear()
+    session._month_prefetching.clear()
+    requests = []
+    monkeypatch.setattr(session.client, "request", lambda *args: requests.append(args))
+    session._prefetch_open_week_month()
+    session.set_view("month")
+    # Both the month on screen and the one asked for ahead name Wednesday (2) as the first day.
+    assert [args[1] for args in requests] == ["/api/month?month=2026-10&first_day=2"] * 2
 
 
 def test_month_keeps_a_picked_day_and_uses_thursday_for_a_week_without_today(

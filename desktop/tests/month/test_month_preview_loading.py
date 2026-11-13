@@ -20,6 +20,7 @@ from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.client import ApiError  # noqa: E402
+from desktop.native.fields import save_week_starts_on  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402, F401
 from desktop.tests.material_support import named, pump, show_material  # noqa: E402
@@ -346,3 +347,20 @@ def test_tab_passes_the_preview_in_three_stops_or_fewer(qapp: QApplication, wind
     assert "previewView" in err_stops
     assert "previewFit" in err_stops
     assert "monthPreviewRetry" in err_stops
+
+
+@pytest.mark.parametrize(("start", "query"), [("monday", ""), ("wednesday", "&first_day=2")])
+def test_the_preview_asks_for_its_month_from_the_week_start_and_as_always_from_monday(
+    qapp: QApplication, window: NativeWindow, start: str, query: str
+) -> None:
+    save_week_starts_on(start)
+    held = hold_month_requests(window)
+    show_material(qapp, window)
+    wait_until(qapp, lambda: idle(window))
+    bridge(window).showPage("settings")
+    settings = panel(window)
+    settings.openAdvanced()
+    settings.setPreviewView("month")
+    wait_until(qapp, lambda: preview_calls(held))
+    month = settings._preview._passive_month._target_month()
+    assert {call[1] for call in preview_calls(held)} == {f"/api/month?month={month}{query}"}

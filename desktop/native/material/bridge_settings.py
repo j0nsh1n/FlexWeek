@@ -575,7 +575,9 @@ class PassiveMonthBridge(QObject):
                 self._failed_month = target_month
                 self.changed.emit()
 
-            asked = f"/api/month?month={target_month}&first_day={week_start_day()}"
+            # A Monday start asks as it always did; the server's first day is Monday when none is named.
+            first = week_start_day()
+            asked = f"/api/month?month={target_month}" + (f"&first_day={first}" if first else "")
             client.request("GET", asked, None, ok, err)
 
         rows, names = read_cells(session, month=target_month, snapshot=snapshot)
