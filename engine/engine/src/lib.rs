@@ -11,6 +11,7 @@ pub mod model;
 pub mod plan;
 pub mod pyprint;
 pub mod repeats;
+pub mod shown;
 pub mod snapshot;
 pub mod solver;
 pub mod standing;
