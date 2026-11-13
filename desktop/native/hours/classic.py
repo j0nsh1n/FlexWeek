@@ -26,7 +26,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from desktop.native import icons
-from desktop.native.calendar import CATEGORIES, DAY_FULL, DAYS, day_names
+from desktop.native.calendar import CATEGORIES, DAY_FULL, DAYS, day_names, week_columns
 from desktop.native.fonts import at_scale, time_font
 from desktop.native.hours.canvas import BlockPainter, HoursCanvas
 from desktop.native.hours.geometry import FIRST, LAST, Axis, LinearTrack
@@ -57,7 +57,6 @@ AGENDA_PX = 288
 # An empty Saturday or Sunday takes this share of a full day's width, and never less than EMPTY_MIN_PX
 # (or the equal share where that is already smaller): a block dropped there still reads, with its
 # icon, the first word of its name and its times.
-WEEKEND = (5, 6)
 EMPTY_SHARE = 0.6
 EMPTY_MIN_PX = 96
 # The other designs' week columns are narrower than this, so their empty weekend days keep less.
@@ -322,11 +321,11 @@ class DayName(QLabel):
 def column_widths(
     total: float, empty: frozenset[int], days: tuple[int, ...] = tuple(range(7)), floor: int = EMPTY_MIN_PX
 ) -> list[float]:
-    """The widths of `days` over `total` pixels: equal, except that an empty weekend day is narrower
-    (see EMPTY_SHARE, and `floor`, the least it keeps) and the days with something in them share what
-    that leaves, equally. The other designs' narrower columns pass a smaller `floor`."""
+    """The widths of `days` over `total` pixels: equal, except that an empty weekend day (`empty`, from
+    `empty_days`) is narrower (see EMPTY_SHARE, and `floor`, the least it keeps) and the other days
+    share what that leaves, equally. The other designs' narrower columns pass a smaller `floor`."""
     share = total / len(days)
-    quiet = [day for day in WEEKEND if day in empty and day in days]
+    quiet = [day for day in days if day in empty]
     if not quiet or len(quiet) == len(days):
         return [share] * len(days)
     narrow = min(share, max(floor, share * EMPTY_SHARE))
@@ -335,7 +334,9 @@ def column_widths(
 
 
 def empty_days(week: WeekModel) -> frozenset[int]:
-    return frozenset(day for day in range(7) if not week.on_day(day))
+    """The Saturday and Sunday of the week on screen, wherever they fall, that have nothing on them."""
+    weekend = set(range(7)) - set(week_columns(week.week_start, False))
+    return frozenset(day for day in weekend if not week.on_day(day))
 
 
 class ClassicWeek(QFrame):

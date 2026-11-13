@@ -60,7 +60,6 @@ from desktop.native.hours.canvas import (
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.classic import (
     EMPTY_MIN_NARROW_PX,
-    WEEKEND,
     ClassicPainter,
     Share,
     column_widths,
@@ -1270,7 +1269,7 @@ class BentoCanvas(HoursCanvas):
         """Preserve equal-width weekday and quiet weekend groups while ensuring day headers fit."""
         if not widths:
             return widths
-        quiet = [day for day in WEEKEND if day in self.empty and day < len(widths)]
+        quiet = [day for day in range(len(widths)) if day in self.empty]
         active = [day for day in range(len(widths)) if day not in quiet]
         if not quiet or not active:
             share = total / len(widths)
