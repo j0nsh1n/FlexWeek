@@ -145,4 +145,3 @@ def test_days_ticked_in_the_routines_sheet_keep_their_weekdays_when_the_week_sta
     walk = [item for item in shell.session.blocks if item["title"] == "Long walk"]
     assert sorted(day for item in walk for day in item["days"]) == [0, 5]
     settle(qapp, shell)
-
