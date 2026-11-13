@@ -4,13 +4,13 @@ import re
 import secrets
 import sqlite3
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 
 import flexweek_engine  # type: ignore[import-untyped]
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -181,12 +181,14 @@ def week_with_standing(db: Connection, user_id: int, week_start: str, stored: st
     return merged
 
 
-def month_weeks(db: Connection, user_id: int, month: str) -> list[tuple[str, list[dict]]]:
+def month_weeks(
+    db: Connection, user_id: int, month: str, first_weekday: int = 0
+) -> list[tuple[str, list[dict]]]:
     """Every saved week, with the weeks the month's grid shows as the student sees them."""
     saved = dict(db.list_account_weeks(user_id))
     first, last = parse_month(month)
-    grid_start, grid_end = month_grid(first, last)
-    monday = grid_start
+    grid_start, grid_end = month_grid(first, last, first_weekday)
+    monday = date.fromisoformat(monday_of(grid_start.isoformat()))
     while monday <= grid_end:
         saved.setdefault(monday.isoformat(), "[]")
         monday += timedelta(days=7)
@@ -1225,15 +1227,20 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         return build_day(date, week_start, rewrite_stored_blocks(blocks, owned), assignment_rows, weeks)
 
     @app.get("/api/month")
-    def get_month(account: Annotated[dict, Depends(user)], month: str | None = None) -> dict:
+    def get_month(
+        account: Annotated[dict, Depends(user)],
+        month: str | None = None,
+        first_day: Annotated[int, Query(ge=0, le=6)] = 0,
+    ) -> dict:
+        """`first_day` is the day the rows start on (0 Monday to 6 Sunday), as the computer shows it."""
         if month is None or not is_month_label(month):
             raise HTTPException(422, MONTH_RULE)
         with connect(path) as db:
             assignment_rows = [
                 (json.loads(body), int(revision)) for body, revision in db.assignment_bodies(account["id"])
             ]
-            weeks = month_weeks(db, account["id"], month)
-        return build_month(month, assignment_rows, weeks)
+            weeks = month_weeks(db, account["id"], month, first_day)
+        return build_month(month, assignment_rows, weeks, first_day)
 
     @app.put("/api/week")
     def put_week(week: SavedWeek, account: Annotated[dict, Depends(user)]) -> dict:

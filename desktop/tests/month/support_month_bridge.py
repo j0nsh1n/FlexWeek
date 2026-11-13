@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 from PySide6.QtCore import QObject, Signal
 
-from desktop.native.material import bridge_month
+from desktop.native import fields
 from desktop.native.material.bridge_month import MonthBridge
 
 
@@ -101,12 +101,14 @@ def chips(rows: list[dict], iso: str) -> list[dict]:
 
 
 @pytest.fixture
-def week_start(monkeypatch: pytest.MonkeyPatch):
+def week_start():
     """Choose which day the week starts on, for the grid and the weekday names alike."""
 
     def choose(value: str) -> None:
-        monkeypatch.setattr("desktop.native.hours.month.week_starts_on", lambda: value)
-        monkeypatch.setattr(bridge_month, "week_starts_on", lambda: value)
+        # Written as a pick writes it; the test folder is cleared between tests.
+        path = fields._week_starts_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"week_starts_on": value}), encoding="utf-8")
 
     choose("monday")
     return choose

@@ -22,6 +22,11 @@ Item {
         property: "scale"
         value: root.theme && root.theme.typeScale ? root.theme.typeScale : 1
     }
+    Binding {
+        target: WeekStart
+        property: "firstDay"
+        value: root.bridge ? root.bridge.firstWeekday : 0
+    }
     readonly property bool typing: sheetHost.active || _field(Window.activeFocusItem)
     // The Focus screen covers the window. The number keys, Z and Esc belong to it while it is open.
     readonly property bool focusOpen: bridge ? bridge.focus.open : false

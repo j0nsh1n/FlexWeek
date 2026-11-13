@@ -48,10 +48,13 @@ Item {
         return new Date(year, month - 1, 0).getDate()
     }
 
-    // Monday is column 0, matching the mockup's M T W T F S S.
+    // Column 0 is the week's first day on this computer (0 Monday to 6 Sunday); Monday shows the mockup's
+    // M T W T F S S.
+    property int firstDay: WeekStart.firstDay
+    readonly property var letters: ["M", "T", "W", "T", "F", "S", "S"]
     function lead() {
-        var js = new Date(year, month - 1, 1).getDay()
-        return (js + 6) % 7
+        var monday = (new Date(year, month - 1, 1).getDay() + 6) % 7
+        return (monday - firstDay + 7) % 7
     }
 
     function dayAt(index) {
@@ -76,7 +79,8 @@ Item {
             height: root.cell
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-            text: ["M", "T", "W", "T", "F", "S", "S"][index]
+            objectName: "letter" + index
+            text: root.letters[(index + root.firstDay) % 7]
             color: root.muteInk
             font.family: M3Font.family
             font.pixelSize: M3Font.px(12)

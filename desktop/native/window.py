@@ -112,7 +112,7 @@ from desktop.native.custom_look import sanitize_saved
 from desktop.native.devices import SyncDot, SyncHost, live_phones, run_off_ui, sync_state
 from desktop.native.elevation import flatten, lift
 from desktop.native.feel import Context, apply_feel, context_for, current, extra_stylesheet, set_current
-from desktop.native.fields import ProblemLine, announce
+from desktop.native.fields import ProblemLine, announce, week_start_day, week_start_notice
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.focus import focus_now, phase_duration_ms
 from desktop.native.focus_screen import QUICK_TITLE, FocusScreen
@@ -639,6 +639,9 @@ class NativeWindow(QMainWindow):
         load_fonts()
         self.session = NativeSession(origin, self, kept)
         self.session.use_sync_host(sync)
+        # The week's first day is kept on this computer, not on the account; the session is told it.
+        self.session.first_weekday = week_start_day()
+        week_start_notice().changed.connect(self._on_week_start)
         self._instance_server: QLocalServer | None = None
         self.setWindowTitle("FlexWeek")
         # This computer's sync host, and the running service once it has started (None until then). The
@@ -2950,6 +2953,10 @@ class NativeWindow(QMainWindow):
         self._recovery_said.stop()
         self.recovery_copy.setText(RECOVERY_COPY)
         self.recovery_save.setText(RECOVERY_SAVE)
+
+    def _on_week_start(self, _value: str) -> None:
+        """The week's first day changed in Settings or Setup: every open screen follows at once."""
+        self.session.follow_first_weekday(week_start_day())
 
     def _on_week(self) -> None:
         if self.session.account is None:

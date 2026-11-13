@@ -1,7 +1,8 @@
 import QtQuick
 import components 1.0
 
-// Seven day buttons that each switch on and off. `days` holds the picked day numbers, Monday 0.
+// Seven day buttons that each switch on and off. `days` holds the picked day numbers, Monday 0; `names`
+// lists the days in the order they are shown, each with its `day` number.
 Flow {
     id: root
     property var theme
@@ -23,10 +24,11 @@ Flow {
             id: chip
             required property var modelData
             required property int index
-            readonly property bool on: root.days.indexOf(index) >= 0
+            readonly property int day: modelData.day === undefined ? index : modelData.day
+            readonly property bool on: root.days.indexOf(day) >= 0
             width: 56
             height: 36
-            objectName: root.prefix + index
+            objectName: root.prefix + day
             activeFocusOnTab: true
             property bool keyDown: false
             Rectangle {
@@ -69,12 +71,12 @@ Flow {
                 }
             }
             HoverHandler { id: hover }
-            TapHandler { id: tap; onTapped: root.toggled(chip.index) }
+            TapHandler { id: tap; onTapped: root.toggled(chip.day) }
             Accessible.role: Accessible.CheckBox
             Accessible.name: root.accessPrefix + chip.modelData.full
             Accessible.checkable: true
             Accessible.checked: chip.on
-            Accessible.onPressAction: root.toggled(chip.index)
+            Accessible.onPressAction: root.toggled(chip.day)
             Keys.onPressed: (event) => {
                 if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                     chip.keyDown = true
@@ -84,7 +86,7 @@ Flow {
             Keys.onReleased: (event) => {
                 if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                     if (chip.keyDown)
-                        root.toggled(chip.index)
+                        root.toggled(chip.day)
                     chip.keyDown = false
                     event.accepted = true
                 }

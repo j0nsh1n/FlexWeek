@@ -286,6 +286,9 @@ class NativeSession(QObject):
         self.day_data: dict | None = None
         self.selected_month: str | None = None
         self.month_data: dict | None = None
+        # The day weeks start on, on screen (0 Monday to 6 Sunday). It is kept on this computer, so the
+        # window tells the session; stored weeks stay keyed by their Monday whatever it is.
+        self.first_weekday = 0
         # The type a drag on the hours makes, once one is picked under Add. Until then a block made by
         # dragging has none: it used to be School, and an hour of Club counted as school.
         self.armed_category: str | None = None
@@ -695,6 +698,15 @@ class NativeSession(QObject):
         self._refresh_view()
         self.week_changed.emit()
 
+    def follow_first_weekday(self, first_weekday: int) -> None:
+        """A new first day of the week: the month's rows change, so what was kept is asked for again."""
+        self.first_weekday = first_weekday
+        self._month_cache.clear()
+        self._month_gen += 1
+        if self.planner_view == "month":
+            self._fetch_month()
+        self.week_changed.emit()
+
     def _fetch_day(self) -> None:
         if self.account is None or self.planner_view != "day":
             return
@@ -749,7 +761,7 @@ class NativeSession(QObject):
             self._say(error.message)
             self.week_changed.emit()
 
-        self.client.request("GET", f"/api/month?month={asked}", None, ok, err)
+        self.client.request("GET", f"/api/month?month={asked}&first_day={self.first_weekday}", None, ok, err)
 
     def _prefetch_open_week_month(self) -> None:
         """Warm the month most likely to be opened without holding up the week."""
@@ -776,7 +788,7 @@ class NativeSession(QObject):
         def err(_error: ApiError) -> None:
             self._month_prefetching.discard(key)
 
-        self.client.request("GET", f"/api/month?month={asked}", None, ok, err)
+        self.client.request("GET", f"/api/month?month={asked}&first_day={self.first_weekday}", None, ok, err)
 
     def _keep_session(self) -> None:
         if self.kept is None:

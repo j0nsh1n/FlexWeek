@@ -64,7 +64,7 @@ from PySide6.QtWidgets import (
 from backend import clock as wall_clock
 from backend.slots import SLOT_MIN
 from desktop.native import icons
-from desktop.native.calendar import DAY_FULL, DAYS
+from desktop.native.calendar import DAY_FULL, DAYS, weekday_order
 from desktop.native.tokens import WEIGHT_STRONG
 from desktop.native.weekmodel import clock_text, end_after_start_words, time_format
 
@@ -97,7 +97,9 @@ class DayPicker(QWidget):
         name: str = "day",
         *,
         exclusive: bool = False,
+        dated: bool = False,
     ) -> None:
+        """`dated` pills are the open week's dates, which run from its Monday as the week is stored."""
         super().__init__()
         self.setObjectName("setupRow")
         self._exclusive = exclusive
@@ -106,9 +108,11 @@ class DayPicker(QWidget):
         line = QHBoxLayout(self)
         line.setContentsMargins(0, 0, 0, 0)
         line.setSpacing(4)
-        self.buttons: list[QPushButton] = []
-        for index, short in enumerate(DAYS):
-            button = QPushButton(short)
+        # Held Monday first, as a block's `days` count; laid out (and tabbed through) from the computer's
+        # first day of the week.
+        made: dict[int, QPushButton] = {}
+        for index in range(7) if dated else weekday_order(week_start_day()):
+            button = QPushButton(DAYS[index])
             button.setObjectName(f"{name}{index}")
             button.setProperty("pill", True)
             button.setCheckable(True)
@@ -118,7 +122,8 @@ class DayPicker(QWidget):
             button.setAutoDefault(False)
             button.toggled.connect(self._toggled)
             line.addWidget(button)
-            self.buttons.append(button)
+            made[index] = button
+        self.buttons: list[QPushButton] = [made[index] for index in range(7)]
         line.addStretch(1)
 
     def days(self) -> list[int]:
@@ -184,7 +189,34 @@ def _toward(colour: QColor, ground: QColor, share: float) -> QColor:
     )
 
 
-WEEK_STARTS = ("monday", "sunday")
+# The days the week can start on, Monday first: a name's place is its weekday number (0 Monday to
+# 6 Sunday), as a block's `days` count them.
+WEEK_STARTS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+QT_DAYS = (
+    Qt.DayOfWeek.Monday,
+    Qt.DayOfWeek.Tuesday,
+    Qt.DayOfWeek.Wednesday,
+    Qt.DayOfWeek.Thursday,
+    Qt.DayOfWeek.Friday,
+    Qt.DayOfWeek.Saturday,
+    Qt.DayOfWeek.Sunday,
+)
+
+
+class WeekStartNotice(QObject):
+    """Says the week's first day changed on this computer, so every open screen redraws at once."""
+
+    changed = Signal(str)
+
+
+_notice: WeekStartNotice | None = None
+
+
+def week_start_notice() -> WeekStartNotice:
+    global _notice
+    if _notice is None:
+        _notice = WeekStartNotice()
+    return _notice
 
 
 def _week_starts_file() -> Path:
@@ -193,7 +225,7 @@ def _week_starts_file() -> Path:
 
 
 def week_starts_on() -> str:
-    """Monday, unless this computer was set to Sunday. Kept per computer, not on the account: the
+    """Monday, unless this computer was set to another day. Kept per computer, not on the account: the
     stored weeks stay Monday-keyed, and the account's preferences are the engine's fixed list."""
     try:
         value = json.loads(_week_starts_file().read_text(encoding="utf-8")).get("week_starts_on")
@@ -202,20 +234,28 @@ def week_starts_on() -> str:
     return value if value in WEEK_STARTS else "monday"
 
 
+def week_start_day() -> int:
+    """The week's first day as the engine counts days: 0 Monday to 6 Sunday."""
+    return WEEK_STARTS.index(week_starts_on())
+
+
 def save_week_starts_on(value: str) -> None:
     if value not in WEEK_STARTS:
         raise ValueError(f"week start must be one of {WEEK_STARTS}, not {value!r}")
+    before = week_starts_on()
     path = _week_starts_file()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"week_starts_on": value}), encoding="utf-8")
+    if value != before:
+        week_start_notice().changed.emit(value)
 
 
 def first_day_of_week() -> Qt.DayOfWeek:
-    return Qt.DayOfWeek.Sunday if week_starts_on() == "sunday" else Qt.DayOfWeek.Monday
+    return QT_DAYS[week_start_day()]
 
 
 class LookCalendar(QCalendarWidget):
-    """A month drawn in the look: Monday first (Sunday if the computer says so), weekends in the text
+    """A month drawn in the look: the computer's first day of the week first, weekends in the text
     colour like any other day, the picked day a round dot in the accent, today ringed in it, and other
     months' days faint. Qt's own drew Saturday and Sunday red and the picked day as a square (T19 of the
     0.17.0 audit)."""
@@ -224,11 +264,15 @@ class LookCalendar(QCalendarWidget):
         super().__init__(parent)
         self.setObjectName("lookCalendar")
         self.setFirstDayOfWeek(first_day_of_week())
+        week_start_notice().changed.connect(self._follow_week_start)
         self.setGridVisible(False)
         self.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
         self.setHorizontalHeaderFormat(QCalendarWidget.HorizontalHeaderFormat.SingleLetterDayNames)
         for day in (Qt.DayOfWeek.Saturday, Qt.DayOfWeek.Sunday):
             self.setWeekdayTextFormat(day, QTextCharFormat())
+
+    def _follow_week_start(self, _value: str) -> None:
+        self.setFirstDayOfWeek(first_day_of_week())
 
     def colours(self) -> tuple[QColor, QColor, QColor, QColor]:
         """The words, the card under them, the accent and the words on the accent, as the look's style

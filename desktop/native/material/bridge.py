@@ -18,6 +18,7 @@ from typing import Any, Protocol, cast
 
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
+from desktop.native.fields import week_start_day, week_start_notice
 from desktop.native.hours.zoom import Scale
 from desktop.native.material.bridge_account import AccountBridge
 from desktop.native.material.bridge_day import DayBridge
@@ -121,6 +122,7 @@ class MaterialBridge(QObject):
         self._focus = FocusBridge(window, self)
         self._sheets = SheetsBridge(window, self)
         self._following = False
+        week_start_notice().changed.connect(self._on_week_start)
         # Save finishes on this signal. The day lists and the Undo button read it then,
         # rather than waiting for the 20s clock tick.
         changed = getattr(self._window.session, "week_changed", None)
@@ -278,6 +280,14 @@ class MaterialBridge(QObject):
         if self._screen == "day":
             return DAY_ZOOM, "material.day"
         return None
+
+    def _on_week_start(self, _value: str) -> None:
+        self.changed.emit()
+
+    @Property(int, notify=changed)
+    def firstWeekday(self) -> int:  # noqa: N802 — QML name
+        """The day weeks start on, 0 Monday to 6 Sunday: the small months start their rows on it."""
+        return week_start_day()
 
     @Property(int, notify=changed)
     def hourRow(self) -> int:

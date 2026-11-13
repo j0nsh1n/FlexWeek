@@ -130,6 +130,7 @@ from desktop.native.calendar import (
     past_problem,
     span_clash,
     span_problem,
+    weekday_order,
 )
 from desktop.native.elevation import lift
 from desktop.native.fields import (
@@ -140,6 +141,7 @@ from desktop.native.fields import (
     Stepper,
     announce,
     held_on_problem,
+    week_start_day,
 )
 from desktop.native.fonts import caption, time_font, weighted
 from desktop.native.hours.geometry import DEFAULT_DRAG_STEP, drag_step, next_slot
@@ -5086,7 +5088,7 @@ class HomeworkDialog(Dialog):
         day, start = self._default_placement()
         if self._placed:
             day, start = self._placed[0], hhmm_to_minutes(self._placed[1])
-        self.when_day = DayPicker([day], "homeworkWhenDay")
+        self.when_day = DayPicker([day], "homeworkWhenDay", dated=True)
         self._day = day
         column.addWidget(self.when_day)
         clock = QHBoxLayout()
@@ -6391,7 +6393,7 @@ class ChooseTimeDialog(Dialog):
         layout.addWidget(sheet_note(f"For {block.get('title') or 'homework'}."))
         form = Form(stacked=True)
         picked = today if today in days else (days[0] if days else 0)
-        self.day = DayPicker([picked], "chooseTimeDay", exclusive=True)
+        self.day = DayPicker([picked], "chooseTimeDay", exclusive=True, dated=True)
         for index, button in enumerate(self.day.buttons):
             button.setEnabled(index in days)
         form.addRow("Day", self.day)
@@ -6917,8 +6919,9 @@ def _by_day(windows: list[dict]) -> list[dict]:
 
 
 class AvailabilityStrip(QWidget):
-    """The week at a glance, Monday to Sunday: study hours in the accent, protected time in grey over
-    them and the cut-off as a line across. Painted to be read; the tabs under it change what it shows."""
+    """The week at a glance, from the computer's first day of the week: study hours in the accent,
+    protected time in grey over them and the cut-off as a line across. Painted to be read; the tabs
+    under it change what it shows."""
 
     HEAD = 18
     GAP = 6
@@ -6944,9 +6947,18 @@ class AvailabilityStrip(QWidget):
         self.first = min([STRIP_FIRST_MIN, *starts])
         self.update()
 
+    def days(self) -> list[int]:
+        """The weekdays (0 Monday) in the order the columns show them."""
+        return weekday_order(week_start_day())
+
+    def letters(self) -> list[str]:
+        return ["MTWTFSS"[day] for day in self.days()]
+
     def column(self, day: int) -> QRectF:
+        """Where weekday `day` (0 Monday) is drawn."""
         width = (self.width() - 6 * self.GAP) / 7
-        return QRectF(day * (width + self.GAP), self.HEAD, width, self.height() - self.HEAD - 1)
+        at = self.days().index(day)
+        return QRectF(at * (width + self.GAP), self.HEAD, width, self.height() - self.HEAD - 1)
 
     def y_of(self, minute: int) -> float:
         track = self.column(0)
@@ -6956,7 +6968,7 @@ class AvailabilityStrip(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setFont(caption(self.font()))
-        for day, letter in enumerate("MTWTFSS"):
+        for day, letter in zip(self.days(), self.letters(), strict=True):
             track = self.column(day)
             painter.setPen(QColor(self.colours["muted"]))
             head = QRectF(track.left(), 0, track.width(), self.HEAD)

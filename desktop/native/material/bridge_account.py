@@ -40,6 +40,7 @@ from desktop.native.calendar import (
     SETUP_SCHOOL_ID,
     is_setup_block,
     new_activity_id,
+    weekday_order,
 )
 from desktop.native.client import (
     SESSION_ENDED,
@@ -54,7 +55,13 @@ from desktop.native.client import (
     sign_in_problem,
     sign_up_problem,
 )
-from desktop.native.fields import QUICK_LENGTHS, read_clock, save_week_starts_on, week_starts_on
+from desktop.native.fields import (
+    QUICK_LENGTHS,
+    WEEK_STARTS,
+    read_clock,
+    save_week_starts_on,
+    week_starts_on,
+)
 from desktop.native.hours.geometry import drag_step
 from desktop.native.layouts.registry import (
     DESIGN_LOOKS,
@@ -682,7 +689,7 @@ class AccountBridge(QObject):
 
     @Slot(str)
     def setWeekStart(self, value: str) -> None:  # noqa: N802 — QML slot
-        if value in ("monday", "sunday"):
+        if value in WEEK_STARTS:
             self._week_start = value
             self.changed.emit()
 
@@ -1274,9 +1281,11 @@ class AccountBridge(QObject):
         times = ({"value": item, "label": hhmm_text(item)} for item in sorted({*CUTOFFS, *kept}))
         return [{"value": "", "label": "No limit"}, *times]
 
-    @Property("QVariantList", constant=True)  # type: ignore[arg-type]
+    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
     def dayNames(self) -> list:  # noqa: N802 — QML name
-        return [{"short": short, "full": full} for short, full in zip(DAYS, DAY_FULL, strict=True)]
+        """The days in the order shown, from the first day picked on this page."""
+        first = WEEK_STARTS.index(self._week_start)
+        return [{"day": day, "short": DAYS[day], "full": DAY_FULL[day]} for day in weekday_order(first)]
 
     @Property(str, notify=changed)
     def planning(self) -> str:

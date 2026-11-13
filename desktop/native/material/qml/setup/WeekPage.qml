@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import components 1.0
 import "../account"
+import "../sheets"
 
 // Clock, week start, school, sports and jobs, and the evening cutoff.
 Column {
@@ -32,16 +33,19 @@ Column {
     }
 
     SectionTitle { theme: page.theme; text: "Week starts on" }
-    ChipRow {
-        width: parent.width
+    PickerField {
+        objectName: "setupWeekStart"
+        width: Math.min(parent.width, 240)
         theme: page.theme
         density: page.density
         reduceMotion: page.reduceMotion
         highContrast: page.highContrast
-        prefix: "setupWeekStart"
-        accessPrefix: "Week starts on "
-        choices: [{value: "monday", label: "Monday"}, {value: "sunday", label: "Sunday"}]
-        current: bridge ? bridge.weekStart : "monday"
+        accessName: "Week starts on"
+        options: [{value: "monday", label: "Monday"}, {value: "tuesday", label: "Tuesday"},
+            {value: "wednesday", label: "Wednesday"}, {value: "thursday", label: "Thursday"},
+            {value: "friday", label: "Friday"}, {value: "saturday", label: "Saturday"},
+            {value: "sunday", label: "Sunday"}]
+        value: bridge ? bridge.weekStart : "monday"
         onPicked: (value) => page.bridge.setWeekStart(value)
     }
     HelpText { theme: page.theme; width: parent.width; text: "The Week view always runs Monday to Sunday." }

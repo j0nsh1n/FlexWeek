@@ -55,7 +55,8 @@ from shiboken6 import isValid
 
 from backend import clock as wall_clock
 from desktop.native import icons
-from desktop.native.calendar import DAYS, day_short, month_title
+from desktop.native.calendar import DAYS, day_short, month_rows, month_title, weekday_order
+from desktop.native.fields import week_start_day, week_start_notice
 from desktop.native.fonts import at_scale, time_font, weighted
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.hand import Hand
@@ -216,8 +217,9 @@ class Colours:
 
 
 class MiniMonth(QWidget):
-    """A month of dates from Monday, painted: the week on screen banded, today in the accent, a dot
-    under each date homework is due, the dates of other months dimmed. A click on a date asks for it."""
+    """A month of dates from the computer's first day of the week, painted: the week on screen banded,
+    today in the accent, a dot under each date homework is due, the dates of other months dimmed. A
+    click on a date asks for it."""
 
     date_chosen = Signal(str)
 
@@ -231,12 +233,20 @@ class MiniMonth(QWidget):
         self.week_start = ""
         self.today = wall_clock.today()
         self.due: frozenset[str] = frozenset()
+        week_start_notice().changed.connect(self._follow_week_start)
 
     def dates(self) -> list[date]:
-        first = self.month - timedelta(days=self.month.weekday())
         last_day = (self.month.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
-        end = last_day + timedelta(days=6 - last_day.weekday())
+        first, end = month_rows(self.month, last_day, week_start_day())
         return [first + timedelta(days=at) for at in range((end - first).days + 1)]
+
+    def letters(self) -> list[str]:
+        """The weekday letters over the columns, from the computer's first day of the week."""
+        return [LETTERS[day] for day in weekday_order(week_start_day())]
+
+    def _follow_week_start(self, _value: str) -> None:
+        self.updateGeometry()
+        self.update()
 
     def row_height(self) -> float:
         return max(28.0, QFontMetricsF(self._font()).height() + 12)
@@ -269,7 +279,7 @@ class MiniMonth(QWidget):
         painter.setFont(self._font())
         painter.setPen(QColor(colours.muted))
         wide = self.width() / 7
-        for column, letter in enumerate(LETTERS):
+        for column, letter in enumerate(self.letters()):
             painter.drawText(QRectF(column * wide, 0, wide, tall), Qt.AlignmentFlag.AlignCenter, letter)
         days = self.dates()
         shown_week = date.fromisoformat(self.week_start) if self.week_start else None

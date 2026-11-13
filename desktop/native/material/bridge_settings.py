@@ -15,6 +15,13 @@ from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from backend.app import Preferences
 from backend.models import valid_spotify_url
+from desktop.native.fields import (
+    WEEK_STARTS,
+    save_week_starts_on,
+    week_start_day,
+    week_start_notice,
+    week_starts_on,
+)
 from desktop.native.hours.geometry import DRAG_STEPS, drag_step
 from desktop.native.material.bridge_month import _ROLES, read_cells
 from desktop.native.material.bridge_rows import Labels, Rows
@@ -568,7 +575,8 @@ class PassiveMonthBridge(QObject):
                 self._failed_month = target_month
                 self.changed.emit()
 
-            client.request("GET", f"/api/month?month={target_month}", None, ok, err)
+            asked = f"/api/month?month={target_month}&first_day={week_start_day()}"
+            client.request("GET", asked, None, ok, err)
 
         rows, names = read_cells(session, month=target_month, snapshot=snapshot)
         if rows != self._cell_rows:
@@ -795,6 +803,7 @@ class SettingsBridge(QObject):
         signal = getattr(session, "week_changed", None)
         if signal is not None:
             signal.connect(self._on_session)
+        week_start_notice().changed.connect(self._on_week_start)
         self._load_applied(keep_draft=False)
 
     def note_applied(self) -> None:
@@ -913,6 +922,7 @@ class SettingsBridge(QObject):
             ],
             "buffer": (0 if prefs.get(_BUFFER) == 0 else int(prefs.get(_BUFFER) or 15)) if _BUFFER else 15,
             "dragStep": drag_step(prefs.get("drag_step_min")),
+            "weekStart": week_starts_on(),
             "urgent": bool(prefs.get(_URGENT, True)) if _URGENT else False,
             "weekendFree": bool(prefs.get(_WEEKEND_FREE)) if _WEEKEND_FREE else False,
             "showWeekends": bool(prefs.get(_SHOW_WEEKENDS, True)) if _SHOW_WEEKENDS else True,
@@ -1240,6 +1250,15 @@ class SettingsBridge(QObject):
         if _BUFFER is None or minutes not in (0, 15, 30):
             return
         self._write({_BUFFER: minutes})
+
+    @Slot(str)
+    def setWeekStart(self, value: str) -> None:  # noqa: N802 — QML slot
+        """Kept on this computer, like Widgets Settings' own row; the notice redraws every screen."""
+        if value in WEEK_STARTS:
+            save_week_starts_on(value)
+
+    def _on_week_start(self, _value: str) -> None:
+        self._publish()
 
     @Slot(int)
     def setDragStep(self, minutes: int) -> None:

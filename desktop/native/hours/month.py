@@ -47,8 +47,8 @@ from shiboken6 import isValid
 
 from backend import clock as wall_clock
 from backend.models import due_is_timed
-from desktop.native.calendar import DAYS
-from desktop.native.fields import week_starts_on
+from desktop.native.calendar import DAYS, month_rows, weekday_order
+from desktop.native.fields import week_start_day
 from desktop.native.fonts import caption, weighted
 from desktop.native.hours.geometry import Span
 from desktop.native.hours.hand import Gesture, Hand, Held, Verdict
@@ -165,12 +165,7 @@ def month_cells(
         first = date.fromisoformat(month + "-01")
         next_month = date(first.year + (first.month == 12), 1 if first.month == 12 else first.month + 1, 1)
         last = next_month - timedelta(days=1)
-        sunday = week_starts_on() == "sunday"
-        start_offset = (first.weekday() + (1 if sunday else 0)) % 7
-        last_column = (last.weekday() + (1 if sunday else 0)) % 7
-        end_offset = (6 - last_column) % 7
-        display_start = first - timedelta(days=start_offset)
-        display_end = last + timedelta(days=end_offset)
+        display_start, display_end = month_rows(first, last, week_start_day())
         ordered_days = []
         current = display_start
         while current <= display_end:
@@ -760,15 +755,17 @@ class MonthNames(QWidget):
         self.setObjectName("monthNames")
         self.canvas = canvas
 
+    def names(self) -> list[str]:
+        """The weekday names over the columns, from the computer's first day of the week."""
+        return [DAYS[day] for day in weekday_order(week_start_day())]
+
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
         painter = QPainter(self)
         painter.fillRect(self.rect(), self.canvas.painter.c("window"))
         font = weighted(self.canvas._small(), WEIGHT_STRONG)
         painter.setFont(font)
         wide = max(self.width() - self.canvas._bar_inset, 1) / 7
-        sunday = week_starts_on() == "sunday"
-        names = (DAYS[-1], *DAYS[:-1]) if sunday else DAYS
-        for column, name in enumerate(names):
+        for column, name in enumerate(self.names()):
             self.canvas.painter.header(painter, QRectF(column * wide, 0, wide, self.height()), name)
         painter.end()
 

@@ -65,6 +65,7 @@ from desktop.native.controller import ROUTINE_STATUS
 from desktop.native.custom_look import UNNAMED, sanitize_saved, wear
 from desktop.native.devices import DevicesPanel, SyncHost
 from desktop.native.fields import (
+    WEEK_STARTS,
     ClockField,
     DayPicker,
     Stepper,
@@ -1096,8 +1097,12 @@ class SettingsPage(QWidget):
         self.clock = Segmented((("24-hour", True), ("12-hour", False)), "prefClock")
         self.clock.setCurrentIndex(0 if preferences.get("clock_24h", False) is True else 1)
         # Kept on this computer, not in the account's preferences (see week_starts_on).
-        self.week_start = Segmented((("Monday", "monday"), ("Sunday", "sunday")), "prefWeekStart")
-        self.week_start.setCurrentIndex(0 if week_starts_on() == "monday" else 1)
+        self.week_start = QComboBox()
+        self.week_start.setObjectName("prefWeekStart")
+        self.week_start.setAccessibleName("Week starts on")
+        for name, value in zip(DAY_FULL, WEEK_STARTS, strict=True):
+            self.week_start.addItem(name, value)
+        self.week_start.setCurrentIndex(self.week_start.findData(week_starts_on()))
         self.week_start.currentIndexChanged.connect(
             lambda _at: save_week_starts_on(self.week_start.currentData())
         )

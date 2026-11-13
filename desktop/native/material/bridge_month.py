@@ -13,8 +13,8 @@ from typing import Any, Protocol
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
-from desktop.native.calendar import month_for_view
-from desktop.native.fields import week_starts_on
+from desktop.native.calendar import month_for_view, weekday_order
+from desktop.native.fields import week_start_day, week_start_notice
 from desktop.native.hours.month import HOMEWORK, LOAD_CAP, LOAD_WORDS, MonthCell, month_cells
 from desktop.native.material.bridge_rows import Labels, Rows
 from desktop.native.material.theme import event_category
@@ -61,10 +61,8 @@ class _Window(Protocol):
 
 
 def weekday_names() -> list[str]:
-    """The account's week, Monday unless this computer starts on Sunday."""
-    if week_starts_on() == "sunday":
-        return ["Sun", *_WEEKDAYS[:6]]
-    return list(_WEEKDAYS)
+    """The week's days from the computer's first day of the week."""
+    return [_WEEKDAYS[day] for day in weekday_order(week_start_day())]
 
 
 def pane_line(chip: Any) -> str:
@@ -176,9 +174,13 @@ class MonthBridge(QObject):
         changed = getattr(self._session(), "week_changed", None)
         if changed is not None:
             changed.connect(self.reload)
+        week_start_notice().changed.connect(self._on_week_start)
 
     def _session(self) -> _Session:
         return self._window.session  # type: ignore[attr-defined]
+
+    def _on_week_start(self, _value: str) -> None:
+        self.reload()
 
     def _note(self) -> None:
         self.changed.emit()
