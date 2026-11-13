@@ -87,7 +87,6 @@ from desktop.native.calendar import (
     date_for_day,
     is_series,
     is_setup_block,
-    monday_of,
     sunday_due,
     this_week_line,
 )
@@ -640,7 +639,7 @@ class NativeWindow(QMainWindow):
         self.session = NativeSession(origin, self, kept)
         self.session.use_sync_host(sync)
         # The week's first day is kept on this computer, not on the account; the session is told it.
-        self.session.first_weekday = week_start_day()
+        self.session.follow_first_weekday(week_start_day())
         week_start_notice().changed.connect(self._on_week_start)
         self._instance_server: QLocalServer | None = None
         self.setWindowTitle("FlexWeek")
@@ -2347,7 +2346,7 @@ class NativeWindow(QMainWindow):
             week = replace(week, focus_min=week.focus_min + running)
         return Scene(
             week=week,
-            today=clock["day"] if monday_of(clock["iso"]) == session.week_start else None,
+            today=session.today_column(clock["iso"]),
             minute=clock["minute"],
             options=options,
             tokens=tokens_for(layout_id, options["look"], palette),
@@ -3525,7 +3524,7 @@ class NativeWindow(QMainWindow):
             # From another week, the week changing to this one opens it at now (_on_week), and that
             # other week stays where it was left.
             self._reset_hours()
-        self.session.load_week(monday_of(today.isoformat()))
+        self.session.load_week(today.isoformat())
         if self.session.planner_view == "day" or self._day_mode:
             self.session.open_day(today.isoformat())
 
@@ -3908,9 +3907,10 @@ class NativeWindow(QMainWindow):
     def _clock_in_week(self) -> tuple[int | None, int | None]:
         """Today's weekday and minute when the open week is this week, else nothing to mark."""
         moment = datetime.fromtimestamp(self.session.now_ms() / 1000.0)
-        if monday_of(moment.date().isoformat()) != self.session.week_start:
+        column = self.session.today_column(moment.date().isoformat())
+        if column is None:
             return None, None
-        return moment.weekday(), moment.hour * 60 + moment.minute
+        return column, moment.hour * 60 + moment.minute
 
     def _fill_classic(self) -> None:
         """Today's app's Day and Week from the open week. Held while the pointer holds something."""
@@ -3924,7 +3924,7 @@ class NativeWindow(QMainWindow):
         today, minute = self._clock_in_week()
         self._sync_week_access_list(week)
         self.week_table.set_week(week, today, minute)
-        self.day_view.set_day(week, date.fromisoformat(self.session.selected_day).weekday(), today, minute)
+        self.day_view.set_day(week, self._selected_column(), today, minute)
         trace = self.session.trace or {}
         one_go_unplaced = (
             {
@@ -4164,7 +4164,12 @@ class NativeWindow(QMainWindow):
         if self.session.planner_view == "day":
             self.session.open_day(iso)
         else:
-            self.session.load_week(monday_of(iso))
+            self.session.load_week(iso)
+
+    def _selected_column(self) -> int:
+        """The selected day's place in the open week (0 its first day)."""
+        column = self.session.today_column(self.session.selected_day)
+        return 0 if column is None else column
 
     def _open_week_day(self, day: int) -> None:
         self.session.open_day(date_for_day(self.session.week_start, day))
@@ -4470,7 +4475,7 @@ class NativeWindow(QMainWindow):
         due = self._due_point(block["id"])
         days = list(block["days"])
         clock = clock_parts(self.session.now_ms())
-        today = clock["day"] if monday_of(clock["iso"]) == self.session.week_start else None
+        today = self.session.today_column(clock["iso"])
         dialog = ChooseTimeDialog(
             self,
             block,
@@ -4513,7 +4518,7 @@ class NativeWindow(QMainWindow):
             # One editor at a time: a click that lands while one is opening opens nothing more.
             return
         if self.session.planner_view == "day":
-            self.session.select_block(block_id, date.fromisoformat(self.session.selected_day).weekday())
+            self.session.select_block(block_id, self._selected_column())
         block = next((item for item in self.session.blocks if item["id"] == block_id), None)
         if block is None:
             return
@@ -4921,7 +4926,7 @@ class NativeWindow(QMainWindow):
 
     def _late_other_week(self) -> bool:
         now = datetime.fromtimestamp(self.session.now_ms() / 1000)
-        return monday_of(now.date().isoformat()) != self.session.week_start
+        return self.session.today_column(now.date().isoformat()) is None
 
     def _sync_running_late(self) -> None:
         late = self.findChild(QPushButton, "runningLate")
@@ -4960,7 +4965,7 @@ class NativeWindow(QMainWindow):
                 if block.get("kind") == "flexible"
                 and not block.get("completed")
                 and block.get("start")
-                and now.weekday() in (block.get("days") or [])
+                and self.session.today_column(now.date().isoformat()) in (block.get("days") or [])
                 and hhmm_to_minutes(block["start"]) <= now_minute
                 < hhmm_to_minutes(block["start"]) + int(block.get("duration_min") or 0)
             ),

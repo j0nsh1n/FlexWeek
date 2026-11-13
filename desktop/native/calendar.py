@@ -155,6 +155,16 @@ def week_start_on(iso_day: str, first_weekday: int) -> str:
     return str(flexweek_engine.calendar_week_start_on(iso_day, first_weekday))
 
 
+def day_in_week(iso_day: str, week_start: str) -> int:
+    """How many days `iso_day` comes after `week_start`: 0 on it, negative before it."""
+    return int(flexweek_engine.calendar_due_day(json.dumps(iso_day), week_start))
+
+
+def stored_weeks_of(week_start: str) -> list[str]:
+    """The stored (Monday) weeks the week on screen from `week_start` covers, first first."""
+    return list(flexweek_engine.shown_week_stores(week_start))
+
+
 def weekday_order(first_weekday: int) -> list[int]:
     """The weekdays (0 Monday to 6 Sunday) in the order a week starting on `first_weekday` runs."""
     return list(flexweek_engine.calendar_weekday_order(first_weekday))

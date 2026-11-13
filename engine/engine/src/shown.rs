@@ -49,6 +49,14 @@ pub fn shown_parts(shown_start: &str) -> EngineResult<Option<(String, String, i6
     Ok(Some((first, iso_text(second), offset)))
 }
 
+/// The stored weeks a shown week covers, first first: its own Monday alone for a Monday, else two.
+pub fn stored_weeks(shown_start: &str) -> EngineResult<Vec<String>> {
+    Ok(match shown_parts(shown_start)? {
+        Some((first, second, _)) => vec![first, second],
+        None => vec![shown_start.to_string()],
+    })
+}
+
 fn offset_of(shown_start: &str) -> EngineResult<i64> {
     Ok(shown_parts(shown_start)?.map_or(0, |(_, _, offset)| offset))
 }

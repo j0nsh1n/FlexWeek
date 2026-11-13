@@ -21,6 +21,7 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | assignments | completed_at_for_block | ADAPTER | Encodes the block as JSON and calls the engine once. |
 | assignments | due_placement_bound | ADAPTER | One engine call; `None` stays `None`, otherwise the pair becomes ints. |
 | assignments | due_slack_point | ADAPTER | One engine call, returned as a pair of ints. |
+| assignments | planned_minutes_from_day | ADAPTER | Encodes the weeks, one call, values become ints. |
 | assignments | prepare_solve | ADAPTER | Encodes blocks and assignments, one call, then pydantic and tuples. |
 | assignments | legacy_session | ADAPTER | One engine call, then a `TimeBlock` and the body dict. |
 | assignments | rewrite_session | ADAPTER | One engine call, then `TimeBlock.model_validate`. |
@@ -184,6 +185,8 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | calendar | monday_of | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | week_start_on | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | weekday_order | ADAPTER | encodes, makes one engine call, decodes |
+| calendar | day_in_week | ADAPTER | encodes, makes one engine call, decodes |
+| calendar | stored_weeks_of | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | month_rows | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | date_for_day | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | sunday_due | ADAPTER | encodes, makes one engine call, decodes |

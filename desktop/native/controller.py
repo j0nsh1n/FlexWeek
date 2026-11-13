@@ -21,6 +21,7 @@ from desktop.native.calendar import (
     apply_block_edit,
     apply_repeat_changes,
     date_for_day,
+    day_in_week,
     days_through,
     delete_occurrence,
     due_day_in_week,
@@ -38,6 +39,8 @@ from desktop.native.calendar import (
     repeat_changes,
     shifted_month,
     span_problem,
+    stored_weeks_of,
+    week_start_on,
 )
 from desktop.native.client import SESSION_ENDED, ApiError, NativeClient, auth_error
 from desktop.native.files import (
@@ -199,10 +202,15 @@ def _week_write(week_start: str, blocks: list[dict], revision: int) -> dict:
     }
 
 
-def _revision_after_deletes(stored_blocks: list[dict], revision: int, deleted: set[str]) -> int:
+def _revision_after_deletes(
+    stored_blocks: list[dict], revision: int | list[int], deleted: set[str]
+) -> int | list[int]:
     """The server takes a deleted homework's blocks out of every week before it writes the week sent
     with it, and each deleted homework that had blocks there moves that week up by one. A week written
-    in the same save has to carry the revision it will have by then."""
+    in the same save has to carry the revision it will have by then. A week on screen from another day
+    names its two stored weeks' revisions, which the server checks as they were before the save."""
+    if isinstance(revision, list):
+        return revision
     return revision + sum(
         1 for item_id in deleted if any(block.get("assignment_id") == item_id for block in stored_blocks)
     )
@@ -289,6 +297,8 @@ class NativeSession(QObject):
         # The day weeks start on, on screen (0 Monday to 6 Sunday). It is kept on this computer, so the
         # window tells the session; stored weeks stay keyed by their Monday whatever it is.
         self.first_weekday = 0
+        # The first day changed while a change was being saved: the week from it opens once it lands.
+        self._refollow_week = False
         # The type a drag on the hours makes, once one is picked under Add. Until then a block made by
         # dragging has none: it used to be School, and an hour of Club counted as school.
         self.armed_category: str | None = None
@@ -465,7 +475,8 @@ class NativeSession(QObject):
         self._credits_waiting.clear()
         self.account = None
         self._drop_setup()
-        self.week_start = current_week_start()
+        self._refollow_week = False
+        self.week_start = self.shown_week_of(wall_clock.today().isoformat())
         self.blocks = []
         self.revision = 0
         self.assignments = {}
@@ -547,11 +558,24 @@ class NativeSession(QObject):
         self.selected_block_id = block_id
         self.selected_occurrence_day = day
 
+    def shown_week_of(self, iso_day: str) -> str:
+        """The first date of the week on screen that holds `iso_day`, from the week's first day."""
+        return week_start_on(iso_day, self.first_weekday)
+
+    def today_column(self, iso_day: str) -> int | None:
+        """Which day of the open week `iso_day` is (0 its first day), or None when it is not in it."""
+        try:
+            day = day_in_week(iso_day, self.week_start)
+        except ValueError:
+            return None
+        return day if 0 <= day <= 6 else None
+
     def _ensure_selected_day(self) -> None:
         try:
-            if monday_of(self.selected_day) == self.week_start:
+            if self.shown_week_of(self.selected_day) == self.week_start:
                 return
-            weekday = date.fromisoformat(self.selected_day).weekday()
+            # The same weekday in the open week.
+            weekday = day_in_week(self.selected_day, self.shown_week_of(self.selected_day))
         except ValueError:
             self.selected_day = self.week_start
             return
@@ -642,12 +666,12 @@ class NativeSession(QObject):
             date.fromisoformat(iso_day)
         except ValueError:
             return
-        monday = monday_of(iso_day)
+        shown = self.shown_week_of(iso_day)
         self.selected_day = iso_day
         self.planner_view = "day"
         self.day_data = None
-        if monday != self.week_start:
-            self.load_week(monday)
+        if shown != self.week_start:
+            self.load_week(shown)
             return
         self._fetch_day()
         self.week_changed.emit()
@@ -660,7 +684,7 @@ class NativeSession(QObject):
             return
         today = datetime.fromtimestamp(self.now_ms() / 1000).date().isoformat()
         anchor = self.selected_day if self.planner_view == "day" else (
-            today if monday_of(today) == self.week_start else date_for_day(self.week_start, 3)
+            today if self.today_column(today) is not None else date_for_day(self.week_start, 3)
         )
         self.selected_day = anchor
         self.selected_month = month or month_for_view(anchor)
@@ -689,23 +713,43 @@ class NativeSession(QObject):
         anchor = self.selected_day if self.selected_day[:7] == self.selected_month else (
             month_anchor_date(self.selected_month, today)
         )
-        monday = monday_of(anchor)
+        shown = self.shown_week_of(anchor)
         self.selected_day = anchor
         self.planner_view = view
-        if monday != self.week_start:
-            self.load_week(monday)
+        if shown != self.week_start:
+            self.load_week(shown)
             return
         self._refresh_view()
         self.week_changed.emit()
 
     def follow_first_weekday(self, first_weekday: int) -> None:
-        """A new first day of the week: the month's rows change, so what was kept is asked for again."""
+        """A new first day of the week: the month's rows change, so what was kept is asked for again,
+        and the open week becomes the one from that day holding the selected day. Changes not yet
+        saved are saved first, in the week they were made in."""
+        changed = first_weekday != self.first_weekday
         self.first_weekday = first_weekday
         self._month_cache.clear()
         self._month_gen += 1
+        if self.account is None:
+            self.week_start = self.shown_week_of(self.selected_day)
+        elif changed:
+            self._refollow_week = True
+            self._follow_week()
         if self.planner_view == "month":
             self._fetch_month()
         self.week_changed.emit()
+
+    def _follow_week(self) -> None:
+        """Open the week from the chosen first day once nothing is held; a save still going on calls
+        this again when it lands."""
+        if not self._refollow_week or self.account is None or self.busy or self._held():
+            return
+        self._refollow_week = False
+        anchor = self.selected_day if self.today_column(self.selected_day) is not None else self.week_start
+        target = self.shown_week_of(anchor)
+        if target != self.week_start:
+            self.selected_day = anchor
+            self.load_week(target)
 
     def _fetch_day(self) -> None:
         if self.account is None or self.planner_view != "day":
@@ -901,7 +945,7 @@ class NativeSession(QObject):
         # next launch and the recovery codes would never be shown again.
         self._keep_session()
         self.selected_day = self.today_iso()
-        self.load_week(monday_of(self.selected_day))
+        self.load_week(self.shown_week_of(self.selected_day))
 
     def logout(self) -> None:
         # Forgotten first, so a sign-out that fails to reach the server still leaves nothing to resume.
@@ -937,7 +981,11 @@ class NativeSession(QObject):
             return
         if self.busy:
             return
-        start = week_start or current_week_start()
+        start = week_start or self.shown_week_of(wall_clock.today().isoformat())
+        if start not in self._drafts and start != self.week_start:
+            # Any date opens the week on screen that holds it. A week set aside unsaved keeps the day it
+            # started on, so it is found and saved as it was.
+            start = self.shown_week_of(start)
         if discard:
             self._drafts.pop(start, None)
         elif start == self.week_start and self._held():
@@ -971,7 +1019,7 @@ class NativeSession(QObject):
             if not self._alive(ticket):
                 return
             # The week on screen did not change, so Day view must not stay on a day outside it.
-            if monday_of(self.selected_day) != self.week_start:
+            if self.shown_week_of(self.selected_day) != self.week_start:
                 self._ensure_selected_day()
                 self._refresh_view()
             self._fail(ticket, error)
@@ -1030,7 +1078,7 @@ class NativeSession(QObject):
         def failed(error: ApiError) -> None:
             if not self._alive(ticket):
                 return
-            if monday_of(self.selected_day) != self.week_start:
+            if self.shown_week_of(self.selected_day) != self.week_start:
                 self._ensure_selected_day()
                 self._refresh_view()
             self._fail(ticket, error)
@@ -1462,7 +1510,8 @@ class NativeSession(QObject):
             done(None)
             return
         try:
-            previous = monday_of((date.fromisoformat(self.week_start) - timedelta(days=7)).isoformat())
+            before = date.fromisoformat(self.week_start) - timedelta(days=7)
+            previous = self.shown_week_of(before.isoformat())
         except ValueError:
             self._say(nothing)
             done(None)
@@ -1503,10 +1552,10 @@ class NativeSession(QObject):
     ) -> str | None:
         """Why this block cannot go on `to_iso`, in the same words as a hours drag, or None."""
         try:
-            to_week = monday_of(to_iso)
-            from_week = monday_of(from_iso)
-            from_day = date.fromisoformat(from_iso).weekday()
-            to_day = date.fromisoformat(to_iso).weekday()
+            to_week = self.shown_week_of(to_iso)
+            from_week = self.shown_week_of(from_iso)
+            from_day = day_in_week(from_iso, from_week)
+            to_day = day_in_week(to_iso, to_week)
         except ValueError:
             return None
         if from_iso == to_iso:
@@ -1551,8 +1600,8 @@ class NativeSession(QObject):
         if self.account is None or self.conflict or self.busy or self.pending_save is not None:
             return False
         try:
-            from_week = monday_of(from_iso)
-            to_week = monday_of(to_iso)
+            from_week = self.shown_week_of(from_iso)
+            to_week = self.shown_week_of(to_iso)
         except ValueError:
             return False
         if from_iso == to_iso:
@@ -1618,6 +1667,17 @@ class NativeSession(QObject):
         fetch_next()
         return True
 
+    def _wrote_open_weeks(self, written: set[str]) -> bool:
+        """A save that wrote a stored week the open week on screen shows, without writing the open week
+        itself (an add to several weeks writes their Mondays)."""
+        if self.week_start in written or self._held():
+            return False
+        try:
+            stored = stored_weeks_of(self.week_start)
+        except ValueError:
+            return False
+        return len(stored) > 1 and any(week in written for week in stored)
+
     def _week_local(self, week_start: str) -> dict | None:
         if week_start == self.week_start:
             return {"blocks": self.blocks, "revision": self.revision}
@@ -1654,8 +1714,8 @@ class NativeSession(QObject):
         attempt_key: str,
         ticket: int | None = None,
     ) -> bool:
-        from_day = date.fromisoformat(from_iso).weekday()
-        to_day = date.fromisoformat(to_iso).weekday()
+        from_day = day_in_week(from_iso, from_week)
+        to_day = day_in_week(to_iso, to_week)
         block = next((item for item in source["blocks"] if item["id"] == block_id), None)
         if block is None or from_day not in (block.get("days") or []) or not block.get("start"):
             self._say("That block isn't on that date.")
@@ -1766,6 +1826,14 @@ class NativeSession(QObject):
                     kept = [b for b in parked["blocks"] if b.get("assignment_id") != assignment_id]
                     parked["blocks"] = kept
                     parked["revision"] = revisions[week_start]
+                elif isinstance(parked["revision"], list):
+                    # A week on screen from another day: each of its stored weeks the delete changed.
+                    stored = stored_weeks_of(week_start)
+                    if any(week in revisions for week in stored):
+                        kept = [b for b in parked["blocks"] if b.get("assignment_id") != assignment_id]
+                        parked["blocks"] = kept
+                        held = zip(stored, parked["revision"], strict=True)
+                        parked["revision"] = [revisions.get(week, revision) for week, revision in held]
             step = {
                 "label": "deleting " + title,
                 "weeks": [
@@ -2179,8 +2247,20 @@ class NativeSession(QObject):
                 self.repeats_kept.emit(kept)
             if planned:
                 self.planned.emit(self.message)
+            if self.first_weekday:
+                # Reminders read today's stored week from the server when the open week starts on another
+                # day; what this save changed is read again.
+                self._reminder_week = None
             if destination is not None:
                 self.load_week(destination)
+                return
+            if self._refollow_week:
+                self._follow_week()
+                if self.busy:
+                    return
+            if current is None and self._wrote_open_weeks(written):
+                # Stored weeks the open week shows changed through their Mondays: show them again.
+                self.load_week(self.week_start, discard=True, said=self.message)
                 return
             self._refresh_view()
             self.week_changed.emit()
@@ -2695,7 +2775,7 @@ class NativeSession(QObject):
         their make-up time is planned from this week, so the week that is over says them as missed rather
         than as still needing a time there. `week` is `_open_week()`, where a missed session has no time."""
         today = datetime.fromtimestamp(self.now_ms() / 1000).date().isoformat()
-        if not self.week_start or monday_of(today) <= self.week_start:
+        if not self.week_start or self.shown_week_of(today) <= self.week_start:
             return {}
         had_time = {block["id"] for block in self.blocks if block.get("start")}
         missed: dict[str, int] = {}
@@ -2758,12 +2838,13 @@ class NativeSession(QObject):
                     )
                 start = placed["start"] if placed and placed.get("start") else None
                 return (self.selected_occurrence_day, start if isinstance(start, str) else None)
-        if self.planner_view == "day" and monday_of(self.selected_day) == self.week_start:
+        if self.planner_view == "day" and self.shown_week_of(self.selected_day) == self.week_start:
             day = (date.fromisoformat(self.selected_day) - date.fromisoformat(self.week_start)).days
             return (day, None)
         today = today or wall_clock.today()
-        if monday_of(today.isoformat()) == self.week_start:
-            return (today.weekday(), None)
+        column = self.today_column(today.isoformat())
+        if column is not None:
+            return (column, None)
         return None
 
     def copy_block(self, block_id: str, day: int | None, scope: str = "auto", *, say: bool = True) -> bool:
@@ -3308,7 +3389,7 @@ class NativeSession(QObject):
             self._say("Choose 15, 30 or 60 minutes.")
             return
         from_start = late_from_start(moment.hour * 60 + moment.minute)
-        day = moment.weekday()
+        day = day_in_week(moment.date().isoformat(), self.week_start)
         ticket = self._begin()
         self._say("Replanning…")
 
@@ -3582,11 +3663,11 @@ class NativeSession(QObject):
 
     def now_next_text(self) -> str:
         clock = self._clock()
-        week = monday_of(clock["iso"])
-        if week != self.week_start:
+        column = self.today_column(clock["iso"])
+        if column is None:
             return ""
         return now_next_line(
-            now_and_next(self.scheduled_blocks(), clock["day"], clock["minute"]),
+            now_and_next(self.scheduled_blocks(), column, clock["minute"]),
             clock["minute"],
         )
 

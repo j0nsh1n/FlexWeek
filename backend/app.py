@@ -19,6 +19,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from backend import clock as wall_clock
 from backend.assignments import (
     planned_minutes_by_id,
+    planned_minutes_from_day,
     prepare_solve,
 )
 from backend.availability import fold_study_windows, spread_sessions
@@ -1363,12 +1364,16 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         week_start: str | None = None,
         include_completed: bool = False,
     ) -> dict:
-        if week_start is None or not is_week_start(week_start):
+        if week_start is None or not (is_week_start(week_start) or is_calendar_date(week_start)):
             raise HTTPException(422, WEEK_START_RULE)
         with connect(path) as db:
             rows = db.list_assignment_rows(account["id"])
             weeks = list_account_weeks(db, account["id"])
-        planned_by_id = planned_minutes_by_id(weeks, week_start)
+        if is_week_start(week_start):
+            planned_by_id = planned_minutes_by_id(weeks, week_start)
+        else:
+            # A week on screen from another day: the minutes from its first day on.
+            planned_by_id = planned_minutes_from_day(weeks, week_start)
         session_weeks_by_id: dict[str, set[str]] = {}
         for saved_week, blocks in weeks:
             for block in blocks:
@@ -1482,7 +1487,9 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                     }
                 )
             week_results: list[dict] = []
-            for week in batch.weeks:
+            # Stored (Monday) weeks first: an Undo that puts back a stored week a week on screen also
+            # shows sends both, and the week on screen then finds them as it means them.
+            for week in sorted(batch.weeks, key=lambda week: shown_parts_of(week.week_start) is not None):
                 parts = shown_parts_of(week.week_start)
                 if parts is not None:
                     save_shown_week(db, account["id"], week, parts, before)

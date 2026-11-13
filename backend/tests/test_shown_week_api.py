@@ -198,3 +198,27 @@ def test_school_taken_out_of_the_shown_week_only_is_missed_on_its_days_and_kept_
     assert (first["days"], first["missed_days"]) == ([0, 1, 2, 3, 4], [2, 3, 4])
     assert (second["days"], second["missed_days"]) == ([0, 1, 2, 3, 4], [0, 1])
     assert "missed_days" not in week(alice, "2026-11-23")["blocks"][0]
+
+
+def test_homework_counts_minutes_planned_from_the_first_day_of_the_shown_week(alice: TestClient) -> None:
+    homework = {
+        "id": "hw",
+        "title": "Essay",
+        "due": "2026-11-20T23:59",
+        "estimate_min": 180,
+        "revision": 0,
+    }
+    made = alice.put("/api/assignments/hw", json=homework, headers=WRITE)
+    assert made.status_code == 200, made.text
+
+    def session(block_id: str, day: int) -> dict:
+        return {**fixed(block_id, "16:00", [day]), "kind": "flexible", "duration_min": 30, "assignment_id": "hw"}
+
+    # Tuesday 10 November is before the week from Wednesday 11; Wednesday 11 and Monday 16 are in it.
+    save(alice, FIRST, [session("tue10", 1), session("wed11", 2)], 0)
+    save(alice, SECOND, [session("mon16", 0)], 0)
+    listed = alice.get(f"/api/assignments?week_start={WED}&include_completed=true")
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["assignments"][0]["planned_min"] == 60
+    monday = alice.get(f"/api/assignments?week_start={FIRST}&include_completed=true").json()
+    assert monday["assignments"][0]["planned_min"] == 90

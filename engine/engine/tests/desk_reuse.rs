@@ -1703,3 +1703,14 @@ fn test_minutes_no_session_holds_count_what_other_weeks_hold() {
         10
     );
 }
+
+#[test]
+fn running_late_works_in_a_week_on_screen_from_wednesday_that_holds_today() {
+    // Wednesday 16 to Tuesday 22 September 2026 holds Tuesday 22, not Wednesday 23.
+    assert_eq!(
+        running_late_refusal("2026-09-16", "2026-09-22", false, false, 0),
+        None
+    );
+    assert!(running_late_refusal("2026-09-16", "2026-09-23", false, false, 0).is_some());
+    assert!(running_late_refusal("2026-09-16", "2026-09-15", false, false, 0).is_some());
+}

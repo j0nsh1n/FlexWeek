@@ -380,3 +380,46 @@ fn a_change_to_a_repeat_from_a_wednesday_week_on_holds_from_the_next_monday() {
         changes
     );
 }
+
+#[test]
+fn a_shown_week_names_the_stored_weeks_it_covers() {
+    use flexweek_engine::shown::stored_weeks;
+    assert_eq!(
+        stored_weeks(WED).unwrap(),
+        vec![FIRST.to_string(), SECOND.to_string()]
+    );
+    assert_eq!(stored_weeks(FIRST).unwrap(), vec![FIRST.to_string()]);
+}
+
+#[test]
+fn homework_minutes_from_a_wednesday_count_the_sessions_on_and_after_it() {
+    use flexweek_engine::plan::planned_minutes_from_day;
+    let session = |id: &str, day: i64| {
+        json!({"id": id, "title": id, "kind": "flexible", "duration_min": 30, "days": [day],
+               "start": "16:00", "assignment_id": "hw"})
+    };
+    let weeks = vec![
+        // Tuesday 3 November is before the week on screen; Wednesday 4 is its first day.
+        (
+            "2026-11-02".to_string(),
+            vec![session("tue3", 1), session("wed4", 2)],
+        ),
+        (
+            "2026-11-09".to_string(),
+            vec![session("mon9", 0), session("wed11", 2)],
+        ),
+        ("2026-10-26".to_string(), vec![session("oct", 4)]),
+    ];
+    assert_eq!(
+        planned_minutes_from_day(&weeks, "2026-11-04")
+            .unwrap()
+            .get("hw"),
+        Some(&90)
+    );
+    assert_eq!(
+        planned_minutes_from_day(&weeks, "2026-11-11")
+            .unwrap()
+            .get("hw"),
+        Some(&30)
+    );
+}
