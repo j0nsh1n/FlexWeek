@@ -89,10 +89,31 @@ fn shown_week_view(
             .cloned()
             .unwrap_or_default()
     };
-    let blocks = flexweek_engine::shown::compose_shown_week(
+    let (first_blocks, second_blocks) = (blocks_of(&first), blocks_of(&second));
+    // The homework its sessions belong to: one waiting for a time may run to its due date.
+    let ids: Vec<String> = first_blocks
+        .iter()
+        .chain(&second_blocks)
+        .filter_map(|block| {
+            block
+                .get("assignment_id")
+                .and_then(serde_json::Value::as_str)
+        })
+        .map(str::to_string)
+        .collect();
+    let mut homework = serde_json::Map::new();
+    for (id, body, _) in
+        flexweek_store::load_assignment_rows(conn, user_id, &ids).map_err(view_error)?
+    {
+        let parsed = serde_json::from_str(&body)
+            .map_err(|error| view_error(StoreError::Json { text: body, error }))?;
+        homework.insert(id, parsed);
+    }
+    let blocks = flexweek_engine::shown::compose_shown_week_due(
         week_start,
-        &blocks_of(&first),
-        &blocks_of(&second),
+        &first_blocks,
+        &second_blocks,
+        &homework,
     )
     .map_err(|error| error.message)?;
     Ok(json!({

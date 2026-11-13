@@ -529,3 +529,43 @@ fn the_helper_follows_the_first_day_of_the_week_it_is_told() {
     let me = body_of(&server.call("whoami", json!({}), 2));
     assert_eq!(me["week_starts_on"], "sunday");
 }
+
+#[test]
+fn the_helpers_week_from_another_day_lets_waiting_homework_run_to_its_due_date() {
+    // "Later" is due Friday 30 October. Its session waits for a time on every day of Monday 19's
+    // week. The week from Wednesday 21 to Tuesday 27 October shows it on all seven days, as the
+    // desktop's week does: Monday 26 and Tuesday 27 are before the due date too.
+    let world = fixture("week-start-due");
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let blocks = json!([{
+        "id": "w1", "title": "Later", "kind": "flexible", "duration_min": 30,
+        "days": [0, 1, 2, 3, 4, 5, 6], "assignment_id": "later"
+    }])
+    .to_string();
+    conn.execute(
+        "UPDATE weeks SET blocks = ?1 WHERE week_start = '2026-10-19'",
+        [blocks],
+    )
+    .expect("waiting session");
+    drop(conn);
+    let mut server = Server::spawn(&[
+        "--data-dir",
+        &world.data_arg,
+        "--database",
+        &world.database_arg,
+        "--now",
+        NOW_ISO,
+        "--week-starts-on",
+        "wednesday",
+    ]);
+    server.handshake();
+    let week = body_of(&server.call("get_week", json!({"week_start": "2026-10-21"}), 2));
+    let blocks = list(&week, "blocks").expect("blocks");
+    assert_eq!(
+        by_id(blocks, "w1")
+            .and_then(|block| block.get("days"))
+            .cloned(),
+        Some(json!([0, 1, 2, 3, 4, 5, 6])),
+        "{week}"
+    );
+}
