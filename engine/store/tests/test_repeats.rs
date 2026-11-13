@@ -763,3 +763,43 @@ fn a_later_week_holding_school_in_two_pieces_changes_both() {
     );
     assert_eq!(next.len(), 3, "{next:?}");
 }
+
+#[test]
+fn a_day_added_to_school_reaches_a_week_holding_two_pieces_once() {
+    // As above, 16 November's week holds School in two pieces. From 9 November School is on Saturday
+    // too: Saturday 21 November is School once, at the time of the days that follow the repeat.
+    let (conn, user_id) = account("repeats-pieces-saturday", true);
+    set_up(&conn, user_id);
+    let piece = json!({"category": "class", "days": [2, 3, 4], "duration_min": 405,
+                       "id": "school@20261118", "kind": "locked", "start": "10:00",
+                       "title": "School"});
+    save_week_as(
+        &conn,
+        user_id,
+        NEXT_WEEK,
+        vec![with(school(), json!({"days": [0, 1]})), piece, soccer()],
+    );
+    change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[(
+            "school",
+            Some(with(school(), json!({"days": [0, 1, 2, 3, 4, 5]}))),
+        )],
+    );
+    let next = shown(&conn, user_id, NEXT_WEEK);
+    let on_saturday: Vec<&Value> = next
+        .iter()
+        .filter(|block| {
+            block["title"] == json!("School")
+                && block["days"].as_array().unwrap().contains(&json!(5))
+        })
+        .collect();
+    assert_eq!(on_saturday.len(), 1, "{next:?}");
+    assert_eq!(on_saturday[0]["start"], json!("08:30"));
+    assert_eq!(
+        block(&next, "school@20261118").unwrap()["days"],
+        json!([2, 3, 4])
+    );
+}

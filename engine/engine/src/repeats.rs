@@ -324,6 +324,47 @@ pub fn restated_copy(old: Option<&Value>, new: Option<&Value>, copy: &Value) -> 
     }
 }
 
+/// The pieces of one repeat in a week (School split at a seam is School on each side) after the
+/// repeat changed from `old` to `new`. A day the change adds goes to one piece only, the one with the
+/// repeat's own id, else the first, so it happens once; the other pieces keep the days they had.
+pub fn restated_pieces(
+    old: Option<&Value>,
+    new: Option<&Value>,
+    pieces: &[Value],
+    id: &str,
+) -> Vec<Option<Value>> {
+    let taker = pieces
+        .iter()
+        .position(|piece| id_of(piece) == Some(id))
+        .unwrap_or(0);
+    let widened = match (old, new) {
+        (Some(old), Some(new)) => {
+            let mut days = days_of(old);
+            for day in days_of(new) {
+                if !days.contains(&day) {
+                    days.push(day);
+                }
+            }
+            let mut widened = old.clone();
+            widened["days"] = json!(days);
+            Some(widened)
+        }
+        _ => None,
+    };
+    pieces
+        .iter()
+        .enumerate()
+        .map(|(at, piece)| {
+            let old = if at == taker {
+                old
+            } else {
+                widened.as_ref().or(old)
+            };
+            restated_copy(old, new, piece)
+        })
+        .collect()
+}
+
 /// The change a School hours or Setup form makes: from the repeat standing in the open week to what
 /// the form now says. Only what differs is sent; None when nothing does.
 pub fn edit_intent(
@@ -435,8 +476,10 @@ pub fn apply_to_week(
             }
             continue;
         }
-        for at in held.into_iter().rev() {
-            match restated_copy(old.as_ref(), new.as_ref(), &blocks[at]) {
+        let pieces: Vec<Value> = held.iter().map(|at| blocks[*at].clone()).collect();
+        let restated = restated_pieces(old.as_ref(), new.as_ref(), &pieces, &intent.id);
+        for (at, copy) in held.into_iter().zip(restated).rev() {
+            match copy {
                 Some(copy) => blocks[at] = copy,
                 None => {
                     blocks.remove(at);

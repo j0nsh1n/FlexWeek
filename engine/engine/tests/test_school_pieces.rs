@@ -171,3 +171,49 @@ fn a_piece_of_another_block_leaves_school_alone() {
     .blocks;
     assert_eq!(left, week());
 }
+
+/// The days of `week` on which School shows (not missed), one entry per piece that holds the day.
+fn school_days(week: &[Value]) -> Vec<i64> {
+    let mut days: Vec<i64> = week
+        .iter()
+        .filter(|block| family_id(block["id"].as_str().unwrap()) == "school")
+        .flat_map(|block| {
+            let missed: Vec<i64> = block["missed_days"]
+                .as_array()
+                .map(|items| items.iter().map(|day| day.as_i64().unwrap()).collect())
+                .unwrap_or_default();
+            block["days"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|day| day.as_i64().unwrap())
+                .filter(move |day| !missed.contains(day))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    days.sort_unstable();
+    days
+}
+
+#[test]
+fn a_day_added_to_school_in_two_pieces_is_school_once_that_day() {
+    // School on Saturday too, from 9 November on. Saturday 14 November is School once, on the days
+    // that follow the repeat (`school`, 08:30); the piece keeps Wednesday to Friday at 10:00.
+    let saturday = parse_intent(&json!({"id": "school", "scope": "from",
+                                        "from_date": "2026-11-09", "add_days": [5]}))
+    .unwrap();
+    let (blocks, _) = apply_to_week(&week(), &[school()], &[saturday]).unwrap();
+    assert_eq!(school_days(&blocks), vec![0, 1, 2, 3, 4, 5], "{blocks:?}");
+    assert_eq!(by_id(&blocks, "school")["days"], json!([0, 1, 5]));
+    assert_eq!(by_id(&blocks, "school@20261111")["days"], json!([2, 3, 4]));
+    // A week holding only a piece gives that piece the new day.
+    let (blocks, _) = apply_to_week(
+        &[piece()],
+        &[school()],
+        &[parse_intent(&json!({"id": "school", "scope": "from",
+                               "from_date": "2026-11-09", "add_days": [5]}))
+        .unwrap()],
+    )
+    .unwrap();
+    assert_eq!(school_days(&blocks), vec![2, 3, 4, 5], "{blocks:?}");
+}

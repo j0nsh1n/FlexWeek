@@ -4,7 +4,7 @@
 //! applied one way whoever sends it.
 
 use flexweek_engine::repeats::{
-    Intent, Kept, kept_notice, own_changes, patched, restated_copy, restated_version,
+    Intent, Kept, kept_notice, own_changes, patched, restated_pieces, restated_version,
 };
 use flexweek_engine::shown::family_id;
 use flexweek_engine::snapshot::canonical;
@@ -272,8 +272,10 @@ pub fn apply_repeat_intents(
             }
             let mut updated = stored.clone();
             if was != now {
-                for at in pieces.into_iter().rev() {
-                    match restated_copy(was, now, &stored[at]) {
+                let copies: Vec<Value> = pieces.iter().map(|at| stored[*at].clone()).collect();
+                let restated = restated_pieces(was, now, &copies, &intent.id);
+                for (at, copy) in pieces.into_iter().zip(restated).rev() {
+                    match copy {
                         Some(copy) => updated[at] = copy,
                         None => {
                             updated.remove(at);
