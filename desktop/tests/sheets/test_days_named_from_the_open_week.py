@@ -125,3 +125,18 @@ def test_a_new_school_block_is_on_monday_to_friday_of_the_week(
         free(dialog)
     assert BlockDraft(window.session, None, category="class").days == school_days
 
+
+def test_a_fixed_time_sheet_made_before_the_week_start_changed_names_the_new_days(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    wait_until(qapp, lambda: getattr(window, "_block_spare", None) is not None)
+    spare = window._block_spare
+    _wednesday_week(qapp, window)
+    dialog = window._take_block_dialog(day=5, start="16:00", category=None)
+    try:
+        assert dialog is spare
+        assert [button.text() for button in dialog.day_picker.buttons] == SHOWN
+        assert dialog.day_picker.buttons[5].accessibleName() == "Monday"
+        assert dialog.day_picker.days() == [5]
+    finally:
+        free(dialog)

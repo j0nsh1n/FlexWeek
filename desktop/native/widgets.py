@@ -3890,6 +3890,9 @@ class BlockDialog(Dialog):
             self._original = _range_locked(category, day, start, duration_min)
         else:
             self._original = _preset_locked(category, day, start, duration_min, week)
+        if week:
+            # Made ahead of time, it may name the days of a week that started on another day.
+            self.day_picker.set_day_labels(list(day_names(week)), day_full_names(week))
         self._result = None
         self._deleted = False
         self._occurrence_day = None
