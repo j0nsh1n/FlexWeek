@@ -532,54 +532,16 @@ fn weekends_homework_free_keeps_saturday_and_sunday_free_wherever_the_week_start
 }
 
 #[test]
-fn a_named_day_in_latest_or_earliest_is_that_day_of_the_week_on_screen() {
-    // A week shown from Wednesday: day 1 is Thursday, day 2 Friday, day 3 Saturday, day 5 Monday.
-    let shown_from_wednesday = || {
-        let mut rules = rules();
-        rules.first_weekday = 2;
-        rules
-    };
-    // Due Friday 18:00, with study hours only on Saturday: nothing before Friday evening fits.
-    let saturday = [work_span(&[3], "10:00", "12:00", None)];
-    let due_friday = Dump::flex("math", "math", 60, &[0, 1, 2, 3, 4, 5, 6])
-        .latest("Friday 18:00")
+fn a_not_before_names_the_days_index_whichever_day_the_week_starts_on() {
+    // The desktop writes Plan's "not before now" as the day's index named Monday first
+    // (`desk::planning::from_not_before`): in a week shown from Wednesday, now on its first day is
+    // "Monday 16:30". It stays day 0, so the evening of the week's first day can still be used.
+    let windows = [work_span(&[0], "19:00", "21:00", None)];
+    let lab = Dump::flex("lab", "lab", 60, &[0])
+        .earliest("Monday 16:30")
         .into_block();
-    let trace = plan(
-        std::slice::from_ref(&due_friday),
-        &saturday,
-        None,
-        shown_from_wednesday(),
-    );
-    assert!(
-        trace.placed.iter().all(|block| block.id != "math"),
-        "{:?}",
-        trace.placed
-    );
-    // Not before Monday 09:00, with study hours on Thursday and on Monday: Monday.
-    let thursday_and_monday = [
-        work_span(&[1], "16:00", "18:00", None),
-        work_span(&[5], "16:00", "18:00", None),
-    ];
-    let from_monday = Dump::flex("read", "read", 60, &[0, 1, 2, 3, 4, 5, 6])
-        .earliest("Monday 09:00")
-        .into_block();
-    let trace = plan(
-        std::slice::from_ref(&from_monday),
-        &thursday_and_monday,
-        None,
-        shown_from_wednesday(),
-    );
-    assert_eq!(start_of(&trace, "read"), expect(5, "16:00", 60));
-    // From Monday the same names are days 4 and 0, as before.
-    let monday_hours = [
-        work_span(&[0], "16:00", "18:00", None),
-        work_span(&[5], "10:00", "12:00", None),
-    ];
-    let trace = plan(
-        std::slice::from_ref(&due_friday),
-        &monday_hours,
-        None,
-        rules(),
-    );
-    assert_eq!(start_of(&trace, "math"), expect(0, "16:00", 60));
+    let mut rules = rules();
+    rules.first_weekday = 2;
+    let trace = plan(std::slice::from_ref(&lab), &windows, None, rules);
+    assert_eq!(start_of(&trace, "lab"), expect(0, "19:00", 60));
 }
