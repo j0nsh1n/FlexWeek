@@ -501,7 +501,8 @@ const DAY_NAME: [&str; 7] = [
     "Sunday",
 ];
 
-fn same_day_spread_notes(placed: &[TimeBlock]) -> Vec<Notice> {
+/// `first_weekday` is the weekday (0 Monday) of the week's day 0, so a day is named for its date.
+fn same_day_spread_notes(placed: &[TimeBlock], first_weekday: i64) -> Vec<Notice> {
     use std::collections::HashMap;
     let mut groups: HashMap<String, Vec<&TimeBlock>> = HashMap::new();
     for block in placed {
@@ -526,7 +527,11 @@ fn same_day_spread_notes(placed: &[TimeBlock]) -> Vec<Notice> {
         }
         if let Some((day, _)) = counts.into_iter().find(|(_, count)| *count >= 2) {
             let title = members[0].title.as_str();
-            let name = DAY_NAME.get(day as usize).copied().unwrap_or("that day");
+            let name = if (0..7).contains(&day) {
+                DAY_NAME[(first_weekday + day).rem_euclid(7) as usize]
+            } else {
+                "that day"
+            };
             notes.push(Notice {
                 kind: "spread_same_day".into(),
                 block_id: members[0].id.clone(),
@@ -1224,7 +1229,7 @@ pub fn solve_with_rules(
             slack_status: None,
         });
     }
-    let notices = same_day_spread_notes(&placed_flex);
+    let notices = same_day_spread_notes(&placed_flex, rules.first_weekday);
     for block in &mut placed_flex {
         block.split_peer = None;
     }
