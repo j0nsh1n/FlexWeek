@@ -220,6 +220,25 @@ def _revision_after_deletes(
     )
 
 
+def _keep_stored_weeks(step: dict, before: list[dict], after: list[dict]) -> None:
+    """A week on screen from another day than Monday is saved in two Monday weeks that also hold days
+    the screen cannot see, such as the other days a session waiting for a time may go on. The step keeps
+    both as they were and are, so Undo and Redo put back exactly what was there."""
+    if not after or [part["week_start"] for part in before] != [part["week_start"] for part in after]:
+        return
+    held = {entry["week_start"] for entry in step["weeks"]}
+    for was, now in zip(before, after, strict=True):
+        if now["week_start"] not in held and was["blocks"] != now["blocks"]:
+            step["weeks"].append(
+                {
+                    "week_start": now["week_start"],
+                    "before": deepcopy(was["blocks"]),
+                    "after": deepcopy(now["blocks"]),
+                    "revision": now["revision"],
+                }
+            )
+
+
 def _keep_step_revisions(step: dict, data: dict) -> None:
     stored = {week["week_start"]: week for week in data.get("weeks") or []}
     for entry in step.get("weeks") or []:
@@ -284,6 +303,8 @@ class NativeSession(QObject):
         self.week_start = current_week_start()
         self.blocks: list[dict] = []
         self.revision = 0
+        # A week on screen from another day than Monday: its two stored weeks as saved, from the server.
+        self._stored_parts: list[dict] = []
         self.assignments: dict[str, dict] = {}
         self.dirty_assignments: set[str] = set()
         self.trace: dict | None = None
@@ -483,6 +504,7 @@ class NativeSession(QObject):
         self.week_start = self.shown_week_of(wall_clock.today().isoformat())
         self.blocks = []
         self.revision = 0
+        self._stored_parts = []
         self.assignments = {}
         self.dirty_assignments.clear()
         self.trace = None
@@ -600,6 +622,7 @@ class NativeSession(QObject):
             "week_start": self.week_start,
             "blocks": deepcopy(self.blocks),
             "revision": self.revision,
+            "stored_parts": deepcopy(self._stored_parts),
             "assignments": deepcopy(self.assignments),
             "dirty_assignments": set(self.dirty_assignments),
             "trace": deepcopy(self.trace),
@@ -624,6 +647,7 @@ class NativeSession(QObject):
         self.week_start = snap["week_start"]
         self.blocks = deepcopy(snap["blocks"])
         self.revision = snap["revision"]
+        self._stored_parts = deepcopy(snap["stored_parts"])
         self.assignments = deepcopy(snap["assignments"])
         self.dirty_assignments = set(snap["dirty_assignments"])
         self.trace = deepcopy(snap["trace"])
@@ -1051,6 +1075,7 @@ class NativeSession(QObject):
             self._drafts.pop(loaded, None)
             self.blocks = list(week["blocks"])
             self.revision = week["revision"]
+            self._stored_parts = list(week.get("stored") or [])
             # Absent when nothing repeats in that week.
             self.repeats = list(week.get("repeats") or [])
             self._saved_repeats = deepcopy(self.repeats)
@@ -1821,6 +1846,7 @@ class NativeSession(QObject):
             if current is not None:
                 self.blocks = list(current["blocks"])
                 self.revision = current["revision"]
+                self._stored_parts = list(current.get("stored") or [])
             self.assignments.pop(assignment_id, None)
             self.dirty_assignments.discard(assignment_id)
             self._committed_blocks = deepcopy(self.blocks)
@@ -2056,8 +2082,17 @@ class NativeSession(QObject):
     ) -> None:
         side = "before" if self._traveling == "undo" else "after"
         writes = [_week_write(self.week_start, self.blocks, self.revision)]
+        # A stored week of the week on screen goes with the revision it has now, as the week on screen does.
+        live = {part["week_start"]: part for part in self._stored_parts}
+        deleted = {entry["id"] for entry in assignments if entry["assignment"] is None}
         for entry in extra:
-            writes.append(_week_write(entry["week_start"], deepcopy(entry[side]), entry["revision"]))
+            part = live.get(entry["week_start"])
+            revision = (
+                entry["revision"]
+                if part is None
+                else _revision_after_deletes(part["blocks"], part["revision"], deleted)
+            )
+            writes.append(_week_write(entry["week_start"], deepcopy(entry[side]), revision))
         self.pending_save = {
             "weeks": writes,
             "assignments": assignments,
@@ -2163,9 +2198,11 @@ class NativeSession(QObject):
                 (week for week in data.get("weeks") or [] if week["week_start"] == self.week_start),
                 None,
             )
+            stored_before = self._stored_parts
             if current is not None:
                 self.blocks = list(current["blocks"])
                 self.revision = current["revision"]
+                self._stored_parts = list(current.get("stored") or [])
                 self.dirty = False
                 self.conflict = False
                 if "repeats" in payload:
@@ -2208,6 +2245,7 @@ class NativeSession(QObject):
                         if stored is not None:
                             entry["after"] = deepcopy(stored["blocks"])
                     _keep_step_revisions(self._pending_step, data)
+                    _keep_stored_weeks(self._pending_step, stored_before, self._stored_parts)
                     for entry in self._pending_step["assignments"]:
                         stored = self.assignments.get(entry["id"])
                         entry["after"] = None if stored is None else deepcopy(stored)

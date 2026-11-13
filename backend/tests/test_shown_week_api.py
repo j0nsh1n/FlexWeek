@@ -287,3 +287,33 @@ def test_school_changed_twice_from_a_wednesday_week_on_then_from_the_next_monday
     shown = week(alice, WED)
     assert school_rows(shown["blocks"]) == [("07:45", [5, 6]), ("09:00", [0, 1, 2])]
     assert "school" in {row["id"] for row in shown["blocks"]}
+
+
+def test_a_shown_week_carries_its_stored_weeks_so_undo_puts_them_back_exactly(alice: TestClient) -> None:
+    # Reviewer's case: a session waiting for a time may go on Thursday 29 or Friday 30 October. Shown
+    # from Friday 30 October, the screen holds Friday only; Thursday is the week before's.
+    waiting = {"id": "hw", "title": "Read", "kind": "flexible", "duration_min": 60, "days": [3, 4]}
+    save(alice, "2026-10-26", [waiting], 0)
+    shown = week(alice, "2026-10-30")
+    assert days_of(shown["blocks"]) == {"hw": [0]}
+    assert [(part["week_start"], part["revision"]) for part in shown["stored"]] == [
+        ("2026-10-26", 1),
+        ("2026-11-02", 0),
+    ]
+    assert days_of(shown["stored"][0]["blocks"]) == {"hw": [3, 4]}
+    assert "stored" not in week(alice, "2026-10-26")
+    deleted = save(alice, "2026-10-30", [], shown["revision"])["weeks"][0]
+    assert week(alice, "2026-10-26")["blocks"] == []
+    # Undo sends each stored week as it was, then the week on screen as it was.
+    post(
+        alice,
+        {
+            "weeks": [
+                {"week_start": part["week_start"], "blocks": before["blocks"], "revision": part["revision"]}
+                for part, before in zip(deleted["stored"], shown["stored"], strict=True)
+            ]
+            + [{"week_start": "2026-10-30", "blocks": shown["blocks"], "revision": deleted["revision"]}]
+        },
+    )
+    assert days_of(week(alice, "2026-10-26")["blocks"]) == {"hw": [3, 4]}
+    assert days_of(week(alice, "2026-10-30")["blocks"]) == {"hw": [0]}

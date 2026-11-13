@@ -353,3 +353,100 @@ def test_school_changed_twice_from_a_wednesday_week_on_and_then_from_monday_stay
     assert school_rows(read_week(qapp, session, "2026-11-02")["blocks"]) == [("08:30", [0, 1])]
     assert school_rows(read_week(qapp, session, "2026-11-09")["blocks"]) == []
     assert school_rows(read_week(qapp, session, "2026-11-16")["blocks"]) == []
+
+
+def test_a_waiting_session_deleted_and_undone_keeps_the_days_the_screen_cannot_see(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    # From Friday the week holding Thursday 5 November runs Friday 30 October to Thursday 5 November. A
+    # session waiting for a time may go on Thursday 29 or Friday 30 October: the screen holds Friday.
+    session = signed_in_from(qapp, server.origin, "waitingundo", 4)
+    waiting = {"id": "hw", "title": "Read", "kind": "flexible", "duration_min": 60, "days": [3, 4]}
+    post_changes(qapp, session, {"weeks": [{"week_start": "2026-10-26", "blocks": [waiting], "revision": 0}]})
+    session.reload()
+    settled(qapp, session)
+    assert session.week_start == "2026-10-30"
+    assert days_by_id({"blocks": session.blocks}) == {"hw": [0]}
+    session.delete_block("hw")
+    session.save()
+    wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+    assert read_week(qapp, session, "2026-10-26")["blocks"] == []
+    session.undo()
+    wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+    settled(qapp, session)
+    assert days_by_id(read_week(qapp, session, "2026-10-26")) == {"hw": [3, 4]}
+    assert days_by_id({"blocks": session.blocks}) == {"hw": [0]}
+    session.redo()
+    wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+    settled(qapp, session)
+    assert read_week(qapp, session, "2026-10-26")["blocks"] == []
+    session.undo()
+    wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+    settled(qapp, session)
+    assert days_by_id(read_week(qapp, session, "2026-10-26")) == {"hw": [3, 4]}
+
+
+def test_undoing_new_homework_planned_after_the_seam_takes_it_out_of_both_stored_weeks(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    session = signed_in_from(qapp, server.origin, "undohomework", WEDNESDAY)
+    away = {"id": "busy", "title": "Away", "kind": "locked", "start": "00:00", "duration_min": 1440}
+    session.add_block({**away, "days": [1, 2, 3, 4]})
+    session.save()
+    wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+    session.add_homework(essay(session, 120))
+    session.save()
+    wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+    session.solve()
+    wait_until(qapp, lambda: not session.busy and not session.planning and session.pending_save is None)
+    settled(qapp, session)
+    # Planned on Monday 9 and Tuesday 10, after the seam.
+    assert {day for day, *_ in essay_sessions(session.blocks)} <= {5, 6}
+    assert essay_sessions(read_week(qapp, session, "2026-11-09")["blocks"]) != []
+    for _ in range(2):
+        session.undo()
+        wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+        settled(qapp, session)
+        assert not session.conflict, session.message
+    assert "essay" not in session.assignments
+    assert essay_sessions(session.blocks) == []
+    for stored in ("2026-11-02", "2026-11-09"):
+        assert not any(block.get("assignment_id") for block in read_week(qapp, session, stored)["blocks"])
+    assert days_by_id(read_week(qapp, session, "2026-11-02")) == {"busy": [3, 4, 5, 6]}
+
+
+def test_three_changes_in_a_wednesday_week_undo_one_by_one_without_a_conflict(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    session = signed_in_from(qapp, server.origin, "undothree", WEDNESDAY)
+
+    def saved() -> None:
+        session.save()
+        wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+        settled(qapp, session)
+
+    def stored(week_start: str) -> dict[str, list[int]]:
+        return days_by_id(read_week(qapp, session, week_start))
+
+    # Thursday 5 and Friday 6 are in Monday 2's stored week; Monday 9 starts the next.
+    session.add_block(fixed("thu5", "Club", 1, "16:00"))
+    saved()
+    session.add_block(fixed("fri6", "Swim", 2, "07:00"))
+    saved()
+    session.add_homework(essay(session, 60))
+    on_monday = {"id": "essay-1", "title": "Essay", "kind": "flexible", "assignment_id": "essay",
+                 "start": "16:00", "duration_min": 60, "days": [5]}  # fmt: skip
+    session.add_block(on_monday)
+    # A change of its own in the same stored week: Undo then has to name that week's revision after the
+    # homework's sessions are taken out of it.
+    session.add_block(fixed("mon9", "Gym", 5, "18:00"))
+    saved()
+    assert stored("2026-11-09") == {"essay-1": [0], "mon9": [0]}
+    for left in ({"thu5": [3], "fri6": [4]}, {"thu5": [3]}, {}):
+        session.undo()
+        wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+        settled(qapp, session)
+        assert not session.conflict, session.message
+        assert stored("2026-11-02") == left
+        assert stored("2026-11-09") == {}
+    assert "essay" not in session.assignments

@@ -115,11 +115,13 @@ def test_get_rejects_malformed_week_starts(account: TestClient) -> None:
 
 
 def test_get_shows_a_week_from_another_day_with_both_stored_revisions(account: TestClient) -> None:
-    # Tuesday 8 September 2026 and Sunday 13 September: weeks on screen that start on those days.
+    # Tuesday 8 September 2026 and Sunday 13 September: weeks on screen that start on those days. Both
+    # cover the stored weeks of Monday 7 and Monday 14 September, which nobody has saved yet.
+    parts: list[dict] = [{"week_start": start, "blocks": [], "revision": 0} for start in ("2026-09-07", "2026-09-14")]
     for week_start in ("2026-09-08", "2026-09-13"):
         response = account.get(f"/api/week?week_start={week_start}")
         assert response.status_code == 200
-        assert response.json() == {"week_start": week_start, "blocks": [], "revision": [0, 0]}
+        assert response.json() == {"week_start": week_start, "blocks": [], "revision": [0, 0], "stored": parts}
 
 
 def test_only_the_monday_containing_the_lower_date_edge_is_allowed(account: TestClient) -> None:

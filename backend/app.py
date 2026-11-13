@@ -219,10 +219,20 @@ def homework_of(db: Connection, user_id: int, blocks: list[dict]) -> dict[str, d
     )
 
 
+def stored_part(db: Connection, user_id: int, week_start: str) -> dict:
+    """A stored week as saved, without the repeats standing in it, and its revision."""
+    row = db.read_week(user_id, week_start)
+    blocks = json.loads(row[0]) if row else []
+    owned = homework_of(db, user_id, blocks)
+    saved = dump_blocks([TimeBlock.model_validate(block) for block in rewrite_stored_blocks(blocks, owned)])
+    return {"week_start": week_start, "blocks": saved, "revision": row[1] if row else 0}
+
+
 def shown_week_view(db: Connection, user_id: int, week_start: str, parts: tuple[str, str, int]) -> dict:
     """The week on screen from `week_start`: the days of both stored weeks it covers, counted from it,
     and their revisions, first week first. Its repeats are those standing in the second week: a change
-    made in it from this week on stands from that week's Monday."""
+    made in it from this week on stands from that week's Monday. `stored` is both stored weeks as
+    saved: they hold days the screen cannot see, so Undo puts them back as they were."""
     first, second, _ = parts
     first_blocks, first_revision = seen_week(db, user_id, first)
     second_blocks, second_revision = seen_week(db, user_id, second)
@@ -232,6 +242,7 @@ def shown_week_view(db: Connection, user_id: int, week_start: str, parts: tuple[
             week_start, first_blocks, second_blocks, homework_of(db, user_id, first_blocks + second_blocks)
         ),
         "revision": [first_revision, second_revision],
+        "stored": [stored_part(db, user_id, first), stored_part(db, user_id, second)],
     }
     repeats = json.loads(db.standing_blocks(user_id, second))
     if repeats:
