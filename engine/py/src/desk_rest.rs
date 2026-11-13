@@ -435,8 +435,8 @@ fn calendar_setup_block(block: &str) -> PyResult<bool> {
 }
 
 #[pyfunction]
-fn calendar_block_family(id: &str) -> String {
-    ::flexweek_engine::shown::family_id(id).to_string()
+fn calendar_block_family(id: &str) -> PyResult<String> {
+    guard(|| Ok(::flexweek_engine::shown::family_id(id).to_string()))
 }
 
 #[pyfunction]
