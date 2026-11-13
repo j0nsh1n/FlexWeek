@@ -249,13 +249,19 @@ fn edit(rng: &mut Seeded, shown: &mut Vec<Value>, round: usize) -> Option<usize>
 fn one_change_on_screen_never_splits_a_block_and_the_next_change_reaches_all_of_it() {
     let mut rng = Seeded(20_261_111);
     // 9 to 15 November are Monday to Sunday; each of them but Monday starts a week over the seam.
+    // Wednesday 28 October runs over a month end, Wednesday 30 December and Sunday 27 December over a
+    // year end; Monday 9 November is one stored week, as before.
     for start in [
+        "2026-11-09",
         "2026-11-10",
         "2026-11-11",
         "2026-11-12",
         "2026-11-13",
         "2026-11-14",
         "2026-11-15",
+        "2026-10-28",
+        "2026-12-30",
+        "2026-12-27",
     ] {
         for round in 0..400 {
             let (first, second) = (random_week(&mut rng), random_week(&mut rng));
