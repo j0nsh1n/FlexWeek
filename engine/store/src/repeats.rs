@@ -183,6 +183,10 @@ fn write_versions(
     Ok(())
 }
 
+fn family_of(block: &Value) -> Option<&str> {
+    block.get("id").and_then(Value::as_str).map(family_id)
+}
+
 /// Apply `intents` in order: the repeat's rows from each change's week, then every saved week from
 /// that week on, where a week's copy follows the change except on what that week changed itself.
 /// The open week is usually in the same batch already changed by the client with the same rule
@@ -283,9 +287,15 @@ pub fn apply_repeat_intents(
                     }
                 }
             }
+            // School's own id, else a piece of it: a week can hold School only as a piece.
             let held = updated
                 .iter()
                 .position(|block| block.get("id").and_then(Value::as_str) == Some(&intent.id))
+                .or_else(|| {
+                    updated
+                        .iter()
+                        .position(|block| family_of(block) == Some(&intent.id))
+                })
                 .unwrap_or(updated.len());
             // Where a later version starts, the copy's own changes are measured against this change, as
             // the version's would have been, so the week is named once for everything it keeps.
@@ -297,7 +307,7 @@ pub fn apply_repeat_intents(
             later_versions.retain(|kept| kept.week_start != week_start);
             if week_start > week
                 && let (Some(now), Some(copy)) = (measured_against, updated.get(held))
-                && copy.get("id") == now.get("id")
+                && family_of(copy) == now.get("id").and_then(Value::as_str)
             {
                 let changes = own_changes(copy, now, &updated, h24);
                 if !changes.is_empty() {

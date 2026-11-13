@@ -803,3 +803,40 @@ fn a_day_added_to_school_reaches_a_week_holding_two_pieces_once() {
         json!([2, 3, 4])
     );
 }
+
+#[test]
+fn a_later_week_holding_only_a_piece_of_school_is_named_for_the_time_it_keeps() {
+    // 16 November's week holds School only as a piece, at 10:00 on every School day. From 9 November
+    // School is called Classes: the piece takes the name and keeps its 10:00, so that week is named,
+    // as it is when it holds `school` itself at 10:00.
+    for id in ["school", "school@20261118"] {
+        let (conn, user_id) = account(&format!("repeats-lone-piece-{}", id.len()), true);
+        set_up(&conn, user_id);
+        save_week_as(
+            &conn,
+            user_id,
+            NEXT_WEEK,
+            vec![
+                with(school(), json!({"id": id, "start": "10:00"})),
+                soccer(),
+            ],
+        );
+        let answer = change_from_open_week(
+            &conn,
+            user_id,
+            OPEN_WEEK,
+            &[("school", Some(with(school(), json!({"title": "Classes"}))))],
+        );
+        let next = shown(&conn, user_id, NEXT_WEEK);
+        assert_eq!(block(&next, id).unwrap()["title"], json!("Classes"), "{id}");
+        let weeks: Vec<_> = answer["repeats"]["kept"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["week_start"].clone())
+            .collect();
+        assert_eq!(weeks, vec![json!(NEXT_WEEK)], "{id}: {answer}");
+        let notice = answer["repeats"]["notice"].as_str().unwrap_or_default();
+        assert!(notice.contains("10:00"), "{id}: {notice}");
+    }
+}
