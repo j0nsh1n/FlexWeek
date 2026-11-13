@@ -341,6 +341,9 @@ class NativeSession(QObject):
         self._join_step = False
         # New homework to give a time once its save lands, when the student plans as they add.
         self._plan_after_save: set[str] = set()
+        # Sessions to plan once the open week is read again: a save wrote them through the stored
+        # Mondays of a week on screen from another day.
+        self._plan_after_load: set[str] = set()
         # Sessions Allow splitting made: a plan that includes them places them all this week, with no fair
         # share, until one such plan is saved. `_split_planned` are those in the plan now being saved.
         self._split_whole: set[str] = set()
@@ -1108,10 +1111,14 @@ class NativeSession(QObject):
             self._fetch_restore_points()
             self._fetch_recovery_status()
             self._prefetch_open_week_month()
+            planned, self._plan_after_load = self._plan_after_load, set()
+            if planned:
+                QTimer.singleShot(0, lambda: self.solve(only=planned, join=True))
 
         def failed(error: ApiError) -> None:
             if not self._alive(ticket):
                 return
+            self._plan_after_load = set()
             if self.shown_week_of(self.selected_day) != self.week_start:
                 self._ensure_selected_day()
                 self._refresh_view()
@@ -2179,7 +2186,10 @@ class NativeSession(QObject):
         destination = None
         written = {week["week_start"] for week in self.pending_save.get("weeks") or []}
         stay = bool(self.pending_save.get("stay"))
-        if self.week_start not in written and written and not stay:
+        # A week on screen from another day than Monday is written through its stored Mondays; writing
+        # them keeps that week open.
+        shown_parts = set(stored_weeks_of(self.week_start)) if self.first_weekday else set()
+        if self.week_start not in written and written and not stay and not written & shown_parts:
             destination = next(iter(written))
         payload = {key: value for key, value in self.pending_save.items() if key != "stay"}
 
@@ -2279,7 +2289,15 @@ class NativeSession(QObject):
             self._split_whole -= self._split_planned
             self._split_planned = set()
             planned_next, self._plan_after_save = self._plan_after_save, set()
-            if planned_next:
+            reread = (
+                destination is None
+                and not self._refollow_week
+                and current is None
+                and self._wrote_open_weeks(written)
+            )
+            if planned_next and reread:
+                self._plan_after_load = planned_next
+            elif planned_next:
                 # Plan it for me as I add it: the new homework's time, joined to the add in one step.
                 QTimer.singleShot(0, lambda: self.solve(only=planned_next, join=True))
             replan_next, self._replan_after_save = self._replan_after_save, False
@@ -3626,11 +3644,16 @@ class NativeSession(QObject):
         )
         operation_id = self._operation(key)
         groups = merge_preview_rows(preview["rows"], operation_id)
+
+        def in_open_week(group: dict) -> bool:
+            # A group is keyed by its stored Monday; the week on screen is the one holding its date.
+            day = date_for_day(group["week_start"], group["block"]["days"][0])
+            return self.shown_week_of(day) == self.week_start
+
         made = {
             group["block"]["id"]
             for group in groups
-            if group["week_start"] == self.week_start
-            and group["block"].get("assignment_id") == preview["assignment_id"]
+            if in_open_week(group) and group["block"].get("assignment_id") == preview["assignment_id"]
         }
         plan_ids = made if self._allow_split_pending == preview["assignment_id"] else set()
         self._plan_after_save |= plan_ids
