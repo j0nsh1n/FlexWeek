@@ -472,6 +472,9 @@ class NativeSession(QObject):
         if self._credits_waiting:
             # After the reply that made this call has been put in place.
             QTimer.singleShot(0, self, self._credit_when_free)
+        if self._refollow_week:
+            # A first day of the week picked while this request ran: its week once the reply is in place.
+            QTimer.singleShot(0, self, self._follow_week)
         return True
 
     def _credit_when_free(self) -> None:
@@ -600,9 +603,11 @@ class NativeSession(QObject):
         return day if 0 <= day <= 6 else None
 
     def _ensure_selected_day(self) -> None:
+        # A day of the open week stays, also when that week still starts on the day weeks started on
+        # before the first day changed: the new week is opened from it.
+        if self.today_column(self.selected_day) is not None:
+            return
         try:
-            if self.shown_week_of(self.selected_day) == self.week_start:
-                return
             # The same weekday in the open week.
             weekday = day_in_week(self.selected_day, self.shown_week_of(self.selected_day))
         except ValueError:
