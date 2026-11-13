@@ -110,7 +110,8 @@ def test_open_week_month_is_prefetched_without_waiting_for_it(
     session._prefetch_open_week_month()
 
     assert len(requests) == 1
-    assert requests[0][0:2] == ("GET", "/api/month?month=2026-10")
+    # The month is asked for with the computer's first day of the week: Monday on a clean computer.
+    assert requests[0][0:2] == ("GET", "/api/month?month=2026-10&first_day=0")
     assert session.month_data is None
     requests[0][3]({"month": "2026-10"})
     assert session._month_cache[(str(session.account["id"]), "2026-10")]["month"] == "2026-10"
@@ -118,7 +119,7 @@ def test_open_week_month_is_prefetched_without_waiting_for_it(
     # The month kept is on screen at once, before any answer; it is asked for again all the same,
     # since another week may have changed, and the fresh answer replaces it.
     assert session.month_data == {"month": "2026-10"}
-    asked_again = [args for args in requests[1:] if args[1] == "/api/month?month=2026-10"]
+    asked_again = [args for args in requests[1:] if args[1] == "/api/month?month=2026-10&first_day=0"]
     assert len(asked_again) == 1
     asked_again[0][3]({"month": "2026-10", "days": [], "fresh": True})
     assert session.month_data.get("fresh") is True

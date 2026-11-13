@@ -577,3 +577,23 @@ def test_a_busy_month_stays_a_compact_read(alice: TestClient) -> None:
     # A September week document of the same density is already tens of kilobytes; the month
     # read names chips, not whole week rows.
     assert 20_000 < len(encoded) < 80_000, len(encoded)
+
+
+def test_month_rows_start_on_the_first_day_asked_for_and_carry_their_weeks(alice: TestClient) -> None:
+    # December 2026 from Wednesday: 25 November (a Wednesday) to 5 January 2027 (a Tuesday), so the
+    # rows reach back past the first Monday of the Monday rows (30 November) into the week of 23 November.
+    assert save_week(alice, [school()], week_start="2026-11-23").status_code == 200
+    response = alice.get("/api/month?month=2026-12&first_day=2")
+    assert response.status_code == 200
+    body = response.json()
+    assert (body["days"][0]["date"], body["days"][-1]["date"]) == ("2026-11-25", "2027-01-05")
+    assert len(body["days"]) == 42
+    assert [chip["title"] for chip in day_on(body, "2026-11-26")["blocks"]] == ["School"]
+    # No first day is Monday's rows, as before.
+    monday = get_month(alice, "2026-12").json()
+    assert (monday["days"][0]["date"], monday["days"][-1]["date"]) == ("2026-11-30", "2027-01-03")
+
+
+def test_month_refuses_a_first_day_past_sunday(alice: TestClient) -> None:
+    assert alice.get("/api/month?month=2026-12&first_day=7").status_code == 422
+    assert alice.get("/api/month?month=2026-12&first_day=-1").status_code == 422
