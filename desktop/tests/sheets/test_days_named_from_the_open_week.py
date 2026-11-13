@@ -105,3 +105,23 @@ def test_a_day_deleted_from_the_week_is_said_by_its_own_name(
     window._delete_block(dict(CLUB), "occurrence", 5, every_week=False)
     settled(qapp, window)
     assert window.toast.text() == "Deleted Club on Monday from this week."
+
+
+def test_a_new_school_block_is_on_monday_to_friday_of_the_week(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    from desktop.native.material.sheet_block import BlockDraft
+    from desktop.native.widgets import BlockDialog
+
+    _wednesday_week(qapp, window)
+    # Wednesday 4 to Friday 6 are days 0 to 2, Monday 9 and Tuesday 10 days 5 and 6.
+    school_days = [0, 1, 2, 5, 6]
+    dialog = BlockDialog(window, category="class")
+    try:
+        pills = [button for button in dialog.findChildren(QPushButton) if button.property("pill")]
+        assert [pill.text() for pill in pills if pill.isChecked()] == ["Wed", "Thu", "Fri", "Mon", "Tue"]
+        assert dialog.day_picker.days() == school_days
+    finally:
+        free(dialog)
+    assert BlockDraft(window.session, None, category="class").days == school_days
+

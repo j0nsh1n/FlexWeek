@@ -127,6 +127,14 @@ fn shown_week_routine(week_start: &str, routine: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
+fn shown_week_weekdays(week_start: &str, weekdays: Vec<i64>) -> PyResult<Vec<i64>> {
+    guard(|| {
+        ::flexweek_engine::shown::weekdays_on_shown_week(week_start, &weekdays)
+            .map_err(crate::raise)
+    })
+}
+
+#[pyfunction]
 fn shown_week_columns(week_start: &str, weekends: bool) -> PyResult<Vec<i64>> {
     guard(|| ::flexweek_engine::shown::shown_columns(week_start, weekends).map_err(crate::raise))
 }
@@ -1855,6 +1863,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         shown_week_rules,
         shown_week_blocks_by_weekday,
         shown_week_routine,
+        shown_week_weekdays,
         compose_shown_week,
         split_shown_week,
         repeat_changes_from_shown_week,

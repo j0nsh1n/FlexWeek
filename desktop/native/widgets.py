@@ -134,6 +134,7 @@ from desktop.native.calendar import (
     span_clash,
     span_problem,
     weekday_order,
+    weekdays_on_week,
 )
 from desktop.native.elevation import lift
 from desktop.native.fields import (
@@ -2709,7 +2710,11 @@ def _buttons(dialog: QDialog) -> QDialogButtonBox:
     return buttons
 
 
-def _preset_locked(category: str | None, day: int, start: str, duration_min: int) -> dict:
+def _preset_locked(
+    category: str | None, day: int, start: str, duration_min: int, week_start: str = ""
+) -> dict:
+    """A new fixed time with its category's preset. A preset's days are weekdays (0 Monday), so in
+    the week from `week_start` they become that week's days."""
     info = CATEGORIES.get(category or "")
     days = [day]
     title = ""
@@ -2722,6 +2727,8 @@ def _preset_locked(category: str | None, day: int, start: str, duration_min: int
             chosen_start = preset["start"]
             chosen_duration = hhmm_to_minutes(preset["end"]) - hhmm_to_minutes(preset["start"])
             days = list(preset.get("days") or [day])
+            if week_start and preset.get("days"):
+                days = weekdays_on_week(week_start, days)
         elif "start" not in preset:
             chosen_duration = preset.get("duration_min", duration_min)
     return {
@@ -3691,7 +3698,7 @@ class BlockDialog(Dialog):
         elif from_range:
             self._original = _range_locked(category, day, start, duration_min)
         else:
-            self._original = _preset_locked(category, day, start, duration_min)
+            self._original = _preset_locked(category, day, start, duration_min, open_week(self))
         self._result: dict | None = None
         self._deleted = False
         self._delete_every_week = False
@@ -3878,8 +3885,11 @@ class BlockDialog(Dialog):
         from_range: bool = False,
     ) -> None:
         """Set the requested values on a new dialog that has never been shown."""
-        made = _range_locked if from_range else _preset_locked
-        self._original = made(category, day, start, duration_min)
+        week = open_week(self)
+        if from_range:
+            self._original = _range_locked(category, day, start, duration_min)
+        else:
+            self._original = _preset_locked(category, day, start, duration_min, week)
         self._result = None
         self._deleted = False
         self._occurrence_day = None

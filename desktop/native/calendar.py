@@ -180,6 +180,11 @@ def routine_on_week(week_start: str, routine: dict) -> dict:
     return turned
 
 
+def weekdays_on_week(week_start: str, weekdays: list[int]) -> list[int]:
+    """Weekdays (0 Monday) as days of the week from `week_start`, in order."""
+    return list(flexweek_engine.shown_week_weekdays(week_start, weekdays))
+
+
 def windows_on_week(week_start: str, windows: list[dict]) -> list[dict]:
     """Work windows kept by weekday, with their days as days of the week from `week_start`."""
     moved: list[dict] = json.loads(flexweek_engine.shown_week_windows(week_start, json.dumps(windows)))

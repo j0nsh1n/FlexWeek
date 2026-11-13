@@ -67,7 +67,9 @@ class BlockDraft:
         self.now = datetime.fromtimestamp(session.now_ms() / 1000)
         self.existing = block is not None
         self.original = (
-            deepcopy(block) if block is not None else _preset_locked(category, day, start, length or 60)
+            deepcopy(block)
+            if block is not None
+            else _preset_locked(category, day, start, length or 60, session.week_start or "")
         )
         if block is None and length is not None:
             # A time picked on the grid keeps its own day, start and length over a category's preset.
