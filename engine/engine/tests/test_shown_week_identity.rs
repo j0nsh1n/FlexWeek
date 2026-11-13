@@ -104,6 +104,56 @@ fn school_changed_from_this_week_on_leaves_the_next_stored_week_whole() {
     assert_eq!(days(&again[0]), vec![0, 1, 2, 5, 6]);
 }
 
+#[test]
+fn edits_over_and_over_add_no_more_blocks_and_changing_back_puts_the_weeks_back() {
+    let (first, second) = (vec![school("08:30")], vec![school("08:30")]);
+    let (mut first_now, mut second_now) = (first.clone(), second.clone());
+    let mut seen_ids: Vec<Vec<String>> = Vec::new();
+    for start in ["10:00", "10:15", "09:45", "11:00", "10:00", "07:30"] {
+        let mut shown = compose_shown_week(WED, &first_now, &second_now).unwrap();
+        assert_eq!(shown.len(), 1, "{shown:?}");
+        assert_eq!(shown[0]["id"], "school");
+        shown[0]["start"] = json!(start);
+        (first_now, second_now) = split_shown_week(WED, &shown, &first_now, &second_now).unwrap();
+        assert_eq!(first_now.len(), 2, "{first_now:?}");
+        assert_eq!(second_now.len(), 2, "{second_now:?}");
+        seen_ids.push(ids(&first_now));
+        seen_ids.push(ids(&second_now));
+    }
+    // The second block of each week keeps one id, made once.
+    seen_ids.sort();
+    seen_ids.dedup();
+    assert_eq!(seen_ids.len(), 1, "{seen_ids:?}");
+    let mut shown = compose_shown_week(WED, &first_now, &second_now).unwrap();
+    shown[0]["start"] = json!("08:30");
+    let (first_back, second_back) = split_shown_week(WED, &shown, &first_now, &second_now).unwrap();
+    assert_eq!(first_back, first);
+    assert_eq!(second_back, second);
+    // Changed from a Wednesday week and a Thursday week in turn, each stored week holds one block per
+    // time School has there, never more.
+    for (round, start) in ["10:00", "10:15", "09:45", "11:00", "10:00", "07:30"]
+        .iter()
+        .enumerate()
+    {
+        let week_start = if round % 2 == 0 { WED } else { "2026-11-12" };
+        let mut shown = compose_shown_week(week_start, &first_now, &second_now).unwrap();
+        for row in &mut shown {
+            row["start"] = json!(start);
+        }
+        (first_now, second_now) =
+            split_shown_week(week_start, &shown, &first_now, &second_now).unwrap();
+        for week in [&first_now, &second_now] {
+            let mut times: Vec<String> = school_times(week).into_iter().map(|(at, _)| at).collect();
+            times.dedup();
+            assert_eq!(week.len(), times.len(), "{week:?}");
+            let all = ids(week);
+            let mut unique = all.clone();
+            unique.dedup();
+            assert_eq!(all, unique);
+        }
+    }
+}
+
 /// A small fixed-seed generator: the same weeks on every run.
 struct Seeded(u64);
 
