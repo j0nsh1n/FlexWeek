@@ -110,12 +110,7 @@ pub(crate) fn run_plan(
         .get("blocks")
         .and_then(Value::as_array)
         .cloned()
-        .unwrap_or(blocks);
-    let moved_blocks = moved
-        .get("moved")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
+        .unwrap_or_else(|| blocks.clone());
     let earlier_updates = moved
         .get("weeks")
         .and_then(Value::as_array)
@@ -133,11 +128,13 @@ pub(crate) fn run_plan(
                     .unwrap_or(false)
         })
         .collect();
-    let open_blocks = flexweek_engine::desk::planning::open_rest_sessions(
+    // The homework's numbers were read with the week as saved (`blocks`), waiting sessions included.
+    let open_blocks = flexweek_engine::desk::planning::open_rest_sessions_since(
         &planning_blocks,
         as_map(&assignments)?,
         week_start,
         &earlier_blocks,
+        &blocks,
     )
     .map_err(engine_failure)?;
     let not_before = start.map(|(day, minute)| json!([day, minute]));
@@ -153,12 +150,6 @@ pub(crate) fn run_plan(
     .map_err(engine_failure)?;
     let first_day = start.map(|(day, _)| day).unwrap_or(0);
     let first_minute = start.map(|(_, minute)| minute).unwrap_or(0);
-    let committed: Vec<Value> = open_blocks
-        .iter()
-        .filter(|block| block.get("start").and_then(Value::as_str).is_some())
-        .cloned()
-        .chain(moved_blocks.iter().cloned())
-        .collect();
     let avail = availability(&db, user_id)?;
     let work = avail.work.as_array().cloned().unwrap_or_default();
     let target_ids: Vec<String> = targets
@@ -169,7 +160,7 @@ pub(crate) fn run_plan(
     let (week_blocks, shares) = flexweek_engine::desk::planning::fair_share(
         &open_blocks,
         as_map(&assignments)?,
-        &Value::Array(committed),
+        &Value::Array(blocks),
         week_start,
         first_day,
         first_minute,
@@ -499,6 +490,32 @@ mod tests {
     #[test]
     fn plan_week_matches_later_fair_share_golden() {
         assert_golden("later-fair-share");
+    }
+
+    #[test]
+    fn a_saved_waiting_session_gets_its_share_without_a_stored_unplanned_number() {
+        // The later-fair-share case as a save really stores it: no `unplanned_min` in the homework, which the
+        // store counts from the saved weeks (planned 180: the waiting session here). This week's part is
+        // 180 less 0 held in later weeks; the session being planned holds none of it yet. On Saturday 10:00,
+        // Sat and Sun are 2 of the 12 plannable days to Wed 21, so it gets 180 x 2 / 12 = 30, as the golden.
+        let mut case = load_case("later-fair-share");
+        case["assignments"]["poster"]
+            .as_object_mut()
+            .unwrap()
+            .shift_remove("unplanned_min");
+        let (week, _) = open_at("later-fair-share-real", case["now"].as_str().unwrap());
+        seed(&week, &case);
+        let result: Value = serde_json::from_str(
+            &week
+                .plan_week(case["week_start"].as_str().unwrap().into(), 0.0)
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            Value::Array(placed_rows(&result)),
+            case["expected"]["placed"]
+        );
+        assert_eq!(result["shares"], case["expected"]["shares"]);
     }
 
     #[test]

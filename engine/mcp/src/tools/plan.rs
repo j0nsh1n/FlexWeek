@@ -295,17 +295,25 @@ fn run_plan(
         .collect();
     let moved =
         planning::move_earlier_homework(&blocks, &earlier, &by_id, week_start).map_err(engine)?;
-    let planning_blocks = moved["blocks"].as_array().cloned().unwrap_or(blocks);
-    let moved_blocks = moved["moved"].as_array().cloned().unwrap_or_default();
+    let planning_blocks = moved["blocks"]
+        .as_array()
+        .cloned()
+        .unwrap_or_else(|| blocks.clone());
     let earlier_updates = moved["weeks"].as_array().cloned().unwrap_or_default();
     let earlier_blocks: Vec<Value> = earlier
         .iter()
         .flat_map(|week| week["blocks"].as_array().cloned().unwrap_or_default())
         .filter(|block| block["start"].is_string() && block["completed"] != json!(true))
         .collect();
-    let open_blocks =
-        planning::open_rest_sessions(&planning_blocks, &by_id, week_start, &earlier_blocks)
-            .map_err(engine)?;
+    // The homework's numbers were read with the week as saved (`blocks`), waiting sessions included.
+    let open_blocks = planning::open_rest_sessions_since(
+        &planning_blocks,
+        &by_id,
+        week_start,
+        &earlier_blocks,
+        &blocks,
+    )
+    .map_err(engine)?;
     let not_before = start.map(|(day, minute)| json!([day, minute]));
     let (payload, targets) = planning::solve_request(
         &Value::Array(open_blocks.clone()),
@@ -318,19 +326,13 @@ fn run_plan(
     )
     .map_err(engine)?;
     let (first_day, first_minute) = start.unwrap_or((0, 0));
-    let committed: Vec<Value> = open_blocks
-        .iter()
-        .filter(|block| block["start"].is_string())
-        .cloned()
-        .chain(moved_blocks.iter().cloned())
-        .collect();
     let found = availability(conn, user_id)?;
     let work = found.work.as_array().cloned().unwrap_or_default();
     let target_ids = ids(&targets);
     let (week_blocks, shares) = planning::fair_share(
         &open_blocks,
         &by_id,
-        &Value::Array(committed),
+        &Value::Array(blocks),
         week_start,
         first_day,
         first_minute,

@@ -344,7 +344,13 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | reuse | settle_placements | LOGIC, moved | `keep` is read as given by `reuse_settle_placements` |
 | reuse | occurrence_days | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | session_minutes | ADAPTER | encodes, makes one engine call, decodes |
-| reuse | available_homework_minutes | ADAPTER | encodes, makes one engine call, decodes |
+| reuse | available_homework_minutes | ADAPTER | encodes, makes one engine call, decodes; `uncovered_homework_minutes` down to a quarter hour, what Plan and paste may place |
+| reuse | uncovered_homework_minutes | ADAPTER | encodes, makes one engine call, decodes; the minutes no session holds, exactly: the estimate less focus done less what later weeks hold (the server's `planned_min` less the sessions of `committed_blocks`, the week as saved when that number was read), less this week's not-finished sessions, never below 0 (`planning::uncovered_homework_minutes`) |
+| reuse | time_still_needed | ADAPTER | encodes, makes one engine call, decodes; counts minutes, not quarter hours: each homework's waiting sessions plus its minutes no session holds, counted as `uncovered_homework_minutes` counts them against `committed_blocks` (`planning::time_still_needed_since`) |
+| reuse | time_still_needed_parts | ADAPTER | the same call with each homework's `waiting_min` and `uncovered_min` beside its minutes; the plan notice names the homework whose `uncovered_min` is not 0 |
+| reuse | plan_open_counts | ADAPTER | encodes, makes one engine call, decodes; `open` is homework with a session still waiting for a time (Material's "Placed N of M"), `waiting_only` those with no minutes outside a session (`planning::plan_open_counts`) |
+| reuse | open_rest_sessions | ADAPTER | encodes, makes one engine call, decodes; `saved_week` is the week the server's numbers were read with, none meaning `blocks` (`planning::open_rest_sessions_since`); the rest session is the minutes no session holds down to a quarter hour |
+| reuse | fair_share | ADAPTER | encodes, makes one engine call, decodes; `saved_week` as for `open_rest_sessions`; the share is cut from all of this week's part, the sessions being planned holding none of it yet (`planning::fair_share`) |
 | reuse | copied_fixed_block | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | copied_homework_block | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | clipboard_item | ADAPTER | encodes, makes one engine call, decodes |

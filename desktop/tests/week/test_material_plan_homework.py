@@ -551,3 +551,45 @@ def test_tabbing_through_homework_cards_keeps_the_focused_card_in_view(qapp, win
         assert bottom <= view_bottom + 1, (card.property("title"), bottom, view_bottom)
         QTest.keyClick(quick, Qt.Key.Key_Tab)
         _pump(qapp)
+
+
+@pytest.mark.parametrize(
+    ("minutes", "said", "empty"),
+    [
+        # 60 - 5 = 55: Plan places 45 of it and the Math worksheet's 30 (two blocks); 10 minutes of the
+        # essay have no session, so the notice names them and the drawer lists them.
+        (
+            5,
+            "Placed 2 of 2. History essay still has 10 min with no time.",
+            "History essay · 10 min with no time",
+        ),
+        # 60 - 15 = 45: Plan places all 45 and the 30. Nothing is missing, and the notice says so.
+        (15, "Placed 2 of 2", "Everything has a time."),
+    ],
+)
+def test_the_plan_notice_counts_what_the_plan_left(qapp, window, minutes: int, said: str, empty: str) -> None:
+    """Material says the same as the plain look: blocks placed after the plan, and any homework with minutes
+    that have no time, by name. Main said "Placed 2 of 3" here, counting the essay from the server's number
+    of before the plan."""
+    root = _reset(window, qapp)
+    session = window.session
+    essay = next(block for block in session.blocks if block.get("assignment_id") == "essay")
+    essay["duration_min"] = minutes
+    essay["pinned"] = True
+    session._touch()
+    session.save()
+    settled(qapp, window)
+    wait_until(qapp, lambda: session.assignments["essay"].get("unplanned_min") == 60 - minutes)
+    due = (_week_monday(window) + timedelta(days=6)).isoformat()
+    _homework(window, "sheet", "Math worksheet", 30, due)
+    settled(qapp, window)
+    _pump(qapp)
+
+    _click(window, _qml(root, "planHomework"))
+    wait_until(qapp, lambda: _snack(window).startswith("Placed") and not window.session.busy)
+    _pump(qapp)
+
+    assert _snack(window) == said
+    assert _qml(root, "homeworkEmptyText").property("text") == empty
+    kept = next(block for block in session.blocks if block.get("pinned"))
+    assert (kept["duration_min"], kept["start"]) == (minutes, essay["start"])

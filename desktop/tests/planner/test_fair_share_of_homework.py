@@ -79,3 +79,36 @@ def test_planning_again_keeps_the_same_share(
     finished_planning(qapp, window)
     placed = [b for b in window.session.blocks if b.get("assignment_id") == "sci" and b.get("start")]
     assert sum(b["duration_min"] for b in placed) == 120, placed
+
+
+def test_a_session_moved_in_from_last_week_gets_the_same_share(
+    qapp: QApplication, window: NativeWindow, clock: FakeClock
+) -> None:
+    """A 2 h "Spread over days" homework due Wednesday of the week after next (16 days after this Monday),
+    its one session saved with no time last week. Plan on Saturday 07:00 moves the session into this week.
+    The server read this week with no session of it (planned 0), so this week's part is 120 and the moved
+    session holds none of it yet. Sat and Sun are 2 of the 2 + 7 + 3 = 12 plannable days up to the
+    Wednesday: 120 x 2 / 12 = 20, a quarter hour up is 30 this week and 90 waiting. Counting the moved
+    session as saved here made the part 240: 45 this week and 195 waiting, 240 for a 2 h homework."""
+    session = window.session
+    week = session.week_start
+    monday = date.fromisoformat(week)
+    session.load_week((monday - timedelta(days=7)).isoformat())
+    settled(qapp, window)
+    due = (monday + timedelta(days=16)).isoformat() + "T23:59"
+    session.add_homework(
+        {"id": "sci", "title": "Science project", "estimate_min": 120, "revision": 0, "due": due,
+         "spread": "spread"}
+    )
+    session.save()
+    settled(qapp, window)
+    session.load_week(week)
+    settled(qapp, window)
+    clock.set(datetime.fromisoformat(week) + timedelta(days=SATURDAY, hours=7))
+    session.solve()
+    finished_planning(qapp, window)
+    sessions = [b for b in session.blocks if b.get("assignment_id") == "sci"]
+    placed = sorted((bool(b.get("start")), b["duration_min"]) for b in sessions)
+    assert placed == [(False, 90), (True, 30)], sessions
+    shares = (session.trace or {}).get("shares") or []
+    assert [(share["this_week_min"], share["left_min"]) for share in shares] == [(30, 90)]

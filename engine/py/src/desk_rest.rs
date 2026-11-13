@@ -561,16 +561,16 @@ fn reuse_session_days(week_start: &str, due: &str) -> PyResult<Vec<i64>> {
 fn reuse_fair_share(
     blocks: &str,
     assignments: &str,
-    committed: &str,
+    saved_week: &str,
     week_start: &str,
     first_day: i64,
     planning_context: &str,
     targets: Vec<String>,
 ) -> PyResult<(String, String)> {
-    let (blocks, assignments, committed, planning_context) = (
+    let (blocks, assignments, saved_week, planning_context) = (
         parse(blocks)?,
         parse(assignments)?,
-        parse(committed)?,
+        parse(saved_week)?,
         parse(planning_context)?,
     );
     guard(|| {
@@ -588,7 +588,7 @@ fn reuse_fair_share(
         let (week, notes) = planning::fair_share(
             &blocks,
             &assignments,
-            &committed,
+            &saved_week,
             week_start,
             first_day,
             first_minute,
@@ -609,16 +609,31 @@ fn reuse_open_rest(
     assignments: &str,
     week_start: &str,
     earlier_blocks: &str,
+    saved_week: &str,
 ) -> PyResult<String> {
-    let (blocks, assignments, earlier_blocks) =
-        (parse(blocks)?, parse(assignments)?, parse(earlier_blocks)?);
+    let (blocks, assignments, earlier_blocks, saved_week) = (
+        parse(blocks)?,
+        parse(assignments)?,
+        parse(earlier_blocks)?,
+        parse(saved_week)?,
+    );
     guard(|| {
         let blocks = blocks.as_array().cloned().unwrap_or_default();
         let assignments = assignments.as_object().cloned().unwrap_or_default();
         let earlier_blocks = earlier_blocks.as_array().cloned().unwrap_or_default();
+        let saved_week = saved_week
+            .as_array()
+            .cloned()
+            .unwrap_or_else(|| blocks.clone());
         Ok(dump(&Value::Array(
-            planning::open_rest_sessions(&blocks, &assignments, week_start, &earlier_blocks)
-                .map_err(crate::raise)?,
+            planning::open_rest_sessions_since(
+                &blocks,
+                &assignments,
+                week_start,
+                &earlier_blocks,
+                &saved_week,
+            )
+            .map_err(crate::raise)?,
         )))
     })
 }
@@ -648,14 +663,75 @@ fn reuse_time_still_needed(
     assignments: &str,
     open_week_blocks: &str,
     week_start: &str,
+    committed_blocks: &str,
 ) -> PyResult<String> {
-    let (assignments, blocks) = (parse(assignments)?, parse(open_week_blocks)?);
+    let (assignments, blocks, committed) = (
+        parse(assignments)?,
+        parse(open_week_blocks)?,
+        parse(committed_blocks)?,
+    );
     guard(|| {
         let assignments = assignments.as_object().cloned().unwrap_or_default();
         let blocks = blocks.as_array().cloned().unwrap_or_default();
+        let committed = committed.as_array().cloned().unwrap_or_default();
         Ok(dump(&Value::Array(
-            planning::time_still_needed(&assignments, &blocks, week_start).map_err(crate::raise)?,
+            planning::time_still_needed_since(&assignments, &blocks, week_start, &committed)
+                .map_err(crate::raise)?,
         )))
+    })
+}
+
+#[pyfunction]
+fn reuse_time_still_needed_parts(
+    assignments: &str,
+    open_week_blocks: &str,
+    week_start: &str,
+    committed_blocks: &str,
+) -> PyResult<String> {
+    let (assignments, blocks, committed) = (
+        parse(assignments)?,
+        parse(open_week_blocks)?,
+        parse(committed_blocks)?,
+    );
+    guard(|| {
+        let assignments = assignments.as_object().cloned().unwrap_or_default();
+        let blocks = blocks.as_array().cloned().unwrap_or_default();
+        let committed = committed.as_array().cloned().unwrap_or_default();
+        Ok(dump(&Value::Array(
+            planning::time_still_needed_parts(&assignments, &blocks, week_start, &committed)
+                .map_err(crate::raise)?,
+        )))
+    })
+}
+
+#[pyfunction]
+fn reuse_plan_open_counts(
+    assignments: &str,
+    open_week_blocks: &str,
+    week_start: &str,
+    committed_blocks: &str,
+) -> PyResult<String> {
+    let (assignments, blocks, committed) = (
+        parse(assignments)?,
+        parse(open_week_blocks)?,
+        parse(committed_blocks)?,
+    );
+    guard(|| {
+        let assignments = assignments.as_object().cloned().unwrap_or_default();
+        let blocks = blocks.as_array().cloned().unwrap_or_default();
+        let committed = committed.as_array().cloned().unwrap_or_default();
+        let (open, waiting_only) =
+            planning::plan_open_counts(&assignments, &blocks, week_start, &committed)
+                .map_err(crate::raise)?;
+        Ok(dump(&json!({"open": open, "waiting_only": waiting_only})))
+    })
+}
+
+#[pyfunction]
+fn reuse_uncovered_minutes(assignment: &str, blocks: &str, committed: &str) -> PyResult<i64> {
+    let (assignment, blocks, committed) = (parse(assignment)?, parse(blocks)?, parse(committed)?);
+    guard(|| {
+        planning::uncovered_homework_minutes(&assignment, &blocks, &committed).map_err(crate::raise)
     })
 }
 
@@ -1562,6 +1638,9 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         reuse_open_rest,
         reuse_move_earlier_homework,
         reuse_time_still_needed,
+        reuse_time_still_needed_parts,
+        reuse_uncovered_minutes,
+        reuse_plan_open_counts,
         reuse_planned,
         reuse_planning_days,
         reuse_apply_plan,

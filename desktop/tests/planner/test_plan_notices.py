@@ -145,3 +145,54 @@ def test_the_plan_notice_counts_homework_blocks(qapp: QApplication, window: Nati
     # Plan's toast counts the blocks it placed; "Everything has a time." is the sidebar's.
     assert window.toast.text() == "Placed 1 homework block."
     assert " of " not in window.toast.text()
+
+
+def _cut_the_essay_to(qapp: QApplication, window: NativeWindow, minutes: int) -> None:
+    """The student shaped the History essay by hand: pinned, `minutes` long, saved."""
+    session = window.session
+    essay = next(block for block in session.blocks if block.get("assignment_id") == "essay")
+    essay["duration_min"] = minutes
+    essay["pinned"] = True
+    session._touch()
+    session.save()
+    settled(qapp, window)
+    # The server's count of what the homework still needs follows the save, as it does in the app.
+    wait_until(qapp, lambda: session.assignments["essay"].get("unplanned_min") == 60 - minutes)
+
+
+@pytest.mark.parametrize(
+    ("minutes", "said", "left"),
+    [
+        # 60 - 5 = 55: Plan places 45 (three quarter hours) and 10 minutes have no session.
+        (
+            5,
+            "Placed 1 homework block. History essay still has 10 min with no time.",
+            [("History essay", 10)],
+        ),
+        # 60 - 15 = 45: Plan places all 45. Nothing is missing, so nothing is said to be.
+        (15, "Placed 1 homework block.", []),
+        # 60 - 20 = 40: places 30, 10 left.
+        (
+            20,
+            "Placed 1 homework block. History essay still has 10 min with no time.",
+            [("History essay", 10)],
+        ),
+        # 60 - 50 = 10: under a quarter hour, so there is nothing for Plan to place. Main said "Everything
+        # has a time." here; the line Plan gives when it finds nothing new now counts the 10 minutes.
+        (50, "10 min still needs a time", []),
+    ],
+)
+def test_the_plan_notice_names_the_minutes_it_could_not_place(
+    qapp: QApplication, window: NativeWindow, minutes: int, said: str, left: list[tuple[str, int]]
+) -> None:
+    """Expected values are worked out from the requirement: the essay is 60 minutes, the student cut one
+    session to `minutes`, and Plan places only whole quarter hours of the 60 - `minutes` still to do. The
+    notice counts what was placed after the plan, and names any homework with minutes that have no time."""
+    _cut_the_essay_to(qapp, window, minutes)
+    window.session.solve()
+    wait_until(qapp, lambda: not window.session.busy and window.toast.text() == said)
+    qapp.processEvents()
+    kept = next(block for block in window.session.blocks if block.get("pinned"))
+    assert (kept["duration_min"], kept["start"], kept["days"]) == (minutes, "18:45", [3])
+    assert window.toast.text() == said
+    assert window.session.plan_remainders == left
