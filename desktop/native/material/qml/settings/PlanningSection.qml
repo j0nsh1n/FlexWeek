@@ -14,7 +14,7 @@ SectionPage {
         PickRow {
             key: "weekStart"
             title: "Week starts on"
-            subtitle: "Month and the date pickers start on this day."
+            subtitle: "Week, Month and the date pickers start on this day."
             choices: [{ label: "Monday", value: "monday" }, { label: "Tuesday", value: "tuesday" },
                 { label: "Wednesday", value: "wednesday" }, { label: "Thursday", value: "thursday" },
                 { label: "Friday", value: "friday" }, { label: "Saturday", value: "saturday" },

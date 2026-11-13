@@ -18,9 +18,8 @@ from backend.models import TimeBlock, WeekRequest
 from backend.slots import hhmm_to_minutes
 from desktop.native.calendar import (
     CATEGORIES,
-    DAY_FULL,
-    DAYS,
     date_for_day,
+    day_full_names,
     is_series,
     is_setup_block,
     monday_of,
@@ -36,7 +35,9 @@ from desktop.native.widgets import (
     _block_problem,
     _preset_locked,
     day_range_and_words,
+    full_day_name,
     guess_locked_category,
+    short_day_name,
 )
 
 STEPS = ("What", "When", "Category")
@@ -327,13 +328,11 @@ class BlockDraft:
             if not isinstance(week, str):
                 week = monday_of(wall_clock.today().isoformat())
             stamp = date.fromisoformat(date_for_day(week, self.occurrence_day))
-            question = (
-                f"Delete {name} on {DAY_FULL[self.occurrence_day]} {stamp.day} {stamp.strftime('%b')} only?"
-            )
+            day_name = day_full_names(week)[self.occurrence_day]
+            question = f"Delete {name} on {day_name} {stamp.day} {stamp.strftime('%b')} only?"
         else:
-            question = (
-                f"Delete {name} on every {day_range_and_words(self.original.get('days') or [])} this week?"
-            )
+            days = day_range_and_words(self.original.get("days") or [], self._week())
+            question = f"Delete {name} on every {days} this week?"
         if is_setup_block(self.original):
             answers = [{"id": "stay", "label": "Cancel", "kind": "text"}]
             if occurrence:
@@ -366,8 +365,13 @@ class BlockDraft:
         )
         return [
             {"value": "occurrence", "label": "This day only"},
-            {"value": "series", "label": f"Every {day_range_and_words(days)}"},
+            {"value": "series", "label": f"Every {day_range_and_words(days, self._week())}"},
         ]
+
+    def _week(self) -> str:
+        """The first day of the open week, whose days a block's `days` count; "" with none."""
+        week = self.session.week_start
+        return week if isinstance(week, str) else ""
 
     def form(self) -> dict:
         step = self.step
@@ -383,7 +387,7 @@ class BlockDraft:
             line = length_label(span)
         done = (
             self.title.strip(),
-            f"{day_range_and_words(self.days)}, {clock_text(self.start)}",
+            f"{day_range_and_words(self.days, self._week())}, {clock_text(self.start)}",
         )
         crumbs = [
             {
@@ -419,7 +423,7 @@ class BlockDraft:
             "days": [
                 {
                     "value": index,
-                    "label": DAYS[index],
+                    "label": short_day_name(self._week(), index),
                     "date": (monday + timedelta(days=index)).day if monday else 0,
                     "on": index in self.days,
                 }
@@ -453,7 +457,7 @@ class BlockDraft:
             "missedLabel": (
                 "I missed it"
                 if self.occurrence_day is None
-                else f"I missed it on {DAY_FULL[self.occurrence_day]}"
+                else f"I missed it on {full_day_name(self._week(), self.occurrence_day)}"
             ),
             "error": self.error,
             "canBack": bool(step),

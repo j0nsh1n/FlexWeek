@@ -187,6 +187,9 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | calendar | weekday_order | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | day_in_week | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | stored_weeks_of | ADAPTER | encodes, makes one engine call, decodes |
+| calendar | week_columns | ADAPTER | encodes, makes one engine call, decodes |
+| calendar | day_names | ADAPTER | encodes, makes one engine call, decodes |
+| calendar | day_full_names | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | month_rows | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | date_for_day | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | sunday_due | ADAPTER | encodes, makes one engine call, decodes |

@@ -85,6 +85,7 @@ from desktop.native.calendar import (
     FLEX_CATEGORIES,
     SETUP_SCHOOL_ID,
     date_for_day,
+    day_full_names,
     is_series,
     is_setup_block,
     sunday_due,
@@ -2958,6 +2959,8 @@ class NativeWindow(QMainWindow):
         self.session.follow_first_weekday(week_start_day())
 
     def _on_week(self) -> None:
+        # The hand names days of the open week, which may start on any day.
+        self.hand.week_start = self.session.week_start
         if self.session.account is None:
             return
         if self.plan_review.isVisible() and self.plan_review.week_start != self.session.week_start:
@@ -3079,13 +3082,13 @@ class NativeWindow(QMainWindow):
             if destination is None:
                 copy_day.setText("Copy a selected day")
             else:
-                copy_day.setText("Copy " + DAY_FULL[destination[0]])
+                copy_day.setText("Copy " + day_full_names(self.session.week_start)[destination[0]])
         if paste is not None:
             paste.setEnabled(clip is not None and destination is not None)
             if destination is None:
                 paste.setText("Paste into a selected day")
             else:
-                paste.setText("Paste into " + DAY_FULL[destination[0]])
+                paste.setText("Paste into " + day_full_names(self.session.week_start)[destination[0]])
         needed = self.session.homework_time_needed()
         unfinished = self.findChild(QPushButton, "unfinishedOpen")
         if unfinished is not None:
@@ -3835,7 +3838,7 @@ class NativeWindow(QMainWindow):
             self._set_notice(f"Deleted {title} from this week and every week after.", "", None)
             return
         if scope == "occurrence" and day is not None:
-            words = f"Deleted {title} on {DAY_FULL[day]} from this week."
+            words = f"Deleted {title} on {day_full_names(self.session.week_start)[day]} from this week."
             self._set_notice(words, "Undo", self._undo_from_notice)
             return
         self._set_notice(f"Deleted {title} from this week.", "Undo", self._undo_from_notice)
@@ -3955,7 +3958,7 @@ class NativeWindow(QMainWindow):
         for day in range(7):
             items = sorted(week.on_day(day), key=lambda item: (item.start, item.end, item.title))
             if not items:
-                words = f"{DAY_FULL[day]}: Nothing planned"
+                words = f"{week.day_full(day)}: Nothing planned"
                 row = QListWidgetItem(words)
                 self.week_access_list.addItem(row)
                 continue
@@ -3978,7 +3981,7 @@ class NativeWindow(QMainWindow):
                 detail = drawn.detail
                 if not occurrence.work:
                     detail += " · Fixed time"
-                words = f"{DAY_FULL[day]}: {occurrence.title}, {detail}"
+                words = f"{week.day_full(day)}: {occurrence.title}, {detail}"
                 row = QListWidgetItem(words)
                 row.setData(Qt.ItemDataRole.UserRole, (occurrence.block_id, day))
                 self.week_access_list.addItem(row)
@@ -4503,7 +4506,7 @@ class NativeWindow(QMainWindow):
         answer = self.session.judge_hand_move(block_id, from_day, day, start, end)
         if not answer["moved"]:
             return HandVerdict(False, answer["problem"])
-        words = span_words(Span(day, start, end)) + (
+        words = span_words(Span(day, start, end), self.hand.day_name) + (
             f" · beside {answer['beside']}" if answer["beside"] else ""
         )
         return HandVerdict(True, words)
@@ -4574,7 +4577,9 @@ class NativeWindow(QMainWindow):
                 # _delete_block asks this week or every week.
                 self._delete_block(block, "occurrence" if one_day else "series", on)
                 return
-            name = (block.get("title") or "this event") + (f" on {DAY_FULL[on]}" if one_day else "")
+            name = block.get("title") or "this event"
+            if one_day and on is not None:
+                name += f" on {day_full_names(self.session.week_start)[on]}"
             if confirm(self, "Delete fixed time", f"Delete {name}? You can undo this.", "Delete"):
                 self._delete_block(block, "occurrence" if one_day else "series", on)
             return

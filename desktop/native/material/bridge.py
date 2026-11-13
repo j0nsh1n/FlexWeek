@@ -493,6 +493,10 @@ class MaterialBridge(QObject):
         return self._week.nowDay
 
     @Property(int, notify=changed)
+    def nowColumn(self) -> int:
+        return self._week.nowColumn
+
+    @Property(int, notify=changed)
     def nowMinute(self) -> int:
         return self._week.nowMinute
 

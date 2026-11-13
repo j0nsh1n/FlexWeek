@@ -18,6 +18,7 @@ from __future__ import annotations
 import html
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from datetime import date
 from functools import cached_property, partial
 
 from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, QSize, Qt, Signal
@@ -135,9 +136,9 @@ def landing(tracks: list[LinearTrack], at: float) -> int:
     return min(max(sum(track.area.center().x() < at for track in tracks), 1), 6)
 
 
-def _run(days: tuple[int, ...]) -> str:
+def _run(days: tuple[int, ...], names: Callable[[int], str]) -> str:
     """A page's days as "Mon–Tue", or one day's short name."""
-    first, last = DAYS[days[0]], DAYS[days[-1]]
+    first, last = names(days[0]), names(days[-1])
     return first if first == last else f"{first}–{last}"
 
 
@@ -238,11 +239,11 @@ def _due_words(due: str | None) -> str:
     return f"due {words.split(',')[0]}" if words else ""
 
 
-def _placed_words(at: tuple[int, int] | None) -> str:
+def _placed_words(at: tuple[int, int] | None, week: WeekModel) -> str:
     """Where a session sits, in those words, so the time is not read as its deadline."""
     if at is None:
         return "Not placed yet"
-    return f"placed {DAYS[at[0]]} {clock_label(at[1])}"
+    return f"placed {week.day_name(at[0])} {clock_label(at[1])}"
 
 
 def _paint(tokens: dict[str, str], category: str) -> tuple[str, str]:
@@ -484,7 +485,8 @@ class DayHeading(QPushButton):
         row = QHBoxLayout(self)
         row.setContentsMargins(self.PAD, 0, 0, 0)
         row.setSpacing(self.GAP)
-        self.title = label(DAY_FULL[day], "timelineDayName")
+        self.full, self.short = DAY_FULL[day], DAYS[day]
+        self.title = label(self.full, "timelineDayName")
         # Two labels shown in turn: Qt keeps a label's padding from its first styling, so a date
         # restyled as today's chip later lost the chip's padding.
         self.date = label("", "timelineDate")
@@ -497,7 +499,14 @@ class DayHeading(QPushButton):
             row.addWidget(part, 0, Qt.AlignmentFlag.AlignVCenter)
         row.addStretch(1)
 
-    def set_date(self, number: int, today: bool) -> None:
+    def set_date(self, when: date, today: bool) -> None:
+        """The day's date, and its name from that date: the week may start on any day."""
+        number = when.day
+        self.full, self.short = DAY_FULL[when.weekday()], DAYS[when.weekday()]
+        opens = self.property("day_target") is not None
+        self.setAccessibleName(f"Show {self.full}" if opens else self.full)
+        if opens:
+            self.setToolTip(f"Open {self.full}")
         self.date.setText(str(number))
         self.chip.setText(str(number))
         self.date.setVisible(not today)
@@ -516,7 +525,7 @@ class DayHeading(QPushButton):
         for part in (self.title, tag):
             part.ensurePolished()
         metrics = self.title.fontMetrics()
-        full, short = DAY_FULL[self.day], DAYS[self.day]
+        full, short = self.full, self.short
         room = self.width() - self.PAD - self.GAP - tag.sizeHint().width()
         pad, gap = (self.PAD, self.GAP) if metrics.horizontalAdvance(short) <= room else (2, 3)
         self.layout().setContentsMargins(pad, 0, 0, 0)
@@ -827,7 +836,7 @@ class TimelineCanvas(HoursCanvas):
         painter.drawLine(QPointF(at, 0), QPointF(at, self.height()))
         visible = self._visible()
         left, right = pages_of(then)
-        words = f"{_run(left)} | {_run(right)}"
+        words = f"{_run(left, self._day_name)} | {_run(right, self._day_name)}"
         font = weighted(caption(self.font()), WEIGHT_STRONG)
         metrics = QFontMetricsF(font)
         box = QRectF(0, 0, metrics.horizontalAdvance(words) + 16, metrics.height() + 6)
@@ -1144,7 +1153,8 @@ class TimelineView(LayoutView):
             canvas.heads.handle.show_fold(left, scene.tokens, scene.scale)
         canvas.relayout()
         self._date_heads(scene, canvas.heads)
-        canvas.set_week(_shown(scene, scene.week.occurrences), scene.today, scene.minute)
+        shown = _shown(scene, scene.week.occurrences)
+        canvas.set_week(shown, scene.today, scene.minute, scene.week.week_start)
         open_hours(hours, scene.week.week_start, scene.week, scene.today, scene.minute)
         self._fit_hours(hours, scene)
         left, right = pages.feet
@@ -1214,7 +1224,8 @@ class TimelineView(LayoutView):
             canvas.heads.show_days((day,))
         canvas.relayout()
         self._date_heads(scene, canvas.heads)
-        canvas.set_week(_shown(scene, scene.week.on_day(day)), scene.today, scene.minute)
+        shown = _shown(scene, scene.week.on_day(day))
+        canvas.set_week(shown, scene.today, scene.minute, scene.week.week_start)
         open_hours(hours, (scene.week.week_start, day), scene.week, scene.today, scene.minute, day)
         self._fit_hours(hours, scene)
         (notes,) = pages.feet
@@ -1256,7 +1267,7 @@ class TimelineView(LayoutView):
     def _summary(self, scene: Scene, day: int, is_today: bool) -> QVBoxLayout:
         """The day's homework planned and done, and its time by category, each with its dot."""
         px = scene.px
-        section = self._section(scene, "Today" if is_today else DAY_FULL[day])
+        section = self._section(scene, "Today" if is_today else scene.week.day_full(day))
         work = [entry for entry in scene.week.on_day(day) if entry.work]
         planned = planned_line(
             sum(entry.minutes for entry in work), sum(entry.minutes for entry in work if entry.done)
@@ -1295,7 +1306,7 @@ class TimelineView(LayoutView):
 
     def _date_heads(self, scene: Scene, heads: Heads | None) -> None:
         for day, heading in (heads.headings if heads is not None else {}).items():
-            heading.set_date(scene.week.date_of(day).day, day == scene.today)
+            heading.set_date(scene.week.date_of(day), day == scene.today)
 
     def _waiting(self, scene: Scene, box: QVBoxLayout, *, square: bool) -> None:
         """Not placed yet, as sticky notes set a little askew each way in turn."""
@@ -1347,7 +1358,7 @@ class TimelineView(LayoutView):
             title.setObjectName("timelineDueTitle")
             title.setProperty("big", big)
             title.set_full_text(due.title)
-            deadline, placed = _due_words(due.due), _placed_words(due.at)
+            deadline, placed = _due_words(due.due), _placed_words(due.at, scene.week)
             words = " · ".join(part for part in (deadline, placed) if part)
             where = label(words, "timelineDueWhen", wrap=True)
             if due.at is None:

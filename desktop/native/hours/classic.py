@@ -26,7 +26,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from desktop.native import icons
-from desktop.native.calendar import CATEGORIES, DAY_FULL, DAYS
+from desktop.native.calendar import CATEGORIES, DAY_FULL, DAYS, day_names
 from desktop.native.fonts import at_scale, time_font
 from desktop.native.hours.canvas import BlockPainter, HoursCanvas
 from desktop.native.hours.geometry import FIRST, LAST, Axis, LinearTrack
@@ -173,15 +173,17 @@ class DayName(QLabel):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setText(self.name)
 
-    def show_day(self, name: str, number: str, homework: int, today: bool) -> None:
+    def show_day(self, name: str, number: str, homework: int, today: bool, full: str = "") -> None:
+        """`full` is the day's whole name, from its date: the week may start on any day."""
         self.name, self.date, self.homework = name, number, homework
+        full = full or DAY_FULL[self._day]
         self.setText(f"{name} {number}".strip())
         self.setProperty("today", today)
-        words = f"{DAY_FULL[self._day]} {number}" + (
+        words = f"{full} {number}" + (
             f", {length_label(homework)} of homework" if homework else ""
         )
         self.setAccessibleName(words)
-        self.setToolTip(f"Open {DAY_FULL[self._day]}")
+        self.setToolTip(f"Open {full}")
         self.setMinimumWidth(self.homework_min_width())
         self.update()
 
@@ -412,7 +414,8 @@ class ClassicWeek(QFrame):
     def _name(self, day: int) -> str:
         if not self.week_start:
             return DAYS[day]
-        return f"{DAYS[day]} {(date.fromisoformat(self.week_start) + timedelta(days=day)).day}"
+        number = (date.fromisoformat(self.week_start) + timedelta(days=day)).day
+        return f"{day_names(self.week_start)[day]} {number}"
 
     def set_look(self, look: dict | None, palette: dict) -> None:
         self.hours.set_painter(ClassicPainter(palette, look))
@@ -429,9 +432,12 @@ class ClassicWeek(QFrame):
             # Laid out for the new widths before the blocks arrive, so none slides for a change of width.
             self._empty = empty
             self.hours.relayout()
-        self.hours.set_week(week.occurrences, today, now_min)
+        self.hours.set_week(week.occurrences, today, now_min, week.week_start)
         for day, label in enumerate(self._name_labels):
-            label.show_day(DAYS[day], str(week.date_of(day).day), homework_minutes(week, day), day == today)
+            label.show_day(
+                week.day_name(day), str(week.date_of(day).day), homework_minutes(week, day), day == today,
+                week.day_full(day),
+            )
         self._shown = (week, today, now_min)
         open_hours(self.scroll, week.week_start, week, today, now_min)
 
@@ -822,7 +828,7 @@ class ClassicDay(QFrame):
         self.day = day
         if changed_day:
             self.hours.relayout()
-        self.hours.set_week(week.on_day(day), today, now_min)
+        self.hours.set_week(week.on_day(day), today, now_min, week.week_start)
         self.agenda.set_day(week, day, today, now_min)
         self.name.show_day("Hours", "", homework_minutes(week, day), day == today)
         self.name.setAccessibleName("Hours")

@@ -672,7 +672,16 @@ class DayName(QPushButton):
         else:
             self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
-    def set_date(self, number: int, today: bool) -> None:
+    def set_date(self, when: date, today: bool) -> None:
+        """The day's date, and its name from that date: the week may start on any day."""
+        number = when.day
+        full = DAY_FULL[when.weekday()]
+        self.title.setText(DAYS[when.weekday()])
+        if self.accessibleName() != full:
+            opens = bool(self.property("day_target") is not None)
+            self.setAccessibleName(f"Show {full}" if opens else full)
+            if opens:
+                self.setToolTip(f"Open {full}")
         self.date.setText(str(number))
         self.chip.setText(str(number))
         self.date.setVisible(not today)
@@ -938,7 +947,7 @@ class MissionView(LayoutView):
         canvas._lay_out = lay_out
         canvas.relayout()
         items = week.on_day(day) if is_day else week.occurrences
-        canvas.set_week(items, scene.today, scene.minute)
+        canvas.set_week(items, scene.today, scene.minute, scene.week.week_start)
         at_now = scene.today is not None and scene.minute is not None and (not is_day or day == scene.today)
         scroll.open_at(
             (week.week_start, day) if is_day else week.week_start,
@@ -972,7 +981,7 @@ class MissionView(LayoutView):
                 column.addWidget(made, 1)
                 canvas.names[day] = made
         for (day, name), count in zip(canvas.names.items(), rows, strict=True):
-            name.set_date(scene.week.date_of(day).day, day == scene.today)
+            name.set_date(scene.week.date_of(day), day == scene.today)
             column.setStretchFactor(name, count)
 
     def _open_day(self, day: int) -> None:
@@ -1135,7 +1144,7 @@ class MissionView(LayoutView):
             state.setSpacing(px(2))
             if item.first is not None and not item.waiting:
                 day, start = item.first
-                placed = QLabel(f"Placed {DAYS[day]} {self._figure(clock_label(start))}")
+                placed = QLabel(f"Placed {scene.week.day_name(day)} {self._figure(clock_label(start))}")
                 placed.setObjectName("missionPlaced")
                 placed.setTextFormat(Qt.TextFormat.RichText)
                 state.addWidget(placed, 0, Qt.AlignmentFlag.AlignRight)
@@ -1300,7 +1309,7 @@ class MissionView(LayoutView):
         if tomorrow:
             then = tomorrow[0]
             at = self._figure(clock_label(then.start))
-            foot = f"Then {DAY_FULL[after]}: {html.escape(then.title)} at {at}."
+            foot = f"Then {week.day_full(after)}: {html.escape(then.title)} at {at}."
         aside = f"{self._figure(len(coming))} more today"
         return self._list_card(scene, "missionUpNext", "Up next", aside, rows, foot)
 
@@ -1360,7 +1369,7 @@ class MissionView(LayoutView):
             rows.append(Wrapped("Nothing planned", "missionHint"))
         total = sum(item.minutes for item in items)
         aside = f"{plural(len(items), 'thing')}, {self._figure(length_label(total))} in all"
-        return self._list_card(scene, "missionDayList", DAY_FULL[day], aside, rows)
+        return self._list_card(scene, "missionDayList", scene.week.day_full(day), aside, rows)
 
     def _sheet(self, scene: Scene) -> str:
         tokens = scene.tokens

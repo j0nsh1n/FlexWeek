@@ -16,7 +16,7 @@ from weakref import WeakKeyDictionary
 
 import flexweek_engine  # type: ignore[import-untyped]
 
-from desktop.native.calendar import iso_of
+from desktop.native.calendar import day_full_names, day_names, iso_of
 from desktop.native.wire import plain, restore, restored
 
 SLACK_WORDS = {"danger": "Cutting it close", "tight": "Tight", "ok": "Plenty of time"}
@@ -206,6 +206,14 @@ class WeekModel:
     # Minutes the focus timer has credited to this week's homework, and to its blocks without any.
     focus_min: int = 0
     homework_sentence: str = ""
+
+    def day_name(self, day: int) -> str:
+        """The day's short name from its date: "Wed" for the first day of a week from Wednesday."""
+        return day_names(self.week_start)[day]
+
+    def day_full(self, day: int) -> str:
+        """`day_name` written out: "Wednesday"."""
+        return day_full_names(self.week_start)[day]
 
     def _engine(self) -> Any:
         """The week as the engine holds it, read once for a model whose tuples cannot change."""

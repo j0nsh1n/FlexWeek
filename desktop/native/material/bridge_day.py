@@ -37,6 +37,12 @@ ROW_ROLES = (
 )
 
 
+def _week_holding(session: object, iso_day: str) -> str:
+    """The first day of the week on screen that holds `iso_day`: it starts on the student's chosen day."""
+    shown_week_of = getattr(session, "shown_week_of", None)
+    return str(shown_week_of(iso_day)) if callable(shown_week_of) else monday_of(iso_day)
+
+
 class _Session(Protocol):
     preferences: dict | None
     week_start: str
@@ -128,7 +134,7 @@ class DayBridge(QObject):
         self._day_index = -1
         week_model = None
         if self._today_only and account is not None:
-            needed = monday_of(viewed.isoformat())
+            needed = _week_holding(session, viewed.isoformat())
             if week_start != needed:
                 self._iso = viewed.isoformat()
                 self._year = viewed.year
@@ -278,7 +284,7 @@ class DayBridge(QObject):
         if getattr(self.parent(), "_screen", "") != "day":
             return
         today_iso = datetime.fromtimestamp(session.now_ms() / 1000).date().isoformat()
-        landed_today = getattr(session, "week_start", "") == monday_of(today_iso)
+        landed_today = getattr(session, "week_start", "") == _week_holding(session, today_iso)
         if getattr(session, "selected_day", "") != today_iso or not landed_today:
             QTimer.singleShot(0, self, self.ensure_today)
 

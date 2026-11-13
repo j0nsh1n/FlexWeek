@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import date, datetime
+from functools import cache
 from uuid import uuid4
 
 import flexweek_engine  # type: ignore[import-untyped]
@@ -163,6 +164,23 @@ def day_in_week(iso_day: str, week_start: str) -> int:
 def stored_weeks_of(week_start: str) -> list[str]:
     """The stored (Monday) weeks the week on screen from `week_start` covers, first first."""
     return list(flexweek_engine.shown_week_stores(week_start))
+
+
+def week_columns(week_start: str, weekends: bool) -> list[int]:
+    """The days of the week on screen that get a column: all seven, or all but Saturday and Sunday."""
+    return list(flexweek_engine.shown_week_columns(week_start, weekends))
+
+
+@cache
+def day_names(week_start: str) -> tuple[str, ...]:
+    """Each day of the week on screen named from its date ("Wed" first for a week from Wednesday)."""
+    return tuple(flexweek_engine.shown_week_day_names(week_start, False))
+
+
+@cache
+def day_full_names(week_start: str) -> tuple[str, ...]:
+    """`day_names` written out: "Wednesday"."""
+    return tuple(flexweek_engine.shown_week_day_names(week_start, True))
 
 
 def weekday_order(first_weekday: int) -> list[int]:

@@ -1582,6 +1582,7 @@ class SetupPage(QWidget):
         self.this_week.setVisible(False)
         box.addWidget(self.this_week)
         self.school_days.changed.connect(self._follow_school)
+        self.week_start.currentIndexChanged.connect(self._follow_week_start)
         self._section(box, "Sports, clubs and jobs")
         self.activity_box = QVBoxLayout()
         self.activity_box.setSpacing(8)
@@ -1857,6 +1858,12 @@ class SetupPage(QWidget):
 
     def _week_start_chosen(self) -> str:
         return str(self.week_start.currentData())
+
+    def _follow_week_start(self) -> None:
+        """School's and the activities' days start on the day just picked, before the page saves it."""
+        first = WEEK_STARTS.index(self._week_start_chosen())
+        for picker in (self.school_days, *(row.days for row in self.activities)):
+            picker.lay_out_from(first)
 
     def _show_clock(self, twenty_four: bool) -> None:
         """Choose the clock and write every time box on the pages in it."""
@@ -2354,6 +2361,7 @@ class SetupPage(QWidget):
         if len(self.activities) >= MAX_ACTIVITIES:
             return
         row = ActivityRow(title, days, start, minutes, category, guess=guess, block_id=block_id)
+        row.days.lay_out_from(WEEK_STARTS.index(self._week_start_chosen()))
         row.removed.connect(self._remove_activity)
         self.activity_box.addWidget(row)
         self.activities.append(row)

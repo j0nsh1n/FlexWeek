@@ -108,3 +108,15 @@ fn month_rows_stay_inside_the_supported_dates() {
         ErrorKind::Value
     );
 }
+
+#[test]
+fn a_shown_week_holds_any_date_the_desktop_can_ask_for_as_monday_of_does() {
+    // The one stored week before 2000 starts on Monday 27 December 1999; the desktop also asks for
+    // weeks past 2099, which the server refuses.
+    assert_eq!(week_start_on("1999-12-30", MONDAY).unwrap(), "1999-12-27");
+    assert_eq!(week_start_on("2100-01-05", MONDAY).unwrap(), "2100-01-04");
+    assert_eq!(
+        week_start_on("1999-12-30", WEDNESDAY).unwrap(),
+        "1999-12-29"
+    );
+}

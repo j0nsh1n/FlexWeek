@@ -66,29 +66,31 @@ def test_a_saved_sunday_is_read_back_and_drives_the_calendar_popup(
 
 
 @pytest.mark.parametrize(
-    ("start", "expected"),
+    ("week_start", "expected"),
     (
-        ("monday", [0, 1, 2, 3, 4, 5, 6]),
-        ("sunday", [6, 0, 1, 2, 3, 4, 5]),
-        ("wednesday", [2, 3, 4, 5, 6, 0, 1]),
-        ("saturday", [5, 6, 0, 1, 2, 3, 4]),
+        # Monday 21 September 2026, and the weeks from Sunday 20, Wednesday 23 and Saturday 26.
+        ("2026-09-21", ["Mon 21", "Tue 22", "Wed 23", "Thu 24", "Fri 25", "Sat 26", "Sun 27"]),
+        ("2026-09-20", ["Sun 20", "Mon 21", "Tue 22", "Wed 23", "Thu 24", "Fri 25", "Sat 26"]),
+        ("2026-09-23", ["Wed 23", "Thu 24", "Fri 25", "Sat 26", "Sun 27", "Mon 28", "Tue 29"]),
+        ("2026-09-26", ["Sat 26", "Sun 27", "Mon 28", "Tue 29", "Wed 30", "Thu 1", "Fri 2"]),
     ),
 )
-def test_my_day_dial_strip_follows_the_first_day_of_the_week(
+def test_my_day_dial_strip_shows_the_open_week_in_order_named_from_its_dates(
     qapp: QApplication,
-    kept: Path,
-    start: str,
-    expected: list[int],
+    week_start: str,
+    expected: list[str],
 ) -> None:
     from desktop.native.layouts.base import Scene
     from desktop.native.layouts.dial import DayDialView, DialFace
     from desktop.native.weekmodel import build_week
 
-    fields.save_week_starts_on(start)
-    week = build_week("2026-09-21", [], {}, None)
+    week = build_week(week_start, [], {}, None)
     strip = DayDialView()._week(Scene(week, 2, 0), 2)
 
-    assert [face.day for face in strip.findChildren(DialFace)] == expected
+    assert [face.day for face in strip.findChildren(DialFace)] == [0, 1, 2, 3, 4, 5, 6]
+    names = [str(item.text()) for item in strip.findChildren(QLabel, "dialMiniName")]
+    dates = [str(item.text()) for item in strip.findChildren(QLabel, "dialMiniDate")]
+    assert [f"{name} {number}" for name, number in zip(names, dates, strict=True)] == expected
     strip.deleteLater()
 
 
@@ -170,6 +172,28 @@ def test_the_setup_week_question_is_saved_when_kept_and_not_when_skipped(
         host.deleteLater()
 
 
+def test_setup_school_and_activity_days_start_on_a_day_as_soon_as_it_is_picked(
+    qapp: QApplication,
+    kept: Path,
+) -> None:
+    host, setup = _setup_page(qapp)
+    try:
+        setup._add_activity("Soccer", [1, 3])
+        choice = setup.findChild(QComboBox, "setupWeekStart")
+        choice.setCurrentIndex(SEVEN.index("Wednesday"))
+        qapp.processEvents()
+        wednesday_first = ["Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday"]
+        assert _pills_in_order(setup.school_days) == wednesday_first
+        assert _pills_in_order(setup.activities[-1].days) == wednesday_first
+        # Nothing is saved until the page is kept, and each pill still means its weekday.
+        assert not kept.exists()
+        assert setup.school_days.days() == [0, 1, 2, 3, 4]
+        assert setup.activities[-1].days.days() == [1, 3]
+    finally:
+        host.close()
+        host.deleteLater()
+
+
 def test_the_settings_control_saves_the_week_start_on_this_computer(
     qapp: QApplication,
     kept: Path,
@@ -226,12 +250,41 @@ def test_day_buttons_start_on_the_chosen_day_and_still_mean_the_same_weekday(
         picker.deleteLater()
 
 
-def test_day_buttons_that_carry_the_open_weeks_dates_keep_its_monday_order(
+def test_day_buttons_that_carry_the_open_weeks_dates_start_on_its_first_day(
     qapp: QApplication, kept: Path
 ) -> None:
+    from desktop.native.calendar import day_full_names
+    from desktop.native.widgets import dated_day_labels
+
     kept.write_text('{"week_starts_on": "wednesday"}', encoding="utf-8")
     picker = fields.DayPicker([3], "homeworkWhenDay", dated=True)
     try:
-        assert _pills_in_order(picker) == SEVEN
+        # The week from Wednesday 4 November 2026; day 3 is Saturday 7.
+        picker.set_day_labels(dated_day_labels("2026-11-04"), day_full_names("2026-11-04"))
+        assert _pills_in_order(picker) == [
+            "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday"
+        ]
+        assert [button.text() for button in picker.buttons][:2] == ["Wed\n4", "Thu\n5"]
+        assert picker.days() == [3]
+        assert picker.buttons[3].text() == "Sat\n7"
+    finally:
+        picker.deleteLater()
+
+
+def test_a_blocks_day_buttons_are_the_open_weeks_days_named_from_their_dates(
+    qapp: QApplication, kept: Path
+) -> None:
+    kept.write_text('{"week_starts_on": "wednesday"}', encoding="utf-8")
+    # A block on the first day of the week from Wednesday 4 November 2026.
+    picker = fields.DayPicker([0], "blockDay", week_start="2026-11-04")
+    try:
+        assert _pills_in_order(picker) == [
+            "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday"
+        ]
+        shown = [button.text() for button in picker.buttons]
+        assert shown == ["Wed", "Thu", "Fri", "Sat", "Sun", "Mon", "Tue"]
+        # Monday 9 November is day 5 of that week, as the block's days count.
+        picker.findChild(QWidget, "blockDay5").click()
+        assert picker.days() == [0, 5]
     finally:
         picker.deleteLater()

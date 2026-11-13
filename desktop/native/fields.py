@@ -64,7 +64,7 @@ from PySide6.QtWidgets import (
 from backend import clock as wall_clock
 from backend.slots import SLOT_MIN
 from desktop.native import icons
-from desktop.native.calendar import DAY_FULL, DAYS, weekday_order
+from desktop.native.calendar import DAY_FULL, DAYS, day_full_names, day_names, weekday_order
 from desktop.native.tokens import WEIGHT_STRONG
 from desktop.native.weekmodel import clock_text, end_after_start_words, time_format
 
@@ -98,8 +98,11 @@ class DayPicker(QWidget):
         *,
         exclusive: bool = False,
         dated: bool = False,
+        week_start: str = "",
     ) -> None:
-        """`dated` pills are the open week's dates, which run from its Monday as the week is stored."""
+        """`dated` pills are the open week's dates, from its first day. With `week_start`, the pills
+        are the days of that week, named from their dates, as a block's `days` count them; without,
+        they are weekdays, Monday 0, laid out from the computer's first day of the week."""
         super().__init__()
         self.setObjectName("setupRow")
         self._exclusive = exclusive
@@ -111,13 +114,16 @@ class DayPicker(QWidget):
         # Held Monday first, as a block's `days` count; laid out (and tabbed through) from the computer's
         # first day of the week.
         made: dict[int, QPushButton] = {}
-        for index in range(7) if dated else weekday_order(week_start_day()):
-            button = QPushButton(DAYS[index])
+        week = dated or bool(week_start)
+        short = day_names(week_start) if week_start else DAYS
+        full = day_full_names(week_start) if week_start else DAY_FULL
+        for index in range(7) if week else weekday_order(week_start_day()):
+            button = QPushButton(short[index])
             button.setObjectName(f"{name}{index}")
             button.setProperty("pill", True)
             button.setCheckable(True)
             button.setChecked(index in days)
-            button.setAccessibleName(DAY_FULL[index])
+            button.setAccessibleName(full[index])
             button.setCursor(Qt.CursorShape.PointingHandCursor)
             button.setAutoDefault(False)
             button.toggled.connect(self._toggled)
@@ -128,6 +134,18 @@ class DayPicker(QWidget):
 
     def days(self) -> list[int]:
         return [index for index, button in enumerate(self.buttons) if button.isChecked()]
+
+    def lay_out_from(self, first_weekday: int) -> None:
+        """Lay weekday pills out, and tab through them, from `first_weekday` (0 Monday), for a page
+        where that day is being picked; what each pill means stays the same."""
+        line = self.layout()
+        ordered = [self.buttons[index] for index in weekday_order(first_weekday)]
+        for button in ordered:
+            line.removeWidget(button)
+        for at, button in enumerate(ordered):
+            line.insertWidget(at, button)
+        for before, after in zip(ordered, ordered[1:], strict=False):
+            QWidget.setTabOrder(before, after)
 
     def currentData(self) -> int | None:
         chosen = self.days()
@@ -144,10 +162,12 @@ class DayPicker(QWidget):
         for index, button in enumerate(self.buttons):
             button.setChecked(index in days)
 
-    def set_day_labels(self, labels: list[str]) -> None:
-        """What each pill says. The accessible name stays the full day."""
+    def set_day_labels(self, labels: list[str], full: tuple[str, ...] | None = None) -> None:
+        """What each pill says, and with `full` each pill's whole day name for a screen reader."""
         for button, label in zip(self.buttons, labels, strict=True):
             button.setText(label)
+        for button, name in zip(self.buttons, full or (), strict=False):
+            button.setAccessibleName(name)
 
     def apply_past(self, before: int | None, tip: str, allowed: set[int] | None = None) -> None:
         """Days before `before` are greyed, with `tip`. `allowed` is which other days stay on; None

@@ -16,12 +16,12 @@ from backend.models import Assignment, ProtectedWindow, TimeBlock, WorkWindow, p
 from backend.slots import hhmm_to_minutes
 from backend.weeks import current_week_start
 from desktop.native.calendar import (
-    DAY_FULL,
-    DAYS,
     apply_block_edit,
     apply_repeat_changes,
     date_for_day,
+    day_full_names,
     day_in_week,
+    day_names,
     days_through,
     delete_occurrence,
     due_day_in_week,
@@ -2622,13 +2622,13 @@ class NativeSession(QObject):
             err,
         )
 
-    @staticmethod
-    def _place_now_sentence(block: dict) -> str:
+    def _place_now_sentence(self, block: dict) -> str:
         """Where Place now put one block, or that it found no room this week."""
         title = block.get("title") or "this homework"
         if not (block.get("start") and block.get("days")):
             return f"No free time this week for {title}."
-        return f"Placed {title} on {DAYS[block['days'][0]]} {hhmm_text(block['start'])}."
+        day = day_names(self.week_start)[block["days"][0]]
+        return f"Placed {title} on {day} {hhmm_text(block['start'])}."
 
     def _apply_auto_split(self, trace: dict, sources: list[dict] | None = None) -> str:
         """Turn each placed homework block into focus chunks and breaks, when the student asked for
@@ -2891,10 +2891,10 @@ class NativeSession(QObject):
                 continue
             items.append(clipboard_item(block, chosen, "occurrence", str(uuid4())))
         if not items:
-            self._say(DAY_FULL[chosen] + " has nothing to copy.")
+            self._say(day_full_names(self.week_start)[chosen] + " has nothing to copy.")
             return False
         noun = " item" if len(items) == 1 else " items"
-        label = f"{DAY_FULL[chosen]} · {len(items)}{noun}"
+        label = f"{day_full_names(self.week_start)[chosen]} · {len(items)}{noun}"
         self.clipboard = {
             "kind": "day",
             "label": label,
@@ -3196,10 +3196,9 @@ class NativeSession(QObject):
             self.blocks,
             self._committed_blocks,
         )
-        return [
-            item for item in items
-            if self.week_start == today_week or item.get("left_over_state") == "overdue"
-        ]
+        # Left from last week shows on the week on screen that holds today.
+        here = self.week_start == self.shown_week_of(today.isoformat())
+        return [item for item in items if here or item.get("left_over_state") == "overdue"]
 
     def _overdue_assignment_ids(self) -> set[str]:
         now = datetime.fromtimestamp(self.now_ms() / 1000)

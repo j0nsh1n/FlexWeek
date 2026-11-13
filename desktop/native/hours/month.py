@@ -47,7 +47,7 @@ from shiboken6 import isValid
 
 from backend import clock as wall_clock
 from backend.models import due_is_timed
-from desktop.native.calendar import DAYS, month_rows, weekday_order
+from desktop.native.calendar import DAYS, day_in_week, month_rows, weekday_order
 from desktop.native.fields import week_start_day
 from desktop.native.fonts import caption, weighted
 from desktop.native.hours.geometry import Span
@@ -677,12 +677,13 @@ class MonthCanvas(QWidget):
             event.ignore()
             return
         cell, chip, _box = found
-        day = date.fromisoformat(cell.iso)
-        if (day - timedelta(days=day.weekday())).isoformat() != self.open_week:
+        # Which day of the open week the date is: the week starts on the student's chosen day.
+        day = day_in_week(cell.iso, self.open_week) if self.open_week else -1
+        if not 0 <= day <= 6:
             event.ignore()
             return
         event.accept()
-        self.hand.ask_menu(chip.block_id, day.weekday(), event.globalPos())
+        self.hand.ask_menu(chip.block_id, day, event.globalPos())
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         pressed, self._pressed = self._pressed, None

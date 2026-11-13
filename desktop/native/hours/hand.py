@@ -29,7 +29,7 @@ from PySide6.QtGui import QKeyEvent, QMouseEvent
 from PySide6.QtWidgets import QApplication, QLabel, QScrollArea, QWidget
 from shiboken6 import isValid
 
-from desktop.native.calendar import DAYS, day_short
+from desktop.native.calendar import DAYS, day_names, day_short
 from desktop.native.hours.geometry import DEFAULT_DRAG_STEP, Span, Track, snap
 from desktop.native.weekmodel import clock_text, length_label
 
@@ -162,8 +162,10 @@ class SecondClick(QObject):
         return near and QApplication.activeModalWidget() is not None
 
 
-def span_words(span: Span) -> str:
-    return f"{DAYS[span.day]} {clock_text(span.start)}–{clock_text(span.end)} · {length_label(span.minutes)}"
+def span_words(span: Span, day_name: Callable[[int], str] = DAYS.__getitem__) -> str:
+    """`day_name` names a day of the open week; the week may start on any day."""
+    times = f"{clock_text(span.start)}–{clock_text(span.end)}"
+    return f"{day_name(span.day)} {times} · {length_label(span.minutes)}"
 
 
 class Hand(QObject):
@@ -189,6 +191,8 @@ class Hand(QObject):
         # The host is the hand's Qt parent, not a reference of its own: a reference back to it made a
         # cycle that only the garbage collector could free, at a moment of its choosing.
         self._judge = judge
+        # The first day of the open week, which may start on any day. The window sets it.
+        self.week_start = ""
         # Minutes a move, a resize or a new block lands on. The window sets it from the account.
         self.step = DEFAULT_DRAG_STEP
         self.preview: Preview | None = None
@@ -413,6 +417,10 @@ class Hand(QObject):
         start = max(min(snap(minute - held.grab, step), last - held.minutes), first)
         return Span(track.day, start, start + held.minutes)
 
+    def day_name(self, day: int) -> str:
+        """Day `day` of the open week, named from its date."""
+        return day_names(self.week_start)[day] if self.week_start else DAYS[day]
+
     def _show(self, span: Span | None) -> None:
         held = self._held
         if held is None or span is None:
@@ -420,7 +428,7 @@ class Hand(QObject):
             self.preview = None
         else:
             if held.kind is Gesture.CREATE:
-                verdict = Verdict(True, span_words(span))
+                verdict = Verdict(True, span_words(span, self.day_name))
             else:
                 verdict = self._judge(held.block_id or "", held.from_day, span)
             fresh = Preview(held, span, verdict)

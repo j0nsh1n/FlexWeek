@@ -423,3 +423,28 @@ fn homework_minutes_from_a_wednesday_count_the_sessions_on_and_after_it() {
         Some(&30)
     );
 }
+
+#[test]
+fn hidden_weekends_are_saturday_and_sunday_wherever_they_fall() {
+    use flexweek_engine::shown::shown_columns;
+    // Wednesday 11 to Tuesday 17 November: Saturday 14 and Sunday 15 are days 3 and 4.
+    assert_eq!(shown_columns(WED, false).unwrap(), vec![0, 1, 2, 5, 6]);
+    assert_eq!(shown_columns(WED, true).unwrap(), vec![0, 1, 2, 3, 4, 5, 6]);
+    // Sunday 8 to Saturday 14: Sunday is day 0, Saturday day 6.
+    assert_eq!(
+        shown_columns("2026-11-08", false).unwrap(),
+        vec![1, 2, 3, 4, 5]
+    );
+    assert_eq!(shown_columns(FIRST, false).unwrap(), vec![0, 1, 2, 3, 4]);
+}
+
+#[test]
+fn a_shown_week_names_its_days_from_their_dates() {
+    use flexweek_engine::shown::day_names;
+    assert_eq!(
+        day_names(WED, false).unwrap(),
+        vec!["Wed", "Thu", "Fri", "Sat", "Sun", "Mon", "Tue"]
+    );
+    assert_eq!(day_names("2026-11-08", true).unwrap()[0], "Sunday");
+    assert_eq!(day_names(FIRST, false).unwrap()[0], "Mon");
+}

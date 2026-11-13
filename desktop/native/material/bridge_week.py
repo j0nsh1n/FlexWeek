@@ -14,6 +14,7 @@ from typing import Any, Protocol
 
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
+from desktop.native.calendar import day_names, week_columns
 from desktop.native.hours.geometry import drag_step, snap
 from desktop.native.material.bridge_rows import Labels, Rows
 from desktop.native.material.theme import event_category, paint_for_category
@@ -28,12 +29,12 @@ from desktop.native.weekmodel import (
     short_clock,
 )
 
-DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 EVERYTHING_TIMED = "Everything has a time."
-DAY_ROLES = ("label", "name", "date", "today")
+DAY_ROLES = ("label", "name", "date", "today", "day")
 BLOCK_ROLES = (
     "title",
     "day",
+    "column",
     "start",
     "end",
     "fill",
@@ -170,8 +171,12 @@ class WeekBridge(QObject):
         self._hours = Labels(self)
         self._hours.set_rows(self._hour_labels)
         self._now_day = -1
+        self._now_column = -1
         self._now_minute = 0
         self._columns = 7
+        # The days of the week that have a column, in order: with the weekend hidden, Saturday and Sunday
+        # are left out wherever the week's first day puts them.
+        self._shown_days: list[int] = list(range(7))
         self._drag_step = drag_step(None)
         self._week_key = ""
         self._seen: set[tuple[str, int]] = set()
@@ -206,13 +211,17 @@ class WeekBridge(QObject):
         prefs = session.preferences or {}
         set_clock_24h(bool(prefs.get("clock_24h")))
         self._hour_labels = [clock_label(hour * 60) for hour in range(24)]
-        self._columns = 7 if _bool_pref(prefs, "show_weekends", True) else 5
+        weekends = _bool_pref(prefs, "show_weekends", True)
+        start_day = session.week_start
+        self._shown_days = week_columns(start_day, weekends) if start_day else list(range(7))
+        self._columns = len(self._shown_days)
         self._drag_step = drag_step(prefs.get("drag_step_min"))
         dim = _bool_pref(prefs, "dim_completed", True)
         block_rows: list[dict] = []
         homework_rows: list[dict] = []
         day_rows: list[dict] = []
         self._now_day = -1
+        self._now_column = -1
         self._now_minute = 0
         if session.account is None or not session.week_start:
             self._block_rows, self._homework_rows, self._day_rows = [], [], []
@@ -227,14 +236,18 @@ class WeekBridge(QObject):
         if 0 <= offset <= 6:
             self._now_day = offset
             self._now_minute = moment.hour * 60 + moment.minute
-        for index in range(self._columns):
+            if offset in self._shown_days:
+                self._now_column = self._shown_days.index(offset)
+        names = day_names(session.week_start)
+        for index in self._shown_days:
             day = start + timedelta(days=index)
             day_rows.append(
                 {
-                    "label": f"{DAYS[index]} {day.day}",
-                    "name": DAYS[index],
+                    "label": f"{names[index]} {day.day}",
+                    "name": names[index],
                     "date": str(day.day),
                     "today": index == self._now_day,
+                    "day": index,
                 }
             )
         week = session.built_week()
@@ -245,7 +258,7 @@ class WeekBridge(QObject):
         clock = time.monotonic()
         for item in week.occurrences:
             day = int(item.day)
-            if day >= self._columns:
+            if day not in self._shown_days:
                 continue
             end = int(item.end)
             if offset > 6:
@@ -258,16 +271,16 @@ class WeekBridge(QObject):
             keys.add(key)
             if fresh_ok and key not in self._seen:
                 self._fresh_until[key] = clock + FRESH_S
-            block_rows.append(
-                occurrence_row(
-                    item,
-                    mode,
-                    dim=dim,
-                    gone=gone,
-                    fresh=self._fresh_until.get(key, 0.0) > clock,
-                    missed=item.block_id in missed,
-                )
+            row = occurrence_row(
+                item,
+                mode,
+                dim=dim,
+                gone=gone,
+                fresh=self._fresh_until.get(key, 0.0) > clock,
+                missed=item.block_id in missed,
             )
+            row["column"] = self._shown_days.index(day)
+            block_rows.append(row)
         for item in getattr(week, "waiting", ()):
             tag, kind = self._tag_for(item, start, moment)
             parts = []
@@ -392,7 +405,7 @@ class WeekBridge(QObject):
         on the student's drag step."""
         session = self._window.session  # type: ignore[attr-defined]
         block = next((item for item in session.blocks if item["id"] == block_id), None)
-        if block is None or not 0 <= day < self._columns:
+        if block is None or day not in self._shown_days:
             return
         length = int(block.get("duration_min") or 0)
         if length <= 0:
@@ -417,7 +430,8 @@ class WeekBridge(QObject):
         hand-move rule the plain look uses, one Undo step, and the same words in the notice."""
         session = self._window.session  # type: ignore[attr-defined]
         block = next((item for item in session.blocks if item["id"] == block_id), None)
-        if block is None or not 0 <= day < len(DAYS) or end <= start:
+        # Day moves a block on a day the week hides too, so any day of the week is taken here.
+        if block is None or not 0 <= day <= 6 or end <= start:
             return
         if not session.busy:
             answer = session.judge_hand_move(block_id, from_day, day, start, end)
@@ -513,11 +527,12 @@ class WeekBridge(QObject):
     @Slot(str)
     def goToDate(self, iso: str) -> None:
         """A day picked in the Go to date month: the week that holds it."""
+        session = self._window.session  # type: ignore[attr-defined]
         try:
             picked = date.fromisoformat(iso)
         except ValueError:
             return
-        self._load_target((picked - timedelta(days=picked.weekday())).isoformat())
+        self._load_target(session.shown_week_of(picked.isoformat()))
 
     @Slot()
     def toggleWeekends(self) -> None:
@@ -549,7 +564,7 @@ class WeekBridge(QObject):
     def today(self) -> None:
         session = self._window.session  # type: ignore[attr-defined]
         moment = datetime.fromtimestamp(session.now_ms() / 1000).date()
-        target = (moment - timedelta(days=moment.weekday())).isoformat()
+        target = session.shown_week_of(moment.isoformat())
         self._load_target(target)
         self.todayAsked.emit()
 
@@ -651,6 +666,11 @@ class WeekBridge(QObject):
     @Property(int, notify=changed)
     def nowDay(self) -> int:
         return self._now_day
+
+    @Property(int, notify=changed)
+    def nowColumn(self) -> int:
+        """Today's column on the week grid, or -1 when today is not shown."""
+        return self._now_column
 
     @Property(int, notify=changed)
     def nowMinute(self) -> int:

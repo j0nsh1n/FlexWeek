@@ -40,7 +40,7 @@ from PySide6.QtWidgets import QScrollArea, QToolTip, QWidget
 
 from backend.slots import SLOT_MIN
 from desktop.native import icons
-from desktop.native.calendar import DAYS, category_icon, create_click_range
+from desktop.native.calendar import DAYS, category_icon, create_click_range, day_names
 from desktop.native.fonts import at_scale, caption, shrink, time_font, weighted
 from desktop.native.hours.geometry import (
     BETWEEN,
@@ -1243,7 +1243,9 @@ class HoursCanvas(QWidget):
         self.hand, self.painter = hand, painter
         self._lay_out = lay_out
         self.gutter, self.header = gutter, header
-        self._names = names or (lambda day: DAYS[day])
+        # The days are named from the week's dates, which `set_week` is told; with none, Monday first.
+        self.week_start = ""
+        self._names = names or self._day_name
         self.tracks: list[LinearTrack] = []
         self.occurrences: tuple[Occurrence, ...] = ()
         self.today: int | None = None
@@ -1269,9 +1271,18 @@ class HoursCanvas(QWidget):
 
     # What it shows
 
+    def _day_name(self, day: int) -> str:
+        return day_names(self.week_start)[day] if self.week_start else DAYS[day]
+
     def set_week(
-        self, occurrences: Sequence[Occurrence], today: int | None = None, now_min: int | None = None
+        self,
+        occurrences: Sequence[Occurrence],
+        today: int | None = None,
+        now_min: int | None = None,
+        week_start: str = "",
     ) -> None:
+        if week_start:
+            self.week_start = week_start
         previous = self._last_rects
         self.occurrences = tuple(occurrences)
         self.today, self.now_min = today, now_min
@@ -1534,7 +1545,7 @@ class HoursCanvas(QWidget):
             ):
                 rect = track.rect_for(preview.span.start, preview.span.end)
                 with _fresh(painter):
-                    self.painter.ghost(painter, rect, span_words(preview.span), True)
+                    self.painter.ghost(painter, rect, span_words(preview.span, self.hand.day_name), True)
             painter.restore()
         self.painter.now_track = None
         for track in self.tracks:

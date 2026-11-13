@@ -733,6 +733,10 @@ class PreviewBridge(QObject):
         return int(self._week().nowDay)  # type: ignore[attr-defined]
 
     @Property(int, notify=changed)
+    def nowColumn(self) -> int:
+        return int(self._week().nowColumn)  # type: ignore[attr-defined]
+
+    @Property(int, notify=changed)
     def nowMinute(self) -> int:
         return int(self._week().nowMinute)  # type: ignore[attr-defined]
 

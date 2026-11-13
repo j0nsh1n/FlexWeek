@@ -764,11 +764,13 @@ class FocusRows(QStyledItemDelegate):
         painter.restore()
 
 
-def focus_when(item: dict, today: int | None) -> str:
-    """When a focus row's homework is: "Today 19:00", "Mon 20:00"."""
+def focus_when(item: dict, today: int | None, week: WeekModel | None = None) -> str:
+    """When a focus row's homework is: "Today 19:00", "Mon 20:00", the day named from its date in
+    `week`, which may start on any day."""
     day = item.get("day")
     start = hhmm_text(item["start"]) if item.get("start") else ""
-    name = "Today" if day is not None and day == today else (DAYS[day] if isinstance(day, int) else "")
+    named = (week.day_name(day) if week is not None else DAYS[day]) if isinstance(day, int) else ""
+    name = "Today" if day is not None and day == today else named
     return f"{name} {start}".strip()
 
 
@@ -1090,7 +1092,7 @@ class Rail(QFrame):
         listed = tuple(
             (item.get("id"), item.get("day"), item.get("start"), item.get("title")) for item in ordered
         )
-        shown = (time_format(), today, listed)
+        shown = (time_format(), today, listed, self._week.week_start if self._week is not None else "")
         if shown == self._tasks:
             return
         self._tasks = shown
@@ -1101,7 +1103,7 @@ class Rail(QFrame):
             row.setData(
                 Qt.ItemDataRole.UserRole + 1, item.get("day") is not None and item.get("day") == today
             )
-            row.setData(Qt.ItemDataRole.ToolTipRole, focus_when(item, today))
+            row.setData(Qt.ItemDataRole.ToolTipRole, focus_when(item, today, self._week))
             self.tasks.addItem(row)
         self._fit_tasks()
         self._show()

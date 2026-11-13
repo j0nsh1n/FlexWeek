@@ -71,6 +71,20 @@ fn shown_week_stores(week_start: &str) -> PyResult<Vec<String>> {
 }
 
 #[pyfunction]
+fn shown_week_columns(week_start: &str, weekends: bool) -> PyResult<Vec<i64>> {
+    guard(|| ::flexweek_engine::shown::shown_columns(week_start, weekends).map_err(crate::raise))
+}
+
+#[pyfunction]
+fn shown_week_day_names(week_start: &str, full: bool) -> PyResult<Vec<String>> {
+    guard(|| {
+        ::flexweek_engine::shown::day_names(week_start, full)
+            .map(|names| names.into_iter().map(str::to_string).collect())
+            .map_err(crate::raise)
+    })
+}
+
+#[pyfunction]
 fn compose_shown_week(week_start: &str, first: &str, second: &str) -> PyResult<String> {
     let (first, second) = (objects(first)?, objects(second)?);
     guard(|| {
@@ -1743,6 +1757,8 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         calendar_weekday_order,
         shown_week_parts,
         shown_week_stores,
+        shown_week_columns,
+        shown_week_day_names,
         compose_shown_week,
         split_shown_week,
         repeat_changes_from_shown_week,

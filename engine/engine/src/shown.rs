@@ -16,6 +16,7 @@ use std::collections::HashSet;
 use chrono::{Datelike, Duration};
 use serde_json::{Map, Value};
 
+use crate::desk::calendar::{DAY_FULL, DAYS};
 use crate::desk::pydate::{from_iso, iso_text};
 use crate::error::{EngineError, EngineResult};
 use crate::time::{is_calendar_date, monday_of};
@@ -55,6 +56,33 @@ pub fn stored_weeks(shown_start: &str) -> EngineResult<Vec<String>> {
         Some((first, second, _)) => vec![first, second],
         None => vec![shown_start.to_string()],
     })
+}
+
+/// The weekday (0 Monday to 6 Sunday) of each day of the week on screen from `week_start`.
+fn weekdays(week_start: &str) -> EngineResult<[usize; 7]> {
+    let first = from_iso(week_start)?.weekday().num_days_from_monday() as usize;
+    Ok(std::array::from_fn(|day| (first + day) % 7))
+}
+
+/// The days of the week on screen that have a column: all seven, or, with the weekend hidden, every
+/// day but Saturday and Sunday wherever they fall.
+pub fn shown_columns(week_start: &str, weekends: bool) -> EngineResult<Vec<i64>> {
+    Ok(weekdays(week_start)?
+        .iter()
+        .enumerate()
+        .filter(|(_, weekday)| weekends || **weekday < 5)
+        .map(|(day, _)| day as i64)
+        .collect())
+}
+
+/// The names of the days of the week on screen, from their dates: "Wed" or "Wednesday" first for a
+/// week from Wednesday.
+pub fn day_names(week_start: &str, full: bool) -> EngineResult<Vec<&'static str>> {
+    let names = if full { DAY_FULL } else { DAYS };
+    Ok(weekdays(week_start)?
+        .iter()
+        .map(|weekday| names[*weekday])
+        .collect())
 }
 
 fn offset_of(shown_start: &str) -> EngineResult<i64> {

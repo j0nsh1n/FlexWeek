@@ -653,10 +653,15 @@ fn days_into_week(day: NaiveDate, first_weekday: u32) -> i64 {
 }
 
 /// The first date of the week on screen that holds `date_str`, when weeks start on `first_weekday`.
-/// Stored weeks stay keyed by their Monday (`monday_of`); this is only where a shown week begins.
+/// Stored weeks stay keyed by their Monday (`monday_of`); this is only where a shown week begins. Any
+/// calendar date is taken, as the desktop's Monday of a date takes it: the server refuses a week
+/// outside the years it keeps.
 pub fn week_start_on(date_str: &str, first_weekday: u32) -> EngineResult<String> {
     let first_weekday = checked_weekday(first_weekday)?;
-    let day = parse_supported(date_str)?;
+    if !iso_date().is_match(date_str) {
+        return Err(EngineError::value("date must be written YYYY-MM-DD"));
+    }
+    let day = from_iso(date_str)?;
     Ok(iso(day - Duration::days(days_into_week(day, first_weekday))))
 }
 

@@ -123,6 +123,9 @@ from desktop.native.calendar import (
     DAYS,
     SETUP_SCHOOL_ID,
     date_for_day,
+    day_full_names,
+    day_in_week,
+    day_names,
     is_series,
     is_setup_block,
     local_stamp,
@@ -216,10 +219,28 @@ def guess_locked_category(start: str) -> str:
     return "extra"
 
 
-def day_range_words(days: list[int] | tuple[int, ...]) -> str:
-    """Three or more days in a row as a range ("Mon–Fri"); otherwise a list ("Mon, Wed, Fri")."""
+def open_week(widget: QWidget) -> str:
+    """The first day of the week open in the window that holds `widget`, or "" when there is none."""
+    week = getattr(getattr(widget.parent(), "session", None), "week_start", None)
+    return week if isinstance(week, str) else ""
+
+
+def short_day_name(week_start: str, day: int) -> str:
+    """Day `day` of the week from `week_start` named from its date ("Wed"); Monday first with no week."""
+    return (day_names(week_start) if week_start else DAYS)[day]
+
+
+def full_day_name(week_start: str, day: int) -> str:
+    """`short_day_name` written out: "Wednesday"."""
+    return (day_full_names(week_start) if week_start else DAY_FULL)[day]
+
+
+def day_range_words(days: list[int] | tuple[int, ...], week_start: str = "") -> str:
+    """Three or more days in a row as a range ("Mon–Fri"); otherwise a list ("Mon, Wed, Fri"). With
+    `week_start`, days of that week named from their dates: the week may start on any day."""
     if not days:
         return ""
+    names = day_names(week_start) if week_start else DAYS
     ordered = sorted(set(days))
     runs: list[list[int]] = [[ordered[0]]]
     for day in ordered[1:]:
@@ -230,14 +251,14 @@ def day_range_words(days: list[int] | tuple[int, ...]) -> str:
     parts: list[str] = []
     for run in runs:
         if len(run) >= 3:
-            parts.append(f"{DAYS[run[0]]}–{DAYS[run[-1]]}")
+            parts.append(f"{names[run[0]]}–{names[run[-1]]}")
         else:
-            parts.extend(DAYS[day] for day in run)
+            parts.extend(names[day] for day in run)
     return ", ".join(parts)
 
 
-def day_range_and_words(days: list[int] | tuple[int, ...]) -> str:
-    words = day_range_words(days)
+def day_range_and_words(days: list[int] | tuple[int, ...], week_start: str = "") -> str:
+    words = day_range_words(days, week_start)
     if ", " not in words:
         return words
     head, last = words.rsplit(", ", 1)
@@ -3718,7 +3739,7 @@ class BlockDialog(Dialog):
         self.title_problem.setVisible(False)
         form.addRow("", self.title_problem)
         self.title.textChanged.connect(self._clear_title_problem)
-        self.day_picker = DayPicker(self._original["days"], "blockDay")
+        self.day_picker = DayPicker(self._original["days"], "blockDay", week_start=open_week(self))
         self.days = self.day_picker.buttons
         for index, check in enumerate(self.days):
             # The day is read off the button: a lambda naming the dialog kept it from being freed.
@@ -3739,7 +3760,7 @@ class BlockDialog(Dialog):
         # a choice of two, under the days it is about (decision 23 of 0.17).
         scopes = (
             ("This day only", "occurrence"),
-            (f"Every {day_range_and_words(self._original.get('days') or [])}", "series"),
+            (f"Every {day_range_and_words(self._original.get('days') or [], open_week(self))}", "series"),
         )
         self.scope_choice = Segmented(scopes, "editScope")
         self.scope_occurrence, self.scope_series = self.scope_choice.buttons()
@@ -3804,7 +3825,9 @@ class BlockDialog(Dialog):
         self.category.currentIndexChanged.connect(self._chose_category)
         self.start.timeChanged.connect(self._maybe_guess)
         self.missed = QCheckBox(
-            "I missed it" if occurrence_day is None else f"I missed it on {DAY_FULL[occurrence_day]}"
+            "I missed it"
+            if occurrence_day is None
+            else f"I missed it on {full_day_name(open_week(self), occurrence_day)}"
         )
         self.missed.setObjectName("blockMissed")
         already = occurrence_day in (self._original.get("missed_days") or [])
@@ -3940,7 +3963,9 @@ class BlockDialog(Dialog):
         prompts = ("What is it?", "When is it?", "What category is it?")
         self.step_prompt.setText(prompts[step])
         names = ("What", "When", "Category")
-        days = day_range_and_words([index for index, check in enumerate(self.days) if check.isChecked()])
+        days = day_range_and_words(
+            [index for index, check in enumerate(self.days) if check.isChecked()], open_week(self)
+        )
         done = (self.title.text().strip(), f"{days}, {clock_text(self.start.minutes())}")
         for index, crumb in enumerate(self._crumbs):
             if index < step:
@@ -4101,7 +4126,7 @@ class BlockDialog(Dialog):
             )
         else:
             days = [index for index, check in enumerate(self.days) if check.isChecked()]
-        self.scope_series.setText(f"Every {day_range_and_words(days)}")
+        self.scope_series.setText(f"Every {day_range_and_words(days, open_week(self))}")
 
     def _day_toggled(self, checked: bool) -> None:
         day = int(self.sender().property("weekday"))
@@ -4280,9 +4305,10 @@ class BlockDialog(Dialog):
                 week_start = monday_of(wall_clock.today().isoformat())
             occurrence_date = date.fromisoformat(date_for_day(week_start, self._occurrence_day))
             date_text = f"{occurrence_date.day} {occurrence_date.strftime('%b')}"
-            question = f"Delete {name} on {DAY_FULL[self._occurrence_day]} {date_text} only?"
+            day_name = day_full_names(week_start)[self._occurrence_day]
+            question = f"Delete {name} on {day_name} {date_text} only?"
         else:
-            selected_days = day_range_and_words(days)
+            selected_days = day_range_and_words(days, open_week(self))
             question = f"Delete {name} on every {selected_days} this week?"
         if setup:
             question += " Earlier weeks keep it."
@@ -5024,14 +5050,13 @@ class HomeworkDialog(Dialog):
         at = sorted((block["days"][0], block["start"]) for block in placed)
         if not at:
             return ""
-        session = getattr(self.parent(), "session", None)
-        week = getattr(session, "week_start", None) or self._today
-        monday = monday_of(week) if week else None
+        # The open week's days, from its first day; with none, the week holding today.
+        week = open_week(self) or (monday_of(self._today) if self._today else "")
 
         def day_stamp(day: int) -> str:
-            if monday:
-                number = date.fromisoformat(date_for_day(monday, day)).day
-                return f"{DAYS[day]} {number}"
+            if week:
+                number = date.fromisoformat(date_for_day(week, day)).day
+                return f"{day_names(week)[day]} {number}"
             return DAYS[day]
 
         names = [day_stamp(day) for day, _start in at]
@@ -5125,14 +5150,16 @@ class HomeworkDialog(Dialog):
         self.when_time.settled.connect(self._touch_pin_time)
 
     def _default_placement(self) -> tuple[int, int]:
-        """Today if the week on screen has it, else Monday, at 16:00 or the next quarter hour after it."""
+        """Today if the week on screen has it, else its first day, at 16:00 or the next quarter hour
+        after it."""
         now = self._now()
         today = date.fromisoformat(self._today) if self._today else now.date()
-        week = getattr(getattr(self.parent(), "session", None), "week_start", None)
-        if week is not None and monday_of(today.isoformat()) != week:
+        week = open_week(self) or monday_of(today.isoformat())
+        column = day_in_week(today.isoformat(), week)
+        if not 0 <= column <= 6:
             return 0, 16 * 60
         quarter = (now.hour * 60 + now.minute) // 15 * 15 + 15
-        return today.weekday(), min(max(16 * 60, quarter), 23 * 60 + 45)
+        return column, min(max(16 * 60, quarter), 23 * 60 + 45)
 
     def _touch_pin_time(self, _by_hand: bool) -> None:
         self._touched.add("pin_time")
@@ -5166,7 +5193,8 @@ class HomeworkDialog(Dialog):
         self.when_problem.clear()
         self.when_problem.setAccessibleName("Pinned time error")
         self.when_note.setText(
-            f"Pinned to {DAYS[fixed['day']]} at {hhmm_text(fixed['start'])}. Plan won't move it."
+            f"Pinned to {short_day_name(open_week(self), fixed['day'])} at {hhmm_text(fixed['start'])}. "
+            "Plan won't move it."
             if fixed
             else ""
         )
@@ -5194,7 +5222,7 @@ class HomeworkDialog(Dialog):
         week = getattr(session, "week_start", None)
         if not isinstance(week, str):
             return
-        self.when_day.set_day_labels(dated_day_labels(week))
+        self.when_day.set_day_labels(dated_day_labels(week), day_full_names(week))
         before = None
         if not self.completed.isChecked():
             before = days_already_past(week, self._now().date().isoformat())
@@ -5207,9 +5235,7 @@ class HomeworkDialog(Dialog):
         session = getattr(self.parent(), "session", None)
         week = getattr(session, "week_start", None)
         now = self._now()
-        if not isinstance(week, str) or monday_of(now.date().isoformat()) != week:
-            return ""
-        if fixed["day"] != now.weekday():
+        if not isinstance(week, str) or fixed["day"] != day_in_week(now.date().isoformat(), week):
             return ""
         return today_from_words(now.hour * 60 + now.minute)
 
@@ -6214,8 +6240,8 @@ class PlanReview(QFrame):
             if move["block_id"] in stranded or not move.get("to_start") or not move.get("from_start"):
                 continue
             name = titles.get(move["block_id"], "Homework")
-            been = _when(move.get("from_day"), move.get("from_start"))
-            now = _when(move.get("to_day"), move.get("to_start"))
+            been = _when(move.get("from_day"), move.get("from_start"), week_start)
+            now = _when(move.get("to_day"), move.get("to_start"), week_start)
             # Running late files its moves under the missed-day code with a sentence of its own, so
             # the code alone told a student who ran late that they had missed a day.
             why = next(
@@ -6236,7 +6262,7 @@ class PlanReview(QFrame):
             if item.get("kind") == "spread_same_day" and item.get("message"):
                 said.append(item["message"])
         for day, total in overfull_days(trace):
-            said.append(f"{DAY_FULL[day]} has {length_label(total)} of homework.")
+            said.append(f"{day_full_names(week_start)[day]} has {length_label(total)} of homework.")
         shares = trace.get("shares") or []
         if shares and not any(share["this_week_min"] for share in shares):
             names = [share["title"] for share in shares]
@@ -6332,28 +6358,27 @@ NO_TIME_LEFT = (
 def dated_day_labels(week_start: str) -> list[str]:
     """"Thu" over "8": the short day and the date, for a pill on this week. On one line the seven
     pills did not fit Choose a time's sheet and their words were cut."""
-    start = date.fromisoformat(week_start)
-    return [f"{DAYS[index]}\n{(start + timedelta(days=index)).day}" for index in range(7)]
+    start, names = date.fromisoformat(week_start), day_names(week_start)
+    return [f"{names[index]}\n{(start + timedelta(days=index)).day}" for index in range(7)]
 
 
 def days_already_past(week_start: str, now_iso: str) -> int | None:
     """How many day pills of this week are already over: none in a later week, all seven in an earlier one."""
-    this = monday_of(now_iso)
-    if week_start > this:
+    day = day_in_week(now_iso, week_start)
+    if day < 0:
         return None
-    if week_start < this:
-        return 7
-    return date.fromisoformat(now_iso).weekday()
+    return min(day, 7)
 
 
 def _past_words() -> str:
     return "That time has passed."
 
 
-def _when(day: object, start: object) -> str:
+def _when(day: object, start: object, week_start: str = "") -> str:
     if not isinstance(day, int) or not start:
         return "no time"
-    return f"{DAYS[day]} {hhmm_text(str(start))}"
+    names = day_names(week_start) if week_start else DAYS
+    return f"{names[day]} {hhmm_text(str(start))}"
 
 
 class ChooseTimeDialog(Dialog):
@@ -6419,7 +6444,7 @@ class ChooseTimeDialog(Dialog):
             if not self._no_time_left:
                 self.start.setTime(QTime(slot // 60, slot % 60))
         if self._now_parts is not None:
-            self.day.set_day_labels(dated_day_labels(week_start))
+            self.day.set_day_labels(dated_day_labels(week_start), day_full_names(week_start))
             self.day.apply_past(
                 days_already_past(week_start, self._now_parts[0]), _past_words(), allowed=set(days)
             )
@@ -6744,15 +6769,16 @@ class LateDialog(Dialog):
             block = details.get(move["block_id"], {})
             title = titles.get(move["block_id"], move["block_id"])
             item = QListWidgetItem()
-            item.setText(_late_move(move, block, title))
-            item.setData(Qt.ItemDataRole.AccessibleTextRole, _late_move_words(move, block, title))
+            item.setText(_late_move(move, block, title, open_week(self)))
+            words = _late_move_words(move, block, title, open_week(self))
+            item.setData(Qt.ItemDataRole.AccessibleTextRole, words)
             self.changes.addItem(item)
             label = QLabel()
             label.setTextFormat(Qt.TextFormat.RichText)
             label.setWordWrap(True)
             background = self.palette().color(QPalette.ColorRole.Base).name()
             muted = fit_lightness(self.palette().color(QPalette.ColorRole.Mid).name(), (background,), 4.5)
-            label.setText(_late_move_markup(move, block, title, muted))
+            label.setText(_late_move_markup(move, block, title, muted, open_week(self)))
             self.changes.setItemWidget(item, label)
         for block in trace.get("unplaced") or []:
             self.changes.addItem(block["title"] + " no longer fits and will stay on the task list.")
@@ -6796,18 +6822,19 @@ def _late_summary(moved: int) -> str:
     return f"{moved} task{'s' if moved != 1 else ''} {'moves' if moved == 1 else 'move'}"
 
 
-def _late_move(move: dict, block: dict, title: str) -> str:
+def _late_move(move: dict, block: dict, title: str, week_start: str = "") -> str:
     was, now = move.get("from_start"), move.get("to_start")
     duration = int(block.get("duration_min") or 0)
     old_day, new_day = move.get("from_day"), move.get("to_day")
     if was and now and old_day is not None and new_day is not None:
         old = range_label(hhmm_to_minutes(was), hhmm_to_minutes(was) + duration)
         new = range_label(hhmm_to_minutes(now), hhmm_to_minutes(now) + duration)
-        return _unbroken_time(f"{title}: {DAY_FULL[old_day][:3]} {old} → {DAY_FULL[new_day][:3]} {new}")
+        was_day, new_name = short_day_name(week_start, old_day), short_day_name(week_start, new_day)
+        return _unbroken_time(f"{title}: {was_day} {old} → {new_name} {new}")
     if now and was:
         return _unbroken_time(f"{title}: from {hhmm_text(was)} to {hhmm_text(now)}")
     if now and new_day is not None:
-        return _unbroken_time(f"{title}, placed {DAY_FULL[new_day][:3]} {hhmm_text(now)}")
+        return _unbroken_time(f"{title}, placed {short_day_name(week_start, new_day)} {hhmm_text(now)}")
     if now:
         return _unbroken_time(f"{title}: placed at {hhmm_text(now)}")
     if was:
@@ -6815,7 +6842,7 @@ def _late_move(move: dict, block: dict, title: str) -> str:
     return f"{title}: not placed"
 
 
-def _late_move_words(move: dict, block: dict, title: str) -> str:
+def _late_move_words(move: dict, block: dict, title: str, week_start: str = "") -> str:
     was, now = move.get("from_start"), move.get("to_start")
     duration = int(block.get("duration_min") or 0)
     old_day, new_day = move.get("from_day"), move.get("to_day")
@@ -6824,24 +6851,26 @@ def _late_move_words(move: dict, block: dict, title: str) -> str:
         new = range_label(hhmm_to_minutes(now), hhmm_to_minutes(now) + duration).replace("–", " to ")
         day_change = " different day" if old_day != new_day else ""
         return _unbroken_time(
-            f"{title}, moves from {DAY_FULL[old_day]} {old} to {DAY_FULL[new_day]} {new}{day_change}"
+            f"{title}, moves from {full_day_name(week_start, old_day)} {old} "
+            f"to {full_day_name(week_start, new_day)} {new}{day_change}"
         )
     if now and not was and new_day is not None:
-        return _unbroken_time(f"{title}, placed {DAY_FULL[new_day]} {hhmm_text(now)}")
+        return _unbroken_time(f"{title}, placed {full_day_name(week_start, new_day)} {hhmm_text(now)}")
     return f"{title}, moved to {now or was or 'no time'}"
 
 
-def _late_move_markup(move: dict, block: dict, title: str, muted: str) -> str:
+def _late_move_markup(move: dict, block: dict, title: str, muted: str, week_start: str = "") -> str:
     was, now = move.get("from_start"), move.get("to_start")
     old_day, new_day = move.get("from_day"), move.get("to_day")
     duration = int(block.get("duration_min") or 0)
     if not was or not now or old_day is None or new_day is None:
-        return html.escape(_late_move(move, block, title))
+        return html.escape(_late_move(move, block, title, week_start))
     old = _unbroken_time(range_label(hhmm_to_minutes(was), hhmm_to_minutes(was) + duration))
     new = _unbroken_time(range_label(hhmm_to_minutes(now), hhmm_to_minutes(now) + duration))
-    to_day = f"<b>{DAY_FULL[new_day][:3]}</b>" if old_day != new_day else DAY_FULL[new_day][:3]
+    new_name, old_name = short_day_name(week_start, new_day), short_day_name(week_start, old_day)
+    to_day = f"<b>{new_name}</b>" if old_day != new_day else new_name
     return (
-        f'{html.escape(title)}: <span style="color:{muted}">{DAY_FULL[old_day][:3]} {old}</span>'
+        f'{html.escape(title)}: <span style="color:{muted}">{old_name} {old}</span>'
         f" → {to_day} {new}"
     )
 
