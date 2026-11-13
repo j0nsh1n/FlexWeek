@@ -21,6 +21,7 @@ from desktop.native.calendar import (
     CATEGORIES,
     DAYS,
     FLEX_CATEGORIES,
+    day_names,
     local_stamp,
     monday_of,
     past_problem,
@@ -38,6 +39,7 @@ from desktop.native.widgets import (
     SLOT_HINT,
     SPREAD_MIN,
     _homework_problem,
+    same_weekday,
     spread_session_min,
     spread_words,
     today_from_words,
@@ -162,6 +164,18 @@ class HomeworkDraft:
         self.error = ""
         self.details_error = ""
         self._opened_as = self._picture()
+        # The open week the day numbers count from.
+        self._days_week = session.week_start or ""
+
+    def follow_week(self) -> None:
+        """A new sheet kept after Esc and opened again in a week that starts on another day: its pinned
+        day, and the one it opened with, keep their weekdays."""
+        week = self.session.week_start or ""
+        title, due_date, due_time, estimate, when, opened_day, *rest = self._opened_as
+        opened_day = same_weekday(opened_day, self._days_week, week)
+        self._opened_as = (title, due_date, due_time, estimate, when, opened_day, *rest)
+        self.when_day = same_weekday(self.when_day, self._days_week, week)
+        self._days_week = week
 
     # What is open -----------------------------------------------------------------------
 
@@ -173,12 +187,20 @@ class HomeworkDraft:
         ]
 
     def _default_placement(self) -> tuple[int, int]:
-        """Today if the week on screen has it, else Monday, at 16:00 or the next quarter hour after it."""
-        week = self.session.week_start
-        if week is not None and monday_of(self.today) != week:
+        """Today if the week on screen has it, else its first day, at 16:00 or the next quarter hour
+        after it."""
+        today = self._today_column()
+        if today is None:
             return 0, 16 * 60
         quarter = (self.now.hour * 60 + self.now.minute) // 15 * 15 + 15
-        return self.now.weekday(), min(max(16 * 60, quarter), 23 * 60 + 45)
+        return today, min(max(16 * 60, quarter), 23 * 60 + 45)
+
+    def _today_column(self) -> int | None:
+        """Which day of the week on screen today is, or None when it shows another week."""
+        week = self.session.week_start
+        if not week:
+            return date.fromisoformat(self.today).weekday()
+        return self.session.today_column(self.today)
 
     def _picture(self) -> tuple:
         return (
@@ -504,9 +526,9 @@ class HomeworkDraft:
         )
         if not placed:
             return ""
-        week = self.session.week_start or self.today
-        monday = date.fromisoformat(monday_of(week))
-        names = [f"{DAYS[day]} {(monday + timedelta(days=day)).day}" for day, _start in placed]
+        week = self.session.week_start or monday_of(self.today)
+        first = date.fromisoformat(week)
+        names = [f"{day_names(week)[day]} {(first + timedelta(days=day)).day}" for day, _start in placed]
         planned = (
             f"Planned {names[0]}" if len(names) == 1 else f"Planned {', '.join(names[:-1])} and {names[-1]}"
         )
@@ -536,8 +558,7 @@ class HomeworkDraft:
 
     def _from_now_hint(self) -> str:
         fixed = self._fixed_at()
-        week = self.session.week_start
-        if fixed is None or monday_of(self.today) != week or fixed["day"] != self.now.weekday():
+        if fixed is None or fixed["day"] != self._today_column():
             return ""
         return today_from_words(self.now.hour * 60 + self.now.minute)
 
@@ -560,9 +581,8 @@ class HomeworkDraft:
     def _quarter_options(self) -> list[dict]:
         step = self._step()
         options = quarter_hours(step)
-        week = self.session.week_start
-        today_is_shown = week is not None and monday_of(self.today) == week
-        if self.completed or not today_is_shown or self.when_day != self.now.weekday():
+        today = self._today_column()
+        if self.completed or today is None or self.when_day != today:
             return options
         earliest = -(-(self.now.hour * 60 + self.now.minute) // step) * step
         if earliest > 24 * 60 - step:
@@ -573,10 +593,11 @@ class HomeworkDraft:
     def form(self) -> dict:
         week = self.session.week_start
         monday = date.fromisoformat(week) if week else None
+        names = day_names(week) if week else DAYS
         day_options = [
             {
                 "value": index,
-                "label": f"{DAYS[index]} {(monday + timedelta(days=index)).day}" if monday else DAYS[index],
+                "label": f"{names[index]} {(monday + timedelta(days=index)).day}" if monday else names[index],
             }
             for index in range(7)
         ]
@@ -622,7 +643,7 @@ class HomeworkDraft:
             "dayOptions": day_options,
             "whenTime": self.when_time,
             "whenNote": (
-                f"Pinned to {DAYS[fixed['day']]} at {hhmm_text(fixed['start'])}. Plan won't move it."
+                f"Pinned to {names[fixed['day']]} at {hhmm_text(fixed['start'])}. Plan won't move it."
                 if fixed
                 else ""
             ),

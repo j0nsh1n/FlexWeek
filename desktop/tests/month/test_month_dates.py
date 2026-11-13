@@ -3,6 +3,7 @@ month is on its way."""
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Iterator
 from datetime import date
@@ -32,6 +33,52 @@ def qapp() -> Iterator[QApplication]:
 
 def dates_shown(grid: MonthGrid) -> list[str]:
     return [cell.iso for cell in grid.canvas.cells]
+
+
+@pytest.mark.parametrize(
+    ("start", "month", "first", "last"),
+    (
+        ("wednesday", "2026-11", "2026-10-28", "2026-12-01"),
+        ("wednesday", "2026-12", "2026-11-25", "2027-01-05"),
+        ("saturday", "2026-11", "2026-10-31", "2026-12-04"),
+        ("saturday", "2027-01", "2026-12-26", "2027-02-05"),
+    ),
+)
+def test_month_rows_start_on_any_chosen_day_and_end_the_day_before_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path, start: str, month: str, first: str, last: str
+) -> None:
+    path = tmp_path / "week-start.json"
+    path.write_text(json.dumps({"week_starts_on": start}), encoding="utf-8")
+    monkeypatch.setattr(fields, "_week_starts_file", lambda: path)
+    weekday = fields.WEEK_STARTS.index(start)
+
+    cells = month_cells(build_month(month, [], []), {}, "")
+
+    assert cells[0].iso == first
+    assert cells[-1].iso == last
+    assert len(cells) % 7 == 0
+    rows = len(cells) // 7
+    assert [date.fromisoformat(cell.iso).weekday() for cell in cells[::7]] == [weekday] * rows
+    assert [date.fromisoformat(cell.iso).weekday() for cell in cells[6::7]] == [(weekday + 6) % 7] * rows
+
+
+@pytest.mark.parametrize(
+    ("start", "names"),
+    (
+        ("monday", ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]),
+        ("wednesday", ["Wed", "Thu", "Fri", "Sat", "Sun", "Mon", "Tue"]),
+        ("saturday", ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"]),
+    ),
+)
+def test_the_month_header_names_follow_the_chosen_first_day(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path, start: str, names: list[str]
+) -> None:
+    path = tmp_path / "week-start.json"
+    path.write_text(json.dumps({"week_starts_on": start}), encoding="utf-8")
+    monkeypatch.setattr(fields, "_week_starts_file", lambda: path)
+    grid = MonthGrid()
+    assert grid.scroll.names.names() == names
+    grid.deleteLater()
 
 
 @pytest.mark.parametrize(

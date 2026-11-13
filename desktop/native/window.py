@@ -85,9 +85,9 @@ from desktop.native.calendar import (
     FLEX_CATEGORIES,
     SETUP_SCHOOL_ID,
     date_for_day,
+    day_full_names,
     is_series,
     is_setup_block,
-    monday_of,
     sunday_due,
     this_week_line,
 )
@@ -112,7 +112,7 @@ from desktop.native.custom_look import sanitize_saved
 from desktop.native.devices import SyncDot, SyncHost, live_phones, run_off_ui, sync_state
 from desktop.native.elevation import flatten, lift
 from desktop.native.feel import Context, apply_feel, context_for, current, extra_stylesheet, set_current
-from desktop.native.fields import ProblemLine, announce
+from desktop.native.fields import ProblemLine, announce, week_start_day, week_start_notice
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.focus import focus_now, phase_duration_ms
 from desktop.native.focus_screen import QUICK_TITLE, FocusScreen
@@ -244,6 +244,7 @@ from desktop.native.widgets import (
     fit_buttons,
     keyboard_focus_rings,
     overdue_unfinished,
+    same_weekday,
     steady_wheel,
     swatch,
     use_app_style,
@@ -639,6 +640,9 @@ class NativeWindow(QMainWindow):
         load_fonts()
         self.session = NativeSession(origin, self, kept)
         self.session.use_sync_host(sync)
+        # The week's first day is kept on this computer, not on the account; the session is told it.
+        self.session.follow_first_weekday(week_start_day())
+        week_start_notice().changed.connect(self._on_week_start)
         self._instance_server: QLocalServer | None = None
         self.setWindowTitle("FlexWeek")
         # This computer's sync host, and the running service once it has started (None until then). The
@@ -734,7 +738,8 @@ class NativeWindow(QMainWindow):
         self._block_prepare_scheduled = False
         # What a student typed into a new Add sheet that Esc closed, by kind, for the next plain Add of that
         # kind: plain values only (never a sheet), the days a drag gave a homework, and the account it is for.
-        self._kept_adds: dict[str, tuple[dict, list[int] | None]] = {}
+        # Each with the open week its day numbers count from.
+        self._kept_adds: dict[str, tuple[dict, list[int] | None, str]] = {}
         self._kept_adds_account: str | None = None
         self._leaving: QTimer | None = None
         self._saved_to_leave = False
@@ -2344,7 +2349,7 @@ class NativeWindow(QMainWindow):
             week = replace(week, focus_min=week.focus_min + running)
         return Scene(
             week=week,
-            today=clock["day"] if monday_of(clock["iso"]) == session.week_start else None,
+            today=session.today_column(clock["iso"]),
             minute=clock["minute"],
             options=options,
             tokens=tokens_for(layout_id, options["look"], palette),
@@ -2727,7 +2732,9 @@ class NativeWindow(QMainWindow):
             layout=self._layout,
             preferences=dict(prefs),
             blocks=list(session.repeats),
-            this_week=this_week_line(session.blocks, session.repeats, prefs.get("clock_24h") is True),
+            this_week=this_week_line(
+                session.blocks, session.repeats, prefs.get("clock_24h") is True, session.week_start
+            ),
             week_start=session.week_start,
             subjects=sorted(course for course in courses if course),
             first_run=first_run,
@@ -2951,7 +2958,13 @@ class NativeWindow(QMainWindow):
         self.recovery_copy.setText(RECOVERY_COPY)
         self.recovery_save.setText(RECOVERY_SAVE)
 
+    def _on_week_start(self, _value: str) -> None:
+        """The week's first day changed in Settings or Setup: every open screen follows at once."""
+        self.session.follow_first_weekday(week_start_day())
+
     def _on_week(self) -> None:
+        # The hand names days of the open week, which may start on any day.
+        self.hand.week_start = self.session.week_start
         if self.session.account is None:
             return
         if self.plan_review.isVisible() and self.plan_review.week_start != self.session.week_start:
@@ -3073,13 +3086,13 @@ class NativeWindow(QMainWindow):
             if destination is None:
                 copy_day.setText("Copy a selected day")
             else:
-                copy_day.setText("Copy " + DAY_FULL[destination[0]])
+                copy_day.setText("Copy " + day_full_names(self.session.week_start)[destination[0]])
         if paste is not None:
             paste.setEnabled(clip is not None and destination is not None)
             if destination is None:
                 paste.setText("Paste into a selected day")
             else:
-                paste.setText("Paste into " + DAY_FULL[destination[0]])
+                paste.setText("Paste into " + day_full_names(self.session.week_start)[destination[0]])
         needed = self.session.homework_time_needed()
         unfinished = self.findChild(QPushButton, "unfinishedOpen")
         if unfinished is not None:
@@ -3518,7 +3531,7 @@ class NativeWindow(QMainWindow):
             # From another week, the week changing to this one opens it at now (_on_week), and that
             # other week stays where it was left.
             self._reset_hours()
-        self.session.load_week(monday_of(today.isoformat()))
+        self.session.load_week(today.isoformat())
         if self.session.planner_view == "day" or self._day_mode:
             self.session.open_day(today.isoformat())
 
@@ -3580,14 +3593,27 @@ class NativeWindow(QMainWindow):
             # A drag gave the day, the due and the length together; the next sheet keeps all three.
             fields = dialog._draft_fields()
             draft = {"due": fields["due"], "estimate": fields["estimate"], **draft}
-        self._kept_adds[kind] = (draft, days)
+        self._kept_adds[kind] = (draft, days, self.session.week_start)
         self._kept_adds_account = self._account_id()
         dialog.deleteLater()
 
     def _take_kept_add(self, kind: str) -> tuple[dict | None, list[int] | None]:
-        """What Esc kept for this kind of Add, once, with the days a drag gave it; or nothing."""
+        """What Esc kept for this kind of Add, once, with the days a drag gave it; or nothing. Its days keep
+        their weekdays when the open week now starts on another day."""
         kept = self._kept_adds.pop(kind, None)
-        return kept if kept is not None else (None, None)
+        if kept is None:
+            return None, None
+        draft, days, week = kept
+        open_now = self.session.week_start
+
+        def turned(day: int) -> int:
+            return same_weekday(day, week, open_now)
+
+        if "days" in draft:
+            draft = {**draft, "days": sorted(turned(day) for day in draft["days"])}
+        if isinstance(draft.get("pin_day"), int):
+            draft = {**draft, "pin_day": turned(draft["pin_day"])}
+        return draft, None if days is None else [turned(day) for day in days]
 
     def _commit_block(self, dialog: BlockDialog) -> None:
         if not self._run_sheet(dialog):
@@ -3829,7 +3855,7 @@ class NativeWindow(QMainWindow):
             self._set_notice(f"Deleted {title} from this week and every week after.", "", None)
             return
         if scope == "occurrence" and day is not None:
-            words = f"Deleted {title} on {DAY_FULL[day]} from this week."
+            words = f"Deleted {title} on {day_full_names(self.session.week_start)[day]} from this week."
             self._set_notice(words, "Undo", self._undo_from_notice)
             return
         self._set_notice(f"Deleted {title} from this week.", "Undo", self._undo_from_notice)
@@ -3842,7 +3868,11 @@ class NativeWindow(QMainWindow):
         repeats = self.session.repeats
         school = next((item for item in repeats if item["id"] == SETUP_SCHOOL_ID), None)
         clock_24h = (self.session.preferences or {}).get("clock_24h") is True
-        line = this_week_line(self.session.blocks, [school], clock_24h) if school is not None else None
+        line = (
+            this_week_line(self.session.blocks, [school], clock_24h, self.session.week_start)
+            if school is not None
+            else None
+        )
         dialog = SchoolHoursDialog(self, school, this_week=line)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
@@ -3901,9 +3931,10 @@ class NativeWindow(QMainWindow):
     def _clock_in_week(self) -> tuple[int | None, int | None]:
         """Today's weekday and minute when the open week is this week, else nothing to mark."""
         moment = datetime.fromtimestamp(self.session.now_ms() / 1000.0)
-        if monday_of(moment.date().isoformat()) != self.session.week_start:
+        column = self.session.today_column(moment.date().isoformat())
+        if column is None:
             return None, None
-        return moment.weekday(), moment.hour * 60 + moment.minute
+        return column, moment.hour * 60 + moment.minute
 
     def _fill_classic(self) -> None:
         """Today's app's Day and Week from the open week. Held while the pointer holds something."""
@@ -3917,7 +3948,7 @@ class NativeWindow(QMainWindow):
         today, minute = self._clock_in_week()
         self._sync_week_access_list(week)
         self.week_table.set_week(week, today, minute)
-        self.day_view.set_day(week, date.fromisoformat(self.session.selected_day).weekday(), today, minute)
+        self.day_view.set_day(week, self._selected_column(), today, minute)
         trace = self.session.trace or {}
         one_go_unplaced = (
             {
@@ -3948,7 +3979,7 @@ class NativeWindow(QMainWindow):
         for day in range(7):
             items = sorted(week.on_day(day), key=lambda item: (item.start, item.end, item.title))
             if not items:
-                words = f"{DAY_FULL[day]}: Nothing planned"
+                words = f"{week.day_full(day)}: Nothing planned"
                 row = QListWidgetItem(words)
                 self.week_access_list.addItem(row)
                 continue
@@ -3971,7 +4002,7 @@ class NativeWindow(QMainWindow):
                 detail = drawn.detail
                 if not occurrence.work:
                     detail += " · Fixed time"
-                words = f"{DAY_FULL[day]}: {occurrence.title}, {detail}"
+                words = f"{week.day_full(day)}: {occurrence.title}, {detail}"
                 row = QListWidgetItem(words)
                 row.setData(Qt.ItemDataRole.UserRole, (occurrence.block_id, day))
                 self.week_access_list.addItem(row)
@@ -4157,7 +4188,12 @@ class NativeWindow(QMainWindow):
         if self.session.planner_view == "day":
             self.session.open_day(iso)
         else:
-            self.session.load_week(monday_of(iso))
+            self.session.load_week(iso)
+
+    def _selected_column(self) -> int:
+        """The selected day's place in the open week (0 its first day)."""
+        column = self.session.today_column(self.session.selected_day)
+        return 0 if column is None else column
 
     def _open_week_day(self, day: int) -> None:
         self.session.open_day(date_for_day(self.session.week_start, day))
@@ -4463,7 +4499,7 @@ class NativeWindow(QMainWindow):
         due = self._due_point(block["id"])
         days = list(block["days"])
         clock = clock_parts(self.session.now_ms())
-        today = clock["day"] if monday_of(clock["iso"]) == self.session.week_start else None
+        today = self.session.today_column(clock["iso"])
         dialog = ChooseTimeDialog(
             self,
             block,
@@ -4491,7 +4527,7 @@ class NativeWindow(QMainWindow):
         answer = self.session.judge_hand_move(block_id, from_day, day, start, end)
         if not answer["moved"]:
             return HandVerdict(False, answer["problem"])
-        words = span_words(Span(day, start, end)) + (
+        words = span_words(Span(day, start, end), self.hand.day_name) + (
             f" · beside {answer['beside']}" if answer["beside"] else ""
         )
         return HandVerdict(True, words)
@@ -4506,7 +4542,7 @@ class NativeWindow(QMainWindow):
             # One editor at a time: a click that lands while one is opening opens nothing more.
             return
         if self.session.planner_view == "day":
-            self.session.select_block(block_id, date.fromisoformat(self.session.selected_day).weekday())
+            self.session.select_block(block_id, self._selected_column())
         block = next((item for item in self.session.blocks if item["id"] == block_id), None)
         if block is None:
             return
@@ -4562,7 +4598,9 @@ class NativeWindow(QMainWindow):
                 # _delete_block asks this week or every week.
                 self._delete_block(block, "occurrence" if one_day else "series", on)
                 return
-            name = (block.get("title") or "this event") + (f" on {DAY_FULL[on]}" if one_day else "")
+            name = block.get("title") or "this event"
+            if one_day and on is not None:
+                name += f" on {day_full_names(self.session.week_start)[on]}"
             if confirm(self, "Delete fixed time", f"Delete {name}? You can undo this.", "Delete"):
                 self._delete_block(block, "occurrence" if one_day else "series", on)
             return
@@ -4914,7 +4952,7 @@ class NativeWindow(QMainWindow):
 
     def _late_other_week(self) -> bool:
         now = datetime.fromtimestamp(self.session.now_ms() / 1000)
-        return monday_of(now.date().isoformat()) != self.session.week_start
+        return self.session.today_column(now.date().isoformat()) is None
 
     def _sync_running_late(self) -> None:
         late = self.findChild(QPushButton, "runningLate")
@@ -4953,7 +4991,7 @@ class NativeWindow(QMainWindow):
                 if block.get("kind") == "flexible"
                 and not block.get("completed")
                 and block.get("start")
-                and now.weekday() in (block.get("days") or [])
+                and self.session.today_column(now.date().isoformat()) in (block.get("days") or [])
                 and hhmm_to_minutes(block["start"]) <= now_minute
                 < hhmm_to_minutes(block["start"]) + int(block.get("duration_min") or 0)
             ),

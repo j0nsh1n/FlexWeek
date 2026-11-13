@@ -34,6 +34,11 @@ from desktop.tests.month.support_month_bridge import (  # noqa: E402, F401
         # February 2027 starts on a Monday and ends on a Sunday: exactly four rows from Monday.
         ("2027-02", "monday", "2027-02-01", "2027-02-28", 28),
         ("2027-02", "sunday", "2027-01-31", "2027-03-06", 35),
+        # Wednesday rows end on a Tuesday, Saturday rows on a Friday.
+        ("2026-11", "wednesday", "2026-10-28", "2026-12-01", 35),
+        ("2026-11", "saturday", "2026-10-31", "2026-12-04", 35),
+        ("2026-12", "wednesday", "2026-11-25", "2027-01-05", 42),
+        ("2026-12", "saturday", "2026-11-28", "2027-01-01", 35),
     ],
 )
 def test_the_grid_runs_from_the_week_start_across_month_edges(
@@ -44,7 +49,7 @@ def test_the_grid_runs_from_the_week_start_across_month_edges(
     assert len(rows) == count
     assert (rows[0]["iso"], rows[-1]["iso"]) == (first, last)
     assert len(set(isos(rows))) == count
-    assert names[0] == ("Sun" if start == "sunday" else "Mon")
+    assert names[0] == start[:3].title()
     assert len(names) == 7
     inside = [row["iso"] for row in rows if row["inMonth"]]
     assert inside[0] == f"{month}-01"

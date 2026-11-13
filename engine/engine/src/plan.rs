@@ -12,7 +12,7 @@ use crate::model::{LAST_DAY_ISO, due_sort_key, parse_due};
 use crate::stored::{self, Dict};
 use crate::time::{
     DAY_END_MIN, SLOT_MIN, SLOTS_PER_DAY, block_interval_on_day, clock_to_minutes, date_from_iso,
-    deadline_with, hhmm_to_minutes, minutes_to_hhmm, monday_of, month_grid, occupancy_between,
+    deadline_with, hhmm_to_minutes, minutes_to_hhmm, monday_of, month_grid_from, occupancy_between,
     parse_month, shift_days,
 };
 
@@ -563,6 +563,48 @@ pub fn planned_minutes_by_id(
         }
     }
     totals
+}
+
+/// Each homework's minutes in sessions from `from_day` on, for a week on screen that starts on
+/// another day than Monday: a stored week's session counts when any of its days falls on or after
+/// that date. `planned_minutes_by_id` is the Monday version.
+pub fn planned_minutes_from_day(
+    weeks: &[(String, Vec<Value>)],
+    from_day: &str,
+) -> EngineResult<BTreeMap<String, i64>> {
+    let first = crate::desk::pydate::from_iso(from_day)?;
+    let mut totals: BTreeMap<String, i64> = BTreeMap::new();
+    for (week_start, blocks) in weeks {
+        let Ok(monday) = crate::desk::pydate::from_iso(week_start) else {
+            continue;
+        };
+        let offset = (first - monday).num_days();
+        for block in blocks {
+            let Some(aid) = block.get("assignment_id").and_then(Value::as_str) else {
+                continue;
+            };
+            if block
+                .get("completed")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
+                continue;
+            }
+            let reaches = block
+                .get("days")
+                .and_then(Value::as_array)
+                .is_some_and(|days| {
+                    days.iter()
+                        .filter_map(Value::as_i64)
+                        .any(|day| day >= offset)
+                });
+            if reaches {
+                let dur = block["duration_min"].as_i64().unwrap_or(0);
+                *totals.entry(aid.to_string()).or_insert(0) += dur;
+            }
+        }
+    }
+    Ok(totals)
 }
 
 pub fn prepare_solve(
@@ -1534,10 +1576,21 @@ pub fn build_month(
     assignment_rows: &[(Value, i64)],
     weeks: &[(String, Vec<Value>)],
 ) -> EngineResult<Value> {
+    build_month_from(month, assignment_rows, weeks, 0)
+}
+
+/// The month with its rows starting on `first_weekday` (0 Monday to 6 Sunday). `weeks` must hold
+/// every stored week the rows touch.
+pub fn build_month_from(
+    month: &str,
+    assignment_rows: &[(Value, i64)],
+    weeks: &[(String, Vec<Value>)],
+    first_weekday: u32,
+) -> EngineResult<Value> {
     let (start_s, end_s) = parse_month(month)?;
     let start = parse_iso_date(&start_s)?;
     let end = parse_iso_date(&end_s)?;
-    let (grid_start_s, grid_end_s) = month_grid(&start_s, &end_s)?;
+    let (grid_start_s, grid_end_s) = month_grid_from(&start_s, &end_s, first_weekday)?;
     let grid_start = parse_iso_date(&grid_start_s)?;
     let grid_end = parse_iso_date(&grid_end_s)?;
     let grid_days = dates_between(grid_start, grid_end);

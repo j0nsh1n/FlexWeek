@@ -250,14 +250,16 @@ fn is_month_label(value: &str) -> PyResult<bool> {
 }
 
 #[pyfunction]
+#[pyo3(signature = (start, end, first_weekday = 0))]
 fn month_grid(
     py: Python<'_>,
     start: &Bound<'_, PyAny>,
     end: &Bound<'_, PyAny>,
+    first_weekday: u32,
 ) -> PyResult<(Py<PyDate>, Py<PyDate>)> {
     guard(|| {
         let (grid_start, grid_end) =
-            time::month_grid(&iso_of(start)?, &iso_of(end)?).map_err(raise)?;
+            time::month_grid_from(&iso_of(start)?, &iso_of(end)?, first_weekday).map_err(raise)?;
         Ok((as_date(py, &grid_start)?, as_date(py, &grid_end)?))
     })
 }

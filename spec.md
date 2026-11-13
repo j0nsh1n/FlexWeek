@@ -109,7 +109,10 @@ Contract for the finished app:
   A change to them is sent as what it changes, from a date (`repeats` in
   `/api/changes`), never as a copy of a week. Deleting School or an
   activity asks once, naming the days: "This day only" (when opened from one
-  day), "This week only" or "This week and later"; earlier weeks keep it, and
+  day), "This week only" or "This week and later"; this week is the week on
+  screen, and from a week that does not start on Monday a change from this week
+  on stands from the next Monday while the days of the week on screen before it
+  take it as that week's own; earlier weeks keep it, and
   this week and later reaches the saved later weeks in the same save, except
   what a later week changed itself, which stays and is named in a notice
   ("The week of 16 Nov keeps its own change: no School on Wednesday."); an
@@ -164,7 +167,8 @@ Contract for the finished app:
     account's username and password hash, and used recovery codes. Each change
     carries a timestamp and the newest one wins, per record.
   - What stays on each device: the look, the theme, the text size, the 12- or
-    24-hour clock, the default Spotify link and the look file.
+    24-hour clock, the first day of the week, the default Spotify link and the
+    look file.
   - Clock guard: a change stamped more than 24 hours ahead of this computer's
     clock is set aside and reported as "your phone's clock looks wrong".
   - Known limitation: running Plan on two devices before they have synced can
@@ -172,6 +176,15 @@ Contract for the finished app:
   - Verified on 2026-10-13 with a real Android phone: pairing and two-way sync
     over the relay on mobile data. Same-Wi-Fi sync between two real devices is
     not separately verified.
+- The week starts on the day chosen on this computer (any of the seven, Monday
+  unless changed; kept in `week-start.json`, not on the account). Week, Month,
+  the small months and the date pickers start on it, and Week shows the seven
+  days from it, each named from its date; with Show weekends off, Material's
+  Week hides Saturday and Sunday wherever they fall. Plan my homework, Replan
+  all and Find a time plan that week, homework added without a date is due at
+  the end of its last day, and the assistant helper's week and month follow the
+  day it is started with (`--week-starts-on`, else the computer's file). The
+  phone keeps Monday to Sunday.
 - Day and Week show the whole day, 00:00 to 24:00. Hours scroll, and the
   student can zoom: Ctrl and the wheel, Ctrl with =, - and 0, or two buttons
   beside the hours. Each surface's level is remembered per device in the look
@@ -463,7 +476,7 @@ Current account/API contract:
 | GET/PUT | `/api/week` | One dated week of the account, with revision-checked saves |
 | GET | `/api/weeks` | The `week_start` dates this account has saved, ascending |
 | GET | `/api/day` | One date's agenda: due-soon homework, that day's sessions and fixed blocks, a next action and the workload split |
-| GET | `/api/month` | Month grid of deadlines, projects, overdue work, planned and completed study time, and an unscheduled total |
+| GET | `/api/month` | Month grid of deadlines, projects, overdue work, planned and completed study time, and an unscheduled total; rows start on `first_day` (0 Monday to 6 Sunday, Monday when absent) |
 | GET | `/api/assignments` | Open assignments with planned and unplanned minutes for a `week_start`; completed ones only when asked |
 | PUT/DELETE | `/api/assignments/{id}` | Revision-checked create, update and delete; delete removes its sessions from every week |
 | POST | `/api/assignments/{id}/spread` | Preview sessions of a chosen length from a start date through the due date; writes nothing |
@@ -509,8 +522,20 @@ it saves, each with its own revision. A never-saved week reads as empty at
 revision 0 rather than 404, and a `week_start` that is malformed, out of
 2000-01-01..2099-12-31, or not a Monday is rejected with 422 rather than snapped
 to the nearest Monday, so a client and the server cannot disagree about which
-week is open while both believe they succeeded. Blocks keep their `days` index
-and derive their calendar date, so the solver stays day-index pure.
+week is open while both believe they succeeded. The one exception is a week on
+screen that starts on another day: `GET /api/week`, `POST /api/changes` and
+`POST /api/solve` take that day's date instead of a Monday. Such a week covers
+the two stored weeks it falls in, carries both their revisions, first week
+first, and both stored weeks as saved (`stored`, so Undo can put back the days
+the screen cannot see), and a save splits it back into them; a block waiting for
+a time is stored in one of them. Where a save changes only some of a stored
+block's days, that stored week keeps the changed days as a second block named
+after the first with the week's first day (`school@20261111`); School hours,
+Setup, the delete question, repeat changes, the standing week and the assistant
+helper read it as that block. Stored weeks stay keyed by their Monday, and a Monday
+`week_start` reads and writes as it always did. Blocks keep their `days` index
+(counted from the week's first day) and derive their calendar date, so the
+solver stays day-index pure.
 A week has at most 100 uniquely identified blocks; titles 1–80,
 course names at most 40, block durations any positive number of minutes up to
 7140, and unique day indices. Explicit starts are any minute from 00:00 and end

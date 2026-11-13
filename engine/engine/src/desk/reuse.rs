@@ -1,6 +1,6 @@
 //! Planning and clipboard helpers from `desktop/native/reuse.py`.
 
-use chrono::{Datelike, Duration, NaiveDate};
+use chrono::{Duration, NaiveDate};
 use serde_json::{Value, json};
 
 use crate::desk::datetext::{day_long, day_short, month_title, week_range};
@@ -39,15 +39,10 @@ pub fn running_late_refusal(
     block_count: i64,
 ) -> Option<&'static str> {
     let today = NaiveDate::parse_from_str(today_iso, "%Y-%m-%d").ok()?;
-    let this_week = today - Duration::days(i64::from(today.weekday().num_days_from_monday()));
-    if week_start
-        != format!(
-            "{:04}-{:02}-{:02}",
-            this_week.year(),
-            this_week.month(),
-            this_week.day()
-        )
-    {
+    // The open week holds today, whatever day it starts on.
+    let holds_today = NaiveDate::parse_from_str(week_start, "%Y-%m-%d")
+        .is_ok_and(|start| start <= today && today < start + Duration::days(7));
+    if !holds_today {
         return Some("Open this week before using Running late.");
     }
     if conflict {

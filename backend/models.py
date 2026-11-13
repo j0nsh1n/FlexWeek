@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from backend.slots import clock_to_minutes, on_slot, span_fits_day, start_fits_day
-from backend.weeks import FIRST_DAY, LAST_DAY, is_week_start
+from backend.weeks import FIRST_DAY, LAST_DAY, is_calendar_date, is_week_start
 
 BlockKind = Literal["locked", "flexible"]
 Priority = Literal[1, 2, 3, 4]
@@ -662,7 +662,8 @@ class SolveRequest(WeekRequest):
     @field_validator("week_start")
     @classmethod
     def week_start_is_a_monday(cls, value: str | None) -> str | None:
-        if value is not None and not is_week_start(value):
+        # Any other date is the week on screen from that date, which plans as one week.
+        if value is not None and not (is_week_start(value) or is_calendar_date(value)):
             raise ValueError("week_start must be a Monday from 2000-01-03 through 2099-12-28, or 1999-12-27")
         return value
 

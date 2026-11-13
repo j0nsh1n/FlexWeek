@@ -124,6 +124,24 @@ def test_open_week_month_is_prefetched_without_waiting_for_it(
     assert session.month_data.get("fresh") is True
 
 
+def test_a_week_from_wednesday_asks_for_the_month_from_wednesday(
+    qapp: QApplication, window: NativeWindow, monkeypatch
+) -> None:
+    session = window.session
+    CLOCK.set(datetime.fromisoformat("2026-10-15T15:40"))
+    session.follow_first_weekday(2)
+    wait_until(qapp, lambda: not session.busy)
+    assert session.week_start == "2026-10-14"
+    session._month_cache.clear()
+    session._month_prefetching.clear()
+    requests = []
+    monkeypatch.setattr(session.client, "request", lambda *args: requests.append(args))
+    session._prefetch_open_week_month()
+    session.set_view("month")
+    # Both the month on screen and the one asked for ahead name Wednesday (2) as the first day.
+    assert [args[1] for args in requests] == ["/api/month?month=2026-10&first_day=2"] * 2
+
+
 def test_month_keeps_a_picked_day_and_uses_thursday_for_a_week_without_today(
     qapp: QApplication, window: NativeWindow
 ) -> None:

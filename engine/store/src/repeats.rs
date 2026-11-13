@@ -4,8 +4,9 @@
 //! applied one way whoever sends it.
 
 use flexweek_engine::repeats::{
-    Intent, Kept, kept_notice, own_changes, patched, restated_copy, restated_version,
+    Intent, Kept, kept_notice, own_changes, patched, restated_pieces, restated_version,
 };
+use flexweek_engine::shown::family_id;
 use flexweek_engine::snapshot::canonical;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
@@ -182,6 +183,10 @@ fn write_versions(
     Ok(())
 }
 
+fn family_of(block: &Value) -> Option<&str> {
+    block.get("id").and_then(Value::as_str).map(family_id)
+}
+
 /// Apply `intents` in order: the repeat's rows from each change's week, then every saved week from
 /// that week on, where a week's copy follows the change except on what that week changed itself.
 /// The open week is usually in the same batch already changed by the client with the same rule
@@ -259,21 +264,39 @@ pub fn apply_repeat_intents(
             let Value::Array(stored) = parse(&text)? else {
                 continue;
             };
-            let Some(held) = stored
-                .iter()
-                .position(|block| block.get("id").and_then(Value::as_str) == Some(&intent.id))
-            else {
+            // Every piece of the repeat in that week: School split at a seam is School on each side.
+            let pieces: Vec<usize> = (0..stored.len())
+                .filter(|at| {
+                    stored[*at].get("id").and_then(Value::as_str).map(family_id)
+                        == Some(intent.id.as_str())
+                })
+                .collect();
+            if pieces.is_empty() {
                 continue;
-            };
+            }
             let mut updated = stored.clone();
             if was != now {
-                match restated_copy(was, now, &stored[held]) {
-                    Some(copy) => updated[held] = copy,
-                    None => {
-                        updated.remove(held);
+                let copies: Vec<Value> = pieces.iter().map(|at| stored[*at].clone()).collect();
+                let restated = restated_pieces(was, now, &copies, &intent.id);
+                for (at, copy) in pieces.into_iter().zip(restated).rev() {
+                    match copy {
+                        Some(copy) => updated[at] = copy,
+                        None => {
+                            updated.remove(at);
+                        }
                     }
                 }
             }
+            // School's own id, else a piece of it: a week can hold School only as a piece.
+            let held = updated
+                .iter()
+                .position(|block| block.get("id").and_then(Value::as_str) == Some(&intent.id))
+                .or_else(|| {
+                    updated
+                        .iter()
+                        .position(|block| family_of(block) == Some(&intent.id))
+                })
+                .unwrap_or(updated.len());
             // Where a later version starts, the copy's own changes are measured against this change, as
             // the version's would have been, so the week is named once for everything it keeps.
             let measured_against = if version_starts_here {
@@ -284,7 +307,7 @@ pub fn apply_repeat_intents(
             later_versions.retain(|kept| kept.week_start != week_start);
             if week_start > week
                 && let (Some(now), Some(copy)) = (measured_against, updated.get(held))
-                && copy.get("id") == now.get("id")
+                && family_of(copy) == now.get("id").and_then(Value::as_str)
             {
                 let changes = own_changes(copy, now, &updated, h24);
                 if !changes.is_empty() {

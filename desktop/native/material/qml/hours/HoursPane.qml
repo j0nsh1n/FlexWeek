@@ -190,7 +190,7 @@ Item {
             start = Math.max(0, Math.min(24 * 60 - length, root.snapToStep(held.start + travel)))
             end = start + length
             if (root.weekMode)
-                day = Math.max(0, Math.min(root.columns - 1, Math.floor((x - root.gutter) / root.dayWidth)))
+                day = root.dayOfColumn(Math.max(0, Math.min(root.columns - 1, Math.floor((x - root.gutter) / root.dayWidth))))
         } else if (held.how === "top") {
             var latest = Math.floor((held.end - root.dragStep) / root.dragStep) * root.dragStep
             start = Math.max(0, Math.min(latest, root.snapToStep(held.start + travel)))
@@ -226,8 +226,30 @@ Item {
     }
 
     function dayAt(x) {
-        return root.weekMode ? Math.floor((x - root.gutter) / root.dayWidth) : root.filterDay
+        return root.weekMode ? root.dayOfColumn(Math.floor((x - root.gutter) / root.dayWidth)) : root.filterDay
     }
+
+    // A column of the week and the day of the week it shows. They differ when the weekend is hidden and
+    // the week does not start on Monday: Saturday and Sunday leave a gap wherever they fall.
+    function dayOfColumn(column) {
+        var rows = root.bridge && root.bridge.week ? root.bridge.week.dayRows : null
+        if (rows && column >= 0 && column < rows.length && rows[column].day !== undefined)
+            return rows[column].day
+        return column
+    }
+
+    function columnOfDay(day) {
+        var rows = root.bridge && root.bridge.week ? root.bridge.week.dayRows : null
+        if (!rows || rows.length === 0 || rows[0].day === undefined)
+            return day
+        for (var i = 0; i < rows.length; i++) {
+            if (rows[i].day === day)
+                return i
+        }
+        return -1
+    }
+
+    readonly property int nowColumn: bridge ? (bridge.nowColumn !== undefined ? bridge.nowColumn : bridge.nowDay) : -1
 
     // Day's own test for a point on free time: inside the hours and on no block.
     function emptyGridTimeAt(x, y) {
@@ -600,7 +622,7 @@ Item {
                 readonly property int ghostStart: dragging ? root.rangeHost.dragRangeStartMin : root.slotStart
                 readonly property int ghostEnd: dragging ? root.rangeHost.dragRangeEndMin : root.slotEnd
                 visible: dragging || picked
-                x: root.weekMode ? root.gutter + Math.max(0, ghostDay) * root.dayWidth + 3 : root.gutter + 3
+                x: root.weekMode ? root.gutter + Math.max(0, root.columnOfDay(ghostDay)) * root.dayWidth + 3 : root.gutter + 3
                 y: (ghostStart / 60) * root.row
                 width: root.weekMode
                        ? Math.max(8, root.dayWidth - 6)
@@ -619,7 +641,7 @@ Item {
                 objectName: "handGhost"
                 visible: root.handing && !!root.landing
                 z: 10
-                x: root.weekMode ? root.gutter + (root.landing ? root.landing.day : 0) * root.dayWidth + 3
+                x: root.weekMode ? root.gutter + (root.landing ? Math.max(0, root.columnOfDay(root.landing.day)) : 0) * root.dayWidth + 3
                                  : root.gutter + 3
                 y: (root.landing ? root.landing.start : 0) / 60 * root.row
                 width: root.weekMode ? Math.max(8, root.dayWidth - 6)
@@ -634,9 +656,9 @@ Item {
 
             Rectangle {
                 objectName: "todayColumn"
-                visible: root.weekMode && !!bridge && bridge.nowDay >= 0 && bridge.nowDay < root.columns
+                visible: root.weekMode && root.nowColumn >= 0 && root.nowColumn < root.columns
                          && !(root.theme && root.theme.todayHighlight === false)
-                x: root.gutter + (bridge ? bridge.nowDay : 0) * root.dayWidth
+                x: root.gutter + Math.max(0, root.nowColumn) * root.dayWidth
                 width: root.dayWidth
                 height: parent.height
                 color: m3.surfaceContainerLow
@@ -722,7 +744,7 @@ Item {
                 id: nowLine
                 objectName: "nowLine"
                 visible: root.showNowLine
-                x: root.gutter + (root.weekMode && bridge ? Math.max(0, bridge.nowDay) : 0) * root.dayWidth
+                x: root.gutter + (root.weekMode ? Math.max(0, root.nowColumn) : 0) * root.dayWidth
                 y: (bridge ? bridge.nowMinute : 0) / 60 * root.row
                 width: root.weekMode ? root.dayWidth : parent.width - root.gutter
                 height: 2
@@ -788,7 +810,8 @@ Item {
                     sideStrip: root.sideStrip
                     wordsTop: spot ? spot.wordsTop : 0
                     wordsRoom: spot ? spot.wordsRoom : -1
-                    x: (root.weekMode ? root.gutter + model.day * root.dayWidth + 3 : root.gutter + 3) + indentX
+                    x: (root.weekMode ? root.gutter + (model.column === undefined ? model.day : model.column) * root.dayWidth + 3
+                                      : root.gutter + 3) + indentX
                     y: model.start / 60 * root.row
                     width: Math.max(8, laneSpan - indentX)
                     height: Math.max(36, (model.end - model.start) / 60 * root.row - 2)
@@ -1000,13 +1023,13 @@ Item {
                     root.menuMode = "days"
                     blockMenu.entries = root.dayEntries()
                     root.fitMenu()
-                    blockMenu.cursor = Math.max(0, Math.min(target.day, blockMenu.entries.length - 1))
+                    blockMenu.cursor = Math.max(0, Math.min(root.columnOfDay(target.day), blockMenu.entries.length - 1))
                     return
                 }
                 if (target && !target.slot && root.menuMode === "days") {
                     root.closeBlockMenu()
-                    if (root.bridge && root.bridge.week && index !== target.day)
-                        root.bridge.week.moveBlock(target.blockId, target.day, index, target.start, target.end)
+                    if (root.bridge && root.bridge.week && root.dayOfColumn(index) !== target.day)
+                        root.bridge.week.moveBlock(target.blockId, target.day, root.dayOfColumn(index), target.start, target.end)
                     return
                 }
                 root.closeBlockMenu()

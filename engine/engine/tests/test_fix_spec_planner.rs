@@ -379,3 +379,25 @@ fn a_held_piece_never_costs_unrelated_homework_its_only_time() {
     assert_eq!(placed_day(&trace, "z-other"), 1);
     assert_eq!(placed_day(&trace, "a-mate"), 0);
 }
+
+#[test]
+fn a_same_day_spread_notice_names_the_day_of_the_week_on_screen() {
+    // A week shown from Wednesday: day 2 is Friday. Both parts of the split essay land on it.
+    let windows = [work_span(&[2], "16:00", "20:00", None)];
+    let long = flex("long", "Essay", 90, &[2], "medium", None, None);
+    let mut rules = plan_rules_from_value(&json!({"first_weekday": 2}));
+    rules.split_long_tasks = true;
+    let trace = plan(&[long], &windows, rules);
+    assert_eq!(placed_day(&trace, "long"), 2);
+    assert_eq!(placed_day(&trace, "long~2"), 2);
+    let said: Vec<&str> = trace
+        .notices
+        .iter()
+        .filter(|item| item.kind == "spread_same_day")
+        .map(|item| item.message.as_str())
+        .collect();
+    assert_eq!(
+        said,
+        vec!["Couldn't spread Essay over separate days, so two parts share Friday."]
+    );
+}

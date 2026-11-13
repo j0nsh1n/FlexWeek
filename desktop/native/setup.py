@@ -60,6 +60,7 @@ from backend.models import valid_spotify_url
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm
 from desktop.native import icons
 from desktop.native.calendar import (
+    DAY_FULL,
     SETUP_SCHOOL_ID,
     is_setup_block,
     new_activity_id,
@@ -67,6 +68,7 @@ from desktop.native.calendar import (
 from desktop.native.fields import (
     END_OF_DAY,
     QUICK_LENGTHS,
+    WEEK_STARTS,
     ClockField,
     DayPicker,
     Stepper,
@@ -1545,23 +1547,21 @@ class SetupPage(QWidget):
             button.installEventFilter(self._clock_ring)
         self._dress_clock_ring()
         box.addWidget(clock)
-        box.addWidget(_label("Week starts on", "setupSection"))
-        self.week_start_choice = QButtonGroup(content)
-        self.week_start_buttons: dict[str, QRadioButton] = {}
+        week_start_label = _label("Week starts on", "setupSection")
+        box.addWidget(week_start_label)
+        self.week_start = QComboBox()
+        self.week_start.setObjectName("setupWeekStart")
+        self.week_start.setAccessibleName("Week starts on")
+        for name, value in zip(DAY_FULL, WEEK_STARTS, strict=True):
+            self.week_start.addItem(name, value)
+        week_start_label.setBuddy(self.week_start)
         starts = QFrame()
         starts.setObjectName("setupGroup")
         starts_line = QHBoxLayout(starts)
         starts_line.setContentsMargins(12, 10, 12, 10)
-        starts_line.setSpacing(24)
-        for value, text in (("monday", "Monday"), ("sunday", "Sunday")):
-            button = QRadioButton(text)
-            button.setObjectName(f"setupWeekStart-{value}")
-            self.week_start_choice.addButton(button)
-            self.week_start_buttons[value] = button
-            starts_line.addWidget(button)
+        starts_line.addWidget(self.week_start)
         starts_line.addStretch(1)
         box.addWidget(starts)
-        box.addWidget(_label("The Week view always runs Monday to Sunday.", "setupWeekStartHint"))
         self.clock_choice.buttonToggled.connect(lambda _button, _on: self._follow_clock())
         self._section(box, "School")
         self.school_days = DayPicker([0, 1, 2, 3, 4], "setupDay")
@@ -1581,6 +1581,7 @@ class SetupPage(QWidget):
         self.this_week.setVisible(False)
         box.addWidget(self.this_week)
         self.school_days.changed.connect(self._follow_school)
+        self.week_start.currentIndexChanged.connect(self._follow_week_start)
         self._section(box, "Sports, clubs and jobs")
         self.activity_box = QVBoxLayout()
         self.activity_box.setSpacing(8)
@@ -1855,8 +1856,13 @@ class SetupPage(QWidget):
         return self.clock_buttons[True].isChecked()
 
     def _week_start_chosen(self) -> str:
-        checked = [value for value, button in self.week_start_buttons.items() if button.isChecked()]
-        return checked[0] if checked else "monday"
+        return str(self.week_start.currentData())
+
+    def _follow_week_start(self) -> None:
+        """School's and the activities' days start on the day just picked, before the page saves it."""
+        first = WEEK_STARTS.index(self._week_start_chosen())
+        for picker in (self.school_days, *(row.days for row in self.activities)):
+            picker.lay_out_from(first)
 
     def _show_clock(self, twenty_four: bool) -> None:
         """Choose the clock and write every time box on the pages in it."""
@@ -1872,7 +1878,7 @@ class SetupPage(QWidget):
     def _fill_week(self) -> None:
         blocks = self._state.blocks
         self._show_clock(self._state.preferences.get("clock_24h") is True)
-        self.week_start_buttons[week_starts_on()].setChecked(True)
+        self.week_start.setCurrentIndex(self.week_start.findData(week_starts_on()))
         school = next((block for block in blocks if block.get("id") == SETUP_SCHOOL_ID), None)
         if school is not None and school.get("start"):
             self.school_days.set_days(list(school.get("days") or []))
@@ -2354,6 +2360,7 @@ class SetupPage(QWidget):
         if len(self.activities) >= MAX_ACTIVITIES:
             return
         row = ActivityRow(title, days, start, minutes, category, guess=guess, block_id=block_id)
+        row.days.lay_out_from(WEEK_STARTS.index(self._week_start_chosen()))
         row.removed.connect(self._remove_activity)
         self.activity_box.addWidget(row)
         self.activities.append(row)

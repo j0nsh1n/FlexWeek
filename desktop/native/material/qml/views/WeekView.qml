@@ -51,18 +51,20 @@ Item {
         if (inScroller.x < 0 || inScroller.y < 0 || inScroller.x > scroller.width || inScroller.y > scroller.height)
             return null
         var spot = hours.mapFromItem(null, scene.x, scene.y)
-        var day = Math.floor((spot.x - gutter) / dayWidth)
-        if (day < 0 || day >= columns || spot.y < 0 || spot.y >= 24 * row)
+        var column = Math.floor((spot.x - gutter) / dayWidth)
+        if (column < 0 || column >= columns || spot.y < 0 || spot.y >= 24 * row)
             return null
         var minute = Math.round(spot.y / row * 60 / dragStep) * dragStep
-        return { day: day, minute: Math.max(0, Math.min(24 * 60 - dragStep, minute)) }
+        return { day: hoursPane.dayOfColumn(column), column: column,
+                 minute: Math.max(0, Math.min(24 * 60 - dragStep, minute)) }
     }
 
     function follow(scene) {
         var local = root.mapFromItem(null, scene.x, scene.y)
         heldAt = Qt.point(local.x, local.y)
         var slot = slotAt(scene)
-        dropDay = slot ? slot.day : -1
+        // The highlight goes by column, which skips a hidden weekend.
+        dropDay = slot ? slot.column : -1
         dropMinute = slot ? slot.minute : -1
     }
 
@@ -95,15 +97,15 @@ Item {
             return false
         if (y < 0 || y >= 24 * root.row)
             return false
-        var day = Math.floor((x - root.gutter) / root.dayWidth)
-        if (day < 0 || day >= root.columns)
+        var column = Math.floor((x - root.gutter) / root.dayWidth)
+        if (column < 0 || column >= root.columns)
             return false
         if (!bridge || !bridge.blockRows)
             return true
         var rows = bridge.blockRows
         for (var i = 0; i < rows.length; i++) {
             var b = rows[i]
-            if (b.day !== day)
+            if ((b.column === undefined ? b.day : b.column) !== column)
                 continue
             var by = b.start / 60 * root.row
             var bh = Math.max(36, (b.end - b.start) / 60 * root.row - 2)
@@ -272,7 +274,7 @@ Item {
         columns: root.columns
         dayWidth: root.dayWidth
         filterDay: -1
-        showNowLine: !!bridge && bridge.nowDay >= 0 && bridge.nowDay < root.columns
+        showNowLine: hoursPane.nowColumn >= 0 && hoursPane.nowColumn < root.columns
         showPill: false
         weekMode: true
         followNow: true

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import date, datetime
+from functools import cache
 from uuid import uuid4
 
 import flexweek_engine  # type: ignore[import-untyped]
@@ -148,6 +149,74 @@ def month_title(day: date | str, short: bool = False) -> str:
 
 def monday_of(iso_day: str) -> str:
     return str(flexweek_engine.calendar_monday_of(iso_day))
+
+
+def week_start_on(iso_day: str, first_weekday: int) -> str:
+    """The first date of the shown week holding `iso_day` (0 Monday to 6 Sunday as its first day)."""
+    return str(flexweek_engine.calendar_week_start_on(iso_day, first_weekday))
+
+
+def day_in_week(iso_day: str, week_start: str) -> int:
+    """How many days `iso_day` comes after `week_start`: 0 on it, negative before it."""
+    return int(flexweek_engine.calendar_due_day(json.dumps(iso_day), week_start))
+
+
+def stored_weeks_of(week_start: str) -> list[str]:
+    """The stored (Monday) weeks the week on screen from `week_start` covers, first first."""
+    return list(flexweek_engine.shown_week_stores(week_start))
+
+
+def blocks_by_weekday(week_start: str, blocks: list[dict]) -> list[dict]:
+    """The week's blocks with their days as weekdays (0 Monday), as a routine keeps them."""
+    turned: list[dict] = json.loads(
+        flexweek_engine.shown_week_blocks_by_weekday(week_start, json.dumps(blocks))
+    )
+    return turned
+
+
+def routine_on_week(week_start: str, routine: dict) -> dict:
+    """A routine with its days as days of the week from `week_start`, to copy into that week."""
+    turned: dict = json.loads(flexweek_engine.shown_week_routine(week_start, json.dumps(routine)))
+    return turned
+
+
+def weekdays_on_week(week_start: str, weekdays: list[int]) -> list[int]:
+    """Weekdays (0 Monday) as days of the week from `week_start`, in order."""
+    return list(flexweek_engine.shown_week_weekdays(week_start, weekdays))
+
+
+def windows_on_week(week_start: str, windows: list[dict]) -> list[dict]:
+    """Work windows kept by weekday, with their days as days of the week from `week_start`."""
+    moved: list[dict] = json.loads(flexweek_engine.shown_week_windows(week_start, json.dumps(windows)))
+    return moved
+
+
+def week_columns(week_start: str, weekends: bool) -> list[int]:
+    """The days of the week on screen that get a column: all seven, or all but Saturday and Sunday."""
+    return list(flexweek_engine.shown_week_columns(week_start, weekends))
+
+
+@cache
+def day_names(week_start: str) -> tuple[str, ...]:
+    """Each day of the week on screen named from its date ("Wed" first for a week from Wednesday)."""
+    return tuple(flexweek_engine.shown_week_day_names(week_start, False))
+
+
+@cache
+def day_full_names(week_start: str) -> tuple[str, ...]:
+    """`day_names` written out: "Wednesday"."""
+    return tuple(flexweek_engine.shown_week_day_names(week_start, True))
+
+
+def weekday_order(first_weekday: int) -> list[int]:
+    """The weekdays (0 Monday to 6 Sunday) in the order a week starting on `first_weekday` runs."""
+    return list(flexweek_engine.calendar_weekday_order(first_weekday))
+
+
+def month_rows(first: date, last: date, first_weekday: int) -> tuple[date, date]:
+    """The first and last dates of a month's whole rows when they start on `first_weekday`."""
+    start, end = flexweek_engine.month_grid(first, last, first_weekday)
+    return start, end
 
 
 def date_for_day(week_start: str, day: int) -> str:
@@ -338,6 +407,11 @@ def is_setup_block(block: dict) -> bool:
     return bool(flexweek_engine.calendar_setup_block(json.dumps(block)))
 
 
+def block_family(block_id: str) -> str:
+    """The block a piece split off at a week's seam belongs to: `school` for `school@20261111`."""
+    return str(flexweek_engine.calendar_block_family(block_id))
+
+
 def new_activity_id() -> str:
     """An id for an activity Setup adds. A new one never takes a number an earlier activity had, so
     removing or reordering activities leaves every other activity's id, and its weeks, as they were."""
@@ -352,24 +426,28 @@ def repeat_changes(before: list[dict], after: list[dict], from_date: str) -> lis
 
 
 def apply_repeat_changes(
-    blocks: list[dict], repeats: list[dict], changes: list[dict]
+    blocks: list[dict], repeats: list[dict], changes: list[dict], week_start: str
 ) -> tuple[list[dict], list[dict]]:
-    """The open week and its repeats after `changes`, by the rule the store applies to saved weeks."""
+    """The open week from `week_start` and its repeats after `changes`, by the rule the store applies to
+    saved weeks. Repeats keep their days by weekday; the week's count from its first day."""
     week, after = flexweek_engine.repeat_apply_to_week(
-        json.dumps(blocks), json.dumps(repeats), json.dumps(changes)
+        json.dumps(blocks), json.dumps(repeats), json.dumps(changes), week_start
     )
     return json.loads(week), json.loads(after)
 
 
-def this_week_line(blocks: list[dict], repeats: list[dict], clock_24h: bool) -> str | None:
-    """'This week: no School on Wednesday.' for a form that shows the repeats, or None."""
-    return flexweek_engine.repeat_this_week_line(json.dumps(blocks), json.dumps(repeats), clock_24h)
+def this_week_line(blocks: list[dict], repeats: list[dict], clock_24h: bool, week_start: str) -> str | None:
+    """'This week: no School on Wednesday.' for a form that shows the repeats, or None. `blocks` is the
+    week from `week_start`."""
+    return flexweek_engine.repeat_this_week_line(
+        json.dumps(blocks), json.dumps(repeats), clock_24h, week_start
+    )
 
 
-def one_day_note(block: dict, day: int, school_hours: bool) -> str | None:
-    """What moving one day of a repeating block adds to its notice; None for a block that does not
-    repeat."""
-    return flexweek_engine.repeat_one_day_note(json.dumps(block), day, school_hours)
+def one_day_note(block: dict, day: int, school_hours: bool, week_start: str) -> str | None:
+    """What moving day `day` of the week from `week_start` of a repeating block adds to its notice; None
+    for a block that does not repeat."""
+    return flexweek_engine.repeat_one_day_note(json.dumps(block), day, school_hours, week_start)
 
 
 def past_problem(

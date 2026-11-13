@@ -9,7 +9,7 @@
  {
   "name": "Month always uses Thursday",
   "file": "desktop/native/controller.py",
-  "old": "            today if monday_of(today) == self.week_start else date_for_day(self.week_start, 3)\n",
+  "old": "            today if self.today_column(today) is not None else date_for_day(self.week_start, 3)\n",
   "new": "            date_for_day(self.week_start, 3)\n",
   "test": "desktop/tests/week/test_month_and_my_day_follow_today.py::test_month_and_mini_month_use_today_at_a_week_boundary"
  },

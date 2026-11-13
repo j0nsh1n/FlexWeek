@@ -27,6 +27,9 @@ pub struct PlanRules {
     pub buffer_min: i64,
     pub urgent_first: bool,
     pub split_long_tasks: bool,
+    /// The weekday (0 Monday) of the week's day 0. A week shown from another day than Monday has
+    /// its Saturday and Sunday elsewhere than days 5 and 6.
+    pub first_weekday: i64,
 }
 
 impl Default for PlanRules {
@@ -36,6 +39,7 @@ impl Default for PlanRules {
             buffer_min: 0,
             urgent_first: true,
             split_long_tasks: false,
+            first_weekday: 0,
         }
     }
 }
@@ -79,6 +83,11 @@ pub fn plan_rules_from_value(value: &Value) -> PlanRules {
         buffer_min,
         urgent_first: flag("urgent_first", true),
         split_long_tasks: flag("split_long_tasks", false),
+        first_weekday: obj
+            .and_then(|fields| fields.get("first_weekday"))
+            .and_then(Value::as_i64)
+            .filter(|day| (0..7).contains(day))
+            .unwrap_or(0),
     }
 }
 
@@ -492,7 +501,8 @@ const DAY_NAME: [&str; 7] = [
     "Sunday",
 ];
 
-fn same_day_spread_notes(placed: &[TimeBlock]) -> Vec<Notice> {
+/// `first_weekday` is the weekday (0 Monday) of the week's day 0, so a day is named for its date.
+fn same_day_spread_notes(placed: &[TimeBlock], first_weekday: i64) -> Vec<Notice> {
     use std::collections::HashMap;
     let mut groups: HashMap<String, Vec<&TimeBlock>> = HashMap::new();
     for block in placed {
@@ -517,7 +527,11 @@ fn same_day_spread_notes(placed: &[TimeBlock]) -> Vec<Notice> {
         }
         if let Some((day, _)) = counts.into_iter().find(|(_, count)| *count >= 2) {
             let title = members[0].title.as_str();
-            let name = DAY_NAME.get(day as usize).copied().unwrap_or("that day");
+            let name = if (0..7).contains(&day) {
+                DAY_NAME[(first_weekday + day).rem_euclid(7) as usize]
+            } else {
+                "that day"
+            };
             notes.push(Notice {
                 kind: "spread_same_day".into(),
                 block_id: members[0].id.clone(),
@@ -1026,7 +1040,9 @@ pub fn solve_with_rules(
     let mut search_blocks = output_blocks.clone();
     if rules.weekend_homework_free {
         for block in &mut search_blocks {
-            block.days.retain(|day| *day <= 4);
+            block
+                .days
+                .retain(|day| (rules.first_weekday + *day).rem_euclid(7) <= 4);
         }
     }
 
@@ -1213,7 +1229,7 @@ pub fn solve_with_rules(
             slack_status: None,
         });
     }
-    let notices = same_day_spread_notes(&placed_flex);
+    let notices = same_day_spread_notes(&placed_flex, rules.first_weekday);
     for block in &mut placed_flex {
         block.split_peer = None;
     }

@@ -58,8 +58,8 @@
  {
   "file": "desktop/native/hours/classic.py",
   "name": "today's name not marked",
-  "old": "            label.show_day(DAYS[day], str(week.date_of(day).day), homework_minutes(week, day), day == today)\n",
-  "new": "            label.show_day(DAYS[day], str(week.date_of(day).day), homework_minutes(week, day), False)\n",
+  "old": "                week.day_name(day), str(week.date_of(day).day), homework_minutes(week, day), day == today,\n",
+  "new": "                week.day_name(day), str(week.date_of(day).day), homework_minutes(week, day), False,\n",
   "test": "desktop/tests/settings/test_look_blocks.py::test_todays_name_above_the_week_is_marked_and_no_other"
  },
  {

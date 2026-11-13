@@ -905,3 +905,54 @@ fn fixed_time_and_a_plan_sent_without_waiting_all_apply() {
         "one restore point per change; a plan with nothing to place saves none"
     );
 }
+
+/// A week on screen that does not start on Monday leaves School in two pieces in a stored week when a
+/// change there reaches some of its days: `school` and `school@20261021`. The assistant changes or
+/// stops School from either piece.
+#[test]
+fn a_piece_of_school_changes_and_stops_school_every_week() {
+    let world = signed_in("school-piece");
+    school_stands(&world);
+    seed_week(
+        &world,
+        json!([
+            {"id": "school", "title": "School", "kind": "locked", "duration_min": 420,
+             "days": [0, 1], "start": "08:00", "category": "class"},
+            {"id": "school@20261021", "title": "School", "kind": "locked", "duration_min": 420,
+             "days": [2, 3, 4], "start": "10:00", "category": "class"}
+        ]),
+    );
+    let mut server = boot(&world);
+    let edited = server.call(
+        "edit_block",
+        json!({"operation_id": "op-piece-later", "week_start": WEEK, "expected_revision": 4,
+            "block_id": "school@20261021", "title": "Classes", "every_week": true}),
+        2,
+    );
+    assert_eq!(body_of(&edited)["ok"], json!(true), "got {edited}");
+    let week = seen(&mut server, WEEK, 3);
+    assert_eq!(
+        by_id(&week, "school")["title"],
+        json!("Classes"),
+        "got {week}"
+    );
+    assert_eq!(by_id(&week, "school@20261021")["title"], json!("Classes"));
+    let next = seen(&mut server, NEXT, 4);
+    assert_eq!(
+        by_id(&next, "school")["title"],
+        json!("Classes"),
+        "got {next}"
+    );
+    let stopped = server.call(
+        "delete_block",
+        json!({"operation_id": "op-piece-stop", "week_start": WEEK,
+            "expected_revision": stored(&world, WEEK).1,
+            "block_id": "school@20261021", "scope": "series", "every_week": true}),
+        5,
+    );
+    assert_eq!(body_of(&stopped)["ok"], json!(true), "got {stopped}");
+    let week = seen(&mut server, WEEK, 6);
+    assert!(titled(&week, "Classes").is_empty(), "got {week}");
+    let next = seen(&mut server, NEXT, 7);
+    assert!(titled(&next, "Classes").is_empty(), "got {next}");
+}

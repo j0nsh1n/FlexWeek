@@ -33,12 +33,20 @@ pub fn delete_block(
             lost: Vec::new(),
         });
     };
-    let mut removed: Vec<Value> = if truthy(block.get("assignment_id")) || scope != "occurrence" {
-        blocks
-            .iter()
-            .filter(|item| item.get("id").and_then(Value::as_str) != Some(block_id))
-            .cloned()
-            .collect()
+    let whole = truthy(block.get("assignment_id")) || scope != "occurrence";
+    let setup = grid::is_setup_block(block).map_err(|err| err.message)?;
+    // School split at a week's seam is School on each side: the whole of it goes together.
+    let family = crate::shown::family_id(block_id);
+    let goes = |item: &Value| {
+        let id = item.get("id").and_then(Value::as_str);
+        if whole && setup {
+            id.map(crate::shown::family_id) == Some(family)
+        } else {
+            id == Some(block_id)
+        }
+    };
+    let mut removed: Vec<Value> = if whole {
+        blocks.iter().filter(|item| !goes(item)).cloned().collect()
     } else {
         let day_value = day.map_or(Value::Null, Value::from);
         grid::delete_occurrence(&Value::Array(blocks.to_vec()), &json!(block_id), &day_value)
@@ -47,16 +55,22 @@ pub fn delete_block(
     // School or a Setup activity stands in every week, so taking it out of this week alone keeps
     // it here missed on every day, or the standing week would bring it back. `every_week` is the
     // caller's to take out of the standing week too.
-    let gone = !removed
-        .iter()
-        .any(|item| item.get("id").and_then(Value::as_str) == Some(block_id));
-    if gone && !every_week && grid::is_setup_block(block).map_err(|err| err.message)? {
-        let mut missed = block.clone();
-        let days = block.get("days").cloned().unwrap_or_else(|| json!([]));
-        if let Some(fields) = missed.as_object_mut() {
-            fields.insert("missed_days".into(), days);
+    if !every_week && setup {
+        let gone: Vec<Value> = blocks
+            .iter()
+            .filter(|item| {
+                goes(item) && !removed.iter().any(|kept| kept.get("id") == item.get("id"))
+            })
+            .cloned()
+            .collect();
+        for gone in gone {
+            let mut missed = gone.clone();
+            let days = gone.get("days").cloned().unwrap_or_else(|| json!([]));
+            if let Some(fields) = missed.as_object_mut() {
+                fields.insert("missed_days".into(), days);
+            }
+            removed.push(missed);
         }
-        removed.push(missed);
     }
     let title = match block.get("title") {
         Some(Value::String(text)) => text.clone(),

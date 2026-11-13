@@ -1,0 +1,319 @@
+"""A week on screen can start on any day. `GET /api/week` with a date that is not a Monday shows the
+seven days from it, taken from the two stored (Monday) weeks it covers, and `POST /api/changes` splits
+a saved one back. Its revision is the two stored weeks' revisions, first week first. Dates are read off
+the 2026 calendar: Wednesday 11 November to Tuesday 17 November covers the weeks of Monday 9 and
+Monday 16 November."""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from backend.app import create_app
+
+PASSWORD = "a-long-test-password"
+WRITE = {"X-FlexWeek-Request": "1", "Origin": "http://testserver"}
+WED = "2026-11-11"
+FIRST = "2026-11-09"
+SECOND = "2026-11-16"
+SCHOOL = [
+    {
+        "id": "school",
+        "scope": "from",
+        "from_date": "2026-11-02",
+        "set": {"title": "School", "category": "class", "start": "08:30", "duration_min": 405},
+        "add_days": [0, 1, 2, 3, 4],
+    }
+]
+
+
+@pytest.fixture()
+def alice(tmp_path: Path) -> Iterator[TestClient]:
+    with TestClient(create_app(database=tmp_path / "shown.db", origin="http://testserver")) as client:
+        made = client.post("/api/auth/register", json={"username": "alice", "password": PASSWORD}, headers=WRITE)
+        assert made.status_code == 201, made.text
+        yield client
+
+
+def fixed(block_id: str, start: str, days: list[int]) -> dict:
+    return {"id": block_id, "title": block_id, "kind": "locked", "duration_min": 60, "days": days, "start": start}
+
+
+def week(client: TestClient, week_start: str) -> dict:
+    response = client.get(f"/api/week?week_start={week_start}")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def post(client: TestClient, body: dict) -> dict:
+    response = client.post("/api/changes", json=body, headers=WRITE)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def save(client: TestClient, week_start: str, blocks: list[dict], revision: object, **extra: object) -> dict:
+    return post(client, {"weeks": [{"week_start": week_start, "blocks": blocks, "revision": revision}], **extra})
+
+
+def days_of(blocks: list[dict]) -> dict[str, list[int]]:
+    return {block["id"]: block["days"] for block in blocks}
+
+
+def test_a_wednesday_week_nobody_saved_is_empty_with_both_revisions(alice: TestClient) -> None:
+    shown = week(alice, WED)
+    assert shown["week_start"] == WED
+    assert shown["blocks"] == []
+    assert shown["revision"] == [0, 0]
+
+
+def test_a_thursday_block_is_stored_in_its_monday_week_and_a_monday_block_in_the_next(alice: TestClient) -> None:
+    saved = save(alice, WED, [fixed("thu12", "10:00", [1]), fixed("mon16", "10:00", [5])], [0, 0])
+    assert saved["weeks"][0]["week_start"] == WED
+    assert saved["weeks"][0]["revision"] == [1, 1]
+    assert days_of(week(alice, FIRST)["blocks"]) == {"thu12": [3]}
+    assert days_of(week(alice, SECOND)["blocks"]) == {"mon16": [0]}
+    shown = week(alice, WED)
+    assert days_of(shown["blocks"]) == {"thu12": [1], "mon16": [5]}
+    assert shown["revision"] == [1, 1]
+
+
+def test_a_shown_week_change_on_one_side_leaves_the_other_stored_week_unwritten(alice: TestClient) -> None:
+    save(alice, WED, [fixed("thu12", "10:00", [1])], [0, 0])
+    assert week(alice, WED)["revision"] == [1, 0]
+    assert week(alice, SECOND)["revision"] == 0
+
+
+def test_a_repeat_deleted_from_the_shown_week_stays_on_the_days_before_and_after(alice: TestClient) -> None:
+    gym = fixed("gym", "17:00", [0, 2, 4])
+    save(alice, FIRST, [gym], 0)
+    save(alice, SECOND, [gym], 0)
+    shown = week(alice, WED)
+    assert days_of(shown["blocks"]) == {"gym": [0, 2, 5]}
+    save(alice, WED, [], shown["revision"])
+    # Monday 9 is the week before's; Wednesday 18 and Friday 20 the week after's.
+    assert days_of(week(alice, FIRST)["blocks"]) == {"gym": [0]}
+    assert days_of(week(alice, SECOND)["blocks"]) == {"gym": [2, 4]}
+
+
+def test_a_session_placed_after_the_seam_is_stored_once(alice: TestClient) -> None:
+    waiting = {"id": "s1", "title": "Read", "kind": "flexible", "duration_min": 60, "days": [0, 1, 2, 3, 4, 5, 6]}
+    save(alice, FIRST, [waiting], 0)
+    shown = week(alice, WED)
+    assert days_of(shown["blocks"]) == {"s1": [0, 1, 2, 3, 4]}
+    placed = [{**shown["blocks"][0], "days": [5], "start": "16:00"}]
+    save(alice, WED, placed, shown["revision"])
+    assert week(alice, FIRST)["blocks"] == []
+    stored = week(alice, SECOND)["blocks"]
+    assert days_of(stored) == {"s1": [0]}
+    assert stored[0]["start"] == "16:00"
+
+
+def test_a_stale_revision_on_either_stored_week_refuses_the_whole_save(alice: TestClient) -> None:
+    shown = week(alice, WED)
+    # Another device saves the second week meanwhile.
+    save(alice, SECOND, [fixed("phone", "12:00", [0])], 0)
+    response = alice.post(
+        "/api/changes",
+        json={"weeks": [{"week_start": WED, "blocks": [fixed("thu12", "10:00", [1])], "revision": shown["revision"]}]},
+        headers=WRITE,
+    )
+    assert response.status_code == 409
+    # Nothing was written to the first week either.
+    assert week(alice, FIRST)["blocks"] == []
+    assert week(alice, FIRST)["revision"] == 0
+    assert days_of(week(alice, WED)["blocks"]) == {"phone": [5]}
+
+
+def test_a_retried_save_lands_once(alice: TestClient) -> None:
+    body = {
+        "weeks": [{"week_start": WED, "blocks": [fixed("mon16", "10:00", [5])], "revision": [0, 0]}],
+        "operation_id": "op-1",
+    }
+    first = post(alice, body)
+    again = post(alice, body)
+    assert again == first
+    assert week(alice, SECOND)["revision"] == 1
+    assert days_of(week(alice, SECOND)["blocks"]) == {"mon16": [0]}
+
+
+def test_a_monday_week_keeps_a_plain_revision(alice: TestClient) -> None:
+    saved = save(alice, FIRST, [fixed("mon9", "10:00", [0])], 0)
+    assert saved["weeks"][0]["revision"] == 1
+    assert week(alice, FIRST)["revision"] == 1
+
+
+def test_a_shown_revision_must_name_both_stored_weeks(alice: TestClient) -> None:
+    for revision in (0, [0], [0, 0, 0]):
+        response = alice.post(
+            "/api/changes", json={"weeks": [{"week_start": WED, "blocks": [], "revision": revision}]}, headers=WRITE
+        )
+        assert response.status_code == 422, revision
+    response = alice.post(
+        "/api/changes", json={"weeks": [{"week_start": FIRST, "blocks": [], "revision": [0, 0]}]}, headers=WRITE
+    )
+    assert response.status_code == 422
+
+
+def test_a_sunday_week_takes_its_sunday_from_the_week_before(alice: TestClient) -> None:
+    save(alice, "2026-11-08", [fixed("sun8", "10:00", [0]), fixed("sat14", "10:00", [6])], [0, 0])
+    assert days_of(week(alice, "2026-11-02")["blocks"]) == {"sun8": [6]}
+    assert days_of(week(alice, FIRST)["blocks"]) == {"sat14": [5]}
+
+
+def test_a_week_over_the_year_end_stores_its_january_days_in_january(alice: TestClient) -> None:
+    # Wednesday 30 December 2026 to Tuesday 5 January 2027.
+    save(alice, "2026-12-30", [fixed("dec31", "10:00", [1]), fixed("jan4", "10:00", [5])], [0, 0])
+    assert days_of(week(alice, "2026-12-28")["blocks"]) == {"dec31": [3]}
+    assert days_of(week(alice, "2027-01-04")["blocks"]) == {"jan4": [0]}
+    # And one over a month end: Wednesday 25 November to Tuesday 1 December.
+    save(alice, "2026-11-25", [fixed("dec1", "10:00", [6])], [0, 0])
+    assert days_of(week(alice, "2026-11-30")["blocks"]) == {"dec1": [1]}
+
+
+def test_school_taken_out_of_the_shown_week_and_later_stays_on_the_days_before(alice: TestClient) -> None:
+    post(alice, {"weeks": [], "repeats": SCHOOL})
+    shown = week(alice, WED)
+    assert days_of(shown["blocks"]) == {"school": [0, 1, 2, 5, 6]}
+    stop = [{"id": "school", "scope": "from", "from_date": WED, "stop": True}]
+    save(alice, WED, [], shown["revision"], repeats=stop)
+    # Monday 9 and Tuesday 10 belong to the week before the shown one and keep School.
+    assert days_of(week(alice, FIRST)["blocks"]) == {"school": [0, 1]}
+    assert week(alice, SECOND)["blocks"] == []
+    assert week(alice, "2026-11-23")["blocks"] == []
+    assert week(alice, "2026-11-02")["blocks"][0]["days"] == [0, 1, 2, 3, 4]
+
+
+def test_school_taken_out_of_the_shown_week_only_is_missed_on_its_days_and_kept_on_the_others(
+    alice: TestClient,
+) -> None:
+    post(alice, {"weeks": [], "repeats": SCHOOL})
+    shown = week(alice, WED)
+    school = shown["blocks"][0]
+    save(alice, WED, [{**school, "missed_days": school["days"]}], shown["revision"])
+    first = week(alice, FIRST)["blocks"][0]
+    second = week(alice, SECOND)["blocks"][0]
+    assert (first["days"], first["missed_days"]) == ([0, 1, 2, 3, 4], [2, 3, 4])
+    assert (second["days"], second["missed_days"]) == ([0, 1, 2, 3, 4], [0, 1])
+    assert "missed_days" not in week(alice, "2026-11-23")["blocks"][0]
+
+
+def test_homework_counts_minutes_planned_from_the_first_day_of_the_shown_week(alice: TestClient) -> None:
+    homework = {
+        "id": "hw",
+        "title": "Essay",
+        "due": "2026-11-20T23:59",
+        "estimate_min": 180,
+        "revision": 0,
+    }
+    made = alice.put("/api/assignments/hw", json=homework, headers=WRITE)
+    assert made.status_code == 200, made.text
+
+    def session(block_id: str, day: int) -> dict:
+        return {**fixed(block_id, "16:00", [day]), "kind": "flexible", "duration_min": 30, "assignment_id": "hw"}
+
+    # Tuesday 10 November is before the week from Wednesday 11; Wednesday 11 and Monday 16 are in it.
+    save(alice, FIRST, [session("tue10", 1), session("wed11", 2)], 0)
+    save(alice, SECOND, [session("mon16", 0)], 0)
+    listed = alice.get(f"/api/assignments?week_start={WED}&include_completed=true")
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["assignments"][0]["planned_min"] == 60
+    monday = alice.get(f"/api/assignments?week_start={FIRST}&include_completed=true").json()
+    assert monday["assignments"][0]["planned_min"] == 90
+
+
+def test_plan_on_a_wednesday_week_uses_each_days_own_hours_and_keeps_its_weekend_free(
+    alice: TestClient,
+) -> None:
+    prefs = alice.get("/api/preferences").json()
+    hours = [{"days": [5], "start": "10:00", "end": "12:00"}, {"days": [0], "start": "16:00", "end": "18:00"}]
+    put = alice.put("/api/preferences", json={**prefs, "work_windows": hours, "buffer_min": 0}, headers=WRITE)
+    assert put.status_code == 200, put.text
+    # From Wednesday 11 November, day 3 is Saturday 14 and day 5 Monday 16.
+    math = {"id": "math", "title": "math", "kind": "flexible", "duration_min": 60, "days": [3, 5],
+            "priority": 3, "energy": "high"}  # fmt: skip
+
+    def placed() -> tuple[int, str]:
+        solved = alice.post("/api/solve", json={"blocks": [math], "week_start": WED}, headers=WRITE)
+        assert solved.status_code == 200, solved.text
+        found = next(item for item in solved.json()["placed"] if item["id"] == "math")
+        return found["days"][0], found["start"]
+
+    assert placed() == (3, "10:00")
+    prefs = alice.get("/api/preferences").json()
+    alice.put("/api/preferences", json={**prefs, "weekend_homework_free": True}, headers=WRITE)
+    assert placed() == (5, "16:00")
+
+
+def school_rows(blocks: list[dict]) -> list[tuple[str, list[int]]]:
+    """School's start and days in a week, earliest start first, whatever ids hold it."""
+    return sorted((block["start"], block["days"]) for block in blocks if block["title"] == "School")
+
+
+def test_school_changed_twice_from_a_wednesday_week_on_then_from_the_next_monday_stays_school(
+    alice: TestClient,
+) -> None:
+    post(alice, {"weeks": [], "repeats": SCHOOL})
+
+    def from_this_week_on(start: str) -> None:
+        shown = week(alice, WED)
+        [school] = shown["blocks"]
+        assert school["id"] == "school"
+        change = [{"id": "school", "scope": "from", "from_date": WED, "set": {"start": start}}]
+        save(alice, WED, [{**school, "start": start}], shown["revision"], repeats=change)
+
+    from_this_week_on("10:00")
+    from_this_week_on("09:00")
+    shown = week(alice, WED)
+    assert [(row["id"], row["start"], row["days"]) for row in shown["blocks"]] == [
+        ("school", "09:00", [0, 1, 2, 5, 6])
+    ]
+    # Monday 9 and Tuesday 10 come before the week on screen and keep 08:30; from Monday 16 the repeat
+    # itself is 09:00, so that week holds School whole, by its own id.
+    first = week(alice, FIRST)["blocks"]
+    assert school_rows(first) == [("08:30", [0, 1]), ("09:00", [2, 3, 4])]
+    assert any(block["id"] == "school" and block["start"] == "08:30" for block in first)
+    assert [(block["id"], block["start"], block["days"]) for block in week(alice, SECOND)["blocks"]] == [
+        ("school", "09:00", [0, 1, 2, 3, 4])
+    ]
+    # Setup changed from Monday 16 on reaches every day of that week, Monday 16 and Tuesday 17 included.
+    post(alice, {"weeks": [], "repeats": [{"id": "school", "scope": "from", "from_date": SECOND,
+                                           "set": {"start": "07:45"}}]})  # fmt: skip
+    assert school_rows(week(alice, SECOND)["blocks"]) == [("07:45", [0, 1, 2, 3, 4])]
+    assert school_rows(week(alice, "2026-11-23")["blocks"]) == [("07:45", [0, 1, 2, 3, 4])]
+    assert school_rows(week(alice, FIRST)["blocks"]) == [("08:30", [0, 1]), ("09:00", [2, 3, 4])]
+    shown = week(alice, WED)
+    assert school_rows(shown["blocks"]) == [("07:45", [5, 6]), ("09:00", [0, 1, 2])]
+    assert "school" in {row["id"] for row in shown["blocks"]}
+
+
+def test_a_shown_week_carries_its_stored_weeks_so_undo_puts_them_back_exactly(alice: TestClient) -> None:
+    # Reviewer's case: a session waiting for a time may go on Thursday 29 or Friday 30 October. Shown
+    # from Friday 30 October, the screen holds Friday only; Thursday is the week before's.
+    waiting = {"id": "hw", "title": "Read", "kind": "flexible", "duration_min": 60, "days": [3, 4]}
+    save(alice, "2026-10-26", [waiting], 0)
+    shown = week(alice, "2026-10-30")
+    assert days_of(shown["blocks"]) == {"hw": [0]}
+    assert [(part["week_start"], part["revision"]) for part in shown["stored"]] == [
+        ("2026-10-26", 1),
+        ("2026-11-02", 0),
+    ]
+    assert days_of(shown["stored"][0]["blocks"]) == {"hw": [3, 4]}
+    assert "stored" not in week(alice, "2026-10-26")
+    deleted = save(alice, "2026-10-30", [], shown["revision"])["weeks"][0]
+    assert week(alice, "2026-10-26")["blocks"] == []
+    # Undo sends each stored week as it was, then the week on screen as it was.
+    post(
+        alice,
+        {
+            "weeks": [
+                {"week_start": part["week_start"], "blocks": before["blocks"], "revision": part["revision"]}
+                for part, before in zip(deleted["stored"], shown["stored"], strict=True)
+            ]
+            + [{"week_start": "2026-10-30", "blocks": shown["blocks"], "revision": deleted["revision"]}]
+        },
+    )
+    assert days_of(week(alice, "2026-10-26")["blocks"]) == {"hw": [3, 4]}
+    assert days_of(week(alice, "2026-10-30")["blocks"]) == {"hw": [0]}

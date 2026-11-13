@@ -7,6 +7,7 @@ homework and Add fixed time alike. Expected values come from the requirement."""
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 
 import pytest
@@ -900,3 +901,72 @@ def test_a_fixed_time_sheet_built_ahead_of_time_says_its_length_not_that_the_end
     shown(qapp, sheet)
     assert sheet.duration_line.text() == "1 h"
     free(sheet)
+
+
+def _look(seen: list) -> Callable[[QDialog], int]:
+    """Record the days the sheet opened with, by their pill names and numbers, then close it."""
+
+    def run(dialog: QDialog) -> int:
+        picker = dialog.day_picker if isinstance(dialog, BlockDialog) else dialog.when_day
+        names = [button.text().split("\n")[0] for button in picker.buttons if button.isChecked()]
+        seen.append((picker.days(), names))
+        return only_look(dialog)
+
+    return run
+
+
+def _pick_friday_then_escape(dialog: QDialog) -> int:
+    dialog.title.setText("Piano lesson")
+    if isinstance(dialog, BlockDialog):
+        for index, check in enumerate(dialog.days):
+            check.setChecked(index == 4)
+    else:
+        dialog.when.setCurrentIndex(dialog.when.findData("fixed"))
+        dialog.when_day.buttons[4].click()
+    press_escape(dialog)
+    return int(dialog.result())
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_a_day_kept_by_esc_keeps_its_weekday_when_the_week_start_changes(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    """The clock is Thursday 5 November 2026. Friday 6 is day 4 of the week from Monday 2 and day 2 of the
+    week from Wednesday 4, so the kept Friday is still Friday after Wednesday is picked."""
+    from desktop.native import fields
+    from desktop.tests.waiting import wait_until
+
+    seen: list = []
+    Script(kind, monkeypatch, _pick_friday_then_escape, _look(seen))
+    add = getattr(window, PLAIN_ADD[kind])
+    add()
+    pump(qapp)
+    assert window._kept_adds, "Esc kept the typing"
+    fields.save_week_starts_on("wednesday")
+    wait_until(qapp, lambda: window.session.week_start == "2026-11-04" and not window.session.busy)
+    add()
+    pump(qapp)
+    assert seen == [([2], ["Fri"])]
+
+
+def test_homework_drawn_on_a_day_and_kept_by_esc_is_added_on_that_weekday_after_the_week_start_changes(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Drawn on Friday 6 November (day 4 of the week from Monday 2), kept by Esc, and added after Wednesday
+    is picked: its time is on Friday 6, day 2 of the week from Wednesday 4."""
+    from desktop.native import fields
+    from desktop.tests.waiting import wait_until
+
+    added: list = []
+    monkeypatch.setattr(window.session, "add_homework", lambda body, **kwargs: added.append(kwargs))
+    for name in ("save", "plan_after_save"):
+        monkeypatch.setattr(window.session, name, lambda *args, **kwargs: None)
+    Script("homework", monkeypatch, type_then_escape, save)
+    window.session.arm_category("assignments")
+    window._create_range(4, 16 * 60, 17 * 60)
+    pump(qapp)
+    fields.save_week_starts_on("wednesday")
+    wait_until(qapp, lambda: window.session.week_start == "2026-11-04" and not window.session.busy)
+    window._add_homework()
+    pump(qapp)
+    assert added == [{"days": [2]}]

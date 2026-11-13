@@ -60,7 +60,6 @@ from desktop.native.hours.canvas import (
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.classic import (
     EMPTY_MIN_NARROW_PX,
-    WEEKEND,
     ClassicPainter,
     Share,
     column_widths,
@@ -393,14 +392,20 @@ class LoadBars(QWidget):
         self.today: int | None = None
         self.ink = Ink(*("#000000",) * 7)
         self.mark, self.scale = "#000000", 1.0
+        self.names, self.fulls = list(DAYS), list(DAY_FULL)
         self.setMinimumHeight(60)
 
-    def show_load(self, minutes: list[int], today: int | None, ink: Ink, mark: str, scale: float) -> None:
+    def show_load(
+        self, minutes: list[int], today: int | None, ink: Ink, mark: str, scale: float, week: WeekModel
+    ) -> None:
+        """`week` names the days from their dates: the week may start on any day."""
         self.minutes, self.today, self.ink, self.mark, self.scale = minutes, today, ink, mark, scale
+        self.names = [week.day_name(day) for day in range(7)]
+        self.fulls = [week.day_full(day) for day in range(7)]
         self.setAccessibleName("Homework by day")
         self.setAccessibleDescription(
             ". ".join(
-                f"{DAY_FULL[day]}: {length_label(each) if each else 'none'}"
+                f"{week.day_full(day)}: {length_label(each) if each else 'none'}"
                 for day, each in enumerate(minutes)
             )
         )
@@ -442,7 +447,7 @@ class LoadBars(QWidget):
             painter.drawText(
                 QRectF(slot.left(), slot.bottom() - line, slot.width(), line),
                 Qt.AlignmentFlag.AlignCenter,
-                DAYS[day][0],
+                self.names[day][0],
             )
         painter.end()
 
@@ -453,7 +458,9 @@ class LoadBars(QWidget):
                 if slot.contains(QPointF(at)):
                     each = self.minutes[day]
                     QToolTip.showText(
-                        event.globalPos(), f"{DAY_FULL[day]}: {length_label(each) if each else 'none'}", self
+                        event.globalPos(),
+                        f"{self.fulls[day]}: {length_label(each) if each else 'none'}",
+                        self,
                     )
                     return True
         return super().event(event)
@@ -467,6 +474,7 @@ class Glance(QWidget):
         super().__init__()
         self.setObjectName("bentoGlance")
         self.columns: list[list[tuple[int, int, str, str]]] = [[] for _ in range(7)]
+        self.names = list(DAYS)
         self.span = (DAY_START, DAY_END)
         self.today: int | None = None
         self.minute = 0
@@ -486,11 +494,12 @@ class Glance(QWidget):
             for day in range(7)
         ]
         self.today, self.minute, self.ink, self.scale = today, minute, ink, scale
+        self.names = [week.day_name(day) for day in range(7)]
         self.setAccessibleName("The week at a glance")
         self.setAccessibleDescription(
             ". ".join(
-                f"{DAY_FULL[day]}: {length_label(sum(end - start for start, end, _, _ in blocks))} planned"
-                for day, blocks in enumerate(self.columns)
+                f"{week.day_full(day)}: {length_label(sum(end - start for start, end, _, _ in each))} planned"
+                for day, each in enumerate(self.columns)
             )
         )
         self.update()
@@ -534,7 +543,7 @@ class Glance(QWidget):
             )
             painter.setPen(QColor(self.ink.text if chosen else self.ink.muted))
             painter.drawText(
-                QRectF(left, self.height() - line, wide, line), Qt.AlignmentFlag.AlignCenter, DAYS[day]
+                QRectF(left, self.height() - line, wide, line), Qt.AlignmentFlag.AlignCenter, self.names[day]
             )
         painter.end()
 
@@ -718,7 +727,7 @@ class Legend(QWidget):
 
 def day_head_paint_geometry(
     font: QFont,
-    day: int,
+    short: str,
     number: str,
     today: bool,
     scale: float,
@@ -730,7 +739,7 @@ def day_head_paint_geometry(
     gap = 6.0 * scale
     chip = max(26.0 * scale, num.horizontalAdvance(number) + 10.0 * scale) if today else 0.0
     date_wide = chip or num.horizontalAdvance(number)
-    words_advance = words.horizontalAdvance(DAYS[day])
+    words_advance = words.horizontalAdvance(short)
     min_widget_width = words_advance + gap + date_wide + 6.0
     return words_advance, gap, date_wide, min_widget_width
 
@@ -744,17 +753,25 @@ class DayHead(QPushButton):
         self.day = day
         self.setObjectName(f"bentoDayName{day}")
         self.setProperty("day_target", day)
-        self.setAccessibleName(f"Show {DAY_FULL[day]}")
-        self.setToolTip(f"Open {DAY_FULL[day]}")
+        self.short, self.full = DAYS[day], DAY_FULL[day]
+        self.setAccessibleName(f"Show {self.full}")
+        self.setToolTip(f"Open {self.full}")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.number, self.today = "", False
         self.ink = Ink(*("#000000",) * 7)
         self.accent, self.accent_ink, self.scale = "#000000", "#ffffff", 1.0
 
-    def show_date(self, number: int, today: bool, ink: Ink, tokens: dict[str, str], scale: float) -> None:
+    def show_date(
+        self, when: date, today: bool, ink: Ink, tokens: dict[str, str], scale: float
+    ) -> None:
+        """The day's date, and its name from that date: the week may start on any day."""
+        number = when.day
         self.number, self.today, self.ink, self.scale = str(number), today, ink, scale
         self.accent, self.accent_ink = tokens["accent"], tokens["accent_ink"]
-        self.setText(f"{DAYS[self.day]} {number}")
+        self.short, self.full = DAYS[when.weekday()], DAY_FULL[when.weekday()]
+        self.setAccessibleName(f"Show {self.full}")
+        self.setToolTip(f"Open {self.full}")
+        self.setText(f"{self.short} {number}")
         self.updateGeometry()
         self.update()
 
@@ -763,7 +780,7 @@ class DayHead(QPushButton):
 
     def needed_width(self) -> float:
         num = self.number or (self.text().split()[-1] if self.text() else "")
-        return day_head_paint_geometry(self.font(), self.day, num, self.today, self.scale)[3]
+        return day_head_paint_geometry(self.font(), self.short, num, self.today, self.scale)[3]
 
     def minimumSizeHint(self) -> QSize:  # noqa: N802
         return QSize(ceil(self.needed_width()), round(36 * self.scale))
@@ -784,7 +801,7 @@ class DayHead(QPushButton):
         figure = at_scale(self.font(), "body", self.scale, WEIGHT_STRONG)
         words, number = QFontMetricsF(name), QFontMetricsF(figure)
         words_advance, gap, date_wide, _ = day_head_paint_geometry(
-            self.font(), self.day, self.number, self.today, self.scale
+            self.font(), self.short, self.number, self.today, self.scale
         )
         chip = (
             max(26 * self.scale, number.horizontalAdvance(self.number) + 10 * self.scale) if self.today else 0
@@ -793,7 +810,7 @@ class DayHead(QPushButton):
         said = next(
             (
                 words_
-                for words_ in (DAYS[self.day], "")
+                for words_ in (self.short, "")
                 if words.horizontalAdvance(words_) + gap + date_wide <= box.width() - 4
             ),
             "",
@@ -841,6 +858,9 @@ class TileDay:
     homework: int
     due: int
     today: bool
+    # The day's names, from its date: the week may start on any day.
+    name: str
+    full: str
 
 
 class DayTile(QPushButton):
@@ -850,13 +870,13 @@ class DayTile(QPushButton):
     def __init__(
         self, shown: TileDay, tokens: dict[str, str], radius: int, scale: float, board: Board
     ) -> None:
-        super().__init__(f"{DAYS[shown.day]} {shown.date}")
+        super().__init__(f"{shown.name} {shown.date}")
         self.shown, self.tokens, self.radius, self.scale, self.board = shown, tokens, radius, scale, board
         self.ink = card_ink(tokens)
         self.setObjectName(f"bentoDay{shown.day}")
         self.setProperty("day_target", shown.day)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setAccessibleName(f"Show {DAY_FULL[shown.day]} here")
+        self.setAccessibleName(f"Show {shown.full} here")
         self.setAccessibleDescription(self._said())
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.lift = 0.0
@@ -866,7 +886,7 @@ class DayTile(QPushButton):
 
     def _said(self) -> str:
         shown = self.shown
-        parts = [f"{DAY_FULL[shown.day]} {shown.date}"]
+        parts = [f"{shown.full} {shown.date}"]
         if shown.first is not None:
             parts.append(f"first {shown.first.title} at {clock_label(shown.first.start)}")
         parts.append(f"{length_label(shown.planned)} planned" if shown.planned else "Nothing planned")
@@ -959,7 +979,7 @@ class DayTile(QPushButton):
         baseline = head.top() + date_metrics.ascent()
         painter.setFont(fonts["name"])
         painter.setPen(QColor(ink.muted))
-        name = DAYS[shown.day]
+        name = shown.name
         painter.drawText(QPointF(head.left(), baseline), name)
         at = head.left() + QFontMetricsF(fonts["name"]).horizontalAdvance(name) + 5 * scale
         painter.setFont(fonts["date"])
@@ -1067,7 +1087,7 @@ class DayTile(QPushButton):
         painter.setFont(font)
         painter.setPen(QColor(self.ink.accent))
         room = foot.adjusted(icon + 8 * self.scale, 0, 0, 0)
-        words = f"Show {DAY_FULL[self.shown.day]} here"
+        words = f"Show {self.shown.full} here"
         painter.drawText(
             room,
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
@@ -1249,7 +1269,7 @@ class BentoCanvas(HoursCanvas):
         """Preserve equal-width weekday and quiet weekend groups while ensuring day headers fit."""
         if not widths:
             return widths
-        quiet = [day for day in WEEKEND if day in self.empty and day < len(widths)]
+        quiet = [day for day in range(len(widths)) if day in self.empty]
         active = [day for day in range(len(widths)) if day not in quiet]
         if not quiet or not active:
             share = total / len(widths)
@@ -1518,7 +1538,8 @@ class BentoView(LayoutView):
         """The hero's title, its line, and its icon on Day."""
         if day == scene.today:
             return "Today", self._day_line(scene, day), "sun"
-        return f"{DAY_FULL[day]} {scene.week.date_of(day).day}", self._day_line(scene, day), "calendar-days"
+        heading = f"{scene.week.day_full(day)} {scene.week.date_of(day).day}"
+        return heading, self._day_line(scene, day), "calendar-days"
 
     def _day_line(self, scene: Scene, day: int) -> str:
         """ "3 still to come · 1 homework" today, "9 h 45 min planned · 1 homework" on another day."""
@@ -1614,14 +1635,13 @@ class BentoView(LayoutView):
             ink = card_ink(scene.tokens)
             for target, head in canvas.day_buttons.items():
                 assert isinstance(head, DayHead)
-                head.show_date(
-                    scene.week.date_of(target).day, target == scene.today, ink, scene.tokens, scene.scale
-                )
+                when = scene.week.date_of(target)
+                head.show_date(when, target == scene.today, ink, scene.tokens, scene.scale)
             if empty != canvas.empty:
                 # Laid out for the new widths before the blocks arrive, so none slides for a change of width.
                 canvas.empty = empty
                 canvas.relayout()
-            canvas.set_week(scene.week.occurrences, scene.today, scene.minute)
+            canvas.set_week(scene.week.occurrences, scene.today, scene.minute, scene.week.week_start)
             assert isinstance(scroll, BentoHours)
             scroll.first = min((item.start for item in scene.week.occurrences if item.live), default=None)
             open_hours(scroll, scene.week.week_start, scene.week, scene.today, scene.minute)
@@ -1630,7 +1650,7 @@ class BentoView(LayoutView):
             if day != canvas.day:
                 canvas.day = day
                 canvas.relayout()
-            canvas.set_week(scene.week.on_day(day), scene.today, scene.minute)
+            canvas.set_week(scene.week.on_day(day), scene.today, scene.minute, scene.week.week_start)
             assert isinstance(scroll, BentoHours)
             scroll.first = min((item.start for item in scene.week.on_day(day) if item.live), default=None)
             open_hours(scroll, (scene.week.week_start, day), scene.week, scene.today, scene.minute, day)
@@ -1798,7 +1818,9 @@ class BentoView(LayoutView):
 
     def _due_row(self, scene: Scene, index: int, due: Due, metas: Metas) -> Row:
         px = scene.px
-        where = f"placed {DAYS[due.at[0]]} {clock_label(due.at[1])}" if due.at is not None else "Not placed"
+        where = "Not placed"
+        if due.at is not None:
+            where = f"placed {scene.week.day_name(due.at[0])} {clock_label(due.at[1])}"
         meta = f"{short_length(due.minutes)} · {where}"
         said = _say(meta, "bentoDueMeta", "muted")
         said.setMinimumWidth(1)
@@ -1851,7 +1873,12 @@ class BentoView(LayoutView):
         box.addLayout(figure)
         bars = LoadBars()
         bars.show_load(
-            by_day, scene.today, card_ink(scene.tokens), paint_of(scene.tokens, HOMEWORK)[1], scene.scale
+            by_day,
+            scene.today,
+            card_ink(scene.tokens),
+            paint_of(scene.tokens, HOMEWORK)[1],
+            scene.scale,
+            scene.week,
         )
         box.addWidget(bars, 1)
         return tile
@@ -2052,12 +2079,12 @@ class BentoView(LayoutView):
         if scene.surface == "day":
             return self._heading(scene, *self._day_heading(scene, day), hero_ink(scene.tokens))
         date_of = scene.week.date_of(day)
-        name = QPushButton(f"{DAY_FULL[day]} {date_of.day}")
+        name = QPushButton(f"{scene.week.day_full(day)} {date_of.day}")
         name.setObjectName("bentoHeroDay")
         name.setProperty("kind", "heading")
         name.setProperty("day_target", day)
         name.setCursor(Qt.CursorShape.PointingHandCursor)
-        name.setToolTip(f"Open {DAY_FULL[day]}")
+        name.setToolTip(f"Open {scene.week.day_full(day)}")
         name.clicked.connect(lambda _=False: self._open_day(day))
         canvas = self._scrolls["day"].canvas
         assert isinstance(canvas, BentoCanvas)
@@ -2101,6 +2128,8 @@ class BentoView(LayoutView):
             sum(1 for item in items if item.work),
             due_here(week, day),
             day == scene.today,
+            week.day_name(day),
+            week.day_full(day),
         )
 
     def _swap(self, day: int) -> None:

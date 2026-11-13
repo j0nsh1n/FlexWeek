@@ -679,6 +679,7 @@ class Head(QPushButton):
         self.setProperty("kind", "head")
         self.setProperty("front", front)
         self.day = -1
+        self.full = self.short = ""
         self._note = ""
         row = QHBoxLayout(self)
         row.setContentsMargins(4 if front else 6, 0, 4, 0)
@@ -698,9 +699,12 @@ class Head(QPushButton):
         row.addWidget(self.date, 0, Qt.AlignmentFlag.AlignVCenter)
         row.addWidget(self.chip, 0, Qt.AlignmentFlag.AlignVCenter)
 
-    def set_day(self, day: int, number: int, today: bool, note: str, opens: bool, dated: bool = True) -> None:
-        """`dated` False leaves the date to the card's corner, as Day's open card has it past the hours."""
+    def set_day(self, day: int, when: date, today: bool, note: str, opens: bool, dated: bool = True) -> None:
+        """`dated` False leaves the date to the card's corner, as Day's open card has it past the hours.
+        The name comes from the date: the week may start on any day."""
+        number = when.day
         self.day = day
+        self.full, self.short = DAY_FULL[when.weekday()], DAYS[when.weekday()]
         self._note = note
         self.note.setText(note)
         self.date.setText(str(number))
@@ -711,8 +715,8 @@ class Head(QPushButton):
         self.setProperty("day_target", day if opens else None)
         self.setCursor(Qt.CursorShape.PointingHandCursor if opens else Qt.CursorShape.ArrowCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus if opens else Qt.FocusPolicy.NoFocus)
-        self.setAccessibleName(f"Show {DAY_FULL[day]}" if opens else DAY_FULL[day])
-        self.setToolTip(f"Open {DAY_FULL[day]}" if opens else "")
+        self.setAccessibleName(f"Show {self.full}" if opens else self.full)
+        self.setToolTip(f"Open {self.full}" if opens else "")
         self.style().unpolish(self)
         self.style().polish(self)
         self._fit()
@@ -734,7 +738,7 @@ class Head(QPushButton):
             room -= tag.sizeHint().width() + 8
         metrics = self.title.fontMetrics()
         note = self.note.fontMetrics().horizontalAdvance(self._note) + 8 if self._note else 0
-        full, short = DAY_FULL[self.day], DAYS[self.day]
+        full, short = self.full, self.short
         for words, with_note in ((full, True), (full, False), (short, True), (short, False)):
             if metrics.horizontalAdvance(words) + (note if with_note else 0) <= room:
                 break
@@ -1095,9 +1099,9 @@ class Row(QWidget):
             return
         week, today = scene.week, scene.today
         for day, card in self._cards.items():
-            card.head.set_day(day, week.date_of(day).day, day == today, "", True)
-            card.hours.set_week(week.on_day(day), today, scene.minute)
-            card.hours.setAccessibleName(f"{DAY_FULL[day]}'s hours, beside the day in front")
+            card.head.set_day(day, week.date_of(day), day == today, "", True)
+            card.hours.set_week(week.on_day(day), today, scene.minute, week.week_start)
+            card.hours.setAccessibleName(f"{week.day_full(day)}'s hours, beside the day in front")
         scroll = self.hours
         assert scroll is not None
         front = self._front
@@ -1106,15 +1110,15 @@ class Row(QWidget):
         note = f"Today · {things}" if front == today else things
         number = week.date_of(front).day
         self._heads["day" if self._open else "week"].set_day(
-            front, number, front == today, note, not self._open, dated=not self._open
+            front, week.date_of(front), front == today, note, not self._open, dated=not self._open
         )
         self._date.setText(str(number))
         self._chip.setText(str(number))
         self._date.setVisible(self._open and front != today)
         self._chip.setVisible(self._open and front == today)
         scroll.canvas.relayout()
-        scroll.canvas.set_week(week.on_day(front), today, scene.minute)
-        scroll.canvas.setAccessibleName(f"{DAY_FULL[front]}, hour by hour")
+        scroll.canvas.set_week(week.on_day(front), today, scene.minute, week.week_start)
+        scroll.canvas.setAccessibleName(f"{week.day_full(front)}, hour by hour")
         self._arrows()
 
     # Moving the row
@@ -2053,7 +2057,7 @@ class ClayDeckView(LayoutView):
         box = QVBoxLayout(frame)
         box.setContentsMargins(px(24), 0, 0, 0)
         box.setSpacing(px(12))
-        title = f"{DAY_FULL[day]}, {clock_label(DAY_FROM)} to {clock_label(DAY_TO)}"
+        title = f"{week.day_full(day)}, {clock_label(DAY_FROM)} to {clock_label(DAY_TO)}"
         box.addWidget(label(title, "claySumTitle"))
         kinds = day_kinds(week, day)
         free = DAY_TO - DAY_FROM - _covered(week.on_day(day), DAY_FROM, DAY_TO)

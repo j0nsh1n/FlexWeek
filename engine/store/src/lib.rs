@@ -209,7 +209,10 @@ pub use rules::{
 pub use standing::{
     adopt_standing, replace_standing, standing_blocks, standing_rows, week_with_standing,
 };
-pub use views::{day_view, homework_list, month_view, restore_point_list, routine_list, week_view};
+pub use views::{
+    day_view, homework_list, month_view, month_view_from, restore_point_list, routine_list,
+    week_view,
+};
 pub use weeks::{WeekSave, list_account_weeks, read_week, save_week, week_blocks, week_starts};
 
 /// A write joins the caller's transaction. The first one begins it, as `Connection.execute` does,

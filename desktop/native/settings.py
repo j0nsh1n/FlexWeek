@@ -65,6 +65,7 @@ from desktop.native.controller import ROUTINE_STATUS
 from desktop.native.custom_look import UNNAMED, sanitize_saved, wear
 from desktop.native.devices import DevicesPanel, SyncHost
 from desktop.native.fields import (
+    WEEK_STARTS,
     ClockField,
     DayPicker,
     Stepper,
@@ -248,7 +249,11 @@ ABOUT_LOGO_PX = 56
 FADE_PX = 24
 HELP_SCREENS = (
     ("Day", "One day hour by hour, with homework that isn't placed yet beside it, ready to drag in."),
-    ("Week", "Monday to Sunday: drag a block to move it, or drag across empty time to add one."),
+    (
+        "Week",
+        "Seven days from the day your week starts on: drag a block to move it, or drag across empty time "
+        "to add one.",
+    ),
     ("Month", "Each date's blocks and the homework due that day; click a date to open it in Day."),
     ("My day", "What is on now and what comes next, to follow once your plan is made."),
 )
@@ -1096,8 +1101,12 @@ class SettingsPage(QWidget):
         self.clock = Segmented((("24-hour", True), ("12-hour", False)), "prefClock")
         self.clock.setCurrentIndex(0 if preferences.get("clock_24h", False) is True else 1)
         # Kept on this computer, not in the account's preferences (see week_starts_on).
-        self.week_start = Segmented((("Monday", "monday"), ("Sunday", "sunday")), "prefWeekStart")
-        self.week_start.setCurrentIndex(0 if week_starts_on() == "monday" else 1)
+        self.week_start = QComboBox()
+        self.week_start.setObjectName("prefWeekStart")
+        self.week_start.setAccessibleName("Week starts on")
+        for name, value in zip(DAY_FULL, WEEK_STARTS, strict=True):
+            self.week_start.addItem(name, value)
+        self.week_start.setCurrentIndex(self.week_start.findData(week_starts_on()))
         self.week_start.currentIndexChanged.connect(
             lambda _at: save_week_starts_on(self.week_start.currentData())
         )
@@ -1325,7 +1334,6 @@ class SettingsPage(QWidget):
         start_form.addRow("Open on", self.preferred_view)
         start_form.addRow("Clock", self.clock)
         start_form.addRow("Week starts on", self.week_start)
-        start_form.addRow(_note("The Week view always runs Monday to Sunday.", "prefWeekStartNote"))
         computer_card, computer_form = _card("Account, setup and updates")
         open_account = _page_button("Manage account…", "prefsAccount")
         open_account.setToolTip("Change your password, export or import, or delete the account.")

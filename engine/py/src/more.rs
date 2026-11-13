@@ -317,6 +317,31 @@ fn rewrite_session(block: &str, assignment: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
+fn planned_minutes_from_day(weeks: &str, from_day: &str) -> PyResult<String> {
+    guard(|| {
+        let weeks: Vec<(String, Vec<Value>)> = parse(weeks)?
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|item| {
+                let pair = item.as_array()?;
+                let start = pair.first()?.as_str()?.to_string();
+                let blocks = pair.get(1)?.as_array()?.clone();
+                Some((start, blocks))
+            })
+            .collect();
+        let planned = plan::planned_minutes_from_day(&weeks, from_day).map_err(crate::raise)?;
+        Ok(dump(&Value::Object(
+            planned
+                .into_iter()
+                .map(|(key, value)| (key, Value::from(value)))
+                .collect(),
+        )))
+    })
+}
+
+#[pyfunction]
 fn planned_minutes_by_id(weeks: &str, from_week: &str) -> PyResult<String> {
     guard(|| {
         let weeks: Vec<(String, Vec<Value>)> = parse(weeks)?
@@ -390,7 +415,13 @@ fn build_day(
 }
 
 #[pyfunction]
-fn build_month(month: &str, assignment_rows: &str, weeks: &str) -> PyResult<String> {
+#[pyo3(signature = (month, assignment_rows, weeks, first_weekday = 0))]
+fn build_month(
+    month: &str,
+    assignment_rows: &str,
+    weeks: &str,
+    first_weekday: u32,
+) -> PyResult<String> {
     guard(|| {
         let rows: Vec<(Value, i64)> = parse(assignment_rows)?
             .as_array()
@@ -415,7 +446,7 @@ fn build_month(month: &str, assignment_rows: &str, weeks: &str) -> PyResult<Stri
                 ))
             })
             .collect();
-        plan::build_month(month, &rows, &weeks)
+        plan::build_month_from(month, &rows, &weeks, first_weekday)
             .map(|value| dump(&value))
             .map_err(crate::raise)
     })
@@ -461,6 +492,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         legacy_session,
         rewrite_session,
         planned_minutes_by_id,
+        planned_minutes_from_day,
         migrate_blocks,
         build_day,
         build_month,

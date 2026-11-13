@@ -7,9 +7,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use flexweek_engine::model::due_sort_key;
-use flexweek_engine::plan::{build_day, build_month, planned_minutes_by_id};
+use flexweek_engine::plan::{build_day, build_month_from, planned_minutes_by_id};
 use flexweek_engine::time::{
-    is_calendar_date, is_month_label, is_week_start, monday_of, month_grid, parse_month,
+    is_calendar_date, is_month_label, is_week_start, monday_of, month_grid_from, parse_month,
 };
 use rusqlite::Connection;
 use serde_json::{Map, Value, json};
@@ -53,11 +53,23 @@ pub fn day_view(conn: &Connection, user_id: i64, date: &str) -> StoreResult<Valu
 }
 
 pub fn month_view(conn: &Connection, user_id: i64, month: &str) -> StoreResult<Value> {
+    month_view_from(conn, user_id, month, 0)
+}
+
+/// The month with its rows starting on `first_weekday` (0 Monday to 6 Sunday).
+pub fn month_view_from(
+    conn: &Connection,
+    user_id: i64,
+    month: &str,
+    first_weekday: u32,
+) -> StoreResult<Value> {
     if !is_month_label(month) {
         return Err(StoreError::Date(MONTH_RULE.into()));
     }
     let (first, last) = parse_month(month)?;
-    let (grid_start, grid_end) = month_grid(&first, &last)?;
+    let (grid_start, grid_end) = month_grid_from(&first, &last, first_weekday)?;
+    // Stored weeks are keyed by Monday: start from the Monday of the rows' first day.
+    let grid_start = monday_of(&grid_start)?;
     let mut saved: BTreeMap<String, String> =
         list_account_weeks(conn, user_id)?.into_iter().collect();
     let mut monday = grid_start;
@@ -78,7 +90,12 @@ pub fn month_view(conn: &Connection, user_id: i64, month: &str) -> StoreResult<V
         weeks.push((start, blocks));
     }
     let assignments = parsed_assignment_bodies(conn, user_id)?;
-    Ok(build_month(month, &assignments, &weeks)?)
+    Ok(build_month_from(
+        month,
+        &assignments,
+        &weeks,
+        first_weekday,
+    )?)
 }
 
 pub fn homework_list(

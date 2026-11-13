@@ -46,6 +46,149 @@ fn calendar_monday_of(iso_day: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
+fn calendar_week_start_on(iso_day: &str, first_weekday: u32) -> PyResult<String> {
+    guard(|| ::flexweek_engine::time::week_start_on(iso_day, first_weekday).map_err(crate::raise))
+}
+
+#[pyfunction]
+fn calendar_weekday_order(first_weekday: u32) -> PyResult<Vec<u32>> {
+    guard(|| {
+        ::flexweek_engine::time::weekday_order(first_weekday)
+            .map(Vec::from)
+            .map_err(crate::raise)
+    })
+}
+
+/// The two stored weeks a shown week covers and how far into the first it starts; None for a Monday.
+#[pyfunction]
+fn shown_week_parts(week_start: &str) -> PyResult<Option<(String, String, i64)>> {
+    guard(|| ::flexweek_engine::shown::shown_parts(week_start).map_err(crate::raise))
+}
+
+#[pyfunction]
+fn shown_week_stores(week_start: &str) -> PyResult<Vec<String>> {
+    guard(|| ::flexweek_engine::shown::stored_weeks(week_start).map_err(crate::raise))
+}
+
+#[pyfunction]
+fn shown_week_availability(
+    week_start: &str,
+    occupancy: Vec<u128>,
+    work: &str,
+) -> PyResult<(Vec<u128>, String)> {
+    let work = objects(work)?;
+    guard(|| {
+        let occupancy = ::flexweek_engine::shown::occupancy_on_shown_week(week_start, &occupancy)
+            .map_err(crate::raise)?;
+        let work = ::flexweek_engine::shown::windows_on_shown_week(week_start, &work)
+            .map_err(crate::raise)?;
+        Ok((occupancy, dump(&Value::Array(work))))
+    })
+}
+
+#[pyfunction]
+fn shown_week_windows(week_start: &str, windows: &str) -> PyResult<String> {
+    let windows = objects(windows)?;
+    guard(|| {
+        let moved = ::flexweek_engine::shown::windows_on_shown_week(week_start, &windows)
+            .map_err(crate::raise)?;
+        Ok(dump(&Value::Array(moved)))
+    })
+}
+
+#[pyfunction]
+fn shown_week_rules(week_start: &str, rules: &str) -> PyResult<String> {
+    let rules = parse(rules)?;
+    guard(|| {
+        let rules = ::flexweek_engine::shown::rules_on_shown_week(week_start, &rules)
+            .map_err(crate::raise)?;
+        Ok(dump(&rules))
+    })
+}
+
+#[pyfunction]
+fn shown_week_blocks_by_weekday(week_start: &str, blocks: &str) -> PyResult<String> {
+    let blocks = objects(blocks)?;
+    guard(|| {
+        ::flexweek_engine::shown::blocks_by_weekday(week_start, &blocks)
+            .map(array)
+            .map_err(crate::raise)
+    })
+}
+
+#[pyfunction]
+fn shown_week_routine(week_start: &str, routine: &str) -> PyResult<String> {
+    let routine = parse(routine)?;
+    guard(|| {
+        ::flexweek_engine::shown::routine_on_shown_week(week_start, &routine)
+            .map(|turned| dump(&turned))
+            .map_err(crate::raise)
+    })
+}
+
+#[pyfunction]
+fn shown_week_weekdays(week_start: &str, weekdays: Vec<i64>) -> PyResult<Vec<i64>> {
+    guard(|| {
+        ::flexweek_engine::shown::weekdays_on_shown_week(week_start, &weekdays)
+            .map_err(crate::raise)
+    })
+}
+
+#[pyfunction]
+fn shown_week_columns(week_start: &str, weekends: bool) -> PyResult<Vec<i64>> {
+    guard(|| ::flexweek_engine::shown::shown_columns(week_start, weekends).map_err(crate::raise))
+}
+
+#[pyfunction]
+fn shown_week_day_names(week_start: &str, full: bool) -> PyResult<Vec<String>> {
+    guard(|| {
+        ::flexweek_engine::shown::day_names(week_start, full)
+            .map(|names| names.into_iter().map(str::to_string).collect())
+            .map_err(crate::raise)
+    })
+}
+
+#[pyfunction]
+fn compose_shown_week(
+    week_start: &str,
+    first: &str,
+    second: &str,
+    homework: &str,
+) -> PyResult<String> {
+    let (first, second, homework) = (objects(first)?, objects(second)?, object_map(homework)?);
+    guard(|| {
+        ::flexweek_engine::shown::compose_shown_week_due(week_start, &first, &second, &homework)
+            .map(array)
+            .map_err(crate::raise)
+    })
+}
+
+#[pyfunction]
+fn split_shown_week(
+    week_start: &str,
+    shown: &str,
+    first: &str,
+    second: &str,
+) -> PyResult<(String, String)> {
+    let (shown, first, second) = (objects(shown)?, objects(first)?, objects(second)?);
+    guard(|| {
+        ::flexweek_engine::shown::split_shown_week(week_start, &shown, &first, &second)
+            .map(|(first, second)| (array(first), array(second)))
+            .map_err(crate::raise)
+    })
+}
+
+#[pyfunction]
+fn repeat_changes_from_shown_week(changes: &str, week_start: &str) -> PyResult<String> {
+    let changes = objects(changes)?;
+    guard(|| {
+        ::flexweek_engine::shown::repeat_changes_from_shown_week(&changes, week_start)
+            .map(array)
+            .map_err(crate::raise)
+    })
+}
+
+#[pyfunction]
 fn calendar_date_for_day(week_start: &str, day: &str) -> PyResult<String> {
     let day = parse(day)?;
     guard(|| grid::date_for_day(week_start, &day).map_err(crate::raise))
@@ -297,6 +440,11 @@ fn calendar_next_action(
 fn calendar_setup_block(block: &str) -> PyResult<bool> {
     let block = parse(block)?;
     guard(|| grid::is_setup_block(&block).map_err(crate::raise))
+}
+
+#[pyfunction]
+fn calendar_block_family(id: &str) -> PyResult<String> {
+    guard(|| Ok(::flexweek_engine::shown::family_id(id).to_string()))
 }
 
 #[pyfunction]
@@ -1645,28 +1793,53 @@ fn repeat_intents_between(before: &str, after: &str, from_date: &str) -> PyResul
 }
 
 #[pyfunction]
-fn repeat_apply_to_week(blocks: &str, standing: &str, intents: &str) -> PyResult<(String, String)> {
+fn repeat_apply_to_week(
+    blocks: &str,
+    standing: &str,
+    intents: &str,
+    week_start: &str,
+) -> PyResult<(String, String)> {
     let blocks = objects(blocks)?;
     let standing = objects(standing)?;
     let intents = intents_of(intents)?;
     guard(|| {
-        repeats::apply_to_week(&blocks, &standing, &intents)
-            .map(|(week, after)| (array(week), array(after)))
-            .map_err(pyo3::exceptions::PyValueError::new_err)
+        ::flexweek_engine::shown::apply_repeats_to_shown_week(
+            week_start, &blocks, &standing, &intents,
+        )
+        .map(|(week, after)| (array(week), array(after)))
+        .map_err(pyo3::exceptions::PyValueError::new_err)
     })
 }
 
 #[pyfunction]
-fn repeat_this_week_line(week: &str, standing: &str, clock_24h: bool) -> PyResult<Option<String>> {
+fn repeat_this_week_line(
+    week: &str,
+    standing: &str,
+    clock_24h: bool,
+    week_start: &str,
+) -> PyResult<Option<String>> {
     let week = objects(week)?;
     let standing = objects(standing)?;
-    guard(|| Ok(repeats::this_week_line(&week, &standing, clock_24h)))
+    guard(|| {
+        ::flexweek_engine::shown::this_week_line_on_shown_week(
+            week_start, &week, &standing, clock_24h,
+        )
+        .map_err(crate::raise)
+    })
 }
 
 #[pyfunction]
-fn repeat_one_day_note(block: &str, day: i64, school_hours: bool) -> PyResult<Option<String>> {
+fn repeat_one_day_note(
+    block: &str,
+    day: i64,
+    school_hours: bool,
+    week_start: &str,
+) -> PyResult<Option<String>> {
     let block = parse(block)?;
-    guard(|| repeats::one_day_note(&block, day, school_hours).map_err(crate::raise))
+    guard(|| {
+        ::flexweek_engine::shown::one_day_note_on_shown_week(week_start, &block, day, school_hours)
+            .map_err(crate::raise)
+    })
 }
 
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -1679,6 +1852,21 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         repeat_this_week_line,
         repeat_one_day_note,
         calendar_monday_of,
+        calendar_week_start_on,
+        calendar_weekday_order,
+        shown_week_parts,
+        shown_week_stores,
+        shown_week_columns,
+        shown_week_day_names,
+        shown_week_availability,
+        shown_week_windows,
+        shown_week_rules,
+        shown_week_blocks_by_weekday,
+        shown_week_routine,
+        shown_week_weekdays,
+        compose_shown_week,
+        split_shown_week,
+        repeat_changes_from_shown_week,
         calendar_date_for_day,
         calendar_sunday_due,
         calendar_local_stamp,
@@ -1701,6 +1889,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         calendar_agenda,
         calendar_next_action,
         calendar_setup_block,
+        calendar_block_family,
         calendar_span_problem,
         calendar_past_problem,
         calendar_span_clash,

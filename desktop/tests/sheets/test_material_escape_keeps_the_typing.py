@@ -181,3 +181,75 @@ def test_a_new_account_does_not_see_the_typing_of_the_last(qapp, shell, focused)
     shell.session.account_changed.emit(None)
     open_add(sheets, "homework")
     assert title_now(sheets) == ""
+
+
+def _pick_friday(sheets, kind: str) -> None:
+    """Friday 6 November is day 4 of the week from Monday 2 November; today, Thursday 5, is day 3."""
+    if kind == "block":
+        sheets.toggleDay(4)
+        sheets.toggleDay(3)
+    else:
+        sheets.setText("when", "fixed")
+        sheets.setNumber("whenDay", 4)
+
+
+def _picked(sheets, kind: str) -> list[tuple[int, str]]:
+    form = sheets.form
+    if kind == "block":
+        return [(day["value"], f"{day['label']} {day['date']}") for day in form["days"] if day["on"]]
+    return [(form["whenDay"], form["dayOptions"][form["whenDay"]]["label"])]
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_a_day_kept_by_escape_keeps_its_weekday_when_the_week_start_changes(
+    qapp, shell, focused, kind: str
+) -> None:
+    """Friday 6 is day 2 of the week from Wednesday 4 November, so the kept Friday is still Friday 6 after
+    Wednesday is picked, and the closed sheet still counts as typed in."""
+    from desktop.native import fields
+
+    sheets = focused
+    open_add(sheets, kind)
+    type_title(sheets, "Piano lesson")
+    _pick_friday(sheets, kind)
+    assert _picked(sheets, kind) == [(4, "Fri 6")]
+    press_escape(shell)
+    assert sheets.kind == ""
+    fields.save_week_starts_on("wednesday")
+    wait_until(qapp, lambda: shell.session.week_start == "2026-11-04" and not shell.session.busy)
+    settle(qapp, shell)
+    open_add(sheets, kind)
+    assert title_now(sheets) == "Piano lesson"
+    assert _picked(sheets, kind) == [(2, "Fri 6")]
+    sheets.closeSheet()  # what the Cancel button calls
+    assert sheets.ask.get("id") == "discard"
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_a_kept_sheet_reopened_in_the_new_week_closes_at_once_when_its_typing_is_undone(
+    qapp, shell, focused, kind: str
+) -> None:
+    """The kept sheet opened on today, Thursday 5 (day 3 of the week from Monday, day 1 of the week from
+    Wednesday). Back on Thursday with the title cleared, it shows what it opened with, so Cancel closes it
+    with no question."""
+    from desktop.native import fields
+
+    sheets = focused
+    open_add(sheets, kind)
+    type_title(sheets, "Piano lesson")
+    _pick_friday(sheets, kind)
+    press_escape(shell)
+    fields.save_week_starts_on("wednesday")
+    wait_until(qapp, lambda: shell.session.week_start == "2026-11-04" and not shell.session.busy)
+    settle(qapp, shell)
+    open_add(sheets, kind)
+    if kind == "block":
+        sheets.toggleDay(1)
+        sheets.toggleDay(2)
+    else:
+        sheets.setNumber("whenDay", 1)
+        sheets.setText("when", "plan")
+    type_title(sheets, "")
+    sheets.closeSheet()  # what the Cancel button calls
+    assert sheets.ask == {}
+    assert sheets.kind == ""

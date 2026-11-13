@@ -14,7 +14,15 @@ from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 from PySide6.QtWidgets import QAbstractButton
 
 from backend.slots import DAY_END_MIN, SLOT_MIN, hhmm_to_minutes
-from desktop.native.calendar import DAY_FULL, DAYS, FLEX_CATEGORIES, monday_of, sunday_due
+from desktop.native.calendar import (
+    DAY_FULL,
+    DAYS,
+    FLEX_CATEGORIES,
+    day_full_names,
+    day_names,
+    routine_on_week,
+    sunday_due,
+)
 from desktop.native.hours.geometry import drag_step, next_slot
 from desktop.native.material.sheet_block import BlockDraft
 from desktop.native.material.sheet_homework import HomeworkDraft
@@ -25,7 +33,7 @@ from desktop.native.reuse import (
     running_late_refusal,
 )
 from desktop.native.weekmodel import added_words, hhmm_text, length_label, range_label
-from desktop.native.widgets import LATE_WAIT, _late_move, _late_summary
+from desktop.native.widgets import LATE_WAIT, _late_move, _late_summary, same_weekday
 
 NOTHING_UNFINISHED = "None left"
 NOTICE_MS = 10000
@@ -88,6 +96,8 @@ class SheetsBridge(QObject):
         self._late_waiting: tuple[str, str] | None = None
         self._routine_id = ""
         self._routine_days: list[int] = []
+        # The open week the numbers in _routine_days count from.
+        self._routine_week = ""
         self._routine_error = ""
         self._paused = False
         self._held = False
@@ -201,6 +211,8 @@ class SheetsBridge(QObject):
         if category not in FLEX_CATEGORIES:
             category = "assignments"
         kept, self._kept_homework = self._kept_homework, None
+        if kept is not None:
+            kept.follow_week()
         self._homework = kept or HomeworkDraft(session, category=category)
         self._open("homework")
 
@@ -247,6 +259,8 @@ class SheetsBridge(QObject):
         day, start = self._new_event_values()
         category = session.armed_category
         kept, self._kept_block = self._kept_block, None
+        if kept is not None:
+            kept.follow_week()
         self._block = kept or BlockDraft(
             session, day=day, start=start, category=None if category in FLEX_CATEGORIES else category
         )
@@ -303,12 +317,13 @@ class SheetsBridge(QObject):
         """The next quarter hour still ahead today, or the usual 16:00 on another week."""
         session = self._session
         now = datetime.fromtimestamp(session.now_ms() / 1000)
-        if monday_of(now.date().isoformat()) != session.week_start:
+        today = session.today_column(now.date().isoformat())
+        if today is None:
             return 0, "16:00"
         ahead, slot = next_slot(now.hour * 60 + now.minute)
-        if now.weekday() + ahead > 6:
+        if today + ahead > 6:
             return 0, "16:00"
-        return now.weekday() + ahead, f"{slot // 60:02d}:{slot % 60:02d}"
+        return today + ahead, f"{slot // 60:02d}:{slot % 60:02d}"
 
     @Slot()
     def closeSheet(self) -> None:
@@ -594,7 +609,8 @@ class SheetsBridge(QObject):
         if every_week:
             self._say(f"Deleted {title} from this week and every week after.")
         elif scope == "occurrence" and day is not None:
-            self._say(f"Deleted {title} on {DAY_FULL[day]} from this week.", undo=True)
+            name = day_full_names(session.week_start)[day]
+            self._say(f"Deleted {title} on {name} from this week.", undo=True)
         else:
             self._say(f"Deleted {title} from this week.", undo=True)
 
@@ -603,7 +619,7 @@ class SheetsBridge(QObject):
     def _late_other_week(self) -> bool:
         session = self._session
         now = datetime.fromtimestamp(session.now_ms() / 1000)
-        return monday_of(now.date().isoformat()) != session.week_start
+        return session.today_column(now.date().isoformat()) is None
 
     @Slot()
     def openLate(self) -> None:
@@ -636,7 +652,7 @@ class SheetsBridge(QObject):
                 if block.get("kind") == "flexible"
                 and not block.get("completed")
                 and block.get("start")
-                and now.weekday() in (block.get("days") or [])
+                and session.today_column(now.date().isoformat()) in (block.get("days") or [])
                 and hhmm_to_minutes(block["start"])
                 <= now_minute
                 < hhmm_to_minutes(block["start"]) + int(block.get("duration_min") or 0)
@@ -670,7 +686,8 @@ class SheetsBridge(QObject):
             }
             for move in trace.get("moves") or []:
                 block = details.get(move["block_id"], {})
-                changes.append(_late_move(move, block, titles.get(move["block_id"], move["block_id"])))
+                title = titles.get(move["block_id"], move["block_id"])
+                changes.append(_late_move(move, block, title, session.week_start))
             changes.extend(
                 block["title"] + " no longer fits and will stay on the task list."
                 for block in trace.get("unplaced") or []
@@ -858,10 +875,10 @@ class SheetsBridge(QObject):
         monday = date.fromisoformat(session.week_start) if session.week_start else None
         rows: list[dict] = []
         for day in range(7):
-            stamp = DAY_FULL[day]
+            stamp = week.day_full(day)
             if monday:
                 moment = date.fromordinal(monday.toordinal() + day)
-                stamp = f"{DAY_FULL[day]} {moment.day} {moment.strftime('%b')}"
+                stamp = f"{week.day_full(day)} {moment.day} {moment.strftime('%b')}"
             rows.append({"type": "heading", "text": stamp})
             items = sorted(week.on_day(day), key=lambda item: (item.start, item.end, item.title))
             if not items:
@@ -877,7 +894,7 @@ class SheetsBridge(QObject):
                         "detail": detail,
                         "blockId": occurrence.block_id,
                         "day": day,
-                        "words": f"{DAY_FULL[day]}: {occurrence.title}, {detail}",
+                        "words": f"{week.day_full(day)}: {occurrence.title}, {detail}",
                     }
                 )
         return {"kind": "weekList", "heading": "Week as a list", "rows": rows}
@@ -897,7 +914,16 @@ class SheetsBridge(QObject):
 
     # Routines ---------------------------------------------------------------------------
 
+    def _keep_routine_days(self) -> None:
+        """Ticked days keep their weekdays when the open week now starts on another day."""
+        week = self._session.week_start or ""
+        if week != self._routine_week:
+            turned = (same_weekday(day, self._routine_week, week) for day in self._routine_days)
+            self._routine_days = sorted(turned)
+            self._routine_week = week
+
     def _routine_form(self) -> dict:
+        self._keep_routine_days()
         session = self._session
         routines = sorted(session.routines.values(), key=lambda item: str(item.get("name", "")).lower())
         monday = date.fromisoformat(session.week_start) if session.week_start else None
@@ -915,7 +941,7 @@ class SheetsBridge(QObject):
         days = [
             {
                 "value": index,
-                "label": DAYS[index],
+                "label": day_names(session.week_start)[index] if monday else DAYS[index],
                 "date": date.fromordinal(monday.toordinal() + index).day if monday else 0,
                 "on": index in self._routine_days,
             }
@@ -947,6 +973,9 @@ class SheetsBridge(QObject):
         if routine is None:
             return
         self._routine_id = routine_id
+        if self._session.week_start:
+            # A routine keeps weekdays (0 Monday); the day buttons are the open week's days.
+            routine = routine_on_week(self._session.week_start, routine)
         days: set[int] = set()
         for block in routine.get("blocks") or []:
             days.update(int(day) for day in block.get("days") or [])

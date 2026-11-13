@@ -481,3 +481,49 @@ def test_when_the_plan_after_allow_splitting_fails_the_next_plan_places_all_thre
     settled(qapp, window)
     assert sorted(block["duration_min"] for block in pieces()) == [60, 60, 60], pieces()
     assert session._split_whole == set()
+
+
+def test_allow_splitting_places_every_session_in_a_week_from_wednesday(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+) -> None:
+    """The first case in a week shown from Wednesday 4 to Tuesday 10 November 2026, on its first day at
+    16:30. Its weekday evenings are Wednesday 4, Thursday 5, Friday 6, Monday 9 and Tuesday 10, two hours
+    each, so the 180 minutes still fit this week in three sessions, every one with a time, across the
+    stored weeks of Monday 2 and Monday 9."""
+    from desktop.native import fields
+
+    CLOCK.set(datetime(2026, 11, 4, 16, 30))
+    fields.save_week_starts_on("wednesday")
+    window = open_light()
+    session = window.session
+    wait_until(qapp, lambda: session.week_start == "2026-11-04" and not session.busy)
+    assert session.save_availability([], None, [WEEKDAYS])
+    settled(qapp, window)
+    session.selected_day = session.today_iso()
+    session.add_homework(
+        {"id": "lab", "title": "Lab", "estimate_min": 180, "revision": 0, "due": "2026-11-13T23:59"}
+    )
+    session.save()
+    settled(qapp, window)
+    assert session.allow_splitting("lab")
+
+    def pieces() -> list[dict]:
+        return [block for block in session.blocks if block.get("assignment_id") == "lab"]
+
+    def split_complete() -> bool:
+        return (
+            not session.busy
+            and not session.dirty
+            and len(pieces()) == 3
+            and all(block.get("start") for block in pieces())
+        )
+
+    wait_until(
+        qapp,
+        split_complete,
+        timeout=20,
+        what=lambda: f"{session.message!r}, pieces {pieces()}, needs time {session.needs_time}",
+    )
+    settled(qapp, window)
+    assert sum(block.get("duration_min") or 0 for block in pieces()) == 180, pieces()

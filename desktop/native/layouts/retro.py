@@ -66,7 +66,6 @@ from backend.models import due_is_timed, due_sort_key
 from desktop.native import icons
 from desktop.native.calendar import (
     CATEGORIES,
-    DAY_FULL,
     DAYS,
     category_title,
     day_long,
@@ -420,7 +419,7 @@ def deadlines(week: WeekModel, today: int | None) -> list[DueGroup]:
     is not placed yet."""
     groups: dict[str, list[tuple[tuple, Deadline]]] = {}
     for item in week.open_work():
-        when = f"placed {DAYS[item.day]} {clock_label(item.start)}"
+        when = f"placed {week.day_name(item.day)} {clock_label(item.start)}"
         line = Deadline(item.title, short_length(item.minutes), when, item.block_id)
         groups.setdefault(item.due or "", []).append(((0, item.day, item.start), line))
     for index, waiting in enumerate(week.waiting):
@@ -810,11 +809,14 @@ class DayHead(Button98):
             self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.number = ""
         self.day = 0
+        self.short = ""
         self._fits_cache: tuple[tuple[object, ...], bool] | None = None
 
-    def show_day(self, day: int, number: int, today: bool) -> None:
-        self.day, self.number = day, str(number)
-        self.setText(f"{DAYS[day]} {number}")
+    def show_day(self, day: int, when: date, today: bool) -> None:
+        """Day `day` of the week on view, named from its date: the week may start on any day."""
+        number = when.day
+        self.day, self.number, self.short = day, str(number), DAYS[when.weekday()]
+        self.setText(f"{self.short} {number}")
         self.sunk = self.strong = today
         self.fill = self.scheme.light if today else ""
         self.setProperty("chosen", "true" if today else "false")
@@ -854,7 +856,7 @@ class DayHead(Button98):
 
     def parts(self) -> list[tuple[str, bool]]:
         row = self.parentWidget().findChildren(DayHead) if self.parentWidget() is not None else [self]
-        return self._whole() if all(DayHead._row_fits(row)) else [(DAYS[self.day], self.strong)]
+        return self._whole() if all(DayHead._row_fits(row)) else [(self.short, self.strong)]
 
 
 class Cap(QWidget):
@@ -1889,17 +1891,17 @@ class RetroView(LayoutView):
             canvas._lay_out = lambda area: [LinearTrack(day, area.adjusted(0, PAD, 0, -PAD))]
             canvas.relayout()
             items = scene.week.on_day(day)
-            scroll.header.findChild(DayHead, "retroDayHead").show_day(day, scene.week.date_of(day).day, True)
+            scroll.header.findChild(DayHead, "retroDayHead").show_day(day, scene.week.date_of(day), True)
         else:
             items = scene.week.occurrences
             for target, head in canvas.day_buttons.items():
-                head.show_day(target, scene.week.date_of(target).day, target == scene.today)
+                head.show_day(target, scene.week.date_of(target), target == scene.today)
             empty = empty_days(scene.week)
             if empty != canvas.empty:
                 # Laid out for the new widths before the blocks arrive, so none slides for a change of width.
                 canvas.empty = empty
                 canvas.relayout()
-        canvas.set_week(items, scene.today, scene.minute)
+        canvas.set_week(items, scene.today, scene.minute, scene.week.week_start)
         open_hours(
             scroll,
             scene.week.week_start if day is None else (scene.week.week_start, day),
@@ -1955,7 +1957,7 @@ class RetroView(LayoutView):
         shown = scene.week.date_of(day)
         items = scene.week.on_day(day)
         today = day == scene.today
-        name = label(DAY_FULL[day], "retroWebDay")
+        name = label(scene.week.day_full(day), "retroWebDay")
         name.setProperty("role", "display")
         box.addWidget(name)
         box.addSpacing(8)

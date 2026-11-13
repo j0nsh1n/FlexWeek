@@ -63,4 +63,4 @@ def test_the_weekend_never_gets_narrower_than_a_block_can_be_read_in() -> None:
     assert column_widths(420.0, both) == [60.0] * 7
     assert column_widths(2100.0, both)[5] == pytest.approx(180.0)
     assert column_widths(1400.0, frozenset({6}))[5] == column_widths(1400.0, frozenset({6}))[0]
-    assert column_widths(1400.0, frozenset({2, 3})) == [200.0] * 7, "only a weekend day gets narrower"
+    assert column_widths(1400.0, frozenset()) == [200.0] * 7, "with no empty weekend day all are equal"

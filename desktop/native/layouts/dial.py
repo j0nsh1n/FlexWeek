@@ -38,7 +38,6 @@ from PySide6.QtWidgets import (
 )
 
 from desktop.native.calendar import DAY_FULL, DAYS, day_long
-from desktop.native.fields import week_starts_on
 from desktop.native.fonts import at_scale, time_font
 from desktop.native.hours.canvas import fit_lines
 from desktop.native.hours.geometry import DialTrack, Span
@@ -214,6 +213,7 @@ class DialFace(QWidget):
     def __init__(self, day: int, mini: bool, hand: Hand | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.day, self.mini, self.hand = day, mini, hand
+        self.short, self.full = DAYS[day], DAY_FULL[day]
         self.takes_blocks = hand is not None and not mini
         self._blocks: tuple[Occurrence, ...] = ()
         self._over = 0
@@ -238,11 +238,15 @@ class DialFace(QWidget):
         tokens: dict[str, str],
         now: int | None = None,
         scale: float = 1.0,
+        names: tuple[str, str] | None = None,
     ) -> None:
-        """`over` is the minute before which the day is over, drawn paler; `now` draws the hand."""
+        """`over` is the minute before which the day is over, drawn paler; `now` draws the hand. `names`
+        are the day's short and whole names, from its date: the week may start on any day."""
         self._blocks, self._over, self._tokens, self._now, self._scale = blocks, over, tokens, now, scale
+        if names is not None:
+            self.short, self.full = names
         said = ", ".join(f"{item.title} {clock_label(item.start)}" for item in blocks) or "Nothing planned"
-        self.setAccessibleName(f"{DAY_FULL[self.day]}: {said}")
+        self.setAccessibleName(f"{self.full}: {said}")
         # The time and its note are painted, so they are said here too.
         time = clock_label(now) if now is not None else ""
         self.setAccessibleDescription(". ".join(part for part in (time, self._note()) if part))
@@ -540,7 +544,7 @@ class DialFace(QWidget):
         big.setPointSizeF(min(full, inner * TIME_SHARE * 72 / max(self.logicalDpiY(), 1)))
         big.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 98)
         shrink = big.pointSizeF() / full
-        words = clock_label(self._now) if self._now is not None else DAYS[self.day]
+        words = clock_label(self._now) if self._now is not None else self.short
         metrics = QFontMetricsF(big)
         lines = [(words, big, "bg_ink", metrics.capHeight())]
         width, height = metrics.horizontalAdvance(words), metrics.capHeight() + metrics.descent()
@@ -800,7 +804,9 @@ class DayDialView(LayoutView):
         empty(self._root)
         self._face = DialFace(day, False, self.hand)
         now = scene.minute if is_today else None
-        self._face.set_day(scene.week.on_day(day), over_until(scene, day), scene.tokens, now, scene.scale)
+        week = scene.week
+        names = (week.day_name(day), week.day_full(day))
+        self._face.set_day(week.on_day(day), over_until(scene, day), scene.tokens, now, scene.scale, names)
         was, self._hand_was = self._hand_was, (day, now) if now is not None else None
         if was is not None and was[0] == day and now is not None:
             self._face.ease_hand(was[1])
@@ -818,7 +824,7 @@ class DayDialView(LayoutView):
                 else "Up next" if found.queue else "Nothing left today"
             )
         else:
-            kicker = DAY_FULL[day]
+            kicker = scene.week.day_full(day)
         left_column.addWidget(label(kicker, "dialKicker"))
         if scene.today is None:
             left_column.addWidget(label(NOT_THIS_WEEK, "dialWeekNotice"))
@@ -1000,7 +1006,7 @@ class DayDialView(LayoutView):
             left = len(scene.week.day_queue(day, scene.minute).queue)
             title = f"{plural(left, 'thing')} left today" if left else "Nothing left today"
         else:
-            title = DAY_FULL[day]
+            title = scene.week.day_full(day)
         header.addWidget(label(title, "dialListLabel"))
         header.addStretch()
         column.addLayout(header)
@@ -1132,9 +1138,9 @@ class DayDialView(LayoutView):
         strip = QHBoxLayout(card)
         strip.setContentsMargins(px(SPACING[3]), px(SPACING[1]), px(SPACING[3]), px(SPACING[1]))
         strip.setSpacing(px(SPACING[1]))
-        order = (6, 0, 1, 2, 3, 4, 5) if week_starts_on() == "sunday" else tuple(range(7))
-        for index in order:
-            name = DAYS[index]
+        # Plain columns from the week's first day, each named from its date.
+        for index in range(7):
+            name = scene.week.day_name(index)
             cell = QVBoxLayout()
             cell.setSpacing(px(SPACING[0]))
             mini = DialFace(index, True)
@@ -1145,6 +1151,7 @@ class DayDialView(LayoutView):
                 scene.tokens,
                 scene.minute if index == scene.today else None,
                 scene.scale,
+                (name, scene.week.day_full(index)),
             )
             mini.day_clicked.connect(self._show_day)
             cell.addWidget(mini, 0, Qt.AlignmentFlag.AlignHCenter)

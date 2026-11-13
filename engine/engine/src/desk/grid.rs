@@ -1,7 +1,6 @@
 //! Week-grid edits and Day/Month helpers from `desktop/native/calendar.py`, on the values as the
 //! Python code held them, so a wrong kind of value raises what Python raised.
 
-use chrono::Datelike;
 use serde_json::{Map, Value, json};
 
 use crate::desk::calendar::{FIRST_MONTH, LAST_MONTH, is_series_checked};
@@ -492,7 +491,8 @@ pub fn first_plannable_day(week_start: &str, today_iso: &str) -> EngineResult<i6
     if monday <= today {
         let last = crate::stored::add_days(monday, 6)?;
         if today <= last {
-            return Ok(i64::from(today.weekday().num_days_from_monday()));
+            // Counted from the week's first day, which need not be a Monday.
+            return Ok((today - monday).num_days());
         }
     }
     Ok(0)
@@ -760,8 +760,10 @@ pub fn next_action_for(
     Ok(json!({"kind": "add"}))
 }
 
+/// School or a Setup activity, or a piece of one split off at a week's seam.
 pub fn is_setup_block(block: &Value) -> EngineResult<bool> {
     let id = py_str(&or_default(get(block, "id")?, json!("")));
+    let id = crate::shown::family_id(&id);
     Ok(id == crate::desk::calendar::SETUP_SCHOOL_ID
         || id == "sport"
         || id.starts_with(crate::desk::calendar::SETUP_ACTIVITY_PREFIX))

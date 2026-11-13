@@ -8,15 +8,20 @@ SectionPage {
     readonly property var panel: Ui.settings
     readonly property bool any: !!(st.showWeekendFree || st.showBuffer || st.showUrgent || st.showSplit || st.showCutoff || st.showDragStep)
 
-    Text {
-        objectName: "planningEmpty"
-        visible: !page.any
-        width: parent.width
-        text: "No planning settings are available in this build yet."
-        color: Ui.theme.onSurfaceVariant || "#44474e"
-        font.family: M3Font.family
-        font.pixelSize: M3Font.px(14)
-        wrapMode: Text.WordWrap
+    Group {
+        // Kept on this computer, so it is always offered.
+        GroupHeader { title: "Your week" }
+        PickRow {
+            key: "weekStart"
+            title: "Week starts on"
+            subtitle: "Week, Month and the date pickers start on this day."
+            choices: [{ label: "Monday", value: "monday" }, { label: "Tuesday", value: "tuesday" },
+                { label: "Wednesday", value: "wednesday" }, { label: "Thursday", value: "thursday" },
+                { label: "Friday", value: "friday" }, { label: "Saturday", value: "saturday" },
+                { label: "Sunday", value: "sunday" }]
+            current: page.st.weekStart || "monday"
+            onChosen: (value) => page.panel.setWeekStart(value)
+        }
     }
     Group {
         visible: page.any

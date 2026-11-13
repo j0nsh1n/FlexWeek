@@ -4,6 +4,7 @@ SectionPage 1.0 SectionPage.qml
 Group 1.0 Group.qml
 ToggleRow 1.0 ToggleRow.qml
 ChoiceRow 1.0 ChoiceRow.qml
+PickRow 1.0 PickRow.qml
 LinkRow 1.0 LinkRow.qml
 FieldRow 1.0 FieldRow.qml
 PresetRow 1.0 PresetRow.qml

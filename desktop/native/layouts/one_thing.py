@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from desktop.native.calendar import DAYS
 from desktop.native.fonts import at_scale, numeral
 from desktop.native.hours.canvas import BlockPainter, Drawn, HoursCanvas
 from desktop.native.hours.geometry import Axis, LinearTrack, Span
@@ -447,7 +446,8 @@ class OneThingView(LayoutView):
                 self._bar_caption(scene),
             )
             selected = self._selected(scene)
-            self._daybar.set_week(scene.week.on_day(selected), scene.today, scene.minute)
+            week = scene.week
+            self._daybar.set_week(week.on_day(selected), scene.today, scene.minute, week.week_start)
             self._daybar.block_clicked.connect(self.block_activated.emit)
             self._daybar.day_clicked.connect(self._show_day)
             navigation = QWidget()
@@ -471,7 +471,7 @@ class OneThingView(LayoutView):
         if day is None:
             return "Not this week"
         if day != scene.today:
-            return DAYS[day]
+            return scene.week.day_name(day)
         if item is None:
             return "Nothing left today"
         return self._words(scene, item, item == current, current is not None)[0]
@@ -505,7 +505,7 @@ class OneThingView(LayoutView):
     def _bar_caption(self, scene: Scene) -> str:
         """What the day bar is: the day's hours, and that nothing is planned on it when nothing is."""
         day = self.shown_day(scene)
-        name = "Today" if day is None or day == scene.today else DAYS[day]
+        name = "Today" if day is None or day == scene.today else scene.week.day_name(day)
         words = f"{name}, {clock_label(DAY_START)} to {clock_label(DAY_END)}."
         if day is not None and not scene.week.on_day(day):
             words += " Nothing planned."
@@ -517,7 +517,9 @@ class OneThingView(LayoutView):
         line = QHBoxLayout(row)
         line.setContentsMargins(0, 0, 0, 0)
         line.setSpacing(0)
-        for index, name in enumerate(DAYS):
+        # Named from the dates: the week may start on any day.
+        for index in range(7):
+            name = scene.week.day_name(index)
             choice = QPushButton(name[0])
             choice.setObjectName(f"oneDay{index}")
             choice.setAccessibleName(name)

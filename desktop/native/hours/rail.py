@@ -55,7 +55,8 @@ from shiboken6 import isValid
 
 from backend import clock as wall_clock
 from desktop.native import icons
-from desktop.native.calendar import DAYS, day_short, month_title
+from desktop.native.calendar import DAYS, day_short, month_rows, month_title, weekday_order
+from desktop.native.fields import week_start_day, week_start_notice
 from desktop.native.fonts import at_scale, time_font, weighted
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.hand import Hand
@@ -216,8 +217,9 @@ class Colours:
 
 
 class MiniMonth(QWidget):
-    """A month of dates from Monday, painted: the week on screen banded, today in the accent, a dot
-    under each date homework is due, the dates of other months dimmed. A click on a date asks for it."""
+    """A month of dates from the computer's first day of the week, painted: the week on screen banded,
+    today in the accent, a dot under each date homework is due, the dates of other months dimmed. A
+    click on a date asks for it."""
 
     date_chosen = Signal(str)
 
@@ -231,12 +233,20 @@ class MiniMonth(QWidget):
         self.week_start = ""
         self.today = wall_clock.today()
         self.due: frozenset[str] = frozenset()
+        week_start_notice().changed.connect(self._follow_week_start)
 
     def dates(self) -> list[date]:
-        first = self.month - timedelta(days=self.month.weekday())
         last_day = (self.month.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
-        end = last_day + timedelta(days=6 - last_day.weekday())
+        first, end = month_rows(self.month, last_day, week_start_day())
         return [first + timedelta(days=at) for at in range((end - first).days + 1)]
+
+    def letters(self) -> list[str]:
+        """The weekday letters over the columns, from the computer's first day of the week."""
+        return [LETTERS[day] for day in weekday_order(week_start_day())]
+
+    def _follow_week_start(self, _value: str) -> None:
+        self.updateGeometry()
+        self.update()
 
     def row_height(self) -> float:
         return max(28.0, QFontMetricsF(self._font()).height() + 12)
@@ -269,7 +279,7 @@ class MiniMonth(QWidget):
         painter.setFont(self._font())
         painter.setPen(QColor(colours.muted))
         wide = self.width() / 7
-        for column, letter in enumerate(LETTERS):
+        for column, letter in enumerate(self.letters()):
             painter.drawText(QRectF(column * wide, 0, wide, tall), Qt.AlignmentFlag.AlignCenter, letter)
         days = self.dates()
         shown_week = date.fromisoformat(self.week_start) if self.week_start else None
@@ -754,11 +764,13 @@ class FocusRows(QStyledItemDelegate):
         painter.restore()
 
 
-def focus_when(item: dict, today: int | None) -> str:
-    """When a focus row's homework is: "Today 19:00", "Mon 20:00"."""
+def focus_when(item: dict, today: int | None, week: WeekModel | None = None) -> str:
+    """When a focus row's homework is: "Today 19:00", "Mon 20:00", the day named from its date in
+    `week`, which may start on any day."""
     day = item.get("day")
     start = hhmm_text(item["start"]) if item.get("start") else ""
-    name = "Today" if day is not None and day == today else (DAYS[day] if isinstance(day, int) else "")
+    named = (week.day_name(day) if week is not None else DAYS[day]) if isinstance(day, int) else ""
+    name = "Today" if day is not None and day == today else named
     return f"{name} {start}".strip()
 
 
@@ -1080,7 +1092,7 @@ class Rail(QFrame):
         listed = tuple(
             (item.get("id"), item.get("day"), item.get("start"), item.get("title")) for item in ordered
         )
-        shown = (time_format(), today, listed)
+        shown = (time_format(), today, listed, self._week.week_start if self._week is not None else "")
         if shown == self._tasks:
             return
         self._tasks = shown
@@ -1091,7 +1103,7 @@ class Rail(QFrame):
             row.setData(
                 Qt.ItemDataRole.UserRole + 1, item.get("day") is not None and item.get("day") == today
             )
-            row.setData(Qt.ItemDataRole.ToolTipRole, focus_when(item, today))
+            row.setData(Qt.ItemDataRole.ToolTipRole, focus_when(item, today, self._week))
             self.tasks.addItem(row)
         self._fit_tasks()
         self._show()

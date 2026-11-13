@@ -26,7 +26,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from desktop.native import icons
-from desktop.native.calendar import CATEGORIES, DAY_FULL, DAYS
+from desktop.native.calendar import CATEGORIES, DAY_FULL, DAYS, day_names, week_columns
 from desktop.native.fonts import at_scale, time_font
 from desktop.native.hours.canvas import BlockPainter, HoursCanvas
 from desktop.native.hours.geometry import FIRST, LAST, Axis, LinearTrack
@@ -57,7 +57,6 @@ AGENDA_PX = 288
 # An empty Saturday or Sunday takes this share of a full day's width, and never less than EMPTY_MIN_PX
 # (or the equal share where that is already smaller): a block dropped there still reads, with its
 # icon, the first word of its name and its times.
-WEEKEND = (5, 6)
 EMPTY_SHARE = 0.6
 EMPTY_MIN_PX = 96
 # The other designs' week columns are narrower than this, so their empty weekend days keep less.
@@ -173,15 +172,17 @@ class DayName(QLabel):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setText(self.name)
 
-    def show_day(self, name: str, number: str, homework: int, today: bool) -> None:
+    def show_day(self, name: str, number: str, homework: int, today: bool, full: str = "") -> None:
+        """`full` is the day's whole name, from its date: the week may start on any day."""
         self.name, self.date, self.homework = name, number, homework
+        full = full or DAY_FULL[self._day]
         self.setText(f"{name} {number}".strip())
         self.setProperty("today", today)
-        words = f"{DAY_FULL[self._day]} {number}" + (
+        words = f"{full} {number}" + (
             f", {length_label(homework)} of homework" if homework else ""
         )
         self.setAccessibleName(words)
-        self.setToolTip(f"Open {DAY_FULL[self._day]}")
+        self.setToolTip(f"Open {full}")
         self.setMinimumWidth(self.homework_min_width())
         self.update()
 
@@ -320,11 +321,11 @@ class DayName(QLabel):
 def column_widths(
     total: float, empty: frozenset[int], days: tuple[int, ...] = tuple(range(7)), floor: int = EMPTY_MIN_PX
 ) -> list[float]:
-    """The widths of `days` over `total` pixels: equal, except that an empty weekend day is narrower
-    (see EMPTY_SHARE, and `floor`, the least it keeps) and the days with something in them share what
-    that leaves, equally. The other designs' narrower columns pass a smaller `floor`."""
+    """The widths of `days` over `total` pixels: equal, except that an empty weekend day (`empty`, from
+    `empty_days`) is narrower (see EMPTY_SHARE, and `floor`, the least it keeps) and the other days
+    share what that leaves, equally. The other designs' narrower columns pass a smaller `floor`."""
     share = total / len(days)
-    quiet = [day for day in WEEKEND if day in empty and day in days]
+    quiet = [day for day in days if day in empty]
     if not quiet or len(quiet) == len(days):
         return [share] * len(days)
     narrow = min(share, max(floor, share * EMPTY_SHARE))
@@ -333,7 +334,9 @@ def column_widths(
 
 
 def empty_days(week: WeekModel) -> frozenset[int]:
-    return frozenset(day for day in range(7) if not week.on_day(day))
+    """The Saturday and Sunday of the week on screen, wherever they fall, that have nothing on them."""
+    weekend = set(range(7)) - set(week_columns(week.week_start, False))
+    return frozenset(day for day in weekend if not week.on_day(day))
 
 
 class ClassicWeek(QFrame):
@@ -412,7 +415,8 @@ class ClassicWeek(QFrame):
     def _name(self, day: int) -> str:
         if not self.week_start:
             return DAYS[day]
-        return f"{DAYS[day]} {(date.fromisoformat(self.week_start) + timedelta(days=day)).day}"
+        number = (date.fromisoformat(self.week_start) + timedelta(days=day)).day
+        return f"{day_names(self.week_start)[day]} {number}"
 
     def set_look(self, look: dict | None, palette: dict) -> None:
         self.hours.set_painter(ClassicPainter(palette, look))
@@ -429,9 +433,12 @@ class ClassicWeek(QFrame):
             # Laid out for the new widths before the blocks arrive, so none slides for a change of width.
             self._empty = empty
             self.hours.relayout()
-        self.hours.set_week(week.occurrences, today, now_min)
+        self.hours.set_week(week.occurrences, today, now_min, week.week_start)
         for day, label in enumerate(self._name_labels):
-            label.show_day(DAYS[day], str(week.date_of(day).day), homework_minutes(week, day), day == today)
+            label.show_day(
+                week.day_name(day), str(week.date_of(day).day), homework_minutes(week, day), day == today,
+                week.day_full(day),
+            )
         self._shown = (week, today, now_min)
         open_hours(self.scroll, week.week_start, week, today, now_min)
 
@@ -822,7 +829,7 @@ class ClassicDay(QFrame):
         self.day = day
         if changed_day:
             self.hours.relayout()
-        self.hours.set_week(week.on_day(day), today, now_min)
+        self.hours.set_week(week.on_day(day), today, now_min, week.week_start)
         self.agenda.set_day(week, day, today, now_min)
         self.name.show_day("Hours", "", homework_minutes(week, day), day == today)
         self.name.setAccessibleName("Hours")
