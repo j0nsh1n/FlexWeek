@@ -349,6 +349,8 @@ class NativeSession(QObject):
         self._split_whole: set[str] = set()
         self._split_planned: set[str] = set()
         self._replan_after_save = False
+        # Replan all asked during a save that ended by reading another week: run once that week is in place.
+        self._replan_after_load = False
         self._spread_after_save: tuple[str, int, str] | None = None
         self._allow_split_pending: str | None = None
         self._redo: list[dict] = []
@@ -543,6 +545,8 @@ class NativeSession(QObject):
         self._pending_step = None
         self._plan_step_id = None
         self._replan_after_save = False
+        self._plan_after_load = set()
+        self._replan_after_load = False
         self._traveling = None
         self._travel_step = None
         self.clipboard = None
@@ -1131,14 +1135,13 @@ class NativeSession(QObject):
             self._fetch_restore_points()
             self._fetch_recovery_status()
             self._prefetch_open_week_month()
-            planned, self._plan_after_load = self._plan_after_load, set()
-            if planned:
-                QTimer.singleShot(0, lambda: self.solve(only=planned, join=True))
+            self._plan_waiting_for_load()
 
         def failed(error: ApiError) -> None:
             if not self._alive(ticket):
                 return
             self._plan_after_load = set()
+            self._replan_after_load = False
             if self.shown_week_of(self.selected_day) != self.week_start:
                 self._ensure_selected_day()
                 self._refresh_view()
@@ -1146,6 +1149,14 @@ class NativeSession(QObject):
             self.week_changed.emit()
 
         self.client.request("GET", self._assignments_url(loaded), None, ok, failed)
+
+    def _plan_waiting_for_load(self) -> None:
+        planned, self._plan_after_load = self._plan_after_load, set()
+        if planned:
+            QTimer.singleShot(0, lambda: self.solve(only=planned, join=True))
+        replan, self._replan_after_load = self._replan_after_load, False
+        if replan:
+            QTimer.singleShot(0, lambda: self.solve(everything=True))
 
     def reload(self) -> None:
         self.pending_save = None
@@ -2318,13 +2329,18 @@ class NativeSession(QObject):
                 and current is None
                 and self._wrote_open_weeks(written)
             )
-            if planned_next and reread:
+            # A new first day of the week opens its week next; a plan started before that read lands
+            # would take its place and leave the old week on screen.
+            following = destination is None and self._refollow_week
+            if planned_next and (reread or following):
                 self._plan_after_load = planned_next
             elif planned_next:
                 # Plan it for me as I add it: the new homework's time, joined to the add in one step.
                 QTimer.singleShot(0, lambda: self.solve(only=planned_next, join=True))
             replan_next, self._replan_after_save = self._replan_after_save, False
-            if replan_next:
+            if replan_next and following:
+                self._replan_after_load = True
+            elif replan_next:
                 QTimer.singleShot(0, lambda: self.solve(everything=True))
             if current is not None:
                 self._committed_blocks = deepcopy(self.blocks)
@@ -2359,6 +2375,8 @@ class NativeSession(QObject):
                 # Stored weeks the open week shows changed through their Mondays: show them again.
                 self.load_week(self.week_start, discard=True, said=self.message)
                 return
+            # No read followed after all: what waited for one runs now.
+            self._plan_waiting_for_load()
             self._refresh_view()
             self.week_changed.emit()
             self._fetch_weeks()
