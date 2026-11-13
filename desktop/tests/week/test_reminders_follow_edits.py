@@ -64,3 +64,31 @@ def test_editing_the_week_stops_reminders_for_a_deleted_session(
     session.check_alerts()
     settled(qapp, session)
     assert notices == []
+
+
+def test_deleting_homework_in_a_week_from_wednesday_stops_its_reminder(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """A week shown from Wednesday reads today's reminders from the server's stored week and keeps them.
+    Deleting the homework must read them again, or the deleted session still rings."""
+    from desktop.native import fields
+    from desktop.tests.waiting import wait_until
+
+    session = window.session
+    fields.save_week_starts_on("wednesday")
+    wait_until(qapp, lambda: session.week_start == "2026-11-04" and not session.busy)
+    placed, shortly_before = planned_session(qapp, session)
+    notices: list = []
+    session.alerts.connect(lambda items: notices.extend(items))
+    CLOCK.set(shortly_before - timedelta(minutes=30))
+    today_monday = (shortly_before.date() - timedelta(days=shortly_before.weekday())).isoformat()
+    session.check_alerts()
+    wait_until(qapp, lambda: session._reminder_week == today_monday)
+    assert notices == []
+    session.delete_homework(placed["assignment_id"])
+    settled(qapp, session)
+    CLOCK.set(shortly_before)
+    session.check_alerts()
+    settled(qapp, session)
+    session.check_alerts()
+    assert notices == []

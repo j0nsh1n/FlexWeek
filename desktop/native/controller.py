@@ -1863,6 +1863,9 @@ class NativeSession(QObject):
             self.dirty_assignments.discard(assignment_id)
             self._committed_blocks = deepcopy(self.blocks)
             self._committed_assignments = deepcopy(self.assignments)
+            if self.first_weekday:
+                # Reminders read today's stored week from the server, as after a save: read it again.
+                self._reminder_week = None
             for week_start, parked in self._drafts.items():
                 if week_start in revisions:
                     kept = [b for b in parked["blocks"] if b.get("assignment_id") != assignment_id]
