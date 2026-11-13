@@ -1562,7 +1562,6 @@ class SetupPage(QWidget):
         starts_line.addWidget(self.week_start)
         starts_line.addStretch(1)
         box.addWidget(starts)
-        box.addWidget(_label("The Week view always runs Monday to Sunday.", "setupWeekStartHint"))
         self.clock_choice.buttonToggled.connect(lambda _button, _on: self._follow_clock())
         self._section(box, "School")
         self.school_days = DayPicker([0, 1, 2, 3, 4], "setupDay")

@@ -249,7 +249,11 @@ ABOUT_LOGO_PX = 56
 FADE_PX = 24
 HELP_SCREENS = (
     ("Day", "One day hour by hour, with homework that isn't placed yet beside it, ready to drag in."),
-    ("Week", "Monday to Sunday: drag a block to move it, or drag across empty time to add one."),
+    (
+        "Week",
+        "Seven days from the day your week starts on: drag a block to move it, or drag across empty time "
+        "to add one.",
+    ),
     ("Month", "Each date's blocks and the homework due that day; click a date to open it in Day."),
     ("My day", "What is on now and what comes next, to follow once your plan is made."),
 )
@@ -1330,7 +1334,6 @@ class SettingsPage(QWidget):
         start_form.addRow("Open on", self.preferred_view)
         start_form.addRow("Clock", self.clock)
         start_form.addRow("Week starts on", self.week_start)
-        start_form.addRow(_note("The Week view always runs Monday to Sunday.", "prefWeekStartNote"))
         computer_card, computer_form = _card("Account, setup and updates")
         open_account = _page_button("Manage account…", "prefsAccount")
         open_account.setToolTip("Change your password, export or import, or delete the account.")

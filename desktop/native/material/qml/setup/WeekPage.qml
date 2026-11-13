@@ -48,7 +48,6 @@ Column {
         value: bridge ? bridge.weekStart : "monday"
         onPicked: (value) => page.bridge.setWeekStart(value)
     }
-    HelpText { theme: page.theme; width: parent.width; text: "The Week view always runs Monday to Sunday." }
 
     SectionTitle { theme: page.theme; text: "School" }
     DayChips {

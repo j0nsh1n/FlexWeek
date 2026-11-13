@@ -19,7 +19,9 @@ from desktop.tests.account.support import (
     create,
     material_launches,  # noqa: F401
     named,
+    root_of,
     through_recovery,
+    visuals,
 )
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
@@ -42,6 +44,10 @@ def test_the_week_page_lists_every_day_and_keeps_a_wednesday_start(
     assert choice.property("accessName") == "Week starts on"
     assert choice.property("value") == "monday"
     assert [row["full"] for row in bridge.dayNames] == SEVEN
+    # Week starts on the chosen day too, so the page no longer says it runs Monday to Sunday.
+    said = [str(item.property("text") or "") for item in visuals(root_of(window))]
+    assert "Week starts on" in " ".join(said)
+    assert not [text for text in said if "Monday to Sunday" in text], said
     bridge.setWeekStart("wednesday")
     wait_until(qapp, lambda: choice.property("value") == "wednesday")
     # The day buttons follow the pick at once, and each still means its own weekday.

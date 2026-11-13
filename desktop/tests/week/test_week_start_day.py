@@ -155,10 +155,9 @@ def test_the_setup_week_question_is_saved_when_kept_and_not_when_skipped(
         assert [choice.itemText(at) for at in range(choice.count())] == SEVEN
         assert choice.currentText() == "Monday"
         assert choice.accessibleName() == "Week starts on"
-        assert (
-            setup.findChild(QLabel, "setupWeekStartHint").text()
-            == "The Week view always runs Monday to Sunday."
-        )
+        # Week starts on the chosen day too, so the page no longer says it runs Monday to Sunday.
+        words = [label.text() for label in setup.findChildren(QLabel)]
+        assert not [text for text in words if "Monday to Sunday" in text], words
         setup._show(WEEK)
         choice.setCurrentIndex(SEVEN.index("Wednesday"))
         setup._leave(HOMEWORK, keep=False)
@@ -206,10 +205,8 @@ def test_the_settings_control_saves_the_week_start_on_this_computer(
         choice = page.findChild(QComboBox, "prefWeekStart")
         assert [choice.itemText(at) for at in range(choice.count())] == SEVEN
         assert choice.currentText() == "Monday"
-        assert (
-            page.findChild(QLabel, "prefWeekStartNote").text()
-            == "The Week view always runs Monday to Sunday."
-        )
+        words = [label.text() for label in page.findChildren(QLabel)]
+        assert not [text for text in words if "Monday to Sunday" in text], words
         choice.setCurrentIndex(SEVEN.index("Sunday"))
         assert fields.week_starts_on() == "sunday"
         assert fields.first_day_of_week() == Qt.DayOfWeek.Sunday
