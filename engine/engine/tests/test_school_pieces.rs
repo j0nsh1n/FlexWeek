@@ -217,3 +217,28 @@ fn a_day_added_to_school_in_two_pieces_is_school_once_that_day() {
     .unwrap();
     assert_eq!(school_days(&blocks), vec![2, 3, 4, 5], "{blocks:?}");
 }
+
+#[test]
+fn a_standing_school_built_from_pieces_keeps_every_day_at_the_time_most_of_them_have() {
+    // School on Monday and Tuesday at 08:30 and on Wednesday to Friday at 10:00 stands on all five
+    // days at 10:00, the time of the piece that holds the most days.
+    let weeks = vec![("2026-11-09".to_string(), week())];
+    let (from, standing) = derive_standing(&weeks).unwrap().unwrap();
+    assert_eq!(from, "2026-11-09");
+    assert_eq!(
+        standing,
+        vec![
+            json!({"id": "school", "title": "School", "kind": "locked", "category": "class",
+                    "start": "10:00", "duration_min": 405, "days": [0, 1, 2, 3, 4]})
+        ]
+    );
+    // Pieces holding as many days each: School's own id gives the time.
+    let mut two = kept();
+    two["days"] = json!([0, 1]);
+    let mut other = piece();
+    other["days"] = json!([3, 4]);
+    let weeks = vec![("2026-11-09".to_string(), vec![other, two])];
+    let (_, standing) = derive_standing(&weeks).unwrap().unwrap();
+    assert_eq!(standing[0]["start"], "08:30");
+    assert_eq!(standing[0]["days"], json!([0, 1, 3, 4]));
+}

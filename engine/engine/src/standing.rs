@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use crate::EngineResult;
 use crate::desk::grid::is_setup_block;
+use crate::repeats::days_of;
 use crate::shown::family_id;
 
 fn id_of(block: &Value) -> Option<&str> {
@@ -52,15 +53,41 @@ pub fn derive_standing(
             continue;
         }
         let mut setup: Vec<Value> = Vec::new();
+        // How many days the piece each standing block took its fields from held.
+        let mut taken_from: Vec<usize> = Vec::new();
         for block in blocks {
-            let Some(family) = id_of(block).map(family_id) else {
+            let Some(id) = id_of(block) else {
                 continue;
             };
-            // School stands once, by its own id, however many pieces the week holds.
-            if is_setup_block(block)? && !setup.iter().any(|held| id_of(held) == Some(family)) {
-                let mut body = standing_body(block);
-                body["id"] = Value::from(family);
-                setup.push(body);
+            if !is_setup_block(block)? {
+                continue;
+            }
+            // School stands once, by its own id, however many pieces the week holds: on all their
+            // days, as the piece holding the most of them has it (School's own id on a tie).
+            let family = family_id(id);
+            let days = days_of(block);
+            let mut body = standing_body(block);
+            body["id"] = Value::from(family);
+            match setup.iter().position(|held| id_of(held) == Some(family)) {
+                None => {
+                    taken_from.push(days.len());
+                    setup.push(body);
+                }
+                Some(at) => {
+                    let mut all = days_of(&setup[at]);
+                    for day in &days {
+                        if !all.contains(day) {
+                            all.push(*day);
+                        }
+                    }
+                    all.sort_unstable();
+                    if days.len() > taken_from[at] || (days.len() == taken_from[at] && id == family)
+                    {
+                        taken_from[at] = days.len();
+                        setup[at] = body;
+                    }
+                    setup[at]["days"] = Value::from(all);
+                }
             }
         }
         if !setup.is_empty() {

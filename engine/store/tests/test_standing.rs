@@ -324,3 +324,40 @@ fn a_restore_point_holds_the_standing_rows_it_was_made_with() {
     assert_eq!(body["standing"], rows);
     assert_eq!(rows.as_array().map(Vec::len), Some(3));
 }
+
+#[test]
+fn the_upgrade_keeps_every_day_of_a_school_split_in_two_pieces() {
+    // An older database whose Setup week (5 October 2026) holds School twice: `school` on Monday and
+    // Tuesday at 08:30, and a piece on Wednesday to Friday at 10:00. After the upgrade a later week
+    // without its own School shows School on all five days, at the time most of the days had.
+    let (path, user_id) = as_left_by_0_18("standing-upgrade-pieces");
+    let conn = open_connection(&path).unwrap();
+    let mut kept = school();
+    kept["days"] = json!([0, 1]);
+    let mut piece = school();
+    piece["id"] = json!("school@20261007");
+    piece["days"] = json!([2, 3, 4]);
+    piece["start"] = json!("10:00");
+    conn.execute(
+        "UPDATE weeks SET blocks = ?1 WHERE user_id = ?2 AND week_start = ?3",
+        params![text(&json!([kept, piece, soccer()])), user_id, SETUP_WEEK],
+    )
+    .unwrap();
+    drop(conn);
+    initialize(&path, NEXT_WEEK).unwrap();
+    let conn = open_connection(&path).unwrap();
+    let later = seen(&conn, user_id, NEXT_WEEK);
+    let school_rows: Vec<&Value> = later
+        .iter()
+        .filter(|block| block["title"] == "School")
+        .collect();
+    assert_eq!(school_rows.len(), 1, "{later:?}");
+    assert_eq!(school_rows[0]["id"], json!("school"));
+    assert_eq!(school_rows[0]["days"], json!([0, 1, 2, 3, 4]));
+    assert_eq!(school_rows[0]["start"], json!("10:00"));
+    // Setup's own week keeps both pieces as they were.
+    assert_eq!(
+        ids(&seen(&conn, user_id, SETUP_WEEK)),
+        vec!["school", "school@20261007", "activity-1"]
+    );
+}
