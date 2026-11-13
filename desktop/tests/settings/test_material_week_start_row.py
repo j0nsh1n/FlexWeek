@@ -37,8 +37,11 @@ def test_planning_starts_with_the_week_start_day_out_of_all_seven(
     assert len(rows) == 1
     words = [str(item.property("text")) for item in _texts(rows[0])]
     assert "Week starts on" in words
-    assert "Week, Month and the date pickers start on this day." in words
-    assert "Your week" in [str(item.property("text")) for item in _texts(root)]
+    # The Week view still runs Monday to Sunday, so the line does not name it.
+    assert "Month and the date pickers start on this day." in words
+    headers = [item for item in _named(root, "header_your week") if item.property("visible")]
+    assert len(headers) == 1
+    assert "Your week" in [str(item.property("text")) for item in _texts(headers[0])]
     choice = _named(root, "weekStart")[0]
     assert [row["label"] for row in choice.property("options").toVariant()] == SEVEN
     assert choice.property("value") == "monday"

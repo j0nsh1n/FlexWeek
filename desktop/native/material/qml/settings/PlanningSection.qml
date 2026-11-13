@@ -10,21 +10,17 @@ SectionPage {
 
     Group {
         // Kept on this computer, so it is always offered.
-        Column {
-            width: parent.width
-            GroupHeader { title: "Your week" }
-            PickRow {
-                key: "weekStart"
-                width: parent.width
-                title: "Week starts on"
-                subtitle: "Week, Month and the date pickers start on this day."
-                choices: [{ label: "Monday", value: "monday" }, { label: "Tuesday", value: "tuesday" },
-                    { label: "Wednesday", value: "wednesday" }, { label: "Thursday", value: "thursday" },
-                    { label: "Friday", value: "friday" }, { label: "Saturday", value: "saturday" },
-                    { label: "Sunday", value: "sunday" }]
-                current: page.st.weekStart || "monday"
-                onChosen: (value) => page.panel.setWeekStart(value)
-            }
+        GroupHeader { title: "Your week" }
+        PickRow {
+            key: "weekStart"
+            title: "Week starts on"
+            subtitle: "Month and the date pickers start on this day."
+            choices: [{ label: "Monday", value: "monday" }, { label: "Tuesday", value: "tuesday" },
+                { label: "Wednesday", value: "wednesday" }, { label: "Thursday", value: "thursday" },
+                { label: "Friday", value: "friday" }, { label: "Saturday", value: "saturday" },
+                { label: "Sunday", value: "sunday" }]
+            current: page.st.weekStart || "monday"
+            onChosen: (value) => page.panel.setWeekStart(value)
         }
     }
     Group {
