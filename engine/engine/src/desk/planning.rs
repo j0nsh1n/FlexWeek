@@ -1,7 +1,6 @@
 //! Planning helpers from `desktop/native/reuse.py`, on the values as the Python code held them, so a
 //! wrong kind of value raises what Python raised.
 
-use chrono::Datelike;
 use serde_json::{Value, json};
 
 use crate::desk::calendar::DAY_FULL;
@@ -44,7 +43,8 @@ pub fn session_days(week_start: &str, due: &Value) -> EngineResult<Vec<i64>> {
     if due_day > last {
         return Ok((0..=6).collect());
     }
-    Ok((0..=i64::from(due_day.weekday().num_days_from_monday())).collect())
+    // Days counted from the week's first day, which need not be a Monday.
+    Ok((0..=(due_day - monday).num_days()).collect())
 }
 
 pub fn is_planned(block: &Value) -> EngineResult<bool> {

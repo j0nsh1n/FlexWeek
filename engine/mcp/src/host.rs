@@ -17,6 +17,32 @@ pub struct Launch {
     pub session_file: PathBuf,
     pub now_flag: Option<String>,
     pub read_only: bool,
+    /// The day this computer's weeks start on, 0 Monday to 6 Sunday.
+    pub first_weekday: u32,
+}
+
+/// The days a week can start on, as the desktop writes them in `week-start.json`.
+pub const WEEK_STARTS: [&str; 7] = [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+];
+
+/// The day the desktop keeps for this computer in the data folder; Monday when there is none or it
+/// cannot be read, as the desktop reads it.
+fn kept_week_start(data_dir: &Path) -> u32 {
+    std::fs::read_to_string(data_dir.join("week-start.json"))
+        .ok()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .and_then(|value| {
+            let name = value.get("week_starts_on")?.as_str()?.to_string();
+            WEEK_STARTS.iter().position(|day| *day == name)
+        })
+        .map_or(0, |at| at as u32)
 }
 
 #[derive(Clone)]
@@ -31,6 +57,7 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Launch, String> {
     let mut database: Option<String> = None;
     let mut session_file: Option<String> = None;
     let mut now_flag: Option<String> = None;
+    let mut week_starts_on: Option<String> = None;
     let mut read_only = false;
     let mut args = args;
     while let Some(flag) = args.next() {
@@ -39,6 +66,9 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Launch, String> {
             "--database" => database = Some(take_value(&mut args, "--database")?),
             "--session-file" => session_file = Some(take_value(&mut args, "--session-file")?),
             "--now" => now_flag = Some(take_value(&mut args, "--now")?),
+            "--week-starts-on" => {
+                week_starts_on = Some(take_value(&mut args, "--week-starts-on")?);
+            }
             "--read-only" => read_only = true,
             "--help" | "-h" => return Err("help".into()),
             _ => return Err("unknown argument".into()),
@@ -53,12 +83,21 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Launch, String> {
         Some(path) => PathBuf::from(path),
         None => default_session_file(&data_dir, database.as_path(), database_was_set),
     };
+    let first_weekday = match week_starts_on {
+        Some(name) => WEEK_STARTS
+            .iter()
+            .position(|day| *day == name)
+            .ok_or("--week-starts-on must be a day of the week, such as monday")?
+            as u32,
+        None => kept_week_start(&data_dir),
+    };
     Ok(Launch {
         data_dir,
         database,
         session_file,
         now_flag,
         read_only,
+        first_weekday,
     })
 }
 

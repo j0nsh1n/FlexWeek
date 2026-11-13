@@ -43,7 +43,9 @@ __all__ = [
     "monday_of",
     "month_grid",
     "parse_month",
+    "availability_on_shown_week",
     "repeat_changes_from_shown_week",
+    "rules_on_shown_week",
     "shown_week_parts",
     "split_shown_week",
 ]
@@ -60,9 +62,14 @@ def shown_week_parts(week_start: str) -> tuple[str, str, int] | None:
     return cast("tuple[str, str, int] | None", flexweek_engine.shown_week_parts(week_start))
 
 
-def compose_shown_week(week_start: str, first: list[dict], second: list[dict]) -> list[dict]:
+def compose_shown_week(
+    week_start: str, first: list[dict], second: list[dict], homework: dict[str, dict]
+) -> list[dict]:
+    """`homework` is the account's homework by id, whose due dates give a waiting session its days."""
     shown: list[dict] = json.loads(
-        flexweek_engine.compose_shown_week(week_start, json.dumps(first), json.dumps(second))
+        flexweek_engine.compose_shown_week(
+            week_start, json.dumps(first), json.dumps(second), json.dumps(homework)
+        )
     )
     return shown
 
@@ -74,6 +81,17 @@ def split_shown_week(
         week_start, json.dumps(shown), json.dumps(first), json.dumps(second)
     )
     return json.loads(first_text), json.loads(second_text)
+
+
+def availability_on_shown_week(week_start: str, occupancy: list[int], work: str) -> tuple[list[int], str]:
+    """Occupancy and work windows kept by weekday, as the days of the week on screen from `week_start`."""
+    moved, windows = flexweek_engine.shown_week_availability(week_start, occupancy, work)
+    return list(moved), str(windows)
+
+
+def rules_on_shown_week(week_start: str, rules: dict | None) -> dict | None:
+    """Planner settings that find Saturday and Sunday in the week on screen from `week_start`."""
+    return cast("dict | None", json.loads(flexweek_engine.shown_week_rules(week_start, json.dumps(rules))))
 
 
 def repeat_changes_from_shown_week(changes: list[dict], week_start: str) -> list[dict]:

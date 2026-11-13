@@ -477,3 +477,55 @@ fn reads_do_not_change_the_schedule() {
         "a read must not change a restore point"
     );
 }
+
+#[test]
+fn the_helper_follows_the_first_day_of_the_week_it_is_told() {
+    let world = fixture("week-start");
+    let mut server = Server::spawn(&[
+        "--data-dir",
+        &world.data_arg,
+        "--database",
+        &world.database_arg,
+        "--now",
+        NOW_ISO,
+        "--week-starts-on",
+        "wednesday",
+    ]);
+    server.handshake();
+    let me = body_of(&server.call("whoami", json!({}), 2));
+    assert_eq!(me["week_starts_on"], "wednesday");
+    // Wednesday 21 to Tuesday 27 October: Monday 19's week gives its Wednesday to Sunday (days 0
+    // to 4) and Monday 26's its Monday and Tuesday (days 5 and 6).
+    let week = body_of(&server.call("get_week", json!({"week_start": "2026-10-21"}), 3));
+    assert_eq!(week["week_start"], "2026-10-21");
+    assert_eq!(week["revision"], json!([4, 0]));
+    let blocks = list(&week, "blocks").expect("blocks");
+    let days_of = |id: &str| {
+        by_id(blocks, id)
+            .and_then(|block| block.get("days"))
+            .cloned()
+    };
+    assert_eq!(days_of("s1"), Some(json!([0])));
+    // Standing School on Mondays falls on Monday 26, day 5.
+    assert_eq!(days_of("school"), Some(json!([5])));
+    let refused = server.call("get_week", json!({"week_start": "2026-10-19"}), 4);
+    assert!(tool_error_text(&refused).is_some(), "{refused}");
+    // October's rows start on Wednesday 30 September.
+    let month = body_of(&server.call("get_month", json!({"month": "2026-10"}), 5));
+    let first = list(&month, "days").and_then(|days| days.first()).cloned();
+    assert_eq!(
+        first.and_then(|day| day.get("date").cloned()),
+        Some(json!("2026-09-30"))
+    );
+    drop(server);
+    // Without the flag it reads the day the desktop keeps in the data folder.
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "sunday"}"#,
+    )
+    .expect("week start file");
+    let mut server = boot(&world);
+    server.handshake();
+    let me = body_of(&server.call("whoami", json!({}), 2));
+    assert_eq!(me["week_starts_on"], "sunday");
+}

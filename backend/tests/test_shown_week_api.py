@@ -222,3 +222,26 @@ def test_homework_counts_minutes_planned_from_the_first_day_of_the_shown_week(al
     assert listed.json()["assignments"][0]["planned_min"] == 60
     monday = alice.get(f"/api/assignments?week_start={FIRST}&include_completed=true").json()
     assert monday["assignments"][0]["planned_min"] == 90
+
+
+def test_plan_on_a_wednesday_week_uses_each_days_own_hours_and_keeps_its_weekend_free(
+    alice: TestClient,
+) -> None:
+    prefs = alice.get("/api/preferences").json()
+    hours = [{"days": [5], "start": "10:00", "end": "12:00"}, {"days": [0], "start": "16:00", "end": "18:00"}]
+    put = alice.put("/api/preferences", json={**prefs, "work_windows": hours, "buffer_min": 0}, headers=WRITE)
+    assert put.status_code == 200, put.text
+    # From Wednesday 11 November, day 3 is Saturday 14 and day 5 Monday 16.
+    math = {"id": "math", "title": "math", "kind": "flexible", "duration_min": 60, "days": [3, 5],
+            "priority": 3, "energy": "high"}  # fmt: skip
+
+    def placed() -> tuple[int, str]:
+        solved = alice.post("/api/solve", json={"blocks": [math], "week_start": WED}, headers=WRITE)
+        assert solved.status_code == 200, solved.text
+        found = next(item for item in solved.json()["placed"] if item["id"] == "math")
+        return found["days"][0], found["start"]
+
+    assert placed() == (3, "10:00")
+    prefs = alice.get("/api/preferences").json()
+    alice.put("/api/preferences", json={**prefs, "weekend_homework_free": True}, headers=WRITE)
+    assert placed() == (5, "16:00")

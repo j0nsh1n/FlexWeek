@@ -448,3 +448,141 @@ fn a_shown_week_names_its_days_from_their_dates() {
     assert_eq!(day_names("2026-11-08", true).unwrap()[0], "Sunday");
     assert_eq!(day_names(FIRST, false).unwrap()[0], "Mon");
 }
+
+#[test]
+fn weekday_availability_lands_on_the_days_of_the_shown_week() {
+    use flexweek_engine::shown::{
+        occupancy_on_shown_week, weekdays_on_shown_week, windows_on_shown_week,
+    };
+    // From Wednesday 11 November, Monday 16 is day 5 and Saturday 14 day 3.
+    assert_eq!(weekdays_on_shown_week(WED, &[0, 5]).unwrap(), vec![3, 5]);
+    let occupancy: Vec<u128> = (0..7).map(|weekday| 1u128 << weekday).collect();
+    let shown = occupancy_on_shown_week(WED, &occupancy).unwrap();
+    assert_eq!(shown[0], 1 << 2);
+    assert_eq!(shown[3], 1 << 5);
+    assert_eq!(shown[5], 1);
+    let windows = vec![json!({"days": [0, 4], "start": "16:00", "end": "18:00"})];
+    let moved = windows_on_shown_week(WED, &windows).unwrap();
+    assert_eq!(moved[0]["days"], json!([2, 5]));
+    assert_eq!(moved[0]["start"], "16:00");
+    // A week from Monday keeps the weekdays as they are.
+    assert_eq!(
+        occupancy_on_shown_week(FIRST, &occupancy).unwrap(),
+        occupancy
+    );
+    assert_eq!(windows_on_shown_week(FIRST, &windows).unwrap(), windows);
+    // From Sunday 8 November, Sunday (6) is day 0 and Saturday (5) day 6.
+    assert_eq!(
+        weekdays_on_shown_week("2026-11-08", &[5, 6]).unwrap(),
+        vec![0, 6]
+    );
+}
+
+#[test]
+fn homework_in_a_week_from_wednesday_may_go_on_its_days_through_the_due_date() {
+    use flexweek_engine::desk::grid::first_plannable_day;
+    use flexweek_engine::desk::planning::session_days;
+    // Due Tuesday 17 November, the last day of the week from Wednesday 11: every day of it.
+    assert_eq!(
+        session_days(WED, &json!("2026-11-17T23:59")).unwrap(),
+        vec![0, 1, 2, 3, 4, 5, 6]
+    );
+    // Due Monday 16: Wednesday 11 to Monday 16, days 0 to 5.
+    assert_eq!(
+        session_days(WED, &json!("2026-11-16T18:00")).unwrap(),
+        vec![0, 1, 2, 3, 4, 5]
+    );
+    // Thursday 12 is day 1 of that week, not its weekday 3.
+    assert_eq!(first_plannable_day(WED, "2026-11-12").unwrap(), 1);
+    assert_eq!(first_plannable_day(WED, "2026-11-17").unwrap(), 6);
+    assert_eq!(first_plannable_day(FIRST, "2026-11-12").unwrap(), 3);
+}
+
+#[test]
+fn a_waiting_session_shows_every_day_through_its_due_date_and_is_stored_once() {
+    use flexweek_engine::shown::compose_shown_week_due;
+    // Due Tuesday 17 November. Waiting in Monday 9's week on Wednesday 11 to Sunday 15, the days it
+    // was given there; Monday 16 and Tuesday 17 come back from the due date.
+    let dues = json!({"hw1": {"id": "hw1", "due": "2026-11-17T23:59"}});
+    let dues = dues.as_object().unwrap();
+    let first = vec![waiting("s1", &[2, 3, 4, 5, 6])];
+    let shown = compose_shown_week_due(WED, &first, &[], dues).unwrap();
+    assert_eq!(
+        days(by_id(&shown, "s1").unwrap()),
+        vec![0, 1, 2, 3, 4, 5, 6]
+    );
+    // Saved back as it shows, it stays in its own week on its own days, once.
+    let (stored_first, stored_second) = split_shown_week(WED, &shown, &first, &[]).unwrap();
+    assert_eq!(stored_first, first);
+    assert!(stored_second.is_empty());
+    // A session given one day keeps that day; one due before the seam keeps its days.
+    let one_day = vec![waiting("s1", &[6])];
+    let shown = compose_shown_week_due(WED, &one_day, &[], dues).unwrap();
+    assert_eq!(days(by_id(&shown, "s1").unwrap()), vec![4]);
+    let early = json!({"hw1": {"due": "2026-11-13T23:59"}});
+    let shown = compose_shown_week_due(WED, &first, &[], early.as_object().unwrap()).unwrap();
+    assert_eq!(days(by_id(&shown, "s1").unwrap()), vec![0, 1, 2, 3, 4]);
+    // From Monday nothing changes.
+    let monday = vec![waiting("s1", &[0, 1, 2, 3, 4, 5, 6])];
+    assert_eq!(
+        compose_shown_week_due(FIRST, &monday, &[], dues).unwrap(),
+        monday
+    );
+}
+
+#[test]
+fn school_changed_from_a_wednesday_week_lands_on_its_own_weekdays() {
+    use flexweek_engine::repeats::parse_intents;
+    use flexweek_engine::shown::{
+        apply_repeats_to_shown_week, one_day_note_on_shown_week, this_week_line_on_shown_week,
+    };
+    // School stands Monday to Friday. From Wednesday 11 it shows on days 0, 1, 2 (Wed, Thu, Fri)
+    // and 5, 6 (Mon 16, Tue 17).
+    let school = json!({"id": "school", "title": "School", "kind": "locked", "category": "class",
+                        "start": "08:30", "duration_min": 405, "days": [0, 1, 2, 3, 4]});
+    let shown = vec![
+        json!({"id": "school", "title": "School", "kind": "locked", "category": "class",
+                            "start": "08:30", "duration_min": 405, "days": [0, 1, 2, 5, 6]}),
+    ];
+    // School on Friday stops from this week on.
+    let intents = parse_intents(&json!([{"id": "school", "scope": "from", "from_date": WED,
+                                         "remove_days": [4]}]))
+    .unwrap();
+    let (week, standing) =
+        apply_repeats_to_shown_week(WED, &shown, std::slice::from_ref(&school), &intents).unwrap();
+    assert_eq!(days(by_id(&week, "school").unwrap()), vec![0, 1, 5, 6]);
+    assert_eq!(days(by_id(&standing, "school").unwrap()), vec![0, 1, 2, 3]);
+    // The week shows School with no Friday: said by its name.
+    let line =
+        this_week_line_on_shown_week(WED, &week, std::slice::from_ref(&school), false).unwrap();
+    assert_eq!(line.as_deref(), Some("This week: no School on Friday."));
+    // Moving day 5 (Monday 16) of School is about Monday.
+    let note = one_day_note_on_shown_week(WED, &school, 5, true)
+        .unwrap()
+        .unwrap();
+    assert!(note.starts_with("Only this Monday changed."), "{note}");
+    // From Monday nothing turns.
+    let monday = vec![school.clone()];
+    let (same, _) = apply_repeats_to_shown_week(FIRST, &monday, &monday, &[]).unwrap();
+    assert_eq!(same, monday);
+}
+
+#[test]
+fn a_routine_keeps_weekdays_whichever_day_the_week_starts_on() {
+    use flexweek_engine::shown::{blocks_by_weekday, routine_on_shown_week};
+    // Club on day 5 of the week from Wednesday 11 is Monday 16: the routine keeps Monday.
+    let shown = vec![fixed("club", "16:00", &[5, 0])];
+    assert_eq!(
+        days(&blocks_by_weekday(WED, &shown).unwrap()[0]),
+        vec![0, 2]
+    );
+    // Copied into a week from Wednesday, Monday is day 5 again.
+    let routine = json!({"id": "r", "name": "Clubs", "blocks": [
+        {"template_id": "t1", "title": "Club", "days": [0, 2], "start": "16:00", "duration_min": 60}]});
+    let turned = routine_on_shown_week(WED, &routine).unwrap();
+    assert_eq!(turned["blocks"][0]["days"], json!([0, 5]));
+    assert_eq!(turned["name"], "Clubs");
+    // From Monday both leave the days alone.
+    assert_eq!(blocks_by_weekday(FIRST, &shown).unwrap(), shown);
+    assert_eq!(routine_on_shown_week(FIRST, &routine).unwrap(), routine);
+}

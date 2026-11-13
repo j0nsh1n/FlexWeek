@@ -85,6 +85,138 @@ pub fn day_names(week_start: &str, full: bool) -> EngineResult<Vec<&'static str>
         .collect())
 }
 
+/// Weekdays (0 Monday) as days of the week on screen from `week_start`, in order.
+pub fn weekdays_on_shown_week(week_start: &str, of_week: &[i64]) -> EngineResult<Vec<i64>> {
+    let first = weekdays(week_start)?[0] as i64;
+    let mut days: Vec<i64> = of_week
+        .iter()
+        .map(|weekday| (weekday - first).rem_euclid(7))
+        .collect();
+    days.sort_unstable();
+    Ok(days)
+}
+
+/// A weekday's occupancy (0 Monday) for each day of the week on screen from `week_start`.
+pub fn occupancy_on_shown_week(week_start: &str, occupancy: &[u128]) -> EngineResult<Vec<u128>> {
+    let days = weekdays(week_start)?;
+    Ok(days
+        .iter()
+        .map(|weekday| occupancy.get(*weekday).copied().unwrap_or(0))
+        .collect())
+}
+
+/// Work and study windows, kept by weekday, with their `days` as days of the week on screen.
+pub fn windows_on_shown_week(week_start: &str, windows: &[Value]) -> EngineResult<Vec<Value>> {
+    windows
+        .iter()
+        .map(|window| {
+            let mut window = window.clone();
+            if let Some(days) = window.get("days").and_then(Value::as_array) {
+                let of_week: Vec<i64> = days.iter().filter_map(Value::as_i64).collect();
+                window["days"] = Value::from(weekdays_on_shown_week(week_start, &of_week)?);
+            }
+            Ok(window)
+        })
+        .collect()
+}
+
+/// Planner settings for a week on screen from `week_start`: they name the weekday its day 0 falls
+/// on, so Saturday and Sunday are found wherever they are. No settings stay none.
+pub fn rules_on_shown_week(week_start: &str, rules: &Value) -> EngineResult<Value> {
+    let first = weekdays(week_start)?[0];
+    let mut rules = rules.clone();
+    if let Some(fields) = rules.as_object_mut() {
+        fields.insert("first_weekday".into(), Value::from(first));
+    }
+    Ok(rules)
+}
+
+/// `block` with its days, missed days and done day moved `by` days round the week.
+fn turned(block: &Value, by: i64) -> Value {
+    let turn = |day: i64| (day + by).rem_euclid(7);
+    let days = day_list(block, "days").into_iter().map(turn).collect();
+    let missed = day_list(block, "missed_days")
+        .into_iter()
+        .map(turn)
+        .collect();
+    with_days(block, days, missed, completed_day(block).map(turn))
+}
+
+/// How far a week on screen from `week_start` is turned from a Monday week: its day 0's weekday.
+fn turn_of(week_start: &str) -> EngineResult<i64> {
+    Ok(weekdays(week_start)?[0] as i64)
+}
+
+/// Repeat changes applied to the week on screen from `week_start`, as `repeats::apply_to_week` applies
+/// them to a Monday week. Repeats keep their days by weekday, so the week's blocks are read by weekday
+/// for the change and given back by day of the week on screen.
+pub fn apply_repeats_to_shown_week(
+    week_start: &str,
+    blocks: &[Value],
+    repeats: &[Value],
+    intents: &[crate::repeats::Intent],
+) -> Result<(Vec<Value>, Vec<Value>), String> {
+    let by = turn_of(week_start).map_err(|error| error.message)?;
+    if by == 0 {
+        return crate::repeats::apply_to_week(blocks, repeats, intents);
+    }
+    let by_weekday: Vec<Value> = blocks.iter().map(|block| turned(block, by)).collect();
+    let (week, repeats) = crate::repeats::apply_to_week(&by_weekday, repeats, intents)?;
+    Ok((
+        week.iter().map(|block| turned(block, -by)).collect(),
+        repeats,
+    ))
+}
+
+/// The blocks of the week on screen from `week_start` with their days as weekdays (0 Monday), as a
+/// routine keeps them.
+pub fn blocks_by_weekday(week_start: &str, blocks: &[Value]) -> EngineResult<Vec<Value>> {
+    let by = turn_of(week_start)?;
+    if by == 0 {
+        return Ok(blocks.to_vec());
+    }
+    Ok(blocks.iter().map(|block| turned(block, by)).collect())
+}
+
+/// A routine, which keeps its days as weekdays, with its days as days of the week on screen from
+/// `week_start`, to copy into that week.
+pub fn routine_on_shown_week(week_start: &str, routine: &Value) -> EngineResult<Value> {
+    let by = turn_of(week_start)?;
+    let mut routine = routine.clone();
+    if by == 0 {
+        return Ok(routine);
+    }
+    if let Some(templates) = routine.get_mut("blocks").and_then(Value::as_array_mut) {
+        for template in templates.iter_mut() {
+            *template = turned(template, -by);
+        }
+    }
+    Ok(routine)
+}
+
+/// `repeats::this_week_line` for the week on screen from `week_start`, its days named as weekdays.
+pub fn this_week_line_on_shown_week(
+    week_start: &str,
+    blocks: &[Value],
+    repeats: &[Value],
+    h24: bool,
+) -> EngineResult<Option<String>> {
+    let by = turn_of(week_start)?;
+    let by_weekday: Vec<Value> = blocks.iter().map(|block| turned(block, by)).collect();
+    Ok(crate::repeats::this_week_line(&by_weekday, repeats, h24))
+}
+
+/// `repeats::one_day_note` for day `day` of the week on screen from `week_start`.
+pub fn one_day_note_on_shown_week(
+    week_start: &str,
+    block: &Value,
+    day: i64,
+    school_hours: bool,
+) -> EngineResult<Option<String>> {
+    let weekday = (day + turn_of(week_start)?).rem_euclid(7);
+    crate::repeats::one_day_note(block, weekday, school_hours)
+}
+
 fn offset_of(shown_start: &str) -> EngineResult<i64> {
     Ok(shown_parts(shown_start)?.map_or(0, |(_, _, offset)| offset))
 }
@@ -268,11 +400,58 @@ pub fn compose_shown_week(
     first: &[Value],
     second: &[Value],
 ) -> EngineResult<Vec<Value>> {
+    compose_shown_week_due(shown_start, first, second, &Map::new())
+}
+
+/// `compose_shown_week`, with the account's homework by id. A session waiting for a time lives in one
+/// stored week, so it can hold only that week's days. One given every day of its week through its
+/// due date shows on every day of the week on screen through that date; saved back, it keeps its own
+/// week's days and is stored once.
+pub fn compose_shown_week_due(
+    shown_start: &str,
+    first: &[Value],
+    second: &[Value],
+    homework: &Map<String, Value>,
+) -> EngineResult<Vec<Value>> {
     let offset = offset_of(shown_start)?;
     if offset == 0 {
         return Ok(first.to_vec());
     }
-    Ok(lay_out(shown_start, offset, first, second).shown)
+    let mut shown = lay_out(shown_start, offset, first, second).shown;
+    let seam = 7 - offset;
+    for block in &mut shown {
+        let due = block
+            .get("assignment_id")
+            .and_then(Value::as_str)
+            .and_then(|id| homework.get(id))
+            .and_then(|item| item.get("due"))
+            .filter(|due| due.is_string());
+        let (Some(due), false) = (due, placed(block) || done(block)) else {
+            continue;
+        };
+        let days = sorted(day_list(block, "days"));
+        let Some(first_day) = days.first() else {
+            continue;
+        };
+        let home = if *first_day < seam { 0..seam } else { seam..7 };
+        if !days.iter().all(|day| home.contains(day)) {
+            continue;
+        }
+        let through = crate::desk::planning::session_days(shown_start, due)?;
+        let in_home: Vec<i64> = through
+            .iter()
+            .copied()
+            .filter(|day| home.contains(day))
+            .collect();
+        if days == in_home && through != days {
+            block["days"] = Value::from(through);
+        }
+    }
+    Ok(shown)
+}
+
+fn done(block: &Value) -> bool {
+    block.get("completed").and_then(Value::as_bool) == Some(true)
 }
 
 /// The days of a shown block that go to each stored week, in that week's days. A block with no time

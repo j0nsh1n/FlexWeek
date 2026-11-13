@@ -67,6 +67,7 @@ from backend.storage import (
 )
 from backend.transfer import TRANSFER_TOO_LARGE, transfer_fits
 from backend.weeks import (
+    availability_on_shown_week,
     compose_shown_week,
     current_week_start,
     is_calendar_date,
@@ -76,6 +77,7 @@ from backend.weeks import (
     month_grid,
     parse_month,
     repeat_changes_from_shown_week,
+    rules_on_shown_week,
     shown_week_parts,
     split_shown_week,
 )
@@ -210,21 +212,40 @@ def stored_revision(db: Connection, user_id: int, week_start: str) -> int:
     return row[1] if row else 0
 
 
+def homework_of(db: Connection, user_id: int, blocks: list[dict]) -> dict[str, dict]:
+    """The account's homework that `blocks` are sessions of, by id."""
+    return load_assignment_bodies(
+        db, user_id, {block["assignment_id"] for block in blocks if block.get("assignment_id")}
+    )
+
+
 def shown_week_view(db: Connection, user_id: int, week_start: str, parts: tuple[str, str, int]) -> dict:
     """The week on screen from `week_start`: the days of both stored weeks it covers, counted from it,
-    and their revisions, first week first. Its repeats are those standing in the first week."""
+    and their revisions, first week first. Its repeats are those standing in the second week: a change
+    made in it from this week on stands from that week's Monday."""
     first, second, _ = parts
     first_blocks, first_revision = seen_week(db, user_id, first)
     second_blocks, second_revision = seen_week(db, user_id, second)
     answer: dict = {
         "week_start": week_start,
-        "blocks": compose_shown_week(week_start, first_blocks, second_blocks),
+        "blocks": compose_shown_week(
+            week_start, first_blocks, second_blocks, homework_of(db, user_id, first_blocks + second_blocks)
+        ),
         "revision": [first_revision, second_revision],
     }
-    repeats = json.loads(db.standing_blocks(user_id, first))
+    repeats = json.loads(db.standing_blocks(user_id, second))
     if repeats:
         answer["repeats"] = repeats
     return answer
+
+
+def apply_repeats(db: Connection, user_id: int, changes: list[dict]) -> dict:
+    """Change the repeats as `changes` say, in every saved week from each change's week on."""
+    try:
+        applied: dict = json.loads(db.apply_repeat_intents(user_id, json.dumps(changes)))
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    return applied
 
 
 def save_shown_week(
@@ -237,7 +258,8 @@ def save_shown_week(
     first_blocks, first_revision = seen_week(db, user_id, first)
     second_blocks, second_revision = seen_week(db, user_id, second)
     shown = dump_blocks(week.blocks)
-    now = compose_shown_week(week.week_start, first_blocks, second_blocks)
+    homework = homework_of(db, user_id, first_blocks + second_blocks)
+    now = compose_shown_week(week.week_start, first_blocks, second_blocks, homework)
     if json.dumps(shown, sort_keys=True) == json.dumps(now, sort_keys=True):
         return
     if list(week.revision) != [before[first], before[second]]:  # type: ignore[arg-type]
@@ -1487,11 +1509,23 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                     }
                 )
             week_results: list[dict] = []
+            repeats: dict | None = None
+            changes = batch.repeats
+            shown_weeks = [week for week in batch.weeks if shown_parts_of(week.week_start) is not None]
+            for week in shown_weeks:
+                if changes is not None:
+                    # From this week on, on screen: the stored week the shown one starts in keeps the
+                    # change on its shown days only, saved below; the repeat changes from the next Monday.
+                    changes = repeat_changes_from_shown_week(changes, week.week_start)
             # Stored (Monday) weeks first: an Undo that puts back a stored week a week on screen also
             # shows sends both, and the week on screen then finds them as it means them.
             for week in sorted(batch.weeks, key=lambda week: shown_parts_of(week.week_start) is not None):
                 parts = shown_parts_of(week.week_start)
                 if parts is not None:
+                    if changes is not None and repeats is None:
+                        # A repeat changed from the next Monday stands there before the week on screen
+                        # is split: that week's days then match it and keep no copy of their own.
+                        repeats = apply_repeats(db, account["id"], changes)
                     save_shown_week(db, account["id"], week, parts, before)
                     week_results.append({"week_start": week.week_start})
                     continue
@@ -1504,20 +1538,10 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 week_results.append(
                     {"week_start": week.week_start, "blocks": stored_blocks, "revision": revision}
                 )
-            repeats: dict | None = None
-            if batch.repeats is not None:
+            if changes is not None and repeats is None:
                 # Saved weeks from the change's week on take it here; the open week is in `weeks`,
                 # already changed by the client, so Undo takes back its part only.
-                changes = batch.repeats
-                for week in batch.weeks:
-                    if shown_parts_of(week.week_start) is not None:
-                        # From this week on, on screen: the stored week the shown one starts in keeps the
-                        # change on its shown days only, saved above; the repeat changes from the next Monday.
-                        changes = repeat_changes_from_shown_week(changes, week.week_start)
-                try:
-                    repeats = json.loads(db.apply_repeat_intents(account["id"], json.dumps(changes)))
-                except ValueError as error:
-                    raise HTTPException(422, str(error)) from error
+                repeats = apply_repeats(db, account["id"], changes)
             for entry in week_results:
                 parts = shown_parts_of(entry["week_start"])
                 if parts is not None:
@@ -1743,6 +1767,13 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             stored_prefs = db.preference_row(account["id"])
         plan_rules = json.loads(stored_prefs) if stored_prefs else None
         extra_occ, work_windows = solve_availability(availability)
+        if week.week_start is not None and shown_parts_of(week.week_start) is not None:
+            # A week on screen from another day than Monday: each weekday's hours and the weekend go on
+            # the days that weekday falls on.
+            stored_work = json.dumps([window.model_dump(mode="json") for window in work_windows])
+            extra_occ, moved = availability_on_shown_week(week.week_start, extra_occ, stored_work)
+            work_windows = [WorkWindow.model_validate(item) for item in json.loads(moved)]
+            plan_rules = rules_on_shown_week(week.week_start, plan_rules)
         blocks = week.blocks
         extra_deadlines = None
         extra_slack = None

@@ -2730,7 +2730,9 @@ class NativeWindow(QMainWindow):
             layout=self._layout,
             preferences=dict(prefs),
             blocks=list(session.repeats),
-            this_week=this_week_line(session.blocks, session.repeats, prefs.get("clock_24h") is True),
+            this_week=this_week_line(
+                session.blocks, session.repeats, prefs.get("clock_24h") is True, session.week_start
+            ),
             week_start=session.week_start,
             subjects=sorted(course for course in courses if course),
             first_run=first_run,
@@ -3851,7 +3853,11 @@ class NativeWindow(QMainWindow):
         repeats = self.session.repeats
         school = next((item for item in repeats if item["id"] == SETUP_SCHOOL_ID), None)
         clock_24h = (self.session.preferences or {}).get("clock_24h") is True
-        line = this_week_line(self.session.blocks, [school], clock_24h) if school is not None else None
+        line = (
+            this_week_line(self.session.blocks, [school], clock_24h, self.session.week_start)
+            if school is not None
+            else None
+        )
         dialog = SchoolHoursDialog(self, school, this_week=line)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return

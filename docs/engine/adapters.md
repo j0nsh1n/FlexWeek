@@ -29,6 +29,8 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | weeks | compose_shown_week | ADAPTER | Encodes the two stored weeks, one call (`shown::compose_shown_week`), JSON decoded. |
 | weeks | split_shown_week | ADAPTER | Encodes the shown week and the two stored weeks, one call (`shown::split_shown_week`), JSON decoded. |
 | weeks | repeat_changes_from_shown_week | ADAPTER | Encodes the changes, one call (`shown::repeat_changes_from_shown_week`), JSON decoded. |
+| weeks | availability_on_shown_week | ADAPTER | One call (`shown::occupancy_on_shown_week` and `shown::windows_on_shown_week` in one binding): each weekday's occupancy and work windows on that weekday's day of the shown week. |
+| weeks | rules_on_shown_week | ADAPTER | Encodes the planner settings, one call (`shown::rules_on_shown_week`) that names the weekday of the shown week's day 0, JSON decoded. |
 | assignments | planned_minutes_by_id | ADAPTER | Encodes the weeks, one call, values become ints. |
 | assignments | unplanned_minutes | ADAPTER | Three ints in, one engine call. |
 | assignments | migrate_blocks | ADAPTER | Encodes the blocks, one call, two lists out. |
@@ -188,6 +190,9 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | calendar | day_in_week | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | stored_weeks_of | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | week_columns | ADAPTER | encodes, makes one engine call, decodes |
+| calendar | windows_on_week | ADAPTER | encodes, makes one engine call, decodes |
+| calendar | blocks_by_weekday | ADAPTER | encodes, makes one engine call, decodes |
+| calendar | routine_on_week | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | day_names | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | day_full_names | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | month_rows | ADAPTER | encodes, makes one engine call, decodes |

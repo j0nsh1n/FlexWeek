@@ -20,6 +20,8 @@ struct App {
     started_as: Arc<Mutex<Option<i64>>>,
     /// `--read-only`: only the read tools are listed or served.
     read_only: bool,
+    /// The day this computer's weeks start on (0 Monday), from `--week-starts-on` or the desktop's file.
+    first_weekday: u32,
 }
 
 impl App {
@@ -77,6 +79,7 @@ async fn main() {
         clock,
         started_as: Arc::new(Mutex::new(signed_in.ok().map(|account| account.user_id))),
         read_only: launch.read_only,
+        first_weekday: launch.first_weekday,
     };
     let served = app.serve(rmcp::transport::stdio()).await;
     let Ok(running) = served else {

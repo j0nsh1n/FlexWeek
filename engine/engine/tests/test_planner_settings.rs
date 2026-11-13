@@ -191,6 +191,7 @@ fn missing_keys_are_todays_planner() {
             buffer_min: 15,
             urgent_first: false,
             split_long_tasks: true,
+            first_weekday: 0,
         }
     );
     assert_eq!(
@@ -503,4 +504,29 @@ fn show_weekends_is_not_a_planner_rule() {
 fn by_id_missing(trace: &SolveTrace, id: &str) -> bool {
     trace.placed.iter().all(|block| block.id != id)
         && trace.unplaced.iter().all(|block| block.id != id)
+}
+
+#[test]
+fn weekends_homework_free_keeps_saturday_and_sunday_free_wherever_the_week_starts() {
+    // A week shown from Wednesday: days 3 and 4 are Saturday and Sunday, days 5 and 6 Monday and
+    // Tuesday. Study hours on Saturday (day 3) and Monday (day 5) only.
+    let windows = [
+        work_span(&[3], "10:00", "12:00", None),
+        work_span(&[5], "16:00", "18:00", None),
+    ];
+    let blocks = [flex("math", 60, &[3, 5], "high", None)];
+    let mut closed =
+        plan_rules_from_value(&json!({"weekend_homework_free": 1, "first_weekday": 2}));
+    closed.buffer_min = 0;
+    assert_eq!(closed.first_weekday, 2);
+    let shut = plan(&blocks, &windows, None, closed);
+    assert_eq!(start_of(&shut, "math"), expect(5, "16:00", 60));
+    let mut open = closed;
+    open.weekend_homework_free = false;
+    assert_eq!(
+        start_of(&plan(&blocks, &windows, None, open), "math"),
+        expect(3, "10:00", 60)
+    );
+    // From Monday, day 5 is Saturday again.
+    assert_eq!(plan_rules_from_value(&json!({})).first_weekday, 0);
 }

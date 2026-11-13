@@ -18,6 +18,7 @@ from backend.weeks import current_week_start
 from desktop.native.calendar import (
     apply_block_edit,
     apply_repeat_changes,
+    blocks_by_weekday,
     date_for_day,
     day_full_names,
     day_in_week,
@@ -37,10 +38,12 @@ from desktop.native.calendar import (
     past_problem,
     relocate_block,
     repeat_changes,
+    routine_on_week,
     shifted_month,
     span_problem,
     stored_weeks_of,
     week_start_on,
+    windows_on_week,
 )
 from desktop.native.client import SESSION_ENDED, ApiError, NativeClient, auth_error
 from desktop.native.files import (
@@ -1374,7 +1377,7 @@ class NativeSession(QObject):
         words = moved_words(block, origin, day, start, end)
         # Material has no School hours, so its note points to Setup.
         material = self.material_owns is not None and self.material_owns()
-        note = one_day_note(block, origin, not material)
+        note = one_day_note(block, origin, not material, self.week_start)
         if note:
             words = f"{words} {note}"
         self.save()
@@ -1439,7 +1442,7 @@ class NativeSession(QObject):
         changes = repeat_changes(self.repeats, after, self.week_start)
         if not changes:
             return
-        self.blocks, self.repeats = apply_repeat_changes(self.blocks, self.repeats, changes)
+        self.blocks, self.repeats = apply_repeat_changes(self.blocks, self.repeats, changes, self.week_start)
         self._touch(label)
 
     def plan_after_save(self, assignment_id: str) -> None:
@@ -2441,7 +2444,7 @@ class NativeSession(QObject):
             self.week_start,
             first_day,
             first_minute,
-            self.preferences.get("work_windows") or [],
+            windows_on_week(self.week_start, self.preferences.get("work_windows") or []),
             targets - self._split_whole,
         )
         if shares:
@@ -3075,7 +3078,8 @@ class NativeSession(QObject):
     def save_routine(self, name: str, block_ids: list[str] | None = None) -> bool:
         if self.account is None:
             return False
-        sources = routine_source_blocks(self.blocks)
+        # A routine keeps weekdays, so it copies the same way whichever day a week starts on.
+        sources = routine_source_blocks(blocks_by_weekday(self.week_start, self.blocks))
         if block_ids is not None:
             allowed = set(block_ids)
             sources = [block for block in sources if block["id"] in allowed]
@@ -3153,7 +3157,7 @@ class NativeSession(QObject):
         if routine is None or not days:
             self._say("Choose at least one weekday to copy.")
             return None
-        return routine_rows(routine, week_start, days)
+        return routine_rows(routine_on_week(week_start, routine), week_start, days)
 
     def apply_routine(
         self,

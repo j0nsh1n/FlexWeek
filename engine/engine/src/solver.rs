@@ -27,6 +27,9 @@ pub struct PlanRules {
     pub buffer_min: i64,
     pub urgent_first: bool,
     pub split_long_tasks: bool,
+    /// The weekday (0 Monday) of the week's day 0. A week shown from another day than Monday has
+    /// its Saturday and Sunday elsewhere than days 5 and 6.
+    pub first_weekday: i64,
 }
 
 impl Default for PlanRules {
@@ -36,6 +39,7 @@ impl Default for PlanRules {
             buffer_min: 0,
             urgent_first: true,
             split_long_tasks: false,
+            first_weekday: 0,
         }
     }
 }
@@ -79,6 +83,11 @@ pub fn plan_rules_from_value(value: &Value) -> PlanRules {
         buffer_min,
         urgent_first: flag("urgent_first", true),
         split_long_tasks: flag("split_long_tasks", false),
+        first_weekday: obj
+            .and_then(|fields| fields.get("first_weekday"))
+            .and_then(Value::as_i64)
+            .filter(|day| (0..7).contains(day))
+            .unwrap_or(0),
     }
 }
 
@@ -1026,7 +1035,9 @@ pub fn solve_with_rules(
     let mut search_blocks = output_blocks.clone();
     if rules.weekend_homework_free {
         for block in &mut search_blocks {
-            block.days.retain(|day| *day <= 4);
+            block
+                .days
+                .retain(|day| (rules.first_weekday + *day).rem_euclid(7) <= 4);
         }
     }
 

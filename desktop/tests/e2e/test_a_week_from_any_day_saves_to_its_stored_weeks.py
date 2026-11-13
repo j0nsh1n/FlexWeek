@@ -9,12 +9,13 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QApplication
 
+from desktop.native.calendar import SETUP_SCHOOL_ID
 from desktop.native.client import ApiError
 from desktop.native.controller import NativeSession
 from desktop.server import LocalServer
 from desktop.tests.e2e.account_sessions import HASHING_WAIT, HELD, server  # noqa: F401
 from desktop.tests.e2e.saved_weeks import read_week
-from desktop.tests.logic_support import fixed, settled
+from desktop.tests.logic_support import essay, fixed, settled
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import PASSWORD, qapp  # noqa: F401
 
@@ -158,3 +159,107 @@ def test_changing_the_first_day_reopens_the_week_holding_the_selected_day(
     session.follow_first_weekday(SUNDAY)
     settled(qapp, session)
     assert session.week_start == "2026-11-01"
+
+
+def essay_sessions(blocks: list[dict]) -> list[tuple[int, str, int]]:
+    return sorted(
+        (block["days"][0], block["start"], block["duration_min"])
+        for block in blocks
+        if block.get("assignment_id") == "essay" and block.get("start")
+    )
+
+
+def test_plan_and_replan_all_plan_the_week_on_screen_and_store_each_session_once(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    session = signed_in_from(qapp, server.origin, "plan", WEDNESDAY)
+    # Homework added with no date is due at the end of the week on screen: Tuesday 10, 11:59 PM.
+    homework = essay(session, 180)
+    assert homework["due"] == "2026-11-10T23:59"
+    session.add_homework(homework)
+    # Thursday 5 to Sunday 8 (days 1 to 4) are full, so the essay has to go after the Monday seam.
+    away = {"id": "busy", "title": "Away", "kind": "locked", "start": "00:00", "duration_min": 1440}
+    session.add_block({**away, "days": [1, 2, 3, 4]})
+    session.save()
+    wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+    for everything in (False, True):
+        session.solve(everything=everything)
+        wait_until(qapp, lambda: not session.busy and not session.planning and session.pending_save is None)
+        settled(qapp, session)
+        shown = essay_sessions(session.blocks)
+        assert sum(minutes for *_, minutes in shown) == 180, session.message
+        # Monday 9 and Tuesday 10, the last days of the week on screen.
+        assert {day for day, *_ in shown} <= {5, 6}, shown
+        assert essay_sessions(read_week(qapp, session, "2026-11-02")["blocks"]) == []
+        stored = essay_sessions(read_week(qapp, session, "2026-11-09")["blocks"])
+        assert [(day + 5, start, minutes) for day, start, minutes in stored] == shown
+        assert essay_sessions(read_week(qapp, session, "2026-11-16")["blocks"]) == []
+
+
+def school_days(week: dict) -> list[int]:
+    return next((block["days"] for block in week["blocks"] if block["id"] == SETUP_SCHOOL_ID), [])
+
+
+def test_school_changed_from_a_wednesday_week_on_keeps_its_weekdays_and_the_days_before(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    session = signed_in_from(qapp, server.origin, "school", WEDNESDAY)
+    school = {"id": SETUP_SCHOOL_ID, "title": "School", "kind": "locked", "category": "class",
+              "start": "08:30", "duration_min": 390, "days": [0, 1, 2, 3, 4]}  # fmt: skip
+    session.set_setup_blocks([school])
+    session.save()
+    wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+    # Monday to Friday: Wednesday 4, Thursday 5, Friday 6, Monday 9 and Tuesday 10 of the week on screen.
+    assert school_days({"blocks": session.blocks}) == [0, 1, 2, 5, 6]
+    # From this week on, no School on Fridays: the week on screen and every week after it.
+    session.set_setup_blocks([{**school, "days": [0, 1, 2, 3]}])
+    session.save()
+    wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+    settled(qapp, session)
+    assert school_days({"blocks": session.blocks}) == [0, 1, 5, 6]
+    # Monday 2 and Tuesday 3 come before the week on screen: School started on Wednesday 4.
+    assert school_days(read_week(qapp, session, "2026-11-02")) == [2, 3]
+    assert school_days(read_week(qapp, session, "2026-11-09")) == [0, 1, 2, 3]
+    assert school_days(read_week(qapp, session, "2026-11-16")) == [0, 1, 2, 3]
+    assert school_days(read_week(qapp, session, "2026-10-26")) == []
+
+
+def test_a_routine_saved_in_a_wednesday_week_keeps_its_weekdays(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    session = signed_in_from(qapp, server.origin, "routine", WEDNESDAY)
+    # Day 5 of the week from Wednesday 4 is Monday 9.
+    session.add_block(fixed("club", "Club", 5, "16:00"))
+    session.save()
+    wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+    assert session.save_routine("Clubs", ["club"])
+    wait_until(qapp, lambda: not session.busy and bool(session.routines))
+    (routine,) = session.routines.values()
+    assert [template["days"] for template in routine["blocks"]] == [[0]]
+    # Copied into the week from Wednesday 11, Monday 16 is its day 5; into Monday 16's week, day 0.
+    rows = session.apply_routine_rows(routine["id"], "2026-11-11", [5])
+    assert [(row["week_start"], row["day"]) for row in rows or []] == [("2026-11-11", 5)]
+    rows = session.apply_routine_rows(routine["id"], "2026-11-16", [0])
+    assert [(row["week_start"], row["day"]) for row in rows or []] == [("2026-11-16", 0)]
+
+
+def test_plan_does_not_take_this_weeks_own_days_for_an_earlier_week(
+    qapp: QApplication, server: LocalServer
+) -> None:
+    session = signed_in_from(qapp, server.origin, "earlier", WEDNESDAY)
+    session.add_homework(essay(session, 60))
+    # Wednesday 4 at 8:00 AM, day 0 of the week on screen and already over, is stored in Monday 2's
+    # week, which starts before it. Plan keeps a missed session of this week where it is; only one
+    # from an earlier week moves.
+    for block in session.blocks:
+        if block.get("assignment_id") == "essay":
+            block["days"], block["start"] = [0], "08:00"
+    session.save()
+    wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+    session.add_homework({**essay(session, 30), "id": "quiz", "title": "Quiz"})
+    session.solve()
+    wait_until(qapp, lambda: not session.busy and not session.planning and session.pending_save is None)
+    settled(qapp, session)
+    assert essay_sessions(session.blocks) == [(0, "08:00", 60)]
+    stored = essay_sessions(read_week(qapp, session, "2026-11-02")["blocks"])
+    assert stored == [(2, "08:00", 60)]
