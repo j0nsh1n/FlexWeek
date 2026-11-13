@@ -476,7 +476,7 @@ Current account/API contract:
 | GET/PUT | `/api/week` | One dated week of the account, with revision-checked saves |
 | GET | `/api/weeks` | The `week_start` dates this account has saved, ascending |
 | GET | `/api/day` | One date's agenda: due-soon homework, that day's sessions and fixed blocks, a next action and the workload split |
-| GET | `/api/month` | Month grid of deadlines, projects, overdue work, planned and completed study time, and an unscheduled total |
+| GET | `/api/month` | Month grid of deadlines, projects, overdue work, planned and completed study time, and an unscheduled total; rows start on `first_day` (0 Monday to 6 Sunday, Monday when absent) |
 | GET | `/api/assignments` | Open assignments with planned and unplanned minutes for a `week_start`; completed ones only when asked |
 | PUT/DELETE | `/api/assignments/{id}` | Revision-checked create, update and delete; delete removes its sessions from every week |
 | POST | `/api/assignments/{id}/spread` | Preview sessions of a chosen length from a start date through the due date; writes nothing |
@@ -524,12 +524,18 @@ revision 0 rather than 404, and a `week_start` that is malformed, out of
 to the nearest Monday, so a client and the server cannot disagree about which
 week is open while both believe they succeeded. The one exception is a week on
 screen that starts on another day: `GET /api/week`, `POST /api/changes` and
-`POST /api/solve` take that day's date, the week covers the two stored weeks it
-falls in, carries both their revisions, first week first, and a save splits it
-back into them; a block waiting for a time is stored in one of them. Stored
-weeks stay keyed by their Monday. Blocks keep their `days` index (counted from
-the week's first day) and derive their calendar date, so the solver stays
-day-index pure.
+`POST /api/solve` take that day's date instead of a Monday. Such a week covers
+the two stored weeks it falls in, carries both their revisions, first week
+first, and both stored weeks as saved (`stored`, so Undo can put back the days
+the screen cannot see), and a save splits it back into them; a block waiting for
+a time is stored in one of them. Where a save changes only some of a stored
+block's days, that stored week keeps the changed days as a second block named
+after the first with the week's first day (`school@20261111`); School hours,
+Setup, the delete question, repeat changes, the standing week and the assistant
+helper read it as that block. Stored weeks stay keyed by their Monday, and a Monday
+`week_start` reads and writes as it always did. Blocks keep their `days` index
+(counted from the week's first day) and derive their calendar date, so the
+solver stays day-index pure.
 A week has at most 100 uniquely identified blocks; titles 1–80,
 course names at most 40, block durations any positive number of minutes up to
 7140, and unique day indices. Explicit starts are any minute from 00:00 and end
