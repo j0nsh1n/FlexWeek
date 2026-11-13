@@ -66,6 +66,7 @@ from backend.storage import (
 )
 from backend.transfer import TRANSFER_TOO_LARGE, transfer_fits
 from backend.weeks import (
+    compose_shown_week,
     current_week_start,
     is_calendar_date,
     is_month_label,
@@ -73,6 +74,9 @@ from backend.weeks import (
     monday_of,
     month_grid,
     parse_month,
+    repeat_changes_from_shown_week,
+    shown_week_parts,
+    split_shown_week,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -179,6 +183,75 @@ def week_with_standing(db: Connection, user_id: int, week_start: str, stored: st
     """A week as the student sees it: its own blocks and the School and activities standing in it."""
     merged: list[dict] = json.loads(db.week_with_standing(user_id, week_start, stored or "[]"))
     return merged
+
+
+def shown_parts_of(week_start: str) -> tuple[str, str, int] | None:
+    """The stored weeks a week on screen covers when it does not start on a Monday."""
+    if is_week_start(week_start) or not is_calendar_date(week_start):
+        return None
+    return shown_week_parts(week_start)
+
+
+def seen_week(db: Connection, user_id: int, week_start: str) -> tuple[list[dict], int]:
+    """A stored week as `GET /api/week` gives it, with its revision (0 for one nobody saved). Each block
+    is written out in full, as a client sends it back, so an unchanged block compares equal."""
+    row = db.read_week(user_id, week_start)
+    blocks = week_with_standing(db, user_id, week_start, row[0] if row else None)
+    owned = load_assignment_bodies(
+        db, user_id, {block["assignment_id"] for block in blocks if block.get("assignment_id")}
+    )
+    seen = dump_blocks([TimeBlock.model_validate(block) for block in rewrite_stored_blocks(blocks, owned)])
+    return seen, row[1] if row else 0
+
+
+def stored_revision(db: Connection, user_id: int, week_start: str) -> int:
+    row = db.read_week(user_id, week_start)
+    return row[1] if row else 0
+
+
+def shown_week_view(db: Connection, user_id: int, week_start: str, parts: tuple[str, str, int]) -> dict:
+    """The week on screen from `week_start`: the days of both stored weeks it covers, counted from it,
+    and their revisions, first week first. Its repeats are those standing in the first week."""
+    first, second, _ = parts
+    first_blocks, first_revision = seen_week(db, user_id, first)
+    second_blocks, second_revision = seen_week(db, user_id, second)
+    answer: dict = {
+        "week_start": week_start,
+        "blocks": compose_shown_week(week_start, first_blocks, second_blocks),
+        "revision": [first_revision, second_revision],
+    }
+    repeats = json.loads(db.standing_blocks(user_id, first))
+    if repeats:
+        answer["repeats"] = repeats
+    return answer
+
+
+def save_shown_week(
+    db: Connection, user_id: int, week: ChangedWeek, parts: tuple[str, str, int], before: dict[str, int]
+) -> None:
+    """Split a saved week on screen back into the stored weeks it covers and write the ones it changed.
+    Its revisions are checked against the stored weeks as they were before this save began, so homework
+    deleted in the same save does not count as someone else's change."""
+    first, second, _ = parts
+    first_blocks, first_revision = seen_week(db, user_id, first)
+    second_blocks, second_revision = seen_week(db, user_id, second)
+    shown = dump_blocks(week.blocks)
+    now = compose_shown_week(week.week_start, first_blocks, second_blocks)
+    if json.dumps(shown, sort_keys=True) == json.dumps(now, sort_keys=True):
+        return
+    if list(week.revision) != [before[first], before[second]]:  # type: ignore[arg-type]
+        raise HTTPException(409, WEEK_CONFLICT)
+    first_new, second_new = split_shown_week(week.week_start, shown, first_blocks, second_blocks)
+    for stored_start, new, seen, revision in (
+        (first, first_new, first_blocks, first_revision),
+        (second, second_new, second_blocks, second_revision),
+    ):
+        if new == seen:
+            continue
+        blocks = [TimeBlock.model_validate(block) for block in new]
+        incoming = adopt_legacy_deadlines(db, user_id, stored_start, blocks)
+        owned = require_own_assignments(db, user_id, assignment_ids_of(incoming))
+        save_week_row(db, user_id, stored_start, dump_blocks(rewrite_blocks(incoming, owned)), revision)
 
 
 def month_weeks(
@@ -391,6 +464,33 @@ class SavedWeek(WeekRequest):
         return value
 
 
+SHOWN_WEEK_RULE = (
+    "week_start must be a date from 2000-01-01 through 2099-12-31. A Monday names its revision; "
+    "a week from another day names the revisions of the two stored weeks it covers"
+)
+Revision = Annotated[int, Field(ge=0, le=2**53 - 1)]
+
+
+class ChangedWeek(WeekRequest):
+    """A week a save writes. A Monday is a stored week. Any other date is the week on screen from that
+    date: it covers two stored weeks, and its revision is theirs, first week first."""
+
+    model_config = ConfigDict(extra="forbid")
+    week_start: str
+    revision: Revision | list[Revision]
+
+    @model_validator(mode="after")
+    def revision_fits_the_week(self) -> ChangedWeek:
+        if is_week_start(self.week_start):
+            if not isinstance(self.revision, int):
+                raise ValueError(SHOWN_WEEK_RULE)
+        elif not (is_calendar_date(self.week_start) and isinstance(self.revision, list)):
+            raise ValueError(SHOWN_WEEK_RULE)
+        if isinstance(self.revision, list) and len(self.revision) != 2:
+            raise ValueError(SHOWN_WEEK_RULE)
+        return self
+
+
 def a_week_start(value: str) -> str:
     if not is_week_start(value):
         raise ValueError(WEEK_START_RULE)
@@ -434,7 +534,7 @@ class AssignmentChange(BaseModel):
 
 class ChangesRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    weeks: list[SavedWeek] = Field(default_factory=list)
+    weeks: list[ChangedWeek] = Field(default_factory=list)
     assignments: list[AssignmentChange] = Field(default_factory=list)
     operation_id: str | None = Field(default=None, min_length=1, max_length=80)
     snapshot_label: str | None = Field(default=None, min_length=1, max_length=80)
@@ -1177,6 +1277,10 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
     @app.get("/api/week")
     def get_week(account: Annotated[dict, Depends(user)], week_start: str | None = None) -> dict:
         start = week_start if week_start is not None else current_week_start()
+        parts = shown_parts_of(start)
+        if parts is not None:
+            with connect(path) as db:
+                return shown_week_view(db, account["id"], start, parts)
         if not is_week_start(start):
             raise HTTPException(422, WEEK_START_RULE)
         with connect(path) as db:
@@ -1342,6 +1446,14 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                     return remembered
             if batch.snapshot_label is not None:
                 insert_restore_point(db, account["id"], batch.snapshot_label)
+            # A week on screen from another day than Monday is checked against its stored weeks as they
+            # were before anything in this save changed them.
+            before: dict[str, int] = {}
+            for week in batch.weeks:
+                parts = shown_parts_of(week.week_start)
+                if parts is not None:
+                    for stored_start in parts[:2]:
+                        before.setdefault(stored_start, stored_revision(db, account["id"], stored_start))
             assignment_results: list[dict] = []
             deletes: list[AssignmentChange] = []
             for change in batch.assignments:
@@ -1371,11 +1483,16 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 )
             week_results: list[dict] = []
             for week in batch.weeks:
+                parts = shown_parts_of(week.week_start)
+                if parts is not None:
+                    save_shown_week(db, account["id"], week, parts, before)
+                    week_results.append({"week_start": week.week_start})
+                    continue
                 incoming = adopt_legacy_deadlines(db, account["id"], week.week_start, week.blocks)
                 owned = require_own_assignments(db, account["id"], assignment_ids_of(incoming))
                 blocks = dump_blocks(rewrite_blocks(incoming, owned))
                 stored_blocks, revision = save_week_row(
-                    db, account["id"], week.week_start, blocks, week.revision
+                    db, account["id"], week.week_start, blocks, int(week.revision)  # type: ignore[arg-type]
                 )
                 week_results.append(
                     {"week_start": week.week_start, "blocks": stored_blocks, "revision": revision}
@@ -1384,11 +1501,21 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             if batch.repeats is not None:
                 # Saved weeks from the change's week on take it here; the open week is in `weeks`,
                 # already changed by the client, so Undo takes back its part only.
+                changes = batch.repeats
+                for week in batch.weeks:
+                    if shown_parts_of(week.week_start) is not None:
+                        # From this week on, on screen: the stored week the shown one starts in keeps the
+                        # change on its shown days only, saved above; the repeat changes from the next Monday.
+                        changes = repeat_changes_from_shown_week(changes, week.week_start)
                 try:
-                    repeats = json.loads(db.apply_repeat_intents(account["id"], json.dumps(batch.repeats)))
+                    repeats = json.loads(db.apply_repeat_intents(account["id"], json.dumps(changes)))
                 except ValueError as error:
                     raise HTTPException(422, str(error)) from error
             for entry in week_results:
+                parts = shown_parts_of(entry["week_start"])
+                if parts is not None:
+                    entry.update(shown_week_view(db, account["id"], entry["week_start"], parts))
+                    continue
                 entry["blocks"] = week_with_standing(
                     db, account["id"], entry["week_start"], json.dumps(entry["blocks"])
                 )

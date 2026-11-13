@@ -59,6 +59,47 @@ fn calendar_weekday_order(first_weekday: u32) -> PyResult<Vec<u32>> {
     })
 }
 
+/// The two stored weeks a shown week covers and how far into the first it starts; None for a Monday.
+#[pyfunction]
+fn shown_week_parts(week_start: &str) -> PyResult<Option<(String, String, i64)>> {
+    guard(|| ::flexweek_engine::shown::shown_parts(week_start).map_err(crate::raise))
+}
+
+#[pyfunction]
+fn compose_shown_week(week_start: &str, first: &str, second: &str) -> PyResult<String> {
+    let (first, second) = (objects(first)?, objects(second)?);
+    guard(|| {
+        ::flexweek_engine::shown::compose_shown_week(week_start, &first, &second)
+            .map(array)
+            .map_err(crate::raise)
+    })
+}
+
+#[pyfunction]
+fn split_shown_week(
+    week_start: &str,
+    shown: &str,
+    first: &str,
+    second: &str,
+) -> PyResult<(String, String)> {
+    let (shown, first, second) = (objects(shown)?, objects(first)?, objects(second)?);
+    guard(|| {
+        ::flexweek_engine::shown::split_shown_week(week_start, &shown, &first, &second)
+            .map(|(first, second)| (array(first), array(second)))
+            .map_err(crate::raise)
+    })
+}
+
+#[pyfunction]
+fn repeat_changes_from_shown_week(changes: &str, week_start: &str) -> PyResult<String> {
+    let changes = objects(changes)?;
+    guard(|| {
+        ::flexweek_engine::shown::repeat_changes_from_shown_week(&changes, week_start)
+            .map(array)
+            .map_err(crate::raise)
+    })
+}
+
 #[pyfunction]
 fn calendar_date_for_day(week_start: &str, day: &str) -> PyResult<String> {
     let day = parse(day)?;
@@ -1695,6 +1736,10 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         calendar_monday_of,
         calendar_week_start_on,
         calendar_weekday_order,
+        shown_week_parts,
+        compose_shown_week,
+        split_shown_week,
+        repeat_changes_from_shown_week,
         calendar_date_for_day,
         calendar_sunday_due,
         calendar_local_stamp,

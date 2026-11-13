@@ -8,7 +8,7 @@ A backend wrapper is one of three classes.
 
 **STAYS.** It cannot move, and only for one of these reasons: it reads the clock, the environment, a file, or randomness (the engine core is pure, so Python reads those and passes them in); it is a dataclass, a `Protocol`, or an exception; it is the pydantic validation the contract keeps in Python (`backend/models.py`, which this table does not list); or it is a method of the connection that only forwards to the Rust connection.
 
-`limits`, `slots`, and `weeks` define no functions. They re-export engine names and constants. `storage.SESSION_SECONDS` stays in Python because `backend/app.py` imports it for the cookie lifetime. Adding that many seconds to the clock reading happens in `open_session`.
+`limits` and `slots` define no functions. They re-export engine names and constants, as `weeks` does besides `current_week_start` and the shown-week adapters below. `storage.SESSION_SECONDS` stays in Python because `backend/app.py` imports it for the cookie lifetime. Adding that many seconds to the clock reading happens in `open_session`.
 
 The desktop tables use the same three classes. Those modules live in `desktop/native/`. `look.py` is paint; only its four engine helpers are in the table. `test_wrappers_hold_no_engine_logic.py` reads every STAYS row and every row whose class is exactly LOGIC. A row marked `LOGIC, moved` is not exempt: the wrapper has to be clean.
 
@@ -24,6 +24,10 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | assignments | prepare_solve | ADAPTER | Encodes blocks and assignments, one call, then pydantic and tuples. |
 | assignments | legacy_session | ADAPTER | One engine call, then a `TimeBlock` and the body dict. |
 | assignments | rewrite_session | ADAPTER | One engine call, then `TimeBlock.model_validate`. |
+| weeks | shown_week_parts | ADAPTER | One engine call (`shown::shown_parts`); `None` for a Monday. |
+| weeks | compose_shown_week | ADAPTER | Encodes the two stored weeks, one call (`shown::compose_shown_week`), JSON decoded. |
+| weeks | split_shown_week | ADAPTER | Encodes the shown week and the two stored weeks, one call (`shown::split_shown_week`), JSON decoded. |
+| weeks | repeat_changes_from_shown_week | ADAPTER | Encodes the changes, one call (`shown::repeat_changes_from_shown_week`), JSON decoded. |
 | assignments | planned_minutes_by_id | ADAPTER | Encodes the weeks, one call, values become ints. |
 | assignments | unplanned_minutes | ADAPTER | Three ints in, one engine call. |
 | assignments | migrate_blocks | ADAPTER | Encodes the blocks, one call, two lists out. |

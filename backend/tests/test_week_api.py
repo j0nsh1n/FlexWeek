@@ -108,10 +108,18 @@ def test_put_rejects_a_non_monday_week_start_and_changes_nothing(account: TestCl
     assert account.get("/api/weeks").json() == {"weeks": [WEEK_ONE]}
 
 
-def test_get_rejects_non_monday_and_malformed_week_starts(account: TestClient) -> None:
-    for week_start in ("2026-09-08", "2026-09-13", "2026-9-7", "20260907", "2026-W37-1"):
+def test_get_rejects_malformed_week_starts(account: TestClient) -> None:
+    for week_start in ("2026-9-7", "20260907", "2026-W37-1", "2026-02-30"):
         response = account.get(f"/api/week?week_start={week_start}")
         assert response.status_code == 422
+
+
+def test_get_shows_a_week_from_another_day_with_both_stored_revisions(account: TestClient) -> None:
+    # Tuesday 8 September 2026 and Sunday 13 September: weeks on screen that start on those days.
+    for week_start in ("2026-09-08", "2026-09-13"):
+        response = account.get(f"/api/week?week_start={week_start}")
+        assert response.status_code == 200
+        assert response.json() == {"week_start": week_start, "blocks": [], "revision": [0, 0]}
 
 
 def test_only_the_monday_containing_the_lower_date_edge_is_allowed(account: TestClient) -> None:
