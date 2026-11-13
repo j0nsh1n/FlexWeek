@@ -637,11 +637,51 @@ pub fn is_month_label(value: &str) -> bool {
     parse_month(value).is_ok()
 }
 
+/// `first_weekday` counts from Monday (0) to Sunday (6), as a block's `days` do.
+fn checked_weekday(first_weekday: u32) -> EngineResult<u32> {
+    if first_weekday > 6 {
+        return Err(EngineError::value(format!(
+            "the week's first day must be 0 (Monday) to 6 (Sunday), not {first_weekday}"
+        )));
+    }
+    Ok(first_weekday)
+}
+
+/// Days from the week's first day back to `day`: 0 on the first day, 6 on the day before it.
+fn days_into_week(day: NaiveDate, first_weekday: u32) -> i64 {
+    i64::from((day.weekday().num_days_from_monday() + 7 - first_weekday) % 7)
+}
+
+/// The first date of the week on screen that holds `date_str`, when weeks start on `first_weekday`.
+/// Stored weeks stay keyed by their Monday (`monday_of`); this is only where a shown week begins.
+pub fn week_start_on(date_str: &str, first_weekday: u32) -> EngineResult<String> {
+    let first_weekday = checked_weekday(first_weekday)?;
+    let day = parse_supported(date_str)?;
+    Ok(iso(day - Duration::days(days_into_week(day, first_weekday))))
+}
+
+/// The seven weekdays (Monday 0 to Sunday 6) in the order a week starting on `first_weekday` shows them.
+pub fn weekday_order(first_weekday: u32) -> EngineResult<[u32; 7]> {
+    let first_weekday = checked_weekday(first_weekday)?;
+    Ok(std::array::from_fn(|at| (first_weekday + at as u32) % 7))
+}
+
 pub fn month_grid(start: &str, end: &str) -> EngineResult<(String, String)> {
+    month_grid_from(start, end, 0)
+}
+
+/// Whole rows of a month, from the week's first day on or before `start` to the day before the
+/// next first day after `end`, kept inside the supported dates.
+pub fn month_grid_from(
+    start: &str,
+    end: &str,
+    first_weekday: u32,
+) -> EngineResult<(String, String)> {
+    let first_weekday = checked_weekday(first_weekday)?;
     let start = from_iso(start)?;
     let end = from_iso(end)?;
-    let mut grid_start = start - Duration::days(i64::from(start.weekday().num_days_from_monday()));
-    let mut grid_end = end + Duration::days(i64::from(6 - end.weekday().num_days_from_monday()));
+    let mut grid_start = start - Duration::days(days_into_week(start, first_weekday));
+    let mut grid_end = end + Duration::days(6 - days_into_week(end, first_weekday));
     let first = NaiveDate::from_ymd_opt(FIRST_DAY.0, FIRST_DAY.1, FIRST_DAY.2).expect("first");
     let last = NaiveDate::from_ymd_opt(LAST_DAY.0, LAST_DAY.1, LAST_DAY.2).expect("last");
     if grid_start < first {

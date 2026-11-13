@@ -46,6 +46,20 @@ fn calendar_monday_of(iso_day: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
+fn calendar_week_start_on(iso_day: &str, first_weekday: u32) -> PyResult<String> {
+    guard(|| ::flexweek_engine::time::week_start_on(iso_day, first_weekday).map_err(crate::raise))
+}
+
+#[pyfunction]
+fn calendar_weekday_order(first_weekday: u32) -> PyResult<Vec<u32>> {
+    guard(|| {
+        ::flexweek_engine::time::weekday_order(first_weekday)
+            .map(Vec::from)
+            .map_err(crate::raise)
+    })
+}
+
+#[pyfunction]
 fn calendar_date_for_day(week_start: &str, day: &str) -> PyResult<String> {
     let day = parse(day)?;
     guard(|| grid::date_for_day(week_start, &day).map_err(crate::raise))
@@ -1679,6 +1693,8 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         repeat_this_week_line,
         repeat_one_day_note,
         calendar_monday_of,
+        calendar_week_start_on,
+        calendar_weekday_order,
         calendar_date_for_day,
         calendar_sunday_due,
         calendar_local_stamp,

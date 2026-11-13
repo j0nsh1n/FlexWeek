@@ -390,7 +390,13 @@ fn build_day(
 }
 
 #[pyfunction]
-fn build_month(month: &str, assignment_rows: &str, weeks: &str) -> PyResult<String> {
+#[pyo3(signature = (month, assignment_rows, weeks, first_weekday = 0))]
+fn build_month(
+    month: &str,
+    assignment_rows: &str,
+    weeks: &str,
+    first_weekday: u32,
+) -> PyResult<String> {
     guard(|| {
         let rows: Vec<(Value, i64)> = parse(assignment_rows)?
             .as_array()
@@ -415,7 +421,7 @@ fn build_month(month: &str, assignment_rows: &str, weeks: &str) -> PyResult<Stri
                 ))
             })
             .collect();
-        plan::build_month(month, &rows, &weeks)
+        plan::build_month_from(month, &rows, &weeks, first_weekday)
             .map(|value| dump(&value))
             .map_err(crate::raise)
     })

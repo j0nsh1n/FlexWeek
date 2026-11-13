@@ -150,6 +150,22 @@ def monday_of(iso_day: str) -> str:
     return str(flexweek_engine.calendar_monday_of(iso_day))
 
 
+def week_start_on(iso_day: str, first_weekday: int) -> str:
+    """The first date of the shown week holding `iso_day` (0 Monday to 6 Sunday as its first day)."""
+    return str(flexweek_engine.calendar_week_start_on(iso_day, first_weekday))
+
+
+def weekday_order(first_weekday: int) -> list[int]:
+    """The weekdays (0 Monday to 6 Sunday) in the order a week starting on `first_weekday` runs."""
+    return list(flexweek_engine.calendar_weekday_order(first_weekday))
+
+
+def month_rows(first: date, last: date, first_weekday: int) -> tuple[date, date]:
+    """The first and last dates of a month's whole rows when they start on `first_weekday`."""
+    start, end = flexweek_engine.month_grid(first, last, first_weekday)
+    return start, end
+
+
 def date_for_day(week_start: str, day: int) -> str:
     return str(flexweek_engine.calendar_date_for_day(week_start, json.dumps(day)))
 

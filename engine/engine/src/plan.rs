@@ -12,7 +12,7 @@ use crate::model::{LAST_DAY_ISO, due_sort_key, parse_due};
 use crate::stored::{self, Dict};
 use crate::time::{
     DAY_END_MIN, SLOT_MIN, SLOTS_PER_DAY, block_interval_on_day, clock_to_minutes, date_from_iso,
-    deadline_with, hhmm_to_minutes, minutes_to_hhmm, monday_of, month_grid, occupancy_between,
+    deadline_with, hhmm_to_minutes, minutes_to_hhmm, monday_of, month_grid_from, occupancy_between,
     parse_month, shift_days,
 };
 
@@ -1534,10 +1534,21 @@ pub fn build_month(
     assignment_rows: &[(Value, i64)],
     weeks: &[(String, Vec<Value>)],
 ) -> EngineResult<Value> {
+    build_month_from(month, assignment_rows, weeks, 0)
+}
+
+/// The month with its rows starting on `first_weekday` (0 Monday to 6 Sunday). `weeks` must hold
+/// every stored week the rows touch.
+pub fn build_month_from(
+    month: &str,
+    assignment_rows: &[(Value, i64)],
+    weeks: &[(String, Vec<Value>)],
+    first_weekday: u32,
+) -> EngineResult<Value> {
     let (start_s, end_s) = parse_month(month)?;
     let start = parse_iso_date(&start_s)?;
     let end = parse_iso_date(&end_s)?;
-    let (grid_start_s, grid_end_s) = month_grid(&start_s, &end_s)?;
+    let (grid_start_s, grid_end_s) = month_grid_from(&start_s, &end_s, first_weekday)?;
     let grid_start = parse_iso_date(&grid_start_s)?;
     let grid_end = parse_iso_date(&grid_end_s)?;
     let grid_days = dates_between(grid_start, grid_end);

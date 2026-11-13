@@ -178,6 +178,9 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | calendar | week_range | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | month_title | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | monday_of | ADAPTER | encodes, makes one engine call, decodes |
+| calendar | week_start_on | ADAPTER | encodes, makes one engine call, decodes |
+| calendar | weekday_order | ADAPTER | encodes, makes one engine call, decodes |
+| calendar | month_rows | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | date_for_day | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | sunday_due | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | local_stamp | STAYS | reads the clock (`datetime.now()`); the engine gets the minute as text |
