@@ -245,3 +245,45 @@ def test_plan_on_a_wednesday_week_uses_each_days_own_hours_and_keeps_its_weekend
     prefs = alice.get("/api/preferences").json()
     alice.put("/api/preferences", json={**prefs, "weekend_homework_free": True}, headers=WRITE)
     assert placed() == (5, "16:00")
+
+
+def school_rows(blocks: list[dict]) -> list[tuple[str, list[int]]]:
+    """School's start and days in a week, earliest start first, whatever ids hold it."""
+    return sorted((block["start"], block["days"]) for block in blocks if block["title"] == "School")
+
+
+def test_school_changed_twice_from_a_wednesday_week_on_then_from_the_next_monday_stays_school(
+    alice: TestClient,
+) -> None:
+    post(alice, {"weeks": [], "repeats": SCHOOL})
+
+    def from_this_week_on(start: str) -> None:
+        shown = week(alice, WED)
+        [school] = shown["blocks"]
+        assert school["id"] == "school"
+        change = [{"id": "school", "scope": "from", "from_date": WED, "set": {"start": start}}]
+        save(alice, WED, [{**school, "start": start}], shown["revision"], repeats=change)
+
+    from_this_week_on("10:00")
+    from_this_week_on("09:00")
+    shown = week(alice, WED)
+    assert [(row["id"], row["start"], row["days"]) for row in shown["blocks"]] == [
+        ("school", "09:00", [0, 1, 2, 5, 6])
+    ]
+    # Monday 9 and Tuesday 10 come before the week on screen and keep 08:30; from Monday 16 the repeat
+    # itself is 09:00, so that week holds School whole, by its own id.
+    first = week(alice, FIRST)["blocks"]
+    assert school_rows(first) == [("08:30", [0, 1]), ("09:00", [2, 3, 4])]
+    assert any(block["id"] == "school" and block["start"] == "08:30" for block in first)
+    assert [(block["id"], block["start"], block["days"]) for block in week(alice, SECOND)["blocks"]] == [
+        ("school", "09:00", [0, 1, 2, 3, 4])
+    ]
+    # Setup changed from Monday 16 on reaches every day of that week, Monday 16 and Tuesday 17 included.
+    post(alice, {"weeks": [], "repeats": [{"id": "school", "scope": "from", "from_date": SECOND,
+                                           "set": {"start": "07:45"}}]})  # fmt: skip
+    assert school_rows(week(alice, SECOND)["blocks"]) == [("07:45", [0, 1, 2, 3, 4])]
+    assert school_rows(week(alice, "2026-11-23")["blocks"]) == [("07:45", [0, 1, 2, 3, 4])]
+    assert school_rows(week(alice, FIRST)["blocks"]) == [("08:30", [0, 1]), ("09:00", [2, 3, 4])]
+    shown = week(alice, WED)
+    assert school_rows(shown["blocks"]) == [("07:45", [5, 6]), ("09:00", [0, 1, 2])]
+    assert "school" in {row["id"] for row in shown["blocks"]}

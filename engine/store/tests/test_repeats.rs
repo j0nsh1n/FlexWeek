@@ -720,3 +720,46 @@ fn a_saved_copy_where_a_later_version_starts_is_named_for_what_it_shows_even_whe
     );
     assert!(!notice.contains("08:30"), "{notice}");
 }
+
+#[test]
+fn a_later_week_holding_school_in_two_pieces_changes_both() {
+    // A week on screen from Wednesday 18 November changed School's time on Wednesday to Friday of 16
+    // November's week only, so that week holds School twice: `school` on Monday and Tuesday at 08:30
+    // and the piece at 10:00. A change from the open week on (9 November) reaches both pieces.
+    let (conn, user_id) = account("repeats-pieces", true);
+    set_up(&conn, user_id);
+    let piece = json!({"category": "class", "days": [2, 3, 4], "duration_min": 405,
+                       "id": "school@20261118", "kind": "locked", "start": "10:00",
+                       "title": "School"});
+    save_week_as(
+        &conn,
+        user_id,
+        NEXT_WEEK,
+        vec![with(school(), json!({"days": [0, 1]})), piece, soccer()],
+    );
+    change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[(
+            "school",
+            Some(with(
+                school(),
+                json!({"title": "Classes", "start": "08:00"}),
+            )),
+        )],
+    );
+    let next = shown(&conn, user_id, NEXT_WEEK);
+    let school = block(&next, "school").unwrap();
+    let piece = block(&next, "school@20261118").unwrap();
+    assert_eq!(
+        (&school["title"], &school["start"], &school["days"]),
+        (&json!("Classes"), &json!("08:00"), &json!([0, 1]))
+    );
+    // The piece keeps the time that week gave it, and takes the new name.
+    assert_eq!(
+        (&piece["title"], &piece["start"], &piece["days"]),
+        (&json!("Classes"), &json!("10:00"), &json!([2, 3, 4]))
+    );
+    assert_eq!(next.len(), 3, "{next:?}");
+}

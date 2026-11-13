@@ -7,17 +7,20 @@ stored weeks of Monday 2 and Monday 9 November; from Sunday it runs Sunday 1 to 
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QApplication
+import pytest
+from PySide6.QtWidgets import QApplication, QWidget
 
+from desktop.native import widgets
 from desktop.native.calendar import SETUP_SCHOOL_ID
 from desktop.native.client import ApiError
 from desktop.native.controller import NativeSession
+from desktop.native.widgets import BlockDialog
 from desktop.server import LocalServer
 from desktop.tests.e2e.account_sessions import HASHING_WAIT, HELD, server  # noqa: F401
 from desktop.tests.e2e.saved_weeks import read_week
 from desktop.tests.logic_support import essay, fixed, settled
 from desktop.tests.waiting import wait_until
-from desktop.tests.window_support import PASSWORD, qapp  # noqa: F401
+from desktop.tests.window_support import PASSWORD, host, qapp  # noqa: F401
 
 WEDNESDAY = 2
 SUNDAY = 6
@@ -263,3 +266,90 @@ def test_plan_does_not_take_this_weeks_own_days_for_an_earlier_week(
     assert essay_sessions(session.blocks) == [(0, "08:00", 60)]
     stored = essay_sessions(read_week(qapp, session, "2026-11-02")["blocks"])
     assert stored == [(2, "08:00", 60)]
+
+
+def post_changes(qapp: QApplication, session: NativeSession, body: dict) -> None:
+    """A change made somewhere else, such as on the phone, straight to the server."""
+    got: dict = {}
+    session.client.request(
+        "POST",
+        "/api/changes",
+        body,
+        lambda data: got.setdefault("ok", data),
+        lambda error: got.setdefault("err", error),
+    )
+    wait_until(qapp, lambda: bool(got))
+    assert "ok" in got, got.get("err")
+
+
+def school_rows(blocks: list[dict]) -> list[tuple[str, list[int]]]:
+    return sorted((block["start"], block["days"]) for block in blocks if block["title"] == "School")
+
+
+def delete_choices(host: QWidget, monkeypatch: pytest.MonkeyPatch, block: dict) -> list[str]:
+    """The answers the delete question offers for a block, left unanswered."""
+    offered: list[str] = []
+
+    class Asked:
+        answer = "stay"
+
+        def __init__(self, _parent, _title, _question, answers, **_kwargs) -> None:  # type: ignore[no-untyped-def]
+            offered.extend(label for _key, label, _style in answers)
+
+        def exec(self) -> int:
+            return 0
+
+    monkeypatch.setattr(widgets, "ConfirmSheet", Asked)
+    monkeypatch.setattr(widgets, "confirm", lambda *_args: offered.append("Delete") and False)
+    BlockDialog(host, block)._delete()
+    return offered
+
+
+def test_school_changed_twice_from_a_wednesday_week_on_and_then_from_monday_stays_school(
+    qapp: QApplication, server: LocalServer, host: QWidget, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = signed_in_from(qapp, server.origin, "schooltwice", WEDNESDAY)
+    school = {"id": SETUP_SCHOOL_ID, "title": "School", "kind": "locked", "category": "class",
+              "start": "08:30", "duration_min": 390, "days": [0, 1, 2, 3, 4]}  # fmt: skip
+    fields = {key: school[key] for key in ("title", "category", "start", "duration_min")}
+    stands = {"id": SETUP_SCHOOL_ID, "scope": "from", "from_date": "2026-10-26", "add_days": [0, 1, 2, 3, 4],
+              "set": fields}  # fmt: skip
+    post_changes(qapp, session, {"weeks": [], "repeats": [stands]})
+    session.reload()
+    settled(qapp, session)
+    for start in ("10:00", "09:00"):
+        # School hours, from this week on.
+        session.change_repeats([{**session.repeats[0], "start": start}], "changing School hours")
+        session.save()
+        wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+        settled(qapp, session)
+        assert [(row["id"], row["start"], row["days"]) for row in session.blocks] == [
+            (SETUP_SCHOOL_ID, start, [0, 1, 2, 5, 6])
+        ]
+    # Monday 2 and Tuesday 3 November come before the week on screen and keep 08:30.
+    before = read_week(qapp, session, "2026-11-02")["blocks"]
+    assert school_rows(before) == [("08:30", [0, 1]), ("09:00", [2, 3, 4])]
+    nine = read_week(qapp, session, "2026-11-09")["blocks"]
+    assert [(block["id"], block["start"], block["days"]) for block in nine] == [
+        (SETUP_SCHOOL_ID, "09:00", [0, 1, 2, 3, 4])
+    ]
+    # Setup changed from Monday 9 November on, on another device: Monday 9 and Tuesday 10 follow it.
+    setup = {"id": SETUP_SCHOOL_ID, "scope": "from", "from_date": "2026-11-09", "set": {"start": "07:45"}}
+    post_changes(qapp, session, {"weeks": [], "repeats": [setup]})
+    session.reload()
+    settled(qapp, session)
+    assert school_rows(read_week(qapp, session, "2026-11-09")["blocks"]) == [("07:45", [0, 1, 2, 3, 4])]
+    assert school_rows(session.blocks) == [("07:45", [5, 6]), ("09:00", [0, 1, 2])]
+    # Each School row on screen is School: deleting it asks this week only or this week and later.
+    for row in session.blocks:
+        assert delete_choices(host, monkeypatch, row) == ["Cancel", "This week only", "This week and later"]
+    # This week and later, from either row, takes School off the whole week on screen and every week after.
+    piece = next(row for row in session.blocks if row["id"] != SETUP_SCHOOL_ID)
+    session.delete_block(piece["id"], every_week=True)
+    session.save()
+    wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+    settled(qapp, session)
+    assert school_rows(session.blocks) == []
+    assert school_rows(read_week(qapp, session, "2026-11-02")["blocks"]) == [("08:30", [0, 1])]
+    assert school_rows(read_week(qapp, session, "2026-11-09")["blocks"]) == []
+    assert school_rows(read_week(qapp, session, "2026-11-16")["blocks"]) == []

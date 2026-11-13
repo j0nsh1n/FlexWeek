@@ -18,6 +18,7 @@ from backend.weeks import current_week_start
 from desktop.native.calendar import (
     apply_block_edit,
     apply_repeat_changes,
+    block_family,
     blocks_by_weekday,
     date_for_day,
     day_full_names,
@@ -1916,16 +1917,25 @@ class NativeSession(QObject):
         block = next((item for item in self.blocks if item["id"] == block_id), None)
         if block is None:
             return
+        setup = is_setup_block(block)
+        family = block_family(block_id)
         if block.get("assignment_id") or scope != "occurrence":
-            self.blocks = [item for item in self.blocks if item["id"] != block_id]
+            # School split at a week's seam is School on each side: all of it goes together.
+            going = {
+                item["id"] for item in self.blocks
+                if item["id"] == block_id or (setup and block_family(item["id"]) == family)
+            }
+            gone = [item for item in self.blocks if item["id"] in going]
+            self.blocks = [item for item in self.blocks if item["id"] not in going]
         else:
             self.blocks = delete_occurrence(self.blocks, block_id, day)
-        if is_setup_block(block) and not any(item["id"] == block_id for item in self.blocks):
+            gone = [] if any(item["id"] == block_id for item in self.blocks) else [block]
+        if setup and gone:
             if every_week:
-                self.repeats = [item for item in self.repeats if item["id"] != block_id]
+                self.repeats = [item for item in self.repeats if item["id"] != family]
             else:
-                missed = {**block, "missed_days": list(block.get("days") or [])}
-                self.blocks = [*self.blocks, missed]
+                missed = [{**item, "missed_days": list(item.get("days") or [])} for item in gone]
+                self.blocks = [*self.blocks, *missed]
         if self.selected_block_id == block_id:
             self.select_block(None, None)
         self._touch("deleting " + block["title"])

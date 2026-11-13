@@ -402,6 +402,11 @@ def is_setup_block(block: dict) -> bool:
     return bool(flexweek_engine.calendar_setup_block(json.dumps(block)))
 
 
+def block_family(block_id: str) -> str:
+    """The block a piece split off at a week's seam belongs to: `school` for `school@20261111`."""
+    return str(flexweek_engine.calendar_block_family(block_id))
+
+
 def new_activity_id() -> str:
     """An id for an activity Setup adds. A new one never takes a number an earlier activity had, so
     removing or reordering activities leaves every other activity's id, and its weeks, as they were."""

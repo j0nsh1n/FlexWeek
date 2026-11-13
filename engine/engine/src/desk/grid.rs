@@ -760,8 +760,10 @@ pub fn next_action_for(
     Ok(json!({"kind": "add"}))
 }
 
+/// School or a Setup activity, or a piece of one split off at a week's seam.
 pub fn is_setup_block(block: &Value) -> EngineResult<bool> {
     let id = py_str(&or_default(get(block, "id")?, json!("")));
+    let id = crate::shown::family_id(&id);
     Ok(id == crate::desk::calendar::SETUP_SCHOOL_ID
         || id == "sport"
         || id.starts_with(crate::desk::calendar::SETUP_ACTIVITY_PREFIX))

@@ -6,6 +6,7 @@
 use flexweek_engine::repeats::{
     Intent, Kept, kept_notice, own_changes, patched, restated_copy, restated_version,
 };
+use flexweek_engine::shown::family_id;
 use flexweek_engine::snapshot::canonical;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
@@ -259,21 +260,31 @@ pub fn apply_repeat_intents(
             let Value::Array(stored) = parse(&text)? else {
                 continue;
             };
-            let Some(held) = stored
-                .iter()
-                .position(|block| block.get("id").and_then(Value::as_str) == Some(&intent.id))
-            else {
+            // Every piece of the repeat in that week: School split at a seam is School on each side.
+            let pieces: Vec<usize> = (0..stored.len())
+                .filter(|at| {
+                    stored[*at].get("id").and_then(Value::as_str).map(family_id)
+                        == Some(intent.id.as_str())
+                })
+                .collect();
+            if pieces.is_empty() {
                 continue;
-            };
+            }
             let mut updated = stored.clone();
             if was != now {
-                match restated_copy(was, now, &stored[held]) {
-                    Some(copy) => updated[held] = copy,
-                    None => {
-                        updated.remove(held);
+                for at in pieces.into_iter().rev() {
+                    match restated_copy(was, now, &stored[at]) {
+                        Some(copy) => updated[at] = copy,
+                        None => {
+                            updated.remove(at);
+                        }
                     }
                 }
             }
+            let held = updated
+                .iter()
+                .position(|block| block.get("id").and_then(Value::as_str) == Some(&intent.id))
+                .unwrap_or(updated.len());
             // Where a later version starts, the copy's own changes are measured against this change, as
             // the version's would have been, so the week is named once for everything it keeps.
             let measured_against = if version_starts_here {

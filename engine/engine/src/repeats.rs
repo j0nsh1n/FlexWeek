@@ -15,6 +15,7 @@ use crate::desk::calendar::{DAY_FULL, SETUP_SCHOOL_ID};
 use crate::desk::grid::is_setup_block;
 use crate::desk::pydate::from_iso;
 use crate::error::EngineResult;
+use crate::shown::family_id;
 use crate::time::{hhmm_to_minutes, is_calendar_date, monday_of};
 use crate::validate::time_block;
 
@@ -133,7 +134,8 @@ pub fn parse_intent(value: &Value) -> Result<Intent, String> {
         return Err(RULE.into());
     }
     Ok(Intent {
-        id: id.to_string(),
+        // A piece of School split off at a week's seam changes School.
+        id: family_id(id).to_string(),
         from_date: from_date.to_string(),
         set,
         add_days,
@@ -423,18 +425,23 @@ pub fn apply_to_week(
             (None, Some(new)) => repeats.push(new.clone()),
             (None, None) => {}
         }
-        let held = blocks
-            .iter()
-            .position(|block| id_of(block) == Some(&intent.id));
-        match (held, old.as_ref(), new.as_ref()) {
-            (Some(at), _, _) => match restated_copy(old.as_ref(), new.as_ref(), &blocks[at]) {
+        // Every piece of the repeat in the week: School split at a seam is School on each side.
+        let held: Vec<usize> = (0..blocks.len())
+            .filter(|at| id_of(&blocks[*at]).map(family_id) == Some(intent.id.as_str()))
+            .collect();
+        if held.is_empty() {
+            if let (None, Some(new)) = (old.as_ref(), new.as_ref()) {
+                blocks.push(new.clone());
+            }
+            continue;
+        }
+        for at in held.into_iter().rev() {
+            match restated_copy(old.as_ref(), new.as_ref(), &blocks[at]) {
                 Some(copy) => blocks[at] = copy,
                 None => {
                     blocks.remove(at);
                 }
-            },
-            (None, None, Some(new)) => blocks.push(new.clone()),
-            _ => {}
+            }
         }
     }
     Ok((blocks, repeats))
@@ -504,30 +511,45 @@ pub fn own_changes(copy: &Value, repeat: &Value, week: &[Value], h24: bool) -> V
         .filter(|day| !missed.contains(day))
         .collect();
     let mut said = Vec::new();
-    let mut moved = Vec::new();
+    // Each block a day moved to, with its span and the days it took, in the order first reached.
+    let mut moved: Vec<(usize, String, Vec<i64>)> = Vec::new();
     let mut skipped = Vec::new();
+    let family = id_of(copy).map(family_id);
     for day in repeat_days
         .iter()
         .copied()
         .filter(|day| !showing.contains(day))
     {
-        // A day split off by a drag or a one-day edit is a block of its own with the same name.
-        let split = week.iter().find(|block| {
+        // A day split off by a drag or a one-day edit is a block of its own with the same name; days
+        // changed on a week that starts on another day are a piece of the repeat itself.
+        let split = week.iter().enumerate().find(|(_, block)| {
+            let piece = id_of(block).map(family_id) == family;
             id_of(block) != id_of(copy)
-                && !is_setup_block(block).unwrap_or(true)
-                && title_of(block) == title_of(copy)
-                && days_of(block) == vec![day]
                 && !missed_of(block).contains(&day)
+                && if piece {
+                    days_of(block).contains(&day)
+                } else {
+                    !is_setup_block(block).unwrap_or(true)
+                        && title_of(block) == title_of(copy)
+                        && days_of(block) == vec![day]
+                }
         });
-        match split.and_then(|block| span_words(block, h24)) {
-            Some(span) => moved.push(format!("{name} at {span} on {}", DAY_FULL[day as usize])),
+        match split.and_then(|(at, block)| Some((at, span_words(block, h24)?))) {
+            Some((at, span)) => match moved.iter_mut().find(|(held, _, _)| *held == at) {
+                Some((_, _, days)) => days.push(day),
+                None => moved.push((at, span, vec![day])),
+            },
             None => skipped.push(day),
         }
     }
     if !skipped.is_empty() {
         said.push(format!("no {name} on {}", days_words(&skipped)));
     }
-    said.extend(moved);
+    said.extend(
+        moved
+            .into_iter()
+            .map(|(_, span, days)| format!("{name} at {span} on {}", days_words(&days))),
+    );
     let extra: Vec<i64> = showing
         .iter()
         .copied()
@@ -640,7 +662,7 @@ pub fn one_day_note(block: &Value, day: i64, school_hours: bool) -> EngineResult
     let Some(name) = usize::try_from(day).ok().and_then(|day| DAY_FULL.get(day)) else {
         return Ok(None);
     };
-    let place = if school_hours && id_of(block) == Some(SETUP_SCHOOL_ID) {
+    let place = if school_hours && id_of(block).map(family_id) == Some(SETUP_SCHOOL_ID) {
         "open School hours"
     } else {
         "run setup again from Settings"

@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use crate::EngineResult;
 use crate::desk::grid::is_setup_block;
+use crate::shown::family_id;
 
 fn id_of(block: &Value) -> Option<&str> {
     block.get("id").and_then(Value::as_str)
@@ -23,9 +24,10 @@ pub fn standing_body(block: &Value) -> Value {
     body
 }
 
-/// A week as the student sees it: its own blocks, then each standing block it has no version of.
+/// A week as the student sees it: its own blocks, then each standing block it has no version of. A
+/// piece of School split off at a week's seam is that week's version of School.
 pub fn with_standing(stored: &[Value], standing: &[Value]) -> Vec<Value> {
-    let held: HashSet<&str> = stored.iter().filter_map(id_of).collect();
+    let held: HashSet<&str> = stored.iter().filter_map(id_of).map(family_id).collect();
     let mut week = stored.to_vec();
     week.extend(
         standing
@@ -49,10 +51,16 @@ pub fn derive_standing(
         {
             continue;
         }
-        let mut setup = Vec::new();
+        let mut setup: Vec<Value> = Vec::new();
         for block in blocks {
-            if is_setup_block(block)? {
-                setup.push(standing_body(block));
+            let Some(family) = id_of(block).map(family_id) else {
+                continue;
+            };
+            // School stands once, by its own id, however many pieces the week holds.
+            if is_setup_block(block)? && !setup.iter().any(|held| id_of(held) == Some(family)) {
+                let mut body = standing_body(block);
+                body["id"] = Value::from(family);
+                setup.push(body);
             }
         }
         if !setup.is_empty() {

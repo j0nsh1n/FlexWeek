@@ -488,7 +488,9 @@ fn every_week_input(
 ) -> Result<ApplyInput, String> {
     let repeats =
         standing_blocks(conn, user_id, &args.week_start).map_err(session::storage_sentence)?;
-    let Some(repeat) = find(&repeats, &args.block_id) else {
+    // A piece of School split off at a week's seam changes School.
+    let family = flexweek_engine::shown::family_id(&args.block_id);
+    let Some(repeat) = find(&repeats, family) else {
         return Err(NOT_STANDING.into());
     };
     let mut wanted = repeat.clone();
@@ -511,12 +513,7 @@ fn every_week_input(
         }
     }
     let mut input = week_input(&args.week_start, blocks.to_vec(), args.expected_revision);
-    let Some(intent) = edit_intent(
-        &args.block_id,
-        &args.week_start,
-        Some(&repeat),
-        Some(&wanted),
-    ) else {
+    let Some(intent) = edit_intent(family, &args.week_start, Some(&repeat), Some(&wanted)) else {
         return Ok(input);
     };
     let (week, _) = apply_to_week(blocks, &repeats, std::slice::from_ref(&intent))?;

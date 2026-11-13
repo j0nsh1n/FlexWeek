@@ -435,6 +435,11 @@ fn calendar_setup_block(block: &str) -> PyResult<bool> {
 }
 
 #[pyfunction]
+fn calendar_block_family(id: &str) -> String {
+    ::flexweek_engine::shown::family_id(id).to_string()
+}
+
+#[pyfunction]
 fn calendar_span_problem(
     day: i64,
     start_min: i64,
@@ -1875,6 +1880,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         calendar_agenda,
         calendar_next_action,
         calendar_setup_block,
+        calendar_block_family,
         calendar_span_problem,
         calendar_past_problem,
         calendar_span_clash,

@@ -315,8 +315,28 @@ fn shown_copy(block: &Value, part: Part, offset: i64) -> Option<Value> {
     Some(with_days(block, days, missed, done))
 }
 
-/// An id not in `taken`, made from `id` and a tag, kept within the id length limit.
-fn fresh_id(id: &str, tag: &str, taken: &HashSet<String>) -> String {
+/// The block a piece belongs to. A stored week holds one block per id, so when a change on screen
+/// reaches only some of a stored block's days, the changed days become a block of their own with the
+/// family's id and a tag: `school@20261111`, or `school@20261111-2`. Every id check reads the family.
+pub fn family_id(id: &str) -> &str {
+    let Some((family, tag)) = id.rsplit_once('@') else {
+        return id;
+    };
+    let (date, count) = match tag.split_once('-') {
+        Some((date, count)) => (date, Some(count)),
+        None => (tag, None),
+    };
+    let digits = |text: &str| !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit());
+    if !family.is_empty() && date.len() == 8 && digits(date) && count.is_none_or(digits) {
+        family
+    } else {
+        id
+    }
+}
+
+/// An id of `family` not in `taken`, tagged with the shown week's first day, kept within the id length
+/// limit.
+fn fresh_id(family: &str, tag: &str, taken: &HashSet<String>) -> String {
     let mut attempt = 1;
     loop {
         let suffix = if attempt == 1 {
@@ -325,7 +345,7 @@ fn fresh_id(id: &str, tag: &str, taken: &HashSet<String>) -> String {
             format!("@{tag}-{attempt}")
         };
         let room = MAX_ID.saturating_sub(suffix.chars().count());
-        let base: String = id.chars().take(room).collect();
+        let base: String = family.chars().take(room).collect();
         let candidate = format!("{base}{suffix}");
         if !taken.contains(&candidate) {
             return candidate;
@@ -345,50 +365,83 @@ struct Layout {
     shown: Vec<Value>,
 }
 
+/// Shown copies that are one block on screen: a block with a time and the same content in both stored
+/// weeks, or split at the seam before, shows once with the days of all of them.
+struct Group {
+    family: String,
+    wanted: String,
+    shown: Value,
+    members: Vec<(Part, usize)>,
+}
+
 fn lay_out(shown_start: &str, offset: i64, first: &[Value], second: &[Value]) -> Layout {
-    let mut entries = Vec::new();
-    let mut shown: Vec<Value> = Vec::new();
-    for (index, block) in first.iter().enumerate() {
-        if let Some(copy) = shown_copy(block, Part::First, offset) {
-            entries.push((Part::First, index, id_of(block).to_string()));
-            shown.push(copy);
+    let mut groups: Vec<Group> = Vec::new();
+    for (part, blocks) in [(Part::First, first), (Part::Second, second)] {
+        for (index, block) in blocks.iter().enumerate() {
+            let Some(copy) = shown_copy(block, part, offset) else {
+                continue;
+            };
+            let family = family_id(id_of(block)).to_string();
+            let same = groups.iter_mut().find(|group| {
+                placed(block)
+                    && placed(&group.shown)
+                    && group.family == family
+                    && content(&group.shown) == content(block)
+            });
+            if let Some(group) = same {
+                let held = &group.shown;
+                let days = [day_list(held, "days"), day_list(&copy, "days")].concat();
+                let missed = [
+                    day_list(held, "missed_days"),
+                    day_list(&copy, "missed_days"),
+                ]
+                .concat();
+                let done = completed_day(held).or(completed_day(&copy));
+                group.shown = with_days(held, days, missed, done);
+                group.members.push((part, index));
+                continue;
+            }
+            // One with a time shows as its family; one waiting for a time keeps its own id.
+            let wanted = if placed(block) {
+                family.clone()
+            } else {
+                id_of(block).to_string()
+            };
+            groups.push(Group {
+                family,
+                wanted,
+                shown: copy,
+                members: vec![(part, index)],
+            });
         }
     }
-    let mut taken: HashSet<String> = first
+    let mut taken: HashSet<String> = HashSet::new();
+    let mut names: Vec<Option<String>> = groups
         .iter()
-        .chain(second.iter())
-        .map(|block| id_of(block).to_string())
+        .map(|group| {
+            taken
+                .insert(group.wanted.clone())
+                .then(|| group.wanted.clone())
+        })
         .collect();
-    for (index, block) in second.iter().enumerate() {
-        let Some(copy) = shown_copy(block, Part::Second, offset) else {
-            continue;
-        };
-        let id = id_of(block);
-        let Some(at) = shown.iter().position(|held| id_of(held) == id) else {
-            entries.push((Part::Second, index, id.to_string()));
-            shown.push(copy);
-            continue;
-        };
-        // One block with a time on both sides of the seam shows once, with the days of both.
-        if placed(block) && placed(&shown[at]) && content(block) == content(&shown[at]) {
-            let held = &shown[at];
-            let days = [day_list(held, "days"), day_list(&copy, "days")].concat();
-            let missed = [
-                day_list(held, "missed_days"),
-                day_list(&copy, "missed_days"),
-            ]
-            .concat();
-            let done = completed_day(held).or(completed_day(&copy));
-            shown[at] = with_days(held, days, missed, done);
-            entries.push((Part::Second, index, id.to_string()));
-            continue;
+    let tag = compact(shown_start);
+    for (group, name) in groups.iter().zip(names.iter_mut()) {
+        if name.is_none() {
+            let fresh = fresh_id(&group.family, &tag, &taken);
+            taken.insert(fresh.clone());
+            *name = Some(fresh);
         }
-        let renamed = fresh_id(id, &compact(shown_start), &taken);
-        taken.insert(renamed.clone());
-        let mut copy = copy;
-        copy["id"] = Value::from(renamed.clone());
-        entries.push((Part::Second, index, renamed));
-        shown.push(copy);
+    }
+    let mut entries = Vec::new();
+    let mut shown = Vec::new();
+    for (group, name) in groups.into_iter().zip(names) {
+        let name = name.unwrap_or_default();
+        for (part, index) in group.members {
+            entries.push((part, index, name.clone()));
+        }
+        let mut block = group.shown;
+        block["id"] = Value::from(name);
+        shown.push(block);
     }
     Layout { entries, shown }
 }
@@ -519,6 +572,179 @@ fn stored_copy(shown: &Value, id: &str, part: Part, offset: i64, days: Vec<i64>)
     copy
 }
 
+/// Some days of a block with a time, as one stored week will hold them: the days the shown week cannot
+/// see of a stored block (`owned` is its id), or the days a shown block lands on there (`covers` are
+/// the ids of the stored blocks of its family that were on those days).
+struct Piece {
+    family: String,
+    body: Value,
+    days: Vec<i64>,
+    missed: Vec<i64>,
+    done: Option<i64>,
+    owned: Option<String>,
+    covers: Vec<String>,
+    order: (usize, usize),
+}
+
+/// The blocks with a time that stored week `part` holds after the save: for each family, its pieces
+/// with the same content are one block again, so a change made and taken back leaves no trace.
+fn placed_blocks(
+    part: Part,
+    offset: i64,
+    tag: &str,
+    stored: &[Value],
+    shown: &[Value],
+    layout: &Layout,
+    taken: &mut HashSet<String>,
+) -> Vec<((usize, usize), Value)> {
+    let mut pieces: Vec<Piece> = Vec::new();
+    // The days of each stored block with a time that the shown week holds, in its own days.
+    let mut seen_days: Vec<(usize, Vec<i64>)> = Vec::new();
+    for (index, block) in stored.iter().enumerate() {
+        if !placed(block) {
+            continue;
+        }
+        let (hidden, visible): (Vec<i64>, Vec<i64>) = day_list(block, "days")
+            .into_iter()
+            .partition(|day| to_shown(part, *day, offset).is_none());
+        seen_days.push((index, visible));
+        if hidden.is_empty() {
+            continue;
+        }
+        let hidden_missed = day_list(block, "missed_days")
+            .into_iter()
+            .filter(|day| to_shown(part, *day, offset).is_none())
+            .collect();
+        pieces.push(Piece {
+            family: family_id(id_of(block)).to_string(),
+            body: block.clone(),
+            days: hidden,
+            missed: hidden_missed,
+            done: completed_day(block).filter(|day| to_shown(part, *day, offset).is_none()),
+            owned: Some(id_of(block).to_string()),
+            covers: Vec::new(),
+            order: (0, index),
+        });
+    }
+    for (at, row) in shown.iter().enumerate() {
+        if !placed(row) {
+            continue;
+        }
+        let landed = landing(row, "days", part, offset);
+        if landed.is_empty() {
+            continue;
+        }
+        let family = family_id(id_of(row)).to_string();
+        let covered: Vec<usize> = seen_days
+            .iter()
+            .filter(|(index, visible)| {
+                family_id(id_of(&stored[*index])) == family
+                    && visible.iter().any(|day| landed.contains(day))
+            })
+            .map(|(index, _)| *index)
+            .collect();
+        let shown_from = layout
+            .entries
+            .iter()
+            .filter(|(at_part, _, id)| *at_part == part && id == id_of(row))
+            .map(|(_, index, _)| *index);
+        let order = covered
+            .iter()
+            .copied()
+            .chain(shown_from)
+            .min()
+            .map_or((1, at), |index| (0, index));
+        pieces.push(Piece {
+            family,
+            body: row.clone(),
+            days: landed,
+            missed: landing(row, "missed_days", part, offset),
+            done: landing_done(row, part, offset),
+            owned: None,
+            covers: covered
+                .iter()
+                .map(|index| id_of(&stored[*index]).to_string())
+                .collect(),
+            order,
+        });
+    }
+    // Pieces of one family with the same content are one block.
+    let mut groups: Vec<Vec<Piece>> = Vec::new();
+    for piece in pieces {
+        let same = groups.iter_mut().find(|group| {
+            group[0].family == piece.family && content(&group[0].body) == content(&piece.body)
+        });
+        match same {
+            Some(group) => group.push(piece),
+            None => groups.push(vec![piece]),
+        }
+    }
+    groups.sort_by_key(|group| group.iter().map(|piece| piece.order).min());
+    // A group that keeps days the shown week cannot see keeps that block's id; another takes the id of
+    // a stored block it now stands for, else its family's, else a new one.
+    let mut names: Vec<Option<String>> = vec![None; groups.len()];
+    for (group, name) in groups.iter().zip(names.iter_mut()) {
+        let mut owners: Vec<&String> = group
+            .iter()
+            .filter_map(|piece| piece.owned.as_ref())
+            .collect();
+        owners.sort_by_key(|id| **id != group[0].family);
+        if let Some(id) = owners.first()
+            && taken.insert((*id).clone())
+        {
+            *name = Some((*id).clone());
+        }
+    }
+    for (group, name) in groups.iter().zip(names.iter_mut()) {
+        if name.is_some() {
+            continue;
+        }
+        let covers = group.iter().flat_map(|piece| piece.covers.iter());
+        let family = std::iter::once(&group[0].family);
+        if let Some(id) = covers.chain(family).find(|id| !taken.contains(*id)) {
+            taken.insert(id.clone());
+            *name = Some(id.clone());
+        }
+    }
+    let mut out = Vec::new();
+    for (group, name) in groups.into_iter().zip(names) {
+        let name = name.unwrap_or_else(|| {
+            let fresh = fresh_id(&group[0].family, tag, taken);
+            taken.insert(fresh.clone());
+            fresh
+        });
+        let order = group
+            .iter()
+            .map(|piece| piece.order)
+            .min()
+            .unwrap_or((1, 0));
+        // A stored block the save left alone stays exactly as it was stored.
+        if let [piece] = group.as_slice()
+            && piece.owned.as_deref() == Some(name.as_str())
+            && piece.days.len() == day_list(&piece.body, "days").len()
+        {
+            out.push((order, piece.body.clone()));
+            continue;
+        }
+        let template = group
+            .iter()
+            .find(|piece| piece.owned.is_some())
+            .unwrap_or(&group[0])
+            .body
+            .clone();
+        let days = group.iter().flat_map(|piece| piece.days.clone()).collect();
+        let missed = group
+            .iter()
+            .flat_map(|piece| piece.missed.clone())
+            .collect();
+        let done = group.iter().find_map(|piece| piece.done);
+        let mut block = with_days(&template, days, missed, done);
+        block["id"] = Value::from(name);
+        out.push((order, block));
+    }
+    out
+}
+
 /// The stored weeks after a shown week is saved: `shown` as the client sends it, `first` and `second`
 /// the two stored weeks as the student sees them now (what `compose_shown_week` was given). Days the
 /// shown week does not hold keep what was stored on them.
@@ -543,114 +769,79 @@ pub fn split_shown_week(
             .find(|(_, _, shown_id)| shown_id == id)
             .map(|(part, _, _)| *part)
     };
-    let mut out: [Vec<Value>; 2] = [Vec::new(), Vec::new()];
-    // Shown ids whose days in a part a stored block there already took.
-    let mut used: [HashSet<String>; 2] = [HashSet::new(), HashSet::new()];
     let tag = compact(shown_start);
+    let mut out: [Vec<Value>; 2] = [Vec::new(), Vec::new()];
     for part in [Part::First, Part::Second] {
-        let mut taken: HashSet<String> = stored[slot(part)]
-            .iter()
-            .map(|block| id_of(block).to_string())
-            .collect();
-        for (index, block) in stored[slot(part)].iter().enumerate() {
+        let week = stored[slot(part)];
+        let mut held: Vec<((usize, usize), Value)> = Vec::new();
+        // Shown ids of sessions waiting for a time that a stored one here already took.
+        let mut used: HashSet<String> = HashSet::new();
+        for (index, block) in week.iter().enumerate() {
+            if placed(block) {
+                continue;
+            }
             let Some((_, _, shown_id)) = layout
                 .entries
                 .iter()
                 .find(|(at_part, at, _)| *at_part == part && *at == index)
             else {
-                out[slot(part)].push(block.clone());
+                held.push(((0, index), block.clone()));
                 continue;
             };
-            used[slot(part)].insert(shown_id.clone());
+            // Taken off the shown week, or given a time there: it happens once, so its days here go.
+            let Some(now) = by_shown_id(shown_id).filter(|now| !placed(now)) else {
+                continue;
+            };
+            used.insert(shown_id.clone());
+            let landed = parts_of(now, offset, home_of(shown_id))[slot(part)].clone();
+            if landed.is_empty() {
+                continue;
+            }
             let hidden: Vec<i64> = day_list(block, "days")
                 .into_iter()
                 .filter(|day| to_shown(part, *day, offset).is_none())
                 .collect();
-            let hidden_missed: Vec<i64> = day_list(block, "missed_days")
-                .into_iter()
-                .filter(|day| to_shown(part, *day, offset).is_none())
-                .collect();
-            let hidden_done =
-                completed_day(block).filter(|day| to_shown(part, *day, offset).is_none());
-            let kept_hidden =
-                || with_days(block, hidden.clone(), hidden_missed.clone(), hidden_done);
-            let id = id_of(block);
-            let Some(now) = by_shown_id(shown_id) else {
-                // Taken off the shown week: a block with a time keeps the days it has elsewhere; one
-                // waiting for a time was the shown week's to delete.
-                if placed(block) && !hidden.is_empty() {
-                    out[slot(part)].push(kept_hidden());
-                }
-                continue;
-            };
-            let landed = parts_of(now, offset, home_of(shown_id))[slot(part)].clone();
-            if !placed(block) {
-                if placed(now) {
-                    if !landed.is_empty() {
-                        out[slot(part)].push(stored_copy(now, id, part, offset, landed));
-                    }
-                } else if !landed.is_empty() {
-                    let days = [hidden.clone(), landed].concat();
-                    out[slot(part)].push(stored_copy(now, id, part, offset, days));
-                }
-                continue;
-            }
-            if placed(now) && content(now) == content(block) {
-                if hidden.is_empty() && landed.is_empty() {
-                    continue;
-                }
-                let mut copy =
-                    stored_copy(now, id, part, offset, [hidden.clone(), landed].concat());
-                let missed = [
-                    hidden_missed.clone(),
-                    landing(now, "missed_days", part, offset),
-                ]
-                .concat();
-                let done = landing_done(now, part, offset).or(hidden_done);
-                copy = with_days(&copy, day_list(&copy, "days"), missed, done);
-                out[slot(part)].push(copy);
-                continue;
-            }
-            // Changed on screen: the days the shown week cannot see keep the block as it was, and the
-            // shown days become a block of their own unless there are no other days.
-            if !hidden.is_empty() {
-                out[slot(part)].push(kept_hidden());
-                if !landed.is_empty() {
-                    let fresh = fresh_id(id, &tag, &taken);
-                    taken.insert(fresh.clone());
-                    out[slot(part)].push(stored_copy(now, &fresh, part, offset, landed));
-                }
-            } else if !landed.is_empty() {
-                out[slot(part)].push(stored_copy(now, id, part, offset, landed));
-            }
+            let days = [hidden, landed].concat();
+            held.push((
+                (0, index),
+                stored_copy(now, id_of(block), part, offset, days),
+            ));
         }
-    }
-    // Days of shown blocks no stored block took: new blocks, and blocks moved over the seam.
-    for block in shown {
-        let shown_id = id_of(block);
-        let parts = parts_of(block, offset, home_of(shown_id));
-        for part in [Part::First, Part::Second] {
-            let days = parts[slot(part)].clone();
-            if days.is_empty() || used[slot(part)].contains(shown_id) {
+        let mut taken: HashSet<String> = held
+            .iter()
+            .map(|(_, block)| id_of(block).to_string())
+            .collect();
+        held.extend(placed_blocks(
+            part, offset, &tag, week, shown, &layout, &mut taken,
+        ));
+        // New sessions waiting for a time, and ones that moved over the seam.
+        for (at, row) in shown.iter().enumerate() {
+            let shown_id = id_of(row);
+            if placed(row) || used.contains(shown_id) {
                 continue;
             }
-            let stored_id = layout
-                .entries
-                .iter()
-                .find(|(_, _, id)| id == shown_id)
-                .map(|(at_part, at, _)| id_of(&stored[slot(*at_part)][*at]).to_string())
+            let days = parts_of(row, offset, home_of(shown_id))[slot(part)].clone();
+            if days.is_empty() {
+                continue;
+            }
+            let entry = layout.entries.iter().find(|(_, _, id)| id == shown_id);
+            let id = entry
+                .map(|(at_part, index, _)| id_of(&stored[slot(*at_part)][*index]).to_string())
                 .unwrap_or_else(|| shown_id.to_string());
-            let taken: HashSet<String> = out[slot(part)]
-                .iter()
-                .map(|held| id_of(held).to_string())
-                .collect();
-            let id = if taken.contains(&stored_id) {
-                fresh_id(&stored_id, &tag, &taken)
+            let id = if taken.contains(&id) {
+                fresh_id(family_id(&id), &tag, &taken)
             } else {
-                stored_id
+                id
             };
-            out[slot(part)].push(stored_copy(block, &id, part, offset, days));
+            taken.insert(id.clone());
+            let order = match entry {
+                Some((at_part, index, _)) if *at_part == part => (0, *index),
+                _ => (1, at),
+            };
+            held.push((order, stored_copy(row, &id, part, offset, days)));
         }
+        held.sort_by_key(|(order, _)| *order);
+        out[slot(part)] = held.into_iter().map(|(_, block)| block).collect();
     }
     let [first_out, second_out] = out;
     Ok((first_out, second_out))
