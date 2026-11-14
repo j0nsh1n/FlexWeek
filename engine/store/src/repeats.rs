@@ -405,6 +405,31 @@ fn enact(
             // All weeks and From today on still replace a saved edit when the standing bodies match.
             let replaces = intent.edited != Edited::Keep;
             if was == now && !version_starts_here && !replaces {
+                // The question is asked before any answer, so it names a week whose copy has its
+                // own edit even when keeping edits leaves it alone: All weeks would replace it.
+                if !write
+                    && let Some(body) = was
+                    && let Value::Array(stored) = parse(&text)?
+                {
+                    let mut changes = Vec::new();
+                    for piece in stored.iter().filter(|block| {
+                        block.get("id").and_then(Value::as_str).map(family_id)
+                            == Some(intent.id.as_str())
+                    }) {
+                        for change in own_changes(piece, body, &stored, h24) {
+                            if !changes.contains(&change) {
+                                changes.push(change);
+                            }
+                        }
+                    }
+                    if !changes.is_empty() {
+                        outcome.kept.push(Kept {
+                            week_start: week_start.clone(),
+                            id: intent.id.clone(),
+                            changes,
+                        });
+                    }
+                }
                 continue;
             }
             let Value::Array(stored) = parse(&text)? else {

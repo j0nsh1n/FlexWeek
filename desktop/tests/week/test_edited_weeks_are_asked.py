@@ -310,6 +310,61 @@ def test_two_changes_to_school_before_a_save_goes_through_both_reach_later_weeks
     assert (start, length) == ("09:00", 360)
 
 
+def _failing_changes(window, monkeypatch) -> tuple[list[dict], dict]:
+    """Every /api/changes payload, and a switch: while it is on, those saves fail."""
+    sent: list[dict] = []
+    down = {"on": True}
+    real = window.session.client.request
+
+    def request(method, path, payload, ok, err):
+        if method == "POST" and path == "/api/changes":
+            sent.append(payload)
+            if down["on"]:
+                err(ApiError(0, "down"))
+                return None
+        return real(method, path, payload, ok, err)
+
+    monkeypatch.setattr(window.session.client, "request", request)
+    return sent, down
+
+
+def test_reload_drops_a_school_change_it_throws_away(qapp, window, after_setup, monkeypatch) -> None:
+    # All weeks was chosen, that save failed, and Reload threw the change away. A later save of
+    # something else must not send it.
+    sent, down = _failing_changes(window, monkeypatch)
+    window.session.set_setup_blocks(_shorter(), edited="replace")
+    window.session.save()
+    wait_until(qapp, lambda: not window.session.busy)
+    down["on"] = False
+    window.session.reload()
+    wait_until(qapp, lambda: not window.session.busy)
+    window.session._touch("a note")
+    save_and_settle(qapp, window.session)
+    assert "repeats" not in sent[-1]
+    go_to(qapp, window.session, LATER)
+    _days, _start, length, _missed = school_of(window.session)
+    assert length == SCHOOL["duration_min"]
+
+
+def test_a_school_change_waits_with_its_own_week(qapp, window, after_setup, monkeypatch) -> None:
+    # School shortened in this week, that save failed, then another week is opened and saved: its
+    # save does not carry this week's change. Back in this week, saving sends it.
+    sent, down = _failing_changes(window, monkeypatch)
+    home = window.session.week_start
+    window.session.set_setup_blocks(_shorter(), edited="replace")
+    window.session.save()
+    wait_until(qapp, lambda: not window.session.busy)
+    down["on"] = False
+    go_to(qapp, window.session, LATER)
+    window.session._touch("a note")
+    save_and_settle(qapp, window.session)
+    assert "repeats" not in sent[-1]
+    go_to(qapp, window.session, home)
+    save_and_settle(qapp, window.session)
+    edited = {item["id"]: item.get("edited") for item in sent[-1].get("repeats", [])}
+    assert edited.get("school") == "replace"
+
+
 def test_closing_the_material_prompt_finishes_the_wait(qapp, window) -> None:
     sheets = SheetsBridge(window, window)
     got: dict = {}

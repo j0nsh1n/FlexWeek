@@ -676,6 +676,9 @@ class NativeSession(QObject):
             "selected_occurrence_day": self.selected_occurrence_day,
             "repeats": deepcopy(self.repeats),
             "saved_repeats": deepcopy(self._saved_repeats),
+            # A School or activity change waiting for the server belongs to this week's draft.
+            "repeat_send": deepcopy(self._repeat_send),
+            "repeat_ack": deepcopy(self._repeat_ack),
         }
 
     def _restore_week(self, snap: dict) -> None:
@@ -701,6 +704,8 @@ class NativeSession(QObject):
         self.selected_occurrence_day = snap["selected_occurrence_day"]
         self.repeats = deepcopy(snap["repeats"])
         self._saved_repeats = deepcopy(snap["saved_repeats"])
+        self._repeat_send = deepcopy(snap.get("repeat_send"))
+        self._repeat_ack = deepcopy(snap.get("repeat_ack"))
 
     def _refresh_view(self) -> None:
         if self.planner_view == "day":
@@ -1134,6 +1139,9 @@ class NativeSession(QObject):
             # Absent when nothing repeats in that week.
             self.repeats = list(week.get("repeats") or [])
             self._saved_repeats = deepcopy(self.repeats)
+            # A change still waiting stayed with the draft of the week it was made in.
+            self._repeat_send = None
+            self._repeat_ack = None
             self.week_start = loaded
             self.dirty = False
             self.conflict = False

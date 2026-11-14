@@ -1222,6 +1222,23 @@ fn all_weeks_replaces_a_saved_edit_when_the_standing_bodies_match() {
             soccer(),
         ],
     );
+    // The desktop asks with the change as the form made it, before any answer. The week of 23
+    // November is named, since All weeks would replace its 10:00 even though its standing body is
+    // the change's own.
+    let asked = edit_intent(
+        "school",
+        OPEN_WEEK,
+        Some(&school()),
+        Some(&with(school(), json!({"duration_min": 360}))),
+    )
+    .unwrap();
+    assert_eq!(
+        preview_edited_weeks(&conn, user_id, &[asked]).unwrap(),
+        json!({
+            "weeks": ["2026-11-23"],
+            "line": "The week of 23 November has its own School times.",
+        })
+    );
     run(
         &conn,
         user_id,
