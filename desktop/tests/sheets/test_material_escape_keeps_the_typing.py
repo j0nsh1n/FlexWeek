@@ -253,3 +253,77 @@ def test_a_kept_sheet_reopened_in_the_new_week_closes_at_once_when_its_typing_is
     sheets.closeSheet()  # what the Cancel button calls
     assert sheets.ask == {}
     assert sheets.kind == ""
+
+
+def _qml_name(shell, name: str) -> str:
+    from PySide6.QtGui import QAccessible
+
+    found = named(shell._material_page.root, name)
+    assert found, name
+    face = QAccessible.queryAccessibleInterface(found[0])
+    assert face is not None, name
+    return face.text(QAccessible.Text.Name)
+
+
+def test_a_kept_block_reopened_in_the_new_week_marks_the_moved_day(
+    qapp, shell, focused
+) -> None:
+    """Monday 2 is ticked in the week from Monday 2 November. From Wednesday the week is Wed 4 to
+    Tue 10, so the kept Monday is Monday 9: marked, named, and announced until touched."""
+    from desktop.native import fields
+
+    sheets = focused
+    open_add(sheets, "block")
+    type_title(sheets, "Piano lesson")
+    sheets.toggleDay(0)
+    sheets.toggleDay(3)
+    assert _picked(sheets, "block") == [(0, "Mon 2")]
+    press_escape(shell)
+    assert sheets.kind == ""
+    fields.save_week_starts_on("wednesday")
+    wait_until(qapp, lambda: shell.session.week_start == "2026-11-04" and not shell.session.busy)
+    settle(qapp, shell)
+    open_add(sheets, "block")
+    assert _picked(sheets, "block") == [(5, "Mon 9")]
+    form = sheets.form
+    assert form["movedNote"] == "Monday 2 isn't in this week any more, so it moved to Monday 9."
+    by_value = {day["value"]: day for day in form["days"]}
+    assert by_value[5]["moved"] and by_value[5]["movedFrom"] == "Monday 2"
+    assert _qml_name(shell, "blockDay5") == "Mon 9, moved from Monday 2"
+    assert _qml_name(shell, "blockMovedNote") == form["movedNote"]
+    sheets.toggleDay(5)
+    pump(qapp)
+    assert sheets.form["movedNote"] == ""
+    assert not [day for day in sheets.form["days"] if day.get("moved")]
+    assert _qml_name(shell, "blockDay5") == "Mon 9"
+
+
+def test_a_kept_homework_reopened_in_the_new_week_names_the_moved_pin(
+    qapp, shell, focused
+) -> None:
+    """The pinned Monday 2 becomes Monday 9: no chips, so the dropdown's name and the note under
+    the When row carry it until the student picks another day."""
+    from desktop.native import fields
+
+    sheets = focused
+    open_add(sheets, "homework")
+    type_title(sheets, "Piano lesson")
+    sheets.setText("when", "fixed")
+    sheets.setNumber("whenDay", 0)
+    assert _picked(sheets, "homework") == [(0, "Mon 2")]
+    press_escape(shell)
+    assert sheets.kind == ""
+    fields.save_week_starts_on("wednesday")
+    wait_until(qapp, lambda: shell.session.week_start == "2026-11-04" and not shell.session.busy)
+    settle(qapp, shell)
+    open_add(sheets, "homework")
+    assert _picked(sheets, "homework") == [(5, "Mon 9")]
+    form = sheets.form
+    assert form["whenMovedNote"] == "Monday 2 isn't in this week any more, so it moved to Monday 9."
+    assert form["whenDayAccess"] == "Day, moved from Monday 2"
+    assert _qml_name(shell, "homeworkWhenDay") == "Day, moved from Monday 2, Mon 9"
+    assert _qml_name(shell, "homeworkMovedNote") == form["whenMovedNote"]
+    sheets.setNumber("whenDay", 4)
+    pump(qapp)
+    assert sheets.form["whenMovedNote"] == ""
+    assert sheets.form["whenDayAccess"] == ""

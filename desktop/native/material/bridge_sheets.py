@@ -33,7 +33,14 @@ from desktop.native.reuse import (
     running_late_refusal,
 )
 from desktop.native.weekmodel import added_words, hhmm_text, length_label, range_label
-from desktop.native.widgets import LATE_WAIT, _late_move, _late_summary, same_weekday
+from desktop.native.widgets import (
+    LATE_WAIT,
+    _late_move,
+    _late_summary,
+    moved_day_name,
+    moved_days_note,
+    turn_days_keeping_weekdays,
+)
 
 NOTHING_UNFINISHED = "None left"
 NOTICE_MS = 10000
@@ -98,6 +105,9 @@ class SheetsBridge(QObject):
         self._routine_days: list[int] = []
         # The open week the numbers in _routine_days count from.
         self._routine_week = ""
+        # The ticks the last turn moved, as new day to the old "Monday 2" label, until the
+        # student touches the row, the sheet is applied, or it closes.
+        self._routine_moved: dict[int, str] = {}
         self._routine_error = ""
         self._paused = False
         self._held = False
@@ -915,11 +925,17 @@ class SheetsBridge(QObject):
     # Routines ---------------------------------------------------------------------------
 
     def _keep_routine_days(self) -> None:
-        """Ticked days keep their weekdays when the open week now starts on another day."""
+        """Ticked days keep their weekdays when the open week now starts on another day. The ticks
+        whose date changed are remembered, so the row can mark them until the student touches it."""
         week = self._session.week_start or ""
         if week != self._routine_week:
-            turned = (same_weekday(day, self._routine_week, week) for day in self._routine_days)
-            self._routine_days = sorted(turned)
+            turned, moved = turn_days_keeping_weekdays(
+                self._routine_days, self._routine_week, week
+            )
+            self._routine_days = turned
+            self._routine_moved = {
+                new: moved_day_name(old, self._routine_week) for old, new in moved
+            }
             self._routine_week = week
 
     def _routine_form(self) -> dict:
@@ -938,12 +954,20 @@ class SheetsBridge(QObject):
                     "on": item["id"] == self._routine_id,
                 }
             )
+        moved_note = moved_days_note(
+            [
+                (old_label, moved_day_name(new, self._routine_week))
+                for new, old_label in sorted(self._routine_moved.items())
+            ]
+        )
         days = [
             {
                 "value": index,
                 "label": day_names(session.week_start)[index] if monday else DAYS[index],
                 "date": date.fromordinal(monday.toordinal() + index).day if monday else 0,
                 "on": index in self._routine_days,
+                "moved": index in self._routine_moved,
+                "movedFrom": self._routine_moved.get(index, ""),
             }
             for index in range(7)
         ]
@@ -955,6 +979,7 @@ class SheetsBridge(QObject):
             "empty": "No routines saved yet." if not rows else "",
             "days": days,
             "selected": self._routine_id,
+            "movedNote": moved_note,
             "error": self._routine_error,
         }
 
@@ -964,6 +989,7 @@ class SheetsBridge(QObject):
             return
         self._routine_id = ""
         self._routine_days = []
+        self._routine_moved = {}
         self._routine_error = ""
         self._open("routines")
 
@@ -980,6 +1006,7 @@ class SheetsBridge(QObject):
         for block in routine.get("blocks") or []:
             days.update(int(day) for day in block.get("days") or [])
         self._routine_days = sorted(days)
+        self._routine_moved = {}
         self._routine_error = ""
         self._publish()
 
@@ -988,6 +1015,7 @@ class SheetsBridge(QObject):
         days = set(self._routine_days)
         days.symmetric_difference_update({day})
         self._routine_days = sorted(days)
+        self._routine_moved = {}
         self._routine_error = ""
         self._publish()
 
@@ -1020,6 +1048,7 @@ class SheetsBridge(QObject):
             self._routine_id, week, self._routine_days, rows, existing=list(session.blocks)
         )
         if done:
+            self._routine_moved = {}
             self._close()
             self._say(f"Added the {name} routine.", undo=True)
             return

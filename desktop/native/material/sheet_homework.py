@@ -39,10 +39,13 @@ from desktop.native.widgets import (
     SLOT_HINT,
     SPREAD_MIN,
     _homework_problem,
+    moved_day_name,
+    moved_days_note,
     same_weekday,
     spread_session_min,
     spread_words,
     today_from_words,
+    turn_days_keeping_weekdays,
 )
 
 STEPS = ("What", "When", "How long")
@@ -166,15 +169,30 @@ class HomeworkDraft:
         self._opened_as = self._picture()
         # The open week the day numbers count from.
         self._days_week = session.week_start or ""
+        # The old "Monday 2" label when the kept pin's date changed, with the one-line note naming
+        # the move. Cleared when the student picks another day.
+        self._moved_from = ""
+        self._moved_note = ""
 
     def follow_week(self) -> None:
         """A new sheet kept after Esc and opened again in a week that starts on another day: its pinned
-        day, and the one it opened with, keep their weekdays."""
+        day, and the one it opened with, keep their weekdays. A pin whose date changed is remembered,
+        so the row can name it until the student picks another day."""
         week = self.session.week_start or ""
+        from_week = self._days_week
+        turned, moved = turn_days_keeping_weekdays([self.when_day], from_week, week)
+        self._moved_from = moved_day_name(moved[0][0], from_week) if moved else ""
+        self._moved_note = (
+            moved_days_note(
+                [(moved_day_name(moved[0][0], from_week), moved_day_name(turned[0], week))]
+            )
+            if moved
+            else ""
+        )
         title, due_date, due_time, estimate, when, opened_day, *rest = self._opened_as
-        opened_day = same_weekday(opened_day, self._days_week, week)
+        opened_day = same_weekday(opened_day, from_week, week)
         self._opened_as = (title, due_date, due_time, estimate, when, opened_day, *rest)
-        self.when_day = same_weekday(self.when_day, self._days_week, week)
+        self.when_day = turned[0]
         self._days_week = week
 
     # What is open -----------------------------------------------------------------------
@@ -364,6 +382,8 @@ class HomeworkDraft:
             self.when_problem = self._past_when_problem()
         elif name == "whenDay":
             self.when_day = int(value)
+            self._moved_from = ""
+            self._moved_note = ""
             self.when_problem = self._past_when_problem()
         elif name == "whenTime":
             self.when_time = str(value)
@@ -648,6 +668,8 @@ class HomeworkDraft:
                 else ""
             ),
             "whenFrom": self._from_now_hint(),
+            "whenMovedNote": self._moved_note,
+            "whenDayAccess": f"Day, moved from {self._moved_from}" if self._moved_from else "",
             "whenProblem": self.when_problem,
             "estimate": self.estimate_text,
             "estimateLabel": length_label(self.estimate()) if self.estimate() else "",
