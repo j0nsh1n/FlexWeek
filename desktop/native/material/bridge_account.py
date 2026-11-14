@@ -1819,8 +1819,10 @@ class AccountBridge(QObject):
             if self._step == WEEK and answer is not None:
                 # Cancel stays on this page: nothing typed is kept, and the week-start file is not
                 # written, until the student answers.
-                if self._window.confirm_standing(answer["blocks"]) is None:  # type: ignore[attr-defined]
+                choice = self._window.confirm_standing(answer["blocks"])  # type: ignore[attr-defined]
+                if choice is None:
                     return
+                answer["edited"] = choice
                 save_week_starts_on(self._week_start)
         elif self._step in LOOK_STEPS and destination not in LOOK_STEPS:
             self._restore_entered()

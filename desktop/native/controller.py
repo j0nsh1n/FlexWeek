@@ -40,6 +40,7 @@ from desktop.native.calendar import (
     relocate_block,
     repeat_changes,
     repeat_leaves_week,
+    replaced_repeat_on_shown_week,
     routine_on_week,
     shifted_month,
     span_problem,
@@ -447,6 +448,8 @@ class NativeSession(QObject):
         # The repeat changes the next save sends, including how edited weeks are treated. Set when
         # the student answers that question, and taken by the save that follows.
         self._repeat_send: list[dict] | None = None
+        # The intents the save now in flight carried, so a reply drops those and keeps a newer one.
+        self._repeat_ack: list[dict] | None = None
         # One block let go while a save is in flight. The save's reply replaces the week, so the move
         # is applied on the next turn after that reply, not during it. A later let-go replaces it.
         self._hand_waiting: tuple[str, int, int, int, int] | None = None
@@ -530,6 +533,7 @@ class NativeSession(QObject):
         self.week_start = self.shown_week_of(wall_clock.today().isoformat())
         self.blocks = []
         self._repeat_send = None
+        self._repeat_ack = None
         self.revision = 0
         self._stored_parts = []
         self.assignments = {}
@@ -1532,25 +1536,46 @@ class NativeSession(QObject):
         changes = repeat_changes(self.repeats, after, self.week_start)
         if not changes:
             return
-        self._repeat_send = _stamp_edited(changes, edited, self.today_iso(), self.first_weekday)
+        stamped = _stamp_edited(changes, edited, self.today_iso(), self.first_weekday)
+        self._hold_repeats(stamped)
         # From today on, this week and every earlier week stay exactly as they are.
-        if self._repeat_send and repeat_leaves_week(self._repeat_send[0], self.week_start):
+        if stamped and repeat_leaves_week(stamped[0], self.week_start):
             self._touch(label)
             return
         if edited in ("replace", "from_today"):
-            changed = {item["id"] for item in changes}
-            self.blocks = [
-                block
-                for block in self.blocks
-                if not (is_setup_block(block) and block_family(block["id"]) in changed)
-            ]
-            self.blocks.extend(item for item in after if item["id"] in changed)
+            # Days on `after` count from Monday. The open week counts from its first day, so the
+            # engine turns them. A stop has no body and comes off the week.
+            by_id = {item["id"]: item for item in after}
+            blocks = self.blocks
+            for block_id in {item["id"] for item in changes}:
+                blocks = replaced_repeat_on_shown_week(
+                    blocks, self.week_start, block_id, by_id.get(block_id)
+                )
+            self.blocks = blocks
             self.repeats = list(after)
         else:
             self.blocks, self.repeats = apply_repeat_changes(
                 self.blocks, self.repeats, changes, self.week_start
             )
         self._touch(label)
+
+    def _hold_repeats(self, changes: list[dict]) -> None:
+        """Stamped intents stay until the server has acknowledged the save that carries them.
+
+        A second change before that save keeps the first, unless it is the same repeat, in which
+        case the later choice replaces it."""
+        ids = {item["id"] for item in changes}
+        held = [item for item in (self._repeat_send or []) if item.get("id") not in ids]
+        self._repeat_send = held + changes
+
+    def _acknowledge_repeats(self) -> None:
+        """The server took the intents this save carried. A choice made since is still waiting."""
+        sent = {item["id"]: item for item in (self._repeat_ack or [])}
+        self._repeat_ack = None
+        if not sent:
+            return
+        left = [item for item in (self._repeat_send or []) if sent.get(item["id"]) != item]
+        self._repeat_send = left or None
 
     def repeat_diff(self, after: list[dict]) -> list[dict]:
         """The repeat changes from what stands now to `after`, as the save would send them."""
@@ -2239,10 +2264,13 @@ class NativeSession(QObject):
                 "assignments": writes,
                 "operation_id": operation_id or str(uuid4()),
             }
-            changes = self._repeat_send
-            self._repeat_send = None
-            if not changes:
+            # Kept until this save is acknowledged, so a failure and a later edit still send them.
+            if self._repeat_send:
+                changes = list(self._repeat_send)
+                self._repeat_ack = changes
+            else:
                 changes = repeat_changes(self._saved_repeats, self.repeats, self.week_start)
+                self._repeat_ack = None
             if changes:
                 self.pending_save["repeats"] = changes
             if snapshot_label:
@@ -2368,6 +2396,7 @@ class NativeSession(QObject):
             self._plan_step_id = None
             self._join_step = False
             self.pending_save = None
+            self._acknowledge_repeats()
             self._save_status = None
             self._month_cache.clear()
             self._month_gen += 1

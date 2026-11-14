@@ -444,6 +444,20 @@ def this_week_line(blocks: list[dict], repeats: list[dict], clock_24h: bool, wee
     )
 
 
+def replaced_repeat_on_shown_week(
+    blocks: list[dict], week_start: str, block_id: str, new_body: dict | None
+) -> list[dict]:
+    """The shown week after `block_id` is replaced by `new_body` (or removed, when `new_body` is
+    none). Days stay counted from the week's first day. The engine turns them."""
+    made = flexweek_engine.repeat_replaced_on_shown_week(
+        week_start,
+        json.dumps(blocks),
+        block_id,
+        "null" if new_body is None else json.dumps(new_body),
+    )
+    return json.loads(made)
+
+
 def repeat_leaves_week(change: dict, week_start: str) -> bool:
     """Whether a from-today change leaves the week of `week_start` as it is. The engine decides."""
     return bool(flexweek_engine.repeat_leaves_week(json.dumps(change), week_start))

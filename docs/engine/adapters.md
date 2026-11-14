@@ -229,6 +229,7 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | calendar | this_week_line | ADAPTER | encodes, one `repeats::this_week_line` call, passes None through |
 | calendar | one_day_note | ADAPTER | encodes, one `repeats::one_day_note` call, passes None through |
 | calendar | repeat_leaves_week | ADAPTER | encodes the change, one `repeats::leaves_week` call |
+| calendar | replaced_repeat_on_shown_week | ADAPTER | encodes, one `shown::replaced_repeat_on_shown_week` call, decodes |
 
 ## custom_look
 

@@ -1829,6 +1829,27 @@ fn repeat_this_week_line(
 }
 
 #[pyfunction]
+fn repeat_replaced_on_shown_week(
+    week_start: &str,
+    blocks: &str,
+    id: &str,
+    new_body: &str,
+) -> PyResult<String> {
+    let blocks = objects(blocks)?;
+    let new_body = parse(new_body)?;
+    let body = if new_body.is_null() {
+        None
+    } else {
+        Some(&new_body)
+    };
+    guard(|| {
+        ::flexweek_engine::shown::replaced_repeat_on_shown_week(week_start, &blocks, id, body)
+            .map(array)
+            .map_err(crate::raise)
+    })
+}
+
+#[pyfunction]
 fn repeat_leaves_week(intent: &str, week_start: &str) -> PyResult<bool> {
     let value = parse(intent)?;
     guard(|| {
@@ -1862,6 +1883,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         repeat_this_week_line,
         repeat_one_day_note,
         repeat_leaves_week,
+        repeat_replaced_on_shown_week,
         calendar_monday_of,
         calendar_week_start_on,
         calendar_weekday_order,

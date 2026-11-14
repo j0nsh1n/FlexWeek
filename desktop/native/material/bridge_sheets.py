@@ -18,8 +18,10 @@ from desktop.native.calendar import (
     DAY_FULL,
     DAYS,
     FLEX_CATEGORIES,
+    block_family,
     day_full_names,
     day_names,
+    is_setup_block,
     routine_on_week,
     sunday_due,
 )
@@ -192,6 +194,7 @@ class SheetsBridge(QObject):
 
     def _close(self) -> None:
         late = self._kind == "late"
+        done, self._edited_done = self._edited_done, None
         self._kind = ""
         self._ask = {}
         self._drag_range_active = False
@@ -202,6 +205,8 @@ class SheetsBridge(QObject):
             session.late_preview = None
             session._say("")
         self._publish()
+        if done is not None:
+            done(None)
 
     @Slot()
     def openHomework(self) -> None:
@@ -621,6 +626,15 @@ class SheetsBridge(QObject):
             scope = "series"
         every_week = choice == "every"
         day = draft.occurrence_day
+        if every_week and is_setup_block(block):
+            family = block_family(block["id"])
+            after = [item for item in session.repeats if item["id"] != family]
+            if not self._window._apply_standing(after, f"deleting {title}"):  # type: ignore[attr-defined]
+                return
+            session.save()
+            self._close()
+            self._say(f"Deleted {title} from this week and every week after.")
+            return
         session.delete_block(block["id"], scope=scope, day=day, every_week=every_week)
         session.save()
         self._close()

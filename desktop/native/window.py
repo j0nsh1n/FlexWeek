@@ -85,6 +85,7 @@ from desktop.native.calendar import (
     DAY_FULL,
     FLEX_CATEGORIES,
     SETUP_SCHOOL_ID,
+    block_family,
     date_for_day,
     day_full_names,
     is_series,
@@ -2833,7 +2834,10 @@ class NativeWindow(QMainWindow):
                     updates[key] = answer[key]
             if "work_windows" in answer:
                 work_windows = answer["work_windows"]
-        if standing is not None and not self._apply_standing(standing, "setting up your week"):
+        edited = answer.get("edited") if isinstance(answer, dict) else None
+        if standing is not None and not self._apply_standing(
+            standing, "setting up your week", edited=edited
+        ):
             return
         self.session.keep_setup(updates, work_windows=work_windows, save_week=save_week)
 
@@ -3852,6 +3856,14 @@ class NativeWindow(QMainWindow):
             if sheet.answer not in ("week", "every"):
                 return
             every_week = sheet.answer == "every"
+        if every_week and is_setup_block(block):
+            family = block_family(block["id"])
+            after = [item for item in self.session.repeats if item["id"] != family]
+            if not self._apply_standing(after, f"deleting {title}"):
+                return
+            self.session.save()
+            self._set_notice(f"Deleted {title} from this week and every week after.", "", None)
+            return
         self.session.delete_block(block["id"], scope=scope, day=day, every_week=bool(every_week))
         self.session.save()
         if every_week:
@@ -3899,35 +3911,57 @@ class NativeWindow(QMainWindow):
     def confirm_standing(self, after: list) -> str | None:
         """The answer for a setup week change, asked before that page keeps anything.
 
-        None is Cancel: the page stays as the student left it and nothing is saved. The answer is
-        kept for the save that follows, so that save does not ask again."""
+        None is Cancel: the page stays as the student left it and nothing is saved. Nothing is
+        remembered after this returns, so a later save asks for itself."""
         changes = self.session.repeat_diff(after)
-        choice = "keep"
-        if changes:
-            asked = self._choice_for_edits(changes)
-            if asked is None:
-                return None
-            choice = asked
-        self._standing_ready = True
-        self._standing_answer = choice
-        return choice
+        if not changes:
+            return "keep"
+        return self._choice_for_edits(changes)
 
-    def _apply_standing(self, after: list, label: str) -> bool:
+    def _repeat_view(self) -> tuple:
+        """The account, week and repeats a preview was asked about."""
+        account = self.session.account
+        rows = tuple(
+            (
+                item.get("id"),
+                item.get("start"),
+                item.get("duration_min"),
+                tuple(item.get("days") or []),
+            )
+            for item in self.session.repeats
+        )
+        return (None if account is None else account.get("id"), self.session.week_start, rows)
+
+    def _arm_epoch(self, loop: QEventLoop) -> tuple[QTimer, int]:
+        """Quit `loop` if the client is signed out or switched while it waits."""
+        epoch = self.session.client.epoch
+        timer = QTimer(self)
+        timer.setInterval(50)
+
+        def tick() -> None:
+            if self.session.client.epoch != epoch:
+                loop.quit()
+
+        timer.timeout.connect(tick)
+        timer.start()
+        return timer, epoch
+
+    def _apply_standing(self, after: list, label: str, *, edited: str | None = None) -> bool:
         """Put `after` in place from this week on, after asking when a later week has its own edit.
-        False when the student cancels: nothing is changed. A setup page asks first, via
-        `confirm_standing`, and this then uses that answer."""
-        if getattr(self, "_standing_ready", False):
-            choice = self._standing_answer
-            self._standing_ready = False
-        else:
+        False when the student cancels, or the week changed while the question was up: nothing is
+        changed. A setup page passes the answer it already asked for."""
+        view = self._repeat_view()
+        if edited is None:
             changes = self.session.repeat_diff(after)
-            choice = "keep"
+            edited = "keep"
             if changes:
                 asked = self._choice_for_edits(changes)
                 if asked is None:
                     return False
-                choice = asked
-        self.session.change_repeats(after, label, edited=choice)
+                edited = asked
+        if self._repeat_view() != view:
+            return False
+        self.session.change_repeats(after, label, edited=edited)
         return True
 
     def _save_standing(self, after: list, label: str, notice: Callable[[], None]) -> None:
@@ -3940,7 +3974,9 @@ class NativeWindow(QMainWindow):
         """keep, replace or from_today. None when the preview fails or the student cancels.
         No question when no later week has its own edit."""
         holder: dict = {}
+        view = self._repeat_view()
         loop = QEventLoop(self)
+        timer, epoch = self._arm_epoch(loop)
 
         def ok(data: dict) -> None:
             holder["line"] = data.get("line") or None
@@ -3952,14 +3988,21 @@ class NativeWindow(QMainWindow):
 
         self.session.preview_repeats(changes, ok, err)
         loop.exec()
+        timer.stop()
+        timer.deleteLater()
         loop.deleteLater()
+        if self.session.client.epoch != epoch or self._repeat_view() != view:
+            return None
         if "error" in holder:
             self._set_notice("Not saved. " + holder["error"].message, "", None)
             return None
         line = holder.get("line")
         if not line:
             return "keep"
-        return self._pose_edited(line)
+        choice = self._pose_edited(line)
+        if self._repeat_view() != view:
+            return None
+        return choice
 
     def _pose_edited(self, line: str) -> str | None:
         """The three answers, or None for Cancel. Material uses its answers sheet; Widgets a confirm
@@ -3977,9 +4020,9 @@ class NativeWindow(QMainWindow):
             line,
             (
                 ("stay", "Cancel", "outlined"),
-                ("from_today", "From today on", ""),
-                ("replace", "All weeks", ""),
-                ("keep", "Except edited", ""),
+                ("from_today", "From today on", "outlined"),
+                ("replace", "All weeks", "outlined"),
+                ("keep", "Except edited", "filled"),
             ),
             default="keep",
         )
@@ -3991,6 +4034,7 @@ class NativeWindow(QMainWindow):
     def _pose_edited_on(self, line: str, pose: Callable) -> str | None:
         holder: dict = {}
         loop = QEventLoop(self)
+        timer, epoch = self._arm_epoch(loop)
 
         def done(choice: str | None) -> None:
             holder["choice"] = choice
@@ -3998,7 +4042,11 @@ class NativeWindow(QMainWindow):
 
         pose(self._edited_ask(line), done)
         loop.exec()
+        timer.stop()
+        timer.deleteLater()
         loop.deleteLater()
+        if self.session.client.epoch != epoch:
+            return None
         return holder.get("choice")
 
     @staticmethod

@@ -118,7 +118,7 @@ Contract for the finished app:
   ("The week of 16 Nov keeps its own change: no School on Wednesday."). Before
   that save, when a later week has its own change, FlexWeek asks. All weeks
   replaces those edits. Except edited, the default, leaves them (what the notice
-  names).   From today on leaves the shown week that holds today, and every earlier
+  names). From today on leaves the shown week that holds today, and every earlier
   week, as they are, edited or not, including days of that week that sit in
   the next stored Monday. The change starts the day after that week and from
   then on replaces every week's own edit. Cancel saves nothing, and on Setup's
@@ -489,6 +489,7 @@ Current account/API contract:
 | PUT/DELETE | `/api/assignments/{id}` | Revision-checked create, update and delete; delete removes its sessions from every week |
 | POST | `/api/assignments/{id}/spread` | Preview sessions of a chosen length from a start date through the due date; writes nothing |
 | POST | `/api/changes` | Several week and assignment writes, all or nothing; optional operation ID and pre-change recovery point |
+| POST | `/api/repeat-edits` | Which later weeks a repeat change would reach that have their own edit; writes nothing |
 | GET/PUT | `/api/preferences` | Theme, appearance pack, accent, motion, reminders, timers, alarms, alarm sound, Spotify default, planning style, setup progress, availability windows and comfort settings |
 | GET | `/api/timer-presets` | Named timer presets on the 15-minute grid |
 | GET | `/api/reminder-limits` | The reminder ceilings the settings dialog explains |
