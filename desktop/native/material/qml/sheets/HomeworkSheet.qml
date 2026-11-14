@@ -174,6 +174,7 @@ SheetFrame {
                     reduceMotion: root.reduceMotion
                     highContrast: root.highContrast
                     label: "Day"
+                    accessName: root.f.whenDayAccess ? root.f.whenDayAccess : ""
                     options: root.f.dayOptions ? root.f.dayOptions : []
                     value: root.f.whenDay
                     onPicked: (v) => root.sheets.setNumber("whenDay", v)
@@ -193,6 +194,7 @@ SheetFrame {
             }
             FieldNote { theme: root.theme; text: root.f.whenNote ? root.f.whenNote : "" }
             FieldNote { theme: root.theme; text: root.f.whenFrom ? root.f.whenFrom : "" }
+            FieldNote { objectName: "homeworkMovedNote"; theme: root.theme; text: root.f.whenMovedNote ? root.f.whenMovedNote : "" }
             FieldNote { objectName: "homeworkWhenProblem"; theme: root.theme; problem: true; text: root.f.whenProblem ? root.f.whenProblem : "" }
         }
     }

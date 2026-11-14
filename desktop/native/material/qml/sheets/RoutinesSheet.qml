@@ -60,7 +60,7 @@ SheetFrame {
                     height: 40
                     activeFocusOnTab: true
                     Accessible.role: Accessible.CheckBox
-                    Accessible.name: modelData.label + " " + modelData.date
+                    Accessible.name: modelData.label + " " + modelData.date + (modelData.movedFrom ? ", moved from " + modelData.movedFrom : "")
                     Accessible.checkable: true
                     Accessible.checked: modelData.on
                     Accessible.onPressAction: root.sheets.toggleRoutineDay(index)
@@ -82,6 +82,16 @@ SheetFrame {
                         lineHeight: 0.9
                     }
                     M3FocusRing { anchors.fill: parent; anchors.margins: -4; ring: pal.focusRing; ringRadius: 16 }
+                    Rectangle {
+                        visible: modelData.moved ? true : false
+                        width: 12
+                        height: 12
+                        radius: 6
+                        color: pal.primary
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.margins: -4
+                    }
                     TapHandler { onTapped: root.sheets.toggleRoutineDay(index) }
                     Keys.onPressed: (event) => {
                         if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
@@ -93,6 +103,7 @@ SheetFrame {
             }
         }
     }
+    FieldNote { objectName: "routinesMovedNote"; theme: root.theme; text: root.f.movedNote ? root.f.movedNote : "" }
     FieldNote { objectName: "routinesError"; theme: root.theme; problem: true; text: root.f.error ? root.f.error : "" }
     trailing: [
         Button {

@@ -245,10 +245,12 @@ from desktop.native.widgets import (
     drop_waiting_dim,
     fit_buttons,
     keyboard_focus_rings,
+    moved_day_name,
     overdue_unfinished,
     same_weekday,
     steady_wheel,
     swatch,
+    turn_days_keeping_weekdays,
     use_app_style,
 )
 
@@ -3605,23 +3607,44 @@ class NativeWindow(QMainWindow):
         self._kept_adds_account = self._account_id()
         dialog.deleteLater()
 
-    def _take_kept_add(self, kind: str) -> tuple[dict | None, list[int] | None]:
+    def _take_kept_add(
+        self, kind: str
+    ) -> tuple[dict | None, list[int] | None, list[tuple[int, str, str]]]:
         """What Esc kept for this kind of Add, once, with the days a drag gave it; or nothing. Its days keep
-        their weekdays when the open week now starts on another day."""
+        their weekdays when the open week now starts on another day. Third is the moved ticks the sheet
+        shows, as (new day, old "Monday 2" label, new label) triples."""
         kept = self._kept_adds.pop(kind, None)
         if kept is None:
-            return None, None
+            return None, None, []
         draft, days, week = kept
         open_now = self.session.week_start
 
         def turned(day: int) -> int:
             return same_weekday(day, week, open_now)
 
-        if "days" in draft:
-            draft = {**draft, "days": sorted(turned(day) for day in draft["days"])}
-        if isinstance(draft.get("pin_day"), int):
-            draft = {**draft, "pin_day": turned(draft["pin_day"])}
-        return draft, None if days is None else [turned(day) for day in days]
+        def marked(
+            shown: list[int],
+        ) -> list[tuple[int, str, str]]:
+            """The visible ticks the turn moved, as (new day, old label, new label) triples."""
+            _, moved = turn_days_keeping_weekdays(shown, week, open_now)
+            return [
+                (new, moved_day_name(old, week), moved_day_name(new, open_now))
+                for old, new in moved
+            ]
+
+        marks: list[tuple[int, str, str]] = []
+        if kind == "block" and "days" in draft:
+            turned_days, _ = turn_days_keeping_weekdays(draft["days"], week, open_now)
+            marks = marked(draft["days"])
+            draft = {**draft, "days": turned_days}
+        else:
+            if "days" in draft:
+                draft = {**draft, "days": sorted(turned(day) for day in draft["days"])}
+            if isinstance(draft.get("pin_day"), int):
+                if kind == "homework":
+                    marks = marked([draft["pin_day"]])
+                draft = {**draft, "pin_day": turned(draft["pin_day"])}
+        return draft, None if days is None else [turned(day) for day in days], marks
 
     def _commit_block(self, dialog: BlockDialog) -> None:
         if not self._run_sheet(dialog):
@@ -3704,7 +3727,8 @@ class NativeWindow(QMainWindow):
         if category in FLEX_CATEGORIES:
             category = None
         day, start = self._new_event_values()
-        self._commit_new_block(day, start, category, draft=self._take_kept_add("block")[0])
+        draft, _, moved = self._take_kept_add("block")
+        self._commit_new_block(day, start, category, draft=draft, moved=moved)
 
     def _commit_new_block(
         self,
@@ -3715,6 +3739,7 @@ class NativeWindow(QMainWindow):
         *,
         from_range: bool = False,
         draft: dict | None = None,
+        moved: list[tuple[int, str, str]] | None = None,
     ) -> None:
         try:
             self._commit_block(
@@ -3726,6 +3751,7 @@ class NativeWindow(QMainWindow):
                         duration_min=duration_min,
                         from_range=from_range,
                         draft=draft,
+                        moved=moved,
                     )
                 )
             )
@@ -3741,6 +3767,7 @@ class NativeWindow(QMainWindow):
         duration_min: int = 60,
         from_range: bool = False,
         draft: dict | None = None,
+        moved: list[tuple[int, str, str]] | None = None,
     ) -> BlockDialog:
         spare = self._block_spare
         if spare is not None and self._block_spare_account == self._account_id() and isValid(spare):
@@ -3762,6 +3789,8 @@ class NativeWindow(QMainWindow):
             )
         if draft:
             dialog.apply_draft(draft)
+        if moved:
+            dialog.show_moved_days(moved)
         return dialog
 
     def _new_event_values(self) -> tuple[int, str]:
@@ -4075,12 +4104,14 @@ class NativeWindow(QMainWindow):
         category = self.session.armed_category
         if category not in FLEX_CATEGORIES:
             category = "assignments"
-        draft, days = self._take_kept_add("homework")
+        draft, days, moved = self._take_kept_add("homework")
 
         def build() -> HomeworkDialog:
             dialog = HomeworkDialog(self, today=self._today(), category=category)
             if draft:
                 dialog.apply_draft(draft)
+            if moved:
+                dialog.show_moved_days(moved)
             return dialog
 
         self._commit_homework(self._sheet(build), days)
@@ -4566,19 +4597,21 @@ class NativeWindow(QMainWindow):
         self.session.arm_category(category)
         self._sync_add_button()
         if category in FLEX_CATEGORIES:
-            draft, days = self._take_kept_add("homework") if plain else (None, None)
+            draft, days, moved = self._take_kept_add("homework") if plain else (None, None, [])
 
             def build() -> HomeworkDialog:
                 dialog = HomeworkDialog(self, today=self._today(), category=category)
                 if draft:
                     dialog.apply_draft(draft)
+                if moved:
+                    dialog.show_moved_days(moved)
                 return dialog
 
             self._commit_homework(self._sheet(build), days)
             return
         day, start = self._new_event_values()
-        draft = self._take_kept_add("block")[0] if plain else None
-        self._commit_new_block(day, start, category, draft=draft)
+        kept = self._take_kept_add("block") if plain else (None, None, [])
+        self._commit_new_block(day, start, category, draft=kept[0], moved=kept[2])
 
     def _create_by_drag(self, span: Span) -> None:
         before = {item["id"] for item in self.session.blocks}

@@ -1511,6 +1511,9 @@ def setup_rules(palette: dict, radius: int, text: float | str, pad: int, depth: 
         f"QPushButton#setupChip:checked, {day}:checked {{ border-color: {palette['accent']}; }}"
         f"QPushButton#setupChip:checked:focus, {day}:checked:focus "
         f"{{ border-color: {readable_focus_edge(palette)}; }}"
+        # A tick the week-start switch moved: the ring's presence is the mark, in the text colour
+        # so it reads on the accent fill in every look; the note under the row names the move.
+        f"{day}[moved=\"true\"] {{ border: 2px solid {palette['text']}; padding: 3px 5px; }}"
         # Days that cannot change, as under "This day only": the picked one still reads as picked.
         f"{day}:disabled {{ background: {palette['field']}; "
         f"color: {mix(palette['text'], palette['field'], 0.5)}; }}"
