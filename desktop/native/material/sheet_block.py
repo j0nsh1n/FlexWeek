@@ -37,8 +37,11 @@ from desktop.native.widgets import (
     day_range_and_words,
     full_day_name,
     guess_locked_category,
+    moved_day_name,
+    moved_days_note,
     same_weekday,
     short_day_name,
+    turn_days_keeping_weekdays,
 )
 
 STEPS = ("What", "When", "Category")
@@ -103,16 +106,32 @@ class BlockDraft:
         self._opened_as = self._picture()
         # The open week the day numbers count from.
         self._days_week = session.week_start or ""
+        # The ticks the last turn moved, as new day to the old "Monday 2" label, with the one-line
+        # note naming the move. Cleared when the student touches the row.
+        self._moved_from: dict[int, str] = {}
+        self._moved_note = ""
 
     def follow_week(self) -> None:
         """A new sheet kept after Esc and opened again in a week that starts on another day: its days, and
-        the days it opened with, keep their weekdays."""
+        the days it opened with, keep their weekdays. The ticks whose date changed are remembered, so
+        the row can mark them until the student touches it."""
         week = self.session.week_start or ""
 
         def turned(days: Any) -> list[int]:
             return sorted(same_weekday(day, self._days_week, week) for day in days)
 
-        self.days = turned(self.days)
+        turned_days, moved = turn_days_keeping_weekdays(self.days, self._days_week, week)
+        from_week = self._days_week
+        self._moved_from = {
+            new: moved_day_name(old, from_week) for old, new in moved
+        }
+        self._moved_note = moved_days_note(
+            [
+                (moved_day_name(old, from_week), moved_day_name(new, week))
+                for old, new in moved
+            ]
+        )
+        self.days = turned_days
         title, opened_days, *rest = self._opened_as
         self._opened_as = (title, tuple(turned(opened_days)), *rest)
         self._days_week = week
@@ -160,6 +179,8 @@ class BlockDraft:
             return
         self.error = ""
         self.days_problem = ""
+        self._moved_from = {}
+        self._moved_note = ""
         days = set(self.days)
         days.symmetric_difference_update({day})
         self.days = sorted(days)
@@ -444,11 +465,14 @@ class BlockDraft:
                     "label": short_day_name(self._week(), index),
                     "date": (monday + timedelta(days=index)).day if monday else 0,
                     "on": index in self.days,
+                    "moved": index in self._moved_from,
+                    "movedFrom": self._moved_from.get(index, ""),
                 }
                 for index in range(7)
             ],
             "daysLocked": locked,
             "daysProblem": self.days_problem,
+            "movedNote": self._moved_note,
             "repeatNote": "" if locked else REPEAT_NOTE,
             "showScope": bool(self.series and self.occurrence_day is not None),
             "scopeChoices": self._scope_choices(),

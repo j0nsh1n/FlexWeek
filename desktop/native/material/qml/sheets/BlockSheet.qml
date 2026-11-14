@@ -129,7 +129,7 @@ SheetFrame {
                         enabled: !root.f.daysLocked
                         activeFocusOnTab: true
                         Accessible.role: Accessible.CheckBox
-                        Accessible.name: modelData.label + " " + modelData.date
+                        Accessible.name: modelData.label + " " + modelData.date + (modelData.movedFrom ? ", moved from " + modelData.movedFrom : "")
                         Accessible.checkable: true
                         Accessible.checked: modelData.on
                         Accessible.onPressAction: root.sheets.toggleDay(index)
@@ -158,6 +158,16 @@ SheetFrame {
                             reduceMotion: root.reduceMotion
                         }
                         M3FocusRing { anchors.fill: parent; anchors.margins: -4; ring: pal.focusRing; ringRadius: 16 }
+                        Rectangle {
+                            visible: modelData.moved ? true : false
+                            width: 12
+                            height: 12
+                            radius: 6
+                            color: pal.primary
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.margins: -4
+                        }
                         HoverHandler { id: dayHover }
                         TapHandler { enabled: day.enabled; onTapped: root.sheets.toggleDay(index) }
                         Keys.onPressed: (event) => {
@@ -170,6 +180,7 @@ SheetFrame {
                 }
             }
             FieldNote { theme: root.theme; text: root.f.repeatNote ? root.f.repeatNote : "" }
+            FieldNote { objectName: "blockMovedNote"; theme: root.theme; text: root.f.movedNote ? root.f.movedNote : "" }
             FieldNote { objectName: "blockDaysProblem"; theme: root.theme; problem: true; text: root.f.daysProblem ? root.f.daysProblem : "" }
             FieldNote { theme: root.theme; text: root.f.seriesNote ? root.f.seriesNote : "" }
         }

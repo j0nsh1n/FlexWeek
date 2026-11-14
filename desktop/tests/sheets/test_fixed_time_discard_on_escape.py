@@ -17,7 +17,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QEvent, Qt, QTime
 from PySide6.QtGui import QFocusEvent, QKeyEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox
+from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel
 
 from backend.models import parse_due
 from backend.tests.fake_clock import CLOCK
@@ -970,3 +970,90 @@ def test_homework_drawn_on_a_day_and_kept_by_esc_is_added_on_that_weekday_after_
     window._add_homework()
     pump(qapp)
     assert added == [{"days": [2]}]
+
+
+def _pick_monday_then_escape(dialog: QDialog) -> int:
+    dialog.title.setText("Piano lesson")
+    if isinstance(dialog, BlockDialog):
+        for index, check in enumerate(dialog.days):
+            check.setChecked(index == 0)
+    else:
+        dialog.when.setCurrentIndex(dialog.when.findData("fixed"))
+        # As if kept on Monday, when Monday was still tickable: past days are greyed by Thursday.
+        dialog.when_day.buttons[0].setChecked(True)
+    press_escape(dialog)
+    return int(dialog.result())
+
+
+def _moved_pill(picker, day: int) -> tuple[bool, bool, str]:
+    button = picker.buttons[day]
+    return button.isChecked(), bool(button.property("moved")), button.accessibleName()
+
+
+def test_a_kept_block_reopened_in_the_new_week_marks_the_moved_day(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Monday 2 is ticked in the week from Monday 2 November. From Wednesday the week is Wed 4 to
+    Tue 10, so the kept Monday is Monday 9: ringed, named, and announced until the row is touched."""
+    from desktop.native import fields
+    from desktop.tests.waiting import wait_until
+
+    seen: dict = {}
+
+    def inspect(dialog: QDialog) -> int:
+        picker = dialog.day_picker
+        seen["pill"] = _moved_pill(picker, 5)
+        seen["note"] = dialog.findChild(QLabel, "blockMovedNote").text()
+        dialog._add_primary()
+        qapp.processEvents()
+        seen["shown"] = dialog.findChild(QLabel, "blockMovedNote").isVisible()
+        picker.buttons[5].click()
+        seen["cleared"] = _moved_pill(picker, 5)
+        seen["note_after"] = dialog.findChild(QLabel, "blockMovedNote").text()
+        seen["hidden_after"] = not dialog.findChild(QLabel, "blockMovedNote").isVisible()
+        return only_look(dialog)
+
+    Script("block", monkeypatch, _pick_monday_then_escape, inspect)
+    window._add_fixed()
+    pump(qapp)
+    fields.save_week_starts_on("wednesday")
+    wait_until(qapp, lambda: window.session.week_start == "2026-11-04" and not window.session.busy)
+    window._add_fixed()
+    pump(qapp)
+    assert seen["pill"] == (True, True, "Monday 9, moved from Monday 2")
+    assert seen["note"] == "Monday 2 isn't in this week any more, so it moved to Monday 9."
+    assert seen["shown"]
+    assert seen["cleared"] == (False, False, "Monday")
+    assert seen["note_after"] == ""
+    assert seen["hidden_after"]
+
+
+def test_a_kept_homework_reopened_in_the_new_week_marks_the_moved_pin(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The pinned Monday 2 becomes Monday 9: the pin pill carries the ring and the note names the
+    move until the student picks another day."""
+    from desktop.native import fields
+    from desktop.tests.waiting import wait_until
+
+    seen: dict = {}
+
+    def inspect(dialog: QDialog) -> int:
+        seen["pill"] = _moved_pill(dialog.when_day, 5)
+        seen["note"] = dialog.findChild(QLabel, "homeworkMovedNote").text()
+        dialog.when_day.buttons[3].click()
+        seen["cleared"] = _moved_pill(dialog.when_day, 3)
+        seen["note_after"] = dialog.findChild(QLabel, "homeworkMovedNote").text()
+        return only_look(dialog)
+
+    Script("homework", monkeypatch, _pick_monday_then_escape, inspect)
+    window._add_homework()
+    pump(qapp)
+    fields.save_week_starts_on("wednesday")
+    wait_until(qapp, lambda: window.session.week_start == "2026-11-04" and not window.session.busy)
+    window._add_homework()
+    pump(qapp)
+    assert seen["pill"] == (True, True, "Monday 9, moved from Monday 2")
+    assert seen["note"] == "Monday 2 isn't in this week any more, so it moved to Monday 9."
+    assert seen["cleared"] == (True, False, "Saturday")
+    assert seen["note_after"] == ""
