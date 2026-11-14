@@ -78,6 +78,7 @@ class SheetsBridge(QObject):
         self._kind = ""
         self._form: dict = {}
         self._ask: dict = {}
+        self._edited_done = None
         self._more = False
         self._drag_range_active = False
         self._notice = ""
@@ -334,8 +335,12 @@ class SheetsBridge(QObject):
             self.changed.emit()
             return
         if self._ask:
+            edited = self._ask.get("id") == "edited-weeks"
+            done, self._edited_done = self._edited_done, None
             self._ask = {}
             self._publish()
+            if edited and done is not None:
+                done(None)
             return
         draft = self._homework if self._kind == "homework" else self._block if self._kind == "block" else None
         if draft is not None and draft.dirty():
@@ -555,10 +560,23 @@ class SheetsBridge(QObject):
             return
         self._publish()
 
+    def pose_edited(self, ask: dict, done) -> None:
+        """The edited-weeks question on the week. `done` is called with the answer, or None to cancel."""
+        self._edited_done = done
+        self._ask = ask
+        self._publish()
+
     @Slot(str)
     def answer(self, choice: str) -> None:
         """A button on the prompt that is up."""
         asked = self._ask.get("id", "") if self._ask else ""
+        if asked == "edited-weeks":
+            done, self._edited_done = self._edited_done, None
+            self._ask = {}
+            self._publish()
+            if done is not None:
+                done(choice if choice in ("keep", "replace", "from_today") else None)
+            return
         self._ask = {}
         if asked == "discard":
             if choice == "discard":

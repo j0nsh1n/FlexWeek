@@ -10,7 +10,8 @@ use common::scratch;
 use flexweek_engine::repeats::{apply_to_week, edit_intent};
 use flexweek_store::{
     ApplyClock, ApplyFailure, ApplyInput, Connection, WeekInput, apply, initialize,
-    insert_preferences, open_connection, read_week, standing_blocks, week_with_standing,
+    insert_preferences, open_connection, preview_edited_weeks, read_week, standing_blocks,
+    week_with_standing,
 };
 use serde_json::{Value, json};
 
@@ -885,4 +886,150 @@ fn a_later_week_holding_only_a_piece_of_school_is_named_for_the_time_it_keeps() 
         let notice = answer["repeats"]["notice"].as_str().unwrap_or_default();
         assert!(notice.contains("10:00"), "{id}: {notice}");
     }
+}
+
+/// 16 November holds School as two pieces, the way a week that does not start on Monday saves a
+/// one-week change. 23 November has skipped Wednesday.
+fn weeks_with_their_own_school(conn: &Connection, user_id: i64) {
+    set_up(conn, user_id);
+    let piece = json!({"category": "class", "days": [2, 3, 4], "duration_min": 405,
+                       "id": "school@20261118", "kind": "locked", "start": "10:00",
+                       "title": "School"});
+    save_week_as(
+        conn,
+        user_id,
+        NEXT_WEEK,
+        vec![with(school(), json!({"days": [0, 1]})), piece, soccer()],
+    );
+    save_week_as(
+        conn,
+        user_id,
+        WEEK_AFTER,
+        vec![with(school(), json!({"days": [0, 1, 3, 4]})), soccer()],
+    );
+}
+
+fn school_change(edited: &str, today: Option<&str>) -> Value {
+    let mut intent = edit_intent(
+        "school",
+        OPEN_WEEK,
+        Some(&school()),
+        Some(&with(school(), json!({"duration_min": 360}))),
+    )
+    .unwrap()
+    .to_value();
+    intent["edited"] = json!(edited);
+    if let Some(today) = today {
+        intent["today"] = json!(today);
+    }
+    intent
+}
+
+fn apply_school(conn: &Connection, user_id: i64, intent: Value) {
+    run(
+        conn,
+        user_id,
+        &batch(Vec::new(), Some(vec![intent]), conn, user_id),
+    );
+}
+
+fn school_piece(week: &[Value]) -> Option<&Value> {
+    block(week, "school@20261118")
+}
+
+#[test]
+fn except_edited_keeps_a_piece_from_another_week_start_and_a_skipped_wednesday() {
+    let (conn, user_id) = account("repeats-edited-keep", true);
+    weeks_with_their_own_school(&conn, user_id);
+    apply_school(&conn, user_id, school_change("keep", None));
+    let next = shown(&conn, user_id, NEXT_WEEK);
+    let piece = school_piece(&next).unwrap();
+    assert_eq!(
+        (
+            piece["start"].clone(),
+            piece["days"].clone(),
+            piece["duration_min"].clone()
+        ),
+        (json!("10:00"), json!([2, 3, 4]), json!(360))
+    );
+    assert_eq!(
+        school_in(&conn, user_id, WEEK_AFTER),
+        (vec![0, 1, 3, 4], 360, vec![])
+    );
+}
+
+#[test]
+fn all_weeks_replaces_a_piece_from_another_week_start_and_a_skipped_wednesday() {
+    let (conn, user_id) = account("repeats-edited-replace", true);
+    weeks_with_their_own_school(&conn, user_id);
+    apply_school(&conn, user_id, school_change("replace", None));
+    let next = shown(&conn, user_id, NEXT_WEEK);
+    assert!(school_piece(&next).is_none());
+    assert_eq!(
+        school_in(&conn, user_id, NEXT_WEEK),
+        (vec![0, 1, 2, 3, 4], 360, vec![])
+    );
+    assert_eq!(
+        school_in(&conn, user_id, WEEK_AFTER),
+        (vec![0, 1, 2, 3, 4], 360, vec![])
+    );
+}
+
+#[test]
+fn from_today_leaves_this_week_and_replaces_edits_from_the_next_week() {
+    // Wednesday 18 November 2026. Today's week is Monday 16 November, so 16 November stays,
+    // piece and all, and 23 November takes the new School on every weekday.
+    let (conn, user_id) = account("repeats-edited-today", true);
+    weeks_with_their_own_school(&conn, user_id);
+    apply_school(
+        &conn,
+        user_id,
+        school_change("from_today", Some("2026-11-18")),
+    );
+    let stayed = shown(&conn, user_id, NEXT_WEEK);
+    let piece = school_piece(&stayed).unwrap();
+    assert_eq!(piece["start"], json!("10:00"));
+    assert_eq!(piece["duration_min"], json!(405));
+    assert_eq!(block(&stayed, "school").unwrap()["days"], json!([0, 1]));
+    assert_eq!(
+        block(&stayed, "school").unwrap()["duration_min"],
+        json!(405)
+    );
+    assert!(school_piece(&shown(&conn, user_id, WEEK_AFTER)).is_none());
+    assert_eq!(
+        school_in(&conn, user_id, WEEK_AFTER),
+        (vec![0, 1, 2, 3, 4], 360, vec![])
+    );
+}
+
+#[test]
+fn the_preview_names_edited_weeks_and_writes_nothing() {
+    let (conn, user_id) = account("repeats-edited-preview", true);
+    weeks_with_their_own_school(&conn, user_id);
+    let before = shown(&conn, user_id, NEXT_WEEK);
+    let intent = edit_intent(
+        "school",
+        OPEN_WEEK,
+        Some(&school()),
+        Some(&with(school(), json!({"duration_min": 360}))),
+    )
+    .unwrap();
+    let found = preview_edited_weeks(&conn, user_id, &[intent]).unwrap();
+    assert_eq!(
+        found,
+        json!({
+            "weeks": [NEXT_WEEK, WEEK_AFTER],
+            "line": "The weeks of 16 and 23 November have their own School times.",
+        })
+    );
+    assert_eq!(shown(&conn, user_id, NEXT_WEEK), before);
+    let quiet = edit_intent(
+        "school",
+        LAST_WEEK,
+        Some(&school()),
+        Some(&with(school(), json!({"duration_min": 360}))),
+    )
+    .unwrap();
+    let none = preview_edited_weeks(&conn, user_id, &[quiet]).unwrap();
+    assert_eq!(none, json!({"weeks": [], "line": null}));
 }

@@ -444,6 +444,11 @@ def this_week_line(blocks: list[dict], repeats: list[dict], clock_24h: bool, wee
     )
 
 
+def repeat_leaves_week(change: dict, week_start: str) -> bool:
+    """Whether a from-today change leaves the week of `week_start` as it is. The engine decides."""
+    return bool(flexweek_engine.repeat_leaves_week(json.dumps(change), week_start))
+
+
 def one_day_note(block: dict, day: int, school_hours: bool, week_start: str) -> str | None:
     """What moving day `day` of the week from `week_start` of a repeating block adds to its notice; None
     for a block that does not repeat."""

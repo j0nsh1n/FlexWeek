@@ -23,7 +23,7 @@ use crate::validate::time_block;
 pub const PATCH_FIELDS: [&str; 4] = ["title", "category", "start", "duration_min"];
 /// Fields that say which block and when, never compared or patched as a value.
 const SHAPE_FIELDS: [&str; 3] = ["id", "days", "missed_days"];
-const INTENT_FIELDS: [&str; 7] = [
+const INTENT_FIELDS: [&str; 9] = [
     "id",
     "scope",
     "from_date",
@@ -31,9 +31,25 @@ const INTENT_FIELDS: [&str; 7] = [
     "add_days",
     "remove_days",
     "stop",
+    "edited",
+    "today",
 ];
 const MONTHS_SHORT: [&str; 12] = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+const MONTHS_FULL: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
 ];
 const MAX_KEPT_SAID: usize = 3;
 
@@ -44,7 +60,40 @@ pub const NOTHING_LEFT: &str =
 pub const NEW_NEEDS_ALL: &str =
     "A new repeating block needs a title, a start, a length and at least one day";
 
+/// How a change from this week on treats a later week that has its own one-week edit.
+/// `Keep` is what a change did before it asked: the later week keeps that edit. `Replace` writes
+/// the change over it. `FromToday` leaves today's week and every earlier week as they are, and
+/// from the next week on replaces those edits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Edited {
+    #[default]
+    Keep,
+    Replace,
+    FromToday,
+}
+
+impl Edited {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Keep => "keep",
+            Self::Replace => "replace",
+            Self::FromToday => "from_today",
+        }
+    }
+
+    fn parse(word: &str) -> Option<Self> {
+        match word {
+            "keep" => Some(Self::Keep),
+            "replace" => Some(Self::Replace),
+            "from_today" => Some(Self::FromToday),
+            _ => None,
+        }
+    }
+}
+
 /// One change to a repeat. `scope` is "from" in this version: the change holds from `from_date` on.
+/// `edited` says what a later week's own edit does; omitted, it keeps it. `today` is the date the
+/// student is on, and only a `from_today` change carries it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Intent {
     pub id: String,
@@ -53,6 +102,8 @@ pub struct Intent {
     pub add_days: Vec<i64>,
     pub remove_days: Vec<i64>,
     pub stop: bool,
+    pub edited: Edited,
+    pub today: Option<String>,
 }
 
 impl Intent {
@@ -62,7 +113,7 @@ impl Intent {
     }
 
     pub fn to_value(&self) -> Value {
-        json!({
+        let mut value = json!({
             "id": self.id,
             "scope": "from",
             "from_date": self.from_date,
@@ -70,8 +121,55 @@ impl Intent {
             "add_days": self.add_days,
             "remove_days": self.remove_days,
             "stop": self.stop,
-        })
+        });
+        // Omitted means keep, so a change saved before this choice still reads.
+        if self.edited != Edited::Keep {
+            value["edited"] = json!(self.edited.as_str());
+        }
+        if let Some(today) = &self.today {
+            value["today"] = json!(today);
+        }
+        value
     }
+}
+
+fn week_after(monday: &str) -> EngineResult<String> {
+    let day = from_iso(monday)?;
+    let next = day + chrono::Duration::days(7);
+    Ok(format!(
+        "{:04}-{:02}-{:02}",
+        next.year(),
+        next.month(),
+        next.day()
+    ))
+}
+
+/// The Monday a `from_today` change starts writing from: the week after the one that holds
+/// `today`, unless the change itself starts later. Any other change starts at its own week.
+pub fn stands_from(intent: &Intent) -> EngineResult<String> {
+    let week = intent.from_week()?;
+    if intent.edited != Edited::FromToday {
+        return Ok(week);
+    }
+    let today = intent
+        .today
+        .as_deref()
+        .ok_or_else(|| crate::error::EngineError::value(RULE))?;
+    let next = week_after(&monday_of(today)?)?;
+    if next.as_str() > week.as_str() {
+        Ok(next)
+    } else {
+        Ok(week)
+    }
+}
+
+/// Whether `week` (a Monday, or the first day of the week on screen) is left untouched.
+/// `from_today` leaves every stored week before the week after today's.
+pub fn leaves_week(intent: &Intent, week: &str) -> EngineResult<bool> {
+    if intent.edited != Edited::FromToday {
+        return Ok(false);
+    }
+    Ok(monday_of(week)?.as_str() < stands_from(intent)?.as_str())
 }
 
 fn day_list(value: Option<&Value>) -> Result<Vec<i64>, String> {
@@ -133,6 +231,20 @@ pub fn parse_intent(value: &Value) -> Result<Intent, String> {
     if stop && (!set.is_empty() || !add_days.is_empty() || !remove_days.is_empty()) {
         return Err(RULE.into());
     }
+    let edited = match map.get("edited") {
+        None | Some(Value::Null) => Edited::Keep,
+        Some(Value::String(word)) => Edited::parse(word).ok_or_else(|| RULE.to_string())?,
+        Some(_) => return Err(RULE.into()),
+    };
+    let today = match map.get("today") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(day)) if is_calendar_date(day) => Some(day.clone()),
+        Some(_) => return Err(RULE.into()),
+    };
+    // Only "from today on" is about today's date. The other two answers have no use for it.
+    if (edited == Edited::FromToday) != today.is_some() {
+        return Err(RULE.into());
+    }
     Ok(Intent {
         // A piece of School split off at a week's seam changes School.
         id: family_id(id).to_string(),
@@ -141,6 +253,8 @@ pub fn parse_intent(value: &Value) -> Result<Intent, String> {
         add_days,
         remove_days,
         stop,
+        edited,
+        today,
     })
 }
 
@@ -402,6 +516,16 @@ pub fn restated_pieces(
         .collect()
 }
 
+/// The same pieces after a change that replaces each week's own edit: the new repeat in the first
+/// piece's place, and the other pieces gone. A stop leaves nothing.
+pub fn pieces_after_replace(pieces: &[Value], new: Option<&Value>) -> Vec<Option<Value>> {
+    let mut out = vec![None; pieces.len()];
+    if !pieces.is_empty() {
+        out[0] = new.cloned();
+    }
+    out
+}
+
 /// The change a School hours or Setup form makes: from the repeat standing in the open week to what
 /// the form now says. Only what differs is sent; None when nothing does.
 pub fn edit_intent(
@@ -417,6 +541,8 @@ pub fn edit_intent(
         add_days: Vec::new(),
         remove_days: Vec::new(),
         stop: false,
+        edited: Edited::Keep,
+        today: None,
     };
     let Some(edited) = edited else {
         return repeat.map(|_| Intent {
@@ -730,6 +856,60 @@ pub fn kept_notice(
         text.push_str(&format!(" {more} more weeks keep their own changes too."));
     }
     Ok(Some(text))
+}
+
+fn weeks_phrase(dates: &[NaiveDate]) -> String {
+    let first = dates[0];
+    let same = dates
+        .iter()
+        .all(|day| day.month() == first.month() && day.year() == first.year());
+    if same {
+        let days: Vec<String> = dates.iter().map(|day| day.day().to_string()).collect();
+        let refs: Vec<&str> = days.iter().map(String::as_str).collect();
+        return format!(
+            "{} {}",
+            and_list(&refs),
+            MONTHS_FULL[first.month0() as usize]
+        );
+    }
+    let parts: Vec<String> = dates
+        .iter()
+        .map(|day| {
+            let mut text = format!("{} {}", day.day(), MONTHS_FULL[day.month0() as usize]);
+            if day.year() != first.year() {
+                text.push_str(&format!(" {}", day.year()));
+            }
+            text
+        })
+        .collect();
+    let refs: Vec<&str> = parts.iter().map(String::as_str).collect();
+    and_list(&refs)
+}
+
+/// The question before a change that would reach a week with its own edit. None when `weeks` is
+/// empty, so the client asks nothing. Dates are the weeks' Mondays.
+pub fn edited_weeks_line(weeks: &[String], titles: &[String]) -> EngineResult<Option<String>> {
+    if weeks.is_empty() {
+        return Ok(None);
+    }
+    let mut dates: Vec<NaiveDate> = weeks
+        .iter()
+        .map(|week| from_iso(week))
+        .collect::<EngineResult<_>>()?;
+    dates.sort();
+    dates.dedup();
+    let phrase = weeks_phrase(&dates);
+    let names: Vec<&str> = titles.iter().map(String::as_str).collect();
+    let what = and_list(&names);
+    if dates.len() == 1 {
+        Ok(Some(format!(
+            "The week of {phrase} has its own {what} times."
+        )))
+    } else {
+        Ok(Some(format!(
+            "The weeks of {phrase} have their own {what} times."
+        )))
+    }
 }
 
 /// What a drag, a resize or Move to day... of one day of a repeating block says: that day changed,

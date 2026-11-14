@@ -1,6 +1,7 @@
 # context.md — FlexWeek
 
-## Current State (2026-11-10)
+## Current State (2026-11-14)
+- Branch `feat/setup-change-asks-about-edited-weeks`, local only, from main 28da96bb. A change to School or an activity from this week on asks before it reaches a later week that has its own edit. Engine and store repeat tests and the desktop tests for both looks passed. The whole local CI was not started: another lane already holds CPUs 8-15.
 - Latest release: v1.3.0, published 2026-11-10 from main d61235ee (PR #111, the version bump). The Linux tarball and
   the Android APK were built on this computer (`scripts/build-linux-local.sh` in an Ubuntu 24.04 container; the APK
   signed with the 1.2.0 key); the AppImage and the Windows installers came from the tagged "Release packages" run.
@@ -98,6 +99,7 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
+- 2026-11-14, branch `feat/setup-change-asks-about-edited-weeks`, local only, from 28da96bb. Done: the ask before a from-this-week-on change to School or an activity, with All weeks, Except edited (default) and From today on. Next: the local CI once `flexweek-localci-helper` is off CPUs 8-15, then review.
 - 2026-11-12, branch `fix/replan-moves-missed-sessions` (#126) with `fix/planner-counts-minutes` (#125) merged in,
   local only. A missed session's minutes are counted through `this_weeks_part` against the saved week
   (`missed_minutes` takes `saved_week`), the desktop passes `_assignments_basis` to the solve request and to every

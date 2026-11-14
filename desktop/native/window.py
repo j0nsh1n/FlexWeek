@@ -15,6 +15,7 @@ from pathlib import Path
 from flexweek_engine import SyncService  # type: ignore[import-untyped]
 from PySide6.QtCore import (
     QEvent,
+    QEventLoop,
     QMetaObject,
     QObject,
     QPoint,
@@ -2800,6 +2801,7 @@ class NativeWindow(QMainWindow):
         updates: dict = {"setup": {"version": SETUP_VERSION, "step": destination}}
         work_windows = None
         save_week = False
+        standing = None
         if isinstance(answer, dict):
             if "layout" in answer:
                 self._look = answer["look"]
@@ -2808,7 +2810,7 @@ class NativeWindow(QMainWindow):
                 self._save_look()
                 updates["theme_pack"] = answer["pack"]
             if "blocks" in answer:
-                self.session.set_setup_blocks(answer["blocks"])
+                standing = answer["blocks"]
                 updates["day_cutoff"] = answer["day_cutoff"]
                 save_week = True
             if "homework" in answer:
@@ -2831,6 +2833,8 @@ class NativeWindow(QMainWindow):
                     updates[key] = answer[key]
             if "work_windows" in answer:
                 work_windows = answer["work_windows"]
+        if standing is not None and not self._apply_standing(standing, "setting up your week"):
+            return
         self.session.keep_setup(updates, work_windows=work_windows, save_week=save_week)
 
     def _flush_setup(self) -> None:
@@ -3881,14 +3885,114 @@ class NativeWindow(QMainWindow):
             after = [made if item["id"] == SETUP_SCHOOL_ID else item for item in repeats]
             if school is None:
                 after = [made, *repeats]
-            self.session.change_repeats(after, "editing School hours")
-            self.session.save()
             start = hhmm_text(made["start"])
             end = hhmm_text(minutes_to_hhmm(hhmm_to_minutes(made["start"]) + made["duration_min"]))
             # Later weeks change with no Undo, so the toast offers none.
-            self._set_notice(f"School now {start}–{end} every week", "", None)
+            self._save_standing(
+                after,
+                "editing School hours",
+                lambda: self._set_notice(f"School now {start}–{end} every week", "", None),
+            )
         elif school is not None:
             self._delete_block(school, "series", None, every_week=True)
+
+    def _apply_standing(self, after: list, label: str) -> bool:
+        """Put `after` in place from this week on, after asking when a later week has its own edit.
+        False when the student cancels: nothing is changed."""
+        changes = self.session.repeat_diff(after)
+        choice = "keep"
+        if changes:
+            asked = self._choice_for_edits(changes)
+            if asked is None:
+                return False
+            choice = asked
+        self.session.change_repeats(after, label, edited=choice)
+        return True
+
+    def _save_standing(self, after: list, label: str, notice: Callable[[], None]) -> None:
+        if not self._apply_standing(after, label):
+            return
+        self.session.save()
+        notice()
+
+    def _choice_for_edits(self, changes: list) -> str | None:
+        """keep, replace or from_today. None when the preview fails or the student cancels.
+        No question when no later week has its own edit."""
+        holder: dict = {}
+        loop = QEventLoop(self)
+
+        def ok(data: dict) -> None:
+            holder["line"] = data.get("line") or None
+            loop.quit()
+
+        def err(error: object) -> None:
+            holder["error"] = error
+            loop.quit()
+
+        self.session.preview_repeats(changes, ok, err)
+        loop.exec()
+        loop.deleteLater()
+        if "error" in holder:
+            self._set_notice("Not saved. " + holder["error"].message, "", None)
+            return None
+        line = holder.get("line")
+        if not line:
+            return "keep"
+        return self._pose_edited(line)
+
+    def _pose_edited(self, line: str) -> str | None:
+        """The three answers, or None for Cancel. Material uses its answers sheet; Widgets a confirm
+        sheet. Except edited is the default."""
+        bridge = self._account_bridge()
+        material = self._surface == "material" and not self._material_gave_up
+        if material and bridge is not None and bridge.phase == "setup":
+            return self._pose_edited_on(line, bridge.pose_edited)
+        page = getattr(self, "_material_page", None)
+        if material and page is not None and self._material_owns():
+            return self._pose_edited_on(line, page.bridge._sheets.pose_edited)
+        sheet = ConfirmSheet(
+            self,
+            "Edited weeks",
+            line,
+            (
+                ("stay", "Cancel", "outlined"),
+                ("from_today", "From today on", ""),
+                ("replace", "All weeks", ""),
+                ("keep", "Except edited", ""),
+            ),
+            default="keep",
+        )
+        sheet.exec()
+        if sheet.answer in ("keep", "replace", "from_today"):
+            return sheet.answer
+        return None
+
+    def _pose_edited_on(self, line: str, pose: Callable) -> str | None:
+        holder: dict = {}
+        loop = QEventLoop(self)
+
+        def done(choice: str | None) -> None:
+            holder["choice"] = choice
+            loop.quit()
+
+        pose(self._edited_ask(line), done)
+        loop.exec()
+        loop.deleteLater()
+        return holder.get("choice")
+
+    @staticmethod
+    def _edited_ask(line: str) -> dict:
+        return {
+            "id": "edited-weeks",
+            "title": "Edited weeks",
+            "body": line,
+            "answers": [
+                {"id": "keep", "label": "Except edited", "kind": "filled", "default": True},
+                {"id": "replace", "label": "All weeks", "kind": "tonal"},
+                {"id": "from_today", "label": "From today on", "kind": "tonal"},
+                {"id": "stay", "label": "Cancel", "kind": "text"},
+            ],
+        }
 
     def _add_now(self) -> None:
         """Add adds homework, or the type picked in its menu for a drag, which the button then names."""

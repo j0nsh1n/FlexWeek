@@ -1829,6 +1829,16 @@ fn repeat_this_week_line(
 }
 
 #[pyfunction]
+fn repeat_leaves_week(intent: &str, week_start: &str) -> PyResult<bool> {
+    let value = parse(intent)?;
+    guard(|| {
+        let intent =
+            repeats::parse_intent(&value).map_err(pyo3::exceptions::PyValueError::new_err)?;
+        repeats::leaves_week(&intent, week_start).map_err(crate::raise)
+    })
+}
+
+#[pyfunction]
 fn repeat_one_day_note(
     block: &str,
     day: i64,
@@ -1851,6 +1861,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         repeat_apply_to_week,
         repeat_this_week_line,
         repeat_one_day_note,
+        repeat_leaves_week,
         calendar_monday_of,
         calendar_week_start_on,
         calendar_weekday_order,

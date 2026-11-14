@@ -4,7 +4,8 @@
 //! applied one way whoever sends it.
 
 use flexweek_engine::repeats::{
-    Intent, Kept, kept_notice, own_changes, patched, restated_pieces, restated_version,
+    Edited, Intent, Kept, edited_weeks_line, kept_notice, leaves_week, own_changes, patched,
+    pieces_after_replace, restated_pieces, restated_version, stands_from,
 };
 use flexweek_engine::shown::family_id;
 use flexweek_engine::snapshot::canonical;
@@ -106,20 +107,20 @@ fn before<'a>(versions: &'a Versions, week: &str) -> Option<&'a Value> {
         .and_then(|(_, body)| body.as_ref())
 }
 
-/// The versions after `intent`. A stop ends the repeat for good from its week; any other change
-/// reaches a later version only where that version had not changed the same thing itself, and a
-/// later stop stays.
-fn rewritten(versions: &Versions, week: &str, new: Option<Value>, stop: bool) -> Versions {
+/// The versions after `intent`. A stop, or a change that replaces one-week edits, ends what stood
+/// after `start`. A change that keeps those edits reaches a later version only where that version
+/// had not changed the same thing itself, and a later stop stays.
+fn rewritten(versions: &Versions, start: &str, new: Option<Value>, drop_later: bool) -> Versions {
     let mut out: Versions = versions
         .iter()
-        .filter(|(from, _)| from.as_str() < week)
+        .filter(|(from, _)| from.as_str() < start)
         .cloned()
         .collect();
-    out.push((week.to_string(), new));
-    if stop {
+    out.push((start.to_string(), new));
+    if drop_later {
         return out;
     }
-    for (from, body) in versions.iter().filter(|(from, _)| from.as_str() > week) {
+    for (from, body) in versions.iter().filter(|(from, _)| from.as_str() > start) {
         let restated = restated_version(before(versions, from), before(&out, from), body.as_ref());
         out.push((from.clone(), restated));
     }
@@ -196,9 +197,47 @@ pub fn apply_repeat_intents(
     user_id: i64,
     intents: &[Intent],
 ) -> Result<RepeatsOutcome, RepeatsFailure> {
+    Ok(enact(conn, user_id, intents, true)?.0)
+}
+
+/// The later weeks a change would reach that have their own one-week edit, and the sentence that
+/// asks about them. Nothing is written. An empty `line` means the client asks nothing.
+pub fn preview_edited_weeks(
+    conn: &Connection,
+    user_id: i64,
+    intents: &[Intent],
+) -> Result<Value, RepeatsFailure> {
+    let (outcome, titles) = enact(conn, user_id, intents, false)?;
+    let mut weeks = Vec::new();
+    let mut names = Vec::new();
+    for kept in &outcome.kept {
+        if !weeks.contains(&kept.week_start) {
+            weeks.push(kept.week_start.clone());
+        }
+        if let Some(title) = titles
+            .iter()
+            .find(|(id, _)| id == &kept.id)
+            .map(|(_, title)| title)
+            && !names.contains(title)
+        {
+            names.push(title.clone());
+        }
+    }
+    let line = edited_weeks_line(&weeks, &names)
+        .map_err(|error| RepeatsFailure::Refused(error.message))?;
+    Ok(json!({"weeks": weeks, "line": line}))
+}
+
+fn enact(
+    conn: &Connection,
+    user_id: i64,
+    intents: &[Intent],
+    write: bool,
+) -> Result<(RepeatsOutcome, Vec<(String, String)>), RepeatsFailure> {
     let h24 = clock_24h(conn, user_id)?;
     let mut outcome = RepeatsOutcome::default();
     let mut titles: Vec<String> = Vec::new();
+    let mut titled: Vec<(String, String)> = Vec::new();
     let mut first_week: Option<String> = None;
     for intent in intents {
         let week = intent.from_week()?;
@@ -216,15 +255,24 @@ pub fn apply_repeat_intents(
             .unwrap_or_default()
             .to_string();
         if !titles.contains(&title) {
-            titles.push(title);
+            titles.push(title.clone());
+        }
+        if !titled.iter().any(|(id, _)| id == &intent.id) {
+            titled.push((intent.id.clone(), title));
         }
         first_week.get_or_insert_with(|| week.clone());
-        let new = rewritten(&old, &week, new_here.clone(), intent.stop);
+        let start = stands_from(intent).map_err(|error| RepeatsFailure::Refused(error.message))?;
+        // Keeping one-week edits is the only answer that still merges a later version. The other
+        // two write this change over them, from `start` on.
+        let drop_later = intent.stop || intent.edited != Edited::Keep;
+        let new = rewritten(&old, &start, new_here.clone(), drop_later);
         // A later change that stays where this one would have set the same thing is named too, at the
         // week it starts. A saved copy of that very week is named instead, against this change, below:
         // the copy is what the week shows, so naming both would say two things about one week.
         let mut later_versions: Vec<Kept> = Vec::new();
-        if let Some(here) = &new_here {
+        if intent.edited == Edited::Keep
+            && let Some(here) = &new_here
+        {
             for (from, body) in new.iter().filter(|(from, _)| from.as_str() > week.as_str()) {
                 let Some(body) = body else { continue };
                 let changes = own_changes(body, here, std::slice::from_ref(body), h24);
@@ -237,11 +285,13 @@ pub fn apply_repeat_intents(
                 }
             }
         }
-        let position = match position {
-            Some(position) => position,
-            None => next_position(conn, user_id, &week)?,
-        };
-        write_versions(conn, user_id, &intent.id, position, &old, &new, &week)?;
+        if write {
+            let position = match position {
+                Some(position) => position,
+                None => next_position(conn, user_id, &week)?,
+            };
+            write_versions(conn, user_id, &intent.id, position, &old, &new, &week)?;
+        }
         let mut stmt = conn.prepare(
             "SELECT week_start, blocks FROM weeks WHERE user_id = ?1 AND week_start >= ?2
             ORDER BY week_start",
@@ -252,6 +302,12 @@ pub fn apply_repeat_intents(
             })?
             .collect::<Result<Vec<_>, _>>()?;
         for (week_start, text) in saved {
+            // From today on, this week and every earlier week stay exactly as saved.
+            if leaves_week(intent, &week_start)
+                .map_err(|error| RepeatsFailure::Refused(error.message))?
+            {
+                continue;
+            }
             let (was, now) = (at(&old, &week_start), at(&new, &week_start));
             let version_starts_here = later_versions
                 .iter()
@@ -277,7 +333,11 @@ pub fn apply_repeat_intents(
             let mut updated = stored.clone();
             if was != now {
                 let copies: Vec<Value> = pieces.iter().map(|at| stored[*at].clone()).collect();
-                let restated = restated_pieces(was, now, &copies, &intent.id);
+                let restated = if intent.edited == Edited::Keep {
+                    restated_pieces(was, now, &copies, &intent.id)
+                } else {
+                    pieces_after_replace(&copies, now)
+                };
                 for (at, copy) in pieces.into_iter().zip(restated).rev() {
                     match copy {
                         Some(copy) => updated[at] = copy,
@@ -305,7 +365,8 @@ pub fn apply_repeat_intents(
                 now
             };
             later_versions.retain(|kept| kept.week_start != week_start);
-            if week_start > week
+            if intent.edited == Edited::Keep
+                && week_start > week
                 && let (Some(now), Some(copy)) = (measured_against, updated.get(held))
                 && family_of(copy) == now.get("id").and_then(Value::as_str)
             {
@@ -318,7 +379,7 @@ pub fn apply_repeat_intents(
                     });
                 }
             }
-            if updated != stored {
+            if write && updated != stored {
                 defer_write(
                     conn,
                     "UPDATE weeks SET blocks = ?1, revision = revision + 1
@@ -337,5 +398,5 @@ pub fn apply_repeat_intents(
     if let Some(week) = first_week {
         outcome.notice = kept_notice(&titles, &week, &outcome.kept)?;
     }
-    Ok(outcome)
+    Ok((outcome, titled))
 }

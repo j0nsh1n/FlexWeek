@@ -115,7 +115,12 @@ Contract for the finished app:
   take it as that week's own; earlier weeks keep it, and
   this week and later reaches the saved later weeks in the same save, except
   what a later week changed itself, which stays and is named in a notice
-  ("The week of 16 Nov keeps its own change: no School on Wednesday."); an
+  ("The week of 16 Nov keeps its own change: no School on Wednesday."). Before
+  that save, when a later week has its own change, FlexWeek asks. All weeks
+  replaces those edits. Except edited, the default, leaves them (what the notice
+  names). From today on leaves this week and every earlier week as they are,
+  edited or not, and from the next week on replaces every week's own edit.
+  Cancel saves nothing. With no such later week it asks nothing. An
   ended activity stays ended when it is changed from an earlier week. This
   week and later can't be undone with Undo; only the open
   week's part has Undo (an assistant's change of this kind is undone with the

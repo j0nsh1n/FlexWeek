@@ -119,6 +119,7 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | storage | Connection.read_week | STAYS | Forwards to the Rust connection. |
 | storage | Connection.week_blocks | STAYS | Forwards to the Rust connection. |
 | storage | Connection.week_starts | STAYS | Forwards to the Rust connection. |
+| storage | Connection.preview_edited_weeks | STAYS | Forwards to the Rust connection. |
 | storage | Connection.assignment_body | STAYS | Forwards to the Rust connection. |
 | storage | Connection.assignment_bodies | STAYS | Forwards to the Rust connection. |
 | storage | Connection.list_assignment_rows | STAYS | Forwards to the Rust connection. |
@@ -143,7 +144,7 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 
 `backend/app.py` is the HTTP layer: routes, dependencies, status codes, the pydantic request and response models, and the mapping of an engine status onto an HTTP error stay in Python. The rows below are the helper functions whose decisions moved into the engine (`engine/store/src/rules.rs`); `test_app_helpers_keep_no_engine_logic` checks them with the same rule as the modules above. Route handlers are not checked.
 
-`post_changes` passes a batch's `repeats` to `db.apply_repeat_intents` (`flexweek_store::apply_repeat_intents`, the function `changes::apply` calls too) and maps its refusal onto a 422; it decides nothing about repeats. `GET /api/week` reads them with `db.standing_blocks`.
+`post_changes` passes a batch's `repeats` to `db.apply_repeat_intents` (`flexweek_store::apply_repeat_intents`, the function `changes::apply` calls too) and maps its refusal onto a 422; it decides nothing about repeats. `POST /api/repeat-edits` passes the same list to `db.preview_edited_weeks` (`flexweek_store::preview_edited_weeks`) and maps its refusal the same way; that call only lists the later weeks that have their own edit. `GET /api/week` reads them with `db.standing_blocks`.
 
 | Module | Function | Class | Reason |
 | --- | --- | --- | --- |
@@ -227,6 +228,7 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | calendar | apply_repeat_changes | ADAPTER | encodes, one `repeats::apply_to_week` call, decodes the pair |
 | calendar | this_week_line | ADAPTER | encodes, one `repeats::this_week_line` call, passes None through |
 | calendar | one_day_note | ADAPTER | encodes, one `repeats::one_day_note` call, passes None through |
+| calendar | repeat_leaves_week | ADAPTER | encodes the change, one `repeats::leaves_week` call |
 
 ## custom_look
 

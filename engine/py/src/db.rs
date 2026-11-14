@@ -751,6 +751,33 @@ impl PyConn {
         })
     }
 
+    /// Which later weeks a change would reach that have their own one-week edit, without writing.
+    /// The same refusal as `apply_repeat_intents` when a change is not one.
+    fn preview_edited_weeks(
+        &self,
+        py: Python<'_>,
+        user_id: i64,
+        intents: &str,
+    ) -> PyResult<String> {
+        let intents = intents.to_string();
+        guard(|| {
+            self.check(py)?;
+            self.with_conn(py, move |conn| {
+                let bad = |message: String| {
+                    Failure::Bind(pyo3::exceptions::PyValueError::new_err(message))
+                };
+                let value: serde_json::Value =
+                    serde_json::from_str(&intents).map_err(|e| bad(e.to_string()))?;
+                let parsed = flexweek_engine::repeats::parse_intents(&value).map_err(bad)?;
+                match flexweek_store::preview_edited_weeks(conn, user_id, &parsed) {
+                    Ok(found) => Ok(flexweek_engine::snapshot::canonical(&found)),
+                    Err(flexweek_store::RepeatsFailure::Refused(message)) => Err(bad(message)),
+                    Err(flexweek_store::RepeatsFailure::Store(error)) => Err(Failure::Store(error)),
+                }
+            })
+        })
+    }
+
     /// The repeats standing in a week, as the week's School hours and Setup show them.
     fn standing_blocks(&self, py: Python<'_>, user_id: i64, week_start: &str) -> PyResult<String> {
         let week_start = week_start.to_string();
