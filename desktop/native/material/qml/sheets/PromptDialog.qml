@@ -42,7 +42,12 @@ SheetFrame {
             text: modelData.label
             accessName: modelData.label
             onClicked: root.sheets.answer(modelData.id)
-            Component.onCompleted: if (index === 0) root.firstButton = choice
+            Component.onCompleted: {
+                if (modelData["default"] === true)
+                    root.firstButton = choice
+                else if (index === 0 && root.firstButton === null)
+                    root.firstButton = choice
+            }
         }
     }
     property Item firstButton: null

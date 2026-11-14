@@ -18,8 +18,10 @@ from desktop.native.calendar import (
     DAY_FULL,
     DAYS,
     FLEX_CATEGORIES,
+    block_family,
     day_full_names,
     day_names,
+    is_setup_block,
     routine_on_week,
     sunday_due,
 )
@@ -86,6 +88,7 @@ class SheetsBridge(QObject):
         self._kind = ""
         self._form: dict = {}
         self._ask: dict = {}
+        self._edited_done = None
         self._more = False
         self._drag_range_active = False
         self._notice = ""
@@ -202,6 +205,7 @@ class SheetsBridge(QObject):
 
     def _close(self) -> None:
         late = self._kind == "late"
+        done, self._edited_done = self._edited_done, None
         self._kind = ""
         self._ask = {}
         self._drag_range_active = False
@@ -212,6 +216,8 @@ class SheetsBridge(QObject):
             session.late_preview = None
             session._say("")
         self._publish()
+        if done is not None:
+            done(None)
 
     @Slot()
     def openHomework(self) -> None:
@@ -345,8 +351,12 @@ class SheetsBridge(QObject):
             self.changed.emit()
             return
         if self._ask:
+            edited = self._ask.get("id") == "edited-weeks"
+            done, self._edited_done = self._edited_done, None
             self._ask = {}
             self._publish()
+            if edited and done is not None:
+                done(None)
             return
         draft = self._homework if self._kind == "homework" else self._block if self._kind == "block" else None
         if draft is not None and draft.dirty():
@@ -566,10 +576,23 @@ class SheetsBridge(QObject):
             return
         self._publish()
 
+    def pose_edited(self, ask: dict, done) -> None:
+        """The edited-weeks question on the week. `done` is called with the answer, or None to cancel."""
+        self._edited_done = done
+        self._ask = ask
+        self._publish()
+
     @Slot(str)
     def answer(self, choice: str) -> None:
         """A button on the prompt that is up."""
         asked = self._ask.get("id", "") if self._ask else ""
+        if asked == "edited-weeks":
+            done, self._edited_done = self._edited_done, None
+            self._ask = {}
+            self._publish()
+            if done is not None:
+                done(choice if choice in ("keep", "replace", "from_today") else None)
+            return
         self._ask = {}
         if asked == "discard":
             if choice == "discard":
@@ -614,6 +637,15 @@ class SheetsBridge(QObject):
             scope = "series"
         every_week = choice == "every"
         day = draft.occurrence_day
+        if every_week and is_setup_block(block):
+            family = block_family(block["id"])
+            after = [item for item in session.repeats if item["id"] != family]
+            if not self._window._apply_standing(after, f"deleting {title}"):  # type: ignore[attr-defined]
+                return
+            session.save()
+            self._close()
+            self._say(f"Deleted {title} from this week and every week after.")
+            return
         session.delete_block(block["id"], scope=scope, day=day, every_week=every_week)
         session.save()
         self._close()

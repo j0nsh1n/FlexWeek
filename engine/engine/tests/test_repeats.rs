@@ -3,9 +3,9 @@
 //! Dates are real: Monday 9 November 2026 is the open week, 16 and 23 November are later weeks.
 
 use flexweek_engine::repeats::{
-    Intent, Kept, NEW_NEEDS_ALL, NOTHING_LEFT, RULE, apply_to_week, edit_intent, intents_between,
-    kept_notice, one_day_note, own_changes, parse_intent, patched, restated_copy, restated_version,
-    this_week_line, three_way,
+    Intent, Kept, NEW_NEEDS_ALL, NOTHING_LEFT, RULE, apply_to_week, edit_intent, edited_weeks_line,
+    intents_between, kept_notice, leaves_week, one_day_note, own_changes, parse_intent, patched,
+    pieces_after_replace, restated_copy, restated_version, this_week_line, three_way,
 };
 use serde_json::{Value, json};
 
@@ -403,4 +403,94 @@ fn the_changes_between_two_lists_of_repeats_are_patches_new_repeats_and_stops() 
         ]
     );
     assert!(intents_between(&[school()], &[school()], OPEN_WEEK).is_empty());
+}
+
+fn from_today(today: &str) -> Intent {
+    intent(json!({
+        "id": "school", "scope": "from", "from_date": "2026-11-02",
+        "set": {"duration_min": 360}, "edited": "from_today", "today": today,
+    }))
+}
+
+#[test]
+fn a_change_may_say_how_edited_weeks_are_treated() {
+    let keep = intent(json!({
+        "id": "school", "scope": "from", "from_date": OPEN_WEEK,
+        "set": {"duration_min": 360}, "edited": "keep",
+    }));
+    assert_eq!(keep.edited, flexweek_engine::repeats::Edited::Keep);
+    assert!(keep.today.is_none());
+    let replace = intent(json!({
+        "id": "school", "scope": "from", "from_date": OPEN_WEEK,
+        "set": {"duration_min": 360}, "edited": "replace",
+    }));
+    assert_eq!(replace.to_value()["edited"], json!("replace"));
+    assert_eq!(
+        parse_intent(&json!({
+            "id": "school", "scope": "from", "from_date": OPEN_WEEK,
+            "edited": "from_today",
+        })),
+        Err(RULE.to_string())
+    );
+    assert_eq!(
+        parse_intent(&json!({
+            "id": "school", "scope": "from", "from_date": OPEN_WEEK,
+            "edited": "sideways", "set": {"duration_min": 360},
+        })),
+        Err(RULE.to_string())
+    );
+}
+
+#[test]
+fn from_today_leaves_this_week_and_every_earlier_week() {
+    // Thursday 5 November 2026: today's week is Monday 2 November, so the next week is 9 November.
+    let change = from_today("2026-11-05");
+    assert!(leaves_week(&change, "2026-11-02").unwrap());
+    assert!(!leaves_week(&change, "2026-11-09").unwrap());
+    // A week on screen from Wednesday 4 November is still today's week (its Monday is 2 November).
+    assert!(leaves_week(&change, "2026-11-04").unwrap());
+    let keeping = intent(json!({
+        "id": "school", "scope": "from", "from_date": OPEN_WEEK, "set": {"duration_min": 360},
+    }));
+    assert!(!leaves_week(&keeping, "2026-11-02").unwrap());
+}
+
+#[test]
+fn replacing_drops_a_piece_split_off_at_another_weeks_start() {
+    let monday = with(school(), json!({"days": [0, 1]}));
+    let piece = json!({"id": "school@20261111", "title": "School", "kind": "locked",
+                       "category": "class", "start": "10:00", "duration_min": 405, "days": [2, 3, 4]});
+    let new = with(school(), json!({"duration_min": 360}));
+    assert_eq!(
+        pieces_after_replace(&[monday, piece], Some(&new)),
+        vec![Some(new), None]
+    );
+}
+
+#[test]
+fn the_question_names_the_edited_weeks_by_their_dates() {
+    assert_eq!(edited_weeks_line(&[], &["School".into()]).unwrap(), None);
+    assert_eq!(
+        edited_weeks_line(&["2026-11-16".into()], &["School".into()]).unwrap(),
+        Some("The week of 16 November has its own School times.".to_string())
+    );
+    assert_eq!(
+        edited_weeks_line(
+            &["2026-11-23".into(), "2026-11-16".into()],
+            &["School".into()]
+        )
+        .unwrap(),
+        Some("The weeks of 16 and 23 November have their own School times.".to_string())
+    );
+    assert_eq!(
+        edited_weeks_line(
+            &["2026-11-16".into(), "2026-12-07".into()],
+            &["School".into(), "Soccer".into()]
+        )
+        .unwrap(),
+        Some(
+            "The weeks of 16 November and 7 December have their own School and Soccer times."
+                .to_string()
+        )
+    );
 }
