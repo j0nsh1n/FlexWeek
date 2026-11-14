@@ -1812,3 +1812,67 @@ fn shown_fixed_reply_failure_rolls_back_both_weeks_atomically() {
     assert_eq!(skip_ok["result"]["week_start"], json!("2026-10-21"));
     assert_eq!(skip_ok["revision"], json!([2, 3]));
 }
+
+#[test]
+fn every_week_start_only_edit_on_shown_week_is_refused_when_a_version_would_pass_midnight() {
+    // Weeks from Wednesday: School is 60 minutes from 19 October and 420 from 26 October, at 08:00.
+    // Moving it to 20:00 every week from the week of 21 October would give the 26 October version
+    // 20:00 to 03:00, which no day holds. The edit is refused and nothing is stored.
+    let world = signed_in("every-week-start-only-past-midnight");
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let first_school = json!({
+        "id": "school", "title": "School", "kind": "locked", "duration_min": 60,
+        "days": [0, 1, 2, 3, 4], "start": "08:00", "category": "class"
+    });
+    let second_school = json!({
+        "id": "school", "title": "School", "kind": "locked", "duration_min": 420,
+        "days": [0, 1, 2, 3, 4], "start": "08:00", "category": "class"
+    });
+    let intent1 = edit_intent("school", WEEK, None, Some(&first_school)).expect("intent1");
+    let intent2 =
+        edit_intent("school", NEXT, Some(&first_school), Some(&second_school)).expect("intent2");
+    apply_repeat_intents(&conn, world.user, &[intent1, intent2]).expect("standing");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+
+    let mut server = boot(&world);
+    let initial = body_of(&server.call("get_week", json!({"week_start": "2026-10-21"}), 2));
+    let refused = server.call(
+        "edit_block",
+        json!({
+            "operation_id": "op-start-only-past-midnight",
+            "week_start": "2026-10-21",
+            "expected_revision": initial["revision"],
+            "block_id": "school",
+            "start": "20:00",
+            "every_week": true
+        }),
+        3,
+    );
+    assert_eq!(
+        tool_error_text(&refused),
+        Some("block must fit between 00:00 and 24:00"),
+        "got {refused}"
+    );
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let standing_second =
+        Value::Array(flexweek_store::standing_blocks(&conn, world.user, NEXT).expect("standing"));
+    drop(conn);
+    assert_eq!(by_id(&standing_second, "school")["start"], json!("08:00"));
+    assert_eq!(
+        by_id(&standing_second, "school")["duration_min"],
+        json!(420)
+    );
+    let after = body_of(&server.call("get_week", json!({"week_start": "2026-10-21"}), 4));
+    assert_eq!(
+        after["revision"], initial["revision"],
+        "a refused edit writes nothing"
+    );
+}

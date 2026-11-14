@@ -10,7 +10,7 @@ use flexweek_engine::desk::grid::{apply_block_edit, is_setup_block, past_problem
 use flexweek_engine::desk::weekmodel::clock_text;
 use flexweek_engine::repeats::{apply_to_week, edit_intent};
 use flexweek_engine::shown::family_id;
-use flexweek_engine::time::{clock_to_minutes, hhmm_to_minutes, minutes_to_hhmm};
+use flexweek_engine::time::{clock_to_minutes, hhmm_to_minutes, minutes_to_hhmm, span_fits_day};
 use flexweek_store::{
     ApplyInput, AssignmentInput, Connection, WeekInput, read_week, standing_blocks,
     week_with_standing,
@@ -816,6 +816,27 @@ fn every_week_input(
     Ok(input)
 }
 
+/// The end a standing version gets from an every-week edit: the edit's own end when it names one,
+/// otherwise the version's own length from the new start. A version that would then run past midnight
+/// refuses the edit before anything is written.
+fn own_end_of(
+    repeat: &Value,
+    args: &EditArgs,
+    start_min: i64,
+    end_min: i64,
+) -> Result<i64, String> {
+    if args.end.is_some() {
+        return Ok(end_min);
+    }
+    let length = repeat["duration_min"]
+        .as_i64()
+        .unwrap_or(end_min - start_min);
+    if !span_fits_day(start_min, length) {
+        return Err("block must fit between 00:00 and 24:00".into());
+    }
+    Ok(start_min + length)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn every_week_shown_input(
     conn: &Connection,
@@ -841,14 +862,7 @@ fn every_week_shown_input(
         return Err(NOT_STANDING.into());
     }
     let first_after_repeat = if let Some(repeat) = &repeat_first {
-        let own_end = if args.end.is_some() {
-            end_min
-        } else {
-            start_min
-                + repeat["duration_min"]
-                    .as_i64()
-                    .unwrap_or(end_min - start_min)
-        };
+        let own_end = own_end_of(repeat, args, start_min, end_min)?;
         let wanted = apply_repeat_fields(repeat, args, offset, start_min, own_end, false)?;
         if let Some(intent) = edit_intent(family, first, Some(repeat), Some(&wanted)) {
             apply_to_week(first_blocks, &repeats_first, std::slice::from_ref(&intent))?.0
@@ -859,14 +873,7 @@ fn every_week_shown_input(
         first_blocks.to_vec()
     };
     let (second_after_repeat, repeats_input) = if let Some(repeat) = &repeat_second {
-        let own_end = if args.end.is_some() {
-            end_min
-        } else {
-            start_min
-                + repeat["duration_min"]
-                    .as_i64()
-                    .unwrap_or(end_min - start_min)
-        };
+        let own_end = own_end_of(repeat, args, start_min, end_min)?;
         let wanted = apply_repeat_fields(repeat, args, offset, start_min, own_end, false)?;
         if let Some(intent) = edit_intent(family, second, Some(repeat), Some(&wanted)) {
             let intent_val = intent.to_value();
