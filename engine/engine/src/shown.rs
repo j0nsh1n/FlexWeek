@@ -168,6 +168,42 @@ pub fn apply_repeats_to_shown_week(
     ))
 }
 
+/// The shown week after `new_body` replaces every piece of `id`. Days stay counted from
+/// `shown_start`. A stop (`new_body` none) takes the repeat off the week. This is the same turn
+/// `apply_repeats_to_shown_week` uses; the split back into stored weeks is still `split_shown_week`.
+pub fn replaced_repeat_on_shown_week(
+    shown_start: &str,
+    blocks: &[Value],
+    id: &str,
+    new_body: Option<&Value>,
+) -> EngineResult<Vec<Value>> {
+    let by = turn_of(shown_start)?;
+    let mut updated: Vec<Value> = blocks.iter().map(|block| turned(block, by)).collect();
+    let pieces: Vec<usize> = updated
+        .iter()
+        .enumerate()
+        .filter(|(_, block)| block.get("id").and_then(Value::as_str).map(family_id) == Some(id))
+        .map(|(at, _)| at)
+        .collect();
+    if pieces.is_empty() {
+        if let Some(body) = new_body {
+            updated.push(body.clone());
+        }
+    } else {
+        let copies: Vec<Value> = pieces.iter().map(|at| updated[*at].clone()).collect();
+        let restated = crate::repeats::pieces_after_replace(&copies, new_body);
+        for (at, copy) in pieces.into_iter().zip(restated).rev() {
+            match copy {
+                Some(copy) => updated[at] = copy,
+                None => {
+                    updated.remove(at);
+                }
+            }
+        }
+    }
+    Ok(updated.iter().map(|block| turned(block, -by)).collect())
+}
+
 /// The blocks of the week on screen from `week_start` with their days as weekdays (0 Monday), as a
 /// routine keeps them.
 pub fn blocks_by_weekday(week_start: &str, blocks: &[Value]) -> EngineResult<Vec<Value>> {

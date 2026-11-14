@@ -196,7 +196,7 @@ pub use prefs::{
     availability_json, create_session_row, delete_account, insert_preferences, preference_row,
     write_preferences,
 };
-pub use repeats::{RepeatsFailure, RepeatsOutcome, apply_repeat_intents};
+pub use repeats::{RepeatsFailure, RepeatsOutcome, apply_repeat_intents, preview_edited_weeks};
 pub use routines::{
     RoutineDelete, RoutineSave, RoutineWrite, delete_routine, list_routines, replace_routines,
     save_routine,

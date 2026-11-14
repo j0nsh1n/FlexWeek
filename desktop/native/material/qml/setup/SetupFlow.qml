@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import components 1.0
+import "../sheets"
 
 // First-run setup: the steps down the side (a line of text on a phone), one page at a time, and
 // Back, Skip this step, Skip setup and Next under it. Every answer goes to the account bridge.
@@ -315,5 +316,20 @@ FocusScope {
         dismissText: bridge ? bridge.skipDismiss : "Cancel"
         onConfirmed: root.bridge.answerSkip("skip")
         onDismissed: root.bridge.answerSkip(bridge && bridge.skipDismissKeeps ? "keep" : "cancel")
+    }
+
+    // A Setup change that would reach a week with its own edit asks here, over the step.
+    PromptDialog {
+        anchors.fill: parent
+        z: 40
+        visible: bridge && bridge.ask && bridge.ask.id !== undefined
+        enabled: visible
+        sheets: root.bridge
+        theme: root.theme
+        density: root.density
+        reduceMotion: root.reduceMotion
+        highContrast: root.highContrast
+        phone: root.phone
+        onVisibleChanged: if (visible) Qt.callLater(focusFirst)
     }
 }

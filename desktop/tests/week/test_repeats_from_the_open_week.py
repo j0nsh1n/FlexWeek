@@ -21,7 +21,7 @@ from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
 
 from desktop.native import window as window_module  # noqa: E402
 from desktop.native.setup import WEEK  # noqa: E402
-from desktop.native.widgets import SchoolHoursDialog  # noqa: E402
+from desktop.native.widgets import ConfirmSheet, SchoolHoursDialog  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402,F401
 from desktop.tests.sheets.support_material_sheets import bridge, material_week, snack  # noqa: E402
@@ -114,6 +114,12 @@ def test_undo_after_school_hours_takes_back_this_weeks_part_only(
 def test_p2_a_later_weeks_skipped_wednesday_stays_and_the_toast_names_that_week(
     qapp, window, after_setup, monkeypatch
 ) -> None:
+    # The change reaches a week that has its own edit, so it asks. Except edited is today's behaviour.
+    def keep(sheet: ConfirmSheet) -> int:
+        sheet.buttons["keep"].click()
+        return 0
+
+    monkeypatch.setattr(ConfirmSheet, "exec", keep)
     session = after_setup
     go_to(qapp, session, WEEK_AFTER)
     session.delete_block("school", scope="occurrence", day=WEDNESDAY)

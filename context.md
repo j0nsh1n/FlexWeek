@@ -1,6 +1,7 @@
 # context.md — FlexWeek
 
-## Current State (2026-11-10)
+## Current State (2026-11-14)
+- Branch `feat/setup-change-asks-about-edited-weeks`, local only, from main 28da96bb. Fix round 2: All weeks turns days through the engine; From today on from a later week still starts the day after today; a stop asks and Except edited keeps that week's copy; stamped intents stay until the save is acknowledged. Local CI passed at 10c5410f (the first pass failed one wrapper test, fixed before the second pass).
 - Latest release: v1.3.0, published 2026-11-10 from main d61235ee (PR #111, the version bump). The Linux tarball and
   the Android APK were built on this computer (`scripts/build-linux-local.sh` in an Ubuntu 24.04 container; the APK
   signed with the 1.2.0 key); the AppImage and the Windows installers came from the tagged "Release packages" run.
@@ -98,6 +99,7 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
+- 2026-11-14, branch `feat/setup-change-asks-about-edited-weeks`, local only. Fix round 2 is in. Local CI passed on the second pass (ci2/summary.txt). Next: review. Nothing pushed.
 - 2026-11-12, branch `fix/replan-moves-missed-sessions` (#126) with `fix/planner-counts-minutes` (#125) merged in,
   local only. A missed session's minutes are counted through `this_weeks_part` against the saved week
   (`missed_minutes` takes `saved_week`), the desktop passes `_assignments_basis` to the solve request and to every

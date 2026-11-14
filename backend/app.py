@@ -259,6 +259,15 @@ def apply_repeats(db: Connection, user_id: int, changes: list[dict]) -> dict:
     return applied
 
 
+def preview_repeats(db: Connection, user_id: int, changes: list[dict]) -> dict:
+    """The later weeks `changes` would reach that have their own edit, without writing."""
+    try:
+        found: dict = json.loads(db.preview_edited_weeks(user_id, json.dumps(changes)))
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    return found
+
+
 def save_shown_week(
     db: Connection, user_id: int, week: ChangedWeek, parts: tuple[str, str, int], before: dict[str, int]
 ) -> None:
@@ -575,6 +584,11 @@ class ChangesRequest(BaseModel):
     # Changes to School and Setup's activities as the student meant them, from a date on. The engine
     # checks each (`flexweek_engine.repeats`); a refusal is a 422 with its sentence.
     repeats: list[dict] | None = Field(default=None, max_length=MAX_REPEAT_CHANGES)
+
+
+class RepeatPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    repeats: list[dict] = Field(max_length=MAX_REPEAT_CHANGES)
 
 
 class RestoreCreate(BaseModel):
@@ -1473,6 +1487,11 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             db.begin_immediate()
             return delete_assignment(db, account["id"], assignment_id, revision)
 
+    @app.post("/api/repeat-edits")
+    def post_repeat_edits(body: RepeatPreviewRequest, account: Annotated[dict, Depends(user)]) -> dict:
+        with connect(path) as db:
+            return preview_repeats(db, account["id"], body.repeats)
+
     @app.post("/api/changes")
     def post_changes(batch: ChangesRequest, account: Annotated[dict, Depends(user)]) -> dict:
         digest_value = payload_digest(batch.model_dump())
@@ -1558,9 +1577,13 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 if parts is not None:
                     entry.update(shown_week_view(db, account["id"], entry["week_start"], parts))
                     continue
-                entry["blocks"] = week_with_standing(
-                    db, account["id"], entry["week_start"], json.dumps(entry["blocks"])
-                )
+                stored_text = json.dumps(entry["blocks"])
+                if repeats is not None:
+                    # All weeks rewrites the open week's row too: the reply gives it as now stored.
+                    row = db.read_week(account["id"], entry["week_start"])
+                    if row is not None:
+                        stored_text, entry["revision"] = row[0], row[1]
+                entry["blocks"] = week_with_standing(db, account["id"], entry["week_start"], stored_text)
                 standing = json.loads(db.standing_blocks(account["id"], entry["week_start"]))
                 if standing:
                     entry["repeats"] = standing
