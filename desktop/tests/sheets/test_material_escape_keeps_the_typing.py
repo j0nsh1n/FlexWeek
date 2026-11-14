@@ -298,6 +298,30 @@ def test_a_kept_block_reopened_in_the_new_week_marks_the_moved_day(
     assert _qml_name(shell, "blockDay5") == "Mon 9"
 
 
+def test_a_moved_pin_is_named_only_while_the_homework_is_pinned(qapp, shell, focused) -> None:
+    """Monday 2 was pinned, then the student went back to "FlexWeek picks the time": the day row is
+    hidden, so nothing names a move there. Pinning again shows it."""
+    from desktop.native import fields
+
+    sheets = focused
+    open_add(sheets, "homework")
+    type_title(sheets, "Piano lesson")
+    sheets.setText("when", "fixed")
+    sheets.setNumber("whenDay", 0)
+    sheets.setText("when", "plan")
+    press_escape(shell)
+    fields.save_week_starts_on("wednesday")
+    wait_until(qapp, lambda: shell.session.week_start == "2026-11-04" and not shell.session.busy)
+    settle(qapp, shell)
+    open_add(sheets, "homework")
+    assert sheets.form["when"] == "plan"
+    assert (sheets.form["whenMovedNote"], sheets.form["whenDayAccess"]) == ("", "")
+    sheets.setText("when", "fixed")
+    pump(qapp)
+    assert sheets.form["whenMovedNote"] == "Monday 2 isn't in this week any more, so it moved to Monday 9."
+    assert sheets.form["whenDayAccess"] == "Day, moved from Monday 2"
+
+
 def test_a_kept_homework_reopened_in_the_new_week_names_the_moved_pin(
     qapp, shell, focused
 ) -> None:

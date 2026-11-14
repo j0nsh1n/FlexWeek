@@ -668,8 +668,11 @@ class HomeworkDraft:
                 else ""
             ),
             "whenFrom": self._from_now_hint(),
-            "whenMovedNote": self._moved_note,
-            "whenDayAccess": f"Day, moved from {self._moved_from}" if self._moved_from else "",
+            # The day row shows only while the homework is pinned, so a move is named only then.
+            "whenMovedNote": self._moved_note if self.when == "fixed" else "",
+            "whenDayAccess": (
+                f"Day, moved from {self._moved_from}" if self._moved_from and self.when == "fixed" else ""
+            ),
             "whenProblem": self.when_problem,
             "estimate": self.estimate_text,
             "estimateLabel": length_label(self.estimate()) if self.estimate() else "",
