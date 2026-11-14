@@ -604,10 +604,11 @@ fn week_start_changes_in_week_start_json_reach_the_running_helper_and_flag_stays
     let wed = body_of(&server.call("get_week", json!({"week_start": "2026-10-21"}), 5));
     assert_eq!(wed["week_starts_on"], "wednesday");
     assert_eq!(wed["revision"], json!([4, 0]));
-    // get_today's week_start is still the stored Monday week, and says so.
+    // get_today keeps stored Monday week_start, reports active week_starts_on, and adds shown_week_start.
     let today = body_of(&server.call("get_today", json!({}), 6));
     assert_eq!(today["week_start"], "2026-10-19");
-    assert_eq!(today["week_starts_on"], "monday");
+    assert_eq!(today["week_starts_on"], "wednesday");
+    assert_eq!(today["shown_week_start"], "2026-10-21");
     // Switching again to Sunday without restarting is picked up immediately.
     std::fs::write(
         Path::new(&world.data_arg).join("week-start.json"),
@@ -785,4 +786,101 @@ fn list_homework_follows_monday_sunday_wednesday_and_month_end_crossing_weeks() 
             .and_then(Value::as_i64),
         Some(30)
     );
+}
+
+#[test]
+fn monday_list_homework_omits_week_start_and_keeps_only_week_starts_on() {
+    let world = fixture("homework-monday-parity");
+    let mut server = boot(&world);
+    server.handshake();
+
+    let mon = body_of(&server.call("list_homework", json!({"week_start": "2026-10-19"}), 2));
+    assert_eq!(
+        mon.get("week_start"),
+        None,
+        "Monday list_homework must not add week_start: {mon}"
+    );
+    assert_eq!(mon.get("week_starts_on"), Some(&json!("monday")));
+
+    // Switch live to Wednesday: Monday compat call still omits week_start; Wednesday call includes it.
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+
+    let compat = body_of(&server.call("list_homework", json!({"week_start": "2026-10-19"}), 3));
+    assert_eq!(
+        compat.get("week_start"),
+        None,
+        "Monday compat must not add week_start: {compat}"
+    );
+    assert_eq!(compat.get("week_starts_on"), Some(&json!("monday")));
+
+    let wed = body_of(&server.call("list_homework", json!({"week_start": "2026-10-21"}), 4));
+    assert_eq!(wed.get("week_start"), Some(&json!("2026-10-21")));
+    assert_eq!(wed.get("week_starts_on"), Some(&json!("wednesday")));
+}
+
+#[test]
+fn get_today_reports_active_week_starts_on_and_shown_week_start_when_not_monday() {
+    let world = fixture("today-shown-week-start");
+    let mut server = boot(&world);
+    server.handshake();
+
+    // 1. Monday start: stays as before (no shown_week_start).
+    let mon = body_of(&server.call("get_today", json!({}), 2));
+    assert_eq!(mon["week_start"], json!("2026-10-19"));
+    assert_eq!(mon["week_starts_on"], json!("monday"));
+    assert_eq!(
+        mon.get("shown_week_start"),
+        None,
+        "Monday must not add shown_week_start: {mon}"
+    );
+
+    // 2. Live Wednesday setting: stored week_start unchanged, week_starts_on active, shown_week_start added.
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+    let wed = body_of(&server.call("get_today", json!({}), 3));
+    assert_eq!(wed["week_start"], json!("2026-10-19"));
+    assert_eq!(wed["week_starts_on"], json!("wednesday"));
+    assert_eq!(wed["shown_week_start"], json!("2026-10-21"));
+
+    // Month-end crossing: Sunday Nov 1 belongs to Monday 2026-10-26 and Wednesday 2026-10-28.
+    let cross = body_of(&server.call("get_today", json!({"date": "2026-11-01"}), 4));
+    assert_eq!(cross["week_start"], json!("2026-10-26"));
+    assert_eq!(cross["week_starts_on"], json!("wednesday"));
+    assert_eq!(cross["shown_week_start"], json!("2026-10-28"));
+
+    // 3. Live Sunday setting: Wednesday Oct 21 belongs to Sunday 2026-10-18.
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "sunday"}"#,
+    )
+    .expect("sun");
+    let sun = body_of(&server.call("get_today", json!({}), 5));
+    assert_eq!(sun["week_start"], json!("2026-10-19"));
+    assert_eq!(sun["week_starts_on"], json!("sunday"));
+    assert_eq!(sun["shown_week_start"], json!("2026-10-18"));
+    drop(server);
+
+    // 4. --week-starts-on overrides week-start.json.
+    let mut override_server = Server::spawn(&[
+        "--data-dir",
+        &world.data_arg,
+        "--database",
+        &world.database_arg,
+        "--now",
+        NOW_ISO,
+        "--week-starts-on",
+        "wednesday",
+    ]);
+    override_server.handshake();
+    let forced = body_of(&override_server.call("get_today", json!({}), 2));
+    assert_eq!(forced["week_start"], json!("2026-10-19"));
+    assert_eq!(forced["week_starts_on"], json!("wednesday"));
+    assert_eq!(forced["shown_week_start"], json!("2026-10-21"));
 }

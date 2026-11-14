@@ -1241,3 +1241,408 @@ fn fixed_tools_follow_monday_sunday_wednesday_and_month_end_crossing_weeks() {
         json!([3])
     );
 }
+
+#[test]
+fn every_week_shown_edit_measures_each_half_against_its_own_standing_version() {
+    // Part A: first ("School") and second ("Next school") differ, plus a later stop at 2026-11-02
+    // and a real per-week override on Thursday in 2026-10-19.
+    let world = signed_in("every-week-changed-versions");
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let v1 = json!({
+        "id": "school", "title": "School", "kind": "locked", "duration_min": 420,
+        "days": [0, 1, 2, 3, 4], "start": "08:00", "category": "class"
+    });
+    let v2 = json!({
+        "id": "school", "title": "Next school", "kind": "locked", "duration_min": 420,
+        "days": [0, 1, 2, 3, 4], "start": "08:00", "category": "class"
+    });
+    let stop_later =
+        json!({"id": "school", "scope": "from", "from_date": "2026-11-02", "stop": true});
+    let i1 = edit_intent("school", "2026-10-19", None, Some(&v1)).expect("v1");
+    let i2 = edit_intent("school", "2026-10-26", Some(&v1), Some(&v2)).expect("v2");
+    apply_repeat_intents(&conn, world.user, &[i1, i2]).expect("standing");
+    flexweek_store::apply_repeat_intents(
+        &conn,
+        world.user,
+        &[flexweek_engine::repeats::parse_intent(&stop_later).expect("stop")],
+    )
+    .expect("stop");
+    // Seed a real per-week override on Thursday (day 3 of 2026-10-19) -> "Field trip"
+    // while Wed/Fri (days 2, 4) and Mon/Tue (days 0, 1) stay "School".
+    let first_seed = json!([
+        {"id": "school", "title": "School", "kind": "locked", "duration_min": 420,
+         "days": [0, 1, 2, 4], "start": "08:00", "category": "class"},
+        {"id": "school@20261021", "title": "Field trip", "kind": "locked", "duration_min": 420,
+         "days": [3], "start": "08:00", "category": "class"}
+    ]);
+    conn.execute(
+        "INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?1, '2026-10-19', ?2, 1)",
+        (world.user, first_seed.to_string()),
+    )
+    .expect("seed first");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+
+    let mut server = boot(&world);
+    let edited = body_of(&server.call(
+        "edit_block",
+        json!({
+            "operation_id": "op-changed-every",
+            "week_start": "2026-10-21",
+            "expected_revision": [1, 0],
+            "block_id": "school",
+            "title": "Classes",
+            "every_week": true
+        }),
+        2,
+    ));
+    assert_eq!(edited["ok"], json!(true), "got {edited}");
+    let shown = seen(&mut server, "2026-10-21", 3);
+    // Wed/Fri (shown days 0, 2) and Mon/Tue (shown days 5, 6) all become "Classes"; Thursday (shown day 1) keeps override "Field trip".
+    let classes_blocks = titled(&shown, "Classes");
+    let classes_days: Vec<i64> = classes_blocks
+        .iter()
+        .flat_map(|b| {
+            b["days"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_i64)
+        })
+        .collect();
+    assert_eq!(classes_days, vec![0, 2, 5, 6], "shown={shown}");
+    assert_eq!(
+        titled(&shown, "Field trip").len(),
+        1,
+        "override kept: {shown}"
+    );
+    assert!(
+        titled(&shown, "School").is_empty(),
+        "old standing replaced: {shown}"
+    );
+    assert!(
+        titled(&shown, "Next school").is_empty(),
+        "second standing replaced: {shown}"
+    );
+
+    // Hidden Mon/Tue of 2026-10-19 stay "School".
+    let first_stored = stored(&world, "2026-10-19").0;
+    assert!(
+        titled(&first_stored, "School")
+            .iter()
+            .any(|b| b["days"] == json!([0, 1])),
+        "hidden Mon/Tue stay School: {first_stored}"
+    );
+    // Later stop at 2026-11-02 is preserved.
+    let nov = seen(&mut server, "2026-11-02", 4);
+    assert!(titled(&nov, "Classes").is_empty(), "later stop kept: {nov}");
+}
+
+#[test]
+fn every_week_shown_edit_works_when_second_week_is_stopped() {
+    let world = signed_in("every-week-second-stopped");
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let v1 = json!({
+        "id": "school", "title": "School", "kind": "locked", "duration_min": 420,
+        "days": [0, 1, 2, 3, 4], "start": "08:00", "category": "class"
+    });
+    let i1 = edit_intent("school", "2026-10-19", None, Some(&v1)).expect("v1");
+    apply_repeat_intents(&conn, world.user, &[i1]).expect("standing");
+    let stop = flexweek_engine::repeats::parse_intent(&json!({
+        "id": "school", "scope": "from", "from_date": "2026-10-26", "stop": true
+    }))
+    .expect("stop");
+    apply_repeat_intents(&conn, world.user, &[stop]).expect("stop second");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+
+    let mut server = boot(&world);
+    let edited = server.call(
+        "edit_block",
+        json!({
+            "operation_id": "op-stopped-every",
+            "week_start": "2026-10-21",
+            "expected_revision": [0, 0],
+            "block_id": "school",
+            "title": "Classes",
+            "every_week": true
+        }),
+        2,
+    );
+    assert_eq!(
+        body_of(&edited)["ok"],
+        json!(true),
+        "must succeed when second week stopped, got {edited}"
+    );
+    let shown = seen(&mut server, "2026-10-21", 3);
+    assert_eq!(
+        titled(&shown, "Classes").len(),
+        1,
+        "Wed-Fri become Classes: {shown}"
+    );
+    assert_eq!(titled(&shown, "Classes")[0]["days"], json!([0, 1, 2]));
+    // First stored week preserves Mon/Tue as School and Wed-Fri as Classes.
+    let first_stored = stored(&world, "2026-10-19").0;
+    assert!(
+        titled(&first_stored, "School")
+            .iter()
+            .any(|b| b["days"] == json!([0, 1]))
+    );
+    assert!(
+        titled(&first_stored, "Classes")
+            .iter()
+            .any(|b| b["days"] == json!([2, 3, 4]))
+    );
+    // Second week remains stopped.
+    let second_seen = seen(&mut server, "2026-10-26", 4);
+    assert!(
+        titled(&second_seen, "Classes").is_empty(),
+        "second week stays stopped: {second_seen}"
+    );
+}
+
+#[test]
+fn monday_validation_keeps_monday_and_sunday_wording_while_shown_uses_first_day() {
+    let world = signed_in("monday-days-wording");
+    seed_week(&world, json!([club(&[2], "16:00")]));
+    let mut server = boot(&world);
+
+    let mon_add = server.call(
+        "add_block",
+        json!({
+            "operation_id": "op-bad-days-mon",
+            "week_start": "2026-10-19",
+            "title": "Bad",
+            "days": [],
+            "start": "17:00",
+            "end": "18:00"
+        }),
+        2,
+    );
+    assert_eq!(
+        tool_error_text(&mon_add),
+        Some("days must name at least one day, 0 (Monday) to 6 (Sunday), once each"),
+        "got {mon_add}"
+    );
+    let mon_edit = server.call(
+        "edit_block",
+        json!({
+            "operation_id": "op-bad-edit-mon",
+            "week_start": "2026-10-19",
+            "expected_revision": 4,
+            "block_id": "club",
+            "days": []
+        }),
+        3,
+    );
+    assert_eq!(
+        tool_error_text(&mon_edit),
+        Some("days must name at least one day, 0 (Monday) to 6 (Sunday), once each"),
+        "got {mon_edit}"
+    );
+
+    // Switch live to Wednesday: Monday week_start still uses Monday/Sunday wording; Wednesday week_start uses shown wording.
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+
+    let compat_add = server.call(
+        "add_block",
+        json!({
+            "operation_id": "op-bad-days-compat",
+            "week_start": "2026-10-19",
+            "title": "Bad",
+            "days": [],
+            "start": "17:00",
+            "end": "18:00"
+        }),
+        4,
+    );
+    assert_eq!(
+        tool_error_text(&compat_add),
+        Some("days must name at least one day, 0 (Monday) to 6 (Sunday), once each"),
+        "got {compat_add}"
+    );
+
+    let wed_add = server.call(
+        "add_block",
+        json!({
+            "operation_id": "op-bad-days-wed",
+            "week_start": "2026-10-21",
+            "title": "Bad",
+            "days": [],
+            "start": "17:00",
+            "end": "18:00"
+        }),
+        5,
+    );
+    assert_eq!(
+        tool_error_text(&wed_add),
+        Some(
+            "days must name at least one day, 0 (the week's first day) to 6 (its last), once each"
+        ),
+        "got {wed_add}"
+    );
+    let wed_edit = server.call(
+        "edit_block",
+        json!({
+            "operation_id": "op-bad-edit-wed",
+            "week_start": "2026-10-21",
+            "expected_revision": [4, 0],
+            "block_id": "club",
+            "days": []
+        }),
+        6,
+    );
+    assert_eq!(
+        tool_error_text(&wed_edit),
+        Some(
+            "days must name at least one day, 0 (the week's first day) to 6 (its last), once each"
+        ),
+        "got {wed_edit}"
+    );
+}
+
+#[test]
+fn shown_fixed_reply_failure_rolls_back_both_weeks_atomically() {
+    let world = signed_in("fixed-reply-fault");
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+
+    let install_trigger = |db: &str| {
+        let conn = open_connection(Path::new(db)).expect("open");
+        conn.execute_batch(
+            "CREATE TRIGGER fail_reply_update BEFORE UPDATE OF response ON operations \
+             BEGIN SELECT RAISE(FAIL, 'review injected reply failure'); END;",
+        )
+        .expect("trigger");
+    };
+    let drop_trigger = |db: &str| {
+        let conn = open_connection(Path::new(db)).expect("open");
+        conn.execute_batch("DROP TRIGGER fail_reply_update;")
+            .expect("drop trigger");
+    };
+
+    let mut server = boot(&world);
+
+    // 1. add_block across seam (Wed day 1 = Thu Oct 22 in first, day 5 = Mon Oct 26 in second).
+    install_trigger(&world.database_arg);
+    let add_args = json!({
+        "operation_id": "op-fault-add",
+        "week_start": "2026-10-21",
+        "title": "Practice",
+        "days": [1, 5],
+        "start": "17:00",
+        "end": "18:00",
+        "expected_revision": [0, 0]
+    });
+    let add_fail = server.call("add_block", add_args.clone(), 2);
+    assert!(
+        tool_error_text(&add_fail).is_some(),
+        "fault must fail add_block, got {add_fail}"
+    );
+    assert_eq!(
+        stored(&world, WEEK).1,
+        -1,
+        "first week must roll back completely"
+    );
+    assert_eq!(
+        stored(&world, NEXT).1,
+        -1,
+        "second week must roll back completely"
+    );
+    assert_eq!(point_count(&world), 0, "restore point must roll back too");
+
+    drop_trigger(&world.database_arg);
+    let add_ok = body_of(&server.call("add_block", add_args, 3));
+    assert_eq!(
+        add_ok["ok"],
+        json!(true),
+        "retry after rollback succeeds: {add_ok}"
+    );
+    assert_eq!(add_ok["result"]["week_start"], json!("2026-10-21"));
+    assert_eq!(add_ok["result"]["week_starts_on"], json!("wednesday"));
+    assert_eq!(add_ok["revision"], json!([1, 1]));
+    let pid = add_ok["result"]["block_id"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+
+    // 2. edit_block across seam.
+    install_trigger(&world.database_arg);
+    let edit_args = json!({
+        "operation_id": "op-fault-edit",
+        "week_start": "2026-10-21",
+        "expected_revision": [1, 1],
+        "block_id": pid,
+        "title": "Rehearsal"
+    });
+    let edit_fail = server.call("edit_block", edit_args.clone(), 4);
+    assert!(
+        tool_error_text(&edit_fail).is_some(),
+        "fault must fail edit_block, got {edit_fail}"
+    );
+    assert_eq!(
+        stored(&world, WEEK).1,
+        1,
+        "first rev unchanged after edit rollback"
+    );
+    assert_eq!(
+        stored(&world, NEXT).1,
+        1,
+        "second rev unchanged after edit rollback"
+    );
+
+    drop_trigger(&world.database_arg);
+    let edit_ok = body_of(&server.call("edit_block", edit_args, 5));
+    assert_eq!(edit_ok["ok"], json!(true), "edit retry succeeds: {edit_ok}");
+    assert_eq!(edit_ok["result"]["week_start"], json!("2026-10-21"));
+    assert_eq!(edit_ok["revision"], json!([2, 2]));
+
+    // 3. skip_block_day on day 5 (in second week).
+    install_trigger(&world.database_arg);
+    let skip_args = json!({
+        "operation_id": "op-fault-skip",
+        "week_start": "2026-10-21",
+        "expected_revision": [2, 2],
+        "block_id": pid,
+        "day": 5
+    });
+    let skip_fail = server.call("skip_block_day", skip_args.clone(), 6);
+    assert!(
+        tool_error_text(&skip_fail).is_some(),
+        "fault must fail skip_block_day, got {skip_fail}"
+    );
+    assert_eq!(
+        stored(&world, NEXT).1,
+        2,
+        "second rev unchanged after skip rollback"
+    );
+
+    drop_trigger(&world.database_arg);
+    let skip_ok = body_of(&server.call("skip_block_day", skip_args, 7));
+    assert_eq!(skip_ok["ok"], json!(true), "skip retry succeeds: {skip_ok}");
+    assert_eq!(skip_ok["result"]["week_start"], json!("2026-10-21"));
+    assert_eq!(skip_ok["revision"], json!([2, 3]));
+}

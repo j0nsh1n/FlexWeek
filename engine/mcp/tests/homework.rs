@@ -1339,3 +1339,63 @@ fn set_block_done_and_delete_homework_say_week_start_across_sunday_wednesday_and
         assert_eq!(entry["week_starts_on"], json!("monday"));
     }
 }
+
+#[test]
+fn shown_set_block_done_reply_failure_rolls_back_atomically() {
+    let world = signed_in("set-block-done-fault");
+    seed_essay(
+        &world,
+        &[(
+            "2026-10-26",
+            2,
+            json!([essay_session("sess-mon2", &[0], Some("16:00"))]),
+        )],
+    );
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    conn.execute_batch(
+        "CREATE TRIGGER fail_reply_update BEFORE UPDATE OF response ON operations \
+         BEGIN SELECT RAISE(FAIL, 'review injected reply failure'); END;",
+    )
+    .expect("trigger");
+    drop(conn);
+
+    let mut server = boot(&world);
+    server.handshake();
+
+    let args = json!({
+        "operation_id": "op-fault-done",
+        "week_start": "2026-10-21",
+        "block_id": "sess-mon2",
+        "day": 5,
+        "done": true,
+        "expected_revision": [0, 2]
+    });
+    let fail = server.call("set_block_done", args.clone(), 2);
+    assert!(
+        tool_error_text(&fail).is_some(),
+        "fault must fail set_block_done, got {fail}"
+    );
+    let (blocks, rev) = week_row(&world.database_arg, world.user, "2026-10-26").unwrap();
+    assert_eq!(rev, 2, "second week rev must roll back");
+    assert!(
+        blocks[0].get("completed").is_none(),
+        "completed must roll back: {blocks}"
+    );
+
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    conn.execute_batch("DROP TRIGGER fail_reply_update;")
+        .expect("drop");
+    drop(conn);
+
+    let ok = body_of(&server.call("set_block_done", args, 3));
+    assert_eq!(ok["ok"], json!(true), "retry succeeds: {ok}");
+    assert_eq!(ok["result"]["week_start"], json!("2026-10-21"));
+    assert_eq!(ok["result"]["week_starts_on"], json!("wednesday"));
+    assert_eq!(ok["revision"], json!([0, 3]));
+}

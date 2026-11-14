@@ -900,3 +900,88 @@ fn move_and_delete_follow_monday_sunday_wednesday_and_month_end_crossing_weeks()
         .is_null()
     );
 }
+
+#[test]
+fn shown_move_and_delete_reply_failure_rolls_back_atomically() {
+    let world = signed_in("blocks-reply-fault");
+    seed_week(&world, json!([club(&[3], "16:00")]));
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+
+    let install_trigger = |db: &str| {
+        let conn = open_connection(Path::new(db)).expect("open");
+        conn.execute_batch(
+            "CREATE TRIGGER fail_reply_update BEFORE UPDATE OF response ON operations \
+             BEGIN SELECT RAISE(FAIL, 'review injected reply failure'); END;",
+        )
+        .expect("trigger");
+    };
+    let drop_trigger = |db: &str| {
+        let conn = open_connection(Path::new(db)).expect("open");
+        conn.execute_batch("DROP TRIGGER fail_reply_update;")
+            .expect("drop");
+    };
+
+    let mut server = boot(&world);
+    server.handshake();
+
+    // 1. move_block across seam (day 5 = Mon Oct 26 in second week).
+    install_trigger(&world.database_arg);
+    let move_args = json!({
+        "operation_id": "op-fault-move",
+        "week_start": "2026-10-21",
+        "expected_revision": [4, 0],
+        "block_id": "club",
+        "day": 5,
+        "start": "18:00",
+        "end": "19:00"
+    });
+    let move_fail = server.call("move_block", move_args.clone(), 2);
+    assert!(
+        tool_error_text(&move_fail).is_some(),
+        "fault must fail move_block, got {move_fail}"
+    );
+    assert_eq!(
+        week_row(&world.database_arg, world.user, "2026-10-19")
+            .unwrap()
+            .1,
+        4
+    );
+    assert!(week_row(&world.database_arg, world.user, "2026-10-26").is_none());
+
+    drop_trigger(&world.database_arg);
+    let move_ok = body_of(&server.call("move_block", move_args, 3));
+    assert_eq!(move_ok["ok"], json!(true), "got {move_ok}");
+    assert_eq!(move_ok["result"]["week_start"], json!("2026-10-21"));
+    assert_eq!(move_ok["revision"], json!([5, 1]));
+
+    // 2. delete_block on non-empty week (label.is_some()).
+    install_trigger(&world.database_arg);
+    let del_args = json!({
+        "operation_id": "op-fault-del",
+        "week_start": "2026-10-21",
+        "expected_revision": [5, 1],
+        "block_id": "club",
+        "scope": "series"
+    });
+    let del_fail = server.call("delete_block", del_args.clone(), 4);
+    assert!(
+        tool_error_text(&del_fail).is_some(),
+        "fault must fail delete_block, got {del_fail}"
+    );
+    assert_eq!(
+        week_row(&world.database_arg, world.user, "2026-10-26")
+            .unwrap()
+            .1,
+        1
+    );
+
+    drop_trigger(&world.database_arg);
+    let del_ok = body_of(&server.call("delete_block", del_args, 5));
+    assert_eq!(del_ok["ok"], json!(true), "got {del_ok}");
+    assert_eq!(del_ok["result"]["week_start"], json!("2026-10-21"));
+    assert_eq!(del_ok["revision"], json!([5, 2]));
+}

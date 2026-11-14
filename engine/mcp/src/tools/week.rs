@@ -10,7 +10,6 @@ use rmcp::schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
-use super::homework;
 use crate::{host, session};
 
 pub(crate) const WEEK_START_RULE: &str =
@@ -243,11 +242,4 @@ pub(crate) fn remember_shown_reply(
     )
     .map_err(|error| session::storage_sentence(StoreError::from(error)))?;
     Ok(())
-}
-
-/// Resolves `seen_week` using `homework::parse_blocks` only as a sanity check helper when unused
-/// imports aren't desired; kept minimal in module.
-#[allow(dead_code)]
-fn _check_parse(raw: &str) -> Result<Vec<Value>, String> {
-    homework::parse_blocks(raw)
 }

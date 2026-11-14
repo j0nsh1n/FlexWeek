@@ -9,9 +9,7 @@ use flexweek_engine::desk::calendar::{FLEX_CATEGORIES, LOCKED_CATEGORIES};
 use flexweek_engine::desk::grid::{apply_block_edit, is_setup_block, past_problem, span_clash};
 use flexweek_engine::desk::weekmodel::clock_text;
 use flexweek_engine::repeats::{apply_to_week, edit_intent};
-use flexweek_engine::shown::{
-    apply_repeats_to_shown_week, family_id, repeat_changes_from_shown_week,
-};
+use flexweek_engine::shown::family_id;
 use flexweek_engine::time::{clock_to_minutes, hhmm_to_minutes, minutes_to_hhmm};
 use flexweek_store::{
     ApplyInput, AssignmentInput, Connection, WeekInput, read_week, standing_blocks,
@@ -32,7 +30,9 @@ const FLEXIBLE: &str = "Use the homework editor for flexible work.";
 const NOT_IN_WEEK: &str = "That block is not in this week, so nothing changed.";
 const NOT_STANDING: &str =
     "Only School and Setup's activities stand in every week, so every_week does not apply.";
-const DAYS_RULE: &str =
+const DAYS_RULE_MONDAY: &str =
+    "days must name at least one day, 0 (Monday) to 6 (Sunday), once each";
+const DAYS_RULE_SHOWN: &str =
     "days must name at least one day, 0 (the week's first day) to 6 (its last), once each";
 const DEFAULT_CATEGORY: &str = "extra";
 
@@ -135,7 +135,7 @@ fn category_of(given: Option<&str>) -> Result<String, String> {
     Ok(category.to_string())
 }
 
-fn days_of(days: &[i64]) -> Result<Vec<i64>, String> {
+fn days_of(days: &[i64], monday_wording: bool) -> Result<Vec<i64>, String> {
     let mut sorted = days.to_vec();
     sorted.sort_unstable();
     sorted.dedup();
@@ -143,7 +143,12 @@ fn days_of(days: &[i64]) -> Result<Vec<i64>, String> {
         || sorted.len() != days.len()
         || sorted.iter().any(|day| !(0..=6).contains(day))
     {
-        return Err(DAYS_RULE.into());
+        return Err(if monday_wording {
+            DAYS_RULE_MONDAY
+        } else {
+            DAYS_RULE_SHOWN
+        }
+        .into());
     }
     Ok(sorted)
 }
@@ -312,7 +317,9 @@ fn perform_add(app: &crate::App, args: &AddArgs) -> Result<Value, String> {
         return saved(&remembered, &block_id, &operation_id);
     }
     let category = category_of(args.category.as_deref())?;
-    let days = days_of(&args.days)?;
+    let monday_wording =
+        flexweek_engine::time::is_week_start(&args.week_start) || app.first_weekday() == 0;
+    let days = days_of(&args.days, monday_wording)?;
     let (start_min, end_min) = span_of(&args.start, &args.end)?;
     let target = week::resolve_week(&args.week_start, app.first_weekday())?;
     for day in &days {
@@ -399,7 +406,7 @@ fn perform_add(app: &crate::App, args: &AddArgs) -> Result<Value, String> {
                 repeats: None,
                 argument_digest: None,
             };
-            let applied = homework::run_apply(
+            homework::run_apply_with(
                 &opened.conn,
                 opened.user_id,
                 "add_block",
@@ -407,27 +414,26 @@ fn perform_add(app: &crate::App, args: &AddArgs) -> Result<Value, String> {
                 &digest,
                 input,
                 &homework::clock_of(app)?,
-            )?;
-            if applied.get("error").is_some() {
-                return Ok(applied);
-            }
-            let answer = build_shown_saved_reply(
-                &opened.conn,
-                opened.user_id,
-                &args.week_start,
-                &first,
-                &second,
-                &block_id,
-                &operation_id,
-            )?;
-            week::remember_shown_reply(
-                &opened.conn,
-                opened.user_id,
-                &operation_id,
-                &applied,
-                &answer,
-            )?;
-            Ok(answer)
+                |conn, applied| {
+                    let answer = build_shown_saved_reply(
+                        conn,
+                        opened.user_id,
+                        &args.week_start,
+                        &first,
+                        &second,
+                        &block_id,
+                        &operation_id,
+                    )?;
+                    week::remember_shown_reply(
+                        conn,
+                        opened.user_id,
+                        &operation_id,
+                        applied,
+                        &answer,
+                    )?;
+                    Ok(answer)
+                },
+            )
         }
     }
 }
@@ -556,8 +562,9 @@ fn perform_edit(app: &crate::App, args: &EditArgs) -> Result<Value, String> {
         }
     };
     let (start_min, end_min) = span_of(&start, &end)?;
+    let monday_wording = shown_parts.is_none();
     let days = match &args.days {
-        Some(days) if !occurrence => days_of(days)?,
+        Some(days) if !occurrence => days_of(days, monday_wording)?,
         _ => original["days"]
             .as_array()
             .into_iter()
@@ -649,7 +656,6 @@ fn perform_edit(app: &crate::App, args: &EditArgs) -> Result<Value, String> {
             &opened.conn,
             opened.user_id,
             args,
-            &shown_blocks,
             &first,
             &first_blocks,
             first_rev,
@@ -689,7 +695,7 @@ fn perform_edit(app: &crate::App, args: &EditArgs) -> Result<Value, String> {
             argument_digest: None,
         }
     };
-    let applied = homework::run_apply(
+    homework::run_apply_with(
         &opened.conn,
         opened.user_id,
         "edit_block",
@@ -697,54 +703,83 @@ fn perform_edit(app: &crate::App, args: &EditArgs) -> Result<Value, String> {
         &digest,
         input,
         &homework::clock_of(app)?,
-    )?;
-    if applied.get("error").is_some() {
-        return Ok(applied);
-    }
-    let (first_after, new_r1) = seen_week(&opened.conn, opened.user_id, &first)?;
-    let (second_after, new_r2) = seen_week(&opened.conn, opened.user_id, &second)?;
-    let shown_after = week::compose_shown_blocks(
-        &opened.conn,
-        opened.user_id,
-        &args.week_start,
-        &first_after,
-        &second_after,
-    )?;
-    let shown_id = if occurrence {
-        let fresh = flexweek_store::digest(&format!("block:{}", args.operation_id));
-        shown_after
-            .iter()
-            .filter_map(|block| block["id"].as_str())
-            .find(|id| id.starts_with(&fresh))
-            .map_or_else(|| args.block_id.clone(), str::to_string)
-    } else {
-        args.block_id.clone()
-    };
-    let next_to = match find(&shown_after, &shown_id) {
-        Some(block) => beside(&shown_after, &block)?,
-        None => None,
-    };
-    let answer = json!({
-        "ok": true,
-        "result": {
-            "week_start": args.week_start,
-            "week_starts_on": week::weekday_name(&args.week_start)?,
-            "revision": [new_r1, new_r2],
-            "block_id": shown_id,
-            "beside": next_to,
+        |conn, applied| {
+            let (first_after, new_r1) = seen_week(conn, opened.user_id, &first)?;
+            let (second_after, new_r2) = seen_week(conn, opened.user_id, &second)?;
+            let shown_after = week::compose_shown_blocks(
+                conn,
+                opened.user_id,
+                &args.week_start,
+                &first_after,
+                &second_after,
+            )?;
+            let shown_id = if occurrence {
+                let fresh = flexweek_store::digest(&format!("block:{}", args.operation_id));
+                shown_after
+                    .iter()
+                    .filter_map(|block| block["id"].as_str())
+                    .find(|id| id.starts_with(&fresh))
+                    .map_or_else(|| args.block_id.clone(), str::to_string)
+            } else {
+                args.block_id.clone()
+            };
+            let next_to = match find(&shown_after, &shown_id) {
+                Some(block) => beside(&shown_after, &block)?,
+                None => None,
+            };
+            let answer = json!({
+                "ok": true,
+                "result": {
+                    "week_start": args.week_start,
+                    "week_starts_on": week::weekday_name(&args.week_start)?,
+                    "revision": [new_r1, new_r2],
+                    "block_id": shown_id,
+                    "beside": next_to,
+                },
+                "revision": [new_r1, new_r2],
+                "restore_point": write::point_id(&operation_id),
+                "reaches_phone": REACHES_PHONE,
+            });
+            week::remember_shown_reply(conn, opened.user_id, &operation_id, applied, &answer)?;
+            Ok(answer)
         },
-        "revision": [new_r1, new_r2],
-        "restore_point": write::point_id(&operation_id),
-        "reaches_phone": REACHES_PHONE,
-    });
-    week::remember_shown_reply(
-        &opened.conn,
-        opened.user_id,
-        &operation_id,
-        &applied,
-        &answer,
-    )?;
-    Ok(answer)
+    )
+}
+
+fn apply_repeat_fields(
+    repeat: &Value,
+    args: &EditArgs,
+    offset: i64,
+    start_min: i64,
+    end_min: i64,
+    monday_wording: bool,
+) -> Result<Value, String> {
+    let mut wanted = repeat.clone();
+    if let Some(fields) = wanted.as_object_mut() {
+        if let Some(title) = &args.title {
+            fields.insert("title".into(), json!(title.trim()));
+        }
+        if args.category.is_some() {
+            fields.insert(
+                "category".into(),
+                json!(category_of(args.category.as_deref())?),
+            );
+        }
+        if args.start.is_some() || args.end.is_some() {
+            fields.insert("start".into(), json!(minutes_to_hhmm(start_min)));
+            fields.insert("duration_min".into(), json!(end_min - start_min));
+        }
+        if let Some(days) = &args.days {
+            let mut weekdays: Vec<i64> = days_of(days, monday_wording)?
+                .into_iter()
+                .map(|day| (day + offset).rem_euclid(7))
+                .collect();
+            weekdays.sort_unstable();
+            weekdays.dedup();
+            fields.insert("days".into(), json!(weekdays));
+        }
+    }
+    Ok(wanted)
 }
 
 /// An `every_week` edit: only the arguments the assistant named change, from this week on, measured
@@ -766,25 +801,7 @@ fn every_week_input(
     let Some(repeat) = find(&repeats, family) else {
         return Err(NOT_STANDING.into());
     };
-    let mut wanted = repeat.clone();
-    if let Some(fields) = wanted.as_object_mut() {
-        if let Some(title) = &args.title {
-            fields.insert("title".into(), json!(title.trim()));
-        }
-        if args.category.is_some() {
-            fields.insert(
-                "category".into(),
-                json!(category_of(args.category.as_deref())?),
-            );
-        }
-        if args.start.is_some() || args.end.is_some() {
-            fields.insert("start".into(), json!(minutes_to_hhmm(start_min)));
-            fields.insert("duration_min".into(), json!(end_min - start_min));
-        }
-        if let Some(days) = &args.days {
-            fields.insert("days".into(), json!(days_of(days)?));
-        }
-    }
+    let wanted = apply_repeat_fields(&repeat, args, 0, start_min, end_min, true)?;
     let mut input = week_input(&args.week_start, blocks.to_vec(), expected_revision);
     let Some(intent) = edit_intent(family, &args.week_start, Some(&repeat), Some(&wanted)) else {
         return Ok(input);
@@ -800,7 +817,6 @@ fn every_week_shown_input(
     conn: &Connection,
     user_id: i64,
     args: &EditArgs,
-    shown_blocks: &[Value],
     first: &str,
     first_blocks: &[Value],
     first_rev: i64,
@@ -811,65 +827,48 @@ fn every_week_shown_input(
     start_min: i64,
     end_min: i64,
 ) -> Result<ApplyInput, String> {
-    let repeats = standing_blocks(conn, user_id, second).map_err(session::storage_sentence)?;
+    let repeats_first = standing_blocks(conn, user_id, first).map_err(session::storage_sentence)?;
+    let repeats_second =
+        standing_blocks(conn, user_id, second).map_err(session::storage_sentence)?;
     let family = family_id(&args.block_id);
-    let Some(repeat) = find(&repeats, family) else {
+    let repeat_first = find(&repeats_first, family);
+    let repeat_second = find(&repeats_second, family);
+    if repeat_first.is_none() && repeat_second.is_none() {
         return Err(NOT_STANDING.into());
-    };
-    let mut wanted = repeat.clone();
-    if let Some(fields) = wanted.as_object_mut() {
-        if let Some(title) = &args.title {
-            fields.insert("title".into(), json!(title.trim()));
-        }
-        if args.category.is_some() {
-            fields.insert(
-                "category".into(),
-                json!(category_of(args.category.as_deref())?),
-            );
-        }
-        if args.start.is_some() || args.end.is_some() {
-            fields.insert("start".into(), json!(minutes_to_hhmm(start_min)));
-            fields.insert("duration_min".into(), json!(end_min - start_min));
-        }
-        if let Some(days) = &args.days {
-            let mut weekdays: Vec<i64> = days_of(days)?
-                .into_iter()
-                .map(|day| (day + offset).rem_euclid(7))
-                .collect();
-            weekdays.sort_unstable();
-            weekdays.dedup();
-            fields.insert("days".into(), json!(weekdays));
-        }
     }
-    let Some(intent_shown) = edit_intent(family, &args.week_start, Some(&repeat), Some(&wanted))
-    else {
-        return Ok(ApplyInput {
-            weeks: Vec::new(),
-            assignments: Vec::new(),
-            operation_id: None,
-            snapshot_label: None,
-            repeats: None,
-            argument_digest: None,
-        });
+    let first_after_repeat = if let Some(repeat) = &repeat_first {
+        let wanted = apply_repeat_fields(repeat, args, offset, start_min, end_min, false)?;
+        if let Some(intent) = edit_intent(family, first, Some(repeat), Some(&wanted)) {
+            apply_to_week(first_blocks, &repeats_first, std::slice::from_ref(&intent))?.0
+        } else {
+            first_blocks.to_vec()
+        }
+    } else {
+        first_blocks.to_vec()
     };
-    let intent_second_val =
-        repeat_changes_from_shown_week(&[intent_shown.to_value()], &args.week_start)
-            .map_err(|err| err.message)?
-            .into_iter()
-            .next()
-            .ok_or_else(|| session::STORAGE_UNAVAILABLE.to_string())?;
-    let intent_second = edit_intent(family, second, Some(&repeat), Some(&wanted))
-        .ok_or_else(|| session::STORAGE_UNAVAILABLE.to_string())?;
-    let (second_after_repeat, _) = apply_to_week(
-        second_blocks,
-        &repeats,
-        std::slice::from_ref(&intent_second),
-    )?;
-    let (shown_after, _) = apply_repeats_to_shown_week(
+    let (second_after_repeat, repeats_input) = if let Some(repeat) = &repeat_second {
+        let wanted = apply_repeat_fields(repeat, args, offset, start_min, end_min, false)?;
+        if let Some(intent) = edit_intent(family, second, Some(repeat), Some(&wanted)) {
+            let intent_val = intent.to_value();
+            let updated = apply_to_week(
+                second_blocks,
+                &repeats_second,
+                std::slice::from_ref(&intent),
+            )?
+            .0;
+            (updated, Some(vec![intent_val]))
+        } else {
+            (second_blocks.to_vec(), None)
+        }
+    } else {
+        (second_blocks.to_vec(), None)
+    };
+    let shown_after = week::compose_shown_blocks(
+        conn,
+        user_id,
         &args.week_start,
-        shown_blocks,
-        &repeats,
-        std::slice::from_ref(&intent_shown),
+        &first_after_repeat,
+        &second_after_repeat,
     )?;
     let weeks = week::split_shown_inputs(
         &args.week_start,
@@ -886,7 +885,7 @@ fn every_week_shown_input(
         assignments: Vec::<AssignmentInput>::new(),
         operation_id: None,
         snapshot_label: None,
-        repeats: Some(vec![intent_second_val]),
+        repeats: repeats_input,
         argument_digest: None,
     })
 }
@@ -1007,7 +1006,7 @@ fn perform_skip(app: &crate::App, args: &SkipArgs) -> Result<Value, String> {
                 repeats: None,
                 argument_digest: None,
             };
-            let applied = homework::run_apply(
+            homework::run_apply_with(
                 &opened.conn,
                 opened.user_id,
                 "skip_block_day",
@@ -1015,27 +1014,26 @@ fn perform_skip(app: &crate::App, args: &SkipArgs) -> Result<Value, String> {
                 &digest,
                 input,
                 &homework::clock_of(app)?,
-            )?;
-            if applied.get("error").is_some() {
-                return Ok(applied);
-            }
-            let answer = build_shown_saved_reply(
-                &opened.conn,
-                opened.user_id,
-                &args.week_start,
-                &first,
-                &second,
-                &args.block_id,
-                &operation_id,
-            )?;
-            week::remember_shown_reply(
-                &opened.conn,
-                opened.user_id,
-                &operation_id,
-                &applied,
-                &answer,
-            )?;
-            Ok(answer)
+                |conn, applied| {
+                    let answer = build_shown_saved_reply(
+                        conn,
+                        opened.user_id,
+                        &args.week_start,
+                        &first,
+                        &second,
+                        &args.block_id,
+                        &operation_id,
+                    )?;
+                    week::remember_shown_reply(
+                        conn,
+                        opened.user_id,
+                        &operation_id,
+                        applied,
+                        &answer,
+                    )?;
+                    Ok(answer)
+                },
+            )
         }
     }
 }

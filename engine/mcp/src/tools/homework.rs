@@ -156,8 +156,10 @@ pub(crate) fn remembered(
 }
 
 /// Every assistant write lands here, and saves a restore point of the account before it changes
-/// anything, so the student can undo the whole change in one step.
-pub(crate) fn run_apply(
+/// anything, so the student can undo the whole change in one step. `finish_in_tx` builds and saves
+/// any extra tool reply inside the same transaction so a failure rolls everything back together.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn run_apply_with<F>(
     conn: &Connection,
     user_id: i64,
     tool: &str,
@@ -165,7 +167,11 @@ pub(crate) fn run_apply(
     digest: &str,
     mut input: ApplyInput,
     clock: &ApplyClock,
-) -> Result<Value, String> {
+    finish_in_tx: F,
+) -> Result<Value, String>
+where
+    F: FnOnce(&Connection, &Value) -> Result<Value, String>,
+{
     input.operation_id = Some(operation_id.to_string());
     input.argument_digest = Some(digest.to_string());
     let (restore_token, label) =
@@ -177,14 +183,43 @@ pub(crate) fn run_apply(
     };
     let applied = apply_within(conn, user_id, &input, &clock);
     // A refused write changes nothing, the restore point pruning above included.
-    let end = if applied.is_ok() {
-        "COMMIT"
-    } else {
-        "ROLLBACK"
+    let (result, should_commit) = match write::from_apply(applied) {
+        Ok(value) if value.get("error").is_some() => (Ok(value), false),
+        Ok(value) => match finish_in_tx(conn, &value) {
+            Ok(answer) => (Ok(answer), true),
+            Err(err) => (Err(err), false),
+        },
+        Err(err) => (Err(err), false),
     };
-    conn.execute(end, [])
-        .map_err(|error| session::storage_sentence(error.into()))?;
-    write::from_apply(applied)
+    let end = if should_commit { "COMMIT" } else { "ROLLBACK" };
+    if let Err(error) = conn.execute(end, []) {
+        if should_commit {
+            let _ = conn.execute("ROLLBACK", []);
+        }
+        return Err(session::storage_sentence(error.into()));
+    }
+    result
+}
+
+pub(crate) fn run_apply(
+    conn: &Connection,
+    user_id: i64,
+    tool: &str,
+    operation_id: &str,
+    digest: &str,
+    input: ApplyInput,
+    clock: &ApplyClock,
+) -> Result<Value, String> {
+    run_apply_with(
+        conn,
+        user_id,
+        tool,
+        operation_id,
+        digest,
+        input,
+        clock,
+        |_, applied| Ok(applied.clone()),
+    )
 }
 
 pub(crate) fn parse_blocks(text: &str) -> Result<Vec<Value>, String> {
@@ -846,7 +881,7 @@ impl crate::App {
                         repeats: None,
                         argument_digest: None,
                     };
-                    let applied = run_apply(
+                    run_apply_with(
                         &opened.conn,
                         opened.user_id,
                         "set_block_done",
@@ -854,30 +889,29 @@ impl crate::App {
                         &digest,
                         input,
                         &clock_of(self)?,
-                    )?;
-                    if applied.get("error").is_some() {
-                        return Ok(applied);
-                    }
-                    let new_r1 = week::week_revision(&opened.conn, opened.user_id, &first)?;
-                    let new_r2 = week::week_revision(&opened.conn, opened.user_id, &second)?;
-                    let answer = json!({
-                        "ok": true,
-                        "result": {
-                            "week_start": args.week_start,
-                            "week_starts_on": week::weekday_name(&args.week_start)?,
-                            "revision": [new_r1, new_r2],
+                        |conn, applied| {
+                            let new_r1 = week::week_revision(conn, opened.user_id, &first)?;
+                            let new_r2 = week::week_revision(conn, opened.user_id, &second)?;
+                            let answer = json!({
+                                "ok": true,
+                                "result": {
+                                    "week_start": args.week_start,
+                                    "week_starts_on": week::weekday_name(&args.week_start)?,
+                                    "revision": [new_r1, new_r2],
+                                },
+                                "revision": [new_r1, new_r2],
+                                "reaches_phone": REACHES_PHONE,
+                            });
+                            week::remember_shown_reply(
+                                conn,
+                                opened.user_id,
+                                &operation_id,
+                                applied,
+                                &answer,
+                            )?;
+                            Ok(answer)
                         },
-                        "revision": [new_r1, new_r2],
-                        "reaches_phone": REACHES_PHONE,
-                    });
-                    week::remember_shown_reply(
-                        &opened.conn,
-                        opened.user_id,
-                        &operation_id,
-                        &applied,
-                        &answer,
-                    )?;
-                    Ok(answer)
+                    )
                 }
             }
         })();

@@ -272,7 +272,7 @@ fn perform_move(app: &crate::App, args: &MoveArgs) -> Result<Value, String> {
         repeats: None,
         argument_digest: None,
     };
-    let applied = homework::run_apply(
+    homework::run_apply_with(
         &opened.conn,
         opened.user_id,
         "move_block",
@@ -280,30 +280,23 @@ fn perform_move(app: &crate::App, args: &MoveArgs) -> Result<Value, String> {
         &digest,
         input,
         &homework::clock_of(app)?,
-    )?;
-    if applied.get("error").is_some() {
-        return Ok(applied);
-    }
-    let new_r1 = week::week_revision(&opened.conn, opened.user_id, &first)?;
-    let new_r2 = week::week_revision(&opened.conn, opened.user_id, &second)?;
-    let answer = json!({
-        "ok": true,
-        "result": {
-            "week_start": args.week_start,
-            "week_starts_on": week::weekday_name(&args.week_start)?,
-            "revision": [new_r1, new_r2],
+        |conn, applied| {
+            let new_r1 = week::week_revision(conn, opened.user_id, &first)?;
+            let new_r2 = week::week_revision(conn, opened.user_id, &second)?;
+            let answer = json!({
+                "ok": true,
+                "result": {
+                    "week_start": args.week_start,
+                    "week_starts_on": week::weekday_name(&args.week_start)?,
+                    "revision": [new_r1, new_r2],
+                },
+                "revision": [new_r1, new_r2],
+                "reaches_phone": REACHES_PHONE,
+            });
+            week::remember_shown_reply(conn, opened.user_id, &operation_id, applied, &answer)?;
+            Ok(answer)
         },
-        "revision": [new_r1, new_r2],
-        "reaches_phone": REACHES_PHONE,
-    });
-    week::remember_shown_reply(
-        &opened.conn,
-        opened.user_id,
-        &operation_id,
-        &applied,
-        &answer,
-    )?;
-    Ok(answer)
+    )
 }
 
 #[allow(clippy::too_many_lines)]
@@ -523,7 +516,7 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
         repeats: repeats_input,
         argument_digest: None,
     };
-    let applied = homework::run_apply(
+    homework::run_apply_with(
         &opened.conn,
         opened.user_id,
         "delete_block",
@@ -531,30 +524,23 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
         &digest,
         input,
         &homework::clock_of(app)?,
-    )?;
-    if applied.get("error").is_some() {
-        return Ok(applied);
-    }
-    let new_r1 = week::week_revision(&opened.conn, opened.user_id, &first)?;
-    let new_r2 = week::week_revision(&opened.conn, opened.user_id, &second)?;
-    let answer = json!({
-        "ok": true,
-        "result": {
-            "week_start": args.week_start,
-            "week_starts_on": week::weekday_name(&args.week_start)?,
-            "revision": [new_r1, new_r2],
+        |conn, applied| {
+            let new_r1 = week::week_revision(conn, opened.user_id, &first)?;
+            let new_r2 = week::week_revision(conn, opened.user_id, &second)?;
+            let answer = json!({
+                "ok": true,
+                "result": {
+                    "week_start": args.week_start,
+                    "week_starts_on": week::weekday_name(&args.week_start)?,
+                    "revision": [new_r1, new_r2],
+                },
+                "revision": [new_r1, new_r2],
+                "reaches_phone": REACHES_PHONE,
+            });
+            week::remember_shown_reply(conn, opened.user_id, &operation_id, applied, &answer)?;
+            Ok(answer)
         },
-        "revision": [new_r1, new_r2],
-        "reaches_phone": REACHES_PHONE,
-    });
-    week::remember_shown_reply(
-        &opened.conn,
-        opened.user_id,
-        &operation_id,
-        &applied,
-        &answer,
-    )?;
-    Ok(answer)
+    )
 }
 
 #[tool_router(router = block_tools, vis = "pub(crate)")]

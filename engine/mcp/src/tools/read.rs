@@ -117,12 +117,7 @@ fn shown_homework_list(
     let target = week::resolve_week(week_start, first_weekday)?;
     let mut view = match target {
         WeekTarget::StoredMonday => {
-            let mut view =
-                homework_list(conn, user_id, week_start, include_completed).map_err(view_error)?;
-            if let Some(fields) = view.as_object_mut() {
-                fields.insert("week_start".into(), json!(week_start));
-            }
-            view
+            homework_list(conn, user_id, week_start, include_completed).map_err(view_error)?
         }
         WeekTarget::Shown { .. } => {
             let rows = list_assignment_rows(conn, user_id).map_err(view_error)?;
@@ -231,12 +226,23 @@ impl crate::App {
                 None => self.now()?.today,
             };
             let mut view = day_view(&conn, account_id(&account), &date).map_err(view_error)?;
-            if let Some(ws) = view
-                .get("week_start")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-            {
-                week::add_week_starts_on(&mut view, &ws)?;
+            let first_weekday = self.first_weekday();
+            let shown_week_start = if first_weekday == 0 {
+                None
+            } else {
+                Some(
+                    flexweek_engine::time::week_start_on(&date, first_weekday)
+                        .map_err(|err| err.message)?,
+                )
+            };
+            if let Some(fields) = view.as_object_mut() {
+                fields.insert(
+                    "week_starts_on".into(),
+                    json!(host::WEEK_STARTS[first_weekday as usize]),
+                );
+                if let Some(shown) = shown_week_start {
+                    fields.insert("shown_week_start".into(), json!(shown));
+                }
             }
             Ok(view.to_string())
         })();

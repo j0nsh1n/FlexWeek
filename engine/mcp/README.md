@@ -92,7 +92,7 @@ Read tools (always served):
 | Tool | What it returns |
 |---|---|
 | `whoami` | Who is signed in, when the session ends, and the active `week_starts_on` |
-| `get_today` | One day (optional `date`): due soon, sessions, fixed blocks, next action, workload, `week_start`, `week_starts_on` |
+| `get_today` | One day (optional `date`): due soon, sessions, fixed blocks, next action, workload, stored Monday `week_start`, active `week_starts_on` (and `shown_week_start` when not Monday) |
 | `get_week` | One week (`week_start`, matching the start day or a Monday stored week) with School and activities merged in, `week_starts_on`, and its revision |
 | `get_month` | One month (`month`, `YYYY-MM`): the grid starting on `week_starts_on`, deadlines, overdue work |
 | `list_homework` | Homework with planned and unplanned minutes from `week_start` (`week_start`, `include_completed`) and `week_starts_on` |
