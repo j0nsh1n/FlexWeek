@@ -2074,6 +2074,11 @@ class SetupPage(QWidget):
                 return
             answer = self._answer(step)
             if step == WEEK:
+                # Cancel has to land before any of this is kept: the week-start file, the page's
+                # own copy, and the move to the next step.
+                confirm = getattr(self.window(), "confirm_standing", None)
+                if confirm is not None and answer is not None and confirm(answer["blocks"]) is None:
+                    return
                 save_week_starts_on(self._week_start_chosen())
         elif step in LOOK_STEPS and destination not in LOOK_STEPS:
             # A look tried and then skipped is not kept, so the app goes back to the one it had.

@@ -1816,7 +1816,11 @@ class AccountBridge(QObject):
             answer = self._answer()
             if self._step == STYLE and not self._own_look:
                 self._surface_pick = "material" if self._style_key == MATERIAL_STYLE.key else "widgets"
-            if self._step == WEEK:
+            if self._step == WEEK and answer is not None:
+                # Cancel stays on this page: nothing typed is kept, and the week-start file is not
+                # written, until the student answers.
+                if self._window.confirm_standing(answer["blocks"]) is None:  # type: ignore[attr-defined]
+                    return
                 save_week_starts_on(self._week_start)
         elif self._step in LOOK_STEPS and destination not in LOOK_STEPS:
             self._restore_entered()

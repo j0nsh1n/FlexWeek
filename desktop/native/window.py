@@ -3896,16 +3896,37 @@ class NativeWindow(QMainWindow):
         elif school is not None:
             self._delete_block(school, "series", None, every_week=True)
 
-    def _apply_standing(self, after: list, label: str) -> bool:
-        """Put `after` in place from this week on, after asking when a later week has its own edit.
-        False when the student cancels: nothing is changed."""
+    def confirm_standing(self, after: list) -> str | None:
+        """The answer for a setup week change, asked before that page keeps anything.
+
+        None is Cancel: the page stays as the student left it and nothing is saved. The answer is
+        kept for the save that follows, so that save does not ask again."""
         changes = self.session.repeat_diff(after)
         choice = "keep"
         if changes:
             asked = self._choice_for_edits(changes)
             if asked is None:
-                return False
+                return None
             choice = asked
+        self._standing_ready = True
+        self._standing_answer = choice
+        return choice
+
+    def _apply_standing(self, after: list, label: str) -> bool:
+        """Put `after` in place from this week on, after asking when a later week has its own edit.
+        False when the student cancels: nothing is changed. A setup page asks first, via
+        `confirm_standing`, and this then uses that answer."""
+        if getattr(self, "_standing_ready", False):
+            choice = self._standing_answer
+            self._standing_ready = False
+        else:
+            changes = self.session.repeat_diff(after)
+            choice = "keep"
+            if changes:
+                asked = self._choice_for_edits(changes)
+                if asked is None:
+                    return False
+                choice = asked
         self.session.change_repeats(after, label, edited=choice)
         return True
 

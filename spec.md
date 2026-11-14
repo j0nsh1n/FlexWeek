@@ -118,9 +118,12 @@ Contract for the finished app:
   ("The week of 16 Nov keeps its own change: no School on Wednesday."). Before
   that save, when a later week has its own change, FlexWeek asks. All weeks
   replaces those edits. Except edited, the default, leaves them (what the notice
-  names). From today on leaves this week and every earlier week as they are,
-  edited or not, and from the next week on replaces every week's own edit.
-  Cancel saves nothing. With no such later week it asks nothing. An
+  names).   From today on leaves the shown week that holds today, and every earlier
+  week, as they are, edited or not, including days of that week that sit in
+  the next stored Monday. The change starts the day after that week and from
+  then on replaces every week's own edit. Cancel saves nothing, and on Setup's
+  week page it stays there with the times, the day cutoff and the week start
+  still as they were typed. With no such later week it asks nothing. An
   ended activity stays ended when it is changed from an earlier week. This
   week and later can't be undone with Undo; only the open
   week's part has Undo (an assistant's change of this kind is undone with the
