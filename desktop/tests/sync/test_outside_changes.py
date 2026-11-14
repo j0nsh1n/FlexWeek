@@ -21,6 +21,7 @@ from backend.tests.fake_clock import CLOCK
 from desktop.native import fields
 from desktop.native.outside import file_stamp
 from desktop.native.window import NativeWindow
+from desktop.tests.blocks_helper import put_block
 from desktop.tests.light_app import open_light  # noqa: F401
 from desktop.tests.logic_support import qapp  # noqa: F401
 from desktop.tests.waiting import wait_until
@@ -351,3 +352,43 @@ def test_another_programs_change_to_a_stored_week_shows_in_a_week_from_sunday(
         timeout=SHOWN_WITHIN_S,
         what=lambda: f"blocks on screen: {sorted(item['id'] for item in session.blocks)}",
     )
+
+
+def test_a_parked_week_from_sunday_holds_the_stored_revisions_a_delete_elsewhere_moved(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The week from Sunday 1 November holds the essay on Tuesday 3 November (stored week of
+    # 2 November) and an unsaved edit. Opening the next week parks it; deleting the essay there moves
+    # that stored week on. Back on 1 November, the window holds the stored weeks' revisions the
+    # database has, so the outside-change check does not take the window's own delete for another's.
+    window = open_light()
+    database = _database(window, tmp_path)
+    session = window.session
+    window._autosave.stop()
+    _start_week_on(qapp, window, monkeypatch, tmp_path, "sunday", "2026-11-01")
+    session.add_homework(
+        {"id": "essay", "title": "History essay", "due": "2026-11-20", "estimate_min": 60, "revision": 0}
+    )
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty, what="the essay saved")
+    waiting = next(block for block in session.blocks if block.get("assignment_id") == "essay")
+    put_block(session, waiting["id"], 2, 16 * 60, 17 * 60, pinned=True)
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty, what="the essay's time saved")
+    session.add_block(
+        {"id": "parked-edit", "title": "Band", "kind": "locked", "days": [1],
+         "start": "18:00", "duration_min": 60}
+    )
+    assert session.dirty
+    session.load_week("2026-11-08")
+    wait_until(qapp, lambda: session.week_start == "2026-11-08" and not session.busy, what="the next week")
+    assert session.delete_homework("essay")
+    wait_until(qapp, lambda: not session.busy and "essay" not in session.assignments, what="the delete")
+    session.load_week("2026-11-01")
+    wait_until(qapp, lambda: session.week_start == "2026-11-01" and not session.busy, what="back")
+    with connect(database) as db:
+        stored = [(week, db.read_week(_user_id(window), week)[1]) for week in ("2026-10-26", "2026-11-02")]
+    assert session.stored_weeks() == stored

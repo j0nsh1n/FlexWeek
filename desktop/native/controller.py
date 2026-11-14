@@ -2013,6 +2013,20 @@ class NativeSession(QObject):
                         parked["blocks"] = kept
                         held = zip(stored, parked["revision"], strict=True)
                         parked["revision"] = [revisions.get(week, revision) for week, revision in held]
+                        # The stored weeks it reads move on with it, or the window's own delete would
+                        # look like another program's change once the week is open again.
+                        parked["stored_parts"] = [
+                            {
+                                **part,
+                                "revision": revisions.get(part["week_start"], part["revision"]),
+                                "blocks": [
+                                    block
+                                    for block in part.get("blocks") or []
+                                    if block.get("assignment_id") != assignment_id
+                                ],
+                            }
+                            for part in parked.get("stored_parts") or []
+                        ]
             step = {
                 "label": "deleting " + title,
                 "weeks": [
