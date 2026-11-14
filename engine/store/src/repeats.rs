@@ -337,6 +337,14 @@ fn enact(
         }
         first_week.get_or_insert_with(|| week.clone());
         let start = stands_from(intent).map_err(|error| RepeatsFailure::Refused(error.message))?;
+        // From today on, an open week later than today must still write from the day after today's
+        // week. The earlier of the two is the bound for the standing row, the saved weeks, and
+        // which version each of those weeks is compared with.
+        let bound = if week.as_str() < start.as_str() {
+            week.clone()
+        } else {
+            start.clone()
+        };
         // Keeping one-week edits is the only answer that still merges a later version. The other
         // two write this change over them, from `start` on.
         let drop_later = intent.stop || intent.edited != Edited::Keep;
@@ -371,14 +379,14 @@ fn enact(
                 Some(position) => position,
                 None => next_position(conn, user_id, &week)?,
             };
-            write_versions(conn, user_id, &intent.id, position, &old, &new, &week)?;
+            write_versions(conn, user_id, &intent.id, position, &old, &new, &bound)?;
         }
         let mut stmt = conn.prepare(
             "SELECT week_start, blocks FROM weeks WHERE user_id = ?1 AND week_start >= ?2
             ORDER BY week_start",
         )?;
         let saved = stmt
-            .query_map(params![user_id, week], |row| {
+            .query_map(params![user_id, bound], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -394,7 +402,9 @@ fn enact(
                 .any(|kept| kept.week_start == week_start);
             // A week this change does not reach is left as saved, but where a later version starts its
             // copy may still say something of its own that the version's line would misstate.
-            if was == now && !version_starts_here {
+            // All weeks and From today on still replace a saved edit when the standing bodies match.
+            let replaces = intent.edited != Edited::Keep;
+            if was == now && !version_starts_here && !replaces {
                 continue;
             }
             let Value::Array(stored) = parse(&text)? else {
@@ -410,8 +420,42 @@ fn enact(
             if pieces.is_empty() {
                 continue;
             }
+            // A stop that keeps one-week edits names a saved week whose copy is not the standing
+            // body, before that copy would be removed, and leaves the copy there.
+            if intent.stop && intent.edited == Edited::Keep {
+                let own = match was {
+                    Some(body) => {
+                        pieces.len() != 1
+                            || pieces
+                                .iter()
+                                .any(|at| !own_changes(&stored[*at], body, &stored, h24).is_empty())
+                    }
+                    None => true,
+                };
+                if own {
+                    let mut changes = Vec::new();
+                    if let Some(body) = was {
+                        for at in &pieces {
+                            for change in own_changes(&stored[*at], body, &stored, h24) {
+                                if !changes.contains(&change) {
+                                    changes.push(change);
+                                }
+                            }
+                        }
+                    }
+                    if changes.is_empty() {
+                        changes.push("its own times".to_string());
+                    }
+                    outcome.kept.push(Kept {
+                        week_start: week_start.clone(),
+                        id: intent.id.clone(),
+                        changes,
+                    });
+                    continue;
+                }
+            }
             let mut updated = stored.clone();
-            if was != now {
+            if was != now || intent.edited != Edited::Keep {
                 let copies: Vec<Value> = pieces.iter().map(|at| stored[*at].clone()).collect();
                 let restated = if intent.edited == Edited::Keep {
                     restated_pieces(was, now, &copies, &intent.id)

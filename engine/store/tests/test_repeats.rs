@@ -1144,3 +1144,148 @@ fn from_today_on_a_sunday_start_leaves_the_shown_week_and_changes_the_next() {
         vec![("08:30".to_string(), vec![0, 1, 2, 3, 4], 360)]
     );
 }
+
+/// Today is Thursday 5 November. The student has 23 November open and answers From today on.
+/// The weeks between today's week and that one change too, and so does every later week.
+#[test]
+fn from_today_from_a_later_open_week_reaches_back_to_the_day_after_today() {
+    let (conn, user_id) = account("repeats-today-later", true);
+    set_up(&conn, user_id);
+    save_week_as(
+        &conn,
+        user_id,
+        "2026-11-30",
+        vec![with(school(), json!({"days": [0, 1, 3, 4]})), soccer()],
+    );
+    let mut intent = edit_intent(
+        "school",
+        "2026-11-23",
+        Some(&school()),
+        Some(&with(school(), json!({"duration_min": 360}))),
+    )
+    .unwrap()
+    .to_value();
+    intent["edited"] = json!("from_today");
+    intent["today"] = json!("2026-11-05");
+    run(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(vec![intent]), &conn, user_id),
+    );
+    assert_eq!(
+        school_in(&conn, user_id, "2026-11-02"),
+        (vec![0, 1, 2, 3, 4], 405, vec![])
+    );
+    assert_eq!(
+        school_in(&conn, user_id, "2026-11-09"),
+        (vec![0, 1, 2, 3, 4], 360, vec![])
+    );
+    assert_eq!(
+        school_in(&conn, user_id, "2026-11-16"),
+        (vec![0, 1, 2, 3, 4], 360, vec![])
+    );
+    assert_eq!(
+        school_in(&conn, user_id, "2026-11-30"),
+        (vec![0, 1, 2, 3, 4], 360, vec![])
+    );
+    assert_eq!(
+        school_in(&conn, user_id, "2026-12-07"),
+        (vec![0, 1, 2, 3, 4], 360, vec![])
+    );
+}
+
+/// School stands at 405, then at 360 from 16 November. The saved week of 23 November starts at
+/// 10:00 under that 360. All weeks back to 360 from 9 November must replace the 10:00.
+#[test]
+fn all_weeks_replaces_a_saved_edit_when_the_standing_bodies_match() {
+    let (conn, user_id) = account("repeats-replace-same-body", true);
+    set_up(&conn, user_id);
+    let later = edit_intent(
+        "school",
+        "2026-11-16",
+        Some(&school()),
+        Some(&with(school(), json!({"duration_min": 360}))),
+    )
+    .unwrap()
+    .to_value();
+    run(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(vec![later]), &conn, user_id),
+    );
+    save_week_as(
+        &conn,
+        user_id,
+        "2026-11-23",
+        vec![
+            with(school(), json!({"start": "10:00", "duration_min": 360})),
+            soccer(),
+        ],
+    );
+    run(
+        &conn,
+        user_id,
+        &batch(
+            Vec::new(),
+            Some(vec![school_change("replace", None)]),
+            &conn,
+            user_id,
+        ),
+    );
+    assert_eq!(
+        school_rows(&raw_blocks(&conn, user_id, "2026-11-23")),
+        vec![("08:30".to_string(), vec![0, 1, 2, 3, 4], 360)]
+    );
+}
+
+fn soccer_at(conn: &Connection, user_id: i64, week: &str) -> Option<(String, Vec<i64>)> {
+    let week = shown(conn, user_id, week);
+    block(&week, "activity-1").map(|soccer| {
+        (
+            soccer["start"].as_str().unwrap().to_string(),
+            soccer["days"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|day| day.as_i64().unwrap())
+                .collect(),
+        )
+    })
+}
+
+/// Stopping Soccer from this week on asks about a later week that moved it, and Except edited
+/// leaves that week's Soccer where the week put it.
+#[test]
+fn a_stop_names_a_later_weeks_own_edit_and_except_edited_keeps_it() {
+    let (conn, user_id) = account("repeats-stop-asks", true);
+    set_up(&conn, user_id);
+    save_week_as(
+        &conn,
+        user_id,
+        NEXT_WEEK,
+        vec![school(), with(soccer(), json!({"start": "17:00"}))],
+    );
+    let stop = edit_intent("activity-1", OPEN_WEEK, Some(&soccer()), None)
+        .unwrap()
+        .to_value();
+    let found = preview_edited_weeks(
+        &conn,
+        user_id,
+        &[edit_intent("activity-1", OPEN_WEEK, Some(&soccer()), None).unwrap()],
+    )
+    .unwrap();
+    assert_eq!(
+        found["line"],
+        json!("The week of 16 November has its own Soccer times.")
+    );
+    run(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(vec![stop]), &conn, user_id),
+    );
+    assert_eq!(
+        soccer_at(&conn, user_id, NEXT_WEEK),
+        Some(("17:00".to_string(), vec![1, 3]))
+    );
+    assert_eq!(soccer_at(&conn, user_id, WEEK_AFTER), None);
+}
