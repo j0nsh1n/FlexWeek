@@ -142,8 +142,8 @@
  {
   "file": "desktop/native/widgets.py",
   "name": "the repeat note sits under the day pills, in their field",
-  "old": "        days_column.addWidget(self.day_picker)\n        days_column.addWidget(self.repeat_note)\n",
-  "new": "        days_column.addWidget(self.repeat_note)\n        days_column.addWidget(self.day_picker)\n",
+  "old": "        days_column.addWidget(self.day_picker)\n        days_column.addWidget(self.moved_note)\n        days_column.addWidget(self.repeat_note)\n",
+  "new": "        days_column.addWidget(self.repeat_note)\n        days_column.addWidget(self.moved_note)\n        days_column.addWidget(self.day_picker)\n",
   "test": "desktop/tests/sheets/test_fixed_time_editor_words.py::test_it_says_that_ticking_another_day_repeats_it"
  },
  {

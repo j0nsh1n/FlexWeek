@@ -244,6 +244,45 @@ def full_day_name(week_start: str, day: int) -> str:
     return (day_full_names(week_start) if week_start else DAY_FULL)[day]
 
 
+def turn_days_keeping_weekdays(
+    days: list[int] | tuple[int, ...], from_week: str, to_week: str
+) -> tuple[list[int], list[tuple[int, int]]]:
+    """Day numbers turned to the week now open, with the ones whose date changed as (old, new)
+    pairs. Nothing turns between two weeks from the same first day, or with no week on either
+    side: then nothing could have moved."""
+    if not from_week or not to_week or from_week == to_week:
+        return sorted(days), []
+    turned = [(day, same_weekday(day, from_week, to_week)) for day in days]
+    # Another week from the same first day (Next, Previous) keeps every day's place: nothing moved.
+    if date.fromisoformat(from_week).weekday() == date.fromisoformat(to_week).weekday():
+        return sorted(new for _, new in turned), []
+    moved = [
+        (old, new)
+        for old, new in turned
+        if date_for_day(from_week, old) != date_for_day(to_week, new)
+    ]
+    return sorted(new for _, new in turned), moved
+
+
+def moved_day_name(day: int, week: str) -> str:
+    """A moved tick named the way the note names it: "Monday 2"."""
+    return f"{full_day_name(week, day)} {date.fromisoformat(date_for_day(week, day)).day}"
+
+
+def moved_days_note(moves: list[tuple[str, str]]) -> str:
+    """Old/new "Monday 2" label pairs as the one line under the row: "Monday 2 isn't in this week
+    any more, so it moved to Monday 9." Empty with no moves."""
+    if not moves:
+        return ""
+    olds = [old for old, _ in moves]
+    news = [new for _, new in moves]
+    if len(moves) == 1:
+        return f"{olds[0]} isn't in this week any more, so it moved to {news[0]}."
+    old_words = ", ".join(olds[:-1]) + f" and {olds[-1]}"
+    new_words = ", ".join(news[:-1]) + f" and {news[-1]}"
+    return f"{old_words} aren't in this week any more, so they moved to {new_words}."
+
+
 def day_range_words(days: list[int] | tuple[int, ...], week_start: str = "") -> str:
     """Three or more days in a row as a range ("Mon–Fri"); otherwise a list ("Mon, Wed, Fri"). With
     `week_start`, days of that week named from their dates: the week may start on any day."""
@@ -3765,10 +3804,16 @@ class BlockDialog(Dialog):
         # height for one line of words, or one line's height for two.
         self.repeat_note = QLabel(REPEAT_NOTE)
         self.repeat_note.setObjectName("blockRepeatNote")
+        self._moved_before: dict[int, str] = {}
+        self.moved_note = QLabel()
+        self.moved_note.setObjectName("blockMovedNote")
+        self.moved_note.setWordWrap(True)
+        self.moved_note.setVisible(False)
         self._days_field = bare(QWidget())
         days_column = QVBoxLayout(self._days_field)
         days_column.setContentsMargins(0, 0, 0, 0)
         days_column.addWidget(self.day_picker)
+        days_column.addWidget(self.moved_note)
         days_column.addWidget(self.repeat_note)
         form.addRow("Days", self._days_field)
         # Which days a change reaches matters only for a block that repeats, opened on one of its days:
@@ -4149,7 +4194,38 @@ class BlockDialog(Dialog):
             days = [index for index, check in enumerate(self.days) if check.isChecked()]
         self.scope_series.setText(f"Every {day_range_and_words(days, open_week(self))}")
 
+    def show_moved_days(self, moves: list[tuple[int, str, str]]) -> None:
+        """Ring the ticks the week-start switch moved and name the move under the row. `moves` holds
+        (new day, old "Monday 2" label, new label) triples. The mark and the note clear the next time
+        the student touches the row."""
+        self._clear_moved_days()
+        if not moves:
+            return
+        for new, old_label, new_label in moves:
+            button = self.day_picker.buttons[new]
+            self._moved_before[new] = button.accessibleName()
+            button.setProperty("moved", True)
+            button.style().unpolish(button)
+            button.style().polish(button)
+            button.setAccessibleName(f"{new_label}, moved from {old_label}")
+        self.moved_note.setText(moved_days_note([(old, new) for _, old, new in moves]))
+        self.moved_note.setAccessibleName(self.moved_note.text())
+        self.moved_note.setVisible(True)
+
+    def _clear_moved_days(self) -> None:
+        for day, name in self._moved_before.items():
+            button = self.day_picker.buttons[day]
+            button.setProperty("moved", False)
+            button.style().unpolish(button)
+            button.style().polish(button)
+            button.setAccessibleName(name)
+        self._moved_before = {}
+        self.moved_note.clear()
+        self.moved_note.setAccessibleName("")
+        self.moved_note.setVisible(False)
+
     def _day_toggled(self, checked: bool) -> None:
+        self._clear_moved_days()
         day = int(self.sender().property("weekday"))
         if (
             self.scope_occurrence.isChecked()
@@ -5134,9 +5210,14 @@ class HomeworkDialog(Dialog):
         day, start = self._default_placement()
         if self._placed:
             day, start = self._placed[0], hhmm_to_minutes(self._placed[1])
+        self._moved_before: dict[int, str] = {}
+        self.moved_note = sheet_note("")
+        self.moved_note.setObjectName("homeworkMovedNote")
         self.when_day = DayPicker([day], "homeworkWhenDay", dated=True)
         self._day = day
         column.addWidget(self.when_day)
+        column.addWidget(self.moved_note)
+        self.moved_note.setVisible(False)
         clock = QHBoxLayout()
         clock.setContentsMargins(0, 0, 0, 0)
         self.when_time = ClockField(QTime(start // 60, start % 60))
@@ -5185,8 +5266,39 @@ class HomeworkDialog(Dialog):
     def _touch_pin_time(self, _by_hand: bool) -> None:
         self._touched.add("pin_time")
 
+    def show_moved_days(self, moves: list[tuple[int, str, str]]) -> None:
+        """Ring the pin the week-start switch moved and name the move under the row. `moves` holds
+        (new day, old "Monday 2" label, new label) triples. The mark and the note clear the next time
+        the student picks a day."""
+        self._clear_moved_days()
+        if not moves:
+            return
+        for new, old_label, new_label in moves:
+            button = self.when_day.buttons[new]
+            self._moved_before[new] = button.accessibleName()
+            button.setProperty("moved", True)
+            button.style().unpolish(button)
+            button.style().polish(button)
+            button.setAccessibleName(f"{new_label}, moved from {old_label}")
+        self.moved_note.setText(moved_days_note([(old, new) for _, old, new in moves]))
+        self.moved_note.setAccessibleName(self.moved_note.text())
+        self.moved_note.setVisible(True)
+
+    def _clear_moved_days(self) -> None:
+        for day, name in self._moved_before.items():
+            button = self.when_day.buttons[day]
+            button.setProperty("moved", False)
+            button.style().unpolish(button)
+            button.style().polish(button)
+            button.setAccessibleName(name)
+        self._moved_before = {}
+        self.moved_note.setText("")
+        self.moved_note.setAccessibleName("")
+        self.moved_note.setVisible(False)
+
     def _pick_day(self) -> None:
         """One day only: ticking another unticks the first, and the last one cannot be unticked."""
+        self._clear_moved_days()
         self._touched.add("pin_day")
         days = self.when_day.days()
         fresh = [day for day in days if day != self._day]
