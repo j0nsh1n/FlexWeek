@@ -450,10 +450,7 @@ def replaced_repeat_on_shown_week(
     """The shown week after `block_id` is replaced by `new_body` (or removed, when `new_body` is
     none). Days stay counted from the week's first day. The engine turns them."""
     made = flexweek_engine.repeat_replaced_on_shown_week(
-        week_start,
-        json.dumps(blocks),
-        block_id,
-        "null" if new_body is None else json.dumps(new_body),
+        week_start, json.dumps(blocks), block_id, json.dumps(new_body)
     )
     return json.loads(made)
 
