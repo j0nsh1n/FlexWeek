@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -19,9 +20,10 @@ ASSISTANT_OPERATIONS = "mcp:%"
 
 @dataclass(frozen=True)
 class Stored:
-    """What the database holds for the open week and the account's homework."""
+    """What the database holds for the stored weeks the open week reads (one from Monday, two from any
+    other day) and for the account's homework."""
 
-    week_revision: int
+    week_revisions: tuple[int, ...]
     assignment_revisions: dict[str, int]
     assistant_seq: int
 
@@ -64,16 +66,20 @@ class OutsideWatch:
             sqlite3.connect(f"{self.database.resolve().as_uri()}?mode=ro", uri=True, timeout=0)
         )
 
-    def look(self, user_id: int, week_start: str) -> Stored | None:
+    def look(self, user_id: int, week_starts: Sequence[str]) -> Stored | None:
         """What is stored now, or None when nothing was committed since the last settled look."""
         stamp = file_stamp(self.database)
         if stamp is None or stamp == self._settled:
             return None
         try:
             with self._reader() as db:
-                week = db.execute(
-                    "SELECT revision FROM weeks WHERE user_id = ? AND week_start = ?", (user_id, week_start)
-                ).fetchone()
+                weeks = [
+                    db.execute(
+                        "SELECT revision FROM weeks WHERE user_id = ? AND week_start = ?",
+                        (user_id, week_start),
+                    ).fetchone()
+                    for week_start in week_starts
+                ]
                 rows = db.execute("SELECT id, revision FROM assignments WHERE user_id = ?", (user_id,))
                 revisions = dict(rows.fetchall())
                 (seq,) = db.execute(
@@ -83,7 +89,7 @@ class OutsideWatch:
         except sqlite3.Error:
             return None
         self._looked = stamp
-        return Stored(int(week[0]) if week else 0, revisions, int(seq))
+        return Stored(tuple(int(week[0]) if week else 0 for week in weeks), revisions, int(seq))
 
     def assistant_wrote(self, stored: Stored) -> bool:
         """The assistant saved a change for this account since the watch started or the last settled look."""
@@ -95,10 +101,12 @@ class OutsideWatch:
         self._assistant_seq = stored.assistant_seq
 
 
-def differs(stored: Stored, revision: int, assignments: dict[str, dict], unsaved: set[str]) -> bool:
+def differs(
+    stored: Stored, revisions: Sequence[int], assignments: dict[str, dict], unsaved: set[str]
+) -> bool:
     """The window holds another revision of the open week or of some homework than the database. Homework
     the student changed and has not saved yet is left out: its revision has not moved on either side."""
-    if stored.week_revision != revision:
+    if stored.week_revisions != tuple(revisions):
         return True
     held = {key: item.get("revision") for key, item in assignments.items() if key not in unsaved}
     kept = {key: value for key, value in stored.assignment_revisions.items() if key not in unsaved}

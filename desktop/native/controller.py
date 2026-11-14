@@ -1243,6 +1243,13 @@ class NativeSession(QObject):
         sync_linked_phones(host, service, done)
         return True
 
+    def stored_weeks(self) -> list[tuple[str, int]]:
+        """The stored (Monday) weeks the open week is read from, with the revisions this window holds:
+        the week itself from Monday, both stored weeks it covers from any other day."""
+        if self._stored_parts:
+            return [(str(part["week_start"]), int(part["revision"])) for part in self._stored_parts]
+        return [(self.week_start, int(self.revision))]
+
     def accept_remote_week(self, who: str) -> bool:
         """A linked phone's edits arrived. Unsaved edits here are kept and marked as a conflict, and
         the week is not reloaded. False while a request is in flight, so the caller can ask again."""

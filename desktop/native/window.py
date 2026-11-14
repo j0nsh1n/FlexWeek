@@ -5632,12 +5632,14 @@ class NativeWindow(QMainWindow):
             return
         if self._sync is not None and self._sync.generation() != self._sync_generation:
             return
-        stored = watch.look(int(account["id"]), session.week_start)
+        weeks = session.stored_weeks()
+        stored = watch.look(int(account["id"]), [week for week, _revision in weeks])
         if stored is None:
             return
         assistant = watch.assistant_wrote(stored)
         unsaved = session.dirty_assignments
-        changed = assistant or differs(stored, session.revision, session.assignments, unsaved)
+        held = [revision for _week, revision in weeks]
+        changed = assistant or differs(stored, held, session.assignments, unsaved)
         if changed and not session.accept_remote_week("your assistant" if assistant else "another program"):
             return
         watch.settle(stored)

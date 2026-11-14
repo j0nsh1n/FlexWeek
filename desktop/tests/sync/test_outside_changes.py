@@ -18,6 +18,7 @@ from PySide6.QtWidgets import QApplication, QDialog
 
 from backend.storage import connect
 from backend.tests.fake_clock import CLOCK
+from desktop.native import fields
 from desktop.native.outside import file_stamp
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import open_light  # noqa: F401
@@ -271,3 +272,82 @@ def test_an_open_sheet_holds_the_reload_until_it_closes(
         what="the change shown once the sheet closed",
     )
     sheet.deleteLater()
+
+
+def _start_week_on(
+    app: QApplication,
+    window: NativeWindow,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    day: str,
+    first: str,
+) -> None:
+    kept = tmp_path / "week-start.json"
+    monkeypatch.setattr(fields, "_week_starts_file", lambda: kept)
+    fields.save_week_starts_on(day)
+    wait_until(app, lambda: window.session.week_start == first and not window.session.busy)
+
+
+@pytest.mark.parametrize(("day", "first"), [("sunday", "2026-11-01"), ("wednesday", "2026-11-04")])
+def test_a_week_from_another_day_is_not_reloaded_after_its_own_save(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    day: str,
+    first: str,
+) -> None:
+    # Weeks are stored by their Monday, so a week on screen from Sunday or Wednesday is no stored
+    # week of its own. The check for another program's change must read the stored weeks it covers:
+    # looking for a row under the Sunday found none, took that for a change, and loaded the week
+    # again after every save, which kept the window busy.
+    window = open_light()
+    database = _database(window, tmp_path)
+    session = window.session
+    _start_week_on(qapp, window, monkeypatch, tmp_path, day, first)
+    reloads = _count_reloads(window, monkeypatch)
+    wait_until(qapp, lambda: _settled_on(window, database), timeout=SHOWN_WITHIN_S, what="the first look")
+    assert reloads == [], "nothing changed elsewhere, so the week is not loaded again"
+    assert not session.message.startswith("Updated from")
+    before = file_stamp(database)
+    session.add_block(
+        {"id": "own-save", "title": "Band", "kind": "locked", "days": [1],
+         "start": "16:00", "duration_min": 60}
+    )
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty, what="the window's own save")
+    assert file_stamp(database) != before, "the save reached the database file"
+    wait_until(
+        qapp, lambda: _settled_on(window, database), timeout=SHOWN_WITHIN_S, what="a look after the save"
+    )
+    assert reloads == [], "the window's own save is not taken for another program's"
+    assert not session.conflict
+
+
+def test_another_programs_change_to_a_stored_week_shows_in_a_week_from_sunday(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The week from Sunday 1 November reads the stored weeks of 26 October and 2 November. A block
+    # another program saves in the week of 2 November (its Tuesday, 3 November) shows here.
+    window = open_light()
+    database = _database(window, tmp_path)
+    session = window.session
+    _start_week_on(qapp, window, monkeypatch, tmp_path, "sunday", "2026-11-01")
+    wait_until(qapp, lambda: _settled_on(window, database), timeout=SHOWN_WITHIN_S, what="the first look")
+    block = {"id": "elsewhere-week", "title": "Orchestra", "kind": "locked", "days": [1],
+             "start": "17:00", "duration_min": 60}
+    with connect(database) as db:
+        db.begin_immediate()
+        row = db.read_week(_user_id(window), "2026-11-02")
+        blocks = json.loads(row[0]) if row else []
+        revision = row[1] if row else 0
+        db.save_week(_user_id(window), "2026-11-02", json.dumps([*blocks, block]), revision)
+    wait_until(
+        qapp,
+        lambda: any(item["id"] == "elsewhere-week" for item in session.blocks) and not session.busy,
+        timeout=SHOWN_WITHIN_S,
+        what=lambda: f"blocks on screen: {sorted(item['id'] for item in session.blocks)}",
+    )
