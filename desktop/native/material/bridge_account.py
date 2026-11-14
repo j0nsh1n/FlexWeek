@@ -287,6 +287,8 @@ class AccountBridge(QObject):
         self._said.setSingleShot(True)
         self._said.setInterval(RECOVERY_SAID_MS)
         self._said.timeout.connect(self._reset_recovery_labels)
+        self._ask: dict = {}
+        self._edited_done = None
         self._state: Any = None
         self._step = STYLE
         self._furthest = STYLE
@@ -864,6 +866,33 @@ class AccountBridge(QObject):
         if row is not None:
             row["time"] = _clock(value) or row["time"]
             self.changed.emit()
+
+    def pose_edited(self, ask: dict, done) -> None:
+        """The edited-weeks question over setup. `done` is called with the answer, or None to cancel."""
+        self._edited_done = done
+        self._ask = ask
+        self.changed.emit()
+
+    @Property("QVariantMap", notify=changed)  # type: ignore[arg-type]
+    def ask(self) -> dict:
+        return self._ask
+
+    @Slot(str)
+    def answer(self, choice: str) -> None:
+        self._finish_edited(choice if choice in ("keep", "replace", "from_today") else None)
+
+    @Slot()
+    def closeSheet(self) -> None:  # noqa: N802 — QML name
+        self._finish_edited(None)
+
+    def _finish_edited(self, choice: str | None) -> None:
+        done, self._edited_done = self._edited_done, None
+        if not self._ask and done is None:
+            return
+        self._ask = {}
+        self.changed.emit()
+        if done is not None:
+            done(choice)
 
     @Slot()
     def setupNext(self) -> None:  # noqa: N802 — QML slot
@@ -1787,7 +1816,13 @@ class AccountBridge(QObject):
             answer = self._answer()
             if self._step == STYLE and not self._own_look:
                 self._surface_pick = "material" if self._style_key == MATERIAL_STYLE.key else "widgets"
-            if self._step == WEEK:
+            if self._step == WEEK and answer is not None:
+                # Cancel stays on this page: nothing typed is kept, and the week-start file is not
+                # written, until the student answers.
+                choice = self._window.confirm_standing(answer["blocks"])  # type: ignore[attr-defined]
+                if choice is None:
+                    return
+                answer["edited"] = choice
                 save_week_starts_on(self._week_start)
         elif self._step in LOOK_STEPS and destination not in LOOK_STEPS:
             self._restore_entered()

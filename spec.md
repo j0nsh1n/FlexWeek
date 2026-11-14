@@ -115,7 +115,15 @@ Contract for the finished app:
   take it as that week's own; earlier weeks keep it, and
   this week and later reaches the saved later weeks in the same save, except
   what a later week changed itself, which stays and is named in a notice
-  ("The week of 16 Nov keeps its own change: no School on Wednesday."); an
+  ("The week of 16 Nov keeps its own change: no School on Wednesday."). Before
+  that save, when a later week has its own change, FlexWeek asks. All weeks
+  replaces those edits. Except edited, the default, leaves them (what the notice
+  names). From today on leaves the shown week that holds today, and every earlier
+  week, as they are, edited or not, including days of that week that sit in
+  the next stored Monday. The change starts the day after that week and from
+  then on replaces every week's own edit. Cancel saves nothing, and on Setup's
+  week page it stays there with the times, the day cutoff and the week start
+  still as they were typed. With no such later week it asks nothing. An
   ended activity stays ended when it is changed from an earlier week. This
   week and later can't be undone with Undo; only the open
   week's part has Undo (an assistant's change of this kind is undone with the
@@ -481,6 +489,7 @@ Current account/API contract:
 | PUT/DELETE | `/api/assignments/{id}` | Revision-checked create, update and delete; delete removes its sessions from every week |
 | POST | `/api/assignments/{id}/spread` | Preview sessions of a chosen length from a start date through the due date; writes nothing |
 | POST | `/api/changes` | Several week and assignment writes, all or nothing; optional operation ID and pre-change recovery point |
+| POST | `/api/repeat-edits` | Which later weeks a repeat change would reach that have their own edit; writes nothing |
 | GET/PUT | `/api/preferences` | Theme, appearance pack, accent, motion, reminders, timers, alarms, alarm sound, Spotify default, planning style, setup progress, availability windows and comfort settings |
 | GET | `/api/timer-presets` | Named timer presets on the 15-minute grid |
 | GET | `/api/reminder-limits` | The reminder ceilings the settings dialog explains |

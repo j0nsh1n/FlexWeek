@@ -39,6 +39,8 @@ from desktop.native.calendar import (
     past_problem,
     relocate_block,
     repeat_changes,
+    repeat_leaves_week,
+    replaced_repeat_on_shown_week,
     routine_on_week,
     shifted_month,
     span_problem,
@@ -265,6 +267,20 @@ def _same_timer(running: dict, target: dict) -> bool:
     return bool(block) and block == running.get("blockId")
 
 
+def _stamp_edited(changes: list[dict], edited: str, today: str, first_weekday: int) -> list[dict]:
+    """The changes as the save sends them. `keep` stays as the form built it."""
+    if edited == "keep":
+        return changes
+    stamped = []
+    for change in changes:
+        item = {**change, "edited": edited}
+        if edited == "from_today":
+            item["today"] = today
+            item["first_weekday"] = first_weekday
+        stamped.append(item)
+    return stamped
+
+
 def _late_summary(moved: int) -> str:
     if not moved:
         return "Nothing needs to move."
@@ -429,6 +445,11 @@ class NativeSession(QObject):
         # sends what differs as changes from this week on.
         self.repeats: list[dict] = []
         self._saved_repeats: list[dict] = []
+        # The repeat changes the next save sends, including how edited weeks are treated. Set when
+        # the student answers that question, and taken by the save that follows.
+        self._repeat_send: list[dict] | None = None
+        # The intents the save now in flight carried, so a reply drops those and keeps a newer one.
+        self._repeat_ack: list[dict] | None = None
         # One block let go while a save is in flight. The save's reply replaces the week, so the move
         # is applied on the next turn after that reply, not during it. A later let-go replaces it.
         self._hand_waiting: tuple[str, int, int, int, int] | None = None
@@ -511,6 +532,8 @@ class NativeSession(QObject):
         self._refollow_week = False
         self.week_start = self.shown_week_of(wall_clock.today().isoformat())
         self.blocks = []
+        self._repeat_send = None
+        self._repeat_ack = None
         self.revision = 0
         self._stored_parts = []
         self.assignments = {}
@@ -653,6 +676,9 @@ class NativeSession(QObject):
             "selected_occurrence_day": self.selected_occurrence_day,
             "repeats": deepcopy(self.repeats),
             "saved_repeats": deepcopy(self._saved_repeats),
+            # A School or activity change waiting for the server belongs to this week's draft.
+            "repeat_send": deepcopy(self._repeat_send),
+            "repeat_ack": deepcopy(self._repeat_ack),
         }
 
     def _restore_week(self, snap: dict) -> None:
@@ -678,6 +704,8 @@ class NativeSession(QObject):
         self.selected_occurrence_day = snap["selected_occurrence_day"]
         self.repeats = deepcopy(snap["repeats"])
         self._saved_repeats = deepcopy(snap["saved_repeats"])
+        self._repeat_send = deepcopy(snap.get("repeat_send"))
+        self._repeat_ack = deepcopy(snap.get("repeat_ack"))
 
     def _refresh_view(self) -> None:
         if self.planner_view == "day":
@@ -1111,6 +1139,9 @@ class NativeSession(QObject):
             # Absent when nothing repeats in that week.
             self.repeats = list(week.get("repeats") or [])
             self._saved_repeats = deepcopy(self.repeats)
+            # A change still waiting stayed with the draft of the week it was made in.
+            self._repeat_send = None
+            self._repeat_ack = None
             self.week_start = loaded
             self.dirty = False
             self.conflict = False
@@ -1498,21 +1529,86 @@ class NativeSession(QObject):
             self.setup_week = False
             self.save()
 
-    def set_setup_blocks(self, blocks: list[dict]) -> None:
+    def set_setup_blocks(self, blocks: list[dict], edited: str = "keep") -> None:
         """School and activities as Setup now has them, from this week on, as one Undo step for this
         week. Setup showed the repeats, so a block it leaves out stops and what this week changed
-        itself stays this week's. Anything the student added another way stays where it is."""
+        itself stays this week's. Anything the student added another way stays where it is.
+        `edited` is keep (later weeks keep their own edits), replace, or from_today."""
         made = [TimeBlock.model_validate(block).model_dump(mode="json") for block in blocks]
-        self.change_repeats(made, "setting up your week")
+        self.change_repeats(made, "setting up your week", edited=edited)
 
-    def change_repeats(self, after: list[dict], label: str) -> None:
+    def change_repeats(self, after: list[dict], label: str, edited: str = "keep") -> None:
         """The repeats become `after` from this week on: the open week changes now by the rule the
-        store applies to later weeks, and the next save sends the changes."""
+        store applies to later weeks, and the next save sends the changes. `edited` is how a later
+        week that has its own edit is treated."""
         changes = repeat_changes(self.repeats, after, self.week_start)
         if not changes:
             return
-        self.blocks, self.repeats = apply_repeat_changes(self.blocks, self.repeats, changes, self.week_start)
+        stamped = _stamp_edited(changes, edited, self.today_iso(), self.first_weekday)
+        send = self._against_saved(changes, after)
+        self._hold_repeats(_stamp_edited(send, edited, self.today_iso(), self.first_weekday))
+        # From today on, this week and every earlier week stay exactly as they are.
+        if stamped and repeat_leaves_week(stamped[0], self.week_start):
+            self._touch(label)
+            return
+        if edited in ("replace", "from_today"):
+            # Days on `after` count from Monday. The open week counts from its first day, so the
+            # engine turns them. A stop has no body and comes off the week.
+            by_id = {item["id"]: item for item in after}
+            blocks = self.blocks
+            for block_id in {item["id"] for item in changes}:
+                blocks = replaced_repeat_on_shown_week(
+                    blocks, self.week_start, block_id, by_id.get(block_id)
+                )
+            self.blocks = blocks
+            self.repeats = list(after)
+        else:
+            self.blocks, self.repeats = apply_repeat_changes(
+                self.blocks, self.repeats, changes, self.week_start
+            )
         self._touch(label)
+
+    def _against_saved(self, changes: list[dict], after: list[dict]) -> list[dict]:
+        """A repeat that already has a held intent changes again before the server took the first:
+        its intent is measured from what the server last said, so it carries both changes."""
+        held = {item["id"] for item in self._repeat_send or []}
+        if not held & {item["id"] for item in changes}:
+            return changes
+        from_saved = {
+            item["id"]: item for item in repeat_changes(self._saved_repeats, after, self.week_start)
+        }
+        return [from_saved.get(item["id"], item) if item["id"] in held else item for item in changes]
+
+    def _hold_repeats(self, changes: list[dict]) -> None:
+        """Stamped intents stay until the server has acknowledged the save that carries them.
+
+        A second change before that save keeps the first, unless it is the same repeat, in which
+        case the later choice replaces it."""
+        ids = {item["id"] for item in changes}
+        held = [item for item in (self._repeat_send or []) if item.get("id") not in ids]
+        self._repeat_send = held + changes
+
+    def _acknowledge_repeats(self) -> None:
+        """The server took the intents this save carried. A choice made since is still waiting."""
+        sent = {item["id"]: item for item in (self._repeat_ack or [])}
+        self._repeat_ack = None
+        if not sent:
+            return
+        left = [item for item in (self._repeat_send or []) if sent.get(item["id"]) != item]
+        self._repeat_send = left or None
+
+    def repeat_diff(self, after: list[dict]) -> list[dict]:
+        """The repeat changes from what stands now to `after`, as the save would send them."""
+        return repeat_changes(self.repeats, after, self.week_start)
+
+    def preview_repeats(
+        self,
+        changes: list[dict],
+        on_success: Callable[[dict], None],
+        on_error: Callable[[ApiError], None],
+    ) -> None:
+        """Ask which later weeks `changes` would reach that have their own edit. Nothing is saved."""
+        self.client.request("POST", "/api/repeat-edits", {"repeats": changes}, on_success, on_error)
 
     def plan_after_save(self, assignment_id: str) -> None:
         """Give this homework's sessions that need a time one once the save now under way lands."""
@@ -2188,7 +2284,13 @@ class NativeSession(QObject):
                 "assignments": writes,
                 "operation_id": operation_id or str(uuid4()),
             }
-            changes = repeat_changes(self._saved_repeats, self.repeats, self.week_start)
+            # Kept until this save is acknowledged, so a failure and a later edit still send them.
+            if self._repeat_send:
+                changes = list(self._repeat_send)
+                self._repeat_ack = changes
+            else:
+                changes = repeat_changes(self._saved_repeats, self.repeats, self.week_start)
+                self._repeat_ack = None
             if changes:
                 self.pending_save["repeats"] = changes
             if snapshot_label:
@@ -2314,6 +2416,7 @@ class NativeSession(QObject):
             self._plan_step_id = None
             self._join_step = False
             self.pending_save = None
+            self._acknowledge_repeats()
             self._save_status = None
             self._month_cache.clear()
             self._month_gen += 1
