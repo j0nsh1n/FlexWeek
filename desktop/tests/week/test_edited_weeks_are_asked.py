@@ -282,6 +282,34 @@ def test_a_second_change_before_save_keeps_the_first(qapp, window, after_setup) 
     assert "edited" not in by_id["activity-1"]
 
 
+def test_two_changes_to_school_before_a_save_goes_through_both_reach_later_weeks(
+    qapp, window, after_setup, monkeypatch
+) -> None:
+    # School moves to 9:00, that save fails, then School is shortened to 360 minutes. A later week
+    # gets both changes, as it would if the first save had gone through.
+    real = window.session.client.request
+    down = {"on": True}
+
+    def request(method, path, payload, ok, err):
+        if down["on"] and method == "POST" and path == "/api/changes":
+            err(ApiError(0, "down"))
+            return None
+        return real(method, path, payload, ok, err)
+
+    monkeypatch.setattr(window.session.client, "request", request)
+    moved = {**SCHOOL, "start": "09:00"}
+    window.session.change_repeats([moved, dict(SOCCER), dict(JOB)], "moving School")
+    window.session.save()
+    wait_until(qapp, lambda: not window.session.busy)
+    shorter = {**moved, "duration_min": 360}
+    window.session.change_repeats([shorter, dict(SOCCER), dict(JOB)], "shortening School")
+    down["on"] = False
+    save_and_settle(qapp, window.session)
+    go_to(qapp, window.session, LATER)
+    _days, start, length, _missed = school_of(window.session)
+    assert (start, length) == ("09:00", 360)
+
+
 def test_closing_the_material_prompt_finishes_the_wait(qapp, window) -> None:
     sheets = SheetsBridge(window, window)
     got: dict = {}

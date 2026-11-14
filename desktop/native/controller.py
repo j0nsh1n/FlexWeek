@@ -1537,7 +1537,8 @@ class NativeSession(QObject):
         if not changes:
             return
         stamped = _stamp_edited(changes, edited, self.today_iso(), self.first_weekday)
-        self._hold_repeats(stamped)
+        send = self._against_saved(changes, after)
+        self._hold_repeats(_stamp_edited(send, edited, self.today_iso(), self.first_weekday))
         # From today on, this week and every earlier week stay exactly as they are.
         if stamped and repeat_leaves_week(stamped[0], self.week_start):
             self._touch(label)
@@ -1558,6 +1559,17 @@ class NativeSession(QObject):
                 self.blocks, self.repeats, changes, self.week_start
             )
         self._touch(label)
+
+    def _against_saved(self, changes: list[dict], after: list[dict]) -> list[dict]:
+        """A repeat that already has a held intent changes again before the server took the first:
+        its intent is measured from what the server last said, so it carries both changes."""
+        held = {item["id"] for item in self._repeat_send or []}
+        if not held & {item["id"] for item in changes}:
+            return changes
+        from_saved = {
+            item["id"]: item for item in repeat_changes(self._saved_repeats, after, self.week_start)
+        }
+        return [from_saved.get(item["id"], item) if item["id"] in held else item for item in changes]
 
     def _hold_repeats(self, changes: list[dict]) -> None:
         """Stamped intents stay until the server has acknowledged the save that carries them.
