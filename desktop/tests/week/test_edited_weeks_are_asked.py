@@ -365,6 +365,42 @@ def test_a_school_change_waits_with_its_own_week(qapp, window, after_setup, monk
     assert edited.get("school") == "replace"
 
 
+@pytest.mark.parametrize("edited", ["replace", "keep", "from_today"])
+def test_the_save_after_a_school_change_is_not_a_conflict(qapp, window, after_setup, edited) -> None:
+    # School shortened with each answer and saved, then something else in the same week is saved.
+    # The second save goes through: the first save's reply has the week as the server now holds it.
+    window.session.set_setup_blocks(_shorter(), edited=edited)
+    save_and_settle(qapp, window.session)
+    assert not window.session.conflict
+    window.session._touch("a note")
+    save_and_settle(qapp, window.session)
+    assert not window.session.conflict
+    assert not window.session.dirty
+
+
+def test_a_second_school_change_in_a_week_left_and_come_back_to_keeps_the_first(
+    qapp, window, after_setup, monkeypatch
+) -> None:
+    # School moves to 9:00 and that save fails; another week is opened, then this one again, where
+    # School is shortened and saved. A later week gets both changes: the waiting one went and came
+    # back with this week's draft.
+    sent, down = _failing_changes(window, monkeypatch)
+    home = window.session.week_start
+    moved = {**SCHOOL, "start": "09:00"}
+    window.session.change_repeats([moved, dict(SOCCER), dict(JOB)], "moving School")
+    window.session.save()
+    wait_until(qapp, lambda: not window.session.busy)
+    down["on"] = False
+    go_to(qapp, window.session, LATER)
+    go_to(qapp, window.session, home)
+    shorter = {**moved, "duration_min": 360}
+    window.session.change_repeats([shorter, dict(SOCCER), dict(JOB)], "shortening School")
+    save_and_settle(qapp, window.session)
+    go_to(qapp, window.session, LATER)
+    _days, start, length, _missed = school_of(window.session)
+    assert (start, length) == ("09:00", 360)
+
+
 def test_closing_the_material_prompt_finishes_the_wait(qapp, window) -> None:
     sheets = SheetsBridge(window, window)
     got: dict = {}

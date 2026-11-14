@@ -1577,9 +1577,13 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 if parts is not None:
                     entry.update(shown_week_view(db, account["id"], entry["week_start"], parts))
                     continue
-                entry["blocks"] = week_with_standing(
-                    db, account["id"], entry["week_start"], json.dumps(entry["blocks"])
-                )
+                stored_text = json.dumps(entry["blocks"])
+                if repeats is not None:
+                    # All weeks rewrites the open week's row too: the reply gives it as now stored.
+                    row = db.read_week(account["id"], entry["week_start"])
+                    if row is not None:
+                        stored_text, entry["revision"] = row[0], row[1]
+                entry["blocks"] = week_with_standing(db, account["id"], entry["week_start"], stored_text)
                 standing = json.loads(db.standing_blocks(account["id"], entry["week_start"]))
                 if standing:
                     entry["repeats"] = standing
