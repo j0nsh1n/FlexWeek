@@ -13,7 +13,8 @@ use std::path::Path;
 use common::{NOW_ISO, NOW_UNIX, Server, scratch, session_path, tool_error_text, tool_ok_text};
 use flexweek_engine::snapshot::canonical;
 use flexweek_store::{
-    initialize, insert_preferences, insert_user, open_connection, open_session, save_week,
+    initialize, insert_assignment, insert_preferences, insert_user, open_connection, open_session,
+    save_week,
 };
 use serde_json::{Value, json};
 
@@ -666,5 +667,611 @@ fn delete_block_of_a_missing_id_keeps_its_answer() {
     assert!(
         !find_block(&after, "ghost").is_null(),
         "the retry does not delete the block that appeared later, got {after}"
+    );
+}
+
+#[test]
+fn move_and_delete_follow_monday_sunday_wednesday_and_month_end_crossing_weeks() {
+    let world = signed_in("blocks-shown-weeks");
+    seed_week(&world, json!([club(&[3], "16:00"), study(&[2], "17:00")]));
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let school = json!({
+        "id": "school", "title": "School", "kind": "locked", "duration_min": 420,
+        "days": [0, 1, 2, 3, 4], "start": "08:00", "category": "class"
+    });
+    let intent = flexweek_engine::repeats::edit_intent("school", "2026-10-19", None, Some(&school))
+        .expect("intent");
+    flexweek_store::apply_repeat_intents(&conn, world.user, &[intent]).expect("standing");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+
+    let mut server = boot(&world);
+    server.handshake();
+
+    // 1. Monday start keeps week_starts_on: "monday" and integer revision.
+    let mon_move = body_of(&server.call(
+        "move_block",
+        json!({
+            "operation_id": "op-mon-move",
+            "week_start": "2026-10-19",
+            "expected_revision": 4,
+            "block_id": "club",
+            "day": 4,
+            "start": "16:30",
+            "end": "17:30"
+        }),
+        2,
+    ));
+    assert_eq!(mon_move["ok"], json!(true), "got {mon_move}");
+    assert_eq!(mon_move["result"]["week_starts_on"], json!("monday"));
+    assert_eq!(mon_move["revision"], json!(5));
+
+    // 2. Switch week-start.json live to Wednesday.
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+
+    // In Wednesday 2026-10-21: Club is on Friday Oct 23 (shown day 2). Move across seam to Monday Oct 26 (shown day 5).
+    let wed_move_args = json!({
+        "operation_id": "op-wed-move",
+        "week_start": "2026-10-21",
+        "expected_revision": [5, 0],
+        "block_id": "club",
+        "day": 5,
+        "start": "18:00",
+        "end": "19:00"
+    });
+    let wed_move = body_of(&server.call("move_block", wed_move_args.clone(), 3));
+    assert_eq!(wed_move["ok"], json!(true), "got {wed_move}");
+    assert_eq!(wed_move["result"]["week_start"], json!("2026-10-21"));
+    assert_eq!(wed_move["result"]["week_starts_on"], json!("wednesday"));
+    assert_eq!(wed_move["revision"], json!([6, 1]));
+    let again = body_of(&server.call("move_block", wed_move_args, 4));
+    assert_eq!(again, wed_move, "retry keeps exact answer");
+    assert!(
+        find_block(
+            &week_row(&world.database_arg, world.user, "2026-10-19")
+                .unwrap()
+                .0,
+            "club"
+        )
+        .is_null(),
+        "club moved out of first"
+    );
+    let moved_second = find_block(
+        &week_row(&world.database_arg, world.user, "2026-10-26")
+            .unwrap()
+            .0,
+        "club",
+    );
+    assert_eq!(moved_second["days"], json!([0]));
+    assert_eq!(moved_second["start"], json!("18:00"));
+
+    // Stale revision on move returns conflict [6, 1].
+    let stale = body_of(&server.call(
+        "move_block",
+        json!({
+            "operation_id": "op-wed-move-stale",
+            "week_start": "2026-10-21",
+            "expected_revision": [5, 1],
+            "block_id": "club",
+            "day": 5,
+            "start": "19:00",
+            "end": "20:00"
+        }),
+        5,
+    ));
+    assert_eq!(
+        stale,
+        json!({"error": "conflict", "current_revision": [6, 1]})
+    );
+
+    // Past check on Wednesday 2026-10-21 (day 0 at 11:00 when now is 12:00) refuses homework.
+    let past_wed = server.call(
+        "move_block",
+        json!({
+            "operation_id": "op-wed-move-past",
+            "week_start": "2026-10-21",
+            "expected_revision": [6, 1],
+            "block_id": "study",
+            "day": 0,
+            "start": "11:00",
+            "end": "12:00"
+        }),
+        6,
+    );
+    assert_eq!(tool_error_text(&past_wed), Some(PAST), "got {past_wed}");
+
+    // delete_block every_week: true on school from Wednesday 2026-10-21 keeps Mon/Tue in 2026-10-19 and stops from 2026-10-26.
+    let del_school = body_of(&server.call(
+        "delete_block",
+        json!({
+            "operation_id": "op-wed-del-school",
+            "week_start": "2026-10-21",
+            "expected_revision": [6, 1],
+            "block_id": "school",
+            "scope": "series",
+            "every_week": true
+        }),
+        7,
+    ));
+    assert_eq!(del_school["ok"], json!(true), "got {del_school}");
+    assert_eq!(del_school["result"]["week_starts_on"], json!("wednesday"));
+    let first_blocks = week_row(&world.database_arg, world.user, "2026-10-19")
+        .unwrap()
+        .0;
+    assert_eq!(find_block(&first_blocks, "school")["days"], json!([0, 1]));
+    let second_blocks = week_row(&world.database_arg, world.user, "2026-10-26")
+        .unwrap()
+        .0;
+    assert!(find_block(&second_blocks, "school").is_null());
+
+    // Old client Monday compatibility.
+    let compat = body_of(&server.call(
+        "delete_block",
+        json!({
+            "operation_id": "op-mon-compat-del",
+            "week_start": "2026-10-19",
+            "expected_revision": 7,
+            "block_id": "study",
+            "scope": "series"
+        }),
+        8,
+    ));
+    assert_eq!(compat["ok"], json!(true), "got {compat}");
+    assert_eq!(compat["result"]["week_starts_on"], json!("monday"));
+    assert_eq!(compat["revision"], json!(8));
+
+    // 3. Switch live to Sunday and check month-end crossing 2026-10-28 (Wed) / 2026-11-29 (Sun).
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "sunday"}"#,
+    )
+    .expect("sun");
+    let sun_add = body_of(&server.call(
+        "add_block",
+        json!({
+            "operation_id": "op-sun-club",
+            "week_start": "2026-11-29",
+            "title": "SunMove",
+            "days": [0],
+            "start": "16:00",
+            "end": "17:00"
+        }),
+        9,
+    ));
+    let sun_id = sun_add["result"]["block_id"].as_str().unwrap_or("");
+    let sun_move = body_of(&server.call(
+        "move_block",
+        json!({
+            "operation_id": "op-sun-move-cross",
+            "week_start": "2026-11-29",
+            "expected_revision": sun_add["revision"],
+            "block_id": sun_id,
+            "day": 4,
+            "start": "18:00",
+            "end": "19:00"
+        }),
+        10,
+    ));
+    assert_eq!(sun_move["ok"], json!(true), "got {sun_move}");
+    assert_eq!(sun_move["result"]["week_starts_on"], json!("sunday"));
+    assert!(
+        find_block(
+            &week_row(&world.database_arg, world.user, "2026-11-23")
+                .unwrap()
+                .0,
+            sun_id
+        )
+        .is_null()
+    );
+    assert_eq!(
+        find_block(
+            &week_row(&world.database_arg, world.user, "2026-11-30")
+                .unwrap()
+                .0,
+            sun_id
+        )["days"],
+        json!([3])
+    );
+    let sun_del = body_of(&server.call(
+        "delete_block",
+        json!({
+            "operation_id": "op-sun-del-cross",
+            "week_start": "2026-11-29",
+            "expected_revision": sun_move["revision"],
+            "block_id": sun_id,
+            "scope": "series"
+        }),
+        11,
+    ));
+    assert_eq!(sun_del["ok"], json!(true));
+    assert_eq!(sun_del["result"]["week_starts_on"], json!("sunday"));
+    assert!(
+        find_block(
+            &week_row(&world.database_arg, world.user, "2026-11-30")
+                .unwrap()
+                .0,
+            sun_id
+        )
+        .is_null()
+    );
+}
+
+#[test]
+fn shown_move_and_delete_reply_failure_rolls_back_atomically() {
+    let world = signed_in("blocks-reply-fault");
+    seed_week(&world, json!([club(&[3], "16:00")]));
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+
+    let install_trigger = |db: &str| {
+        let conn = open_connection(Path::new(db)).expect("open");
+        conn.execute_batch(
+            "CREATE TRIGGER fail_reply_update BEFORE UPDATE OF response ON operations \
+             BEGIN SELECT RAISE(FAIL, 'review injected reply failure'); END;",
+        )
+        .expect("trigger");
+    };
+    let drop_trigger = |db: &str| {
+        let conn = open_connection(Path::new(db)).expect("open");
+        conn.execute_batch("DROP TRIGGER fail_reply_update;")
+            .expect("drop");
+    };
+
+    let mut server = boot(&world);
+    server.handshake();
+
+    // 1. move_block across seam (day 5 = Mon Oct 26 in second week).
+    install_trigger(&world.database_arg);
+    let move_args = json!({
+        "operation_id": "op-fault-move",
+        "week_start": "2026-10-21",
+        "expected_revision": [4, 0],
+        "block_id": "club",
+        "day": 5,
+        "start": "18:00",
+        "end": "19:00"
+    });
+    let move_fail = server.call("move_block", move_args.clone(), 2);
+    assert!(
+        tool_error_text(&move_fail).is_some(),
+        "fault must fail move_block, got {move_fail}"
+    );
+    assert_eq!(
+        week_row(&world.database_arg, world.user, "2026-10-19")
+            .unwrap()
+            .1,
+        4
+    );
+    assert!(week_row(&world.database_arg, world.user, "2026-10-26").is_none());
+
+    drop_trigger(&world.database_arg);
+    let move_ok = body_of(&server.call("move_block", move_args, 3));
+    assert_eq!(move_ok["ok"], json!(true), "got {move_ok}");
+    assert_eq!(move_ok["result"]["week_start"], json!("2026-10-21"));
+    assert_eq!(move_ok["revision"], json!([5, 1]));
+
+    // 2. delete_block on non-empty week (label.is_some()).
+    install_trigger(&world.database_arg);
+    let del_args = json!({
+        "operation_id": "op-fault-del",
+        "week_start": "2026-10-21",
+        "expected_revision": [5, 1],
+        "block_id": "club",
+        "scope": "series"
+    });
+    let del_fail = server.call("delete_block", del_args.clone(), 4);
+    assert!(
+        tool_error_text(&del_fail).is_some(),
+        "fault must fail delete_block, got {del_fail}"
+    );
+    assert_eq!(
+        week_row(&world.database_arg, world.user, "2026-10-26")
+            .unwrap()
+            .1,
+        1
+    );
+
+    drop_trigger(&world.database_arg);
+    let del_ok = body_of(&server.call("delete_block", del_args, 5));
+    assert_eq!(del_ok["ok"], json!(true), "got {del_ok}");
+    assert_eq!(del_ok["result"]["week_start"], json!("2026-10-21"));
+    assert_eq!(del_ok["revision"], json!([5, 2]));
+}
+
+#[test]
+fn read_and_write_shown_week_lay_out_cached_homework_consistently() {
+    let world = signed_in("cached-homework-shown-layout");
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    insert_assignment(
+        &conn,
+        world.user,
+        "essay",
+        &json!({
+            "id": "essay",
+            "title": "Essay",
+            "due": "2026-10-28T21:00",
+            "estimate_min": 180,
+            "focus_minutes": 0,
+            "completed": false,
+            "priority": 2,
+            "energy": "medium",
+            "category": "homework"
+        })
+        .to_string(),
+    )
+    .expect("essay");
+    insert_assignment(
+        &conn,
+        world.user,
+        "later",
+        &json!({
+            "id": "later",
+            "title": "Later",
+            "due": "2026-10-30T21:00",
+            "estimate_min": 60,
+            "focus_minutes": 0,
+            "completed": false,
+            "priority": 2,
+            "energy": "medium",
+            "category": "homework"
+        })
+        .to_string(),
+    )
+    .expect("later");
+    let first_blocks = json!([
+        {
+            "id": "s",
+            "title": "Draft",
+            "kind": "flexible",
+            "duration_min": 60,
+            "days": [0, 2],
+            "start": "15:00",
+            "priority": 2,
+            "energy": "medium",
+            "category": "homework",
+            "assignment_id": "essay"
+        },
+        {
+            "id": "u",
+            "title": "OldLater",
+            "kind": "flexible",
+            "duration_min": 30,
+            "days": [3],
+            "start": "14:00",
+            "priority": 2,
+            "energy": "medium",
+            "category": "homework",
+            "assignment_id": "later"
+        }
+    ]);
+    let second_blocks = json!([
+        {
+            "id": "s",
+            "title": "Essay",
+            "kind": "flexible",
+            "duration_min": 60,
+            "days": [0],
+            "start": "15:00",
+            "priority": 2,
+            "energy": "medium",
+            "category": "homework",
+            "assignment_id": "essay"
+        },
+        {
+            "id": "w",
+            "title": "Study",
+            "kind": "locked",
+            "duration_min": 30,
+            "days": [1],
+            "start": "11:00",
+            "category": "study"
+        }
+    ]);
+    conn.execute(
+        "INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?1, '2026-10-19', ?2, 1)",
+        (world.user, first_blocks.to_string()),
+    )
+    .expect("first");
+    conn.execute(
+        "INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?1, '2026-10-26', ?2, 1)",
+        (world.user, second_blocks.to_string()),
+    )
+    .expect("second");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+
+    let mut server = boot(&world);
+    server.handshake();
+
+    let read = body_of(&server.call("get_week", json!({"week_start": "2026-10-21"}), 2));
+    let essay_blocks: Vec<&Value> = read["blocks"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|block| block["assignment_id"] == json!("essay"))
+        .collect();
+    assert_eq!(
+        essay_blocks.len(),
+        1,
+        "read merges cached Draft and Essay into one block s: {read}"
+    );
+    let read_id = essay_blocks[0]["id"].as_str().expect("id").to_string();
+    assert_eq!(read_id, "s");
+    assert_eq!(essay_blocks[0]["days"], json!([0, 5]));
+    assert_eq!(essay_blocks[0]["title"], json!("Essay"));
+
+    // Editing a block only in second must not save first or store rewritten Draft/OldLater fields there.
+    let moved_w = server.call(
+        "move_block",
+        json!({
+            "operation_id": "op-move-second-only-w",
+            "week_start": "2026-10-21",
+            "expected_revision": read["revision"],
+            "block_id": "w",
+            "day": 6,
+            "start": "12:00",
+            "end": "12:30"
+        }),
+        3,
+    );
+    assert_eq!(is_error(&moved_w), Some(false), "got {moved_w}");
+    let moved_w_body = body_of(&moved_w);
+    assert_eq!(
+        moved_w_body["revision"],
+        json!([1, 2]),
+        "first untouched week must stay at rev 1 when second changes: {moved_w_body}"
+    );
+    let (first_untouched, first_rev_untouched) =
+        week_row(&world.database_arg, world.user, "2026-10-19").expect("first");
+    assert_eq!(first_rev_untouched, 1);
+    assert_eq!(find_block(&first_untouched, "s")["title"], json!("Draft"));
+    assert_eq!(
+        find_block(&first_untouched, "s")["days"],
+        json!([0, 2]),
+        "hidden day 0 and shown day 2 must stay merged: {first_untouched}"
+    );
+    assert_eq!(
+        find_block(&first_untouched, "u")["title"],
+        json!("OldLater")
+    );
+
+    // Write using the read block id ("s") and the second week's day (5 = Monday Oct 26).
+    let moved = server.call(
+        "move_block",
+        json!({
+            "operation_id": "op-move-cached-shown",
+            "week_start": "2026-10-21",
+            "expected_revision": moved_w_body["revision"],
+            "block_id": read_id,
+            "day": 5,
+            "start": "17:00",
+            "end": "18:00"
+        }),
+        4,
+    );
+    assert_eq!(
+        is_error(&moved),
+        Some(false),
+        "move_block on read block s day 5 must succeed, got {moved}"
+    );
+    let moved_body = body_of(&moved);
+    let (first_after_move, first_rev_after_move) =
+        week_row(&world.database_arg, world.user, "2026-10-19").expect("first");
+    assert_eq!(moved_body["revision"], json!([2, 3]));
+    assert_eq!(first_rev_after_move, 2);
+    assert_eq!(
+        find_block(&first_after_move, "s")["days"],
+        json!([0]),
+        "hidden day 0 stays in first week: {first_after_move}"
+    );
+    let (second_after_move, _) =
+        week_row(&world.database_arg, world.user, "2026-10-26").expect("second");
+    assert!(
+        second_after_move
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|b| b["assignment_id"] == json!("essay") && b["start"] == json!("17:00")),
+        "second week moved Monday block to 17:00: {second_after_move}"
+    );
+
+    // Also verify set_block_done on a fresh world with the same cached Draft vs Essay layout.
+    let world_done = signed_in("cached-homework-shown-done");
+    std::fs::write(
+        Path::new(&world_done.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+    let conn = open_connection(Path::new(&world_done.database_arg)).expect("open");
+    insert_assignment(
+        &conn,
+        world_done.user,
+        "essay",
+        &json!({
+            "id": "essay",
+            "title": "Essay",
+            "due": "2026-10-28T21:00",
+            "estimate_min": 180,
+            "focus_minutes": 0,
+            "completed": false,
+            "priority": 2,
+            "energy": "medium",
+            "category": "homework"
+        })
+        .to_string(),
+    )
+    .expect("essay");
+    conn.execute(
+        "INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?1, '2026-10-19', ?2, 1)",
+        (
+            world_done.user,
+            json!([{
+                "id": "s",
+                "title": "Draft",
+                "kind": "flexible",
+                "duration_min": 60,
+                "days": [2],
+                "start": "15:00",
+                "priority": 2,
+                "energy": "medium",
+                "category": "homework",
+                "assignment_id": "essay"
+            }])
+            .to_string(),
+        ),
+    )
+    .expect("first");
+    conn.execute(
+        "INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?1, '2026-10-26', ?2, 1)",
+        (world_done.user, second_blocks.to_string()),
+    )
+    .expect("second");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+    let mut done_server = boot(&world_done);
+    done_server.handshake();
+    let done_read = body_of(&done_server.call("get_week", json!({"week_start": "2026-10-21"}), 2));
+    let done = done_server.call(
+        "set_block_done",
+        json!({
+            "operation_id": "op-done-cached-shown",
+            "week_start": "2026-10-21",
+            "expected_revision": done_read["revision"],
+            "block_id": "s",
+            "day": 5,
+            "done": true
+        }),
+        3,
+    );
+    assert_eq!(
+        is_error(&done),
+        Some(false),
+        "set_block_done on read block s day 5 must succeed, got {done}"
+    );
+    let (second_after_done, second_rev_after_done) =
+        week_row(&world_done.database_arg, world_done.user, "2026-10-26").expect("second");
+    assert_eq!(second_rev_after_done, 2);
+    assert_eq!(
+        find_block(&second_after_done, "s")["completed_day"],
+        json!(0)
     );
 }

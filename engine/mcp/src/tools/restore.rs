@@ -13,6 +13,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::homework;
+use super::week;
 use super::write::{self, OPERATION_CONFLICT, REACHES_PHONE};
 use crate::session;
 
@@ -66,8 +67,18 @@ fn replace(
     if let Some(standing) = stored.get("standing") {
         replace_standing(conn, user_id, &text_of(standing)).map_err(stored_error)?;
     }
+    let week_rows = weeks
+        .iter()
+        .map(|(start, _, revision)| {
+            Ok(json!({
+                "week_start": start,
+                "week_starts_on": week::weekday_name(start)?,
+                "revision": revision,
+            }))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
     Ok(json!({
-        "weeks": weeks.iter().map(|(start, _, revision)| json!({"week_start": start, "revision": revision})).collect::<Vec<_>>(),
+        "weeks": week_rows,
         "assignments": assignments.iter().map(|(id, _, revision)| json!({"id": id, "revision": revision})).collect::<Vec<_>>(),
     }))
 }
