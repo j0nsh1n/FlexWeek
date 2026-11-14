@@ -329,3 +329,27 @@ def test_a_second_switch_keeps_a_mark_the_student_has_not_touched(
     by_value = {day["value"]: day for day in form["days"]}
     assert (by_value[4]["moved"], by_value[4]["movedFrom"]) == (True, "Monday 2")
     assert (by_value[6]["moved"], by_value[6]["movedFrom"]) == (True, "Wednesday 4")
+
+
+def test_a_mark_clears_when_a_week_from_the_same_first_day_opens(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    # Monday 2 moved to Monday 9 when the week began starting on Wednesday. Opening the next week
+    # (Wed 11 to Tue 17, the same first day) is another week: the mark and note are gone.
+    from desktop.native import fields
+
+    _monday_and_wednesday(shell)
+    sheets.openRoutines()
+    pump(qapp)
+    sheets.selectRoutine("r-4")
+    fields.save_week_starts_on("wednesday")
+    wait_until(qapp, lambda: shell.session.week_start == "2026-11-04" and not shell.session.busy)
+    settle(qapp, shell)
+    pump(qapp)
+    assert sheets.form["movedNote"] != ""
+    shell.session.load_week("2026-11-11")
+    wait_until(qapp, lambda: shell.session.week_start == "2026-11-11" and not shell.session.busy)
+    settle(qapp, shell)
+    pump(qapp)
+    assert sheets.form["movedNote"] == ""
+    assert not any(day.get("moved") for day in sheets.form["days"])
