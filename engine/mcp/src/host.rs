@@ -17,8 +17,8 @@ pub struct Launch {
     pub session_file: PathBuf,
     pub now_flag: Option<String>,
     pub read_only: bool,
-    /// The day this computer's weeks start on, 0 Monday to 6 Sunday.
-    pub first_weekday: u32,
+    /// Explicit `--week-starts-on` override when passed; otherwise each call reads `week-start.json`.
+    pub week_starts_on_override: Option<u32>,
 }
 
 /// The days a week can start on, as the desktop writes them in `week-start.json`.
@@ -34,7 +34,7 @@ pub const WEEK_STARTS: [&str; 7] = [
 
 /// The day the desktop keeps for this computer in the data folder; Monday when there is none or it
 /// cannot be read, as the desktop reads it.
-fn kept_week_start(data_dir: &Path) -> u32 {
+pub(crate) fn kept_week_start(data_dir: &Path) -> u32 {
     std::fs::read_to_string(data_dir.join("week-start.json"))
         .ok()
         .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
@@ -43,6 +43,12 @@ fn kept_week_start(data_dir: &Path) -> u32 {
             WEEK_STARTS.iter().position(|day| *day == name)
         })
         .map_or(0, |at| at as u32)
+}
+
+/// The first day of the week for this computer right now: `--week-starts-on` if passed at launch,
+/// otherwise read fresh from `<data_dir>/week-start.json`.
+pub(crate) fn first_weekday(data_dir: &Path, override_day: Option<u32>) -> u32 {
+    override_day.unwrap_or_else(|| kept_week_start(data_dir))
 }
 
 #[derive(Clone)]
@@ -83,13 +89,15 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Launch, String> {
         Some(path) => PathBuf::from(path),
         None => default_session_file(&data_dir, database.as_path(), database_was_set),
     };
-    let first_weekday = match week_starts_on {
-        Some(name) => WEEK_STARTS
-            .iter()
-            .position(|day| *day == name)
-            .ok_or("--week-starts-on must be a day of the week, such as monday")?
-            as u32,
-        None => kept_week_start(&data_dir),
+    let week_starts_on_override = match week_starts_on {
+        Some(name) => Some(
+            WEEK_STARTS
+                .iter()
+                .position(|day| *day == name)
+                .ok_or("--week-starts-on must be a day of the week, such as monday")?
+                as u32,
+        ),
+        None => None,
     };
     Ok(Launch {
         data_dir,
@@ -97,7 +105,7 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Launch, String> {
         session_file,
         now_flag,
         read_only,
-        first_weekday,
+        week_starts_on_override,
     })
 }
 

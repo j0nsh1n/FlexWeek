@@ -5,16 +5,21 @@
 use flexweek_engine::desk::blocks;
 use flexweek_engine::desk::grid::is_setup_block;
 use flexweek_engine::desk::hand_move::{HandDrop, HandMove, WeekClock, hand_move};
+use flexweek_engine::repeats::{apply_to_week, edit_intent};
+use flexweek_engine::shown::{family_id, repeat_changes_from_shown_week};
 use flexweek_engine::time::hhmm_to_minutes;
-use flexweek_store::{ApplyInput, AssignmentInput, Connection, WeekInput, list_assignment_rows};
+use flexweek_store::{
+    ApplyInput, AssignmentInput, Connection, WeekInput, list_assignment_rows, standing_blocks,
+};
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::schemars::JsonSchema;
 use rmcp::{tool, tool_router};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
-use super::fixed::seen_week;
+use super::fixed::{find, seen_week};
 use super::homework;
+use super::week::{self, RevisionArg, WeekTarget};
 use super::write::{self, REACHES_PHONE};
 use crate::session;
 
@@ -23,7 +28,7 @@ use crate::session;
 struct MoveArgs {
     operation_id: String,
     week_start: String,
-    expected_revision: i64,
+    expected_revision: RevisionArg,
     block_id: String,
     #[serde(default)]
     day: Option<i64>,
@@ -36,7 +41,7 @@ struct MoveArgs {
 struct DeleteArgs {
     operation_id: String,
     week_start: String,
-    expected_revision: i64,
+    expected_revision: RevisionArg,
     block_id: String,
     scope: String,
     #[serde(default)]
@@ -94,16 +99,24 @@ fn saved_week(applied: &Value) -> Result<Value, String> {
     if applied.get("error").is_some() {
         return Ok(applied.clone());
     }
+    if let Some(reply) = applied.get("shown_reply") {
+        return Ok(reply.clone());
+    }
     let week = applied
         .get("weeks")
         .and_then(Value::as_array)
         .and_then(|items| items.first())
         .ok_or_else(|| session::STORAGE_UNAVAILABLE.to_string())?;
+    let week_start = week
+        .get("week_start")
+        .and_then(Value::as_str)
+        .ok_or_else(|| session::STORAGE_UNAVAILABLE.to_string())?;
     let revision = week.get("revision").cloned().unwrap_or(Value::Null);
     Ok(json!({
         "ok": true,
         "result": {
-            "week_start": week.get("week_start").cloned().unwrap_or(Value::Null),
+            "week_start": week_start,
+            "week_starts_on": week::weekday_name(week_start)?,
             "revision": revision,
         },
         "revision": revision,
@@ -145,11 +158,38 @@ fn perform_move(app: &crate::App, args: &MoveArgs) -> Result<Value, String> {
     {
         return saved_week(&saved);
     }
-    let (blocks, _) = seen_week(&opened.conn, opened.user_id, &args.week_start)?;
-    let found = blocks
-        .iter()
-        .find(|block| block.get("id").and_then(Value::as_str) == Some(args.block_id.as_str()))
-        .cloned();
+    let target = week::resolve_week(&args.week_start, app.first_weekday())?;
+    let (blocks, monday_rev, shown_parts) = match target {
+        WeekTarget::StoredMonday => {
+            let (blocks, _) = seen_week(&opened.conn, opened.user_id, &args.week_start)?;
+            let expected = week::expect_monday_revision(Some(&args.expected_revision), 0)?;
+            (blocks, Some(expected), None)
+        }
+        WeekTarget::Shown { first, second, .. } => {
+            let (first_blocks, first_rev) = seen_week(&opened.conn, opened.user_id, &first)?;
+            let (second_blocks, second_rev) = seen_week(&opened.conn, opened.user_id, &second)?;
+            let shown_blocks = week::compose_shown_blocks(
+                &opened.conn,
+                opened.user_id,
+                &args.week_start,
+                &first_blocks,
+                &second_blocks,
+            )?;
+            (
+                shown_blocks,
+                None,
+                Some((
+                    first,
+                    first_blocks,
+                    first_rev,
+                    second,
+                    second_blocks,
+                    second_rev,
+                )),
+            )
+        }
+    };
+    let found = find(&blocks, &args.block_id);
     let to_day = args
         .day
         .or_else(|| found.as_ref().and_then(sole_day))
@@ -195,18 +235,78 @@ fn perform_move(app: &crate::App, args: &MoveArgs) -> Result<Value, String> {
         HandMove::Refused(words) => return Err(words),
         HandMove::Moved { blocks, .. } => blocks,
     };
+    let Some((first, first_blocks, first_rev, second, second_blocks, second_rev)) = shown_parts
+    else {
+        let applied = homework::run_apply(
+            &opened.conn,
+            opened.user_id,
+            "move_block",
+            &operation_id,
+            &digest,
+            week_input(args.week_start.clone(), blocks, monday_rev.unwrap_or(0)),
+            &homework::clock_of(app)?,
+        )?;
+        return saved_week(&applied);
+    };
+    let expected =
+        week::expect_shown_revision(Some(&args.expected_revision), [first_rev, second_rev])?;
+    if let Err(conflict) = week::check_shown_revision(&opened.conn, first_rev, second_rev, expected)
+    {
+        return Ok(conflict);
+    }
+    let weeks = week::split_shown_inputs(
+        &args.week_start,
+        &blocks,
+        &first,
+        &first_blocks,
+        first_rev,
+        &second,
+        &second_blocks,
+        second_rev,
+    )?;
+    let input = ApplyInput {
+        weeks,
+        assignments: Vec::<AssignmentInput>::new(),
+        operation_id: None,
+        snapshot_label: None,
+        repeats: None,
+        argument_digest: None,
+    };
     let applied = homework::run_apply(
         &opened.conn,
         opened.user_id,
         "move_block",
         &operation_id,
         &digest,
-        week_input(args.week_start.clone(), blocks, args.expected_revision),
+        input,
         &homework::clock_of(app)?,
     )?;
-    saved_week(&applied)
+    if applied.get("error").is_some() {
+        return Ok(applied);
+    }
+    let new_r1 = week::week_revision(&opened.conn, opened.user_id, &first)?;
+    let new_r2 = week::week_revision(&opened.conn, opened.user_id, &second)?;
+    let answer = json!({
+        "ok": true,
+        "result": {
+            "week_start": args.week_start,
+            "week_starts_on": week::weekday_name(&args.week_start)?,
+            "revision": [new_r1, new_r2],
+        },
+        "revision": [new_r1, new_r2],
+        "reaches_phone": REACHES_PHONE,
+    });
+    week::remember_shown_reply(
+        &opened.conn,
+        opened.user_id,
+        &operation_id,
+        &applied,
+        &answer,
+    )?;
+    Ok(answer)
 }
 
+#[allow(clippy::too_many_lines)]
 fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> {
     let opened = homework::open(app)?;
     let operation_id = write::operation_key(&args.operation_id)?;
@@ -226,12 +326,40 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
     {
         return saved_week(&saved);
     }
-    let (blocks, revision) = seen_week(&opened.conn, opened.user_id, &args.week_start)?;
+    let target = week::resolve_week(&args.week_start, app.first_weekday())?;
+    let (blocks, monday_rev, shown_parts) = match target {
+        WeekTarget::StoredMonday => {
+            let (blocks, revision) = seen_week(&opened.conn, opened.user_id, &args.week_start)?;
+            let expected = week::expect_monday_revision(Some(&args.expected_revision), revision)?;
+            (blocks, Some((revision, expected)), None)
+        }
+        WeekTarget::Shown { first, second, .. } => {
+            let (first_blocks, first_rev) = seen_week(&opened.conn, opened.user_id, &first)?;
+            let (second_blocks, second_rev) = seen_week(&opened.conn, opened.user_id, &second)?;
+            let shown_blocks = week::compose_shown_blocks(
+                &opened.conn,
+                opened.user_id,
+                &args.week_start,
+                &first_blocks,
+                &second_blocks,
+            )?;
+            (
+                shown_blocks,
+                None,
+                Some((
+                    first,
+                    first_blocks,
+                    first_rev,
+                    second,
+                    second_blocks,
+                    second_rev,
+                )),
+            )
+        }
+    };
     let every_week = args.every_week.unwrap_or(false);
-    let target = blocks
-        .iter()
-        .find(|block| block.get("id").and_then(Value::as_str) == Some(args.block_id.as_str()));
-    let setup = match target {
+    let target_block = find(&blocks, &args.block_id);
+    let setup = match target_block.as_ref() {
         Some(block) => is_setup_block(block).map_err(|err| err.message)?,
         None => false,
     };
@@ -243,7 +371,8 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
     }
     // The app asks "this week or every week" only when the whole block goes
     // (`window.py` `_delete_block`); one day of it is this week only.
-    let days = target
+    let days = target_block
+        .as_ref()
         .and_then(|block| block.get("days"))
         .and_then(Value::as_array)
         .map_or(0, Vec::len);
@@ -265,21 +394,85 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
         now.minute,
         every_week,
     )?;
+    let Some((first, first_blocks, first_rev, second, second_blocks, second_rev)) = shown_parts
+    else {
+        let (revision, expected) = monday_rev.unwrap_or((0, 0));
+        if deletion.label.is_none() {
+            let answer = json!({
+                "weeks": [{
+                    "week_start": args.week_start,
+                    "revision": revision,
+                }],
+                "assignments": [],
+            });
+            flexweek_store::remember_operation(
+                &opened.conn,
+                opened.user_id,
+                &operation_id,
+                &digest,
+                &flexweek_engine::snapshot::canonical(&answer),
+                // `changes.rs` keeps 100 operations. That constant is private.
+                100,
+            )
+            .map_err(session::storage_sentence)?;
+            opened.conn.execute_batch("COMMIT").map_err(|error| {
+                session::storage_sentence(flexweek_store::StoreError::from(error))
+            })?;
+            return Ok(json!({
+                "ok": true,
+                "result": {
+                    "week_start": args.week_start,
+                    "week_starts_on": week::weekday_name(&args.week_start)?,
+                    "revision": revision,
+                },
+                "revision": revision,
+                "reaches_phone": REACHES_PHONE,
+            }));
+        }
+        let mut input = week_input(args.week_start.clone(), deletion.blocks, expected);
+        if every_week {
+            input.repeats = Some(vec![json!({
+                "id": family_id(&args.block_id),
+                "scope": "from",
+                "from_date": args.week_start,
+                "stop": true,
+            })]);
+        }
+        let applied = homework::run_apply(
+            &opened.conn,
+            opened.user_id,
+            "delete_block",
+            &operation_id,
+            &digest,
+            input,
+            &homework::clock_of(app)?,
+        )?;
+        return saved_week(&applied);
+    };
+    let expected =
+        week::expect_shown_revision(Some(&args.expected_revision), [first_rev, second_rev])?;
+    if let Err(conflict) = week::check_shown_revision(&opened.conn, first_rev, second_rev, expected)
+    {
+        return Ok(conflict);
+    }
     if deletion.label.is_none() {
         let answer = json!({
-            "weeks": [{
+            "ok": true,
+            "result": {
                 "week_start": args.week_start,
-                "revision": revision,
-            }],
-            "assignments": [],
+                "week_starts_on": week::weekday_name(&args.week_start)?,
+                "revision": [first_rev, second_rev],
+            },
+            "revision": [first_rev, second_rev],
+            "reaches_phone": REACHES_PHONE,
         });
+        let remembered = json!({"shown_reply": answer});
         flexweek_store::remember_operation(
             &opened.conn,
             opened.user_id,
             &operation_id,
             &digest,
-            &flexweek_engine::snapshot::canonical(&answer),
-            // `changes.rs` keeps 100 operations. That constant is private.
+            &flexweek_engine::snapshot::canonical(&remembered),
             100,
         )
         .map_err(session::storage_sentence)?;
@@ -287,26 +480,49 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
             .conn
             .execute_batch("COMMIT")
             .map_err(|error| session::storage_sentence(flexweek_store::StoreError::from(error)))?;
-        return Ok(json!({
-            "ok": true,
-            "result": {"week_start": args.week_start, "revision": revision},
-            "revision": revision,
-            "reaches_phone": REACHES_PHONE,
-        }));
+        return Ok(answer);
     }
-    let mut input = week_input(
-        args.week_start.clone(),
-        deletion.blocks,
-        args.expected_revision,
-    );
-    if every_week {
-        input.repeats = Some(vec![json!({
-            "id": args.block_id,
+    let (second_baseline, repeats_input) = if every_week {
+        let repeats = standing_blocks(&opened.conn, opened.user_id, &second)
+            .map_err(session::storage_sentence)?;
+        let family = family_id(&args.block_id);
+        let repeat = find(&repeats, family);
+        let stop_shown = json!({
+            "id": family,
             "scope": "from",
             "from_date": args.week_start,
             "stop": true,
-        })]);
-    }
+        });
+        let stop_second = repeat_changes_from_shown_week(&[stop_shown], &args.week_start)
+            .map_err(|err| err.message)?;
+        let second_after_repeat =
+            if let Some(intent) = edit_intent(family, &second, repeat.as_ref(), None) {
+                apply_to_week(&second_blocks, &repeats, &[intent])?.0
+            } else {
+                second_blocks.clone()
+            };
+        (second_after_repeat, Some(stop_second))
+    } else {
+        (second_blocks.clone(), None)
+    };
+    let weeks = week::split_shown_inputs(
+        &args.week_start,
+        &deletion.blocks,
+        &first,
+        &first_blocks,
+        first_rev,
+        &second,
+        &second_baseline,
+        second_rev,
+    )?;
+    let input = ApplyInput {
+        weeks,
+        assignments: Vec::<AssignmentInput>::new(),
+        operation_id: None,
+        snapshot_label: None,
+        repeats: repeats_input,
+        argument_digest: None,
+    };
     let applied = homework::run_apply(
         &opened.conn,
         opened.user_id,
@@ -316,7 +532,29 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
         input,
         &homework::clock_of(app)?,
     )?;
-    saved_week(&applied)
+    if applied.get("error").is_some() {
+        return Ok(applied);
+    }
+    let new_r1 = week::week_revision(&opened.conn, opened.user_id, &first)?;
+    let new_r2 = week::week_revision(&opened.conn, opened.user_id, &second)?;
+    let answer = json!({
+        "ok": true,
+        "result": {
+            "week_start": args.week_start,
+            "week_starts_on": week::weekday_name(&args.week_start)?,
+            "revision": [new_r1, new_r2],
+        },
+        "revision": [new_r1, new_r2],
+        "reaches_phone": REACHES_PHONE,
+    });
+    week::remember_shown_reply(
+        &opened.conn,
+        opened.user_id,
+        &operation_id,
+        &applied,
+        &answer,
+    )?;
+    Ok(answer)
 }
 
 #[tool_router(router = block_tools, vis = "pub(crate)")]

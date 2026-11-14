@@ -8,7 +8,7 @@
 use std::collections::{BTreeMap, HashSet};
 
 use flexweek_engine::desk::planning;
-use flexweek_engine::solver;
+use flexweek_engine::{shown, solver};
 use flexweek_store::{
     ApplyInput, AssignmentInput, Connection, WeekInput, list_account_weeks, list_assignment_rows,
     read_week,
@@ -21,6 +21,7 @@ use serde_json::{Map, Value, json};
 
 use super::fixed::seen_week;
 use super::homework;
+use super::week::{self, WeekTarget};
 use super::write::{self, REACHES_PHONE};
 use crate::session;
 
@@ -32,7 +33,8 @@ const NOT_THAT_DAY: &str = "It cannot go on that day: its due date or its days l
 struct PlanArgs {
     operation_id: String,
     week_start: String,
-    /// Plan only this day, 0 (Monday) to 6 (Sunday). Without it the whole week is planned.
+    /// Plan only this day, 0 (Monday, or `week_start` when not Monday) to 6. Without it the
+    /// whole week is planned.
     #[serde(default)]
     day: Option<i64>,
 }
@@ -78,12 +80,20 @@ fn views(
     rows: &[(String, String, i64)],
     weeks: &[(String, Vec<Value>, i64)],
     week_start: &str,
+    target: &WeekTarget,
 ) -> Result<Map<String, Value>, String> {
     let listed: Vec<(String, Vec<Value>)> = weeks
         .iter()
         .map(|(start, blocks, _)| (start.clone(), blocks.clone()))
         .collect();
-    let planned = flexweek_engine::plan::planned_minutes_by_id(&listed, week_start);
+    let planned = match target {
+        WeekTarget::StoredMonday => {
+            flexweek_engine::plan::planned_minutes_by_id(&listed, week_start)
+        }
+        WeekTarget::Shown { .. } => {
+            flexweek_engine::plan::planned_minutes_from_day(&listed, week_start).map_err(engine)?
+        }
+    };
     let mut out = Map::new();
     for (id, _, revision) in rows {
         let Some(body) = keyed.get(id) else {
@@ -132,12 +142,19 @@ fn availability(
     })
 }
 
-fn plan_rules(conn: &Connection, user_id: i64) -> Result<solver::PlanRules, String> {
+fn plan_rules(
+    conn: &Connection,
+    user_id: i64,
+    shown_start: Option<&str>,
+) -> Result<solver::PlanRules, String> {
     let raw = flexweek_store::preference_row(conn, user_id)
         .map_err(session::storage_sentence)?
         .unwrap_or_else(|| "{}".to_string());
-    let prefs: Value =
+    let mut prefs: Value =
         serde_json::from_str(&raw).map_err(|_| session::STORAGE_UNAVAILABLE.to_string())?;
+    if let Some(week_start) = shown_start {
+        prefs = shown::rules_on_shown_week(week_start, &prefs).map_err(engine)?;
+    }
     Ok(solver::plan_rules_from_value(&prefs))
 }
 
@@ -215,11 +232,39 @@ fn on_day(
     (kept, targets, left)
 }
 
+enum PlanBasis {
+    Monday {
+        revision: i64,
+    },
+    Shown {
+        first: String,
+        first_seen: Vec<Value>,
+        first_rev: i64,
+        second: String,
+        second_seen: Vec<Value>,
+        second_rev: i64,
+    },
+}
+
+impl PlanBasis {
+    fn revision_json(&self) -> Value {
+        match self {
+            Self::Monday { revision } => json!(revision),
+            Self::Shown {
+                first_rev,
+                second_rev,
+                ..
+            } => json!([first_rev, second_rev]),
+        }
+    }
+}
+
 struct Planned {
     message: String,
     /// The week after the plan, every block in it.
     week: Option<Vec<Value>>,
-    revision: i64,
+    revision: Value,
+    basis: Option<PlanBasis>,
     /// `{week_start, revision, after}` of earlier weeks whose sessions moved here.
     earlier: Vec<Value>,
     placed: Vec<Value>,
@@ -261,16 +306,22 @@ fn run_plan(
     conn: &Connection,
     user_id: i64,
     args: &PlanArgs,
+    target: &WeekTarget,
 ) -> Result<Planned, String> {
     let week_start = args.week_start.as_str();
     let now = app.now()?;
     let hour = now.minute / 60;
     let start = planning::plan_start_at(week_start, &now.today, hour, now.minute % 60, 0, 0)
         .map_err(engine)?;
+    let empty_revision = match target {
+        WeekTarget::StoredMonday => json!(0),
+        WeekTarget::Shown { .. } => json!([0, 0]),
+    };
     let empty = |message: &str| Planned {
         message: message.to_string(),
         week: None,
-        revision: 0,
+        revision: empty_revision.clone(),
+        basis: None,
         earlier: Vec::new(),
         placed: Vec::new(),
         not_placed: Vec::new(),
@@ -281,16 +332,49 @@ fn run_plan(
     if let Some(day) = args.day
         && !(0..=6).contains(&day)
     {
-        return Err("day must be 0 (Monday) to 6 (Sunday)".into());
+        return Err(match target {
+            WeekTarget::StoredMonday => "day must be 0 (Monday) to 6 (Sunday)".into(),
+            WeekTarget::Shown { .. } => {
+                format!("day must be 0 ({}) to 6", week::weekday_name(week_start)?)
+            }
+        });
     }
     let (keyed, tree, rows) = assignments(conn, user_id)?;
     let weeks = stored_weeks(conn, user_id)?;
-    let assignments = Value::Object(views(&keyed, &rows, &weeks, week_start)?);
+    let assignments = Value::Object(views(&keyed, &rows, &weeks, week_start, target)?);
     let by_id = assignments.as_object().cloned().unwrap_or_default();
-    let (blocks, revision) = open_week(conn, user_id, week_start, &assignments)?;
+    let (blocks, basis, earlier_cutoff) = match target {
+        WeekTarget::StoredMonday => {
+            let (blocks, revision) = open_week(conn, user_id, week_start, &assignments)?;
+            (blocks, PlanBasis::Monday { revision }, week_start)
+        }
+        WeekTarget::Shown {
+            first,
+            second,
+            offset: _,
+        } => {
+            let (first_seen, first_rev) = open_week(conn, user_id, first, &assignments)?;
+            let (second_seen, second_rev) = open_week(conn, user_id, second, &assignments)?;
+            let blocks =
+                shown::compose_shown_week_due(week_start, &first_seen, &second_seen, &by_id)
+                    .map_err(engine)?;
+            (
+                blocks,
+                PlanBasis::Shown {
+                    first: first.clone(),
+                    first_seen,
+                    first_rev,
+                    second: second.clone(),
+                    second_seen,
+                    second_rev,
+                },
+                first.as_str(),
+            )
+        }
+    };
     let earlier: Vec<Value> = weeks
         .iter()
-        .filter(|(start, _, _)| start.as_str() < week_start)
+        .filter(|(start, _, _)| start.as_str() < earlier_cutoff)
         .map(|(start, blocks, revision)| json!({"week_start": start, "blocks": blocks, "revision": revision}))
         .collect();
     let moved =
@@ -300,11 +384,28 @@ fn run_plan(
         .cloned()
         .unwrap_or_else(|| blocks.clone());
     let earlier_updates = moved["weeks"].as_array().cloned().unwrap_or_default();
-    let earlier_blocks: Vec<Value> = earlier
+    let mut earlier_blocks: Vec<Value> = earlier
         .iter()
         .flat_map(|week| week["blocks"].as_array().cloned().unwrap_or_default())
         .filter(|block| block["start"].is_string() && block["completed"] != json!(true))
         .collect();
+    if let (WeekTarget::Shown { offset, .. }, PlanBasis::Shown { first_seen, .. }) =
+        (target, &basis)
+    {
+        earlier_blocks.extend(
+            first_seen
+                .iter()
+                .filter(|block| {
+                    block["start"].is_string()
+                        && block["completed"] != json!(true)
+                        && block["days"].as_array().is_some_and(|days| {
+                            !days.is_empty()
+                                && days.iter().all(|d| d.as_i64().is_some_and(|n| n < *offset))
+                        })
+                })
+                .cloned(),
+        );
+    }
     // The homework's numbers were read with the week as saved (`blocks`), waiting sessions included.
     let open_blocks = planning::open_rest_sessions_since(
         &planning_blocks,
@@ -327,7 +428,15 @@ fn run_plan(
     .map_err(engine)?;
     let (first_day, first_minute) = start.unwrap_or((0, 0));
     let found = availability(conn, user_id)?;
-    let work = found.work.as_array().cloned().unwrap_or_default();
+    let work_raw = found.work.as_array().cloned().unwrap_or_default();
+    let (work, occupancy, rules) = match target {
+        WeekTarget::StoredMonday => (work_raw, found.occupancy, plan_rules(conn, user_id, None)?),
+        WeekTarget::Shown { .. } => (
+            shown::windows_on_shown_week(week_start, &work_raw).map_err(engine)?,
+            shown::occupancy_on_shown_week(week_start, &found.occupancy).map_err(engine)?,
+            plan_rules(conn, user_id, Some(week_start))?,
+        ),
+    };
     let target_ids = ids(&targets);
     let (week_blocks, shares) = planning::fair_share(
         &open_blocks,
@@ -400,13 +509,13 @@ fn run_plan(
     let elapsed = move || began.elapsed().as_secs_f64() * 1000.0;
     let trace = solver::solve_with_rules(
         &typed,
-        Some(&found.occupancy),
+        Some(&occupancy),
         Some(&windows),
         Some(&overrides),
         start,
         solver::SOLVE_BUDGET_MS,
         &elapsed,
-        plan_rules(conn, user_id)?,
+        rules,
     )
     .map_err(engine)?;
     let trace = solver::trace_to_value(&trace);
@@ -462,7 +571,8 @@ fn run_plan(
     Ok(Planned {
         message: String::new(),
         week: Some(settled),
-        revision,
+        revision: basis.revision_json(),
+        basis: Some(basis),
         earlier: earlier_updates,
         placed,
         not_placed,
@@ -474,11 +584,12 @@ fn reply(
     week_start: &str,
     revision: Value,
     operation_id: Option<&str>,
-) -> Value {
-    json!({
+) -> Result<Value, String> {
+    Ok(json!({
         "ok": true,
         "result": {
             "week_start": week_start,
+            "week_starts_on": week::weekday_name(week_start)?,
             "revision": revision,
             "placed": planned.placed,
             "not_placed": planned.not_placed,
@@ -487,10 +598,11 @@ fn reply(
         "revision": revision,
         "restore_point": operation_id.map(write::point_id),
         "reaches_phone": REACHES_PHONE,
-    })
+    }))
 }
 
 fn perform(app: &crate::App, args: &PlanArgs) -> Result<Value, String> {
+    let target = week::resolve_week(&args.week_start, app.first_weekday())?;
     let opened = homework::open(app)?;
     let operation_id = write::operation_key(&args.operation_id)?;
     let digest = write::argument_digest(
@@ -504,28 +616,56 @@ fn perform(app: &crate::App, args: &PlanArgs) -> Result<Value, String> {
         if remembered.get("plan").is_some() {
             return Ok(remembered["plan"].clone());
         }
-        let revision = remembered["weeks"][0]["revision"].clone();
-        return Ok(
-            json!({"ok": true, "result": {"week_start": args.week_start, "revision": revision},
-            "revision": revision, "restore_point": write::point_id(&operation_id),
-            "reaches_phone": REACHES_PHONE}),
-        );
+        let revision = match &target {
+            WeekTarget::StoredMonday => remembered["weeks"][0]["revision"].clone(),
+            WeekTarget::Shown { first, second, .. } => {
+                let first_rev = week::week_revision(&opened.conn, opened.user_id, first)?;
+                let second_rev = week::week_revision(&opened.conn, opened.user_id, second)?;
+                json!([first_rev, second_rev])
+            }
+        };
+        return Ok(json!({
+            "ok": true,
+            "result": {
+                "week_start": args.week_start,
+                "week_starts_on": week::weekday_name(&args.week_start)?,
+                "revision": revision,
+            },
+            "revision": revision,
+            "restore_point": write::point_id(&operation_id),
+            "reaches_phone": REACHES_PHONE,
+        }));
     }
-    let planned = run_plan(app, &opened.conn, opened.user_id, args)?;
+    let planned = run_plan(app, &opened.conn, opened.user_id, args, &target)?;
     let Some(week) = planned.week.clone().filter(|_| !planned.placed.is_empty()) else {
         // Nothing placed is nothing written, and no restore point.
-        return Ok(reply(
-            &planned,
-            &args.week_start,
-            json!(planned.revision),
-            None,
-        ));
+        return reply(&planned, &args.week_start, planned.revision.clone(), None);
     };
-    let mut weeks = vec![WeekInput {
-        week_start: args.week_start.clone(),
-        blocks: week,
-        revision: planned.revision,
-    }];
+    let mut weeks = match &planned.basis {
+        Some(PlanBasis::Monday { revision }) => vec![WeekInput {
+            week_start: args.week_start.clone(),
+            blocks: week,
+            revision: *revision,
+        }],
+        Some(PlanBasis::Shown {
+            first,
+            first_seen,
+            first_rev,
+            second,
+            second_seen,
+            second_rev,
+        }) => week::split_shown_inputs(
+            &args.week_start,
+            &week,
+            first,
+            first_seen,
+            *first_rev,
+            second,
+            second_seen,
+            *second_rev,
+        )?,
+        None => Vec::new(),
+    };
     for update in &planned.earlier {
         let Some(start) = update["week_start"].as_str() else {
             continue;
@@ -556,8 +696,15 @@ fn perform(app: &crate::App, args: &PlanArgs) -> Result<Value, String> {
     if applied.get("error").is_some() {
         return Ok(applied);
     }
-    let revision = applied["weeks"][0]["revision"].clone();
-    let answer = reply(&planned, &args.week_start, revision, Some(&operation_id));
+    let revision = match &planned.basis {
+        Some(PlanBasis::Shown { first, second, .. }) => {
+            let new_first = week::week_revision(&opened.conn, opened.user_id, first)?;
+            let new_second = week::week_revision(&opened.conn, opened.user_id, second)?;
+            json!([new_first, new_second])
+        }
+        _ => applied["weeks"][0]["revision"].clone(),
+    };
+    let answer = reply(&planned, &args.week_start, revision, Some(&operation_id))?;
     remember_plan(
         &opened.conn,
         opened.user_id,

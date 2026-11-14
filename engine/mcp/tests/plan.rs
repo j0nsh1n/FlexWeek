@@ -474,3 +474,207 @@ fn plan_gives_homework_spread_over_days_its_share_of_this_week() {
         .collect();
     assert_eq!(placed, vec![(json!("poster"), json!(60))], "got {body}");
 }
+
+#[test]
+fn plan_homework_follows_monday_sunday_wednesday_and_month_end_crossing_weeks() {
+    let world = signed_in("plan-shown-weeks");
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    // Enable weekend_homework_free and set work windows ONLY on Monday 16:00-18:00 and Saturday 10:00-12:00.
+    // On a Wednesday-starting week 2026-10-21..2026-10-27:
+    //   - Saturday Oct 24 is shown day 3 (must be skipped because weekend_homework_free: true)
+    //   - Monday Oct 26 is shown day 5 (must be chosen at 16:00 and stored in 2026-10-26 at day 0).
+    let availability = json!({
+        "work_windows": [
+            {"days": [0], "start": "16:00", "end": "18:00"},
+            {"days": [5], "start": "10:00", "end": "12:00"}
+        ]
+    });
+    conn.execute(
+        "UPDATE preferences SET weekend_homework_free = 1, buffer_min = 0, availability_json = ?1 WHERE user_id = ?2",
+        (availability.to_string(), world.user),
+    )
+    .expect("prefs");
+    insert_assignment(
+        &conn,
+        world.user,
+        "math",
+        r#"{"id":"math","title":"Math","due":"2026-10-27T21:00","estimate_min":60,"focus_minutes":0,"completed":false,"priority":2,"energy":"medium"}"#,
+    )
+    .expect("math");
+    // Waiting session in earlier week 2026-10-12 must move into 2026-10-21; 2026-10-19 stays clean.
+    save_week(
+        &conn,
+        world.user,
+        "2026-10-12",
+        &json!([{
+            "id": "math-early", "title": "Math", "kind": "flexible", "assignment_id": "math",
+            "duration_min": 60, "days": [2], "priority": 2, "energy": "medium"
+        }])
+        .to_string(),
+        0,
+    )
+    .expect("earlier week");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+
+    let mut server = boot(&world);
+    // 1. Monday WEEK_OVER carries week_starts_on: "monday".
+    let mon_over = body_of(&server.call(
+        "plan_homework",
+        json!({"operation_id": "op-mon-over", "week_start": "2026-10-12"}),
+        2,
+    ));
+    assert_eq!(mon_over["result"]["message"], json!(WEEK_OVER));
+    assert_eq!(mon_over["result"]["week_starts_on"], json!("monday"));
+
+    // 2. Switch live to Wednesday.
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+
+    let wed_over = body_of(&server.call(
+        "plan_homework",
+        json!({"operation_id": "op-wed-over", "week_start": "2026-10-14"}),
+        3,
+    ));
+    assert_eq!(wed_over["result"]["message"], json!(WEEK_OVER));
+    assert_eq!(wed_over["result"]["week_starts_on"], json!("wednesday"));
+
+    let wed_plan = body_of(&server.call(
+        "plan_homework",
+        json!({"operation_id": "op-wed-plan", "week_start": "2026-10-21"}),
+        4,
+    ));
+    assert_eq!(wed_plan["ok"], json!(true), "got {wed_plan}");
+    assert_eq!(wed_plan["result"]["week_starts_on"], json!("wednesday"));
+    assert_eq!(wed_plan["revision"], json!([0, 1]));
+    let placed = wed_plan["result"]["placed"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(placed.len(), 1, "got {wed_plan}");
+    assert_eq!(
+        placed[0]["day"],
+        json!(5),
+        "Monday Oct 26 is day 5 from Wed 21, skipping weekend"
+    );
+    assert_eq!(placed[0]["start"], json!("16:00"));
+    let wed_retry = body_of(&server.call(
+        "plan_homework",
+        json!({"operation_id": "op-wed-plan", "week_start": "2026-10-21"}),
+        5,
+    ));
+    assert_eq!(wed_retry, wed_plan);
+    // Stored: 2026-10-12 emptied, 2026-10-26 has math-early at day 0 16:00, 2026-10-19 not created.
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let w12: String = conn
+        .query_row(
+            "SELECT blocks FROM weeks WHERE user_id = ?1 AND week_start = '2026-10-12'",
+            (world.user,),
+            |row| row.get(0),
+        )
+        .expect("w12");
+    assert_eq!(w12, "[]");
+    let w26: String = conn
+        .query_row(
+            "SELECT blocks FROM weeks WHERE user_id = ?1 AND week_start = '2026-10-26'",
+            (world.user,),
+            |row| row.get(0),
+        )
+        .expect("w26");
+    let w26_blocks: Value = serde_json::from_str(&w26).expect("json");
+    assert_eq!(session_of(&w26_blocks, "math")["days"], json!([0]));
+    // Over-month homework for 2026-10-28..2026-11-03.
+    insert_assignment(
+        &conn,
+        world.user,
+        "bio",
+        r#"{"id":"bio","title":"Bio","due":"2026-11-03T21:00","estimate_min":45,"focus_minutes":0,"completed":false,"priority":2,"energy":"medium"}"#,
+    )
+    .expect("bio");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+
+    // Month-end crossing Wednesday 2026-10-28..2026-11-03 places bio on Monday Nov 2 (shown day 5 -> 2026-11-02 day 0).
+    let cross_wed = body_of(&server.call(
+        "plan_homework",
+        json!({"operation_id": "op-wed-plan-cross", "week_start": "2026-10-28"}),
+        6,
+    ));
+    assert_eq!(cross_wed["ok"], json!(true), "got {cross_wed}");
+    assert_eq!(cross_wed["result"]["week_starts_on"], json!("wednesday"));
+    let bio_row = cross_wed["result"]["placed"]
+        .as_array()
+        .and_then(|arr| arr.iter().find(|r| r["assignment_id"] == "bio"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    assert_eq!(bio_row["day"], json!(5));
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let w_nov: String = conn
+        .query_row(
+            "SELECT blocks FROM weeks WHERE user_id = ?1 AND week_start = '2026-11-02'",
+            (world.user,),
+            |row| row.get(0),
+        )
+        .expect("w_nov");
+    let w_nov_blocks: Value = serde_json::from_str(&w_nov).expect("json");
+    assert_eq!(session_of(&w_nov_blocks, "bio")["days"], json!([0]));
+    drop(conn);
+
+    // Old client Monday compatibility.
+    let compat = body_of(&server.call(
+        "plan_homework",
+        json!({"operation_id": "op-mon-plan-compat", "week_start": "2026-11-09"}),
+        7,
+    ));
+    assert_eq!(compat["result"]["week_starts_on"], json!("monday"));
+    assert!(compat["revision"].is_i64(), "got {compat}");
+
+    // 3. Switch live to Sunday and test 2026-11-29 (Sun..Dec 5) placing chem on Monday Nov 30 (day 1 -> 2026-11-30 day 0).
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    insert_assignment(
+        &conn,
+        world.user,
+        "chem",
+        r#"{"id":"chem","title":"Chem","due":"2026-12-05T21:00","estimate_min":45,"focus_minutes":0,"completed":false,"priority":2,"energy":"medium"}"#,
+    )
+    .expect("chem");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "sunday"}"#,
+    )
+    .expect("sun");
+    let cross_sun = body_of(&server.call(
+        "plan_homework",
+        json!({"operation_id": "op-sun-plan-cross", "week_start": "2026-11-29"}),
+        8,
+    ));
+    assert_eq!(cross_sun["ok"], json!(true), "got {cross_sun}");
+    assert_eq!(cross_sun["result"]["week_starts_on"], json!("sunday"));
+    let chem_row = cross_sun["result"]["placed"]
+        .as_array()
+        .and_then(|arr| arr.iter().find(|r| r["assignment_id"] == "chem"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    assert_eq!(chem_row["day"], json!(1));
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let w_dec: String = conn
+        .query_row(
+            "SELECT blocks FROM weeks WHERE user_id = ?1 AND week_start = '2026-11-30'",
+            (world.user,),
+            |row| row.get(0),
+        )
+        .expect("w_dec");
+    let w_dec_blocks: Value = serde_json::from_str(&w_dec).expect("json");
+    assert_eq!(session_of(&w_dec_blocks, "chem")["days"], json!([0]));
+}

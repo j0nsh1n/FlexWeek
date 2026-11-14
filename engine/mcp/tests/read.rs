@@ -498,6 +498,7 @@ fn the_helper_follows_the_first_day_of_the_week_it_is_told() {
     // to 4) and Monday 26's its Monday and Tuesday (days 5 and 6).
     let week = body_of(&server.call("get_week", json!({"week_start": "2026-10-21"}), 3));
     assert_eq!(week["week_start"], "2026-10-21");
+    assert_eq!(week["week_starts_on"], "wednesday");
     assert_eq!(week["revision"], json!([4, 0]));
     let blocks = list(&week, "blocks").expect("blocks");
     let days_of = |id: &str| {
@@ -508,10 +509,16 @@ fn the_helper_follows_the_first_day_of_the_week_it_is_told() {
     assert_eq!(days_of("s1"), Some(json!([0])));
     // Standing School on Mondays falls on Monday 26, day 5.
     assert_eq!(days_of("school"), Some(json!([5])));
-    let refused = server.call("get_week", json!({"week_start": "2026-10-19"}), 4);
+    // Old clients passing a Monday stored week are still accepted when weeks start on Wednesday.
+    let monday_compat = body_of(&server.call("get_week", json!({"week_start": "2026-10-19"}), 4));
+    assert_eq!(monday_compat["week_start"], "2026-10-19");
+    assert_eq!(monday_compat["week_starts_on"], "monday");
+    assert_eq!(monday_compat["revision"], json!(4));
+    let refused = server.call("get_week", json!({"week_start": "2026-10-20"}), 5);
     assert!(tool_error_text(&refused).is_some(), "{refused}");
     // October's rows start on Wednesday 30 September.
-    let month = body_of(&server.call("get_month", json!({"month": "2026-10"}), 5));
+    let month = body_of(&server.call("get_month", json!({"month": "2026-10"}), 6));
+    assert_eq!(month["week_starts_on"], "wednesday");
     let first = list(&month, "days").and_then(|days| days.first()).cloned();
     assert_eq!(
         first.and_then(|day| day.get("date").cloned()),
@@ -560,6 +567,7 @@ fn the_helpers_week_from_another_day_lets_waiting_homework_run_to_its_due_date()
     ]);
     server.handshake();
     let week = body_of(&server.call("get_week", json!({"week_start": "2026-10-21"}), 2));
+    assert_eq!(week["week_starts_on"], "wednesday");
     let blocks = list(&week, "blocks").expect("blocks");
     assert_eq!(
         by_id(blocks, "w1")
@@ -567,5 +575,214 @@ fn the_helpers_week_from_another_day_lets_waiting_homework_run_to_its_due_date()
             .cloned(),
         Some(json!([0, 1, 2, 3, 4, 5, 6])),
         "{week}"
+    );
+}
+
+#[test]
+fn week_start_changes_in_week_start_json_reach_the_running_helper_and_flag_stays_override() {
+    let world = fixture("week-start-live");
+    let mut server = boot(&world);
+    server.handshake();
+    assert_eq!(
+        body_of(&server.call("whoami", json!({}), 2))["week_starts_on"],
+        "monday"
+    );
+    assert_eq!(
+        body_of(&server.call("get_today", json!({}), 3))["week_starts_on"],
+        "monday"
+    );
+    // Changing week-start.json while the helper runs is picked up on the next call.
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wednesday file");
+    assert_eq!(
+        body_of(&server.call("whoami", json!({}), 4))["week_starts_on"],
+        "wednesday"
+    );
+    let wed = body_of(&server.call("get_week", json!({"week_start": "2026-10-21"}), 5));
+    assert_eq!(wed["week_starts_on"], "wednesday");
+    assert_eq!(wed["revision"], json!([4, 0]));
+    // get_today's week_start is still the stored Monday week, and says so.
+    let today = body_of(&server.call("get_today", json!({}), 6));
+    assert_eq!(today["week_start"], "2026-10-19");
+    assert_eq!(today["week_starts_on"], "monday");
+    // Switching again to Sunday without restarting is picked up immediately.
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "sunday"}"#,
+    )
+    .expect("sunday file");
+    assert_eq!(
+        body_of(&server.call("whoami", json!({}), 7))["week_starts_on"],
+        "sunday"
+    );
+    let sun = body_of(&server.call("get_week", json!({"week_start": "2026-10-18"}), 8));
+    assert_eq!(sun["week_starts_on"], "sunday");
+    assert_eq!(sun["revision"], json!([1, 4]));
+    // Invalid content falls back to Monday.
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "funday"}"#,
+    )
+    .expect("invalid file");
+    assert_eq!(
+        body_of(&server.call("whoami", json!({}), 9))["week_starts_on"],
+        "monday"
+    );
+    drop(server);
+
+    // --week-starts-on overrides week-start.json even if the file changes while running.
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "sunday"}"#,
+    )
+    .expect("sunday override test");
+    let mut fixed_server = Server::spawn(&[
+        "--data-dir",
+        &world.data_arg,
+        "--database",
+        &world.database_arg,
+        "--now",
+        NOW_ISO,
+        "--week-starts-on",
+        "wednesday",
+    ]);
+    fixed_server.handshake();
+    assert_eq!(
+        body_of(&fixed_server.call("whoami", json!({}), 2))["week_starts_on"],
+        "wednesday"
+    );
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "friday"}"#,
+    )
+    .expect("friday file");
+    assert_eq!(
+        body_of(&fixed_server.call("whoami", json!({}), 3))["week_starts_on"],
+        "wednesday"
+    );
+}
+
+#[test]
+fn list_homework_follows_monday_sunday_wednesday_and_month_end_crossing_weeks() {
+    let world = fixture("homework-shown-weeks");
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    // Replace current week 2026-10-19 with two sessions for essay: Mon 19 (30m) and Wed 21 (45m),
+    // plus a session in 2026-11-02 (Mon 2 Nov, 60m) for month-end crossing 2026-10-28 (Wed)..Nov 3.
+    let w1 = json!([
+        {
+            "id": "s-mon", "title": "Draft", "kind": "flexible", "duration_min": 30,
+            "days": [0], "start": "15:00", "assignment_id": "essay"
+        },
+        {
+            "id": "s-wed", "title": "Draft", "kind": "flexible", "duration_min": 45,
+            "days": [2], "start": "16:00", "assignment_id": "essay"
+        }
+    ])
+    .to_string();
+    let w_nov = json!([
+        {
+            "id": "s-nov", "title": "Later", "kind": "flexible", "duration_min": 60,
+            "days": [0], "start": "17:00", "assignment_id": "later"
+        }
+    ])
+    .to_string();
+    let w_dec = json!([
+        {
+            "id": "s-dec", "title": "Later", "kind": "flexible", "duration_min": 30,
+            "days": [1], "start": "17:00", "assignment_id": "later"
+        }
+    ])
+    .to_string();
+    conn.execute(
+        "UPDATE weeks SET blocks = ?1 WHERE user_id = 1 AND week_start = '2026-10-19'",
+        [w1],
+    )
+    .expect("update w1");
+    conn.execute(
+        "INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (1, '2026-11-02', ?1, 1)",
+        [w_nov],
+    )
+    .expect("insert w_nov");
+    conn.execute(
+        "INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (1, '2026-11-30', ?1, 1)",
+        [w_dec],
+    )
+    .expect("insert w_dec");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+
+    let mut server = boot(&world);
+    server.handshake();
+    // Monday start: counts Mon 19 + Wed 21 = 75 min.
+    let mon = body_of(&server.call("list_homework", json!({"week_start": "2026-10-19"}), 2));
+    assert_eq!(mon["week_starts_on"], "monday");
+    assert_eq!(
+        by_id(list(&mon, "assignments").expect("list"), "essay")
+            .and_then(|item| item.get("planned_min"))
+            .and_then(Value::as_i64),
+        Some(75)
+    );
+
+    // Switch live to Wednesday: from Wed 21 Oct omits Mon 19 (30m) and keeps Wed 21 (45m).
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+    let wed = body_of(&server.call("list_homework", json!({"week_start": "2026-10-21"}), 3));
+    assert_eq!(wed["week_start"], "2026-10-21");
+    assert_eq!(wed["week_starts_on"], "wednesday");
+    assert_eq!(
+        by_id(list(&wed, "assignments").expect("list"), "essay")
+            .and_then(|item| item.get("planned_min"))
+            .and_then(Value::as_i64),
+        Some(45)
+    );
+    // Month-end crossing Wednesday 2026-10-28..2026-11-03 sees Nov 2 (60m) + Nov 3/Dec (30m) = 90m.
+    let cross_wed = body_of(&server.call("list_homework", json!({"week_start": "2026-10-28"}), 4));
+    assert_eq!(cross_wed["week_starts_on"], "wednesday");
+    assert_eq!(
+        by_id(list(&cross_wed, "assignments").expect("list"), "later")
+            .and_then(|item| item.get("planned_min"))
+            .and_then(Value::as_i64),
+        Some(90)
+    );
+    // Old client passing Monday 2026-10-19 still works as Monday.
+    let compat = body_of(&server.call("list_homework", json!({"week_start": "2026-10-19"}), 5));
+    assert_eq!(compat["week_starts_on"], "monday");
+    assert_eq!(
+        by_id(list(&compat, "assignments").expect("list"), "essay")
+            .and_then(|item| item.get("planned_min"))
+            .and_then(Value::as_i64),
+        Some(75)
+    );
+
+    // Switch live to Sunday: Sun 18 Oct includes Mon 19 + Wed 21 = 75m; month-end crossing
+    // Sun 2026-11-29..Sat Dec 5 includes Tue Dec 1 (30m).
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "sunday"}"#,
+    )
+    .expect("sun");
+    let sun = body_of(&server.call("list_homework", json!({"week_start": "2026-10-18"}), 6));
+    assert_eq!(sun["week_starts_on"], "sunday");
+    assert_eq!(
+        by_id(list(&sun, "assignments").expect("list"), "essay")
+            .and_then(|item| item.get("planned_min"))
+            .and_then(Value::as_i64),
+        Some(75)
+    );
+    let cross_sun = body_of(&server.call("list_homework", json!({"week_start": "2026-11-29"}), 7));
+    assert_eq!(cross_sun["week_starts_on"], "sunday");
+    assert_eq!(
+        by_id(list(&cross_sun, "assignments").expect("list"), "later")
+            .and_then(|item| item.get("planned_min"))
+            .and_then(Value::as_i64),
+        Some(30)
     );
 }
