@@ -472,6 +472,10 @@ fn restore_point_undoes_the_assistants_whole_change_and_can_be_undone() {
     );
     let body = body_of(&restored);
     assert_eq!(body["ok"], json!(true), "the restore lands, got {restored}");
+    assert_eq!(
+        body["result"]["weeks"][0]["week_starts_on"],
+        json!("monday")
+    );
     let (week, revision) = week_row(&world);
     assert_eq!(
         ids_in(&week),

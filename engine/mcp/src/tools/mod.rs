@@ -4,6 +4,7 @@ mod homework;
 mod plan;
 mod read;
 mod restore;
+mod week;
 mod write;
 
 pub(crate) fn router(

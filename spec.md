@@ -183,8 +183,8 @@ Contract for the finished app:
   Week hides Saturday and Sunday wherever they fall. Plan my homework, Replan
   all and Find a time plan that week, homework added without a date is due at
   the end of its last day, and the assistant helper's week and month follow the
-  day it is started with (`--week-starts-on`, else the computer's file). The
-  phone keeps Monday to Sunday.
+  computer's start day as it is now (read live on each call; `--week-starts-on`
+  overrides it). The phone keeps Monday to Sunday.
 - Day and Week show the whole day, 00:00 to 24:00. Hours scroll, and the
   student can zoom: Ctrl and the wheel, Ctrl with =, - and 0, or two buttons
   beside the hours. Each surface's level is remembered per device in the look

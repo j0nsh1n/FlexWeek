@@ -20,14 +20,19 @@ struct App {
     started_as: Arc<Mutex<Option<i64>>>,
     /// `--read-only`: only the read tools are listed or served.
     read_only: bool,
-    /// The day this computer's weeks start on (0 Monday), from `--week-starts-on` or the desktop's file.
-    first_weekday: u32,
+    /// Explicit `--week-starts-on` override when passed; otherwise each call reads `week-start.json`.
+    week_starts_on_override: Option<u32>,
 }
 
 impl App {
     /// The time for this call. A student's helper runs for days, so nothing about the time is kept.
     fn now(&self) -> Result<host::Clock, String> {
         self.clock.now()
+    }
+
+    /// The first day of the week right now (`--week-starts-on`, else `week-start.json`).
+    pub(crate) fn first_weekday(&self) -> u32 {
+        host::first_weekday(&self.data_dir, self.week_starts_on_override)
     }
 }
 
@@ -79,7 +84,7 @@ async fn main() {
         clock,
         started_as: Arc::new(Mutex::new(signed_in.ok().map(|account| account.user_id))),
         read_only: launch.read_only,
-        first_weekday: launch.first_weekday,
+        week_starts_on_override: launch.week_starts_on_override,
     };
     let served = app.serve(rmcp::transport::stdio()).await;
     let Ok(running) = served else {

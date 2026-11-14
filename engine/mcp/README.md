@@ -37,11 +37,16 @@ only look at it; a write tool renews it, as the desktop does on each request,
 so an assistant that only reads does not keep the student signed in.
 
 ```
-flexweek-mcp --data-dir DIR [--database FILE] [--session-file FILE]
+flexweek-mcp --data-dir DIR [--database FILE] [--session-file FILE] [--week-starts-on DAY]
 ```
 
 `--database` selects a database file. The session file name is then the hash
 of that path, unless `--session-file` names the file directly.
+
+`--week-starts-on` fixes the weekday (`monday`..`sunday`) for the run. Without
+it, each tool call reads `<data folder>/week-start.json` fresh (defaulting to
+`monday` if absent or unreadable), so changing Week starts on in the app reaches
+a running helper on the next call.
 
 `--read-only` lists and serves only the read tools. A call to a write tool is
 answered with a JSON-RPC error and changes nothing. Use it for an assistant
@@ -86,11 +91,11 @@ Read tools (always served):
 
 | Tool | What it returns |
 |---|---|
-| `whoami` | Who is signed in, when the session ends |
-| `get_today` | One day (optional `date`): due soon, sessions, fixed blocks, next action, workload |
-| `get_week` | One week (`week_start`, a Monday) with School and activities merged in, and its revision |
-| `get_month` | One month (`month`, `YYYY-MM`): the grid, deadlines, overdue work |
-| `list_homework` | Homework with planned and unplanned minutes (`week_start`, `include_completed`) |
+| `whoami` | Who is signed in, when the session ends, and the active `week_starts_on` |
+| `get_today` | One day (optional `date`): due soon, sessions, fixed blocks, next action, workload, stored Monday `week_start`, active `week_starts_on` (and `shown_week_start` when not Monday) |
+| `get_week` | One week (`week_start`, matching the start day or a Monday stored week) with School and activities merged in, `week_starts_on`, and its revision |
+| `get_month` | One month (`month`, `YYYY-MM`): the grid starting on `week_starts_on`, deadlines, overdue work |
+| `list_homework` | Homework with planned and unplanned minutes from `week_start` (`week_start`, `include_completed`) and `week_starts_on` |
 | `list_routines` | Saved routines |
 | `list_restore_points` | Restore points, newest first |
 
@@ -119,14 +124,23 @@ on `edit_block` or `delete_block` changes them from this week on, as the app's
 School hours and "This week and later" do. Taken out of this week alone, School
 stays in it missed on its days, as in the app.
 
+All read, write, and plan tools accept a shown `week_start` whose weekday matches
+the current start day (`0..=6` day indices count from `week_start`), compose and
+split across stored Monday weeks automatically, and also still accept a Monday
+stored `week_start` for older clients. Every reply that names a week includes
+`week_starts_on` (`"monday"`..`"sunday"`).
+
 Each write takes an `operation_id` (8 to 80 characters): the same id with the
 same arguments returns the first answer and changes nothing, and the same id with
-other arguments is refused. Edits carry the revision they were read at; a stale
-one returns `{"error": "conflict", "current_revision": N}` and changes nothing.
+other arguments is refused. Edits carry the revision they were read at (an integer
+for a Monday stored week, or `[first_revision, second_revision]` for a shown week
+starting on another day); a stale one returns
+`{"error": "conflict", "current_revision": N}` (or `[first_rev, second_rev]`) and
+changes nothing.
 
 `set_homework_done` and `set_block_done` take an optional `expected_revision`
-(the homework's revision, or the week's from `get_week`), checked the same way
-when it is given.
+(the homework's revision, or the week's revision or pair from `get_week`),
+checked the same way when it is given.
 
 Several writes can be sent at once without waiting for each answer. Each one
 reads what it changes and saves it under one database lock, so changes to

@@ -13,6 +13,7 @@ use rmcp::{tool, tool_router};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
+use super::week::{self, RevisionArg, WeekTarget};
 use super::write::{self, OPERATION_CONFLICT, REACHES_PHONE};
 use crate::session;
 
@@ -92,7 +93,7 @@ struct BlockDoneArgs {
     done: bool,
     /// The week's revision from `get_week`. When given, a newer one is refused as a conflict.
     #[serde(default)]
-    expected_revision: Option<i64>,
+    expected_revision: Option<RevisionArg>,
 }
 
 pub(crate) struct Opened {
@@ -155,8 +156,10 @@ pub(crate) fn remembered(
 }
 
 /// Every assistant write lands here, and saves a restore point of the account before it changes
-/// anything, so the student can undo the whole change in one step.
-pub(crate) fn run_apply(
+/// anything, so the student can undo the whole change in one step. `finish_in_tx` builds and saves
+/// any extra tool reply inside the same transaction so a failure rolls everything back together.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn run_apply_with<F>(
     conn: &Connection,
     user_id: i64,
     tool: &str,
@@ -164,7 +167,11 @@ pub(crate) fn run_apply(
     digest: &str,
     mut input: ApplyInput,
     clock: &ApplyClock,
-) -> Result<Value, String> {
+    finish_in_tx: F,
+) -> Result<Value, String>
+where
+    F: FnOnce(&Connection, &Value) -> Result<Value, String>,
+{
     input.operation_id = Some(operation_id.to_string());
     input.argument_digest = Some(digest.to_string());
     let (restore_token, label) =
@@ -176,14 +183,43 @@ pub(crate) fn run_apply(
     };
     let applied = apply_within(conn, user_id, &input, &clock);
     // A refused write changes nothing, the restore point pruning above included.
-    let end = if applied.is_ok() {
-        "COMMIT"
-    } else {
-        "ROLLBACK"
+    let (result, should_commit) = match write::from_apply(applied) {
+        Ok(value) if value.get("error").is_some() => (Ok(value), false),
+        Ok(value) => match finish_in_tx(conn, &value) {
+            Ok(answer) => (Ok(answer), true),
+            Err(err) => (Err(err), false),
+        },
+        Err(err) => (Err(err), false),
     };
-    conn.execute(end, [])
-        .map_err(|error| session::storage_sentence(error.into()))?;
-    write::from_apply(applied)
+    let end = if should_commit { "COMMIT" } else { "ROLLBACK" };
+    if let Err(error) = conn.execute(end, []) {
+        if should_commit {
+            let _ = conn.execute("ROLLBACK", []);
+        }
+        return Err(session::storage_sentence(error.into()));
+    }
+    result
+}
+
+pub(crate) fn run_apply(
+    conn: &Connection,
+    user_id: i64,
+    tool: &str,
+    operation_id: &str,
+    digest: &str,
+    input: ApplyInput,
+    clock: &ApplyClock,
+) -> Result<Value, String> {
+    run_apply_with(
+        conn,
+        user_id,
+        tool,
+        operation_id,
+        digest,
+        input,
+        clock,
+        |_, applied| Ok(applied.clone()),
+    )
 }
 
 pub(crate) fn parse_blocks(text: &str) -> Result<Vec<Value>, String> {
@@ -413,11 +449,23 @@ fn saved_delete(applied: &Value) -> Result<Value, String> {
         .and_then(Value::as_array)
         .and_then(|items| items.first())
         .ok_or_else(|| session::STORAGE_UNAVAILABLE.to_string())?;
+    let mut changed_weeks = entry.get("changed_weeks").cloned().unwrap_or(Value::Null);
+    if let Some(items) = changed_weeks.as_array_mut() {
+        for item in items {
+            if let Some(ws) = item
+                .get("week_start")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+            {
+                week::add_week_starts_on(item, &ws)?;
+            }
+        }
+    }
     Ok(json!({
         "ok": true,
         "result": {
             "removed_sessions": entry.get("removed_sessions").cloned().unwrap_or(Value::Null),
-            "changed_weeks": entry.get("changed_weeks").cloned().unwrap_or(Value::Null),
+            "changed_weeks": changed_weeks,
         },
         "reaches_phone": REACHES_PHONE,
     }))
@@ -427,16 +475,24 @@ fn saved_block(applied: &Value) -> Result<Value, String> {
     if applied.get("error").is_some() {
         return Ok(applied.clone());
     }
+    if let Some(reply) = applied.get("shown_reply") {
+        return Ok(reply.clone());
+    }
     let week = applied
         .get("weeks")
         .and_then(Value::as_array)
         .and_then(|items| items.first())
         .ok_or_else(|| session::STORAGE_UNAVAILABLE.to_string())?;
+    let week_start = week
+        .get("week_start")
+        .and_then(Value::as_str)
+        .ok_or_else(|| session::STORAGE_UNAVAILABLE.to_string())?;
     let revision = week.get("revision").cloned().unwrap_or(Value::Null);
     Ok(json!({
         "ok": true,
         "result": {
-            "week_start": week.get("week_start").cloned().unwrap_or(Value::Null),
+            "week_start": week_start,
+            "week_starts_on": week::weekday_name(week_start)?,
             "revision": revision,
         },
         "revision": revision,
@@ -446,7 +502,10 @@ fn saved_block(applied: &Value) -> Result<Value, String> {
 
 /// The digest takes `expected_revision` only when it was sent, so an operation remembered before
 /// the field existed still matches its retry.
-fn with_revision(mut arguments: Value, expected_revision: Option<i64>) -> Value {
+fn with_revision<T: serde::Serialize>(
+    mut arguments: Value,
+    expected_revision: Option<&T>,
+) -> Value {
     if let (Some(revision), Some(map)) = (expected_revision, arguments.as_object_mut()) {
         map.insert("expected_revision".into(), json!(revision));
     }
@@ -640,7 +699,7 @@ impl crate::App {
                 &args.operation_id,
                 &with_revision(
                     json!({"done": args.done, "id": args.id}),
-                    args.expected_revision,
+                    args.expected_revision.as_ref(),
                 ),
             );
             if let Some(saved) = remembered(&opened.conn, opened.user_id, &operation_id, &digest)? {
@@ -741,37 +800,122 @@ impl crate::App {
                         "done": args.done,
                         "week_start": args.week_start,
                     }),
-                    args.expected_revision,
+                    args.expected_revision.as_ref(),
                 ),
             );
             if let Some(saved) = remembered(&opened.conn, opened.user_id, &operation_id, &digest)? {
                 return saved_block(&saved);
             }
-            let (mut blocks, revision) =
-                super::fixed::seen_week(&opened.conn, opened.user_id, &args.week_start)?;
-            blocks::mark_block_done(&mut blocks, &args.block_id, args.day, args.done)?;
-            let input = ApplyInput {
-                weeks: vec![WeekInput {
-                    week_start: args.week_start,
-                    blocks,
-                    revision: args.expected_revision.unwrap_or(revision),
-                }],
-                assignments: Vec::new(),
-                operation_id: None,
-                snapshot_label: None,
-                repeats: None,
-                argument_digest: None,
-            };
-            let applied = run_apply(
-                &opened.conn,
-                opened.user_id,
-                "set_block_done",
-                &operation_id,
-                &digest,
-                input,
-                &clock_of(self)?,
-            )?;
-            saved_block(&applied)
+            match week::resolve_week(&args.week_start, self.first_weekday())? {
+                WeekTarget::StoredMonday => {
+                    let (mut blocks, revision) =
+                        super::fixed::seen_week(&opened.conn, opened.user_id, &args.week_start)?;
+                    blocks::mark_block_done(&mut blocks, &args.block_id, args.day, args.done)?;
+                    let expected =
+                        week::expect_monday_revision(args.expected_revision.as_ref(), revision)?;
+                    let input = ApplyInput {
+                        weeks: vec![WeekInput {
+                            week_start: args.week_start.clone(),
+                            blocks,
+                            revision: expected,
+                        }],
+                        assignments: Vec::new(),
+                        operation_id: None,
+                        snapshot_label: None,
+                        repeats: None,
+                        argument_digest: None,
+                    };
+                    let applied = run_apply(
+                        &opened.conn,
+                        opened.user_id,
+                        "set_block_done",
+                        &operation_id,
+                        &digest,
+                        input,
+                        &clock_of(self)?,
+                    )?;
+                    saved_block(&applied)
+                }
+                WeekTarget::Shown { first, second, .. } => {
+                    let (first_blocks, first_rev) =
+                        super::fixed::seen_week(&opened.conn, opened.user_id, &first)?;
+                    let (second_blocks, second_rev) =
+                        super::fixed::seen_week(&opened.conn, opened.user_id, &second)?;
+                    let mut shown_blocks = week::compose_shown_blocks(
+                        &opened.conn,
+                        opened.user_id,
+                        &args.week_start,
+                        &first_blocks,
+                        &second_blocks,
+                    )?;
+                    blocks::mark_block_done(
+                        &mut shown_blocks,
+                        &args.block_id,
+                        args.day,
+                        args.done,
+                    )?;
+                    let expected = week::expect_shown_revision(
+                        args.expected_revision.as_ref(),
+                        [first_rev, second_rev],
+                    )?;
+                    if let Err(conflict) =
+                        week::check_shown_revision(&opened.conn, first_rev, second_rev, expected)
+                    {
+                        return Ok(conflict);
+                    }
+                    let weeks = week::split_shown_inputs(
+                        &opened.conn,
+                        opened.user_id,
+                        &args.week_start,
+                        &shown_blocks,
+                        &first,
+                        &first_blocks,
+                        first_rev,
+                        &second,
+                        &second_blocks,
+                        second_rev,
+                    )?;
+                    let input = ApplyInput {
+                        weeks,
+                        assignments: Vec::new(),
+                        operation_id: None,
+                        snapshot_label: None,
+                        repeats: None,
+                        argument_digest: None,
+                    };
+                    run_apply_with(
+                        &opened.conn,
+                        opened.user_id,
+                        "set_block_done",
+                        &operation_id,
+                        &digest,
+                        input,
+                        &clock_of(self)?,
+                        |conn, applied| {
+                            let new_r1 = week::week_revision(conn, opened.user_id, &first)?;
+                            let new_r2 = week::week_revision(conn, opened.user_id, &second)?;
+                            let answer = json!({
+                                "ok": true,
+                                "result": {
+                                    "week_start": args.week_start,
+                                    "week_starts_on": week::weekday_name(&args.week_start)?,
+                                    "revision": [new_r1, new_r2],
+                                },
+                                "revision": [new_r1, new_r2],
+                                "reaches_phone": REACHES_PHONE,
+                            });
+                            week::remember_shown_reply(
+                                conn,
+                                opened.user_id,
+                                &operation_id,
+                                applied,
+                                &answer,
+                            )?;
+                            Ok(answer)
+                        },
+                    )
+                }
+            }
         })();
         write::finish("set_block_done", result)
     }

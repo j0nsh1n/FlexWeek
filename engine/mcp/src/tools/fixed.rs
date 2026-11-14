@@ -9,7 +9,8 @@ use flexweek_engine::desk::calendar::{FLEX_CATEGORIES, LOCKED_CATEGORIES};
 use flexweek_engine::desk::grid::{apply_block_edit, is_setup_block, past_problem, span_clash};
 use flexweek_engine::desk::weekmodel::clock_text;
 use flexweek_engine::repeats::{apply_to_week, edit_intent};
-use flexweek_engine::time::{clock_to_minutes, hhmm_to_minutes, minutes_to_hhmm};
+use flexweek_engine::shown::family_id;
+use flexweek_engine::time::{clock_to_minutes, hhmm_to_minutes, minutes_to_hhmm, span_fits_day};
 use flexweek_store::{
     ApplyInput, AssignmentInput, Connection, WeekInput, read_week, standing_blocks,
     week_with_standing,
@@ -21,6 +22,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::homework;
+use super::week::{self, RevisionArg, WeekTarget};
 use super::write::{self, REACHES_PHONE};
 use crate::session;
 
@@ -28,7 +30,10 @@ const FLEXIBLE: &str = "Use the homework editor for flexible work.";
 const NOT_IN_WEEK: &str = "That block is not in this week, so nothing changed.";
 const NOT_STANDING: &str =
     "Only School and Setup's activities stand in every week, so every_week does not apply.";
-const DAYS_RULE: &str = "days must name at least one day, 0 (Monday) to 6 (Sunday), once each";
+const DAYS_RULE_MONDAY: &str =
+    "days must name at least one day, 0 (Monday) to 6 (Sunday), once each";
+const DAYS_RULE_SHOWN: &str =
+    "days must name at least one day, 0 (the week's first day) to 6 (its last), once each";
 const DEFAULT_CATEGORY: &str = "extra";
 
 #[derive(Deserialize, JsonSchema)]
@@ -37,7 +42,7 @@ struct AddArgs {
     operation_id: String,
     week_start: String,
     title: String,
-    /// Days of the week it is on, 0 (Monday) to 6 (Sunday). Several days repeat it this week.
+    /// Days of the week it is on, 0 (the week's first day) to 6 (its last). Several days repeat it this week.
     days: Vec<i64>,
     start: String,
     /// HH:MM; 24:00 is the end of the day.
@@ -45,9 +50,9 @@ struct AddArgs {
     /// One of class, exercise, extra, meals, sleep, free. Default extra.
     #[serde(default)]
     category: Option<String>,
-    /// When given, a week changed since then is a conflict.
+    /// When given, a week changed since then is a conflict. `[first_revision, second_revision]` for a non-Monday week.
     #[serde(default)]
-    expected_revision: Option<i64>,
+    expected_revision: Option<RevisionArg>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -55,7 +60,7 @@ struct AddArgs {
 struct EditArgs {
     operation_id: String,
     week_start: String,
-    expected_revision: i64,
+    expected_revision: RevisionArg,
     block_id: String,
     #[serde(default)]
     title: Option<String>,
@@ -82,7 +87,7 @@ struct EditArgs {
 struct SkipArgs {
     operation_id: String,
     week_start: String,
-    expected_revision: i64,
+    expected_revision: RevisionArg,
     block_id: String,
     day: i64,
     /// false takes the skip back. Default true.
@@ -130,7 +135,7 @@ fn category_of(given: Option<&str>) -> Result<String, String> {
     Ok(category.to_string())
 }
 
-fn days_of(days: &[i64]) -> Result<Vec<i64>, String> {
+fn days_of(days: &[i64], monday_wording: bool) -> Result<Vec<i64>, String> {
     let mut sorted = days.to_vec();
     sorted.sort_unstable();
     sorted.dedup();
@@ -138,7 +143,12 @@ fn days_of(days: &[i64]) -> Result<Vec<i64>, String> {
         || sorted.len() != days.len()
         || sorted.iter().any(|day| !(0..=6).contains(day))
     {
-        return Err(DAYS_RULE.into());
+        return Err(if monday_wording {
+            DAYS_RULE_MONDAY
+        } else {
+            DAYS_RULE_SHOWN
+        }
+        .into());
     }
     Ok(sorted)
 }
@@ -219,10 +229,17 @@ fn saved(applied: &Value, block_id: &str, operation_id: &str) -> Result<Value, S
     if applied.get("error").is_some() {
         return Ok(applied.clone());
     }
+    if let Some(reply) = applied.get("shown_reply") {
+        return Ok(reply.clone());
+    }
     let week = applied
         .get("weeks")
         .and_then(Value::as_array)
         .and_then(|items| items.first())
+        .ok_or_else(|| session::STORAGE_UNAVAILABLE.to_string())?;
+    let week_start = week
+        .get("week_start")
+        .and_then(Value::as_str)
         .ok_or_else(|| session::STORAGE_UNAVAILABLE.to_string())?;
     let blocks = week["blocks"].as_array().cloned().unwrap_or_default();
     let next_to = match find(&blocks, block_id) {
@@ -233,12 +250,45 @@ fn saved(applied: &Value, block_id: &str, operation_id: &str) -> Result<Value, S
     Ok(json!({
         "ok": true,
         "result": {
-            "week_start": week.get("week_start").cloned().unwrap_or(Value::Null),
+            "week_start": week_start,
+            "week_starts_on": week::weekday_name(week_start)?,
             "revision": revision,
             "block_id": block_id,
             "beside": next_to,
         },
         "revision": revision,
+        "restore_point": write::point_id(operation_id),
+        "reaches_phone": REACHES_PHONE,
+    }))
+}
+
+fn build_shown_saved_reply(
+    conn: &Connection,
+    user_id: i64,
+    week_start: &str,
+    first: &str,
+    second: &str,
+    block_id: &str,
+    operation_id: &str,
+) -> Result<Value, String> {
+    let (first_after, new_r1) = seen_week(conn, user_id, first)?;
+    let (second_after, new_r2) = seen_week(conn, user_id, second)?;
+    let shown_after =
+        week::compose_shown_blocks(conn, user_id, week_start, &first_after, &second_after)?;
+    let next_to = match find(&shown_after, block_id) {
+        Some(block) => beside(&shown_after, &block)?,
+        None => None,
+    };
+    Ok(json!({
+        "ok": true,
+        "result": {
+            "week_start": week_start,
+            "week_starts_on": week::weekday_name(week_start)?,
+            "revision": [new_r1, new_r2],
+            "block_id": block_id,
+            "beside": next_to,
+        },
+        "revision": [new_r1, new_r2],
         "restore_point": write::point_id(operation_id),
         "reaches_phone": REACHES_PHONE,
     }))
@@ -267,12 +317,14 @@ fn perform_add(app: &crate::App, args: &AddArgs) -> Result<Value, String> {
         return saved(&remembered, &block_id, &operation_id);
     }
     let category = category_of(args.category.as_deref())?;
-    let days = days_of(&args.days)?;
+    let monday_wording =
+        flexweek_engine::time::is_week_start(&args.week_start) || app.first_weekday() == 0;
+    let days = days_of(&args.days, monday_wording)?;
     let (start_min, end_min) = span_of(&args.start, &args.end)?;
+    let target = week::resolve_week(&args.week_start, app.first_weekday())?;
     for day in &days {
         past_of(app, &args.week_start, *day, start_min)?;
     }
-    let (blocks, revision) = seen_week(&opened.conn, opened.user_id, &args.week_start)?;
     let block = json!({
         "id": block_id,
         "title": args.title.trim(),
@@ -284,29 +336,108 @@ fn perform_add(app: &crate::App, args: &AddArgs) -> Result<Value, String> {
         "priority": 3,
         "energy": "medium",
     });
-    let mut fresh = fresh_ids(&args.operation_id);
-    let edited = apply_block_edit(
-        &Value::Array(blocks),
-        &block,
-        &json!("series"),
-        &Value::Null,
-        &mut fresh,
-    )
-    .map_err(|err| err.message)?;
-    let applied = homework::run_apply(
-        &opened.conn,
-        opened.user_id,
-        "add_block",
-        &operation_id,
-        &digest,
-        week_input(
-            &args.week_start,
-            edited,
-            args.expected_revision.unwrap_or(revision),
-        ),
-        &homework::clock_of(app)?,
-    )?;
-    saved(&applied, &block_id, &operation_id)
+    match target {
+        WeekTarget::StoredMonday => {
+            let (blocks, revision) = seen_week(&opened.conn, opened.user_id, &args.week_start)?;
+            let expected = week::expect_monday_revision(args.expected_revision.as_ref(), revision)?;
+            let mut fresh = fresh_ids(&args.operation_id);
+            let edited = apply_block_edit(
+                &Value::Array(blocks),
+                &block,
+                &json!("series"),
+                &Value::Null,
+                &mut fresh,
+            )
+            .map_err(|err| err.message)?;
+            let applied = homework::run_apply(
+                &opened.conn,
+                opened.user_id,
+                "add_block",
+                &operation_id,
+                &digest,
+                week_input(&args.week_start, edited, expected),
+                &homework::clock_of(app)?,
+            )?;
+            saved(&applied, &block_id, &operation_id)
+        }
+        WeekTarget::Shown { first, second, .. } => {
+            let (first_blocks, first_rev) = seen_week(&opened.conn, opened.user_id, &first)?;
+            let (second_blocks, second_rev) = seen_week(&opened.conn, opened.user_id, &second)?;
+            let expected = week::expect_shown_revision(
+                args.expected_revision.as_ref(),
+                [first_rev, second_rev],
+            )?;
+            if let Err(conflict) =
+                week::check_shown_revision(&opened.conn, first_rev, second_rev, expected)
+            {
+                return Ok(conflict);
+            }
+            let shown_blocks = week::compose_shown_blocks(
+                &opened.conn,
+                opened.user_id,
+                &args.week_start,
+                &first_blocks,
+                &second_blocks,
+            )?;
+            let mut fresh = fresh_ids(&args.operation_id);
+            let edited = apply_block_edit(
+                &Value::Array(shown_blocks),
+                &block,
+                &json!("series"),
+                &Value::Null,
+                &mut fresh,
+            )
+            .map_err(|err| err.message)?;
+            let weeks = week::split_shown_inputs(
+                &opened.conn,
+                opened.user_id,
+                &args.week_start,
+                &edited,
+                &first,
+                &first_blocks,
+                first_rev,
+                &second,
+                &second_blocks,
+                second_rev,
+            )?;
+            let input = ApplyInput {
+                weeks,
+                assignments: Vec::<AssignmentInput>::new(),
+                operation_id: None,
+                snapshot_label: None,
+                repeats: None,
+                argument_digest: None,
+            };
+            homework::run_apply_with(
+                &opened.conn,
+                opened.user_id,
+                "add_block",
+                &operation_id,
+                &digest,
+                input,
+                &homework::clock_of(app)?,
+                |conn, applied| {
+                    let answer = build_shown_saved_reply(
+                        conn,
+                        opened.user_id,
+                        &args.week_start,
+                        &first,
+                        &second,
+                        &block_id,
+                        &operation_id,
+                    )?;
+                    week::remember_shown_reply(
+                        conn,
+                        opened.user_id,
+                        &operation_id,
+                        applied,
+                        &answer,
+                    )?;
+                    Ok(answer)
+                },
+            )
+        }
+    }
 }
 
 /// `BlockDialog._moved_into_the_past` for a block that exists: only a day it is newly on, or a
@@ -337,6 +468,7 @@ fn edit_past(
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn perform_edit(app: &crate::App, args: &EditArgs) -> Result<Value, String> {
     let opened = homework::open(app)?;
     let operation_id = write::operation_key(&args.operation_id)?;
@@ -370,8 +502,43 @@ fn perform_edit(app: &crate::App, args: &EditArgs) -> Result<Value, String> {
     {
         return Err("scope must be series or occurrence".into());
     }
-    let (blocks, _) = seen_week(&opened.conn, opened.user_id, &args.week_start)?;
-    let Some(original) = find(&blocks, &args.block_id) else {
+    let target = week::resolve_week(&args.week_start, app.first_weekday())?;
+    let (shown_blocks, monday_rev, shown_parts) = match target {
+        WeekTarget::StoredMonday => {
+            let (blocks, _) = seen_week(&opened.conn, opened.user_id, &args.week_start)?;
+            let expected = week::expect_monday_revision(Some(&args.expected_revision), 0)?;
+            (blocks, Some(expected), None)
+        }
+        WeekTarget::Shown {
+            first,
+            second,
+            offset,
+        } => {
+            let (first_blocks, first_rev) = seen_week(&opened.conn, opened.user_id, &first)?;
+            let (second_blocks, second_rev) = seen_week(&opened.conn, opened.user_id, &second)?;
+            let shown_blocks = week::compose_shown_blocks(
+                &opened.conn,
+                opened.user_id,
+                &args.week_start,
+                &first_blocks,
+                &second_blocks,
+            )?;
+            (
+                shown_blocks,
+                None,
+                Some((
+                    first,
+                    first_blocks,
+                    first_rev,
+                    second,
+                    second_blocks,
+                    second_rev,
+                    offset,
+                )),
+            )
+        }
+    };
+    let Some(original) = find(&shown_blocks, &args.block_id) else {
         return Err(NOT_IN_WEEK.into());
     };
     if original["kind"] != json!("locked") {
@@ -397,8 +564,9 @@ fn perform_edit(app: &crate::App, args: &EditArgs) -> Result<Value, String> {
         }
     };
     let (start_min, end_min) = span_of(&start, &end)?;
+    let monday_wording = shown_parts.is_none();
     let days = match &args.days {
-        Some(days) if !occurrence => days_of(days)?,
+        Some(days) if !occurrence => days_of(days, monday_wording)?,
         _ => original["days"]
             .as_array()
             .into_iter()
@@ -441,28 +609,97 @@ fn perform_edit(app: &crate::App, args: &EditArgs) -> Result<Value, String> {
             .collect();
         fields.insert("missed_days".into(), Value::Array(missed));
     }
+    let Some((first, first_blocks, first_rev, second, second_blocks, second_rev, offset)) =
+        shown_parts
+    else {
+        let expected = monday_rev.unwrap_or(0);
+        let input = if every_week {
+            every_week_input(
+                &opened.conn,
+                opened.user_id,
+                args,
+                &shown_blocks,
+                start_min,
+                end_min,
+                expected,
+            )?
+        } else {
+            let mut fresh = fresh_ids(&args.operation_id);
+            let edited = apply_block_edit(
+                &Value::Array(shown_blocks),
+                &candidate,
+                &json!(if occurrence { "occurrence" } else { "series" }),
+                &args.day.map_or(Value::Null, Value::from),
+                &mut fresh,
+            )
+            .map_err(|err| err.message)?;
+            week_input(&args.week_start, edited, expected)
+        };
+        let applied = homework::run_apply(
+            &opened.conn,
+            opened.user_id,
+            "edit_block",
+            &operation_id,
+            &digest,
+            input,
+            &homework::clock_of(app)?,
+        )?;
+        let shown = edited_id(&applied, args, occurrence);
+        return saved(&applied, &shown, &operation_id);
+    };
+    let expected =
+        week::expect_shown_revision(Some(&args.expected_revision), [first_rev, second_rev])?;
+    if let Err(conflict) = week::check_shown_revision(&opened.conn, first_rev, second_rev, expected)
+    {
+        return Ok(conflict);
+    }
     let input = if every_week {
-        every_week_input(
+        every_week_shown_input(
             &opened.conn,
             opened.user_id,
             args,
-            &blocks,
+            &first,
+            &first_blocks,
+            first_rev,
+            &second,
+            &second_blocks,
+            second_rev,
+            offset,
             start_min,
             end_min,
         )?
     } else {
         let mut fresh = fresh_ids(&args.operation_id);
         let edited = apply_block_edit(
-            &Value::Array(blocks),
+            &Value::Array(shown_blocks),
             &candidate,
             &json!(if occurrence { "occurrence" } else { "series" }),
             &args.day.map_or(Value::Null, Value::from),
             &mut fresh,
         )
         .map_err(|err| err.message)?;
-        week_input(&args.week_start, edited, args.expected_revision)
+        let weeks = week::split_shown_inputs(
+            &opened.conn,
+            opened.user_id,
+            &args.week_start,
+            &edited,
+            &first,
+            &first_blocks,
+            first_rev,
+            &second,
+            &second_blocks,
+            second_rev,
+        )?;
+        ApplyInput {
+            weeks,
+            assignments: Vec::<AssignmentInput>::new(),
+            operation_id: None,
+            snapshot_label: None,
+            repeats: None,
+            argument_digest: None,
+        }
     };
-    let applied = homework::run_apply(
+    homework::run_apply_with(
         &opened.conn,
         opened.user_id,
         "edit_block",
@@ -470,29 +707,57 @@ fn perform_edit(app: &crate::App, args: &EditArgs) -> Result<Value, String> {
         &digest,
         input,
         &homework::clock_of(app)?,
-    )?;
-    let shown = edited_id(&applied, args, occurrence);
-    saved(&applied, &shown, &operation_id)
+        |conn, applied| {
+            let (first_after, new_r1) = seen_week(conn, opened.user_id, &first)?;
+            let (second_after, new_r2) = seen_week(conn, opened.user_id, &second)?;
+            let shown_after = week::compose_shown_blocks(
+                conn,
+                opened.user_id,
+                &args.week_start,
+                &first_after,
+                &second_after,
+            )?;
+            let shown_id = if occurrence {
+                let fresh = flexweek_store::digest(&format!("block:{}", args.operation_id));
+                shown_after
+                    .iter()
+                    .filter_map(|block| block["id"].as_str())
+                    .find(|id| id.starts_with(&fresh))
+                    .map_or_else(|| args.block_id.clone(), str::to_string)
+            } else {
+                args.block_id.clone()
+            };
+            let next_to = match find(&shown_after, &shown_id) {
+                Some(block) => beside(&shown_after, &block)?,
+                None => None,
+            };
+            let answer = json!({
+                "ok": true,
+                "result": {
+                    "week_start": args.week_start,
+                    "week_starts_on": week::weekday_name(&args.week_start)?,
+                    "revision": [new_r1, new_r2],
+                    "block_id": shown_id,
+                    "beside": next_to,
+                },
+                "revision": [new_r1, new_r2],
+                "restore_point": write::point_id(&operation_id),
+                "reaches_phone": REACHES_PHONE,
+            });
+            week::remember_shown_reply(conn, opened.user_id, &operation_id, applied, &answer)?;
+            Ok(answer)
+        },
+    )
 }
 
-/// An `every_week` edit: only the arguments the assistant named change, from this week on, measured
-/// against the repeat rather than this week's copy, so what this week changed itself (a skipped day,
-/// a one-week name) neither spreads to later weeks nor is lost here.
-fn every_week_input(
-    conn: &Connection,
-    user_id: i64,
+fn apply_repeat_fields(
+    repeat: &Value,
     args: &EditArgs,
-    blocks: &[Value],
+    offset: i64,
     start_min: i64,
     end_min: i64,
-) -> Result<ApplyInput, String> {
-    let repeats =
-        standing_blocks(conn, user_id, &args.week_start).map_err(session::storage_sentence)?;
-    // A piece of School split off at a week's seam changes School.
-    let family = flexweek_engine::shown::family_id(&args.block_id);
-    let Some(repeat) = find(&repeats, family) else {
-        return Err(NOT_STANDING.into());
-    };
+    monday_wording: bool,
+) -> Result<Value, String> {
     let mut wanted = repeat.clone();
     if let Some(fields) = wanted.as_object_mut() {
         if let Some(title) = &args.title {
@@ -509,10 +774,39 @@ fn every_week_input(
             fields.insert("duration_min".into(), json!(end_min - start_min));
         }
         if let Some(days) = &args.days {
-            fields.insert("days".into(), json!(days_of(days)?));
+            let mut weekdays: Vec<i64> = days_of(days, monday_wording)?
+                .into_iter()
+                .map(|day| (day + offset).rem_euclid(7))
+                .collect();
+            weekdays.sort_unstable();
+            weekdays.dedup();
+            fields.insert("days".into(), json!(weekdays));
         }
     }
-    let mut input = week_input(&args.week_start, blocks.to_vec(), args.expected_revision);
+    Ok(wanted)
+}
+
+/// An `every_week` edit: only the arguments the assistant named change, from this week on, measured
+/// against the repeat rather than this week's copy, so what this week changed itself (a skipped day,
+/// a one-week name) neither spreads to later weeks nor is lost here.
+fn every_week_input(
+    conn: &Connection,
+    user_id: i64,
+    args: &EditArgs,
+    blocks: &[Value],
+    start_min: i64,
+    end_min: i64,
+    expected_revision: i64,
+) -> Result<ApplyInput, String> {
+    let repeats =
+        standing_blocks(conn, user_id, &args.week_start).map_err(session::storage_sentence)?;
+    // A piece of School split off at a week's seam changes School.
+    let family = family_id(&args.block_id);
+    let Some(repeat) = find(&repeats, family) else {
+        return Err(NOT_STANDING.into());
+    };
+    let wanted = apply_repeat_fields(&repeat, args, 0, start_min, end_min, true)?;
+    let mut input = week_input(&args.week_start, blocks.to_vec(), expected_revision);
     let Some(intent) = edit_intent(family, &args.week_start, Some(&repeat), Some(&wanted)) else {
         return Ok(input);
     };
@@ -520,6 +814,109 @@ fn every_week_input(
     input.weeks[0].blocks = week;
     input.repeats = Some(vec![intent.to_value()]);
     Ok(input)
+}
+
+/// The end a standing version gets from an every-week edit: the edit's own end when it names one,
+/// otherwise the version's own length from the new start. A version that would then run past midnight
+/// refuses the edit before anything is written.
+fn own_end_of(
+    repeat: &Value,
+    args: &EditArgs,
+    start_min: i64,
+    end_min: i64,
+) -> Result<i64, String> {
+    if args.end.is_some() {
+        return Ok(end_min);
+    }
+    let length = repeat["duration_min"]
+        .as_i64()
+        .unwrap_or(end_min - start_min);
+    if !span_fits_day(start_min, length) {
+        return Err("block must fit between 00:00 and 24:00".into());
+    }
+    Ok(start_min + length)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn every_week_shown_input(
+    conn: &Connection,
+    user_id: i64,
+    args: &EditArgs,
+    first: &str,
+    first_blocks: &[Value],
+    first_rev: i64,
+    second: &str,
+    second_blocks: &[Value],
+    second_rev: i64,
+    offset: i64,
+    start_min: i64,
+    end_min: i64,
+) -> Result<ApplyInput, String> {
+    let repeats_first = standing_blocks(conn, user_id, first).map_err(session::storage_sentence)?;
+    let repeats_second =
+        standing_blocks(conn, user_id, second).map_err(session::storage_sentence)?;
+    let family = family_id(&args.block_id);
+    let repeat_first = find(&repeats_first, family);
+    let repeat_second = find(&repeats_second, family);
+    if repeat_first.is_none() && repeat_second.is_none() {
+        return Err(NOT_STANDING.into());
+    }
+    let first_after_repeat = if let Some(repeat) = &repeat_first {
+        let own_end = own_end_of(repeat, args, start_min, end_min)?;
+        let wanted = apply_repeat_fields(repeat, args, offset, start_min, own_end, false)?;
+        if let Some(intent) = edit_intent(family, first, Some(repeat), Some(&wanted)) {
+            apply_to_week(first_blocks, &repeats_first, std::slice::from_ref(&intent))?.0
+        } else {
+            first_blocks.to_vec()
+        }
+    } else {
+        first_blocks.to_vec()
+    };
+    let (second_after_repeat, repeats_input) = if let Some(repeat) = &repeat_second {
+        let own_end = own_end_of(repeat, args, start_min, end_min)?;
+        let wanted = apply_repeat_fields(repeat, args, offset, start_min, own_end, false)?;
+        if let Some(intent) = edit_intent(family, second, Some(repeat), Some(&wanted)) {
+            let intent_val = intent.to_value();
+            let updated = apply_to_week(
+                second_blocks,
+                &repeats_second,
+                std::slice::from_ref(&intent),
+            )?
+            .0;
+            (updated, Some(vec![intent_val]))
+        } else {
+            (second_blocks.to_vec(), None)
+        }
+    } else {
+        (second_blocks.to_vec(), None)
+    };
+    let shown_after = week::compose_shown_blocks(
+        conn,
+        user_id,
+        &args.week_start,
+        &first_after_repeat,
+        &second_after_repeat,
+    )?;
+    let weeks = week::split_shown_inputs(
+        conn,
+        user_id,
+        &args.week_start,
+        &shown_after,
+        first,
+        first_blocks,
+        first_rev,
+        second,
+        &second_after_repeat,
+        second_rev,
+    )?;
+    Ok(ApplyInput {
+        weeks,
+        assignments: Vec::<AssignmentInput>::new(),
+        operation_id: None,
+        snapshot_label: None,
+        repeats: repeats_input,
+        argument_digest: None,
+    })
 }
 
 /// The block the edit left on the asked day: a day split off a series has an id of its own.
@@ -559,38 +956,117 @@ fn perform_skip(app: &crate::App, args: &SkipArgs) -> Result<Value, String> {
     {
         return saved(&remembered, &args.block_id, &operation_id);
     }
-    let (mut blocks, _) = seen_week(&opened.conn, opened.user_id, &args.week_start)?;
-    let Some(block) = blocks
-        .iter_mut()
-        .find(|block| block.get("id").and_then(Value::as_str) == Some(args.block_id.as_str()))
-    else {
-        return Err(NOT_IN_WEEK.into());
+    let apply_skip = |blocks: &mut [Value]| -> Result<(), String> {
+        let Some(block) = blocks
+            .iter_mut()
+            .find(|block| block.get("id").and_then(Value::as_str) == Some(args.block_id.as_str()))
+        else {
+            return Err(NOT_IN_WEEK.into());
+        };
+        let mut missed: Vec<i64> = block["missed_days"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_i64)
+            .filter(|day| *day != args.day)
+            .collect();
+        if skipped {
+            missed.push(args.day);
+        }
+        missed.sort_unstable();
+        if let Some(fields) = block.as_object_mut() {
+            fields.insert("missed_days".into(), json!(missed));
+        }
+        Ok(())
     };
-    let mut missed: Vec<i64> = block["missed_days"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_i64)
-        .filter(|day| *day != args.day)
-        .collect();
-    if skipped {
-        missed.push(args.day);
+    match week::resolve_week(&args.week_start, app.first_weekday())? {
+        WeekTarget::StoredMonday => {
+            let (mut blocks, _) = seen_week(&opened.conn, opened.user_id, &args.week_start)?;
+            apply_skip(&mut blocks)?;
+            let expected = week::expect_monday_revision(Some(&args.expected_revision), 0)?;
+            // The store's check refuses a skip of homework or of a day the block is not on.
+            let applied = homework::run_apply(
+                &opened.conn,
+                opened.user_id,
+                "skip_block_day",
+                &operation_id,
+                &digest,
+                week_input(&args.week_start, blocks, expected),
+                &homework::clock_of(app)?,
+            )?;
+            saved(&applied, &args.block_id, &operation_id)
+        }
+        WeekTarget::Shown { first, second, .. } => {
+            let (first_blocks, first_rev) = seen_week(&opened.conn, opened.user_id, &first)?;
+            let (second_blocks, second_rev) = seen_week(&opened.conn, opened.user_id, &second)?;
+            let mut shown_blocks = week::compose_shown_blocks(
+                &opened.conn,
+                opened.user_id,
+                &args.week_start,
+                &first_blocks,
+                &second_blocks,
+            )?;
+            apply_skip(&mut shown_blocks)?;
+            flexweek_engine::validate::week_request(&json!({"blocks": shown_blocks}))?;
+            let expected = week::expect_shown_revision(
+                Some(&args.expected_revision),
+                [first_rev, second_rev],
+            )?;
+            if let Err(conflict) =
+                week::check_shown_revision(&opened.conn, first_rev, second_rev, expected)
+            {
+                return Ok(conflict);
+            }
+            let weeks = week::split_shown_inputs(
+                &opened.conn,
+                opened.user_id,
+                &args.week_start,
+                &shown_blocks,
+                &first,
+                &first_blocks,
+                first_rev,
+                &second,
+                &second_blocks,
+                second_rev,
+            )?;
+            let input = ApplyInput {
+                weeks,
+                assignments: Vec::<AssignmentInput>::new(),
+                operation_id: None,
+                snapshot_label: None,
+                repeats: None,
+                argument_digest: None,
+            };
+            homework::run_apply_with(
+                &opened.conn,
+                opened.user_id,
+                "skip_block_day",
+                &operation_id,
+                &digest,
+                input,
+                &homework::clock_of(app)?,
+                |conn, applied| {
+                    let answer = build_shown_saved_reply(
+                        conn,
+                        opened.user_id,
+                        &args.week_start,
+                        &first,
+                        &second,
+                        &args.block_id,
+                        &operation_id,
+                    )?;
+                    week::remember_shown_reply(
+                        conn,
+                        opened.user_id,
+                        &operation_id,
+                        applied,
+                        &answer,
+                    )?;
+                    Ok(answer)
+                },
+            )
+        }
     }
-    missed.sort_unstable();
-    if let Some(fields) = block.as_object_mut() {
-        fields.insert("missed_days".into(), json!(missed));
-    }
-    // The store's check refuses a skip of homework or of a day the block is not on.
-    let applied = homework::run_apply(
-        &opened.conn,
-        opened.user_id,
-        "skip_block_day",
-        &operation_id,
-        &digest,
-        week_input(&args.week_start, blocks, args.expected_revision),
-        &homework::clock_of(app)?,
-    )?;
-    saved(&applied, &args.block_id, &operation_id)
 }
 
 #[tool_router(router = fixed_tools, vis = "pub(crate)")]
