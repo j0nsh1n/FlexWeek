@@ -39,6 +39,7 @@ from desktop.native.widgets import (
     _late_summary,
     moved_day_name,
     moved_days_note,
+    same_weekday,
     turn_days_keeping_weekdays,
 )
 
@@ -933,8 +934,25 @@ class SheetsBridge(QObject):
                 self._routine_days, self._routine_week, week
             )
             self._routine_days = turned
+            # A mark the student has not touched yet stays through another first-day switch; another
+            # week from the same first day is a different week, so its marks no longer apply.
+            same_start = (
+                bool(week)
+                and bool(self._routine_week)
+                and date.fromisoformat(week).weekday()
+                == date.fromisoformat(self._routine_week).weekday()
+            )
+            kept = (
+                {}
+                if same_start
+                else {
+                    same_weekday(day, self._routine_week, week): label
+                    for day, label in self._routine_moved.items()
+                }
+            )
             self._routine_moved = {
-                new: moved_day_name(old, self._routine_week) for old, new in moved
+                **kept,
+                **{new: moved_day_name(old, self._routine_week) for old, new in moved},
             }
             self._routine_week = week
 

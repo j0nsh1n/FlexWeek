@@ -263,3 +263,69 @@ def test_two_moved_routine_days_share_one_note(
         "so they moved to Monday 9 and Tuesday 10."
     )
     assert [day["value"] for day in form["days"] if day.get("moved")] == [5, 6]
+
+
+def _monday_and_wednesday(shell: NativeWindow) -> None:
+    shell.session.routines["r-4"] = {
+        "id": "r-4",
+        "name": "Monday and Wednesday",
+        "revision": 1,
+        "blocks": [
+            {
+                "template_id": "t1",
+                "title": "Long walk",
+                "days": [0, 2],
+                "start": "10:00",
+                "duration_min": 60,
+                "category": "exercise",
+            }
+        ],
+    }
+
+
+def test_the_next_week_opened_under_the_sheet_marks_nothing(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    # The week still starts on Monday, so Monday 2 and Wednesday 4 are Monday 9 and Wednesday 11 of
+    # the next week by the same weekday: no day moved, so nothing is marked or named.
+    _monday_and_wednesday(shell)
+    sheets.openRoutines()
+    pump(qapp)
+    sheets.selectRoutine("r-4")
+    shell.session.load_week("2026-11-09")
+    wait_until(qapp, lambda: shell.session.week_start == "2026-11-09" and not shell.session.busy)
+    settle(qapp, shell)
+    pump(qapp)
+    form = sheets.form
+    assert form["movedNote"] == ""
+    assert [day["value"] for day in form["days"] if day["on"]] == [0, 2]
+    assert not any(day.get("moved") for day in form["days"])
+
+
+def test_a_second_switch_keeps_a_mark_the_student_has_not_touched(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    # Monday 2 moved to Monday 9 when the week began starting on Wednesday. Starting it on Thursday
+    # (Thu 5 to Wed 11) keeps Monday 9, so its mark stays until the row is touched, and Wednesday 4
+    # now moves to Wednesday 11: both are named.
+    from desktop.native import fields
+
+    _monday_and_wednesday(shell)
+    sheets.openRoutines()
+    pump(qapp)
+    sheets.selectRoutine("r-4")
+    fields.save_week_starts_on("wednesday")
+    wait_until(qapp, lambda: shell.session.week_start == "2026-11-04" and not shell.session.busy)
+    settle(qapp, shell)
+    fields.save_week_starts_on("thursday")
+    wait_until(qapp, lambda: shell.session.week_start == "2026-11-05" and not shell.session.busy)
+    settle(qapp, shell)
+    pump(qapp)
+    form = sheets.form
+    assert form["movedNote"] == (
+        "Monday 2 and Wednesday 4 aren't in this week any more, so they moved to Monday 9 and "
+        "Wednesday 11."
+    )
+    by_value = {day["value"]: day for day in form["days"]}
+    assert (by_value[4]["moved"], by_value[4]["movedFrom"]) == (True, "Monday 2")
+    assert (by_value[6]["moved"], by_value[6]["movedFrom"]) == (True, "Wednesday 4")

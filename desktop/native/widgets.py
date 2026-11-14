@@ -253,6 +253,9 @@ def turn_days_keeping_weekdays(
     if not from_week or not to_week or from_week == to_week:
         return sorted(days), []
     turned = [(day, same_weekday(day, from_week, to_week)) for day in days]
+    # Another week from the same first day (Next, Previous) keeps every day's place: nothing moved.
+    if date.fromisoformat(from_week).weekday() == date.fromisoformat(to_week).weekday():
+        return sorted(new for _, new in turned), []
     moved = [
         (old, new)
         for old, new in turned
