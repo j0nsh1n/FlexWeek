@@ -929,3 +929,67 @@ fn plan_reply_failure_rolls_back_atomically() {
     assert_eq!(retry["result"]["week_starts_on"], json!("wednesday"));
     assert_eq!(retry["revision"], json!([1, 0]));
 }
+
+#[test]
+fn plan_homework_with_nothing_to_plan_in_shown_week_returns_stored_revisions() {
+    let world = signed_in("plan-empty-shown-revisions");
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    conn.execute(
+        "INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?1, '2026-10-19', '[]', 4)",
+        (world.user,),
+    )
+    .expect("first week");
+    conn.execute(
+        "INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?1, '2026-10-26', '[]', 2)",
+        (world.user,),
+    )
+    .expect("second week");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+
+    let mut server = boot(&world);
+    let planned = body_of(&server.call(
+        "plan_homework",
+        json!({"operation_id": "op-empty-shown", "week_start": "2026-10-21"}),
+        2,
+    ));
+    assert_eq!(planned["ok"], json!(true), "got {planned}");
+    assert_eq!(
+        planned["revision"],
+        json!([4, 2]),
+        "must return observed stored revisions, got {planned}"
+    );
+    assert_eq!(
+        planned["result"]["revision"],
+        json!([4, 2]),
+        "result revision must match stored revisions, got {planned}"
+    );
+
+    let added = body_of(&server.call(
+        "add_block",
+        json!({
+            "operation_id": "op-after-empty-plan",
+            "week_start": "2026-10-21",
+            "expected_revision": planned["revision"],
+            "title": "Study",
+            "days": [1],
+            "start": "16:00",
+            "end": "17:00"
+        }),
+        3,
+    ));
+    assert_eq!(
+        added["ok"],
+        json!(true),
+        "write using returned revision pair must succeed without conflict: {added}"
+    );
+    assert_eq!(added["revision"], json!([5, 2]));
+}

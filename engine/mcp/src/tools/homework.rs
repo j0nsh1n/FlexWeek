@@ -864,6 +864,8 @@ impl crate::App {
                         return Ok(conflict);
                     }
                     let weeks = week::split_shown_inputs(
+                        &opened.conn,
+                        opened.user_id,
                         &args.week_start,
                         &shown_blocks,
                         &first,

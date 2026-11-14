@@ -255,6 +255,8 @@ fn perform_move(app: &crate::App, args: &MoveArgs) -> Result<Value, String> {
         return Ok(conflict);
     }
     let weeks = week::split_shown_inputs(
+        &opened.conn,
+        opened.user_id,
         &args.week_start,
         &blocks,
         &first,
@@ -499,6 +501,8 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
         (second_blocks.clone(), None)
     };
     let weeks = week::split_shown_inputs(
+        &opened.conn,
+        opened.user_id,
         &args.week_start,
         &deletion.blocks,
         &first,

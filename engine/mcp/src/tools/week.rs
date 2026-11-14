@@ -3,7 +3,7 @@
 //! A week starting on Monday maps 1:1 to a stored Monday week; any other `week_start` spans two
 //! stored Monday weeks (`first` and `second`) composed and split through `flexweek_engine::shown`.
 
-use flexweek_engine::shown::{compose_shown_week_due, shown_parts, split_shown_week};
+use flexweek_engine::shown::{compose_shown_week_due, family_id, shown_parts, split_shown_week};
 use flexweek_engine::time::{is_calendar_date, is_week_start, week_start_on};
 use flexweek_store::{Connection, StoreError, WeekInput, load_assignment_rows, read_week};
 use rmcp::schemars::JsonSchema;
@@ -38,6 +38,9 @@ pub(crate) enum WeekTarget {
 
 /// Weekday name (`"monday"` .. `"sunday"`) for `week_start`.
 pub(crate) fn weekday_name(week_start: &str) -> Result<&'static str, String> {
+    if is_week_start(week_start) {
+        return Ok("monday");
+    }
     let idx = match shown_parts(week_start).map_err(|error| error.message)? {
         None => 0,
         Some((_, _, offset)) => usize::try_from(offset).unwrap_or(0),
@@ -176,6 +179,24 @@ pub(crate) fn assignment_map_for_blocks(
     Ok(homework)
 }
 
+fn rewrite_for_shown(
+    blocks: &[Value],
+    homework: &Map<String, Value>,
+) -> Result<Vec<Value>, String> {
+    if homework.is_empty() {
+        return Ok(blocks.to_vec());
+    }
+    flexweek_store::rewrite_stored_blocks(
+        &Value::Array(blocks.to_vec()),
+        &Value::Object(homework.clone()),
+        |block| Ok::<Value, std::convert::Infallible>(block.clone()),
+    )
+    .map_err(|relay| match relay {
+        flexweek_store::Relay::Store(error) => session::storage_sentence(error),
+        flexweek_store::Relay::Caller(never) => match never {},
+    })
+}
+
 /// Composes a shown week from its two seen stored weeks using `compose_shown_week_due`.
 pub(crate) fn compose_shown_blocks(
     conn: &Connection,
@@ -185,13 +206,96 @@ pub(crate) fn compose_shown_blocks(
     second: &[Value],
 ) -> Result<Vec<Value>, String> {
     let homework = assignment_map_for_blocks(conn, user_id, first, second)?;
-    compose_shown_week_due(week_start, first, second, &homework).map_err(|error| error.message)
+    let first_rewritten = rewrite_for_shown(first, &homework)?;
+    let second_rewritten = rewrite_for_shown(second, &homework)?;
+    compose_shown_week_due(week_start, &first_rewritten, &second_rewritten, &homework)
+        .map_err(|error| error.message)
+}
+
+const ASSIGNMENT_FIELDS: [&str; 6] = [
+    "title",
+    "priority",
+    "energy",
+    "course",
+    "category",
+    "spotify_url",
+];
+
+fn block_id(block: &Value) -> Option<&str> {
+    block.get("id").and_then(Value::as_str)
+}
+
+fn find_seen_pair<'a>(
+    id: &str,
+    own_seen: &'a [Value],
+    own_rewritten: &'a [Value],
+    other_seen: &'a [Value],
+    other_rewritten: &'a [Value],
+) -> Option<(&'a Value, &'a Value)> {
+    let target_family = family_id(id);
+    for (seen, rewritten) in [(own_seen, own_rewritten), (other_seen, other_rewritten)] {
+        if let Some(pair) = seen
+            .iter()
+            .zip(rewritten.iter())
+            .find(|(b, _)| block_id(b) == Some(id))
+        {
+            return Some(pair);
+        }
+        if let Some(pair) = seen
+            .iter()
+            .zip(rewritten.iter())
+            .find(|(b, _)| block_id(b).is_some_and(|seen_id| family_id(seen_id) == target_family))
+        {
+            return Some(pair);
+        }
+    }
+    None
+}
+
+fn restore_unedited_fields(
+    blocks: Vec<Value>,
+    own_seen: &[Value],
+    own_rewritten: &[Value],
+    other_seen: &[Value],
+    other_rewritten: &[Value],
+) -> Vec<Value> {
+    blocks
+        .into_iter()
+        .map(|mut block| {
+            let Some(id) = block_id(&block).map(str::to_string) else {
+                return block;
+            };
+            let Some((seen_orig, rewritten_orig)) =
+                find_seen_pair(&id, own_seen, own_rewritten, other_seen, other_rewritten)
+            else {
+                return block;
+            };
+            let Some(obj) = block.as_object_mut() else {
+                return block;
+            };
+            for key in ASSIGNMENT_FIELDS {
+                if obj.get(key) == rewritten_orig.get(key) {
+                    match seen_orig.get(key) {
+                        Some(original) => {
+                            obj.insert(key.into(), original.clone());
+                        }
+                        None => {
+                            obj.shift_remove(key);
+                        }
+                    }
+                }
+            }
+            block
+        })
+        .collect()
 }
 
 /// Splits `shown` back onto `(first, second)` via `flexweek_engine::shown::split_shown_week`,
 /// returning `WeekInput` entries only for stored weeks whose blocks changed.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn split_shown_inputs(
+    conn: &Connection,
+    user_id: i64,
     week_start: &str,
     shown: &[Value],
     first_start: &str,
@@ -201,8 +305,26 @@ pub(crate) fn split_shown_inputs(
     second_seen: &[Value],
     second_rev: i64,
 ) -> Result<Vec<WeekInput>, String> {
-    let (first_new, second_new) =
-        split_shown_week(week_start, shown, first_seen, second_seen).map_err(|err| err.message)?;
+    let homework = assignment_map_for_blocks(conn, user_id, first_seen, second_seen)?;
+    let first_rewritten = rewrite_for_shown(first_seen, &homework)?;
+    let second_rewritten = rewrite_for_shown(second_seen, &homework)?;
+    let (first_split, second_split) =
+        split_shown_week(week_start, shown, &first_rewritten, &second_rewritten)
+            .map_err(|err| err.message)?;
+    let first_new = restore_unedited_fields(
+        first_split,
+        first_seen,
+        &first_rewritten,
+        second_seen,
+        &second_rewritten,
+    );
+    let second_new = restore_unedited_fields(
+        second_split,
+        second_seen,
+        &second_rewritten,
+        first_seen,
+        &first_rewritten,
+    );
     let mut inputs = Vec::new();
     if first_new != first_seen {
         inputs.push(WeekInput {

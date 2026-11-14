@@ -579,7 +579,12 @@ fn run_plan(
         })
         .collect();
     if targets.is_empty() {
+        let revision = match &basis {
+            PlanBasis::Monday { .. } => empty_revision.clone(),
+            PlanBasis::Shown { .. } => basis.revision_json(),
+        };
         return Ok(Planned {
+            revision,
             not_placed: left_rows,
             ..empty("")
         });

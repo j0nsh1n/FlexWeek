@@ -389,6 +389,8 @@ fn perform_add(app: &crate::App, args: &AddArgs) -> Result<Value, String> {
             )
             .map_err(|err| err.message)?;
             let weeks = week::split_shown_inputs(
+                &opened.conn,
+                opened.user_id,
                 &args.week_start,
                 &edited,
                 &first,
@@ -677,6 +679,8 @@ fn perform_edit(app: &crate::App, args: &EditArgs) -> Result<Value, String> {
         )
         .map_err(|err| err.message)?;
         let weeks = week::split_shown_inputs(
+            &opened.conn,
+            opened.user_id,
             &args.week_start,
             &edited,
             &first,
@@ -837,7 +841,15 @@ fn every_week_shown_input(
         return Err(NOT_STANDING.into());
     }
     let first_after_repeat = if let Some(repeat) = &repeat_first {
-        let wanted = apply_repeat_fields(repeat, args, offset, start_min, end_min, false)?;
+        let own_end = if args.end.is_some() {
+            end_min
+        } else {
+            start_min
+                + repeat["duration_min"]
+                    .as_i64()
+                    .unwrap_or(end_min - start_min)
+        };
+        let wanted = apply_repeat_fields(repeat, args, offset, start_min, own_end, false)?;
         if let Some(intent) = edit_intent(family, first, Some(repeat), Some(&wanted)) {
             apply_to_week(first_blocks, &repeats_first, std::slice::from_ref(&intent))?.0
         } else {
@@ -847,7 +859,15 @@ fn every_week_shown_input(
         first_blocks.to_vec()
     };
     let (second_after_repeat, repeats_input) = if let Some(repeat) = &repeat_second {
-        let wanted = apply_repeat_fields(repeat, args, offset, start_min, end_min, false)?;
+        let own_end = if args.end.is_some() {
+            end_min
+        } else {
+            start_min
+                + repeat["duration_min"]
+                    .as_i64()
+                    .unwrap_or(end_min - start_min)
+        };
+        let wanted = apply_repeat_fields(repeat, args, offset, start_min, own_end, false)?;
         if let Some(intent) = edit_intent(family, second, Some(repeat), Some(&wanted)) {
             let intent_val = intent.to_value();
             let updated = apply_to_week(
@@ -871,6 +891,8 @@ fn every_week_shown_input(
         &second_after_repeat,
     )?;
     let weeks = week::split_shown_inputs(
+        conn,
+        user_id,
         &args.week_start,
         &shown_after,
         first,
@@ -989,6 +1011,8 @@ fn perform_skip(app: &crate::App, args: &SkipArgs) -> Result<Value, String> {
                 return Ok(conflict);
             }
             let weeks = week::split_shown_inputs(
+                &opened.conn,
+                opened.user_id,
                 &args.week_start,
                 &shown_blocks,
                 &first,

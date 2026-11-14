@@ -884,3 +884,40 @@ fn get_today_reports_active_week_starts_on_and_shown_week_start_when_not_monday(
     assert_eq!(forced["week_starts_on"], json!("wednesday"));
     assert_eq!(forced["shown_week_start"], json!("2026-10-21"));
 }
+
+#[test]
+fn boundary_monday_1999_12_27_works_in_get_week_and_list_homework() {
+    let world = fixture("boundary-monday-1999");
+    let mut server = boot(&world);
+    server.handshake();
+
+    let week = server.call("get_week", json!({"week_start": "1999-12-27"}), 2);
+    assert_eq!(
+        tool_error_text(&week),
+        None,
+        "get_week must accept 1999-12-27, got {week}"
+    );
+    let week_body = body_of(&week);
+    assert_eq!(week_body["week_start"], json!("1999-12-27"));
+    assert_eq!(week_body["week_starts_on"], json!("monday"));
+
+    let hw = server.call("list_homework", json!({"week_start": "1999-12-27"}), 3);
+    assert_eq!(
+        tool_error_text(&hw),
+        None,
+        "list_homework must accept 1999-12-27, got {hw}"
+    );
+    let hw_body = body_of(&hw);
+    assert_eq!(hw_body["week_starts_on"], json!("monday"));
+
+    // Also accepted in non-Monday mode as a stored Monday week.
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+    let compat_week = body_of(&server.call("get_week", json!({"week_start": "1999-12-27"}), 4));
+    assert_eq!(compat_week["week_starts_on"], json!("monday"));
+    let compat_hw = body_of(&server.call("list_homework", json!({"week_start": "1999-12-27"}), 5));
+    assert_eq!(compat_hw["week_starts_on"], json!("monday"));
+}

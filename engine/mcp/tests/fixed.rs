@@ -1522,6 +1522,172 @@ fn monday_validation_keeps_monday_and_sunday_wording_while_shown_uses_first_day(
 }
 
 #[test]
+fn every_week_start_only_edit_on_shown_week_preserves_each_standing_duration() {
+    let world = signed_in("every-week-start-only-shown");
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let first_school = json!({
+        "id": "school", "title": "School", "kind": "locked", "duration_min": 420,
+        "days": [0, 1, 2, 3, 4], "start": "08:00", "category": "class"
+    });
+    let second_school = json!({
+        "id": "school", "title": "School", "kind": "locked", "duration_min": 300,
+        "days": [0, 1, 2, 3, 4], "start": "08:00", "category": "class"
+    });
+    let intent1 = edit_intent("school", WEEK, None, Some(&first_school)).expect("intent1");
+    let intent2 =
+        edit_intent("school", NEXT, Some(&first_school), Some(&second_school)).expect("intent2");
+    apply_repeat_intents(&conn, world.user, &[intent1.clone(), intent2.clone()]).expect("standing");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+
+    let mut server = boot(&world);
+    let initial = body_of(&server.call("get_week", json!({"week_start": "2026-10-21"}), 2));
+    assert_eq!(
+        by_id(&initial["blocks"], "school")["duration_min"],
+        json!(420)
+    );
+
+    let edited = body_of(&server.call(
+        "edit_block",
+        json!({
+            "operation_id": "op-start-only-every-week",
+            "week_start": "2026-10-21",
+            "expected_revision": initial["revision"],
+            "block_id": "school",
+            "start": "09:00",
+            "every_week": true
+        }),
+        3,
+    ));
+    assert_eq!(edited["ok"], json!(true), "got {edited}");
+
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let standing_first = Value::Array(
+        flexweek_store::standing_blocks(&conn, world.user, WEEK).expect("standing first"),
+    );
+    let standing_second = Value::Array(
+        flexweek_store::standing_blocks(&conn, world.user, NEXT).expect("standing second"),
+    );
+    let standing_third = Value::Array(
+        flexweek_store::standing_blocks(&conn, world.user, "2026-11-02").expect("standing third"),
+    );
+    drop(conn);
+
+    let first_saved = stored(&world, WEEK).0;
+    let wed_fri = first_saved
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|b| b["days"] == json!([2, 3, 4]))
+        .expect("wed-fri block in first week");
+    assert_eq!(wed_fri["start"], json!("09:00"));
+    assert_eq!(
+        wed_fri["duration_min"],
+        json!(420),
+        "first week Wed-Fri keeps its 420-min span: {first_saved}"
+    );
+    assert_eq!(by_id(&standing_first, "school")["start"], json!("08:00"));
+    assert_eq!(by_id(&standing_first, "school")["duration_min"], json!(420));
+    assert_eq!(by_id(&standing_second, "school")["start"], json!("09:00"));
+    assert_eq!(
+        by_id(&standing_second, "school")["duration_min"],
+        json!(300),
+        "second standing version keeps its 300-min span on start-only edit: {standing_second}"
+    );
+    assert_eq!(
+        by_id(&standing_third, "school")["duration_min"],
+        json!(300),
+        "later weeks inherit second's 300-min span: {standing_third}"
+    );
+
+    // Explicit end sets the span on both versions.
+    let explicit = body_of(&server.call(
+        "edit_block",
+        json!({
+            "operation_id": "op-explicit-end-every-week",
+            "week_start": "2026-10-21",
+            "expected_revision": edited["revision"],
+            "block_id": "school",
+            "start": "09:30",
+            "end": "11:30",
+            "every_week": true
+        }),
+        4,
+    ));
+    assert_eq!(explicit["ok"], json!(true), "got {explicit}");
+
+    let first_saved_explicit = stored(&world, WEEK).0;
+    let wed_fri_explicit = first_saved_explicit
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|b| b["days"] == json!([2, 3, 4]))
+        .expect("wed-fri block in first week");
+    assert_eq!(wed_fri_explicit["duration_min"], json!(120));
+
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let standing_second_after = Value::Array(
+        flexweek_store::standing_blocks(&conn, world.user, NEXT).expect("standing second"),
+    );
+    assert_eq!(
+        by_id(&standing_second_after, "school")["duration_min"],
+        json!(120)
+    );
+    drop(conn);
+    drop(server);
+
+    // Symmetric check: start-only edit targeting the second block (300m) keeps first week's Wed-Fri 420m span.
+    let sym = signed_in("every-week-start-only-shown-sym");
+    std::fs::write(
+        Path::new(&sym.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+    let conn = open_connection(Path::new(&sym.database_arg)).expect("open");
+    apply_repeat_intents(&conn, sym.user, &[intent1, intent2]).expect("standing");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+    let mut sym_server = boot(&sym);
+    let sym_initial = body_of(&sym_server.call("get_week", json!({"week_start": "2026-10-21"}), 2));
+    let edited_second = body_of(&sym_server.call(
+        "edit_block",
+        json!({
+            "operation_id": "op-start-only-every-week-second",
+            "week_start": "2026-10-21",
+            "expected_revision": sym_initial["revision"],
+            "block_id": "school@20261021",
+            "start": "10:00",
+            "every_week": true
+        }),
+        3,
+    ));
+    assert_eq!(edited_second["ok"], json!(true), "got {edited_second}");
+    let first_saved_after_second = stored(&sym, WEEK).0;
+    let wed_fri_after_second = first_saved_after_second
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|b| b["days"] == json!([2, 3, 4]))
+        .expect("wed-fri block in first week");
+    assert_eq!(wed_fri_after_second["start"], json!("10:00"));
+    assert_eq!(
+        wed_fri_after_second["duration_min"],
+        json!(420),
+        "first week Wed-Fri keeps its 420-min span when editing second block: {first_saved_after_second}"
+    );
+}
+
+#[test]
 fn shown_fixed_reply_failure_rolls_back_both_weeks_atomically() {
     let world = signed_in("fixed-reply-fault");
     std::fs::write(
