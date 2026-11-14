@@ -23,7 +23,7 @@ use crate::validate::time_block;
 pub const PATCH_FIELDS: [&str; 4] = ["title", "category", "start", "duration_min"];
 /// Fields that say which block and when, never compared or patched as a value.
 const SHAPE_FIELDS: [&str; 3] = ["id", "days", "missed_days"];
-const INTENT_FIELDS: [&str; 9] = [
+const INTENT_FIELDS: [&str; 10] = [
     "id",
     "scope",
     "from_date",
@@ -33,6 +33,7 @@ const INTENT_FIELDS: [&str; 9] = [
     "stop",
     "edited",
     "today",
+    "first_weekday",
 ];
 const MONTHS_SHORT: [&str; 12] = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -104,6 +105,8 @@ pub struct Intent {
     pub stop: bool,
     pub edited: Edited,
     pub today: Option<String>,
+    /// 0 Monday to 6 Sunday. Only a from-today change carries it; omitted means Monday.
+    pub first_weekday: u32,
 }
 
 impl Intent {
@@ -129,13 +132,16 @@ impl Intent {
         if let Some(today) = &self.today {
             value["today"] = json!(today);
         }
+        if self.edited == Edited::FromToday && self.first_weekday != 0 {
+            value["first_weekday"] = json!(self.first_weekday);
+        }
         value
     }
 }
 
-fn week_after(monday: &str) -> EngineResult<String> {
-    let day = from_iso(monday)?;
-    let next = day + chrono::Duration::days(7);
+fn plus_days(day: &str, count: i64) -> EngineResult<String> {
+    let date = from_iso(day)?;
+    let next = date + chrono::Duration::days(count);
     Ok(format!(
         "{:04}-{:02}-{:02}",
         next.year(),
@@ -144,32 +150,39 @@ fn week_after(monday: &str) -> EngineResult<String> {
     ))
 }
 
-/// The Monday a `from_today` change starts writing from: the week after the one that holds
-/// `today`, unless the change itself starts later. Any other change starts at its own week.
+/// The first day a from-today change applies: the day after the shown week that holds today.
+/// That week is the one the student sees, from the day their week starts on.
+pub fn change_shown_start(intent: &Intent) -> EngineResult<String> {
+    let today = intent
+        .today
+        .as_deref()
+        .ok_or_else(|| crate::error::EngineError::value(RULE))?;
+    let shown = crate::time::week_start_on(today, intent.first_weekday)?;
+    plus_days(&shown, 7)
+}
+
+/// The Monday a `from_today` change stands from. The change itself begins the day after the shown
+/// week that holds today; a shown week that does not start on Monday stands from the next Monday,
+/// the same seam as any other change from that week on. Any other change starts at its own week.
 pub fn stands_from(intent: &Intent) -> EngineResult<String> {
     let week = intent.from_week()?;
     if intent.edited != Edited::FromToday {
         return Ok(week);
     }
-    let today = intent
-        .today
-        .as_deref()
-        .ok_or_else(|| crate::error::EngineError::value(RULE))?;
-    let next = week_after(&monday_of(today)?)?;
-    if next.as_str() > week.as_str() {
-        Ok(next)
-    } else {
-        Ok(week)
+    let start = change_shown_start(intent)?;
+    match crate::shown::shown_parts(&start)? {
+        Some((_, second, _)) => Ok(second),
+        None => Ok(start),
     }
 }
 
-/// Whether `week` (a Monday, or the first day of the week on screen) is left untouched.
-/// `from_today` leaves every stored week before the week after today's.
+/// Whether the shown week starting on `week` is left untouched. A from-today change leaves every
+/// shown week that starts before the day after today's shown week.
 pub fn leaves_week(intent: &Intent, week: &str) -> EngineResult<bool> {
     if intent.edited != Edited::FromToday {
         return Ok(false);
     }
-    Ok(monday_of(week)?.as_str() < stands_from(intent)?.as_str())
+    Ok(from_iso(week)? < from_iso(&change_shown_start(intent)?)?)
 }
 
 fn day_list(value: Option<&Value>) -> Result<Vec<i64>, String> {
@@ -245,6 +258,20 @@ pub fn parse_intent(value: &Value) -> Result<Intent, String> {
     if (edited == Edited::FromToday) != today.is_some() {
         return Err(RULE.into());
     }
+    let first_weekday = match map.get("first_weekday") {
+        None | Some(Value::Null) => 0,
+        Some(Value::Number(day)) => {
+            let day = day
+                .as_u64()
+                .filter(|day| *day <= 6)
+                .ok_or_else(|| RULE.to_string())?;
+            if edited != Edited::FromToday {
+                return Err(RULE.into());
+            }
+            u32::try_from(day).unwrap_or(0)
+        }
+        Some(_) => return Err(RULE.into()),
+    };
     Ok(Intent {
         // A piece of School split off at a week's seam changes School.
         id: family_id(id).to_string(),
@@ -255,6 +282,7 @@ pub fn parse_intent(value: &Value) -> Result<Intent, String> {
         stop,
         edited,
         today,
+        first_weekday,
     })
 }
 
@@ -543,6 +571,7 @@ pub fn edit_intent(
         stop: false,
         edited: Edited::Keep,
         today: None,
+        first_weekday: 0,
     };
     let Some(edited) = edited else {
         return repeat.map(|_| Intent {

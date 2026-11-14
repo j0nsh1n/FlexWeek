@@ -910,6 +910,10 @@ fn weeks_with_their_own_school(conn: &Connection, user_id: i64) {
 }
 
 fn school_change(edited: &str, today: Option<&str>) -> Value {
+    school_change_on(edited, today, None)
+}
+
+fn school_change_on(edited: &str, today: Option<&str>, first_weekday: Option<u32>) -> Value {
     let mut intent = edit_intent(
         "school",
         OPEN_WEEK,
@@ -922,7 +926,41 @@ fn school_change(edited: &str, today: Option<&str>) -> Value {
     if let Some(today) = today {
         intent["today"] = json!(today);
     }
+    if let Some(day) = first_weekday {
+        intent["first_weekday"] = json!(day);
+    }
     intent
+}
+
+fn raw_blocks(conn: &Connection, user_id: i64, week: &str) -> Vec<Value> {
+    let text = read_week(conn, user_id, week)
+        .unwrap()
+        .map(|(blocks, _)| blocks)
+        .unwrap_or_else(|| "[]".to_string());
+    serde_json::from_str(&text).unwrap()
+}
+
+/// `(start, days, minutes)` for every School row, in day order.
+fn school_rows(blocks: &[Value]) -> Vec<(String, Vec<i64>, i64)> {
+    let mut rows: Vec<_> = blocks
+        .iter()
+        .filter(|block| block["title"] == json!("School"))
+        .map(|block| {
+            let days: Vec<i64> = block["days"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|day| day.as_i64().unwrap())
+                .collect();
+            (
+                block["start"].as_str().unwrap().to_string(),
+                days,
+                block["duration_min"].as_i64().unwrap(),
+            )
+        })
+        .collect();
+    rows.sort_by(|left, right| left.1.cmp(&right.1));
+    rows
 }
 
 fn apply_school(conn: &Connection, user_id: i64, intent: Value) {
@@ -1032,4 +1070,77 @@ fn the_preview_names_edited_weeks_and_writes_nothing() {
     .unwrap();
     let none = preview_edited_weeks(&conn, user_id, &[quiet]).unwrap();
     assert_eq!(none, json!({"weeks": [], "line": null}));
+}
+
+/// Friday 13 November 2026, weeks from Wednesday: the shown week is Wed 11 to Tue 17. Mon 16 and
+/// Tue 17 sit in the next stored Monday and stay. The new School starts Wed 18.
+#[test]
+fn from_today_on_a_wednesday_start_leaves_the_whole_shown_week() {
+    let (conn, user_id) = account("repeats-wed-today", true);
+    set_up(&conn, user_id);
+    let held = "2026-11-09";
+    let boundary = "2026-11-16";
+    let after = "2026-11-23";
+    save_week_as(&conn, user_id, held, vec![school(), soccer()]);
+    let early = with(school(), json!({"days": [0, 1]}));
+    let edited = json!({"category": "class", "days": [2, 3, 4], "duration_min": 405,
+                        "id": "school@20261118", "kind": "locked", "start": "10:00",
+                        "title": "School"});
+    save_week_as(&conn, user_id, boundary, vec![early, edited, soccer()]);
+    save_week_as(
+        &conn,
+        user_id,
+        after,
+        vec![
+            with(school(), json!({"start": "10:00", "days": [0, 1]})),
+            soccer(),
+        ],
+    );
+    let held_before = raw_blocks(&conn, user_id, held);
+    apply_school(
+        &conn,
+        user_id,
+        school_change_on("from_today", Some("2026-11-13"), Some(2)),
+    );
+    assert_eq!(raw_blocks(&conn, user_id, held), held_before);
+    assert_eq!(
+        school_rows(&raw_blocks(&conn, user_id, boundary)),
+        vec![
+            ("08:30".to_string(), vec![0, 1], 405),
+            ("08:30".to_string(), vec![2, 3, 4], 360),
+        ]
+    );
+    assert_eq!(
+        school_rows(&raw_blocks(&conn, user_id, after)),
+        vec![("08:30".to_string(), vec![0, 1, 2, 3, 4], 360)]
+    );
+}
+
+/// Wednesday 11 November 2026, weeks from Sunday: the shown week is Sun 8 to Sat 14. Its stored
+/// week stays. The next week, which had its own School time, takes the change from Sun 15, and the
+/// first School day of that is Monday 16.
+#[test]
+fn from_today_on_a_sunday_start_leaves_the_shown_week_and_changes_the_next() {
+    let (conn, user_id) = account("repeats-sun-today", true);
+    set_up(&conn, user_id);
+    let held = "2026-11-09";
+    let next = "2026-11-16";
+    save_week_as(&conn, user_id, held, vec![school(), soccer()]);
+    save_week_as(
+        &conn,
+        user_id,
+        next,
+        vec![with(school(), json!({"start": "10:00"})), soccer()],
+    );
+    let held_before = raw_blocks(&conn, user_id, held);
+    apply_school(
+        &conn,
+        user_id,
+        school_change_on("from_today", Some("2026-11-11"), Some(6)),
+    );
+    assert_eq!(raw_blocks(&conn, user_id, held), held_before);
+    assert_eq!(
+        school_rows(&raw_blocks(&conn, user_id, next)),
+        vec![("08:30".to_string(), vec![0, 1, 2, 3, 4], 360)]
+    );
 }

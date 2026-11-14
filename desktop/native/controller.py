@@ -266,7 +266,7 @@ def _same_timer(running: dict, target: dict) -> bool:
     return bool(block) and block == running.get("blockId")
 
 
-def _stamp_edited(changes: list[dict], edited: str, today: str) -> list[dict]:
+def _stamp_edited(changes: list[dict], edited: str, today: str, first_weekday: int) -> list[dict]:
     """The changes as the save sends them. `keep` stays as the form built it."""
     if edited == "keep":
         return changes
@@ -275,6 +275,7 @@ def _stamp_edited(changes: list[dict], edited: str, today: str) -> list[dict]:
         item = {**change, "edited": edited}
         if edited == "from_today":
             item["today"] = today
+            item["first_weekday"] = first_weekday
         stamped.append(item)
     return stamped
 
@@ -1531,7 +1532,7 @@ class NativeSession(QObject):
         changes = repeat_changes(self.repeats, after, self.week_start)
         if not changes:
             return
-        self._repeat_send = _stamp_edited(changes, edited, self.today_iso())
+        self._repeat_send = _stamp_edited(changes, edited, self.today_iso(), self.first_weekday)
         # From today on, this week and every earlier week stay exactly as they are.
         if self._repeat_send and repeat_leaves_week(self._repeat_send[0], self.week_start):
             self._touch(label)

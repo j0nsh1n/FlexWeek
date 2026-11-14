@@ -4,15 +4,17 @@
 //! applied one way whoever sends it.
 
 use flexweek_engine::repeats::{
-    Edited, Intent, Kept, edited_weeks_line, kept_notice, leaves_week, own_changes, patched,
+    Edited, Intent, Kept, change_shown_start, edited_weeks_line, kept_notice, own_changes, patched,
     pieces_after_replace, restated_pieces, restated_version, stands_from,
 };
-use flexweek_engine::shown::family_id;
+use flexweek_engine::shown::{
+    compose_shown_week, family_id, replaced_repeat_on_shown_week, shown_parts, split_shown_week,
+};
 use flexweek_engine::snapshot::canonical;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 
-use crate::{StoreError, StoreResult, defer_write};
+use crate::{StoreError, StoreResult, defer_write, read_week, week_with_standing};
 
 /// What a batch of changes did: the saved weeks it rewrote, the later weeks that kept a change of
 /// their own, and the sentence that says so (None when none did).
@@ -192,6 +194,79 @@ fn family_of(block: &Value) -> Option<&str> {
 /// that week on, where a week's copy follows the change except on what that week changed itself.
 /// The open week is usually in the same batch already changed by the client with the same rule
 /// (`repeats::apply_to_week`), so this pass leaves it as it is.
+fn seen_blocks(
+    conn: &Connection,
+    user_id: i64,
+    monday: &str,
+) -> Result<Vec<Value>, RepeatsFailure> {
+    let raw = read_week(conn, user_id, monday)?
+        .map(|(blocks, _)| blocks)
+        .unwrap_or_else(|| "[]".to_string());
+    let seen = week_with_standing(conn, user_id, monday, &raw)?;
+    match parse(&seen)? {
+        Value::Array(blocks) => Ok(blocks),
+        _ => Ok(Vec::new()),
+    }
+}
+
+fn write_week(
+    conn: &Connection,
+    user_id: i64,
+    monday: &str,
+    blocks: &[Value],
+) -> Result<(), RepeatsFailure> {
+    let encoded = canonical(&Value::Array(blocks.to_vec()));
+    match read_week(conn, user_id, monday)? {
+        Some((stored, _)) if stored == encoded => Ok(()),
+        Some(_) => {
+            defer_write(
+                conn,
+                "UPDATE weeks SET blocks = ?1, revision = revision + 1
+                WHERE user_id = ?2 AND week_start = ?3",
+                params![encoded, user_id, monday],
+            )?;
+            Ok(())
+        }
+        None => {
+            defer_write(
+                conn,
+                "INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?1, ?2, ?3, 1)",
+                params![user_id, monday, encoded],
+            )?;
+            Ok(())
+        }
+    }
+}
+
+/// The shown week the change starts on may begin in the middle of a stored Monday. Split that week
+/// the way a save of it would: days before it stay, and its own days take the new repeat.
+fn write_seam(
+    conn: &Connection,
+    user_id: i64,
+    intent: &Intent,
+    new_body: Option<&Value>,
+) -> Result<(), RepeatsFailure> {
+    let start =
+        change_shown_start(intent).map_err(|error| RepeatsFailure::Refused(error.message))?;
+    let Some((first, second, _)) =
+        shown_parts(&start).map_err(|error| RepeatsFailure::Refused(error.message))?
+    else {
+        return Ok(());
+    };
+    let first_blocks = seen_blocks(conn, user_id, &first)?;
+    let second_blocks = seen_blocks(conn, user_id, &second)?;
+    let shown = compose_shown_week(&start, &first_blocks, &second_blocks)
+        .map_err(|error| RepeatsFailure::Refused(error.message))?;
+    let replaced = replaced_repeat_on_shown_week(&start, &shown, &intent.id, new_body)
+        .map_err(|error| RepeatsFailure::Refused(error.message))?;
+    let (out_first, out_second) =
+        split_shown_week(&start, &replaced, &first_blocks, &second_blocks)
+            .map_err(|error| RepeatsFailure::Refused(error.message))?;
+    write_week(conn, user_id, &first, &out_first)?;
+    write_week(conn, user_id, &second, &out_second)?;
+    Ok(())
+}
+
 pub fn apply_repeat_intents(
     conn: &Connection,
     user_id: i64,
@@ -266,6 +341,12 @@ fn enact(
         // two write this change over them, from `start` on.
         let drop_later = intent.stop || intent.edited != Edited::Keep;
         let new = rewritten(&old, &start, new_here.clone(), drop_later);
+        if write && intent.edited == Edited::FromToday {
+            // The shown week after today may start mid stored week. The days before it stay, and
+            // the days from that shown week on take the change, by the same split as any other
+            // change from a week that does not start on Monday.
+            write_seam(conn, user_id, intent, new_here.as_ref())?;
+        }
         // A later change that stays where this one would have set the same thing is named too, at the
         // week it starts. A saved copy of that very week is named instead, against this change, below:
         // the copy is what the week shows, so naming both would say two things about one week.
@@ -302,10 +383,9 @@ fn enact(
             })?
             .collect::<Result<Vec<_>, _>>()?;
         for (week_start, text) in saved {
-            // From today on, this week and every earlier week stay exactly as saved.
-            if leaves_week(intent, &week_start)
-                .map_err(|error| RepeatsFailure::Refused(error.message))?
-            {
+            // Before the Monday the change stands from, a stored week is left alone. The one that
+            // also holds the first days of the next shown week was split above.
+            if intent.edited == Edited::FromToday && week_start.as_str() < start.as_str() {
                 continue;
             }
             let (was, now) = (at(&old, &week_start), at(&new, &week_start));
