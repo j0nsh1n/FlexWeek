@@ -72,6 +72,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Plan on the phone and through the assistant helper now gives homework set to "Spread over days" and due more than a week away its share of this week when its session is already saved without a time; it was given no time this week. On the computer, such homework whose session waited in an earlier week is no longer shared out as if it were twice as long, and Plan right after you shorten a session places the minutes you cut, even before the app has read its numbers back from the server.
 - Homework past its deadline with fewer than 15 minutes left (for example 5 minutes after a 25-minute timer on a 30-minute homework) now stays in Overdue and Left from last week, and a leftover of 20 minutes is listed as 20, not 15. Pasting or duplicating a homework session with less than a quarter hour left, or a copy shorter than 15 minutes, now says so in minutes instead of "No unplanned time remains for this homework."
 - With the week starting on Sunday, Month showed nothing on a date of its first row before that row's Monday (Sunday 29 November in December 2026). It now shows that date's homework and blocks, and so does any other first day of the week.
+- With the week starting on a day other than Monday, FlexWeek no longer reloads the week again and again as if another program had changed it. It kept the window busy and slow whenever anything was saved, by the app itself or by a linked phone's sync, and could wipe a change made just before.
 
 ## [1.3.0] - 2026-11-10
 
