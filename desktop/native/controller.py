@@ -3509,8 +3509,8 @@ class NativeSession(QObject):
             self.saved_weeks,
             today_week,
             moment.isoformat(timespec="minutes"),
-            self.blocks,
-            self._committed_blocks,
+            self._open_week(),
+            self._assignments_basis,
         )
         # Left from last week shows on the week on screen that holds today.
         here = self.week_start == self.shown_week_of(today.isoformat())

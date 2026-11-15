@@ -2,7 +2,9 @@
 
 use serde_json::{Map, Value, json};
 
-use crate::desk::planning::{available_homework_minutes, floor_slot, occurrence_days};
+use crate::desk::planning::{
+    available_homework_minutes, floor_slot, occurrence_days, time_still_needed_parts,
+};
 use crate::desk::pyops::{
     Cmp, PyDict, compare, contains, eq, get, hashable, in_set, iterate, or_default, order, py_dict,
     sub,
@@ -533,7 +535,7 @@ pub fn left_over_items(
     today_week: &str,
     now: &str,
     blocks: &Value,
-    _committed_blocks: &Value,
+    committed_blocks: &Value,
 ) -> EngineResult<Vec<Value>> {
     let (today, minute) = crate::model::parse_due(now)?;
     let moment = (today, minute);
@@ -577,6 +579,32 @@ pub fn left_over_items(
             had_past_session
         };
         if !overdue && !carried {
+            continue;
+        }
+        // Time already placed this week or later is not left over: a carried line lists only the
+        // minutes that still have no time, by the same count as "needs a time".
+        let remaining = if overdue {
+            remaining
+        } else {
+            let one: Map<String, Value> =
+                Map::from_iter([(py_str(subscript(assignment, "id")?), assignment.clone())]);
+            // A block with no length holds no time, and the count would refuse it.
+            let with_length = |week: &Value| -> EngineResult<Vec<Value>> {
+                Ok(iterate(week)?
+                    .into_iter()
+                    .filter(|block| block.get("duration_min").is_some())
+                    .collect())
+            };
+            let open_week = with_length(blocks)?;
+            let saved_week = with_length(committed_blocks)?;
+            let parts = time_still_needed_parts(&one, &open_week, today_week, &saved_week)?;
+            let needed = parts
+                .first()
+                .and_then(|part| part["minutes"].as_i64())
+                .unwrap_or(0);
+            (needed - done).max(0)
+        };
+        if remaining == 0 {
             continue;
         }
         let Value::Object(fields) = assignment else {

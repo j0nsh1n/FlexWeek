@@ -599,6 +599,58 @@ fn test_left_from_last_week_subtracts_focus_and_sessions_ticked_done() {
     }
 }
 
+fn carried_project(estimate: i64, focus: i64, planned: i64) -> Value {
+    with(
+        essay(),
+        json!({
+            "estimate_min": estimate, "focus_minutes": focus, "planned_min": planned,
+            "unplanned_min": (estimate - focus - planned).max(0), "due": "2026-10-26",
+            "session_weeks": ["2026-10-05", "2026-10-12"],
+        }),
+    )
+}
+
+fn placed_hours(minutes: i64) -> Value {
+    json!({"id": "now", "assignment_id": "essay", "duration_min": minutes, "start": "15:00",
+           "days": [2], "completed": false})
+}
+
+fn carried_line(assignment: Value, week: Value) -> Vec<Value> {
+    clipboard::left_over_items(
+        &json!({"essay": assignment}),
+        &json!(["2026-10-05"]),
+        "2026-10-12",
+        "2026-10-12T10:00",
+        &week,
+        &week,
+    )
+    .expect("left-over items")
+}
+
+#[test]
+fn test_left_from_last_week_is_not_listed_for_time_already_planned() {
+    // Audit F-009: a 4 h project, 2 h worked last week by focus, the other 2 h placed this week.
+    let items = carried_line(carried_project(240, 120, 120), json!([placed_hours(120)]));
+    assert_eq!(items, Vec::<Value>::new());
+}
+
+#[test]
+fn test_left_from_last_week_lists_only_the_minutes_with_no_time() {
+    // 1 h placed last week, not done, nothing this week: the whole hour has no time.
+    let items = carried_line(carried_project(60, 0, 0), json!([]));
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["left_over_state"], "left_from_last_week");
+    assert_eq!(items[0]["remaining_min"], 60);
+    // 3 h estimate, 1 h planned this week: 2 h have no time.
+    let items = carried_line(carried_project(180, 0, 60), json!([placed_hours(60)]));
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["remaining_min"], 120);
+    // A missed session of last week is in the estimate and not in planned time: 2 h, 1 h planned now.
+    let items = carried_line(carried_project(120, 0, 60), json!([placed_hours(60)]));
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["remaining_min"], 60);
+}
+
 #[test]
 fn test_block_without_duration_counts_as_zero_minutes_in_both_states() {
     // A completed block with no length counts as 0 minutes, so the 2 h essay keeps all 2 h.

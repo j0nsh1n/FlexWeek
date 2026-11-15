@@ -145,3 +145,86 @@ def test_the_past_week_tag_survives_editing_the_assignment(qapp, window) -> None
     settled(qapp, window)
     item = next(item for item in session.unfinished() if item["id"] == "lab")
     assert item["left_over_state"] == "left_from_last_week"
+
+
+def test_time_already_planned_this_week_is_not_left_from_last_week(qapp, window) -> None:
+    """Last week's hour was never done, but the same hour now has a time on Tuesday: nothing is left
+    over, so there is no line and no Plan into this week to press (audit F-009)."""
+    left_in_week_one(qapp, window)
+    session = window.session
+    assert [item["id"] for item in session.unfinished()] == ["lab"]
+    session.add_block(
+        {
+            "id": "lab-again",
+            "title": "Lab report",
+            "kind": "flexible",
+            "assignment_id": "lab",
+            "duration_min": 60,
+            "days": [1],
+            "start": "15:00",
+        }
+    )
+    session.save()
+    settled(qapp, window)
+    assert session.unfinished() == []
+    plan(qapp, window)
+    hide_the_panel(qapp, window)
+    chip = [label.text() for label in window.findChildren(QLabel) if label.isVisible()]
+    assert not [text for text in chip if "left from last week" in text], chip
+    assert visible_button(window, PLAN_IT) is None
+
+
+def test_the_line_shows_only_the_minutes_that_still_have_no_time(qapp, window) -> None:
+    """The lab report is 60 minutes and none of it is done. Half an hour of it now has a time this
+    week, so the line is for the other 30 and Plan into this week places those 30."""
+    left_in_week_one(qapp, window)
+    session = window.session
+    session.add_block(
+        {
+            "id": "lab-half",
+            "title": "Lab report",
+            "kind": "flexible",
+            "assignment_id": "lab",
+            "duration_min": 30,
+            "days": [1],
+            "start": "15:00",
+        }
+    )
+    session.save()
+    settled(qapp, window)
+    assert [(item["id"], item["remaining_min"]) for item in session.unfinished()] == [("lab", 30)]
+    plan(qapp, window)
+    hide_the_panel(qapp, window)
+    button = visible_button(window, PLAN_IT)
+    assert button is not None, f"no {PLAN_IT}"
+    button.click()
+    settled(qapp, window)
+    new_hours = [b for b in lab_sessions(window) if b["id"] != "lab-half" and b["duration_min"] == 30]
+    assert new_hours, lab_sessions(window)
+
+
+def test_plan_into_this_week_places_the_hour_this_week_already_holds_without_a_time(qapp, window) -> None:
+    """The line lists minutes that have no time, a session waiting for one included, and pressing Plan
+    into this week gives that session its time instead of saying the homework is fully planned."""
+    left_in_week_one(qapp, window)
+    session = window.session
+    session.add_block(
+        {
+            "id": "lab-waiting",
+            "title": "Lab report",
+            "kind": "flexible",
+            "assignment_id": "lab",
+            "duration_min": 60,
+            "days": [0, 1, 2],
+        }
+    )
+    session.save()
+    settled(qapp, window)
+    assert [(item["id"], item["remaining_min"]) for item in session.unfinished()] == [("lab", 60)]
+    hide_the_panel(qapp, window)
+    button = visible_button(window, PLAN_IT)
+    assert button is not None, f"no {PLAN_IT}"
+    button.click()
+    settled(qapp, window)
+    assert [b for b in lab_sessions(window) if b.get("start")], lab_sessions(window)
+    assert "fully planned" not in session.message, session.message
