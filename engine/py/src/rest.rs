@@ -180,9 +180,11 @@ fn spread_min() -> PyResult<i64> {
 }
 
 #[pyfunction]
+#[allow(clippy::too_many_arguments)]
 fn spread_sessions(
     estimate_min: i64,
     focus_minutes: i64,
+    done_min: i64,
     planned_min: i64,
     due: &str,
     session_min: i64,
@@ -192,6 +194,7 @@ fn spread_sessions(
         let (sessions, remaining) = plan::spread_sessions(
             estimate_min,
             focus_minutes,
+            done_min,
             planned_min,
             due,
             session_min,

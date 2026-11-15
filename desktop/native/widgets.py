@@ -105,6 +105,7 @@ from PySide6.QtWidgets import (
 from shiboken6 import isValid
 
 from backend import clock as wall_clock
+from backend.assignments import unplanned_minutes
 from backend.availability import spread_sessions
 from backend.explain import REASON_COPY
 from backend.models import ESTIMATE_MAX_MIN, Assignment, TimeBlock, WeekRequest, due_is_timed, parse_due
@@ -5451,15 +5452,21 @@ class HomeworkDialog(Dialog):
         """The session length, the day the sessions start and the sessions themselves, for the values as
         they stand now. Every open time of this homework is replaced, so only focus already given counts."""
         due = self._chosen_due()
-        remaining = max(0, self.estimate.value() - int(self._original.get("focus_minutes") or 0))
+        session = getattr(self.parent(), "session", None)
+        focus = int(self._original.get("focus_minutes") or 0)
+        # As with the selected day, a sheet with no window session has no done time to take off.
+        done_for = getattr(session, "done_minutes_for", None)
+        done = done_for(self._original.get("id")) if done_for is not None else 0
+        remaining = unplanned_minutes(self.estimate.value(), focus, done, 0)
         session_min = spread_session_min(remaining)
         today = self._now().date().isoformat()
-        ahead = str(getattr(getattr(self.parent(), "session", None), "selected_day", "") or "")
+        ahead = str(getattr(session, "selected_day", "") or "")
         start = max(today, ahead)
         from_date = min(start, parse_due(due)[0].isoformat())
         sessions, _off_grid = spread_sessions(
             estimate_min=self.estimate.value(),
-            focus_minutes=int(self._original.get("focus_minutes") or 0),
+            focus_minutes=focus,
+            done_min=done,
             planned_min=0,
             due=due,
             session_min=session_min,

@@ -34,7 +34,7 @@ struct AddArgs {
     category: Option<String>,
     #[serde(default)]
     notes: Option<String>,
-    /// true saves the homework as "Spread over days", so Plan shares its time across the days up to the due date; false saves it as "In one go". Leave it out when adding to get "In one go", and when editing to keep what is saved.
+    /// true saves the homework as "Spread over days" and cuts its time not yet done into sessions on the days from today to the due date, as the app does; false saves it as "In one go". As in the app, Spread over days holds only for an estimate of 60 minutes or more and a homework not already in several open sessions this week; otherwise it is saved as "In one go". Leave it out when adding to get "In one go", and when editing to keep what is saved.
     #[serde(default)]
     spread: Option<bool>,
 }
@@ -61,7 +61,7 @@ struct EditArgs {
     category: Option<String>,
     #[serde(default)]
     notes: Option<String>,
-    /// true saves the homework as "Spread over days", so Plan shares its time across the days up to the due date; false saves it as "In one go". Leave it out when adding to get "In one go", and when editing to keep what is saved.
+    /// true saves the homework as "Spread over days" and cuts its time not yet done into sessions on the days from today to the due date, as the app does; false saves it as "In one go". As in the app, Spread over days holds only for an estimate of 60 minutes or more and a homework not already in several open sessions this week; otherwise it is saved as "In one go". Leave it out when adding to get "In one go", and when editing to keep what is saved.
     #[serde(default)]
     spread: Option<bool>,
 }
@@ -371,16 +371,48 @@ fn edit_weeks(
     })
 }
 
-/// Open (not finished) sessions of the homework in these weeks.
-fn open_sessions(weeks: &[(String, Vec<Value>, i64)], assignment_id: &str) -> usize {
-    weeks
+/// Open (not finished) sessions of the homework in the week the app has open today: the shown week
+/// that holds today, from this computer's first day of the week. The app's sheet counts that week
+/// alone when it decides whether Spread over days is offered.
+fn open_sessions_this_week(
+    conn: &Connection,
+    user_id: i64,
+    weeks: &[(String, Vec<Value>, i64)],
+    assignment_id: &str,
+    today: &str,
+    first_weekday: u32,
+) -> Result<usize, String> {
+    let monday = flexweek_engine::time::monday_of(today).map_err(|error| error.message)?;
+    let day = |start: &str, count: i64| -> Result<String, String> {
+        let date = chrono::NaiveDate::parse_from_str(start, "%Y-%m-%d")
+            .map_err(|_| session::STORAGE_UNAVAILABLE.to_string())?;
+        Ok((date + chrono::Duration::days(count))
+            .format("%Y-%m-%d")
+            .to_string())
+    };
+    let mut shown = day(&monday, i64::from(first_weekday))?;
+    if shown.as_str() > today {
+        shown = day(&shown, -7)?;
+    }
+    let stored = |start: &str| -> Result<Vec<Value>, String> {
+        match weeks.iter().find(|(held, _, _)| held == start) {
+            Some((_, blocks, _)) => Ok(blocks.clone()),
+            None => Ok(load_week(conn, user_id, start)?.0),
+        }
+    };
+    let blocks = match flexweek_engine::shown::shown_parts(&shown).map_err(|error| error.message)? {
+        None => stored(&shown)?,
+        Some((first, second, _)) => {
+            week::compose_shown_blocks(conn, user_id, &shown, &stored(&first)?, &stored(&second)?)?
+        }
+    };
+    Ok(blocks
         .iter()
-        .flat_map(|(_, blocks, _)| blocks)
         .filter(|block| {
             block.get("assignment_id").and_then(Value::as_str) == Some(assignment_id)
                 && block.get("completed").and_then(Value::as_bool) != Some(true)
         })
-        .count()
+        .count())
 }
 
 /// Adds the sessions Spread over days makes (the engine's `spread_new_sessions`, as the app's spread
@@ -706,7 +738,15 @@ impl crate::App {
                 .estimate_min
                 .or_else(|| existing.get("estimate_min").and_then(Value::as_i64))
                 .unwrap_or_default();
-            let choice = spread_choice(args.spread, estimate, open_sessions(&weeks, &args.id));
+            let open_here = open_sessions_this_week(
+                &opened.conn,
+                opened.user_id,
+                &weeks,
+                &args.id,
+                &now.today,
+                self.first_weekday(),
+            )?;
+            let choice = spread_choice(args.spread, estimate, open_here);
             let payload = edit_payload(existing, &args, choice.field)?;
             let mut edited = edit_weeks(
                 weeks,

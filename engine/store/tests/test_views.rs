@@ -543,3 +543,51 @@ fn homework_lists_the_minutes_of_sessions_ticked_done_in_every_saved_week() {
         assert_eq!(done("quiz"), Some(0), "read for {read_for}");
     }
 }
+
+#[test]
+fn day_month_and_the_list_take_the_done_time_off_what_needs_a_time() {
+    // Essay (90 min, due Wednesday 21 October) has 20 focus minutes, its 30-minute session in the week
+    // of 12 October ticked done and 45 minutes still placed this week. Its done time is the larger of
+    // focus and ticked, 30, never the 50 they add up to: 90 - 30 - 45 = 15 still need a time, on Day,
+    // in Month and in the list alike.
+    let (conn, user) = fixture("done-time-everywhere");
+    let mut essay = assignment("essay", "Essay", "2026-10-21T21:00", 90, false);
+    essay["focus_minutes"] = json!(20);
+    conn.execute(
+        "UPDATE assignments SET body = ?1 WHERE user_id = ?2 AND id = 'essay'",
+        params![text(&essay), user],
+    )
+    .expect("essay");
+    let earlier = json!([{
+        "id": "s0", "title": "Draft", "kind": "flexible", "duration_min": 30,
+        "days": [2], "start": "16:00", "assignment_id": "essay", "completed": true
+    }]);
+    conn.execute(
+        "UPDATE weeks SET blocks = ?1 WHERE user_id = ?2 AND week_start = '2026-10-12'",
+        params![text(&earlier), user],
+    )
+    .expect("earlier week");
+    let unplanned = |items: &[Value]| {
+        by_id(items, "essay")
+            .and_then(|item| item.get("unplanned_min"))
+            .and_then(Value::as_i64)
+    };
+    let day = day_view(&conn, user, "2026-10-21").expect("day");
+    assert_eq!(
+        unplanned(list(&day, "due_soon").expect("due soon")),
+        Some(15),
+        "Day"
+    );
+    let month = month_view(&conn, user, "2026-10").expect("month");
+    assert_eq!(
+        unplanned(list(&month, "deadlines").expect("deadlines")),
+        Some(15),
+        "Month"
+    );
+    let listed = homework_list(&conn, user, "2026-10-19", false).expect("list");
+    assert_eq!(
+        unplanned(list(&listed, "assignments").expect("list")),
+        Some(15),
+        "list"
+    );
+}

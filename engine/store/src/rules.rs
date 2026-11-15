@@ -73,7 +73,12 @@ pub fn assignment_view(
     view.insert("planned_min".into(), json!(planned));
     view.insert(
         "unplanned_min".into(),
-        json!(plan::unplanned_minutes(estimate, focus, planned)),
+        json!(plan::unplanned_minutes(
+            estimate,
+            focus,
+            done.unwrap_or(0),
+            planned
+        )),
     );
     if let Some(done) = done {
         view.insert("done_min".into(), json!(done));

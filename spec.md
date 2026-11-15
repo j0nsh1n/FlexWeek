@@ -217,8 +217,10 @@ Contract for the finished app:
   all my homework", under More and in the plan review, plans every unfinished
   session again, one whose time has passed unfinished included (its end is at
   or before the current minute): it gets a time from now on, or none when no
-  room is left before its due, and only the minutes still needed after focus
-  time are planned. A session on now, a pinned
+  room is left before its due, and only the minutes still needed after done
+  time are planned. A homework's done time is the larger of its focus minutes
+  and the minutes of its sessions ticked done in any week, never their sum, and
+  every count of what a homework still needs takes it off. A session on now, a pinned
   one and a finished one stay, and nothing is placed before now. The
   `planning_style` preference says when new homework gets a
   time: `suggest` (the default) waits for Plan my homework, `auto` plans each

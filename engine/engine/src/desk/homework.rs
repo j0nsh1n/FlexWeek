@@ -475,9 +475,9 @@ fn overdue_ids(
     Ok(ids)
 }
 
-/// What a save does about Spread over days. The choice is kept only for an estimate long enough to
-/// offer it, and the homework is cut into spread sessions only when it is not already in several open
-/// sessions, as the Material sheet offers it. `asked` is `Some(true)` for Spread over days, `Some(false)`
+/// What a save does about Spread over days, as the Material sheet does: the choice holds only for an
+/// estimate long enough to offer it and a homework not already in several open sessions in the week
+/// that is open (`open_sessions`); otherwise it saves In one go. `asked` is `Some(true)` for Spread over days, `Some(false)`
 /// for In one go and `None` to keep what is saved.
 pub struct SpreadChoice {
     /// The `spread` value to save, or `None` to keep the stored one.
@@ -493,9 +493,11 @@ pub fn spread_choice(asked: Option<bool>, estimate_min: i64, open_sessions: usiz
             field: None,
             respread: false,
         },
-        Some(true) if long_enough => SpreadChoice {
+        // Several open sessions this week hide the choice in the app's sheet, which then saves In one
+        // go and keeps the sessions' times.
+        Some(true) if long_enough && open_sessions <= 1 => SpreadChoice {
             field: Some("spread"),
-            respread: open_sessions <= 1,
+            respread: true,
         },
         Some(_) => SpreadChoice {
             field: Some("one"),
@@ -522,7 +524,7 @@ pub fn spread_new_sessions(
             .and_then(Value::as_i64)
             .unwrap_or_default()
     };
-    let (estimate, focus) = (int("estimate_min"), int("focus_minutes").max(done_min));
+    let (estimate, focus) = (int("estimate_min"), int("focus_minutes"));
     let due = assignment
         .get("due")
         .and_then(Value::as_str)
@@ -530,10 +532,19 @@ pub fn spread_new_sessions(
     let due_day = model::parse_due(due).map_err(|error| error.message)?.0;
     let today_day = model::parse_due(today).map_err(|error| error.message)?.0;
     let from_date = super::pydate::iso_text(today_day.min(due_day));
-    let session_min = crate::plan::spread_session_min((estimate - focus).max(0));
-    let (sessions, _off_grid) =
-        crate::plan::spread_sessions(estimate, focus, planned_min, due, session_min, &from_date)
-            .map_err(|error| error.message)?;
+    let session_min = crate::plan::spread_session_min(
+        (estimate - crate::plan::done_time(focus, done_min)).max(0),
+    );
+    let (sessions, _off_grid) = crate::plan::spread_sessions(
+        estimate,
+        focus,
+        done_min,
+        planned_min,
+        due,
+        session_min,
+        &from_date,
+    )
+    .map_err(|error| error.message)?;
     let mut made = Vec::new();
     for (index, session) in sessions.iter().enumerate() {
         let day = session["days"][0].as_i64().unwrap_or(0);

@@ -12,6 +12,7 @@ from uuid import uuid4
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from backend import clock as wall_clock
+from backend.assignments import unplanned_minutes
 from backend.models import Assignment, ProtectedWindow, TimeBlock, WorkWindow, parse_due
 from backend.slots import hhmm_to_minutes
 from backend.weeks import current_week_start
@@ -99,6 +100,7 @@ from desktop.native.reuse import (
     copied_fixed_block,
     copied_homework_block,
     copy_label,
+    done_minutes,
     due_point,
     fair_share,
     is_planned,
@@ -1408,6 +1410,11 @@ class NativeSession(QObject):
         body = Assignment.model_validate(payload).model_dump(mode="json")
         if known is not None:
             body["session_weeks"] = list(known.get("session_weeks") or [])
+            # The server's counts stay paired with `_assignments_basis`, the week they were read with, until
+            # the next read: an edit drops none of them, or the done and later-week minutes are lost.
+            for key in ("planned_min", "unplanned_min", "done_min"):
+                if key in known:
+                    body[key] = known[key]
         sessions = [item for item in self.blocks if item.get("assignment_id") == body["id"]]
         # One session as long as the old estimate is the homework's only planned time, so it follows
         # the new estimate. Spread, pasted or partly planned sessions keep the lengths already chosen.
@@ -1437,12 +1444,19 @@ class NativeSession(QObject):
             if "fixed_at" in assignment and not session.get("completed"):
                 self._fix_session(session, assignment["fixed_at"])
             blocks.append(TimeBlock.model_validate(session).model_dump(mode="json"))
-        if not sessions and not spread:
+        # A homework already known gets a session for what is still to place of it, by the one count (its
+        # done time and later weeks' sessions off), and none when nothing is: a new one gets its estimate.
+        length = (
+            available_homework_minutes(body, blocks, self._assignments_basis)
+            if known is not None
+            else body["estimate_min"]
+        )
+        if not sessions and not spread and length > 0:
             session = {
                 "id": str(uuid4()),
                 "title": body["title"],
                 "kind": "flexible",
-                "duration_min": body["estimate_min"],
+                "duration_min": length,
                 "days": days if days is not None else session_days(self.week_start, body["due"]),
                 "priority": body["priority"],
                 "energy": body["energy"],
@@ -1681,7 +1695,12 @@ class NativeSession(QObject):
             return False
         updated = deepcopy(assignment)
         updated["spread"] = "spread"
-        remaining = max(0, int(updated.get("estimate_min") or 0) - int(updated.get("focus_minutes") or 0))
+        remaining = unplanned_minutes(
+            int(updated.get("estimate_min") or 0),
+            int(updated.get("focus_minutes") or 0),
+            self.done_minutes_for(assignment_id),
+            0,
+        )
         session_min = max(15, min(60, remaining - remaining % 15))
         due = str(updated.get("due") or self.week_start)[:10]
         from_date = min(max(self.today_iso(), self.selected_day or self.week_start), due)
@@ -3068,6 +3087,13 @@ class NativeSession(QObject):
             return None
         self._fresh_plan = False
         return self.trace
+
+    def done_minutes_for(self, assignment_id: str | None) -> int:
+        """Minutes of this homework's sessions ticked done, in every saved week and this week as it stands:
+        with its focus minutes, the larger of the two is its done time."""
+        known = self.assignments.get(assignment_id or "")
+        # A homework not saved yet has done nothing.
+        return done_minutes(known, self._open_week(), self._assignments_basis) if known is not None else 0
 
     def remaining_for(self, assignment_id: str) -> int:
         return available_homework_minutes(

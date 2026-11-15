@@ -1511,3 +1511,83 @@ fn an_edit_retry_tells_an_omitted_spread_from_spread_false() {
     );
     assert_eq!(stored_spread(&world, &id), json!("spread"));
 }
+
+fn boot_from(world: &World, first_day: &str) -> Server {
+    Server::spawn(&[
+        "--data-dir",
+        &world.data_arg,
+        "--database",
+        &world.database_arg,
+        "--now",
+        NOW_ISO,
+        "--week-starts-on",
+        first_day,
+    ])
+}
+
+/// Poster (180 min, due 4 November) in two open sessions: two hours on Monday 19 October and one hour on
+/// Sunday 25 October, both stored in the week of 19 October. Today is Wednesday 21 October.
+fn poster_in_two_sessions(world: &World, server: &mut Server) -> String {
+    let id = add_with(server, "op-two-sessions-add", None);
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let blocks = json!([
+        {"id": "mon", "title": "Poster", "kind": "flexible", "duration_min": 120, "days": [0],
+         "start": "16:00", "assignment_id": id},
+        {"id": "sun", "title": "Poster", "kind": "flexible", "duration_min": 60, "days": [6],
+         "start": "16:00", "assignment_id": id}
+    ]);
+    conn.execute(
+        "UPDATE weeks SET blocks = ?1 WHERE user_id = ?2 AND week_start = '2026-10-19'",
+        (blocks.to_string(), world.user),
+    )
+    .expect("week");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    id
+}
+
+fn open_session_lengths(world: &World, id: &str) -> Vec<i64> {
+    let mut lengths = Vec::new();
+    for week in ["2026-10-12", "2026-10-19", "2026-10-26", "2026-11-02"] {
+        if let Some((blocks, _)) = week_row(&world.database_arg, world.user, week) {
+            for block in blocks_with_assignment(&blocks, id) {
+                if block.get("completed").and_then(Value::as_bool) != Some(true) {
+                    lengths.push(block["duration_min"].as_i64().unwrap_or(0));
+                }
+            }
+        }
+    }
+    lengths.sort_unstable();
+    lengths
+}
+
+#[test]
+fn spread_from_the_helper_counts_only_the_open_weeks_sessions_as_the_app_does() {
+    // From Monday the open week (19-25 October) holds both sessions: the app's sheet hides Spread over
+    // days, saves In one go and keeps the times, and so does the helper. From Sunday the open week is
+    // 18-24 October and holds only the Monday one: the app offers and makes the hour sessions, and so
+    // does the helper.
+    for (first_day, spread, lengths) in [
+        ("monday", json!("one"), vec![60, 120]),
+        ("sunday", json!("spread"), vec![60, 60, 60]),
+    ] {
+        let world = signed_in(&format!("helper-spread-open-week-{first_day}"));
+        let mut server = boot_from(&world, first_day);
+        server.handshake();
+        let id = poster_in_two_sessions(&world, &mut server);
+        let response = server.call(
+            "edit_homework",
+            json!({"operation_id": "op-two-sessions-edit", "id": id, "expected_revision": 1,
+                   "spread": true}),
+            3,
+        );
+        assert_eq!(body_of(&response)["ok"], json!(true), "got {response}");
+        assert_eq!(stored_spread(&world, &id), spread, "from {first_day}");
+        assert_eq!(
+            open_session_lengths(&world, &id),
+            lengths,
+            "from {first_day}"
+        );
+    }
+}

@@ -79,8 +79,8 @@ def planned_minutes_from_day(weeks: list[tuple[str, list[dict]]], from_day: str)
     return {key: int(value) for key, value in raw.items()}
 
 
-def unplanned_minutes(estimate_min: int, focus_minutes: int, planned: int) -> int:
-    return flexweek_engine.unplanned_minutes(estimate_min, focus_minutes, planned)
+def unplanned_minutes(estimate_min: int, focus_minutes: int, done_min: int, planned: int) -> int:
+    return flexweek_engine.unplanned_minutes(estimate_min, focus_minutes, done_min, planned)
 
 
 def migrate_blocks(week_start: str, blocks: list[dict]) -> tuple[list[dict], list[dict]]:

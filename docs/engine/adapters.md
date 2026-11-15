@@ -33,7 +33,7 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | weeks | rules_on_shown_week | ADAPTER | Encodes the planner settings, one call (`shown::rules_on_shown_week`) that names the weekday of the shown week's day 0, JSON decoded. |
 | assignments | planned_minutes_by_id | ADAPTER | Encodes the weeks, one call, values become ints. |
 | assignments | done_minutes_by_id | ADAPTER | Encodes the weeks, one call, values become ints. |
-| assignments | unplanned_minutes | ADAPTER | Three ints in, one engine call. |
+| assignments | unplanned_minutes | ADAPTER | Four ints in (estimate, focus, minutes ticked done, planned), one engine call. |
 | assignments | migrate_blocks | ADAPTER | Encodes the blocks, one call, two lists out. |
 | availability | add_occupancy | ADAPTER | One engine call, written back over the occupancy list. |
 | availability | occupancy_from_windows | ADAPTER | Encodes the windows, one call, list out. |
@@ -371,6 +371,7 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | reuse | settle_placements | LOGIC, moved | `keep` is read as given by `reuse_settle_placements` |
 | reuse | occurrence_days | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | session_minutes | ADAPTER | encodes, makes one engine call, decodes |
+| reuse | done_minutes | ADAPTER | encodes, makes one engine call, decodes; the homework's minutes ticked done in every saved week, this week as it stands (`credited_done_minutes`) |
 | reuse | available_homework_minutes | ADAPTER | encodes, makes one engine call, decodes; `uncovered_homework_minutes` down to a quarter hour, what Plan and paste may place |
 | reuse | uncovered_homework_minutes | ADAPTER | encodes, makes one engine call, decodes; the minutes no session holds, exactly: the estimate less focus done less what later weeks hold (the server's `planned_min` less the sessions of `committed_blocks`, the week as saved when that number was read), less this week's not-finished sessions, never below 0 (`planning::uncovered_homework_minutes`) |
 | reuse | time_still_needed | ADAPTER | encodes, makes one engine call, decodes; counts minutes, not quarter hours: each homework's waiting sessions plus its minutes no session holds, counted as `uncovered_homework_minutes` counts them against `committed_blocks` (`planning::time_still_needed_since`) |

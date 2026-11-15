@@ -256,11 +256,17 @@ fn due_slack_point(week_start: &str, due: &str) -> PyResult<(i64, i64)> {
 }
 
 #[pyfunction]
-fn unplanned_minutes(estimate_min: i64, focus_minutes: i64, planned: i64) -> PyResult<i64> {
+fn unplanned_minutes(
+    estimate_min: i64,
+    focus_minutes: i64,
+    done_min: i64,
+    planned: i64,
+) -> PyResult<i64> {
     guard(|| {
         Ok(plan::unplanned_minutes(
             estimate_min,
             focus_minutes,
+            done_min,
             planned,
         ))
     })

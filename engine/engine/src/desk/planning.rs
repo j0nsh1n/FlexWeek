@@ -1367,7 +1367,10 @@ pub fn done_time_minutes(
     saved_week: &Value,
 ) -> EngineResult<i64> {
     let focus = int_of(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
-    Ok(focus.max(credited_done_minutes(assignment, id, blocks, saved_week)?))
+    Ok(crate::plan::done_time(
+        focus,
+        credited_done_minutes(assignment, id, blocks, saved_week)?,
+    ))
 }
 
 /// Minutes of the homework that this week's sessions are to hold: the estimate less its done time
@@ -1396,7 +1399,9 @@ fn this_weeks_part(
     let Some(estimate) = get(assignment, "estimate_min")?.filter(|value| !value.is_null()) else {
         return Ok(py_int(server)? + saved);
     };
-    let need = (int_of(estimate)? - focus).max(0);
+    // The server's unplanned number credits the done time it knew of: focus and the saved ticks.
+    let server_done = int_of(&or_default(get(assignment, "done_min")?, json!(0)))?;
+    let need = (int_of(estimate)? - crate::plan::done_time(focus, server_done)).max(0);
     let later = match get(assignment, "planned_min")?.filter(|value| !value.is_null()) {
         Some(planned) => py_int(planned)? - saved,
         // The unplanned number alone is floored at 0, so it says only that later weeks hold at least

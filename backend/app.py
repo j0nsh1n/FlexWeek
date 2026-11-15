@@ -1472,6 +1472,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         sessions, remaining = spread_sessions(
             estimate_min=int(body["estimate_min"]),
             focus_minutes=int(body["focus_minutes"]),
+            done_min=done_minutes_by_id(weeks).get(assignment_id, 0),
             planned_min=planned,
             due=body["due"],
             session_min=payload.session_min,

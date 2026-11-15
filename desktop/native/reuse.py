@@ -315,6 +315,20 @@ def session_minutes(blocks: list[dict], assignment_id: str) -> int:
     return int(flexweek_engine.reuse_session_minutes(json.dumps(blocks), json.dumps(assignment_id)))
 
 
+def done_minutes(
+    assignment: dict | None,
+    blocks: list[dict],
+    committed_blocks: list[dict] | None = None,
+) -> int:
+    return int(
+        flexweek_engine.reuse_done_minutes(
+            json.dumps(assignment),
+            json.dumps(blocks),
+            json.dumps(committed_blocks),
+        )
+    )
+
+
 def available_homework_minutes(
     assignment: dict | None,
     blocks: list[dict],

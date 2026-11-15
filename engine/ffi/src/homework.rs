@@ -218,9 +218,17 @@ pub(crate) fn save_homework(
     let estimate = body["estimate_min"].as_i64().unwrap_or(0);
     let focus = body["focus_minutes"].as_i64().unwrap_or(0);
     let mut weeks = stored_weeks(&db, user_id)?;
+    let held: Vec<(String, Vec<Value>)> = weeks
+        .iter()
+        .map(|(start, blocks, _)| (start.clone(), blocks.clone()))
+        .collect();
+    let done = flexweek_engine::plan::done_minutes_by_id(&held)
+        .get(body["id"].as_str().unwrap_or(""))
+        .copied()
+        .unwrap_or(0);
     if spread == "spread" && estimate >= 60 {
         let (sessions, _) =
-            flexweek_engine::plan::spread_sessions(estimate, focus, 0, due, 60, &from_date)
+            flexweek_engine::plan::spread_sessions(estimate, focus, done, 0, due, 60, &from_date)
                 .map_err(engine_failure)?;
         for (index, session) in sessions.iter().enumerate() {
             let week_start = session["week_start"].as_str().unwrap_or("");

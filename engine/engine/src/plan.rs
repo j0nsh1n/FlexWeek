@@ -533,8 +533,22 @@ pub fn due_slack_point(week_start: &str, due: &str) -> EngineResult<(i64, i64)> 
     Ok(((due_day - monday).num_days(), minutes))
 }
 
-pub fn unplanned_minutes(estimate_min: i64, focus_minutes: i64, planned: i64) -> i64 {
-    let remaining = (estimate_min - focus_minutes).max(0);
+/// A homework's done time: the larger of its focus minutes and the minutes of its sessions ticked
+/// done, never their sum. Focus time is kept per homework, not per session, so a session both timed
+/// and ticked would otherwise count twice. Every count that credits work reads this.
+pub fn done_time(focus_minutes: i64, done_min: i64) -> i64 {
+    focus_minutes.max(done_min)
+}
+
+/// Minutes of the homework that no unfinished session holds: the estimate less its done time
+/// (`done_time`) less `planned`.
+pub fn unplanned_minutes(
+    estimate_min: i64,
+    focus_minutes: i64,
+    done_min: i64,
+    planned: i64,
+) -> i64 {
+    let remaining = (estimate_min - done_time(focus_minutes, done_min)).max(0);
     (remaining - planned).max(0)
 }
 
@@ -1178,15 +1192,17 @@ pub fn spread_session_min(remaining: i64) -> i64 {
     SLOT_MIN.max(60.min(remaining - remaining.rem_euclid(SLOT_MIN)).min(180))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn spread_sessions(
     estimate_min: i64,
     focus_minutes: i64,
+    done_min: i64,
     planned_min: i64,
     due: &str,
     session_min: i64,
     from_date: &str,
 ) -> EngineResult<(Vec<Value>, i64)> {
-    let remaining = unplanned_minutes(estimate_min, focus_minutes, planned_min);
+    let remaining = unplanned_minutes(estimate_min, focus_minutes, done_min, planned_min);
     let remainder = remaining.rem_euclid(SLOT_MIN);
     let grid_total = remaining - remainder;
     let (due_day, _) = parse_due(due)?;
@@ -1268,6 +1284,7 @@ fn due_soon(
     weeks: &[(String, Vec<Value>)],
 ) -> EngineResult<Vec<Value>> {
     let planned = planned_minutes_by_id(weeks, week_start);
+    let done = done_minutes_by_id(weeks);
     let tomorrow = agenda + Duration::days(1);
     let mut items: Vec<Value> = Vec::new();
     for (body, revision) in assignment_rows {
@@ -1295,6 +1312,7 @@ fn due_soon(
                     body.get("focus_minutes")
                         .and_then(Value::as_i64)
                         .unwrap_or(0),
+                    done.get(id).copied().unwrap_or(0),
                     planned_min,
                 )),
             );
@@ -1585,6 +1603,7 @@ fn deadline_item(
     revision: i64,
     due_day: NaiveDate,
     planned: &BTreeMap<String, i64>,
+    done: &BTreeMap<String, i64>,
 ) -> Value {
     let id = body["id"].as_str().unwrap_or("");
     json!({
@@ -1597,6 +1616,7 @@ fn deadline_item(
         "unplanned_min": unplanned_minutes(
             body["estimate_min"].as_i64().unwrap_or(0),
             body.get("focus_minutes").and_then(Value::as_i64).unwrap_or(0),
+            done.get(id).copied().unwrap_or(0),
             planned.get(id).copied().unwrap_or(0),
         ),
         "revision": revision,
@@ -1632,6 +1652,7 @@ pub fn build_month_from(
     }
     let from_week = monday_of(&iso_date(start))?;
     let planned = planned_minutes_by_id(weeks, &from_week);
+    let done = done_minutes_by_id(weeks);
 
     let mut due_by_date: BTreeMap<String, Vec<Value>> = BTreeMap::new();
     for day in &grid_days {
@@ -1643,7 +1664,7 @@ pub fn build_month_from(
         let (due_day, _) = parse_due(body["due"].as_str().unwrap_or(""))?;
         let id = body["id"].as_str().unwrap_or("").to_string();
         assignment_due.insert(id.clone(), due_day);
-        let item = deadline_item(body, *revision, due_day, &planned);
+        let item = deadline_item(body, *revision, due_day, &planned, &done);
         let key = iso_date(due_day);
         if due_by_date.contains_key(&key) {
             due_by_date.get_mut(&key).unwrap().push(item);
@@ -1827,7 +1848,7 @@ pub fn build_month_from(
             continue;
         }
         let due_day = assignment_due[&assignment_id];
-        let mut item = deadline_item(body, *revision, due_day, &planned);
+        let mut item = deadline_item(body, *revision, due_day, &planned, &done);
         if let Some(obj) = item.as_object_mut() {
             obj.insert("session_dates".into(), json!(dates));
             obj.insert("has_notes".into(), json!(has_notes));
@@ -1882,7 +1903,16 @@ mod tests {
 
     #[test]
     fn unplanned_minutes_matches_python() {
-        assert_eq!(unplanned_minutes(60, 10, 20), 30);
+        assert_eq!(unplanned_minutes(60, 10, 0, 20), 30);
+    }
+
+    #[test]
+    fn done_time_is_the_larger_of_focus_and_ticked_never_their_sum() {
+        // 120 min: 30 focus and 30 ticked is 30 done (one half hour, timed and ticked), 30 and 60 is 60.
+        assert_eq!(unplanned_minutes(120, 30, 30, 0), 90);
+        assert_eq!(unplanned_minutes(120, 30, 60, 0), 60);
+        assert_eq!(unplanned_minutes(120, 60, 30, 0), 60);
+        assert_eq!(unplanned_minutes(120, 0, 60, 30), 30);
     }
 
     #[test]
