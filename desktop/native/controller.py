@@ -2055,9 +2055,9 @@ class NativeSession(QObject):
                     parked[held] = _without_homework(parked[held], assignment_id)
                 if parked["trace"]:
                     trace = dict(parked["trace"])
-                    for key in ("placed", "unplaced"):
-                        if key in trace:
-                            trace[key] = _without_homework(trace[key], assignment_id)
+                    for listing in ("placed", "unplaced"):
+                        if listing in trace:
+                            trace[listing] = _without_homework(trace[listing], assignment_id)
                     parked["trace"] = trace
                 for side in ("undo", "redo"):
                     steps = (_step_without_homework(step, assignment_id, revisions) for step in parked[side])
