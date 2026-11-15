@@ -85,9 +85,9 @@
  },
  {
   "file": "engine/engine/src/desk/planning.rs",
-  "name": "the focus time is not taken off the minutes left",
-  "old": "    let need = (int_of(estimate)? - focus).max(0);\n",
-  "new": "    let need = int_of(estimate)?.max(0);\n",
+  "name": "the done time is not taken off the minutes left",
+  "old": "    Ok((int_of(estimate)? - done).max(0) - later)\n",
+  "new": "    Ok(int_of(estimate)?.max(0) - later)\n",
   "test": "cargo:flexweek-engine:replan_missed_sessions:test_a_session_partly_done_by_the_timer_is_replanned_for_what_is_left"
  },
  {

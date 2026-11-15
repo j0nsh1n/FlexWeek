@@ -5450,7 +5450,8 @@ class HomeworkDialog(Dialog):
 
     def _spread_figures(self) -> tuple[int, str, list[dict]]:
         """The session length, the day the sessions start and the sessions themselves, for the values as
-        they stand now. Every open time of this homework is replaced, so only focus already given counts."""
+        they stand now. Every open time of this homework is replaced, so only its done time counts: the
+        larger of its focus minutes and its minutes ticked done."""
         due = self._chosen_due()
         session = getattr(self.parent(), "session", None)
         focus = int(self._original.get("focus_minutes") or 0)
