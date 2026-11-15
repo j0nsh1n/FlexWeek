@@ -40,6 +40,7 @@ from desktop.native.widgets import (
     SPREAD_MIN,
     _homework_problem,
     first_day_changed,
+    moved_across_months,
     moved_day_names,
     moved_days_note,
     same_weekday,
@@ -91,6 +92,8 @@ class HomeworkDraft:
         self.existing = assignment is not None
         # The pinned day came from a gesture (a time drawn on the grid), not from the app's default.
         self._day_given = when_day is not None or day is not None
+        # Whether the student picked a day: one they handled is theirs, even if it is the one it opened on.
+        self._day_touched = False
         if category not in FLEX_CATEGORIES:
             category = "assignments"
         info = CATEGORIES.get(category, {})
@@ -175,6 +178,8 @@ class HomeworkDraft:
         # The old "Monday 2" label when the kept pin's date changed, with the one-line note naming
         # the move. Cleared when the student picks another day.
         self._moved_from = ""
+        # The new name when the pin moved into another month, for the spoken name of the day.
+        self._moved_to = ""
         self._moved_note = ""
 
     def follow_week(self, fresh_day: int) -> None:
@@ -185,27 +190,32 @@ class HomeworkDraft:
         with no mark."""
         week = self.session.week_start or ""
         from_week = self._days_week
-        if (
-            first_day_changed(from_week, week)
-            and not self._day_given
-            and self.when_day == self._opened_as[5]
-        ):
+        if first_day_changed(from_week, week) and not self._day_given and not self._day_touched:
             title, due_date, due_time, estimate, when, _, *rest = self._opened_as
             self._opened_as = (title, due_date, due_time, estimate, when, fresh_day, *rest)
             self.when_day = fresh_day
             self._days_week = week
             self._moved_from = ""
+            self._moved_to = ""
             self._moved_note = ""
             return
         turned, moved = turn_days_keeping_weekdays([self.when_day], from_week, week)
         names = moved_day_names(moved[0][0], from_week, moved[0][1], week) if moved else None
         self._moved_from = names[0] if names else ""
+        self._moved_to = (
+            names[1] if names and moved_across_months(moved[0][0], from_week, moved[0][1], week) else ""
+        )
         self._moved_note = moved_days_note([names]) if names else ""
         title, due_date, due_time, estimate, when, opened_day, *rest = self._opened_as
         opened_day = same_weekday(opened_day, from_week, week)
         self._opened_as = (title, due_date, due_time, estimate, when, opened_day, *rest)
         self.when_day = turned[0]
         self._days_week = week
+
+    def _moved_access(self) -> str:
+        if self._moved_to:
+            return f"Day, moved from {self._moved_from} to {self._moved_to}"
+        return f"Day, moved from {self._moved_from}"
 
     # What is open -----------------------------------------------------------------------
 
@@ -394,7 +404,9 @@ class HomeworkDraft:
             self.when_problem = self._past_when_problem()
         elif name == "whenDay":
             self.when_day = int(value)
+            self._day_touched = True
             self._moved_from = ""
+            self._moved_to = ""
             self._moved_note = ""
             self.when_problem = self._past_when_problem()
         elif name == "whenTime":
@@ -683,7 +695,7 @@ class HomeworkDraft:
             # The day row shows only while the homework is pinned, so a move is named only then.
             "whenMovedNote": self._moved_note if self.when == "fixed" else "",
             "whenDayAccess": (
-                f"Day, moved from {self._moved_from}" if self._moved_from and self.when == "fixed" else ""
+                self._moved_access() if self._moved_from and self.when == "fixed" else ""
             ),
             "whenProblem": self.when_problem,
             "estimate": self.estimate_text,

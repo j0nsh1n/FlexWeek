@@ -40,6 +40,7 @@ from desktop.native.widgets import (
     LATE_WAIT,
     _late_move,
     _late_summary,
+    moved_across_months,
     moved_day_names,
     moved_days_note,
     same_weekday,
@@ -1021,6 +1022,15 @@ class SheetsBridge(QObject):
             new: moved_day_names(old, old_week, new, self._routine_week)
             for new, (old, old_week) in sorted(self._routine_moved.items())
         }
+        moved_origin = dict(self._routine_moved)
+
+        def spoken_to(index: int) -> str:
+            """The new name when the tick moved into another month, for its chip's spoken name."""
+            crossed = index in moved_names and moved_across_months(
+                *moved_origin[index], index, self._routine_week
+            )
+            return moved_names[index][1] if crossed else ""
+
         moved_note = moved_days_note(list(moved_names.values()))
         days = [
             {
@@ -1030,6 +1040,7 @@ class SheetsBridge(QObject):
                 "on": index in self._routine_days,
                 "moved": index in self._routine_moved,
                 "movedFrom": moved_names[index][0] if index in moved_names else "",
+                "movedTo": spoken_to(index),
             }
             for index in range(7)
         ]

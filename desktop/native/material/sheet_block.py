@@ -38,6 +38,7 @@ from desktop.native.widgets import (
     first_day_changed,
     full_day_name,
     guess_locked_category,
+    moved_across_months,
     moved_day_names,
     moved_days_note,
     same_weekday,
@@ -112,24 +113,27 @@ class BlockDraft:
         # The ticks the last turn moved, as new day to the old "Monday 2" label, with the one-line
         # note naming the move. Cleared when the student touches the row.
         self._moved_from: dict[int, str] = {}
+        # The new name of a tick that moved into another month, for the spoken name of its chip.
+        self._moved_to: dict[int, str] = {}
         self._moved_note = ""
+        # Whether the student ticked or unticked a day: a row they handled is theirs, even if it ended
+        # on the days it opened with.
+        self._days_touched = False
 
     def follow_week(self, fresh_days: list[int]) -> None:
         """A new sheet kept after Esc and opened again in a week that starts on another day: the days the
         student ticked keep their weekdays, and the ticks whose date changed are remembered, so the row
-        can mark them until the student touches it. Days still as the app put them when the sheet opened
-        are picked again for this week, `fresh_days` as a fresh sheet has them, with no mark."""
+        can mark them until the student touches it. A row the student never handled is still what the app
+        put there when the sheet opened: it is picked again for this week, `fresh_days` as a fresh sheet
+        has them, with no mark."""
         week = self.session.week_start or ""
         title, opened_days, *rest = self._opened_as
-        if (
-            first_day_changed(self._days_week, week)
-            and not self._drawn
-            and tuple(self.days) == opened_days
-        ):
+        if first_day_changed(self._days_week, week) and not self._drawn and not self._days_touched:
             self.days = sorted(fresh_days)
             self._opened_as = (title, tuple(self.days), *rest)
             self._days_week = week
             self._moved_from = {}
+            self._moved_to = {}
             self._moved_note = ""
             return
 
@@ -140,6 +144,9 @@ class BlockDraft:
         from_week = self._days_week
         names = {new: moved_day_names(old, from_week, new, week) for old, new in moved}
         self._moved_from = {new: old_name for new, (old_name, _) in names.items()}
+        self._moved_to = {
+            new: names[new][1] for old, new in moved if moved_across_months(old, from_week, new, week)
+        }
         self._moved_note = moved_days_note(list(names.values()))
         self.days = turned_days
         self._opened_as = (title, tuple(turned(opened_days)), *rest)
@@ -189,7 +196,9 @@ class BlockDraft:
         self.error = ""
         self.days_problem = ""
         self._moved_from = {}
+        self._moved_to = {}
         self._moved_note = ""
+        self._days_touched = True
         days = set(self.days)
         days.symmetric_difference_update({day})
         self.days = sorted(days)
@@ -476,6 +485,7 @@ class BlockDraft:
                     "on": index in self.days,
                     "moved": index in self._moved_from,
                     "movedFrom": self._moved_from.get(index, ""),
+                    "movedTo": self._moved_to.get(index, ""),
                 }
                 for index in range(7)
             ],

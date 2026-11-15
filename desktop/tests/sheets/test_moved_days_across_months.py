@@ -151,7 +151,7 @@ def test_material_block_names_the_month_where_a_move_crosses_it(qapp, shell, foc
     assert form["movedNote"] == note
     by_value = {day["value"]: day for day in form["days"]}
     assert by_value[5]["movedFrom"] == "Monday 30 November"
-    assert _qml_name(shell, "blockDay5") == "Mon 7, moved from Monday 30 November"
+    assert _qml_name(shell, "blockDay5") == "Monday 7 December, moved from Monday 30 November"
     if days == [0, 1]:
         assert by_value[6]["movedFrom"] == "Tuesday 1"
 
@@ -173,7 +173,7 @@ def test_material_homework_pin_names_the_month_where_the_move_crosses_it(qapp, s
     assert form["whenMovedNote"] == (
         "Tuesday 24 November isn't in this week any more, so it moved to Tuesday 1 December."
     )
-    assert form["whenDayAccess"] == "Day, moved from Tuesday 24 November"
+    assert form["whenDayAccess"] == "Day, moved from Tuesday 24 November to Tuesday 1 December"
 
 
 def test_material_routine_days_name_the_month_where_a_move_crosses_it(qapp, shell, sheets) -> None:
