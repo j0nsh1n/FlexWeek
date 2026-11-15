@@ -1477,3 +1477,36 @@ fn edit_homework_sets_spread_both_ways_and_keeps_it_when_absent() {
     edit(&mut server, "op-edit-spread-4", json!({}));
     assert_eq!(stored_spread(&world, &id), json!("one"), "absent keeps it");
 }
+
+#[test]
+fn an_edit_retry_tells_an_omitted_spread_from_spread_false() {
+    // Stored "spread"; an edit that leaves spread out keeps it. Sent again under the same operation id
+    // with spread=false it is a different request, not the first one's answer.
+    let world = signed_in("edit-retry-spread");
+    let mut server = boot(&world);
+    server.handshake();
+    let id = add_with(&mut server, "op-retry-spread-add", Some(true));
+    let args = json!({
+        "operation_id": "op-retry-spread-edit",
+        "id": id,
+        "expected_revision": 1,
+        "notes": "Cite sources"
+    });
+    let first = server.call("edit_homework", args.clone(), 3);
+    assert_eq!(body_of(&first)["ok"], json!(true), "got {first}");
+    let same = server.call("edit_homework", args.clone(), 4);
+    assert_eq!(
+        body_of(&same),
+        body_of(&first),
+        "an identical retry repeats the answer"
+    );
+    let mut changed = args;
+    changed["spread"] = json!(false);
+    let conflict = server.call("edit_homework", changed, 5);
+    assert_eq!(
+        tool_error_text(&conflict),
+        Some(OPERATION_CONFLICT),
+        "spread=false after an omitted spread is changed data, got {conflict}"
+    );
+    assert_eq!(stored_spread(&world, &id), json!("spread"));
+}

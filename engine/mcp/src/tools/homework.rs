@@ -541,8 +541,10 @@ fn add_arguments(args: &AddArgs) -> Value {
     })
 }
 
+/// `spread` joins the digest only when it was sent: leaving it out keeps what is saved and `false` sets
+/// "In one go", so they are different requests.
 fn edit_arguments(args: &EditArgs) -> Value {
-    json!({
+    let mut arguments = json!({
         "category": args.category,
         "course": args.course,
         "due": args.due,
@@ -552,9 +554,12 @@ fn edit_arguments(args: &EditArgs) -> Value {
         "id": args.id,
         "notes": args.notes,
         "priority": args.priority,
-        "spread": args.spread.unwrap_or(false),
         "title": args.title,
-    })
+    });
+    if let (Some(spread), Some(map)) = (args.spread, arguments.as_object_mut()) {
+        map.insert("spread".into(), json!(spread));
+    }
+    arguments
 }
 
 #[tool_router(router = homework_tools, vis = "pub(crate)")]
