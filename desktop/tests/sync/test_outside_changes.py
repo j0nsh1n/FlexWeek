@@ -392,3 +392,64 @@ def test_a_parked_week_from_sunday_holds_the_stored_revisions_a_delete_elsewhere
     with connect(database) as db:
         stored = [(week, db.read_week(_user_id(window), week)[1]) for week in ("2026-10-26", "2026-11-02")]
     assert session.stored_weeks() == stored
+
+
+@pytest.mark.parametrize(
+    ("day", "first", "next_week"),
+    [("monday", "2026-11-02", "2026-11-09"), ("sunday", "2026-11-01", "2026-11-08")],
+)
+def test_a_parked_week_forgets_homework_deleted_in_another_week(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    day: str,
+    first: str,
+    next_week: str,
+) -> None:
+    # The first week holds the essay (Wednesday 4 November) and an unsaved edit. Opening the next week
+    # parks it, and the essay is deleted there. Back on the first week the essay is gone, the week is
+    # not marked changed by the outside check, and the parked edit still saves.
+    window = open_light()
+    database = _database(window, tmp_path)
+    session = window.session
+    window._autosave.stop()
+    _start_week_on(qapp, window, monkeypatch, tmp_path, day, first)
+    session.add_homework(
+        {"id": "essay", "title": "History essay", "due": "2026-11-20", "estimate_min": 60, "revision": 0}
+    )
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty, what="the essay saved")
+    waiting = next(block for block in session.blocks if block.get("assignment_id") == "essay")
+    put_block(session, waiting["id"], 2, 16 * 60, 17 * 60, pinned=True)
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty, what="the essay's time saved")
+    session.add_block(
+        {"id": "parked-edit", "title": "Band", "kind": "locked", "days": [1],
+         "start": "18:00", "duration_min": 60}
+    )
+    assert session.dirty
+    session.load_week(next_week)
+    wait_until(qapp, lambda: session.week_start == next_week and not session.busy, what="the next week")
+    assert session.delete_homework("essay")
+    wait_until(qapp, lambda: not session.busy and "essay" not in session.assignments, what="the delete")
+    session.load_week(first)
+    wait_until(qapp, lambda: session.week_start == first and not session.busy, what="back")
+    assert "essay" not in session.assignments, "the deleted homework is gone from the week that was parked"
+    assert not any(block.get("assignment_id") == "essay" for block in session.blocks)
+    assert "essay" not in session.dirty_assignments
+    reloads = _count_reloads(window, monkeypatch)
+    wait_until(qapp, lambda: _settled_on(window, database), timeout=SHOWN_WITHIN_S, what="a look after")
+    assert not session.conflict, "the window's own delete is not taken for another program's change"
+    assert reloads == []
+    assert session.dirty, "the parked edit is still waiting"
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty, what="the parked edit saved")
+    assert not session.conflict
+    with connect(database) as db:
+        saved = [
+            block["id"]
+            for week in session.stored_weeks()
+            for block in json.loads(db.read_week(_user_id(window), week[0])[0])
+        ]
+    assert "parked-edit" in saved

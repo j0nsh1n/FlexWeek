@@ -2001,6 +2001,14 @@ class NativeSession(QObject):
                 # Reminders read today's stored week from the server, as after a save: read it again.
                 self._reminder_week = None
             for week_start, parked in self._drafts.items():
+                # A parked draft forgets the homework everywhere it holds it, not only in the weeks the
+                # delete touched, or coming back to it brings the homework back and the week reads as
+                # changed elsewhere.
+                parked["assignments"].pop(assignment_id, None)
+                parked["dirty_assignments"].discard(assignment_id)
+                parked["committed_assignments"].pop(assignment_id, None)
+                for held in ("assignments_basis", "blocks", "committed_blocks"):
+                    parked[held] = [b for b in parked[held] if b.get("assignment_id") != assignment_id]
                 if week_start in revisions:
                     kept = [b for b in parked["blocks"] if b.get("assignment_id") != assignment_id]
                     parked["blocks"] = kept
