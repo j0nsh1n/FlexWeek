@@ -3579,6 +3579,10 @@ class NativeSession(QObject):
             return
         first_day = start[0] if start else 0
         overdue = self._overdue_assignment_ids()
+        # The line counts a missed session as time with no time, so Plan takes it as it takes a waiting
+        # one. The same engine answer the counts read: a pinned session never reads as missed here.
+        timeless = {block["id"] for block in self._open_week() if not block.get("start")}
+        missed = {block["id"] for block in self.blocks if block.get("start") and block["id"] in timeless}
         made: set[str] = set()
         targets: set[str] = set()
         late_targets: set[str] = set()
@@ -3591,7 +3595,7 @@ class NativeSession(QObject):
             for block in self.blocks:
                 if block.get("assignment_id") != assignment_id or block.get("completed"):
                     continue
-                if block.get("start") and not late:
+                if block.get("start") and not late and block["id"] not in missed:
                     continue
                 targets.add(block["id"])
                 if late:

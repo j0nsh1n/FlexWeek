@@ -228,3 +228,73 @@ def test_plan_into_this_week_places_the_hour_this_week_already_holds_without_a_t
     settled(qapp, window)
     assert [b for b in lab_sessions(window) if b.get("start")], lab_sessions(window)
     assert "fully planned" not in session.message, session.message
+
+
+def hold_a_session(window: NativeWindow, start: str | None, *, pinned: bool = False) -> None:
+    """A second Lab report hour in week 2: Monday at `start`, or waiting for a time when None."""
+    block = {
+        "id": "lab-monday",
+        "title": "Lab report",
+        "kind": "flexible",
+        "assignment_id": "lab",
+        "duration_min": 60,
+        "days": [0],
+    }
+    if start is not None:
+        block["start"] = start
+        block["pinned"] = pinned
+    window.session.add_block(block)
+    window.session.save()
+
+
+def press_plan_into_this_week(qapp: QApplication, window: NativeWindow) -> None:
+    window.session.week_changed.emit()
+    settled(qapp, window)
+    hide_the_panel(qapp, window)
+    button = visible_button(window, PLAN_IT)
+    assert button is not None, f"no {PLAN_IT}"
+    button.click()
+    wait_until(qapp, lambda: not window.session.planning and not window.session.busy)
+    settled(qapp, window)
+
+
+def test_plan_into_this_week_moves_a_missed_session_the_line_lists(qapp, window) -> None:
+    """The hour planned for Monday 08:00 was not done and it is now 10:00. The line counts it as time
+    with no time, so Plan into this week moves it to a time ahead and does not say it has a time."""
+    _week1, week2 = left_in_week_one(qapp, window)
+    hold_a_session(window, "08:00")
+    settled(qapp, window)
+    CLOCK.set(datetime.fromisoformat(week2) + timedelta(hours=10))
+    assert [(item["id"], item["remaining_min"]) for item in window.session.unfinished()] == [("lab", 60)]
+    press_plan_into_this_week(qapp, window)
+    moved = next(b for b in lab_sessions(window) if b["id"] == "lab-monday")
+    assert (moved["days"][0], moved["start"]) > (0, "10:00"), moved
+    assert "already has a time" not in window.session.message
+
+
+def test_plan_into_this_week_leaves_a_pinned_missed_session_where_it_is(qapp, window) -> None:
+    """A session the student pinned is never moved, so the line has nothing to offer for it."""
+    _week1, week2 = left_in_week_one(qapp, window)
+    hold_a_session(window, "08:00", pinned=True)
+    settled(qapp, window)
+    CLOCK.set(datetime.fromisoformat(week2) + timedelta(hours=10))
+    window.session.week_changed.emit()
+    settled(qapp, window)
+    window.session.plan_left(["lab"])
+    wait_until(qapp, lambda: not window.session.planning and not window.session.busy)
+    settled(qapp, window)
+    pinned = next(b for b in lab_sessions(window) if b["id"] == "lab-monday")
+    assert (pinned["days"], pinned["start"]) == ([0], "08:00")
+
+
+def test_the_panels_plan_button_places_a_session_that_is_waiting_for_a_time(qapp, window) -> None:
+    """In the Overdue and left from last week panel, Plan into this week on one homework gives its
+    waiting session a time instead of saying the homework is fully planned."""
+    left_in_week_one(qapp, window)
+    hold_a_session(window, None)
+    settled(qapp, window)
+    window._plan_unfinished("lab")
+    wait_until(qapp, lambda: not window.session.planning and not window.session.busy)
+    settled(qapp, window)
+    assert [b for b in lab_sessions(window) if b["id"] == "lab-monday" and b.get("start")]
+    assert "fully planned" not in window.session.message
