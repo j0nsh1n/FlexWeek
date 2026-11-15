@@ -85,15 +85,17 @@ pub(crate) fn views_for_week(
         .map(|(start, blocks, _)| (start.clone(), blocks.clone()))
         .collect();
     let planned = flexweek_engine::plan::planned_minutes_by_id(&listed, week_start);
+    let done = flexweek_engine::plan::done_minutes_by_id(&listed);
     let mut views = Map::new();
     for (id, _, revision) in rows {
         let Some(body) = assignments.get(id) else {
             continue;
         };
         let planned_min = planned.get(id).copied().unwrap_or(0);
-        // The phone's golden homework JSON carries no `done_min`: it counts the open week's ticks only.
-        let mut view = flexweek_store::assignment_view(body, *revision, planned_min, None)
-            .map_err(engine_failure)?;
+        let done_min = done.get(id).copied().unwrap_or(0);
+        let mut view =
+            flexweek_store::assignment_view(body, *revision, planned_min, Some(done_min))
+                .map_err(engine_failure)?;
         if let Some(given) = body.get("unplanned_min") {
             view["unplanned_min"] = given.clone();
         }
@@ -209,4 +211,39 @@ pub(crate) fn empty_plan(week_start: &str, message: &str) -> Value {
         "applied_preview": "",
         "message": message,
     })
+}
+
+#[cfg(test)]
+mod done_minutes_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn the_phones_homework_view_carries_the_minutes_ticked_done_in_every_saved_week() {
+        // 60 min ticked done in an earlier week and 30 in this one: done_min 90 whichever week is read.
+        let mut assignments = Map::new();
+        assignments.insert(
+            "essay".into(),
+            json!({"id": "essay", "estimate_min": 180, "focus_minutes": 0}),
+        );
+        let rows = vec![("essay".to_string(), String::new(), 1)];
+        let done = |minutes: i64| {
+            json!([{
+                "id": format!("s{minutes}"), "assignment_id": "essay", "kind": "flexible",
+                "duration_min": minutes, "days": [0], "start": "09:00", "completed": true,
+                "completed_day": 0
+            }])
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+        };
+        let weeks = vec![
+            ("2026-10-12".to_string(), done(60), 1),
+            ("2026-10-19".to_string(), done(30), 1),
+        ];
+        for week in ["2026-10-12", "2026-10-19"] {
+            let views = views_for_week(&assignments, &rows, &weeks, week).expect("views");
+            assert_eq!(views["essay"]["done_min"], json!(90), "read for {week}");
+        }
+    }
 }

@@ -11,5 +11,6 @@
   "completed_at": null,
   "revision": 1,
   "planned_min": 60,
-  "unplanned_min": 0
+  "unplanned_min": 0,
+  "done_min": 0
 }
