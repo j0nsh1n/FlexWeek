@@ -34,6 +34,7 @@ struct AddArgs {
     category: Option<String>,
     #[serde(default)]
     notes: Option<String>,
+    /// true saves the homework as "Spread over days", so Plan shares its time across the days up to the due date; false saves it as "In one go". Leave it out when adding to get "In one go", and when editing to keep what is saved.
     #[serde(default)]
     spread: Option<bool>,
 }
@@ -60,6 +61,7 @@ struct EditArgs {
     category: Option<String>,
     #[serde(default)]
     notes: Option<String>,
+    /// true saves the homework as "Spread over days", so Plan shares its time across the days up to the due date; false saves it as "In one go". Leave it out when adding to get "In one go", and when editing to keep what is saved.
     #[serde(default)]
     spread: Option<bool>,
 }
@@ -303,6 +305,14 @@ fn add_payload(args: &AddArgs, assignment_id: &str) -> Value {
     put_str(&mut map, "course", &args.course);
     put_str(&mut map, "category", &args.category);
     put_str(&mut map, "notes", &args.notes);
+    map.insert(
+        "spread".into(),
+        json!(if args.spread == Some(true) {
+            "spread"
+        } else {
+            "one"
+        }),
+    );
     Value::Object(map)
 }
 
@@ -324,6 +334,12 @@ fn edit_payload(existing: &Value, args: &EditArgs) -> Result<Value, String> {
     put_str(&mut map, "course", &args.course);
     put_str(&mut map, "category", &args.category);
     put_str(&mut map, "notes", &args.notes);
+    if let Some(spread) = args.spread {
+        map.insert(
+            "spread".into(),
+            json!(if spread { "spread" } else { "one" }),
+        );
+    }
     Ok(Value::Object(map))
 }
 
@@ -336,7 +352,6 @@ fn edit_weeks(
     weeks: Vec<(String, Vec<Value>, i64)>,
     assignments: &Map<String, Value>,
     payload: &Value,
-    spread: bool,
     session_id: &str,
     today: &str,
     minute: i64,
@@ -350,7 +365,7 @@ fn edit_weeks(
             &start,
             payload,
             None,
-            spread,
+            false,
             session_id,
             today,
             minute,
@@ -567,7 +582,6 @@ impl crate::App {
                 weeks,
                 &assignments,
                 &payload,
-                args.spread.unwrap_or(false),
                 &session_id,
                 &now.today,
                 now.minute,
@@ -615,7 +629,6 @@ impl crate::App {
                 weeks,
                 &assignments,
                 &payload,
-                args.spread.unwrap_or(false),
                 &session_id,
                 &now.today,
                 now.minute,

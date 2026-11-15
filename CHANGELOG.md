@@ -75,6 +75,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - With the week starting on Sunday, Month showed nothing on a date of its first row before that row's Monday (Sunday 29 November in December 2026). It now shows that date's homework and blocks, and so does any other first day of the week.
 - With the week starting on a day other than Monday, FlexWeek no longer reloads the week again and again as if another program had changed it. It kept the window busy and slow whenever anything was saved, by the app itself or by a linked phone's sync, and could wipe a change made just before.
 - Homework you delete while another week is open no longer comes back when you return to a week with unsaved changes, and the week is no longer shown as changed by another program.
+- Homework you add or edit through the assistant helper with "spread over days" is now saved as Spread over days, as the app does, so Plan shares its time across the days up to the due date. Before, it was saved as In one go. Leaving that choice out when adding gives In one go, and leaving it out when editing keeps what was saved.
 
 ## [1.3.0] - 2026-11-10
 

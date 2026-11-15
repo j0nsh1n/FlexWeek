@@ -993,3 +993,42 @@ fn plan_homework_with_nothing_to_plan_in_shown_week_returns_stored_revisions() {
     );
     assert_eq!(added["revision"], json!([5, 2]));
 }
+
+#[test]
+fn plan_gives_homework_the_helper_added_as_spread_its_share_of_this_week() {
+    // The same 180 min poster as the stored "spread" case above, but added through add_homework with
+    // spread=true: it must be saved as "Spread over days", so Plan places this week's 60 min share
+    // (180 x 5 / 15) and not the whole 180 as for "In one go".
+    let world = signed_in("plan-helper-spread");
+    school_stands(&world);
+    let mut server = boot(&world);
+    let added = server.call(
+        "add_homework",
+        json!({
+            "operation_id": "op-spread-poster",
+            "title": "Poster",
+            "due": "2026-11-04T21:00",
+            "estimate_min": 180,
+            "spread": true
+        }),
+        2,
+    );
+    let poster = body_of(&added)["result"]["assignment"]["id"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    let planned = server.call(
+        "plan_homework",
+        json!({"operation_id": "op-plan-helper-spread", "week_start": WEEK}),
+        3,
+    );
+    let body = body_of(&planned);
+    let placed: Vec<(Value, Value)> = body["result"]["placed"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .map(|row| (row["assignment_id"].clone(), row["duration_min"].clone()))
+        .collect();
+    assert_eq!(placed, vec![(json!(poster), json!(60))], "got {body}");
+}

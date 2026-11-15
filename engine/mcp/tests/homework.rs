@@ -1399,3 +1399,81 @@ fn shown_set_block_done_reply_failure_rolls_back_atomically() {
     assert_eq!(ok["result"]["week_starts_on"], json!("wednesday"));
     assert_eq!(ok["revision"], json!([0, 3]));
 }
+
+fn stored_spread(world: &World, id: &str) -> Value {
+    let (body, _) = assignment_row(&world.database_arg, world.user, id).expect("homework row");
+    let value: Value = serde_json::from_str(&body).expect("body");
+    value.get("spread").cloned().unwrap_or(json!("one"))
+}
+
+fn add_with(server: &mut Server, operation_id: &str, spread: Option<bool>) -> String {
+    let mut args = json!({
+        "operation_id": operation_id,
+        "title": "Poster",
+        "due": "2026-11-04T21:00",
+        "estimate_min": 180
+    });
+    if let Some(spread) = spread {
+        args["spread"] = json!(spread);
+    }
+    let response = server.call("add_homework", args, 2);
+    body_of(&response)["result"]["assignment"]["id"]
+        .as_str()
+        .unwrap_or("")
+        .to_string()
+}
+
+#[test]
+fn add_homework_saves_spread_over_days_only_when_asked() {
+    let world = signed_in("add-spread-field");
+    let mut server = boot(&world);
+    server.handshake();
+    let spread = add_with(&mut server, "op-add-spread-1", Some(true));
+    let one = add_with(&mut server, "op-add-spread-2", Some(false));
+    let absent = add_with(&mut server, "op-add-spread-3", None);
+    assert_eq!(stored_spread(&world, &spread), json!("spread"));
+    assert_eq!(stored_spread(&world, &one), json!("one"));
+    assert_eq!(stored_spread(&world, &absent), json!("one"));
+    let (week, _) = week_row(&world.database_arg, world.user, "2026-10-19").expect("week");
+    assert_eq!(
+        blocks_with_assignment(&week, &spread).len(),
+        1,
+        "a spread homework still has its one waiting session for Plan to share out"
+    );
+}
+
+#[test]
+fn edit_homework_sets_spread_both_ways_and_keeps_it_when_absent() {
+    let world = signed_in("edit-spread-field");
+    let mut server = boot(&world);
+    server.handshake();
+    let id = add_with(&mut server, "op-edit-spread-add", None);
+    let mut revision = 1;
+    let mut edit = |server: &mut Server, op: &str, extra: Value| {
+        let mut args = json!({
+            "operation_id": op,
+            "id": id,
+            "expected_revision": revision,
+            "notes": op
+        });
+        for (key, value) in extra.as_object().cloned().unwrap_or_default() {
+            args[key] = value;
+        }
+        let response = server.call("edit_homework", args, 2);
+        let body = body_of(&response);
+        assert_eq!(body["ok"], json!(true), "edit succeeds, got {body}");
+        revision = body["revision"].as_i64().expect("revision");
+    };
+    edit(&mut server, "op-edit-spread-1", json!({"spread": true}));
+    assert_eq!(stored_spread(&world, &id), json!("spread"));
+    edit(&mut server, "op-edit-spread-2", json!({}));
+    assert_eq!(
+        stored_spread(&world, &id),
+        json!("spread"),
+        "absent keeps it"
+    );
+    edit(&mut server, "op-edit-spread-3", json!({"spread": false}));
+    assert_eq!(stored_spread(&world, &id), json!("one"));
+    edit(&mut server, "op-edit-spread-4", json!({}));
+    assert_eq!(stored_spread(&world, &id), json!("one"), "absent keeps it");
+}
