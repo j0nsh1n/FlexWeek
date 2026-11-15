@@ -39,7 +39,7 @@ from desktop.native.widgets import (
     LATE_WAIT,
     _late_move,
     _late_summary,
-    moved_day_name,
+    moved_day_names,
     moved_days_note,
     same_weekday,
     turn_days_keeping_weekdays,
@@ -109,9 +109,9 @@ class SheetsBridge(QObject):
         self._routine_days: list[int] = []
         # The open week the numbers in _routine_days count from.
         self._routine_week = ""
-        # The ticks the last turn moved, as new day to the old "Monday 2" label, until the
+        # The ticks the last turn moved, as new day to the old (day, week) it came from, until the
         # student touches the row, the sheet is applied, or it closes.
-        self._routine_moved: dict[int, str] = {}
+        self._routine_moved: dict[int, tuple[int, str]] = {}
         self._routine_error = ""
         self._paused = False
         self._held = False
@@ -978,13 +978,13 @@ class SheetsBridge(QObject):
                 {}
                 if same_start
                 else {
-                    same_weekday(day, self._routine_week, week): label
-                    for day, label in self._routine_moved.items()
+                    same_weekday(day, self._routine_week, week): origin
+                    for day, origin in self._routine_moved.items()
                 }
             )
             self._routine_moved = {
                 **kept,
-                **{new: moved_day_name(old, self._routine_week) for old, new in moved},
+                **{new: (old, self._routine_week) for old, new in moved},
             }
             self._routine_week = week
 
@@ -1004,12 +1004,11 @@ class SheetsBridge(QObject):
                     "on": item["id"] == self._routine_id,
                 }
             )
-        moved_note = moved_days_note(
-            [
-                (old_label, moved_day_name(new, self._routine_week))
-                for new, old_label in sorted(self._routine_moved.items())
-            ]
-        )
+        moved_names = {
+            new: moved_day_names(old, old_week, new, self._routine_week)
+            for new, (old, old_week) in sorted(self._routine_moved.items())
+        }
+        moved_note = moved_days_note(list(moved_names.values()))
         days = [
             {
                 "value": index,
@@ -1017,7 +1016,7 @@ class SheetsBridge(QObject):
                 "date": date.fromordinal(monday.toordinal() + index).day if monday else 0,
                 "on": index in self._routine_days,
                 "moved": index in self._routine_moved,
-                "movedFrom": self._routine_moved.get(index, ""),
+                "movedFrom": moved_names[index][0] if index in moved_names else "",
             }
             for index in range(7)
         ]

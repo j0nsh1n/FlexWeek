@@ -37,7 +37,7 @@ from desktop.native.widgets import (
     day_range_and_words,
     full_day_name,
     guess_locked_category,
-    moved_day_name,
+    moved_day_names,
     moved_days_note,
     same_weekday,
     short_day_name,
@@ -122,15 +122,9 @@ class BlockDraft:
 
         turned_days, moved = turn_days_keeping_weekdays(self.days, self._days_week, week)
         from_week = self._days_week
-        self._moved_from = {
-            new: moved_day_name(old, from_week) for old, new in moved
-        }
-        self._moved_note = moved_days_note(
-            [
-                (moved_day_name(old, from_week), moved_day_name(new, week))
-                for old, new in moved
-            ]
-        )
+        names = {new: moved_day_names(old, from_week, new, week) for old, new in moved}
+        self._moved_from = {new: old_name for new, (old_name, _) in names.items()}
+        self._moved_note = moved_days_note(list(names.values()))
         self.days = turned_days
         title, opened_days, *rest = self._opened_as
         self._opened_as = (title, tuple(turned(opened_days)), *rest)

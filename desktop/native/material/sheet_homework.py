@@ -39,7 +39,7 @@ from desktop.native.widgets import (
     SLOT_HINT,
     SPREAD_MIN,
     _homework_problem,
-    moved_day_name,
+    moved_day_names,
     moved_days_note,
     same_weekday,
     spread_session_min,
@@ -181,14 +181,9 @@ class HomeworkDraft:
         week = self.session.week_start or ""
         from_week = self._days_week
         turned, moved = turn_days_keeping_weekdays([self.when_day], from_week, week)
-        self._moved_from = moved_day_name(moved[0][0], from_week) if moved else ""
-        self._moved_note = (
-            moved_days_note(
-                [(moved_day_name(moved[0][0], from_week), moved_day_name(turned[0], week))]
-            )
-            if moved
-            else ""
-        )
+        names = moved_day_names(moved[0][0], from_week, moved[0][1], week) if moved else None
+        self._moved_from = names[0] if names else ""
+        self._moved_note = moved_days_note([names]) if names else ""
         title, due_date, due_time, estimate, when, opened_day, *rest = self._opened_as
         opened_day = same_weekday(opened_day, from_week, week)
         self._opened_as = (title, due_date, due_time, estimate, when, opened_day, *rest)

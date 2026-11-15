@@ -264,9 +264,19 @@ def turn_days_keeping_weekdays(
     return sorted(new for _, new in turned), moved
 
 
-def moved_day_name(day: int, week: str) -> str:
-    """A moved tick named the way the note names it: "Monday 2"."""
-    return f"{full_day_name(week, day)} {date.fromisoformat(date_for_day(week, day)).day}"
+def moved_day_names(old_day: int, from_week: str, new_day: int, to_week: str) -> tuple[str, str]:
+    """A moved tick's old and new names the way the note names them: "Monday 2" and "Monday 9". A pair
+    whose two dates fall in different months names both with their month ("Monday 30 November",
+    "Monday 7 December")."""
+    old_date = date.fromisoformat(date_for_day(from_week, old_day))
+    new_date = date.fromisoformat(date_for_day(to_week, new_day))
+    crosses = (old_date.year, old_date.month) != (new_date.year, new_date.month)
+
+    def named(week: str, day: int, when: date) -> str:
+        name = f"{full_day_name(week, day)} {when.day}"
+        return f"{name} {when.strftime('%B')}" if crosses else name
+
+    return named(from_week, old_day, old_date), named(to_week, new_day, new_date)
 
 
 def moved_days_note(moves: list[tuple[str, str]]) -> str:
