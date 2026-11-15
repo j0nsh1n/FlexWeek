@@ -264,6 +264,15 @@ def turn_days_keeping_weekdays(
     return sorted(new for _, new in turned), moved
 
 
+def first_day_changed(from_week: str, to_week: str) -> bool:
+    """Whether the two weeks start on different days of the week."""
+    return (
+        bool(from_week)
+        and bool(to_week)
+        and date.fromisoformat(from_week).weekday() != date.fromisoformat(to_week).weekday()
+    )
+
+
 def moved_day_names(old_day: int, from_week: str, new_day: int, to_week: str) -> tuple[str, str]:
     """A moved tick's old and new names the way the note names them: "Monday 2" and "Monday 9". A pair
     whose two dates fall in different months names both with their month ("Monday 30 November",

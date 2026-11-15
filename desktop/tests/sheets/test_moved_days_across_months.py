@@ -52,11 +52,11 @@ def _go(qapp: QApplication, session, week: str) -> None:
     wait_until(qapp, lambda: session.week_start == week and not session.busy)
 
 
-def _wednesday(qapp: QApplication, session) -> None:
+def _wednesday(qapp: QApplication, session, week: str = "2026-12-02") -> None:
     from desktop.native import fields
 
     fields.save_week_starts_on("wednesday")
-    wait_until(qapp, lambda: session.week_start == "2026-12-02" and not session.busy)
+    wait_until(qapp, lambda: session.week_start == week and not session.busy)
 
 
 def _tick_widgets(days: list[int]):
@@ -157,19 +157,23 @@ def test_material_block_names_the_month_where_a_move_crosses_it(qapp, shell, foc
 
 
 def test_material_homework_pin_names_the_month_where_the_move_crosses_it(qapp, shell, focused) -> None:
+    """Tuesday 24 November pinned in the week from Monday 23; from Wednesday that week is Wed 25 to Tue 1
+    December, so the pin becomes Tuesday 1 December."""
     sheets = focused
-    _go(qapp, shell.session, "2026-11-30")
+    _go(qapp, shell.session, "2026-11-23")
     open_add(sheets, "homework")
     type_title(sheets, "Piano lesson")
     sheets.setText("when", "fixed")
-    sheets.setNumber("whenDay", 0)
+    sheets.setNumber("whenDay", 1)
     press_escape_material(shell)
-    _wednesday(qapp, shell.session)
+    _wednesday(qapp, shell.session, "2026-11-25")
     settle(qapp, shell)
     open_add(sheets, "homework")
     form = sheets.form
-    assert form["whenMovedNote"] == CROSSING
-    assert form["whenDayAccess"] == "Day, moved from Monday 30 November"
+    assert form["whenMovedNote"] == (
+        "Tuesday 24 November isn't in this week any more, so it moved to Tuesday 1 December."
+    )
+    assert form["whenDayAccess"] == "Day, moved from Tuesday 24 November"
 
 
 def test_material_routine_days_name_the_month_where_a_move_crosses_it(qapp, shell, sheets) -> None:
@@ -193,6 +197,7 @@ def test_material_routine_days_name_the_month_where_a_move_crosses_it(qapp, shel
     pump(qapp, 40)
     shell.session.routines["r-9"] = routine
     sheets.selectRoutine("r-9")
+    sheets.toggleRoutineDay(2)
     _wednesday(qapp, shell.session)
     settle(qapp, shell)
     shell.session.routines["r-9"] = routine

@@ -39,6 +39,7 @@ from desktop.native.widgets import (
     SLOT_HINT,
     SPREAD_MIN,
     _homework_problem,
+    first_day_changed,
     moved_day_names,
     moved_days_note,
     same_weekday,
@@ -88,6 +89,8 @@ class HomeworkDraft:
         self.now = datetime.fromtimestamp(session.now_ms() / 1000)
         self.today = self.now.date().isoformat()
         self.existing = assignment is not None
+        # The pinned day came from a gesture (a time drawn on the grid), not from the app's default.
+        self._day_given = when_day is not None or day is not None
         if category not in FLEX_CATEGORIES:
             category = "assignments"
         info = CATEGORIES.get(category, {})
@@ -174,12 +177,26 @@ class HomeworkDraft:
         self._moved_from = ""
         self._moved_note = ""
 
-    def follow_week(self) -> None:
-        """A new sheet kept after Esc and opened again in a week that starts on another day: its pinned
-        day, and the one it opened with, keep their weekdays. A pin whose date changed is remembered,
-        so the row can name it until the student picks another day."""
+    def follow_week(self, fresh_day: int) -> None:
+        """A new sheet kept after Esc and opened again in a week that starts on another day: a pinned day
+        the student picked, and the one it opened with, keep their weekday. A pin whose date changed is
+        remembered, so the row can name it until the student picks another day. A day still as the app
+        put it when the sheet opened is picked again for this week, `fresh_day` as a fresh sheet has it,
+        with no mark."""
         week = self.session.week_start or ""
         from_week = self._days_week
+        if (
+            first_day_changed(from_week, week)
+            and not self._day_given
+            and self.when_day == self._opened_as[5]
+        ):
+            title, due_date, due_time, estimate, when, _, *rest = self._opened_as
+            self._opened_as = (title, due_date, due_time, estimate, when, fresh_day, *rest)
+            self.when_day = fresh_day
+            self._days_week = week
+            self._moved_from = ""
+            self._moved_note = ""
+            return
         turned, moved = turn_days_keeping_weekdays([self.when_day], from_week, week)
         names = moved_day_names(moved[0][0], from_week, moved[0][1], week) if moved else None
         self._moved_from = names[0] if names else ""

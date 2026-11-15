@@ -112,6 +112,9 @@ class SheetsBridge(QObject):
         # The ticks the last turn moved, as new day to the old (day, week) it came from, until the
         # student touches the row, the sheet is applied, or it closes.
         self._routine_moved: dict[int, tuple[int, str]] = {}
+        # Whether the student ticked or unticked a day since the routine was picked: the ticks the
+        # routine put there carry no mark when the week start changes.
+        self._routine_touched = False
         self._routine_error = ""
         self._paused = False
         self._held = False
@@ -229,7 +232,7 @@ class SheetsBridge(QObject):
             category = "assignments"
         kept, self._kept_homework = self._kept_homework, None
         if kept is not None:
-            kept.follow_week()
+            kept.follow_week(HomeworkDraft(session, category=category).when_day)
         self._homework = kept or HomeworkDraft(session, category=category)
         self._open("homework")
 
@@ -276,11 +279,12 @@ class SheetsBridge(QObject):
         day, start = self._new_event_values()
         category = session.armed_category
         kept, self._kept_block = self._kept_block, None
-        if kept is not None:
-            kept.follow_week()
-        self._block = kept or BlockDraft(
+        fresh = BlockDraft(
             session, day=day, start=start, category=None if category in FLEX_CATEGORIES else category
         )
+        if kept is not None:
+            kept.follow_week(fresh.days)
+        self._block = kept or fresh
         self._open("block")
 
     @Slot(int, int, int)
@@ -966,6 +970,11 @@ class SheetsBridge(QObject):
                 self._routine_days, self._routine_week, week
             )
             self._routine_days = turned
+            if not self._routine_touched:
+                # The routine's own days follow its weekdays into the new week, as picking it again would.
+                self._routine_moved = {}
+                self._routine_week = week
+                return
             # A mark the student has not touched yet stays through another first-day switch; another
             # week from the same first day is a different week, so its marks no longer apply.
             same_start = (
@@ -1039,6 +1048,7 @@ class SheetsBridge(QObject):
         self._routine_id = ""
         self._routine_days = []
         self._routine_moved = {}
+        self._routine_touched = False
         self._routine_error = ""
         self._open("routines")
 
@@ -1056,6 +1066,7 @@ class SheetsBridge(QObject):
             days.update(int(day) for day in block.get("days") or [])
         self._routine_days = sorted(days)
         self._routine_moved = {}
+        self._routine_touched = False
         self._routine_error = ""
         self._publish()
 
@@ -1065,6 +1076,7 @@ class SheetsBridge(QObject):
         days.symmetric_difference_update({day})
         self._routine_days = sorted(days)
         self._routine_moved = {}
+        self._routine_touched = True
         self._routine_error = ""
         self._publish()
 

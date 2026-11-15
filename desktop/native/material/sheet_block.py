@@ -35,6 +35,7 @@ from desktop.native.widgets import (
     _block_problem,
     _preset_locked,
     day_range_and_words,
+    first_day_changed,
     full_day_name,
     guess_locked_category,
     moved_day_names,
@@ -70,6 +71,8 @@ class BlockDraft:
         self.session = session
         self.now = datetime.fromtimestamp(session.now_ms() / 1000)
         self.existing = block is not None
+        # A time drawn on the grid gave the day: the student chose it, the app did not.
+        self._drawn = block is None and length is not None
         self.original = (
             deepcopy(block)
             if block is not None
@@ -111,11 +114,24 @@ class BlockDraft:
         self._moved_from: dict[int, str] = {}
         self._moved_note = ""
 
-    def follow_week(self) -> None:
-        """A new sheet kept after Esc and opened again in a week that starts on another day: its days, and
-        the days it opened with, keep their weekdays. The ticks whose date changed are remembered, so
-        the row can mark them until the student touches it."""
+    def follow_week(self, fresh_days: list[int]) -> None:
+        """A new sheet kept after Esc and opened again in a week that starts on another day: the days the
+        student ticked keep their weekdays, and the ticks whose date changed are remembered, so the row
+        can mark them until the student touches it. Days still as the app put them when the sheet opened
+        are picked again for this week, `fresh_days` as a fresh sheet has them, with no mark."""
         week = self.session.week_start or ""
+        title, opened_days, *rest = self._opened_as
+        if (
+            first_day_changed(self._days_week, week)
+            and not self._drawn
+            and tuple(self.days) == opened_days
+        ):
+            self.days = sorted(fresh_days)
+            self._opened_as = (title, tuple(self.days), *rest)
+            self._days_week = week
+            self._moved_from = {}
+            self._moved_note = ""
+            return
 
         def turned(days: Any) -> list[int]:
             return sorted(same_weekday(day, self._days_week, week) for day in days)
@@ -126,7 +142,6 @@ class BlockDraft:
         self._moved_from = {new: old_name for new, (old_name, _) in names.items()}
         self._moved_note = moved_days_note(list(names.values()))
         self.days = turned_days
-        title, opened_days, *rest = self._opened_as
         self._opened_as = (title, tuple(turned(opened_days)), *rest)
         self._days_week = week
 
