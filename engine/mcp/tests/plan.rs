@@ -1108,3 +1108,40 @@ fn editing_a_planned_homework_to_spread_replaces_its_whole_session() {
         vec![(2, 60, true), (3, 60, true), (4, 60, true)]
     );
 }
+
+#[test]
+fn editing_to_spread_keeps_a_session_ticked_done_and_spreads_only_what_is_left() {
+    // 180 min, one hour already ticked done on Monday: spreading leaves that hour alone and cuts the other
+    // 120 into two hours, on Wednesday (today) and Thursday.
+    let world = signed_in("spread-edit-done");
+    school_stands(&world);
+    let mut server = boot(&world);
+    let (poster, revision) = add_poster(&mut server, "op-done-add", false, 2);
+    let (_, week_revision) = stored(&world);
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let done = json!([{
+        "id": "done-hour", "title": "Poster", "kind": "flexible", "assignment_id": poster,
+        "duration_min": 60, "days": [0], "start": "09:00", "completed": true, "completed_day": 0,
+        "priority": 3, "energy": "medium", "category": "assignments"
+    }]);
+    save_week(&conn, world.user, WEEK, &done.to_string(), week_revision).expect("week");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+    let edited = server.call(
+        "edit_homework",
+        json!({
+            "operation_id": "op-done-spread",
+            "id": poster,
+            "expected_revision": revision,
+            "spread": true
+        }),
+        3,
+    );
+    assert_eq!(body_of(&edited)["ok"], json!(true), "got {edited}");
+    assert_eq!(
+        poster_sessions(&world, &poster),
+        vec![(0, 60, true), (2, 60, false), (3, 60, false)]
+    );
+}
