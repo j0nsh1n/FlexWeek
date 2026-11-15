@@ -470,3 +470,80 @@ def test_a_week_from_sunday_read_without_its_stored_parts_still_names_its_stored
     session._stored_parts = []
     session.revision = [3, 4]
     assert session.stored_weeks() == [("2026-10-26", 3), ("2026-11-02", 4)]
+
+
+def _own_save_from_sunday(
+    app: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    window._autosave.stop()
+    _start_week_on(app, window, monkeypatch, tmp_path, "sunday", "2026-11-01")
+    session = window.session
+    session.add_block(
+        {"id": "own-save", "title": "Band", "kind": "locked", "days": [1],
+         "start": "16:00", "duration_min": 60}
+    )
+    session.save()
+    wait_until(app, lambda: not session.busy and not session.dirty, what="the window's own save")
+
+
+def _quiet_after(
+    app: QApplication, window: NativeWindow, database: Path, reloads: list[str], what: str
+) -> None:
+    wait_until(app, lambda: _settled_on(window, database), timeout=SHOWN_WITHIN_S, what=what)
+    assert reloads == [], f"{what}: the window's own change is not taken for another program's"
+    assert not window.session.conflict
+    assert not window.session.message.startswith("Updated from")
+
+
+@pytest.mark.parametrize("step", ["undo", "redo", "reload"])
+def test_undo_redo_and_reload_on_a_week_from_sunday_are_not_taken_for_outside_changes(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    step: str,
+) -> None:
+    window = open_light()
+    database = _database(window, tmp_path)
+    session = window.session
+    _own_save_from_sunday(qapp, window, monkeypatch, tmp_path)
+    if step != "reload":
+        session.undo()
+        wait_until(qapp, lambda: not session.busy and not session.dirty, what="the undo")
+    if step == "redo":
+        session.redo()
+        wait_until(qapp, lambda: not session.busy and not session.dirty, what="the redo")
+    if step == "reload":
+        session.reload()
+        wait_until(qapp, lambda: not session.busy, what="the reload")
+    reloads = _count_reloads(window, monkeypatch)
+    _quiet_after(qapp, window, database, reloads, f"a look after {step}")
+
+
+def test_a_conflict_then_reload_on_a_week_from_sunday_is_not_followed_by_another_reload(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = open_light()
+    database = _database(window, tmp_path)
+    session = window.session
+    _own_save_from_sunday(qapp, window, monkeypatch, tmp_path)
+    session.add_block(
+        {"id": "unsaved", "title": "Choir", "kind": "locked", "days": [2],
+         "start": "17:00", "duration_min": 60}
+    )
+    _write_homework_elsewhere(database, _user_id(window), "elsewhere-4", "Saved elsewhere")
+    wait_until(qapp, lambda: session.conflict, timeout=SHOWN_WITHIN_S, what="the week marked as changed")
+    session.reload()
+    wait_until(qapp, lambda: not session.busy and "Saved elsewhere" in _titles(window), what="the reload")
+    # The reload settled the outside change; a save of the window's own is the next commit to be looked at.
+    reloads = _count_reloads(window, monkeypatch)
+    session.add_block(
+        {"id": "after-reload", "title": "Choir", "kind": "locked", "days": [3],
+         "start": "17:00", "duration_min": 60}
+    )
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty, what="a save after the reload")
+    _quiet_after(qapp, window, database, reloads, "a look after the save that followed the reload")
