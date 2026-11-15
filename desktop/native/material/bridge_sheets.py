@@ -25,6 +25,7 @@ from desktop.native.calendar import (
     routine_on_week,
     sunday_due,
 )
+from desktop.native.fields import announce
 from desktop.native.hours.geometry import drag_step, next_slot
 from desktop.native.material.sheet_block import BlockDraft
 from desktop.native.material.sheet_homework import HomeworkDraft
@@ -116,6 +117,8 @@ class SheetsBridge(QObject):
         # routine put there carry no mark when the week start changes.
         self._routine_touched = False
         self._routine_error = ""
+        # The moved-day note the open sheet last showed; None until the sheet's first showing.
+        self._noted: str | None = None
         self._paused = False
         self._held = False
         self._remaining_ms = NOTICE_MS
@@ -204,6 +207,7 @@ class SheetsBridge(QObject):
         self._kind = kind
         self._more = False
         self._ask = {}
+        self._noted = None
         self._publish()
 
     def _close(self) -> None:
@@ -1266,4 +1270,10 @@ class SheetsBridge(QObject):
             self._form = self._routine_form()
         else:
             self._form = {}
+        # The moved-day note is said aloud when it appears or changes in a sheet that is already open. A
+        # sheet that opens with it is read with the note, and one that clears it says nothing.
+        note = str(self._form.get("movedNote") or self._form.get("whenMovedNote") or "")
+        if self._noted is not None and note and note != self._noted:
+            announce(self._window, note)
+        self._noted = note
         self.changed.emit()

@@ -4230,6 +4230,10 @@ class BlockDialog(Dialog):
         self.moved_note.setText(moved_days_note([(old, new) for _, old, new in moves]))
         self.moved_note.setAccessibleName(self.moved_note.text())
         self.moved_note.setVisible(True)
+        # A sheet that opens with the note is read with it; only a note that arrives in an open sheet
+        # is said aloud.
+        if self.isVisible():
+            announce(self.moved_note, self.moved_note.text())
 
     def _clear_moved_days(self) -> None:
         for day, name in self._moved_before.items():
@@ -5302,6 +5306,10 @@ class HomeworkDialog(Dialog):
         self.moved_note.setText(moved_days_note([(old, new) for _, old, new in moves]))
         self.moved_note.setAccessibleName(self.moved_note.text())
         self.moved_note.setVisible(True)
+        # A sheet that opens with the note is read with it; only a note that arrives in an open sheet
+        # is said aloud.
+        if self.isVisible():
+            announce(self.moved_note, self.moved_note.text())
 
     def _clear_moved_days(self) -> None:
         for day, name in self._moved_before.items():
