@@ -222,3 +222,56 @@ def test_a_parked_plan_forgets_the_placements_of_deleted_homework(
     assert waiting["id"] not in shown, "the deleted homework's session shows again from the parked plan"
     assert "kept-placement" in shown
     assert session.trace is not None and not session.trace.get("unplaced")
+
+
+@pytest.mark.parametrize(("day", "first", "next_week"), WEEKS)
+@pytest.mark.parametrize("landed", [False, True], ids=["never-sent", "reply-lost"])
+def test_a_delete_elsewhere_after_a_failed_save_is_done_and_undo_works_after_retry(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    day: str,
+    first: str,
+    next_week: str,
+    landed: bool,
+) -> None:
+    # Band's save fails (never sent, or written with its reply lost), so the parked week holds a
+    # save and a history step not yet acknowledged. Deleting the essay in the next week is reported
+    # done, and back on the first week Retry saves Band and its Undo takes Band away, with the essay
+    # still gone.
+    window = open_light()
+    session = window.session
+    database = _start(qapp, window, monkeypatch, tmp_path, day, first)
+    session.add_block(dict(BAND))
+    request = session.client.request
+
+    def fail(method, path, payload, ok, err):  # type: ignore[no-untyped-def]
+        if method == "POST" and path == "/api/changes":
+            if landed:
+                return request(method, path, payload, lambda _data: err(ApiError(0, "reply lost")), err)
+            err(ApiError(0, "not sent"))
+            return None
+        return request(method, path, payload, ok, err)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(session.client, "request", fail)
+        session.save()
+        _settle(qapp, window, "the failed save")
+    session.load_week(next_week)
+    wait_until(qapp, lambda: session.week_start == next_week and not session.busy, what="the next week")
+    assert session.delete_homework("essay")
+    _settle(qapp, window, "the delete")
+    assert session.message == "Deleted Essay."
+    session.load_week(first)
+    wait_until(qapp, lambda: session.week_start == first and not session.busy, what="back")
+    session.retry_save()
+    _settle(qapp, window, "the retry")
+    assert not session.conflict, session.message
+    assert "parked-edit" in {block["id"] for block in _stored_blocks(window, database, first)}
+    session.undo()
+    _settle(qapp, window, "the undo")
+    assert not session.conflict, session.message
+    assert "parked-edit" not in {block["id"] for block in _stored_blocks(window, database, first)}
+    with connect(database) as db:
+        assert db.assignment_body(_user_id(window), "essay") is None

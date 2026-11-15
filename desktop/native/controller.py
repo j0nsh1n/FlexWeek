@@ -235,8 +235,11 @@ def _step_without_homework(step: dict, assignment_id: str, revisions: dict[str, 
         before = _without_homework(entry["before"], assignment_id)
         after = _without_homework(entry["after"], assignment_id)
         if before != after:
-            revision = revisions.get(entry["week_start"], entry["revision"])
-            weeks.append({**entry, "before": before, "after": after, "revision": revision})
+            cleaned = {**entry, "before": before, "after": after}
+            # A step whose save is not acknowledged yet has no revision; the reply gives it one.
+            if "revision" in entry:
+                cleaned["revision"] = revisions.get(entry["week_start"], entry["revision"])
+            weeks.append(cleaned)
     assignments = [entry for entry in step.get("assignments") or [] if entry["id"] != assignment_id]
     if not weeks and not assignments:
         return None
