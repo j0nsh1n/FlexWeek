@@ -179,10 +179,12 @@ from desktop.native.reuse import (
     AVAILABILITY_LIMIT,
     LATE_MINUTES,
     PROTECTED_KINDS,
+    SPREAD_MIN,
     due_point,
     preview_conflict_message,
     routine_source_blocks,
     row_conflict,
+    spread_session_min,
 )
 from desktop.native.tokens import (
     RADIUS_CONTROL,
@@ -320,8 +322,6 @@ REVEAL_ICON_PX = 24
 DETAIL_BOX_HEIGHT = 84
 SCROLL_GAP = 16
 DUE_SWITCH_EXTRA = 1
-# An estimate of an hour or more can be spread over days; a shorter one is a single sitting.
-SPREAD_MIN = 60
 SPREAD_NOTHING = "Nothing left to spread: the rest is already done or focused."
 DIALOG_USABLE_HEIGHT = 480
 # Dates as a student reads them. "2026-09-27 23:59" made them work out which day that was.
@@ -4694,12 +4694,6 @@ class DueField(QWidget):
         # Connected straight to `changed.emit`, each signal handed its value to a signal that takes
         # none: a TypeError inside Qt, and nothing connected to `changed` ran.
         self.changed.emit()
-
-
-def spread_session_min(remaining: int) -> int:
-    """How long each spread session is: an hour, or what is left when that is less, cut to the 15-minute
-    grid and never over three hours."""
-    return max(SLOT_MIN, min(60, remaining - remaining % SLOT_MIN, 180))
 
 
 def spread_words(sessions: list[dict], due: str, today: date) -> str:

@@ -351,6 +351,7 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 
 | Module | Function | Class | Reason |
 |---|---|---|---|
+| reuse | spread_session_min | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | restore_point_label | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | week_label | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | floor_slot | ADAPTER | encodes, makes one engine call, decodes |

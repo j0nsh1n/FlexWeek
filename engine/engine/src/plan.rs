@@ -1146,6 +1146,15 @@ pub fn merge_occupancy(base: &[u128], extra: &[u128]) -> EngineResult<Vec<u128>>
         .collect())
 }
 
+/// The shortest estimate the Spread over days choice is offered for.
+pub const SPREAD_MIN: i64 = 60;
+
+/// How long each spread session is: an hour, or what is left when that is less, cut to the 15-minute
+/// grid and never over three hours.
+pub fn spread_session_min(remaining: i64) -> i64 {
+    SLOT_MIN.max(60.min(remaining - remaining.rem_euclid(SLOT_MIN)).min(180))
+}
+
 pub fn spread_sessions(
     estimate_min: i64,
     focus_minutes: i64,

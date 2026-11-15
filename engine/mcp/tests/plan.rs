@@ -994,41 +994,117 @@ fn plan_homework_with_nothing_to_plan_in_shown_week_returns_stored_revisions() {
     assert_eq!(added["revision"], json!([5, 2]));
 }
 
-#[test]
-fn plan_gives_homework_the_helper_added_as_spread_its_share_of_this_week() {
-    // The same 180 min poster as the stored "spread" case above, but added through add_homework with
-    // spread=true: it must be saved as "Spread over days", so Plan places this week's 60 min share
-    // (180 x 5 / 15) and not the whole 180 as for "In one go".
-    let world = signed_in("plan-helper-spread");
-    school_stands(&world);
-    let mut server = boot(&world);
+fn add_poster(server: &mut Server, operation: &str, spread: bool, id: i64) -> (String, i64) {
     let added = server.call(
         "add_homework",
         json!({
-            "operation_id": "op-spread-poster",
+            "operation_id": operation,
             "title": "Poster",
-            "due": "2026-11-04T21:00",
+            "due": "2026-10-25T21:00",
             "estimate_min": 180,
-            "spread": true
+            "spread": spread
         }),
-        2,
+        id,
     );
-    let poster = body_of(&added)["result"]["assignment"]["id"]
-        .as_str()
-        .unwrap_or("")
-        .to_string();
-    let planned = server.call(
-        "plan_homework",
-        json!({"operation_id": "op-plan-helper-spread", "week_start": WEEK}),
-        3,
-    );
-    let body = body_of(&planned);
-    let placed: Vec<(Value, Value)> = body["result"]["placed"]
+    let body = body_of(&added);
+    assert_eq!(body["ok"], json!(true), "got {added}");
+    (
+        body["result"]["assignment"]["id"]
+            .as_str()
+            .unwrap_or("")
+            .to_string(),
+        body["revision"].as_i64().unwrap_or(0),
+    )
+}
+
+fn poster_sessions(world: &World, poster: &str) -> Vec<(i64, i64, bool)> {
+    let (blocks, _) = stored(world);
+    let mut rows: Vec<(i64, i64, bool)> = blocks
         .as_array()
         .cloned()
         .unwrap_or_default()
         .iter()
-        .map(|row| (row["assignment_id"].clone(), row["duration_min"].clone()))
+        .filter(|block| block["assignment_id"].as_str() == Some(poster))
+        .map(|block| {
+            (
+                block["days"][0].as_i64().unwrap_or(-1),
+                block["duration_min"].as_i64().unwrap_or(0),
+                block["start"].is_string(),
+            )
+        })
         .collect();
-    assert_eq!(placed, vec![(json!(poster), json!(60))], "got {body}");
+    rows.sort();
+    rows
+}
+
+fn plan_week(server: &mut Server, operation: &str, id: i64) -> Value {
+    body_of(&server.call(
+        "plan_homework",
+        json!({"operation_id": operation, "week_start": WEEK}),
+        id,
+    ))
+}
+
+#[test]
+fn a_homework_added_as_spread_is_hour_sessions_on_different_days_as_in_the_app() {
+    // Now is Wed 21 Oct 12:00, due Sun 25 Oct, 180 min. The app's Spread over days makes sessions of
+    // an hour from today: Wed, Thu and Fri (days 2, 3, 4), and Plan places each where it is.
+    let world = signed_in("spread-add-sessions");
+    school_stands(&world);
+    let mut server = boot(&world);
+    let (poster, _) = add_poster(&mut server, "op-spread-add", true, 2);
+    assert_eq!(
+        poster_sessions(&world, &poster),
+        vec![(2, 60, false), (3, 60, false), (4, 60, false)]
+    );
+    let planned = plan_week(&mut server, "op-spread-add-plan", 3);
+    assert_eq!(planned["ok"], json!(true), "got {planned}");
+    assert_eq!(
+        poster_sessions(&world, &poster),
+        vec![(2, 60, true), (3, 60, true), (4, 60, true)]
+    );
+}
+
+#[test]
+fn a_homework_added_in_one_go_stays_one_session() {
+    let world = signed_in("spread-add-one");
+    school_stands(&world);
+    let mut server = boot(&world);
+    let (poster, _) = add_poster(&mut server, "op-one-add", false, 2);
+    assert_eq!(poster_sessions(&world, &poster).len(), 1);
+    plan_week(&mut server, "op-one-add-plan", 3);
+    let sessions = poster_sessions(&world, &poster);
+    assert_eq!(sessions.len(), 1);
+    assert_eq!((sessions[0].1, sessions[0].2), (180, true));
+}
+
+#[test]
+fn editing_a_planned_homework_to_spread_replaces_its_whole_session() {
+    let world = signed_in("spread-edit-sessions");
+    school_stands(&world);
+    let mut server = boot(&world);
+    let (poster, revision) = add_poster(&mut server, "op-edit-add", false, 2);
+    plan_week(&mut server, "op-edit-plan-1", 3);
+    assert_eq!(poster_sessions(&world, &poster).len(), 1);
+    let edited = server.call(
+        "edit_homework",
+        json!({
+            "operation_id": "op-edit-spread",
+            "id": poster,
+            "expected_revision": revision,
+            "spread": true
+        }),
+        4,
+    );
+    assert_eq!(body_of(&edited)["ok"], json!(true), "got {edited}");
+    assert_eq!(
+        poster_sessions(&world, &poster),
+        vec![(2, 60, false), (3, 60, false), (4, 60, false)],
+        "the old whole session is gone"
+    );
+    plan_week(&mut server, "op-edit-plan-2", 5);
+    assert_eq!(
+        poster_sessions(&world, &poster),
+        vec![(2, 60, true), (3, 60, true), (4, 60, true)]
+    );
 }

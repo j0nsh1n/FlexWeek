@@ -1437,9 +1437,10 @@ fn add_homework_saves_spread_over_days_only_when_asked() {
     let (week, _) = week_row(&world.database_arg, world.user, "2026-10-19").expect("week");
     assert_eq!(
         blocks_with_assignment(&week, &spread).len(),
-        1,
-        "a spread homework still has its one waiting session for Plan to share out"
+        3,
+        "a spread homework has its hour sessions, one per day (due 4 Nov, 180 min)"
     );
+    assert_eq!(blocks_with_assignment(&week, &one).len(), 1);
 }
 
 #[test]

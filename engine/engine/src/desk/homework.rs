@@ -474,3 +474,76 @@ fn overdue_ids(
     }
     Ok(ids)
 }
+
+/// What a save does about Spread over days. The choice is kept only for an estimate long enough to
+/// offer it, and the homework is cut into spread sessions only when it is not already in several open
+/// sessions, as the Material sheet offers it. `asked` is `Some(true)` for Spread over days, `Some(false)`
+/// for In one go and `None` to keep what is saved.
+pub struct SpreadChoice {
+    /// The `spread` value to save, or `None` to keep the stored one.
+    pub field: Option<&'static str>,
+    /// Drop the open sessions and make the spread ones.
+    pub respread: bool,
+}
+
+pub fn spread_choice(asked: Option<bool>, estimate_min: i64, open_sessions: usize) -> SpreadChoice {
+    let long_enough = estimate_min >= crate::plan::SPREAD_MIN;
+    match asked {
+        None => SpreadChoice {
+            field: None,
+            respread: false,
+        },
+        Some(true) if long_enough => SpreadChoice {
+            field: Some("spread"),
+            respread: open_sessions <= 1,
+        },
+        Some(_) => SpreadChoice {
+            field: Some("one"),
+            respread: false,
+        },
+    }
+}
+
+/// The sessions Spread over days makes once the homework is saved: the app's spread preview,
+/// `spread_sessions` over the days from today (or its due day when that comes first), each session a
+/// waiting block on its own day with the id `block_id(index)`. Returns each session's week start and
+/// block. `planned_min` is what the homework's other not-finished sessions already hold.
+pub fn spread_new_sessions(
+    assignment: &Value,
+    planned_min: i64,
+    today: &str,
+    block_id: &dyn Fn(usize) -> String,
+) -> Result<Vec<(String, Value)>, String> {
+    let int = |name: &str| {
+        assignment
+            .get(name)
+            .and_then(Value::as_i64)
+            .unwrap_or_default()
+    };
+    let (estimate, focus) = (int("estimate_min"), int("focus_minutes"));
+    let due = assignment
+        .get("due")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "homework has no due date".to_string())?;
+    let due_day = model::parse_due(due).map_err(|error| error.message)?.0;
+    let today_day = model::parse_due(today).map_err(|error| error.message)?.0;
+    let from_date = super::pydate::iso_text(today_day.min(due_day));
+    let session_min = crate::plan::spread_session_min((estimate - focus).max(0));
+    let (sessions, _off_grid) =
+        crate::plan::spread_sessions(estimate, focus, planned_min, due, session_min, &from_date)
+            .map_err(|error| error.message)?;
+    let mut made = Vec::new();
+    for (index, session) in sessions.iter().enumerate() {
+        let day = session["days"][0].as_i64().unwrap_or(0);
+        let block = super::reuse::copied_homework_block_of(
+            assignment,
+            day,
+            &session["duration_min"],
+            &json!(block_id(index)),
+        )
+        .map_err(|error| error.message)?;
+        let week = session["week_start"].as_str().unwrap_or_default();
+        made.push((week.to_string(), block));
+    }
+    Ok(made)
+}

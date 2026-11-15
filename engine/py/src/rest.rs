@@ -170,6 +170,16 @@ fn merge_occupancy(base: Vec<u128>, extra: Vec<u128>) -> PyResult<Vec<u128>> {
 }
 
 #[pyfunction]
+fn spread_session_min(remaining: i64) -> i64 {
+    plan::spread_session_min(remaining)
+}
+
+#[pyfunction]
+fn spread_min() -> i64 {
+    plan::SPREAD_MIN
+}
+
+#[pyfunction]
 fn spread_sessions(
     estimate_min: i64,
     focus_minutes: i64,
@@ -407,6 +417,8 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         session_inside_work_windows,
         merge_occupancy,
         spread_sessions,
+        spread_session_min,
+        spread_min,
         solve,
         reschedule_after_miss,
         reschedule_running_late,

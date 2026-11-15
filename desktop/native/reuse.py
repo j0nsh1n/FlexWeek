@@ -13,6 +13,8 @@ MAX_WEEK_BLOCKS = 100
 AVAILABILITY_LIMIT = 21
 LATE_MINUTES = (15, 30, 60)
 PROTECTED_KINDS = ("downtime", "commute", "meal")
+# An estimate of this many minutes or more can be spread over days; a shorter one is a single sitting.
+SPREAD_MIN = int(flexweek_engine.spread_min())
 ROUTINE_FIELDS = (
     "title",
     "days",
@@ -24,6 +26,10 @@ ROUTINE_FIELDS = (
     "energy",
     "spotify_url",
 )
+
+
+def spread_session_min(remaining: int) -> int:
+    return int(flexweek_engine.spread_session_min(remaining))
 
 
 def restore_point_label(text: str) -> str:
