@@ -1,13 +1,13 @@
 # context.md — FlexWeek
 
-## Current State (2026-11-14)
-- Branch `feat/setup-change-asks-about-edited-weeks`, local only, from main 28da96bb. Fix round 2: All weeks turns days through the engine; From today on from a later week still starts the day after today; a stop asks and Except edited keeps that week's copy; stamped intents stay until the save is acknowledged. Local CI passed at 10c5410f (the first pass failed one wrapper test, fixed before the second pass).
+## Current State (2026-11-15)
+- Branch `fix/week-start-follow-ups-3`, local only, from main ce956452 (week start on any day: #128-#133 merged). It holds Jonathan's 2026-11-15 answers: the helper's every-week delete also removes later edited copies; the moved-day note names both months across a month end (English, from the engine's `day_long`); days the app picked by default are picked again after a start-day switch, with no mark; a screen reader hears the note when it appears in an open sheet. Sol's re-check passed at 0190ae9e; local CI passed there.
 - Latest release: v1.3.0, published 2026-11-10 from main d61235ee (PR #111, the version bump). The Linux tarball and
   the Android APK were built on this computer (`scripts/build-linux-local.sh` in an Ubuntu 24.04 container; the APK
   signed with the 1.2.0 key); the AppImage and the Windows installers came from the tagged "Release packages" run.
   The previous release is v1.2.0 (2026-10-27).
-- Developer build 4 (`1.3.0.202611101403`) is `dev`; older builds stay as `dev-<commit>` pre-releases (`dev-4e21fa5`
-  and `dev-f242d2f` among them). GitHub publishes them; the Linux tarball can also be built here.
+- Developer build `1.3.0.202611150450` (main ce95645) is `dev`; older builds stay as `dev-<commit>` pre-releases
+  (`dev-4110547` the newest of them). GitHub publishes them; the Linux tarball can also be built here.
 - In 1.3.0 since 1.2.0: FIX-SPEC 1.3 (#67-#76), the J lanes (Material Week zoom, Day hours, Month study fill, Look
   preview), the assistant's planning tools and live reload (#91, #92), the testing rebuild (#97, 2026-11-08: tests by
   area, light app, looks judged by review, CI as the gate), Material review fixes (#89-#96, #98-#105), CI/build work
@@ -99,6 +99,7 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
+- 2026-11-15, branch `fix/week-start-follow-ups-3` at 0190ae9e, local only. Done and reviewed (Sol PASS); next: Jonathan's word on the PR. Open planner pieces he has not picked yet: the helper's "spread" not saved as Spread over days, "Left from last week" after a make-up is planned, counts after a move or an Undo of a delete, Plan and this week's missed sessions, pieces around held times, the #125 review's wording questions.
 - 2026-11-14, branch `feat/setup-change-asks-about-edited-weeks`, local only. Fix round 2 is in. Local CI passed on the second pass (ci2/summary.txt). Next: review. Nothing pushed.
 - 2026-11-12, branch `fix/replan-moves-missed-sessions` (#126) with `fix/planner-counts-minutes` (#125) merged in,
   local only. A missed session's minutes are counted through `this_weeks_part` against the saved week
@@ -121,5 +122,3 @@ preview. Recorded `operation_id` values make a retried write return the first re
   the app asks the student what to do with such a remainder (options in
   `~/.flexweek-ui-harness/scratch/round2-fix2/planner-minutes/ASK-OPTIONS.md`, owner's pick pending). Next:
   review of this branch and the owner's pick.
-- 2026-11-10, branch `fix/131-helper-and-keys` from the v1.3.0 tag: helper live clock, Material letter-keys
-  switch, Help closing from the keyboard; the checks left from the 1.3.0 checklist are still open.
