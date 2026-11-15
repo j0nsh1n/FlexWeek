@@ -91,7 +91,8 @@ pub(crate) fn views_for_week(
             continue;
         };
         let planned_min = planned.get(id).copied().unwrap_or(0);
-        let mut view = flexweek_store::assignment_view(body, *revision, planned_min)
+        // The phone's golden homework JSON carries no `done_min`: it counts the open week's ticks only.
+        let mut view = flexweek_store::assignment_view(body, *revision, planned_min, None)
             .map_err(engine_failure)?;
         if let Some(given) = body.get("unplanned_min") {
             view["unplanned_min"] = given.clone();

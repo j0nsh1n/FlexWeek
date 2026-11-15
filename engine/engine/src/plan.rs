@@ -565,6 +565,29 @@ pub fn planned_minutes_by_id(
     totals
 }
 
+/// Each homework's minutes in sessions ticked done, over every saved week: what the homework list
+/// carries as `done_min`, so every count credits the same finished time.
+pub fn done_minutes_by_id(weeks: &[(String, Vec<Value>)]) -> BTreeMap<String, i64> {
+    let mut totals: BTreeMap<String, i64> = BTreeMap::new();
+    for (_, blocks) in weeks {
+        for block in blocks {
+            let Some(aid) = block.get("assignment_id").and_then(Value::as_str) else {
+                continue;
+            };
+            if !block
+                .get("completed")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
+                continue;
+            }
+            let dur = block["duration_min"].as_i64().unwrap_or(0);
+            *totals.entry(aid.to_string()).or_insert(0) += dur;
+        }
+    }
+    totals
+}
+
 /// Each homework's minutes in sessions from `from_day` on, for a week on screen that starts on
 /// another day than Monday: a stored week's session counts when any of its days falls on or after
 /// that date. `planned_minutes_by_id` is the Monday version.

@@ -479,10 +479,11 @@ fn payload_digest(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<String> 
 }
 
 #[pyfunction]
-fn assignment_view(body: &str, revision: i64, planned: i64) -> PyResult<String> {
+#[pyo3(signature = (body, revision, planned, done=None))]
+fn assignment_view(body: &str, revision: i64, planned: i64, done: Option<i64>) -> PyResult<String> {
     guard(|| {
         let view =
-            store::assignment_view(&parse(body)?, revision, planned).map_err(crate::raise)?;
+            store::assignment_view(&parse(body)?, revision, planned, done).map_err(crate::raise)?;
         Ok(dump(&view))
     })
 }

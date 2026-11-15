@@ -298,3 +298,56 @@ def test_the_panels_plan_button_places_a_session_that_is_waiting_for_a_time(qapp
     settled(qapp, window)
     assert [b for b in lab_sessions(window) if b["id"] == "lab-monday" and b.get("start")]
     assert "fully planned" not in window.session.message
+
+
+def add_done_hour(window: NativeWindow, block_id: str, day: int) -> None:
+    """An hour of the lab report already ticked done, on `day` of the open week."""
+    window.session.add_block(
+        {
+            "id": block_id,
+            "title": "Lab report",
+            "kind": "flexible",
+            "assignment_id": "lab",
+            "duration_min": 60,
+            "days": [day],
+            "start": "06:00",
+            "completed": True,
+            "completed_day": day,
+        }
+    )
+
+
+def test_a_session_ticked_done_this_week_is_one_credit_in_the_line_the_count_and_plan(qapp, window) -> None:
+    """A 2 h lab report with an hour ticked done this week has 1 h left: the line, "needs a time" and
+    Plan into this week all say 60 (before, the count said 120 and Plan placed 120)."""
+    left_in_week_one(qapp, window)
+    session = window.session
+    session.assignments["lab"]["estimate_min"] = 120
+    session.dirty_assignments.add("lab")
+    add_done_hour(window, "lab-done", 0)
+    session.save()
+    settled(qapp, window)
+    assert [(item["id"], item["remaining_min"]) for item in session.unfinished()] == [("lab", 60)]
+    assert [row["minutes"] for row in session.homework_time_needed()] == [60]
+    press_plan_into_this_week(qapp, window)
+    placed = sum(b["duration_min"] for b in lab_sessions(window) if b.get("start") and not b.get("completed"))
+    assert placed == 60, lab_sessions(window)
+
+
+def test_an_hour_ticked_done_in_an_earlier_saved_week_leaves_nothing_to_carry(qapp, window) -> None:
+    """The lab report's only session was ticked done last week: no line, nothing needed this week."""
+    week1, week2 = left_in_week_one(qapp, window)
+    session = window.session
+    session.load_week(week1)
+    wait_until(qapp, lambda: session.week_start == week1 and not session.busy)
+    settled(qapp, window)
+    old = lab_sessions(window)[0]
+    day = old["days"][0]
+    session.add_block({**old, "start": "06:00", "pinned": False, "completed": True, "completed_day": day})
+    session.save()
+    settled(qapp, window)
+    session.load_week(week2)
+    wait_until(qapp, lambda: session.week_start == week2 and not session.busy)
+    settled(qapp, window)
+    assert session.unfinished() == []
+    assert session.homework_time_needed() == []

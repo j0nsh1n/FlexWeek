@@ -18,6 +18,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from backend import clock as wall_clock
 from backend.assignments import (
+    done_minutes_by_id,
     planned_minutes_by_id,
     planned_minutes_from_day,
     prepare_solve,
@@ -311,8 +312,8 @@ def month_weeks(
     return [(start, week_with_standing(db, user_id, start, text)) for start, text in saved.items()]
 
 
-def assignment_view(body: dict, revision: int, planned: int) -> dict:
-    view: dict = json.loads(flexweek_engine.assignment_view(json.dumps(body), revision, planned))
+def assignment_view(body: dict, revision: int, planned: int, done: int = 0) -> dict:
+    view: dict = json.loads(flexweek_engine.assignment_view(json.dumps(body), revision, planned, done))
     return view
 
 
@@ -1424,6 +1425,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         else:
             # A week on screen from another day: the minutes from its first day on.
             planned_by_id = planned_minutes_from_day(weeks, week_start)
+        done_by_id = done_minutes_by_id(weeks)
         session_weeks_by_id: dict[str, set[str]] = {}
         for saved_week, blocks in weeks:
             for block in blocks:
@@ -1435,7 +1437,9 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             body = json.loads(row_body)
             if body["completed"] and not include_completed:
                 continue
-            item = assignment_view(body, row_revision, planned_by_id.get(row_id, 0))
+            item = assignment_view(
+                body, row_revision, planned_by_id.get(row_id, 0), done_by_id.get(row_id, 0)
+            )
             item["session_weeks"] = sorted(session_weeks_by_id.get(row_id, set()))
             items.append(item)
         items.sort(key=lambda item: due_sort_key(item["due"], item["id"]))

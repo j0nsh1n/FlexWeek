@@ -3,7 +3,8 @@
 use serde_json::{Map, Value, json};
 
 use crate::desk::planning::{
-    available_homework_minutes, floor_slot, occurrence_days, time_still_needed_parts,
+    available_homework_minutes, credited_done_minutes, floor_slot, occurrence_days,
+    time_still_needed_parts,
 };
 use crate::desk::pyops::{
     Cmp, PyDict, compare, contains, eq, get, hashable, in_set, iterate, or_default, order, py_dict,
@@ -514,21 +515,6 @@ pub fn unfinished_items(
     Ok(keyed.into_iter().map(|(_, item)| item).collect())
 }
 
-fn done_session_minutes(blocks: &Value, assignment_id: &Value) -> EngineResult<i64> {
-    let mut total = 0;
-    for block in iterate(blocks)? {
-        if eq(
-            get(&block, "assignment_id")?.unwrap_or(null()),
-            assignment_id,
-        ) && truthy(get(&block, "completed")?)
-        {
-            // A block with no length counts as nothing, the same as a block with a zero length.
-            total += whole(&or_default(get(&block, "duration_min")?, json!(0)))?;
-        }
-    }
-    Ok(total)
-}
-
 pub fn left_over_items(
     assignments: &Value,
     saved_weeks: &Value,
@@ -552,16 +538,6 @@ pub fn left_over_items(
             .map(crate::model::parse_due)
             .transpose()?
             .is_some_and(|deadline| deadline <= moment);
-        // Placed unfinished minutes are still left to do, so only sessions ticked done come off.
-        // `unplanned_min` from the server can hide them, so both states use the homework itself:
-        // estimate minus focus minutes minus done sessions.
-        let estimate = whole(&or_default(get(assignment, "estimate_min")?, json!(0)))?;
-        let focus = whole(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
-        let done = done_session_minutes(blocks, subscript(assignment, "id")?)?;
-        let remaining = (estimate - focus - done).max(0);
-        if remaining == 0 {
-            continue;
-        }
         let carried = if overdue {
             false
         } else {
@@ -581,13 +557,19 @@ pub fn left_over_items(
         if !overdue && !carried {
             continue;
         }
-        // Time already placed this week or later is not left over: a carried line lists only the
-        // minutes that still have no time, by the same count as "needs a time".
+        let id = subscript(assignment, "id")?;
         let remaining = if overdue {
-            remaining
+            // Placed unfinished minutes are still left to do, so only focus time and sessions ticked
+            // done come off: the estimate itself, not `unplanned_min`, which can hide them.
+            let estimate = whole(&or_default(get(assignment, "estimate_min")?, json!(0)))?;
+            let focus = whole(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
+            let done = credited_done_minutes(assignment, id, blocks, committed_blocks)?;
+            (estimate - focus - done).max(0)
         } else {
-            let one: Map<String, Value> =
-                Map::from_iter([(py_str(subscript(assignment, "id")?), assignment.clone())]);
+            // Time already placed this week or later is not left over: the line lists only the minutes
+            // that still have no time, by the same count as "needs a time" (focus time and sessions
+            // ticked done in every week already come off there).
+            let one: Map<String, Value> = Map::from_iter([(py_str(id), assignment.clone())]);
             // A block with no length holds no time, and the count would refuse it.
             let with_length = |week: &Value| -> EngineResult<Vec<Value>> {
                 Ok(iterate(week)?
@@ -598,11 +580,10 @@ pub fn left_over_items(
             let open_week = with_length(blocks)?;
             let saved_week = with_length(committed_blocks)?;
             let parts = time_still_needed_parts(&one, &open_week, today_week, &saved_week)?;
-            let needed = parts
+            parts
                 .first()
                 .and_then(|part| part["minutes"].as_i64())
-                .unwrap_or(0);
-            (needed - done).max(0)
+                .unwrap_or(0)
         };
         if remaining == 0 {
             continue;

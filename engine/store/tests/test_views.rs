@@ -499,3 +499,47 @@ fn routines_and_restore_points_use_the_route_names() {
         "the route renames weeks_count to weeks"
     );
 }
+
+#[test]
+fn homework_lists_the_minutes_of_sessions_ticked_done_in_every_saved_week() {
+    // Essay's session in the week of 12 October is ticked done (30 min) and another in the week of
+    // 19 October is too (45 min): done_min 75, whatever week the list is read for. Not-finished
+    // sessions and other homework add nothing.
+    let (conn, user) = fixture("homework-done");
+    for (week, blocks) in [
+        (
+            "2026-10-12",
+            json!([{
+                "id": "s0", "title": "Draft", "kind": "flexible", "duration_min": 30,
+                "days": [2], "start": "16:00", "assignment_id": "essay", "completed": true
+            }]),
+        ),
+        (
+            "2026-10-19",
+            json!([{
+                "id": "s1", "title": "Draft", "kind": "flexible", "duration_min": 45,
+                "days": [2], "start": "16:00", "assignment_id": "essay", "completed": true
+            }, {
+                "id": "s2", "title": "Quiz", "kind": "flexible", "duration_min": 30,
+                "days": [3], "assignment_id": "quiz"
+            }]),
+        ),
+    ] {
+        conn.execute(
+            "UPDATE weeks SET blocks = ?1 WHERE user_id = ?2 AND week_start = ?3",
+            params![text(&blocks), user, week],
+        )
+        .expect("week");
+    }
+    for read_for in ["2026-10-12", "2026-10-19", "2026-10-26"] {
+        let listed = homework_list(&conn, user, read_for, false).expect("list");
+        let items = list(&listed, "assignments").expect("items");
+        let done = |id: &str| {
+            by_id(items, id)
+                .and_then(|item| item.get("done_min"))
+                .and_then(Value::as_i64)
+        };
+        assert_eq!(done("essay"), Some(75), "read for {read_for}");
+        assert_eq!(done("quiz"), Some(0), "read for {read_for}");
+    }
+}

@@ -94,13 +94,16 @@ fn views(
             flexweek_engine::plan::planned_minutes_from_day(&listed, week_start).map_err(engine)?
         }
     };
+    let done = flexweek_engine::plan::done_minutes_by_id(&listed);
     let mut out = Map::new();
     for (id, _, revision) in rows {
         let Some(body) = keyed.get(id) else {
             continue;
         };
         let minutes = planned.get(id).copied().unwrap_or(0);
-        let mut view = flexweek_store::assignment_view(body, *revision, minutes).map_err(engine)?;
+        let done_min = done.get(id).copied().unwrap_or(0);
+        let mut view = flexweek_store::assignment_view(body, *revision, minutes, Some(done_min))
+            .map_err(engine)?;
         if let Some(given) = body.get("unplanned_min") {
             view["unplanned_min"] = given.clone();
         }

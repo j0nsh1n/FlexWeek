@@ -140,6 +140,7 @@ fn shown_homework_list(
             }
             let planned =
                 planned_minutes_from_day(&weeks, week_start).map_err(|err| err.message)?;
+            let done = flexweek_engine::plan::done_minutes_by_id(&weeks);
             let mut keyed = Vec::new();
             for (row_id, row_body, row_revision) in rows {
                 let body: Value = serde_json::from_str(&row_body).map_err(|error| {
@@ -156,8 +157,9 @@ fn shown_homework_list(
                     continue;
                 }
                 let planned_min = planned.get(&row_id).copied().unwrap_or(0);
-                let mut item =
-                    assignment_view(&body, row_revision, planned_min).map_err(|err| err.message)?;
+                let done_min = done.get(&row_id).copied().unwrap_or(0);
+                let mut item = assignment_view(&body, row_revision, planned_min, Some(done_min))
+                    .map_err(|err| err.message)?;
                 let listed: Vec<&str> = session_weeks
                     .get(&row_id)
                     .map(|weeks| weeks.iter().map(String::as_str).collect())

@@ -645,9 +645,62 @@ fn test_left_from_last_week_lists_only_the_minutes_with_no_time() {
     let items = carried_line(carried_project(180, 0, 60), json!([placed_hours(60)]));
     assert_eq!(items.len(), 1);
     assert_eq!(items[0]["remaining_min"], 120);
-    // A missed session of last week is in the estimate and not in planned time: 2 h, 1 h planned now.
-    let items = carried_line(carried_project(120, 0, 60), json!([placed_hours(60)]));
+}
+
+#[test]
+fn test_left_from_last_week_credits_sessions_ticked_done_in_any_saved_week() {
+    // 60 min whose only session was ticked done last week: the server lists done_min 60, nothing is left.
+    let mut done_last_week = carried_project(60, 0, 0);
+    done_last_week["done_min"] = json!(60);
+    assert_eq!(carried_line(done_last_week, json!([])), Vec::<Value>::new());
+    // 120 min with an hour ticked done last week and nothing planned: 60 are left.
+    let mut half = carried_project(120, 0, 0);
+    half["done_min"] = json!(60);
+    let items = carried_line(half, json!([]));
+    assert_eq!(items[0]["remaining_min"], 60);
+}
+
+#[test]
+fn test_left_from_last_week_counts_a_session_whose_time_has_passed() {
+    // 2 h homework, nothing done. This week's hour was planned for Monday 08:00 and it is Monday 10:00:
+    // the screens read that session as having no time (`without_missed_times`), so 60 of the 120 wait
+    // for a time and the other 60 are in no session at all: 120 are left, none of them done.
+    let assignments = json!({"essay": carried_project(120, 0, 60)});
+    let saved = vec![json!({
+        "id": "now", "assignment_id": "essay", "kind": "flexible", "duration_min": 60, "start": "08:00",
+        "days": [0], "completed": false,
+    })];
+    let at_ten = json!([0, 10 * 60]);
+    let open_week =
+        planning::without_missed_times(&saved, &assignments, &saved, Some(&at_ten)).unwrap();
+    assert_eq!(
+        open_week[0]["start"],
+        Value::Null,
+        "the passed hour has no time now"
+    );
+    let items = clipboard::left_over_items(
+        &assignments,
+        &json!(["2026-10-05"]),
+        "2026-10-12",
+        "2026-10-12T10:00",
+        &json!(open_week),
+        &json!(saved),
+    )
+    .unwrap();
     assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["remaining_min"], 120);
+    // The same hour still ahead (08:00 at 07:00) holds its time: 120 - 60 planned = 60 have no time.
+    let early = json!([0, 7 * 60]);
+    let ahead = planning::without_missed_times(&saved, &assignments, &saved, Some(&early)).unwrap();
+    let items = clipboard::left_over_items(
+        &assignments,
+        &json!(["2026-10-05"]),
+        "2026-10-12",
+        "2026-10-12T07:00",
+        &json!(ahead),
+        &json!(saved),
+    )
+    .unwrap();
     assert_eq!(items[0]["remaining_min"], 60);
 }
 

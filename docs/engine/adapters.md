@@ -32,6 +32,7 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | weeks | availability_on_shown_week | ADAPTER | One call (`shown::occupancy_on_shown_week` and `shown::windows_on_shown_week` in one binding): each weekday's occupancy and work windows on that weekday's day of the shown week. |
 | weeks | rules_on_shown_week | ADAPTER | Encodes the planner settings, one call (`shown::rules_on_shown_week`) that names the weekday of the shown week's day 0, JSON decoded. |
 | assignments | planned_minutes_by_id | ADAPTER | Encodes the weeks, one call, values become ints. |
+| assignments | done_minutes_by_id | ADAPTER | Encodes the weeks, one call, values become ints. |
 | assignments | unplanned_minutes | ADAPTER | Three ints in, one engine call. |
 | assignments | migrate_blocks | ADAPTER | Encodes the blocks, one call, two lists out. |
 | availability | add_occupancy | ADAPTER | One engine call, written back over the occupancy list. |

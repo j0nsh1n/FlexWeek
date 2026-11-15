@@ -2273,7 +2273,7 @@ class NativeSession(QObject):
                         block for block in self._assignments_basis if block.get("assignment_id") != homework
                     ] + [deepcopy(block) for block in self.blocks if block.get("assignment_id") == homework]
                 else:
-                    for key in ("unplanned_min", "planned_min"):
+                    for key in ("unplanned_min", "planned_min", "done_min"):
                         if key in live:
                             restored[key] = live[key]
                     restored["focus_minutes"] = live.get("focus_minutes") or 0
@@ -2464,7 +2464,7 @@ class NativeSession(QObject):
                     held_copy = self.assignments.get(result["id"], {})
                     stored["session_weeks"] = list(held_copy.get("session_weeks") or [])
                     # The save's echo has no server numbers; the held ones still match the saved-week copy.
-                    for key in ("unplanned_min", "planned_min"):
+                    for key in ("unplanned_min", "planned_min", "done_min"):
                         if key in held_copy:
                             stored[key] = held_copy[key]
                     self.assignments[result["id"]] = stored
@@ -3043,11 +3043,13 @@ class NativeSession(QObject):
                 if saved is not None:
                     saved["unplanned_min"] = item.get("unplanned_min")
                     saved["planned_min"] = item.get("planned_min")
+                    saved["done_min"] = item.get("done_min")
                 if item["id"] in self.dirty_assignments:
                     local = self.assignments.get(item["id"])
                     if local is not None:
                         local["unplanned_min"] = item.get("unplanned_min")
                         local["planned_min"] = item.get("planned_min")
+                        local["done_min"] = item.get("done_min")
                     continue
                 self.assignments[item["id"]] = item
             self.week_changed.emit()
