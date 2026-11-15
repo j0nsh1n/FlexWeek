@@ -1279,6 +1279,8 @@ class NativeSession(QObject):
         the week itself from Monday, both stored weeks it covers from any other day."""
         if self._stored_parts:
             return [(str(part["week_start"]), int(part["revision"])) for part in self._stored_parts]
+        if isinstance(self.revision, list):
+            return list(zip(stored_weeks_of(self.week_start), map(int, self.revision), strict=True))
         return [(self.week_start, int(self.revision))]
 
     def accept_remote_week(self, who: str) -> bool:

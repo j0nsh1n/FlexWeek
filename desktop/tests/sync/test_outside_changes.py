@@ -453,3 +453,20 @@ def test_a_parked_week_forgets_homework_deleted_in_another_week(
             for block in json.loads(db.read_week(_user_id(window), week[0])[0])
         ]
     assert "parked-edit" in saved
+
+
+def test_a_week_from_sunday_read_without_its_stored_parts_still_names_its_stored_weeks(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A week from another day carries one revision per stored week. Were its stored parts ever missing,
+    # the stored weeks are still the two Mondays it covers, each with its own revision, and never one
+    # list taken for a number.
+    window = open_light()
+    session = window.session
+    _start_week_on(qapp, window, monkeypatch, tmp_path, "sunday", "2026-11-01")
+    session._stored_parts = []
+    session.revision = [3, 4]
+    assert session.stored_weeks() == [("2026-10-26", 3), ("2026-11-02", 4)]
