@@ -833,6 +833,105 @@ fn school_deleted_this_week_stays_missed_and_every_week_stops_it() {
     );
 }
 
+/// School standing from `from`, Monday to Friday 08:00-15:00.
+fn school_stands_from(world: &World, from: &str) {
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let school = json!({
+        "id": "school", "title": "School", "kind": "locked", "duration_min": 420,
+        "days": [0, 1, 2, 3, 4], "start": "08:00", "category": "class"
+    });
+    let intent = edit_intent("school", from, None, Some(&school)).expect("new");
+    apply_repeat_intents(&conn, world.user, &[intent]).expect("school stands");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+}
+
+/// A saved week of the student's own: School moved to start at 10:00 there.
+fn seed_moved_school(world: &World, week: &str) {
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let blocks = json!([{
+        "id": "school", "title": "School", "kind": "locked", "duration_min": 420,
+        "days": [0, 1, 2, 3, 4], "start": "10:00", "category": "class"
+    }]);
+    conn.execute(
+        "INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?1, ?2, ?3, 1)",
+        (world.user, week, blocks.to_string()),
+    )
+    .expect("week");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+}
+
+#[test]
+fn every_week_delete_also_removes_the_later_weeks_own_copy_of_school_monday_start() {
+    let world = signed_in("school-delete-edited-monday");
+    school_stands_from(&world, "2026-10-12");
+    seed_moved_school(&world, "2026-11-02");
+    let mut server = boot(&world);
+    let before = seen(&mut server, "2026-11-02", 2);
+    assert_eq!(
+        by_id(&before, "school")["start"],
+        json!("10:00"),
+        "the later week has its own copy, got {before}"
+    );
+    let every = server.call(
+        "delete_block",
+        json!({"operation_id": "op-edited-del-mon", "week_start": WEEK, "expected_revision": 0,
+            "block_id": "school", "scope": "series", "every_week": true}),
+        3,
+    );
+    assert_eq!(body_of(&every)["ok"], json!(true), "got {every}");
+    let later = seen(&mut server, "2026-11-02", 4);
+    assert_eq!(
+        by_id(&later, "school"),
+        &Value::Null,
+        "the helper's delete takes the later week's own copy too, got {later}"
+    );
+    let next = seen(&mut server, NEXT, 5);
+    assert_eq!(by_id(&next, "school"), &Value::Null, "got {next}");
+    let earlier = seen(&mut server, "2026-10-12", 6);
+    assert_eq!(
+        by_id(&earlier, "school")["days"],
+        json!([0, 1, 2, 3, 4]),
+        "a week before the delete keeps School, got {earlier}"
+    );
+}
+
+#[test]
+fn every_week_delete_also_removes_the_later_weeks_own_copy_of_school_sunday_start() {
+    let world = signed_in("school-delete-edited-sunday");
+    school_stands_from(&world, "2026-10-12");
+    seed_moved_school(&world, "2026-11-02");
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "sunday"}"#,
+    )
+    .expect("sun file");
+    let mut server = boot(&world);
+    let every = server.call(
+        "delete_block",
+        json!({"operation_id": "op-edited-del-sun", "week_start": "2026-10-25",
+            "expected_revision": [0, 0],
+            "block_id": "school", "scope": "series", "every_week": true}),
+        2,
+    );
+    assert_eq!(body_of(&every)["ok"], json!(true), "got {every}");
+    let later = seen(&mut server, "2026-11-02", 3);
+    assert_eq!(
+        by_id(&later, "school"),
+        &Value::Null,
+        "the helper's delete takes the later week's own copy too, got {later}"
+    );
+    let before = seen(&mut server, "2026-10-19", 4);
+    assert_eq!(
+        by_id(&before, "school")["days"],
+        json!([0, 1, 2, 3, 4]),
+        "the week before the delete's week keeps School, got {before}"
+    );
+}
+
 #[test]
 fn one_day_of_school_cannot_be_deleted_from_every_week() {
     // The app asks "this week or every week" only when the whole block goes; one day of School

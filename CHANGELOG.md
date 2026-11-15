@@ -75,6 +75,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - With the week starting on Sunday, Month showed nothing on a date of its first row before that row's Monday (Sunday 29 November in December 2026). It now shows that date's homework and blocks, and so does any other first day of the week.
 - With the week starting on a day other than Monday, FlexWeek no longer reloads the week again and again as if another program had changed it. It kept the window busy and slow whenever anything was saved, by the app itself or by a linked phone's sync, and could wipe a change made just before.
 - Homework you delete while another week is open no longer comes back when you return to a week with unsaved changes, and the week is no longer shown as changed by another program.
+- The assistant helper's delete of School or an activity "from this week on" now also removes a later week's own changed copy of it, as All weeks does in the app. Weeks before the one it was asked from, and earlier days of that week, are left alone.
 
 ## [1.3.0] - 2026-11-10
 
