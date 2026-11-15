@@ -1328,6 +1328,9 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         parts = shown_parts_of(start)
         if parts is not None:
             with connect(path) as db:
+                # Both stored weeks and their parts come from one snapshot: a commit between the reads
+                # would pair blocks of one revision with `stored` of another.
+                db.begin()
                 return shown_week_view(db, account["id"], start, parts)
         if not is_week_start(start):
             raise HTTPException(422, WEEK_START_RULE)

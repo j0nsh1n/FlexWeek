@@ -392,3 +392,160 @@ def test_a_parked_week_from_sunday_holds_the_stored_revisions_a_delete_elsewhere
     with connect(database) as db:
         stored = [(week, db.read_week(_user_id(window), week)[1]) for week in ("2026-10-26", "2026-11-02")]
     assert session.stored_weeks() == stored
+
+
+@pytest.mark.parametrize(
+    ("day", "first", "next_week"),
+    [("monday", "2026-11-02", "2026-11-09"), ("sunday", "2026-11-01", "2026-11-08")],
+)
+def test_a_parked_week_forgets_homework_deleted_in_another_week(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    day: str,
+    first: str,
+    next_week: str,
+) -> None:
+    # The first week holds the essay (Wednesday 4 November) and an unsaved edit. Opening the next week
+    # parks it, and the essay is deleted there. Back on the first week the essay is gone, the week is
+    # not marked changed by the outside check, and the parked edit still saves.
+    window = open_light()
+    database = _database(window, tmp_path)
+    session = window.session
+    window._autosave.stop()
+    _start_week_on(qapp, window, monkeypatch, tmp_path, day, first)
+    session.add_homework(
+        {"id": "essay", "title": "History essay", "due": "2026-11-20", "estimate_min": 60, "revision": 0}
+    )
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty, what="the essay saved")
+    waiting = next(block for block in session.blocks if block.get("assignment_id") == "essay")
+    put_block(session, waiting["id"], 2, 16 * 60, 17 * 60, pinned=True)
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty, what="the essay's time saved")
+    session.add_homework({**session.assignments["essay"], "title": "History essay, edited"})
+    assert "essay" in session.dirty_assignments, "an edit to the essay is waiting to be saved"
+    session.add_block(
+        {"id": "parked-edit", "title": "Band", "kind": "locked", "days": [1],
+         "start": "18:00", "duration_min": 60}
+    )
+    assert session.dirty
+    session.load_week(next_week)
+    wait_until(qapp, lambda: session.week_start == next_week and not session.busy, what="the next week")
+    assert session.delete_homework("essay")
+    wait_until(qapp, lambda: not session.busy and "essay" not in session.assignments, what="the delete")
+    session.load_week(first)
+    wait_until(qapp, lambda: session.week_start == first and not session.busy, what="back")
+    assert "essay" not in session.assignments, "the deleted homework is gone from the week that was parked"
+    assert not any(block.get("assignment_id") == "essay" for block in session.blocks)
+    assert "essay" not in session.dirty_assignments
+    reloads = _count_reloads(window, monkeypatch)
+    wait_until(qapp, lambda: _settled_on(window, database), timeout=SHOWN_WITHIN_S, what="a look after")
+    assert not session.conflict, "the window's own delete is not taken for another program's change"
+    assert reloads == []
+    assert session.dirty, "the parked edit is still waiting"
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty, what="the parked edit saved")
+    assert not session.conflict
+    with connect(database) as db:
+        saved = [
+            block["id"]
+            for week in session.stored_weeks()
+            for block in json.loads(db.read_week(_user_id(window), week[0])[0])
+        ]
+    assert "parked-edit" in saved
+
+
+def test_a_week_from_sunday_read_without_its_stored_parts_still_names_its_stored_weeks(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A week from another day carries one revision per stored week. Were its stored parts ever missing,
+    # the stored weeks are still the two Mondays it covers, each with its own revision, and never one
+    # list taken for a number.
+    window = open_light()
+    session = window.session
+    _start_week_on(qapp, window, monkeypatch, tmp_path, "sunday", "2026-11-01")
+    session._stored_parts = []
+    session.revision = [3, 4]
+    assert session.stored_weeks() == [("2026-10-26", 3), ("2026-11-02", 4)]
+
+
+def _own_save_from_sunday(
+    app: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    window._autosave.stop()
+    _start_week_on(app, window, monkeypatch, tmp_path, "sunday", "2026-11-01")
+    session = window.session
+    session.add_block(
+        {"id": "own-save", "title": "Band", "kind": "locked", "days": [1],
+         "start": "16:00", "duration_min": 60}
+    )
+    session.save()
+    wait_until(app, lambda: not session.busy and not session.dirty, what="the window's own save")
+
+
+def _quiet_after(
+    app: QApplication, window: NativeWindow, database: Path, reloads: list[str], what: str
+) -> None:
+    wait_until(app, lambda: _settled_on(window, database), timeout=SHOWN_WITHIN_S, what=what)
+    assert reloads == [], f"{what}: the window's own change is not taken for another program's"
+    assert not window.session.conflict
+    assert not window.session.message.startswith("Updated from")
+
+
+@pytest.mark.parametrize("step", ["undo", "redo", "reload"])
+def test_undo_redo_and_reload_on_a_week_from_sunday_are_not_taken_for_outside_changes(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    step: str,
+) -> None:
+    window = open_light()
+    database = _database(window, tmp_path)
+    session = window.session
+    _own_save_from_sunday(qapp, window, monkeypatch, tmp_path)
+    if step != "reload":
+        session.undo()
+        wait_until(qapp, lambda: not session.busy and not session.dirty, what="the undo")
+    if step == "redo":
+        session.redo()
+        wait_until(qapp, lambda: not session.busy and not session.dirty, what="the redo")
+    if step == "reload":
+        session.reload()
+        wait_until(qapp, lambda: not session.busy, what="the reload")
+    reloads = _count_reloads(window, monkeypatch)
+    _quiet_after(qapp, window, database, reloads, f"a look after {step}")
+
+
+def test_a_conflict_then_reload_on_a_week_from_sunday_is_not_followed_by_another_reload(
+    qapp: QApplication,  # noqa: F811
+    open_light: Callable[..., NativeWindow],  # noqa: F811
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = open_light()
+    database = _database(window, tmp_path)
+    session = window.session
+    _own_save_from_sunday(qapp, window, monkeypatch, tmp_path)
+    session.add_block(
+        {"id": "unsaved", "title": "Choir", "kind": "locked", "days": [2],
+         "start": "17:00", "duration_min": 60}
+    )
+    _write_homework_elsewhere(database, _user_id(window), "elsewhere-4", "Saved elsewhere")
+    wait_until(qapp, lambda: session.conflict, timeout=SHOWN_WITHIN_S, what="the week marked as changed")
+    session.reload()
+    wait_until(qapp, lambda: not session.busy and "Saved elsewhere" in _titles(window), what="the reload")
+    # The reload settled the outside change; a save of the window's own is the next commit to be looked at.
+    reloads = _count_reloads(window, monkeypatch)
+    session.add_block(
+        {"id": "after-reload", "title": "Choir", "kind": "locked", "days": [3],
+         "start": "17:00", "duration_min": 60}
+    )
+    session.save()
+    wait_until(qapp, lambda: not session.busy and not session.dirty, what="a save after the reload")
+    _quiet_after(qapp, window, database, reloads, "a look after the save that followed the reload")
