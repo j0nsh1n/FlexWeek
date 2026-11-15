@@ -6,12 +6,14 @@ Monday 16 November."""
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+import backend.app as app_module
 from backend.app import create_app
 
 PASSWORD = "a-long-test-password"
@@ -317,3 +319,31 @@ def test_a_shown_week_carries_its_stored_weeks_so_undo_puts_them_back_exactly(al
     )
     assert days_of(week(alice, "2026-10-26")["blocks"]) == {"hw": [3, 4]}
     assert days_of(week(alice, "2026-10-30")["blocks"]) == {"hw": [0]}
+
+
+def test_a_shown_week_is_read_in_one_transaction_so_a_commit_between_reads_cannot_split_it(
+    alice: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Another program commits to the second stored week after the first read of the shown week. The
+    # reply must hold one revision of each stored week: the blocks shown, `revision` and `stored` agree.
+    save(alice, WED, [fixed("thu12", "10:00", [1]), fixed("mon16", "10:00", [5])], [0, 0])
+    stored_part = app_module.stored_part
+    outcome: list[str] = []
+
+    def commit_elsewhere_then_read(db: object, user_id: int, week_start: str) -> dict:
+        if week_start == SECOND and not outcome:
+            other = sqlite3.connect(tmp_path / "shown.db", timeout=0)
+            try:
+                other.execute("UPDATE weeks SET revision = revision + 1 WHERE week_start = ?", (SECOND,))
+                other.commit()
+                outcome.append("committed")
+            except sqlite3.OperationalError:
+                outcome.append("refused")
+            finally:
+                other.close()
+        return stored_part(db, user_id, week_start)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(app_module, "stored_part", commit_elsewhere_then_read)
+    shown = week(alice, WED)
+    assert outcome, "the commit was tried between the reads"
+    assert shown["revision"] == [part["revision"] for part in shown["stored"]]
