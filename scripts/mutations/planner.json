@@ -114,8 +114,8 @@
  {
   "file": "engine/engine/src/desk/planning.rs",
   "name": "the session of finished homework is moved",
-  "old": "        if truthy(get(assignment, \"completed\")?) {\n            continue;\n        }\n        let part = this_weeks_part(assignment, link, &saved)?;\n",
-  "new": "        let part = this_weeks_part(assignment, link, &saved)?;\n",
+  "old": "        if truthy(get(assignment, \"completed\")?) {\n            continue;\n        }\n        let part = this_weeks_part(assignment, link, &open_week, &saved)?;\n",
+  "new": "        let part = this_weeks_part(assignment, link, &open_week, &saved)?;\n",
   "test": "cargo:flexweek-engine:replan_missed_sessions:test_a_session_of_finished_homework_is_not_moved"
  },
  {

@@ -170,13 +170,13 @@ fn merge_occupancy(base: Vec<u128>, extra: Vec<u128>) -> PyResult<Vec<u128>> {
 }
 
 #[pyfunction]
-fn spread_session_min(remaining: i64) -> i64 {
-    plan::spread_session_min(remaining)
+fn spread_session_min(remaining: i64) -> PyResult<i64> {
+    guard(|| Ok(plan::spread_session_min(remaining)))
 }
 
 #[pyfunction]
-fn spread_min() -> i64 {
-    plan::SPREAD_MIN
+fn spread_min() -> PyResult<i64> {
+    guard(|| Ok(plan::SPREAD_MIN))
 }
 
 #[pyfunction]
