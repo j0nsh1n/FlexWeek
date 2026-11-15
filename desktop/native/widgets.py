@@ -4142,6 +4142,9 @@ class BlockDialog(Dialog):
             self.title.setText(draft["title"])
         if "days" in draft:
             self.day_picker.set_days(draft["days"])
+            # A draft carries days only when the student chose them; the picker may already show the same
+            # days and so send no toggle that would mark the row touched.
+            self._touched.add("days")
         if "start" in draft:
             start = QTime.fromString(draft["start"], "HH:mm")
             # Not a move made in this sheet: the end follows without saying "End moved to".

@@ -1,4 +1,4 @@
-"""Week-start follow-ups 3, fix round 1 (review of 8dc77ddb).
+"""Chosen days and moved-day names across a week-start switch.
 
 A days row counts as touched once the student interacted with it, even if it ends on the value it opened with;
 a grid-drawn day is the student's choice in both looks; month names are English whatever the computer's
@@ -278,3 +278,47 @@ def test_widgets_the_same_note_is_said_once(
         assert len(said) == 2, said
     finally:
         dialog.reject()
+
+
+@pytest.mark.parametrize("choice", ["untouched", "returned", "drawn"])
+def test_widgets_block_choice_survives_an_extra_esc_and_reopen(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, choice: str
+) -> None:
+    """Esc, reopen in the same week, Esc again, then the switch: a chosen Monday is still the student's
+    choice, though the reopened sheet already showed Monday before the kept days were put back."""
+    seen: dict = {}
+
+    def fill(dialog: QDialog) -> int:
+        dialog.title.setText("Piano lesson")
+        if choice == "returned":
+            for day in (1, 0, 1, 0):
+                dialog.day_picker.buttons[day].click()
+        press_escape(dialog)
+        return int(dialog.result())
+
+    def keep_again(dialog: QDialog) -> int:
+        assert dialog.day_picker.days() == [0]
+        press_escape(dialog)
+        return int(dialog.result())
+
+    def inspect(dialog: QDialog) -> int:
+        seen["days"] = dialog.day_picker.days()
+        seen["note"] = dialog.moved_note.text()
+        seen["marked"] = [
+            day for day, button in enumerate(dialog.day_picker.buttons) if button.property("moved")
+        ]
+        return only_look(dialog)
+
+    Script("block", monkeypatch, fill, keep_again, inspect)
+    _go(qapp, window.session, "2026-11-30")
+    if choice == "drawn":
+        window._create_range(0, 16 * 60, 17 * 60)
+    else:
+        window._add_fixed()
+    window._add_fixed()
+    _wednesday(qapp, window.session)
+    window._add_fixed()
+    if choice == "untouched":
+        assert seen == {"days": [0], "note": "", "marked": []}
+    else:
+        assert seen == {"days": [5], "note": CROSSING, "marked": [5]}
