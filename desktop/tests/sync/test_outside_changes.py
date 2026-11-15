@@ -424,6 +424,8 @@ def test_a_parked_week_forgets_homework_deleted_in_another_week(
     put_block(session, waiting["id"], 2, 16 * 60, 17 * 60, pinned=True)
     session.save()
     wait_until(qapp, lambda: not session.busy and not session.dirty, what="the essay's time saved")
+    session.add_homework({**session.assignments["essay"], "title": "History essay, edited"})
+    assert "essay" in session.dirty_assignments, "an edit to the essay is waiting to be saved"
     session.add_block(
         {"id": "parked-edit", "title": "Band", "kind": "locked", "days": [1],
          "start": "18:00", "duration_min": 60}

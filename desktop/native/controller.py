@@ -222,6 +222,48 @@ def _revision_after_deletes(
     )
 
 
+def _without_homework(blocks: list[dict], assignment_id: str) -> list[dict]:
+    return [block for block in blocks if block.get("assignment_id") != assignment_id]
+
+
+def _step_without_homework(step: dict, assignment_id: str, revisions: dict[str, int]) -> dict | None:
+    """An Undo or Redo step as it reads once `assignment_id` is deleted: the homework and its sessions
+    are gone from both sides, and a week left with nothing else to change drops out. None when nothing
+    else is left, so Undo can never bring the deleted homework back."""
+    weeks = []
+    for entry in step.get("weeks") or []:
+        before = _without_homework(entry["before"], assignment_id)
+        after = _without_homework(entry["after"], assignment_id)
+        if before != after:
+            revision = revisions.get(entry["week_start"], entry["revision"])
+            weeks.append({**entry, "before": before, "after": after, "revision": revision})
+    assignments = [entry for entry in step.get("assignments") or [] if entry["id"] != assignment_id]
+    if not weeks and not assignments:
+        return None
+    return {**step, "weeks": weeks, "assignments": assignments}
+
+
+def _request_without_homework(
+    request: dict, draft: dict, assignment_id: str, revisions: dict[str, int]
+) -> dict:
+    """A save that failed, as it reads once `assignment_id` is deleted: without the homework and its
+    sessions, and with the revisions the delete moved the weeks on to. The draft's own week keeps the
+    lead its write had over the revision the draft held (a delete in the same save moves it on)."""
+    weeks = []
+    for write in request["weeks"]:
+        week, revision = write["week_start"], write["revision"]
+        if week == draft["week_start"] and isinstance(revision, list):
+            held = zip(stored_weeks_of(week), revision, strict=True)
+            revision = [revisions.get(part, number) for part, number in held]
+        elif week in revisions:
+            lead = revision - draft["revision"] if week == draft["week_start"] else 0
+            revision = revisions[week] + lead
+        blocks = _without_homework(write["blocks"], assignment_id)
+        weeks.append({**write, "blocks": blocks, "revision": revision})
+    kept = [entry for entry in request["assignments"] if entry["id"] != assignment_id]
+    return {**request, "weeks": weeks, "assignments": kept}
+
+
 def _keep_stored_weeks(step: dict, before: list[dict], after: list[dict]) -> None:
     """A week on screen from another day than Monday is saved in two Monday weeks that also hold days
     the screen cannot see, such as the other days a session waiting for a time may go on. The step keeps
@@ -2010,7 +2052,28 @@ class NativeSession(QObject):
                 parked["dirty_assignments"].discard(assignment_id)
                 parked["committed_assignments"].pop(assignment_id, None)
                 for held in ("assignments_basis", "blocks", "committed_blocks"):
-                    parked[held] = [b for b in parked[held] if b.get("assignment_id") != assignment_id]
+                    parked[held] = _without_homework(parked[held], assignment_id)
+                if parked["trace"]:
+                    trace = dict(parked["trace"])
+                    for key in ("placed", "unplaced"):
+                        if key in trace:
+                            trace[key] = _without_homework(trace[key], assignment_id)
+                    parked["trace"] = trace
+                for side in ("undo", "redo"):
+                    steps = (_step_without_homework(step, assignment_id, revisions) for step in parked[side])
+                    parked[side] = [step for step in steps if step is not None]
+                # A save that failed is sent again as it reads now. Its operation id may already have
+                # reached the store, which would then answer for the old request, so a request that
+                # changed takes a new id and one the delete left alone keeps its own.
+                request = parked["pending_save"]
+                if request is not None:
+                    rebuilt = _request_without_homework(request, parked, assignment_id, revisions)
+                    if rebuilt != request:
+                        parked["pending_save"] = {**rebuilt, "operation_id": str(uuid4())}
+                if parked["pending_step"] is not None:
+                    parked["pending_step"] = _step_without_homework(
+                        parked["pending_step"], assignment_id, revisions
+                    )
                 if week_start in revisions:
                     kept = [b for b in parked["blocks"] if b.get("assignment_id") != assignment_id]
                     parked["blocks"] = kept
