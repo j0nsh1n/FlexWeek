@@ -403,18 +403,18 @@ fn add_spread_sessions(
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
-    // What the homework already holds or has had done: not-finished sessions and ticked-done ones.
     let planned = flexweek_engine::plan::planned_minutes_by_id(&held, "2000-01-01")
         .get(&id)
         .copied()
-        .unwrap_or(0)
-        + flexweek_engine::plan::done_minutes_by_id(&held)
-            .get(&id)
-            .copied()
-            .unwrap_or(0);
+        .unwrap_or(0);
+    let done = flexweek_engine::plan::done_minutes_by_id(&held)
+        .get(&id)
+        .copied()
+        .unwrap_or(0);
     let made = flexweek_engine::desk::homework::spread_new_sessions(
         &edited.assignment,
         planned,
+        done,
         today,
         &|index| derived_id(operation_id, &format!("spread-{index}")),
     )?;

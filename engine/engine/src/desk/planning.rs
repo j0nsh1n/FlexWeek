@@ -1357,9 +1357,22 @@ pub fn credited_done_minutes(
     }
 }
 
-/// Minutes of the homework that this week's sessions are to hold: the estimate less focus done, less
-/// the minutes of sessions ticked done (`credited_done_minutes`), less what its not-finished sessions
-/// in later weeks hold. Sessions in earlier weeks hold nothing here, because the server counts from
+/// The homework's done time: the larger of its focus minutes and the minutes of sessions ticked done
+/// (`credited_done_minutes`), never their sum, because focus time is kept per homework and a session
+/// both timed and ticked would count twice. The one definition every count that credits work reads.
+pub fn done_time_minutes(
+    assignment: &Value,
+    id: &Value,
+    blocks: &Value,
+    saved_week: &Value,
+) -> EngineResult<i64> {
+    let focus = int_of(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
+    Ok(focus.max(credited_done_minutes(assignment, id, blocks, saved_week)?))
+}
+
+/// Minutes of the homework that this week's sessions are to hold: the estimate less its done time
+/// (`done_time_minutes`: the larger of focus minutes and minutes ticked done), less what its
+/// not-finished sessions in later weeks hold. Sessions in earlier weeks hold nothing here, because the server counts from
 /// this week on.
 ///
 /// `saved_week` is this week exactly as saved when the homework's `planned_min` and `unplanned_min`
@@ -1373,11 +1386,11 @@ fn this_weeks_part(
     saved_week: &Value,
 ) -> EngineResult<i64> {
     let focus = int_of(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
-    let done = credited_done_minutes(assignment, id, blocks, saved_week)?;
+    let done = done_time_minutes(assignment, id, blocks, saved_week)?;
     let Some(server) = get(assignment, "unplanned_min")?.filter(|value| !value.is_null()) else {
         // As the server branch below, a homework with no estimate is not an error: it asks for no time.
         let estimate = int_of(&or_default(get(assignment, "estimate_min")?, json!(0)))?;
-        return Ok((estimate - focus - done).max(0));
+        return Ok((estimate - done).max(0));
     };
     let saved = session_minutes(&or_default(Some(saved_week), json!([])), id)?;
     let Some(estimate) = get(assignment, "estimate_min")?.filter(|value| !value.is_null()) else {
@@ -1390,7 +1403,7 @@ fn this_weeks_part(
         // what it leaves unexplained; read before a focus credit, that bound still holds.
         None => (need - py_int(server)? - saved).max(0),
     };
-    Ok((need - done).max(0) - later)
+    Ok((int_of(estimate)? - done).max(0) - later)
 }
 
 /// What the planner can place: the uncovered minutes, down to a whole quarter hour.

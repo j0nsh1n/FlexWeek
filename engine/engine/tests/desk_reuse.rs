@@ -543,11 +543,12 @@ fn test_overdue_left_subtracts_focus_and_sessions_ticked_done() {
         json!({"id": "done", "assignment_id": "essay", "duration_min": 60, "completed": true});
     let open_hour =
         json!({"id": "open", "assignment_id": "essay", "duration_min": 60, "completed": false});
-    // 2 h essay, 1 h session ticked done: 1 h left. Adding 30 min of focus leaves 30 min.
-    // An unticked session does not count as done.
+    // 2 h essay, 1 h session ticked done: 1 h left. Done time is the larger of focus and ticked time, so
+    // 30 min of focus changes nothing and 90 min of focus leaves 30 min. An unticked session is not done.
     for (focus, blocks, expected) in [
         (0, json!([done_hour.clone()]), 60),
-        (30, json!([done_hour.clone()]), 30),
+        (30, json!([done_hour.clone()]), 60),
+        (90, json!([done_hour.clone()]), 30),
         (0, json!([open_hour]), 120),
     ] {
         let assignment = with(essay_2h.clone(), json!({"focus_minutes": focus}));
@@ -568,8 +569,9 @@ fn test_overdue_left_subtracts_focus_and_sessions_ticked_done() {
 
 #[test]
 fn test_left_from_last_week_subtracts_focus_and_sessions_ticked_done() {
-    // Same rule as overdue: a carried 2 h essay with a 1 h session ticked done has 1 h left.
-    // Adding 30 min of focus leaves 30 min. An unticked session does not count as done.
+    // Same rule as overdue: a carried 2 h essay with a 1 h session ticked done has 1 h left. Done time is
+    // the larger of focus and ticked time: 30 min of focus changes nothing, 90 min leaves 30 min. An
+    // unticked session does not count as done.
     let carried_2h = with(
         essay(),
         json!({"estimate_min": 120, "unplanned_min": 120, "due": "2026-10-21", "session_weeks": ["2026-10-05"]}),
@@ -580,7 +582,8 @@ fn test_left_from_last_week_subtracts_focus_and_sessions_ticked_done() {
         json!({"id": "open", "assignment_id": "essay", "duration_min": 60, "completed": false});
     for (focus, blocks, expected) in [
         (0, json!([done_hour.clone()]), 60),
-        (30, json!([done_hour.clone()]), 30),
+        (30, json!([done_hour.clone()]), 60),
+        (90, json!([done_hour.clone()]), 30),
         (0, json!([open_hour]), 120),
     ] {
         let assignment = with(carried_2h.clone(), json!({"focus_minutes": focus}));

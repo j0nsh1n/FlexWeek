@@ -1145,3 +1145,45 @@ fn editing_to_spread_keeps_a_session_ticked_done_and_spreads_only_what_is_left()
         vec![(0, 60, true), (2, 60, false), (3, 60, false)]
     );
 }
+
+#[test]
+fn spreading_takes_off_the_larger_of_focus_time_and_ticked_done_time() {
+    // 180 min with 60 min of focus and one hour also ticked done: done time is 60, not 120, so 120 min
+    // are cut into two hours (Wednesday and Thursday), not one.
+    let world = signed_in("spread-edit-focus");
+    school_stands(&world);
+    let mut server = boot(&world);
+    let (poster, revision) = add_poster(&mut server, "op-focus-add", false, 2);
+    let (_, week_revision) = stored(&world);
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let done = json!([{
+        "id": "done-hour", "title": "Poster", "kind": "flexible", "assignment_id": poster,
+        "duration_min": 60, "days": [0], "start": "09:00", "completed": true, "completed_day": 0,
+        "priority": 3, "energy": "medium", "category": "assignments"
+    }]);
+    save_week(&conn, world.user, WEEK, &done.to_string(), week_revision).expect("week");
+    conn.execute(
+        "UPDATE assignments SET body = json_set(body, '$.focus_minutes', 60) WHERE user_id = ?1 AND id = ?2",
+        (world.user, &poster),
+    )
+    .expect("focus");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+    let edited = server.call(
+        "edit_homework",
+        json!({
+            "operation_id": "op-focus-spread",
+            "id": poster,
+            "expected_revision": revision,
+            "spread": true
+        }),
+        3,
+    );
+    assert_eq!(body_of(&edited)["ok"], json!(true), "got {edited}");
+    assert_eq!(
+        poster_sessions(&world, &poster),
+        vec![(0, 60, true), (2, 60, false), (3, 60, false)]
+    );
+}

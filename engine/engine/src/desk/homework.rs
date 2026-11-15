@@ -507,10 +507,12 @@ pub fn spread_choice(asked: Option<bool>, estimate_min: i64, open_sessions: usiz
 /// The sessions Spread over days makes once the homework is saved: the app's spread preview,
 /// `spread_sessions` over the days from today (or its due day when that comes first), each session a
 /// waiting block on its own day with the id `block_id(index)`. Returns each session's week start and
-/// block. `planned_min` is what the homework's other not-finished sessions already hold.
+/// block. `planned_min` is what the homework's other not-finished sessions already hold and `done_min`
+/// the minutes of its sessions ticked done: its done time is the larger of that and its focus minutes.
 pub fn spread_new_sessions(
     assignment: &Value,
     planned_min: i64,
+    done_min: i64,
     today: &str,
     block_id: &dyn Fn(usize) -> String,
 ) -> Result<Vec<(String, Value)>, String> {
@@ -520,7 +522,7 @@ pub fn spread_new_sessions(
             .and_then(Value::as_i64)
             .unwrap_or_default()
     };
-    let (estimate, focus) = (int("estimate_min"), int("focus_minutes"));
+    let (estimate, focus) = (int("estimate_min"), int("focus_minutes").max(done_min));
     let due = assignment
         .get("due")
         .and_then(Value::as_str)

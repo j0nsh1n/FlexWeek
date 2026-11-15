@@ -3,7 +3,7 @@
 use serde_json::{Map, Value, json};
 
 use crate::desk::planning::{
-    available_homework_minutes, credited_done_minutes, floor_slot, occurrence_days,
+    available_homework_minutes, done_time_minutes, floor_slot, occurrence_days,
     time_still_needed_parts,
 };
 use crate::desk::pyops::{
@@ -559,12 +559,11 @@ pub fn left_over_items(
         }
         let id = subscript(assignment, "id")?;
         let remaining = if overdue {
-            // Placed unfinished minutes are still left to do, so only focus time and sessions ticked
-            // done come off: the estimate itself, not `unplanned_min`, which can hide them.
+            // Placed unfinished minutes are still left to do, so only done time (focus time or sessions
+            // ticked done, whichever is more) comes off: the estimate itself, not `unplanned_min`, which can hide them.
             let estimate = whole(&or_default(get(assignment, "estimate_min")?, json!(0)))?;
-            let focus = whole(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
-            let done = credited_done_minutes(assignment, id, blocks, committed_blocks)?;
-            (estimate - focus - done).max(0)
+            let done = done_time_minutes(assignment, id, blocks, committed_blocks)?;
+            (estimate - done).max(0)
         } else {
             // Time already placed this week or later is not left over: the line lists only the minutes
             // that still have no time, by the same count as "needs a time" (focus time and sessions
