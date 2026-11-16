@@ -238,17 +238,31 @@ pub(crate) fn save_homework(
                 .map(|days| days.iter().filter_map(Value::as_i64).collect::<Vec<_>>())
                 .unwrap_or_else(|| vec![0]);
             let duration = session["duration_min"].as_i64().unwrap_or(0);
-            let session_id = format!("{assignment_id}-{week_start}-{index}");
-            let block = session_block(&body, &days, duration, &session_id);
+            let base = format!("{assignment_id}-{week_start}-{index}");
             if let Some((_, blocks, _)) = weeks.iter_mut().find(|(start, _, _)| start == week_start)
             {
+                // A session ticked done keeps its id and its time: the new session takes the next id
+                // no finished session holds. An open one with that id is this session saved before.
+                let finished = |id: &str| {
+                    blocks.iter().any(|item| {
+                        item.get("id").and_then(Value::as_str) == Some(id)
+                            && item.get("completed").and_then(Value::as_bool) == Some(true)
+                    })
+                };
+                let mut session_id = base.clone();
+                let mut next = 1;
+                while finished(&session_id) {
+                    session_id = format!("{base}-{next}");
+                    next += 1;
+                }
                 if !blocks
                     .iter()
                     .any(|item| item.get("id").and_then(Value::as_str) == Some(session_id.as_str()))
                 {
-                    blocks.push(block);
+                    blocks.push(session_block(&body, &days, duration, &session_id));
                 }
             } else {
+                let block = session_block(&body, &days, duration, &base);
                 weeks.push((week_start.to_string(), vec![block], 0));
             }
         }
@@ -387,6 +401,55 @@ mod tests {
         assert_eq!(blocks[0]["assignment_id"], "essay");
         assert_eq!(blocks[0]["duration_min"], 60);
         assert!(blocks[0].get("start").is_none());
+    }
+
+    #[test]
+    fn a_spread_homework_grown_after_an_hour_ticked_done_gets_a_session_for_the_rest() {
+        // Spread, 60 min, its one session ticked done; raised to 120 the done hour counts, so one
+        // new hour is spread. Its id must not be the finished session's, which would drop it.
+        let (week, _) = open_test("hw-spread-grown");
+        let draft = |estimate: i64| {
+            json!({"id": "essay", "title": "History essay", "due": "2026-10-15T21:00",
+                   "estimate_min": estimate, "spread": "spread"})
+        };
+        let first: Value = serde_json::from_str(
+            &week
+                .save_homework(draft(60).to_string(), "op-spread-1".into())
+                .unwrap(),
+        )
+        .unwrap();
+        let user = week.user_id.unwrap();
+        {
+            let db = week.db.lock().unwrap();
+            let raw = flexweek_store::week_blocks(&db, user, "2026-10-12")
+                .unwrap()
+                .unwrap();
+            let mut blocks: Value = serde_json::from_str(&raw).unwrap();
+            assert_eq!(blocks.as_array().unwrap().len(), 1);
+            blocks[0]["completed"] = json!(true);
+            db.execute(
+                "UPDATE weeks SET blocks = ?1 WHERE user_id = ?2 AND week_start = '2026-10-12'",
+                (blocks.to_string(), user),
+            )
+            .unwrap();
+        }
+        let mut grown = draft(120);
+        grown["revision"] = first["revision"].clone();
+        week.save_homework(grown.to_string(), "op-spread-2".into())
+            .unwrap();
+        let db = week.db.lock().unwrap();
+        let raw = flexweek_store::week_blocks(&db, user, "2026-10-12")
+            .unwrap()
+            .unwrap();
+        let blocks: Value = serde_json::from_str(&raw).unwrap();
+        let open: i64 = blocks
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|block| block["assignment_id"] == "essay" && block["completed"] != json!(true))
+            .map(|block| block["duration_min"].as_i64().unwrap_or(0))
+            .sum();
+        assert_eq!(open, 60, "{blocks}");
     }
 
     #[test]
