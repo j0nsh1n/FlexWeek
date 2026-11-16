@@ -25,6 +25,7 @@ from desktop.native.calendar import (
     routine_on_week,
     sunday_due,
 )
+from desktop.native.fields import announce
 from desktop.native.hours.geometry import drag_step, next_slot
 from desktop.native.material.sheet_block import BlockDraft
 from desktop.native.material.sheet_homework import HomeworkDraft
@@ -39,7 +40,8 @@ from desktop.native.widgets import (
     LATE_WAIT,
     _late_move,
     _late_summary,
-    moved_day_name,
+    moved_across_months,
+    moved_day_names,
     moved_days_note,
     same_weekday,
     turn_days_keeping_weekdays,
@@ -109,10 +111,15 @@ class SheetsBridge(QObject):
         self._routine_days: list[int] = []
         # The open week the numbers in _routine_days count from.
         self._routine_week = ""
-        # The ticks the last turn moved, as new day to the old "Monday 2" label, until the
+        # The ticks the last turn moved, as new day to the old (day, week) it came from, until the
         # student touches the row, the sheet is applied, or it closes.
-        self._routine_moved: dict[int, str] = {}
+        self._routine_moved: dict[int, tuple[int, str]] = {}
+        # Whether the student ticked or unticked a day since the routine was picked: the ticks the
+        # routine put there carry no mark when the week start changes.
+        self._routine_touched = False
         self._routine_error = ""
+        # The moved-day note the open sheet last showed; None until the sheet's first showing.
+        self._noted: str | None = None
         self._paused = False
         self._held = False
         self._remaining_ms = NOTICE_MS
@@ -201,6 +208,7 @@ class SheetsBridge(QObject):
         self._kind = kind
         self._more = False
         self._ask = {}
+        self._noted = None
         self._publish()
 
     def _close(self) -> None:
@@ -229,7 +237,7 @@ class SheetsBridge(QObject):
             category = "assignments"
         kept, self._kept_homework = self._kept_homework, None
         if kept is not None:
-            kept.follow_week()
+            kept.follow_week(HomeworkDraft(session, category=category).when_day)
         self._homework = kept or HomeworkDraft(session, category=category)
         self._open("homework")
 
@@ -276,11 +284,12 @@ class SheetsBridge(QObject):
         day, start = self._new_event_values()
         category = session.armed_category
         kept, self._kept_block = self._kept_block, None
-        if kept is not None:
-            kept.follow_week()
-        self._block = kept or BlockDraft(
+        fresh = BlockDraft(
             session, day=day, start=start, category=None if category in FLEX_CATEGORIES else category
         )
+        if kept is not None:
+            kept.follow_week(fresh.days)
+        self._block = kept or fresh
         self._open("block")
 
     @Slot(int, int, int)
@@ -966,6 +975,11 @@ class SheetsBridge(QObject):
                 self._routine_days, self._routine_week, week
             )
             self._routine_days = turned
+            if not self._routine_touched:
+                # The routine's own days follow its weekdays into the new week, as picking it again would.
+                self._routine_moved = {}
+                self._routine_week = week
+                return
             # A mark the student has not touched yet stays through another first-day switch; another
             # week from the same first day is a different week, so its marks no longer apply.
             same_start = (
@@ -978,13 +992,13 @@ class SheetsBridge(QObject):
                 {}
                 if same_start
                 else {
-                    same_weekday(day, self._routine_week, week): label
-                    for day, label in self._routine_moved.items()
+                    same_weekday(day, self._routine_week, week): origin
+                    for day, origin in self._routine_moved.items()
                 }
             )
             self._routine_moved = {
                 **kept,
-                **{new: moved_day_name(old, self._routine_week) for old, new in moved},
+                **{new: (old, self._routine_week) for old, new in moved},
             }
             self._routine_week = week
 
@@ -1004,12 +1018,20 @@ class SheetsBridge(QObject):
                     "on": item["id"] == self._routine_id,
                 }
             )
-        moved_note = moved_days_note(
-            [
-                (old_label, moved_day_name(new, self._routine_week))
-                for new, old_label in sorted(self._routine_moved.items())
-            ]
-        )
+        moved_names = {
+            new: moved_day_names(old, old_week, new, self._routine_week)
+            for new, (old, old_week) in sorted(self._routine_moved.items())
+        }
+        moved_origin = dict(self._routine_moved)
+
+        def spoken_to(index: int) -> str:
+            """The new name when the tick moved into another month, for its chip's spoken name."""
+            crossed = index in moved_names and moved_across_months(
+                *moved_origin[index], index, self._routine_week
+            )
+            return moved_names[index][1] if crossed else ""
+
+        moved_note = moved_days_note(list(moved_names.values()))
         days = [
             {
                 "value": index,
@@ -1017,7 +1039,8 @@ class SheetsBridge(QObject):
                 "date": date.fromordinal(monday.toordinal() + index).day if monday else 0,
                 "on": index in self._routine_days,
                 "moved": index in self._routine_moved,
-                "movedFrom": self._routine_moved.get(index, ""),
+                "movedFrom": moved_names[index][0] if index in moved_names else "",
+                "movedTo": spoken_to(index),
             }
             for index in range(7)
         ]
@@ -1040,6 +1063,7 @@ class SheetsBridge(QObject):
         self._routine_id = ""
         self._routine_days = []
         self._routine_moved = {}
+        self._routine_touched = False
         self._routine_error = ""
         self._open("routines")
 
@@ -1057,6 +1081,7 @@ class SheetsBridge(QObject):
             days.update(int(day) for day in block.get("days") or [])
         self._routine_days = sorted(days)
         self._routine_moved = {}
+        self._routine_touched = False
         self._routine_error = ""
         self._publish()
 
@@ -1066,6 +1091,7 @@ class SheetsBridge(QObject):
         days.symmetric_difference_update({day})
         self._routine_days = sorted(days)
         self._routine_moved = {}
+        self._routine_touched = True
         self._routine_error = ""
         self._publish()
 
@@ -1255,4 +1281,10 @@ class SheetsBridge(QObject):
             self._form = self._routine_form()
         else:
             self._form = {}
+        # The moved-day note is said aloud when it appears or changes in a sheet that is already open. A
+        # sheet that opens with it is read with the note, and one that clears it says nothing.
+        note = str(self._form.get("movedNote") or self._form.get("whenMovedNote") or "")
+        if self._noted is not None and note and note != self._noted:
+            announce(self._window, note)
+        self._noted = note
         self.changed.emit()

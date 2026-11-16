@@ -179,7 +179,9 @@ def test_moved_routine_days_are_marked_named_and_announced(
     sheets.openRoutines()
     pump(qapp)
     sheets.selectRoutine("r-4")
-    assert [day["value"] for day in sheets.form["days"] if day["on"]] == [0, 2]
+    # A tick by hand: only ticks the student made carry a mark into another week start.
+    sheets.toggleRoutineDay(4)
+    assert [day["value"] for day in sheets.form["days"] if day["on"]] == [0, 2, 4]
     fields.save_week_starts_on("wednesday")
     wait_until(qapp, lambda: shell.session.week_start == "2026-11-04" and not shell.session.busy)
     settle(qapp, shell)
@@ -218,6 +220,8 @@ def test_touching_the_routines_row_clears_the_moved_mark(
     sheets.openRoutines()
     pump(qapp)
     sheets.selectRoutine("r-5")
+    # A tick by hand: only ticks the student made carry a mark into another week start.
+    sheets.toggleRoutineDay(4)
     fields.save_week_starts_on("wednesday")
     wait_until(qapp, lambda: shell.session.week_start == "2026-11-04" and not shell.session.busy)
     settle(qapp, shell)
@@ -253,6 +257,8 @@ def test_two_moved_routine_days_share_one_note(
     sheets.openRoutines()
     pump(qapp)
     sheets.selectRoutine("r-6")
+    # A tick by hand: only ticks the student made carry a mark into another week start.
+    sheets.toggleRoutineDay(4)
     fields.save_week_starts_on("wednesday")
     wait_until(qapp, lambda: shell.session.week_start == "2026-11-04" and not shell.session.busy)
     settle(qapp, shell)
@@ -314,6 +320,8 @@ def test_a_second_switch_keeps_a_mark_the_student_has_not_touched(
     sheets.openRoutines()
     pump(qapp)
     sheets.selectRoutine("r-4")
+    # A tick by hand: only ticks the student made carry a mark into another week start.
+    sheets.toggleRoutineDay(4)
     fields.save_week_starts_on("wednesday")
     wait_until(qapp, lambda: shell.session.week_start == "2026-11-04" and not shell.session.busy)
     settle(qapp, shell)
@@ -342,6 +350,8 @@ def test_a_mark_clears_when_a_week_from_the_same_first_day_opens(
     sheets.openRoutines()
     pump(qapp)
     sheets.selectRoutine("r-4")
+    # A tick by hand: only ticks the student made carry a mark into another week start.
+    sheets.toggleRoutineDay(4)
     fields.save_week_starts_on("wednesday")
     wait_until(qapp, lambda: shell.session.week_start == "2026-11-04" and not shell.session.busy)
     settle(qapp, shell)

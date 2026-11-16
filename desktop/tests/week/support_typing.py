@@ -67,6 +67,7 @@ def click_at(field: ClockField, fraction: float) -> None:
     line.setCursorPosition(round(len(line.text()) * fraction))
     at = line.cursorRect().center()
     line.setCursorPosition(keep)
+    field.setProperty("lastClick", f"{at.x()},{at.y()}")
     window = field.window()
     QTest.mouseClick(window.windowHandle(), Qt.MouseButton.LeftButton, NONE, line.mapTo(window, at))
     QApplication.processEvents()
@@ -97,7 +98,20 @@ def enter(field: ClockField, how: str) -> None:
         press(field, Qt.Key.Key_A, CTRL)
     else:
         click_at(field, {"click-start": 0.0, "click-middle": 0.5, "click-end": 1.0}[how])
-    assert field.hasFocus() or field.lineEdit().hasFocus(), f"{how} did not give the box the keyboard"
+    assert field.hasFocus() or field.lineEdit().hasFocus(), (
+        f"{how} did not give the box the keyboard; {where(field)}"
+    )
+
+
+def where(field: ClockField) -> str:
+    """The box's size, its text and the last click, for a failure message: a click near the text's end
+    can fall off a narrow box on a machine whose font is a little wider."""
+    line = field.lineEdit()
+    return (
+        f"text {line.text()!r}, line edit {line.width()}x{line.height()}, field {field.width()}x"
+        f"{field.height()}, text width {line.fontMetrics().horizontalAdvance(line.text())}, "
+        f"font {line.font().family()!r} {line.font().pointSizeF()}, click {field.property('lastClick')}"
+    )
 
 
 def up(qapp: QApplication, widget: QWidget) -> QWidget:
