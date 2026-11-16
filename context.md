@@ -1,13 +1,13 @@
 # context.md — FlexWeek
 
 ## Current State (2026-11-15)
-- Branch `fix/planner-spread-and-left-over`, local only, from main ce956452: Jonathan's 2026-11-15 planner picks. The helper's "spread over days" works as the app's Spread over days (saved, cut into hour sessions from today, only when this week holds at most one open session); "left from last week" lists only minutes with no time and Plan into this week places them, missed sessions included; done time is the larger of focus minutes and minutes ticked done (`plan::done_time`), taken off in every count (Day, Month, list, spread previews, phone, helper), and a desktop edit keeps it. Local CI passed apart from the mutation-pattern steps, fixed after.
+- Branch `fix/planner-spread-and-left-over`, PR #135 (main 90f02c94 merged in; #134, the week-start follow-ups 3, merged as 90f02c94): Jonathan's 2026-11-15 planner picks. The helper's "spread over days" works as the app's Spread over days (saved, cut into hour sessions from today, only when this week holds at most one open session); "left from last week" lists only minutes with no time and Plan into this week places them, missed sessions included; done time is the larger of focus minutes and minutes ticked done (`plan::done_time`), taken off in every count (Day, Month, list, spread previews, phone, helper), and a desktop edit keeps it. Local CI passed apart from the mutation-pattern steps, fixed after.
 - Latest release: v1.3.0, published 2026-11-10 from main d61235ee (PR #111, the version bump). The Linux tarball and
   the Android APK were built on this computer (`scripts/build-linux-local.sh` in an Ubuntu 24.04 container; the APK
   signed with the 1.2.0 key); the AppImage and the Windows installers came from the tagged "Release packages" run.
   The previous release is v1.2.0 (2026-10-27).
-- Developer build 4 (`1.3.0.202611101403`) is `dev`; older builds stay as `dev-<commit>` pre-releases (`dev-4e21fa5`
-  and `dev-f242d2f` among them). GitHub publishes them; the Linux tarball can also be built here.
+- Developer build `1.3.0.202611150450` (main ce95645) is `dev`; older builds stay as `dev-<commit>` pre-releases
+  (`dev-4110547` the newest of them). GitHub publishes them; the Linux tarball can also be built here.
 - In 1.3.0 since 1.2.0: FIX-SPEC 1.3 (#67-#76), the J lanes (Material Week zoom, Day hours, Month study fill, Look
   preview), the assistant's planning tools and live reload (#91, #92), the testing rebuild (#97, 2026-11-08: tests by
   area, light app, looks judged by review, CI as the gate), Material review fixes (#89-#96, #98-#105), CI/build work
@@ -99,7 +99,7 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
-- 2026-11-15, branch `fix/planner-spread-and-left-over`, local only. Sonnet built it in two rounds; the lead took it over after Sol failed both (d6e49bee and the mutation-pattern fix after). Next: Sol's final check, then Jonathan's word on the PR. #134 (week-start follow-ups 3) waits on a GitHub-only test failure: the time boxes get the Retro look's VT323 font from an earlier test.
+- 2026-11-15, branch `fix/planner-spread-and-left-over`, PR #135. Sonnet built it in two rounds; the lead took it over after Sol failed both (d6e49bee and the mutation-pattern fix after). Next: GitHub checks and Sol's check of the CodeRabbit round on PR #135, then merge and a developer build with #134 and #135. #134 merged as 90f02c94 after its GitHub-only failure (the Retro look leaking into later tests' dialogs) was fixed in the tests' conftest.
 - 2026-11-14, branch `feat/setup-change-asks-about-edited-weeks`, local only. Fix round 2 is in. Local CI passed on the second pass (ci2/summary.txt). Next: review. Nothing pushed.
 - 2026-11-12, branch `fix/replan-moves-missed-sessions` (#126) with `fix/planner-counts-minutes` (#125) merged in,
   local only. A missed session's minutes are counted through `this_weeks_part` against the saved week
@@ -122,5 +122,3 @@ preview. Recorded `operation_id` values make a retried write return the first re
   the app asks the student what to do with such a remainder (options in
   `~/.flexweek-ui-harness/scratch/round2-fix2/planner-minutes/ASK-OPTIONS.md`, owner's pick pending). Next:
   review of this branch and the owner's pick.
-- 2026-11-10, branch `fix/131-helper-and-keys` from the v1.3.0 tag: helper live clock, Material letter-keys
-  switch, Help closing from the keyboard; the checks left from the 1.3.0 checklist are still open.

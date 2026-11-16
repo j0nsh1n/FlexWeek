@@ -129,7 +129,7 @@ SheetFrame {
                         enabled: !root.f.daysLocked
                         activeFocusOnTab: true
                         Accessible.role: Accessible.CheckBox
-                        Accessible.name: modelData.label + " " + modelData.date + (modelData.movedFrom ? ", moved from " + modelData.movedFrom : "")
+                        Accessible.name: (modelData.movedTo ? modelData.movedTo : modelData.label + " " + modelData.date) + (modelData.movedFrom ? ", moved from " + modelData.movedFrom : "")
                         Accessible.checkable: true
                         Accessible.checked: modelData.on
                         Accessible.onPressAction: root.sheets.toggleDay(index)

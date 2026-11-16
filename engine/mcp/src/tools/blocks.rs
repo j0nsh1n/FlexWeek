@@ -46,8 +46,9 @@ struct DeleteArgs {
     scope: String,
     #[serde(default)]
     day: Option<i64>,
-    /// School or a Setup activity only: take it out of this week and every week after. Without
-    /// it, it stays in this week missed on its days, as the app does.
+    /// School or a Setup activity only: take it out of this week and every week after, including
+    /// a later week where the student changed it. Without it, it stays in this week missed on its
+    /// days, as the app does.
     #[serde(default)]
     every_week: Option<bool>,
 }
@@ -431,6 +432,7 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
                 "scope": "from",
                 "from_date": args.week_start,
                 "stop": true,
+                "edited": "replace",
             })]);
         }
         let applied = homework::run_apply(
@@ -487,6 +489,7 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
             "scope": "from",
             "from_date": args.week_start,
             "stop": true,
+            "edited": "replace",
         });
         let stop_second = repeat_changes_from_shown_week(&[stop_shown], &args.week_start)
             .map_err(|err| err.message)?;
@@ -558,7 +561,7 @@ impl crate::App {
     }
 
     #[tool(
-        description = "Delete a block, or one day of it",
+        description = "Delete a block, or one day of it. With every_week, School or a Setup activity goes from this week on, and a later week where the student changed it loses its own copy too",
         annotations(destructive_hint = true, read_only_hint = false)
     )]
     async fn delete_block(

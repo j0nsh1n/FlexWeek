@@ -126,6 +126,7 @@ from desktop.native.calendar import (
     date_for_day,
     day_full_names,
     day_in_week,
+    day_long,
     day_names,
     is_series,
     is_setup_block,
@@ -267,9 +268,34 @@ def turn_days_keeping_weekdays(
     return sorted(new for _, new in turned), moved
 
 
-def moved_day_name(day: int, week: str) -> str:
-    """A moved tick named the way the note names it: "Monday 2"."""
-    return f"{full_day_name(week, day)} {date.fromisoformat(date_for_day(week, day)).day}"
+def first_day_changed(from_week: str, to_week: str) -> bool:
+    """Whether the two weeks start on different days of the week."""
+    return (
+        bool(from_week)
+        and bool(to_week)
+        and date.fromisoformat(from_week).weekday() != date.fromisoformat(to_week).weekday()
+    )
+
+
+def moved_day_names(old_day: int, from_week: str, new_day: int, to_week: str) -> tuple[str, str]:
+    """A moved tick's old and new names the way the note names them: "Monday 2" and "Monday 9". A pair
+    whose two dates fall in different months names both with their month ("Monday 30 November",
+    "Monday 7 December")."""
+    old_date = date_for_day(from_week, old_day)
+    new_date = date_for_day(to_week, new_day)
+    if old_date[:7] == new_date[:7]:
+        return (
+            f"{full_day_name(from_week, old_day)} {int(old_date[8:])}",
+            f"{full_day_name(to_week, new_day)} {int(new_date[8:])}",
+        )
+    # The engine's own long date is English whatever the computer's language; its year shows only
+    # outside the reference year, so each date is its own reference.
+    return day_long(old_date, old_date), day_long(new_date, new_date)
+
+
+def moved_across_months(old_day: int, from_week: str, new_day: int, to_week: str) -> bool:
+    """Whether a moved tick's old and new dates are in different months."""
+    return date_for_day(from_week, old_day)[:7] != date_for_day(to_week, new_day)[:7]
 
 
 def moved_days_note(moves: list[tuple[str, str]]) -> str:
@@ -3741,6 +3767,8 @@ class BlockDialog(Dialog):
         from_range: bool = False,
     ) -> None:
         super().__init__(parent, sheet=True)
+        # A day drawn on the grid is the student's choice, though the sheet opens with it.
+        self._days_drawn = from_range
         if block is not None:
             self._original = deepcopy(block)
         elif from_range:
@@ -3939,6 +3967,7 @@ class BlockDialog(Dialog):
         from_range: bool = False,
     ) -> None:
         """Set the requested values on a new dialog that has never been shown."""
+        self._days_drawn = from_range
         week = open_week(self)
         if from_range:
             self._original = _range_locked(category, day, start, duration_min)
@@ -4083,6 +4112,14 @@ class BlockDialog(Dialog):
     def _touch_start(self, _by_hand: bool) -> None:
         self._touched.add("start")
 
+    def draft(self) -> dict:
+        """The base draft, plus the days when the student touched the row (even back to what it opened
+        with) or drew the block's day on the grid: both are the student's choice."""
+        kept = super().draft()
+        if "days" not in kept and ("days" in self._touched or self._days_drawn):
+            kept["days"] = self._draft_fields()["days"]
+        return kept
+
     def _draft_fields(self) -> dict:
         span = self._span()
         return {
@@ -4106,6 +4143,9 @@ class BlockDialog(Dialog):
             self.title.setText(draft["title"])
         if "days" in draft:
             self.day_picker.set_days(draft["days"])
+            # A draft carries days only when the student chose them; the picker may already show the same
+            # days and so send no toggle that would mark the row touched.
+            self._touched.add("days")
         if "start" in draft:
             start = QTime.fromString(draft["start"], "HH:mm")
             # Not a move made in this sheet: the end follows without saying "End moved to".
@@ -4199,6 +4239,7 @@ class BlockDialog(Dialog):
         """Ring the ticks the week-start switch moved and name the move under the row. `moves` holds
         (new day, old "Monday 2" label, new label) triples. The mark and the note clear the next time
         the student touches the row."""
+        previous = self.moved_note.text()
         self._clear_moved_days()
         if not moves:
             return
@@ -4212,6 +4253,10 @@ class BlockDialog(Dialog):
         self.moved_note.setText(moved_days_note([(old, new) for _, old, new in moves]))
         self.moved_note.setAccessibleName(self.moved_note.text())
         self.moved_note.setVisible(True)
+        # A sheet that opens with the note is read with it; only a note that arrives in an open sheet
+        # is said aloud.
+        if self.isVisible() and self.moved_note.text() != previous:
+            announce(self.moved_note, self.moved_note.text())
 
     def _clear_moved_days(self) -> None:
         for day, name in self._moved_before.items():
@@ -4227,6 +4272,7 @@ class BlockDialog(Dialog):
 
     def _day_toggled(self, checked: bool) -> None:
         self._clear_moved_days()
+        self._touched.add("days")
         day = int(self.sender().property("weekday"))
         if (
             self.scope_occurrence.isChecked()
@@ -5265,6 +5311,7 @@ class HomeworkDialog(Dialog):
         """Ring the pin the week-start switch moved and name the move under the row. `moves` holds
         (new day, old "Monday 2" label, new label) triples. The mark and the note clear the next time
         the student picks a day."""
+        previous = self.moved_note.text()
         self._clear_moved_days()
         if not moves:
             return
@@ -5278,6 +5325,10 @@ class HomeworkDialog(Dialog):
         self.moved_note.setText(moved_days_note([(old, new) for _, old, new in moves]))
         self.moved_note.setAccessibleName(self.moved_note.text())
         self.moved_note.setVisible(True)
+        # A sheet that opens with the note is read with it; only a note that arrives in an open sheet
+        # is said aloud.
+        if self.isVisible() and self.moved_note.text() != previous:
+            announce(self.moved_note, self.moved_note.text())
 
     def _clear_moved_days(self) -> None:
         for day, name in self._moved_before.items():

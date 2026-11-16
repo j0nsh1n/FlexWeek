@@ -245,7 +245,7 @@ from desktop.native.widgets import (
     drop_waiting_dim,
     fit_buttons,
     keyboard_focus_rings,
-    moved_day_name,
+    moved_day_names,
     overdue_unfinished,
     same_weekday,
     steady_wheel,
@@ -3627,10 +3627,7 @@ class NativeWindow(QMainWindow):
         ) -> list[tuple[int, str, str]]:
             """The visible ticks the turn moved, as (new day, old label, new label) triples."""
             _, moved = turn_days_keeping_weekdays(shown, week, open_now)
-            return [
-                (new, moved_day_name(old, week), moved_day_name(new, open_now))
-                for old, new in moved
-            ]
+            return [(new, *moved_day_names(old, week, new, open_now)) for old, new in moved]
 
         marks: list[tuple[int, str, str]] = []
         if kind == "block" and "days" in draft:

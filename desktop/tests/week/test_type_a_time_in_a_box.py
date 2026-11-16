@@ -51,6 +51,7 @@ from desktop.tests.week.support_typing import (
     go_when,
     press,
     type_text,
+    where,
 )
 from desktop.tests.window_support import free, qapp, still  # noqa: F401
 
@@ -281,7 +282,7 @@ def test_retyping_15_15_saves_exactly_15_15(opened, clock, name, entry, way) -> 
     enter(box.field, entry)
     type_text(box.field, TYPED[clock])
     leave(box, way)
-    assert box.read() == "15:15", f"box shows {box.field.lineEdit().text()!r}"
+    assert box.read() == "15:15", f"box shows {box.field.lineEdit().text()!r}; {where(box.field)}"
 
 
 @pytest.mark.parametrize("name", list(BOXES))
