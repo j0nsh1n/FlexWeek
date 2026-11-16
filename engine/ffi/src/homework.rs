@@ -227,9 +227,16 @@ pub(crate) fn save_homework(
         .copied()
         .unwrap_or(0);
     if spread == "spread" && estimate >= 60 {
-        let (sessions, _) =
-            flexweek_engine::plan::spread_sessions(estimate, focus, done, 0, due, 60, &from_date)
-                .map_err(engine_failure)?;
+        // The homework's open sessions stay as they are, placed times included: only the minutes they
+        // and its done time leave uncovered are spread, so a save that changes nothing adds nothing.
+        let open = flexweek_engine::plan::planned_minutes_by_id(&held, "2000-01-01")
+            .get(&assignment_id)
+            .copied()
+            .unwrap_or(0);
+        let (sessions, _) = flexweek_engine::plan::spread_sessions(
+            estimate, focus, done, open, due, 60, &from_date,
+        )
+        .map_err(engine_failure)?;
         for (index, session) in sessions.iter().enumerate() {
             let week_start = session["week_start"].as_str().unwrap_or("");
             let days = session
@@ -241,26 +248,19 @@ pub(crate) fn save_homework(
             let base = format!("{assignment_id}-{week_start}-{index}");
             if let Some((_, blocks, _)) = weeks.iter_mut().find(|(start, _, _)| start == week_start)
             {
-                // A session ticked done keeps its id and its time: the new session takes the next id
-                // no finished session holds. An open one with that id is this session saved before.
-                let finished = |id: &str| {
-                    blocks.iter().any(|item| {
-                        item.get("id").and_then(Value::as_str) == Some(id)
-                            && item.get("completed").and_then(Value::as_bool) == Some(true)
-                    })
+                // A new session never takes the id of one the week already holds.
+                let taken = |id: &str| {
+                    blocks
+                        .iter()
+                        .any(|item| item.get("id").and_then(Value::as_str) == Some(id))
                 };
                 let mut session_id = base.clone();
                 let mut next = 1;
-                while finished(&session_id) {
+                while taken(&session_id) {
                     session_id = format!("{base}-{next}");
                     next += 1;
                 }
-                if !blocks
-                    .iter()
-                    .any(|item| item.get("id").and_then(Value::as_str) == Some(session_id.as_str()))
-                {
-                    blocks.push(session_block(&body, &days, duration, &session_id));
-                }
+                blocks.push(session_block(&body, &days, duration, &session_id));
             } else {
                 let block = session_block(&body, &days, duration, &base);
                 weeks.push((week_start.to_string(), vec![block], 0));
@@ -450,6 +450,79 @@ mod tests {
             .map(|block| block["duration_min"].as_i64().unwrap_or(0))
             .sum();
         assert_eq!(open, 60, "{blocks}");
+    }
+
+    #[test]
+    fn a_spread_homework_saved_again_after_an_hour_ticked_done_keeps_its_time_once() {
+        // Spread, 180 min in three hour sessions; the first is ticked done and one is given a time.
+        // Saved again unchanged: the two open hours stay as they are (the placed one at its time)
+        // and nothing is added, so 120 open minutes cover the 120 still to do. Saved a third time:
+        // still nothing added.
+        let (week, _) = open_test("hw-spread-resave");
+        let draft = json!({"id": "essay", "title": "History essay", "due": "2026-10-15T21:00",
+                           "estimate_min": 180, "spread": "spread"});
+        let first: Value = serde_json::from_str(
+            &week
+                .save_homework(draft.to_string(), "op-resave-1".into())
+                .unwrap(),
+        )
+        .unwrap();
+        let user = week.user_id.unwrap();
+        let read = |week: &FlexWeek| -> Value {
+            let db = week.db.lock().unwrap();
+            let raw = flexweek_store::week_blocks(&db, user, "2026-10-12")
+                .unwrap()
+                .unwrap();
+            serde_json::from_str(&raw).unwrap()
+        };
+        let mut blocks = read(&week);
+        let ours: Vec<usize> = (0..blocks.as_array().unwrap().len())
+            .filter(|&at| blocks[at]["assignment_id"] == "essay")
+            .collect();
+        assert_eq!(ours.len(), 3, "{blocks}");
+        blocks[ours[0]]["completed"] = json!(true);
+        blocks[ours[1]]["start"] = json!("17:00");
+        {
+            let db = week.db.lock().unwrap();
+            db.execute(
+                "UPDATE weeks SET blocks = ?1 WHERE user_id = ?2 AND week_start = '2026-10-12'",
+                (blocks.to_string(), user),
+            )
+            .unwrap();
+        }
+        let mut again = draft.clone();
+        again["revision"] = first["revision"].clone();
+        let second: Value = serde_json::from_str(
+            &week
+                .save_homework(again.to_string(), "op-resave-2".into())
+                .unwrap(),
+        )
+        .unwrap();
+        let open = |blocks: &Value| -> Vec<(i64, Option<String>)> {
+            let mut open: Vec<(i64, Option<String>)> = blocks
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|block| {
+                    block["assignment_id"] == "essay" && block["completed"] != json!(true)
+                })
+                .map(|block| {
+                    (
+                        block["duration_min"].as_i64().unwrap_or(0),
+                        block["start"].as_str().map(str::to_string),
+                    )
+                })
+                .collect();
+            open.sort();
+            open
+        };
+        let expected = vec![(60, None), (60, Some("17:00".to_string()))];
+        assert_eq!(open(&read(&week)), expected);
+        let mut third = draft.clone();
+        third["revision"] = second["revision"].clone();
+        week.save_homework(third.to_string(), "op-resave-3".into())
+            .unwrap();
+        assert_eq!(open(&read(&week)), expected);
     }
 
     #[test]
