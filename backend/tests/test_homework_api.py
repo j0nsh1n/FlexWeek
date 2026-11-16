@@ -118,6 +118,7 @@ def test_put_revision_zero_creates_at_revision_one_and_identical_body_does_not_b
                 **assignment(revision=1),
                 "planned_min": 0,
                 "unplanned_min": 120,
+                "done_min": 0,
                 "session_weeks": [],
             }
         ]
@@ -179,6 +180,19 @@ def test_planned_and_unplanned_minutes_count_open_sessions_in_this_week_and_late
     assert week_one["unplanned_min"] == 75
     assert week_two["planned_min"] == 45
     assert week_two["unplanned_min"] == 135
+
+
+def test_done_minutes_count_sessions_ticked_done_in_every_saved_week(alice: TestClient) -> None:
+    assert put_assignment(alice, assignment(estimate_min=180)).status_code == 200
+    ticked = {"start": "09:00", "completed": True}
+    first = save_week(alice, WEEK_ONE, [session("w1", "hw-essay", duration_min=60, **ticked)], 0)
+    second = save_week(alice, WEEK_TWO, [session("w2", "hw-essay", duration_min=45, days=[0], **ticked)], 0)
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    for week in (WEEK_ONE, WEEK_TWO):
+        listed = alice.get(f"/api/assignments?week_start={week}").json()["assignments"][0]
+        assert listed["done_min"] == 105, week
+        assert listed["planned_min"] == 0
 
 
 def test_assignment_lists_weeks_with_saved_sessions(alice: TestClient) -> None:

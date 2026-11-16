@@ -497,6 +497,7 @@ fn missed_minutes(
     now: &Value,
 ) -> EngineResult<Vec<(Value, i64)>> {
     let saved = Value::Array(saved_week.to_vec());
+    let open_week = Value::Array(blocks.to_vec());
     let mut passed = Vec::with_capacity(blocks.len());
     for block in blocks {
         let at = match ended_session(block, now)? {
@@ -521,7 +522,7 @@ fn missed_minutes(
         if truthy(get(assignment, "completed")?) {
             continue;
         }
-        let part = this_weeks_part(assignment, link, &saved)?;
+        let part = this_weeks_part(assignment, link, &open_week, &saved)?;
         let mut others = 0;
         for (at, other) in blocks.iter().enumerate() {
             if at == index
@@ -1314,36 +1315,100 @@ fn uncovered_minutes(
     blocks: &Value,
     saved_week: &Value,
 ) -> EngineResult<i64> {
-    Ok((this_weeks_part(assignment, id, saved_week)? - session_minutes(blocks, id)?).max(0))
+    Ok(
+        (this_weeks_part(assignment, id, blocks, saved_week)? - session_minutes(blocks, id)?)
+            .max(0),
+    )
 }
 
-/// Minutes of the homework that this week's sessions are to hold: the estimate less focus done, less
-/// what its not-finished sessions in later weeks hold. Sessions in earlier weeks hold nothing here,
-/// because the server counts from this week on.
+/// Minutes of the homework's sessions ticked done in `blocks`.
+pub fn done_session_minutes(blocks: &Value, assignment_id: &Value) -> EngineResult<i64> {
+    let mut total = 0;
+    for block in iterate(blocks)? {
+        if eq(
+            get(&block, "assignment_id")?.unwrap_or(null()),
+            assignment_id,
+        ) && truthy(get(&block, "completed")?)
+        {
+            // A block with no length counts as nothing, the same as a block with a zero length.
+            total += int_of(&or_default(get(&block, "duration_min")?, json!(0)))?;
+        }
+    }
+    Ok(total)
+}
+
+/// Minutes of the homework's sessions ticked done, each counted once: the server's `done_min` (every
+/// saved week) with the open week as saved taken off, and the open week as it is now put in its place,
+/// so a tick not saved yet counts and a saved one is not counted twice. A homework not read from the
+/// server counts the open week alone.
+pub fn credited_done_minutes(
+    assignment: &Value,
+    id: &Value,
+    blocks: &Value,
+    saved_week: &Value,
+) -> EngineResult<i64> {
+    let here = done_session_minutes(blocks, id)?;
+    match get(assignment, "done_min")?.filter(|value| !value.is_null()) {
+        Some(server) => {
+            let saved = done_session_minutes(&or_default(Some(saved_week), json!([])), id)?;
+            Ok((py_int(server)? - saved).max(0) + here)
+        }
+        None => Ok(here),
+    }
+}
+
+/// The homework's done time: the larger of its focus minutes and the minutes of sessions ticked done
+/// (`credited_done_minutes`), never their sum, because focus time is kept per homework and a session
+/// both timed and ticked would count twice. The one definition every count that credits work reads.
+pub fn done_time_minutes(
+    assignment: &Value,
+    id: &Value,
+    blocks: &Value,
+    saved_week: &Value,
+) -> EngineResult<i64> {
+    let focus = int_of(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
+    Ok(crate::plan::done_time(
+        focus,
+        credited_done_minutes(assignment, id, blocks, saved_week)?,
+    ))
+}
+
+/// Minutes of the homework that this week's sessions are to hold: the estimate less its done time
+/// (`done_time_minutes`: the larger of focus minutes and minutes ticked done), less what its
+/// not-finished sessions in later weeks hold. Sessions in earlier weeks hold nothing here, because the server counts from
+/// this week on.
 ///
 /// `saved_week` is this week exactly as saved when the homework's `planned_min` and `unplanned_min`
 /// were read, every session in it, placed or waiting. `planned_min` counted those sessions and every
 /// later week's, so less them it is what later weeks hold. A homework not read from the server has no
 /// later week known.
-fn this_weeks_part(assignment: &Value, id: &Value, saved_week: &Value) -> EngineResult<i64> {
+fn this_weeks_part(
+    assignment: &Value,
+    id: &Value,
+    blocks: &Value,
+    saved_week: &Value,
+) -> EngineResult<i64> {
     let focus = int_of(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
+    let done = done_time_minutes(assignment, id, blocks, saved_week)?;
     let Some(server) = get(assignment, "unplanned_min")?.filter(|value| !value.is_null()) else {
         // As the server branch below, a homework with no estimate is not an error: it asks for no time.
         let estimate = int_of(&or_default(get(assignment, "estimate_min")?, json!(0)))?;
-        return Ok((estimate - focus).max(0));
+        return Ok((estimate - done).max(0));
     };
     let saved = session_minutes(&or_default(Some(saved_week), json!([])), id)?;
     let Some(estimate) = get(assignment, "estimate_min")?.filter(|value| !value.is_null()) else {
         return Ok(py_int(server)? + saved);
     };
-    let need = (int_of(estimate)? - focus).max(0);
+    // The server's unplanned number credits the done time it knew of: focus and the saved ticks.
+    let server_done = int_of(&or_default(get(assignment, "done_min")?, json!(0)))?;
+    let need = (int_of(estimate)? - crate::plan::done_time(focus, server_done)).max(0);
     let later = match get(assignment, "planned_min")?.filter(|value| !value.is_null()) {
         Some(planned) => py_int(planned)? - saved,
         // The unplanned number alone is floored at 0, so it says only that later weeks hold at least
         // what it leaves unexplained; read before a focus credit, that bound still holds.
         None => (need - py_int(server)? - saved).max(0),
     };
-    Ok(need - later)
+    Ok((int_of(estimate)? - done).max(0) - later)
 }
 
 /// What the planner can place: the uncovered minutes, down to a whole quarter hour.

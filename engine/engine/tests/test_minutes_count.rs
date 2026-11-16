@@ -209,7 +209,9 @@ fn homework_finished_early_needs_nothing() {
 #[test]
 fn a_finished_session_holds_nothing() {
     // 60 min, a 30 min session marked finished and 30 min of focus credited for it: the server counts no
-    // finished session (planned 0), so 60 - 30 - 0 = 30 still have no session.
+    // finished session (planned 0). Focus time is kept per homework, not per session, so the finished
+    // session and the timer may be the same half hour; done time is the larger of the two, 30, never
+    // their sum: 60 - 30 - 0 = 30 still have no session.
     let done = with(
         session("one", "history", 30, Some("18:45")),
         json!({"completed": true}),
@@ -380,4 +382,102 @@ fn a_paste_of_a_session_longer_than_what_is_left() {
         rows[0]["invalid"],
         "Only 10 min of this homework is left to plan, and a pasted session needs at least 15."
     );
+}
+
+fn done_session(id: &str, homework: &str, minutes: i64) -> Value {
+    let mut block = session(id, homework, minutes, None);
+    block["completed"] = json!(true);
+    block
+}
+
+#[test]
+fn a_session_ticked_done_in_the_open_week_is_credited_once_in_every_count() {
+    // 120 min, nothing planned, 60 min ticked done in this week (not yet saved as done, so the server's
+    // numbers know nothing of it): 120 - 0 focus - 60 done = 60 with no time, and Plan may place 60.
+    let homework = read("history", 120, 0, 0, "2026-10-08T21:00");
+    let done = done_session("tick", "history", 60);
+    assert_eq!(uncovered(&homework, std::slice::from_ref(&done), &[]), 60);
+    assert_eq!(placeable(&homework, std::slice::from_ref(&done), &[]), 60);
+    assert_eq!(needed(&homework, &[done], &[]), Some((60, 0, 60)));
+}
+
+#[test]
+fn a_session_ticked_done_in_an_earlier_saved_week_is_credited_from_the_server_count() {
+    // 60 min whose only session was ticked done last week. The server lists done_min 60 (every saved week)
+    // and nothing planned: 60 - 60 = 0 needed, in the line, the count and Plan.
+    let mut homework = read("history", 60, 0, 0, "2026-10-08T21:00");
+    homework["done_min"] = json!(60);
+    assert_eq!(uncovered(&homework, &[], &[]), 0);
+    assert_eq!(needed(&homework, &[], &[]), None);
+    // The same hour not ticked done is still needed.
+    homework["done_min"] = json!(0);
+    assert_eq!(needed(&homework, &[], &[]), Some((60, 0, 60)));
+}
+
+#[test]
+fn done_minutes_are_never_counted_twice_across_the_saved_week_and_the_open_one() {
+    // 120 min. This week's saved copy holds a 60 min session already ticked done, so the server's
+    // done_min is 60 and includes it. The open week holds the same session ticked done: one 60, not two.
+    // 120 - 60 = 60 needed. The same session ticked only here (saved copy not done, done_min 0) is 60 too.
+    let mut homework = read("history", 120, 0, 0, "2026-10-08T21:00");
+    let done = done_session("tick", "history", 60);
+    homework["done_min"] = json!(60);
+    assert_eq!(
+        uncovered(
+            &homework,
+            std::slice::from_ref(&done),
+            std::slice::from_ref(&done)
+        ),
+        60
+    );
+    let mut unsaved = read("history", 120, 0, 60, "2026-10-08T21:00");
+    unsaved["done_min"] = json!(0);
+    let open = session("tick", "history", 60, None);
+    assert_eq!(
+        uncovered(&unsaved, std::slice::from_ref(&done), &[open]),
+        60
+    );
+    // A tick in an earlier week as well as this one: 120 - 30 earlier - 60 here = 30.
+    homework["done_min"] = json!(30);
+    assert_eq!(uncovered(&homework, &[done], &[]), 30);
+}
+
+#[test]
+fn done_time_is_the_larger_of_focus_minutes_and_ticked_done_minutes() {
+    // 120 min, nothing planned. Done time = max(focus, ticked done), so the minutes still needed are
+    //   focus  ticked  done = max   120 - done
+    //   30     30      30           90
+    //   30     60      60           60
+    //   60     30      60           60
+    //   0      30      30           90
+    //   0      0       0            120
+    for (focus, ticked, left) in [
+        (30, 30, 90),
+        (30, 60, 60),
+        (60, 30, 60),
+        (0, 30, 90),
+        (0, 0, 120),
+    ] {
+        let homework = read("history", 120, focus, 0, "2026-10-08T21:00");
+        let blocks: Vec<Value> = if ticked > 0 {
+            vec![done_session("tick", "history", ticked)]
+        } else {
+            vec![]
+        };
+        assert_eq!(
+            uncovered(&homework, &blocks, &[]),
+            left,
+            "focus {focus}, ticked {ticked}"
+        );
+        assert_eq!(
+            placeable(&homework, &blocks, &[]),
+            left,
+            "focus {focus}, ticked {ticked}"
+        );
+        assert_eq!(
+            needed(&homework, &blocks, &[]).map(|(minutes, _, _)| minutes),
+            Some(left),
+            "focus {focus}, ticked {ticked}"
+        );
+    }
 }

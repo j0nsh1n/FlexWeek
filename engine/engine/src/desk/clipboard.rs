@@ -2,7 +2,10 @@
 
 use serde_json::{Map, Value, json};
 
-use crate::desk::planning::{available_homework_minutes, floor_slot, occurrence_days};
+use crate::desk::planning::{
+    available_homework_minutes, done_time_minutes, floor_slot, occurrence_days,
+    time_still_needed_parts,
+};
 use crate::desk::pyops::{
     Cmp, PyDict, compare, contains, eq, get, hashable, in_set, iterate, or_default, order, py_dict,
     sub,
@@ -512,28 +515,13 @@ pub fn unfinished_items(
     Ok(keyed.into_iter().map(|(_, item)| item).collect())
 }
 
-fn done_session_minutes(blocks: &Value, assignment_id: &Value) -> EngineResult<i64> {
-    let mut total = 0;
-    for block in iterate(blocks)? {
-        if eq(
-            get(&block, "assignment_id")?.unwrap_or(null()),
-            assignment_id,
-        ) && truthy(get(&block, "completed")?)
-        {
-            // A block with no length counts as nothing, the same as a block with a zero length.
-            total += whole(&or_default(get(&block, "duration_min")?, json!(0)))?;
-        }
-    }
-    Ok(total)
-}
-
 pub fn left_over_items(
     assignments: &Value,
     saved_weeks: &Value,
     today_week: &str,
     now: &str,
     blocks: &Value,
-    _committed_blocks: &Value,
+    committed_blocks: &Value,
 ) -> EngineResult<Vec<Value>> {
     let (today, minute) = crate::model::parse_due(now)?;
     let moment = (today, minute);
@@ -550,16 +538,6 @@ pub fn left_over_items(
             .map(crate::model::parse_due)
             .transpose()?
             .is_some_and(|deadline| deadline <= moment);
-        // Placed unfinished minutes are still left to do, so only sessions ticked done come off.
-        // `unplanned_min` from the server can hide them, so both states use the homework itself:
-        // estimate minus focus minutes minus done sessions.
-        let estimate = whole(&or_default(get(assignment, "estimate_min")?, json!(0)))?;
-        let focus = whole(&or_default(get(assignment, "focus_minutes")?, json!(0)))?;
-        let done = done_session_minutes(blocks, subscript(assignment, "id")?)?;
-        let remaining = (estimate - focus - done).max(0);
-        if remaining == 0 {
-            continue;
-        }
         let carried = if overdue {
             false
         } else {
@@ -577,6 +555,36 @@ pub fn left_over_items(
             had_past_session
         };
         if !overdue && !carried {
+            continue;
+        }
+        let id = subscript(assignment, "id")?;
+        let remaining = if overdue {
+            // Placed unfinished minutes are still left to do, so only done time (focus time or sessions
+            // ticked done, whichever is more) comes off: the estimate itself, not `unplanned_min`, which can hide them.
+            let estimate = whole(&or_default(get(assignment, "estimate_min")?, json!(0)))?;
+            let done = done_time_minutes(assignment, id, blocks, committed_blocks)?;
+            (estimate - done).max(0)
+        } else {
+            // Time already placed this week or later is not left over: the line lists only the minutes
+            // that still have no time, by the same count as "needs a time" (focus time and sessions
+            // ticked done in every week already come off there).
+            let one: Map<String, Value> = Map::from_iter([(py_str(id), assignment.clone())]);
+            // A block with no length holds no time, and the count would refuse it.
+            let with_length = |week: &Value| -> EngineResult<Vec<Value>> {
+                Ok(iterate(week)?
+                    .into_iter()
+                    .filter(|block| block.get("duration_min").is_some())
+                    .collect())
+            };
+            let open_week = with_length(blocks)?;
+            let saved_week = with_length(committed_blocks)?;
+            let parts = time_still_needed_parts(&one, &open_week, today_week, &saved_week)?;
+            parts
+                .first()
+                .and_then(|part| part["minutes"].as_i64())
+                .unwrap_or(0)
+        };
+        if remaining == 0 {
             continue;
         }
         let Value::Object(fields) = assignment else {

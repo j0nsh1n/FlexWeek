@@ -256,11 +256,17 @@ fn due_slack_point(week_start: &str, due: &str) -> PyResult<(i64, i64)> {
 }
 
 #[pyfunction]
-fn unplanned_minutes(estimate_min: i64, focus_minutes: i64, planned: i64) -> PyResult<i64> {
+fn unplanned_minutes(
+    estimate_min: i64,
+    focus_minutes: i64,
+    done_min: i64,
+    planned: i64,
+) -> PyResult<i64> {
     guard(|| {
         Ok(plan::unplanned_minutes(
             estimate_min,
             focus_minutes,
+            done_min,
             planned,
         ))
     })
@@ -357,6 +363,31 @@ fn planned_minutes_by_id(weeks: &str, from_week: &str) -> PyResult<String> {
             })
             .collect();
         let planned = plan::planned_minutes_by_id(&weeks, from_week);
+        Ok(dump(&Value::Object(
+            planned
+                .into_iter()
+                .map(|(key, value)| (key, Value::from(value)))
+                .collect(),
+        )))
+    })
+}
+
+#[pyfunction]
+fn done_minutes_by_id(weeks: &str) -> PyResult<String> {
+    guard(|| {
+        let weeks: Vec<(String, Vec<Value>)> = parse(weeks)?
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|item| {
+                let pair = item.as_array()?;
+                let start = pair.first()?.as_str()?.to_string();
+                let blocks = pair.get(1)?.as_array()?.clone();
+                Some((start, blocks))
+            })
+            .collect();
+        let planned = plan::done_minutes_by_id(&weeks);
         Ok(dump(&Value::Object(
             planned
                 .into_iter()
@@ -492,6 +523,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         legacy_session,
         rewrite_session,
         planned_minutes_by_id,
+        done_minutes_by_id,
         planned_minutes_from_day,
         migrate_blocks,
         build_day,

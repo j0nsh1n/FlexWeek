@@ -2,7 +2,7 @@
 //! and the batch is `changes::apply`. Done rules live in the engine.
 
 use flexweek_engine::desk::blocks;
-use flexweek_engine::desk::homework::{edit_homework, mark_homework_done};
+use flexweek_engine::desk::homework::{edit_homework, mark_homework_done, spread_choice};
 use flexweek_store::{
     ApplyClock, ApplyInput, AssignmentInput, Connection, Recall, WeekInput, apply_within,
     begin_immediate, list_account_weeks, list_assignment_rows, read_week, recall_operation,
@@ -34,6 +34,7 @@ struct AddArgs {
     category: Option<String>,
     #[serde(default)]
     notes: Option<String>,
+    /// true saves the homework as "Spread over days" and cuts its time not yet done into sessions on the days from today to the due date, as the app does; false saves it as "In one go". As in the app, Spread over days holds only for an estimate of 60 minutes or more and a homework not already in several open sessions this week; otherwise it is saved as "In one go". Leave it out when adding to get "In one go", and when editing to keep what is saved.
     #[serde(default)]
     spread: Option<bool>,
 }
@@ -60,6 +61,7 @@ struct EditArgs {
     category: Option<String>,
     #[serde(default)]
     notes: Option<String>,
+    /// true saves the homework as "Spread over days" and cuts its time not yet done into sessions on the days from today to the due date, as the app does; false saves it as "In one go". As in the app, Spread over days holds only for an estimate of 60 minutes or more and a homework not already in several open sessions this week; otherwise it is saved as "In one go". Leave it out when adding to get "In one go", and when editing to keep what is saved.
     #[serde(default)]
     spread: Option<bool>,
 }
@@ -290,7 +292,7 @@ fn put_str(map: &mut Map<String, Value>, key: &str, value: &Option<String>) {
     }
 }
 
-fn add_payload(args: &AddArgs, assignment_id: &str) -> Value {
+fn add_payload(args: &AddArgs, assignment_id: &str, spread: Option<&str>) -> Value {
     let mut map = Map::new();
     map.insert("id".into(), json!(assignment_id));
     map.insert("title".into(), json!(args.title));
@@ -303,10 +305,11 @@ fn add_payload(args: &AddArgs, assignment_id: &str) -> Value {
     put_str(&mut map, "course", &args.course);
     put_str(&mut map, "category", &args.category);
     put_str(&mut map, "notes", &args.notes);
+    map.insert("spread".into(), json!(spread.unwrap_or("one")));
     Value::Object(map)
 }
 
-fn edit_payload(existing: &Value, args: &EditArgs) -> Result<Value, String> {
+fn edit_payload(existing: &Value, args: &EditArgs, spread: Option<&str>) -> Result<Value, String> {
     let mut map = existing
         .as_object()
         .cloned()
@@ -324,6 +327,9 @@ fn edit_payload(existing: &Value, args: &EditArgs) -> Result<Value, String> {
     put_str(&mut map, "course", &args.course);
     put_str(&mut map, "category", &args.category);
     put_str(&mut map, "notes", &args.notes);
+    if let Some(spread) = spread {
+        map.insert("spread".into(), json!(spread));
+    }
     Ok(Value::Object(map))
 }
 
@@ -336,7 +342,7 @@ fn edit_weeks(
     weeks: Vec<(String, Vec<Value>, i64)>,
     assignments: &Map<String, Value>,
     payload: &Value,
-    spread: bool,
+    respread: bool,
     session_id: &str,
     today: &str,
     minute: i64,
@@ -350,7 +356,7 @@ fn edit_weeks(
             &start,
             payload,
             None,
-            spread,
+            respread,
             session_id,
             today,
             minute,
@@ -363,6 +369,109 @@ fn edit_weeks(
         weeks: edited,
         assignment,
     })
+}
+
+/// Open (not finished) sessions of the homework in the week the app has open today: the shown week
+/// that holds today, from this computer's first day of the week. The app's sheet counts that week
+/// alone when it decides whether Spread over days is offered.
+fn open_sessions_this_week(
+    conn: &Connection,
+    user_id: i64,
+    weeks: &[(String, Vec<Value>, i64)],
+    assignment_id: &str,
+    today: &str,
+    first_weekday: u32,
+) -> Result<usize, String> {
+    let monday = flexweek_engine::time::monday_of(today).map_err(|error| error.message)?;
+    let day = |start: &str, count: i64| -> Result<String, String> {
+        let date = chrono::NaiveDate::parse_from_str(start, "%Y-%m-%d")
+            .map_err(|_| session::STORAGE_UNAVAILABLE.to_string())?;
+        Ok((date + chrono::Duration::days(count))
+            .format("%Y-%m-%d")
+            .to_string())
+    };
+    let mut shown = day(&monday, i64::from(first_weekday))?;
+    if shown.as_str() > today {
+        shown = day(&shown, -7)?;
+    }
+    let stored = |start: &str| -> Result<Vec<Value>, String> {
+        match weeks.iter().find(|(held, _, _)| held == start) {
+            Some((_, blocks, _)) => Ok(blocks.clone()),
+            None => Ok(load_week(conn, user_id, start)?.0),
+        }
+    };
+    let blocks = match flexweek_engine::shown::shown_parts(&shown).map_err(|error| error.message)? {
+        None => stored(&shown)?,
+        Some((first, second, _)) => {
+            week::compose_shown_blocks(conn, user_id, &shown, &stored(&first)?, &stored(&second)?)?
+        }
+    };
+    Ok(blocks
+        .iter()
+        .filter(|block| {
+            block.get("assignment_id").and_then(Value::as_str) == Some(assignment_id)
+                && block.get("completed").and_then(Value::as_bool) != Some(true)
+        })
+        .count())
+}
+
+/// Adds the sessions Spread over days makes (the engine's `spread_new_sessions`, as the app's spread
+/// preview does) to the weeks they fall in, reading a week not held yet from the database.
+fn add_spread_sessions(
+    conn: &Connection,
+    user_id: i64,
+    edited: &mut Edited,
+    operation_id: &str,
+    today: &str,
+) -> Result<(), String> {
+    let held: Vec<(String, Vec<Value>)> = edited
+        .weeks
+        .iter()
+        .map(|(start, blocks, _)| (start.clone(), blocks.clone()))
+        .collect();
+    let id = edited
+        .assignment
+        .get("id")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let planned = flexweek_engine::plan::planned_minutes_by_id(&held, "2000-01-01")
+        .get(&id)
+        .copied()
+        .unwrap_or(0);
+    let done = flexweek_engine::plan::done_minutes_by_id(&held)
+        .get(&id)
+        .copied()
+        .unwrap_or(0);
+    let made = flexweek_engine::desk::homework::spread_new_sessions(
+        &edited.assignment,
+        planned,
+        done,
+        today,
+        &|index| derived_id(operation_id, &format!("spread-{index}")),
+    )?;
+    for (week_start, block) in made {
+        let at = match edited
+            .weeks
+            .iter()
+            .position(|(start, _, _)| *start == week_start)
+        {
+            Some(at) => at,
+            None => {
+                let (blocks, revision) = load_week(conn, user_id, &week_start)?;
+                edited.weeks.push((week_start.clone(), blocks, revision));
+                edited.weeks.len() - 1
+            }
+        };
+        let blocks = &mut edited.weeks[at].1;
+        let problem =
+            flexweek_engine::desk::planning::capacity_problem(blocks.len() as i64, 1, "Spreading");
+        if !problem.is_empty() {
+            return Err(problem);
+        }
+        blocks.push(block);
+    }
+    Ok(())
 }
 
 fn homework_input(edited: Edited, revision: i64) -> Result<ApplyInput, String> {
@@ -526,8 +635,10 @@ fn add_arguments(args: &AddArgs) -> Value {
     })
 }
 
+/// `spread` joins the digest only when it was sent: leaving it out keeps what is saved and `false` sets
+/// "In one go", so they are different requests.
 fn edit_arguments(args: &EditArgs) -> Value {
-    json!({
+    let mut arguments = json!({
         "category": args.category,
         "course": args.course,
         "due": args.due,
@@ -537,9 +648,12 @@ fn edit_arguments(args: &EditArgs) -> Value {
         "id": args.id,
         "notes": args.notes,
         "priority": args.priority,
-        "spread": args.spread.unwrap_or(false),
         "title": args.title,
-    })
+    });
+    if let (Some(spread), Some(map)) = (args.spread, arguments.as_object_mut()) {
+        map.insert("spread".into(), json!(spread));
+    }
+    arguments
 }
 
 #[tool_router(router = homework_tools, vis = "pub(crate)")]
@@ -559,19 +673,29 @@ impl crate::App {
             }
             let assignment_id = derived_id(&args.operation_id, "hw");
             let session_id = derived_id(&args.operation_id, "session");
-            let payload = add_payload(&args, &assignment_id);
+            let choice = spread_choice(args.spread, args.estimate_min, 0);
+            let payload = add_payload(&args, &assignment_id, choice.field);
             let assignments = load_assignments(&opened.conn, opened.user_id)?;
             let now = self.now()?;
             let weeks = weeks_touching(&opened.conn, opened.user_id, &assignment_id, &now.today)?;
-            let edited = edit_weeks(
+            let mut edited = edit_weeks(
                 weeks,
                 &assignments,
                 &payload,
-                args.spread.unwrap_or(false),
+                choice.respread,
                 &session_id,
                 &now.today,
                 now.minute,
             )?;
+            if choice.respread {
+                add_spread_sessions(
+                    &opened.conn,
+                    opened.user_id,
+                    &mut edited,
+                    &args.operation_id,
+                    &now.today,
+                )?;
+            }
             let input = homework_input(edited, 0)?;
             let applied = run_apply(
                 &opened.conn,
@@ -607,19 +731,41 @@ impl crate::App {
             let Some(existing) = assignments.get(&args.id) else {
                 return Err("homework was not found".into());
             };
-            let payload = edit_payload(existing, &args)?;
             let session_id = derived_id(&args.operation_id, "session");
             let now = self.now()?;
             let weeks = weeks_touching(&opened.conn, opened.user_id, &args.id, &now.today)?;
-            let edited = edit_weeks(
+            let estimate = args
+                .estimate_min
+                .or_else(|| existing.get("estimate_min").and_then(Value::as_i64))
+                .unwrap_or_default();
+            let open_here = open_sessions_this_week(
+                &opened.conn,
+                opened.user_id,
+                &weeks,
+                &args.id,
+                &now.today,
+                self.first_weekday(),
+            )?;
+            let choice = spread_choice(args.spread, estimate, open_here);
+            let payload = edit_payload(existing, &args, choice.field)?;
+            let mut edited = edit_weeks(
                 weeks,
                 &assignments,
                 &payload,
-                args.spread.unwrap_or(false),
+                choice.respread,
                 &session_id,
                 &now.today,
                 now.minute,
             )?;
+            if choice.respread {
+                add_spread_sessions(
+                    &opened.conn,
+                    opened.user_id,
+                    &mut edited,
+                    &args.operation_id,
+                    &now.today,
+                )?;
+            }
             let input = homework_input(edited, args.expected_revision)?;
             let applied = run_apply(
                 &opened.conn,

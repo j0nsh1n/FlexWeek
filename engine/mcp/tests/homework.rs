@@ -1399,3 +1399,195 @@ fn shown_set_block_done_reply_failure_rolls_back_atomically() {
     assert_eq!(ok["result"]["week_starts_on"], json!("wednesday"));
     assert_eq!(ok["revision"], json!([0, 3]));
 }
+
+fn stored_spread(world: &World, id: &str) -> Value {
+    let (body, _) = assignment_row(&world.database_arg, world.user, id).expect("homework row");
+    let value: Value = serde_json::from_str(&body).expect("body");
+    value.get("spread").cloned().unwrap_or(json!("one"))
+}
+
+fn add_with(server: &mut Server, operation_id: &str, spread: Option<bool>) -> String {
+    let mut args = json!({
+        "operation_id": operation_id,
+        "title": "Poster",
+        "due": "2026-11-04T21:00",
+        "estimate_min": 180
+    });
+    if let Some(spread) = spread {
+        args["spread"] = json!(spread);
+    }
+    let response = server.call("add_homework", args, 2);
+    body_of(&response)["result"]["assignment"]["id"]
+        .as_str()
+        .unwrap_or("")
+        .to_string()
+}
+
+#[test]
+fn add_homework_saves_spread_over_days_only_when_asked() {
+    let world = signed_in("add-spread-field");
+    let mut server = boot(&world);
+    server.handshake();
+    let spread = add_with(&mut server, "op-add-spread-1", Some(true));
+    let one = add_with(&mut server, "op-add-spread-2", Some(false));
+    let absent = add_with(&mut server, "op-add-spread-3", None);
+    assert_eq!(stored_spread(&world, &spread), json!("spread"));
+    assert_eq!(stored_spread(&world, &one), json!("one"));
+    assert_eq!(stored_spread(&world, &absent), json!("one"));
+    let (week, _) = week_row(&world.database_arg, world.user, "2026-10-19").expect("week");
+    assert_eq!(
+        blocks_with_assignment(&week, &spread).len(),
+        3,
+        "a spread homework has its hour sessions, one per day (due 4 Nov, 180 min)"
+    );
+    assert_eq!(blocks_with_assignment(&week, &one).len(), 1);
+}
+
+#[test]
+fn edit_homework_sets_spread_both_ways_and_keeps_it_when_absent() {
+    let world = signed_in("edit-spread-field");
+    let mut server = boot(&world);
+    server.handshake();
+    let id = add_with(&mut server, "op-edit-spread-add", None);
+    let mut revision = 1;
+    let mut edit = |server: &mut Server, op: &str, extra: Value| {
+        let mut args = json!({
+            "operation_id": op,
+            "id": id,
+            "expected_revision": revision,
+            "notes": op
+        });
+        for (key, value) in extra.as_object().cloned().unwrap_or_default() {
+            args[key] = value;
+        }
+        let response = server.call("edit_homework", args, 2);
+        let body = body_of(&response);
+        assert_eq!(body["ok"], json!(true), "edit succeeds, got {body}");
+        revision = body["revision"].as_i64().expect("revision");
+    };
+    edit(&mut server, "op-edit-spread-1", json!({"spread": true}));
+    assert_eq!(stored_spread(&world, &id), json!("spread"));
+    edit(&mut server, "op-edit-spread-2", json!({}));
+    assert_eq!(
+        stored_spread(&world, &id),
+        json!("spread"),
+        "absent keeps it"
+    );
+    edit(&mut server, "op-edit-spread-3", json!({"spread": false}));
+    assert_eq!(stored_spread(&world, &id), json!("one"));
+    edit(&mut server, "op-edit-spread-4", json!({}));
+    assert_eq!(stored_spread(&world, &id), json!("one"), "absent keeps it");
+}
+
+#[test]
+fn an_edit_retry_tells_an_omitted_spread_from_spread_false() {
+    // Stored "spread"; an edit that leaves spread out keeps it. Sent again under the same operation id
+    // with spread=false it is a different request, not the first one's answer.
+    let world = signed_in("edit-retry-spread");
+    let mut server = boot(&world);
+    server.handshake();
+    let id = add_with(&mut server, "op-retry-spread-add", Some(true));
+    let args = json!({
+        "operation_id": "op-retry-spread-edit",
+        "id": id,
+        "expected_revision": 1,
+        "notes": "Cite sources"
+    });
+    let first = server.call("edit_homework", args.clone(), 3);
+    assert_eq!(body_of(&first)["ok"], json!(true), "got {first}");
+    let same = server.call("edit_homework", args.clone(), 4);
+    assert_eq!(
+        body_of(&same),
+        body_of(&first),
+        "an identical retry repeats the answer"
+    );
+    let mut changed = args;
+    changed["spread"] = json!(false);
+    let conflict = server.call("edit_homework", changed, 5);
+    assert_eq!(
+        tool_error_text(&conflict),
+        Some(OPERATION_CONFLICT),
+        "spread=false after an omitted spread is changed data, got {conflict}"
+    );
+    assert_eq!(stored_spread(&world, &id), json!("spread"));
+}
+
+fn boot_from(world: &World, first_day: &str) -> Server {
+    Server::spawn(&[
+        "--data-dir",
+        &world.data_arg,
+        "--database",
+        &world.database_arg,
+        "--now",
+        NOW_ISO,
+        "--week-starts-on",
+        first_day,
+    ])
+}
+
+/// Poster (180 min, due 4 November) in two open sessions: two hours on Monday 19 October and one hour on
+/// Sunday 25 October, both stored in the week of 19 October. Today is Wednesday 21 October.
+fn poster_in_two_sessions(world: &World, server: &mut Server) -> String {
+    let id = add_with(server, "op-two-sessions-add", None);
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let blocks = json!([
+        {"id": "mon", "title": "Poster", "kind": "flexible", "duration_min": 120, "days": [0],
+         "start": "16:00", "assignment_id": id},
+        {"id": "sun", "title": "Poster", "kind": "flexible", "duration_min": 60, "days": [6],
+         "start": "16:00", "assignment_id": id}
+    ]);
+    conn.execute(
+        "UPDATE weeks SET blocks = ?1 WHERE user_id = ?2 AND week_start = '2026-10-19'",
+        (blocks.to_string(), world.user),
+    )
+    .expect("week");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    id
+}
+
+fn open_session_lengths(world: &World, id: &str) -> Vec<i64> {
+    let mut lengths = Vec::new();
+    for week in ["2026-10-12", "2026-10-19", "2026-10-26", "2026-11-02"] {
+        if let Some((blocks, _)) = week_row(&world.database_arg, world.user, week) {
+            for block in blocks_with_assignment(&blocks, id) {
+                if block.get("completed").and_then(Value::as_bool) != Some(true) {
+                    lengths.push(block["duration_min"].as_i64().unwrap_or(0));
+                }
+            }
+        }
+    }
+    lengths.sort_unstable();
+    lengths
+}
+
+#[test]
+fn spread_from_the_helper_counts_only_the_open_weeks_sessions_as_the_app_does() {
+    // From Monday the open week (19-25 October) holds both sessions: the app's sheet hides Spread over
+    // days, saves In one go and keeps the times, and so does the helper. From Sunday the open week is
+    // 18-24 October and holds only the Monday one: the app offers and makes the hour sessions, and so
+    // does the helper.
+    for (first_day, spread, lengths) in [
+        ("monday", json!("one"), vec![60, 120]),
+        ("sunday", json!("spread"), vec![60, 60, 60]),
+    ] {
+        let world = signed_in(&format!("helper-spread-open-week-{first_day}"));
+        let mut server = boot_from(&world, first_day);
+        server.handshake();
+        let id = poster_in_two_sessions(&world, &mut server);
+        let response = server.call(
+            "edit_homework",
+            json!({"operation_id": "op-two-sessions-edit", "id": id, "expected_revision": 1,
+                   "spread": true}),
+            3,
+        );
+        assert_eq!(body_of(&response)["ok"], json!(true), "got {response}");
+        assert_eq!(stored_spread(&world, &id), spread, "from {first_day}");
+        assert_eq!(
+            open_session_lengths(&world, &id),
+            lengths,
+            "from {first_day}"
+        );
+    }
+}

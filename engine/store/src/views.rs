@@ -7,7 +7,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use flexweek_engine::model::due_sort_key;
-use flexweek_engine::plan::{build_day, build_month_from, planned_minutes_by_id};
+use flexweek_engine::plan::{
+    build_day, build_month_from, done_minutes_by_id, planned_minutes_by_id,
+};
 use flexweek_engine::time::{
     is_calendar_date, is_month_label, is_week_start, monday_of, month_grid_from, parse_month,
 };
@@ -110,6 +112,7 @@ pub fn homework_list(
     let rows = list_assignment_rows(conn, user_id)?;
     let weeks = raw_weeks(conn, user_id)?;
     let planned = planned_minutes_by_id(&weeks, week_start);
+    let done = done_minutes_by_id(&weeks);
     let mut session_weeks: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for (saved_week, blocks) in &weeks {
         for block in blocks {
@@ -133,7 +136,8 @@ pub fn homework_list(
             continue;
         }
         let planned_min = planned.get(&row_id).copied().unwrap_or(0);
-        let mut item = assignment_view(&body, row_revision, planned_min)?;
+        let done_min = done.get(&row_id).copied().unwrap_or(0);
+        let mut item = assignment_view(&body, row_revision, planned_min, Some(done_min))?;
         let listed: Vec<&str> = session_weeks
             .get(&row_id)
             .map(|weeks| weeks.iter().map(String::as_str).collect())

@@ -1,7 +1,7 @@
 # context.md — FlexWeek
 
 ## Current State (2026-11-15)
-- Branch `fix/week-start-follow-ups-3`, local only, from main ce956452 (week start on any day: #128-#133 merged). It holds Jonathan's 2026-11-15 answers: the helper's every-week delete also removes later edited copies; the moved-day note names both months across a month end (English, from the engine's `day_long`); days the app picked by default are picked again after a start-day switch, with no mark; a screen reader hears the note when it appears in an open sheet. Sol's re-check passed at 0190ae9e; local CI passed there.
+- Branch `fix/planner-spread-and-left-over`, PR #135 (main 90f02c94 merged in; #134, the week-start follow-ups 3, merged as 90f02c94): Jonathan's 2026-11-15 planner picks. The helper's "spread over days" works as the app's Spread over days (saved, cut into hour sessions from today, only when this week holds at most one open session); "left from last week" lists only minutes with no time and Plan into this week places them, missed sessions included; done time is the larger of focus minutes and minutes ticked done (`plan::done_time`), taken off in every count (Day, Month, list, spread previews, phone, helper), and a desktop edit keeps it. Local CI passed apart from the mutation-pattern steps, fixed after.
 - Latest release: v1.3.0, published 2026-11-10 from main d61235ee (PR #111, the version bump). The Linux tarball and
   the Android APK were built on this computer (`scripts/build-linux-local.sh` in an Ubuntu 24.04 container; the APK
   signed with the 1.2.0 key); the AppImage and the Windows installers came from the tagged "Release packages" run.
@@ -99,7 +99,7 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
-- 2026-11-15, branch `fix/week-start-follow-ups-3` at 0190ae9e, local only. Done and reviewed (Sol PASS); next: Jonathan's word on the PR. Open planner pieces he has not picked yet: the helper's "spread" not saved as Spread over days, "Left from last week" after a make-up is planned, counts after a move or an Undo of a delete, Plan and this week's missed sessions, pieces around held times, the #125 review's wording questions.
+- 2026-11-15, branch `fix/planner-spread-and-left-over`, PR #135. Sonnet built it in two rounds; the lead took it over after Sol failed both (d6e49bee and the mutation-pattern fix after). Next: GitHub checks and Sol's check of the CodeRabbit round on PR #135, then merge and a developer build with #134 and #135. #134 merged as 90f02c94 after its GitHub-only failure (the Retro look leaking into later tests' dialogs) was fixed in the tests' conftest.
 - 2026-11-14, branch `feat/setup-change-asks-about-edited-weeks`, local only. Fix round 2 is in. Local CI passed on the second pass (ci2/summary.txt). Next: review. Nothing pushed.
 - 2026-11-12, branch `fix/replan-moves-missed-sessions` (#126) with `fix/planner-counts-minutes` (#125) merged in,
   local only. A missed session's minutes are counted through `this_weeks_part` against the saved week

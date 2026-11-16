@@ -602,7 +602,8 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["bio", "lab", "poster", "essay"]
         );
-        assert_eq!(out["due_soon"][0]["unplanned_min"], 60);
+        // Bio reading's only hour is ticked done (bio-session), so none of it is left to place.
+        assert_eq!(out["due_soon"][0]["unplanned_min"], 0);
         assert_eq!(out["workload"]["scheduled_min"], 600);
         assert_eq!(out["workload"]["focus_min"], 0);
 

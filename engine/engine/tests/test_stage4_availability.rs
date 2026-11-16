@@ -138,7 +138,7 @@ fn test_packed_fixture_stays_under_budget_with_protected_hours() {
 #[test]
 fn test_spread_chunks_remaining_minutes_before_the_due_date() {
     let (sessions, remaining) =
-        spread_sessions(120, 0, 0, "2026-09-15T23:59", 60, "2026-09-14").unwrap();
+        spread_sessions(120, 0, 0, 0, "2026-09-15T23:59", 60, "2026-09-14").unwrap();
     assert_eq!(remaining, 0);
     assert_eq!(
         sessions,
@@ -152,7 +152,7 @@ fn test_spread_chunks_remaining_minutes_before_the_due_date() {
 #[test]
 fn test_spread_keeps_unplaced_remaining_when_the_start_is_after_the_due_date() {
     let (sessions, remaining) =
-        spread_sessions(90, 0, 0, "2026-09-15T23:59", 45, "2026-09-16").unwrap();
+        spread_sessions(90, 0, 0, 0, "2026-09-15T23:59", 45, "2026-09-16").unwrap();
     assert!(sessions.is_empty());
     assert_eq!(remaining, 90);
 }
@@ -160,7 +160,7 @@ fn test_spread_keeps_unplaced_remaining_when_the_start_is_after_the_due_date() {
 #[test]
 fn test_spread_snaps_a_focus_remainder_down_to_the_grid() {
     let (sessions, remaining) =
-        spread_sessions(120, 7, 0, "2026-09-15T23:59", 60, "2026-09-14").unwrap();
+        spread_sessions(120, 7, 0, 0, "2026-09-15T23:59", 60, "2026-09-14").unwrap();
     assert_eq!(remaining, 8);
     let durations: Vec<_> = sessions
         .iter()
@@ -172,7 +172,7 @@ fn test_spread_snaps_a_focus_remainder_down_to_the_grid() {
 #[test]
 fn test_spread_reports_a_remainder_that_fits_no_grid_session() {
     let (sessions, remaining) =
-        spread_sessions(60, 53, 0, "2026-09-15T23:59", 60, "2026-09-14").unwrap();
+        spread_sessions(60, 53, 0, 0, "2026-09-15T23:59", 60, "2026-09-14").unwrap();
     assert!(sessions.is_empty());
     assert_eq!(remaining, 7);
 }

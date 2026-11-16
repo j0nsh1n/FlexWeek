@@ -985,6 +985,15 @@ fn reuse_available_minutes(assignment: &str, blocks: &str, committed: &str) -> P
 }
 
 #[pyfunction]
+fn reuse_done_minutes(assignment: &str, blocks: &str, committed: &str) -> PyResult<i64> {
+    let (assignment, blocks, committed) = (parse(assignment)?, parse(blocks)?, parse(committed)?);
+    let id = assignment.get("id").cloned().unwrap_or(Value::Null);
+    guard(|| {
+        planning::credited_done_minutes(&assignment, &id, &blocks, &committed).map_err(crate::raise)
+    })
+}
+
+#[pyfunction]
 fn reuse_capacity(existing_count: i64, added_count: i64, label: &str) -> PyResult<String> {
     guard(|| {
         Ok(planning::capacity_problem(
@@ -1966,6 +1975,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         reuse_occurrence_days,
         reuse_session_minutes,
         reuse_available_minutes,
+        reuse_done_minutes,
         reuse_capacity,
         reuse_overlap,
         reuse_late_from,

@@ -170,9 +170,21 @@ fn merge_occupancy(base: Vec<u128>, extra: Vec<u128>) -> PyResult<Vec<u128>> {
 }
 
 #[pyfunction]
+fn spread_session_min(remaining: i64) -> PyResult<i64> {
+    guard(|| Ok(plan::spread_session_min(remaining)))
+}
+
+#[pyfunction]
+fn spread_min() -> PyResult<i64> {
+    guard(|| Ok(plan::SPREAD_MIN))
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
 fn spread_sessions(
     estimate_min: i64,
     focus_minutes: i64,
+    done_min: i64,
     planned_min: i64,
     due: &str,
     session_min: i64,
@@ -182,6 +194,7 @@ fn spread_sessions(
         let (sessions, remaining) = plan::spread_sessions(
             estimate_min,
             focus_minutes,
+            done_min,
             planned_min,
             due,
             session_min,
@@ -407,6 +420,8 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         session_inside_work_windows,
         merge_occupancy,
         spread_sessions,
+        spread_session_min,
+        spread_min,
         solve,
         reschedule_after_miss,
         reschedule_running_late,
@@ -467,10 +482,11 @@ fn payload_digest(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<String> 
 }
 
 #[pyfunction]
-fn assignment_view(body: &str, revision: i64, planned: i64) -> PyResult<String> {
+#[pyo3(signature = (body, revision, planned, done=None))]
+fn assignment_view(body: &str, revision: i64, planned: i64, done: Option<i64>) -> PyResult<String> {
     guard(|| {
         let view =
-            store::assignment_view(&parse(body)?, revision, planned).map_err(crate::raise)?;
+            store::assignment_view(&parse(body)?, revision, planned, done).map_err(crate::raise)?;
         Ok(dump(&view))
     })
 }

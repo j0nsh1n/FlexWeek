@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
+from backend.assignments import unplanned_minutes
 from backend.availability import spread_sessions
 from backend.models import ESTIMATE_MAX_MIN, Assignment, parse_due
 from backend.slots import SLOT_MIN, hhmm_to_minutes
@@ -357,7 +358,9 @@ class HomeworkDraft:
     def _spread_figures(self) -> tuple[int, str, list[dict]]:
         due = self._chosen_due()
         focus = int(self.original.get("focus_minutes") or 0)
-        remaining = max(0, self.estimate() - focus)
+        done_for = getattr(self.session, "done_minutes_for", None)
+        done = done_for(self.original.get("id")) if done_for is not None else 0
+        remaining = unplanned_minutes(self.estimate(), focus, done, 0)
         session_min = spread_session_min(remaining)
         ahead = str(getattr(self.session, "selected_day", "") or "")
         start = max(self.today, ahead)
@@ -365,6 +368,7 @@ class HomeworkDraft:
         sessions, _off_grid = spread_sessions(
             estimate_min=self.estimate(),
             focus_minutes=focus,
+            done_min=done,
             planned_min=0,
             due=due,
             session_min=session_min,

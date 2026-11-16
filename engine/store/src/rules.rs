@@ -51,9 +51,15 @@ pub fn payload_digest(value: &Value) -> String {
     digest(&canonical(value))
 }
 
-/// An assignment as the list shows it: the stored body, then the revision and the minutes
-/// still unplanned. A key the body already has keeps its place.
-pub fn assignment_view(body: &Value, revision: i64, planned: i64) -> EngineResult<Value> {
+/// An assignment as the list shows it: the stored body, then the revision, the minutes still
+/// unplanned and, when given, the minutes of sessions ticked done in every saved week. A key the body already has
+/// keeps its place.
+pub fn assignment_view(
+    body: &Value,
+    revision: i64,
+    planned: i64,
+    done: Option<i64>,
+) -> EngineResult<Value> {
     let Value::Object(fields) = body else {
         return Err(type_error(format!(
             "'{}' object is not a mapping",
@@ -67,8 +73,16 @@ pub fn assignment_view(body: &Value, revision: i64, planned: i64) -> EngineResul
     view.insert("planned_min".into(), json!(planned));
     view.insert(
         "unplanned_min".into(),
-        json!(plan::unplanned_minutes(estimate, focus, planned)),
+        json!(plan::unplanned_minutes(
+            estimate,
+            focus,
+            done.unwrap_or(0),
+            planned
+        )),
     );
+    if let Some(done) = done {
+        view.insert("done_min".into(), json!(done));
+    }
     Ok(Value::Object(view))
 }
 
@@ -528,31 +542,36 @@ mod tests {
         // {**body, "revision": 3, "planned_min": 45, "unplanned_min": max(0, 90 - 30 - 45)}
         let body = text(r#"{"id": "a", "estimate_min": 90, "focus_minutes": 30, "revision": 9}"#);
         assert_eq!(
-            assignment_view(&body, 3, 45).unwrap().to_string(),
-            r#"{"id":"a","estimate_min":90,"focus_minutes":30,"revision":3,"planned_min":45,"unplanned_min":15}"#
+            assignment_view(&body, 3, 45, Some(0)).unwrap().to_string(),
+            r#"{"id":"a","estimate_min":90,"focus_minutes":30,"revision":3,"planned_min":45,"unplanned_min":15,"done_min":0}"#
         );
         let done = text(r#"{"estimate_min": 30, "focus_minutes": 60}"#);
         assert_eq!(
-            assignment_view(&done, 1, 0).unwrap().to_string(),
-            r#"{"estimate_min":30,"focus_minutes":60,"revision":1,"planned_min":0,"unplanned_min":0}"#
+            assignment_view(&done, 1, 0, Some(20)).unwrap().to_string(),
+            r#"{"estimate_min":30,"focus_minutes":60,"revision":1,"planned_min":0,"unplanned_min":0,"done_min":20}"#
         );
     }
 
     #[test]
     fn assignment_view_raises_what_python_raised() {
-        let missing = assignment_view(&text(r#"{"focus_minutes": 1}"#), 1, 0).unwrap_err();
+        let missing = assignment_view(&text(r#"{"focus_minutes": 1}"#), 1, 0, None).unwrap_err();
         assert_eq!(
             (missing.kind, missing.message.as_str()),
             (ErrorKind::Key, "estimate_min")
         );
-        let none = assignment_view(&text(r#"{"estimate_min": null, "focus_minutes": 1}"#), 1, 0)
-            .unwrap_err();
+        let none = assignment_view(
+            &text(r#"{"estimate_min": null, "focus_minutes": 1}"#),
+            1,
+            0,
+            None,
+        )
+        .unwrap_err();
         assert_eq!(none.kind, ErrorKind::Type);
         assert_eq!(
             none.message,
             "int() argument must be a string, a bytes-like object or a real number, not 'NoneType'"
         );
-        let list = assignment_view(&text("[1]"), 1, 0).unwrap_err();
+        let list = assignment_view(&text("[1]"), 1, 0, None).unwrap_err();
         assert_eq!(list.message, "'list' object is not a mapping");
     }
 

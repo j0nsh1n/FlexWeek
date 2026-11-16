@@ -95,6 +95,7 @@ def spread_sessions(
     *,
     estimate_min: int,
     focus_minutes: int,
+    done_min: int,
     planned_min: int,
     due: str,
     session_min: int,
@@ -103,6 +104,7 @@ def spread_sessions(
     sessions, remaining = flexweek_engine.spread_sessions(
         estimate_min,
         focus_minutes,
+        done_min,
         planned_min,
         due,
         session_min,

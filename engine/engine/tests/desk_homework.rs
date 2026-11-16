@@ -798,3 +798,30 @@ fn homework_that_is_not_an_object_is_refused() {
         "agenda.rs 408 refuses a stored homework that is not an object"
     );
 }
+
+/// A session ticked done keeps its length when the estimate changes: it is time done, and done time
+/// counts in every count. Essay was 90 with its one 90-minute session ticked done; raised to 120, the
+/// session stays 90 so 30 still need a time.
+#[test]
+fn a_session_ticked_done_keeps_its_length_when_the_estimate_grows() {
+    let mut session = flexible("s1", "Essay", 90, vec![2]);
+    put(&mut session, "completed", json!(true));
+    let blocks = vec![session];
+    let assignments = assignments_of(json!({"essay": known_essay()}));
+    let changed = edit(
+        &blocks,
+        &assignments,
+        &essay("Essay", 120),
+        None,
+        false,
+        "s-new",
+    )
+    .expect("edit");
+    let kept: Vec<i64> = changed
+        .blocks
+        .iter()
+        .filter(|block| block["assignment_id"] == "essay")
+        .map(|block| block["duration_min"].as_i64().unwrap_or(0))
+        .collect();
+    assert_eq!(kept, vec![90]);
+}
