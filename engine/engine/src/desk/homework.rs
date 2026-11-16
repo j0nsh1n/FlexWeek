@@ -82,9 +82,11 @@ pub fn edit_homework(
         .iter()
         .filter(|block| block.get("assignment_id") == Some(&body_id))
         .collect();
+    // A session ticked done keeps its length: it is time done, and done time counts in every count.
     let whole = !spread
         && sessions.len() == 1
         && known.is_some()
+        && !truthy(sessions[0].get("completed"))
         && sessions[0].get("duration_min")
             == known.as_ref().and_then(|item| item.get("estimate_min"));
 

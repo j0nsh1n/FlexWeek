@@ -1418,10 +1418,12 @@ class NativeSession(QObject):
         sessions = [item for item in self.blocks if item.get("assignment_id") == body["id"]]
         # One session as long as the old estimate is the homework's only planned time, so it follows
         # the new estimate. Spread, pasted or partly planned sessions keep the lengths already chosen.
+        # A session ticked done keeps its length: it is time done, and done time counts in every count.
         whole = (
             not spread
             and len(sessions) == 1
             and known is not None
+            and not sessions[0].get("completed")
             and sessions[0]["duration_min"] == known.get("estimate_min")
         )
         blocks = []

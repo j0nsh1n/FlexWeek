@@ -5140,9 +5140,18 @@ class NativeWindow(QMainWindow):
     def _plan_unfinished(self, assignment_id: str) -> None:
         # Time the week already holds without a time (a waiting or missed session) is placed where it
         # is; only minutes no session holds become a new session through the preview.
-        if assignment_id in self.session._overdue_assignment_ids() or self.session.remaining_for(
-            assignment_id
-        ) < 15:
+        missed = self.session.missed_block_ids()
+        held = any(
+            block.get("assignment_id") == assignment_id
+            and not block.get("completed")
+            and (not block.get("start") or block["id"] in missed)
+            for block in self.session.blocks
+        )
+        if (
+            held
+            or assignment_id in self.session._overdue_assignment_ids()
+            or self.session.remaining_for(assignment_id) < 15
+        ):
             self.session.plan_left([assignment_id])
             return
         item = self.session.assignments.get(assignment_id)

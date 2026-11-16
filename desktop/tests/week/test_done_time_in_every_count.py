@@ -96,3 +96,51 @@ def test_an_edit_keeps_the_done_time_from_earlier_weeks(
     session.add_homework({**session.assignments["lab"], "notes": "Cite sources"})
     assert sum(row["minutes"] for row in session.homework_time_needed()) == needed
     assert [block["duration_min"] for block in lab_sessions(window)] == [needed]
+
+
+def test_a_session_ticked_done_keeps_its_length_when_the_estimate_grows(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    # The Lab report was 60 min with its one hour ticked done; raised to 120, that hour stays an hour,
+    # so 60 still need a time.
+    session = window.session
+    week = session.week_start
+    due = (datetime.fromisoformat(week) + timedelta(days=6)).date().isoformat() + "T23:59"
+    session.add_homework({"id": "lab", "title": "Lab report", "estimate_min": 60, "due": due, "revision": 0})
+    session.save()
+    settled(qapp, window)
+    hour = lab_sessions(window)[0]
+    session.add_block({**hour, "days": [0], "start": "06:00", "completed": True, "completed_day": 0})
+    session.save()
+    settled(qapp, window)
+    session.add_homework({**session.assignments["lab"], "estimate_min": 120})
+    assert [block["duration_min"] for block in lab_sessions(window) if block.get("completed")] == [60]
+    assert sum(row["minutes"] for row in session.homework_time_needed()) == 60
+
+
+def test_plan_into_this_week_places_a_waiting_session_and_the_rest(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The Lab report (120 min) holds one 60-minute session with no time and 60 minutes no session holds:
+    # Plan into this week gives both a time, not only the uncovered hour.
+    session = window.session
+    week = session.week_start
+    due = (datetime.fromisoformat(week) + timedelta(days=6)).date().isoformat() + "T23:59"
+    session.add_homework({"id": "lab", "title": "Lab report", "estimate_min": 60, "due": due, "revision": 0})
+    session.save()
+    settled(qapp, window)
+    session.assignments["lab"]["estimate_min"] = 120
+    session.dirty_assignments.add("lab")
+    session.save()
+    settled(qapp, window)
+    assert [(block["duration_min"], block.get("start")) for block in lab_sessions(window)] == [(60, None)]
+    # The preview offers only a new session for the uncovered hour, so it must not be the way taken.
+    previews: list[str] = []
+    monkeypatch.setattr(window, "_show_preview", lambda title, *_args, **_kwargs: previews.append(title))
+    window._plan_unfinished("lab")
+    assert previews == []
+    wait_until(qapp, lambda: not session.busy and not session.planning)
+    settled(qapp, window)
+    open_sessions = [block for block in lab_sessions(window) if not block.get("completed")]
+    assert all(block.get("start") for block in open_sessions), open_sessions
+    assert sum(block["duration_min"] for block in open_sessions) == 120
