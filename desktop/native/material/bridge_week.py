@@ -716,9 +716,10 @@ class WeekBridge(QObject):
 
     @Property(int, notify=homeworkChanged)
     def listedCount(self) -> int:
-        """Everything the drawer lists: the cards and the lines for homework with no session."""
-        lines = [line for line in self._leftover_words.split("\n") if line]
-        return len(self._homework_rows) + len(lines)
+        """How many homework the drawer lists, each once: a homework with a card and a "with no time" line
+        is one. The lines say a title first, so a card and a line with the same title are the same one."""
+        lines = [line.split(" · ")[0] for line in self._leftover_words.split("\n") if line]
+        return len({row["title"] for row in self._homework_rows} | set(lines))
 
     @Property(str, notify=homeworkChanged)
     def timeWords(self) -> str:

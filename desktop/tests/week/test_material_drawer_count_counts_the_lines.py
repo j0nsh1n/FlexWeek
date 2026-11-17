@@ -1,5 +1,5 @@
-"""Material drawer: the count beside "No time yet" counts what the drawer lists, the cards and the lines
-for homework that has minutes no session holds ("Science poster · 1 h with no time")."""
+"""Material drawer: the count beside "No time yet" counts each homework the drawer lists once, as a card
+or as a line for minutes no session holds ("Science poster · 1 h with no time"), or both."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
@@ -22,7 +22,7 @@ def _publish(window, qapp) -> None:
     _pump(qapp)
 
 
-def test_the_count_includes_the_lines_for_homework_with_no_session(qapp, window) -> None:
+def test_the_count_includes_each_homework_with_a_line_and_no_card(qapp, window) -> None:
     root = _reset(window, qapp)
     due = (_week_monday(window) + timedelta(days=6)).isoformat()
     _homework(window, "sheet", "Math worksheet", 30, due)
@@ -40,3 +40,14 @@ def test_the_count_is_zero_when_nothing_is_listed(qapp, window) -> None:
     _publish(window, qapp)
 
     assert _qml(root, "homeworkCount").property("text") == "0"
+
+
+def test_a_homework_with_a_card_and_a_line_counts_once(qapp, window) -> None:
+    root = _reset(window, qapp)
+    due = (_week_monday(window) + timedelta(days=6)).isoformat()
+    _homework(window, "sheet", "Math worksheet", 30, due)
+    settled(qapp, window)
+    window.session.homework_remainders = lambda: [("Math worksheet", 10), ("History essay", 45)]
+    _publish(window, qapp)
+
+    assert _qml(root, "homeworkCount").property("text") == "2"
