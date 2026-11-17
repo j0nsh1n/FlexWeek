@@ -711,14 +711,25 @@ pub fn open_rest_sessions_at(
         if crate::model::parse_due(due)?.0 < monday {
             continue;
         }
-        let has_open = out.iter().any(|block| {
-            block.get("assignment_id").and_then(Value::as_str) == Some(id)
-                && !truthy(block.get("start"))
-                && !block
-                    .get("completed")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false)
-        });
+        let mut pinned_passed = false;
+        for block in blocks {
+            if block.get("assignment_id").and_then(Value::as_str) == Some(id) {
+                if let Some(now) = now.filter(|value| !value.is_null()) {
+                    pinned_passed |= pinned_past(block, now)?;
+                }
+            }
+        }
+        // A waiting session covers the homework's minutes unless a pinned session that passed left
+        // some over; `uncovered_minutes` below already counts the waiting one as held.
+        let has_open = !pinned_passed
+            && out.iter().any(|block| {
+                block.get("assignment_id").and_then(Value::as_str) == Some(id)
+                    && !truthy(block.get("start"))
+                    && !block
+                        .get("completed")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false)
+            });
         let already_placed_earlier = earlier_blocks.iter().any(|block| {
             block.get("assignment_id").and_then(Value::as_str) == Some(id)
                 && truthy(block.get("start"))

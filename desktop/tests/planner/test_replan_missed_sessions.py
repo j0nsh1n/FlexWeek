@@ -384,6 +384,29 @@ def test_a_pinned_session_that_passed_stays_and_its_undone_minutes_still_need_a_
     assert _sentence(session) == EVERYTHING
 
 
+def test_one_plan_press_places_the_waiting_session_and_the_pinned_past_ones_minutes(
+    qapp: QApplication, open_light: Callable[..., NativeWindow]
+) -> None:
+    """A 2 h essay in two 1 h sessions: one pinned on Tuesday 16:00 (passed unfinished), one waiting in the
+    drawer for a time. One Plan press places the waiting one and gives the pinned one's hour a new session,
+    so nothing is left with no time while Thursday evening to Saturday has room."""
+    session, work = _essay_planned_on_tuesday(qapp, open_light, estimate=120, pinned=True)
+    waiting = {key: value for key, value in work.items() if key not in ("start", "pinned")}
+    session.add_block({**waiting, "id": "essay-waiting", "days": [3, 4], "duration_min": 60})
+    session.save()
+    _settle(qapp, session)
+    assert [item["minutes"] for item in session.homework_time_needed()] == [120]
+    session.solve()
+    _settle(qapp, session)
+    kept = _block(session, work["id"])
+    assert (kept["days"], kept["start"], kept.get("pinned")) == ([1], "16:00", True)
+    mine = [item for item in session.blocks if item.get("assignment_id") == "essay"]
+    assert sorted(item["duration_min"] for item in mine) == [60, 60, 60]
+    assert all(item.get("start") for item in mine)
+    assert session.homework_time_needed() == []
+    assert _sentence(session) == EVERYTHING
+
+
 def test_a_pinned_session_ticked_done_asks_for_no_new_session(
     qapp: QApplication, open_light: Callable[..., NativeWindow]
 ) -> None:

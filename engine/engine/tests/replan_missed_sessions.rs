@@ -282,6 +282,34 @@ fn test_a_new_session_for_a_pinned_past_ones_minutes_leaves_nothing_needed() {
 }
 
 #[test]
+fn test_a_pinned_past_session_gets_its_new_session_though_another_one_waits_for_a_time() {
+    // A 2 h homework in two 1 h sessions: one pinned on Tuesday (passed), one waiting in the drawer.
+    let mut pinned = session("essay", 1, "16:00", 60);
+    pinned["pinned"] = json!(true);
+    let mut waiting = session("essay-2", 0, "09:00", 60);
+    waiting.as_object_mut().expect("object").remove("start");
+    let assignments = essay(120, 0, "2026-11-07T23:59");
+    let now = not_before();
+    let open = with_rest(&[pinned, waiting], &assignments, &now);
+    let rest = open
+        .iter()
+        .find(|block| block["id"] == "essay-a-rest-2026-11-02")
+        .expect("a new session for the pinned one's 60 minutes");
+    assert_eq!(rest["duration_min"], 60);
+    let (_, targets) = request_at(open.clone(), &assignments, false, &now);
+    assert_eq!(targets, ["essay-2", "essay-a-rest-2026-11-02"]);
+    // One Plan press places everything: nothing is still needed once both have a time.
+    let mut placed = open.clone();
+    for (at, start) in [(1, "10:00"), (2, "11:00")] {
+        placed[at]["start"] = json!(start);
+        placed[at]["days"] = json!([4]);
+    }
+    assert_eq!(needed(&placed, &assignments, Some(&now)), 0);
+    // Pressed again, it makes no further session.
+    assert_eq!(with_rest(&placed, &assignments, &now).len(), 3);
+}
+
+#[test]
 fn test_a_pinned_session_does_not_hold_the_minutes_of_a_missed_one_after_it() {
     // 60 minutes to do, a pinned session on Monday and an unpinned one on Tuesday, both passed:
     // the pinned one holds nothing, so the Tuesday session is still owed all 60.
