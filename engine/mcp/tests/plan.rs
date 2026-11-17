@@ -435,13 +435,19 @@ fn plan_never_places_homework_in_time_that_has_passed() {
 /// An essay of 60 minutes due Friday 21:00 whose one planned session ended on Monday 10:00 (a hand-shaped
 /// one when `pinned`), for a plan on Wednesday 21 Oct 12:00, and what the plan placed.
 fn plan_with_a_session_from_monday(name: &str, pinned: bool) -> (Value, Value) {
+    plan_with_a_session_from_monday_due(name, pinned, "2026-10-23T21:00")
+}
+
+fn plan_with_a_session_from_monday_due(name: &str, pinned: bool, due: &str) -> (Value, Value) {
     let world = signed_in(name);
     let conn = open_connection(Path::new(&world.database_arg)).expect("open");
     insert_assignment(
         &conn,
         world.user,
         "essay",
-        r#"{"id":"essay","title":"Essay","due":"2026-10-23T21:00","estimate_min":60,"focus_minutes":0,"completed":false,"priority":2,"energy":"medium","spread":"one"}"#,
+        &format!(
+            r#"{{"id":"essay","title":"Essay","due":"{due}","estimate_min":60,"focus_minutes":0,"completed":false,"priority":2,"energy":"medium","spread":"one"}}"#
+        ),
     )
     .expect("homework");
     let mut session = json!({
@@ -483,6 +489,21 @@ fn plan_moves_a_session_of_this_week_that_passed_unfinished() {
     assert!(
         (day, end) <= (4, 21 * 60),
         "before it is due, got {day} {end}"
+    );
+}
+
+#[test]
+fn plan_that_cannot_place_a_passed_session_still_saves_that_it_has_no_time() {
+    // Due Wednesday 12:30 and now Wednesday 12:00: the passed Monday session (60 minutes) cannot fit
+    // before it is due. It places nothing, but the expired Monday time must not stay saved.
+    let (body, blocks) =
+        plan_with_a_session_from_monday_due("plan-saves-unplaced", false, "2026-10-21T12:30");
+    assert_eq!(body["ok"], json!(true), "got {body}");
+    assert_eq!(body["result"]["placed"], json!([]), "got {body}");
+    assert_eq!(
+        spans(session_of(&blocks, "essay")),
+        Vec::<(i64, i64, i64)>::new(),
+        "the passed time is still saved: {blocks}"
     );
 }
 

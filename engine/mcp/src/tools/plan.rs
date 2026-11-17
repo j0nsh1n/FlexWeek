@@ -289,6 +289,9 @@ struct Planned {
     earlier: Vec<Value>,
     placed: Vec<Value>,
     not_placed: Vec<Value>,
+    /// Whether planning changed the week's blocks, a passed session's time cleared included, though
+    /// nothing was placed.
+    changed: bool,
 }
 
 fn row(block: &Value) -> Value {
@@ -348,6 +351,7 @@ fn run_plan(
         earlier: Vec::new(),
         placed: Vec::new(),
         not_placed: Vec::new(),
+        changed: false,
     };
     if start.is_some_and(|(day, _)| day > 6) {
         return Ok(empty(WEEK_OVER));
@@ -632,6 +636,7 @@ fn run_plan(
     )
     .map_err(engine)?;
     let trace = solver::trace_to_value(&trace);
+    let before_plan = week_blocks.clone();
     let applied = planning::apply_plan(
         &Value::Array(week_blocks),
         &trace,
@@ -681,6 +686,7 @@ fn run_plan(
         not_placed.push(shown);
     }
     not_placed.extend(left_rows);
+    let changed = timing_changed(&before_plan, &settled);
     Ok(Planned {
         message: String::new(),
         week: Some(settled),
@@ -689,7 +695,29 @@ fn run_plan(
         earlier: earlier_updates,
         placed,
         not_placed,
+        changed,
     })
+}
+
+/// Whether a block's time or length differs between the two weeks, or a block is gone or new. The
+/// settle step may reshape other fields of a week where nothing was placed; those are not a change to save.
+fn timing_changed(before: &[Value], after: &[Value]) -> bool {
+    let timing = |block: &Value| {
+        (
+            block["id"].clone(),
+            block
+                .get("start")
+                .cloned()
+                .filter(|start| start.is_string()),
+            block["days"].clone(),
+            block["duration_min"].clone(),
+        )
+    };
+    let mut was: Vec<_> = before.iter().map(timing).collect();
+    let mut is: Vec<_> = after.iter().map(timing).collect();
+    was.sort_by_key(|row| row.0.to_string());
+    is.sort_by_key(|row| row.0.to_string());
+    was != is
 }
 
 fn reply(
@@ -750,8 +778,12 @@ fn perform(app: &crate::App, args: &PlanArgs) -> Result<Value, String> {
     }
     let target = week::resolve_week(&args.week_start, app.first_weekday())?;
     let planned = run_plan(app, &opened.conn, opened.user_id, args, &target)?;
-    let Some(week) = planned.week.clone().filter(|_| !planned.placed.is_empty()) else {
-        // Nothing placed is nothing written, and no restore point.
+    let Some(week) = planned
+        .week
+        .clone()
+        .filter(|_| !planned.placed.is_empty() || planned.changed)
+    else {
+        // Nothing placed and nothing changed is nothing written, and no restore point.
         return reply(&planned, &args.week_start, planned.revision.clone(), None);
     };
     let mut weeks = match &planned.basis {
