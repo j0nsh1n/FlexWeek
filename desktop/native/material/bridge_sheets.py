@@ -237,6 +237,7 @@ class SheetsBridge(QObject):
             category = "assignments"
         kept, self._kept_homework = self._kept_homework, None
         if kept is not None:
+            kept.read_clock()
             kept.follow_week(HomeworkDraft(session, category=category).when_day)
         self._homework = kept or HomeworkDraft(session, category=category)
         self._open("homework")
@@ -258,6 +259,7 @@ class SheetsBridge(QObject):
         start_hhmm = f"{start_min // 60:02d}:{start_min % 60:02d}"
         kept, self._kept_homework = self._kept_homework, None
         if kept is not None:
+            kept.read_clock()
             kept.follow_week(HomeworkDraft(session, category=category).when_day)
             kept.use_picked(day, start_hhmm)
             self._homework = kept

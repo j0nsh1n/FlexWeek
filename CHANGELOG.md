@@ -105,6 +105,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Plan my homework no longer gives a homework due in more than a week less time than its share because of a session that already passed unfinished. A session that passed holds none of the week's share.
 - When the assistant plans a homework whose passed session cannot fit before its due time, it now saves that the session has no time. The passed time used to stay on the week.
 - The count beside Plan my homework now goes up at the moment a planned session passes unfinished, with no other click. It stayed at zero while the side panel already listed the homework.
+- In the Material style, an Add homework sheet kept with Esc now checks a time you pick later against the time it is then, not the time when you first opened it. A time that has already passed is no longer accepted.
 
 ## [1.3.0] - 2026-11-10
 

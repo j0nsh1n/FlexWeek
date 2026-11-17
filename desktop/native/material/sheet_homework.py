@@ -88,8 +88,7 @@ class HomeworkDraft:
         estimate_min: int | None = None,
     ) -> None:
         self.session = session
-        self.now = datetime.fromtimestamp(session.now_ms() / 1000)
-        self.today = self.now.date().isoformat()
+        self.read_clock()
         self.existing = assignment is not None
         # The pinned day came from a gesture (a time drawn on the grid), not from the app's default.
         self._day_given = when_day is not None or day is not None
@@ -384,6 +383,12 @@ class HomeworkDraft:
         return {"session_min": session_min, "from_date": from_date}
 
     # Edits ------------------------------------------------------------------------------
+
+    def read_clock(self) -> None:
+        """The clock now: a sheet kept while the student was away judges a picked time by the time it is
+        when it opens again, not by the time it was first built."""
+        self.now = datetime.fromtimestamp(self.session.now_ms() / 1000)
+        self.today = self.now.date().isoformat()
 
     def use_picked(self, day: int, start: str) -> None:
         """A kept new sheet opened again from a time picked on the grid: it is pinned to the picked day and
