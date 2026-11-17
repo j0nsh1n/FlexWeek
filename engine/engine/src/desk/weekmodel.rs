@@ -209,7 +209,7 @@ pub fn due_label_text(due: Option<&str>, today: NaiveDate) -> EngineResult<Strin
 
 /// The names of the days of the week on screen: from its date when `week_start` is given, else
 /// as a week from Monday.
-fn shown_names(week_start: &str, full: bool) -> EngineResult<Vec<&'static str>> {
+pub(crate) fn shown_names(week_start: &str, full: bool) -> EngineResult<Vec<&'static str>> {
     if week_start.is_empty() {
         return Ok(if full { DAY_FULL } else { DAYS }.to_vec());
     }

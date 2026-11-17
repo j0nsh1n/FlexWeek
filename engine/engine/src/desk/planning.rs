@@ -1137,7 +1137,8 @@ pub fn settle_placements_after_deadline(
             continue;
         };
         let title = or_default(get(block, "title")?, json!("Homework"));
-        let shown = DAY_FULL[tuple_index(DAY_FULL.len(), &day)?];
+        let names = crate::desk::weekmodel::shown_names(week_start, true)?;
+        let shown = names[tuple_index(names.len(), &day)?];
         let stamp = crate::desk::weekmodel::hhmm_text(text(subscript(block, "start")?, "split")?)?;
         lost.set(
             subscript(block, "id")?.clone(),
