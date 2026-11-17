@@ -2,16 +2,35 @@
 
 Places homework around school and sports, then explains why something moved.
 
-Congressional App Challenge 2026. No chatbot. No product demo mode.
+FlexWeek is a weekly planner for high school students who juggle classes, sports, activities and homework. You
+enter the fixed parts of your week (school, practice, lessons) and your homework with its due date and how long it
+takes. FlexWeek finds free time for each homework before it is due, keeps the times you chose yourself, and says in
+plain words what it placed, what it moved and what did not fit. It runs on your own computer: your week is saved there,
+it needs no internet, and it uses no AI service. Made for the Congressional App Challenge 2026.
 
-![FlexWeek's week view after Solve: school, soccer practice and a piano lesson are fixed, and four homework and study tasks are placed around them](docs/images/week-light.png)
+![FlexWeek's week after Plan my homework: school and soccer practice are fixed, and homework is placed around them](docs/images/week-light.png)
+
+## Features
+
+- **Plan my homework** places each homework in free time before it is due, around fixed times, and explains anything
+  it could not place. Replan all starts fresh; homework you placed by hand stays where you put it.
+- **Spread over days or in one go**: long homework can be split across the days before it is due, or kept whole.
+- **Missed time is made up**: a session whose time passed unfinished is planned again in time still ahead.
+- **Week, Day, Month and My day** screens; drag a block to move it, drag its edge to resize it, and Undo puts it back.
+- **Your week, your way**: the week can start on any day; School hours and activities repeat every week, with one-week
+  changes when you need them.
+- **Focus timer** that counts toward the homework it is for, and **reminders and alarms** for what comes next.
+- **Two looks**: the standard Widgets designs with ten looks and a look editor, and a Material 3 style; light and dark;
+  keyboard shortcuts throughout.
+- **Phone app** for Android that syncs with your computer, and an optional **assistant helper** for AI assistants
+  that speak MCP.
 
 ## Download
 
 From the [latest GitHub Release](https://github.com/j0nsh1n/FlexWeek/releases/latest):
 
 - **Download for Windows.** `FlexWeek-Windows-x64-Setup.exe`
-- **Download for Linux.** `FlexWeek-Linux-x86_64.tar.gz`
+- **Download for Linux.** `FlexWeek-Linux-x86_64.tar.gz`, or `FlexWeek-x86_64.AppImage`
 - **Download for Android.** `FlexWeek-Android-<version>.apk` (the version is part of the file name), on the same page. See [Phone app](#phone-app).
 
 Checksum files (`.sha256`) sit next to those downloads if you want to confirm the file is complete. You can ignore them and still open FlexWeek.
@@ -57,7 +76,7 @@ On Debian or Ubuntu without a full desktop, such as a container or a minimal ins
 
 FlexWeek also runs on an Android phone (Android 8.0 or newer). Pair it with your computer in Settings > This computer > Devices: the computer shows an 8-digit code, you type it on the phone, and the code works once and lasts 5 minutes. The phone runs the same engine as your computer and syncs your real homework both ways. When your computer isn't on the same Wi-Fi, FlexWeek uses a public relay run by n0. It sees that two devices are talking, not what they send. With no phone linked, the computer opens no network connection and contacts no relay. How to build the app is in [docs/android.md](docs/android.md).
 
-**Get it.** Download `FlexWeek-Android-<version>.apk` from the [latest GitHub Release](https://github.com/j0nsh1n/FlexWeek/releases/latest), open it on the phone and allow installs from your browser or file manager when Android asks. The app is signed with the project's own key, not Google Play's. After that, the app offers each new release itself (Settings), and installing it over the old one keeps your data. The phone shows Today, a list of the week and your reminders, and syncs; it does not have Month or Day screens yet.
+**Get it.** Download `FlexWeek-Android-<version>.apk` from the [latest GitHub Release](https://github.com/j0nsh1n/FlexWeek/releases/latest), open it on the phone and allow installs from your browser or file manager when Android asks. The app is signed with the project's own key, not Google Play's. After that, the app offers each new release itself (Settings), and installing it over the old one keeps your data. The phone has Today, Week, Add homework, Plan, Running late, a focus timer, reminders and an Up next home-screen widget, and syncs; it does not have Month or Day screens yet.
 
 ## Assistant helper
 
@@ -65,9 +84,21 @@ The Linux downloads include a helper that lets an AI assistant you already use (
 
 ## Screenshots
 
-| First-week setup | Dark theme |
+| Material 3 style | Dark theme |
 | --- | --- |
-| ![The first-week setup asks what homework is due first, how long it takes and when it is due](docs/images/setup.png) | ![The same solved week in the dark theme](docs/images/week-dark.png) |
+| ![The same week in the Material 3 style](docs/images/material-week.png) | ![The same planned week in the dark theme](docs/images/week-dark.png) |
+
+| First-run setup |
+| --- |
+| ![Setup asks how homework should get a time and how far a dragged block moves](docs/images/setup.png) |
+
+## Tech stack
+
+- **Desktop app**: Python 3.14 with Qt (PySide6), Widgets and QML (Material 3).
+- **Planner and storage**: Rust (`engine/`), built into a Python module with PyO3 and maturin; SQLite (rusqlite).
+- **Local API**: FastAPI and Pydantic, started inside the app on a loopback port.
+- **Phone app**: Android, Kotlin with Jetpack Compose, calling the same Rust engine through UniFFI; sync uses iroh.
+- **Packaging**: Linux tarball and AppImage, Windows installers (Inno Setup and WiX), built on GitHub Actions.
 
 ## Run from source
 
@@ -184,7 +215,7 @@ built on GitHub Actions when a release is made; nobody has yet run the installer
 real Windows PC for this project, so a first install there still needs a person to
 click through SmartScreen and report back.
 
-A Linux desktop build exists: a native Qt window with the FastAPI backend
+The Linux app is a native Qt window with the FastAPI backend
 bundled inside it. It needs no separate server, no Python install and no
 Chromium. Build it with `pip install -r requirements-desktop.txt` then
 `./desktop/build_linux.sh`. Package the download with
@@ -208,10 +239,11 @@ palette in September 2026.
 AI assistance was used throughout development. These models wrote, reviewed
 or checked code, tests and documents under j0nsh1n's direction, who decided
 what was built and checked what shipped:
-- Claude (Anthropic): Opus 5 and 5.5, Fable 5.1, Sonnet 5.5, Haiku 5.5.
+- Claude (Anthropic): Opus 5 and 5.5, Fable 5.1 and 5.2, Sonnet 5.5, Haiku 5.5.
 - Grok 4.6 and 4.7 (xAI) and Composer 2.5, through Cursor.
 - ChatGPT and Codex (OpenAI): GPT-6.1 Sol, GPT-6 Luna.
 - GLM-5.3 Flash (Z.ai), through OpenCode.
+- Kimi K3.1 Pro (Moonshot AI): bug hunting and picture reviews.
 - TypeSafe's Jev and Laya: small typed-decision models used for checks of
   wording and documents.
 
@@ -220,9 +252,11 @@ The app itself uses no AI service.
 The original Sep 6 contest brief (working title Reslot) is in git history. The
 living schedule is the [roadmap](roadmap.md).
 
-Submit by Sunday, October 25, 2026, 8:00 p.m. PDT.
+## Credits
 
-License: GPL-3.0.
+- **Jonathan Shin** ([j0nsh1n](https://github.com/j0nsh1n)): design, development and direction.
+- **Caleb** ([maruzenskymambo](https://github.com/maruzenskymambo)): ideas.
 
-Contributors: j0nsh1n (design, development and direction) and
-maruzenskymambo (ideas).
+## License
+
+FlexWeek is free software under the GNU General Public License v3.0; see [LICENSE](LICENSE).

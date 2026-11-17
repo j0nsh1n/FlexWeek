@@ -27,12 +27,8 @@ Run these from `android/`:
 
 The unit tests cover the Pair screen's code, Today, reminders, the reminder scheduler, the v2 screens (Add homework, Plan, Running late), the foreground sync, the phone's JSON over the Rust core, and core startup.
 
-Build variants:
-
-| Variant | `BuildConfig.V2_ENABLED` | Notes |
-|---|---|---|
-| debug | true | The v2 screens (Add homework, Plan, Running late, Week) are on. |
-| release | false | The v2 screens are hidden. Minification is off. 1.0.0 ships this variant. |
+Build variants: debug and release have the same screens (Today, Week, Add homework, Plan, Running late). The release
+build is the one published; minification is off.
 
 Release APKs are signed with `scripts/android/sign-release.sh`, which needs `FLEXWEEK_ANDROID_KEYSTORE`, `FLEXWEEK_ANDROID_KEYSTORE_PASSWORD_FILE` and `ANDROID_HOME` in the environment, and signs with the `flexweek-release` key alias unless another is set.
 
