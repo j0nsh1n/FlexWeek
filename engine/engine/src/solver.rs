@@ -125,6 +125,8 @@ pub struct TimeBlock {
     pub missed_days: Vec<i64>,
     pub pinned: bool,
     pub prefer_earliest: bool,
+    /// Solve-only. A session of a homework saved In one go: Split long tasks never cuts it in two.
+    pub keep_whole: bool,
     /// The other half of a task split for planning. Not stored or returned.
     pub split_peer: Option<String>,
     /// Fields the planner does not read. Copied through so a round trip keeps them.
@@ -150,6 +152,7 @@ impl Default for TimeBlock {
             missed_days: vec![],
             pinned: false,
             prefer_earliest: false,
+            keep_whole: false,
             split_peer: None,
             rest: Map::new(),
         }
@@ -936,7 +939,9 @@ fn split_long_tasks(flexible: &[TimeBlock], blocks: &[TimeBlock]) -> Vec<TimeBlo
         blocks.iter().map(|block| block.id.clone()).collect();
     let mut out = Vec::with_capacity(flexible.len());
     for block in flexible {
-        let Some((left_len, right_len)) = split_lengths(block.duration_min) else {
+        let Some((left_len, right_len)) =
+            split_lengths(block.duration_min).filter(|_| !block.keep_whole)
+        else {
             out.push(block.clone());
             continue;
         };
@@ -1471,6 +1476,7 @@ const BLOCK_FIELDS: &[&str] = &[
     "missed_days",
     "pinned",
     "prefer_earliest",
+    "keep_whole",
 ];
 
 pub fn block_from_value(value: &Value) -> EngineResult<TimeBlock> {
@@ -1518,6 +1524,10 @@ pub fn block_from_value(value: &Value) -> EngineResult<TimeBlock> {
             .get("prefer_earliest")
             .and_then(Value::as_bool)
             .unwrap_or(false),
+        keep_whole: obj
+            .get("keep_whole")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
         split_peer: None,
         rest,
     })
@@ -1562,6 +1572,9 @@ pub fn block_to_value(block: &TimeBlock) -> Value {
     }
     if block.prefer_earliest {
         map.insert("prefer_earliest".into(), Value::Bool(true));
+    }
+    if block.keep_whole {
+        map.insert("keep_whole".into(), Value::Bool(true));
     }
     Value::Object(map)
 }

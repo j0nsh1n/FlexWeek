@@ -19,6 +19,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from backend import clock as wall_clock
 from backend.assignments import (
     done_minutes_by_id,
+    held_dates_by_id,
     planned_minutes_by_id,
     planned_minutes_from_day,
     prepare_solve,
@@ -1477,6 +1478,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             due=body["due"],
             session_min=payload.session_min,
             from_date=payload.from_date,
+            held_dates=held_dates_by_id(weeks, "2000-01-01").get(assignment_id, []),
         )
         return {
             "assignment_id": assignment_id,

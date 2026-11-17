@@ -248,3 +248,41 @@ def test_planning_a_spread_that_must_share_a_day_succeeds_and_returns_the_notice
     assert any(item.get("kind") == "spread_same_day" and item.get("message") == notice for item in notices), (
         notices
     )
+
+
+def test_split_long_tasks_leaves_a_homework_saved_in_one_go_whole(alice: TestClient) -> None:
+    both = [{"days": [4], "start": "16:00", "end": "20:00"}, {"days": [5], "start": "10:00", "end": "12:00"}]
+    save(alice, work_windows=both, split_long_tasks=True)
+    for spread, expected in (
+        ("one", [("hw1", 120)]),
+        ("spread", [("hw1", 60), ("hw1~2", 60)]),
+    ):
+        body = {
+            "id": "hw",
+            "title": "Essay",
+            "course": None,
+            "category": None,
+            "priority": 2,
+            "energy": "medium",
+            "spotify_url": None,
+            "due": "2026-09-19T23:59",
+            "estimate_min": 120,
+            "focus_minutes": 0,
+            "focus_sessions": 0,
+            "completed": False,
+            "completed_at": None,
+            "revision": 0 if spread == "one" else 1,
+            "spread": spread,
+        }
+        assert alice.put("/api/assignments/hw", json=body, headers=WRITE).status_code == 200
+        session = block("hw1", 120, [4, 5], assignment_id="hw")
+        solved = alice.post(
+            "/api/solve", json={"blocks": [session], "week_start": "2026-09-14"}, headers=WRITE
+        )
+        assert solved.status_code == 200, solved.text
+        flexible = [
+            (item["id"], item["duration_min"])
+            for item in solved.json()["placed"]
+            if item["kind"] == "flexible"
+        ]
+        assert sorted(flexible) == expected

@@ -69,6 +69,11 @@ def planned_minutes_by_id(weeks: list[tuple[str, list[dict]]], from_week: str) -
     return {key: int(value) for key, value in raw.items()}
 
 
+def held_dates_by_id(weeks: list[tuple[str, list[dict]]], from_week: str) -> dict[str, list[str]]:
+    raw = json.loads(flexweek_engine.held_dates_by_id(json.dumps(weeks), from_week))
+    return {key: [str(day) for day in value] for key, value in raw.items()}
+
+
 def done_minutes_by_id(weeks: list[tuple[str, list[dict]]]) -> dict[str, int]:
     raw = json.loads(flexweek_engine.done_minutes_by_id(json.dumps(weeks)))
     return {key: int(value) for key, value in raw.items()}
