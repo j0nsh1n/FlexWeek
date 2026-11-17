@@ -287,7 +287,10 @@ fn test_a_pinned_past_session_gets_its_new_session_though_another_one_waits_for_
     let mut pinned = session("essay", 1, "16:00", 60);
     pinned["pinned"] = json!(true);
     let mut waiting = session("essay-2", 0, "09:00", 60);
-    waiting.as_object_mut().expect("object").remove("start");
+    waiting
+        .as_object_mut()
+        .expect("object")
+        .shift_remove("start");
     let assignments = essay(120, 0, "2026-11-07T23:59");
     let now = not_before();
     let open = with_rest(&[pinned, waiting], &assignments, &now);

@@ -712,9 +712,9 @@ pub fn open_rest_sessions_at(
             continue;
         }
         let mut pinned_passed = false;
-        for block in blocks {
-            if block.get("assignment_id").and_then(Value::as_str) == Some(id) {
-                if let Some(now) = now.filter(|value| !value.is_null()) {
+        if let Some(now) = now.filter(|value| !value.is_null()) {
+            for block in blocks {
+                if block.get("assignment_id").and_then(Value::as_str) == Some(id) {
                     pinned_passed |= pinned_past(block, now)?;
                 }
             }
