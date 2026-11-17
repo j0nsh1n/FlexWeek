@@ -663,3 +663,99 @@ fn plan_takes_from_the_first_stored_week_only_what_the_shown_week_cannot_see() {
         assert_eq!(moved["weeks"][0]["after"], json!([]), "from {start}");
     }
 }
+
+/// Every week on screen that holds `today` and starts on Tuesday to Sunday: its first day, the Monday
+/// of the stored week that holds that day, and how many days into that stored week it starts.
+fn shown_weeks_holding(today: &str) -> Vec<(String, String, i64)> {
+    use chrono::{Datelike, Duration, NaiveDate};
+    let today = NaiveDate::parse_from_str(today, "%Y-%m-%d").unwrap();
+    (1..7)
+        .map(|first_weekday: i64| {
+            let back =
+                (i64::from(today.weekday().num_days_from_monday()) - first_weekday).rem_euclid(7);
+            let start = today - Duration::days(back);
+            let offset = i64::from(start.weekday().num_days_from_monday());
+            let monday = start - Duration::days(offset);
+            (start.to_string(), monday.to_string(), offset)
+        })
+        .collect()
+}
+
+/// Homework added today in a week on screen that does not start on Monday has its waiting session
+/// saved in the stored week that holds the shown week's first days (`split_shown_week`). That stored
+/// week starts before the week on screen, but the session is this week's: it is not "left from last
+/// week". Today is Thursday 19 November (in the first half of some of these weeks, the second of
+/// others) and Monday 23 November (the second half of each).
+#[test]
+fn homework_added_today_is_not_left_from_last_week_whatever_day_the_week_starts() {
+    use chrono::{Duration, NaiveDate};
+    use flexweek_engine::desk::clipboard::{left_over_items, left_over_items_from};
+    for today in ["2026-11-19", "2026-11-23"] {
+        for (start, first, offset) in shown_weeks_holding(today) {
+            let last = NaiveDate::parse_from_str(&start, "%Y-%m-%d").unwrap() + Duration::days(6);
+            let second = (NaiveDate::parse_from_str(&first, "%Y-%m-%d").unwrap()
+                + Duration::days(7))
+            .to_string();
+            let poster = json!({"id": "poster", "title": "Science poster", "due": format!("{last}T21:00"),
+                "estimate_min": 60, "focus_minutes": 0, "completed": false, "planned_min": 60,
+                "unplanned_min": 0, "done_min": 0, "session_weeks": [first]});
+            let shown = vec![
+                json!({"id": "poster-1", "title": "Science poster", "kind": "flexible",
+                "assignment_id": "poster", "duration_min": 60, "days": [0, 1, 2, 3, 4, 5, 6]}),
+            ];
+            let (stored, _) = split_shown_week(&start, &shown, &[], &[]).unwrap();
+            assert_eq!(
+                stored.len(),
+                1,
+                "from {start}: saved in the stored week of {first}"
+            );
+            let items = left_over_items(
+                &json!({"poster": poster}),
+                &json!([first, second]),
+                &start,
+                &format!("{today}T15:40"),
+                &json!(shown),
+                &json!(shown),
+            )
+            .unwrap();
+            assert_eq!(
+                items,
+                Vec::<Value>::new(),
+                "today {today}, week from {start}"
+            );
+            // A session placed on the day before the week on screen passed unfinished: it is in the
+            // same stored week, and it is left from last week.
+            let essay = json!({"id": "essay", "title": "Essay", "due": format!("{last}T21:00"),
+                "estimate_min": 60, "focus_minutes": 0, "completed": false, "planned_min": 0,
+                "unplanned_min": 60, "done_min": 0, "session_weeks": [first]});
+            let passed = json!({"id": "essay-1", "title": "Essay", "kind": "flexible",
+                "assignment_id": "essay", "duration_min": 60, "start": "16:00", "days": [offset - 1]});
+            let mut first_part = stored.clone();
+            first_part.push(passed);
+            let items = left_over_items_from(
+                &json!({"poster": poster, "essay": essay}),
+                &json!([first, second]),
+                &start,
+                &format!("{today}T15:40"),
+                &json!(shown),
+                &json!(shown),
+                &json!(first_part),
+            )
+            .unwrap();
+            let states: Vec<(&str, &str)> = items
+                .iter()
+                .map(|item| {
+                    (
+                        item["id"].as_str().unwrap(),
+                        item["left_over_state"].as_str().unwrap(),
+                    )
+                })
+                .collect();
+            assert_eq!(
+                states,
+                [("essay", "left_from_last_week")],
+                "today {today}, week from {start}"
+            );
+        }
+    }
+}

@@ -3532,8 +3532,11 @@ class NativeSession(QObject):
 
     def unfinished(self) -> list[dict]:
         moment = datetime.fromtimestamp(self.now_ms() / 1000)
-        today = moment.date()
-        today_week = monday_of(today.isoformat())
+        today_week = self.shown_week_of(moment.date().isoformat())
+        # Left from last week shows on the week on screen that holds today.
+        here = self.week_start == today_week
+        # The stored week holding that week's first days, as saved, to tell its earlier days apart.
+        first_part = self._stored_parts[0]["blocks"] if here and len(self._stored_parts) == 2 else []
         items = left_over_items(
             self.assignments,
             self.saved_weeks,
@@ -3541,9 +3544,8 @@ class NativeSession(QObject):
             moment.isoformat(timespec="minutes"),
             self._open_week(),
             self._assignments_basis,
+            first_part,
         )
-        # Left from last week shows on the week on screen that holds today.
-        here = self.week_start == self.shown_week_of(today.isoformat())
         return [item for item in items if here or item.get("left_over_state") == "overdue"]
 
     def _overdue_assignment_ids(self) -> set[str]:

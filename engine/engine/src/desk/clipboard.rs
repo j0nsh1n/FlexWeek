@@ -515,6 +515,7 @@ pub fn unfinished_items(
     Ok(keyed.into_iter().map(|(_, item)| item).collect())
 }
 
+/// `left_over_items_from` with no stored week before today's week on screen known in full.
 pub fn left_over_items(
     assignments: &Value,
     saved_weeks: &Value,
@@ -523,6 +524,36 @@ pub fn left_over_items(
     blocks: &Value,
     committed_blocks: &Value,
 ) -> EngineResult<Vec<Value>> {
+    left_over_items_from(
+        assignments,
+        saved_weeks,
+        today_week,
+        now,
+        blocks,
+        committed_blocks,
+        &json!([]),
+    )
+}
+
+/// Homework overdue at `now`, or left from a week before `today_week`, the first day of the week on
+/// screen that holds today (a Monday, or the chosen first day). `first_part` is the stored week that
+/// holds that day's first days, as saved, when it starts before it: of its sessions, only one lying
+/// wholly on its days before `today_week` is from an earlier week.
+pub fn left_over_items_from(
+    assignments: &Value,
+    saved_weeks: &Value,
+    today_week: &str,
+    now: &str,
+    blocks: &Value,
+    committed_blocks: &Value,
+    first_part: &Value,
+) -> EngineResult<Vec<Value>> {
+    let shown = crate::shown::shown_parts(today_week)?;
+    let first_monday = json!(
+        shown
+            .as_ref()
+            .map_or(today_week, |(first, _, _)| first.as_str())
+    );
     let (today, minute) = crate::model::parse_due(now)?;
     let moment = (today, minute);
     let Value::Object(table) = assignments else {
@@ -541,13 +572,29 @@ pub fn left_over_items(
         let carried = if overdue {
             false
         } else {
-            let week = json!(today_week);
             let empty_weeks = Value::Array(Vec::new());
             let session_weeks = get(assignment, "session_weeks")?.unwrap_or(&empty_weeks);
+            let id = get(assignment, "id")?.unwrap_or(&Value::Null);
             let mut had_past_session = false;
             for session_week in iterate(session_weeks)? {
-                if compare(Cmp::Lt, &session_week, &week)? && contains(saved_weeks, &session_week)?
-                {
+                if !contains(saved_weeks, &session_week)? {
+                    continue;
+                }
+                let before = match &shown {
+                    Some((first, _, offset)) if session_week == json!(first) => {
+                        iterate(first_part)?.iter().any(|block| {
+                            block.get("assignment_id") == Some(id)
+                                && block["days"].as_array().is_some_and(|days| {
+                                    !days.is_empty()
+                                        && days.iter().all(|day| {
+                                            day.as_i64().is_some_and(|day| day < *offset)
+                                        })
+                                })
+                        })
+                    }
+                    _ => compare(Cmp::Lt, &session_week, &first_monday)?,
+                };
+                if before {
                     had_past_session = true;
                     break;
                 }
