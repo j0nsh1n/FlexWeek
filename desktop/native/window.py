@@ -4152,6 +4152,8 @@ class NativeWindow(QMainWindow):
         """Today's app's Day and Week from the open week. Held while the pointer holds something."""
         if self.hand.busy:
             return
+        # Read before the fill, so a session that passes while it runs brings one more refill.
+        clock_state = self._clock_state()
         week = self._week_with_history(
             build_week(
                 self.session.week_start, self.session.blocks, self.session.assignments, self.session.trace
@@ -4182,7 +4184,7 @@ class NativeWindow(QMainWindow):
         )
         self.month_grid.set_unsaved(self.session.unsaved_weeks())
         self.month_grid.set_week(week)
-        self._filled_at_clock = self._clock_state()
+        self._filled_at_clock = clock_state
         self._announce_overdue()
 
     def _sync_week_access_list(self, week) -> None:

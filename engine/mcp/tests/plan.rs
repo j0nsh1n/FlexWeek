@@ -500,8 +500,14 @@ fn plan_that_cannot_place_a_passed_session_still_saves_that_it_has_no_time() {
         plan_with_a_session_from_monday_due("plan-saves-unplaced", false, "2026-10-21T12:30");
     assert_eq!(body["ok"], json!(true), "got {body}");
     assert_eq!(body["result"]["placed"], json!([]), "got {body}");
+    let kept = session_of(&blocks, "essay");
     assert_eq!(
-        spans(session_of(&blocks, "essay")),
+        kept["duration_min"],
+        json!(60),
+        "the session is still there: {blocks}"
+    );
+    assert_eq!(
+        spans(kept),
         Vec::<(i64, i64, i64)>::new(),
         "the passed time is still saved: {blocks}"
     );

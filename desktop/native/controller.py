@@ -470,7 +470,7 @@ class NativeSession(QObject):
         self.material_owns: Callable[[], bool] | None = None
         self._held_alerts: list[dict] = []
         # Finished focus sessions, with their length, not yet added to their homework.
-        self._credits_waiting: list[tuple[dict, int]] = []
+        self._credits_waiting: list[tuple[dict, int, bool]] = []
         self._record_history = True
         self.fired_reminders: set[str] = set()
         self.fired_alarms: set[str] = set()
