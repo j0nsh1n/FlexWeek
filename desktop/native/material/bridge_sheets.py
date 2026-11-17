@@ -548,7 +548,7 @@ class SheetsBridge(QObject):
         session.save()
         existed = made["id"] in before
         self._close()
-        self._say(f"Saved {made['title']}" if existed else added_words(made), undo=True)
+        self._say(f"Saved {made['title']}" if existed else added_words(made, session.week_start), undo=True)
 
     @Slot()
     def unpin(self) -> None:

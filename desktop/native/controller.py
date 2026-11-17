@@ -1544,7 +1544,7 @@ class NativeSession(QObject):
         if not self.hand_move(block_id, from_day, day, start, end):
             return
         origin = from_day if from_day in block["days"] else day
-        words = moved_words(block, origin, day, start, end)
+        words = moved_words(block, origin, day, start, end, self.week_start)
         # Material has no School hours, so its note points to Setup.
         material = self.material_owns is not None and self.material_owns()
         note = one_day_note(block, origin, not material, self.week_start)

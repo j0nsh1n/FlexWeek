@@ -4615,7 +4615,7 @@ class NativeWindow(QMainWindow):
         self._create_range(span.day, span.start, span.end)
         made = [item for item in self.session.blocks if item["id"] not in before]
         if made:
-            self._say_when_saved(added_words(made[0]))
+            self._say_when_saved(added_words(made[0], self.session.week_start))
 
     def _create_range(self, day: int, start_min: int, end_min: int) -> None:
         start = minutes_to_hhmm(start_min)

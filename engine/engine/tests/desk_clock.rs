@@ -92,16 +92,35 @@ fn test_the_week_model_words() {
     assert_eq!(due("2027-01-08T09:30"), "Fri 8 Jan 2027, 09:30");
     set_clock_24h(false);
     assert_eq!(
-        added_words(&block()).expect("words"),
+        added_words(&block(), "").expect("words"),
         "Added Soccer practice on Thu 4:00 PM."
     );
     assert_eq!(
-        moved_words(&block(), 3, 4, 17 * 60, 18 * 60 + 30).expect("words"),
+        moved_words(&block(), 3, 4, 17 * 60, 18 * 60 + 30, "").expect("words"),
         "Moved Soccer practice to Fri 5:00 PM."
     );
     assert_eq!(
-        moved_words(&block(), 3, 3, 16 * 60, 18 * 60).expect("words"),
+        moved_words(&block(), 3, 3, 16 * 60, 18 * 60, "").expect("words"),
         "Soccer practice now ends at 6:00 PM."
+    );
+}
+
+#[test]
+fn test_notices_name_the_day_from_the_week_on_screen() {
+    let _clock = clock_lock();
+    set_clock_24h(false);
+    // Day 3 is Saturday 7 Nov in a week from Wednesday 4 Nov, and Wednesday 4 Nov in one from Sunday 1.
+    assert_eq!(
+        added_words(&block(), "2026-11-04").expect("words"),
+        "Added Soccer practice on Sat 4:00 PM."
+    );
+    assert_eq!(
+        added_words(&block(), "2026-11-01").expect("words"),
+        "Added Soccer practice on Wed 4:00 PM."
+    );
+    assert_eq!(
+        moved_words(&block(), 3, 4, 17 * 60, 18 * 60 + 30, "2026-11-04").expect("words"),
+        "Moved Soccer practice to Sun 5:00 PM."
     );
 }
 
