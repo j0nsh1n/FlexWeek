@@ -12,7 +12,12 @@ from uuid import uuid4
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from backend import clock as wall_clock
-from backend.assignments import done_minutes_by_id, planned_minutes_by_id, unplanned_minutes
+from backend.assignments import (
+    done_minutes_by_id,
+    planned_minutes_by_id,
+    planned_minutes_from_day,
+    unplanned_minutes,
+)
 from backend.models import Assignment, ProtectedWindow, TimeBlock, WorkWindow, parse_due
 from backend.slots import hhmm_to_minutes
 from backend.weeks import current_week_start
@@ -2450,11 +2455,20 @@ class NativeSession(QObject):
     def _shift_held_numbers(self, data: dict) -> None:
         """A save that moved sessions into or out of a week other than the open one changes what the held
         `planned_min` and `done_min` count, which were read with the open week as saved. Those weeks' change
-        is put on the held numbers now, so every count is right before the server's next read lands."""
+        is put on the held numbers now, so every count is right before the server's next read lands. Planned
+        minutes are counted as the server counts them, from the open week on, so a session in an earlier week
+        changes nothing; done minutes are counted in every week."""
         step = self._travel_step if self._traveling else self._pending_step
         if step is None:
             return
         old_side, new_side = ("after", "before") if self._traveling == "undo" else ("before", "after")
+        # A homework Undo or Redo brought back from a delete step has the numbers that step kept, read with
+        # its sessions in every week as they come back; shifting them again would count those twice.
+        restored = {
+            entry["id"]
+            for entry in step.get("assignments") or []
+            if self._traveling and "basis" in entry and entry[new_side] is not None
+        }
         stored = {week["week_start"]: week for week in data.get("weeks") or []}
         old_weeks: list[tuple[str, list[dict]]] = []
         new_weeks: list[tuple[str, list[dict]]] = []
@@ -2466,11 +2480,14 @@ class NativeSession(QObject):
             new_weeks.append((week_start, stored[week_start].get("blocks") or []))
         if not old_weeks:
             return
-        for key, count in (("planned_min", planned_minutes_by_id), ("done_min", done_minutes_by_id)):
-            args = ("0000-01-01",) if key == "planned_min" else ()
-            gone = count(old_weeks, *args)
-            came = count(new_weeks, *args)
-            for homework in gone.keys() | came.keys():
+        if not self.first_weekday:
+            count_planned = lambda weeks: planned_minutes_by_id(weeks, self.week_start)  # noqa: E731
+        else:
+            count_planned = lambda weeks: planned_minutes_from_day(weeks, self.week_start)  # noqa: E731
+        for key, count in (("planned_min", count_planned), ("done_min", done_minutes_by_id)):
+            gone = count(old_weeks)
+            came = count(new_weeks)
+            for homework in (gone.keys() | came.keys()) - restored:
                 for held in (self.assignments, self._committed_assignments):
                     item = held.get(homework)
                     if item is not None and item.get(key) is not None:

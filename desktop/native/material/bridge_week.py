@@ -305,7 +305,8 @@ class WeekBridge(QObject):
         self._time_words = homework_time_sentence([], needed)
         self._all_timed = not needed
         can_place = getattr(session, "plan_can_place", None)
-        self._can_plan = bool(can_place()) if can_place else bool(homework_rows)
+        # A card the drawer lists is something Plan places, even a task that is not homework.
+        self._can_plan = bool(homework_rows) or (bool(can_place()) if can_place else False)
         remainders = getattr(session, "homework_remainders", None)
         self._leftover_words = "\n".join(
             [
