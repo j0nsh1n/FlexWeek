@@ -101,6 +101,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - The assistant's day and month readings now count homework planned later this week the same way the week screens do: a homework whose session is still ahead of now needs no time, and one whose session passed unfinished still does. They said it still needed the full time while next week was asked for.
 - A "no longer fits" note in a week that starts on another day than Monday now names the right day.
 - In the Material style, Plan my homework now places the minutes no session holds when it is on without a card in the drawer. It did nothing when pressed.
+- The assistant's day and month readings no longer count a session that passed unfinished earlier in the week asked about as planned time. A homework missed on Tuesday now shows as still needing its time, and the next step is to plan it.
 
 ## [1.3.0] - 2026-11-10
 
