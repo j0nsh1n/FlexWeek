@@ -110,6 +110,8 @@ All notable changes to FlexWeek are documented here. Format follows
 - A homework session you placed by hand whose time passed unfinished now still needs its time on every screen: the week, the side panel, Plan's count, the day, the month, the assistant and the phone. It stays where you put it, and Plan my homework gives its minutes a new session.
 - Plan my homework now places everything in one press when a homework has a session waiting for a time and another pinned session that passed unfinished. It placed only the waiting session and needed a second press for the passed session's hour.
 - In a week that is over, a session you pinned that passed unfinished now reads "pinned, in the past" in the homework list, the status line and the side panel, in both looks, where an unpinned one reads "missed". Its minutes still count as needing a time.
+- Plan my homework no longer fails with "Check the required fields, dates, times and lengths" after you move a new session it made onto a time by hand and that time passes too: the hour gets one more new session of its own, and a session you placed keeps its time.
+- In the Material style, Place now on a homework card waiting for a time places that session, instead of picking a session of the homework whose time has passed and showing "Check the required fields...".
 
 ## [1.3.0] - 2026-11-10
 

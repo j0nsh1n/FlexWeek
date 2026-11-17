@@ -743,8 +743,20 @@ pub fn open_rest_sessions_at(
             continue;
         }
         let due = subscript(assignment, "due")?;
+        // The week holds each id once, and an earlier new session (moved by hand, or still waiting) may
+        // already have the plain one.
+        let base = format!("{id}-rest-{week_start}");
+        let mut rest_id = base.clone();
+        let mut next = 2;
+        while out
+            .iter()
+            .any(|block| block.get("id").and_then(Value::as_str) == Some(rest_id.as_str()))
+        {
+            rest_id = format!("{base}-{next}");
+            next += 1;
+        }
         out.push(json!({
-            "id": format!("{id}-rest-{week_start}"),
+            "id": rest_id,
             "kind": "flexible",
             "assignment_id": id,
             "title": assignment.get("title").cloned().unwrap_or(Value::Null),
@@ -1727,8 +1739,24 @@ pub fn fair_share(
         if cut {
             let remainder = (left - placed).max(0);
             if remainder >= SLOT_MIN {
-                let rest_id = format!("{homework}-rest-{week_start}");
-                out.retain(|block| id_of(block).as_deref() != Some(rest_id.as_str()));
+                let base = format!("{homework}-rest-{week_start}");
+                // A waiting session of that id is replaced; one the student gave a time or pinned stays,
+                // and the new session takes an id the week does not hold.
+                out.retain(|block| {
+                    id_of(block).as_deref() != Some(base.as_str())
+                        || truthy(block.get("start"))
+                        || truthy(block.get("pinned"))
+                        || truthy(block.get("completed"))
+                });
+                let mut rest_id = base.clone();
+                let mut next = 2;
+                while out
+                    .iter()
+                    .any(|block| id_of(block).as_deref() == Some(rest_id.as_str()))
+                {
+                    rest_id = format!("{base}-{next}");
+                    next += 1;
+                }
                 let due = subscript(assignment, "due")?;
                 out.push(json!({
                     "id": rest_id,

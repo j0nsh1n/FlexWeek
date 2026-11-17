@@ -355,3 +355,28 @@ fn a_session_still_ahead_holds_its_time_of_the_weeks_share() {
     let (blocks, _) = share_with_one_kept_session(3);
     assert!(blocks.iter().all(|block| block["id"] != "s1"));
 }
+
+#[test]
+fn a_shared_rest_session_never_replaces_a_pinned_one_with_its_id() {
+    // An earlier new session the student dragged onto Monday 16:00 (pinning it) keeps its time when the
+    // share leaves minutes over again; the new session for them takes an id of its own.
+    let pinned = json!({"id": "sci-rest-2026-10-05", "title": "Science project", "kind": "flexible",
+                        "assignment_id": "sci", "duration_min": 30, "days": [0], "start": "16:00",
+                        "pinned": true});
+    let (blocks, _) = share(
+        &[session("s1", 105), pinned.clone()],
+        "2026-10-14T23:59",
+        135,
+        0,
+        &["s1"],
+    );
+    assert!(blocks.contains(&pinned), "{blocks:?}");
+    let mut ids: Vec<&str> = blocks
+        .iter()
+        .map(|block| block["id"].as_str().unwrap())
+        .collect();
+    let all = ids.len();
+    ids.sort_unstable();
+    ids.dedup();
+    assert_eq!(ids.len(), all, "each id once: {blocks:?}");
+}

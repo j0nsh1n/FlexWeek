@@ -312,6 +312,71 @@ fn test_a_pinned_past_session_gets_its_new_session_though_another_one_waits_for_
     assert_eq!(with_rest(&placed, &assignments, &now).len(), 3);
 }
 
+fn ids(blocks: &[Value]) -> Vec<String> {
+    blocks
+        .iter()
+        .map(|block| block["id"].as_str().expect("an id").to_string())
+        .collect()
+}
+
+fn unique(blocks: &[Value]) -> bool {
+    let all = ids(blocks);
+    let mut seen = all.clone();
+    seen.sort();
+    seen.dedup();
+    seen.len() == all.len()
+}
+
+#[test]
+fn test_a_second_new_session_never_reuses_the_first_ones_id() {
+    // Plan gave the pinned Tuesday hour a new session; the student dragged that one to Wednesday 16:00
+    // (pinning it) and it passed too. The hour is uncovered again: a new session, under an id of its own,
+    // since the week cannot hold two sessions with one id.
+    let mut tuesday = session("essay", 1, "16:00", 60);
+    tuesday["pinned"] = json!(true);
+    let mut wednesday = session("essay-a-rest-2026-11-02", 2, "16:00", 60);
+    wednesday["pinned"] = json!(true);
+    let assignments = essay(60, 0, "2026-11-07T23:59");
+    let now = not_before();
+    let open = with_rest(&[tuesday, wednesday], &assignments, &now);
+    assert!(unique(&open), "{:?}", ids(&open));
+    assert_eq!(open.len(), 3);
+    assert_eq!(open[2]["duration_min"], 60);
+    let mut placed = open.clone();
+    placed[2]["start"] = json!("10:00");
+    placed[2]["days"] = json!([4]);
+    assert_eq!(needed(&placed, &assignments, Some(&now)), 0);
+    assert_eq!(
+        with_rest(&placed, &assignments, &now).len(),
+        3,
+        "pressed again, nothing more"
+    );
+}
+
+#[test]
+fn test_a_new_session_beside_a_waiting_rest_session_has_an_id_of_its_own() {
+    // The pinned Tuesday hour passed while its new session still waits for a time, and the estimate grew
+    // to 3 h: one more hour has no session. It gets one under an id the week does not hold yet.
+    let mut tuesday = session("essay", 1, "16:00", 60);
+    tuesday["pinned"] = json!(true);
+    let mut waiting = session("essay-a-rest-2026-11-02", 0, "09:00", 60);
+    waiting
+        .as_object_mut()
+        .expect("object")
+        .shift_remove("start");
+    let assignments = essay(180, 0, "2026-11-07T23:59");
+    let now = not_before();
+    let open = with_rest(&[tuesday, waiting], &assignments, &now);
+    assert!(unique(&open), "{:?}", ids(&open));
+    assert_eq!(open.len(), 3);
+    let (_, targets) = request_at(open.clone(), &assignments, false, &now);
+    assert_eq!(
+        targets.len(),
+        2,
+        "both sessions with no time are placed in one press"
+    );
+}
+
 #[test]
 fn test_a_pinned_session_does_not_hold_the_minutes_of_a_missed_one_after_it() {
     // 60 minutes to do, a pinned session on Monday and an unpinned one on Tuesday, both passed:

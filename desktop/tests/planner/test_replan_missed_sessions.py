@@ -384,6 +384,32 @@ def test_a_pinned_session_that_passed_stays_and_its_undone_minutes_still_need_a_
     assert _sentence(session) == EVERYTHING
 
 
+def test_plan_gives_the_hour_another_new_session_when_its_first_one_was_pinned_and_passed(
+    qapp: QApplication, open_light: Callable[..., NativeWindow]
+) -> None:
+    """Plan gave the pinned Tuesday hour a new session; the student dragged that one to Wednesday 16:00,
+    which pins it, and it passed too. Plan places the hour once more, under a session id of its own: two
+    sessions with one id would make the whole plan be refused."""
+    session, work = _essay_planned_on_tuesday(qapp, open_light, pinned=True)
+    session.solve()
+    _settle(qapp, session)
+    first = next(
+        item for item in session.blocks if item.get("assignment_id") == "essay" and item["id"] != work["id"]
+    )
+    session.add_block({**first, "days": [2], "start": "16:00", "pinned": True})
+    session.save()
+    _settle(qapp, session)
+    assert [item["minutes"] for item in session.homework_time_needed()] == [60]
+    session.solve()
+    _settle(qapp, session)
+    mine = [item for item in session.blocks if item.get("assignment_id") == "essay"]
+    assert len({item["id"] for item in mine}) == len(mine) == 3
+    assert (_block(session, first["id"])["days"], _block(session, first["id"])["start"]) == ([2], "16:00")
+    newest = [item for item in mine if item["id"] not in (work["id"], first["id"])]
+    assert (newest[0]["days"][0], newest[0]["start"]) >= THURSDAY_NOW
+    assert session.homework_time_needed() == []
+
+
 def test_one_plan_press_places_the_waiting_session_and_the_pinned_past_ones_minutes(
     qapp: QApplication, open_light: Callable[..., NativeWindow]
 ) -> None:
