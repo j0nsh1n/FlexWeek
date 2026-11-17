@@ -401,3 +401,53 @@ fn a_same_day_spread_notice_names_the_day_of_the_week_on_screen() {
         vec!["Couldn't spread Essay over separate days, so two parts share Friday."]
     );
 }
+
+/// A 120 minute essay session through the real Plan funnel (`prepare_solve`), Split long tasks on.
+fn plan_one_long_session(spread: &str) -> SolveTrace {
+    let windows = [work_span(&[0, 1], "16:00", "20:00", None)];
+    let session = json!({
+        "id": "essay-a", "title": "Essay", "kind": "flexible", "duration_min": 120,
+        "days": [0, 1], "priority": 3, "energy": "medium", "assignment_id": "essay"
+    });
+    let mut body = assignment("essay", "Essay", "2026-11-20T23:59");
+    body["spread"] = json!(spread);
+    let assignments = BTreeMap::from([("essay".to_string(), body)]);
+    let school = locked("school", "08:00", 60, &[3]);
+    let rules = plan_rules_from_value(&json!({"split_long_tasks": true}));
+    plan_assignments(
+        school,
+        &[session],
+        &assignments,
+        "2026-11-16",
+        &windows,
+        rules,
+    )
+}
+
+#[test]
+fn a_homework_saved_in_one_go_is_not_cut_in_two_by_split_long_tasks() {
+    let trace = plan_one_long_session("one");
+    let sessions: Vec<_> = trace
+        .placed
+        .iter()
+        .filter(|block| block.kind == "flexible")
+        .map(|block| (block.id.clone(), block.duration_min))
+        .collect();
+    assert_eq!(sessions, vec![("essay-a".to_string(), 120)]);
+}
+
+#[test]
+fn a_homework_spread_over_days_is_still_cut_by_split_long_tasks() {
+    let trace = plan_one_long_session("spread");
+    let mut sessions: Vec<_> = trace
+        .placed
+        .iter()
+        .filter(|block| block.kind == "flexible")
+        .map(|block| (block.id.clone(), block.duration_min))
+        .collect();
+    sessions.sort();
+    assert_eq!(
+        sessions,
+        vec![("essay-a".to_string(), 60), ("essay-a~2".to_string(), 60)]
+    );
+}

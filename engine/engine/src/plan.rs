@@ -723,6 +723,9 @@ pub fn prepare_solve(
                 "course".into(),
                 body.get("course").cloned().unwrap_or(Value::Null),
             );
+            if body.get("spread").and_then(Value::as_str).unwrap_or("one") == "one" {
+                obj.insert("keep_whole".into(), Value::Bool(true));
+            }
         }
         keep.push(updated);
         let block_id = block["id"].as_str().unwrap_or("");

@@ -167,6 +167,8 @@ class TimeBlock(BaseModel):
     pinned: bool = Field(default=False, exclude_if=lambda value: value is False)
     # Solve-only. An overdue plan asks for the first free time from now, not the energy window.
     prefer_earliest: bool = Field(default=False, exclude_if=lambda value: value is False)
+    # Solve-only. The session belongs to a homework saved In one go, so Split long tasks leaves it whole.
+    keep_whole: bool = Field(default=False, exclude_if=lambda value: value is False)
     assignment_id: str | None = Field(
         default=None, min_length=1, max_length=80, exclude_if=lambda value: value is None
     )
