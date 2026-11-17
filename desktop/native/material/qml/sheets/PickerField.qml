@@ -177,6 +177,7 @@ Item {
         contentItem: ListView {
             id: list
             objectName: "pickerList"
+            focus: true
             clip: true
             model: root.options
             currentIndex: 0

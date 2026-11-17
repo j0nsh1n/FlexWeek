@@ -92,6 +92,10 @@ All notable changes to FlexWeek are documented here. Format follows
 - The notice after you add, move or place a block names the day from the week on screen: in a week that starts on Wednesday, dropping Science poster on Friday says "Placed Science poster on Fri 4:30 PM", not "Wed".
 - In the Widgets styles, the week notices time passing by itself: when a day ends, the header marks the new day as today, and when a planned session's time passes unfinished, the homework list stops saying "Everything has a time." without you pressing anything.
 - Ending a focus session early now keeps the minutes you had worked. They count toward the homework, as the End question says, instead of being lost, so the homework no longer asks for time you already spent. Nothing is marked finished by ending early.
+- In the Material style, "Add fixed time here" and "Add homework here" on free time in Week and Day now open with the words kept by an earlier Esc, the same as the + button does. The day and time you clicked are the ones the sheet shows.
+- In the Material style, an open drop-down list (Week starts on in Settings, and the date and time lists in Add and Edit homework and fixed time) now moves with Up and Down and picks with Enter; before, the arrow keys and Enter did nothing while the list was open.
+- In the Material style, the number beside "No time yet" in the homework drawer counts every line the drawer lists, including homework with minutes that have no session ("Science poster · 1 h with no time"), so it no longer says 0 beside them.
+- In the Material style, Week has a line above the grid when homework is overdue or left from last week, saying "1 overdue · 1 left from last week" as the Widgets styles do, with Plan into this week and Mark as finished, which do what the Widgets buttons do. It is not there when nothing is left over.
 
 ## [1.3.0] - 2026-11-10
 

@@ -385,6 +385,13 @@ class HomeworkDraft:
 
     # Edits ------------------------------------------------------------------------------
 
+    def use_picked(self, day: int, start: str) -> None:
+        """A kept new sheet opened again from a time picked on the grid: it is pinned to the picked day and
+        start. The typed words and length stay."""
+        self.set("when", "fixed")
+        self.set("whenDay", day)
+        self.set("whenTime", start)
+
     def set(self, name: str, value: Any) -> None:
         """One field changed. Words that said it was wrong go when it changes."""
         if name == "title":

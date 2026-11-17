@@ -256,6 +256,13 @@ class SheetsBridge(QObject):
             category = "assignments"
         due = sunday_due(session.week_start) if session.week_start else None
         start_hhmm = f"{start_min // 60:02d}:{start_min % 60:02d}"
+        kept, self._kept_homework = self._kept_homework, None
+        if kept is not None:
+            kept.follow_week(HomeworkDraft(session, category=category).when_day)
+            kept.use_picked(day, start_hhmm)
+            self._homework = kept
+            self._open("homework")
+            return
         self._homework = HomeworkDraft(
             session,
             category=category,
@@ -303,6 +310,13 @@ class SheetsBridge(QObject):
         if end_min - start_min < drag_step((session.preferences or {}).get("drag_step_min")):
             return
         category = session.armed_category
+        kept, self._kept_block = self._kept_block, None
+        if kept is not None:
+            kept.follow_week(BlockDraft(session, day=day).days)
+            kept.use_picked(day, f"{start_min // 60:02d}:{start_min % 60:02d}", end_min - start_min)
+            self._block = kept
+            self._open("block")
+            return
         self._block = BlockDraft(
             session,
             day=day,

@@ -410,3 +410,19 @@ def test_up_on_todays_pinned_time_stops_at_the_earliest_time_allowed(
     assert sheets.form["whenTime"] == "19:15"
     sheets.forceClose()
     pump(qapp, 5)
+
+
+def test_open_pinned_time_list_moves_with_down_and_picks_with_enter(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    _open_pinned_time_field(qapp, shell, sheets)
+    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Space)
+    pump(qapp, 8)
+    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Down)
+    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Down)
+    pump(qapp, 5)
+    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Return)
+    pump(qapp, 8)
+    assert sheets.form["whenTime"] == "19:30"
+    sheets.forceClose()
+    pump(qapp, 5)
