@@ -517,10 +517,12 @@ class WeekBridge(QObject):
     def planOne(self, identifier: str) -> None:
         """Place now, and Enter on a card: that homework at the first free gap from now that fits it."""
         session = self._window.session  # type: ignore[attr-defined]
+        # A homework id names its waiting session first: its other sessions may have a time already, and a
+        # pinned one that passed cannot be placed again.
         target = next(
             (
                 block["id"]
-                for block in session.blocks
+                for block in sorted(session.blocks, key=lambda item: bool(item.get("start")))
                 if block["id"] == identifier or block.get("assignment_id") == identifier
             ),
             None,
