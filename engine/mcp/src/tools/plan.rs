@@ -1,7 +1,8 @@
 //! `plan_homework` is "Plan my homework": the steps of `controller.py` `solve` as the phone runs
-//! them in Rust (`ffi/src/plan_week.rs` `run_plan`). Homework that already has a time keeps it;
-//! earlier weeks' unfinished sessions move into this week; the planner places the rest around the
-//! fixed blocks, never before now. What it placed is written in one change, after one restore
+//! them in Rust (`ffi/src/plan_week.rs` `run_plan`). Homework that already has a time keeps it,
+//! unless that time has passed this week, the work is not finished and the student did not pin it:
+//! the planner moves such a missed session. Earlier weeks' unfinished sessions move into this week;
+//! the planner places the rest around the fixed blocks, never before now. What it placed is written in one change, after one restore
 //! point. `day` keeps the plan to that day. The desktop's focus-chunk split after a plan is not
 //! part of it, as on the phone.
 
@@ -851,7 +852,8 @@ impl crate::App {
     #[tool(
         description = "Plan my homework: FlexWeek's own planner gives homework with no time a \
             time this week (or on one day), around school and other fixed time, never before now. \
-            Returns what it placed and what it could not place with the reason, and saves it as one \
+            It also moves a session of this week whose time has passed unfinished, unless the \
+            student pinned it; other sessions with a time keep it. Returns what it placed and what it could not place with the reason, and saves it as one \
             change",
         annotations(read_only_hint = false, destructive_hint = false)
     )]
