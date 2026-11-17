@@ -199,7 +199,7 @@ Item {
                 density: root.density
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
-                kind: "tonal"
+                kind: "text"
                 text: "Plan into this week"
                 accessName: "Plan into this week"
                 activeFocusOnTab: leftRow.visible

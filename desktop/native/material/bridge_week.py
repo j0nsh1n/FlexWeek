@@ -229,6 +229,7 @@ class WeekBridge(QObject):
         if session.account is None or not session.week_start:
             self._block_rows, self._homework_rows, self._day_rows = [], [], []
             self._leftover_words = ""
+            self._listed_count = 0
             self._left_words = ""
             self._seen = set()
             self._publish()
