@@ -701,3 +701,25 @@ fn test_a_session_of_finished_homework_is_not_moved() {
     assert_eq!(sent(&payload, "essay")["kind"], "locked");
     assert_eq!(needed(&blocks, &assignments, Some(&not_before())), 0);
 }
+
+#[test]
+fn a_pinned_session_of_an_earlier_week_that_passed_does_not_count_as_placed() {
+    // Last week's essay hour was pinned and not finished. In this week, with the clock in it, that hour is
+    // over, so it holds nothing: the essay gets a new session here for it. A session of an earlier week
+    // that was not pinned is moved in by move_earlier_homework, so it still blocks a second one.
+    let mut last_week = session("essay", 4, "16:00", 60);
+    last_week["pinned"] = json!(true);
+    // The server's numbers count last week's passed pinned hour as held by nothing: 60 unplanned.
+    let mut assignments = essay(60, 0, "2026-11-07T23:59");
+    assignments["essay-a"]["unplanned_min"] = json!(60);
+    let map: &Map<String, Value> = assignments.as_object().expect("assignments");
+    let now = not_before();
+    let open =
+        open_rest_sessions_at(&[], map, WEEK, &[last_week.clone()], &[], Some(&now)).expect("rest");
+    assert_eq!(ids(&open), ["essay-a-rest-2026-11-02"]);
+    assert_eq!(open[0]["duration_min"], 60);
+    let mut moved_in = last_week;
+    moved_in["pinned"] = json!(false);
+    let open = open_rest_sessions_at(&[], map, WEEK, &[moved_in], &[], Some(&now)).expect("rest");
+    assert!(open.is_empty(), "{open:?}");
+}
