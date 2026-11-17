@@ -91,6 +91,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Opening next week after planning this one no longer lists homework as "1 h left" or says "3 h still needs a time" when every minute already has a time later this week. A planned session in any week holds its time while that time is still ahead; only one that passed unfinished needs a new time.
 - The notice after you add, move or place a block names the day from the week on screen: in a week that starts on Wednesday, dropping Science poster on Friday says "Placed Science poster on Fri 4:30 PM", not "Wed".
 - In the Widgets styles, the week notices time passing by itself: when a day ends, the header marks the new day as today, and when a planned session's time passes unfinished, the homework list stops saying "Everything has a time." without you pressing anything.
+- Ending a focus session early now keeps the minutes you had worked. They count toward the homework, as the End question says, instead of being lost, so the homework no longer asks for time you already spent. Nothing is marked finished by ending early.
 
 ## [1.3.0] - 2026-11-10
 

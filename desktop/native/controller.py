@@ -4294,6 +4294,14 @@ class NativeSession(QObject):
     def reset_focus(self) -> None:
         self._reset_focus()
 
+    def end_focus_early(self) -> None:
+        """End a session on the student's word: the whole minutes already worked count toward the
+        homework or block, as the End question says, but nothing is finished by it."""
+        minutes = self.focus_elapsed_min()
+        if minutes > 0:
+            self.credit_focus_session(minutes, finished=False)
+        self._reset_focus()
+
     def focus_elapsed_min(self) -> int:
         """Whole minutes of the work session running or paused on this week, which are credited to
         the homework only when it ends."""
@@ -4370,11 +4378,12 @@ class NativeSession(QObject):
         )
         return moved
 
-    def credit_focus_session(self) -> None:
+    def credit_focus_session(self, minutes: int | None = None, *, finished: bool = True) -> None:
         state = self.focus
         if state is None or not (state.get("blockId") or state.get("assignmentId")):
             return
-        credit = (dict(state), work_minutes(state, self.preferences))
+        worked = work_minutes(state, self.preferences) if minutes is None else minutes
+        credit = (dict(state), worked, finished)
         if self.busy:
             # A save is under way and its reply replaces the homework, which would wipe the minutes
             # added now. They are added once it is done.
@@ -4387,7 +4396,7 @@ class NativeSession(QObject):
         for credit in waiting:
             self._credit_session(*credit)
 
-    def _credit_session(self, state: dict, work_min: int) -> None:
+    def _credit_session(self, state: dict, work_min: int, finished: bool = True) -> None:
         if state.get("assignmentId"):
             assignment = self.assignments.get(state["assignmentId"])
             updated = credit_target(state, assignment, None, work_min)
@@ -4407,7 +4416,8 @@ class NativeSession(QObject):
             if updated is None:
                 return
             self.blocks = [updated if item["id"] == updated["id"] else item for item in self.blocks]
-        self._auto_complete_session(state)
+        if finished:
+            self._auto_complete_session(state)
         self.dirty = True
         self.pending_save = None
         self.save(record_history=False)
