@@ -203,6 +203,22 @@ class BlockDraft:
         days.symmetric_difference_update({day})
         self.days = sorted(days)
 
+    def use_picked(self, day: int, start: str, length: int) -> None:
+        """A kept new sheet opened again from a time picked on the grid: the picked day, start and length
+        replace the kept ones, as a fresh sheet opened there would have them."""
+        self.error = ""
+        self.days = [day]
+        self.days_problem = ""
+        self._days_touched = True
+        self._drawn = True
+        self._moved_from = {}
+        self._moved_to = {}
+        self._moved_note = ""
+        self.end_by_hand = False
+        self.length = length
+        self._move_start(hhmm_to_minutes(start))
+        self.moved = ""
+
     def _move_start(self, minute: int) -> None:
         """A start that moves takes the end with it, so the length stays, up to the end of the day. Once
         End was set here it is the student's and stays."""
