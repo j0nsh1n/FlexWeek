@@ -511,11 +511,13 @@ pub fn spread_choice(asked: Option<bool>, estimate_min: i64, open_sessions: usiz
 /// The sessions Spread over days makes once the homework is saved: the app's spread preview,
 /// `spread_sessions` over the days from today (or its due day when that comes first), each session a
 /// waiting block on its own day with the id `block_id(index)`. Returns each session's week start and
-/// block. `planned_min` is what the homework's other not-finished sessions already hold and `done_min`
+/// block. `planned_min` is what the homework's other not-finished sessions already hold, `held_dates` the days
+/// those with a time sit on, and `done_min`
 /// the minutes of its sessions ticked done: its done time is the larger of that and its focus minutes.
 pub fn spread_new_sessions(
     assignment: &Value,
     planned_min: i64,
+    held_dates: &[String],
     done_min: i64,
     today: &str,
     block_id: &dyn Fn(usize) -> String,
@@ -537,7 +539,7 @@ pub fn spread_new_sessions(
     let session_min = crate::plan::spread_session_min(
         (estimate - crate::plan::done_time(focus, done_min)).max(0),
     );
-    let (sessions, _off_grid) = crate::plan::spread_sessions(
+    let (sessions, _off_grid) = crate::plan::spread_sessions_around(
         estimate,
         focus,
         done_min,
@@ -545,6 +547,7 @@ pub fn spread_new_sessions(
         due,
         session_min,
         &from_date,
+        held_dates,
     )
     .map_err(|error| error.message)?;
     let mut made = Vec::new();

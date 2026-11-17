@@ -152,7 +152,7 @@ def test_the_deadline_passing_refreshes_tags_the_sidebar_and_the_focus_list(
     expected = f"Wednesday: Bio reading, {times} · {length_label(60)} · {due_words} · Pinned"
     bio_rows = [row for row in rows if row.startswith("Wednesday: Bio reading, ")]
     assert bio_rows == [expected]
-    assert window.rail.none_waiting.text() == "Everything has a time."
+    assert window.rail.none_waiting.text() == "Bio reading · 1 h left"
     assert any(item["title"] == "Bio reading, overdue" for item in session.focus_tasks())
     target = window if page == "settings" else window.more_button
     assert target.isVisible()

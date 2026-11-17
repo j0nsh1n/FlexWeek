@@ -830,6 +830,7 @@ class NativeWindow(QMainWindow):
         self._alert_tick.timeout.connect(self.session.check_alerts)
         self._alert_tick.start()
         # A day screen is about the minute, so it is looked at again well inside one.
+        self._filled_at_clock: tuple | None = None
         self._layout_tick = QTimer(self)
         self._layout_tick.setInterval(LAYOUT_TICK_MS)
         self._layout_tick.timeout.connect(self._refresh_layout)
@@ -2385,7 +2386,17 @@ class NativeWindow(QMainWindow):
             ),
         )
 
+    def _clock_state(self) -> tuple:
+        """What on screen depends on the clock beyond the minute: which day is today and which sessions
+        have passed unfinished."""
+        return self._clock_in_week()[0], self.session.missed_block_ids()
+
     def _refresh_layout(self) -> None:
+        if self.session.account is not None and self._clock_state() != self._filled_at_clock:
+            # A new day or a session that has just passed: the header's today mark and the rail's
+            # "Everything has a time" line change without any click.
+            self._fill_classic()
+            self.solve_button.set_count(len(self.session.homework_time_needed()))
         shown = self.planner.currentWidget()
         if isinstance(shown, LayoutView) and self.session.account is not None:
             shown.show_week(self._scene_for(shown.layout_id))
@@ -4141,6 +4152,8 @@ class NativeWindow(QMainWindow):
         """Today's app's Day and Week from the open week. Held while the pointer holds something."""
         if self.hand.busy:
             return
+        # Read before the fill, so a session that passes while it runs brings one more refill.
+        clock_state = self._clock_state()
         week = self._week_with_history(
             build_week(
                 self.session.week_start, self.session.blocks, self.session.assignments, self.session.trace
@@ -4171,6 +4184,7 @@ class NativeWindow(QMainWindow):
         )
         self.month_grid.set_unsaved(self.session.unsaved_weeks())
         self.month_grid.set_week(week)
+        self._filled_at_clock = clock_state
         self._announce_overdue()
 
     def _sync_week_access_list(self, week) -> None:
@@ -4615,7 +4629,7 @@ class NativeWindow(QMainWindow):
         self._create_range(span.day, span.start, span.end)
         made = [item for item in self.session.blocks if item["id"] not in before]
         if made:
-            self._say_when_saved(added_words(made[0]))
+            self._say_when_saved(added_words(made[0], self.session.week_start))
 
     def _create_range(self, day: int, start_min: int, end_min: int) -> None:
         start = minutes_to_hhmm(start_min)
@@ -5439,7 +5453,7 @@ class NativeWindow(QMainWindow):
         sheet.exec()
         if sheet.answer != "yes":
             return
-        self.session.reset_focus()
+        self.session.end_focus_early()
         self._close_focus_screen()
 
     def _finish_focus_homework(self) -> None:

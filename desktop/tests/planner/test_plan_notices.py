@@ -153,6 +153,7 @@ def _cut_the_essay_to(qapp: QApplication, window: NativeWindow, minutes: int) ->
     essay = next(block for block in session.blocks if block.get("assignment_id") == "essay")
     essay["duration_min"] = minutes
     essay["pinned"] = True
+    essay["start"] = "19:30"
     session._touch()
     session.save()
     settled(qapp, window)
@@ -193,6 +194,6 @@ def test_the_plan_notice_names_the_minutes_it_could_not_place(
     wait_until(qapp, lambda: not window.session.busy and window.toast.text() == said)
     qapp.processEvents()
     kept = next(block for block in window.session.blocks if block.get("pinned"))
-    assert (kept["duration_min"], kept["start"], kept["days"]) == (minutes, "18:45", [3])
+    assert (kept["duration_min"], kept["start"], kept["days"]) == (minutes, "19:30", [3])
     assert window.toast.text() == said
     assert window.session.plan_remainders == left

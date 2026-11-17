@@ -12,7 +12,12 @@ from uuid import uuid4
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from backend import clock as wall_clock
-from backend.assignments import unplanned_minutes
+from backend.assignments import (
+    done_minutes_by_id,
+    planned_minutes_by_id,
+    planned_minutes_from_day,
+    unplanned_minutes,
+)
 from backend.models import Assignment, ProtectedWindow, TimeBlock, WorkWindow, parse_due
 from backend.slots import hhmm_to_minutes
 from backend.weeks import current_week_start
@@ -465,7 +470,7 @@ class NativeSession(QObject):
         self.material_owns: Callable[[], bool] | None = None
         self._held_alerts: list[dict] = []
         # Finished focus sessions, with their length, not yet added to their homework.
-        self._credits_waiting: list[tuple[dict, int]] = []
+        self._credits_waiting: list[tuple[dict, int, bool]] = []
         self._record_history = True
         self.fired_reminders: set[str] = set()
         self.fired_alarms: set[str] = set()
@@ -1544,7 +1549,7 @@ class NativeSession(QObject):
         if not self.hand_move(block_id, from_day, day, start, end):
             return
         origin = from_day if from_day in block["days"] else day
-        words = moved_words(block, origin, day, start, end)
+        words = moved_words(block, origin, day, start, end, self.week_start)
         # Material has no School hours, so its note points to Setup.
         material = self.material_owns is not None and self.material_owns()
         note = one_day_note(block, origin, not material, self.week_start)
@@ -2130,7 +2135,17 @@ class NativeSession(QObject):
                     {"week_start": self.week_start, "before": before, "after": deepcopy(self.blocks),
                      "revision": self.revision}
                 ],
-                "assignments": [{"id": assignment_id, "before": deepcopy(item), "after": None}],
+                "assignments": [
+                    {
+                        "id": assignment_id,
+                        "before": deepcopy(item),
+                        "after": None,
+                        # The saved sessions its held numbers were read with: Undo pairs them again.
+                        "basis": deepcopy(
+                            [b for b in self._assignments_basis if b.get("assignment_id") == assignment_id]
+                        ),
+                    }
+                ],
                 "stale": False,
             }
             others = [week for week in removed if week != self.week_start]
@@ -2290,9 +2305,17 @@ class NativeSession(QObject):
                 if live is None:
                     # Its numbers were read before the delete, with its sessions as this side has them.
                     homework = entry["id"]
+                    paired = entry.get("basis")
                     self._assignments_basis = [
                         block for block in self._assignments_basis if block.get("assignment_id") != homework
-                    ] + [deepcopy(block) for block in self.blocks if block.get("assignment_id") == homework]
+                    ] + [
+                        deepcopy(block)
+                        for block in (
+                            paired
+                            if paired is not None
+                            else [b for b in self.blocks if b.get("assignment_id") == homework]
+                        )
+                    ]
                 else:
                     for key in ("unplanned_min", "planned_min", "done_min"):
                         if key in live:
@@ -2429,6 +2452,50 @@ class NativeSession(QObject):
                         self._plan_step_id = self._pending_step["id"]
         self._post_pending()
 
+    def _shift_held_numbers(self, data: dict) -> None:
+        """A save that moved sessions into or out of a week other than the open one changes what the held
+        `planned_min` and `done_min` count, which were read with the open week as saved. Those weeks' change
+        is put on the held numbers now, so every count is right before the server's next read lands. Planned
+        minutes are counted as the server counts them: from the open week on, and in an earlier week the
+        sessions whose time is still ahead of now; done minutes are counted in every week."""
+        step = self._travel_step if self._traveling else self._pending_step
+        if step is None:
+            return
+        old_side, new_side = ("after", "before") if self._traveling == "undo" else ("before", "after")
+        # A homework Undo or Redo brought back from a delete step has the numbers that step kept, read with
+        # its sessions in every week as they come back; shifting them again would count those twice.
+        restored = {
+            entry["id"]
+            for entry in step.get("assignments") or []
+            if self._traveling and "basis" in entry and entry[new_side] is not None
+        }
+        stored = {week["week_start"]: week for week in data.get("weeks") or []}
+        # The open week's own change is already in the basis; a week from another day is two stored Mondays.
+        open_weeks = {self.week_start, *(stored_weeks_of(self.week_start) if self.first_weekday else ())}
+        old_weeks: list[tuple[str, list[dict]]] = []
+        new_weeks: list[tuple[str, list[dict]]] = []
+        for entry in step.get("weeks") or []:
+            week_start = entry["week_start"]
+            if week_start in open_weeks or week_start not in stored:
+                continue
+            old_weeks.append((week_start, entry[old_side]))
+            new_weeks.append((week_start, stored[week_start].get("blocks") or []))
+        if not old_weeks:
+            return
+        now = datetime.fromtimestamp(self.now_ms() / 1000).strftime("%Y-%m-%dT%H:%M")
+        if not self.first_weekday:
+            count_planned = lambda weeks: planned_minutes_by_id(weeks, self.week_start, now)  # noqa: E731
+        else:
+            count_planned = lambda weeks: planned_minutes_from_day(weeks, self.week_start, now)  # noqa: E731
+        for key, count in (("planned_min", count_planned), ("done_min", done_minutes_by_id)):
+            gone = count(old_weeks)
+            came = count(new_weeks)
+            for homework in (gone.keys() | came.keys()) - restored:
+                for held in (self.assignments, self._committed_assignments):
+                    item = held.get(homework)
+                    if item is not None and item.get(key) is not None:
+                        item[key] = int(item[key]) + came.get(homework, 0) - gone.get(homework, 0)
+
     def _post_pending(self, ticket: int | None = None) -> None:
         if self.pending_save is None:
             return
@@ -2463,6 +2530,7 @@ class NativeSession(QObject):
                 weeks = set(assignment.get("session_weeks") or []) - changed_weeks
                 weeks.update(session_weeks_by_id.get(assignment_id, set()))
                 assignment["session_weeks"] = sorted(weeks)
+            self._shift_held_numbers(data)
             current = next(
                 (week for week in data.get("weeks") or [] if week["week_start"] == self.week_start),
                 None,
@@ -2674,8 +2742,10 @@ class NativeSession(QObject):
         _prepared_weeks: dict[str, dict] | None = None,
         _overdue: set[str] | None = None,
         _new_left: set[str] | None = None,
+        _dirty_before: bool | None = None,
     ) -> None:
-        """Plan my homework. Homework that already has a time keeps it.
+        """Plan my homework. Homework that already has a time keeps it, except a session of this week whose
+        time has passed unfinished.
 
         `everything` is Replan all my homework. `only` finds new times for named work. Nothing is
         placed before now. `earliest_first` (Place now) puts each named block at the first gap that
@@ -2755,7 +2825,7 @@ class NativeSession(QObject):
             if block.get("start") and not block.get("completed")
         ]
         open_blocks = planning_blocks if only is not None else open_rest_sessions(
-            planning_blocks, self.assignments, self.week_start, earlier_blocks, self._assignments_basis
+            planning_blocks, self.assignments, self.week_start, earlier_blocks, self._assignments_basis, clock
         )
         payload, targets = solve_request(
             open_blocks,
@@ -2943,6 +3013,9 @@ class NativeSession(QObject):
             if self._alive(ticket) and _new_left:
                 self.blocks = [block for block in self.blocks if block["id"] not in _new_left]
                 self._forget_settled_notes()
+                if _dirty_before is not None:
+                    # The planner's error stays on screen instead of an autosave of the unchanged week.
+                    self.dirty = _dirty_before
                 self.week_changed.emit()
             self._fail(ticket, error)
 
@@ -3106,14 +3179,34 @@ class NativeSession(QObject):
 
     def homework_time_needed(self) -> list[dict]:
         """Homework that needs a time. A session whose time has passed unfinished needs one again. In a week
-        that is over, the minutes of its missed sessions are also given as `missed_min`."""
+        that is over, the minutes of its missed sessions are also given as `missed_min`, and those of its
+        pinned sessions that passed unfinished as `pinned_min`."""
         week = self._open_week()
         needed = time_still_needed(self.assignments, week, self.week_start, self._assignments_basis)
         missed = self._missed_minutes(week)
+        pinned = self._pinned_past_minutes(week)
         for item in needed:
             if missed.get(item["assignment_id"]):
                 item["missed_min"] = missed[item["assignment_id"]]
+            if pinned.get(item["assignment_id"]):
+                item["pinned_min"] = min(
+                    pinned[item["assignment_id"]], item["minutes"] - item.get("missed_min", 0)
+                )
         return needed
+
+    def _pinned_past_minutes(self, week: list[dict]) -> dict[str, int]:
+        """Each homework's minutes in pinned sessions that passed unfinished, in a week that is over: the
+        open week leaves them out, and no plan moves them, so they are said as pinned in the past."""
+        today = datetime.fromtimestamp(self.now_ms() / 1000).date().isoformat()
+        if not self.week_start or self.shown_week_of(today) <= self.week_start:
+            return {}
+        kept = {block["id"] for block in week}
+        pinned: dict[str, int] = {}
+        for block in self.blocks:
+            homework = block.get("assignment_id")
+            if homework and block.get("start") and block["id"] not in kept:
+                pinned[homework] = pinned.get(homework, 0) + int(block.get("duration_min") or 0)
+        return pinned
 
     def _missed_minutes(self, week: list[dict]) -> dict[str, int]:
         """Each homework's minutes in missed sessions, by homework, in a week that is over and in no other:
@@ -3149,11 +3242,23 @@ class NativeSession(QObject):
             self.assignments, self._open_week(), self.week_start, self._assignments_basis
         )
 
-    def homework_remainders(self) -> list[tuple[str, int]]:
-        """Homework with minutes that no session holds, by title and those minutes alone: the drawer lists
-        them under the cards, which already show the sessions that wait."""
+    def plan_can_place(self) -> bool:
+        """Whether pressing Plan has something to place: a session waiting for a time (a missed one is read
+        as waiting), or minutes no session holds that make a whole quarter hour."""
+        return any(
+            item["waiting_min"] or self.remaining_for(item["assignment_id"]) > 0
+            for item in self._time_split()
+        )
+
+    def homework_remainders(self) -> list[tuple[str, int, str]]:
+        """Homework with minutes that no session holds, by title, those minutes alone and its id: the drawer
+        lists them under the cards, which already show the sessions that wait. In a week that is over a
+        pinned session that passed is said as such, not as minutes with no time."""
+        pinned = self._pinned_past_minutes(self._open_week())
         return [
-            (item["title"], item["uncovered_min"]) for item in self._time_split() if item["uncovered_min"]
+            (item["title"], item["uncovered_min"] - held, item["assignment_id"])
+            for item in self._time_split()
+            if item["uncovered_min"] > (held := pinned.get(item["assignment_id"], 0))
         ]
 
     def minutes_left_for(self, assignment_id: str) -> int:
@@ -3532,8 +3637,11 @@ class NativeSession(QObject):
 
     def unfinished(self) -> list[dict]:
         moment = datetime.fromtimestamp(self.now_ms() / 1000)
-        today = moment.date()
-        today_week = monday_of(today.isoformat())
+        today_week = self.shown_week_of(moment.date().isoformat())
+        # Left from last week shows on the week on screen that holds today.
+        here = self.week_start == today_week
+        # The stored week holding that week's first days, as saved, to tell its earlier days apart.
+        first_part = self._stored_parts[0]["blocks"] if here and len(self._stored_parts) == 2 else []
         items = left_over_items(
             self.assignments,
             self.saved_weeks,
@@ -3541,9 +3649,8 @@ class NativeSession(QObject):
             moment.isoformat(timespec="minutes"),
             self._open_week(),
             self._assignments_basis,
+            first_part,
         )
-        # Left from last week shows on the week on screen that holds today.
-        here = self.week_start == self.shown_week_of(today.isoformat())
         return [item for item in items if here or item.get("left_over_state") == "overdue"]
 
     def _overdue_assignment_ids(self) -> set[str]:
@@ -3613,6 +3720,8 @@ class NativeSession(QObject):
         # one. The same engine answer the counts read: a pinned session never reads as missed here.
         timeless = {block["id"] for block in self._open_week() if not block.get("start")}
         missed = {block["id"] for block in self.blocks if block.get("start") and block["id"] in timeless}
+        # A pinned session that passed stays where the student put it: its minutes get a new session.
+        pinned_past = {block["id"] for block in self.blocks if block.get("pinned")} & self.missed_block_ids()
         made: set[str] = set()
         targets: set[str] = set()
         late_targets: set[str] = set()
@@ -3623,7 +3732,11 @@ class NativeSession(QObject):
                 continue
             late = assignment_id in overdue
             for block in self.blocks:
-                if block.get("assignment_id") != assignment_id or block.get("completed"):
+                if (
+                    block.get("assignment_id") != assignment_id
+                    or block.get("completed")
+                    or block["id"] in pinned_past
+                ):
                     continue
                 if block.get("start") and not late and block["id"] not in missed:
                     continue
@@ -3647,9 +3760,10 @@ class NativeSession(QObject):
         if not targets:
             self._say(short or "That homework already has a time.")
             return
+        dirty_before = self.dirty
         if made:
             self._touch("planning unfinished homework")
-        self.solve(only=targets, _overdue=late_targets, _new_left=made)
+        self.solve(only=targets, _overdue=late_targets, _new_left=made, _dirty_before=dirty_before)
 
     def did_these(self, assignment_ids: list[str]) -> None:
         """"Mark as finished": the student finished them after all, as one Undo step."""
@@ -4219,11 +4333,21 @@ class NativeSession(QObject):
     def reset_focus(self) -> None:
         self._reset_focus()
 
+    def end_focus_early(self) -> None:
+        """End a session on the student's word: the whole minutes already worked count toward the
+        homework or block, as the End question says, but nothing is finished by it."""
+        minutes = self.focus_elapsed_min()
+        if minutes > 0:
+            self.credit_focus_session(minutes, finished=False)
+        self._reset_focus()
+
     def focus_elapsed_min(self) -> int:
-        """Whole minutes of the work session running or paused on this week, which are credited to
-        the homework only when it ends."""
+        """Whole minutes of the work session running or paused, which are credited to the homework only
+        when it ends. A homework is credited whichever week is open; a block, only from its own week."""
         state = self.focus
-        if state is None or state.get("phase") != "work" or state.get("weekStart") != self.week_start:
+        if state is None or state.get("phase") != "work":
+            return 0
+        if not state.get("assignmentId") and state.get("weekStart") != self.week_start:
             return 0
         spent = phase_total_ms(state, self.preferences) - remaining_ms(state, self.now_ms())
         return max(0, spent) // 60_000
@@ -4295,11 +4419,12 @@ class NativeSession(QObject):
         )
         return moved
 
-    def credit_focus_session(self) -> None:
+    def credit_focus_session(self, minutes: int | None = None, *, finished: bool = True) -> None:
         state = self.focus
         if state is None or not (state.get("blockId") or state.get("assignmentId")):
             return
-        credit = (dict(state), work_minutes(state, self.preferences))
+        worked = work_minutes(state, self.preferences) if minutes is None else minutes
+        credit = (dict(state), worked, finished)
         if self.busy:
             # A save is under way and its reply replaces the homework, which would wipe the minutes
             # added now. They are added once it is done.
@@ -4312,7 +4437,7 @@ class NativeSession(QObject):
         for credit in waiting:
             self._credit_session(*credit)
 
-    def _credit_session(self, state: dict, work_min: int) -> None:
+    def _credit_session(self, state: dict, work_min: int, finished: bool = True) -> None:
         if state.get("assignmentId"):
             assignment = self.assignments.get(state["assignmentId"])
             updated = credit_target(state, assignment, None, work_min)
@@ -4332,7 +4457,8 @@ class NativeSession(QObject):
             if updated is None:
                 return
             self.blocks = [updated if item["id"] == updated["id"] else item for item in self.blocks]
-        self._auto_complete_session(state)
+        if finished:
+            self._auto_complete_session(state)
         self.dirty = True
         self.pending_save = None
         self.save(record_history=False)

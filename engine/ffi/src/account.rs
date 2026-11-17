@@ -79,12 +79,13 @@ pub(crate) fn views_for_week(
     rows: &[(String, String, i64)],
     weeks: &[(String, Vec<Value>, i64)],
     week_start: &str,
+    now: Option<flexweek_engine::plan::Moment>,
 ) -> Result<Map<String, Value>, FfiError> {
     let listed: Vec<(String, Vec<Value>)> = weeks
         .iter()
         .map(|(start, blocks, _)| (start.clone(), blocks.clone()))
         .collect();
-    let planned = flexweek_engine::plan::planned_minutes_by_id(&listed, week_start);
+    let planned = flexweek_engine::plan::planned_minutes_by_id(&listed, week_start, now);
     let done = flexweek_engine::plan::done_minutes_by_id(&listed);
     let mut views = Map::new();
     for (id, _, revision) in rows {
@@ -242,7 +243,7 @@ mod done_minutes_tests {
             ("2026-10-19".to_string(), done(30), 1),
         ];
         for week in ["2026-10-12", "2026-10-19"] {
-            let views = views_for_week(&assignments, &rows, &weeks, week).expect("views");
+            let views = views_for_week(&assignments, &rows, &weeks, week, None).expect("views");
             assert_eq!(views["essay"]["done_min"], json!(90), "read for {week}");
         }
     }

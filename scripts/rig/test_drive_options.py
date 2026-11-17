@@ -208,6 +208,20 @@ def test_the_rig_forgets_the_look_an_earlier_run_left_behind():
     assert not left.exists()
 
 
+def test_the_rig_forgets_the_first_day_of_the_week_an_earlier_run_left_behind():
+    from PySide6.QtCore import QStandardPaths
+
+    from desktop.native import fields
+
+    QStandardPaths.setTestModeEnabled(True)
+    fields.save_week_starts_on("wednesday")
+    assert fields.week_starts_on() == "wednesday"
+    drive.clean_look_file()
+    assert fields.week_starts_on() == "monday"
+    drive.clean_look_file()
+    assert fields.week_starts_on() == "monday"
+
+
 def test_material_new_forgets_an_earlier_kept_session_and_saves_the_surface():
     import json
 

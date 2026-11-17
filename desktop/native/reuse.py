@@ -217,8 +217,10 @@ def open_rest_sessions(
     week_start: str,
     earlier_blocks: tuple[dict, ...] | list[dict] = (),
     saved_week: list[dict] | None = None,
+    now: datetime | None = None,
 ) -> list[dict]:
-    """`saved_week` is the week the homework's server numbers were read with; none means `blocks`."""
+    """`saved_week` is the week the homework's server numbers were read with; none means `blocks`. `now`
+    is the real clock: a pinned session that passed unfinished holds none of its minutes."""
     return json.loads(
         flexweek_engine.reuse_open_rest(
             json.dumps(blocks),
@@ -226,6 +228,7 @@ def open_rest_sessions(
             week_start,
             json.dumps(earlier_blocks),
             json.dumps(saved_week),
+            now,
         )
     )
 
@@ -487,6 +490,7 @@ def left_over_items(
     now: str,
     blocks: list[dict],
     committed_blocks: list[dict],
+    first_part: list[dict],
 ) -> list[dict]:
     return json.loads(
         flexweek_engine.reuse_left_over(
@@ -496,6 +500,7 @@ def left_over_items(
             now,
             json.dumps(blocks),
             json.dumps(committed_blocks),
+            json.dumps(first_part),
         )
     )
 

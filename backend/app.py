@@ -19,6 +19,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from backend import clock as wall_clock
 from backend.assignments import (
     done_minutes_by_id,
+    held_dates_by_id,
     planned_minutes_by_id,
     planned_minutes_from_day,
     prepare_solve,
@@ -1380,7 +1381,9 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 (json.loads(body), int(revision)) for body, revision in db.assignment_bodies(account["id"])
             ]
             weeks = list_account_weeks(db, account["id"])
-        return build_day(date, week_start, rewrite_stored_blocks(blocks, owned), assignment_rows, weeks)
+        return build_day(
+            date, week_start, rewrite_stored_blocks(blocks, owned), assignment_rows, weeks, naive_now()
+        )
 
     @app.get("/api/month")
     def get_month(
@@ -1396,7 +1399,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 (json.loads(body), int(revision)) for body, revision in db.assignment_bodies(account["id"])
             ]
             weeks = month_weeks(db, account["id"], month, first_day)
-        return build_month(month, assignment_rows, weeks, first_day)
+        return build_month(month, assignment_rows, weeks, first_day, naive_now())
 
     @app.put("/api/week")
     def put_week(week: SavedWeek, account: Annotated[dict, Depends(user)]) -> dict:
@@ -1421,10 +1424,10 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             rows = db.list_assignment_rows(account["id"])
             weeks = list_account_weeks(db, account["id"])
         if is_week_start(week_start):
-            planned_by_id = planned_minutes_by_id(weeks, week_start)
+            planned_by_id = planned_minutes_by_id(weeks, week_start, naive_now())
         else:
             # A week on screen from another day: the minutes from its first day on.
-            planned_by_id = planned_minutes_from_day(weeks, week_start)
+            planned_by_id = planned_minutes_from_day(weeks, week_start, naive_now())
         done_by_id = done_minutes_by_id(weeks)
         session_weeks_by_id: dict[str, set[str]] = {}
         for saved_week, blocks in weeks:
@@ -1477,6 +1480,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             due=body["due"],
             session_min=payload.session_min,
             from_date=payload.from_date,
+            held_dates=held_dates_by_id(weeks, "2000-01-01").get(assignment_id, []),
         )
         return {
             "assignment_id": assignment_id,

@@ -3,8 +3,8 @@
 
 The clock is Thursday 5 November 2026 at 19:00 (backend.tests.fake_clock), in the week of Monday
 2 November. The essay was planned on Tuesday 3 November, 16:00 to 17:00, and nothing was done. Replan all
-my homework gives it a new time ahead of now, or no time when none fits before it is due. Plan my homework
-keeps the times already planned (spec.md). Nothing is ever placed before now, a pinned or finished session
+my homework and Plan my homework give it a new time ahead of now, or no time when none fits before it is due;
+every other planned time stays with Plan. Nothing is ever placed before now, a pinned or finished session
 is never touched, and what the status line says is true afterwards."""
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from datetime import datetime
 
 from PySide6.QtWidgets import QApplication
 
-from backend.tests.fake_clock import FakeClock
+from backend.tests.fake_clock import CLOCK, FakeClock
 from desktop.native.controller import NativeSession
 from desktop.native.weekmodel import homework_time_sentence
 from desktop.native.window import NativeWindow
@@ -121,16 +121,52 @@ def test_replan_all_leaves_the_essay_with_no_time_when_none_fits_before_it_is_du
     assert session.message == "Nothing placed. 1 with no time yet."
 
 
-def test_plan_keeps_the_missed_time_and_says_the_time_is_needed(
+def test_plan_moves_the_missed_essay_to_a_time_ahead_as_replan_all_does(
     qapp: QApplication, open_light: Callable[..., NativeWindow]
 ) -> None:
-    """spec.md: Plan places only homework that has no time yet and keeps the times already planned."""
+    """spec.md: Plan moves a session of this week that passed unfinished, to a time still ahead. Tuesday
+    16:00 to 17:00 is over at Thursday 19:00: after Plan the essay's 60 min hold a time at or after
+    Thursday 19:00, nothing is left needing one, and the notice is Replan all's."""
     session, work = _essay_planned_on_tuesday(qapp, open_light)
     session.solve()
     _settle(qapp, session)
-    kept = _block(session, work["id"])
-    assert (kept["days"], kept["start"]) == ([1], "16:00")
-    assert session.message == "1 h still needs a time"
+    moved = _block(session, work["id"])
+    assert (moved["days"][0], moved["start"]) >= THURSDAY_NOW
+    assert moved["duration_min"] == 60
+    assert session.homework_time_needed() == []
+    assert _sentence(session) == EVERYTHING
+    assert session.message == "Placed 1 homework block."
+
+
+def test_plan_leaves_a_passed_session_with_no_time_when_none_fits_before_it_is_due(
+    qapp: QApplication, open_light: Callable[..., NativeWindow]
+) -> None:
+    """Due Thursday 19:30: only 30 min lie between now and the deadline, so Plan leaves the 60 min with no
+    time, as Replan all does, and never puts it in the past."""
+    session, work = _essay_planned_on_tuesday(qapp, open_light, due="2026-11-05T19:30")
+    session.solve()
+    _settle(qapp, session)
+    left = _block(session, work["id"])
+    assert not left.get("start")
+    assert [item["minutes"] for item in session.homework_time_needed()] == [60]
+
+
+def test_plan_keeps_a_pinned_a_finished_a_running_and_a_later_session(
+    qapp: QApplication, open_light: Callable[..., NativeWindow]
+) -> None:
+    """Pinned (hand-shaped) and finished sessions of Tuesday, one running now (Thursday 18:30 to 19:30) and
+    one later today (Thursday 20:00) all stay where they are when Plan runs."""
+    for block, spot in (
+        ({"pinned": True}, ([1], "16:00")),
+        ({"completed": True, "completed_day": 1}, ([1], "16:00")),
+        ({"start": "18:30", "days": [3]}, ([3], "18:30")),
+        ({"start": "20:00", "days": [3]}, ([3], "20:00")),
+    ):
+        session, work = _essay_planned_on_tuesday(qapp, open_light, **block)
+        session.solve()
+        _settle(qapp, session)
+        kept = _block(session, work["id"])
+        assert (kept["days"], kept["start"]) == spot, block
 
 
 def test_replan_all_never_touches_a_pinned_session_that_passed(
@@ -141,7 +177,8 @@ def test_replan_all_never_touches_a_pinned_session_that_passed(
     _settle(qapp, session)
     kept = _block(session, work["id"])
     assert (kept["days"], kept["start"], kept.get("pinned")) == ([1], "16:00", True)
-    assert session.homework_time_needed() == [], "the student chose that time, so it is not waiting"
+    # The pinned session holds none of the 60 min it did not do: Replan all gave them a new session.
+    assert session.homework_time_needed() == []
 
 
 def test_replan_all_never_touches_a_finished_session_in_the_past(
@@ -322,14 +359,89 @@ def test_a_missed_session_never_comes_back_longer_than_itself(
     assert _block(session, work["id"])["duration_min"] == 60
 
 
-def test_a_pinned_session_that_passed_is_called_missed_but_not_counted(
+def test_a_pinned_session_that_passed_stays_and_its_undone_minutes_still_need_a_time(
     qapp: QApplication, open_light: Callable[..., NativeWindow]
 ) -> None:
-    """What a pinned missed session shows is not decided by the owner: screens call it missed, as they
-    did, and the count of homework needing a time does not include it (no plan moves it)."""
+    """The student put the essay at Tuesday 16:00 and it passed unfinished. It stays there, its 60 min are
+    still needed on every count, and Plan gives them a new session at or after Thursday 19:00."""
     session, work = _essay_planned_on_tuesday(qapp, open_light, pinned=True)
     assert session.missed_block_ids() == frozenset({work["id"]})
+    assert [item["minutes"] for item in session.homework_time_needed()] == [60]
+    assert _sentence(session) == "1 h still needs a time"
+    assert session.plan_can_place()
+    session.solve()
+    _settle(qapp, session)
+    kept = _block(session, work["id"])
+    assert (kept["days"], kept["start"], kept.get("pinned")) == ([1], "16:00", True)
+    fresh = [
+        item
+        for item in session.blocks
+        if item.get("assignment_id") == "essay" and item["id"] != work["id"]
+    ]
+    assert [item["duration_min"] for item in fresh] == [60]
+    assert (fresh[0]["days"][0], fresh[0]["start"]) >= THURSDAY_NOW
     assert session.homework_time_needed() == []
+    assert _sentence(session) == EVERYTHING
+
+
+def test_plan_gives_the_hour_another_new_session_when_its_first_one_was_pinned_and_passed(
+    qapp: QApplication, open_light: Callable[..., NativeWindow]
+) -> None:
+    """Plan gave the pinned Tuesday hour a new session; the student dragged that one to Wednesday 16:00,
+    which pins it, and it passed too. Plan places the hour once more, under a session id of its own: two
+    sessions with one id would make the whole plan be refused."""
+    session, work = _essay_planned_on_tuesday(qapp, open_light, pinned=True)
+    session.solve()
+    _settle(qapp, session)
+    first = next(
+        item for item in session.blocks if item.get("assignment_id") == "essay" and item["id"] != work["id"]
+    )
+    session.add_block({**first, "days": [2], "start": "16:00", "pinned": True})
+    session.save()
+    _settle(qapp, session)
+    assert [item["minutes"] for item in session.homework_time_needed()] == [60]
+    session.solve()
+    _settle(qapp, session)
+    mine = [item for item in session.blocks if item.get("assignment_id") == "essay"]
+    assert len({item["id"] for item in mine}) == len(mine) == 3
+    assert (_block(session, first["id"])["days"], _block(session, first["id"])["start"]) == ([2], "16:00")
+    newest = [item for item in mine if item["id"] not in (work["id"], first["id"])]
+    assert (newest[0]["days"][0], newest[0]["start"]) >= THURSDAY_NOW
+    assert session.homework_time_needed() == []
+
+
+def test_one_plan_press_places_the_waiting_session_and_the_pinned_past_ones_minutes(
+    qapp: QApplication, open_light: Callable[..., NativeWindow]
+) -> None:
+    """A 2 h essay in two 1 h sessions: one pinned on Tuesday 16:00 (passed unfinished), one waiting in the
+    drawer for a time. One Plan press places the waiting one and gives the pinned one's hour a new session,
+    so nothing is left with no time while Thursday evening to Saturday has room."""
+    session, work = _essay_planned_on_tuesday(qapp, open_light, estimate=120, pinned=True)
+    waiting = {key: value for key, value in work.items() if key not in ("start", "pinned")}
+    session.add_block({**waiting, "id": "essay-waiting", "days": [3, 4], "duration_min": 60})
+    session.save()
+    _settle(qapp, session)
+    assert [item["minutes"] for item in session.homework_time_needed()] == [120]
+    session.solve()
+    _settle(qapp, session)
+    kept = _block(session, work["id"])
+    assert (kept["days"], kept["start"], kept.get("pinned")) == ([1], "16:00", True)
+    mine = [item for item in session.blocks if item.get("assignment_id") == "essay"]
+    assert sorted(item["duration_min"] for item in mine) == [60, 60, 60]
+    assert all(item.get("start") for item in mine)
+    assert session.homework_time_needed() == []
+    assert _sentence(session) == EVERYTHING
+
+
+def test_a_pinned_session_ticked_done_asks_for_no_new_session(
+    qapp: QApplication, open_light: Callable[..., NativeWindow]
+) -> None:
+    session, work = _essay_planned_on_tuesday(
+        qapp, open_light, pinned=True, completed=True, completed_day=1
+    )
+    assert session.homework_time_needed() == []
+    assert not session.plan_can_place()
+    assert session.missed_block_ids() == frozenset()
 
 
 def test_an_unfinished_session_of_a_week_that_is_over_is_still_called_missed(
@@ -393,6 +505,23 @@ def test_a_week_that_is_over_says_its_missed_time_as_missed(
     assert window.rail.none_waiting.text() == "History essay · 1 h missed"
 
 
+def test_a_week_that_is_over_says_a_pinned_session_that_passed_as_pinned_in_the_past(
+    qapp: QApplication, open_light: Callable[..., NativeWindow], clock: FakeClock
+) -> None:
+    """The essay's Tuesday hour is pinned and was not finished. This week it needs a time; once the week is
+    over, the status line and the plain look's list say "pinned, in the past" where an unpinned hour reads
+    missed. Its minutes still count as needed."""
+    window = open_light()
+    session, _ = _essay_planned_on_tuesday(qapp, lambda: window, due="2026-11-13T23:59", pinned=True)
+    window._fill_classic()
+    assert window.rail.none_waiting.text() == "History essay · 1 h left"
+    clock.set(datetime(2026, 11, 9, 10, 0))
+    window._fill_classic()
+    assert [item["minutes"] for item in session.homework_time_needed()] == [60]
+    assert _sentence(session) == "1 h pinned, in the past"
+    assert window.rail.none_waiting.text() == "History essay · 1 h pinned, in the past"
+
+
 def test_minutes_no_session_holds_are_read_with_the_missed_session_counted_as_time_still_needed(
     qapp: QApplication, open_light: Callable[..., NativeWindow], clock: FakeClock
 ) -> None:
@@ -404,7 +533,7 @@ def test_minutes_no_session_holds_are_read_with_the_missed_session_counted_as_ti
     session.preferences = {**(session.preferences or {}), "timer_work_min": 10}
     _log_focus(qapp, session, work, clock, 10, 10)
     assert [item["minutes"] for item in session.homework_time_needed()] == [50]
-    assert session.homework_remainders() == [("History essay", 5)]
+    assert session.homework_remainders() == [("History essay", 5, "essay")]
     assert session.minutes_left_for("essay") == 5
     assert session.remaining_for("essay") == 0
     assert session.plan_unfinished("essay") is None
@@ -437,12 +566,11 @@ def test_replan_all_counts_a_missed_session_again_when_another_homework_gets_a_f
     assert [minutes for _, _, minutes in _placed(session)] == [30]
 
 
-def test_plan_counts_a_missed_session_as_homework_with_no_time_yet(
+def test_plan_places_a_missed_session_together_with_new_homework(
     qapp: QApplication, open_light: Callable[..., NativeWindow]
 ) -> None:
-    """Plan keeps the essay's missed Tuesday time and places the new maths sheet. Its count is the one
-    count: the essay's hour has no time, so the plan says 1 with no time yet, and Material's "Placed 1 of 2"
-    counts it."""
+    """Plan moves the essay's missed Tuesday hour and places the new maths sheet: two blocks placed, and
+    nothing is left with no time yet. Before, Plan kept the missed time and said "1 with no time yet"."""
     session, _ = _essay_planned_on_tuesday(qapp, open_light)
     session.add_homework(
         {
@@ -457,6 +585,27 @@ def test_plan_counts_a_missed_session_as_homework_with_no_time_yet(
     _settle(qapp, session)
     session.solve()
     _settle(qapp, session)
-    assert session.plan_counts == (1, 1)
-    assert session.plan_open == 1
-    assert session.message == "Placed 1 homework block. 1 with no time yet."
+    assert session.plan_counts == (2, 0)
+    assert session.plan_open == 0
+    assert session.message == "Placed 2 homework blocks."
+
+
+def test_the_plan_badge_counts_a_session_that_passes_while_the_window_is_open(
+    qapp: QApplication, open_light: Callable[..., NativeWindow]
+) -> None:
+    """The essay is planned for Thursday 20:00 to 21:00 and the clock reads 19:00: everything has a time and
+    Plan carries no count. At 21:30 the session has passed unfinished, the clock's own refill runs and the
+    rail needs 60 min; Plan must then say one homework still needs time, with no other click."""
+    window = open_light()
+    session, _ = _essay_planned_on_tuesday(qapp, lambda: window, start="20:00", days=[3])
+    window._sync_chrome()
+    qapp.processEvents()
+    assert session.homework_time_needed() == []
+    assert window.solve_button.accessibleName() == "Plan my homework"
+
+    CLOCK.move(hours=2, minutes=30)
+    window._refresh_layout()
+    qapp.processEvents()
+
+    assert [item["minutes"] for item in session.homework_time_needed()] == [60]
+    assert window.solve_button.accessibleName() == "Plan my homework, 1 homework still needs time"

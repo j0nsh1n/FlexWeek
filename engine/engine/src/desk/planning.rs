@@ -382,7 +382,7 @@ pub fn solve_request(
 
 /// `solve_request` that also knows the clock, `now` as (day, minute) of the real current minute. A
 /// homework session that ended by `now`, is not pinned and still has minutes to do is then moved by
-/// Replan all instead of kept for having begun. Without `now` no session counts as missed.
+/// Plan and by Replan all instead of kept for having begun. Without `now` no session counts as missed.
 /// `saved_week` is the week the homework's server numbers were read with (`this_weeks_part`).
 pub fn solve_request_at(
     blocks: &Value,
@@ -421,7 +421,7 @@ pub fn solve_request_at(
             && (truthy(get(&block, "pinned")?) || begun(&block, not_before, not_before_is_list)?);
         let wanted = match only.filter(|value| !value.is_null()) {
             Some(only) => contains(only, subscript(&block, "id")?)?,
-            None => (everything && !kept) || !planned,
+            None => (everything && !kept) || !planned || minutes.is_some(),
         };
         if wanted {
             let mut session = match &block {
@@ -480,6 +480,12 @@ fn finished(block: &Value) -> bool {
         .unwrap_or(false)
 }
 
+/// A pinned homework session whose time passed unfinished. No plan moves it, but it holds none of its
+/// homework's minutes: they are still needed, and Plan gives them a new session.
+fn pinned_past(block: &Value, now: &Value) -> EngineResult<bool> {
+    Ok(truthy(get(block, "pinned")?) && !finished(block) && ended_session(block, now)?.is_some())
+}
+
 /// What Replan all gives each homework session whose time has passed: the minutes it still needs,
 /// as (session id, minutes). A session left out is not one a plan moves: not planned, pinned,
 /// finished, not homework, still ahead or on now, or none of its homework's time is left for it.
@@ -509,6 +515,10 @@ fn missed_minutes(
         };
         passed.push(at);
     }
+    let mut holds_nothing = Vec::with_capacity(blocks.len());
+    for block in blocks {
+        holds_nothing.push(pinned_past(block, now)?);
+    }
     let mut out = Vec::new();
     for (index, block) in blocks.iter().enumerate() {
         let Some(here) = &passed[index] else {
@@ -528,6 +538,7 @@ fn missed_minutes(
             if at == index
                 || other.get("assignment_id") != Some(link)
                 || finished(other)
+                || holds_nothing[at]
                 || passed[at].as_ref().is_some_and(|there| there >= here)
             {
                 continue;
@@ -577,9 +588,9 @@ pub fn missed_session_ids(
 }
 
 /// The week with each session Replan all would move for having passed read as one with no time (its
-/// start dropped, its length the minutes still needed), so the count of homework that needs a time
-/// does not call a missed session "has a time". The week as it is when there is no clock to read
-/// (`now` empty).
+/// start dropped, its length the minutes still needed), and a pinned session that passed unfinished
+/// left out (it holds no minutes), so the count of homework that needs a time does not call either
+/// "has a time". The week as it is when there is no clock to read (`now` empty).
 pub fn without_missed_times(
     blocks: &[Value],
     assignments: &Value,
@@ -592,6 +603,9 @@ pub fn without_missed_times(
     let missed = missed_minutes(blocks, assignments, saved_week, now)?;
     let mut out = Vec::with_capacity(blocks.len());
     for block in blocks {
+        if pinned_past(block, now)? {
+            continue;
+        }
         let id = subscript(block, "id")?;
         match missed.iter().find(|(held, _)| eq(held, id)) {
             Some((_, minutes)) => {
@@ -655,8 +669,36 @@ pub fn open_rest_sessions_since(
     earlier_blocks: &[Value],
     saved_week: &[Value],
 ) -> EngineResult<Vec<Value>> {
+    open_rest_sessions_at(
+        blocks,
+        assignments,
+        week_start,
+        earlier_blocks,
+        saved_week,
+        None,
+    )
+}
+
+/// `open_rest_sessions_since` that also knows the clock, `now` as (day, minute) of the real current
+/// minute: a pinned session that passed unfinished holds none of its homework's minutes, so they get a
+/// rest session while the pinned one stays where it is.
+pub fn open_rest_sessions_at(
+    blocks: &[Value],
+    assignments: &serde_json::Map<String, Value>,
+    week_start: &str,
+    earlier_blocks: &[Value],
+    saved_week: &[Value],
+    now: Option<&Value>,
+) -> EngineResult<Vec<Value>> {
     let monday = from_iso(week_start)?;
-    let here = Value::Array(blocks.to_vec());
+    let mut holding = Vec::with_capacity(blocks.len());
+    for block in blocks {
+        match now.filter(|value| !value.is_null()) {
+            Some(now) if pinned_past(block, now)? => {}
+            _ => holding.push(block.clone()),
+        }
+    }
+    let here = Value::Array(holding);
     let saved = Value::Array(saved_week.to_vec());
     let mut out = blocks.to_vec();
     for (id, assignment) in assignments {
@@ -669,14 +711,25 @@ pub fn open_rest_sessions_since(
         if crate::model::parse_due(due)?.0 < monday {
             continue;
         }
-        let has_open = out.iter().any(|block| {
-            block.get("assignment_id").and_then(Value::as_str) == Some(id)
-                && !truthy(block.get("start"))
-                && !block
-                    .get("completed")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false)
-        });
+        let mut pinned_passed = false;
+        if let Some(now) = now.filter(|value| !value.is_null()) {
+            for block in blocks {
+                if block.get("assignment_id").and_then(Value::as_str) == Some(id) {
+                    pinned_passed |= pinned_past(block, now)?;
+                }
+            }
+        }
+        // A waiting session covers the homework's minutes unless a pinned session that passed left
+        // some over; `uncovered_minutes` below already counts the waiting one as held.
+        let has_open = !pinned_passed
+            && out.iter().any(|block| {
+                block.get("assignment_id").and_then(Value::as_str) == Some(id)
+                    && !truthy(block.get("start"))
+                    && !block
+                        .get("completed")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false)
+            });
         let already_placed_earlier = earlier_blocks.iter().any(|block| {
             block.get("assignment_id").and_then(Value::as_str) == Some(id)
                 && truthy(block.get("start"))
@@ -690,8 +743,20 @@ pub fn open_rest_sessions_since(
             continue;
         }
         let due = subscript(assignment, "due")?;
+        // The week holds each id once, and an earlier new session (moved by hand, or still waiting) may
+        // already have the plain one.
+        let base = format!("{id}-rest-{week_start}");
+        let mut rest_id = base.clone();
+        let mut next = 2;
+        while out
+            .iter()
+            .any(|block| block.get("id").and_then(Value::as_str) == Some(rest_id.as_str()))
+        {
+            rest_id = format!("{base}-{next}");
+            next += 1;
+        }
         out.push(json!({
-            "id": format!("{id}-rest-{week_start}"),
+            "id": rest_id,
             "kind": "flexible",
             "assignment_id": id,
             "title": assignment.get("title").cloned().unwrap_or(Value::Null),
@@ -713,6 +778,7 @@ pub fn move_earlier_homework(
     week_start: &str,
 ) -> EngineResult<Value> {
     let monday = from_iso(week_start)?;
+    let first_part = crate::shown::shown_parts(week_start)?;
     let mut current = blocks.to_vec();
     let mut moved = Vec::new();
     let mut updates = Vec::new();
@@ -721,6 +787,12 @@ pub fn move_earlier_homework(
         if source_week.as_str() >= week_start {
             continue;
         }
+        // The stored week holding a shown week's first day is partly this week: a session waiting
+        // on any of its shown days is already in `blocks`; moving it in would count its time twice.
+        let shown_from = match &first_part {
+            Some((first, _, offset)) if *first == source_week => Some(*offset),
+            _ => None,
+        };
         let before = list_field(saved, "blocks")?;
         let before_blocks = iterate(&before)?;
         let mut after = Vec::new();
@@ -742,7 +814,13 @@ pub fn move_earlier_homework(
                 after.push(block);
                 continue;
             };
-            if !is_open || crate::model::parse_due(due)?.0 < monday {
+            let shown = shown_from.is_some_and(|offset| {
+                block["days"].as_array().is_some_and(|days| {
+                    days.iter()
+                        .any(|day| day.as_i64().is_some_and(|day| day >= offset))
+                })
+            });
+            if !is_open || shown || crate::model::parse_due(due)?.0 < monday {
                 after.push(block);
                 continue;
             }
@@ -1124,7 +1202,8 @@ pub fn settle_placements_after_deadline(
             continue;
         };
         let title = or_default(get(block, "title")?, json!("Homework"));
-        let shown = DAY_FULL[tuple_index(DAY_FULL.len(), &day)?];
+        let names = crate::desk::weekmodel::shown_names(week_start, true)?;
+        let shown = names[tuple_index(names.len(), &day)?];
         let stamp = crate::desk::weekmodel::hhmm_text(text(subscript(block, "start")?, "split")?)?;
         lost.set(
             subscript(block, "id")?.clone(),
@@ -1615,18 +1694,20 @@ pub fn fair_share(
             continue;
         }
         let share = ceil_slot((left * this_week + all_days - 1) / all_days).min(left);
-        let held: i64 = out
-            .iter()
-            .filter(|block| {
-                homework_of(block).as_deref() == Some(homework.as_str())
-                    && !id_of(block).is_some_and(|id| targets.contains(&id))
-                    && !block
-                        .get("completed")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false)
-            })
-            .map(duration)
-            .sum();
+        // A session whose time is over holds none of the share, as `missed_minutes` reads it: only a
+        // session ticked done or still ahead of the plan's start does. Plan starts on the quarter hour
+        // after now, so a session ending inside the current one is already counted as over.
+        let start_point = json!([first_day, first_minute]);
+        let mut held = 0;
+        for block in out.iter() {
+            let counts = homework_of(block).as_deref() == Some(homework.as_str())
+                && !id_of(block).is_some_and(|id| targets.contains(&id))
+                && !finished(block)
+                && ended_session(block, &start_point)?.is_none();
+            if counts {
+                held += duration(block);
+            }
+        }
         let mut budget = (share - held).max(0);
         let mut placed = held;
         let mut cut = false;
@@ -1658,8 +1739,24 @@ pub fn fair_share(
         if cut {
             let remainder = (left - placed).max(0);
             if remainder >= SLOT_MIN {
-                let rest_id = format!("{homework}-rest-{week_start}");
-                out.retain(|block| id_of(block).as_deref() != Some(rest_id.as_str()));
+                let base = format!("{homework}-rest-{week_start}");
+                // A waiting session of that id is replaced; one the student gave a time or pinned stays,
+                // and the new session takes an id the week does not hold.
+                out.retain(|block| {
+                    id_of(block).as_deref() != Some(base.as_str())
+                        || truthy(block.get("start"))
+                        || truthy(block.get("pinned"))
+                        || truthy(block.get("completed"))
+                });
+                let mut rest_id = base.clone();
+                let mut next = 2;
+                while out
+                    .iter()
+                    .any(|block| id_of(block).as_deref() == Some(rest_id.as_str()))
+                {
+                    rest_id = format!("{base}-{next}");
+                    next += 1;
+                }
                 let due = subscript(assignment, "due")?;
                 out.push(json!({
                     "id": rest_id,

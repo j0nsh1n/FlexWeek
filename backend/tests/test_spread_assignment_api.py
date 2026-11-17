@@ -117,3 +117,64 @@ def test_spread_rejects_a_completed_assignment(alice: TestClient) -> None:
         headers=WRITE,
     )
     assert response.status_code == 422
+
+
+def test_spread_leaves_the_day_of_a_placed_session_for_last(alice: TestClient) -> None:
+    # 120 minutes due Tuesday 2026-09-15 with a 30 minute session already timed on Monday: 90 are
+    # uncovered, as shares of 60 and 30. Monday and Tuesday are the only days, so the 60 takes Tuesday
+    # (no session there) and the 30 takes Monday, the held day, once Tuesday has its share.
+    assert alice.put("/api/assignments/hw-essay", json=assignment(), headers=WRITE).status_code == 200
+    placed = {
+        "id": "hw-essay-held",
+        "title": "Essay",
+        "kind": "flexible",
+        "duration_min": 30,
+        "days": [0],
+        "start": "16:00",
+        "priority": 2,
+        "energy": "low",
+        "assignment_id": "hw-essay",
+    }
+    saved = alice.put(
+        "/api/week", json={"week_start": WEEK, "blocks": [placed], "revision": 0}, headers=WRITE
+    )
+    assert saved.status_code == 200, saved.text
+    preview = alice.post(
+        "/api/assignments/hw-essay/spread",
+        json={"session_min": 60, "from_date": "2026-09-14"},
+        headers=WRITE,
+    )
+    assert preview.status_code == 200, preview.text
+    shares = [(item["date"], item["duration_min"]) for item in preview.json()["sessions"]]
+    assert shares == [("2026-09-15", 60), ("2026-09-14", 30)]
+
+
+def test_spread_gives_a_free_day_the_share_before_a_day_with_a_placed_session(
+    alice: TestClient,
+) -> None:
+    # Due Wednesday: three days. The held session is on Monday, so the two shares take Tuesday and
+    # Wednesday, not Monday and Tuesday.
+    body = assignment(due="2026-09-16T23:59", estimate_min=150)
+    assert alice.put("/api/assignments/hw-essay", json=body, headers=WRITE).status_code == 200
+    placed = {
+        "id": "hw-essay-held",
+        "title": "Essay",
+        "kind": "flexible",
+        "duration_min": 30,
+        "days": [0],
+        "start": "16:00",
+        "priority": 2,
+        "energy": "low",
+        "assignment_id": "hw-essay",
+    }
+    saved = alice.put(
+        "/api/week", json={"week_start": WEEK, "blocks": [placed], "revision": 0}, headers=WRITE
+    )
+    assert saved.status_code == 200, saved.text
+    preview = alice.post(
+        "/api/assignments/hw-essay/spread",
+        json={"session_min": 60, "from_date": "2026-09-14"},
+        headers=WRITE,
+    )
+    shares = [(item["date"], item["duration_min"]) for item in preview.json()["sessions"]]
+    assert shares == [("2026-09-15", 60), ("2026-09-16", 60)]

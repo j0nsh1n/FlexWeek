@@ -351,3 +351,25 @@ def test_a_kept_homework_reopened_in_the_new_week_names_the_moved_pin(
     pump(qapp)
     assert sheets.form["whenMovedNote"] == ""
     assert sheets.form["whenDayAccess"] == ""
+
+
+def test_a_kept_homework_reopened_later_judges_a_picked_time_by_the_clock_now(
+    qapp, shell, focused
+) -> None:
+    """Esc at 19:00 keeps the typing. At 20:00 the student draws 19:30 to 20:30 on Thursday: 19:30 has
+    passed, so the sheet says so, in the words it uses for a past time (it judged by 19:00 and said
+    nothing)."""
+    from backend.tests.fake_clock import CLOCK
+
+    sheets = focused
+    open_add(sheets, "homework")
+    type_title(sheets, "Piano lesson")
+    press_escape(shell)
+    assert sheets.kind == ""
+    CLOCK.move(hours=1)
+    sheets.openHomeworkAt(3, 19 * 60 + 30, 20 * 60 + 30)
+    pump(qapp, 20)
+    assert sheets.kind == "homework"
+    assert sheets.form["whenProblem"] == (
+        "That time has passed. Choose 8:00 PM or later today, or another day."
+    )

@@ -9,8 +9,8 @@
 //! because the plan's limit is rounded up to the quarter hour.
 
 use flexweek_engine::desk::planning::{
-    clock_point, missed_session_ids, screen_point, solve_request, solve_request_at,
-    time_still_needed_since, without_missed_times,
+    clock_point, missed_session_ids, open_rest_sessions_at, screen_point, solve_request,
+    solve_request_at, time_still_needed_since, without_missed_times,
 };
 use serde_json::{Map, Value, json};
 
@@ -125,15 +125,67 @@ fn test_replan_all_moves_a_session_whose_time_passed_to_a_time_still_ahead() {
 }
 
 #[test]
-fn test_plan_keeps_the_time_of_a_session_that_passed() {
-    // spec.md: "Plan my homework" places only homework that has no time yet and keeps the times
-    // already planned. The session has a time (a passed one), so Plan holds it where it is.
+fn test_plan_moves_a_session_whose_time_passed_to_a_time_still_ahead() {
+    // spec.md: Plan places homework that has no time yet and moves a session of this week that
+    // passed unfinished, as Replan all does. Tuesday 16:00-17:00 is over by Thursday 19:00.
     let assignments = essay(60, 0, "2026-11-07T23:59");
-    let (payload, targets) = request(vec![session("essay", 1, "16:00", 60)], &assignments, false);
-    assert!(targets.is_empty());
+    let blocks = vec![session("essay", 1, "16:00", 60)];
+    let (payload, targets) = request(blocks.clone(), &assignments, false);
+    assert_eq!(targets, ["essay"]);
     let essay = sent(&payload, "essay");
-    assert_eq!(essay["kind"], "locked");
-    assert_eq!(essay["start"], "16:00");
+    assert_eq!(essay["kind"], "flexible", "sent to the solver, not held");
+    assert!(essay.get("start").is_none(), "its old time is not kept");
+    assert_eq!(essay["days"], json!([3, 4, 5]));
+    assert_eq!(essay["earliest"], "Thursday 19:00");
+    assert_eq!(essay["duration_min"], 60);
+    let (replanned, _) = request(blocks, &assignments, true);
+    assert_eq!(payload, replanned, "the same request Replan all makes");
+}
+
+#[test]
+fn test_plan_keeps_a_pinned_a_finished_a_running_and_a_later_session() {
+    let assignments = essay(60, 0, "2026-11-07T23:59");
+    let mut pinned = session("essay", 1, "16:00", 60);
+    pinned["pinned"] = json!(true);
+    let mut done = session("essay", 1, "16:00", 60);
+    done["completed"] = json!(true);
+    let running = session("essay", 3, "18:30", 60);
+    let later = session("essay", 3, "20:00", 60);
+    for kept in [pinned, done, running, later] {
+        let (payload, targets) = request(vec![kept.clone()], &assignments, false);
+        assert!(targets.is_empty(), "{kept} stays");
+        let sent = sent(&payload, "essay");
+        if kept["completed"] == json!(true) {
+            assert_eq!(sent, &kept);
+        } else {
+            assert_eq!(sent["kind"], "locked");
+            assert_eq!(sent["start"], kept["start"]);
+        }
+    }
+}
+
+#[test]
+fn test_plan_moves_only_the_session_that_passed_of_two() {
+    // 120 estimated: Tuesday's hour passed, Friday's hour is ahead. Friday's keeps its time; the
+    // passed one comes back for what Friday's does not hold, 120 - 60 = 60.
+    let assignments = essay(120, 0, "2026-11-07T23:59");
+    let blocks = vec![session("a", 1, "16:00", 60), session("b", 4, "16:00", 60)];
+    let (payload, targets) = request(blocks, &assignments, false);
+    assert_eq!(targets, ["a"]);
+    assert_eq!(sent(&payload, "a")["duration_min"], 60);
+    assert_eq!(sent(&payload, "b")["kind"], "locked");
+    assert_eq!(sent(&payload, "b")["start"], "16:00");
+}
+
+#[test]
+fn test_plan_leaves_a_passed_session_with_no_time_when_no_room_is_left_before_its_due() {
+    // Due Thursday 19:00, the minute on the clock: nothing is left to place before it. Plan sends
+    // the same thing Replan all does for it.
+    let assignments = essay(60, 0, "2026-11-05T19:00");
+    let blocks = vec![session("essay", 1, "16:00", 60)];
+    let plan = request(blocks.clone(), &assignments, false);
+    let replan = request(blocks, &assignments, true);
+    assert_eq!(plan, replan);
 }
 
 #[test]
@@ -181,7 +233,173 @@ fn test_replan_all_never_touches_a_pinned_session_that_passed() {
     assert!(targets.is_empty());
     assert_eq!(sent(&payload, "essay")["kind"], "locked");
     assert_eq!(sent(&payload, "essay")["start"], "16:00");
-    assert_eq!(needed(&[pinned], &assignments, Some(&not_before())), 0);
+    // Its minutes were not done: they are still needed, though the session stays where it is.
+    assert_eq!(needed(&[pinned], &assignments, Some(&not_before())), 60);
+}
+
+/// The open-week reading of a plan: sessions plus the rest session the homework's uncovered minutes get.
+fn with_rest(blocks: &[Value], assignments: &Value, now: &Value) -> Vec<Value> {
+    let map: &Map<String, Value> = assignments.as_object().expect("assignments");
+    open_rest_sessions_at(blocks, map, WEEK, &[], blocks, Some(now)).expect("rest sessions")
+}
+
+#[test]
+fn test_a_pinned_session_that_passed_stays_and_plan_asks_for_its_minutes_as_a_new_session() {
+    let mut pinned = session("essay", 1, "16:00", 60);
+    pinned["pinned"] = json!(true);
+    let assignments = essay(60, 0, "2026-11-07T23:59");
+    let now = not_before();
+    let open = with_rest(&[pinned.clone()], &assignments, &now);
+    let rest = open
+        .iter()
+        .find(|block| block["id"] == "essay-a-rest-2026-11-02")
+        .expect("a new session for the 60 minutes");
+    assert_eq!(rest["duration_min"], 60);
+    assert!(rest.get("start").is_none());
+    let (payload, targets) = request_at(open.clone(), &assignments, false, &now);
+    assert_eq!(targets, ["essay-a-rest-2026-11-02"]);
+    assert_eq!(sent(&payload, "essay")["start"], "16:00");
+    assert_eq!(sent(&payload, "essay")["kind"], "locked");
+}
+
+#[test]
+fn test_a_new_session_for_a_pinned_past_ones_minutes_leaves_nothing_needed() {
+    let mut pinned = session("essay", 1, "16:00", 60);
+    pinned["pinned"] = json!(true);
+    let assignments = essay(60, 0, "2026-11-07T23:59");
+    let placed = session("essay-a-rest-2026-11-02", 4, "10:00", 60);
+    assert_eq!(
+        needed(
+            &[pinned.clone(), placed.clone()],
+            &assignments,
+            Some(&not_before())
+        ),
+        0
+    );
+    // The pinned one holds nothing: with 120 minutes to do, the new session's 60 are all that is held.
+    let bigger = essay(120, 0, "2026-11-07T23:59");
+    assert_eq!(needed(&[pinned, placed], &bigger, Some(&not_before())), 60);
+}
+
+#[test]
+fn test_a_pinned_past_session_gets_its_new_session_though_another_one_waits_for_a_time() {
+    // A 2 h homework in two 1 h sessions: one pinned on Tuesday (passed), one waiting in the drawer.
+    let mut pinned = session("essay", 1, "16:00", 60);
+    pinned["pinned"] = json!(true);
+    let mut waiting = session("essay-2", 0, "09:00", 60);
+    waiting
+        .as_object_mut()
+        .expect("object")
+        .shift_remove("start");
+    let assignments = essay(120, 0, "2026-11-07T23:59");
+    let now = not_before();
+    let open = with_rest(&[pinned, waiting], &assignments, &now);
+    let rest = open
+        .iter()
+        .find(|block| block["id"] == "essay-a-rest-2026-11-02")
+        .expect("a new session for the pinned one's 60 minutes");
+    assert_eq!(rest["duration_min"], 60);
+    let (_, targets) = request_at(open.clone(), &assignments, false, &now);
+    assert_eq!(targets, ["essay-2", "essay-a-rest-2026-11-02"]);
+    // One Plan press places everything: nothing is still needed once both have a time.
+    let mut placed = open.clone();
+    for (at, start) in [(1, "10:00"), (2, "11:00")] {
+        placed[at]["start"] = json!(start);
+        placed[at]["days"] = json!([4]);
+    }
+    assert_eq!(needed(&placed, &assignments, Some(&now)), 0);
+    // Pressed again, it makes no further session.
+    assert_eq!(with_rest(&placed, &assignments, &now).len(), 3);
+}
+
+fn ids(blocks: &[Value]) -> Vec<String> {
+    blocks
+        .iter()
+        .map(|block| block["id"].as_str().expect("an id").to_string())
+        .collect()
+}
+
+fn unique(blocks: &[Value]) -> bool {
+    let all = ids(blocks);
+    let mut seen = all.clone();
+    seen.sort();
+    seen.dedup();
+    seen.len() == all.len()
+}
+
+#[test]
+fn test_a_second_new_session_never_reuses_the_first_ones_id() {
+    // Plan gave the pinned Tuesday hour a new session; the student dragged that one to Wednesday 16:00
+    // (pinning it) and it passed too. The hour is uncovered again: a new session, under an id of its own,
+    // since the week cannot hold two sessions with one id.
+    let mut tuesday = session("essay", 1, "16:00", 60);
+    tuesday["pinned"] = json!(true);
+    let mut wednesday = session("essay-a-rest-2026-11-02", 2, "16:00", 60);
+    wednesday["pinned"] = json!(true);
+    let assignments = essay(60, 0, "2026-11-07T23:59");
+    let now = not_before();
+    let open = with_rest(&[tuesday, wednesday], &assignments, &now);
+    assert!(unique(&open), "{:?}", ids(&open));
+    assert_eq!(open.len(), 3);
+    assert_eq!(open[2]["duration_min"], 60);
+    let mut placed = open.clone();
+    placed[2]["start"] = json!("10:00");
+    placed[2]["days"] = json!([4]);
+    assert_eq!(needed(&placed, &assignments, Some(&now)), 0);
+    assert_eq!(
+        with_rest(&placed, &assignments, &now).len(),
+        3,
+        "pressed again, nothing more"
+    );
+}
+
+#[test]
+fn test_a_new_session_beside_a_waiting_rest_session_has_an_id_of_its_own() {
+    // The pinned Tuesday hour passed while its new session still waits for a time, and the estimate grew
+    // to 3 h: one more hour has no session. It gets one under an id the week does not hold yet.
+    let mut tuesday = session("essay", 1, "16:00", 60);
+    tuesday["pinned"] = json!(true);
+    let mut waiting = session("essay-a-rest-2026-11-02", 0, "09:00", 60);
+    waiting
+        .as_object_mut()
+        .expect("object")
+        .shift_remove("start");
+    let assignments = essay(180, 0, "2026-11-07T23:59");
+    let now = not_before();
+    let open = with_rest(&[tuesday, waiting], &assignments, &now);
+    assert!(unique(&open), "{:?}", ids(&open));
+    assert_eq!(open.len(), 3);
+    let (_, targets) = request_at(open.clone(), &assignments, false, &now);
+    assert_eq!(
+        targets.len(),
+        2,
+        "both sessions with no time are placed in one press"
+    );
+}
+
+#[test]
+fn test_a_pinned_session_does_not_hold_the_minutes_of_a_missed_one_after_it() {
+    // 60 minutes to do, a pinned session on Monday and an unpinned one on Tuesday, both passed:
+    // the pinned one holds nothing, so the Tuesday session is still owed all 60.
+    let mut pinned = session("essay", 0, "16:00", 60);
+    pinned["pinned"] = json!(true);
+    let tuesday = session("essay-2", 1, "16:00", 60);
+    let assignments = essay(60, 0, "2026-11-07T23:59");
+    let now = not_before();
+    assert_eq!(needed(&[pinned, tuesday], &assignments, Some(&now)), 60);
+}
+
+#[test]
+fn test_a_pinned_session_ticked_done_asks_for_no_new_session() {
+    let mut done = session("essay", 1, "16:00", 60);
+    done["pinned"] = json!(true);
+    done["completed"] = json!(true);
+    let assignments = essay(60, 0, "2026-11-07T23:59");
+    assert_eq!(
+        with_rest(&[done.clone()], &assignments, &not_before()).len(),
+        1
+    );
+    assert_eq!(needed(&[done], &assignments, Some(&not_before())), 0);
 }
 
 #[test]

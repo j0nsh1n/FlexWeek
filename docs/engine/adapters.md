@@ -31,6 +31,7 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | weeks | repeat_changes_from_shown_week | ADAPTER | Encodes the changes, one call (`shown::repeat_changes_from_shown_week`), JSON decoded. |
 | weeks | availability_on_shown_week | ADAPTER | One call (`shown::occupancy_on_shown_week` and `shown::windows_on_shown_week` in one binding): each weekday's occupancy and work windows on that weekday's day of the shown week. |
 | weeks | rules_on_shown_week | ADAPTER | Encodes the planner settings, one call (`shown::rules_on_shown_week`) that names the weekday of the shown week's day 0, JSON decoded. |
+| assignments | held_dates_by_id | ADAPTER | Encodes the weeks, one call, values become lists of text. |
 | assignments | planned_minutes_by_id | ADAPTER | Encodes the weeks, one call, values become ints. |
 | assignments | done_minutes_by_id | ADAPTER | Encodes the weeks, one call, values become ints. |
 | assignments | unplanned_minutes | ADAPTER | Four ints in (estimate, focus, minutes ticked done, planned), one engine call. |
@@ -43,7 +44,7 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | availability | resolve_work_windows | ADAPTER | `None` stays `None`; an empty list is the engine's to default. One call, then pydantic. |
 | availability | session_inside_work_windows | ADAPTER | Encodes the windows, one call. |
 | availability | merge_occupancy | ADAPTER | One engine call, list out. |
-| availability | spread_sessions | ADAPTER | One engine call; the session text is decoded and the remainder is returned beside it. |
+| availability | spread_sessions | ADAPTER | One engine call (`spread_sessions_around`, with the days the homework's timed sessions sit on); the session text is decoded and the remainder is returned beside it. |
 | comfort | snap_minutes | ADAPTER | One `snap_minutes_wide` call. Integers f64 holds exactly keep `plan::snap_minutes`; past 2^53 the engine uses Python's formula. |
 | comfort | split_plan | ADAPTER | One engine call, JSON decoded. |
 | comfort | preview_split | ADAPTER | One engine call, JSON decoded. |
@@ -365,7 +366,7 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | reuse | held_in_place | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | plan_start | LOGIC, moved | hour and minute arithmetic and the half-minute rule: `planning::plan_start_at` |
 | reuse | solve_request | LOGIC, moved | `only`, `not_before` and `everything` are read as given by `reuse_solve_request`; the set of targets is a list to set; `now` is read as the real clock point by `reuse_solve_request`; `saved_week` is the week the server's numbers were read with, which a missed session's minutes are counted against (`this_weeks_part`) |
-| reuse | without_missed_times | ADAPTER | encodes, makes one engine call, decodes; `now` read at `planning::screen_point`, as `missed_session_ids` reads it; a missed session's minutes counted against `saved_week` |
+| reuse | without_missed_times | ADAPTER | encodes, makes one engine call, decodes; `now` read at `planning::screen_point`, as `missed_session_ids` reads it; a missed session's minutes counted against `saved_week`; a pinned session that passed unfinished is left out, holding none |
 | reuse | missed_session_ids | ADAPTER | encodes, makes one engine call, decodes to a frozenset; minutes counted against `saved_week` |
 | reuse | due_point | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | settle_placements | LOGIC, moved | `keep` is read as given by `reuse_settle_placements` |
@@ -377,7 +378,7 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | reuse | time_still_needed | ADAPTER | encodes, makes one engine call, decodes; counts minutes, not quarter hours: each homework's waiting sessions plus its minutes no session holds, counted as `uncovered_homework_minutes` counts them against `committed_blocks` (`planning::time_still_needed_since`) |
 | reuse | time_still_needed_parts | ADAPTER | the same call with each homework's `waiting_min` and `uncovered_min` beside its minutes; the plan notice names the homework whose `uncovered_min` is not 0 |
 | reuse | plan_open_counts | ADAPTER | encodes, makes one engine call, decodes; `open` is homework with a session still waiting for a time (Material's "Placed N of M"), `waiting_only` those with no minutes outside a session (`planning::plan_open_counts`) |
-| reuse | open_rest_sessions | ADAPTER | encodes, makes one engine call, decodes; `saved_week` is the week the server's numbers were read with, none meaning `blocks` (`planning::open_rest_sessions_since`); the rest session is the minutes no session holds down to a quarter hour |
+| reuse | open_rest_sessions | ADAPTER | encodes, makes one engine call, decodes; `saved_week` is the week the server's numbers were read with, none meaning `blocks`; `now` is the real clock, a pinned session that passed unfinished holding none of the minutes (`planning::open_rest_sessions_at`); the rest session is the minutes no session holds down to a quarter hour |
 | reuse | fair_share | ADAPTER | encodes, makes one engine call, decodes; `saved_week` as for `open_rest_sessions`; the share is cut from all of this week's part, the sessions being planned holding none of it yet (`planning::fair_share`) |
 | reuse | copied_fixed_block | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | copied_homework_block | ADAPTER | encodes, makes one engine call, decodes |

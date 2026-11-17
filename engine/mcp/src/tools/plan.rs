@@ -1,7 +1,8 @@
 //! `plan_homework` is "Plan my homework": the steps of `controller.py` `solve` as the phone runs
-//! them in Rust (`ffi/src/plan_week.rs` `run_plan`). Homework that already has a time keeps it;
-//! earlier weeks' unfinished sessions move into this week; the planner places the rest around the
-//! fixed blocks, never before now. What it placed is written in one change, after one restore
+//! them in Rust (`ffi/src/plan_week.rs` `run_plan`). Homework that already has a time keeps it,
+//! unless that time has passed this week, the work is not finished and the student did not pin it:
+//! the planner moves such a missed session. Earlier weeks' unfinished sessions move into this week;
+//! the planner places the rest around the fixed blocks, never before now. What it placed is written in one change, after one restore
 //! point. `day` keeps the plan to that day. The desktop's focus-chunk split after a plan is not
 //! part of it, as on the phone.
 
@@ -81,6 +82,7 @@ fn views(
     weeks: &[(String, Vec<Value>, i64)],
     week_start: &str,
     target: &WeekTarget,
+    now: flexweek_engine::plan::Moment,
 ) -> Result<Map<String, Value>, String> {
     let listed: Vec<(String, Vec<Value>)> = weeks
         .iter()
@@ -88,10 +90,11 @@ fn views(
         .collect();
     let planned = match target {
         WeekTarget::StoredMonday => {
-            flexweek_engine::plan::planned_minutes_by_id(&listed, week_start)
+            flexweek_engine::plan::planned_minutes_by_id(&listed, week_start, Some(now))
         }
         WeekTarget::Shown { .. } => {
-            flexweek_engine::plan::planned_minutes_from_day(&listed, week_start).map_err(engine)?
+            flexweek_engine::plan::planned_minutes_from_day(&listed, week_start, Some(now))
+                .map_err(engine)?
         }
     };
     let done = flexweek_engine::plan::done_minutes_by_id(&listed);
@@ -286,6 +289,9 @@ struct Planned {
     earlier: Vec<Value>,
     placed: Vec<Value>,
     not_placed: Vec<Value>,
+    /// Whether planning changed the week's blocks, a passed session's time cleared included, though
+    /// nothing was placed.
+    changed: bool,
 }
 
 fn row(block: &Value) -> Value {
@@ -330,6 +336,9 @@ fn run_plan(
     let hour = now.minute / 60;
     let start = planning::plan_start_at(week_start, &now.today, hour, now.minute % 60, 0, 0)
         .map_err(engine)?;
+    let clock = planning::clock_point(week_start, &now.today, hour, now.minute % 60)
+        .map_err(engine)?
+        .map(|(day, minute)| json!([day, minute]));
     let empty_revision = match target {
         WeekTarget::StoredMonday => json!(0),
         WeekTarget::Shown { .. } => json!([0, 0]),
@@ -342,6 +351,7 @@ fn run_plan(
         earlier: Vec::new(),
         placed: Vec::new(),
         not_placed: Vec::new(),
+        changed: false,
     };
     if start.is_some_and(|(day, _)| day > 6) {
         return Ok(empty(WEEK_OVER));
@@ -358,7 +368,14 @@ fn run_plan(
     }
     let (keyed, tree, rows) = assignments(conn, user_id)?;
     let weeks = stored_weeks(conn, user_id)?;
-    let assignments = Value::Object(views(&keyed, &rows, &weeks, week_start, target)?);
+    let assignments = Value::Object(views(
+        &keyed,
+        &rows,
+        &weeks,
+        week_start,
+        target,
+        now.moment()?,
+    )?);
     let by_id = assignments.as_object().cloned().unwrap_or_default();
     let (blocks, mut basis, earlier_cutoff, first_hidden_indices) = match target {
         WeekTarget::StoredMonday => {
@@ -498,16 +515,17 @@ fn run_plan(
         );
     }
     // The homework's numbers were read with the week as saved (`blocks`), waiting sessions included.
-    let open_blocks = planning::open_rest_sessions_since(
+    let open_blocks = planning::open_rest_sessions_at(
         &planning_blocks,
         &by_id,
         week_start,
         &earlier_blocks,
         &blocks,
+        clock.as_ref(),
     )
     .map_err(engine)?;
     let not_before = start.map(|(day, minute)| json!([day, minute]));
-    let (payload, targets) = planning::solve_request(
+    let (payload, targets) = planning::solve_request_at(
         &Value::Array(open_blocks.clone()),
         &assignments,
         week_start,
@@ -515,6 +533,8 @@ fn run_plan(
         None,
         not_before.as_ref(),
         false,
+        clock.as_ref(),
+        &blocks,
     )
     .map_err(engine)?;
     let (first_day, first_minute) = start.unwrap_or((0, 0));
@@ -532,7 +552,7 @@ fn run_plan(
     let (week_blocks, shares) = planning::fair_share(
         &open_blocks,
         &by_id,
-        &Value::Array(blocks),
+        &Value::Array(blocks.clone()),
         week_start,
         first_day,
         first_minute,
@@ -552,7 +572,7 @@ fn run_plan(
             .filter(|id| kept.contains(id.as_str()))
             .map(|id| json!(id))
             .collect();
-        planning::solve_request(
+        planning::solve_request_at(
             &Value::Array(week_blocks.clone()),
             &assignments,
             week_start,
@@ -560,6 +580,8 @@ fn run_plan(
             Some(&Value::Array(only)),
             not_before.as_ref(),
             false,
+            clock.as_ref(),
+            &blocks,
         )
         .map_err(engine)?
     };
@@ -615,6 +637,7 @@ fn run_plan(
     )
     .map_err(engine)?;
     let trace = solver::trace_to_value(&trace);
+    let before_plan = week_blocks.clone();
     let applied = planning::apply_plan(
         &Value::Array(week_blocks),
         &trace,
@@ -664,6 +687,7 @@ fn run_plan(
         not_placed.push(shown);
     }
     not_placed.extend(left_rows);
+    let changed = timing_changed(&before_plan, &settled);
     Ok(Planned {
         message: String::new(),
         week: Some(settled),
@@ -672,7 +696,29 @@ fn run_plan(
         earlier: earlier_updates,
         placed,
         not_placed,
+        changed,
     })
+}
+
+/// Whether a block's time or length differs between the two weeks, or a block is gone or new. The
+/// settle step may reshape other fields of a week where nothing was placed; those are not a change to save.
+fn timing_changed(before: &[Value], after: &[Value]) -> bool {
+    let timing = |block: &Value| {
+        (
+            block["id"].clone(),
+            block
+                .get("start")
+                .cloned()
+                .filter(|start| start.is_string()),
+            block["days"].clone(),
+            block["duration_min"].clone(),
+        )
+    };
+    let mut was: Vec<_> = before.iter().map(timing).collect();
+    let mut is: Vec<_> = after.iter().map(timing).collect();
+    was.sort_by_key(|row| row.0.to_string());
+    is.sort_by_key(|row| row.0.to_string());
+    was != is
 }
 
 fn reply(
@@ -733,8 +779,12 @@ fn perform(app: &crate::App, args: &PlanArgs) -> Result<Value, String> {
     }
     let target = week::resolve_week(&args.week_start, app.first_weekday())?;
     let planned = run_plan(app, &opened.conn, opened.user_id, args, &target)?;
-    let Some(week) = planned.week.clone().filter(|_| !planned.placed.is_empty()) else {
-        // Nothing placed is nothing written, and no restore point.
+    let Some(week) = planned
+        .week
+        .clone()
+        .filter(|_| !planned.placed.is_empty() || planned.changed)
+    else {
+        // Nothing placed and nothing changed is nothing written, and no restore point.
         return reply(&planned, &args.week_start, planned.revision.clone(), None);
     };
     let mut weeks = match &planned.basis {
@@ -844,7 +894,8 @@ impl crate::App {
     #[tool(
         description = "Plan my homework: FlexWeek's own planner gives homework with no time a \
             time this week (or on one day), around school and other fixed time, never before now. \
-            Returns what it placed and what it could not place with the reason, and saves it as one \
+            It also moves a session of this week whose time has passed unfinished, unless the \
+            student pinned it; other sessions with a time keep it. Returns what it placed and what it could not place with the reason, and saves it as one \
             change",
         annotations(read_only_hint = false, destructive_hint = false)
     )]

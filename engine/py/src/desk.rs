@@ -217,15 +217,16 @@ fn week_moved_words(
     day: i64,
     start: i64,
     end: i64,
+    week_start: &str,
 ) -> PyResult<String> {
     let block = parse(block)?;
-    guard(|| weekmodel::moved_words(&block, from_day, day, start, end).map_err(raise))
+    guard(|| weekmodel::moved_words(&block, from_day, day, start, end, week_start).map_err(raise))
 }
 
 #[pyfunction]
-fn week_added_words(block: &str) -> PyResult<String> {
+fn week_added_words(block: &str, week_start: &str) -> PyResult<String> {
     let block = parse(block)?;
-    guard(|| weekmodel::added_words(&block).map_err(raise))
+    guard(|| weekmodel::added_words(&block, week_start).map_err(raise))
 }
 
 #[pyfunction]

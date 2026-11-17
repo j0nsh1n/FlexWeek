@@ -43,6 +43,7 @@ pub struct TimeBlock {
     pub pomodoro_index: Option<i64>,
     pub pinned: bool,
     pub prefer_earliest: bool,
+    pub keep_whole: bool,
     pub assignment_id: Option<String>,
 }
 
@@ -133,6 +134,7 @@ pub fn time_block(value: &Value) -> Result<TimeBlock, String> {
         pomodoro_index: opt_int(map, "pomodoro_index", Some(1), Some(999))?,
         pinned: bool_default(map, "pinned", false)?,
         prefer_earliest: bool_default(map, "prefer_earliest", false)?,
+        keep_whole: bool_default(map, "keep_whole", false)?,
         assignment_id: opt_str_bounds(map, "assignment_id", 1, 80)?,
     };
     block_state(&block)?;
@@ -277,6 +279,9 @@ impl TimeBlock {
         }
         if self.prefer_earliest {
             put_bool(&mut map, "prefer_earliest", true);
+        }
+        if self.keep_whole {
+            put_bool(&mut map, "keep_whole", true);
         }
         put_some_str(&mut map, "assignment_id", &self.assignment_id);
         Value::Object(map)

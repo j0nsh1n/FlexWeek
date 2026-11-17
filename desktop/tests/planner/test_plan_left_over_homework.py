@@ -23,7 +23,9 @@ from desktop.tests.planner.support import (
 from desktop.tests.window_support import settled
 
 
-def test_next_week_does_not_call_current_week_work_carried(qapp, window) -> None:
+def test_a_session_ahead_of_now_in_an_earlier_week_holds_its_time_when_next_week_is_open(
+    qapp, window
+) -> None:
     session = window.session
     week = session.week_start
     monday = date.fromisoformat(week)
@@ -62,11 +64,11 @@ def test_next_week_does_not_call_current_week_work_carried(qapp, window) -> None
     settled(qapp, window)
     session.load_week((monday + timedelta(days=7)).isoformat())
     settled(qapp, window)
-    assert session.assignments["future"]["unplanned_min"] == 60
+    assert session.assignments["future"]["unplanned_min"] == 0
     assert session.unfinished() == []
 
 
-def test_plan_overdue_reuses_the_session_and_keeps_other_blocks(qapp, window) -> None:
+def test_plan_overdue_leaves_the_pinned_session_and_adds_a_new_one(qapp, window) -> None:
     session_id = overdue_this_week(qapp, window)
     session = window.session
     session.save_preferences({"work_windows": [{"days": [SATURDAY], "start": "10:00", "end": "14:00"}]})
@@ -88,15 +90,19 @@ def test_plan_overdue_reuses_the_session_and_keeps_other_blocks(qapp, window) ->
     session.plan_left(["bio"])
     settled(qapp, window)
     bio = [item for item in session.blocks if item.get("assignment_id") == "bio"]
-    assert len(bio) == 1
-    # The class ends at 11:00 and the default leaves 15 minutes after it.
-    assert (bio[0]["id"], bio[0]["days"], bio[0]["start"]) == (session_id, [SATURDAY], "11:15")
+    assert len(bio) == 2
+    # The pinned Wednesday session stays where the student put it; its hour got a new session. The class
+    # ends at 11:00 and the default leaves 15 minutes after it.
+    kept = next(item for item in bio if item["id"] == session_id)
+    fresh = next(item for item in bio if item["id"] != session_id)
+    assert (kept["days"], kept["start"], kept.get("pinned")) == ([WEDNESDAY], "15:15", True)
+    assert (fresh["days"], fresh["start"], fresh["duration_min"]) == ([SATURDAY], "11:15", 60)
     assert session.message == "Placed 1 homework block."
     assert session.assignments["bio"]["due"] == due
     assert next(item for item in session.blocks if item["id"] == "class") == before_class
     session.plan_left(["bio"])
     settled(qapp, window)
-    assert len([item for item in session.blocks if item.get("assignment_id") == "bio"]) == 1
+    assert len([item for item in session.blocks if item.get("assignment_id") == "bio"]) == 2
     session.add_block(
         {
             "id": "lunch",
@@ -111,12 +117,12 @@ def test_plan_overdue_reuses_the_session_and_keeps_other_blocks(qapp, window) ->
     settled(qapp, window)
     session.reload()
     settled(qapp, window)
-    bio = next(item for item in session.blocks if item["id"] == session_id)
+    bio = next(item for item in session.blocks if item["id"] == fresh["id"])
     assert (bio["days"], bio["start"]) == ([SATURDAY], "11:15")
     session.add_homework({**session.assignments["bio"], "title": "Biology reading"})
     session.save()
     settled(qapp, window)
-    bio = next(item for item in session.blocks if item["id"] == session_id)
+    bio = next(item for item in session.blocks if item["id"] == fresh["id"])
     assert (bio["title"], bio["days"], bio["start"]) == ("Biology reading", [SATURDAY], "11:15")
 
 
@@ -141,7 +147,7 @@ def test_overdue_plan_with_no_room_does_not_add_an_unplaced_block(qapp, window) 
     session.plan_left(["bio"])
     settled(qapp, window)
     assert session.blocks == before
-    assert session.message == "Nothing placed."
+    assert session.message == "Nothing placed. Bio reading still has 1 h with no time."
     session.reload()
     settled(qapp, window)
     assert session.blocks == before
@@ -168,14 +174,16 @@ def test_planning_the_selected_overdue_homework_leaves_other_homework_alone(qapp
     before_ids = {item["id"] for item in session.blocks}
     session.plan_left(["bio"])
     settled(qapp, window)
-    assert {item["id"] for item in session.blocks} == before_ids
+    # Only Bio's hour got a new session: the pinned Wednesday one stays and nothing of Other moved.
+    added = {item["id"] for item in session.blocks} - before_ids
+    assert len(added) == 1
     assert next(item for item in session.blocks if item["id"] == other["id"]) == before_other
 
-    bio = next(item for item in session.blocks if item.get("assignment_id") == "bio")
-    assert (bio["days"], bio["start"]) == ([SATURDAY], "10:00")
+    bio = next(item for item in session.blocks if item["id"] in added)
+    assert (bio["assignment_id"], bio["days"], bio["start"]) == ("bio", [SATURDAY], "10:00")
     session.plan_left(["bio"])
     settled(qapp, window)
-    assert {item["id"] for item in session.blocks} == before_ids
+    assert {item["id"] for item in session.blocks} == before_ids | added
     assert next(item for item in session.blocks if item["id"] == other["id"]) == before_other
 
 
@@ -199,9 +207,10 @@ def test_overdue_homework_still_asks_for_the_hour_that_never_had_a_time(qapp, wi
     item = next(row for row in session.unfinished() if row["id"] == "essay")
     assert (item["left_over_state"], item["remaining_min"]) == ("overdue", 120)
     # Past its deadline it is in Unfinished, and its hour that never had a time still asks for one this
-    # week (Jonathan, 2026-11-07); the missed Wednesday hour is not counted again.
+    # week (Jonathan, 2026-11-07). The pinned Wednesday hour passed unfinished, so it is needed too
+    # (Jonathan, 2026-11-17): 60 + 60.
     assert session.homework_time_needed() == [
-        {"assignment_id": "essay", "title": "Essay", "minutes": 60, "period": "this_week"}
+        {"assignment_id": "essay", "title": "Essay", "minutes": 120, "period": "this_week"}
     ]
 
 
@@ -263,7 +272,11 @@ def test_an_overdue_plan_survives_the_next_edit(qapp, window) -> None:
     )
     session.save()
     settled(qapp, window)
-    bio = next(item for item in session.blocks if item["id"] == session_id)
+    bio = next(
+        item
+        for item in session.blocks
+        if item.get("assignment_id") == "bio" and item["id"] != session_id
+    )
     # The class ends at 11:00 and the default leaves 15 minutes after it.
     assert (bio["days"], bio["start"]) == ([SATURDAY], "11:15")
 

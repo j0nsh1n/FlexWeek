@@ -243,6 +243,16 @@ def busy() -> bool:
     return False
 
 
+def _forget_clock(clock: Clock) -> Callable[..., None]:
+    ref = weakref.ref(clock)
+
+    def forget(*_: object) -> None:
+        if (gone := ref()) is not None:
+            _RUNNING.discard(gone)
+
+    return forget
+
+
 class Clock(QObject):
     """A frame clock for one animation. Qt's own animation clock stays near 60 Hz, and this PySide
     has no way to replace it, so a precise timer follows the screen. The time it reports is how long
@@ -263,7 +273,9 @@ class Clock(QObject):
         self._timer = QTimer(self)
         self._timer.setTimerType(Qt.TimerType.PreciseTimer)
         self._timer.timeout.connect(self._tick)
-        self.destroyed.connect(self._dropped)
+        # Not a bound method of this clock: Qt skips a slot whose receiver is the object being destroyed,
+        # so a clock deleted under its widget stayed in _RUNNING with its timer gone.
+        self.destroyed.connect(_forget_clock(self))
 
     def start(self, total: int, step: Callable[[float], None]) -> None:
         self._total = total
@@ -323,9 +335,6 @@ class Clock(QObject):
 
     def _gone(self) -> int:
         return 0 if self._since is None else now_ms() - self._since
-
-    def _dropped(self) -> None:
-        _RUNNING.discard(self)
 
     def _retarget(self) -> None:
         parent = self.parent()

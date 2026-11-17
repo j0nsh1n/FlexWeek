@@ -229,12 +229,22 @@ pub(crate) fn save_homework(
     if spread == "spread" && estimate >= 60 {
         // The homework's open sessions stay as they are, placed times included: only the minutes they
         // and its done time leave uncovered are spread, so a save that changes nothing adds nothing.
-        let open = flexweek_engine::plan::planned_minutes_by_id(&held, "2000-01-01")
+        let open = flexweek_engine::plan::planned_minutes_by_id(&held, "2000-01-01", None)
             .get(&assignment_id)
             .copied()
             .unwrap_or(0);
-        let (sessions, _) = flexweek_engine::plan::spread_sessions(
-            estimate, focus, done, open, due, 60, &from_date,
+        let held_dates = flexweek_engine::plan::held_dates_by_id(&held, "2000-01-01")
+            .remove(&assignment_id)
+            .unwrap_or_default();
+        let (sessions, _) = flexweek_engine::plan::spread_sessions_around(
+            estimate,
+            focus,
+            done,
+            open,
+            due,
+            60,
+            &from_date,
+            &held_dates,
         )
         .map_err(engine_failure)?;
         for (index, session) in sessions.iter().enumerate() {
@@ -302,7 +312,7 @@ pub(crate) fn save_homework(
     for (id, stored, _) in &rows {
         keyed.insert(id.clone(), serde_json::from_str(stored).map_err(failure)?);
     }
-    let views = views_for_week(&keyed, &rows, &weeks, "2000-01-01")?;
+    let views = views_for_week(&keyed, &rows, &weeks, "2000-01-01", None)?;
     let mut saved = views.get(&assignment_id).cloned().unwrap_or(body);
     saved["revision"] = json!(saved_revision);
     drop(db);

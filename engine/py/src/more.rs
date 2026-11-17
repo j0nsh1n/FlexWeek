@@ -323,7 +323,8 @@ fn rewrite_session(block: &str, assignment: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
-fn planned_minutes_from_day(weeks: &str, from_day: &str) -> PyResult<String> {
+#[pyo3(signature = (weeks, from_day, now = None))]
+fn planned_minutes_from_day(weeks: &str, from_day: &str, now: Option<&str>) -> PyResult<String> {
     guard(|| {
         let weeks: Vec<(String, Vec<Value>)> = parse(weeks)?
             .as_array()
@@ -337,7 +338,12 @@ fn planned_minutes_from_day(weeks: &str, from_day: &str) -> PyResult<String> {
                 Some((start, blocks))
             })
             .collect();
-        let planned = plan::planned_minutes_from_day(&weeks, from_day).map_err(crate::raise)?;
+        let now = now
+            .map(plan::parse_moment)
+            .transpose()
+            .map_err(crate::raise)?;
+        let planned =
+            plan::planned_minutes_from_day(&weeks, from_day, now).map_err(crate::raise)?;
         Ok(dump(&Value::Object(
             planned
                 .into_iter()
@@ -348,7 +354,7 @@ fn planned_minutes_from_day(weeks: &str, from_day: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
-fn planned_minutes_by_id(weeks: &str, from_week: &str) -> PyResult<String> {
+fn held_dates_by_id(weeks: &str, from_week: &str) -> PyResult<String> {
     guard(|| {
         let weeks: Vec<(String, Vec<Value>)> = parse(weeks)?
             .as_array()
@@ -362,7 +368,36 @@ fn planned_minutes_by_id(weeks: &str, from_week: &str) -> PyResult<String> {
                 Some((start, blocks))
             })
             .collect();
-        let planned = plan::planned_minutes_by_id(&weeks, from_week);
+        let held = plan::held_dates_by_id(&weeks, from_week);
+        Ok(dump(&Value::Object(
+            held.into_iter()
+                .map(|(key, dates)| (key, Value::from(dates)))
+                .collect(),
+        )))
+    })
+}
+
+#[pyfunction]
+#[pyo3(signature = (weeks, from_week, now = None))]
+fn planned_minutes_by_id(weeks: &str, from_week: &str, now: Option<&str>) -> PyResult<String> {
+    guard(|| {
+        let weeks: Vec<(String, Vec<Value>)> = parse(weeks)?
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|item| {
+                let pair = item.as_array()?;
+                let start = pair.first()?.as_str()?.to_string();
+                let blocks = pair.get(1)?.as_array()?.clone();
+                Some((start, blocks))
+            })
+            .collect();
+        let now = now
+            .map(plan::parse_moment)
+            .transpose()
+            .map_err(crate::raise)?;
+        let planned = plan::planned_minutes_by_id(&weeks, from_week, now);
         Ok(dump(&Value::Object(
             planned
                 .into_iter()
@@ -407,12 +442,14 @@ fn migrate_blocks(week_start: &str, blocks: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
+#[pyo3(signature = (date_str, week_start, blocks, assignment_rows, weeks, now = None))]
 fn build_day(
     date_str: &str,
     week_start: &str,
     blocks: &str,
     assignment_rows: &str,
     weeks: &str,
+    now: Option<&str>,
 ) -> PyResult<String> {
     guard(|| {
         let blocks = parse(blocks)?.as_array().cloned().unwrap_or_default();
@@ -439,19 +476,24 @@ fn build_day(
                 ))
             })
             .collect();
-        plan::build_day(date_str, week_start, &blocks, &rows, &weeks)
+        let now = now
+            .map(plan::parse_moment)
+            .transpose()
+            .map_err(crate::raise)?;
+        plan::build_day(date_str, week_start, &blocks, &rows, &weeks, now)
             .map(|value| dump(&value))
             .map_err(crate::raise)
     })
 }
 
 #[pyfunction]
-#[pyo3(signature = (month, assignment_rows, weeks, first_weekday = 0))]
+#[pyo3(signature = (month, assignment_rows, weeks, first_weekday = 0, now = None))]
 fn build_month(
     month: &str,
     assignment_rows: &str,
     weeks: &str,
     first_weekday: u32,
+    now: Option<&str>,
 ) -> PyResult<String> {
     guard(|| {
         let rows: Vec<(Value, i64)> = parse(assignment_rows)?
@@ -477,7 +519,11 @@ fn build_month(
                 ))
             })
             .collect();
-        plan::build_month_from(month, &rows, &weeks, first_weekday)
+        let now = now
+            .map(plan::parse_moment)
+            .transpose()
+            .map_err(crate::raise)?;
+        plan::build_month_from(month, &rows, &weeks, first_weekday, now)
             .map(|value| dump(&value))
             .map_err(crate::raise)
     })
@@ -523,6 +569,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         legacy_session,
         rewrite_session,
         planned_minutes_by_id,
+        held_dates_by_id,
         done_minutes_by_id,
         planned_minutes_from_day,
         migrate_blocks,

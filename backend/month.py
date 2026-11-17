@@ -12,6 +12,7 @@ def build_month(
     assignment_rows: list[tuple[dict, int]],
     weeks: list[tuple[str, list[dict]]],
     first_weekday: int = 0,
+    now: str | None = None,
 ) -> dict:
     """`first_weekday` is the day the month's rows start on, 0 Monday to 6 Sunday."""
     return json.loads(
@@ -20,5 +21,6 @@ def build_month(
             json.dumps([[body, revision] for body, revision in assignment_rows]),
             json.dumps([[start, blocks] for start, blocks in weeks]),
             first_weekday,
+            now,
         )
     )

@@ -46,9 +46,9 @@ def test_plan_carries_the_not_placed_count_and_more_does_not(
     window: NativeWindow,  # noqa: F811
 ) -> None:
     seeded(qapp, window)
-    assert window.solve_button.accessibleName() == "Plan my homework, 1 homework still needs time"
+    assert window.solve_button.accessibleName() == "Plan my homework, 2 homework still need time"
     assert window.more_button.accessibleName() == "More"
-    assert window.rail.waiting_count.text() == "1"
+    assert window.rail.waiting_count.text() == "2"
     assert window.rail.waiting_label.text() == "No time yet · drag onto a day"
 
 
@@ -117,17 +117,18 @@ def test_the_week_title_opens_the_mini_month(
     assert not window.month_pop.isVisible()
 
 
-def test_overdue_homework_that_already_has_a_time_stays_in_unfinished(
+def test_overdue_homework_whose_pinned_time_passed_stays_in_unfinished_and_needs_a_time(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
 ) -> None:
     overdue_this_week(qapp, window)
     window._on_week()
     qapp.processEvents()
-    assert window.rail.none_waiting.text() == "Everything has a time."
+    # The pinned Wednesday hour passed unfinished: it stays where it was, and its hour needs a time.
+    assert window.rail.none_waiting.text() == "Bio reading · 1 h left"
     assert window.more_button.accessibleName() == "More"
-    assert window.solve_button.accessibleName() == "Plan my homework"
-    assert more_row(window) == (True, "Unfinished\tNone left")
+    assert window.solve_button.accessibleName() == "Plan my homework, 1 homework still needs time"
+    assert more_row(window) == (True, "Unfinished\t1 left")
     window._show_unfinished()
     settled(qapp, window)
     assert window.unfinished_panel.isVisibleTo(window)

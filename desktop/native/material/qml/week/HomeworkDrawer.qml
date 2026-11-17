@@ -18,6 +18,7 @@ Rectangle {
     signal cardDragStarted(string title)
 
     readonly property int count: bridge ? bridge.week.homeworkCount : 0
+    readonly property int listed: bridge ? bridge.week.listedCount : 0
     readonly property bool allTimed: bridge ? bridge.week.allTimed : true
     readonly property string leftover: bridge ? bridge.week.leftoverWords : ""
     property alias planButton: planButton
@@ -59,14 +60,14 @@ Rectangle {
                     id: countText
                     objectName: "homeworkCount"
                     anchors.centerIn: parent
-                    text: String(drawer.count)
+                    text: String(drawer.listed)
                     color: m3.inkSecondaryContainer
                     font.family: M3Font.family
                     font.pixelSize: M3Font.px(12)
                     font.weight: 500
                 }
                 Accessible.role: Accessible.StaticText
-                Accessible.name: drawer.count === 1 ? "1 homework needs a time" : drawer.count + " homework need a time"
+                Accessible.name: drawer.listed === 1 ? "1 homework needs a time" : drawer.listed + " homework need a time"
             }
         }
 
@@ -81,7 +82,7 @@ Rectangle {
             mutedWhenDisabled: true
             icon: "schedule"
             text: "Plan my homework"
-            enabled: drawer.count > 0
+            enabled: drawer.bridge ? drawer.bridge.week.canPlan : false
             activeFocusOnTab: enabled && !drawer.passive
             onClicked: drawer.bridge.week.plan()
         }

@@ -259,6 +259,33 @@ def _place_now_in_week(window, qapp, root, minutes: int) -> None:
     _pump(qapp)
 
 
+def test_place_now_on_a_card_places_the_waiting_session_not_the_pinned_one_that_passed(qapp, window) -> None:
+    """A 2 h worksheet in two 1 h sessions: one pinned on Tuesday 16:00 (passed unfinished), one waiting.
+    Place now on the waiting card places that one; it does not run into the passed session."""
+    _reset(window, qapp)
+    due = (_week_monday(window) + timedelta(days=5)).isoformat()
+    _homework(window, "sheet", "Math worksheet", 120, due)
+    settled(qapp, window)
+    _pump(qapp)
+    session = window.session
+    passed = _homework_block(window, "sheet")
+    passed.update({"duration_min": 60, "start": "16:00", "days": [1], "pinned": True})
+    waiting = {key: value for key, value in passed.items() if key not in ("start", "pinned")}
+    session.add_block({**waiting, "id": "sheet-waiting", "days": [3, 4]})
+    session.save()
+    wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+    window._material_page.publish()
+    _pump(qapp)
+    _bridge(window).week.planOne("sheet")
+    wait_until(qapp, lambda: _snack(window) != "" and not session.busy)
+    _pump(qapp)
+    placed = next(b for b in session.blocks if b["id"] == "sheet-waiting")
+    assert placed.get("start"), _snack(window)
+    assert "required fields" not in _snack(window)
+    kept = next(b for b in session.blocks if b["id"] == passed["id"])
+    assert (kept["days"], kept["start"]) == ([1], "16:00")
+
+
 def test_place_now_takes_the_first_free_gap_from_now_and_says_where(qapp, window) -> None:
     # Now is Thursday 19:00 and the History essay holds 18:45-19:45. The default 15-minute buffer
     # keeps the next block off it, so the first free start is Thursday 20:00. Left to its energy
@@ -405,6 +432,28 @@ def test_the_drawer_says_missed_time_as_missed_in_a_week_that_is_over(qapp, wind
         window._material_page.publish()
         _pump(qapp)
         assert _qml(root, "homeworkEmptyText").property("text") == "History essay · 1 h missed"
+        assert _qml(root, "homeworkEmptyIcon").property("visible") is False
+    finally:
+        CLOCK.set(thursday)
+
+
+def test_the_drawer_says_a_pinned_session_that_passed_as_pinned_in_the_past_in_a_week_that_is_over(
+    qapp, window
+) -> None:
+    """The essay's pinned Tuesday 16:00 to 17:00 was not finished. Its hour still needs a time, but in a week
+    that is over the drawer names it as pinned in the past where an unpinned one reads missed."""
+    root = _reset(window, qapp)
+    session = window.session
+    essay = next(block for block in session.blocks if block.get("assignment_id") == "essay")
+    session.add_block({**essay, "start": "16:00", "days": [1], "duration_min": 60, "pinned": True})
+    session.save()
+    wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+    thursday = CLOCK.now()
+    try:
+        CLOCK.set(datetime.fromisoformat(session.week_start) + timedelta(days=7, hours=10))
+        window._material_page.publish()
+        _pump(qapp)
+        assert _qml(root, "homeworkEmptyText").property("text") == "History essay · 1 h pinned, in the past"
         assert _qml(root, "homeworkEmptyIcon").property("visible") is False
     finally:
         CLOCK.set(thursday)
@@ -624,6 +673,7 @@ def test_the_plan_notice_counts_what_the_plan_left(qapp, window, minutes: int, s
     essay = next(block for block in session.blocks if block.get("assignment_id") == "essay")
     essay["duration_min"] = minutes
     essay["pinned"] = True
+    essay["start"] = "19:30"
     session._touch()
     session.save()
     settled(qapp, window)

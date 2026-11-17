@@ -49,7 +49,7 @@ are on main (PRs #67-#83). In order:
 - Material memory growth (1.9 GB after 49 min on the tarball): measure, then fix or close.
 - The autostart entry is only rewritten when the switch changes; no check at startup.
 - Closed 2026-11-10: the Undo notice now stays at least 10 s (spec and CHANGELOG agree).
-- Check and close or fix: planner spread around held pieces and grouping that ignores "one piece".
+- Closed 2026-11-16 (branch `fix/planner-leftovers`): planner spread around held pieces and grouping that ignores "one piece" are checked and fixed, each with a test that failed first.
 - Added 2026-11-10 (release review): eight tests logged flaky on main, two failing in the suite on nearly every run
   (Retry save after a failed save and one editor on a double-click are among them); the assistant helper's stderr
   test can fail once; Edit in a Material block's right-click menu needs one try on a real screen.

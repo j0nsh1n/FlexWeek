@@ -294,3 +294,21 @@ def test_work_finished_without_a_time_still_counts_as_planned_that_day(alice: Te
     assert save_week(alice, [session("w1", completed=True)]).status_code == 200
     tuesday = get_day(alice).json()["workload"]
     assert (tuesday["scheduled_min"], tuesday["focus_min"]) == (60, 60)
+
+
+def test_due_soon_counts_a_session_ahead_of_now_in_an_earlier_week_and_not_one_that_passed(
+    alice: TestClient, clock
+) -> None:
+    """Essay due Monday 9 November, 60 minutes, one session in the week before on Friday 6 at 15:00. The
+    clock starts on Thursday 5 November at 19:00, when that session is still ahead, so nothing is needed."""
+    assert put_assignment(alice, assignment(due="2026-11-09T18:00", estimate_min=60)).status_code == 200
+    blocks = [session("s1", days=[4], start="15:00")]
+    saved = alice.put(
+        "/api/week", json={"week_start": "2026-11-02", "blocks": blocks, "revision": 0}, headers=WRITE
+    )
+    assert saved.status_code == 200, saved.text
+
+    assert get_day(alice, "2026-11-09").json()["due_soon"][0]["unplanned_min"] == 0
+
+    clock.move(days=2)
+    assert get_day(alice, "2026-11-09").json()["due_soon"][0]["unplanned_min"] == 60

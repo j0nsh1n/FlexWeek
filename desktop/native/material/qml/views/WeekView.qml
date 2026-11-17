@@ -161,11 +161,70 @@ Item {
         onActivated: root.cancelDragRange()
     }
 
+    // Homework left over from before: the Widgets line above the week, with its two buttons.
+    Rectangle {
+        id: leftRow
+        objectName: "leftOverRow"
+        readonly property string words: bridge && bridge.week ? bridge.week.leftWords : ""
+        visible: words !== "" && !root.passive
+        anchors.left: parent.left
+        anchors.right: root.phone ? parent.right : drawer.left
+        anchors.top: parent.top
+        height: visible ? Math.max(48, flow.implicitHeight + 16) : 0
+        color: m3.secondaryContainer
+
+        Flow {
+            id: flow
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: 16
+            anchors.rightMargin: 16
+            spacing: 8
+            Text {
+                objectName: "leftOverWords"
+                height: 40
+                verticalAlignment: Text.AlignVCenter
+                text: leftRow.words
+                color: m3.inkSecondaryContainer
+                font.family: M3Font.family
+                font.pixelSize: M3Font.px(14)
+                font.weight: 500
+                Accessible.role: Accessible.StaticText
+                Accessible.name: leftRow.words
+            }
+            Button {
+                objectName: "leftOverPlan"
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                kind: "text"
+                text: "Plan into this week"
+                accessName: "Plan into this week"
+                activeFocusOnTab: leftRow.visible
+                onClicked: root.bridge.week.planLeft()
+            }
+            Button {
+                objectName: "leftOverDone"
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                kind: "text"
+                text: "Mark as finished"
+                accessName: "Mark as finished"
+                activeFocusOnTab: leftRow.visible
+                onClicked: root.bridge.week.didLeft()
+            }
+        }
+    }
+
     Item {
         id: headerRow
         anchors.left: parent.left
         anchors.right: root.phone ? parent.right : drawer.left
-        anchors.top: parent.top
+        anchors.top: leftRow.bottom
         height: 56
 
         Rectangle {

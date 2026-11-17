@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 
-use chrono::Datelike;
+use chrono::{Datelike, Timelike};
 use flexweek_engine::desk::blocks::mark_block_done;
 use flexweek_engine::desk::homework::mark_homework_done;
 use flexweek_engine::desk::weekmodel::build_week;
@@ -174,8 +174,20 @@ pub(crate) fn today(week: &FlexWeek, date: &str, now_minute: i64) -> Result<Stri
     let stored_blocks = decode_blocks(&merged)?;
     let blocks = rewritten(&stored_blocks, &assignment_map)?;
     let weeks = stored_weeks(&db, user_id)?;
-    let day_data = plan::build_day(date, &monday, &blocks, &assignment_rows, &weeks)
-        .map_err(engine_failure)?;
+    let local = crate::core::parse_local(&week.host.local_now())?;
+    let clock = (
+        local.date_naive(),
+        i64::from(local.time().hour()) * 60 + i64::from(local.time().minute()),
+    );
+    let day_data = plan::build_day(
+        date,
+        &monday,
+        &blocks,
+        &assignment_rows,
+        &weeks,
+        Some(clock),
+    )
+    .map_err(engine_failure)?;
     let model = build_week(
         &json!(monday),
         &Value::Array(blocks),
@@ -628,6 +640,44 @@ mod tests {
         assert_eq!(saturday["empty"], true);
         assert_eq!(saturday["rows"].as_array().unwrap().len(), 0);
         assert!(saturday["now"].is_null());
+    }
+
+    // Homework due Monday 2 Nov, 60 minutes, whose only session is Wednesday 21 Oct, 15:00, two weeks
+    // before the day the phone opens.
+    fn far_off_session(name: &str, local: &str) -> Value {
+        let (week, _path) = crate::core::tests_support::open_at(name, local);
+        {
+            let db = week.db.lock().unwrap();
+            flexweek_store::insert_assignment(
+                &db,
+                week.user_id.unwrap(),
+                "essay",
+                r#"{"id":"essay","title":"Essay","due":"2026-11-02T18:00","estimate_min":60,"focus_minutes":0,"completed":false,"category":"homework"}"#,
+            )
+            .unwrap();
+        }
+        save_week(
+            &week,
+            "2026-10-19",
+            &json!([
+                {"id":"s1","assignment_id":"essay","title":"Essay","kind":"flexible","days":[2],"start":"15:00","duration_min":60,"category":"study"}
+            ]),
+        );
+        serde_json::from_str(&week.today("2026-11-02".into(), 9 * 60).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn today_counts_a_session_ahead_of_the_phone_clock_in_an_earlier_week_as_planned() {
+        let out = far_off_session("clock-ahead", "2026-10-19T00:00:00-07:00");
+        assert_eq!(out["due_soon"][0]["id"], "essay");
+        assert_eq!(out["due_soon"][0]["unplanned_min"], 0);
+    }
+
+    #[test]
+    fn today_still_needs_a_session_that_passed_unfinished() {
+        let out = far_off_session("clock-passed", "2026-10-22T09:00:00-07:00");
+        assert_eq!(out["due_soon"][0]["id"], "essay");
+        assert_eq!(out["due_soon"][0]["unplanned_min"], 60);
     }
 
     #[test]

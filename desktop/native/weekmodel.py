@@ -101,8 +101,9 @@ def homework_time_sentence(left_over: list[dict], needed: list[dict]) -> str:
     minutes = {item.get("assignment_id"): int(item.get("minutes", 0)) for item in needed}
     # In a week that is over a missed session's minutes are said as missed: they are planned from this week.
     missed = sum({item.get("assignment_id"): int(item.get("missed_min", 0)) for item in needed}.values())
-    total = sum(minutes.values()) - missed
-    if not overdue and not carried and not total and not missed:
+    pinned = sum({item.get("assignment_id"): int(item.get("pinned_min", 0)) for item in needed}.values())
+    total = sum(minutes.values()) - missed - pinned
+    if not overdue and not carried and not total and not missed and not pinned:
         return "Everything has a time."
     words = []
     if overdue:
@@ -113,6 +114,8 @@ def homework_time_sentence(left_over: list[dict], needed: list[dict]) -> str:
         words.append(f"{length_label(total)} still needs a time")
     if missed:
         words.append(f"{length_label(missed)} missed")
+    if pinned:
+        words.append(f"{length_label(pinned)} pinned, in the past")
     return " · ".join(words)
 
 
@@ -125,14 +128,15 @@ def due_label(due: str | None, today: date | str | None = None) -> str:
     return str(flexweek_engine.week_due_label(plain(due), iso_of(today)))
 
 
-def moved_words(block: dict, from_day: int, day: int, start: int, end: int) -> str:
-    """What a drag did to `block`, as it was before, now that it is on `day` from `start` to `end`."""
-    return str(restore(flexweek_engine.week_moved_words(plain(block), from_day, day, start, end)))
+def moved_words(block: dict, from_day: int, day: int, start: int, end: int, week_start: str) -> str:
+    """What a drag did to `block`, as it was before, now that it is on `day` (of the week from
+    `week_start`) from `start` to `end`."""
+    return str(restore(flexweek_engine.week_moved_words(plain(block), from_day, day, start, end, week_start)))
 
 
-def added_words(block: dict) -> str:
+def added_words(block: dict, week_start: str) -> str:
     """A block just made: "Added Club on Thu 16:00.", or without a day and time when it has several days."""
-    return str(restore(flexweek_engine.week_added_words(plain(block))))
+    return str(restore(flexweek_engine.week_added_words(plain(block), week_start)))
 
 
 def dated_words(title: str, iso: str, today: date | str | None = None) -> str:

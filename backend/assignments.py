@@ -64,9 +64,16 @@ def rewrite_session(block: TimeBlock, assignment: dict) -> TimeBlock:
     return TimeBlock.model_validate(raw)
 
 
-def planned_minutes_by_id(weeks: list[tuple[str, list[dict]]], from_week: str) -> dict[str, int]:
-    raw = json.loads(flexweek_engine.planned_minutes_by_id(json.dumps(weeks), from_week))
+def planned_minutes_by_id(
+    weeks: list[tuple[str, list[dict]]], from_week: str, now: str | None = None
+) -> dict[str, int]:
+    raw = json.loads(flexweek_engine.planned_minutes_by_id(json.dumps(weeks), from_week, now))
     return {key: int(value) for key, value in raw.items()}
+
+
+def held_dates_by_id(weeks: list[tuple[str, list[dict]]], from_week: str) -> dict[str, list[str]]:
+    raw = json.loads(flexweek_engine.held_dates_by_id(json.dumps(weeks), from_week))
+    return {key: [str(day) for day in value] for key, value in raw.items()}
 
 
 def done_minutes_by_id(weeks: list[tuple[str, list[dict]]]) -> dict[str, int]:
@@ -74,8 +81,10 @@ def done_minutes_by_id(weeks: list[tuple[str, list[dict]]]) -> dict[str, int]:
     return {key: int(value) for key, value in raw.items()}
 
 
-def planned_minutes_from_day(weeks: list[tuple[str, list[dict]]], from_day: str) -> dict[str, int]:
-    raw = json.loads(flexweek_engine.planned_minutes_from_day(json.dumps(weeks), from_day))
+def planned_minutes_from_day(
+    weeks: list[tuple[str, list[dict]]], from_day: str, now: str | None = None
+) -> dict[str, int]:
+    raw = json.loads(flexweek_engine.planned_minutes_from_day(json.dumps(weeks), from_day, now))
     return {key: int(value) for key, value in raw.items()}
 
 

@@ -101,7 +101,9 @@ def kept_session_path() -> Path:
 def clean_look_file() -> Path:
     """The look an earlier run left behind (its zoom and text size) is gone before this one starts, so a
     play sees only the look it asks for. Also deletes the carried look next to the kept session
-    (`flexweek.look.json`). Call after QStandardPaths' test mode is on."""
+    (`flexweek.look.json`), and the first day of the week an earlier play picked, which lives in the same
+    folder and would otherwise open every later run in that week. Call after QStandardPaths' test mode
+    is on."""
     from PySide6.QtCore import QStandardPaths
 
     from desktop.native.kept import KeptSession
@@ -109,6 +111,7 @@ def clean_look_file() -> Path:
     root = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
     look_path = Path(root) / "flexweek-look.json"
     look_path.unlink(missing_ok=True)
+    (Path(root) / "week-start.json").unlink(missing_ok=True)
     KeptSession(kept_session_path()).look.unlink(missing_ok=True)
     return look_path
 

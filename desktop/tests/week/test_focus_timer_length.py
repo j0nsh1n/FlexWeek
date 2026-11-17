@@ -6,6 +6,8 @@ the minutes it wants to have passed."""
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 import pytest
 
 pytest.importorskip("PySide6")
@@ -87,3 +89,18 @@ def test_the_next_work_phase_uses_the_new_length(qapp: QApplication, window: Nat
     session.tick_focus()
     settled(qapp, session)
     assert session.assignments["essay"]["focus_minutes"] == 45
+
+
+def test_end_credits_the_minutes_worked_after_the_student_looked_at_another_week(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """Ten minutes into a session on the essay, the student opens next week. Pressing End there still
+    credits the 10 minutes to the essay (they were lost, and the question said 0 min)."""
+    session = focusing_on_the_essay(qapp, window)
+    CLOCK.move(minutes=10)
+    session.load_week((date.fromisoformat(session.week_start) + timedelta(days=7)).isoformat())
+    settled(qapp, session)
+    assert session.focus_elapsed_min() == 10
+    session.end_focus_early()
+    settled(qapp, session)
+    assert session.assignments["essay"]["focus_minutes"] == 10

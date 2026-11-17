@@ -15,7 +15,7 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QAbstractAnimation
+    from PySide6.QtCore import QAbstractAnimation, QCoreApplication, QEvent
     from PySide6.QtWidgets import QApplication, QWidget
 
     from desktop.native import motion
@@ -66,3 +66,18 @@ def test_paused_stopped_and_hidden_clocks_are_not_busy(
     clock.stop()
     assert not motion.busy()
     owner.close()
+
+
+def test_a_clock_deleted_with_its_widget_is_no_longer_counted_as_running(
+    qapp: QApplication, manual_time: ManualTime  # noqa: F811
+) -> None:
+    """A page or dialog closed mid-animation takes its clock with it while something still holds the
+    clock's Python object. The helper that steps every running clock must not meet its dead timer."""
+    owner = QWidget()
+    clock = motion.Clock(owner)
+    clock.start(10000, lambda _: None)
+    assert clock in motion._RUNNING
+    owner.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert clock not in motion._RUNNING
+    manual_time.advance(20)

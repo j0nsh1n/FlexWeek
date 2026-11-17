@@ -162,8 +162,11 @@ class WeekBridge(QObject):
         self._homework_rows: list[dict] = []
         self._time_words = EVERYTHING_TIMED
         self._all_timed = True
+        self._can_plan = False
+        self._listed_count = 0
         self._day_rows: list[dict] = []
         self._leftover_words = ""
+        self._left_words = ""
         self._hour_labels: list[str] = [clock_label(hour * 60) for hour in range(24)]
         self._blocks = Rows(BLOCK_ROLES, self)
         self._homework = Rows(HOMEWORK_ROLES, self)
@@ -226,6 +229,8 @@ class WeekBridge(QObject):
         if session.account is None or not session.week_start:
             self._block_rows, self._homework_rows, self._day_rows = [], [], []
             self._leftover_words = ""
+            self._listed_count = 0
+            self._left_words = ""
             self._seen = set()
             self._publish()
             return
@@ -303,21 +308,31 @@ class WeekBridge(QObject):
         needed = session.homework_time_needed()
         self._time_words = homework_time_sentence([], needed)
         self._all_timed = not needed
+        can_place = getattr(session, "plan_can_place", None)
+        # A card the drawer lists is something Plan places, even a task that is not homework.
+        self._can_plan = bool(homework_rows) or (bool(can_place()) if can_place else False)
         remainders = getattr(session, "homework_remainders", None)
+        uncovered = remainders() if remainders else []
+        missed_items = [item for item in needed if item.get("missed_min") or item.get("pinned_min")]
+        # Each homework once, by id: its card and its line are one; two homework with one title are two.
+        self._listed_count = len(
+            {row["assignmentId"] or row["blockId"] for row in homework_rows}
+            | {homework for _title, _minutes, homework in uncovered}
+            | {item["assignment_id"] for item in missed_items}
+        )
         self._leftover_words = "\n".join(
             [
-                *(
-                    f"{title} · {length_label(minutes)} with no time"
-                    for title, minutes in (remainders() if remainders else [])
-                ),
+                *(f"{title} · {length_label(minutes)} with no time" for title, minutes, _id in uncovered),
                 # Only a week that is over has these: its missed time is planned from this week.
                 *(
-                    f"{item['title']} · {length_label(item['missed_min'])} missed"
-                    for item in needed
-                    if item.get("missed_min")
+                    f"{item['title']} · {length_label(item[key])} {words}"
+                    for item in missed_items
+                    for key, words in (("missed_min", "missed"), ("pinned_min", "pinned, in the past"))
+                    if item.get(key)
                 ),
             ]
         )
+        self._left_words = self._left_line()
         self._week_key = session.week_start
         self._seen = keys
         self._fresh_until = {key: until for key, until in self._fresh_until.items() if until > clock}
@@ -327,6 +342,18 @@ class WeekBridge(QObject):
             day_rows,
         )
         self._publish()
+
+    def _left_line(self) -> str:
+        """The Widgets line above the week: "N overdue · N left from last week", from the same list."""
+        left = self._window._unfinished_items()  # type: ignore[attr-defined]
+        overdue = sum(item.get("left_over_state") == "overdue" for item in left)
+        carried = len(left) - overdue
+        parts = []
+        if overdue:
+            parts.append(f"{overdue} overdue")
+        if carried:
+            parts.append(f"{carried} left from last week")
+        return " · ".join(parts)
 
     @staticmethod
     def _tag_for(item: Any, start: date, moment: datetime) -> tuple[str, str]:
@@ -394,10 +421,20 @@ class WeekBridge(QObject):
     @Slot()
     def plan(self) -> None:
         """Plan my homework: the window's own call, so Widgets and Material plan the same way."""
-        if not self._homework_rows:
+        if not self._can_plan:
             return
         self._said_plan = time.monotonic()
         self._window._plan_with_left_over()  # type: ignore[attr-defined]
+
+    @Slot()
+    def planLeft(self) -> None:
+        """Plan into this week: the Widgets button's own call."""
+        self._window._plan_left()  # type: ignore[attr-defined]
+
+    @Slot()
+    def didLeft(self) -> None:
+        """Mark as finished: the Widgets button's own call."""
+        self._window._did_left()  # type: ignore[attr-defined]
 
     @Slot(str, int, int)
     def placeHomework(self, block_id: str, day: int, start: int) -> None:
@@ -480,10 +517,12 @@ class WeekBridge(QObject):
     def planOne(self, identifier: str) -> None:
         """Place now, and Enter on a card: that homework at the first free gap from now that fits it."""
         session = self._window.session  # type: ignore[attr-defined]
+        # A homework id names its waiting session first: its other sessions may have a time already, and a
+        # pinned one that passed cannot be placed again.
         target = next(
             (
                 block["id"]
-                for block in session.blocks
+                for block in sorted(session.blocks, key=lambda item: bool(item.get("start")))
                 if block["id"] == identifier or block.get("assignment_id") == identifier
             ),
             None,
@@ -681,9 +720,25 @@ class WeekBridge(QObject):
         return len(self._homework_rows)
 
     @Property(str, notify=homeworkChanged)
+    def leftWords(self) -> str:
+        """"N overdue · N left from last week", or nothing when no homework is left over."""
+        return self._left_words
+
+    @Property(int, notify=homeworkChanged)
+    def listedCount(self) -> int:
+        """How many homework the drawer lists, each once: a homework with a card and a "with no time" line
+        is one."""
+        return self._listed_count
+
+    @Property(str, notify=homeworkChanged)
     def timeWords(self) -> str:
         """What the drawer says when no card is listed: whether any homework still needs a time."""
         return self._time_words
+
+    @Property(bool, notify=homeworkChanged)
+    def canPlan(self) -> bool:
+        """Whether Plan my homework has anything to place, listed as a card or not."""
+        return self._can_plan
 
     @Property(bool, notify=homeworkChanged)
     def allTimed(self) -> bool:

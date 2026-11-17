@@ -170,11 +170,12 @@ def test_more_counts_only_panel_rows_that_need_a_time(qapp: QApplication, window
     add(window, "art", "Art", 30, due_in(window, 6))
     window.session.save()
     settled(qapp, window)
-    assert more_row(window) == (True, "Unfinished\t1 left")
+    # Bio's pinned hour passed unfinished (Jonathan, 2026-11-17), so Bio needs a time as Art does.
+    assert more_row(window) == (True, "Unfinished\t2 left")
     window._show_unfinished()
     settled(qapp, window)
     assert window.unfinished_panel.list.count() == 2
-    assert {item["assignment_id"] for item in window.session.homework_time_needed()} == {"art"}
+    assert {item["assignment_id"] for item in window.session.homework_time_needed()} == {"art", "bio"}
     buttons = [
         window.unfinished_panel.list.itemWidget(window.unfinished_panel.list.item(index)).findChild(
             QPushButton, "focusUnfinished-bio"

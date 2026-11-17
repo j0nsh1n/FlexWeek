@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use flexweek_engine::model::due_sort_key;
 use flexweek_engine::plan::{
-    build_day, build_month_from, done_minutes_by_id, planned_minutes_by_id,
+    Moment, build_day, build_month_from, done_minutes_by_id, planned_minutes_by_id,
 };
 use flexweek_engine::time::{
     is_calendar_date, is_month_label, is_week_start, monday_of, month_grid_from, parse_month,
@@ -27,7 +27,12 @@ const WEEK_START_RULE: &str =
 const DATE_RULE: &str = "date must be YYYY-MM-DD between 2000-01-01 and 2099-12-31";
 const MONTH_RULE: &str = "month must be YYYY-MM between 2000-01 and 2099-12";
 
-pub fn day_view(conn: &Connection, user_id: i64, date: &str) -> StoreResult<Value> {
+pub fn day_view(
+    conn: &Connection,
+    user_id: i64,
+    date: &str,
+    now: Option<Moment>,
+) -> StoreResult<Value> {
     if !is_calendar_date(date) {
         return Err(StoreError::Date(DATE_RULE.into()));
     }
@@ -51,11 +56,17 @@ pub fn day_view(conn: &Connection, user_id: i64, date: &str) -> StoreResult<Valu
         &rewritten,
         &assignments,
         &weeks,
+        now,
     )?)
 }
 
-pub fn month_view(conn: &Connection, user_id: i64, month: &str) -> StoreResult<Value> {
-    month_view_from(conn, user_id, month, 0)
+pub fn month_view(
+    conn: &Connection,
+    user_id: i64,
+    month: &str,
+    now: Option<Moment>,
+) -> StoreResult<Value> {
+    month_view_from(conn, user_id, month, 0, now)
 }
 
 /// The month with its rows starting on `first_weekday` (0 Monday to 6 Sunday).
@@ -64,6 +75,7 @@ pub fn month_view_from(
     user_id: i64,
     month: &str,
     first_weekday: u32,
+    now: Option<Moment>,
 ) -> StoreResult<Value> {
     if !is_month_label(month) {
         return Err(StoreError::Date(MONTH_RULE.into()));
@@ -97,6 +109,7 @@ pub fn month_view_from(
         &assignments,
         &weeks,
         first_weekday,
+        now,
     )?)
 }
 
@@ -105,13 +118,14 @@ pub fn homework_list(
     user_id: i64,
     week_start: &str,
     include_completed: bool,
+    now: Option<Moment>,
 ) -> StoreResult<Value> {
     if !is_week_start(week_start) {
         return Err(StoreError::Date(WEEK_START_RULE.into()));
     }
     let rows = list_assignment_rows(conn, user_id)?;
     let weeks = raw_weeks(conn, user_id)?;
-    let planned = planned_minutes_by_id(&weeks, week_start);
+    let planned = planned_minutes_by_id(&weeks, week_start, now);
     let done = done_minutes_by_id(&weeks);
     let mut session_weeks: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for (saved_week, blocks) in &weeks {

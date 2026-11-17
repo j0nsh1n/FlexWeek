@@ -230,9 +230,10 @@ def test_choose_a_time_with_nothing_waiting_says_so(
     waiting = [
         block for block in window.session.blocks if block.get("assignment_id") and not block.get("start")
     ]
+    # Thursday evening on, after the test clock, so each pinned time still holds its homework's minutes.
     for index, block in enumerate(waiting):
         plant_block(
-            window.session, block["id"], 2 + index, 16 * 60, 16 * 60 + block["duration_min"], pinned=True
+            window.session, block["id"], 3 + index, 20 * 60, 20 * 60 + block["duration_min"], pinned=True
         )
     window.session.save()
     settled(qapp, window)

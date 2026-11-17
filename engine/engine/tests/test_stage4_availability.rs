@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use common::{Dump, by_id, ids, late_legacy, solve_legacy, work_span};
 use flexweek_engine::plan::{
     WINDOW_LIMIT, build_day, build_month, fold_study_windows, occupancy_from_windows,
-    prepare_solve, spread_sessions, study_rank,
+    prepare_solve, spread_sessions, spread_sessions_around, study_rank,
 };
 use flexweek_engine::solver::{SOLVE_BUDGET_MS, SolveTrace, TimeBlock, WorkWindow};
 use flexweek_engine::time::hhmm_to_minutes;
@@ -150,6 +150,40 @@ fn test_spread_chunks_remaining_minutes_before_the_due_date() {
 }
 
 #[test]
+fn test_spread_gives_a_day_with_a_placed_session_its_share_last() {
+    // 120 minutes due Friday 2026-11-20, a 30 minute session already on Tuesday: 90 minutes are
+    // uncovered, cut as 60 and 30. Monday and Wednesday have no session of it, so they take the shares.
+    let held = vec!["2026-11-17".to_string()];
+    let (sessions, remaining) =
+        spread_sessions_around(120, 0, 0, 30, "2026-11-20T23:59", 60, "2026-11-16", &held).unwrap();
+    assert_eq!(remaining, 0);
+    let dated: Vec<_> = sessions
+        .iter()
+        .map(|item| {
+            (
+                item["date"].as_str().unwrap(),
+                item["duration_min"].as_i64().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(dated, vec![("2026-11-16", 60), ("2026-11-18", 30)]);
+}
+
+#[test]
+fn test_spread_shares_a_day_with_a_placed_session_once_every_day_has_a_share() {
+    // Due Tuesday, so only Monday and Tuesday exist. Monday holds a session: three shares go
+    // Tuesday, Monday (the held day last), then Tuesday again.
+    let held = vec!["2026-11-16".to_string()];
+    let (sessions, _) =
+        spread_sessions_around(195, 0, 0, 15, "2026-11-17T23:59", 60, "2026-11-16", &held).unwrap();
+    let dates: Vec<_> = sessions
+        .iter()
+        .map(|item| item["date"].as_str().unwrap())
+        .collect();
+    assert_eq!(dates, vec!["2026-11-17", "2026-11-16", "2026-11-17"]);
+}
+
+#[test]
 fn test_spread_keeps_unplaced_remaining_when_the_start_is_after_the_due_date() {
     let (sessions, remaining) =
         spread_sessions(90, 0, 0, 0, "2026-09-15T23:59", 45, "2026-09-16").unwrap();
@@ -287,6 +321,30 @@ fn test_solving_takes_the_subject_from_the_assignment() {
 }
 
 #[test]
+fn test_keep_whole_follows_the_assignment_every_time() {
+    // A stale keep_whole: true on a session of a spread homework must not keep it whole, and a
+    // "one" homework keeps its session whole whatever the session carried.
+    let session = || {
+        let mut value = Dump::flex("s1", "s1", 120, &[0])
+            .assignment_id("hw")
+            .into_value();
+        value["keep_whole"] = json!(true);
+        value
+    };
+    let kept = |spread: &str| {
+        let mut assignments = BTreeMap::new();
+        assignments.insert(
+            "hw".into(),
+            json!({"completed": false, "due": "2026-09-18T23:59", "spread": spread}),
+        );
+        let (keep, _, _) = prepare_solve(&[session()], "2026-09-14", &assignments).unwrap();
+        keep[0].get("keep_whole").cloned()
+    };
+    assert_eq!(kept("spread"), None);
+    assert_eq!(kept("one"), Some(json!(true)));
+}
+
+#[test]
 fn test_a_subjects_own_window_beats_an_earlier_untagged_one() {
     let math = Dump::flex("math", "math", 60, &[0])
         .energy("high")
@@ -409,7 +467,15 @@ fn read_at_nine() -> serde_json::Value {
 
 #[test]
 fn test_a_session_with_an_empty_start_is_not_placed_on_the_day_agenda() {
-    let day = build_day("2026-09-07", "2026-09-07", &[unplaced_essay()], &[], &[]).unwrap();
+    let day = build_day(
+        "2026-09-07",
+        "2026-09-07",
+        &[unplaced_essay()],
+        &[],
+        &[],
+        None,
+    )
+    .unwrap();
     assert_eq!(day["next_action"], json!({"kind": "add"}));
     assert_eq!(day["workload"]["available_min"], 1440);
     assert_eq!(day["workload"]["scheduled_min"], 0);
@@ -420,7 +486,7 @@ fn test_a_session_with_an_empty_start_is_not_placed_on_the_day_agenda() {
 #[test]
 fn test_an_empty_start_does_not_outrank_a_real_start_for_the_next_action() {
     let blocks = [unplaced_essay(), read_at_nine()];
-    let day = build_day("2026-09-07", "2026-09-07", &blocks, &[], &[]).unwrap();
+    let day = build_day("2026-09-07", "2026-09-07", &blocks, &[], &[], None).unwrap();
     assert_eq!(
         day["next_action"],
         json!({"kind": "start", "block_id": "s0"})

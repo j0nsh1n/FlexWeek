@@ -74,6 +74,14 @@ pub(crate) fn run_plan(
         i64::from(local.time().nanosecond() / 1000),
     )
     .map_err(engine_failure)?;
+    let now_point = flexweek_engine::desk::planning::clock_point(
+        week_start,
+        &today,
+        i64::from(local.time().hour()),
+        i64::from(local.time().minute()),
+    )
+    .map_err(engine_failure)?
+    .map(|(day, minute)| json!([day, minute]));
     if start.is_some_and(|(day, _)| day > 6) {
         return Ok((
             empty_plan(week_start, WEEK_OVER),
@@ -85,7 +93,11 @@ pub(crate) fn run_plan(
     let db = db_lock(week)?;
     let (keyed, tree, rows) = crate::account::assignment_map(&db, user_id)?;
     let weeks = stored_weeks(&db, user_id)?;
-    let views = views_for_week(&keyed, &rows, &weeks, week_start)?;
+    let now = (
+        local.date_naive(),
+        i64::from(local.time().hour()) * 60 + i64::from(local.time().minute()),
+    );
+    let views = views_for_week(&keyed, &rows, &weeks, week_start, Some(now))?;
     let assignments = assignment_object(views);
     let (blocks, _revision) = load_open_week(&db, user_id, week_start, &assignments)?;
     let earlier: Vec<Value> = weeks
@@ -129,16 +141,17 @@ pub(crate) fn run_plan(
         })
         .collect();
     // The homework's numbers were read with the week as saved (`blocks`), waiting sessions included.
-    let open_blocks = flexweek_engine::desk::planning::open_rest_sessions_since(
+    let open_blocks = flexweek_engine::desk::planning::open_rest_sessions_at(
         &planning_blocks,
         as_map(&assignments)?,
         week_start,
         &earlier_blocks,
         &blocks,
+        now_point.as_ref(),
     )
     .map_err(engine_failure)?;
     let not_before = start.map(|(day, minute)| json!([day, minute]));
-    let (payload, targets) = flexweek_engine::desk::planning::solve_request(
+    let (payload, targets) = flexweek_engine::desk::planning::solve_request_at(
         &Value::Array(open_blocks.clone()),
         &assignments,
         week_start,
@@ -146,6 +159,8 @@ pub(crate) fn run_plan(
         None,
         not_before.as_ref(),
         false,
+        now_point.as_ref(),
+        &blocks,
     )
     .map_err(engine_failure)?;
     let first_day = start.map(|(day, _)| day).unwrap_or(0);
@@ -160,7 +175,7 @@ pub(crate) fn run_plan(
     let (week_blocks, shares) = flexweek_engine::desk::planning::fair_share(
         &open_blocks,
         as_map(&assignments)?,
-        &Value::Array(blocks),
+        &Value::Array(blocks.clone()),
         week_start,
         first_day,
         first_minute,
@@ -180,7 +195,7 @@ pub(crate) fn run_plan(
             .filter(|id| kept.contains(*id))
             .map(|id| Value::String(id.clone()))
             .collect();
-        flexweek_engine::desk::planning::solve_request(
+        flexweek_engine::desk::planning::solve_request_at(
             &Value::Array(week_blocks.clone()),
             &assignments,
             week_start,
@@ -188,6 +203,8 @@ pub(crate) fn run_plan(
             Some(&Value::Array(only)),
             not_before.as_ref(),
             false,
+            now_point.as_ref(),
+            &blocks,
         )
         .map_err(engine_failure)?
     };
@@ -557,6 +574,54 @@ mod tests {
         let row = &result["placed"][0];
         assert_eq!(row["days"], json!([0]));
         assert_eq!(row["start"], "16:00");
+    }
+
+    /// A 60 minute essay due Friday 21:00 with one session on Monday 09:00 of the week of 5 October, for a
+    /// plan on Wednesday 7 October 12:00 (`pinned`: a session the student shaped by hand).
+    fn plan_with_a_session_from_monday(name: &str, pinned: bool) -> Value {
+        let (week, _) = open_at(name, "2026-10-07T12:00:00");
+        {
+            let db = week.db.lock().unwrap();
+            flexweek_store::insert_assignment(
+                &db,
+                week.user_id.unwrap(),
+                "essay",
+                r#"{"id":"essay","title":"History essay","due":"2026-10-09T21:00","estimate_min":60,"focus_minutes":0,"completed":false,"priority":3,"energy":"medium","spread":"one"}"#,
+            )
+            .unwrap();
+        }
+        let mut session = json!({"id":"essay-session","title":"History essay","kind":"flexible","days":[0],"start":"09:00","duration_min":60,"assignment_id":"essay","priority":3,"energy":"medium","category":"assignments"});
+        if pinned {
+            session["pinned"] = json!(true);
+        }
+        save_week(&week, "2026-10-05", &json!([session]));
+        serde_json::from_str(&week.plan_week("2026-10-05".into(), 0.0).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn plan_moves_a_session_that_passed_unfinished_to_a_time_still_ahead() {
+        let result = plan_with_a_session_from_monday("plan-moves-passed", false);
+        let rows = placed_rows(&result);
+        assert_eq!(rows.len(), 1, "got {result}");
+        let day = rows[0]["days"][0].as_i64().unwrap();
+        let start =
+            flexweek_engine::time::hhmm_to_minutes(rows[0]["start"].as_str().unwrap()).unwrap();
+        assert!((day, start) >= (2, 12 * 60), "not before now, got {rows:?}");
+        assert!(day <= 4, "before it is due, got {rows:?}");
+    }
+
+    #[test]
+    fn plan_keeps_a_pinned_session_that_passed() {
+        let result = plan_with_a_session_from_monday("plan-keeps-pinned-passed", true);
+        // The pinned session is not moved, so it is not among the placed rows; its 60 minutes are still
+        // needed, so the plan places a new session for them at a time still ahead.
+        let rows = placed_rows(&result);
+        assert_eq!(rows.len(), 1, "got {result}");
+        assert_ne!(rows[0]["id"], "essay-session", "got {result}");
+        let day = rows[0]["days"][0].as_i64().unwrap();
+        let start =
+            flexweek_engine::time::hhmm_to_minutes(rows[0]["start"].as_str().unwrap()).unwrap();
+        assert!((day, start) >= (2, 12 * 60), "not before now, got {rows:?}");
     }
 
     /// Monday is all fixed (School 00:00 for 24 h) and the History essay may only go on Monday, so Plan

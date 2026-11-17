@@ -752,12 +752,14 @@ fn reuse_fair_share(
 }
 
 #[pyfunction]
+#[pyo3(signature = (blocks, assignments, week_start, earlier_blocks, saved_week, now=None))]
 fn reuse_open_rest(
     blocks: &str,
     assignments: &str,
     week_start: &str,
     earlier_blocks: &str,
     saved_week: &str,
+    now: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<String> {
     let (blocks, assignments, earlier_blocks, saved_week) = (
         parse(blocks)?,
@@ -765,6 +767,7 @@ fn reuse_open_rest(
         parse(earlier_blocks)?,
         parse(saved_week)?,
     );
+    let now = clock_point(week_start, now)?;
     guard(|| {
         let blocks = blocks.as_array().cloned().unwrap_or_default();
         let assignments = assignments.as_object().cloned().unwrap_or_default();
@@ -774,12 +777,13 @@ fn reuse_open_rest(
             .cloned()
             .unwrap_or_else(|| blocks.clone());
         Ok(dump(&Value::Array(
-            planning::open_rest_sessions_since(
+            planning::open_rest_sessions_at(
                 &blocks,
                 &assignments,
                 week_start,
                 &earlier_blocks,
                 &saved_week,
+                now.as_ref(),
             )
             .map_err(crate::raise)?,
         )))
@@ -1264,17 +1268,26 @@ fn reuse_left_over(
     now: &str,
     blocks: &str,
     committed: &str,
+    first_part: &str,
 ) -> PyResult<String> {
-    let (assignments, saved, blocks, committed) = (
+    let (assignments, saved, blocks, committed, first_part) = (
         parse(assignments)?,
         parse(saved_weeks)?,
         parse(blocks)?,
         parse(committed)?,
+        parse(first_part)?,
     );
     guard(|| {
-        let items =
-            clipboard::left_over_items(&assignments, &saved, today_week, now, &blocks, &committed)
-                .map_err(crate::raise)?;
+        let items = clipboard::left_over_items_from(
+            &assignments,
+            &saved,
+            today_week,
+            now,
+            &blocks,
+            &committed,
+            &first_part,
+        )
+        .map_err(crate::raise)?;
         Ok(dump(&Value::Array(items)))
     })
 }

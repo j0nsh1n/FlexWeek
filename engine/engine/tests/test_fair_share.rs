@@ -320,3 +320,63 @@ fn earlier_open_homework_moves_into_this_week_with_both_week_writes() {
     assert_eq!(repeated["blocks"], moved["blocks"]);
     assert!(repeated["weeks"].as_array().unwrap().is_empty());
 }
+
+// Due Wednesday 21 October (16 days from Monday), 120 minutes, planned on Wednesday 7 October at 10:00
+// (day 2, minute 600) with no study windows: 15 plannable days, 5 of them this week, so the week's
+// share is 120 * 5 / 15 = 40, up to the quarter hour 45.
+fn share_with_one_kept_session(day: i64) -> (Vec<Value>, Vec<Value>) {
+    let mut kept = session("kept", 60);
+    kept["start"] = json!("09:00");
+    kept["days"] = json!([day]);
+    fair_share(
+        &[kept, session("s1", 60)],
+        &science("2026-10-21T23:59", 120),
+        &json!([]),
+        WEEK,
+        2,
+        600,
+        &[],
+        &["s1".to_string()],
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_session_that_passed_unfinished_holds_none_of_the_weeks_share() {
+    // Monday 09:00-10:00 is over by Wednesday 10:00, so the whole 45 minutes go to the session planned.
+    let (blocks, _) = share_with_one_kept_session(0);
+    let planned = blocks.iter().find(|block| block["id"] == "s1").unwrap();
+    assert_eq!(planned["duration_min"], json!(45));
+}
+
+#[test]
+fn a_session_still_ahead_holds_its_time_of_the_weeks_share() {
+    // Thursday 09:00 is ahead: its 60 minutes use up the 45, so the session planned gets nothing.
+    let (blocks, _) = share_with_one_kept_session(3);
+    assert!(blocks.iter().all(|block| block["id"] != "s1"));
+}
+
+#[test]
+fn a_shared_rest_session_never_replaces_a_pinned_one_with_its_id() {
+    // An earlier new session the student dragged onto Monday 16:00 (pinning it) keeps its time when the
+    // share leaves minutes over again; the new session for them takes an id of its own.
+    let pinned = json!({"id": "sci-rest-2026-10-05", "title": "Science project", "kind": "flexible",
+                        "assignment_id": "sci", "duration_min": 30, "days": [0], "start": "16:00",
+                        "pinned": true});
+    let (blocks, _) = share(
+        &[session("s1", 105), pinned.clone()],
+        "2026-10-14T23:59",
+        135,
+        0,
+        &["s1"],
+    );
+    assert!(blocks.contains(&pinned), "{blocks:?}");
+    let mut ids: Vec<&str> = blocks
+        .iter()
+        .map(|block| block["id"].as_str().unwrap())
+        .collect();
+    let all = ids.len();
+    ids.sort_unstable();
+    ids.dedup();
+    assert_eq!(ids.len(), all, "each id once: {blocks:?}");
+}

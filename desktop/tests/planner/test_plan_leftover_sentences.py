@@ -82,7 +82,7 @@ def test_a_finished_homework_has_no_minutes_left(qapp: QApplication, window: Nat
     """Essay cut to 5 (55 to do) and then ticked off: a finished homework needs nothing, whatever the cut."""
     session = window.session
     essay = next(item for item in session.blocks if item.get("assignment_id") == "essay")
-    essay.update(duration_min=5, pinned=True)
+    essay.update(duration_min=5, pinned=True, start="19:30")
     session._touch()
     session.save()
     settled(qapp, window)

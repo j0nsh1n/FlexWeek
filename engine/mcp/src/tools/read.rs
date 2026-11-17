@@ -113,11 +113,13 @@ fn shown_homework_list(
     week_start: &str,
     include_completed: bool,
     first_weekday: u32,
+    now: flexweek_engine::plan::Moment,
 ) -> Result<Value, String> {
     let target = week::resolve_week(week_start, first_weekday)?;
     let mut view = match target {
         WeekTarget::StoredMonday => {
-            homework_list(conn, user_id, week_start, include_completed).map_err(view_error)?
+            homework_list(conn, user_id, week_start, include_completed, Some(now))
+                .map_err(view_error)?
         }
         WeekTarget::Shown { .. } => {
             let rows = list_assignment_rows(conn, user_id).map_err(view_error)?;
@@ -138,8 +140,8 @@ fn shown_homework_list(
                 }
                 weeks.push((saved_week, blocks));
             }
-            let planned =
-                planned_minutes_from_day(&weeks, week_start).map_err(|err| err.message)?;
+            let planned = planned_minutes_from_day(&weeks, week_start, Some(now))
+                .map_err(|err| err.message)?;
             let done = flexweek_engine::plan::done_minutes_by_id(&weeks);
             let mut keyed = Vec::new();
             for (row_id, row_body, row_revision) in rows {
@@ -227,7 +229,13 @@ impl crate::App {
                 Some(date) => date,
                 None => self.now()?.today,
             };
-            let mut view = day_view(&conn, account_id(&account), &date).map_err(view_error)?;
+            let mut view = day_view(
+                &conn,
+                account_id(&account),
+                &date,
+                Some(self.now()?.moment()?),
+            )
+            .map_err(view_error)?;
             let first_weekday = self.first_weekday();
             let shown_week_start = if first_weekday == 0 {
                 None
@@ -291,8 +299,14 @@ impl crate::App {
             )?;
             let conn = open_connection(&self.database).map_err(session::storage_sentence)?;
             let first_weekday = self.first_weekday();
-            let mut view = month_view_from(&conn, account_id(&account), &args.month, first_weekday)
-                .map_err(view_error)?;
+            let mut view = month_view_from(
+                &conn,
+                account_id(&account),
+                &args.month,
+                first_weekday,
+                Some(self.now()?.moment()?),
+            )
+            .map_err(view_error)?;
             if let Some(fields) = view.as_object_mut() {
                 fields.insert(
                     "week_starts_on".into(),
@@ -326,6 +340,7 @@ impl crate::App {
                 &args.week_start,
                 args.include_completed.unwrap_or(false),
                 self.first_weekday(),
+                self.now()?.moment()?,
             )?;
             Ok(view.to_string())
         })();

@@ -260,7 +260,8 @@ HELP_SCREENS = (
 HELP_PLANNING = (
     "Add homework with its due date and length. Press Plan my homework and FlexWeek finds free time for "
     "it in your study hours, around your fixed times, before it's due. Homework that already has a time "
-    "keeps it. Replan all starts fresh but keeps pinned homework. Anything that doesn't "
+    "keeps it, unless that time has passed, the work isn't finished and you didn't pin it. Replan all "
+    "starts fresh but keeps pinned homework. Anything that doesn't "
     "fit stays under Not placed yet, and Details says why. From the keyboard, press Ctrl+K and type Plan."
 )
 # Each key in brackets is drawn as a keycap; the words between are drawn plain.
