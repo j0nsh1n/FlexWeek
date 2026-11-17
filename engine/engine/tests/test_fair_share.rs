@@ -320,3 +320,38 @@ fn earlier_open_homework_moves_into_this_week_with_both_week_writes() {
     assert_eq!(repeated["blocks"], moved["blocks"]);
     assert!(repeated["weeks"].as_array().unwrap().is_empty());
 }
+
+// Due Wednesday 21 October (16 days from Monday), 120 minutes, planned on Wednesday 7 October at 10:00
+// (day 2, minute 600) with no study windows: 15 plannable days, 5 of them this week, so the week's
+// share is 120 * 5 / 15 = 40, up to the quarter hour 45.
+fn share_with_one_kept_session(day: i64) -> (Vec<Value>, Vec<Value>) {
+    let mut kept = session("kept", 60);
+    kept["start"] = json!("09:00");
+    kept["days"] = json!([day]);
+    fair_share(
+        &[kept, session("s1", 60)],
+        &science("2026-10-21T23:59", 120),
+        &json!([]),
+        WEEK,
+        2,
+        600,
+        &[],
+        &["s1".to_string()],
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_session_that_passed_unfinished_holds_none_of_the_weeks_share() {
+    // Monday 09:00-10:00 is over by Wednesday 10:00, so the whole 45 minutes go to the session planned.
+    let (blocks, _) = share_with_one_kept_session(0);
+    let planned = blocks.iter().find(|block| block["id"] == "s1").unwrap();
+    assert_eq!(planned["duration_min"], json!(45));
+}
+
+#[test]
+fn a_session_still_ahead_holds_its_time_of_the_weeks_share() {
+    // Thursday 09:00 is ahead: its 60 minutes use up the 45, so the session planned gets nothing.
+    let (blocks, _) = share_with_one_kept_session(3);
+    assert!(blocks.iter().all(|block| block["id"] != "s1"));
+}

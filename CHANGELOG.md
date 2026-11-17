@@ -102,6 +102,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - A "no longer fits" note in a week that starts on another day than Monday now names the right day.
 - In the Material style, Plan my homework now places the minutes no session holds when it is on without a card in the drawer. It did nothing when pressed.
 - The assistant's day and month readings no longer count a session that passed unfinished earlier in the week asked about as planned time. A homework missed on Tuesday now shows as still needing its time, and the next step is to plan it.
+- Plan my homework no longer gives a homework due in more than a week less time than its share because of a session that already passed unfinished. A session that passed holds none of the week's share.
 
 ## [1.3.0] - 2026-11-10
 

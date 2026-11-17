@@ -1629,18 +1629,20 @@ pub fn fair_share(
             continue;
         }
         let share = ceil_slot((left * this_week + all_days - 1) / all_days).min(left);
-        let held: i64 = out
-            .iter()
-            .filter(|block| {
-                homework_of(block).as_deref() == Some(homework.as_str())
-                    && !id_of(block).is_some_and(|id| targets.contains(&id))
-                    && !block
-                        .get("completed")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false)
-            })
-            .map(duration)
-            .sum();
+        // A session whose time is over holds none of the share, as `missed_minutes` reads it: only a
+        // session ticked done or still ahead of the plan's start does. Plan starts on the quarter hour
+        // after now, so a session ending inside the current one is already counted as over.
+        let start_point = json!([first_day, first_minute]);
+        let mut held = 0;
+        for block in out.iter() {
+            let counts = homework_of(block).as_deref() == Some(homework.as_str())
+                && !id_of(block).is_some_and(|id| targets.contains(&id))
+                && !finished(block)
+                && ended_session(block, &start_point)?.is_none();
+            if counts {
+                held += duration(block);
+            }
+        }
         let mut budget = (share - held).max(0);
         let mut placed = held;
         let mut cut = false;
