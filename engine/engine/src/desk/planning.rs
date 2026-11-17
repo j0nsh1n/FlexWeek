@@ -713,6 +713,7 @@ pub fn move_earlier_homework(
     week_start: &str,
 ) -> EngineResult<Value> {
     let monday = from_iso(week_start)?;
+    let first_part = crate::shown::shown_parts(week_start)?;
     let mut current = blocks.to_vec();
     let mut moved = Vec::new();
     let mut updates = Vec::new();
@@ -721,6 +722,12 @@ pub fn move_earlier_homework(
         if source_week.as_str() >= week_start {
             continue;
         }
+        // The stored week holding a shown week's first day is partly this week: a session waiting
+        // on any of its shown days is already in `blocks`; moving it in would count its time twice.
+        let shown_from = match &first_part {
+            Some((first, _, offset)) if *first == source_week => Some(*offset),
+            _ => None,
+        };
         let before = list_field(saved, "blocks")?;
         let before_blocks = iterate(&before)?;
         let mut after = Vec::new();
@@ -742,7 +749,13 @@ pub fn move_earlier_homework(
                 after.push(block);
                 continue;
             };
-            if !is_open || crate::model::parse_due(due)?.0 < monday {
+            let shown = shown_from.is_some_and(|offset| {
+                block["days"].as_array().is_some_and(|days| {
+                    days.iter()
+                        .any(|day| day.as_i64().is_some_and(|day| day >= offset))
+                })
+            });
+            if !is_open || shown || crate::model::parse_due(due)?.0 < monday {
                 after.push(block);
                 continue;
             }

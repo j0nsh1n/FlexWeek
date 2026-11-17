@@ -630,3 +630,36 @@ fn a_block_done_on_a_hidden_day_and_marked_done_on_a_shown_day_keeps_both_marks(
     assert_eq!(done, vec![(vec![0], 0), (vec![3], 3)], "{first_out:?}");
     assert!(second_out.is_empty());
 }
+
+/// Plan gathers waiting sessions from earlier stored weeks with `move_earlier_homework`. The stored
+/// week that holds the shown week's first day is not all earlier: a waiting session there that the
+/// shown week shows is already this week's, so it is not added to itself (which gave each homework
+/// its hour twice); one on days before the shown week only still comes in.
+#[test]
+fn plan_takes_from_the_first_stored_week_only_what_the_shown_week_cannot_see() {
+    use flexweek_engine::desk::planning::move_earlier_homework;
+    let mut homework = serde_json::Map::new();
+    homework.insert(
+        "hw1".into(),
+        json!({"id": "hw1", "title": "hw1", "due": "2026-11-22T21:00", "estimate_min": 60}),
+    );
+    for offset in 1..7 {
+        let start = format!("2026-11-{:02}", 9 + offset);
+        let first = vec![waiting("poster", &[0, 1, 2, 3, 4, 5, 6])];
+        let shown = compose_shown_week(&start, &first, &[]).unwrap();
+        let earlier = vec![json!({"week_start": FIRST, "revision": 1, "blocks": first})];
+        let moved = move_earlier_homework(&shown, &earlier, &homework, &start).unwrap();
+        assert_eq!(moved["blocks"], json!(shown), "from {start}");
+        assert_eq!(moved["weeks"], json!([]), "from {start}");
+        let before = vec![waiting("old", &(0..offset).collect::<Vec<_>>())];
+        let hidden = vec![json!({"week_start": FIRST, "revision": 1, "blocks": before})];
+        let moved = move_earlier_homework(&[], &hidden, &homework, &start).unwrap();
+        assert_eq!(moved["blocks"][0]["id"], json!("old"), "from {start}");
+        assert_eq!(
+            moved["blocks"][0]["duration_min"],
+            json!(60),
+            "from {start}"
+        );
+        assert_eq!(moved["weeks"][0]["after"], json!([]), "from {start}");
+    }
+}
