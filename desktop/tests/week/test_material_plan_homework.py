@@ -262,7 +262,7 @@ def _place_now_in_week(window, qapp, root, minutes: int) -> None:
 def test_place_now_on_a_card_places_the_waiting_session_not_the_pinned_one_that_passed(qapp, window) -> None:
     """A 2 h worksheet in two 1 h sessions: one pinned on Tuesday 16:00 (passed unfinished), one waiting.
     Place now on the waiting card places that one; it does not run into the passed session."""
-    root = _reset(window, qapp)
+    _reset(window, qapp)
     due = (_week_monday(window) + timedelta(days=5)).isoformat()
     _homework(window, "sheet", "Math worksheet", 120, due)
     settled(qapp, window)

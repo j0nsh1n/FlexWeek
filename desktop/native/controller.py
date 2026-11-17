@@ -3256,9 +3256,9 @@ class NativeSession(QObject):
         pinned session that passed is said as such, not as minutes with no time."""
         pinned = self._pinned_past_minutes(self._open_week())
         return [
-            (item["title"], item["uncovered_min"] - pinned.get(item["assignment_id"], 0), item["assignment_id"])
+            (item["title"], item["uncovered_min"] - held, item["assignment_id"])
             for item in self._time_split()
-            if item["uncovered_min"] > pinned.get(item["assignment_id"], 0)
+            if item["uncovered_min"] > (held := pinned.get(item["assignment_id"], 0))
         ]
 
     def minutes_left_for(self, assignment_id: str) -> int:
