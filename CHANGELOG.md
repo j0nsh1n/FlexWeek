@@ -88,6 +88,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Spread over days gives the minutes a homework still needs a day with no session of it first. A session of the homework that already has a time no longer gets a second share on its day while another day before the due date is free; a day with one is used only when every day has a share.
 - Help now says a planned homework keeps its time unless that time has passed, the work isn't finished and you didn't pin it, which is when Plan moves it. The assistant helper's Plan description says the same.
 - A homework saved In one go is no longer cut into two sessions by Plan when Split long tasks is on. The setting splits only long tasks that are not homework; homework follows its own In one go or Spread over days choice (Spread over days already cuts it into sessions of an hour or less).
+- Opening next week after planning this one no longer lists homework as "1 h left" or says "3 h still needs a time" when every minute already has a time later this week. A planned session in any week holds its time while that time is still ahead; only one that passed unfinished needs a new time.
 
 ## [1.3.0] - 2026-11-10
 

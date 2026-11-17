@@ -2456,8 +2456,8 @@ class NativeSession(QObject):
         """A save that moved sessions into or out of a week other than the open one changes what the held
         `planned_min` and `done_min` count, which were read with the open week as saved. Those weeks' change
         is put on the held numbers now, so every count is right before the server's next read lands. Planned
-        minutes are counted as the server counts them, from the open week on, so a session in an earlier week
-        changes nothing; done minutes are counted in every week."""
+        minutes are counted as the server counts them: from the open week on, and in an earlier week the
+        sessions whose time is still ahead of now; done minutes are counted in every week."""
         step = self._travel_step if self._traveling else self._pending_step
         if step is None:
             return
@@ -2480,10 +2480,11 @@ class NativeSession(QObject):
             new_weeks.append((week_start, stored[week_start].get("blocks") or []))
         if not old_weeks:
             return
+        now = datetime.fromtimestamp(self.now_ms() / 1000).strftime("%Y-%m-%dT%H:%M")
         if not self.first_weekday:
-            count_planned = lambda weeks: planned_minutes_by_id(weeks, self.week_start)  # noqa: E731
+            count_planned = lambda weeks: planned_minutes_by_id(weeks, self.week_start, now)  # noqa: E731
         else:
-            count_planned = lambda weeks: planned_minutes_from_day(weeks, self.week_start)  # noqa: E731
+            count_planned = lambda weeks: planned_minutes_from_day(weeks, self.week_start, now)  # noqa: E731
         for key, count in (("planned_min", count_planned), ("done_min", done_minutes_by_id)):
             gone = count(old_weeks)
             came = count(new_weeks)

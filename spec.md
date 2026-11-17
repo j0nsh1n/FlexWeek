@@ -249,11 +249,13 @@ Contract for the finished app:
   that week's Monday and has no open session there; unplaced time left in
   an earlier week moves into it in the same save. Until placed it shows in Not
   placed yet with its amount ("History · 1 h left"). One engine count of the
-  time still needed (this week, an earlier week, a later week; a session whose
-  time has passed unfinished, and is not pinned, counts as having no time) feeds
+  time still needed (this week, an earlier week, a later week) feeds
   the plan review, the message after Plan, Not placed yet and More; "All your
   homework already has a time" and "Everything has a time" show only when it is
-  0. The
+  0. In that count a session in any week holds its time when it is ticked done
+  or its time is still ahead of now; only a session whose time passed
+  unfinished needs a new one, and a pinned one that passed stays where it is
+  with its undone minutes still needed. The
   plan review hides when the week changes. The review says what was placed
   ("History: 1 h this week (Sun), 1 h left for next week"), or with nothing
   placed: "No homework time left this week. History, Math and Bio are due next

@@ -58,6 +58,19 @@ pub struct Clock {
     pub minute: i64,
 }
 
+impl Clock {
+    /// This minute as the engine's count of what sessions hold reads it.
+    pub fn moment(&self) -> Result<flexweek_engine::plan::Moment, String> {
+        flexweek_engine::plan::parse_moment(&format!(
+            "{}T{:02}:{:02}",
+            self.today,
+            self.minute / 60,
+            self.minute % 60
+        ))
+        .map_err(|error| error.message)
+    }
+}
+
 pub fn parse(args: impl Iterator<Item = String>) -> Result<Launch, String> {
     let mut data_dir: Option<String> = None;
     let mut database: Option<String> = None;

@@ -323,7 +323,8 @@ fn rewrite_session(block: &str, assignment: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
-fn planned_minutes_from_day(weeks: &str, from_day: &str) -> PyResult<String> {
+#[pyo3(signature = (weeks, from_day, now = None))]
+fn planned_minutes_from_day(weeks: &str, from_day: &str, now: Option<&str>) -> PyResult<String> {
     guard(|| {
         let weeks: Vec<(String, Vec<Value>)> = parse(weeks)?
             .as_array()
@@ -337,7 +338,12 @@ fn planned_minutes_from_day(weeks: &str, from_day: &str) -> PyResult<String> {
                 Some((start, blocks))
             })
             .collect();
-        let planned = plan::planned_minutes_from_day(&weeks, from_day).map_err(crate::raise)?;
+        let now = now
+            .map(plan::parse_moment)
+            .transpose()
+            .map_err(crate::raise)?;
+        let planned =
+            plan::planned_minutes_from_day(&weeks, from_day, now).map_err(crate::raise)?;
         Ok(dump(&Value::Object(
             planned
                 .into_iter()
@@ -372,7 +378,8 @@ fn held_dates_by_id(weeks: &str, from_week: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
-fn planned_minutes_by_id(weeks: &str, from_week: &str) -> PyResult<String> {
+#[pyo3(signature = (weeks, from_week, now = None))]
+fn planned_minutes_by_id(weeks: &str, from_week: &str, now: Option<&str>) -> PyResult<String> {
     guard(|| {
         let weeks: Vec<(String, Vec<Value>)> = parse(weeks)?
             .as_array()
@@ -386,7 +393,11 @@ fn planned_minutes_by_id(weeks: &str, from_week: &str) -> PyResult<String> {
                 Some((start, blocks))
             })
             .collect();
-        let planned = plan::planned_minutes_by_id(&weeks, from_week);
+        let now = now
+            .map(plan::parse_moment)
+            .transpose()
+            .map_err(crate::raise)?;
+        let planned = plan::planned_minutes_by_id(&weeks, from_week, now);
         Ok(dump(&Value::Object(
             planned
                 .into_iter()

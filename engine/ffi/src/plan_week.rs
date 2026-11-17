@@ -93,7 +93,11 @@ pub(crate) fn run_plan(
     let db = db_lock(week)?;
     let (keyed, tree, rows) = crate::account::assignment_map(&db, user_id)?;
     let weeks = stored_weeks(&db, user_id)?;
-    let views = views_for_week(&keyed, &rows, &weeks, week_start)?;
+    let now = (
+        local.date_naive(),
+        i64::from(local.time().hour()) * 60 + i64::from(local.time().minute()),
+    );
+    let views = views_for_week(&keyed, &rows, &weeks, week_start, Some(now))?;
     let assignments = assignment_object(views);
     let (blocks, _revision) = load_open_week(&db, user_id, week_start, &assignments)?;
     let earlier: Vec<Value> = weeks

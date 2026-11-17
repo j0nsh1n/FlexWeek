@@ -623,13 +623,15 @@ def test_undoing_a_move_to_next_week_counts_the_week_it_comes_back_to(
 
 
 @pytest.mark.parametrize("reads", ["fail", "held", "land"])
-def test_a_session_moved_out_of_the_open_week_to_an_earlier_one_is_not_counted_there(
+def test_a_session_moved_out_of_the_open_week_to_an_earlier_one_ahead_of_now_holds_its_time(
     qapp, window, reads: str
 ) -> None:
     """The session sits next Tuesday and next week is open (read: 60 held there, 0 needed). It is moved to
-    this Friday, a week before the open one. The server counts planned minutes from the open week on, so
-    the 60 are in no session it counts: 60 - 0 = 60 have no session and 60 are needed, straight after the
-    move, while the re-read has not come (or never comes), and after it lands."""
+    this Friday, a week before the open one, keeping its 10:00. A session in any week holds its time while
+    that time is ahead of now (Thursday 19:00), so Friday's holds the 60: 60 - 60 = 0 have no session and 0
+    are needed, straight after the move, while the re-read has not come (or never comes), and after it
+    lands. (The app refuses a move to a time that has passed, so the over case is the next-week test in
+    test_planned_in_an_earlier_week_holds_its_time.py.)"""
     _reset(window, qapp)
     session = window.session
     _long_homework_on_thursday(window, qapp)
@@ -653,7 +655,7 @@ def test_a_session_moved_out_of_the_open_week_to_an_earlier_one_is_not_counted_t
         )
         _pump(qapp)
 
-    assert _long_counts(window) == ([], 60, 60, True)
+    assert _long_counts(window) == ([], 0, 0, False)
 
 
 @pytest.mark.parametrize("reads", ["fail", "held", "land"])

@@ -113,11 +113,13 @@ fn shown_homework_list(
     week_start: &str,
     include_completed: bool,
     first_weekday: u32,
+    now: flexweek_engine::plan::Moment,
 ) -> Result<Value, String> {
     let target = week::resolve_week(week_start, first_weekday)?;
     let mut view = match target {
         WeekTarget::StoredMonday => {
-            homework_list(conn, user_id, week_start, include_completed).map_err(view_error)?
+            homework_list(conn, user_id, week_start, include_completed, Some(now))
+                .map_err(view_error)?
         }
         WeekTarget::Shown { .. } => {
             let rows = list_assignment_rows(conn, user_id).map_err(view_error)?;
@@ -138,8 +140,8 @@ fn shown_homework_list(
                 }
                 weeks.push((saved_week, blocks));
             }
-            let planned =
-                planned_minutes_from_day(&weeks, week_start).map_err(|err| err.message)?;
+            let planned = planned_minutes_from_day(&weeks, week_start, Some(now))
+                .map_err(|err| err.message)?;
             let done = flexweek_engine::plan::done_minutes_by_id(&weeks);
             let mut keyed = Vec::new();
             for (row_id, row_body, row_revision) in rows {
@@ -326,6 +328,7 @@ impl crate::App {
                 &args.week_start,
                 args.include_completed.unwrap_or(false),
                 self.first_weekday(),
+                self.now()?.moment()?,
             )?;
             Ok(view.to_string())
         })();

@@ -82,6 +82,7 @@ fn views(
     weeks: &[(String, Vec<Value>, i64)],
     week_start: &str,
     target: &WeekTarget,
+    now: flexweek_engine::plan::Moment,
 ) -> Result<Map<String, Value>, String> {
     let listed: Vec<(String, Vec<Value>)> = weeks
         .iter()
@@ -89,10 +90,11 @@ fn views(
         .collect();
     let planned = match target {
         WeekTarget::StoredMonday => {
-            flexweek_engine::plan::planned_minutes_by_id(&listed, week_start)
+            flexweek_engine::plan::planned_minutes_by_id(&listed, week_start, Some(now))
         }
         WeekTarget::Shown { .. } => {
-            flexweek_engine::plan::planned_minutes_from_day(&listed, week_start).map_err(engine)?
+            flexweek_engine::plan::planned_minutes_from_day(&listed, week_start, Some(now))
+                .map_err(engine)?
         }
     };
     let done = flexweek_engine::plan::done_minutes_by_id(&listed);
@@ -362,7 +364,14 @@ fn run_plan(
     }
     let (keyed, tree, rows) = assignments(conn, user_id)?;
     let weeks = stored_weeks(conn, user_id)?;
-    let assignments = Value::Object(views(&keyed, &rows, &weeks, week_start, target)?);
+    let assignments = Value::Object(views(
+        &keyed,
+        &rows,
+        &weeks,
+        week_start,
+        target,
+        now.moment()?,
+    )?);
     let by_id = assignments.as_object().cloned().unwrap_or_default();
     let (blocks, mut basis, earlier_cutoff, first_hidden_indices) = match target {
         WeekTarget::StoredMonday => {

@@ -142,7 +142,7 @@ fn a_bad_date_week_or_month_is_refused_with_the_route_sentence() {
         MONTH_RULE,
         "a bad month must be refused with the month rule"
     );
-    let homework = homework_list(&conn, user, "2026-10-20", false);
+    let homework = homework_list(&conn, user, "2026-10-20", false, None);
     assert!(
         homework.is_err(),
         "homework must refuse a week that is not a Monday"
@@ -364,7 +364,7 @@ fn month_fills_empty_weeks_from_standing_and_keeps_the_stored_title() {
 #[test]
 fn homework_sorts_by_due_and_names_every_session_week() {
     let (conn, user) = fixture("homework");
-    let open = homework_list(&conn, user, "2026-10-19", false).expect("open");
+    let open = homework_list(&conn, user, "2026-10-19", false, None).expect("open");
     let items = list(&open, "assignments").filter(|items| !items.is_empty());
     assert!(items.is_some(), "the homework list must not be empty");
     let items = items.expect("asserted");
@@ -401,7 +401,7 @@ fn homework_sorts_by_due_and_names_every_session_week() {
         Some(&json!(["2026-10-12", "2026-10-19"])),
         "session weeks are every week that holds the assignment, oldest first"
     );
-    let with_done = homework_list(&conn, user, "2026-10-19", true).expect("done");
+    let with_done = homework_list(&conn, user, "2026-10-19", true, None).expect("done");
     let done_items = list(&with_done, "assignments").filter(|items| !items.is_empty());
     assert!(
         done_items.is_some(),
@@ -532,7 +532,7 @@ fn homework_lists_the_minutes_of_sessions_ticked_done_in_every_saved_week() {
         .expect("week");
     }
     for read_for in ["2026-10-12", "2026-10-19", "2026-10-26"] {
-        let listed = homework_list(&conn, user, read_for, false).expect("list");
+        let listed = homework_list(&conn, user, read_for, false, None).expect("list");
         let items = list(&listed, "assignments").expect("items");
         let done = |id: &str| {
             by_id(items, id)
@@ -584,7 +584,7 @@ fn day_month_and_the_list_take_the_done_time_off_what_needs_a_time() {
         Some(15),
         "Month"
     );
-    let listed = homework_list(&conn, user, "2026-10-19", false).expect("list");
+    let listed = homework_list(&conn, user, "2026-10-19", false, None).expect("list");
     assert_eq!(
         unplanned(list(&listed, "assignments").expect("list")),
         Some(15),

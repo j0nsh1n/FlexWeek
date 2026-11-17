@@ -411,13 +411,13 @@ fn homework_minutes_from_a_wednesday_count_the_sessions_on_and_after_it() {
         ("2026-10-26".to_string(), vec![session("oct", 4)]),
     ];
     assert_eq!(
-        planned_minutes_from_day(&weeks, "2026-11-04")
+        planned_minutes_from_day(&weeks, "2026-11-04", None)
             .unwrap()
             .get("hw"),
         Some(&90)
     );
     assert_eq!(
-        planned_minutes_from_day(&weeks, "2026-11-11")
+        planned_minutes_from_day(&weeks, "2026-11-11", None)
             .unwrap()
             .get("hw"),
         Some(&30)

@@ -4,7 +4,7 @@
 //! minutes no session holds = this week's part - what this week's not-finished sessions hold (placed
 //! or waiting), never below 0; Plan and paste may place those minutes down to a quarter hour; a
 //! "Spread over days" share is cut from all of this week's part, the sessions being planned holding
-//! nothing yet. Sessions in an earlier week hold nothing here, as on main.
+//! nothing yet. The server's `planned_min` (given here) already counts an earlier week's session whose time is ahead of now.
 //!
 //! What later weeks hold comes from the server's `planned_min` (every saved, not-finished session from
 //! this week on) and the one input every caller passes: this week exactly as saved when that number was

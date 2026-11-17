@@ -552,13 +552,56 @@ pub fn unplanned_minutes(
     (remaining - planned).max(0)
 }
 
+/// A point on the calendar: a date and the minute of its day.
+pub type Moment = (NaiveDate, i64);
+
+/// `YYYY-MM-DDTHH:MM` as a `Moment`.
+pub fn parse_moment(stamp: &str) -> EngineResult<Moment> {
+    let (day, time) = stamp
+        .split_once('T')
+        .ok_or_else(|| EngineError::value(format!("not a date and time: {stamp:?}")))?;
+    Ok((parse_iso_date(day)?, hhmm_to_minutes(time)?))
+}
+
+/// Whether a session of the week starting `monday` has a time that is still ahead of `now`: it has a
+/// start, and its end (capped at midnight) is after `now`. One on now is ahead; one that ended is not.
+fn time_ahead_of(monday: NaiveDate, block: &Value, now: Moment) -> bool {
+    let Some(start) = block
+        .get("start")
+        .and_then(Value::as_str)
+        .filter(|start| !start.is_empty())
+        .and_then(|start| hhmm_to_minutes(start).ok())
+    else {
+        return false;
+    };
+    let Some(day) = block
+        .get("days")
+        .and_then(Value::as_array)
+        .and_then(|days| days.first())
+        .and_then(Value::as_i64)
+    else {
+        return false;
+    };
+    let length = block["duration_min"].as_i64().unwrap_or(0);
+    let end = (start + length).min(DAY_END_MIN);
+    (monday + Duration::days(day), end) > now
+}
+
+/// What a homework's open sessions hold, from `from_week` on, and in an earlier week the sessions whose
+/// time is still ahead of `now`. A session in any week holds its time when it is ticked done (that is
+/// done time, counted by `done_minutes_by_id`, never here) or its time is still ahead; one whose time
+/// passed unfinished, pinned or not, and one with no time hold nothing in an earlier week. With no
+/// `now`, earlier weeks hold nothing.
 pub fn planned_minutes_by_id(
     weeks: &[(String, Vec<Value>)],
     from_week: &str,
+    now: Option<Moment>,
 ) -> BTreeMap<String, i64> {
     let mut totals: BTreeMap<String, i64> = BTreeMap::new();
     for (week_start, blocks) in weeks {
-        if week_start.as_str() < from_week {
+        let earlier = week_start.as_str() < from_week;
+        let monday = parse_iso_date(week_start).ok();
+        if earlier && (now.is_none() || monday.is_none()) {
             continue;
         }
         for block in blocks {
@@ -569,6 +612,11 @@ pub fn planned_minutes_by_id(
                 .get("completed")
                 .and_then(Value::as_bool)
                 .unwrap_or(false)
+            {
+                continue;
+            }
+            if let (true, Some(monday), Some(now)) = (earlier, monday, now)
+                && !time_ahead_of(monday, block, now)
             {
                 continue;
             }
@@ -645,10 +693,12 @@ pub fn done_minutes_by_id(weeks: &[(String, Vec<Value>)]) -> BTreeMap<String, i6
 
 /// Each homework's minutes in sessions from `from_day` on, for a week on screen that starts on
 /// another day than Monday: a stored week's session counts when any of its days falls on or after
-/// that date. `planned_minutes_by_id` is the Monday version.
+/// that date, and a session before it whose time is still ahead of `now`. `planned_minutes_by_id` is
+/// the Monday version.
 pub fn planned_minutes_from_day(
     weeks: &[(String, Vec<Value>)],
     from_day: &str,
+    now: Option<Moment>,
 ) -> EngineResult<BTreeMap<String, i64>> {
     let first = crate::desk::pydate::from_iso(from_day)?;
     let mut totals: BTreeMap<String, i64> = BTreeMap::new();
@@ -676,7 +726,7 @@ pub fn planned_minutes_from_day(
                         .filter_map(Value::as_i64)
                         .any(|day| day >= offset)
                 });
-            if reaches {
+            if reaches || now.is_some_and(|now| time_ahead_of(monday, block, now)) {
                 let dur = block["duration_min"].as_i64().unwrap_or(0);
                 *totals.entry(aid.to_string()).or_insert(0) += dur;
             }
@@ -1357,7 +1407,7 @@ fn due_soon(
     week_start: &str,
     weeks: &[(String, Vec<Value>)],
 ) -> EngineResult<Vec<Value>> {
-    let planned = planned_minutes_by_id(weeks, week_start);
+    let planned = planned_minutes_by_id(weeks, week_start, None);
     let done = done_minutes_by_id(weeks);
     let tomorrow = agenda + Duration::days(1);
     let mut items: Vec<Value> = Vec::new();
@@ -1725,7 +1775,7 @@ pub fn build_month_from(
         weeks_by_start.insert(ws.clone(), blocks.clone());
     }
     let from_week = monday_of(&iso_date(start))?;
-    let planned = planned_minutes_by_id(weeks, &from_week);
+    let planned = planned_minutes_by_id(weeks, &from_week, None);
     let done = done_minutes_by_id(weeks);
 
     let mut due_by_date: BTreeMap<String, Vec<Value>> = BTreeMap::new();

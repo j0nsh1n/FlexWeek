@@ -764,7 +764,8 @@ fn list_homework_follows_monday_sunday_wednesday_and_month_end_crossing_weeks() 
     );
 
     // Switch live to Sunday: Sun 18 Oct includes Mon 19 + Wed 21 = 75m; month-end crossing
-    // Sun 2026-11-29..Sat Dec 5 includes Tue Dec 1 (30m).
+    // Sun 2026-11-29..Sat Dec 5 includes Tue Dec 1 (30m), and Mon 2 Nov 17:00 (60m), before that week but
+    // still ahead of the clock (Wed 21 Oct 12:00), holds its time too: 90m.
     std::fs::write(
         Path::new(&world.data_arg).join("week-start.json"),
         r#"{"week_starts_on": "sunday"}"#,
@@ -784,7 +785,7 @@ fn list_homework_follows_monday_sunday_wednesday_and_month_end_crossing_weeks() 
         by_id(list(&cross_sun, "assignments").expect("list"), "later")
             .and_then(|item| item.get("planned_min"))
             .and_then(Value::as_i64),
-        Some(30)
+        Some(90)
     );
 }
 

@@ -1422,10 +1422,10 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             rows = db.list_assignment_rows(account["id"])
             weeks = list_account_weeks(db, account["id"])
         if is_week_start(week_start):
-            planned_by_id = planned_minutes_by_id(weeks, week_start)
+            planned_by_id = planned_minutes_by_id(weeks, week_start, naive_now())
         else:
             # A week on screen from another day: the minutes from its first day on.
-            planned_by_id = planned_minutes_from_day(weeks, week_start)
+            planned_by_id = planned_minutes_from_day(weeks, week_start, naive_now())
         done_by_id = done_minutes_by_id(weeks)
         session_weeks_by_id: dict[str, set[str]] = {}
         for saved_week, blocks in weeks:

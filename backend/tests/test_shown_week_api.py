@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Iterator
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ from fastapi.testclient import TestClient
 
 import backend.app as app_module
 from backend.app import create_app
+from backend.tests.fake_clock import CLOCK
 
 PASSWORD = "a-long-test-password"
 WRITE = {"X-FlexWeek-Request": "1", "Origin": "http://testserver"}
@@ -219,9 +221,16 @@ def test_homework_counts_minutes_planned_from_the_first_day_of_the_shown_week(al
     # Tuesday 10 November is before the week from Wednesday 11; Wednesday 11 and Monday 16 are in it.
     save(alice, FIRST, [session("tue10", 1), session("wed11", 2)], 0)
     save(alice, SECOND, [session("mon16", 0)], 0)
+    # The clock is still Thursday 5 November: Tuesday's 16:00 session is ahead of now, so it holds its 30
+    # minutes too, 30 + 30 + 30 = 90.
     listed = alice.get(f"/api/assignments?week_start={WED}&include_completed=true")
     assert listed.status_code == 200, listed.text
+    assert listed.json()["assignments"][0]["planned_min"] == 90
+    # Once Tuesday 10 November is over (its session ended at 16:30) it holds nothing: 30 + 30 = 60.
+    CLOCK.set(datetime(2026, 11, 10, 17, 0))
+    listed = alice.get(f"/api/assignments?week_start={WED}&include_completed=true")
     assert listed.json()["assignments"][0]["planned_min"] == 60
+    CLOCK.set(datetime(2026, 11, 5, 19, 0))
     monday = alice.get(f"/api/assignments?week_start={FIRST}&include_completed=true").json()
     assert monday["assignments"][0]["planned_min"] == 90
 

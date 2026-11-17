@@ -435,7 +435,7 @@ fn add_spread_sessions(
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
-    let planned = flexweek_engine::plan::planned_minutes_by_id(&held, "2000-01-01")
+    let planned = flexweek_engine::plan::planned_minutes_by_id(&held, "2000-01-01", None)
         .get(&id)
         .copied()
         .unwrap_or(0);
