@@ -680,6 +680,12 @@ class WeekBridge(QObject):
     def homeworkCount(self) -> int:
         return len(self._homework_rows)
 
+    @Property(int, notify=homeworkChanged)
+    def listedCount(self) -> int:
+        """Everything the drawer lists: the cards and the lines for homework with no session."""
+        lines = [line for line in self._leftover_words.split("\n") if line]
+        return len(self._homework_rows) + len(lines)
+
     @Property(str, notify=homeworkChanged)
     def timeWords(self) -> str:
         """What the drawer says when no card is listed: whether any homework still needs a time."""

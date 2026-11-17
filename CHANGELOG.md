@@ -84,6 +84,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Plan into this week now moves a homework session that was planned for a time that has passed and not finished (and not pinned), when "left from last week" counts its minutes. It used to leave the session at its old time and answer "That homework already has a time." The Plan into this week button on a single homework in the Overdue and left from last week panel gives a session that is waiting for a time its time, instead of saying the homework is fully planned.
 - In the Material style, "Add fixed time here" and "Add homework here" on free time in Week and Day now open with the words kept by an earlier Esc, the same as the + button does. The day and time you clicked are the ones the sheet shows.
 - In the Material style, an open drop-down list (Week starts on in Settings, and the date and time lists in Add and Edit homework and fixed time) now moves with Up and Down and picks with Enter; before, the arrow keys and Enter did nothing while the list was open.
+- In the Material style, the number beside "No time yet" in the homework drawer counts every line the drawer lists, including homework with minutes that have no session ("Science poster · 1 h with no time"), so it no longer says 0 beside them.
 
 ## [1.3.0] - 2026-11-10
 
