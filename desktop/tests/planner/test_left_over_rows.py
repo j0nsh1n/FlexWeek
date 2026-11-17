@@ -140,8 +140,7 @@ def test_the_deadline_passing_refreshes_tags_the_sidebar_and_the_focus_list(
     CLOCK.set(before)
     session.week_changed.emit()
     settled(qapp, window)
-    # The pinned Wednesday hour passed unfinished, so it needs a time already, but it is not overdue yet.
-    assert [item["left_over_state"] for item in session.unfinished()] != ["overdue"]
+    assert not session.unfinished()
     assert 0 < window._deadline_tick.remainingTime() <= 61_000
     CLOCK.set(after)
     window._deadline_tick.timeout.emit()
