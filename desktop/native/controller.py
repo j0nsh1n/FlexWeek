@@ -3198,6 +3198,14 @@ class NativeSession(QObject):
             self.assignments, self._open_week(), self.week_start, self._assignments_basis
         )
 
+    def plan_can_place(self) -> bool:
+        """Whether pressing Plan has something to place: a session waiting for a time (a missed one is read
+        as waiting), or minutes no session holds that make a whole quarter hour."""
+        return any(
+            item["waiting_min"] or self.remaining_for(item["assignment_id"]) > 0
+            for item in self._time_split()
+        )
+
     def homework_remainders(self) -> list[tuple[str, int]]:
         """Homework with minutes that no session holds, by title and those minutes alone: the drawer lists
         them under the cards, which already show the sessions that wait."""

@@ -81,7 +81,7 @@ Rectangle {
             mutedWhenDisabled: true
             icon: "schedule"
             text: "Plan my homework"
-            enabled: drawer.count > 0
+            enabled: drawer.bridge ? drawer.bridge.week.canPlan : false
             activeFocusOnTab: enabled && !drawer.passive
             onClicked: drawer.bridge.week.plan()
         }

@@ -162,6 +162,7 @@ class WeekBridge(QObject):
         self._homework_rows: list[dict] = []
         self._time_words = EVERYTHING_TIMED
         self._all_timed = True
+        self._can_plan = False
         self._day_rows: list[dict] = []
         self._leftover_words = ""
         self._hour_labels: list[str] = [clock_label(hour * 60) for hour in range(24)]
@@ -303,6 +304,8 @@ class WeekBridge(QObject):
         needed = session.homework_time_needed()
         self._time_words = homework_time_sentence([], needed)
         self._all_timed = not needed
+        can_place = getattr(session, "plan_can_place", None)
+        self._can_plan = bool(can_place()) if can_place else bool(homework_rows)
         remainders = getattr(session, "homework_remainders", None)
         self._leftover_words = "\n".join(
             [
@@ -684,6 +687,11 @@ class WeekBridge(QObject):
     def timeWords(self) -> str:
         """What the drawer says when no card is listed: whether any homework still needs a time."""
         return self._time_words
+
+    @Property(bool, notify=homeworkChanged)
+    def canPlan(self) -> bool:
+        """Whether Plan my homework has anything to place, listed as a card or not."""
+        return self._can_plan
 
     @Property(bool, notify=homeworkChanged)
     def allTimed(self) -> bool:

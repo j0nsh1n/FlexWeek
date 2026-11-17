@@ -667,3 +667,45 @@ def test_undoing_a_delete_after_a_cut_whose_read_has_not_landed_keeps_the_minute
     settled(qapp, window)
 
     assert _essay_counts(window) == ([5], 55, 55)
+
+
+def test_plan_is_on_when_minutes_no_session_holds_are_enough_to_place(qapp, window) -> None:
+    """Essay 60, session cut to 5, saved: 55 minutes have no session and 45 of them are whole quarter hours
+    Plan can place, so the Plan button is on although no card is listed."""
+    root = _reset(window, qapp)
+    _cut(window, qapp, "essay", 5)
+    wait_until(qapp, lambda: window.session.assignments["essay"].get("unplanned_min") == 55)
+    _pump(qapp)
+
+    assert _bridge(window).week.property("homeworkCount") == 0
+    assert _qml(root, "planHomework").property("enabled") is True
+
+
+def test_plan_is_off_when_nothing_is_left_to_place(qapp, window) -> None:
+    """Essay 60 with its 60 minute session saved and read: every minute has a time."""
+    root = _reset(window, qapp)
+    _cut(window, qapp, "essay", 60)
+    wait_until(qapp, lambda: window.session.assignments["essay"].get("unplanned_min") == 0)
+    _pump(qapp)
+
+    assert _qml(root, "planHomework").property("enabled") is False
+
+
+@pytest.mark.parametrize(("pinned", "on"), [(False, True), (True, False)])
+def test_plan_is_on_for_a_session_of_this_week_that_passed_unless_it_is_pinned(
+    qapp, window, pinned: bool, on: bool
+) -> None:
+    """Essay 60 with its 60 minute session on Monday 10:00, over by now (Thursday evening). Plan moves a
+    session the planner placed, so the button is on; a session the student pinned stays, so there is
+    nothing for Plan to place and the button is off."""
+    root = _reset(window, qapp)
+    session = window.session
+    block = next(item for item in session.blocks if item.get("assignment_id") == "essay")
+    block.update(duration_min=60, pinned=pinned, start="10:00", days=[0])
+    session._touch()
+    session.save()
+    settled(qapp, window)
+    wait_until(qapp, lambda: session.assignments["essay"].get("planned_min") == 60)
+    _pump(qapp)
+
+    assert _qml(root, "planHomework").property("enabled") is on
