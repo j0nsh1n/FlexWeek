@@ -32,10 +32,6 @@ AFTER_SCHOOL_GAP = 30
 TODAY = {"1": 3, "2": 8, "3": 22, "4": 60, "5": 8, "6": 10, "7": 6, "8": 6, "9": 9, "10": 6, "11": 25,
          "12": 27, "13": 30, "14": 22, "15": 15, "16": 40, "17": 3, "17b": 3}
 TODAY_SLOW = {**TODAY, "10": 5, "15": 14}
-KNOWN_WEEKEND = (
-    "known failure (item 1c.A): due after Sunday offers Mon-Fri only, so a Friday plan puts all 3 h 15 min "
-    "on Friday and nothing on the weekend"
-)
 KNOWN_SPREAD = "known failure (item 1c.B): the solver fills the earliest slot; 7 h of homework on Monday"
 KNOWN_GAP = "known failure (item 1c.B): homework starts at School's end (15:15), no 30 min gap"
 
@@ -116,7 +112,6 @@ def test_week17_offers_plan_friday_at_least() -> None:
     assert len(placed(week, solve(week))) == 3
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_WEEKEND)
 def test_week17_uses_the_weekend_and_friday_stays_under_the_cap() -> None:
     week = week17_as_the_app_asks()
     times = placed(week, solve(week))
