@@ -163,6 +163,7 @@ class WeekBridge(QObject):
         self._time_words = EVERYTHING_TIMED
         self._all_timed = True
         self._can_plan = False
+        self._listed_count = 0
         self._day_rows: list[dict] = []
         self._leftover_words = ""
         self._left_words = ""
@@ -310,18 +311,19 @@ class WeekBridge(QObject):
         # A card the drawer lists is something Plan places, even a task that is not homework.
         self._can_plan = bool(homework_rows) or (bool(can_place()) if can_place else False)
         remainders = getattr(session, "homework_remainders", None)
+        uncovered = remainders() if remainders else []
+        missed_items = [item for item in needed if item.get("missed_min")]
+        # Each homework once, by id: its card and its line are one; two homework with one title are two.
+        self._listed_count = len(
+            {row["assignmentId"] or row["blockId"] for row in homework_rows}
+            | {homework for _title, _minutes, homework in uncovered}
+            | {item["assignment_id"] for item in missed_items}
+        )
         self._leftover_words = "\n".join(
             [
-                *(
-                    f"{title} · {length_label(minutes)} with no time"
-                    for title, minutes in (remainders() if remainders else [])
-                ),
+                *(f"{title} · {length_label(minutes)} with no time" for title, minutes, _id in uncovered),
                 # Only a week that is over has these: its missed time is planned from this week.
-                *(
-                    f"{item['title']} · {length_label(item['missed_min'])} missed"
-                    for item in needed
-                    if item.get("missed_min")
-                ),
+                *(f"{item['title']} · {length_label(item['missed_min'])} missed" for item in missed_items),
             ]
         )
         self._left_words = self._left_line()
@@ -717,9 +719,8 @@ class WeekBridge(QObject):
     @Property(int, notify=homeworkChanged)
     def listedCount(self) -> int:
         """How many homework the drawer lists, each once: a homework with a card and a "with no time" line
-        is one. The lines say a title first, so a card and a line with the same title are the same one."""
-        lines = [line.split(" · ")[0] for line in self._leftover_words.split("\n") if line]
-        return len({row["title"] for row in self._homework_rows} | set(lines))
+        is one."""
+        return self._listed_count
 
     @Property(str, notify=homeworkChanged)
     def timeWords(self) -> str:

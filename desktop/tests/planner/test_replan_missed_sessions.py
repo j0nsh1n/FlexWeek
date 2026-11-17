@@ -440,7 +440,7 @@ def test_minutes_no_session_holds_are_read_with_the_missed_session_counted_as_ti
     session.preferences = {**(session.preferences or {}), "timer_work_min": 10}
     _log_focus(qapp, session, work, clock, 10, 10)
     assert [item["minutes"] for item in session.homework_time_needed()] == [50]
-    assert session.homework_remainders() == [("History essay", 5)]
+    assert session.homework_remainders() == [("History essay", 5, "essay")]
     assert session.minutes_left_for("essay") == 5
     assert session.remaining_for("essay") == 0
     assert session.plan_unfinished("essay") is None

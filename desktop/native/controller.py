@@ -3226,11 +3226,13 @@ class NativeSession(QObject):
             for item in self._time_split()
         )
 
-    def homework_remainders(self) -> list[tuple[str, int]]:
-        """Homework with minutes that no session holds, by title and those minutes alone: the drawer lists
-        them under the cards, which already show the sessions that wait."""
+    def homework_remainders(self) -> list[tuple[str, int, str]]:
+        """Homework with minutes that no session holds, by title, those minutes alone and its id: the drawer
+        lists them under the cards, which already show the sessions that wait."""
         return [
-            (item["title"], item["uncovered_min"]) for item in self._time_split() if item["uncovered_min"]
+            (item["title"], item["uncovered_min"], item["assignment_id"])
+            for item in self._time_split()
+            if item["uncovered_min"]
         ]
 
     def minutes_left_for(self, assignment_id: str) -> int:
