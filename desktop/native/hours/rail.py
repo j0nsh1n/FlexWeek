@@ -136,12 +136,15 @@ def rail_needed_line(item: dict) -> str:
     """One homework of the rail's list: what it still needs, and in a week that is over what was missed,
     since that time is planned from this week."""
     missed = int(item.get("missed_min") or 0)
-    rest = int(item["minutes"]) - missed
+    pinned = int(item.get("pinned_min") or 0)
+    rest = int(item["minutes"]) - missed - pinned
     parts = [item["title"]]
     if rest:
         parts.append(f"{length_label(rest)} left")
     if missed:
         parts.append(f"{length_label(missed)} missed")
+    if pinned:
+        parts.append(f"{length_label(pinned)} pinned, in the past")
     return " · ".join(parts)
 
 

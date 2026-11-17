@@ -3179,14 +3179,34 @@ class NativeSession(QObject):
 
     def homework_time_needed(self) -> list[dict]:
         """Homework that needs a time. A session whose time has passed unfinished needs one again. In a week
-        that is over, the minutes of its missed sessions are also given as `missed_min`."""
+        that is over, the minutes of its missed sessions are also given as `missed_min`, and those of its
+        pinned sessions that passed unfinished as `pinned_min`."""
         week = self._open_week()
         needed = time_still_needed(self.assignments, week, self.week_start, self._assignments_basis)
         missed = self._missed_minutes(week)
+        pinned = self._pinned_past_minutes(week)
         for item in needed:
             if missed.get(item["assignment_id"]):
                 item["missed_min"] = missed[item["assignment_id"]]
+            if pinned.get(item["assignment_id"]):
+                item["pinned_min"] = min(
+                    pinned[item["assignment_id"]], item["minutes"] - item.get("missed_min", 0)
+                )
         return needed
+
+    def _pinned_past_minutes(self, week: list[dict]) -> dict[str, int]:
+        """Each homework's minutes in pinned sessions that passed unfinished, in a week that is over: the
+        open week leaves them out, and no plan moves them, so they are said as pinned in the past."""
+        today = datetime.fromtimestamp(self.now_ms() / 1000).date().isoformat()
+        if not self.week_start or self.shown_week_of(today) <= self.week_start:
+            return {}
+        kept = {block["id"] for block in week}
+        pinned: dict[str, int] = {}
+        for block in self.blocks:
+            homework = block.get("assignment_id")
+            if homework and block.get("start") and block["id"] not in kept:
+                pinned[homework] = pinned.get(homework, 0) + int(block.get("duration_min") or 0)
+        return pinned
 
     def _missed_minutes(self, week: list[dict]) -> dict[str, int]:
         """Each homework's minutes in missed sessions, by homework, in a week that is over and in no other:
@@ -3232,11 +3252,13 @@ class NativeSession(QObject):
 
     def homework_remainders(self) -> list[tuple[str, int, str]]:
         """Homework with minutes that no session holds, by title, those minutes alone and its id: the drawer
-        lists them under the cards, which already show the sessions that wait."""
+        lists them under the cards, which already show the sessions that wait. In a week that is over a
+        pinned session that passed is said as such, not as minutes with no time."""
+        pinned = self._pinned_past_minutes(self._open_week())
         return [
-            (item["title"], item["uncovered_min"], item["assignment_id"])
+            (item["title"], item["uncovered_min"] - pinned.get(item["assignment_id"], 0), item["assignment_id"])
             for item in self._time_split()
-            if item["uncovered_min"]
+            if item["uncovered_min"] > pinned.get(item["assignment_id"], 0)
         ]
 
     def minutes_left_for(self, assignment_id: str) -> int:

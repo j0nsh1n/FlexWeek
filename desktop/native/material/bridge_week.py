@@ -313,7 +313,7 @@ class WeekBridge(QObject):
         self._can_plan = bool(homework_rows) or (bool(can_place()) if can_place else False)
         remainders = getattr(session, "homework_remainders", None)
         uncovered = remainders() if remainders else []
-        missed_items = [item for item in needed if item.get("missed_min")]
+        missed_items = [item for item in needed if item.get("missed_min") or item.get("pinned_min")]
         # Each homework once, by id: its card and its line are one; two homework with one title are two.
         self._listed_count = len(
             {row["assignmentId"] or row["blockId"] for row in homework_rows}
@@ -324,7 +324,12 @@ class WeekBridge(QObject):
             [
                 *(f"{title} · {length_label(minutes)} with no time" for title, minutes, _id in uncovered),
                 # Only a week that is over has these: its missed time is planned from this week.
-                *(f"{item['title']} · {length_label(item['missed_min'])} missed" for item in missed_items),
+                *(
+                    f"{item['title']} · {length_label(item[key])} {words}"
+                    for item in missed_items
+                    for key, words in (("missed_min", "missed"), ("pinned_min", "pinned, in the past"))
+                    if item.get(key)
+                ),
             ]
         )
         self._left_words = self._left_line()

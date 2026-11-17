@@ -410,6 +410,28 @@ def test_the_drawer_says_missed_time_as_missed_in_a_week_that_is_over(qapp, wind
         CLOCK.set(thursday)
 
 
+def test_the_drawer_says_a_pinned_session_that_passed_as_pinned_in_the_past_in_a_week_that_is_over(
+    qapp, window
+) -> None:
+    """The essay's pinned Tuesday 16:00 to 17:00 was not finished. Its hour still needs a time, but in a week
+    that is over the drawer names it as pinned in the past where an unpinned one reads missed."""
+    root = _reset(window, qapp)
+    session = window.session
+    essay = next(block for block in session.blocks if block.get("assignment_id") == "essay")
+    session.add_block({**essay, "start": "16:00", "days": [1], "duration_min": 60, "pinned": True})
+    session.save()
+    wait_until(qapp, lambda: not session.busy and session.pending_save is None)
+    thursday = CLOCK.now()
+    try:
+        CLOCK.set(datetime.fromisoformat(session.week_start) + timedelta(days=7, hours=10))
+        window._material_page.publish()
+        _pump(qapp)
+        assert _qml(root, "homeworkEmptyText").property("text") == "History essay · 1 h pinned, in the past"
+        assert _qml(root, "homeworkEmptyIcon").property("visible") is False
+    finally:
+        CLOCK.set(thursday)
+
+
 def test_plenty_of_time_is_never_due_within_24_hours() -> None:
     start = date(2026, 11, 2)
     moment = datetime(2026, 11, 5, 19, 0)

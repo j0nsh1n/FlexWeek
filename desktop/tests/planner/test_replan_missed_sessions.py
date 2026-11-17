@@ -479,6 +479,23 @@ def test_a_week_that_is_over_says_its_missed_time_as_missed(
     assert window.rail.none_waiting.text() == "History essay · 1 h missed"
 
 
+def test_a_week_that_is_over_says_a_pinned_session_that_passed_as_pinned_in_the_past(
+    qapp: QApplication, open_light: Callable[..., NativeWindow], clock: FakeClock
+) -> None:
+    """The essay's Tuesday hour is pinned and was not finished. This week it needs a time; once the week is
+    over, the status line and the plain look's list say "pinned, in the past" where an unpinned hour reads
+    missed. Its minutes still count as needed."""
+    window = open_light()
+    session, _ = _essay_planned_on_tuesday(qapp, lambda: window, due="2026-11-13T23:59", pinned=True)
+    window._fill_classic()
+    assert window.rail.none_waiting.text() == "History essay · 1 h left"
+    clock.set(datetime(2026, 11, 9, 10, 0))
+    window._fill_classic()
+    assert [item["minutes"] for item in session.homework_time_needed()] == [60]
+    assert _sentence(session) == "1 h pinned, in the past"
+    assert window.rail.none_waiting.text() == "History essay · 1 h pinned, in the past"
+
+
 def test_minutes_no_session_holds_are_read_with_the_missed_session_counted_as_time_still_needed(
     qapp: QApplication, open_light: Callable[..., NativeWindow], clock: FakeClock
 ) -> None:
