@@ -207,15 +207,27 @@ pub fn due_label_text(due: Option<&str>, today: NaiveDate) -> EngineResult<Strin
     due_label(&due.map_or(Value::Null, |found| json!(found)), today)
 }
 
+/// The names of the days of the week on screen: from its date when `week_start` is given, else
+/// as a week from Monday.
+fn shown_names(week_start: &str, full: bool) -> EngineResult<Vec<&'static str>> {
+    if week_start.is_empty() {
+        return Ok(if full { DAY_FULL } else { DAYS }.to_vec());
+    }
+    crate::shown::day_names(week_start, full)
+}
+
 pub fn moved_words(
     block: &Value,
     from_day: i64,
     day: i64,
     start: i64,
     end: i64,
+    week_start: &str,
 ) -> EngineResult<String> {
-    let day_name =
-        || -> EngineResult<&'static str> { Ok(DAYS[tuple_index(DAYS.len(), &Value::from(day))?]) };
+    let names = shown_names(week_start, false)?;
+    let day_name = || -> EngineResult<&'static str> {
+        Ok(names[tuple_index(names.len(), &Value::from(day))?])
+    };
     let mut title = or_default(get(block, "title")?, json!("the block"));
     if !truthy(get(block, "start")?) {
         return Ok(format!(
@@ -226,7 +238,8 @@ pub fn moved_words(
         ));
     }
     if is_series_checked(block)? {
-        let full = DAY_FULL[tuple_index(DAY_FULL.len(), &Value::from(from_day))?];
+        let fulls = shown_names(week_start, true)?;
+        let full = fulls[tuple_index(fulls.len(), &Value::from(from_day))?];
         title = json!(format!("{full}'s {}", py_str(&title)));
     }
     let was = minute_of_value(subscript(block, "start")?)?;
@@ -256,11 +269,12 @@ fn first_day(days: &Value) -> EngineResult<Value> {
     }
 }
 
-pub fn added_words(block: &Value) -> EngineResult<String> {
+pub fn added_words(block: &Value, week_start: &str) -> EngineResult<String> {
     let title = or_default(get(block, "title")?, json!("a block"));
     let days = or_default(get(block, "days")?, json!([]));
     if truthy(get(block, "start")?) && length(&days)? == 1 {
-        let name = DAYS[tuple_index(DAYS.len(), &first_day(&days)?)?];
+        let names = shown_names(week_start, false)?;
+        let name = names[tuple_index(names.len(), &first_day(&days)?)?];
         return Ok(format!(
             "Added {} on {name} {}.",
             py_str(&title),
