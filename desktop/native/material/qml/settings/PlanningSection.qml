@@ -54,7 +54,7 @@ SectionPage {
             key: "split"
             visible: !!page.st.showSplit
             title: "Split long tasks"
-            subtitle: "Tasks over 60 minutes can divide into shorter sessions."
+            subtitle: "Tasks over 60 minutes, other than homework, can divide into shorter sessions. Homework keeps its own In one go or Spread over days choice."
             isOn: !!page.st.split
             onFlipped: (value) => page.panel.setSplit(value)
         }
