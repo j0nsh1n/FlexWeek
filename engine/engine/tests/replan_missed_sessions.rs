@@ -282,6 +282,18 @@ fn test_a_new_session_for_a_pinned_past_ones_minutes_leaves_nothing_needed() {
 }
 
 #[test]
+fn test_a_pinned_session_does_not_hold_the_minutes_of_a_missed_one_after_it() {
+    // 60 minutes to do, a pinned session on Monday and an unpinned one on Tuesday, both passed:
+    // the pinned one holds nothing, so the Tuesday session is still owed all 60.
+    let mut pinned = session("essay", 0, "16:00", 60);
+    pinned["pinned"] = json!(true);
+    let tuesday = session("essay-2", 1, "16:00", 60);
+    let assignments = essay(60, 0, "2026-11-07T23:59");
+    let now = not_before();
+    assert_eq!(needed(&[pinned, tuesday], &assignments, Some(&now)), 60);
+}
+
+#[test]
 fn test_a_pinned_session_ticked_done_asks_for_no_new_session() {
     let mut done = session("essay", 1, "16:00", 60);
     done["pinned"] = json!(true);
