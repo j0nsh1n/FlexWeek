@@ -634,7 +634,13 @@ fn planned_minutes(
             {
                 continue;
             }
-            if let (true, Some(monday), Some(now)) = (earlier || clock_every_week, monday, now)
+            // A session still waiting for a time holds its minutes in the asked week and later: it has not passed.
+            let has_time = block
+                .get("start")
+                .and_then(Value::as_str)
+                .is_some_and(|start| !start.is_empty());
+            if let (true, Some(monday), Some(now)) =
+                (earlier || (clock_every_week && has_time), monday, now)
                 && !time_ahead_of(monday, block, now)
             {
                 continue;
