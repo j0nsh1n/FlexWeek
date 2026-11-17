@@ -85,6 +85,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - In the Material style, "Add fixed time here" and "Add homework here" on free time in Week and Day now open with the words kept by an earlier Esc, the same as the + button does. The day and time you clicked are the ones the sheet shows.
 - In the Material style, an open drop-down list (Week starts on in Settings, and the date and time lists in Add and Edit homework and fixed time) now moves with Up and Down and picks with Enter; before, the arrow keys and Enter did nothing while the list was open.
 - In the Material style, the number beside "No time yet" in the homework drawer counts every line the drawer lists, including homework with minutes that have no session ("Science poster · 1 h with no time"), so it no longer says 0 beside them.
+- In the Material style, Week has a line above the grid when homework is overdue or left from last week, saying "1 overdue · 1 left from last week" as the Widgets styles do, with Plan into this week and Mark as finished, which do what the Widgets buttons do. It is not there when nothing is left over.
 
 ## [1.3.0] - 2026-11-10
 

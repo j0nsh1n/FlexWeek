@@ -164,6 +164,7 @@ class WeekBridge(QObject):
         self._all_timed = True
         self._day_rows: list[dict] = []
         self._leftover_words = ""
+        self._left_words = ""
         self._hour_labels: list[str] = [clock_label(hour * 60) for hour in range(24)]
         self._blocks = Rows(BLOCK_ROLES, self)
         self._homework = Rows(HOMEWORK_ROLES, self)
@@ -226,6 +227,7 @@ class WeekBridge(QObject):
         if session.account is None or not session.week_start:
             self._block_rows, self._homework_rows, self._day_rows = [], [], []
             self._leftover_words = ""
+            self._left_words = ""
             self._seen = set()
             self._publish()
             return
@@ -318,6 +320,7 @@ class WeekBridge(QObject):
                 ),
             ]
         )
+        self._left_words = self._left_line()
         self._week_key = session.week_start
         self._seen = keys
         self._fresh_until = {key: until for key, until in self._fresh_until.items() if until > clock}
@@ -327,6 +330,18 @@ class WeekBridge(QObject):
             day_rows,
         )
         self._publish()
+
+    def _left_line(self) -> str:
+        """The Widgets line above the week: "N overdue · N left from last week", from the same list."""
+        left = self._window._unfinished_items()  # type: ignore[attr-defined]
+        overdue = sum(item.get("left_over_state") == "overdue" for item in left)
+        carried = len(left) - overdue
+        parts = []
+        if overdue:
+            parts.append(f"{overdue} overdue")
+        if carried:
+            parts.append(f"{carried} left from last week")
+        return " · ".join(parts)
 
     @staticmethod
     def _tag_for(item: Any, start: date, moment: datetime) -> tuple[str, str]:
@@ -398,6 +413,16 @@ class WeekBridge(QObject):
             return
         self._said_plan = time.monotonic()
         self._window._plan_with_left_over()  # type: ignore[attr-defined]
+
+    @Slot()
+    def planLeft(self) -> None:
+        """Plan into this week: the Widgets button's own call."""
+        self._window._plan_left()  # type: ignore[attr-defined]
+
+    @Slot()
+    def didLeft(self) -> None:
+        """Mark as finished: the Widgets button's own call."""
+        self._window._did_left()  # type: ignore[attr-defined]
 
     @Slot(str, int, int)
     def placeHomework(self, block_id: str, day: int, start: int) -> None:
@@ -679,6 +704,11 @@ class WeekBridge(QObject):
     @Property(int, notify=homeworkChanged)
     def homeworkCount(self) -> int:
         return len(self._homework_rows)
+
+    @Property(str, notify=homeworkChanged)
+    def leftWords(self) -> str:
+        """"N overdue · N left from last week", or nothing when no homework is left over."""
+        return self._left_words
 
     @Property(int, notify=homeworkChanged)
     def listedCount(self) -> int:
