@@ -199,7 +199,7 @@ Item {
                 density: root.density
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
-                kind: "filled"
+                kind: "tonal"
                 text: "Plan into this week"
                 accessName: "Plan into this week"
                 activeFocusOnTab: leftRow.visible
@@ -211,7 +211,7 @@ Item {
                 density: root.density
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
-                kind: "outlined"
+                kind: "text"
                 text: "Mark as finished"
                 accessName: "Mark as finished"
                 activeFocusOnTab: leftRow.visible

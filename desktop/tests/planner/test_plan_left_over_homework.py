@@ -23,7 +23,9 @@ from desktop.tests.planner.support import (
 from desktop.tests.window_support import settled
 
 
-def test_a_session_ahead_of_now_in_an_earlier_week_holds_its_time_when_next_week_is_open(qapp, window) -> None:
+def test_a_session_ahead_of_now_in_an_earlier_week_holds_its_time_when_next_week_is_open(
+    qapp, window
+) -> None:
     session = window.session
     week = session.week_start
     monday = date.fromisoformat(week)
