@@ -5439,7 +5439,7 @@ class NativeWindow(QMainWindow):
         sheet.exec()
         if sheet.answer != "yes":
             return
-        self.session.reset_focus()
+        self.session.end_focus_early()
         self._close_focus_screen()
 
     def _finish_focus_homework(self) -> None:
