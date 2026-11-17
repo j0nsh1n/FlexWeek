@@ -4309,10 +4309,12 @@ class NativeSession(QObject):
         self._reset_focus()
 
     def focus_elapsed_min(self) -> int:
-        """Whole minutes of the work session running or paused on this week, which are credited to
-        the homework only when it ends."""
+        """Whole minutes of the work session running or paused, which are credited to the homework only
+        when it ends. A homework is credited whichever week is open; a block, only from its own week."""
         state = self.focus
-        if state is None or state.get("phase") != "work" or state.get("weekStart") != self.week_start:
+        if state is None or state.get("phase") != "work":
+            return 0
+        if not state.get("assignmentId") and state.get("weekStart") != self.week_start:
             return 0
         spent = phase_total_ms(state, self.preferences) - remaining_ms(state, self.now_ms())
         return max(0, spent) // 60_000
