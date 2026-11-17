@@ -348,6 +348,30 @@ fn planned_minutes_from_day(weeks: &str, from_day: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
+fn held_dates_by_id(weeks: &str, from_week: &str) -> PyResult<String> {
+    guard(|| {
+        let weeks: Vec<(String, Vec<Value>)> = parse(weeks)?
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|item| {
+                let pair = item.as_array()?;
+                let start = pair.first()?.as_str()?.to_string();
+                let blocks = pair.get(1)?.as_array()?.clone();
+                Some((start, blocks))
+            })
+            .collect();
+        let held = plan::held_dates_by_id(&weeks, from_week);
+        Ok(dump(&Value::Object(
+            held.into_iter()
+                .map(|(key, dates)| (key, Value::from(dates)))
+                .collect(),
+        )))
+    })
+}
+
+#[pyfunction]
 fn planned_minutes_by_id(weeks: &str, from_week: &str) -> PyResult<String> {
     guard(|| {
         let weeks: Vec<(String, Vec<Value>)> = parse(weeks)?
@@ -523,6 +547,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         legacy_session,
         rewrite_session,
         planned_minutes_by_id,
+        held_dates_by_id,
         done_minutes_by_id,
         planned_minutes_from_day,
         migrate_blocks,

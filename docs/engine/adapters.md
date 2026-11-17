@@ -31,6 +31,7 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | weeks | repeat_changes_from_shown_week | ADAPTER | Encodes the changes, one call (`shown::repeat_changes_from_shown_week`), JSON decoded. |
 | weeks | availability_on_shown_week | ADAPTER | One call (`shown::occupancy_on_shown_week` and `shown::windows_on_shown_week` in one binding): each weekday's occupancy and work windows on that weekday's day of the shown week. |
 | weeks | rules_on_shown_week | ADAPTER | Encodes the planner settings, one call (`shown::rules_on_shown_week`) that names the weekday of the shown week's day 0, JSON decoded. |
+| assignments | held_dates_by_id | ADAPTER | Encodes the weeks, one call, values become lists of text. |
 | assignments | planned_minutes_by_id | ADAPTER | Encodes the weeks, one call, values become ints. |
 | assignments | done_minutes_by_id | ADAPTER | Encodes the weeks, one call, values become ints. |
 | assignments | unplanned_minutes | ADAPTER | Four ints in (estimate, focus, minutes ticked done, planned), one engine call. |
@@ -43,7 +44,7 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | availability | resolve_work_windows | ADAPTER | `None` stays `None`; an empty list is the engine's to default. One call, then pydantic. |
 | availability | session_inside_work_windows | ADAPTER | Encodes the windows, one call. |
 | availability | merge_occupancy | ADAPTER | One engine call, list out. |
-| availability | spread_sessions | ADAPTER | One engine call; the session text is decoded and the remainder is returned beside it. |
+| availability | spread_sessions | ADAPTER | One engine call (`spread_sessions_around`, with the days the homework's timed sessions sit on); the session text is decoded and the remainder is returned beside it. |
 | comfort | snap_minutes | ADAPTER | One `snap_minutes_wide` call. Integers f64 holds exactly keep `plan::snap_minutes`; past 2^53 the engine uses Python's formula. |
 | comfort | split_plan | ADAPTER | One engine call, JSON decoded. |
 | comfort | preview_split | ADAPTER | One engine call, JSON decoded. |

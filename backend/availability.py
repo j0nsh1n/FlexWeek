@@ -100,6 +100,7 @@ def spread_sessions(
     due: str,
     session_min: int,
     from_date: str,
+    held_dates: list[str] | None = None,
 ) -> tuple[list[dict[str, object]], int]:
     sessions, remaining = flexweek_engine.spread_sessions(
         estimate_min,
@@ -109,5 +110,6 @@ def spread_sessions(
         due,
         session_min,
         from_date,
+        held_dates,
     )
     return json.loads(sessions), remaining

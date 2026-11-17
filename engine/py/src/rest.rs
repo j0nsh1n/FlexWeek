@@ -181,6 +181,7 @@ fn spread_min() -> PyResult<i64> {
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (estimate_min, focus_minutes, done_min, planned_min, due, session_min, from_date, held_dates=None))]
 fn spread_sessions(
     estimate_min: i64,
     focus_minutes: i64,
@@ -189,9 +190,10 @@ fn spread_sessions(
     due: &str,
     session_min: i64,
     from_date: &str,
+    held_dates: Option<Vec<String>>,
 ) -> PyResult<(String, i64)> {
     guard(|| {
-        let (sessions, remaining) = plan::spread_sessions(
+        let (sessions, remaining) = plan::spread_sessions_around(
             estimate_min,
             focus_minutes,
             done_min,
@@ -199,6 +201,7 @@ fn spread_sessions(
             due,
             session_min,
             from_date,
+            held_dates.as_deref().unwrap_or(&[]),
         )
         .map_err(|error| value_error(error.message))?;
         Ok((dump(&Value::Array(sessions)), remaining))

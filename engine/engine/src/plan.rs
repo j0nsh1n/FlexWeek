@@ -579,6 +579,47 @@ pub fn planned_minutes_by_id(
     totals
 }
 
+/// The days (ISO dates) each homework's open sessions with a time sit on, over every saved week from
+/// `from_week`: what a Spread over days leaves alone when it picks the days for the minutes still uncovered.
+pub fn held_dates_by_id(
+    weeks: &[(String, Vec<Value>)],
+    from_week: &str,
+) -> BTreeMap<String, Vec<String>> {
+    let mut held: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (week_start, blocks) in weeks {
+        if week_start.as_str() < from_week {
+            continue;
+        }
+        let Ok(monday) = parse_iso_date(week_start) else {
+            continue;
+        };
+        for block in blocks {
+            let Some(aid) = block.get("assignment_id").and_then(Value::as_str) else {
+                continue;
+            };
+            let finished = block
+                .get("completed")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let timed = block
+                .get("start")
+                .and_then(Value::as_str)
+                .is_some_and(|start| !start.is_empty());
+            let day = block
+                .get("days")
+                .and_then(Value::as_array)
+                .and_then(|days| days.first())
+                .and_then(Value::as_i64);
+            if let (false, true, Some(day)) = (finished, timed, day) {
+                held.entry(aid.to_string())
+                    .or_default()
+                    .push(iso_date(monday + Duration::days(day)));
+            }
+        }
+    }
+    held
+}
+
 /// Each homework's minutes in sessions ticked done, over every saved week: what the homework list
 /// carries as `done_min`, so every count credits the same finished time.
 pub fn done_minutes_by_id(weeks: &[(String, Vec<Value>)]) -> BTreeMap<String, i64> {
@@ -1202,6 +1243,32 @@ pub fn spread_sessions(
     session_min: i64,
     from_date: &str,
 ) -> EngineResult<(Vec<Value>, i64)> {
+    spread_sessions_around(
+        estimate_min,
+        focus_minutes,
+        done_min,
+        planned_min,
+        due,
+        session_min,
+        from_date,
+        &[],
+    )
+}
+
+/// `spread_sessions` for a homework that already holds sessions with a time: `held_dates` are the days
+/// those sit on. A new share takes a day with none of them first and shares a day with one only once
+/// every day to the due date has a share.
+#[allow(clippy::too_many_arguments)]
+pub fn spread_sessions_around(
+    estimate_min: i64,
+    focus_minutes: i64,
+    done_min: i64,
+    planned_min: i64,
+    due: &str,
+    session_min: i64,
+    from_date: &str,
+    held_dates: &[String],
+) -> EngineResult<(Vec<Value>, i64)> {
     let remaining = unplanned_minutes(estimate_min, focus_minutes, done_min, planned_min);
     let remainder = remaining.rem_euclid(SLOT_MIN);
     let grid_total = remaining - remainder;
@@ -1216,6 +1283,10 @@ pub fn spread_sessions(
         dates.push(cursor);
         cursor += Duration::days(1);
     }
+    let (free, held): (Vec<NaiveDate>, Vec<NaiveDate>) = dates
+        .into_iter()
+        .partition(|day| !held_dates.contains(&iso_date(*day)));
+    let dates: Vec<NaiveDate> = free.into_iter().chain(held).collect();
     let mut sizes: Vec<i64> = Vec::new();
     let mut left = grid_total;
     while left >= session_min {

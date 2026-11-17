@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use common::{Dump, by_id, ids, late_legacy, solve_legacy, work_span};
 use flexweek_engine::plan::{
     WINDOW_LIMIT, build_day, build_month, fold_study_windows, occupancy_from_windows,
-    prepare_solve, spread_sessions, study_rank,
+    prepare_solve, spread_sessions, spread_sessions_around, study_rank,
 };
 use flexweek_engine::solver::{SOLVE_BUDGET_MS, SolveTrace, TimeBlock, WorkWindow};
 use flexweek_engine::time::hhmm_to_minutes;
@@ -147,6 +147,40 @@ fn test_spread_chunks_remaining_minutes_before_the_due_date() {
             json!({"week_start": "2026-09-14", "date": "2026-09-15", "days": [1], "duration_min": 60}),
         ]
     );
+}
+
+#[test]
+fn test_spread_gives_a_day_with_a_placed_session_its_share_last() {
+    // 120 minutes due Friday 2026-11-20, a 30 minute session already on Tuesday: 90 minutes are
+    // uncovered, cut as 60 and 30. Monday and Wednesday have no session of it, so they take the shares.
+    let held = vec!["2026-11-17".to_string()];
+    let (sessions, remaining) =
+        spread_sessions_around(120, 0, 0, 30, "2026-11-20T23:59", 60, "2026-11-16", &held).unwrap();
+    assert_eq!(remaining, 0);
+    let dated: Vec<_> = sessions
+        .iter()
+        .map(|item| {
+            (
+                item["date"].as_str().unwrap(),
+                item["duration_min"].as_i64().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(dated, vec![("2026-11-16", 60), ("2026-11-18", 30)]);
+}
+
+#[test]
+fn test_spread_shares_a_day_with_a_placed_session_once_every_day_has_a_share() {
+    // Due Tuesday, so only Monday and Tuesday exist. Monday holds a session: three shares go
+    // Tuesday, Monday (the held day last), then Tuesday again.
+    let held = vec!["2026-11-16".to_string()];
+    let (sessions, _) =
+        spread_sessions_around(195, 0, 0, 15, "2026-11-17T23:59", 60, "2026-11-16", &held).unwrap();
+    let dates: Vec<_> = sessions
+        .iter()
+        .map(|item| item["date"].as_str().unwrap())
+        .collect();
+    assert_eq!(dates, vec!["2026-11-17", "2026-11-16", "2026-11-17"]);
 }
 
 #[test]

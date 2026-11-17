@@ -443,9 +443,13 @@ fn add_spread_sessions(
         .get(&id)
         .copied()
         .unwrap_or(0);
+    let held_dates = flexweek_engine::plan::held_dates_by_id(&held, "2000-01-01")
+        .remove(&id)
+        .unwrap_or_default();
     let made = flexweek_engine::desk::homework::spread_new_sessions(
         &edited.assignment,
         planned,
+        &held_dates,
         done,
         today,
         &|index| derived_id(operation_id, &format!("spread-{index}")),

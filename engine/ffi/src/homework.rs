@@ -233,8 +233,18 @@ pub(crate) fn save_homework(
             .get(&assignment_id)
             .copied()
             .unwrap_or(0);
-        let (sessions, _) = flexweek_engine::plan::spread_sessions(
-            estimate, focus, done, open, due, 60, &from_date,
+        let held_dates = flexweek_engine::plan::held_dates_by_id(&held, "2000-01-01")
+            .remove(&assignment_id)
+            .unwrap_or_default();
+        let (sessions, _) = flexweek_engine::plan::spread_sessions_around(
+            estimate,
+            focus,
+            done,
+            open,
+            due,
+            60,
+            &from_date,
+            &held_dates,
         )
         .map_err(engine_failure)?;
         for (index, session) in sessions.iter().enumerate() {
