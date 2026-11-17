@@ -2470,11 +2470,13 @@ class NativeSession(QObject):
             if self._traveling and "basis" in entry and entry[new_side] is not None
         }
         stored = {week["week_start"]: week for week in data.get("weeks") or []}
+        # The open week's own change is already in the basis; a week from another day is two stored Mondays.
+        open_weeks = {self.week_start, *(stored_weeks_of(self.week_start) if self.first_weekday else ())}
         old_weeks: list[tuple[str, list[dict]]] = []
         new_weeks: list[tuple[str, list[dict]]] = []
         for entry in step.get("weeks") or []:
             week_start = entry["week_start"]
-            if week_start == self.week_start or week_start not in stored:
+            if week_start in open_weeks or week_start not in stored:
                 continue
             old_weeks.append((week_start, entry[old_side]))
             new_weeks.append((week_start, stored[week_start].get("blocks") or []))
