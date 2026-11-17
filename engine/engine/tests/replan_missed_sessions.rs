@@ -125,15 +125,67 @@ fn test_replan_all_moves_a_session_whose_time_passed_to_a_time_still_ahead() {
 }
 
 #[test]
-fn test_plan_keeps_the_time_of_a_session_that_passed() {
-    // spec.md: "Plan my homework" places only homework that has no time yet and keeps the times
-    // already planned. The session has a time (a passed one), so Plan holds it where it is.
+fn test_plan_moves_a_session_whose_time_passed_to_a_time_still_ahead() {
+    // spec.md: Plan places homework that has no time yet and moves a session of this week that
+    // passed unfinished, as Replan all does. Tuesday 16:00-17:00 is over by Thursday 19:00.
     let assignments = essay(60, 0, "2026-11-07T23:59");
-    let (payload, targets) = request(vec![session("essay", 1, "16:00", 60)], &assignments, false);
-    assert!(targets.is_empty());
+    let blocks = vec![session("essay", 1, "16:00", 60)];
+    let (payload, targets) = request(blocks.clone(), &assignments, false);
+    assert_eq!(targets, ["essay"]);
     let essay = sent(&payload, "essay");
-    assert_eq!(essay["kind"], "locked");
-    assert_eq!(essay["start"], "16:00");
+    assert_eq!(essay["kind"], "flexible", "sent to the solver, not held");
+    assert!(essay.get("start").is_none(), "its old time is not kept");
+    assert_eq!(essay["days"], json!([3, 4, 5]));
+    assert_eq!(essay["earliest"], "Thursday 19:00");
+    assert_eq!(essay["duration_min"], 60);
+    let (replanned, _) = request(blocks, &assignments, true);
+    assert_eq!(payload, replanned, "the same request Replan all makes");
+}
+
+#[test]
+fn test_plan_keeps_a_pinned_a_finished_a_running_and_a_later_session() {
+    let assignments = essay(60, 0, "2026-11-07T23:59");
+    let mut pinned = session("essay", 1, "16:00", 60);
+    pinned["pinned"] = json!(true);
+    let mut done = session("essay", 1, "16:00", 60);
+    done["completed"] = json!(true);
+    let running = session("essay", 3, "18:30", 60);
+    let later = session("essay", 3, "20:00", 60);
+    for kept in [pinned, done, running, later] {
+        let (payload, targets) = request(vec![kept.clone()], &assignments, false);
+        assert!(targets.is_empty(), "{kept} stays");
+        let sent = sent(&payload, "essay");
+        if kept["completed"] == json!(true) {
+            assert_eq!(sent, &kept);
+        } else {
+            assert_eq!(sent["kind"], "locked");
+            assert_eq!(sent["start"], kept["start"]);
+        }
+    }
+}
+
+#[test]
+fn test_plan_moves_only_the_session_that_passed_of_two() {
+    // 120 estimated: Tuesday's hour passed, Friday's hour is ahead. Friday's keeps its time; the
+    // passed one comes back for what Friday's does not hold, 120 - 60 = 60.
+    let assignments = essay(120, 0, "2026-11-07T23:59");
+    let blocks = vec![session("a", 1, "16:00", 60), session("b", 4, "16:00", 60)];
+    let (payload, targets) = request(blocks, &assignments, false);
+    assert_eq!(targets, ["a"]);
+    assert_eq!(sent(&payload, "a")["duration_min"], 60);
+    assert_eq!(sent(&payload, "b")["kind"], "locked");
+    assert_eq!(sent(&payload, "b")["start"], "16:00");
+}
+
+#[test]
+fn test_plan_leaves_a_passed_session_with_no_time_when_no_room_is_left_before_its_due() {
+    // Due Thursday 19:00, the minute on the clock: nothing is left to place before it. Plan sends
+    // the same thing Replan all does for it.
+    let assignments = essay(60, 0, "2026-11-05T19:00");
+    let blocks = vec![session("essay", 1, "16:00", 60)];
+    let plan = request(blocks.clone(), &assignments, false);
+    let replan = request(blocks, &assignments, true);
+    assert_eq!(plan, replan);
 }
 
 #[test]

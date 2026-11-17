@@ -3,8 +3,8 @@
 
 The clock is Thursday 5 November 2026 at 19:00 (backend.tests.fake_clock), in the week of Monday
 2 November. The essay was planned on Tuesday 3 November, 16:00 to 17:00, and nothing was done. Replan all
-my homework gives it a new time ahead of now, or no time when none fits before it is due. Plan my homework
-keeps the times already planned (spec.md). Nothing is ever placed before now, a pinned or finished session
+my homework and Plan my homework give it a new time ahead of now, or no time when none fits before it is due;
+every other planned time stays with Plan. Nothing is ever placed before now, a pinned or finished session
 is never touched, and what the status line says is true afterwards."""
 
 from __future__ import annotations
@@ -121,16 +121,52 @@ def test_replan_all_leaves_the_essay_with_no_time_when_none_fits_before_it_is_du
     assert session.message == "Nothing placed. 1 with no time yet."
 
 
-def test_plan_keeps_the_missed_time_and_says_the_time_is_needed(
+def test_plan_moves_the_missed_essay_to_a_time_ahead_as_replan_all_does(
     qapp: QApplication, open_light: Callable[..., NativeWindow]
 ) -> None:
-    """spec.md: Plan places only homework that has no time yet and keeps the times already planned."""
+    """spec.md: Plan moves a session of this week that passed unfinished, to a time still ahead. Tuesday
+    16:00 to 17:00 is over at Thursday 19:00: after Plan the essay's 60 min hold a time at or after
+    Thursday 19:00, nothing is left needing one, and the notice is Replan all's."""
     session, work = _essay_planned_on_tuesday(qapp, open_light)
     session.solve()
     _settle(qapp, session)
-    kept = _block(session, work["id"])
-    assert (kept["days"], kept["start"]) == ([1], "16:00")
-    assert session.message == "1 h still needs a time"
+    moved = _block(session, work["id"])
+    assert (moved["days"][0], moved["start"]) >= THURSDAY_NOW
+    assert moved["duration_min"] == 60
+    assert session.homework_time_needed() == []
+    assert _sentence(session) == EVERYTHING
+    assert session.message == "Placed 1 homework block."
+
+
+def test_plan_leaves_a_passed_session_with_no_time_when_none_fits_before_it_is_due(
+    qapp: QApplication, open_light: Callable[..., NativeWindow]
+) -> None:
+    """Due Thursday 19:30: only 30 min lie between now and the deadline, so Plan leaves the 60 min with no
+    time, as Replan all does, and never puts it in the past."""
+    session, work = _essay_planned_on_tuesday(qapp, open_light, due="2026-11-05T19:30")
+    session.solve()
+    _settle(qapp, session)
+    left = _block(session, work["id"])
+    assert not left.get("start")
+    assert [item["minutes"] for item in session.homework_time_needed()] == [60]
+
+
+def test_plan_keeps_a_pinned_a_finished_a_running_and_a_later_session(
+    qapp: QApplication, open_light: Callable[..., NativeWindow]
+) -> None:
+    """Pinned (hand-shaped) and finished sessions of Tuesday, one running now (Thursday 18:30 to 19:30) and
+    one later today (Thursday 20:00) all stay where they are when Plan runs."""
+    for block, spot in (
+        ({"pinned": True}, ([1], "16:00")),
+        ({"completed": True, "completed_day": 1}, ([1], "16:00")),
+        ({"start": "18:30", "days": [3]}, ([3], "18:30")),
+        ({"start": "20:00", "days": [3]}, ([3], "20:00")),
+    ):
+        session, work = _essay_planned_on_tuesday(qapp, open_light, **block)
+        session.solve()
+        _settle(qapp, session)
+        kept = _block(session, work["id"])
+        assert (kept["days"], kept["start"]) == spot, block
 
 
 def test_replan_all_never_touches_a_pinned_session_that_passed(
@@ -437,12 +473,11 @@ def test_replan_all_counts_a_missed_session_again_when_another_homework_gets_a_f
     assert [minutes for _, _, minutes in _placed(session)] == [30]
 
 
-def test_plan_counts_a_missed_session_as_homework_with_no_time_yet(
+def test_plan_places_a_missed_session_together_with_new_homework(
     qapp: QApplication, open_light: Callable[..., NativeWindow]
 ) -> None:
-    """Plan keeps the essay's missed Tuesday time and places the new maths sheet. Its count is the one
-    count: the essay's hour has no time, so the plan says 1 with no time yet, and Material's "Placed 1 of 2"
-    counts it."""
+    """Plan moves the essay's missed Tuesday hour and places the new maths sheet: two blocks placed, and
+    nothing is left with no time yet. Before, Plan kept the missed time and said "1 with no time yet"."""
     session, _ = _essay_planned_on_tuesday(qapp, open_light)
     session.add_homework(
         {
@@ -457,6 +492,6 @@ def test_plan_counts_a_missed_session_as_homework_with_no_time_yet(
     _settle(qapp, session)
     session.solve()
     _settle(qapp, session)
-    assert session.plan_counts == (1, 1)
-    assert session.plan_open == 1
-    assert session.message == "Placed 1 homework block. 1 with no time yet."
+    assert session.plan_counts == (2, 0)
+    assert session.plan_open == 0
+    assert session.message == "Placed 2 homework blocks."

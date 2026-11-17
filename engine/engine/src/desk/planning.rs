@@ -382,7 +382,7 @@ pub fn solve_request(
 
 /// `solve_request` that also knows the clock, `now` as (day, minute) of the real current minute. A
 /// homework session that ended by `now`, is not pinned and still has minutes to do is then moved by
-/// Replan all instead of kept for having begun. Without `now` no session counts as missed.
+/// Plan and by Replan all instead of kept for having begun. Without `now` no session counts as missed.
 /// `saved_week` is the week the homework's server numbers were read with (`this_weeks_part`).
 pub fn solve_request_at(
     blocks: &Value,
@@ -421,7 +421,7 @@ pub fn solve_request_at(
             && (truthy(get(&block, "pinned")?) || begun(&block, not_before, not_before_is_list)?);
         let wanted = match only.filter(|value| !value.is_null()) {
             Some(only) => contains(only, subscript(&block, "id")?)?,
-            None => (everything && !kept) || !planned,
+            None => (everything && !kept) || !planned || minutes.is_some(),
         };
         if wanted {
             let mut session = match &block {

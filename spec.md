@@ -212,11 +212,13 @@ Contract for the finished app:
   midnight, with a breakdown by category. Due soon is open homework due that day or the next, plus anything
   already overdue. Below 800px Day is the default view and Week stays one control
   away. Quick Add homework asks only for title, due date and estimated time, with
-  "Choose a time myself" for anything more. "Plan my homework" places only
-  homework that has no time yet and keeps the times already planned; "Replan
+  "Choose a time myself" for anything more. "Plan my homework" places
+  homework that has no time yet, and a session of this week whose time has
+  passed unfinished (its end is at or before the current minute), and keeps
+  every other time already planned; "Replan
   all my homework", under More and in the plan review, plans every unfinished
-  session again, one whose time has passed unfinished included (its end is at
-  or before the current minute): it gets a time from now on, or none when no
+  session again, one whose time has passed unfinished included. A session
+  that passed gets a time from now on in either, or none when no
   room is left before its due, and only the minutes still needed after done
   time are planned. A homework's done time is the larger of its focus minutes
   and the minutes of its sessions ticked done in any week, never their sum, and

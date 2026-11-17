@@ -2723,7 +2723,8 @@ class NativeSession(QObject):
         _overdue: set[str] | None = None,
         _new_left: set[str] | None = None,
     ) -> None:
-        """Plan my homework. Homework that already has a time keeps it.
+        """Plan my homework. Homework that already has a time keeps it, except a session of this week whose
+        time has passed unfinished.
 
         `everything` is Replan all my homework. `only` finds new times for named work. Nothing is
         placed before now. `earliest_first` (Place now) puts each named block at the first gap that

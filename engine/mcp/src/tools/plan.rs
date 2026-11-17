@@ -330,6 +330,9 @@ fn run_plan(
     let hour = now.minute / 60;
     let start = planning::plan_start_at(week_start, &now.today, hour, now.minute % 60, 0, 0)
         .map_err(engine)?;
+    let clock = planning::clock_point(week_start, &now.today, hour, now.minute % 60)
+        .map_err(engine)?
+        .map(|(day, minute)| json!([day, minute]));
     let empty_revision = match target {
         WeekTarget::StoredMonday => json!(0),
         WeekTarget::Shown { .. } => json!([0, 0]),
@@ -507,7 +510,7 @@ fn run_plan(
     )
     .map_err(engine)?;
     let not_before = start.map(|(day, minute)| json!([day, minute]));
-    let (payload, targets) = planning::solve_request(
+    let (payload, targets) = planning::solve_request_at(
         &Value::Array(open_blocks.clone()),
         &assignments,
         week_start,
@@ -515,6 +518,8 @@ fn run_plan(
         None,
         not_before.as_ref(),
         false,
+        clock.as_ref(),
+        &blocks,
     )
     .map_err(engine)?;
     let (first_day, first_minute) = start.unwrap_or((0, 0));
@@ -532,7 +537,7 @@ fn run_plan(
     let (week_blocks, shares) = planning::fair_share(
         &open_blocks,
         &by_id,
-        &Value::Array(blocks),
+        &Value::Array(blocks.clone()),
         week_start,
         first_day,
         first_minute,
@@ -552,7 +557,7 @@ fn run_plan(
             .filter(|id| kept.contains(id.as_str()))
             .map(|id| json!(id))
             .collect();
-        planning::solve_request(
+        planning::solve_request_at(
             &Value::Array(week_blocks.clone()),
             &assignments,
             week_start,
@@ -560,6 +565,8 @@ fn run_plan(
             Some(&Value::Array(only)),
             not_before.as_ref(),
             false,
+            clock.as_ref(),
+            &blocks,
         )
         .map_err(engine)?
     };

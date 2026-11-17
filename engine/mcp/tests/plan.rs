@@ -432,6 +432,70 @@ fn plan_never_places_homework_in_time_that_has_passed() {
     );
 }
 
+/// An essay of 60 minutes due Friday 21:00 whose one planned session ended on Monday 10:00 (a hand-shaped
+/// one when `pinned`), for a plan on Wednesday 21 Oct 12:00, and what the plan placed.
+fn plan_with_a_session_from_monday(name: &str, pinned: bool) -> (Value, Value) {
+    let world = signed_in(name);
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    insert_assignment(
+        &conn,
+        world.user,
+        "essay",
+        r#"{"id":"essay","title":"Essay","due":"2026-10-23T21:00","estimate_min":60,"focus_minutes":0,"completed":false,"priority":2,"energy":"medium","spread":"one"}"#,
+    )
+    .expect("homework");
+    let mut session = json!({
+        "id": "essay-session", "title": "Essay", "kind": "flexible", "assignment_id": "essay",
+        "duration_min": 60, "days": [0], "start": "09:00", "priority": 2, "energy": "medium",
+        "category": "assignments"
+    });
+    if pinned {
+        session["pinned"] = json!(true);
+    }
+    save_week(&conn, world.user, WEEK, &json!([session]).to_string(), 0).expect("week");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+    let mut server = boot(&world);
+    let planned = server.call(
+        "plan_homework",
+        json!({"operation_id": "op-plan-passed", "week_start": WEEK}),
+        2,
+    );
+    (body_of(&planned), stored(&world).0)
+}
+
+#[test]
+fn plan_moves_a_session_of_this_week_that_passed_unfinished() {
+    // Monday 09:00-10:00 is over at Wednesday 12:00: Plan gives the 60 minutes a time still ahead.
+    let (body, blocks) = plan_with_a_session_from_monday("plan-moves-passed", false);
+    assert_eq!(body["ok"], json!(true), "got {body}");
+    let session = session_of(&blocks, "essay");
+    let taken = spans(session);
+    assert_eq!(taken.len(), 1, "one time, got {session}");
+    let (day, start, end) = taken[0];
+    assert_eq!(end - start, 60);
+    assert!(
+        (day, start) >= (2, 12 * 60),
+        "not before now, got {day} {start}"
+    );
+    assert!(
+        (day, end) <= (4, 21 * 60),
+        "before it is due, got {day} {end}"
+    );
+}
+
+#[test]
+fn plan_keeps_a_pinned_session_of_this_week_that_passed() {
+    let (body, blocks) = plan_with_a_session_from_monday("plan-keeps-pinned-passed", true);
+    assert_eq!(body["ok"], json!(true), "got {body}");
+    assert_eq!(
+        spans(session_of(&blocks, "essay")),
+        vec![(0, 9 * 60, 10 * 60)]
+    );
+}
+
 #[test]
 fn plan_gives_homework_spread_over_days_its_share_of_this_week() {
     // 180 min "Spread over days", due Wed 4 Nov, its one session saved on this week with no time. Now is

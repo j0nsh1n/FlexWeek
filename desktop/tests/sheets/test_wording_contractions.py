@@ -157,7 +157,9 @@ def test_help_for_planning_and_the_day_screen_use_contractions() -> None:
     assert HELP_PLANNING == (
         "Add homework with its due date and length. Press Plan my homework and FlexWeek finds free time for "
         "it in your study hours, around your fixed times, before it's due. Homework that already has a time "
-        "keeps it. Replan all starts fresh but keeps pinned homework. Anything that doesn't "
+        "keeps it, unless that time has passed and the work isn't finished. Replan all starts fresh but "
+        "keeps "
+        "pinned homework. Anything that doesn't "
         "fit stays under Not placed yet, and Details says why. From the keyboard, press Ctrl+K and type Plan."
     )
     assert HELP_SCREENS[0] == (
