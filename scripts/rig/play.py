@@ -446,6 +446,7 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
         QWidget,
     )
 
+    from backend import clock as wall_clock
     from desktop.native.layouts.registry import sanitize_layout
     from desktop.tests.logic_support import past_setup, wait_until
 
@@ -461,6 +462,8 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
 
     held = {"now": datetime.now()}
     session.now_ms = lambda: int(held["now"].timestamp() * 1000)
+    # The server inside the app counts what homework still needs against its own clock: hold it too.
+    wall_clock.use(lambda: held["now"].timestamp())
     window.toast.clock_ms = session.now_ms
     setup = play.setup
 
