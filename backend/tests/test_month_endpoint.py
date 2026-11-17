@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.app import MONTH_RULE, create_app
+from backend.tests.fake_clock import CLOCK
 
 PASSWORD = "a-long-test-password"
 WRITE = {"X-FlexWeek-Request": "1", "Origin": "http://testserver"}
@@ -201,6 +203,8 @@ def test_notes_make_the_same_homework_a_project(alice: TestClient) -> None:
 
 
 def test_two_placed_session_dates_make_a_project_without_notes(alice: TestClient) -> None:
+    # Before both sessions, so each still holds its hour.
+    CLOCK.set(datetime(2026, 9, 14, 8, 0))
     assert put_assignment(alice, assignment()).status_code == 200
     assert save_week(alice, [session("s-tue", 1, "16:00"), session("s-wed", 2, "16:00")]).status_code == 200
     body = get_month(alice).json()
