@@ -29,10 +29,11 @@ from desktop.tests.window_support import qapp, settled  # noqa: F401
 
 
 def _cut(window, qapp, assignment_id: str, minutes: int) -> None:
-    """The student shaped the homework by hand: its session pinned Thursday 18:45, `minutes` long, saved."""
+    """The student shaped the homework by hand: its session pinned Thursday 19:30 (after the 19:00 clock),
+    `minutes` long, saved."""
     session = window.session
     block = next(item for item in session.blocks if item.get("assignment_id") == assignment_id)
-    block.update(duration_min=minutes, pinned=True, start="18:45", days=[3])
+    block.update(duration_min=minutes, pinned=True, start="19:30", days=[3])
     session._touch()
     session.save()
     settled(qapp, window)
@@ -87,7 +88,7 @@ def test_a_plan_that_could_place_nothing_says_how_many_it_tried(qapp, window) ->
     ]
     assert session.minutes_left_for("poster") == 10
     kept = next(b for b in session.blocks if b.get("pinned"))
-    assert (kept["duration_min"], kept["start"]) == (5, "18:45")
+    assert (kept["duration_min"], kept["start"]) == (5, "19:30")
 
 
 def test_a_second_homework_that_was_placed_does_not_contradict_the_sentence(qapp, window) -> None:
@@ -544,14 +545,14 @@ def test_undoing_a_homework_delete_that_cannot_be_saved_then_can(qapp, window, m
     assert _essay_counts(window) == ([40], 20, 20)
 
 
-def _long_homework_on_thursday(window, qapp) -> dict:
-    """60 minutes of homework due 13 days out, its one 60 minute session pinned Thursday 10:00 of this week,
-    saved, with the server's number (planned 60) read."""
+def _long_homework_on_thursday(window, qapp, start: str = "19:30") -> dict:
+    """60 minutes of homework due 13 days out, its one 60 minute session pinned Thursday `start` of this
+    week (by default after the 19:00 clock), saved, with the server's number (planned 60) read."""
     session = window.session
     due = (_week_monday(window) + timedelta(days=13)).isoformat()
     _homework(window, "long", "Long homework", 60, due)
     block = next(item for item in session.blocks if item.get("assignment_id") == "long")
-    block.update(duration_min=60, pinned=True, start="10:00", days=[3])
+    block.update(duration_min=60, pinned=True, start=start, days=[3])
     session._touch()
     session.save()
     settled(qapp, window)
@@ -667,7 +668,7 @@ def test_a_session_moved_from_an_earlier_week_into_the_open_week_is_counted_once
     needed, straight after the move and after the re-read lands."""
     _reset(window, qapp)
     session = window.session
-    block = _long_homework_on_thursday(window, qapp)
+    block = _long_homework_on_thursday(window, qapp, "10:00")
     monday = _week_monday(window)
     session.load_week((monday + timedelta(days=7)).isoformat())
     settled(qapp, window)
@@ -865,13 +866,13 @@ def test_plan_is_off_when_nothing_is_left_to_place(qapp, window) -> None:
     assert _qml(root, "planHomework").property("enabled") is False
 
 
-@pytest.mark.parametrize(("pinned", "on"), [(False, True), (True, False)])
-def test_plan_is_on_for_a_session_of_this_week_that_passed_unless_it_is_pinned(
+@pytest.mark.parametrize(("pinned", "on"), [(False, True), (True, True)])
+def test_plan_is_on_for_a_session_of_this_week_that_passed_pinned_or_not(
     qapp, window, pinned: bool, on: bool
 ) -> None:
     """Essay 60 with its 60 minute session on Monday 10:00, over by now (Thursday evening). Plan moves a
-    session the planner placed, so the button is on; a session the student pinned stays, so there is
-    nothing for Plan to place and the button is off."""
+    session the planner placed; a session the student pinned stays, but its minutes still need a time,
+    so the button is on for both."""
     root = _reset(window, qapp)
     session = window.session
     block = next(item for item in session.blocks if item.get("assignment_id") == "essay")

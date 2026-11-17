@@ -177,7 +177,8 @@ def test_replan_all_never_touches_a_pinned_session_that_passed(
     _settle(qapp, session)
     kept = _block(session, work["id"])
     assert (kept["days"], kept["start"], kept.get("pinned")) == ([1], "16:00", True)
-    assert session.homework_time_needed() == [], "the student chose that time, so it is not waiting"
+    # The pinned session holds none of the 60 min it did not do: Replan all gave them a new session.
+    assert session.homework_time_needed() == []
 
 
 def test_replan_all_never_touches_a_finished_session_in_the_past(
@@ -358,14 +359,40 @@ def test_a_missed_session_never_comes_back_longer_than_itself(
     assert _block(session, work["id"])["duration_min"] == 60
 
 
-def test_a_pinned_session_that_passed_is_called_missed_but_not_counted(
+def test_a_pinned_session_that_passed_stays_and_its_undone_minutes_still_need_a_time(
     qapp: QApplication, open_light: Callable[..., NativeWindow]
 ) -> None:
-    """What a pinned missed session shows is not decided by the owner: screens call it missed, as they
-    did, and the count of homework needing a time does not include it (no plan moves it)."""
+    """The student put the essay at Tuesday 16:00 and it passed unfinished. It stays there, its 60 min are
+    still needed on every count, and Plan gives them a new session at or after Thursday 19:00."""
     session, work = _essay_planned_on_tuesday(qapp, open_light, pinned=True)
     assert session.missed_block_ids() == frozenset({work["id"]})
+    assert [item["minutes"] for item in session.homework_time_needed()] == [60]
+    assert _sentence(session) == "1 h still needs a time"
+    assert session.plan_can_place()
+    session.solve()
+    _settle(qapp, session)
+    kept = _block(session, work["id"])
+    assert (kept["days"], kept["start"], kept.get("pinned")) == ([1], "16:00", True)
+    fresh = [
+        item
+        for item in session.blocks
+        if item.get("assignment_id") == "essay" and item["id"] != work["id"]
+    ]
+    assert [item["duration_min"] for item in fresh] == [60]
+    assert (fresh[0]["days"][0], fresh[0]["start"]) >= THURSDAY_NOW
     assert session.homework_time_needed() == []
+    assert _sentence(session) == EVERYTHING
+
+
+def test_a_pinned_session_ticked_done_asks_for_no_new_session(
+    qapp: QApplication, open_light: Callable[..., NativeWindow]
+) -> None:
+    session, work = _essay_planned_on_tuesday(
+        qapp, open_light, pinned=True, completed=True, completed_day=1
+    )
+    assert session.homework_time_needed() == []
+    assert not session.plan_can_place()
+    assert session.missed_block_ids() == frozenset()
 
 
 def test_an_unfinished_session_of_a_week_that_is_over_is_still_called_missed(

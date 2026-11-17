@@ -2742,6 +2742,7 @@ class NativeSession(QObject):
         _prepared_weeks: dict[str, dict] | None = None,
         _overdue: set[str] | None = None,
         _new_left: set[str] | None = None,
+        _dirty_before: bool | None = None,
     ) -> None:
         """Plan my homework. Homework that already has a time keeps it, except a session of this week whose
         time has passed unfinished.
@@ -2824,7 +2825,7 @@ class NativeSession(QObject):
             if block.get("start") and not block.get("completed")
         ]
         open_blocks = planning_blocks if only is not None else open_rest_sessions(
-            planning_blocks, self.assignments, self.week_start, earlier_blocks, self._assignments_basis
+            planning_blocks, self.assignments, self.week_start, earlier_blocks, self._assignments_basis, clock
         )
         payload, targets = solve_request(
             open_blocks,
@@ -3012,6 +3013,9 @@ class NativeSession(QObject):
             if self._alive(ticket) and _new_left:
                 self.blocks = [block for block in self.blocks if block["id"] not in _new_left]
                 self._forget_settled_notes()
+                if _dirty_before is not None:
+                    # The planner's error stays on screen instead of an autosave of the unchanged week.
+                    self.dirty = _dirty_before
                 self.week_changed.emit()
             self._fail(ticket, error)
 
@@ -3694,6 +3698,8 @@ class NativeSession(QObject):
         # one. The same engine answer the counts read: a pinned session never reads as missed here.
         timeless = {block["id"] for block in self._open_week() if not block.get("start")}
         missed = {block["id"] for block in self.blocks if block.get("start") and block["id"] in timeless}
+        # A pinned session that passed stays where the student put it: its minutes get a new session.
+        pinned_past = {block["id"] for block in self.blocks if block.get("pinned")} & self.missed_block_ids()
         made: set[str] = set()
         targets: set[str] = set()
         late_targets: set[str] = set()
@@ -3704,7 +3710,11 @@ class NativeSession(QObject):
                 continue
             late = assignment_id in overdue
             for block in self.blocks:
-                if block.get("assignment_id") != assignment_id or block.get("completed"):
+                if (
+                    block.get("assignment_id") != assignment_id
+                    or block.get("completed")
+                    or block["id"] in pinned_past
+                ):
                     continue
                 if block.get("start") and not late and block["id"] not in missed:
                     continue
@@ -3728,9 +3738,10 @@ class NativeSession(QObject):
         if not targets:
             self._say(short or "That homework already has a time.")
             return
+        dirty_before = self.dirty
         if made:
             self._touch("planning unfinished homework")
-        self.solve(only=targets, _overdue=late_targets, _new_left=made)
+        self.solve(only=targets, _overdue=late_targets, _new_left=made, _dirty_before=dirty_before)
 
     def did_these(self, assignment_ids: list[str]) -> None:
         """"Mark as finished": the student finished them after all, as one Undo step."""

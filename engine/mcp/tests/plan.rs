@@ -511,9 +511,30 @@ fn plan_that_cannot_place_a_passed_session_still_saves_that_it_has_no_time() {
 fn plan_keeps_a_pinned_session_of_this_week_that_passed() {
     let (body, blocks) = plan_with_a_session_from_monday("plan-keeps-pinned-passed", true);
     assert_eq!(body["ok"], json!(true), "got {body}");
-    assert_eq!(
-        spans(session_of(&blocks, "essay")),
-        vec![(0, 9 * 60, 10 * 60)]
+    let sessions: Vec<&Value> = blocks
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|block| block["assignment_id"].as_str() == Some("essay"))
+        .collect();
+    // The pinned session stays where the student put it, unfinished; its 60 minutes are still needed,
+    // so the plan gives them a new session at a time still ahead.
+    assert_eq!(sessions.len(), 2, "pinned plus a new one, got {blocks}");
+    let pinned = sessions
+        .iter()
+        .find(|block| block["id"] == "essay-session")
+        .expect("the pinned session");
+    assert_eq!(spans(pinned), vec![(0, 9 * 60, 10 * 60)]);
+    let fresh = sessions
+        .iter()
+        .find(|block| block["id"] != "essay-session")
+        .expect("a new session");
+    let taken = spans(fresh);
+    assert_eq!(taken.len(), 1, "one time, got {fresh}");
+    assert_eq!(taken[0].2 - taken[0].1, 60);
+    assert!(
+        taken[0].0 > 2 || (taken[0].0 == 2 && taken[0].1 >= 12 * 60),
+        "not before now, got {taken:?}"
     );
 }
 

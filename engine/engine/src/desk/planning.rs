@@ -480,6 +480,12 @@ fn finished(block: &Value) -> bool {
         .unwrap_or(false)
 }
 
+/// A pinned homework session whose time passed unfinished. No plan moves it, but it holds none of its
+/// homework's minutes: they are still needed, and Plan gives them a new session.
+fn pinned_past(block: &Value, now: &Value) -> EngineResult<bool> {
+    Ok(truthy(get(block, "pinned")?) && !finished(block) && ended_session(block, now)?.is_some())
+}
+
 /// What Replan all gives each homework session whose time has passed: the minutes it still needs,
 /// as (session id, minutes). A session left out is not one a plan moves: not planned, pinned,
 /// finished, not homework, still ahead or on now, or none of its homework's time is left for it.
@@ -509,6 +515,10 @@ fn missed_minutes(
         };
         passed.push(at);
     }
+    let mut holds_nothing = Vec::with_capacity(blocks.len());
+    for block in blocks {
+        holds_nothing.push(pinned_past(block, now)?);
+    }
     let mut out = Vec::new();
     for (index, block) in blocks.iter().enumerate() {
         let Some(here) = &passed[index] else {
@@ -528,6 +538,7 @@ fn missed_minutes(
             if at == index
                 || other.get("assignment_id") != Some(link)
                 || finished(other)
+                || holds_nothing[at]
                 || passed[at].as_ref().is_some_and(|there| there >= here)
             {
                 continue;
@@ -577,9 +588,9 @@ pub fn missed_session_ids(
 }
 
 /// The week with each session Replan all would move for having passed read as one with no time (its
-/// start dropped, its length the minutes still needed), so the count of homework that needs a time
-/// does not call a missed session "has a time". The week as it is when there is no clock to read
-/// (`now` empty).
+/// start dropped, its length the minutes still needed), and a pinned session that passed unfinished
+/// left out (it holds no minutes), so the count of homework that needs a time does not call either
+/// "has a time". The week as it is when there is no clock to read (`now` empty).
 pub fn without_missed_times(
     blocks: &[Value],
     assignments: &Value,
@@ -592,6 +603,9 @@ pub fn without_missed_times(
     let missed = missed_minutes(blocks, assignments, saved_week, now)?;
     let mut out = Vec::with_capacity(blocks.len());
     for block in blocks {
+        if pinned_past(block, now)? {
+            continue;
+        }
         let id = subscript(block, "id")?;
         match missed.iter().find(|(held, _)| eq(held, id)) {
             Some((_, minutes)) => {
@@ -655,8 +669,36 @@ pub fn open_rest_sessions_since(
     earlier_blocks: &[Value],
     saved_week: &[Value],
 ) -> EngineResult<Vec<Value>> {
+    open_rest_sessions_at(
+        blocks,
+        assignments,
+        week_start,
+        earlier_blocks,
+        saved_week,
+        None,
+    )
+}
+
+/// `open_rest_sessions_since` that also knows the clock, `now` as (day, minute) of the real current
+/// minute: a pinned session that passed unfinished holds none of its homework's minutes, so they get a
+/// rest session while the pinned one stays where it is.
+pub fn open_rest_sessions_at(
+    blocks: &[Value],
+    assignments: &serde_json::Map<String, Value>,
+    week_start: &str,
+    earlier_blocks: &[Value],
+    saved_week: &[Value],
+    now: Option<&Value>,
+) -> EngineResult<Vec<Value>> {
     let monday = from_iso(week_start)?;
-    let here = Value::Array(blocks.to_vec());
+    let mut holding = Vec::with_capacity(blocks.len());
+    for block in blocks {
+        match now.filter(|value| !value.is_null()) {
+            Some(now) if pinned_past(block, now)? => {}
+            _ => holding.push(block.clone()),
+        }
+    }
+    let here = Value::Array(holding);
     let saved = Value::Array(saved_week.to_vec());
     let mut out = blocks.to_vec();
     for (id, assignment) in assignments {

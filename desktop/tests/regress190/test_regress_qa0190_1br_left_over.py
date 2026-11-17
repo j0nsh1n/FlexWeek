@@ -78,15 +78,16 @@ def test_1br_unfinished_stays_open_for_the_overdue_session(qapp, window) -> None
     overdue_this_week(qapp, window)
     assert window.findChild(QWidget, "weekStatusStrip") is None
     enabled, words = more_unfinished_row(window)
-    assert (enabled, words) == (True, "Unfinished\tNone left")
+    assert (enabled, words) == (True, "Unfinished\t1 left")
 
 
-def test_1br_more_keeps_unfinished_open_when_the_overdue_session_already_has_a_time(qapp, window) -> None:
-    # More counts homework that still needs a time (Jonathan, 2026-10-12): none here, so "None left";
-    # the row stays enabled because the Unfinished panel holds the overdue row and its Start focus.
+def test_1br_more_keeps_unfinished_open_when_the_overdue_session_was_pinned_and_passed(qapp, window) -> None:
+    # More counts homework that still needs a time (Jonathan, 2026-10-12). The pinned Wednesday hour passed
+    # unfinished and is still needed (Jonathan, 2026-11-17), so it is "1 left"; the Unfinished panel holds
+    # the overdue row and its Start focus.
     overdue_this_week(qapp, window)
     enabled, words = more_unfinished_row(window)
-    assert (enabled, words) == (True, "Unfinished\tNone left")
+    assert (enabled, words) == (True, "Unfinished\t1 left")
 
 
 def test_1br_more_row_says_unfinished_with_the_count_left(qapp, window) -> None:

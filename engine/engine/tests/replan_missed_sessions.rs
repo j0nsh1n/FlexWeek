@@ -9,8 +9,8 @@
 //! because the plan's limit is rounded up to the quarter hour.
 
 use flexweek_engine::desk::planning::{
-    clock_point, missed_session_ids, screen_point, solve_request, solve_request_at,
-    time_still_needed_since, without_missed_times,
+    clock_point, missed_session_ids, open_rest_sessions_at, screen_point, solve_request,
+    solve_request_at, time_still_needed_since, without_missed_times,
 };
 use serde_json::{Map, Value, json};
 
@@ -233,7 +233,65 @@ fn test_replan_all_never_touches_a_pinned_session_that_passed() {
     assert!(targets.is_empty());
     assert_eq!(sent(&payload, "essay")["kind"], "locked");
     assert_eq!(sent(&payload, "essay")["start"], "16:00");
-    assert_eq!(needed(&[pinned], &assignments, Some(&not_before())), 0);
+    // Its minutes were not done: they are still needed, though the session stays where it is.
+    assert_eq!(needed(&[pinned], &assignments, Some(&not_before())), 60);
+}
+
+/// The open-week reading of a plan: sessions plus the rest session the homework's uncovered minutes get.
+fn with_rest(blocks: &[Value], assignments: &Value, now: &Value) -> Vec<Value> {
+    let map: &Map<String, Value> = assignments.as_object().expect("assignments");
+    open_rest_sessions_at(blocks, map, WEEK, &[], blocks, Some(now)).expect("rest sessions")
+}
+
+#[test]
+fn test_a_pinned_session_that_passed_stays_and_plan_asks_for_its_minutes_as_a_new_session() {
+    let mut pinned = session("essay", 1, "16:00", 60);
+    pinned["pinned"] = json!(true);
+    let assignments = essay(60, 0, "2026-11-07T23:59");
+    let now = not_before();
+    let open = with_rest(&[pinned.clone()], &assignments, &now);
+    let rest = open
+        .iter()
+        .find(|block| block["id"] == "essay-a-rest-2026-11-02")
+        .expect("a new session for the 60 minutes");
+    assert_eq!(rest["duration_min"], 60);
+    assert!(rest.get("start").is_none());
+    let (payload, targets) = request_at(open.clone(), &assignments, false, &now);
+    assert_eq!(targets, ["essay-a-rest-2026-11-02"]);
+    assert_eq!(sent(&payload, "essay")["start"], "16:00");
+    assert_eq!(sent(&payload, "essay")["kind"], "locked");
+}
+
+#[test]
+fn test_a_new_session_for_a_pinned_past_ones_minutes_leaves_nothing_needed() {
+    let mut pinned = session("essay", 1, "16:00", 60);
+    pinned["pinned"] = json!(true);
+    let assignments = essay(60, 0, "2026-11-07T23:59");
+    let placed = session("essay-a-rest-2026-11-02", 4, "10:00", 60);
+    assert_eq!(
+        needed(
+            &[pinned.clone(), placed.clone()],
+            &assignments,
+            Some(&not_before())
+        ),
+        0
+    );
+    // The pinned one holds nothing: with 120 minutes to do, the new session's 60 are all that is held.
+    let bigger = essay(120, 0, "2026-11-07T23:59");
+    assert_eq!(needed(&[pinned, placed], &bigger, Some(&not_before())), 60);
+}
+
+#[test]
+fn test_a_pinned_session_ticked_done_asks_for_no_new_session() {
+    let mut done = session("essay", 1, "16:00", 60);
+    done["pinned"] = json!(true);
+    done["completed"] = json!(true);
+    let assignments = essay(60, 0, "2026-11-07T23:59");
+    assert_eq!(
+        with_rest(&[done.clone()], &assignments, &not_before()).len(),
+        1
+    );
+    assert_eq!(needed(&[done], &assignments, Some(&not_before())), 0);
 }
 
 #[test]

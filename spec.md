@@ -255,7 +255,8 @@ Contract for the finished app:
   0. In that count a session in any week holds its time when it is ticked done
   or its time is still ahead of now; only a session whose time passed
   unfinished needs a new one, and a pinned one that passed stays where it is
-  with its undone minutes still needed. The
+  with its undone minutes still needed: it holds none of them on any screen, and Plan
+  gives them a new session. The
   plan review hides when the week changes. The review says what was placed
   ("History: 1 h this week (Sun), 1 h left for next week"), or with nothing
   placed: "No homework time left this week. History, Math and Bio are due next

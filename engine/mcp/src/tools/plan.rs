@@ -515,12 +515,13 @@ fn run_plan(
         );
     }
     // The homework's numbers were read with the week as saved (`blocks`), waiting sessions included.
-    let open_blocks = planning::open_rest_sessions_since(
+    let open_blocks = planning::open_rest_sessions_at(
         &planning_blocks,
         &by_id,
         week_start,
         &earlier_blocks,
         &blocks,
+        clock.as_ref(),
     )
     .map_err(engine)?;
     let not_before = start.map(|(day, minute)| json!([day, minute]));

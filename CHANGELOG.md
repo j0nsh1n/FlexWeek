@@ -107,6 +107,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - The count beside Plan my homework now goes up at the moment a planned session passes unfinished, with no other click. It stayed at zero while the side panel already listed the homework.
 - In the Material style, an Add homework sheet kept with Esc now checks a time you pick later against the time it is then, not the time when you first opened it. A time that has already passed is no longer accepted.
 - Pressing End on a focus session after opening another week now counts the minutes worked toward the homework. They were lost, and the End question said 0 min.
+- A homework session you placed by hand whose time passed unfinished now still needs its time on every screen: the week, the side panel, Plan's count, the day, the month, the assistant and the phone. It stays where you put it, and Plan my homework gives its minutes a new session.
 
 ## [1.3.0] - 2026-11-10
 

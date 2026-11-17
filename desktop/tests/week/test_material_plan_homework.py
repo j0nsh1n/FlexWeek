@@ -624,6 +624,7 @@ def test_the_plan_notice_counts_what_the_plan_left(qapp, window, minutes: int, s
     essay = next(block for block in session.blocks if block.get("assignment_id") == "essay")
     essay["duration_min"] = minutes
     essay["pinned"] = True
+    essay["start"] = "19:30"
     session._touch()
     session.save()
     settled(qapp, window)

@@ -366,7 +366,7 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | reuse | held_in_place | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | plan_start | LOGIC, moved | hour and minute arithmetic and the half-minute rule: `planning::plan_start_at` |
 | reuse | solve_request | LOGIC, moved | `only`, `not_before` and `everything` are read as given by `reuse_solve_request`; the set of targets is a list to set; `now` is read as the real clock point by `reuse_solve_request`; `saved_week` is the week the server's numbers were read with, which a missed session's minutes are counted against (`this_weeks_part`) |
-| reuse | without_missed_times | ADAPTER | encodes, makes one engine call, decodes; `now` read at `planning::screen_point`, as `missed_session_ids` reads it; a missed session's minutes counted against `saved_week` |
+| reuse | without_missed_times | ADAPTER | encodes, makes one engine call, decodes; `now` read at `planning::screen_point`, as `missed_session_ids` reads it; a missed session's minutes counted against `saved_week`; a pinned session that passed unfinished is left out, holding none |
 | reuse | missed_session_ids | ADAPTER | encodes, makes one engine call, decodes to a frozenset; minutes counted against `saved_week` |
 | reuse | due_point | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | settle_placements | LOGIC, moved | `keep` is read as given by `reuse_settle_placements` |
@@ -378,7 +378,7 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | reuse | time_still_needed | ADAPTER | encodes, makes one engine call, decodes; counts minutes, not quarter hours: each homework's waiting sessions plus its minutes no session holds, counted as `uncovered_homework_minutes` counts them against `committed_blocks` (`planning::time_still_needed_since`) |
 | reuse | time_still_needed_parts | ADAPTER | the same call with each homework's `waiting_min` and `uncovered_min` beside its minutes; the plan notice names the homework whose `uncovered_min` is not 0 |
 | reuse | plan_open_counts | ADAPTER | encodes, makes one engine call, decodes; `open` is homework with a session still waiting for a time (Material's "Placed N of M"), `waiting_only` those with no minutes outside a session (`planning::plan_open_counts`) |
-| reuse | open_rest_sessions | ADAPTER | encodes, makes one engine call, decodes; `saved_week` is the week the server's numbers were read with, none meaning `blocks` (`planning::open_rest_sessions_since`); the rest session is the minutes no session holds down to a quarter hour |
+| reuse | open_rest_sessions | ADAPTER | encodes, makes one engine call, decodes; `saved_week` is the week the server's numbers were read with, none meaning `blocks`; `now` is the real clock, a pinned session that passed unfinished holding none of the minutes (`planning::open_rest_sessions_at`); the rest session is the minutes no session holds down to a quarter hour |
 | reuse | fair_share | ADAPTER | encodes, makes one engine call, decodes; `saved_week` as for `open_rest_sessions`; the share is cut from all of this week's part, the sessions being planned holding none of it yet (`planning::fair_share`) |
 | reuse | copied_fixed_block | ADAPTER | encodes, makes one engine call, decodes |
 | reuse | copied_homework_block | ADAPTER | encodes, makes one engine call, decodes |

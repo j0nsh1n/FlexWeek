@@ -141,12 +141,13 @@ pub(crate) fn run_plan(
         })
         .collect();
     // The homework's numbers were read with the week as saved (`blocks`), waiting sessions included.
-    let open_blocks = flexweek_engine::desk::planning::open_rest_sessions_since(
+    let open_blocks = flexweek_engine::desk::planning::open_rest_sessions_at(
         &planning_blocks,
         as_map(&assignments)?,
         week_start,
         &earlier_blocks,
         &blocks,
+        now_point.as_ref(),
     )
     .map_err(engine_failure)?;
     let not_before = start.map(|(day, minute)| json!([day, minute]));
@@ -612,7 +613,15 @@ mod tests {
     #[test]
     fn plan_keeps_a_pinned_session_that_passed() {
         let result = plan_with_a_session_from_monday("plan-keeps-pinned-passed", true);
-        assert!(placed_rows(&result).is_empty(), "got {result}");
+        // The pinned session is not moved, so it is not among the placed rows; its 60 minutes are still
+        // needed, so the plan places a new session for them at a time still ahead.
+        let rows = placed_rows(&result);
+        assert_eq!(rows.len(), 1, "got {result}");
+        assert_ne!(rows[0]["id"], "essay-session", "got {result}");
+        let day = rows[0]["days"][0].as_i64().unwrap();
+        let start =
+            flexweek_engine::time::hhmm_to_minutes(rows[0]["start"].as_str().unwrap()).unwrap();
+        assert!((day, start) >= (2, 12 * 60), "not before now, got {rows:?}");
     }
 
     /// Monday is all fixed (School 00:00 for 24 h) and the History essay may only go on Monday, so Plan

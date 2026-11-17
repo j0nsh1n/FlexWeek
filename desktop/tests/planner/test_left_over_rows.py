@@ -140,7 +140,8 @@ def test_the_deadline_passing_refreshes_tags_the_sidebar_and_the_focus_list(
     CLOCK.set(before)
     session.week_changed.emit()
     settled(qapp, window)
-    assert not session.unfinished()
+    # The pinned Wednesday hour passed unfinished, so it needs a time already, but it is not overdue yet.
+    assert [item["left_over_state"] for item in session.unfinished()] != ["overdue"]
     assert 0 < window._deadline_tick.remainingTime() <= 61_000
     CLOCK.set(after)
     window._deadline_tick.timeout.emit()
@@ -152,7 +153,7 @@ def test_the_deadline_passing_refreshes_tags_the_sidebar_and_the_focus_list(
     expected = f"Wednesday: Bio reading, {times} · {length_label(60)} · {due_words} · Pinned"
     bio_rows = [row for row in rows if row.startswith("Wednesday: Bio reading, ")]
     assert bio_rows == [expected]
-    assert window.rail.none_waiting.text() == "Everything has a time."
+    assert window.rail.none_waiting.text() == "Bio reading · 1 h left"
     assert any(item["title"] == "Bio reading, overdue" for item in session.focus_tasks())
     target = window if page == "settings" else window.more_button
     assert target.isVisible()
