@@ -112,7 +112,7 @@ fn by_date<'a>(days: &'a [Value], date: &str) -> Option<&'a Value> {
 #[test]
 fn a_bad_date_week_or_month_is_refused_with_the_route_sentence() {
     let (conn, user) = account("reject");
-    let date = day_view(&conn, user, "2026-10-32");
+    let date = day_view(&conn, user, "2026-10-32", None);
     assert!(
         date.is_err(),
         "a bad date must be refused with the date rule"
@@ -132,7 +132,7 @@ fn a_bad_date_week_or_month_is_refused_with_the_route_sentence() {
         WEEK_START_RULE,
         "a Tuesday must be refused with the week rule"
     );
-    let month = month_view(&conn, user, "2026-13");
+    let month = month_view(&conn, user, "2026-13", None);
     assert!(
         month.is_err(),
         "a bad month must be refused with the month rule"
@@ -157,7 +157,7 @@ fn a_bad_date_week_or_month_is_refused_with_the_route_sentence() {
 #[test]
 fn day_rewrites_the_session_and_counts_the_open_afternoon() {
     let (conn, user) = fixture("day");
-    let day = day_view(&conn, user, "2026-10-21").expect("day");
+    let day = day_view(&conn, user, "2026-10-21", None).expect("day");
     assert_eq!(day.get("date").and_then(Value::as_str), Some("2026-10-21"));
     assert_eq!(
         day.get("week_start").and_then(Value::as_str),
@@ -267,7 +267,7 @@ fn day_rewrites_the_session_and_counts_the_open_afternoon() {
 #[test]
 fn month_fills_empty_weeks_from_standing_and_keeps_the_stored_title() {
     let (conn, user) = fixture("month");
-    let month = month_view(&conn, user, "2026-10").expect("month");
+    let month = month_view(&conn, user, "2026-10", None).expect("month");
     assert_eq!(
         month.get("start").and_then(Value::as_str),
         Some("2026-10-01")
@@ -572,13 +572,13 @@ fn day_month_and_the_list_take_the_done_time_off_what_needs_a_time() {
             .and_then(|item| item.get("unplanned_min"))
             .and_then(Value::as_i64)
     };
-    let day = day_view(&conn, user, "2026-10-21").expect("day");
+    let day = day_view(&conn, user, "2026-10-21", None).expect("day");
     assert_eq!(
         unplanned(list(&day, "due_soon").expect("due soon")),
         Some(15),
         "Day"
     );
-    let month = month_view(&conn, user, "2026-10").expect("month");
+    let month = month_view(&conn, user, "2026-10", None).expect("month");
     assert_eq!(
         unplanned(list(&month, "deadlines").expect("deadlines")),
         Some(15),

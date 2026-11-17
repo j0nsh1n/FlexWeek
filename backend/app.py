@@ -1381,7 +1381,9 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 (json.loads(body), int(revision)) for body, revision in db.assignment_bodies(account["id"])
             ]
             weeks = list_account_weeks(db, account["id"])
-        return build_day(date, week_start, rewrite_stored_blocks(blocks, owned), assignment_rows, weeks)
+        return build_day(
+            date, week_start, rewrite_stored_blocks(blocks, owned), assignment_rows, weeks, naive_now()
+        )
 
     @app.get("/api/month")
     def get_month(
@@ -1397,7 +1399,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 (json.loads(body), int(revision)) for body, revision in db.assignment_bodies(account["id"])
             ]
             weeks = month_weeks(db, account["id"], month, first_day)
-        return build_month(month, assignment_rows, weeks, first_day)
+        return build_month(month, assignment_rows, weeks, first_day, naive_now())
 
     @app.put("/api/week")
     def put_week(week: SavedWeek, account: Annotated[dict, Depends(user)]) -> dict:

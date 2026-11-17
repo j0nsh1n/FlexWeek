@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 
-use chrono::Datelike;
+use chrono::{Datelike, Timelike};
 use flexweek_engine::desk::blocks::mark_block_done;
 use flexweek_engine::desk::homework::mark_homework_done;
 use flexweek_engine::desk::weekmodel::build_week;
@@ -174,8 +174,20 @@ pub(crate) fn today(week: &FlexWeek, date: &str, now_minute: i64) -> Result<Stri
     let stored_blocks = decode_blocks(&merged)?;
     let blocks = rewritten(&stored_blocks, &assignment_map)?;
     let weeks = stored_weeks(&db, user_id)?;
-    let day_data = plan::build_day(date, &monday, &blocks, &assignment_rows, &weeks)
-        .map_err(engine_failure)?;
+    let local = crate::core::parse_local(&week.host.local_now())?;
+    let clock = (
+        local.date_naive(),
+        i64::from(local.time().hour()) * 60 + i64::from(local.time().minute()),
+    );
+    let day_data = plan::build_day(
+        date,
+        &monday,
+        &blocks,
+        &assignment_rows,
+        &weeks,
+        Some(clock),
+    )
+    .map_err(engine_failure)?;
     let model = build_week(
         &json!(monday),
         &Value::Array(blocks),

@@ -19,6 +19,7 @@ def build_day(
     blocks: list[dict],
     assignment_rows: list[tuple[dict, int]],
     weeks: list[tuple[str, list[dict]]],
+    now: str | None = None,
 ) -> dict:
     raw = json.loads(
         flexweek_engine.build_day(
@@ -27,6 +28,7 @@ def build_day(
             json.dumps(blocks),
             json.dumps([[body, revision] for body, revision in assignment_rows]),
             json.dumps([[start, week_blocks] for start, week_blocks in weeks]),
+            now,
         )
     )
     raw["sessions"] = [TimeBlock.model_validate(block).model_dump() for block in raw["sessions"]]

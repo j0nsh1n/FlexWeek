@@ -229,7 +229,13 @@ impl crate::App {
                 Some(date) => date,
                 None => self.now()?.today,
             };
-            let mut view = day_view(&conn, account_id(&account), &date).map_err(view_error)?;
+            let mut view = day_view(
+                &conn,
+                account_id(&account),
+                &date,
+                Some(self.now()?.moment()?),
+            )
+            .map_err(view_error)?;
             let first_weekday = self.first_weekday();
             let shown_week_start = if first_weekday == 0 {
                 None
@@ -293,8 +299,14 @@ impl crate::App {
             )?;
             let conn = open_connection(&self.database).map_err(session::storage_sentence)?;
             let first_weekday = self.first_weekday();
-            let mut view = month_view_from(&conn, account_id(&account), &args.month, first_weekday)
-                .map_err(view_error)?;
+            let mut view = month_view_from(
+                &conn,
+                account_id(&account),
+                &args.month,
+                first_weekday,
+                Some(self.now()?.moment()?),
+            )
+            .map_err(view_error)?;
             if let Some(fields) = view.as_object_mut() {
                 fields.insert(
                     "week_starts_on".into(),

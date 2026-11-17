@@ -442,12 +442,14 @@ fn migrate_blocks(week_start: &str, blocks: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
+#[pyo3(signature = (date_str, week_start, blocks, assignment_rows, weeks, now = None))]
 fn build_day(
     date_str: &str,
     week_start: &str,
     blocks: &str,
     assignment_rows: &str,
     weeks: &str,
+    now: Option<&str>,
 ) -> PyResult<String> {
     guard(|| {
         let blocks = parse(blocks)?.as_array().cloned().unwrap_or_default();
@@ -474,19 +476,24 @@ fn build_day(
                 ))
             })
             .collect();
-        plan::build_day(date_str, week_start, &blocks, &rows, &weeks)
+        let now = now
+            .map(plan::parse_moment)
+            .transpose()
+            .map_err(crate::raise)?;
+        plan::build_day(date_str, week_start, &blocks, &rows, &weeks, now)
             .map(|value| dump(&value))
             .map_err(crate::raise)
     })
 }
 
 #[pyfunction]
-#[pyo3(signature = (month, assignment_rows, weeks, first_weekday = 0))]
+#[pyo3(signature = (month, assignment_rows, weeks, first_weekday = 0, now = None))]
 fn build_month(
     month: &str,
     assignment_rows: &str,
     weeks: &str,
     first_weekday: u32,
+    now: Option<&str>,
 ) -> PyResult<String> {
     guard(|| {
         let rows: Vec<(Value, i64)> = parse(assignment_rows)?
@@ -512,7 +519,11 @@ fn build_month(
                 ))
             })
             .collect();
-        plan::build_month_from(month, &rows, &weeks, first_weekday)
+        let now = now
+            .map(plan::parse_moment)
+            .transpose()
+            .map_err(crate::raise)?;
+        plan::build_month_from(month, &rows, &weeks, first_weekday, now)
             .map(|value| dump(&value))
             .map_err(crate::raise)
     })

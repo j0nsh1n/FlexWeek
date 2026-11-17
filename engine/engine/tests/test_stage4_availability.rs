@@ -443,7 +443,15 @@ fn read_at_nine() -> serde_json::Value {
 
 #[test]
 fn test_a_session_with_an_empty_start_is_not_placed_on_the_day_agenda() {
-    let day = build_day("2026-09-07", "2026-09-07", &[unplaced_essay()], &[], &[]).unwrap();
+    let day = build_day(
+        "2026-09-07",
+        "2026-09-07",
+        &[unplaced_essay()],
+        &[],
+        &[],
+        None,
+    )
+    .unwrap();
     assert_eq!(day["next_action"], json!({"kind": "add"}));
     assert_eq!(day["workload"]["available_min"], 1440);
     assert_eq!(day["workload"]["scheduled_min"], 0);
@@ -454,7 +462,7 @@ fn test_a_session_with_an_empty_start_is_not_placed_on_the_day_agenda() {
 #[test]
 fn test_an_empty_start_does_not_outrank_a_real_start_for_the_next_action() {
     let blocks = [unplaced_essay(), read_at_nine()];
-    let day = build_day("2026-09-07", "2026-09-07", &blocks, &[], &[]).unwrap();
+    let day = build_day("2026-09-07", "2026-09-07", &blocks, &[], &[], None).unwrap();
     assert_eq!(
         day["next_action"],
         json!({"kind": "start", "block_id": "s0"})

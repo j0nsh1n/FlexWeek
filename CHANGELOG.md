@@ -98,6 +98,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - In the Material style, Week has a line above the grid when homework is overdue or left from last week, saying "1 overdue · 1 left from last week" as the Widgets styles do, with Plan into this week and Mark as finished, which do what the Widgets buttons do. It is not there when nothing is left over.
 - Plan my homework and Replan all no longer give a homework twice its time when the week starts on another day than Monday. A 1-hour homework now gets 1 hour, on screen and as saved.
 - Homework you add today in a week that does not start on Monday no longer shows as "left from last week", and Plan my homework no longer asks "Before planning" about it. A session that passed unfinished before the week on screen still shows as left from last week, also when it was on the days just before the week's first day.
+- The assistant's day and month readings, and the phone's agenda, now count homework planned later this week the same way the week screens do: a homework whose session is still ahead of now needs no time, and one whose session passed unfinished still does. They said it still needed the full time while next week was asked for. A "no longer fits" note in a week that starts on another day than Monday now names the right day.
 
 ## [1.3.0] - 2026-11-10
 

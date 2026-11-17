@@ -1406,8 +1406,9 @@ fn due_soon(
     agenda: NaiveDate,
     week_start: &str,
     weeks: &[(String, Vec<Value>)],
+    now: Option<Moment>,
 ) -> EngineResult<Vec<Value>> {
-    let planned = planned_minutes_by_id(weeks, week_start, None);
+    let planned = planned_minutes_by_id(weeks, week_start, now);
     let done = done_minutes_by_id(weeks);
     let tomorrow = agenda + Duration::days(1);
     let mut items: Vec<Value> = Vec::new();
@@ -1572,6 +1573,7 @@ pub fn build_day(
     blocks: &[Value],
     assignment_rows: &[(Value, i64)],
     weeks: &[(String, Vec<Value>)],
+    now: Option<Moment>,
 ) -> EngineResult<Value> {
     let agenda = parse_iso_date(date_str)?;
     let monday = parse_iso_date(week_start)?;
@@ -1590,7 +1592,7 @@ pub fn build_day(
         })
         .map(dump_block)
         .collect();
-    let due_soon = due_soon(assignment_rows, agenda, week_start, weeks)?;
+    let due_soon = due_soon(assignment_rows, agenda, week_start, weeks, now)?;
     let scheduled: i64 = sessions
         .iter()
         .chain(locked.iter())
@@ -1752,7 +1754,7 @@ pub fn build_month(
     assignment_rows: &[(Value, i64)],
     weeks: &[(String, Vec<Value>)],
 ) -> EngineResult<Value> {
-    build_month_from(month, assignment_rows, weeks, 0)
+    build_month_from(month, assignment_rows, weeks, 0, None)
 }
 
 /// The month with its rows starting on `first_weekday` (0 Monday to 6 Sunday). `weeks` must hold
@@ -1762,6 +1764,7 @@ pub fn build_month_from(
     assignment_rows: &[(Value, i64)],
     weeks: &[(String, Vec<Value>)],
     first_weekday: u32,
+    now: Option<Moment>,
 ) -> EngineResult<Value> {
     let (start_s, end_s) = parse_month(month)?;
     let start = parse_iso_date(&start_s)?;
@@ -1775,7 +1778,7 @@ pub fn build_month_from(
         weeks_by_start.insert(ws.clone(), blocks.clone());
     }
     let from_week = monday_of(&iso_date(start))?;
-    let planned = planned_minutes_by_id(weeks, &from_week, None);
+    let planned = planned_minutes_by_id(weeks, &from_week, now);
     let done = done_minutes_by_id(weeks);
 
     let mut due_by_date: BTreeMap<String, Vec<Value>> = BTreeMap::new();

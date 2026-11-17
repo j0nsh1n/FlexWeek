@@ -27,7 +27,12 @@ const WEEK_START_RULE: &str =
 const DATE_RULE: &str = "date must be YYYY-MM-DD between 2000-01-01 and 2099-12-31";
 const MONTH_RULE: &str = "month must be YYYY-MM between 2000-01 and 2099-12";
 
-pub fn day_view(conn: &Connection, user_id: i64, date: &str) -> StoreResult<Value> {
+pub fn day_view(
+    conn: &Connection,
+    user_id: i64,
+    date: &str,
+    now: Option<Moment>,
+) -> StoreResult<Value> {
     if !is_calendar_date(date) {
         return Err(StoreError::Date(DATE_RULE.into()));
     }
@@ -51,11 +56,17 @@ pub fn day_view(conn: &Connection, user_id: i64, date: &str) -> StoreResult<Valu
         &rewritten,
         &assignments,
         &weeks,
+        now,
     )?)
 }
 
-pub fn month_view(conn: &Connection, user_id: i64, month: &str) -> StoreResult<Value> {
-    month_view_from(conn, user_id, month, 0)
+pub fn month_view(
+    conn: &Connection,
+    user_id: i64,
+    month: &str,
+    now: Option<Moment>,
+) -> StoreResult<Value> {
+    month_view_from(conn, user_id, month, 0, now)
 }
 
 /// The month with its rows starting on `first_weekday` (0 Monday to 6 Sunday).
@@ -64,6 +75,7 @@ pub fn month_view_from(
     user_id: i64,
     month: &str,
     first_weekday: u32,
+    now: Option<Moment>,
 ) -> StoreResult<Value> {
     if !is_month_label(month) {
         return Err(StoreError::Date(MONTH_RULE.into()));
@@ -97,6 +109,7 @@ pub fn month_view_from(
         &assignments,
         &weeks,
         first_weekday,
+        now,
     )?)
 }
 

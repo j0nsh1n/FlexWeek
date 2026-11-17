@@ -12,6 +12,6 @@ fn test_a_block_at_any_minute_takes_every_quarter_hour_it_touches_from_free_time
         "id": "lesson", "title": "Lesson", "kind": "locked",
         "start": "17:37", "duration_min": 45, "days": [1],
     });
-    let day = build_day("2026-09-15", "2026-09-14", &[lesson], &[], &[]).unwrap();
+    let day = build_day("2026-09-15", "2026-09-14", &[lesson], &[], &[], None).unwrap();
     assert_eq!(day["workload"]["available_min"], 24 * 60 - 60);
 }
