@@ -125,17 +125,15 @@ def due_label(due: str | None, today: date | str | None = None) -> str:
     return str(flexweek_engine.week_due_label(plain(due), iso_of(today)))
 
 
-def moved_words(block: dict, from_day: int, day: int, start: int, end: int, week_start: str = "") -> str:
+def moved_words(block: dict, from_day: int, day: int, start: int, end: int, week_start: str) -> str:
     """What a drag did to `block`, as it was before, now that it is on `day` (of the week from
     `week_start`) from `start` to `end`."""
-    return str(
-        restore(flexweek_engine.week_moved_words(plain(block), from_day, day, start, end, week_start or ""))
-    )
+    return str(restore(flexweek_engine.week_moved_words(plain(block), from_day, day, start, end, week_start)))
 
 
-def added_words(block: dict, week_start: str = "") -> str:
+def added_words(block: dict, week_start: str) -> str:
     """A block just made: "Added Club on Thu 16:00.", or without a day and time when it has several days."""
-    return str(restore(flexweek_engine.week_added_words(plain(block), week_start or "")))
+    return str(restore(flexweek_engine.week_added_words(plain(block), week_start)))
 
 
 def dated_words(title: str, iso: str, today: date | str | None = None) -> str:

@@ -275,7 +275,7 @@
  {
   "file": "desktop/native/window.py",
   "name": "a block made by dragging says nothing",
-  "old": "            self._say_when_saved(added_words(made[0]))\n",
+  "old": "            self._say_when_saved(added_words(made[0], self.session.week_start))\n",
   "new": "            pass\n",
   "test": "desktop/tests/week/test_drag_says_what_it_did.py::test_a_move_a_resize_a_create_and_a_placing_each_say_what_they_did_with_undo"
  },
