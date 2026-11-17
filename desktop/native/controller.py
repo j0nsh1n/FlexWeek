@@ -12,7 +12,7 @@ from uuid import uuid4
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from backend import clock as wall_clock
-from backend.assignments import unplanned_minutes
+from backend.assignments import done_minutes_by_id, planned_minutes_by_id, unplanned_minutes
 from backend.models import Assignment, ProtectedWindow, TimeBlock, WorkWindow, parse_due
 from backend.slots import hhmm_to_minutes
 from backend.weeks import current_week_start
@@ -2130,7 +2130,17 @@ class NativeSession(QObject):
                     {"week_start": self.week_start, "before": before, "after": deepcopy(self.blocks),
                      "revision": self.revision}
                 ],
-                "assignments": [{"id": assignment_id, "before": deepcopy(item), "after": None}],
+                "assignments": [
+                    {
+                        "id": assignment_id,
+                        "before": deepcopy(item),
+                        "after": None,
+                        # The saved sessions its held numbers were read with: Undo pairs them again.
+                        "basis": deepcopy(
+                            [b for b in self._assignments_basis if b.get("assignment_id") == assignment_id]
+                        ),
+                    }
+                ],
                 "stale": False,
             }
             others = [week for week in removed if week != self.week_start]
@@ -2290,9 +2300,17 @@ class NativeSession(QObject):
                 if live is None:
                     # Its numbers were read before the delete, with its sessions as this side has them.
                     homework = entry["id"]
+                    paired = entry.get("basis")
                     self._assignments_basis = [
                         block for block in self._assignments_basis if block.get("assignment_id") != homework
-                    ] + [deepcopy(block) for block in self.blocks if block.get("assignment_id") == homework]
+                    ] + [
+                        deepcopy(block)
+                        for block in (
+                            paired
+                            if paired is not None
+                            else [b for b in self.blocks if b.get("assignment_id") == homework]
+                        )
+                    ]
                 else:
                     for key in ("unplanned_min", "planned_min", "done_min"):
                         if key in live:
@@ -2429,6 +2447,35 @@ class NativeSession(QObject):
                         self._plan_step_id = self._pending_step["id"]
         self._post_pending()
 
+    def _shift_held_numbers(self, data: dict) -> None:
+        """A save that moved sessions into or out of a week other than the open one changes what the held
+        `planned_min` and `done_min` count, which were read with the open week as saved. Those weeks' change
+        is put on the held numbers now, so every count is right before the server's next read lands."""
+        step = self._travel_step if self._traveling else self._pending_step
+        if step is None:
+            return
+        old_side, new_side = ("after", "before") if self._traveling == "undo" else ("before", "after")
+        stored = {week["week_start"]: week for week in data.get("weeks") or []}
+        old_weeks: list[tuple[str, list[dict]]] = []
+        new_weeks: list[tuple[str, list[dict]]] = []
+        for entry in step.get("weeks") or []:
+            week_start = entry["week_start"]
+            if week_start == self.week_start or week_start not in stored:
+                continue
+            old_weeks.append((week_start, entry[old_side]))
+            new_weeks.append((week_start, stored[week_start].get("blocks") or []))
+        if not old_weeks:
+            return
+        for key, count in (("planned_min", planned_minutes_by_id), ("done_min", done_minutes_by_id)):
+            args = ("0000-01-01",) if key == "planned_min" else ()
+            gone = count(old_weeks, *args)
+            came = count(new_weeks, *args)
+            for homework in gone.keys() | came.keys():
+                for held in (self.assignments, self._committed_assignments):
+                    item = held.get(homework)
+                    if item is not None and item.get(key) is not None:
+                        item[key] = int(item[key]) + came.get(homework, 0) - gone.get(homework, 0)
+
     def _post_pending(self, ticket: int | None = None) -> None:
         if self.pending_save is None:
             return
@@ -2463,6 +2510,7 @@ class NativeSession(QObject):
                 weeks = set(assignment.get("session_weeks") or []) - changed_weeks
                 weeks.update(session_weeks_by_id.get(assignment_id, set()))
                 assignment["session_weeks"] = sorted(weeks)
+            self._shift_held_numbers(data)
             current = next(
                 (week for week in data.get("weeks") or [] if week["week_start"] == self.week_start),
                 None,

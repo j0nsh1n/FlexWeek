@@ -542,3 +542,128 @@ def test_undoing_a_homework_delete_that_cannot_be_saved_then_can(qapp, window, m
     real("GET", path, payload, on_success, on_error)
     settled(qapp, window)
     assert _essay_counts(window) == ([40], 20, 20)
+
+
+def _long_homework_on_thursday(window, qapp) -> dict:
+    """60 minutes of homework due 13 days out, its one 60 minute session pinned Thursday 10:00 of this week,
+    saved, with the server's number (planned 60) read."""
+    session = window.session
+    due = (_week_monday(window) + timedelta(days=13)).isoformat()
+    _homework(window, "long", "Long homework", 60, due)
+    block = next(item for item in session.blocks if item.get("assignment_id") == "long")
+    block.update(duration_min=60, pinned=True, start="10:00", days=[3])
+    session._touch()
+    session.save()
+    settled(qapp, window)
+    wait_until(qapp, lambda: session.assignments["long"].get("planned_min") == 60)
+    _pump(qapp)
+    return block
+
+
+def _long_counts(window) -> tuple[list[int], int, int, bool]:
+    """The long homework's sessions in this week, its minutes no session holds, its time still needed, and
+    whether the drawer's line names it."""
+    session = window.session
+    needed = {item["assignment_id"]: item["minutes"] for item in session.homework_time_needed()}
+    lengths = [b["duration_min"] for b in session.blocks if b.get("assignment_id") == "long"]
+    return (
+        lengths,
+        session.minutes_left_for("long"),
+        needed.get("long", 0),
+        "Long homework" in str(_bridge(window).week.property("leftoverWords")),
+    )
+
+
+def _move_long_next_week(window, qapp, reads: str) -> None:
+    """Move the session from Thursday to Tuesday of next week while the server's re-read ("fail": never
+    comes, "held": has not come yet, "land": comes at once)."""
+    session = window.session
+    block = next(item for item in session.blocks if item.get("assignment_id") == "long")
+    monday = _week_monday(window)
+    if reads != "land":
+        _hold_the_assignments_reply(window, pytest.MonkeyPatch(), fail=reads == "fail")
+    assert session.move_to_date(
+        block["id"], (monday + timedelta(days=3)).isoformat(), (monday + timedelta(days=8)).isoformat()
+    )
+    settled(qapp, window)
+    if reads == "land":
+        wait_until(
+            qapp, lambda: not any(b.get("assignment_id") == "long" for b in session._assignments_basis)
+        )
+        _pump(qapp)
+
+
+@pytest.mark.parametrize("reads", ["fail", "held", "land"])
+def test_a_session_moved_to_next_week_is_counted_there_at_once(qapp, window, reads: str) -> None:
+    """60 minutes of homework, its one 60 minute session moved from this Thursday to next Tuesday. Next week
+    holds the 60, so 60 - 60 = 0 minutes have no session and 0 are still needed, straight after the move,
+    while the server's re-read has not come (or never comes), and after it lands. It said 60 until a read."""
+    _reset(window, qapp)
+    _long_homework_on_thursday(window, qapp)
+    assert _long_counts(window) == ([60], 0, 0, False)
+    _move_long_next_week(window, qapp, reads)
+
+    assert _long_counts(window) == ([], 0, 0, False)
+    assert _bridge(window).week.property("timeWords") != ""
+
+
+@pytest.mark.parametrize("reads", ["fail", "held"])
+def test_undoing_a_move_to_next_week_counts_the_week_it_comes_back_to(
+    qapp, window, reads: str
+) -> None:
+    """Moved to next Tuesday (0 needed), then Undo: the session is back on this Thursday and next week holds
+    nothing again, so 0 are needed, with the server's re-read not come."""
+    _reset(window, qapp)
+    _long_homework_on_thursday(window, qapp)
+    _move_long_next_week(window, qapp, reads)
+    window.session.undo()
+    settled(qapp, window)
+
+    assert _long_counts(window) == ([60], 0, 0, False)
+
+
+@pytest.mark.parametrize("reads", ["fail", "held"])
+def test_a_session_moved_out_of_next_week_is_counted_in_the_week_it_goes_to(
+    qapp, window, reads: str
+) -> None:
+    """The session sits next Tuesday (saved and read: 60 held there). Next week is open and the session is
+    moved to this Friday: the homework's 60 minutes are in a session in another week, so 0 are still
+    needed in the open week, straight after the move and with the server's re-read not come."""
+    _reset(window, qapp)
+    session = window.session
+    _long_homework_on_thursday(window, qapp)
+    _move_long_next_week(window, qapp, "land")
+    monday = _week_monday(window)
+    session.load_week((monday + timedelta(days=7)).isoformat())
+    settled(qapp, window)
+    wait_until(qapp, lambda: session.assignments["long"].get("planned_min") == 60)
+    block = next(item for item in session.blocks if item.get("assignment_id") == "long")
+    _hold_the_assignments_reply(window, pytest.MonkeyPatch(), fail=reads == "fail")
+    moved = session.move_to_date(
+        block["id"], (monday + timedelta(days=8)).isoformat(), (monday + timedelta(days=4)).isoformat()
+    )
+    assert moved, session.message
+    settled(qapp, window)
+
+    assert _long_counts(window) == ([], 0, 0, False)
+
+
+@pytest.mark.parametrize("reads", ["fail", "held"])
+def test_undoing_a_delete_after_a_cut_whose_read_has_not_landed_keeps_the_minutes(
+    qapp, window, reads: str
+) -> None:
+    """Essay 60 with its 60 minute session, read. The session is cut to 5 and saved, and the server's re-read
+    has not come: 60 - 5 = 55 have no session. The essay is deleted and the delete undone before a read comes:
+    the essay is back with its 5 minute session, so 55 have no session and 55 are needed. It said 0."""
+    _reset(window, qapp)
+    session = window.session
+    _cut_and_read(window, qapp, 60)
+    _hold_the_assignments_reply(window, pytest.MonkeyPatch(), fail=reads == "fail")
+    _cut(window, qapp, "essay", 5)
+    assert _essay_counts(window) == ([5], 55, 55)
+    assert session.delete_homework("essay")
+    settled(qapp, window)
+    session.undo()
+    settled(qapp, window)
+
+    assert _essay_counts(window) == ([5], 55, 55)
