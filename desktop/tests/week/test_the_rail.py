@@ -49,7 +49,8 @@ def test_the_rail_holds_next_not_placed_yet_and_the_focus_list_left_of_the_week(
     # In time order with the time at the right, today's said as Today.
     assert rail.task_rows() == [("History essay", "Today 7:00 PM")]
     assert [chip.accessibleName() for chip in chips(window)] == ["Math worksheet · 1 h"]
-    assert rail.waiting_count.text() == "1"
+    # The seed's Chem lab hour is pinned to Monday evening, now passed unfinished: it needs its time too.
+    assert rail.waiting_count.text() == "2"
     use_clock(qapp, window, True)
     assert (card.when.text(), card.then.text()) == ("16:00 · in 20 min", "Then Dinner at 18:30")
     assert rail.task_rows() == [("History essay", "Today 19:00")]
