@@ -321,6 +321,30 @@ fn test_solving_takes_the_subject_from_the_assignment() {
 }
 
 #[test]
+fn test_keep_whole_follows_the_assignment_every_time() {
+    // A stale keep_whole: true on a session of a spread homework must not keep it whole, and a
+    // "one" homework keeps its session whole whatever the session carried.
+    let session = || {
+        let mut value = Dump::flex("s1", "s1", 120, &[0])
+            .assignment_id("hw")
+            .into_value();
+        value["keep_whole"] = json!(true);
+        value
+    };
+    let kept = |spread: &str| {
+        let mut assignments = BTreeMap::new();
+        assignments.insert(
+            "hw".into(),
+            json!({"completed": false, "due": "2026-09-18T23:59", "spread": spread}),
+        );
+        let (keep, _, _) = prepare_solve(&[session()], "2026-09-14", &assignments).unwrap();
+        keep[0].get("keep_whole").cloned()
+    };
+    assert_eq!(kept("spread"), None);
+    assert_eq!(kept("one"), Some(json!(true)));
+}
+
+#[test]
 fn test_a_subjects_own_window_beats_an_earlier_untagged_one() {
     let math = Dump::flex("math", "math", 60, &[0])
         .energy("high")

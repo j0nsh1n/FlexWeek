@@ -794,6 +794,8 @@ pub fn prepare_solve(
             );
             if body.get("spread").and_then(Value::as_str).unwrap_or("one") == "one" {
                 obj.insert("keep_whole".into(), Value::Bool(true));
+            } else {
+                obj.shift_remove("keep_whole");
             }
         }
         keep.push(updated);
