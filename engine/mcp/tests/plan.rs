@@ -1251,3 +1251,67 @@ fn spreading_takes_off_the_larger_of_focus_time_and_ticked_done_time() {
         vec![(0, 60, true), (2, 60, false), (3, 60, false)]
     );
 }
+
+/// From Wednesday 21 October, today, the week on screen is Wednesday 21 to Tuesday 27, and Monday 19's
+/// stored week holds its first five days. A session waiting there on days the screen shows is this
+/// week's: Plan gives the homework its hour once, not again for that stored week taken as an earlier one.
+#[test]
+fn plan_from_wednesday_gives_a_session_waiting_in_the_first_stored_week_its_length_once() {
+    let world = signed_in("plan-wednesday-first-half");
+    std::fs::write(
+        Path::new(&world.data_arg).join("week-start.json"),
+        r#"{"week_starts_on": "wednesday"}"#,
+    )
+    .expect("wed");
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    insert_assignment(
+        &conn,
+        world.user,
+        "math",
+        r#"{"id":"math","title":"Math","due":"2026-10-27T21:00","estimate_min":60,"focus_minutes":0,"completed":false,"priority":2,"energy":"medium"}"#,
+    )
+    .expect("math");
+    let waiting = json!([
+        {"id": "math-open", "title": "Math", "kind": "flexible", "assignment_id": "math",
+         "duration_min": 60, "days": [0, 1, 2, 3, 4, 5, 6], "priority": 2, "energy": "medium"}
+    ]);
+    save_week(&conn, world.user, WEEK, &waiting.to_string(), 0).expect("save w19");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+    drop(conn);
+
+    let mut server = boot(&world);
+    let planned = body_of(&server.call(
+        "plan_homework",
+        json!({"operation_id": "op-wed-first-half", "week_start": "2026-10-21"}),
+        2,
+    ));
+    assert_eq!(planned["ok"], json!(true), "got {planned}");
+    let placed = planned["result"]["placed"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(placed.len(), 1, "got {planned}");
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let mut lengths = Vec::new();
+    for week in [WEEK, "2026-10-26"] {
+        let text: String = conn
+            .query_row(
+                "SELECT blocks FROM weeks WHERE user_id = ?1 AND week_start = ?2",
+                (world.user, week),
+                |row| row.get(0),
+            )
+            .unwrap_or_else(|_| "[]".into());
+        let blocks: Value = serde_json::from_str(&text).expect("blocks");
+        lengths.extend(
+            blocks
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|block| block["assignment_id"] == json!("math"))
+                .map(|block| block["duration_min"].clone()),
+        );
+    }
+    assert_eq!(lengths, vec![json!(60)], "got {planned}");
+}

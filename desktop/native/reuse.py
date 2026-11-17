@@ -487,6 +487,7 @@ def left_over_items(
     now: str,
     blocks: list[dict],
     committed_blocks: list[dict],
+    first_part: list[dict],
 ) -> list[dict]:
     return json.loads(
         flexweek_engine.reuse_left_over(
@@ -496,6 +497,7 @@ def left_over_items(
             now,
             json.dumps(blocks),
             json.dumps(committed_blocks),
+            json.dumps(first_part),
         )
     )
 

@@ -1264,17 +1264,26 @@ fn reuse_left_over(
     now: &str,
     blocks: &str,
     committed: &str,
+    first_part: &str,
 ) -> PyResult<String> {
-    let (assignments, saved, blocks, committed) = (
+    let (assignments, saved, blocks, committed, first_part) = (
         parse(assignments)?,
         parse(saved_weeks)?,
         parse(blocks)?,
         parse(committed)?,
+        parse(first_part)?,
     );
     guard(|| {
-        let items =
-            clipboard::left_over_items(&assignments, &saved, today_week, now, &blocks, &committed)
-                .map_err(crate::raise)?;
+        let items = clipboard::left_over_items_from(
+            &assignments,
+            &saved,
+            today_week,
+            now,
+            &blocks,
+            &committed,
+            &first_part,
+        )
+        .map_err(crate::raise)?;
         Ok(dump(&Value::Array(items)))
     })
 }
