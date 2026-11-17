@@ -832,6 +832,29 @@ def test_plan_is_on_when_minutes_no_session_holds_are_enough_to_place(qapp, wind
     assert _qml(root, "planHomework").property("enabled") is True
 
 
+def test_pressing_plan_with_only_minutes_no_session_holds_places_them(qapp, window) -> None:
+    """Essay 60, session cut to 5 and pinned, saved: 55 minutes have no session, no card is listed and the
+    button is on. Pressing it must place a new essay session: 45 of the 55 are whole quarter hours, so
+    the essay then holds a second session of 45 minutes (it did nothing)."""
+    root = _reset(window, qapp)
+    session = window.session
+    _cut(window, qapp, "essay", 5)
+    wait_until(qapp, lambda: session.assignments["essay"].get("unplanned_min") == 55)
+    _pump(qapp)
+    assert _qml(root, "planHomework").property("enabled") is True
+
+    _bridge(window).week.plan()
+    wait_until(
+        qapp,
+        lambda: sorted(
+            b["duration_min"] for b in session.blocks if b.get("assignment_id") == "essay"
+        )
+        == [5, 45]
+        and not session.busy,
+        what=lambda: repr(_snack(window)) + repr(session.message),
+    )
+
+
 def test_plan_is_off_when_nothing_is_left_to_place(qapp, window) -> None:
     """Essay 60 with its 60 minute session saved and read: every minute has a time."""
     root = _reset(window, qapp)

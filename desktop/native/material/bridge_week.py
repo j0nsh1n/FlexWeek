@@ -416,7 +416,7 @@ class WeekBridge(QObject):
     @Slot()
     def plan(self) -> None:
         """Plan my homework: the window's own call, so Widgets and Material plan the same way."""
-        if not self._homework_rows:
+        if not self._can_plan:
             return
         self._said_plan = time.monotonic()
         self._window._plan_with_left_over()  # type: ignore[attr-defined]
