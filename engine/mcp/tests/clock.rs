@@ -326,3 +326,68 @@ fn now_is_still_a_fixed_clock_whatever_the_test_file_says() {
         "--now holds the time, got {today}"
     );
 }
+
+/// Homework due Monday 2 November (60 minutes) whose only session is Wednesday 21 October, 15:00,
+/// two weeks before the day the helper is asked about.
+fn seed_far_off_session(world: &World) {
+    let conn = open_connection(Path::new(&world.database_arg)).expect("open");
+    let essay = json!({
+        "id": "essay", "title": "Essay", "due": "2026-11-02T18:00", "estimate_min": 60,
+        "focus_minutes": 0, "completed": false, "category": "homework"
+    });
+    flexweek_store::insert_assignment(&conn, world.user, "essay", &essay.to_string())
+        .expect("assignment");
+    let session = json!({
+        "id": "s1", "title": "Essay", "kind": "flexible", "assignment_id": "essay",
+        "start": "15:00", "duration_min": 60, "days": [2], "category": "study"
+    });
+    conn.execute(
+        "INSERT INTO weeks(user_id, week_start, blocks, revision) VALUES (?1, ?2, ?3, 1)",
+        (world.user, WEEK, json!([session]).to_string()),
+    )
+    .expect("week");
+    if !conn.is_autocommit() {
+        conn.execute_batch("COMMIT").expect("commit");
+    }
+}
+
+/// What the day and month tools say is still unplanned for the essay, read at `clock`.
+fn unplanned_at(name: &str, clock: &str) -> (i64, i64) {
+    let world = signed_in(name, NOW_UNIX);
+    seed_far_off_session(&world);
+    let mut server = boot_live(&world, clock);
+    let day = body_of(&server.call("get_today", json!({ "date": "2026-11-02" }), 2));
+    let month = body_of(&server.call("get_month", json!({ "month": "2026-11" }), 3));
+    (
+        day["due_soon"][0]["unplanned_min"].as_i64().unwrap_or(-1),
+        month["deadlines"][0]["unplanned_min"]
+            .as_i64()
+            .unwrap_or(-1),
+    )
+}
+
+#[test]
+fn a_session_ahead_of_the_helpers_clock_in_an_earlier_week_holds_its_time_on_day_and_month() {
+    let (day, month) = unplanned_at("clock-ahead", "2026-10-19T00:00:00Z");
+    assert_eq!(
+        day, 0,
+        "get_today counts the session still ahead as planned"
+    );
+    assert_eq!(
+        month, 0,
+        "get_month counts the session still ahead as planned"
+    );
+}
+
+#[test]
+fn a_session_that_passed_unfinished_is_still_needed_on_day_and_month() {
+    let (day, month) = unplanned_at("clock-passed", "2026-10-22T09:00:00Z");
+    assert_eq!(
+        day, 60,
+        "get_today counts the passed session as still needed"
+    );
+    assert_eq!(
+        month, 60,
+        "get_month counts the passed session as still needed"
+    );
+}
