@@ -2396,6 +2396,7 @@ class NativeWindow(QMainWindow):
             # A new day or a session that has just passed: the header's today mark and the rail's
             # "Everything has a time" line change without any click.
             self._fill_classic()
+            self.solve_button.set_count(len(self.session.homework_time_needed()))
         shown = self.planner.currentWidget()
         if isinstance(shown, LayoutView) and self.session.account is not None:
             shown.show_week(self._scene_for(shown.layout_id))
