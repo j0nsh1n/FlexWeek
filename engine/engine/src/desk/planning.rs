@@ -730,14 +730,10 @@ pub fn open_rest_sessions_at(
                         .and_then(Value::as_bool)
                         .unwrap_or(false)
             });
-        // With the clock in this week every earlier week's session is over, so a pinned one there that was
-        // not finished holds nothing and leaves its minutes for a new session here.
-        let clock_here = now.filter(|value| !value.is_null()).is_some();
         let already_placed_earlier = earlier_blocks.iter().any(|block| {
             block.get("assignment_id").and_then(Value::as_str) == Some(id)
                 && truthy(block.get("start"))
                 && !truthy(block.get("completed"))
-                && !(clock_here && truthy(block.get("pinned")))
         });
         if has_open || already_placed_earlier {
             continue;
