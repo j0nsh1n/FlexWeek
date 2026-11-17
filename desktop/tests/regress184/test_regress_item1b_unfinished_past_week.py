@@ -23,6 +23,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QLabel, QPushButton
 
+from backend.tests.fake_clock import CLOCK
 from desktop.native.window import NONE_UNFINISHED
 from desktop.tests.grid_support import (  # noqa: F401
     qapp,
@@ -56,6 +57,7 @@ def left_in_week_one(qapp, window) -> tuple[str, str]:
     settled(qapp, window)
     monday_7 = datetime.fromisoformat(week2) + timedelta(hours=7)
     session.now_ms = lambda: int(monday_7.timestamp() * 1000)
+    CLOCK.set(monday_7)
     session.load_week(week2)
     wait_until(qapp, lambda: session.week_start == week2 and not session.busy)
     settled(qapp, window)
