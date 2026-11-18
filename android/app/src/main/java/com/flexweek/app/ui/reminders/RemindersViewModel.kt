@@ -21,6 +21,8 @@ data class RemindersUiState(
     val deviceName: String = "Joo's laptop",
     val pairedAt: String = "8 Oct",
     val reachable: Boolean = true,
+    val paired: Boolean = true,
+    val lastSync: String = "",
     val syncing: Boolean = false,
     val problem: String? = null,
 )
@@ -31,6 +33,8 @@ private data class ReminderSettings(
     val deviceName: String,
     val pairedAt: String,
     val reachable: Boolean,
+    val paired: Boolean,
+    val lastSync: String,
 )
 
 interface ReminderPrefs {
@@ -74,6 +78,8 @@ class RemindersViewModel(
                     deviceName = refreshed.deviceName,
                     pairedAt = refreshed.pairedAt,
                     reachable = refreshed.reachable,
+                    paired = refreshed.paired,
+                    lastSync = refreshed.lastSync,
                 )
             }
             return
@@ -89,6 +95,8 @@ class RemindersViewModel(
             deviceName = settings.getString("device_name"),
             pairedAt = settings.getString("paired_at"),
             reachable = settings.getBoolean("reachable"),
+            paired = settings.optBoolean("paired", true),
+            lastSync = settings.optString("last_sync", ""),
         )
     }
 
@@ -99,6 +107,8 @@ class RemindersViewModel(
             deviceName = refreshed.deviceName,
             pairedAt = refreshed.pairedAt,
             reachable = refreshed.reachable,
+            paired = refreshed.paired,
+            lastSync = refreshed.lastSync,
         )
     }
 

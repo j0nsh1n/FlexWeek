@@ -103,6 +103,24 @@ internal object RustPhoneJson {
         return root.toString()
     }
 
+    /**
+     * Settings' view of the computer, built from the same sync answer as the top line so the two cannot
+     * disagree: "paired" is the answer's own flag, not a guess from the name or the date.
+     */
+    fun phoneSettings(settingsRaw: String, syncRaw: String, exactReminders: Boolean, zone: ZoneId = ZoneId.systemDefault()): String {
+        val settings = JSONObject(settingsRaw)
+        val sync = JSONObject(syncRaw)
+        val lastSync = if (sync.isNull("last_sync_ms") || !sync.has("last_sync_ms")) ""
+        else Instant.ofEpochMilli(sync.getLong("last_sync_ms")).atZone(zone).format(timeFormat)
+        return settings.put("lead_minutes", settings.getInt("reminder_lead_min"))
+            .put("exact_reminders", exactReminders)
+            .put("device_name", sync.optString("peer_name", "Your computer"))
+            .put("paired_at", pairedDate(sync.optString("paired_at", ""), zone))
+            .put("paired", sync.optBoolean("paired"))
+            .put("last_sync", lastSync)
+            .put("reachable", sync.optString("state") != "unreachable").toString()
+    }
+
     fun pairedDate(raw: String, zone: ZoneId = ZoneId.systemDefault()): String {
         val milliseconds = raw.toLongOrNull() ?: return ""
         return Instant.ofEpochMilli(milliseconds).atZone(zone)

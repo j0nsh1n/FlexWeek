@@ -181,8 +181,8 @@ fun RemindersScreen(
                 modifier = Modifier.padding(top = 18.dp, bottom = 6.dp),
             )
             SettingRow(
-                title = state.deviceName,
-                subtitle = "Paired ${state.pairedAt} · ${if (state.reachable) "on the same Wi‑Fi" else "not reachable now"}",
+                title = DeviceWords.title(state),
+                subtitle = DeviceWords.line(state),
                 trailing = {
                     TextButton(onClick = onUnpair, enabled = !state.syncing, modifier = Modifier.height(48.dp)) { Text("Unpair") }
                 },

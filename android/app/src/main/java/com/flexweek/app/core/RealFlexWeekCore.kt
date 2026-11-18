@@ -70,15 +70,8 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
         }
     }.toString()
 
-    override fun settingsForPhone(): String {
-        val settings = JSONObject(native.settingsForPhone())
-        val sync = JSONObject(syncStatus())
-        return settings.put("lead_minutes", settings.getInt("reminder_lead_min"))
-            .put("exact_reminders", localSettings.getBoolean("exact-reminders", false))
-            .put("device_name", sync.optString("peer_name", "Your computer"))
-            .put("paired_at", RustPhoneJson.pairedDate(sync.optString("paired_at", "")))
-            .put("reachable", sync.optString("state") != "unreachable").toString()
-    }
+    override fun settingsForPhone(): String =
+        RustPhoneJson.phoneSettings(native.settingsForPhone(), syncStatus(), localSettings.getBoolean("exact-reminders", false))
 
     override fun setLeadMinutes(minutes: Int) = native.setReminderLead(minutes.toLong())
     override fun setExactReminders(on: Boolean) {
