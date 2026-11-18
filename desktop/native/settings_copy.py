@@ -214,7 +214,8 @@ def recovery_status(remaining: int | None) -> str:
 def restore_parts(point: dict) -> tuple[str, str]:
     """A restore point as its name and, apart, when it was made and how many weeks it holds."""
     weeks = point.get("weeks_count", point.get("week_count", point.get("weeks", 0)))
-    return str(point.get("label")), f"{point.get('created_at') or ''} · {weeks} weeks"
+    unit = "week" if weeks == 1 else "weeks"
+    return str(point.get("label")), f"{point.get('created_at') or ''} · {weeks} {unit}"
 
 
 def restore_row(point: dict) -> str:
