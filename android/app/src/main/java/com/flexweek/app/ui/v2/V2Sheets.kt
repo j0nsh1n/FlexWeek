@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,7 +50,7 @@ fun SheetScrim(onDismiss: () -> Unit, content: @Composable () -> Unit) {
                 .background(Color.Black.copy(alpha = 0.35f))
                 .clickable(onClick = onDismiss),
         )
-        Column(Modifier.align(Alignment.BottomCenter)) {
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
             content()
         }
     }
@@ -61,8 +63,8 @@ fun PlanRecordSheet(
     onAccept: () -> Unit,
 ) {
     SheetScrim(onUndo) {
-        Surface(shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)) {
-            Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
+        Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+            Column(Modifier.padding(24.dp).verticalScroll(rememberScrollState())) {
                 Text("Planned just now", style = MaterialTheme.typography.titleLarge)
                 Text(record.summary, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
                 record.lines.forEach { line ->
@@ -79,10 +81,9 @@ fun PlanRecordSheet(
                         }
                     }
                 }
-                Row(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                    TextButton(onClick = onUndo, modifier = Modifier.height(48.dp)) { Text("Undo") }
-                    Box(Modifier.weight(1f))
-                    Button(onClick = onAccept, modifier = Modifier.height(48.dp)) { Text("Accept") }
+                Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onUndo, modifier = Modifier.heightIn(min = 48.dp)) { Text("Undo") }
+                    Button(onClick = onAccept, modifier = Modifier.heightIn(min = 48.dp)) { Text("Accept") }
                 }
             }
         }
@@ -101,8 +102,8 @@ fun RunningLateSheet(
     onAccept: () -> Unit,
 ) {
     SheetScrim(onCancel) {
-        Surface(shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)) {
-            Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
+        Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+            Column(Modifier.padding(24.dp).verticalScroll(rememberScrollState())) {
                 if (preview != null) {
                     Text("${preview.current.title} is running late", style = MaterialTheme.typography.titleLarge)
                     Text("Now ends at ${lateClockLabel(preview.current.end)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -141,10 +142,9 @@ fun RunningLateSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 8.dp),
                 )
-                Row(Modifier.fillMaxWidth()) {
-                    TextButton(onClick = onCancel, modifier = Modifier.height(48.dp)) { Text("Cancel") }
-                    Box(Modifier.weight(1f))
-                    Button(onClick = onAccept, enabled = preview != null, modifier = Modifier.height(48.dp)) { Text("Move it") }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onCancel, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") }
+                    Button(onClick = onAccept, enabled = preview != null, modifier = Modifier.heightIn(min = 48.dp)) { Text("Move it") }
                 }
             }
         }
@@ -152,28 +152,3 @@ fun RunningLateSheet(
 }
 
 private fun lateClockLabel(value: String): String = runCatching { TimeLabel.short(value) }.getOrDefault(value)
-
-@Composable
-private fun ChipRow(options: List<String>, selected: String, onPick: (String) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        options.forEach { opt ->
-            val on = opt == selected || (opt.startsWith("FlexWeek") && selected == "pick") ||
-                (opt.startsWith("I'll") && selected == "at") ||
-                (opt.startsWith("In one") && selected == "one") ||
-                (opt.startsWith("Spread") && selected == "spread")
-            TextButton(
-                onClick = { onPick(opt) },
-                modifier =
-                    Modifier
-                        .heightIn(min = 44.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface),
-            ) {
-                Text(
-                    opt,
-                    color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                )
-            }
-        }
-    }
-}

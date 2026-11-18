@@ -21,6 +21,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.Button
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -485,10 +490,16 @@ private fun FlexWeekRoot(
                     PlanRecordSheet(record, onUndo = planVm::undo, onAccept = planVm::accept)
                 } ?: planVm.error?.let { err ->
                     SheetScrim({ sheet = ActiveSheet.None }) {
-                        Surface(shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)) {
-                            Column(Modifier.padding(16.dp)) {
+                        Surface(
+                            Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        ) {
+                            Column(Modifier.navigationBarsPadding().padding(24.dp)) {
                                 Text(err, color = MaterialTheme.colorScheme.error)
-                                TextButton(onClick = { sheet = ActiveSheet.None }) { Text("Close") }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                    Button(onClick = { sheet = ActiveSheet.None }) { Text("Close") }
+                                }
                             }
                         }
                     }

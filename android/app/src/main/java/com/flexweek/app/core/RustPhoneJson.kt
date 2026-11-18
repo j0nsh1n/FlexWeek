@@ -178,7 +178,8 @@ internal object RustPhoneJson {
             val block = placed.getJSONObject(i)
             val day = block.getJSONArray("days").getInt(0)
             lines.put(JSONObject().put("title", block.getString("title"))
-                .put("detail", "${block.optString("start")} · ${block.optInt("duration_min")} min")
+                // The time is on the right already; saying it again here (as "16:00") showed it twice.
+                .put("detail", length(block.optLong("duration_min")))
                 .put("right", TimeLabel.dayAndTime(day, block.getString("start"))))
         }
         for (i in 0 until waiting.length()) {

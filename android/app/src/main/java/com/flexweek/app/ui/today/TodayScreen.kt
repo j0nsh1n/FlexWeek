@@ -197,7 +197,7 @@ fun TodayScreen(
                 onDismissRequest = onKeepFocus,
                 title = { Text(FocusSheetText.replaceTitle) },
                 text = { Text(FocusJson.replaceText(current, incoming)) },
-                confirmButton = { TextButton(onClick = onKeepFocus) { Text(FocusSheetText.keepCurrent) } },
+                confirmButton = { Button(onClick = onKeepFocus) { Text(FocusSheetText.keepCurrent) } },
                 dismissButton = { TextButton(onClick = onReplaceFocus) { Text(FocusSheetText.replace) } },
             )
         }
@@ -206,7 +206,7 @@ fun TodayScreen(
                 onDismissRequest = onKeepGoing,
                 title = { Text(FocusSheetText.finishTitle) },
                 text = { Text(FocusJson.finishText(focus.elapsedMin(nowMs), focus.title)) },
-                confirmButton = { TextButton(onClick = onKeepGoing) { Text(FocusSheetText.keepGoing) } },
+                confirmButton = { Button(onClick = onKeepGoing) { Text(FocusSheetText.keepGoing) } },
                 dismissButton = { TextButton(onClick = onEndSession) { Text(FocusSheetText.endSession) } },
             )
         }

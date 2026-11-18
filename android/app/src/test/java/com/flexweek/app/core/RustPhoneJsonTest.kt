@@ -93,6 +93,13 @@ class RustPhoneJsonTest {
         assertEquals("Mon 4 PM", result.lines.first().right)
     }
 
+    @Test fun planPlacedLineSaysTheTimeOnceAndTheLengthApart() {
+        val raw = File("src/test/resources/phone/plan-open-thursday.json").readText()
+        val line = V2Json.parsePlanRecord(RustPhoneJson.plan(raw)).lines.first()
+        assertEquals("1 h", line.detail)
+        assertEquals("the time is only on the right", false, (line.detail + line.title).contains("16:00"))
+    }
+
     @Test fun planNotPlacedLineCarriesTheRealReason() {
         val raw = File("src/test/resources/phone/plan-not-placed.json").readText()
         val preview = JSONObject(raw)
