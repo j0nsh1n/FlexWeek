@@ -253,7 +253,9 @@ stay in place.
   changed copy of it, as All weeks does in the app.
 - Homework you add or edit with "spread over days" now works as the Spread over
   days choice in the app: it is cut into sessions of an hour (or what is left) on
-  different days up to the due date, and Plan places each one on its day.
+  different days up to the due date, and Plan places each one on its day. As in
+  the app, homework under 60 minutes, or already in two or more sessions this
+  week, is saved as In one go and keeps its times.
 
 ### Fixes
 - With the week starting on Sunday, Month showed nothing on a date of its first row
