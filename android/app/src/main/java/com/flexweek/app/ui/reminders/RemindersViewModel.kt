@@ -39,35 +39,57 @@ private data class ReminderSettings(
 )
 
 interface ReminderPrefs {
-    var permissionBannerDismissed: Boolean
+    /** When the student last chose "Not now" (epoch ms), 0 for never. */
+    var permissionBannerDismissedAt: Long
+    var notificationAsked: Boolean
 }
 
 class SharedPreferenceReminderPrefs(context: Context) : ReminderPrefs {
     private val prefs = context.getSharedPreferences("flexweek_reminders", Context.MODE_PRIVATE)
 
-    override var permissionBannerDismissed: Boolean
-        get() = prefs.getBoolean("permission_banner_dismissed", false)
-        set(value) { prefs.edit().putBoolean("permission_banner_dismissed", value).apply() }
+    override var permissionBannerDismissedAt: Long
+        get() = prefs.getLong("permission_banner_dismissed_at", 0L)
+        set(value) { prefs.edit().putLong("permission_banner_dismissed_at", value).apply() }
+    override var notificationAsked: Boolean
+        get() = prefs.getBoolean("notification_asked", false)
+        set(value) { prefs.edit().putBoolean("notification_asked", value).apply() }
 }
 
 class InMemoryReminderPrefs : ReminderPrefs {
-    override var permissionBannerDismissed: Boolean = false
+    override var permissionBannerDismissedAt: Long = 0L
+    override var notificationAsked: Boolean = false
 }
 
 class RemindersViewModel(
     private val core: FlexWeekCore,
     private val prefs: ReminderPrefs = InMemoryReminderPrefs(),
     private val workerDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val permissions: SystemPermissions = UnknownPermissions,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
     constructor(core: FlexWeekCore, workerDispatcher: CoroutineDispatcher) :
         this(core, InMemoryReminderPrefs(), workerDispatcher)
 
-    var state by mutableStateOf(RemindersUiState(showPermissionBanner = !prefs.permissionBannerDismissed))
+    var state by mutableStateOf(RemindersUiState(showPermissionBanner = bannerShown()))
         private set
 
     init {
         reload()
     }
+
+    private fun bannerShown() =
+        PermissionBanner.show(permissions.notificationsAllowed(), prefs.permissionBannerDismissedAt, clock())
+
+    /** Asks Android again (on return from a system screen): the banner and the exact switch follow the answer. */
+    fun refreshPermissions() {
+        state = state.copy(showPermissionBanner = bannerShown())
+        reload()
+    }
+
+    val notificationAsked: Boolean
+        get() = prefs.notificationAsked
+
+    fun markNotificationAsked() { prefs.notificationAsked = true }
 
     fun reload() {
         if (core !is com.flexweek.app.core.FakeFlexWeekCore) {
@@ -92,7 +114,7 @@ class RemindersViewModel(
         val settings = JSONObject(core.settingsForPhone())
         return ReminderSettings(
             leadMinutes = settings.getInt("lead_minutes"),
-            exactReminders = settings.getBoolean("exact_reminders"),
+            exactReminders = settings.getBoolean("exact_reminders") && permissions.canScheduleExact(),
             deviceName = settings.getString("device_name"),
             pairedAt = settings.getString("paired_at"),
             reachable = settings.getBoolean("reachable"),
@@ -130,7 +152,7 @@ class RemindersViewModel(
 
     fun toggleExact(onRequestExactSetting: () -> Unit = {}) {
         val next = !state.exactReminders
-        if (next) {
+        if (next && !permissions.canScheduleExact()) {
             onRequestExactSetting()
         }
         if (core !is com.flexweek.app.core.FakeFlexWeekCore) {
@@ -148,7 +170,7 @@ class RemindersViewModel(
     }
 
     fun showPostPairBanner() {
-        state = state.copy(showPermissionBanner = true)
+        state = state.copy(showPermissionBanner = !permissions.notificationsAllowed())
     }
 
     fun allowNotifications() {
@@ -156,7 +178,7 @@ class RemindersViewModel(
     }
 
     fun dismissPermissionBanner() {
-        prefs.permissionBannerDismissed = true
+        prefs.permissionBannerDismissedAt = clock()
         state = state.copy(showPermissionBanner = false)
     }
 

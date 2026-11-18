@@ -35,6 +35,8 @@ import com.flexweek.app.ui.pair.PairScreen
 import com.flexweek.app.ui.pair.PairViewModel
 import com.flexweek.app.ui.nav.MainTab
 import com.flexweek.app.ui.nav.MainTabs
+import com.flexweek.app.ui.reminders.AndroidPermissions
+import com.flexweek.app.ui.reminders.NotificationAsk
 import com.flexweek.app.ui.reminders.RemindersScreen
 import com.flexweek.app.ui.reminders.RemindersViewModel
 import com.flexweek.app.ui.reminders.SharedPreferenceReminderPrefs
@@ -234,7 +236,9 @@ private fun FlexWeekRoot(
         return
     }
     val todayVm = viewModel { TodayViewModel(core) }
-    val remindersVm = viewModel { RemindersViewModel(core, SharedPreferenceReminderPrefs(activity)) }
+    val remindersVm = viewModel {
+        RemindersViewModel(core, SharedPreferenceReminderPrefs(activity), permissions = AndroidPermissions(activity))
+    }
     val updateVm = viewModel { UpdateViewModel(BuildConfig.VERSION_NAME, HttpUpdateSource(), PackageUpdateInstaller(activity), SharedPreferenceUpdatePrefs(activity), activity.filesDir.resolve("updates")) }
     val updateState by updateVm.state
     DisposableEffect(updateVm) {
@@ -248,6 +252,8 @@ private fun FlexWeekRoot(
             if (event == Lifecycle.Event.ON_CREATE || event == Lifecycle.Event.ON_RESUME) {
                 updateVm.onResumed()
                 updateVm.onResumeCheck()
+                // The student may have just come back from Android's notification or alarm screen.
+                if (event == Lifecycle.Event.ON_RESUME) remindersVm.refreshPermissions()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -358,10 +364,19 @@ private fun FlexWeekRoot(
                             syncLine = syncLine,
                             state = remindersVm.state,
                             onAllowNotifications = {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                val canAskAgain = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                    activity.shouldShowRequestPermissionRationale(android.Manifest.permission.POST_NOTIFICATIONS)
+                                val ask = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                    NotificationAsk.next(remindersVm.notificationAsked, canAskAgain) == NotificationAsk.Step.Ask
+                                if (ask) {
+                                    remindersVm.markNotificationAsked()
                                     notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                                 } else {
-                                    remindersVm.allowNotifications()
+                                    // Android will not show its question again: its own notification switch is the way.
+                                    activity.startActivity(
+                                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                            .putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName),
+                                    )
                                 }
                             },
                             onDismissPermissionBanner = remindersVm::dismissPermissionBanner,
@@ -371,7 +386,9 @@ private fun FlexWeekRoot(
                             onToggleExact = {
                                 remindersVm.toggleExact {
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                        activity.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
+                                        activity.startActivity(
+                                            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, android.net.Uri.parse("package:${activity.packageName}")),
+                                        )
                                     }
                                 }
                             },
