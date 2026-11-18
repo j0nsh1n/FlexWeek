@@ -12,7 +12,6 @@ import java.security.SecureRandom
 import java.time.LocalDate
 import java.time.LocalDateTime
 import com.flexweek.app.model.DueDate
-import java.util.concurrent.ConcurrentHashMap
 
 private const val UNREADABLE = "FlexWeek could not read its own answer. Nothing was changed."
 
@@ -22,8 +21,7 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
     private val localSettings = context.getSharedPreferences("phone-settings", Context.MODE_PRIVATE)
     private lateinit var native: FlexWeek
     private var selected: String? = null
-    private data class Completion(val assignment: String?, val week: String, val day: Int)
-    private val completions = ConcurrentHashMap<String, Completion>()
+    private val ticks = RowTicks { week, id, day, done, opId -> native.setBlockDone(week, id, day.toLong(), done, opId) }
     private val host = object : Host {
         private val random = SecureRandom()
         override fun nowUnixMs(): Long = System.currentTimeMillis()
@@ -56,26 +54,14 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
 
     override fun today(date: String, nowMinute: Int): String {
         val raw = native.today(date, nowMinute.toLong())
-        val root = JSONObject(raw)
-        val rows = root.getJSONArray("rows")
-        for (i in 0 until rows.length()) {
-            val row = rows.getJSONObject(i)
-            completions[row.getString("id")] = Completion(
-                if (row.isNull("assignment_id")) null else row.getString("assignment_id"),
-                root.getString("week_start"), root.getInt("day"),
-            )
-        }
+        ticks.remember(raw)
         return RustPhoneJson.today(raw, currentDate(), syncStatus())
     }
 
     override fun setBlockDone(weekStart: String, blockId: String, dayIndex: Int, done: Boolean, opId: String) =
         native.setBlockDone(weekStart, blockId, dayIndex.toLong(), done, opId)
 
-    override fun setHomeworkDone(id: String, done: Boolean, opId: String) {
-        val target = completions[id] ?: error("Homework row is no longer available. Open the day again.")
-        if (target.assignment != null) native.setHomeworkDone(target.assignment, done, opId)
-        else native.setBlockDone(target.week, id, target.day.toLong(), done, opId)
-    }
+    override fun setHomeworkDone(id: String, done: Boolean, opId: String) = ticks.mark(id, done, opId)
 
     override fun upcomingReminders(fromLocal: String, hours: Int): String = JSONArray().also { items ->
         native.upcomingReminders(fromLocal.take(19), hours.toUInt()).forEach { reminder ->
