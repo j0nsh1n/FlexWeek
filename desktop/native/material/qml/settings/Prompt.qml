@@ -136,12 +136,35 @@ FocusScope {
                 wrapMode: Text.WordWrap
             }
             Item {
+                id: footer
+                objectName: "promptFooter"
                 width: parent.width
-                height: actions.implicitHeight
-                Row {
+                height: actions.height
+                // One row while the buttons fit; when they do not, one column, right-aligned, Cancel on
+                // top and the main choice at the bottom.
+                property bool stacked: false
+                function fit() {
+                    var total = 0
+                    var count = 0
+                    for (var i = 0; i < actions.children.length; i++) {
+                        var kid = actions.children[i]
+                        var wide = kid.implicitWidth > 0 ? kid.implicitWidth : kid.width
+                        if (!kid.visible || !(wide > 0))
+                            continue
+                        total += wide
+                        count++
+                    }
+                    footer.stacked = count > 0 && total + 8 * (count - 1) > footer.width
+                }
+                onWidthChanged: Qt.callLater(fit)
+                Component.onCompleted: Qt.callLater(fit)
+                Grid {
                     id: actions
-                    anchors.right: parent.right
+                    x: footer.width - width
+                    columns: footer.stacked ? 1 : 100
+                    horizontalItemAlignment: Grid.AlignRight
                     spacing: 8
+                    onChildrenChanged: Qt.callLater(footer.fit)
                     Repeater {
                         model: root.buttons
                         delegate: Button {

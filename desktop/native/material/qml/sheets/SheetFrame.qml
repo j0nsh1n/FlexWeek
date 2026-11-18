@@ -17,6 +17,8 @@ FocusScope {
     default property alias content: body.data
     property alias leading: leadingRow.data
     property alias trailing: trailingRow.data
+    // True when the footer's buttons do not fit side by side; they then stack, one per line.
+    property bool stacked: false
     signal closeRequested()
 
     anchors.fill: parent
@@ -161,13 +163,51 @@ FocusScope {
         }
         Item {
             id: footer
+            objectName: "sheetFooter"
             x: root.margin
             width: card.width - 2 * root.margin
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 24
-            height: 40
-            Row { id: leadingRow; anchors.left: parent.left; spacing: 8 }
-            Row { id: trailingRow; anchors.right: parent.right; spacing: 8 }
+            height: root.stacked ? trailingRow.y + trailingRow.height : 40
+            function natural(grid) {
+                var total = 0
+                var count = 0
+                for (var i = 0; i < grid.children.length; i++) {
+                    var kid = grid.children[i]
+                    var wide = kid.implicitWidth > 0 ? kid.implicitWidth : kid.width
+                    if (!kid.visible || !(wide > 0))
+                        continue
+                    total += wide
+                    count++
+                }
+                return count > 0 ? total + 8 * (count - 1) : 0
+            }
+            function fit() {
+                var lead = natural(leadingRow)
+                var trail = natural(trailingRow)
+                root.stacked = lead + trail + (lead > 0 && trail > 0 ? 8 : 0) > footer.width
+            }
+            onWidthChanged: Qt.callLater(fit)
+            Component.onCompleted: Qt.callLater(fit)
+            // One row while the buttons fit. When they do not, one column, right-aligned, in the order
+            // they are written: Cancel on top and the main choice at the bottom.
+            Grid {
+                id: leadingRow
+                x: root.stacked ? footer.width - width : 0
+                columns: root.stacked ? 1 : 100
+                horizontalItemAlignment: Grid.AlignRight
+                spacing: 8
+                onChildrenChanged: Qt.callLater(footer.fit)
+            }
+            Grid {
+                id: trailingRow
+                x: footer.width - width
+                y: root.stacked && leadingRow.height > 0 ? leadingRow.height + 8 : 0
+                columns: root.stacked ? 1 : 100
+                horizontalItemAlignment: Grid.AlignRight
+                spacing: 8
+                onChildrenChanged: Qt.callLater(footer.fit)
+            }
         }
     }
 
