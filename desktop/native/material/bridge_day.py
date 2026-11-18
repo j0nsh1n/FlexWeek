@@ -9,7 +9,7 @@ from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from desktop.native.calendar import monday_of
 from desktop.native.focus import remaining_ms
-from desktop.native.hours.zoom import OPENS, opening_minute
+from desktop.native.hours.scale import OPENS, opening_minute
 from desktop.native.material.bridge_rows import Rows
 from desktop.native.material.bridge_week import BLOCK_ROLES, occurrence_row, overlapped
 from desktop.native.material.day_board import (

@@ -19,7 +19,7 @@ from typing import Any, Protocol, cast
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from desktop.native.fields import week_start_day, week_start_notice
-from desktop.native.hours.zoom import Scale
+from desktop.native.hours.scale import Scale
 from desktop.native.material.bridge_account import AccountBridge
 from desktop.native.material.bridge_day import DayBridge
 from desktop.native.material.bridge_focus import FocusBridge
