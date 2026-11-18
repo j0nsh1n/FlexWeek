@@ -15,16 +15,26 @@ SheetFrame {
     Row {
         width: parent.width
         spacing: 14
-        Image {
-            objectName: "aboutLogo"
+        // The logo is a picture on its own light ground. A rounded tile of that ground, with the logo inset so
+        // its square corners sit inside the tile's curve, keeps a white square from showing in dark.
+        Rectangle {
+            objectName: "aboutLogoTile"
             width: 56
             height: 56
-            sourceSize.width: 112
-            sourceSize.height: 112
-            fillMode: Image.PreserveAspectFit
-            smooth: true
-            source: root.f.logo ? root.f.logo : ""
-            Accessible.ignored: true
+            radius: 14
+            color: "#f0f1f0"
+            Image {
+                objectName: "aboutLogo"
+                anchors.centerIn: parent
+                width: 44
+                height: 44
+                sourceSize.width: 88
+                sourceSize.height: 88
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                source: root.f.logo ? root.f.logo : ""
+                Accessible.ignored: true
+            }
         }
         Text {
             objectName: "aboutVersion"

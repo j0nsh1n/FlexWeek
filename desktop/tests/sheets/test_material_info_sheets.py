@@ -491,3 +491,17 @@ def test_sign_out_on_the_widgets_looks_still_asks_with_the_widgets_question(
     monkeypatch.setattr("desktop.native.window.confirm", lambda *args, **kwargs: asked.append(args) or False)
     window._log_out()
     assert len(asked) == 1 and asked[0][1] == "Sign out"
+
+
+def test_the_about_logo_sits_on_a_rounded_tile_so_no_white_square_shows_in_dark(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root, _quick = _material(qapp, window)
+    _sheets(window).openAbout()
+    pump(qapp, 40)
+    tile = named(root, "aboutLogoTile")[0]
+    logo = named(root, "aboutLogo")[0]
+    assert float(tile.property("radius")) >= 12
+    # The logo's square corner must lie inside the tile's curve: its inset is at least r * (1 - 1/sqrt 2).
+    inset = (float(tile.property("width")) - float(logo.property("width"))) / 2
+    assert inset >= float(tile.property("radius")) * 0.2929
