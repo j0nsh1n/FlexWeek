@@ -27,6 +27,12 @@ class WidgetPaletteTest {
         }
     }
 
+    @Test fun everyCategoryNameTheAppColoursGreenIsGreenOnTheWidgetToo() {
+        for (name in listOf("sports", "sport", "activity", "activities")) {
+            assertEquals(name, 0xFF2F7D55.toInt(), WidgetPalette.categoryArgb(name, dark = false))
+        }
+    }
+
     @Test fun theRealCoresHomeworkCategoryGetsTheHomeworkColour() {
         assertEquals(WidgetPalette.categoryArgb("hw", dark = false), WidgetPalette.categoryArgb("homework", dark = false))
     }
