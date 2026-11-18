@@ -107,15 +107,23 @@ from desktop.native.motion import switch_page
 from desktop.native.previews import CANVAS
 from desktop.native.remind import ALARM_SNOOZE_MIN, reminder_lead_min
 from desktop.native.settings_copy import (
+    ABOUT_HERE,
+    ABOUT_LINE,
     ALARM_NOTE,
     ALARM_TONE_LABELS,
     DRAG_STEP_CHOICES,
     DRAG_STEP_QUESTION,
+    HELP_KEYS,  # noqa: F401
+    HELP_PLANNING,
+    HELP_SCREENS,
     PLANNING_STYLES,
     SPORT_FALLBACK,  # noqa: F401
     SPOTIFY_LINK_HINT,
     SPOTIFY_TONE_NOTE,  # noqa: F401
     SPOTIFY_TONE_REST,
+    first_lines,
+    help_keys,
+    keys_words,
     ring_days,
 )
 from desktop.native.sound import Bell
@@ -231,60 +239,10 @@ TODAYS_APP_KNOBS = ("surface", "corners", "blocks")
 FINE_TUNE_LOOK = "Show shape, spacing and type"
 OWN_LOOK = "Your own look"
 SECTION_GAP = 14
-ABOUT_LINE = "FlexWeek plans your homework around school, sports and everything else in your week."
-ABOUT_HERE = "Your week is saved on this computer, under this account."
 LOGO = Path(__file__).resolve().parents[1] / "assets" / "logo.png"
 ABOUT_LOGO_PX = 56
 # How far the words fade out at a scroll edge with more past it.
 FADE_PX = 24
-HELP_SCREENS = (
-    ("Day", "One day hour by hour, with homework that isn't placed yet beside it, ready to drag in."),
-    (
-        "Week",
-        "Seven days from the day your week starts on: drag a block to move it, or drag across empty time "
-        "to add one.",
-    ),
-    ("Month", "Each date's blocks and the homework due that day; click a date to open it in Day."),
-    ("My day", "What is on now and what comes next, to follow once your plan is made."),
-)
-HELP_PLANNING = (
-    "Add homework with its due date and length. Press Plan my homework and FlexWeek finds free time for "
-    "it in your study hours, around your fixed times, before it's due. Homework that already has a time "
-    "keeps it, unless that time has passed, the work isn't finished and you didn't pin it. Replan all "
-    "starts fresh but keeps pinned homework. Anything that doesn't "
-    "fit stays under Not placed yet, and Details says why. From the keyboard, press Ctrl+K and type Plan."
-)
-# Each key in brackets is drawn as a keycap; the words between are drawn plain.
-# One group per Settings switch: Number keys, then Letter keys. A group whose switch is off is left out.
-HELP_NUMBER_KEYS = (("[1] to [5]", "Day, Week, Month, My day, Settings"),)
-HELP_LETTER_KEYS = (
-    ("[T]", "Go to today"),
-    ("[D] [W] [M]", "Day, Week, Month"),
-    ("[J] [K]", "Next and previous week, day or month"),
-    ("[C]", "Add homework"),
-    ("[P]", "Plan my homework"),
-    ("[Z]", "Undo"),
-    ("[F]", "Focus screen"),
-)
-# Keys that answer to neither switch.
-HELP_OTHER_KEYS = (
-    ("[B] or [Esc]", "Back from My day"),
-    ("[Ctrl]+[Shift]+[F]", "Quick focus"),
-    ("[F1]", "Help"),
-    ("[Ctrl]+[N]", "Add homework"),
-    ("[Ctrl]+[K]", "Command bar"),
-    ("[Ctrl]+[Shift]+[L]", "Week as a list"),
-    ("[Ctrl]+[Z]", "Undo"),
-    ("[Ctrl]+[Y] or [Ctrl]+[Shift]+[Z]", "Redo"),
-    ("[Ctrl]+[C] then [Ctrl]+[V]", "Copy the selected block, then paste it into the selected day"),
-    ("[Ctrl]+[D]", "Duplicate the selected block"),
-    ("[Delete]", "Delete the selected block"),
-    ("[Ctrl]+[S]", "Save now"),
-    ("[Ctrl]+[=] [-] [0]", "Zoom the hours in, out, or back to normal"),
-    ("[Ctrl] and the mouse wheel", "Zoom the hours"),
-    ("[Esc] while dragging", "Put the block back where it was"),
-)
-HELP_KEYS = HELP_NUMBER_KEYS + HELP_LETTER_KEYS + HELP_OTHER_KEYS
 NUMBER_KEYS_NOTE = "1 to 5 open Day, Week, Month, My day and Settings. Off while you type."
 LETTER_KEYS_NOTE = (
     "T goes to today, D, W and M open Day, Week and Month, J and K go to the next and previous one, C adds "
@@ -2488,43 +2446,6 @@ def _line(words: str, name: str) -> QLabel:
     return made
 
 
-# The "other" rows that are also true in Material. Its window answers none of the rest: F1, Ctrl+N,
-# Ctrl+K, B, copy, paste, duplicate and Delete do nothing there. Ctrl+Shift+L is switched off while
-# Material shows (it is the Widgets week list's key), and Esc does not put a held card back.
-_MATERIAL_OTHER_KEYS = frozenset(
-    {
-        "[Ctrl]+[Shift]+[F]",
-        "[F1]",
-        "[Ctrl]+[N]",
-        "[Ctrl]+[Z]",
-        "[Ctrl]+[Y] or [Ctrl]+[Shift]+[Z]",
-        "[Ctrl]+[C] then [Ctrl]+[V]",
-        "[Ctrl]+[D]",
-        "[Delete]",
-        "[Ctrl]+[S]",
-        "[Ctrl]+[=] [-] [0]",
-        "[Ctrl] and the mouse wheel",
-    }
-)
-
-
-def help_keys(numbers: bool, letters: bool, *, material: bool = False) -> tuple[tuple[str, str], ...]:
-    """Help's keys as the look answers to them: 1 to 5 only while Number keys is on, the letters only while
-    Letter keys is on, and of the rest only the rows that work in that look."""
-    rows: list[tuple[str, str]] = []
-    if numbers:
-        rows += HELP_NUMBER_KEYS
-    if letters:
-        rows += HELP_LETTER_KEYS
-    rows += (row for row in HELP_OTHER_KEYS if not material or row[0] in _MATERIAL_OTHER_KEYS)
-    return tuple(rows)
-
-
-def keys_words(marked: str) -> str:
-    """A shortcut as it is said: its keys without their brackets."""
-    return marked.replace("[", "").replace("]", "")
-
-
 def keycaps(marked: str) -> QWidget:
     """A shortcut drawn as keys: each key in brackets a keycap, the words between them plain."""
     row = QWidget()
@@ -2723,7 +2644,7 @@ class UpdateDialog(QDialog):
         detail.setObjectName("updateDetail")
         detail.setWordWrap(True)
         layout.addWidget(detail)
-        notes = _first_lines(update.get("notes") or "")
+        notes = first_lines(update.get("notes") or "")
         if notes:
             body = QLabel(notes)
             body.setObjectName("updateNotes")
@@ -2774,22 +2695,3 @@ class UpdateDialog(QDialog):
         self.install.setEnabled(True)
         self.status.setText(why)
 
-
-def _first_lines(notes: str, limit: int = 6) -> str:
-    """The top of the release notes, which is where what changed is written.
-
-    GitHub release bodies are Markdown, and a QLabel shows it raw, so the few markers that actually
-    appear in these notes are turned into something readable rather than left as "## What changed".
-    """
-    kept: list[str] = []
-    for raw in notes.splitlines():
-        line = raw.strip()
-        if not line or set(line) <= {"-", "="} and len(line) > 2:
-            continue
-        line = line.lstrip("#").strip()
-        if line.startswith(("- ", "* ")):
-            line = "•  " + line[2:]
-        kept.append(line.replace("**", ""))
-        if len(kept) == limit:
-            break
-    return "\n".join(kept)
