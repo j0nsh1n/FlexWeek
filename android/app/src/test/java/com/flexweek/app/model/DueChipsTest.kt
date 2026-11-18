@@ -26,8 +26,17 @@ class DueChipsTest {
     @Test fun noTwoChipsShareADate() {
         // On a Thursday tomorrow is the next Friday; on a Sunday it is the next Monday.
         for (day in listOf("2026-10-15", "2026-10-18")) {
-            val dates = DueChips.forToday(LocalDate.parse(day)).filter { it.label != "Pick a day" }.map { it.date }
+            val dates = DueChips.forToday(LocalDate.parse(day)).map { it.date }
             assertEquals("chips on $day: $dates", dates.distinct(), dates)
+        }
+    }
+
+    @Test fun thursdayAndSundayShowNoSecondPickADayChip() {
+        // The real "Pick a day" button sits below the chips; a chip of that name silently set the due date to Monday.
+        for (day in listOf("2026-10-15", "2026-10-18")) {
+            val chips = DueChips.forToday(LocalDate.parse(day))
+            assertTrue("chips on $day: $chips", chips.none { it.label == "Pick a day" })
+            assertEquals(2, chips.size)
         }
     }
 

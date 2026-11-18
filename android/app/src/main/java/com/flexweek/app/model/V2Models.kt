@@ -268,8 +268,7 @@ object DueChips {
         val friday = today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.FRIDAY))
         val monday = today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.MONDAY))
         // On a Thursday tomorrow is the next Friday, on a Sunday the next Monday: one chip per day.
-        return listOf(tomorrow, friday, monday).distinct().map { DueChip(label(it, today), it) } +
-            DueChip("Pick a day", monday)
+        return listOf(tomorrow, friday, monday).distinct().map { DueChip(label(it, today), it) }
     }
 }
 
