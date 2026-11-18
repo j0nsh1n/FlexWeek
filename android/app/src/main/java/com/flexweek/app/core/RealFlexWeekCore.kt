@@ -12,6 +12,7 @@ import java.security.SecureRandom
 import java.time.LocalDate
 import java.time.LocalDateTime
 import com.flexweek.app.model.DueDate
+import com.flexweek.app.model.FocusJson
 
 private const val UNREADABLE = "FlexWeek could not read its own answer. Nothing was changed."
 
@@ -144,6 +145,10 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
     }
 
     override fun focusFinish(): String = result {
+        // Ending early keeps the whole minutes worked, as the End question says and the computer does.
+        FocusJson.earlyCredit(focusState(), System.currentTimeMillis())?.let {
+            native.creditFocus(it.assignmentId, it.minutes.toLong(), it.operation)
+        }
         val answer = native.focusFinish(focusState())
         localSettings.edit().remove("focus-state").apply()
         com.flexweek.app.system.FocusRuntime.update(appContext, "null")

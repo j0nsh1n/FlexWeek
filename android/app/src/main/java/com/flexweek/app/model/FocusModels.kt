@@ -12,7 +12,14 @@ data class FocusUiState(
     val workMin: Int,
 ) {
     fun remaining(nowMs: Long): Long = if (running) (endsAt - nowMs).coerceAtLeast(0) else remainingMs.coerceAtLeast(0)
+
+    /** Whole minutes of the work session already spent, running or paused; a break has none. */
+    fun elapsedMin(nowMs: Long): Int =
+        if (phase != "work") 0 else ((workMin * 60_000L - remaining(nowMs)) / 60_000L).toInt().coerceAtLeast(0)
 }
+
+/** What ending a session early credits, the same whole minutes the End question promises. */
+data class EarlyCredit(val assignmentId: String, val minutes: Int, val operation: String)
 
 object FocusJson {
     fun countdown(milliseconds: Long): String {
@@ -47,6 +54,14 @@ object FocusJson {
         val value = JSONObject(json)
         require(value.getString("kind") == "needs_replace")
         return value.getString("current") to value.getString("incoming")
+    }
+
+    fun earlyCredit(saved: String, nowMs: Long): EarlyCredit? {
+        val state = parseState(saved) ?: return null
+        val minutes = state.elapsedMin(nowMs)
+        if (minutes <= 0) return null
+        val session = JSONObject(saved).optString("sessionId", "${state.assignmentId}-${state.endsAt}")
+        return EarlyCredit(state.assignmentId, minutes, "focus-early-$session-$minutes")
     }
 
     fun parseCredit(json: String): JSONObject = JSONObject(json).getJSONObject("assignment")

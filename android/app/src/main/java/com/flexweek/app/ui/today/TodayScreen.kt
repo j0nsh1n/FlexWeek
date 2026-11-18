@@ -197,7 +197,7 @@ fun TodayScreen(
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = onKeepGoing,
                 title = { Text(FocusSheetText.finishTitle) },
-                text = { Text(FocusJson.finishText(((focus.workMin * 60_000L - focus.remaining(nowMs)) / 60_000L).toInt().coerceAtLeast(0), focus.title)) },
+                text = { Text(FocusJson.finishText(focus.elapsedMin(nowMs), focus.title)) },
                 confirmButton = { TextButton(onClick = onKeepGoing) { Text(FocusSheetText.keepGoing) } },
                 dismissButton = { TextButton(onClick = onEndSession) { Text(FocusSheetText.endSession) } },
             )

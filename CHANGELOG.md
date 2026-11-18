@@ -114,6 +114,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - In the Material style, Place now on a homework card waiting for a time places that session, instead of picking a session of the homework whose time has passed and showing "Check the required fields...".
 - On the phone, ticking a session marks that session done for that day only; the homework's other sessions stay planned. The widget tick does the same.
 - On the phone, a session that ends at midnight no longer crashes Today, the widget or Running late, and shows as 12 AM.
+- On the phone, ending a focus session early now counts the whole minutes you worked toward the homework, the same as the dialog says and the computer does.
 
 ## [1.3.0] - 2026-11-10
 
