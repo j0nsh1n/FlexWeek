@@ -19,6 +19,7 @@ HANDLED = {
     "Ctrl+Shift+F": (MAIN, '"Ctrl+Shift+F"'),
     "F1": (MAIN, '"F1"'),
     "Ctrl+N": (MAIN, '"Ctrl+N"'),
+    "Ctrl+Shift+L": (MAIN, '"Ctrl+Shift+L"'),
     "Ctrl+Z": (MAIN, '"Ctrl+Z"'),
     "Ctrl+Y or Ctrl+Shift+Z": (MAIN, '["Ctrl+Shift+Z", "Ctrl+Y"]'),
     "Ctrl+C then Ctrl+V": (BLOCK, "ctrl && event.key === Qt.Key_C"),

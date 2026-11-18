@@ -165,9 +165,9 @@ def test_help_in_material_lists_the_keys_material_answers_to(
     assert "1 to 5" in rows and "D W M" not in rows
     assert "Ctrl+Z" in rows and "Ctrl+Y or Ctrl+Shift+Z" in rows and "Ctrl+S" in rows
     assert "Ctrl+Shift+F" in rows
-    for key in ("F1", "Ctrl+N", "Ctrl+D", "Delete", "Ctrl+C then Ctrl+V"):
+    for key in ("F1", "Ctrl+N", "Ctrl+Shift+L", "Ctrl+D", "Delete", "Ctrl+C then Ctrl+V"):
         assert key in rows, key
-    for key in ("T", "B or Esc", "Ctrl+K", "Ctrl+Shift+L", "Esc while dragging"):
+    for key in ("T", "B or Esc", "Ctrl+K", "Esc while dragging"):
         assert key not in rows, key
 
 

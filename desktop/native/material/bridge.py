@@ -670,6 +670,11 @@ class MaterialBridge(QObject):
         self._window._open_help()  # type: ignore[attr-defined]
 
     @Slot()
+    def openWeekList(self) -> None:
+        """Ctrl+Shift+L: the same sheet as More's Week as a list."""
+        self._sheets.openWeekList()
+
+    @Slot()
     def addHomework(self) -> None:
         self._sheets.openHomework()
 

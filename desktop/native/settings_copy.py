@@ -127,14 +127,14 @@ HELP_OTHER_KEYS = (
 HELP_KEYS = HELP_NUMBER_KEYS + HELP_LETTER_KEYS + HELP_OTHER_KEYS
 
 
-# The "other" rows that are also true in Material. Its window answers none of the rest: F1, Ctrl+N,
-# Ctrl+K, B, copy, paste, duplicate and Delete do nothing there. Ctrl+Shift+L is switched off while
-# Material shows (it is the Widgets week list's key), and Esc does not put a held card back.
+# The "other" rows that are also true in Material. Its window answers none of the rest: Ctrl+K and B
+# do nothing there, and Esc does not put a held card back.
 _MATERIAL_OTHER_KEYS = frozenset(
     {
         "[Ctrl]+[Shift]+[F]",
         "[F1]",
         "[Ctrl]+[N]",
+        "[Ctrl]+[Shift]+[L]",
         "[Ctrl]+[Z]",
         "[Ctrl]+[Y] or [Ctrl]+[Shift]+[Z]",
         "[Ctrl]+[C] then [Ctrl]+[V]",

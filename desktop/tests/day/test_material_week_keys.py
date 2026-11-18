@@ -219,3 +219,28 @@ def test_help_lists_the_new_keys_in_material() -> None:
     assert rows["[Ctrl]+[D]"] == "Duplicate the selected block"
     assert rows["[Delete]"] == "Delete the selected block"
     assert "[Ctrl]+[K]" not in rows
+
+
+def test_ctrl_shift_l_opens_the_week_as_a_list(qapp: QApplication, material_window: NativeWindow) -> None:
+    root = show_material(qapp, material_window)
+    quick = material_window._material_page._quick
+    sheets = material_window._material_page.bridge.sheets
+    root.forceActiveFocus()
+    pump(qapp)
+    QTest.keyClick(quick, Qt.Key.Key_L, CTRL | Qt.KeyboardModifier.ShiftModifier)
+    pump(qapp)
+    assert sheets.kind == "weekList"
+
+
+def test_ctrl_shift_l_does_nothing_while_a_sheet_is_open(
+    qapp: QApplication, material_window: NativeWindow
+) -> None:
+    root = show_material(qapp, material_window)
+    quick = material_window._material_page._quick
+    sheets = material_window._material_page.bridge.sheets
+    root.forceActiveFocus()
+    sheets.openHomework()
+    pump(qapp)
+    QTest.keyClick(quick, Qt.Key.Key_L, CTRL | Qt.KeyboardModifier.ShiftModifier)
+    pump(qapp)
+    assert sheets.kind == "homework"

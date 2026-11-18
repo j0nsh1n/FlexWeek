@@ -833,6 +833,13 @@ Item {
         enabled: !modalActive
         onActivated: bridge.focus.show()
     }
+    // The week as a list, the same as More's row. The Widgets key of the same name is off while Material shows.
+    Shortcut {
+        sequence: "Ctrl+Shift+L"
+        context: Qt.WindowShortcut
+        enabled: !modalActive
+        onActivated: bridge.openWeekList()
+    }
     Shortcut {
         sequence: "Ctrl+="
         context: Qt.WindowShortcut
