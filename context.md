@@ -2,7 +2,7 @@
 
 ## Current State (2026-11-17)
 - Branch `release/1.4.0`: the 1.4.0 version bump from main 5788750e (#115-#136 since 1.3.0: week start on any
-  day, the planner leftovers and missed sessions, School changes across weeks, Material drag and menus). Desktop only: the phone stays 1.3.0. Done time is the larger of focus minutes and minutes ticked done
+  day, the planner leftovers and missed sessions, School changes across weeks, Material drag and menus). The Android 1.4.0 app is built from main, without PR #137. Done time is the larger of focus minutes and minutes ticked done
   (`plan::done_time`), taken off in every count.
 - PR #137 (`fix/phone-1.4.0`, draft): the phone's 20 fixes, phone edits stamped when made, set-aside sync records
   retried, the layout B restyle and Report a problem (phone and desktop, hidden until the form link is set). Review 1
@@ -104,9 +104,10 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
-- 2026-11-17, branch `release/1.4.0`, PR #138: 1.4.0 cut from main 5788750e, desktop only (Jonathan: "get the 1.4.0
-  release besides mobile going"); checks run on GitHub while Jonathan uses his computer. Next: merge #138 on a passed
-  review and green checks, tag v1.4.0, "Release packages" with the tag (eight files), checksums, publish latest.
+- 2026-11-17, branch `release/1.4.0`, PR #138: 1.4.0 cut from main 5788750e without the phone work (Jonathan: "get
+  the 1.4.0 release besides mobile going", then "Both": an Android 1.4.0 from main ships too). Next: merge #138 on a
+  passed review and green checks, tag v1.4.0, "Release packages" with the tag (eight files), the APK built from the
+  tag here (`scratch/android-inspect/android-build.sh release`), checksums, publish latest.
   `fix/planner-leftovers` merged as #136 (5788750e). The phone work is draft PR #137 (`fix/phone-1.4.0`); its review 1
   fixes (scratch/android-inspect/review1/VERDICT.md) are not done.
 - 2026-11-15, branch `fix/planner-spread-and-left-over`, PR #135. Sonnet built it in two rounds; the lead took it over after Sol failed both (d6e49bee and the mutation-pattern fix after). Next: GitHub checks and Sol's check of the CodeRabbit round on PR #135, then merge and a developer build with #134 and #135. #134 merged as 90f02c94 after its GitHub-only failure (the Retro look leaking into later tests' dialogs) was fixed in the tests' conftest.

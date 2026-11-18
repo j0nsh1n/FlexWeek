@@ -8,17 +8,17 @@ list, all shipped).
 - v1.3.0 is the latest release (2026-11-10). Main (5788750e) is prepared as 1.4.0 on branch `release/1.4.0`: the week
   can start on any day, Plan and Replan move a session whose time passed unfinished, School and activity changes
   across weeks, Material drag, menus and the Dragging step, the assistant helper's live clock and Spread over days.
-- The phone app is not in 1.4.0 (Jonathan, 2026-11-17: release "besides mobile"). Its fixes, sync dating and the
-  layout B restyle wait on PR #137 (`fix/phone-1.4.0`) for the next update.
+- The phone work is not in 1.4.0 (Jonathan, 2026-11-17: release "besides mobile", then "Both": an Android 1.4.0 from
+  main ships with it). The phone's fixes, sync dating and the layout B restyle wait on PR #137 (`fix/phone-1.4.0`).
 
 ### Release 1.3.0
 - Status: [x] released 2026-11-10 (main d61235ee, PR #111).
 
 ### Release 1.4.0
-- Done: version 1.4.0 (app and changelog; the phone stays 1.3.0, versionCode 5), `docs/release-notes-v1.4.0.md`.
+- Done: version 1.4.0 (app, changelog, phone: versionCode 6), `docs/release-notes-v1.4.0.md`.
 - Open: the release pull request, the tag, the Windows and Linux files from "Release packages", checked checksums.
-- Complete when: v1.4.0 is the latest release with its eight desktop files and checked checksums, and the notes say
-  there is no Android file.
+- Complete when: v1.4.0 is the latest release with all ten files (the Android app built from main without the phone
+  work of PR #137) and checked checksums.
 - Status: [ ] in preparation.
 
 ## After FIX-SPEC 1.3 (planned 2026-11-06)

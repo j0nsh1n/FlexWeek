@@ -54,8 +54,8 @@ stay in place.
 - Plan my homework does the same for a session of this week whose time has passed
   and that you did not finish, with the same notice. A pinned session, a finished
   one, one on now and one later today stay where they are, and every other planned
-  time stays. The assistant helper's Plan does the same, and Help and the helper's
-  Plan description say so. If no room is left before it is due, it is left with no
+  time stays. The assistant helper's Plan and the phone's Plan do the same,
+  and Help and the helper's Plan description say so. If no room is left before it is due, it is left with no
   time rather than put in the past.
 - A session you pinned by hand that passed unfinished stays where you put it, and
   its minutes still count as needing a time: Plan gives them a new session. In a
@@ -85,8 +85,8 @@ stay in place.
   saying "Everything has a time."
 - Time you have done now counts everywhere FlexWeek works out what a homework
   still needs: "left from last week", Plan, Day's due-soon list and next step,
-  Month's deadlines, the homework list and Spread over days, and through the
-  assistant helper. Done time is whichever is more, the focus timer
+  Month's deadlines, the homework list and Spread over days, on the phone and
+  through the assistant helper. Done time is whichever is more, the focus timer
   minutes or the minutes of sessions you ticked done, never both added together.
   A 2-hour homework with an hour ticked done needs 1 hour, not 2.
 - "Left from last week" no longer lists homework whose time is already planned.
@@ -241,6 +241,11 @@ stay in place.
   new day as today, and when a planned session's time passes unfinished, the
   homework list stops saying "Everything has a time." without you pressing anything.
 
+### Phone
+- Plan on the phone gives homework set to "Spread over days" and due more than a
+  week away its share of this week when its session is saved without a time.
+- The phone counts done time the same way the computer does.
+
 ### Assistant helper
 - It checks your "Week starts on" setting on every tool call, so changing it in
   Settings reaches a running helper without restarting it (`--week-starts-on`
@@ -274,9 +279,8 @@ from the extracted tarball. Drop `--read-only` to let it change your schedule.
 
 - Windows and Android do not include the assistant helper.
 - Developer builds are a Linux tarball only.
-- There is no new Android app in 1.4.0: the phone stays on 1.3.0 and keeps
-  syncing with 1.4.0 on the computer. The phone's fixes and new look come in the
-  next update.
+- The phone's new look and its larger set of fixes are not in 1.4.0; they come in
+  the next update.
 - The Android app does not have Month or Day screens.
 - Material is an added style. Today's app is still the default.
 - Sync uses the same Wi-Fi network or the public n0 relay and needs FlexWeek
