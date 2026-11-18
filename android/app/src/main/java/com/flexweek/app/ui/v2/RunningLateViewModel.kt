@@ -56,9 +56,14 @@ class RunningLateViewModel(
     fun accept() {
         val id = preview?.previewId ?: return
         val raw = core.acceptRunningLate(id, newOpId())
-        if (JSONObject(raw).optBoolean("ok", false)) {
+        val answer = JSONObject(raw)
+        if (answer.optBoolean("ok", false)) {
             preview = null
             onAccepted()
+        } else {
+            // The week changed under the preview, so it is stale: show why and make the student look again.
+            preview = null
+            error = answer.optString("error").ifBlank { "Running late could not move that. Try again." }
         }
     }
 }

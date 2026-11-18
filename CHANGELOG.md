@@ -116,6 +116,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - On the phone, a session that ends at midnight no longer crashes Today, the widget or Running late, and shows as 12 AM.
 - On the phone, ending a focus session early now counts the whole minutes you worked toward the homework, the same as the dialog says and the computer does.
 - On the phone, a focus timer saved for a homework that was deleted is cleared when the app opens, instead of stopping it from opening at every launch.
+- On the phone, Plan, Accept, Running late's Move it, Start focus and Sync now now say why when they cannot act (nothing to place, the week changed on another device, the homework is gone, the sync failed), instead of an empty "Placed 0 of 0" sheet or nothing at all.
 
 ## [1.3.0] - 2026-11-10
 

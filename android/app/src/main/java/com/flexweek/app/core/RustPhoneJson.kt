@@ -131,8 +131,21 @@ internal object RustPhoneJson {
         return root.toString()
     }
 
+    const val NOTHING_TO_PLAN = "Nothing is waiting for a time right now."
+
+    /** The engine's own sentence from a refused call; its exception text is "details=...". */
+    fun ffiText(error: com.flexweek.app.bindings.FfiException): String =
+        (error as? com.flexweek.app.bindings.FfiException.Failure)?.details ?: error.message ?: UNREADABLE_ERROR
+
+    private const val UNREADABLE_ERROR = "FlexWeek could not finish that. Nothing was changed."
+
     fun plan(raw: String): String {
         val root = JSONObject(raw)
+        // With nothing to place (or a week that is over) the engine saves no preview and says why in "message".
+        if (root.optString("applied_preview").isBlank()) {
+            return JSONObject().put("ok", false)
+                .put("error", root.optString("message").ifBlank { NOTHING_TO_PLAN }).toString()
+        }
         val placed = root.getJSONArray("placed")
         val waiting = root.getJSONArray("not_placed")
         val lines = JSONArray()

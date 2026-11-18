@@ -157,8 +157,10 @@ class RemindersViewModel(
         if (state.syncing) return
         state = state.copy(syncing = true, problem = null)
         viewModelScope.launch {
-            withContext(workerDispatcher) { core.syncOnce(45_000) }
-            state = state.copy(syncing = false)
+            val answer = JSONObject(withContext(workerDispatcher) { core.syncOnce(45_000) })
+            val failure = if (answer.optBoolean("ok", true)) null
+            else answer.optString("error").ifBlank { "Sync did not finish. Try again." }
+            state = state.copy(syncing = false, problem = failure)
             reload()
         }
     }

@@ -151,7 +151,9 @@ class TodayViewModel(
 
     private fun applyStart(raw: String, saved: String, assignmentId: String) {
         val answer = JSONObject(raw)
-        if (answer.optString("kind") == "needs_replace") {
+        if (!answer.optBoolean("ok", true)) {
+            showMessage(answer.optString("error").ifBlank { "Could not start focus." })
+        } else if (answer.optString("kind") == "needs_replace") {
             replaceAssignmentId = assignmentId
             replacePrompt = answer.getString("current") to answer.getString("incoming")
         } else focusState = FocusJson.parseState(saved)

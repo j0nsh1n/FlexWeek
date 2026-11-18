@@ -114,3 +114,22 @@ class RustPhoneJsonTest {
         assertEquals("10:00 PM–12:00 AM · 2 h", (state.rows.single() as AgendaRow.Now).whenLine)
     }
 }
+
+class PlanRefusalTest {
+    @Test fun nothingToPlaceIsAnErrorWithTheEnginesMessageNotAnEmptySheet() {
+        val raw = """{"week_start":"2026-10-05","placed":[],"not_placed":[],"moves":[],"explanations":[],"applied_preview":"","message":"This week is over, so nothing was planned. Plan this week or a later one."}"""
+        val answer = JSONObject(RustPhoneJson.plan(raw))
+        assertFalse(answer.getBoolean("ok"))
+        assertEquals("This week is over, so nothing was planned. Plan this week or a later one.", answer.getString("error"))
+    }
+
+    @Test fun nothingToPlaceWithNoMessageStillSaysSo() {
+        val raw = """{"week_start":"2026-10-05","placed":[],"not_placed":[],"applied_preview":"","message":""}"""
+        assertEquals(RustPhoneJson.NOTHING_TO_PLAN, JSONObject(RustPhoneJson.plan(raw)).getString("error"))
+    }
+
+    @Test fun theEnginesRefusalReadsWithoutTheExceptionPrefix() {
+        val error = com.flexweek.app.bindings.FfiException.Failure("preview was not found")
+        assertEquals("preview was not found", RustPhoneJson.ffiText(error))
+    }
+}

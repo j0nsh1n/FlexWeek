@@ -97,9 +97,9 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
     override fun isPaired(): Boolean = JSONObject(syncStatus()).optBoolean("has_account")
 
     private fun result(call: () -> String): String = try {
-        JSONObject(call()).put("ok", true).toString()
+        JSONObject(call()).also { if (!it.has("ok")) it.put("ok", true) }.toString()
     } catch (error: FfiException) {
-        JSONObject().put("ok", false).put("error", error.message).toString()
+        JSONObject().put("ok", false).put("error", RustPhoneJson.ffiText(error)).toString()
     } catch (error: org.json.JSONException) {
         // An answer the phone cannot read once crashed the app as soon as Running late opened.
         JSONObject().put("ok", false).put("error", UNREADABLE).toString()

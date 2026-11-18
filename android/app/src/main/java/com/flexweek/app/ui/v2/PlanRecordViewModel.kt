@@ -45,7 +45,9 @@ class PlanRecordViewModel(
         val preview = record ?: return
         val raw = core.acceptPlan(preview.previewId, newOpId())
         if (!JSONObject(raw).optBoolean("ok", false)) {
-            error = JSONObject(raw).optString("error", "Could not accept.")
+            // The sheet shows the reason in place of the plan, which is stale once the core refused it.
+            error = JSONObject(raw).optString("error").ifBlank { "Could not accept." }
+            record = null
             return
         }
         record = null
