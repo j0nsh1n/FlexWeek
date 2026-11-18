@@ -4,20 +4,21 @@ Phases, their complete-when conditions and status. Finished phases are removed; 
 history and in `CHANGELOG.md` (pruned 2026-11-06: Phase 8, 1.1.1, the 0.18.x series, 0.18.5 and the 1.0.0 running
 list, all shipped).
 
-## Where things stand (2026-11-10)
-- v1.2.0 is the latest release. Main (1425ebb4) is prepared as 1.3.0 on branch `release/1.3.0-prep` (not yet tagged):
-  Material 3 as a style, planner settings, the assistant's planning tools, developer builds, the testing rebuild.
-  Developer build 1.2.0.202611100207 (main 8533105b) is `dev`.
-- Next: the release steps in `docs/github-release.md`. The review of 2026-11-10 lists what comes first: hide the
-  developer-builds switch off the Linux tarball, add a Material step to the packaged smoke test, a by-hand "Release
-  packages" run, Material's memory measured, and Jonathan's call on Ctrl+wheel zoom in Material.
+## Where things stand (2026-11-17)
+- v1.3.0 is the latest release (2026-11-10). Main (5788750e) is prepared as 1.4.0 on branch `release/1.4.0`: the week
+  can start on any day, Plan and Replan move a session whose time passed unfinished, School and activity changes
+  across weeks, Material drag, menus and the Dragging step, the assistant helper's live clock and Spread over days.
+- The phone work is not in 1.4.0 (Jonathan, 2026-11-17: release "besides mobile", then "Both": an Android 1.4.0 from
+  main ships with it). The phone's fixes, sync dating and the layout B restyle wait on PR #137 (`fix/phone-1.4.0`).
 
 ### Release 1.3.0
-- Done 2026-11-10 on the prep branch: version 1.3.0 (app, changelog, phone), the tag-equals-version check, uploads
-  that never replace a file already on the release, the written checklist, draft notes, README, context.md.
-- Open: the four items above, the release pull request with a by-hand Verify, Jonathan's own try of a developer
-  build, the tag, the Windows, Linux and Android files, and the phone update check on a real phone.
-- Complete when: v1.3.0 is the latest release with all ten files and checked checksums.
+- Status: [x] released 2026-11-10 (main d61235ee, PR #111).
+
+### Release 1.4.0
+- Done: version 1.4.0 (app, changelog, phone: versionCode 6), `docs/release-notes-v1.4.0.md`.
+- Open: the release pull request, the tag, the Windows and Linux files from "Release packages", checked checksums.
+- Complete when: v1.4.0 is the latest release with all ten files (the Android app built from main without the phone
+  work of PR #137) and checked checksums.
 - Status: [ ] in preparation.
 
 ## After FIX-SPEC 1.3 (planned 2026-11-06)
@@ -41,7 +42,7 @@ are on main (PRs #67-#83). In order:
 - Done 2026-11-07 (#87): the imagehlp.dll and web-module fixes; the Windows job builds. No Windows or AppImage
   package has been built since (329 commits of Material work); the 1.3.0 steps include a by-hand run on main.
 - Complete when: a stable release builds on every platform and spec.md matches CI. The 1.3.0 release is that test.
-- Status: [ ] open until v1.3.0 is released.
+- Status: [ ] v1.3.0 built and shipped on every platform (2026-11-10); spec.md against CI not re-checked since.
 
 ### R2 — Correctness
 - Two quick settings saves can overwrite each other (save_preferences).
