@@ -42,8 +42,10 @@ FocusScope {
 
     Rectangle {
         anchors.fill: parent
+        objectName: "ringScrim"
         color: "#000000"
-        opacity: 0.32
+        // Darker in dark, where the card and the page are close greys: a ringing alarm must stand out.
+        opacity: pal.dark ? 0.7 : 0.32
         // Takes every click so nothing under the ring is reached.
         MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
     }
@@ -55,8 +57,8 @@ FocusScope {
         anchors.centerIn: parent
         radius: 28
         color: pal.surfaceContainerHigh
-        border.width: root.highContrast ? 1.5 : 0
-        border.color: pal.outline
+        border.width: root.highContrast ? 1.5 : (pal.dark ? 1 : 0)
+        border.color: root.highContrast ? pal.outline : pal.outlineVariant
         Column {
             id: content
             x: 24

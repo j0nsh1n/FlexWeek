@@ -14,6 +14,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QObject, Qt, QUrl
 from PySide6.QtGui import QDesktopServices
+from PySide6.QtQml import QQmlProperty
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -505,3 +506,23 @@ def test_the_about_logo_sits_on_a_rounded_tile_so_no_white_square_shows_in_dark(
     # The logo's square corner must lie inside the tile's curve: its inset is at least r * (1 - 1/sqrt 2).
     inset = (float(tile.property("width")) - float(logo.property("width"))) / 2
     assert inset >= float(tile.property("radius")) * 0.2929
+
+
+def test_in_dark_the_page_behind_a_sheet_is_dimmed_harder_and_the_card_has_an_edge(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    scrims = {}
+    for mode in ("light", "dark"):
+        look_file().write_text(json.dumps({"material": {"mode": mode}}))
+        root, _quick = _material(qapp, window)
+        window._material_page.publish()
+        _sheets(window).openAbout()
+        pump(qapp, 40)
+        scrims[mode] = (
+            float(named(root, "sheetScrim")[0].property("opacity")),
+            float(QQmlProperty(named(root, "sheetCard")[0], "border.width").read()),
+        )
+        _sheets(window).closeSheet()
+        pump(qapp, 10)
+    assert scrims["light"] == (0.32, 0.0)
+    assert scrims["dark"] == (0.6, 1.0)

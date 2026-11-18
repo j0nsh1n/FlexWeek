@@ -5,6 +5,8 @@ prints."""
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtTest import QTest
@@ -23,6 +25,7 @@ from desktop.tests.settings.support_material_settings import (
     _pump,
 )
 from desktop.tests.waiting import wait_until
+from desktop.tests.window_support import look_file
 from desktop.tests.window_support import qapp  # noqa: F401
 
 # ruff: noqa: F811
@@ -274,6 +277,28 @@ def test_an_alarm_rings_on_the_material_screen_and_never_in_the_widgets_dialog(
     screen = root.findChild(QObject, "ringScreen")
     assert screen is not None and screen.property("visible") is True
     assert _named(root, "ringDismiss") and _named(root, "ringSnooze")
+
+
+def test_the_ring_screen_in_dark_dims_the_page_harder_and_draws_the_card_edge(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from PySide6.QtQml import QQmlProperty
+
+    seen = {}
+    for mode in ("light", "dark"):
+        look_file().write_text(json.dumps({"material": {"mode": mode}}))
+        root = _open_settings(qapp, window, "alerts")
+        _rig(window, monkeypatch)
+        _ring(window, {"id": mode, "name": "Practice", "time": "07:00", "sound": "low"})
+        _pump(qapp)
+        seen[mode] = (
+            float(_named(root, "ringScrim")[0].property("opacity")),
+            float(QQmlProperty(_named(root, "ringCard")[0], "border.width").read()),
+        )
+        _bridge(window).ring.dismiss()
+        _pump(qapp)
+    assert seen["light"] == (0.32, 0.0)
+    assert seen["dark"] == (0.7, 1.0)
 
 
 def test_dismiss_stops_the_noise_and_does_not_snooze(

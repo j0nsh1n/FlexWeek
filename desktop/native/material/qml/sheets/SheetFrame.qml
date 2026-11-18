@@ -75,8 +75,11 @@ FocusScope {
     Rectangle {
         id: scrim
         anchors.fill: parent
+        objectName: "sheetScrim"
         color: "#000000"
-        opacity: 0.32
+        // In dark a card and the page are close greys, so the page is dimmed harder, which also separates
+        // a question from the sheet it sits over (both are this frame, each with its own scrim).
+        opacity: pal.dark ? 0.6 : 0.32
         TapHandler {
             id: scrimTap
             // A picker's list is a non-modal popup, so a tap on it also reaches the scrim. A row can hang
@@ -115,8 +118,8 @@ FocusScope {
             height: 28
             color: parent.color
         }
-        border.width: root.highContrast ? 1.5 : 0
-        border.color: pal.outline
+        border.width: root.highContrast ? 1.5 : (pal.dark ? 1 : 0)
+        border.color: root.highContrast ? pal.outline : pal.outlineVariant
         // Takes the clicks so the scrim's tap handler does not see them.
         TapHandler { }
 
