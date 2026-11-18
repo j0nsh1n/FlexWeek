@@ -95,9 +95,7 @@ def test_more_rows_work_without_any_widgets_button(
     monkeypatch.setattr(shell, "_open_help", lambda: calls.append("helpButton"))
     monkeypatch.setattr(shell, "_open_about", lambda: calls.append("aboutButton"))
     monkeypatch.setattr(shell.session, "solve", lambda **kw: calls.append(f"solve {kw}"))
-    monkeypatch.setattr(
-        "desktop.native.window.confirm", lambda *a, **kw: calls.append("signOut asked") or False
-    )
+    monkeypatch.setattr(shell, "_log_out", lambda: calls.append("signOut asked"))
 
     sheets.openMore()
     rows = {row["id"]: row for row in sheets.moreEntries if row["id"]}

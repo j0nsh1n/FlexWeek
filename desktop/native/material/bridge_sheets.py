@@ -10,7 +10,8 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
+from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
+from PySide6.QtGui import QDesktopServices
 
 from backend.slots import DAY_END_MIN, SLOT_MIN, hhmm_to_minutes
 from desktop.native.calendar import (
@@ -27,6 +28,7 @@ from desktop.native.calendar import (
 from desktop.native.fields import announce
 from desktop.native.hours.geometry import drag_step, next_slot
 from desktop.native.material.bridge_alarms import FULL, MAX_ALARMS, NOT_SAVED, AlarmDraft, with_alarm
+from desktop.native.material.bridge_info import SIGN_OUT, about_form, help_form, update_form
 from desktop.native.material.sheet_block import BlockDraft
 from desktop.native.material.sheet_homework import HomeworkDraft
 from desktop.native.reuse import (
@@ -102,6 +104,16 @@ class SheetsBridge(QObject):
         self._homework: HomeworkDraft | None = None
         self._block: BlockDraft | None = None
         self._alarm: AlarmDraft | None = None
+        # The update sheet: what was found, the window's answers to it, and how the download is going.
+        self._update: dict | None = None
+        self._update_current = ""
+        self._update_install: Any = None
+        self._update_finished: Any = None
+        self._update_skip = False
+        self._update_state: dict = {}
+        # An update found while another sheet is open waits for it to close, so no typing is lost.
+        self._update_waiting: tuple | None = None
+        self._sign_out_done: Any = None
         # What was typed into a new Add sheet that Esc closed, kept for the next Add of that kind.
         self._kept_homework: HomeworkDraft | None = None
         self._kept_block: BlockDraft | None = None
@@ -219,6 +231,7 @@ class SheetsBridge(QObject):
     def _close(self) -> None:
         late = self._kind == "late"
         done, self._edited_done = self._edited_done, None
+        update_done = self._finish_update() if self._kind == "update" else None
         self._kind = ""
         self._ask = {}
         self._drag_range_active = False
@@ -232,6 +245,8 @@ class SheetsBridge(QObject):
         self._publish()
         if done is not None:
             done(None)
+        if update_done is not None:
+            update_done()
 
     @Slot()
     def openHomework(self) -> None:
@@ -384,6 +399,7 @@ class SheetsBridge(QObject):
         if self._ask:
             edited = self._ask.get("id") == "edited-weeks"
             done, self._edited_done = self._edited_done, None
+            self._sign_out_done = None
             self._ask = {}
             self._publish()
             if edited and done is not None:
@@ -629,6 +645,12 @@ class SheetsBridge(QObject):
                 done(choice if choice in ("keep", "replace", "from_today") else None)
             return
         self._ask = {}
+        if asked == "sign-out":
+            signing_out, self._sign_out_done = self._sign_out_done, None
+            self._publish()
+            if choice == "yes" and signing_out is not None:
+                signing_out()
+            return
         if asked == "discard":
             if choice == "discard":
                 self._close()
@@ -1357,6 +1379,95 @@ class SheetsBridge(QObject):
             "signOut": window._log_out,
         }[name]()
 
+    # Help, About, Update and the Sign out question ---------------------------------------
+
+    @Slot()
+    def openHelp(self) -> None:
+        self._open("help")
+
+    @Slot()
+    def openAbout(self) -> None:
+        self._open("about")
+
+    @Slot()
+    def openAboutFolder(self) -> None:
+        folder = str(self._window._look_path().parent)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
+
+    def ask_sign_out(self, question: str, done: Any) -> None:
+        """The Sign out question. `done()` runs when the student answers Sign out; Cancel and Esc leave
+        everything as it was."""
+        self._more = False
+        self._sign_out_done = done
+        self._ask = {**SIGN_OUT, "body": question}
+        self._publish()
+
+    def open_update(self, update: dict, current: str, install: Any, finished: Any) -> None:
+        """A newer FlexWeek exists. `install()` starts the download; `finished(skip)` runs when the sheet
+        closes, with whether the student chose Skip this version. Another sheet that is open keeps the
+        screen: the update waits for it."""
+        self._update_waiting = (update, current, install, finished)
+        self._show_waiting_update()
+
+    def _show_waiting_update(self) -> None:
+        if self._update_waiting is None or self.active:
+            return
+        update, current, install, finished = self._update_waiting
+        self._update_waiting = None
+        self._update = update
+        self._update_current = current
+        self._update_install = install
+        self._update_finished = finished
+        self._update_skip = False
+        self._update_state = {"status": "", "problem": False, "busy": False, "progress": -1}
+        self._open("update")
+
+    def _finish_update(self) -> Any:
+        """The sheet closes: what to tell the window once the sheet is gone."""
+        finished, skip = self._update_finished, self._update_skip
+        self._update = None
+        self._update_install = None
+        self._update_finished = None
+        self._update_skip = False
+        if finished is None:
+            return None
+        return lambda: finished(skip)
+
+    @Slot()
+    def updateInstall(self) -> None:
+        if self._kind != "update" or self._update_state.get("busy"):
+            return
+        self._update_state = {"status": "Downloading…", "problem": False, "busy": True, "progress": 0.0}
+        self._publish()
+        if self._update_install is not None:
+            self._update_install()
+
+    @Slot()
+    def updateSkip(self) -> None:
+        if self._kind == "update":
+            self._update_skip = True
+            self._close()
+
+    def update_progress(self, got: int, total: int) -> None:
+        if self._kind != "update":
+            return
+        self._update_state = {**self._update_state, "progress": min(1.0, got / total) if total > 0 else -1}
+        self._publish()
+
+    def update_problem(self, why: str) -> None:
+        if self._kind != "update":
+            return
+        self._update_state = {"status": why, "problem": True, "busy": False, "progress": -1}
+        self._publish()
+
+    def update_open(self) -> bool:
+        return self._kind == "update"
+
+    def update_done(self) -> None:
+        """The download is in place: the sheet goes without the student pressing anything."""
+        if self._kind == "update":
+            self._close()
+
     # Notice -----------------------------------------------------------------------------
 
     def _say(self, text: str, *, undo: bool = False) -> None:
@@ -1430,6 +1541,15 @@ class SheetsBridge(QObject):
             self._form = self._routine_form()
         elif kind == "alarm" and self._alarm is not None:
             self._form = {**self._alarm.form(), "canSave": self.canSave}
+        elif kind == "help":
+            owner = self.parent()
+            self._form = help_form(
+                bool(getattr(owner, "shortcuts", True)), bool(getattr(owner, "letterKeys", False))
+            )
+        elif kind == "about":
+            self._form = about_form(getattr(self._session, "storage_info", None))
+        elif kind == "update" and self._update is not None:
+            self._form = update_form(self._update, self._update_current, self._update_state)
         else:
             self._form = {}
         # The moved-day note is said aloud when it appears or changes in a sheet that is already open. A
@@ -1439,3 +1559,4 @@ class SheetsBridge(QObject):
             announce(self._window, note)
         self._noted = note
         self.changed.emit()
+        self._show_waiting_update()

@@ -52,6 +52,11 @@ FocusScope {
         return item
     }
 
+    // A sheet that is only read (Help) scrolls with the arrow and page keys.
+    function scrollBy(dy) {
+        scroller.contentY = Math.max(0, Math.min(scroller.contentHeight - scroller.height, scroller.contentY + dy))
+    }
+
     function focusFirst() {
         var start = focusTarget(initialFocus)
         if (start && start.visible && start.enabled) {

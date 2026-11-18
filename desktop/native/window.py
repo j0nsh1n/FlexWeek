@@ -708,6 +708,7 @@ class NativeWindow(QMainWindow):
         self._hours_week: tuple | None = None
         self._update_asked = False
         self._update_dialog: UpdateDialog | None = None
+        self._update_on_material = False
         self._updater = Updater(self)
         self._updater.found.connect(self._on_update_found)
         self._updater.none_found.connect(self._no_update)
@@ -5695,6 +5696,18 @@ class NativeWindow(QMainWindow):
             return
         if not self._update_asked and update["version"] == self._updates.get("skip"):
             return
+        page = self._material_shown()
+        if page is not None:
+            self._update_on_material = True
+
+            def finished(skip: bool) -> None:
+                self._update_on_material = False
+                if skip:
+                    self._updates["skip"] = update["version"]
+                    self._save_look()
+
+            page.bridge.sheets.open_update(update, VERSION, lambda: self._updater.download(update), finished)
+            return
         dialog = UpdateDialog(self, update, VERSION)
         self._update_dialog = dialog
         dialog.install.clicked.connect(lambda: self._updater.download(update))
@@ -5704,13 +5717,23 @@ class NativeWindow(QMainWindow):
             self._save_look()
         self._update_dialog = None
 
+    def _update_sheet(self):
+        """Material's update sheet while it is the one showing the update, else None."""
+        page = self._material_page if self._update_on_material else None
+        sheets = None if page is None else page.bridge.sheets
+        return sheets if sheets is not None and sheets.update_open() else None
+
     def _on_update_progress(self, got: int, total: int) -> None:
         if self._update_dialog is not None:
             self._update_dialog.show_progress(got, total)
+        elif (sheet := self._update_sheet()) is not None:
+            sheet.update_progress(got, total)
 
     def _on_update_problem(self, why: str) -> None:
         if self._update_dialog is not None:
             self._update_dialog.show_problem(why)
+        elif (sheet := self._update_sheet()) is not None:
+            sheet.update_problem(why)
         elif self._update_asked:
             self.session._say(why)
 
@@ -5722,9 +5745,13 @@ class NativeWindow(QMainWindow):
         if problem is not None:
             if self._update_dialog is not None:
                 self._update_dialog.show_problem(problem + " Open the release page to update by hand.")
+            elif (sheet := self._update_sheet()) is not None:
+                sheet.update_problem(problem + " Open the release page to update by hand.")
             return
         if self._update_dialog is not None:
             self._update_dialog.accept()
+        elif (sheet := self._update_sheet()) is not None:
+            sheet.update_done()
         self.session._say("Update installed. FlexWeek will close so the new version can start.")
         QTimer.singleShot(UPDATE_QUIT_MS, self.quit_app)
 
@@ -6146,24 +6173,38 @@ class NativeWindow(QMainWindow):
             if (self.session.storage_info or {}).get("mode") == "hosted"
             else "this computer"
         )
+        question = SIGN_OUT_QUESTION.format(where=where)
+        page = self._material_shown()
+        if page is not None:
+            page.bridge.sheets.ask_sign_out(question, self._sign_out_confirmed)
+            return
+        if confirm(self, "Sign out", question, "Sign out", danger=False):
+            self._sign_out_confirmed()
+
+    def _sign_out_confirmed(self) -> None:
         # Same wait as closing: an unsent Settings change has to reach the server, or stay on screen.
-        if confirm(
-            self, "Sign out", SIGN_OUT_QUESTION.format(where=where), "Sign out", danger=False
-        ) and self._save_before_leaving(self.session.logout, again="sign out again"):
+        if self._save_before_leaving(self.session.logout, again="sign out again"):
             self.session.logout()
 
+    def _material_shown(self):
+        """The Material page while it is the page on screen and built, else None."""
+        page = self._material_page
+        if page is None or page.root is None or self._stack.currentWidget() is not page:
+            return None
+        return page
+
     def _open_help(self) -> None:
-        current = self._stack.currentWidget()
-        page = self._material_page if current is not None and current.objectName() == "materialPage" else None
-        if page is None or page.root is None:
+        page = self._material_shown()
+        if page is None:
             HelpDialog(self, self._key_switches()).exec()
             return
-        bridge = page.bridge
-        dialog = HelpDialog(self, (bridge.shortcuts, bridge.letterKeys), material=True)
-        with self._material_keys_held():
-            dialog.exec()
+        page.bridge.sheets.openHelp()
 
     def _open_about(self) -> None:
+        page = self._material_shown()
+        if page is not None:
+            page.bridge.sheets.openAbout()
+            return
         AboutDialog(self, self.session.storage_info, str(self._look_path().parent)).exec()
 
     def _open_account(self) -> None:

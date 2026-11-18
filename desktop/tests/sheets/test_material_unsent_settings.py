@@ -169,8 +169,9 @@ def test_sign_out_keeps_an_unsent_settings_change_on_both_surfaces(
         window._material_page.bridge.openMore()
         pump(qapp)
         assert window._material_page.bridge.sheets.moreOpen is True
-        _accept_sign_out()
         window._material_page.bridge.sheets.moreAction("signOut")
+        pump(qapp)
+        window._material_page.bridge.sheets.answer("yes")
         wait_until(
             qapp,
             lambda: window.session.message == SIGN_OUT_REFUSED,
