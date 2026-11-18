@@ -36,6 +36,7 @@ SectionPage {
         }
         PickRow {
             key: "planningStyle"
+            fieldWidth: 320
             visible: !!page.st.showPlanningStyle
             title: "Planning style"
             subtitle: "When new homework gets a time."

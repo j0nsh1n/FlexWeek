@@ -682,7 +682,7 @@ Item {
                     if (!fab)
                         return 0
                     var spot = fab.mapToItem(parent, 0, 0)
-                    return root.phone ? Math.max(8, spot.y - height - 8) : spot.y
+                    return root.phone ? Math.max(8, spot.y - height - 8) : spot.y + fab.height + 8
                 }
                 theme: root.theme
                 density: root.density
