@@ -304,6 +304,20 @@ fn write_real(tx: &Connection, user_id: i64, record: &Record) -> SyncResult<()> 
     Ok(())
 }
 
+/// Rows no retry can change: another account's record, and a write the database refused. Everything else
+/// was set aside for the sender's clock or an older app, which a later try can fix.
+const NOT_RETRYABLE: &str =
+    "reason <> 'account identity differs' AND reason NOT LIKE 'could not be saved:%'";
+
+/// How many set-aside records a retry could still fix; the phone's notice counts these only.
+pub fn retryable_held(conn: &Connection, user_id: i64) -> SyncResult<i64> {
+    Ok(conn.query_row(
+        &format!("SELECT COUNT(*) FROM sync_quarantine WHERE user_id = ?1 AND {NOT_RETRYABLE}"),
+        [user_id],
+        |row| row.get(0),
+    )?)
+}
+
 fn quarantine(
     tx: &Transaction<'_>,
     user_id: i64,
@@ -320,7 +334,9 @@ fn quarantine(
 /// longer so; one that a newer edit has since replaced is dropped. Returns how many are still set aside.
 pub fn retry_quarantine(conn: &mut Connection, user_id: i64, now_ms: i64) -> SyncResult<usize> {
     let held: Vec<(i64, String)> = conn
-        .prepare("SELECT id, body FROM sync_quarantine WHERE user_id = ?1 ORDER BY id")?
+        .prepare(&format!(
+            "SELECT id, body FROM sync_quarantine WHERE user_id = ?1 AND {NOT_RETRYABLE} ORDER BY id"
+        ))?
         .query_map([user_id], |row| Ok((row.get(0)?, row.get(1)?)))?
         .collect::<Result<_, _>>()?;
     let mut retried = Vec::new();
@@ -353,12 +369,7 @@ pub fn retry_quarantine(conn: &mut Connection, user_id: i64, now_ms: i64) -> Syn
         }
         tx.commit()?;
     }
-    let left: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM sync_quarantine WHERE user_id = ?1",
-        [user_id],
-        |row| row.get(0),
-    )?;
-    Ok(usize::try_from(left).unwrap_or(0))
+    Ok(usize::try_from(retryable_held(conn, user_id)?).unwrap_or(0))
 }
 
 pub fn apply_batch(conn: &mut Connection, batch: &Batch, now_ms: i64) -> SyncResult<ApplyReport> {
@@ -455,7 +466,13 @@ pub fn apply_batch(conn: &mut Connection, batch: &Batch, now_ms: i64) -> SyncRes
             Err(error) => {
                 savepoint.rollback()?;
                 drop(savepoint);
-                quarantine(&tx, id, record, &error.to_string(), now_ms)?;
+                quarantine(
+                    &tx,
+                    id,
+                    record,
+                    &format!("could not be saved: {error}"),
+                    now_ms,
+                )?;
                 report.quarantined += 1;
                 continue;
             }

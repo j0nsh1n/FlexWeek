@@ -1,6 +1,7 @@
 use flexweek_sync::{
     Batch, Record, acknowledge_pull, acknowledge_push, apply_batch, export_since, list_peers,
-    migrate, retry_quarantine, revoke_peer, scan, set_account, set_device, upsert_peer,
+    migrate, retry_quarantine, retryable_held, revoke_peer, scan, set_account, set_device,
+    upsert_peer,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
@@ -561,6 +562,52 @@ fn held_back_records_apply_on_a_later_try_or_go_when_replaced() {
         .query_row("SELECT COUNT(*) FROM sync_quarantine", [], |row| row.get(0))
         .unwrap();
     assert_eq!(count, 0);
+}
+
+#[test]
+fn records_no_retry_can_fix_are_neither_counted_nor_churned() {
+    let mut b = db("b", true);
+    let body = Record {
+        entity: "assignment".into(),
+        key: "x".into(),
+        body: Some(assignment("x", "X")),
+        hlc: 1 << 16,
+        device_id: "a".into(),
+        seq: 1,
+    }
+    .to_value()
+    .to_string();
+    for reason in [
+        "account identity differs",
+        "could not be saved: FOREIGN KEY constraint failed",
+        "clock is more than 24 hours ahead",
+    ] {
+        b.execute(
+            "INSERT INTO sync_quarantine(user_id, entity, key, reason, body, at) VALUES (1, 'assignment', 'x', ?1, ?2, '0')",
+            rusqlite::params![reason, body],
+        )
+        .unwrap();
+    }
+    assert_eq!(
+        retryable_held(&b, 1).unwrap(),
+        1,
+        "only the clock one can be fixed by a retry"
+    );
+    let ids = |b: &rusqlite::Connection| -> Vec<(i64, String)> {
+        b.prepare("SELECT id, reason FROM sync_quarantine ORDER BY id")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    };
+    let before = ids(&b);
+    retry_quarantine(&mut b, 1, 0).unwrap();
+    let after = ids(&b);
+    assert!(
+        after.contains(&before[0]) && after.contains(&before[1]),
+        "{after:?}"
+    );
 }
 
 #[test]

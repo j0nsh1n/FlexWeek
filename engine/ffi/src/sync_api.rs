@@ -95,14 +95,7 @@ impl NativeSync {
         };
         flexweek_store::open_connection(&self.db_path)
             .ok()
-            .and_then(|db| {
-                db.query_row(
-                    "SELECT COUNT(*) FROM sync_quarantine WHERE user_id = ?1",
-                    [user_id],
-                    |row| row.get(0),
-                )
-                .ok()
-            })
+            .and_then(|db| flexweek_sync::retryable_held(&db, user_id).ok())
             .unwrap_or(0)
     }
 
