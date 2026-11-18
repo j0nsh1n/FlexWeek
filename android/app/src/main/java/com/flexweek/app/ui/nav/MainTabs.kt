@@ -13,8 +13,8 @@ enum class MainTab(val label: String, @DrawableRes val icon: Int, @DrawableRes v
 object MainTabs {
     val releaseTabs = listOf(MainTab.Today, MainTab.Week, MainTab.Settings)
 
-    /** Add is an action over every tab, not a tab of its own (pick 1 A). */
-    fun addAvailable(tab: MainTab): Boolean = tab in releaseTabs
+    /** Add is an action over Today and Week, not a tab of its own; Settings has none (layout B, 2026-11-17). */
+    fun addAvailable(tab: MainTab): Boolean = tab == MainTab.Today || tab == MainTab.Week
 }
 
 /** What Back does: close an open sheet first, then go back to Today, and only then leave the app. */

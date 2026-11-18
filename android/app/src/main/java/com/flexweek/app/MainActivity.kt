@@ -325,7 +325,8 @@ private fun FlexWeekRoot(
     Box(Modifier.fillMaxSize()) {
     Scaffold(
         bottomBar = {
-            NavigationBar {
+            // The full-screen Add form covers the tabs, as in layout B.
+            if (sheet != ActiveSheet.Add) NavigationBar {
                 MainTabs.releaseTabs.forEach { item ->
                     NavigationBarItem(
                         selected = tab == item,
