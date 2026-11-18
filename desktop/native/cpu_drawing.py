@@ -42,13 +42,32 @@ def apply_saved(look_path: Path, version: str) -> bool:
     return True
 
 
-def start_new_copy(*, cpu: bool) -> None:
-    """Start FlexWeek again the way it was started. The caller quits this copy.
+def new_copy_command(
+    *, frozen: bool, appimage: str | None, executable: str, argv: list[str], orig_argv: list[str]
+) -> list[str]:
+    """The command that starts FlexWeek again the way it was started.
 
-    `sys.orig_argv` is the interpreter and its arguments for a source run (`python -m desktop.main ...`),
-    and the program and its arguments for a frozen build.
+    An AppImage runs from a mount that goes away once this copy quits, so the new copy starts from the
+    AppImage file itself. A packaged build is its executable. A source run repeats the interpreter and
+    its arguments (`python -m desktop.main ...`).
     """
-    arguments = list(sys.orig_argv) or [sys.executable, *sys.argv]
+    if frozen:
+        program = appimage if appimage else executable
+        return [program, *argv[1:]]
+    return list(orig_argv) or [executable, *argv]
+
+
+def start_new_copy(*, cpu: bool) -> None:
+    """Start FlexWeek again the way it was started. The caller quits this copy."""
+    from desktop.native.autostart import frozen
+
+    arguments = new_copy_command(
+        frozen=frozen(),
+        appimage=os.environ.get("APPIMAGE"),
+        executable=sys.executable,
+        argv=list(sys.argv),
+        orig_argv=list(sys.orig_argv),
+    )
     environment = dict(os.environ)
     if cpu:
         environment[BACKEND_ENV] = SOFTWARE
