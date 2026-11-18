@@ -82,7 +82,7 @@ Item {
                     x: 16
                     y: 12
                     width: parent.width - 32
-                    text: "Layered on the " + (root.st.draftPreset || "") + " preset. Done applies what you change here."
+                    text: "Based on the " + (root.st.draftPreset || "") + " preset. Done applies what you change here."
                     color: palette.inkPrimaryContainer
                     font.family: M3Font.family
                     font.pixelSize: M3Font.px(14)
