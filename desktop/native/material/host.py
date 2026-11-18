@@ -7,18 +7,25 @@ reported; this page does not change the saved surface.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
 from PySide6.QtCore import QEventLoop, Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import QGuiApplication, QPalette
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtQuickWidgets import QQuickWidget
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
-from desktop.native.look import design_look
 from desktop.native.material.bridge import MaterialBridge
 from desktop.native.material.focus_visible import install as install_focus_visible
-from desktop.native.material.theme import qml_dir, qml_path, register_fonts
+from desktop.native.material.theme import (
+    qml_dir,
+    qml_path,
+    read_material_choice,
+    register_fonts,
+    resolved_mode,
+)
 
 log = logging.getLogger("flexweek.material")
 
@@ -113,13 +120,22 @@ class MaterialPage(QWidget):
         self.bridge.refresh()
 
 
+def device_is_dark() -> bool:
+    return QGuiApplication.palette().color(QPalette.ColorRole.Window).lightness() < 128
+
+
 def appearance_of(window: Any) -> tuple[str, str]:
-    """Light or dark, and standard or high contrast, from the look the window wears."""
-    pack, system_dark, accent = window._look_inputs()
-    look = window._worn_look()
-    palette, selected = design_look("your", pack, system_dark, look, accent)
-    mode = "dark" if palette.get("axis") == "dark" else "light"
-    custom = selected.get("custom") or {}
-    base = custom.get("base", selected.get("preset"))
-    contrast_name = "high" if base == "high-contrast" else "std"
-    return mode, contrast_name
+    """Light or dark, and standard or high contrast, from Material's own saved choice.
+
+    System follows the device; Light and Dark win over it. Nobody signed in follows the device with
+    standard contrast. The Widgets look and the account's theme pack play no part.
+    """
+    dark = device_is_dark()
+    if window._wears_carried_look():
+        return resolved_mode("system", dark), "std"
+    try:
+        stored = json.loads(window._look_path().read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        stored = None
+    choice = read_material_choice(stored)
+    return resolved_mode(choice["mode"], dark), choice["contrast"]

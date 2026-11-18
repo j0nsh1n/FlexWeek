@@ -36,8 +36,6 @@ FORBIDDEN = (
 # (file under material/, module, name) imports that are still there, and the plan step that removes each.
 # Exact: a new forbidden import in an allowed file fails, and so does an entry nothing imports any more.
 ALLOWED = {
-    # Step 3: Material's light or dark comes from the system palette, not the Widgets look.
-    **{("host.py", "look", name): "step 3" for name in ("design_look",)},
     # Step 7: setup's style pick goes (the Widgets designs and their looks).
     **{
         ("bridge_account.py", "layouts.registry", name): "step 7"

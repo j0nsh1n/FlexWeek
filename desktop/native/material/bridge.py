@@ -131,12 +131,8 @@ class MaterialBridge(QObject):
             self._week_follow = changed
 
     def set_appearance(self, mode: str, _worn_contrast: str) -> None:
-        """Apply the saved Material look. `mode` is the worn light or dark axis.
-
-        Follow system uses that axis. An explicit saved light or dark wins. The worn
-        contrast is not Material's contrast: this shell stays standard unless its own
-        saved contrast says high.
-        """
+        """Apply the saved Material look. `mode` is the light or dark the device or Material's own
+        choice gives (appearance_of). Material's contrast is its own saved one."""
         stored = self._stored_look()
         choice = read_material_choice(stored)
         self._advanced = read_advanced(stored)
