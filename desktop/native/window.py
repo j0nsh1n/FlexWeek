@@ -4075,6 +4075,30 @@ class NativeWindow(QMainWindow):
                 {"id": "from_today", "label": "From today on", "kind": "tonal"},
                 {"id": "stay", "label": "Cancel", "kind": "text"},
             ],
+            "cards": [
+                {
+                    "id": "keep",
+                    "title": "Keep my edited weeks",
+                    "line": "Updates the other weeks. Weeks you changed yourself keep their own times.",
+                },
+                {
+                    "id": "from_today",
+                    "title": "From today on",
+                    "line": (
+                        "Days before today keep their times. Weeks you changed are replaced. "
+                        "Can't be undone."
+                    ),
+                },
+                {
+                    "id": "replace",
+                    "title": "Every week",
+                    "line": (
+                        "Replaces the times in all weeks, including the ones you changed. "
+                        "Can't be undone."
+                    ),
+                },
+            ],
+            "confirm": "Save changes",
         }
 
     def _add_now(self) -> None:

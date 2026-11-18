@@ -408,15 +408,39 @@ class BlockDraft:
             question = f"Delete {name} on every {days} this week?"
         if is_setup_block(self.original):
             answers = [{"id": "stay", "label": "Cancel", "kind": "text"}]
+            cards = []
             if occurrence:
                 answers.append({"id": "day", "label": "This day only", "kind": "tonal"})
+                cards.append(
+                    {
+                        "id": "day",
+                        "title": f"Just {day_name} {stamp.day} {stamp.strftime('%b')}",
+                        "line": f"Other days this week and other weeks keep {name}. You can undo this.",
+                    }
+                )
             answers.append({"id": "week", "label": "This week only", "kind": "tonal"})
             answers.append({"id": "every", "label": "This week and later", "kind": "filled"})
+            cards.append(
+                {
+                    "id": "week",
+                    "title": "This week only",
+                    "line": f"Other weeks keep {name}. You can undo this.",
+                }
+            )
+            cards.append(
+                {
+                    "id": "every",
+                    "title": "This week and every week after",
+                    "line": f"Earlier weeks keep {name}. Can't be undone.",
+                }
+            )
             return {
                 "id": "delete-block",
                 "title": f"Delete {name}?",
-                "body": question + " Earlier weeks keep it. This week and later can't be undone.",
+                "body": "",
                 "answers": answers,
+                "cards": cards,
+                "confirm": "Delete",
             }
         return {
             "id": "delete-block",

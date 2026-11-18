@@ -23,7 +23,7 @@ from desktop.native.setup import WEEK  # noqa: E402
 from desktop.native.widgets import ConfirmSheet, SchoolHoursDialog  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402, F401
-from desktop.tests.material_support import named, show_material  # noqa: E402
+from desktop.tests.material_support import named, pump, show_material  # noqa: E402
 from desktop.tests.sheets.support_material_sheets import click  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.week.test_repeats_from_the_open_week import WEDNESDAY, block, school_of  # noqa: E402
@@ -151,13 +151,13 @@ def test_material_defaults_to_except_edited_and_cancel_saves_nothing(
     def poke() -> None:
         tries["n"] += 1
         prompts = [item for item in named(root, "sheetPrompt") if item.property("visible")]
-        button = named(prompts[0], "prompt_keep") if prompts else []
+        button = named(prompts[0], "prompt_confirm") if prompts else []
         focused = bool(button) and button[0].property("activeFocus") is True
         if (not prompts or not focused) and tries["n"] < 40:
             QTimer.singleShot(0, poke)
             return
         assert prompts, "the edited-weeks question did not appear"
-        assert button, "Except edited was not on the question"
+        assert button, "the confirm button was not on the question"
         seen["label"] = str(button[0].property("text"))
         seen["focused"] = focused
         ask = prompts[0].property("ask")
@@ -167,7 +167,7 @@ def test_material_defaults_to_except_edited_and_cancel_saves_nothing(
     QTimer.singleShot(0, poke)
     monkeypatch.setattr(window_module.SchoolHoursDialog, "exec", lambda dialog: shorten(dialog))
     window._school_hours()
-    assert seen["label"] == "Except edited"
+    assert seen["label"] == "Save changes"
     assert seen["focused"] is True
     assert seen["body"] == "The week of 16 November has its own School times."
     assert school_of(after_setup) == before
@@ -229,6 +229,7 @@ def test_cancel_on_the_material_setup_week_page_stays_there_and_saves_nothing(
             QTimer.singleShot(0, poke)
             return
         assert stay, "the edited-weeks question did not appear"
+        pump(QApplication.instance(), 10)
         click(window, stay[0])
 
     QTimer.singleShot(0, poke)
