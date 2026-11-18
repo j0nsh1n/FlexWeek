@@ -1,8 +1,8 @@
 # context.md — FlexWeek
 
 ## Current State (2026-11-17)
-- Branch `release/1.4.0`: the 1.4.0 version bump from main 5788750e (#128-#136: week start on any day, the planner
-  leftovers). Desktop only: the phone stays 1.3.0. Done time is the larger of focus minutes and minutes ticked done
+- Branch `release/1.4.0`: the 1.4.0 version bump from main 5788750e (#115-#136 since 1.3.0: week start on any
+  day, the planner leftovers and missed sessions, School changes across weeks, Material drag and menus). Desktop only: the phone stays 1.3.0. Done time is the larger of focus minutes and minutes ticked done
   (`plan::done_time`), taken off in every count.
 - PR #137 (`fix/phone-1.4.0`, draft): the phone's 20 fixes, phone edits stamped when made, set-aside sync records
   retried, the layout B restyle and Report a problem (phone and desktop, hidden until the form link is set). Review 1
@@ -11,8 +11,8 @@
   the Android APK were built on this computer (`scripts/build-linux-local.sh` in an Ubuntu 24.04 container; the APK
   signed with the 1.2.0 key); the AppImage and the Windows installers came from the tagged "Release packages" run.
   The previous release is v1.2.0 (2026-10-27).
-- Developer build `1.3.0.202611150450` (main ce95645) is `dev`; older builds stay as `dev-<commit>` pre-releases
-  (`dev-4110547` the newest of them). GitHub publishes them; the Linux tarball can also be built here.
+- Developer build `1.3.0.202611171825` (main 5788750) is `dev`; older builds stay as `dev-<commit>` pre-releases
+  (`dev-18dee2e` the newest of them). GitHub publishes them; the Linux tarball can also be built here.
 - In 1.3.0 since 1.2.0: FIX-SPEC 1.3 (#67-#76), the J lanes (Material Week zoom, Day hours, Month study fill, Look
   preview), the assistant's planning tools and live reload (#91, #92), the testing rebuild (#97, 2026-11-08: tests by
   area, light app, looks judged by review, CI as the gate), Material review fixes (#89-#96, #98-#105), CI/build work
@@ -104,8 +104,11 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
-- 2026-11-16, branch `fix/planner-leftovers`, local only, from main 18dee2e6. Does: Plan moves a missed unpinned session of this week; Spread over days spreads around held pieces; a homework saved In one go is not cut by Split long tasks; Material's Plan button is on whenever Plan can place something; held `planned_min` is shifted after a save across weeks as the server counts it (from the open week on), and not again for a homework Undo restored from a delete. Fix round 1 answered the review's findings 1-7. Open: the lead's whole local check, a second review, then Jonathan's go to push.
-  Fix round 5 (2026-11-17): a pinned session that passed unfinished holds none of its homework's minutes on any screen (engine `planning::pinned_past`, left out by `without_missed_times`, `open_rest_sessions_at`); it stays put and Plan gives its minutes a new session, `plan_left` included.
+- 2026-11-17, branch `release/1.4.0`, PR #138: 1.4.0 cut from main 5788750e, desktop only (Jonathan: "get the 1.4.0
+  release besides mobile going"); checks run on GitHub while Jonathan uses his computer. Next: merge #138 on a passed
+  review and green checks, tag v1.4.0, "Release packages" with the tag (eight files), checksums, publish latest.
+  `fix/planner-leftovers` merged as #136 (5788750e). The phone work is draft PR #137 (`fix/phone-1.4.0`); its review 1
+  fixes (scratch/android-inspect/review1/VERDICT.md) are not done.
 - 2026-11-15, branch `fix/planner-spread-and-left-over`, PR #135. Sonnet built it in two rounds; the lead took it over after Sol failed both (d6e49bee and the mutation-pattern fix after). Next: GitHub checks and Sol's check of the CodeRabbit round on PR #135, then merge and a developer build with #134 and #135. #134 merged as 90f02c94 after its GitHub-only failure (the Retro look leaking into later tests' dialogs) was fixed in the tests' conftest.
 - 2026-11-14, branch `feat/setup-change-asks-about-edited-weeks`, local only. Fix round 2 is in. Local CI passed on the second pass (ci2/summary.txt). Next: review. Nothing pushed.
 - 2026-11-12, branch `fix/replan-moves-missed-sessions` (#126) with `fix/planner-counts-minutes` (#125) merged in,

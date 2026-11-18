@@ -54,9 +54,12 @@ stay in place.
 - Plan my homework does the same for a session of this week whose time has passed
   and that you did not finish, with the same notice. A pinned session, a finished
   one, one on now and one later today stay where they are, and every other planned
-  time stays. The assistant helper's Plan does the same, and
-  Help and the helper's Plan description say so. If no room is left before it is due, it is left with no time
-  rather than put in the past.
+  time stays. The assistant helper's Plan does the same, and Help and the helper's
+  Plan description say so. If no room is left before it is due, it is left with no
+  time rather than put in the past.
+- A session you pinned by hand that passed unfinished stays where you put it, and
+  its minutes still count as needing a time: Plan gives them a new session. In a
+  week that is over it reads "History essay · 1 h pinned, in the past".
 - Plan into this week now moves a homework session planned for a time that has
   passed and not finished (and not pinned), when "left from last week" counts its
   minutes. The Plan into this week button on a single homework in the Overdue and

@@ -42,7 +42,7 @@ are on main (PRs #67-#83). In order:
 - Done 2026-11-07 (#87): the imagehlp.dll and web-module fixes; the Windows job builds. No Windows or AppImage
   package has been built since (329 commits of Material work); the 1.3.0 steps include a by-hand run on main.
 - Complete when: a stable release builds on every platform and spec.md matches CI. The 1.3.0 release is that test.
-- Status: [ ] open until v1.3.0 is released.
+- Status: [ ] v1.3.0 built and shipped on every platform (2026-11-10); spec.md against CI not re-checked since.
 
 ### R2 — Correctness
 - Two quick settings saves can overwrite each other (save_preferences).

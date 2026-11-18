@@ -7,6 +7,8 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [1.4.0] - 2026-11-17
 
+This release has no new Android app: the phone stays on 1.3.0, and the phone changes below arrive with the next Android app.
+
 ### Added
 - In the Material style, a block's menu in Week and Day (right-click, Shift+F10, the Menu key) has Duplicate, Move to day... and Copy, for fixed times and homework. Duplicate and Copy work as in the Widgets styles; Move to day... opens a list of the week's days with today marked, and the block goes to that day at the same time, with Undo. Ctrl+V pastes what Copy took, into today in Week or the day on view in Day.
 - In the Material style, Week and Day blocks can be dragged: press and drag a block to move it to another time (and, in Week, another day), or drag its top or bottom edge to change its start or end, for fixed times and homework alike. It lands on your Dragging step (every 5 minutes or every quarter hour) and an edge never leaves a block shorter than one step; it saves the way the Widgets styles' drag does, and shows the Undo notice; Esc during the drag puts the block back and saves nothing.
