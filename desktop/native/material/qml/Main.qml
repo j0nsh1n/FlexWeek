@@ -454,6 +454,21 @@ Item {
                         onClicked: bridge.showPage("month")
                     }
 
+                    Button {
+                        objectName: "materialRetrySave"
+                        visible: bridge.retryShown
+                        enabled: bridge.retryEnabled && !root.settingsPromptOpen
+                        anchors.verticalCenter: parent.verticalCenter
+                        theme: root.theme
+                        density: root.density
+                        reduceMotion: root.reduceMotion
+                        highContrast: root.highContrast
+                        kind: "tonal"
+                        text: "Retry save"
+                        accessName: "Retry save"
+                        onClicked: bridge.retrySave()
+                    }
+
                     IconButton {
                         objectName: "materialUndo"
                         theme: root.theme
@@ -671,7 +686,7 @@ Item {
                 z: 3
                 message: bridge.snackText
                 actionText: bridge.snackAction
-                onActionClicked: if (bridge.snackAction !== "") bridge.undo()
+                onActionClicked: if (bridge.snackAction !== "") bridge.snackActed()
                 onPauseRequested: if (bridge) bridge.pauseSnack()
                 onResumeRequested: if (bridge) bridge.resumeSnack()
                 anchors.horizontalCenter: parent.horizontalCenter

@@ -70,6 +70,12 @@ class _Session(Protocol):
 
     def can_redo(self) -> bool: ...
 
+    pending_save: dict | None
+    conflict: bool
+    busy: bool
+
+    def retry_save(self) -> None: ...
+
     def undo(self) -> None: ...
 
     def redo(self) -> None: ...
@@ -136,6 +142,11 @@ class MaterialBridge(QObject):
         if changed is not None and hasattr(changed, "connect"):
             changed.connect(self._follow_week)
             self._week_follow = changed
+        finished = getattr(self._window.session, "save_finished", None)
+        self._save_follow = None
+        if finished is not None and hasattr(finished, "connect"):
+            finished.connect(self._on_save_finished)
+            self._save_follow = finished
 
     def set_appearance(self, mode: str, _worn_contrast: str) -> None:
         """Apply the saved Material look. `mode` is the light or dark the device or Material's own
@@ -210,6 +221,22 @@ class MaterialBridge(QObject):
         if changed is not None:
             with contextlib.suppress(RuntimeError, TypeError):
                 changed.disconnect(self._follow_week)
+        finished = getattr(self, "_save_follow", None)
+        self._save_follow = None
+        if finished is not None:
+            with contextlib.suppress(RuntimeError, TypeError):
+                finished.disconnect(self._on_save_finished)
+
+    def _on_save_finished(self, ok: bool, message: str) -> None:
+        """A save that failed says so in the snackbar with a Retry button, and the top bar keeps a
+        Retry save button for as long as the changes wait. A save that worked takes the Retry away."""
+        if not ok:
+            if self._window.session.pending_save is not None:
+                self.note(message, action="RETRY")
+            return
+        if self._snack_action == "RETRY":
+            self._clear_snack(self._snack)
+        self.changed.emit()
 
     def _publish_theme(self) -> None:
         self._reduce_motion = self._motion_reduced() or self._advanced.get("motion") == "Off"
@@ -443,6 +470,31 @@ class MaterialBridge(QObject):
         session = self._window.session
         moment = datetime.fromtimestamp(session.now_ms() / 1000)
         return clock_label(moment.hour * 60 + moment.minute)
+
+    @Property(bool, notify=changed)
+    def retryShown(self) -> bool:
+        """Changes are waiting after a failed save and Retry save can send them."""
+        session = self._window.session
+        return session.pending_save is not None and not session.conflict
+
+    @Property(bool, notify=changed)
+    def retryEnabled(self) -> bool:
+        return self.retryShown and not self._window.session.busy
+
+    @Slot()
+    def retrySave(self) -> None:
+        """Retry save: the same call as the Widgets button. Ctrl+S flushes the same waiting changes."""
+        if self._snack_action == "RETRY":
+            self._clear_snack(self._snack)
+        self._window.session.retry_save()
+        self.changed.emit()
+
+    @Slot()
+    def snackActed(self) -> None:
+        if self._snack_action == "RETRY":
+            self.retrySave()
+        else:
+            self.undo()
 
     @Property(bool, notify=changed)
     def canUndo(self) -> bool:
