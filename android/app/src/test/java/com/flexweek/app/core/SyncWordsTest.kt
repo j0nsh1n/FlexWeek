@@ -20,6 +20,17 @@ class SyncWordsTest {
         assertFalse(other, "isn't reachable" in other)
     }
 
+    @Test fun onlyAVersionMismatchSaysToUpdate() {
+        val busy = SyncWords.syncProblem("protocol", "database is locked")
+        assertFalse(busy, "update" in busy)
+        assertEquals(SyncWords.NEEDS_UPDATE, SyncWords.syncProblem("protocol", "unsupported protocol version"))
+        assertEquals(SyncWords.NEEDS_UPDATE, SyncWords.syncProblem("version_mismatch", ""))
+        assertEquals("protocol", SyncWords.kindToRemember("""{"ok":false,"kind":"protocol","error":"sync is not making progress"}""", null))
+        assertEquals("version_mismatch", SyncWords.kindToRemember("""{"ok":false,"kind":"protocol","error":"unsupported protocol version"}""", null))
+        val raw = JSONObject().put("paired", true).put("state", "unreachable").put("line", "x").toString()
+        assertEquals(SyncWords.OTHER, JSONObject(RustPhoneJson.sync(raw, ZoneId.of("UTC"), "protocol")).getString("line"))
+    }
+
     @Test fun onlyAWrongCodeSaysTheCodeDidNotMatch() {
         assertTrue(SyncWords.pairProblem("wrong_code").startsWith("That code didn't match"))
         listOf("version_mismatch", "code_used", "device_mismatch", "key", "protocol", "database", "").forEach {
@@ -32,14 +43,14 @@ class SyncWordsTest {
     @Test fun aSuccessClearsTheKeptKindAndACancelKeepsIt() {
         assertNull(SyncWords.kindToRemember("""{"ok":true,"applied":0}""", "timeout"))
         assertEquals("timeout", SyncWords.kindToRemember("""{"ok":false,"kind":"cancelled"}""", "timeout"))
-        assertEquals("protocol", SyncWords.kindToRemember("""{"ok":false,"kind":"protocol"}""", null))
+        assertEquals("database", SyncWords.kindToRemember("""{"ok":false,"kind":"database"}""", null))
     }
 
     @Test fun theStatusLineNamesAnUpdateInsteadOfAnOffComputer() {
         val raw = JSONObject().put("paired", true).put("state", "unreachable")
             .put("line", "Your computer isn't reachable. Showing the last saved week.").toString()
         val zone = ZoneId.of("UTC")
-        assertEquals(SyncWords.NEEDS_UPDATE, JSONObject(RustPhoneJson.sync(raw, zone, "protocol")).getString("line"))
+        assertEquals(SyncWords.NEEDS_UPDATE, JSONObject(RustPhoneJson.sync(raw, zone, "version_mismatch")).getString("line"))
         assertTrue(JSONObject(RustPhoneJson.sync(raw, zone, "timeout")).getString("line").startsWith("Your computer isn't reachable"))
         assertEquals(SyncWords.OTHER, JSONObject(RustPhoneJson.sync(raw, zone, "database")).getString("line"))
     }
