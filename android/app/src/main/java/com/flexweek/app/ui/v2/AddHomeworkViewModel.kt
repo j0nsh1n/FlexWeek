@@ -4,6 +4,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.flexweek.app.core.FlexWeekCore
 import com.flexweek.app.core.newOpId
 import com.flexweek.app.model.HomeworkDraft
@@ -14,15 +19,21 @@ import java.time.LocalDate
 
 class AddHomeworkViewModel(
     private val core: FlexWeekCore,
+    private val workerDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val onSaved: (String) -> Unit,
 ) : ViewModel() {
     // A nice-to-have row: if the core cannot list them, the sheet opens without it.
-    val recentTitles: List<String> = runCatching { core.recentTitles() }.getOrDefault(emptyList())
+    var recentTitles: List<String> by mutableStateOf(emptyList())
+        private set
     var draft by mutableStateOf(HomeworkDraft())
         private set
+    private var saving = false
 
     init {
         draft = draft.copy(due = DueChips.forToday(LocalDate.now()).first().date.toString())
+        viewModelScope.launch {
+            recentTitles = withContext(workerDispatcher) { runCatching { core.recentTitles() }.getOrDefault(emptyList()) }
+        }
     }
 
     var stepProblem: String? by mutableStateOf(null)
@@ -83,11 +94,17 @@ class AddHomeworkViewModel(
     }
 
     private fun save() {
-        val result = JSONObject(core.saveHomework(V2Json.homeworkDraftJson(draft), newOpId()))
-        if (!result.optBoolean("ok", false)) {
-            stepProblem = result.optString("error", "Could not save.")
-            return
+        if (saving) return
+        saving = true
+        val json = V2Json.homeworkDraftJson(draft)
+        viewModelScope.launch {
+            val result = JSONObject(withContext(workerDispatcher) { core.saveHomework(json, newOpId()) })
+            saving = false
+            if (!result.optBoolean("ok", false)) {
+                stepProblem = result.optString("error", "Could not save.")
+                return@launch
+            }
+            onSaved(result.optString("message", "Homework added."))
         }
-        onSaved(result.optString("message", "Homework added."))
     }
 }

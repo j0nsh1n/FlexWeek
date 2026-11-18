@@ -12,16 +12,20 @@ import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import kotlinx.coroutines.asCoroutineDispatcher
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RefusedAnswersTest {
+    @get:org.junit.Rule val main = com.flexweek.app.testing.MainThreadRule()
+
     @Test fun aRefusedAcceptShowsTheReasonInPlaceOfAPlanWithADeadButton() {
         val core = object : FlexWeekCore by FakeFlexWeekCore() {
             override fun acceptPlan(previewId: String, opId: String) = """{"ok":false,"error":"The week changed on another device. Plan again."}"""
         }
         var accepted = false
-        val vm = PlanRecordViewModel(core, onAccepted = { accepted = true }, onDismiss = {})
+        val vm = PlanRecordViewModel(core, onAccepted = { accepted = true }, onDismiss = {}, workerDispatcher = main.dispatcher)
         assertNotNull(vm.record)
         vm.accept()
         assertEquals(false, accepted)
@@ -33,7 +37,7 @@ class RefusedAnswersTest {
         val core = object : FlexWeekCore by FakeFlexWeekCore() {
             override fun planWeek(weekStart: String) = """{"ok":false,"error":"This week is over, so nothing was planned."}"""
         }
-        val vm = PlanRecordViewModel(core, onAccepted = {}, onDismiss = {})
+        val vm = PlanRecordViewModel(core, onAccepted = {}, onDismiss = {}, workerDispatcher = main.dispatcher)
         assertNull(vm.record)
         assertEquals("This week is over, so nothing was planned.", vm.error)
     }
@@ -43,7 +47,7 @@ class RefusedAnswersTest {
             override fun acceptRunningLate(previewId: String, opId: String) = """{"ok":false,"error":"The week changed on another device."}"""
         }
         var accepted = false
-        val vm = RunningLateViewModel(core, onAccepted = { accepted = true }, onDismiss = {})
+        val vm = RunningLateViewModel(core, onAccepted = { accepted = true }, onDismiss = {}, workerDispatcher = main.dispatcher)
         vm.accept()
         assertEquals(false, accepted)
         assertEquals("The week changed on another device.", vm.error)
@@ -77,6 +81,42 @@ class RefusedAnswersTest {
             assertEquals(com.flexweek.app.core.SyncWords.OFF, vm.state.problem)
         } finally {
             Dispatchers.resetMain()
+        }
+    }
+}
+
+class ThreadingTest {
+    @get:org.junit.Rule val main = com.flexweek.app.testing.MainThreadRule()
+
+    private fun offMain(calls: MutableList<Boolean>, uiThread: Thread) { calls += Thread.currentThread() !== uiThread }
+
+    // A worker dispatcher on its own thread stands for Dispatchers.IO: every engine call must run on it.
+    @Test fun planRunningLateAddAndWeekCallTheEngineOffTheMainThread() {
+        val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+        try {
+            val worker = executor.asCoroutineDispatcher()
+            val uiThread = Thread.currentThread()
+            val calls = java.util.Collections.synchronizedList(mutableListOf<Boolean>())
+            val delegate = FakeFlexWeekCore()
+            val core = object : FlexWeekCore by delegate {
+                override fun planWeek(weekStart: String): String { offMain(calls, uiThread); return delegate.planWeek(weekStart) }
+                override fun runningLate(dayIndex: Int, minutes: Int, opId: String): String { offMain(calls, uiThread); return delegate.runningLate(dayIndex, minutes, opId) }
+                override fun saveHomework(draftJson: String, opId: String): String { offMain(calls, uiThread); return delegate.saveHomework(draftJson, opId) }
+                override fun weekRows(weekStart: String): String { offMain(calls, uiThread); return delegate.weekRows(weekStart) }
+            }
+            PlanRecordViewModel(core, {}, {}, workerDispatcher = worker)
+            val late = RunningLateViewModel(core, {}, {}, workerDispatcher = worker)
+            late.pickMinutes(15)
+            val week = WeekViewModel(core, worker)
+            val add = AddHomeworkViewModel(core, worker) {}
+            add.onTitleChange("Lab report")
+            repeat(3) { add.nextOrSave() }
+            executor.shutdown()
+            assertTrue("engine calls did not finish", executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS))
+            assertEquals("plan, two late steps, week, save", 5, calls.size)
+            assertTrue("every engine call leaves the main thread: $calls", calls.all { it })
+        } finally {
+            executor.shutdownNow()
         }
     }
 }

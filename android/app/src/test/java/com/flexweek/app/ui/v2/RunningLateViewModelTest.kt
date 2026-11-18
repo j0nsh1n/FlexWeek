@@ -8,12 +8,14 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class RunningLateViewModelTest {
+    @get:org.junit.Rule val main = com.flexweek.app.testing.MainThreadRule()
+
     private val core = FakeFlexWeekCore()
 
     @Test
     fun previewListsEssayAndSoccer() {
         var accepted = false
-        val vm = RunningLateViewModel(core, onAccepted = { accepted = true }, onDismiss = {})
+        val vm = RunningLateViewModel(core, onAccepted = { accepted = true }, onDismiss = {}, workerDispatcher = main.dispatcher)
         assertNotNull(vm.preview)
         assertEquals(1, vm.preview!!.moves.size)
         assertEquals(listOf("Soccer"), vm.preview!!.stays)
@@ -23,7 +25,7 @@ class RunningLateViewModelTest {
 
     @Test
     fun minutesChangeReloadsPreview() {
-        val vm = RunningLateViewModel(core, onAccepted = {}, onDismiss = {})
+        val vm = RunningLateViewModel(core, onAccepted = {}, onDismiss = {}, workerDispatcher = main.dispatcher)
         vm.pickMinutes(15)
         assertEquals(15, vm.minutes)
         assertNotNull(vm.preview)
@@ -35,7 +37,7 @@ class RunningLateViewModelTest {
             override fun runningLate(dayIndex: Int, minutes: Int, opId: String) =
                 """{"ok":false,"error":"Open this week before using Running late."}"""
         }
-        val vm = RunningLateViewModel(refusing, onAccepted = {}, onDismiss = {})
+        val vm = RunningLateViewModel(refusing, onAccepted = {}, onDismiss = {}, workerDispatcher = main.dispatcher)
         assertNull(vm.preview)
         assertEquals("Open this week before using Running late.", vm.error)
     }

@@ -124,6 +124,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - On the phone, the Week tab refreshes after every sync and rolls over to the new week on Monday, instead of keeping the old week until the app is restarted.
 - On the phone, Today follows the real date when a new day starts, instead of staying on the day you last tapped, and the jump back to Today shows when you are on the same weekday of another week.
 - On the phone, the notification banner asks Android whether notifications are allowed (it goes when they are, and comes back a few days after "Not now" if they are still off), Allow sends you to Android's own switch once Android will not ask again, and the Exact reminders switch reads on only when Android allows exact alarms and re-plans reminders when you allow them.
+- On the phone, Plan, each Running late slider step, saving a homework and the Week tab no longer make the screen wait on the planner or a sync; they run in the background and show their result when ready.
 
 ## [1.3.0] - 2026-11-10
 
