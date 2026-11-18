@@ -106,6 +106,15 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
+- 2026-11-18 AFK run, branch `feat/material-only` (head 79a80b10, local only): steps 1-7 of the Material-only plan,
+  step 8 in part (command bar and Widgets focus screen deleted), Material Settings parity with the High contrast,
+  Paper, Ink and Terminal presets, alarms and a ring screen, keys and week tools, Help/About/Update/Account/Copies of
+  this week as Material sheets, the B2 choice-card dialogs with stacking, the CPU drawing fallback, CHANGELOG.
+  Whole desktop suite at 79a80b10: 5598 passed, 1 skipped. Waiting on Jonathan: who does steps 9-10 (the rest of the
+  Widgets UI in window.py) and #118's rebuild; the setup and Look-controls mockups
+  (`~/.flexweek-ui-harness/scratch/afk-2026-11-18/mockups/`). Phone PR #137: review-1 fixes done and main merged in
+  locally (`fix/phone-1.4.0`, abe76dd2), not pushed; its reviewer is his pick. Run log:
+  `~/.flexweek-ui-harness/scratch/afk-2026-11-18/plan.md`.
 - 2026-11-17, branch `feat/material-only` (worktree `~/.worktrees/flexweek-1.5.0`): 1.5.0 started after the Hack Club
   steps (README #139 merged, gallery PR hackclub/capitol#82 opened by Jonathan). Next: step 1 of the plan (move the
   shared non-UI code out of the Widgets files, with a test that fails if `material/**` imports Widgets code). Also in
