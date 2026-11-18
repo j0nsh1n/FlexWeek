@@ -12,6 +12,7 @@ import kotlinx.coroutines.withContext
 import com.flexweek.app.core.FlexWeekCore
 import com.flexweek.app.core.newOpId
 import com.flexweek.app.model.HomeworkDraft
+import com.flexweek.app.model.AddHomeworkWords
 import com.flexweek.app.model.DueChips
 import com.flexweek.app.model.V2Json
 import org.json.JSONObject
@@ -36,12 +37,12 @@ class AddHomeworkViewModel(
         }
     }
 
-    var stepProblem: String? by mutableStateOf(null)
+    var problem: String? by mutableStateOf(null)
         private set
 
     fun onTitleChange(value: String) {
-        draft = draft.copy(title = value, tried = false)
-        stepProblem = null
+        draft = draft.copy(title = value)
+        problem = null
     }
 
     fun onRecentTitle(value: String) = onTitleChange(value)
@@ -50,50 +51,33 @@ class AddHomeworkViewModel(
         draft = draft.copy(due = value)
     }
 
-    fun onWhenMode(value: String) {
-        draft = draft.copy(whenMode = value)
+    fun onEstimate(value: Int) {
+        draft = draft.copy(estimateMin = value, otherLength = false)
     }
 
-    fun onEstimate(value: Int) {
-        draft = draft.copy(estimateMin = value)
+    /** "Other": the length now comes from the minutes field, empty until the student types one. */
+    fun onOtherLength() {
+        draft = draft.copy(otherLength = true, estimateMin = 0)
+    }
+
+    fun onOtherMinutes(text: String) {
+        val minutes = text.filter { it.isDigit() }.take(3).toIntOrNull() ?: 0
+        draft = draft.copy(otherLength = true, estimateMin = minutes)
     }
 
     fun onSessions(value: String) {
         draft = draft.copy(sessions = value)
     }
 
-    fun goToStep(step: Int) {
-        draft = draft.copy(step = step.coerceIn(0, 2), tried = false)
-        stepProblem = null
-    }
-
-    fun nextOrSave() {
-        when (draft.step) {
-            0 -> {
-                draft = draft.copy(tried = true)
-                if (draft.title.trim().isEmpty()) {
-                    stepProblem = "Give the homework a title."
-                    return
-                }
-                stepProblem = null
-                draft = draft.copy(step = 1, tried = false)
-            }
-            1 -> {
-                stepProblem = null
-                draft = draft.copy(step = 2, tried = false)
-            }
-            else -> save()
+    fun save() {
+        if (!draft.canSave) {
+            problem = if (draft.title.trim().isEmpty()) AddHomeworkWords.NEEDS_TITLE else null
+            return
         }
+        send()
     }
 
-    fun back() {
-        if (draft.step > 0) {
-            draft = draft.copy(step = draft.step - 1, tried = false)
-            stepProblem = null
-        }
-    }
-
-    private fun save() {
+    private fun send() {
         if (saving) return
         saving = true
         val json = V2Json.homeworkDraftJson(draft)
@@ -101,7 +85,7 @@ class AddHomeworkViewModel(
             val result = JSONObject(withContext(workerDispatcher) { core.saveHomework(json, newOpId()) })
             saving = false
             if (!result.optBoolean("ok", false)) {
-                stepProblem = result.optString("error", "Could not save.")
+                problem = result.optString("error", "Could not save.")
                 return@launch
             }
             onSaved(result.optString("message", "Homework added."))

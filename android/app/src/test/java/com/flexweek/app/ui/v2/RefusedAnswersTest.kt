@@ -110,7 +110,8 @@ class ThreadingTest {
             val week = WeekViewModel(core, worker)
             val add = AddHomeworkViewModel(core, worker) {}
             add.onTitleChange("Lab report")
-            repeat(3) { add.nextOrSave() }
+            add.onEstimate(60)
+            add.save()
             executor.shutdown()
             assertTrue("engine calls did not finish", executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS))
             assertEquals("plan, two late steps, week, save", 5, calls.size)

@@ -6,9 +6,7 @@ import org.junit.Test
 
 class AddHomeworkWordsTest {
     @Test fun neitherLinePromisesATimeThatSaveDoesNotGive() {
-        listOf(AddHomeworkWords.TIME_NOTE, AddHomeworkWords.dueCrumb("Fri 20 Nov")).forEach {
-            assertFalse("Save does not place the homework: $it", it.contains("picks the time"))
-        }
+        assertFalse("Save does not place the homework", AddHomeworkWords.TIME_NOTE.contains("picks the time"))
         assertTrue(AddHomeworkWords.TIME_NOTE.contains("Plan"))
     }
 }

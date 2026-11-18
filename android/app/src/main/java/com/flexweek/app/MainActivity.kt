@@ -53,7 +53,7 @@ import com.flexweek.app.ui.theme.FlexWeekTheme
 import com.flexweek.app.ui.today.TodayScreen
 import com.flexweek.app.ui.today.TodayV2Extras
 import com.flexweek.app.ui.today.TodayViewModel
-import com.flexweek.app.ui.v2.AddHomeworkSheet
+import com.flexweek.app.ui.v2.AddHomeworkScreen
 import com.flexweek.app.ui.v2.AddHomeworkViewModel
 import com.flexweek.app.ui.v2.PlanRecordSheet
 import com.flexweek.app.ui.v2.PlanRecordViewModel
@@ -317,6 +317,7 @@ private fun FlexWeekRoot(
             BackStep.Leave -> Unit
         }
     }
+    Box(Modifier.fillMaxSize()) {
     Scaffold(
         bottomBar = {
             NavigationBar {
@@ -461,28 +462,6 @@ private fun FlexWeekRoot(
                         )
                 }
             }
-            if (sheet == ActiveSheet.Add) {
-                // A ViewModel keeps the half-typed draft over a rotation; the callback is rebound each time.
-                val addVm = viewModel(key = "add-homework-$addEpoch") { AddHomeworkViewModel(core) {} }
-                addVm.onSaved = { message ->
-                    todayVm.showMessage(message)
-                    closeSheet()
-                }
-                AddHomeworkSheet(
-                    draft = addVm.draft,
-                    recentTitles = addVm.recentTitles,
-                    stepProblem = addVm.stepProblem,
-                    onTitleChange = addVm::onTitleChange,
-                    onDuePick = addVm::onDuePick,
-                    onWhenMode = addVm::onWhenMode,
-                    onEstimate = addVm::onEstimate,
-                    onSessions = addVm::onSessions,
-                    onStepJump = addVm::goToStep,
-                    onBack = addVm::back,
-                    onNext = addVm::nextOrSave,
-                    onCancel = closeSheet,
-                )
-            }
             if (sheet == ActiveSheet.Plan) {
                 val planVm =
                     remember(sheet) {
@@ -527,5 +506,27 @@ private fun FlexWeekRoot(
                 }
             }
         }
+    }
+    if (sheet == ActiveSheet.Add) {
+        // A ViewModel keeps the half-typed draft over a rotation; the callback is rebound each time.
+        val addVm = viewModel(key = "add-homework-$addEpoch") { AddHomeworkViewModel(core) {} }
+        addVm.onSaved = { message ->
+            todayVm.showMessage(message)
+            closeSheet()
+        }
+        AddHomeworkScreen(
+            draft = addVm.draft,
+            recentTitles = addVm.recentTitles,
+            problem = addVm.problem,
+            onTitleChange = addVm::onTitleChange,
+            onDuePick = addVm::onDuePick,
+            onEstimate = addVm::onEstimate,
+            onOtherLength = addVm::onOtherLength,
+            onOtherMinutes = addVm::onOtherMinutes,
+            onSessions = addVm::onSessions,
+            onSave = addVm::save,
+            onClose = closeSheet,
+        )
+    }
     }
 }

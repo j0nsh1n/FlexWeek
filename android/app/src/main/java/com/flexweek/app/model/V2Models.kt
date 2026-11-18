@@ -9,12 +9,15 @@ import java.util.Locale
 data class HomeworkDraft(
     val title: String = "",
     val due: String = "",
-    val whenMode: String = "pick",
-    val estimateMin: Int = 60,
+    // 0 until the student picks a length; Save stays off until then.
+    val estimateMin: Int = 0,
+    // "Other" is chosen: the length comes from the minutes field instead of a chip.
+    val otherLength: Boolean = false,
     val sessions: String = "one",
-    val step: Int = 0,
-    val tried: Boolean = false,
-)
+) {
+    /** Save needs a title, a due day and a length. */
+    val canSave: Boolean get() = title.trim().isNotEmpty() && due.isNotBlank() && estimateMin > 0
+}
 
 data class PlanRecordLine(
     val title: String,
@@ -252,10 +255,13 @@ object V2Json {
             .toString()
 }
 
-/** What step 2 says about the time: Save leaves the homework in "No time yet" until Plan gives it one. */
+/** What the form says about the time: Save leaves the homework in "No time yet" until Plan gives it one. */
 object AddHomeworkWords {
     const val TIME_NOTE = "Save puts it in No time yet. Plan gives it a time."
-    fun dueCrumb(due: String) = "✓ due $due"
+    const val NEEDS_TITLE = "Give the homework a title."
+    val LENGTHS: List<Pair<String, Int>> =
+        listOf("15 min" to 15, "30 min" to 30, "45 min" to 45, "1 h" to 60, "1 h 30" to 90, "2 h" to 120)
+    const val OTHER = "Other"
 }
 
 data class DueChip(val label: String, val date: LocalDate)
