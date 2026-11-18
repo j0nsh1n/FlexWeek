@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import os
 import time
 import weakref
 from collections.abc import Callable, Iterator
@@ -77,7 +78,7 @@ from shiboken6 import isValid
 
 from backend import clock as wall_clock
 from backend.slots import DAY_END_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
-from desktop.native import autostart, icons
+from desktop.native import autostart, cpu_drawing, icons
 from desktop.native.account_copy import (
     CREATE_HEADING,
     CREATE_NOTE,
@@ -482,6 +483,8 @@ AUTH_CARD_WIDTH = 420
 ENTRY_PAGES = ("authPage", "recoveryPage", "forgotPage")
 # The pages Material 3 answers for, as its own screens, while it is the saved surface.
 MATERIAL_ACCOUNT_PAGES = ("authPage", "recoveryPage", "setupPage")
+# Pages that the draw-error page stands in for when Material cannot be drawn at all.
+DRAW_ERROR_COVERS = ("weekPage", *MATERIAL_ACCOUNT_PAGES)
 # The room a card's large shadow needs above and below it, which its holder keeps (a widget clips what
 # it holds, shadow included).
 AUTH_SHADOW_ABOVE = SHADOW_LARGE.blur - SHADOW_LARGE.y
@@ -680,8 +683,9 @@ class NativeWindow(QMainWindow):
         self._material_page = None
         self._account_showing = False
         self._material_gave_up = False
-        # The app version that last failed to open Material, or "" when the student may try it.
-        self._material_failed = ""
+        # The app version that must draw Material on the CPU, or "" when the graphics card may be used.
+        self._cpu_drawing_version = ""
+        self._relaunching = False
         self._day_mode = False
         self._opened_on_preference = False
         # Number keys and Letter keys as the look file holds them, and the file's stamp when read.
@@ -1165,6 +1169,9 @@ class NativeWindow(QMainWindow):
         self.activateWindow()
 
     def _show_page(self, name: str) -> None:
+        if self._surface == "material" and self._material_gave_up and name in DRAW_ERROR_COVERS:
+            self._show_draw_error()
+            return
         # S7: Material sign-in, recovery and setup cover these widgets pages while Material is the surface.
         if self._material_account_page(name):
             return
@@ -1261,6 +1268,9 @@ class NativeWindow(QMainWindow):
         """Show the surface that owns the window. True when Material is on screen."""
         if self._material_owns():
             return self._present_material()
+        if self._surface == "material" and self._material_gave_up:
+            self._show_draw_error()
+            return False
         self._show_page("weekPage")
         return False
 
@@ -1311,47 +1321,88 @@ class NativeWindow(QMainWindow):
             item.deleteLater()
 
     def _give_up_material(self, *, show_week: bool = True) -> None:
-        """Show the Widgets week and say so once that week is visible.
+        """Material could not draw. With the graphics card: remember this version must use the CPU and
+        start a new copy that does. Already on the CPU: a plain error page, never the Widgets week.
 
-        The saved choice stays Material. This version does not try again at start-up until the
-        student chooses Material, or a newer app version is installed.
+        `show_week` is kept for the callers that name where the student was; neither path uses it.
         """
+        if self._relaunching or self._material_gave_up:
+            return
+        if cpu_drawing.drawing_on_cpu():
+            self._material_gave_up = True
+            if self._settings is not None:
+                self._settings.look.show_material(False)
+            self._week_keys(False)
+            self._show_draw_error()
+            return
+        self._relaunching = True
         self._material_gave_up = True
-        self._material_failed = VERSION
-        if self._settings is not None:
-            # Material is no longer the one worn, whatever Settings showed when it opened (UI22).
-            self._settings.look.show_material(False)
-        self._week_keys(True)
-        current = self._stack.currentWidget()
-        bridge = self._account_bridge()
-        phase = "app" if bridge is None else bridge.phase
-        if phase == "recovery" and bridge is not None:
-            # The codes are on Material's screen; they have to reach the Widgets one before it goes.
-            self._show_recovery_widgets(bridge.codes)
-        elif phase in ("sign-in", "create", "reset") or self.session.account is None:
-            self._show_page("authPage")
-        elif phase == "setup" or self._setup_active:
-            self.setup_page.motion = self._motion
-            state = self._setup_state(self.session.new_account)
-            step = STYLE if bridge is None else bridge.setup_step
-            self.setup_page.open(state, step)
-            self._show_page("setupPage")
-            if bridge is not None:
-                bridge.show_app()
-        # Stay on Settings when that is what is open and Material never appeared. A graphics
-        # failure while Material is up, or a load that was meant to replace the week, shows the week.
-        elif show_week and (current is None or current.objectName() != "settingsPage"):
-            self._show_page("weekPage")
+        self._cpu_drawing_version = VERSION
         self._save_look()
-        if self.session.account is not None:
-            self.session._say(
-                "Material 3 could not open, so FlexWeek is showing the other styles. "
-                "Your week is unchanged."
-            )
+        self._relaunch(cpu=True)
+
+    def _relaunch(self, *, cpu: bool) -> None:
+        """Wait for unsaved edits to reach the server, then start a new copy and quit this one."""
+        again = "try again"
+
+        def go() -> None:
+            server = self._instance_server
+            if server is not None:
+                # The new copy must not find this one and just ask it to show itself.
+                server.close()
+            try:
+                cpu_drawing.start_new_copy(cpu=cpu)
+            except OSError as error:
+                logging.getLogger("flexweek.material").warning("FlexWeek could not start again: %s", error)
+                self._relaunching = False
+                self._show_draw_error()
+                return
+            self._quit_now()
+
+        if self._save_before_leaving(go, again=again):
+            go()
+
+    def _show_draw_error(self) -> None:
+        """A plain page for a window that cannot be drawn at all: what happened, the version, two buttons."""
+        page = self.findChild(QWidget, "drawErrorPage")
+        if page is None:
+            page = QWidget()
+            page.setObjectName("drawErrorPage")
+            box = QVBoxLayout(page)
+            box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            line = QLabel(cpu_drawing.DRAW_ERROR)
+            line.setObjectName("drawErrorLine")
+            line.setWordWrap(True)
+            line.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            version = QLabel(f"FlexWeek {VERSION}")
+            version.setObjectName("drawErrorVersion")
+            version.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            row = QHBoxLayout()
+            row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            quit_button = QPushButton("Quit")
+            quit_button.setObjectName("drawErrorQuit")
+            quit_button.clicked.connect(self.quit_app)
+            retry = QPushButton("Try again")
+            retry.setObjectName("drawErrorRetry")
+            retry.clicked.connect(self._try_graphics_again)
+            row.addWidget(quit_button)
+            row.addWidget(retry)
+            box.addWidget(line)
+            box.addWidget(version)
+            box.addLayout(row)
+            self._stack.addWidget(page)
+        if self._stack.currentWidget() is not page:
+            self._stack.setCurrentWidget(page)
+
+    def _try_graphics_again(self) -> None:
+        """Forget that this version failed and start a new copy that uses the graphics card."""
+        self._cpu_drawing_version = ""
+        self._save_look()
+        self._relaunching = True
+        self._relaunch(cpu=False)
 
     def _on_material_failed(self, _message: str) -> None:
-        if not self._material_gave_up:
-            self._give_up_material()
+        self._give_up_material()
 
     def _present_material(self) -> bool:
         """Show the QML week. False means the Widgets week is up and the saved choice is unchanged."""
@@ -1383,9 +1434,8 @@ class NativeWindow(QMainWindow):
                 self._give_up_material()
             self._drop_partial_material()
             return False
-        if self._material_failed:
-            self._material_failed = ""
-            self._save_look()
+        if self.session.account is not None and os.environ.pop(cpu_drawing.NOTICE_ENV, ""):
+            self.session._say(cpu_drawing.NOTICE)
         return True
 
     def _tick_material_clock(self) -> None:
@@ -1401,7 +1451,6 @@ class NativeWindow(QMainWindow):
         """The Material settings stub's way back. The settings draft, if one is open, stays."""
         self._surface = "widgets"
         self._material_gave_up = False
-        self._material_failed = ""
         settings = self._settings
         if settings is not None and settings.layout_sections:
             settings.layout_sections[0].show_surface("widgets")
@@ -1413,7 +1462,6 @@ class NativeWindow(QMainWindow):
         """Switch back to Material 3 styles."""
         self._surface = "material"
         self._material_gave_up = False
-        self._material_failed = ""
         settings = self._settings
         if settings is not None and settings.layout_sections:
             settings.layout_sections[0].show_surface("material")
@@ -5876,9 +5924,7 @@ class NativeWindow(QMainWindow):
             surface_changed = surface != self._surface
             # A failed open leaves Material saved and the control unchecked. Checking it is the
             # retry. A refresh must not do this while Settings is still the page on screen.
-            choosing_material_again = surface == "material" and (
-                self._material_gave_up or bool(self._material_failed)
-            )
+            choosing_material_again = surface == "material" and self._material_gave_up
             if (
                 look != self._look
                 or layout != self._layout
@@ -5893,7 +5939,6 @@ class NativeWindow(QMainWindow):
                 self._surface = sanitize_surface(surface)
                 if self._surface == "material":
                     self._material_gave_up = False
-                    self._material_failed = ""
                 self._save_look()
                 if surface_changed or choosing_material_again:
                     opened = self._show_surface()
@@ -6208,7 +6253,7 @@ class NativeWindow(QMainWindow):
         self._has_saved_design_look = False
         path = self._look_path()
         if not path.is_file():
-            self._material_failed = ""
+            self._cpu_drawing_version = ""
             self._material_gave_up = False
             return
         try:
@@ -6220,10 +6265,8 @@ class NativeWindow(QMainWindow):
         self._has_saved_design_look = self._layout_has_saved_look(raw_layout)
         self._layout = sanitize_layout(raw_layout)
         self._surface = sanitize_surface(stored)
-        failed = stored.get("material_failed") if isinstance(stored, dict) else None
-        self._material_failed = failed if isinstance(failed, str) else ""
-        # Same app version as the failure: do not build Material again until the student chooses it.
-        self._material_gave_up = self._surface == "material" and self._material_failed == VERSION
+        self._cpu_drawing_version = cpu_drawing.saved_version(stored)
+        self._material_gave_up = False
         self._updates = sanitize_updates(stored.get("updates") if isinstance(stored, dict) else None)
         self._zoom = sanitize_zoom(stored.get("zoom") if isinstance(stored, dict) else None)
         self._saved_looks = sanitize_saved(stored.get("saved_looks") if isinstance(stored, dict) else None)
@@ -6264,8 +6307,8 @@ class NativeWindow(QMainWindow):
                 "new_look_notice_seen": sorted(self._new_look_notice_seen),
                 "new_look_notice_exempt": sorted(self._new_look_notice_exempt),
             }
-            if self._material_failed:
-                body["material_failed"] = self._material_failed
+            if self._cpu_drawing_version:
+                body[cpu_drawing.LOOK_KEY] = self._cpu_drawing_version
             # Settings writes the material object into this file. Keep it when the widgets look saves.
             material = kept_material(path)
             if material is not None:

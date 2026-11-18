@@ -232,37 +232,34 @@ def test_setup_keeps_the_computers_material_mode(
     assert window._material_page.bridge.dark is True
 
 
-def test_graphics_fallback_during_material_setup_keeps_the_widgets_step(
-    qapp: QApplication, material_launches: LightLaunches
+def test_graphics_failure_during_material_setup_asks_for_a_cpu_copy_and_keeps_the_step(
+    qapp: QApplication, material_launches: LightLaunches, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A scene-graph failure mid-setup must finish from the Widgets page, not the abandoned bridge."""
+    """A scene-graph failure mid-setup saves the CPU key and starts a new copy, not the Widgets setup."""
+    from desktop.native import cpu_drawing
+    from desktop.native.version import VERSION
+
+    monkeypatch.delenv(cpu_drawing.BACKEND_ENV, raising=False)
+    launched: list[bool] = []
+    monkeypatch.setattr(cpu_drawing, "start_new_copy", lambda *, cpu: launched.append(cpu))
     window = material_launches.launch()
+    monkeypatch.setattr(window, "_quit_now", lambda: None)
     bridge = account(window)
     create(qapp, window, "fallback_setup_student")
     through_recovery(qapp, window)
     assert bridge.phase == "setup"
     assert bridge.setupStep == STYLE
     assert page(window) == "materialPage"
-    bridge._surface_pick = "widgets"
 
     window._give_up_material(show_week=False)
-    wait_until(qapp, lambda: page(window) == "setupPage")
-    assert window._material_gave_up is True
-    assert window.setup_page.step == STYLE
-    assert bridge.phase == "app"
-
-    window.setup_page.next.click()
-    wait_until(qapp, lambda: window.setup_page.step == WEEK)
-    widgets_step = window.setup_page.step
-    window.setup_page.skip_all.click()
-    wait_until(qapp, lambda: bool((window.session.preferences or {}).get("setup", {}).get("finished_at")))
     settle(qapp, window)
 
-    progress = window.session.preferences["setup"]
-    assert progress["step"] == widgets_step
+    assert launched == [True]
+    assert window.setup_page.isVisible() is False
     assert window._surface == "material"
-    assert json.loads(look_file().read_text())["surface"] == "material"
-    assert bridge._surface_pick == "widgets"
+    stored = json.loads(look_file().read_text())
+    assert stored["surface"] == "material"
+    assert stored[cpu_drawing.LOOK_KEY] == VERSION
 
 
 def test_setup_focus_and_tab_ownership_stays_on_visible_material_controls(

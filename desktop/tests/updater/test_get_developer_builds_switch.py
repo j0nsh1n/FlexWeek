@@ -61,7 +61,7 @@ def panel(window: NativeWindow):
 def show_material(qapp: QApplication, window: NativeWindow) -> QObject:
     window._surface = "material"
     window._material_gave_up = False
-    window._material_failed = ""
+    window._cpu_drawing_version = ""
     window.resize(1280, 800)
     window._on_week()
     pump(qapp)

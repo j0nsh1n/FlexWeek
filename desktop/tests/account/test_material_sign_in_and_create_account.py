@@ -8,6 +8,8 @@ the account keeps), not from reading the QML.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 pytest.importorskip("PySide6")
@@ -208,17 +210,30 @@ def test_without_keep_a_new_launch_asks_to_sign_in(
     assert account(second).phase == "sign-in"
 
 
-def test_a_bad_load_falls_back_to_the_widgets_sign_in(
+def test_a_bad_load_asks_for_a_cpu_copy_instead_of_showing_the_widgets_sign_in(
     qapp: QApplication, material_launches: LightLaunches, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from desktop.native import cpu_drawing
     from desktop.native.material.host import MaterialPage
+    from desktop.native.version import VERSION
+    from desktop.tests.window_support import look_file
 
+    monkeypatch.delenv(cpu_drawing.BACKEND_ENV, raising=False)
+    launched: list[bool] = []
+    monkeypatch.setattr(cpu_drawing, "start_new_copy", lambda *, cpu: launched.append(cpu))
     monkeypatch.setattr(MaterialPage, "load", lambda self: False)
     window = material_launches.launch()
-    assert page(window) == "authPage"
-    assert window._material_gave_up is True
-    # The Widgets card still works.
-    window.username.setText("fallback_student")
-    window.password.setText(PASSWORD)
-    window.create_button.click()
-    wait_until(qapp, lambda: page(window) == "recoveryPage")
+    assert launched == [True]
+    assert json.loads(look_file().read_text())[cpu_drawing.LOOK_KEY] == VERSION
+
+    # Already drawing on the CPU: the error page, never the Widgets card.
+    launched.clear()
+    window._material_gave_up = False
+    window._relaunching = False
+    monkeypatch.setenv(cpu_drawing.BACKEND_ENV, cpu_drawing.SOFTWARE)
+    window._give_up_material()
+    wait_until(qapp, lambda: page(window) == "drawErrorPage")
+    window._show_page("authPage")
+    qapp.processEvents()
+    assert page(window) == "drawErrorPage"
+    assert launched == []

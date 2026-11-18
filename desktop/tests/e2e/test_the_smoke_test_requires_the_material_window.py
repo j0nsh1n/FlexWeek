@@ -90,7 +90,7 @@ def test_material_state_tells_the_window_from_the_fallback(qapp: QApplication, w
     window.show()
     window._surface = "material"
     window._material_gave_up = False
-    window._material_failed = ""
+    window._cpu_drawing_version = ""
     window._on_week()
     pump(qapp)
     page = window._material_page

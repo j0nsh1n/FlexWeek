@@ -285,23 +285,36 @@ def test_choosing_material_again_retries_a_failed_open_and_current_follows_the_l
     qapp: QApplication, window: NativeWindow
 ) -> None:
     """Activating the Material card always asks to open Material, even when the hidden toggle is
-    already checked, so a failed open can be retried. Current follows whether Material opened."""
-    dialog = prefs(window)
-    host = window._ensure_material()
-    assert host is not None
-    material = dialog.look.material
-    host.break_load = True
-    material.chosen.emit()
-    for _ in range(20):
-        qapp.processEvents()
-    assert window._stack.currentWidget().objectName() == "weekPage"
-    assert material.note.text() != "Current"
-    host.break_load = False
-    material.chosen.emit()
-    for _ in range(20):
-        qapp.processEvents()
-    assert window._stack.currentWidget().objectName() == "materialPage"
-    assert material.note.text() == "Current"
+    already checked, so a failed open can be retried. Current follows whether Material opened.
+    A failure on the CPU leaves the error page up, not the Widgets week."""
+    import os
+
+    from desktop.native import cpu_drawing
+
+    previous = os.environ.get(cpu_drawing.BACKEND_ENV)
+    os.environ[cpu_drawing.BACKEND_ENV] = cpu_drawing.SOFTWARE
+    try:
+        dialog = prefs(window)
+        host = window._ensure_material()
+        assert host is not None
+        material = dialog.look.material
+        host.break_load = True
+        material.chosen.emit()
+        for _ in range(20):
+            qapp.processEvents()
+        assert window._stack.currentWidget().objectName() == "drawErrorPage"
+        assert material.note.text() != "Current"
+        host.break_load = False
+        material.chosen.emit()
+        for _ in range(20):
+            qapp.processEvents()
+        assert window._stack.currentWidget().objectName() == "materialPage"
+        assert material.note.text() == "Current"
+    finally:
+        if previous is None:
+            os.environ.pop(cpu_drawing.BACKEND_ENV, None)
+        else:
+            os.environ[cpu_drawing.BACKEND_ENV] = previous
 
 
 def test_material_is_not_current_after_a_late_failure_or_a_rebuilt_settings_page(

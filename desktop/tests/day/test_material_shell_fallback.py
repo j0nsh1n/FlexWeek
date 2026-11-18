@@ -1,6 +1,7 @@
 # ruff: noqa: F811
-"""When Material 3 cannot open, FlexWeek shows the Widgets week with a toast, keeps the student's week and
-their choice, and does not try again until the version changes or they choose Material again.
+"""When Material 3 cannot draw with the graphics card, FlexWeek saves that this version must draw on the CPU
+and starts a new copy that does. A failure while already drawing on the CPU shows a plain error page with
+Quit and Try again. No path shows the Widgets week.
 """
 
 from __future__ import annotations
@@ -16,12 +17,12 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QObject  # noqa: E402
-from PySide6.QtWidgets import QApplication, QPushButton, QWidget  # noqa: E402
+from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget  # noqa: E402
 
+from desktop.native import cpu_drawing
 from desktop.native.version import VERSION  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_window import (  # noqa: E402, F401
-    FALLBACK,
     material_window,
     qapp,
 )
@@ -59,15 +60,43 @@ def _blocks(window: NativeWindow) -> list[tuple[str, str]]:
     return [(block["id"], block["title"]) for block in window.session.blocks]
 
 
-def test_a_load_or_graphics_failure_keeps_the_session_and_the_choice(
-    qapp: QApplication, material_window: NativeWindow
+@pytest.fixture
+def launches(monkeypatch: pytest.MonkeyPatch, material_window: NativeWindow) -> list[bool]:
+    """Every request for a new copy, as its `cpu` flag. Nothing is really started or quit."""
+    calls: list[bool] = []
+    monkeypatch.setattr(cpu_drawing, "start_new_copy", lambda *, cpu: calls.append(cpu))
+    monkeypatch.setattr(material_window, "_quit_now", lambda: None)
+    return calls
+
+
+def _on_graphics_card(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(cpu_drawing.BACKEND_ENV, raising=False)
+
+
+def _on_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(cpu_drawing.BACKEND_ENV, cpu_drawing.SOFTWARE)
+
+
+def _saved() -> dict:
+    return json.loads(look_file().read_text())
+
+
+def _week_page_never_shown(window: NativeWindow) -> None:
+    assert window._stack.currentWidget().objectName() != "weekPage"
+
+
+def test_a_load_failure_on_the_graphics_card_saves_the_cpu_key_and_asks_for_a_cpu_copy(
+    qapp: QApplication,
+    material_window: NativeWindow,
+    launches: list[bool],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _on_graphics_card(monkeypatch)
     window = material_window
     window._surface = "material"
     window._material_gave_up = False
     window._save_look()
     before = _blocks(window)
-    told = window.session.message
     page = window._ensure_material()
     assert page is not None
     page.break_load = True
@@ -75,74 +104,76 @@ def test_a_load_or_graphics_failure_keeps_the_session_and_the_choice(
     window._on_week()
     pump(qapp)
 
-    assert window._stack.currentWidget().objectName() == "weekPage"
-    assert window.toast.isVisible()
-    assert window.toast.text() == FALLBACK
+    assert launches == [True]
+    assert _saved()[cpu_drawing.LOOK_KEY] == VERSION
+    assert _saved()["surface"] == "material"
     assert _blocks(window) == before
-    assert json.loads(look_file().read_text())["surface"] == "material"
-    assert window._surface == "material"
-    assert window.session.message not in ("", told)
-    window._on_week()
-    assert window._stack.currentWidget().objectName() == "weekPage"
-    assert _blocks(window) == before
+    _week_page_never_shown(window)
 
+
+def test_a_graphics_error_on_the_graphics_card_asks_for_one_cpu_copy_however_often_it_is_reported(
+    qapp: QApplication,
+    material_window: NativeWindow,
+    launches: list[bool],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _on_graphics_card(monkeypatch)
+    window = material_window
+    window._surface = "material"
     window._material_gave_up = False
-    page.break_load = False
-    page._on_scene_graph_error(None, "device lost")
+    page = window._ensure_material()
+    assert page is not None
+    window._on_week()
     pump(qapp)
-    assert window._stack.currentWidget().objectName() == "weekPage"
-    assert _blocks(window) == before
-    assert json.loads(look_file().read_text())["surface"] == "material"
-    assert window._surface == "material"
+
+    page._on_scene_graph_error(None, "device lost")
+    page._on_scene_graph_error(None, "device lost again")
+    pump(qapp)
+
+    assert launches == [True]
+    assert _saved()[cpu_drawing.LOOK_KEY] == VERSION
+    _week_page_never_shown(window)
 
 
-def test_a_missing_or_broken_token_file_falls_back_and_leaves_no_material_page(
-    qapp: QApplication, material_window: NativeWindow, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_a_missing_or_broken_token_file_asks_for_a_cpu_copy_and_leaves_no_material_page(
+    qapp: QApplication,
+    material_window: NativeWindow,
+    launches: list[bool],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     from desktop.native.material import theme
 
+    _on_graphics_card(monkeypatch)
     window = material_window
     _drop_material(window, qapp)
     theme._schemes.cache_clear()
-    missing = tmp_path / "tokens.json"
-    monkeypatch.setattr(theme, "tokens_path", lambda: missing)
+    monkeypatch.setattr(theme, "tokens_path", lambda: tmp_path / "tokens.json")
     window._surface = "material"
     window._material_gave_up = False
-    window.toast.hide()
     try:
         window._on_week()
         pump(qapp)
-        assert window._stack.currentWidget().objectName() == "weekPage"
-        assert window.toast.isVisible()
-        assert window.toast.text() == FALLBACK
-        assert window._surface == "material"
+        assert launches == [True]
         assert window.findChild(QWidget, "materialPage") is None
-
-        broken = tmp_path / "broken.json"
-        broken.write_text("{", encoding="utf-8")
-        monkeypatch.setattr(theme, "tokens_path", lambda: broken)
-        theme._schemes.cache_clear()
-        window._material_gave_up = False
-        window._material_failed = ""
-        window.toast.hide()
-        window._on_week()
-        pump(qapp)
-        assert window._stack.currentWidget().objectName() == "weekPage"
-        assert window.toast.text() == FALLBACK
-        assert window.findChild(QWidget, "materialPage") is None
+        # The week page was already the window's page before Material was tried. It is the stand-in
+        # until the CPU copy starts, not a switch to the Widgets week, which the on-CPU test covers.
     finally:
         # The scheme cache is shared by the whole run, so it must not keep the broken file's answer.
         theme._schemes.cache_clear()
         _drop_material(window, qapp)
 
 
-def test_a_publish_failure_falls_back_to_the_widgets_week(
-    qapp: QApplication, material_window: NativeWindow
+def test_a_publish_failure_on_the_graphics_card_asks_for_a_cpu_copy(
+    qapp: QApplication,
+    material_window: NativeWindow,
+    launches: list[bool],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _on_graphics_card(monkeypatch)
     window = material_window
     window._surface = "widgets"
     window._material_gave_up = False
-    window._material_failed = ""
     page = window._ensure_material()
     assert page is not None
 
@@ -151,57 +182,141 @@ def test_a_publish_failure_falls_back_to_the_widgets_week(
 
     page.publish = boom
     window._surface = "material"
-    window.toast.hide()
 
     window._on_week()
     pump(qapp)
 
-    assert window._stack.currentWidget().objectName() == "weekPage"
-    assert window.toast.isVisible()
-    assert window.toast.text() == FALLBACK
+    assert launches == [True]
+    assert _saved()[cpu_drawing.LOOK_KEY] == VERSION
     assert window._surface == "material"
-    assert _blocks(window)
+    _week_page_never_shown(window)
 
 
-def test_a_failed_material_is_not_tried_again_until_the_version_or_a_new_choice(
-    qapp: QApplication, material_window: NativeWindow
+def test_start_up_draws_on_the_cpu_only_for_the_version_that_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    path = tmp_path / "flexweek-look.json"
+    monkeypatch.delenv(cpu_drawing.BACKEND_ENV, raising=False)
+
+    path.write_text(json.dumps({cpu_drawing.LOOK_KEY: "0.0.0"}))
+    assert cpu_drawing.apply_saved(path, VERSION) is False
+    assert cpu_drawing.BACKEND_ENV not in os.environ
+
+    path.write_text(json.dumps({cpu_drawing.LOOK_KEY: VERSION}))
+    assert cpu_drawing.apply_saved(path, VERSION) is True
+    assert os.environ[cpu_drawing.BACKEND_ENV] == cpu_drawing.SOFTWARE
+
+    monkeypatch.delenv(cpu_drawing.BACKEND_ENV)
+    assert cpu_drawing.apply_saved(tmp_path / "missing.json", VERSION) is False
+    path.write_text("{")
+    assert cpu_drawing.apply_saved(path, VERSION) is False
+    assert cpu_drawing.BACKEND_ENV not in os.environ
+
+
+def test_main_applies_the_saved_cpu_choice_before_the_window_is_made() -> None:
+    source = (Path(__file__).parents[2] / "main.py").read_text()
+    assert source.index("apply_saved_cpu_drawing(") < source.index("NativeWindow(origin")
+
+
+def test_the_saved_key_does_not_stop_material_from_being_tried_and_is_kept_by_a_look_save(
+    qapp: QApplication, material_window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _on_cpu(monkeypatch)
     window = material_window
-    window.toast.hide()
     window._surface = "material"
-    window._material_failed = VERSION
-    window._material_gave_up = False
+    window._cpu_drawing_version = VERSION
     window._save_look()
-    window._material_gave_up = False
     window._load_look()
-    window._on_week()
-    pump(qapp)
-
-    assert window._material_gave_up is True
-    assert window._stack.currentWidget().objectName() == "weekPage"
-    assert window.toast.isHidden()
-    assert json.loads(look_file().read_text())["surface"] == "material"
-
-    # A different version tries again.
-    stored = json.loads(look_file().read_text())
-    stored["material_failed"] = "0.0.0"
-    look_file().write_text(json.dumps(stored))
-    window._load_look()
+    assert window._cpu_drawing_version == VERSION
     assert window._material_gave_up is False
     window._on_week()
     pump(qapp)
     assert window._stack.currentWidget().objectName() == "materialPage"
-    window._use_widgets_styles()
-    pump(qapp)
-    assert "material_failed" not in json.loads(look_file().read_text())
+    assert _saved()[cpu_drawing.LOOK_KEY] == VERSION
 
-    # Choosing Material again in Settings tries again too.
+    # An older version's key is read, kept, and does not match this version at start-up.
+    stored = _saved()
+    stored[cpu_drawing.LOOK_KEY] = "0.0.0"
+    look_file().write_text(json.dumps(stored))
+    window._load_look()
+    assert window._cpu_drawing_version == "0.0.0"
+    assert window._cpu_drawing_version != VERSION
+
+
+def test_after_the_cpu_copy_starts_the_snackbar_says_so_once(
+    qapp: QApplication, material_window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _on_cpu(monkeypatch)
+    monkeypatch.setenv(cpu_drawing.NOTICE_ENV, "1")
+    window = material_window
     window._surface = "material"
-    window._material_failed = VERSION
-    window._material_gave_up = True
-    window._save_look()
-    window._open_settings()
-    window._settings.findChild(QPushButton, "chooseMaterial").click()
+    window._material_gave_up = False
+    window._on_week()
     pump(qapp)
     assert window._stack.currentWidget().objectName() == "materialPage"
-    assert "material_failed" not in json.loads(look_file().read_text())
+    assert window.session.message == cpu_drawing.NOTICE
+    assert cpu_drawing.NOTICE_ENV not in os.environ
+    window.session.message = ""
+    window._on_week()
+    pump(qapp)
+    assert window.session.message == ""
+
+
+def test_a_failure_while_drawing_on_the_cpu_shows_the_error_page_and_try_again_clears_the_key(
+    qapp: QApplication,
+    material_window: NativeWindow,
+    launches: list[bool],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _on_cpu(monkeypatch)
+    window = material_window
+    window._surface = "material"
+    window._material_gave_up = False
+    window._cpu_drawing_version = VERSION
+    window._save_look()
+    before = _blocks(window)
+    page = window._ensure_material()
+    assert page is not None
+    page.break_load = True
+
+    window._on_week()
+    pump(qapp)
+
+    shown = window._stack.currentWidget()
+    assert shown.objectName() == "drawErrorPage"
+    assert launches == []
+    assert VERSION in shown.findChild(QLabel, "drawErrorVersion").text()
+    assert shown.findChild(QLabel, "drawErrorLine").text() == cpu_drawing.DRAW_ERROR
+    assert shown.findChild(QPushButton, "drawErrorQuit").text() == "Quit"
+    assert _blocks(window) == before
+    # Later refreshes keep the error page up, never the week.
+    window._on_week()
+    pump(qapp)
+    assert window._stack.currentWidget().objectName() == "drawErrorPage"
+
+    shown.findChild(QPushButton, "drawErrorRetry").click()
+    pump(qapp)
+    assert launches == [False]
+    assert cpu_drawing.LOOK_KEY not in _saved()
+    assert _saved()["surface"] == "material"
+
+
+def test_no_failure_path_shows_the_widgets_week(
+    qapp: QApplication,
+    material_window: NativeWindow,
+    launches: list[bool],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = material_window
+    window._surface = "material"
+    for on_cpu in (False, True):
+        window._material_gave_up = False
+        window._relaunching = False
+        (_on_cpu if on_cpu else _on_graphics_card)(monkeypatch)
+        page = window._ensure_material()
+        assert page is not None
+        page.break_load = True
+        window._on_week()
+        pump(qapp)
+        _week_page_never_shown(window)
+        page.break_load = False

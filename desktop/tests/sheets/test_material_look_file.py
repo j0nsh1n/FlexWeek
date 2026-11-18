@@ -70,7 +70,7 @@ def test_saved_looks_round_trip_with_surface(qapp: QApplication, material_window
 def test_setup_writes_material_beside_the_layout(qapp: QApplication, material_window: NativeWindow) -> None:
     window = material_window
     window._surface = "material"
-    window._material_failed = ""
+    window._cpu_drawing_version = ""
     window._material_gave_up = False
     answer = {
         "look": sanitize_look(window._look),

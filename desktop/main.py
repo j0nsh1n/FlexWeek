@@ -67,11 +67,13 @@ try:
     import backend
     from desktop.native.calendar import sunday_due
     from desktop.native.collector import WindowThreadCollector
+    from desktop.native.cpu_drawing import apply_saved as apply_saved_cpu_drawing
     from desktop.native.devices import SyncHost
     from desktop.native.fonts import load_fonts
     from desktop.native.kept import KeptSession
     from desktop.native.setup import DONE as SETUP_DONE
     from desktop.native.updater import collect_stale_downloads
+    from desktop.native.version import VERSION
     from desktop.native.window import NativeWindow
     from desktop.origin import configured_origin
     from desktop.server import LocalServer
@@ -147,7 +149,7 @@ def material_state(window: NativeWindow) -> tuple[str, int]:
 
     "fallback" means this build gave up on Material; "waiting" means it is not drawn yet.
     """
-    if window._material_gave_up or window._material_failed:
+    if window._material_gave_up:
         return "fallback", 0
     page = window._material_page
     if page is None or not page._ready or window._stack.currentWidget() is not page:
@@ -335,6 +337,9 @@ def main(argv: list[str] | None = None) -> int:
     collector = WindowThreadCollector(app)  # noqa: F841 - the app keeps it as a child
     app.setApplicationName("FlexWeek")
     app.setDesktopFileName(DESKTOP_FILE_NAME)
+    if report is None:
+        # Qt Quick reads its backend when the first Material window is made, so this is early enough.
+        apply_saved_cpu_drawing(Path(profile_root()) / "flexweek-look.json", VERSION)
     load_fonts()
     collect_stale_downloads()
 

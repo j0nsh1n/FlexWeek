@@ -71,6 +71,16 @@ def no_error_is_lost_inside_a_qt_slot(request: pytest.FixtureRequest) -> Iterato
 
 
 @pytest.fixture(autouse=True)
+def no_test_starts_a_new_copy_of_the_app(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A graphics failure starts FlexWeek again from sys.orig_argv, which under pytest is pytest itself.
+    No test may really do that; the ones that care patch it again and look at the request."""
+    if importlib.util.find_spec("PySide6") is not None:
+        from desktop.native import cpu_drawing
+
+        monkeypatch.setattr(cpu_drawing, "start_new_copy", lambda *, cpu: None)
+
+
+@pytest.fixture(autouse=True)
 def the_pointer_finds_windows_past_the_screens_edge(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Qt's offscreen screen is 800 by 800, and QApplication.widgetAt finds nothing past its edge: with
     the rail on the left, Thursday and Friday of a 1280 pixel window lay past it, and a drag there
