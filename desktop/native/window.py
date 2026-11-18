@@ -79,6 +79,19 @@ from shiboken6 import isValid
 from backend import clock as wall_clock
 from backend.slots import DAY_END_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
 from desktop.native import autostart, icons
+from desktop.native.account_copy import (
+    CREATE_HEADING,
+    CREATE_NOTE,
+    RECOVERY_COPY,
+    RECOVERY_FILE,
+    RECOVERY_KEEP,
+    RECOVERY_SAID_MS,
+    RECOVERY_SAVE,
+    RECOVERY_WAIT,
+    RESET_HEADING,
+    RESET_NOTE,
+    SIGN_IN_HEADING,
+)
 from desktop.native.ambient import FocusAudio
 from desktop.native.calendar import (
     CATEGORIES,
@@ -189,6 +202,7 @@ from desktop.native.settings import (
     UpdateDialog,
 )
 from desktop.native.setup import REMINDERS, SETUP_VERSION, STYLE, SetupPage, SetupState
+from desktop.native.sheet_rules import moved_day_names, same_weekday, turn_days_keeping_weekdays
 from desktop.native.sound import Bell
 from desktop.native.spotify import LISTENING, STARTING, SpotifyPlayer, open_in_app
 from desktop.native.tokens import SHADOW_LARGE, SHADOW_SMALL, SPACING
@@ -245,12 +259,9 @@ from desktop.native.widgets import (
     drop_waiting_dim,
     fit_buttons,
     keyboard_focus_rings,
-    moved_day_names,
     overdue_unfinished,
-    same_weekday,
     steady_wheel,
     swatch,
-    turn_days_keeping_weekdays,
     use_app_style,
 )
 
@@ -457,9 +468,7 @@ WAIT_TIP = "Saving your last change… this will work in a moment."
 PLANNING_TIP = "Planning… one moment."
 CONFLICT_TIP = "This week changed in another window. Choose More > Reload this week, then try again."
 SIGN_OUT_QUESTION = "Your week is saved on {where}, under this account. Sign in again to see it."
-RECOVERY_KEEP = "Keep this file somewhere private. Anyone who has it can reset your password."
 RECOVERY_CHOOSE = "Choose where to save"
-RECOVERY_WAIT = "Tick the box above to continue."
 # What they say on a top bar with no room for the whole words.
 PLAN_SHORT = "Plan homework"
 # The last of #83's steps: Plan my homework, Plan homework, then this.
@@ -478,22 +487,8 @@ MATERIAL_ACCOUNT_PAGES = ("authPage", "recoveryPage", "setupPage")
 # it holds, shadow included).
 AUTH_SHADOW_ABOVE = SHADOW_LARGE.blur - SHADOW_LARGE.y
 AUTH_SHADOW_BELOW = SHADOW_LARGE.blur + SHADOW_LARGE.y
-# One heading on the sign-in card, the same on a first launch and on a return, and what the page is for
-# when making an account.
-SIGN_IN_HEADING = "Sign in"
 # The error mark beside a wrong sign-in, in pixels.
 ERROR_ICON_PX = 16
-CREATE_HEADING = "Create your account"
-CREATE_NOTE = (
-    "FlexWeek fits homework around school and sports. "
-    "Your week is saved on this computer, under this account. "
-    "Export a backup file now and then (Settings > This computer > Manage account)."
-)
-RESET_HEADING = "Reset your password"
-RESET_NOTE = (
-    "Use one of the recovery codes you saved when you made your account. Lost them too? Create a new "
-    "account and import a backup file, or start fresh."
-)
 # What the sign-in card is for at the moment.
 SIGN_IN, CREATE, RESET = "sign in", "create", "reset"
 # Long enough for the student to read that the update installed before the window goes.
@@ -513,11 +508,6 @@ LEAVE_WAIT_MS = 5000
 LEAVE_POLL_MS = 100
 LOGO = Path(__file__).resolve().parents[1] / "assets" / "logo.png"
 LOGO_PX = 28
-RECOVERY_COPY = "Copy"
-RECOVERY_SAVE = "Save…"
-RECOVERY_FILE = "flexweek-recovery-codes.txt"
-# How long Copy says Copied, and Save says Saved.
-RECOVERY_SAID_MS = 2000
 # Homework named on a Find a new time notice before the rest is counted.
 NOTICE_LINES = 3
 

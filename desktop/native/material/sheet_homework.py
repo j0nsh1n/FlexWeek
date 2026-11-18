@@ -31,25 +31,23 @@ from desktop.native.calendar import (
 )
 from desktop.native.fields import QUICK_LENGTHS
 from desktop.native.hours.geometry import drag_step
-from desktop.native.reuse import due_point
-from desktop.native.weekmodel import clock_text, due_label, hhmm_text, length_label
-from desktop.native.widgets import (
+from desktop.native.reuse import SPREAD_MIN, due_point, spread_session_min
+from desktop.native.sheet_rules import (
     DUE_PASSED,
     ESTIMATE_LONG,
     ESTIMATE_SHORT,
     SLOT_HINT,
-    SPREAD_MIN,
     _homework_problem,
     first_day_changed,
     moved_across_months,
     moved_day_names,
     moved_days_note,
     same_weekday,
-    spread_session_min,
     spread_words,
     today_from_words,
     turn_days_keeping_weekdays,
 )
+from desktop.native.weekmodel import clock_text, due_label, hhmm_text, length_label
 
 STEPS = ("What", "When", "How long")
 PROMPTS = ("What is it?", "When is it due?", "How long will it take?")

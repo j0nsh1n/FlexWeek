@@ -35,8 +35,7 @@ from desktop.native.reuse import (
     late_locked_line,
     running_late_refusal,
 )
-from desktop.native.weekmodel import added_words, hhmm_text, length_label, range_label
-from desktop.native.widgets import (
+from desktop.native.sheet_rules import (
     LATE_WAIT,
     _late_move,
     _late_summary,
@@ -46,6 +45,7 @@ from desktop.native.widgets import (
     same_weekday,
     turn_days_keeping_weekdays,
 )
+from desktop.native.weekmodel import added_words, hhmm_text, length_label, range_label
 
 NOTHING_UNFINISHED = "None left"
 NOTICE_MS = 10000

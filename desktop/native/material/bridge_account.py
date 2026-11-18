@@ -34,6 +34,19 @@ from PySide6.QtWidgets import QApplication
 from backend import clock as wall_clock
 from backend.models import valid_spotify_url
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm
+from desktop.native.account_copy import (
+    CREATE_HEADING,
+    CREATE_NOTE,
+    RECOVERY_COPY,
+    RECOVERY_FILE,
+    RECOVERY_KEEP,
+    RECOVERY_SAID_MS,
+    RECOVERY_SAVE,
+    RECOVERY_WAIT,
+    RESET_HEADING,
+    RESET_NOTE,
+    SIGN_IN_HEADING,
+)
 from desktop.native.calendar import (
     DAY_FULL,
     DAYS,
@@ -43,6 +56,7 @@ from desktop.native.calendar import (
     weekday_order,
 )
 from desktop.native.client import (
+    PASSWORD_LENGTH_HINT,
     SESSION_ENDED,
     SIGN_IN_AGAIN,
     SIGN_IN_WHY,
@@ -78,7 +92,7 @@ from desktop.native.look import (
     sanitize_look,
 )
 from desktop.native.remind import reminder_lead_min
-from desktop.native.settings import (
+from desktop.native.settings_copy import (
     ALARM_TONE_LABELS,
     DRAG_STEP_CHOICES,
     DRAG_STEP_QUESTION,
@@ -86,7 +100,8 @@ from desktop.native.settings import (
     SPORT_FALLBACK,
     SPOTIFY_TONE_NOTE,
 )
-from desktop.native.setup import (
+from desktop.native.setup import STYLES, Style, style_layout, style_look
+from desktop.native.setup_steps import (
     COLOURS,
     DONE,
     FINISH_LABEL,
@@ -105,34 +120,16 @@ from desktop.native.setup import (
     SKIP_ALL_LABEL,
     SKIP_STEP_LABEL,
     STYLE,
-    STYLES,
     TITLES,
     WEEK,
-    Style,
     activity_category_for,
     days_label,
     next_school_day,
     span_label,
-    style_layout,
-    style_look,
 )
+from desktop.native.sheet_rules import CUTOFFS, DUE_BY_HINT
 from desktop.native.tones import FALLBACK, RECIPES
 from desktop.native.weekmodel import end_after_start_words, hhmm_text, set_clock_24h
-from desktop.native.widgets import CUTOFFS, DUE_BY_HINT
-from desktop.native.window import (
-    CREATE_HEADING,
-    CREATE_NOTE,
-    PASSWORD_LENGTH_HINT,
-    RECOVERY_COPY,
-    RECOVERY_FILE,
-    RECOVERY_KEEP,
-    RECOVERY_SAID_MS,
-    RECOVERY_SAVE,
-    RECOVERY_WAIT,
-    RESET_HEADING,
-    RESET_NOTE,
-    SIGN_IN_HEADING,
-)
 from desktop.native.work_windows import MAX_WORK_WINDOWS, PRESETS, PRESETS_NOTE
 
 log = logging.getLogger("flexweek.material")

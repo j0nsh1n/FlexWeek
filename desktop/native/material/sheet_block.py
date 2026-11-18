@@ -28,8 +28,7 @@ from desktop.native.calendar import (
 )
 from desktop.native.hours.geometry import DEFAULT_DRAG_STEP, drag_step
 from desktop.native.remind import clock_parts
-from desktop.native.weekmodel import clock_text, end_after_start_words, length_label
-from desktop.native.widgets import (
+from desktop.native.sheet_rules import (
     BLOCK_PROBLEMS,
     REPEAT_NOTE,
     _block_problem,
@@ -45,6 +44,7 @@ from desktop.native.widgets import (
     short_day_name,
     turn_days_keeping_weekdays,
 )
+from desktop.native.weekmodel import clock_text, end_after_start_words, length_label
 
 STEPS = ("What", "When", "Category")
 PROMPTS = ("What is it?", "When is it?", "What category is it?")

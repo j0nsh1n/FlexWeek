@@ -12,7 +12,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
-from datetime import date, timedelta
 from uuid import uuid4
 
 from PySide6.QtCore import QEvent, QObject, QRect, QRectF, QSize, Qt, QTime, QTimer, Signal
@@ -55,7 +54,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from backend import clock as wall_clock
 from backend.models import valid_spotify_url
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm
 from desktop.native import icons
@@ -118,13 +116,42 @@ from desktop.native.settings import (
     SPORT_FALLBACK,
     SPOTIFY_TONE_NOTE,
 )
+from desktop.native.setup_steps import (
+    COLOURS,
+    CURRENT,
+    DONE,
+    FINISH_LABEL,
+    FINISHED,
+    FIRST,
+    HOMEWORK,
+    LOOK,
+    LOOK_STEPS,
+    MAX_ACTIVITIES,
+    MAX_FIRST_HOMEWORK,
+    NEXT_LABEL,
+    NOTES,
+    OWN_LOOK_LABEL,
+    PENDING,
+    RAIL,
+    RAIL_STATES,
+    REMINDERS,
+    SKIP_ALL_LABEL,
+    SKIP_STEP_LABEL,
+    SKIPPED,
+    STYLE,
+    TITLES,
+    WEEK,
+    activity_category_for,
+    days_label,
+    next_school_day,
+    span_label,
+)
 from desktop.native.sound import Bell
 from desktop.native.tokens import WEIGHT_STRONG
 from desktop.native.tones import FALLBACK, RECIPES
 from desktop.native.weekmodel import clock_text, hhmm_text, set_clock_24h, time_format
 from desktop.native.widgets import (
     CARD_WIDTH_PAD,
-    DAYS,
     CardGrid,
     ChoiceCard,
     ConfirmSheet,
@@ -136,48 +163,8 @@ from desktop.native.widgets import (
 from desktop.native.work_windows import WorkWindowsEditor
 
 SETUP_VERSION = 1
-STYLE, LOOK, COLOURS, WEEK, HOMEWORK, REMINDERS, FIRST, DONE = range(8)
-# The rail names six steps. Style has two more pages behind it for a student who builds their own.
-RAIL = (
-    ("Style", (STYLE, LOOK, COLOURS)),
-    ("Your week", (WEEK,)),
-    ("Homework time", (HOMEWORK,)),
-    ("Reminders and alarm", (REMINDERS,)),
-    ("First homework", (FIRST,)),
-    ("Done", (DONE,)),
-)
-LOOK_STEPS = (STYLE, LOOK, COLOURS)
-TITLES = {
-    STYLE: "Start from a style",
-    LOOK: "How do you want to see your week?",
-    COLOURS: "Colours and size",
-    WEEK: "Your week",
-    HOMEWORK: "How should homework get a time?",
-    REMINDERS: "Reminders and your alarm sound",
-    FIRST: "What homework is due first?",
-    DONE: "You're set",
-}
-NOTES = {
-    STYLE: "Each sets the view, the colours and the text size together. Change any of it later in Settings.",
-    LOOK: "Each one shows the same week its own way.",
-    COLOURS: "The picture follows what you pick.",
-    WEEK: "FlexWeek works around fixed times. Skip anything you don't have.",
-    HOMEWORK: "You can change this any time in Settings, under Planning.",
-    REMINDERS: (
-        "Pick the sound for reminders, alarms and the end of a focus session. Spotify plays for an alarm."
-        " A block starts with the Spotify link from Settings when the alarm sound is Spotify. The rest"
-        " play Chime."
-    ),
-    FIRST: "Add up to three. You can add the rest any time.",
-    DONE: "Everything here is also in Settings. Run setup again from Settings, under This computer.",
-}
-NEXT_LABEL, FINISH_LABEL = "Next", "Open my week"
-SKIP_STEP_LABEL, SKIP_ALL_LABEL = "Skip this step", "Skip setup"
-OWN_LOOK_LABEL = "Choose my own look instead"
 # 12-hour first and pre-selected: it is the clock a new account starts with.
 CLOCK_CHOICES = ((False, "12-hour clock (4:00 PM)"), (True, "24-hour clock (16:00)"))
-MAX_ACTIVITIES = 8
-MAX_FIRST_HOMEWORK = 3
 # A tap adds one of these rather than making the student type hours for the usual answers.
 TEXT_SIZES = (("small", "Small"), ("normal", "Normal"), ("large", "Large"))
 SPACINGS = (("comfortable", "Comfortable"), ("compact", "Compact"))
@@ -208,9 +195,6 @@ RAIL_MIN = 210
 PAGE_MARGIN, FADE_PX = 32, 24
 # A step on the rail is marked by its number in a ring, or once it is done by a tick on the accent.
 BADGE_PX, TICK_PX = 20, 16
-PENDING, CURRENT, FINISHED, SKIPPED = "pending", "current", "finished", "skipped"
-# What the side list says of each step's state, as the step's accessible description.
-RAIL_STATES = {CURRENT: "Current step", FINISHED: "Done", SKIPPED: "Skipped", PENDING: ""}
 PLAY_PX = 20
 
 
@@ -311,22 +295,8 @@ def matching_style(pack: str, look: dict, layout: dict) -> str | None:
     return None
 
 
-def days_label(days: list[int]) -> str:
-    """Mon–Fri for a run of days, Tue, Thu for the rest."""
-    ordered = sorted(set(days))
-    if len(ordered) == 7:
-        return "every day"
-    if len(ordered) > 2 and ordered == list(range(ordered[0], ordered[-1] + 1)):
-        return f"{DAYS[ordered[0]]}–{DAYS[ordered[-1]]}"
-    return ", ".join(DAYS[day] for day in ordered)
-
-
 def _design_chips(specs: tuple[LayoutSpec, ...]) -> tuple[tuple[str, str], ...]:
     return tuple((spec.id, spec.label) for spec in specs)
-
-
-def span_label(start: str, minutes: int) -> str:
-    return f"{hhmm_text(start)}–{clock_text(hhmm_to_minutes(start) + minutes)}"
 
 
 def _label(text: str, name: str = "", wrap: bool = True) -> QLabel:
@@ -1088,35 +1058,6 @@ class TimeRange(QWidget):
         self.end.set_minutes(begin + minutes)
 
 
-SPORT_WORDS = frozenset(
-    {
-        "soccer",
-        "football",
-        "basketball",
-        "swim",
-        "swimming",
-        "track",
-        "tennis",
-        "volleyball",
-        "baseball",
-        "hockey",
-        "lacrosse",
-        "softball",
-        "golf",
-        "wrestling",
-        "cheer",
-        "cheerleading",
-        "rugby",
-        "gym",
-    }
-)
-
-
-def activity_category_for(title: str) -> str:
-    words = {part.strip(".,!?").lower() for part in title.split() if part.strip(".,!?")}
-    return "exercise" if words & SPORT_WORDS else "extra"
-
-
 class ActivityRow(QFrame):
     removed = Signal(object)
 
@@ -1188,17 +1129,6 @@ class ActivityRow(QFrame):
             return
         wanted = activity_category_for(self.name.text())
         self.category.setCurrentIndex(max(0, self.category.findData(wanted)))
-
-
-def next_school_day(school_days: list[int], today: date | None = None) -> str:
-    """The first day after today that is a school day, as the day first homework is most likely due:
-    the default of Sunday was a day with no school. With no school days picked, tomorrow."""
-    today = today or wall_clock.today()
-    for ahead in range(1, 8):
-        day = today + timedelta(days=ahead)
-        if not school_days or day.weekday() in school_days:
-            return day.isoformat()
-    return (today + timedelta(days=1)).isoformat()
 
 
 class HomeworkRow(QFrame):

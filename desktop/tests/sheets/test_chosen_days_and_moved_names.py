@@ -22,7 +22,8 @@ from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
 
 from desktop.native.material.sheet_block import BlockDraft  # noqa: E402
 from desktop.native.material.sheet_homework import HomeworkDraft  # noqa: E402
-from desktop.native.widgets import BlockDialog, HomeworkDialog, moved_day_names  # noqa: E402
+from desktop.native.sheet_rules import moved_day_names  # noqa: E402
+from desktop.native.widgets import BlockDialog, HomeworkDialog  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402,F401
 from desktop.tests.material_support import pump  # noqa: E402
