@@ -66,3 +66,43 @@ class ForegroundSyncTest {
         }
     }
 }
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class ForegroundSyncBackoffTest {
+    @Test fun aComputerThatIsOffIsAskedLessAndLessOften() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(dispatcher)
+        try {
+            lateinit var registry: LifecycleRegistry
+            val owner = object : LifecycleOwner {
+                override val lifecycle: Lifecycle get() = registry
+            }
+            registry = LifecycleRegistry.createUnsafe(owner)
+            registry.currentState = Lifecycle.State.STARTED
+            var calls = 0
+            val core = object : FlexWeekCore by FakeFlexWeekCore() {
+                override fun syncOnce(deadlineMs: Long): String {
+                    calls += 1
+                    return "{\"ok\":false,\"kind\":\"timeout\"}"
+                }
+            }
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+                syncWhileForeground(core, registry, dispatcher) {}
+            }
+            runCurrent()
+            assertEquals(1, calls)
+            advanceTimeBy(10_000)
+            runCurrent()
+            assertEquals("first retry after 10 s, not 5", 2, calls)
+            advanceTimeBy(20_000)
+            runCurrent()
+            assertEquals("second retry after 20 s more", 3, calls)
+            advanceTimeBy(19_000)
+            runCurrent()
+            assertEquals("still waiting", 3, calls)
+            registry.currentState = Lifecycle.State.DESTROYED
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+}
