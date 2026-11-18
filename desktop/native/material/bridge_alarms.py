@@ -28,6 +28,8 @@ ALARM_SOUNDS = tuple(
     {"label": "Spotify link" if name == "spotify" else name.title(), "value": name} for name in SOUNDS
 )
 HOURS = tuple({"label": f"{hour:02d}", "value": hour} for hour in range(24))
+# The same hours for a student on a 12-hour clock: the value stays 0 to 23, the label says AM or PM.
+HOURS_12 = tuple({"label": f"{hour % 12 or 12} {'AM' if hour < 12 else 'PM'}", "value": hour} for hour in range(24))
 MINUTES = tuple({"label": f"{minute:02d}", "value": minute} for minute in range(60))
 
 
@@ -52,8 +54,9 @@ def alarm_rows(alarms: list[dict]) -> list[dict]:
 class AlarmDraft:
     """One alarm being added or edited. Nothing is stored until `candidate` is saved."""
 
-    def __init__(self, alarm: dict | None, default_sound: str) -> None:
+    def __init__(self, alarm: dict | None, default_sound: str, clock_24h: bool = False) -> None:
         self.existing = alarm is not None
+        self.clock_24h = clock_24h
         base = alarm or {}
         self.id = str(base.get("id") or uuid4())
         self.name = str(base.get("name") or "")
@@ -144,7 +147,7 @@ class AlarmDraft:
             "name": self.name,
             "hour": self.hour,
             "minute": self.minute,
-            "hours": list(HOURS),
+            "hours": list(HOURS if self.clock_24h else HOURS_12),
             "minutes": list(MINUTES),
             "days": [{"label": DAYS[day], "full": DAY_FULL[day], "on": day in self.days} for day in range(7)],
             "enabled": self.enabled,

@@ -95,6 +95,35 @@ def test_an_alarm_added_in_the_sheet_is_saved_and_listed(qapp: QApplication, win
     assert _named(root, "row_alarm_" + alarm["id"])
 
 
+def test_the_alarm_hour_picker_follows_the_twelve_or_twenty_four_hour_setting(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    _open_settings(qapp, window, "alerts")
+    sheets = _sheets(window)
+    window.session.preferences["clock_24h"] = False
+    sheets.openAlarm("")
+    labels = [item["label"] for item in _form(window)["hours"]]
+    assert labels[0] == "12 AM" and labels[7] == "7 AM" and labels[12] == "12 PM" and labels[16] == "4 PM"
+    assert [item["value"] for item in _form(window)["hours"]] == list(range(24)), "the saved hour is still 0 to 23"
+    sheets.closeSheet()
+    window.session.preferences["clock_24h"] = True
+    sheets.openAlarm("")
+    assert [item["label"] for item in _form(window)["hours"]][16] == "16"
+
+
+def test_a_picked_alarm_day_shows_a_check_and_an_unpicked_one_does_not(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    root = _open_settings(qapp, window, "alerts")
+    _sheets(window).openAlarm("")
+    _pump(qapp, 20)
+    checks = _named(root, "alarmDayCheck")
+    assert len([c for c in checks if c.property("visible")]) == 5, "Monday to Friday are picked"
+    _sheets(window).toggleAlarmDay(5)
+    _pump(qapp, 10)
+    assert len([c for c in _named(root, "alarmDayCheck") if c.property("visible")]) == 6
+
+
 def test_a_blank_name_is_called_alarm(qapp: QApplication, window: NativeWindow) -> None:
     _open_settings(qapp, window, "alerts")
     _add(qapp, window, "   ", 7, 0, [0])

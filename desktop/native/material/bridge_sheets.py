@@ -764,7 +764,9 @@ class SheetsBridge(QObject):
         if found is None and len(alarms) >= MAX_ALARMS:
             self._say(FULL)
             return
-        self._alarm = AlarmDraft(found, str(session.preferences.get("alarm_tone") or "chime"))
+        self._alarm = AlarmDraft(
+            found, str(session.preferences.get("alarm_tone") or "chime"), session.preferences.get("clock_24h") is True
+        )
         self._open("alarm")
 
     @Slot(str, str)

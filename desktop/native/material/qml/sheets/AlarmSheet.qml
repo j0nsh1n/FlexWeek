@@ -68,7 +68,7 @@ SheetFrame {
                 delegate: Item {
                     id: day
                     objectName: "alarmDay" + index
-                    width: 52
+                    width: 60
                     height: 40
                     activeFocusOnTab: true
                     Accessible.role: Accessible.CheckBox
@@ -83,13 +83,25 @@ SheetFrame {
                         border.width: modelData.on ? 0 : 1
                         border.color: pal.outline
                     }
-                    Text {
+                    // The check says "picked" without relying on the tint alone, as the chips in Settings do.
+                    Row {
                         anchors.centerIn: parent
-                        text: modelData.label
-                        color: modelData.on ? pal.inkSecondaryContainer : pal.inkSurface
-                        font.family: M3Font.family
-                        font.pixelSize: M3Font.px(14)
-                        font.weight: 500
+                        spacing: 4
+                        M3Icon {
+                            objectName: modelData.on ? "alarmDayCheck" : ""
+                            visible: modelData.on
+                            name: "check"
+                            width: 16
+                            height: 16
+                            color: pal.inkSecondaryContainer
+                        }
+                        Text {
+                            text: modelData.label
+                            color: modelData.on ? pal.inkSecondaryContainer : pal.inkSurface
+                            font.family: M3Font.family
+                            font.pixelSize: M3Font.px(14)
+                            font.weight: 500
+                        }
                     }
                     M3StateLayer {
                         anchors.fill: parent
