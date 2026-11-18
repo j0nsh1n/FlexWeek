@@ -24,7 +24,7 @@ SectionPage {
         ChoiceRow {
             key: "timerPreset"
             title: "Timer"
-            subtitle: "Short, Standard and Long set all four lengths. Custom lets you set each one."
+            subtitle: "Pick a set of lengths, or Custom to set each one."
             choices: page.st.timerChoices || []
             current: page.st.timerPreset || "standard"
             onChosen: (value) => page.panel.setTimerPreset(value)
