@@ -217,7 +217,7 @@ fn serve(ctx: &Ctx, remote: &str, request: &Value) -> NetResult<Value> {
                 "ack_through": push.next_since,
                 "batch": batch.to_value(),
                 "applied": applied,
-                "quarantined": report.quarantined + retried.quarantined,
+                "quarantined": report.quarantined,
             }))
         }
         other => Err(NetError::Protocol(format!("unknown request {other}"))),
@@ -414,7 +414,7 @@ async fn rounds(
         summary.sent += push.records.len();
         summary.received += batch.records.len();
         summary.applied += report.applied + retried.applied;
-        summary.quarantined += report.quarantined + retried.quarantined;
+        summary.quarantined += report.quarantined;
         summary.clock_skewed += report.clock_skewed;
         summary.exchanges += 1;
         if !push.more && !batch.more {
