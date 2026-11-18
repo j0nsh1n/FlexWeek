@@ -228,8 +228,10 @@ fun skipFocus() = advanceFocus(completed = false)
     private fun refresh(snackbar: SnackbarState? = uiState.snackbar) {
         if (core !is FakeFlexWeekCore) {
             viewModelScope.launch {
-                val parsed = withContext(workerDispatcher) { readToday() }
+                // The timer is read with the day: the notification's Pause and Finish change it while the card is open.
+                val (parsed, saved) = withContext(workerDispatcher) { readToday() to core.focusState() }
                 uiState = parsed.copy(snackbar = snackbar)
+                focusState = FocusJson.parseState(saved)
             }
             return
         }

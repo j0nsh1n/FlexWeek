@@ -154,6 +154,8 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
     }
 
     override fun focusComplete(): String {
+        // The end alarm can fire after the timer was paused; a paused timer has not run to its end.
+        if (FocusGuard.isPaused(focusState())) return "{}"
         // No saved timer is the text "null", which JSONObject() throws on, outside result's error wrapper.
         val state = runCatching { JSONObject(focusState()) }.getOrNull() ?: return "{}"
         if (state.isNull("assignmentId")) return "{}"
@@ -168,7 +170,7 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
         }
     }
 
-    override fun focusAdvance(completed: Boolean): String = result {
+    override fun focusAdvance(completed: Boolean): String = FocusGuard.holdIfPaused(focusState(), completed) ?: result {
         val answer = JSONObject(native.focusAdvance(focusState(), completed))
         val persisted = answer.opt("persist")
         if (persisted == null || persisted == JSONObject.NULL) localSettings.edit().remove("focus-state").apply()

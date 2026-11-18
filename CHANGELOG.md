@@ -127,6 +127,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - On the phone, Plan, each Running late slider step, saving a homework and the Week tab no longer make the screen wait on the planner or a sync; they run in the background and show their result when ready.
 - On the phone, Add homework on a Thursday or a Sunday no longer shows a second "Pick a day" chip that set the due date to Monday.
 - On the phone, Back closes an open sheet, then goes to Today, and only then leaves the app. Rotating the phone keeps the tab, an open sheet and a half-typed Add homework, and after Unpair a rotation no longer brings the main screens back.
+- On the phone, pausing or finishing the focus timer from the notification now shows on the open Today card, and a paused timer is never counted as a full session.
 
 ## [1.3.0] - 2026-11-10
 
