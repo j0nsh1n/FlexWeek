@@ -109,7 +109,7 @@ from desktop.native.motion import (
 )
 from desktop.native.previews import Previews
 from desktop.native.remind import reminder_lead_min
-from desktop.native.settings import (
+from desktop.native.settings_copy import (
     DRAG_STEP_CHOICES,
     DRAG_STEP_QUESTION,
     PLANNING_STYLES,
