@@ -53,7 +53,7 @@ Item {
     // An alarm is ringing: Material's ring screen is over everything.
     readonly property bool ringOpen: bridge !== undefined && bridge !== null && bridge.ring !== undefined && bridge.ring.open
     readonly property bool modalActive: typing || focusOpen || accountLayer.active || settingsPromptOpen
-        || widgetsDialogOpen || datePicker.open || gridHeld || ringOpen
+        || widgetsDialogOpen || datePicker.open || gridHeld || ringOpen || addMenu.open
 
     function _field(item) {
         while (item) {
@@ -99,6 +99,14 @@ Item {
             direction > 0 ? bridge.day.nextDay() : bridge.day.previousDay()
         else if (bridge.screen === "month")
             direction > 0 ? bridge.month.nextMonth() : bridge.month.previousMonth()
+    }
+
+    function toggleAddMenu(fab) {
+        addMenu.fab = fab
+        addMenu.cursor = 0
+        addMenu.open = !addMenu.open
+        if (addMenu.open)
+            addMenu.forceActiveFocus()
     }
 
     // The letter keys, behind Letter keys. True when `key` is one of them and did its work.
@@ -222,8 +230,8 @@ Item {
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
                 icon: "add"
-                accessName: "Add homework"
-                onClicked: bridge.addHomework()
+                accessName: "Add"
+                onClicked: root.toggleAddMenu(railFab)
             }
 
             NavDestination {
@@ -653,8 +661,45 @@ Item {
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
                 icon: "add"
-                accessName: "Add homework"
-                onClicked: bridge.addHomework()
+                accessName: "Add"
+                onClicked: root.toggleAddMenu(phoneFab)
+            }
+
+            // Add homework or Add fixed time, from the Add button on every screen.
+            Menu {
+                id: addMenu
+                objectName: "addMenu"
+                open: false
+                z: 4
+                accessName: "Add"
+                property Item fab: null
+                entries: [
+                    { label: "Add homework", icon: "add" },
+                    { label: "Add fixed time", icon: "schedule" }
+                ]
+                x: root.phone ? parent.width - width - 16 : 88
+                y: {
+                    if (!fab)
+                        return 0
+                    var spot = fab.mapToItem(parent, 0, 0)
+                    return root.phone ? Math.max(8, spot.y - height - 8) : spot.y
+                }
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                onChosen: (index, label) => {
+                    var fabItem = addMenu.fab
+                    open = false
+                    if (fabItem)
+                        fabItem.forceActiveFocus()
+                    if (index === 0)
+                        bridge.addHomework()
+                    else
+                        bridge.addFixedTime()
+                }
+                onDismissed: if (fab) fab.forceActiveFocus()
+                onActiveFocusChanged: if (!activeFocus && open) open = false
             }
 
             // Go to date: a month under the Week or Month title.
@@ -869,7 +914,7 @@ Item {
         context: Qt.WindowShortcut
         // An open Week or Day menu takes its own Escape, so it can close and give the focus back.
         enabled: !accountLayer.active && !focusOverlay.ending && !sheetHost.active && !settingsPromptOpen && !ringOpen
-                 && !widgetsDialogOpen && !datePicker.open
+                 && !widgetsDialogOpen && !datePicker.open && !addMenu.open
                  && !(bridge.screen === "week" && (weekView.menuOpen || weekView.handing))
                  && !(bridge.screen === "day" && (dayView.menuOpen || dayView.handing))
         onActivated: {

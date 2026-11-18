@@ -98,9 +98,9 @@ def test_the_add_button_opens_homework_from_the_keyboard(
 
     QTest.keyClick(quick, Qt.Key.Key_Space)
     pump(qapp)
-    if sheets.kind != "homework":
-        QTest.keyClick(quick, Qt.Key.Key_Return)
-        pump(qapp)
+    # The Add button asks which; Add homework is the first row.
+    QTest.keyClick(quick, Qt.Key.Key_Return)
+    pump(qapp)
 
     assert sheets.kind == "homework"
     assert named(root, "sheetTitle")[0].property("text") == "Add homework"

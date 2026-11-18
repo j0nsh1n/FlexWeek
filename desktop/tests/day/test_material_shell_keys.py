@@ -101,6 +101,9 @@ def test_rings_follow_the_last_input_in_the_real_window(
     root = show_material(qapp, material_window)
     sheets = material_window._material_page.bridge.sheets
     _press_item(qapp, material_window, named(root, "materialFab")[0])
+    # The Add button asks which: Return takes the first, Add homework.
+    QTest.keyClick(material_window._material_page._quick, Qt.Key.Key_Return)
+    pump(qapp)
 
     # Title marks focus with its own border (Material 3), so it has no ring to show.
     def focused() -> list[QObject]:
