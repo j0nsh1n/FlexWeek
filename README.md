@@ -210,7 +210,7 @@ FlexWeek is a native desktop app for Windows and Linux with an Android phone app
 with it. [CHANGELOG.md](CHANGELOG.md) lists what each version changed, and the
 [roadmap](roadmap.md) lists what is being worked on and what is waiting. Developer builds
 of the newest work are published on GitHub as a pre-release named `dev` (Linux tarball only);
-turn them on with Settings > Computer > Get developer builds. Windows packages are
+turn them on with Settings > This computer > Get developer builds. Windows packages are
 built on GitHub Actions when a release is made; nobody has yet run the installers on a
 real Windows PC for this project, so a first install there still needs a person to
 click through SmartScreen and report back.

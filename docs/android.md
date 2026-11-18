@@ -1,12 +1,12 @@
 # Building the Android app
 
-The phone app lives in `android/`. It is a Kotlin and Jetpack Compose app, package `com.flexweek.app`. It needs Android 8.0 (API 26) or newer and targets API 36. It builds for `arm64-v8a` and `x86_64`. Facts come from `android/` and `scripts/android/build-rust.sh` on `release/1.0.0`.
+The phone app lives in `android/`. It is a Kotlin and Jetpack Compose app, package `com.flexweek.app`. It needs Android 8.0 (API 26) or newer and targets API 36. It builds for `arm64-v8a` and `x86_64`. Facts come from `android/` and `scripts/android/build-rust.sh`.
 
 ## What you need
 
-- **JDK 25.** On Fedora: `sudo dnf install java-25-openjdk-devel`. Set `JAVA_HOME` to it, for example `export JAVA_HOME=/usr/lib/jvm/java-25-openjdk`. The Java code is compiled to Java 17 bytecode (`compileOptions` in `android/app/build.gradle.kts`). The Fedora package name has not been checked on a clean machine.
+- **JDK 25.** On Fedora: `sudo dnf install java-25-openjdk-devel`. Set `JAVA_HOME` to it, for example `export JAVA_HOME=/usr/lib/jvm/java-25-openjdk`. The Java code is compiled to Java 17 bytecode (`compileOptions` in `android/app/build.gradle.kts`). That is the package the project builds with on Fedora 44.
 - **Android SDK** with platform 36, build-tools and platform-tools. Put it in `~/Android/Sdk`, or set `ANDROID_HOME` to where it is.
-- **An Android NDK**, for the Rust core that Gradle builds (below). The machine that built 1.0.0 used NDK 30.0.16248370; Gradle does not pin a version.
+- **An Android NDK**, for the Rust core that Gradle builds (below). Release APKs are built with NDK 30.0.16248370; Gradle does not pin a version.
 - **Gradle does not need installing.** The project includes the wrapper (`./gradlew`, Gradle 9.8.1). Android Gradle Plugin 9.4.1 and Kotlin 2.4.21 are pinned in `android/gradle/libs.versions.toml`.
 - **An emulator or a phone** only for the screenshot scripts and for real-device checks. Unit tests need neither.
 
@@ -34,7 +34,7 @@ Release APKs are signed with `scripts/android/sign-release.sh`, which needs `FLE
 
 ## The Rust core
 
-The app calls the Rust core through UniFFI. Gradle builds it: every build task (including `assembleDebug`) runs `scripts/android/build-rust.sh` first, wired through `preBuild` in `android/app/build.gradle.kts`. The script needs `cargo-ndk` and the Rust targets `aarch64-linux-android` and `x86_64-linux-android`, plus the NDK above. `cargo install cargo-ndk` and `rustup target add aarch64-linux-android x86_64-linux-android` are the usual install commands; they have not been run on the machine that wrote this page. The script puts `libflexweek_ffi.so` into `android/app/src/main/jniLibs/`, and the app loads that file when it starts. Without it the app does not start.
+The app calls the Rust core through UniFFI. Gradle builds it: every build task (including `assembleDebug`) runs `scripts/android/build-rust.sh` first, wired through `preBuild` in `android/app/build.gradle.kts`. The script needs `cargo-ndk` and the Rust targets `aarch64-linux-android` and `x86_64-linux-android`, plus the NDK above. Install them with `cargo install cargo-ndk` and `rustup target add aarch64-linux-android x86_64-linux-android`. The script puts `libflexweek_ffi.so` into `android/app/src/main/jniLibs/`, and the app loads that file when it starts. Without it the app does not start.
 
 ## Screenshots
 
