@@ -1,4 +1,4 @@
-"""The window carries the buttons for account recovery, quick focus, settings, restore points and More."""
+"""The window carries the buttons for account recovery, quick focus, restore points and More."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 
@@ -15,11 +15,9 @@ def test_native_window_exposes_recovery_and_focus_controls(window: NativeWindow)
     for name in (
         "forgotPassword",
         "focusQuick",
-        "settingsButton",
         "restoreButton",
         "accountButton",
         "moreButton",
-        "settingsGear",
     ):
         assert window.findChild(QPushButton, name) is not None, name
     copy_day = window.findChild(QPushButton, "copyDay")

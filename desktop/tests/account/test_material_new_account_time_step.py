@@ -23,7 +23,6 @@ from desktop.tests.account.support import (
     through_recovery,
 )
 from desktop.tests.settings.support_material_settings import _named, _open_settings
-from desktop.tests.settings.test_material_dragging_step import _widgets_choice
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
 
@@ -56,7 +55,7 @@ def test_a_new_account_that_skips_setup_in_material_ends_on_15_minutes(
     assert window.hand.step == 15
 
 
-def test_a_5_picked_in_materials_setup_is_stored_and_both_looks_settings_show_it(
+def test_a_5_picked_in_materials_setup_is_stored_and_settings_show_it(
     qapp: QApplication, material_launches: LightLaunches
 ) -> None:
     window = material_launches.launch()
@@ -76,4 +75,3 @@ def test_a_5_picked_in_materials_setup_is_stored_and_both_looks_settings_show_it
     assert window.hand.step == 5
     root = _open_settings(qapp, window, "planning")
     wait_until(qapp, lambda: _named(root, "dragStep")[0].property("current") == "5")
-    assert _widgets_choice(window) == 5

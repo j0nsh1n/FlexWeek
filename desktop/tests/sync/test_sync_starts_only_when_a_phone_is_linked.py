@@ -1,24 +1,19 @@
 """The sync service starts only when a phone is linked at launch or when Pair a phone is pressed.
-With none, FlexWeek opens no network endpoint and the Devices card offers Pair a phone."""
+With none, FlexWeek opens no network endpoint."""
 
 from __future__ import annotations
 
-import re
 import sqlite3
 from pathlib import Path
 
 import pytest
-from PySide6.QtWidgets import QApplication, QLabel, QLineEdit
+from PySide6.QtWidgets import QApplication
 
 from backend.storage import initialize
 from desktop.native import devices
-from desktop.native.devices import NO_PHONE_WORDS, PairDialog, SyncHost, linked_phone_at_launch
-from desktop.native.window import NativeWindow
+from desktop.native.devices import SyncHost, linked_phone_at_launch
 from desktop.tests.sync.support import (
     PHONE_NAME,
-    devices_panel,
-    label_texts,
-    listed_phones,
     loopback_service,
 )
 from desktop.tests.waiting import wait_until
@@ -97,34 +92,5 @@ def test_asking_for_the_service_twice_starts_it_once(
     assert len(starts) == 1, "a second ask waits for the first start instead of starting another"
 
 
-def test_the_card_before_any_service_offers_pair_a_phone(
-    lazy_light_desk: tuple[NativeWindow, SyncHost, list[Path]],
-) -> None:
-    window, host, started = lazy_light_desk
-    panel = devices_panel(window)
-    assert host.service is None
-    assert started == []
-    assert listed_phones(panel) == []
-    assert NO_PHONE_WORDS in label_texts(panel)
-    assert panel.pair_button.isEnabled()
-    assert not panel.sync_button.isEnabled()
-    assert window.sync_dot.isHidden()
 
 
-def test_pressing_pair_starts_the_service_once_and_opens_the_pairing_sheet(
-    lazy_light_desk: tuple[NativeWindow, SyncHost, list[Path]],
-) -> None:
-    window, host, started = lazy_light_desk
-    panel = devices_panel(window)
-    panel.pair_button.click()
-    assert not panel.pair_button.isEnabled(), "Pair is off while the service starts"
-    panel.pair_button.click()
-    wait_until(None, lambda: isinstance(panel.dialog, PairDialog))
-    assert len(started) == 1
-    assert host.service is not None
-    code = panel.dialog.findChild(QLabel, "pairCode")
-    wait_until(None, lambda: re.fullmatch(r"\d{4} \d{4}", code.text()) is not None)
-    assert not any("scan the code" in text.lower() for text in label_texts(panel.dialog))
-    assert panel.dialog.findChild(QLineEdit, "pairQr") is None
-    assert panel.dialog.status.text().startswith("Code works for ")
-    panel.dialog.reject()

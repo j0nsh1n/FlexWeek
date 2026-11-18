@@ -35,8 +35,6 @@ def _still(root: QWidget) -> None:
 DIALOG_SOURCES = (
     "desktop/native/widgets.py",
     "desktop/native/settings.py",
-    "desktop/native/devices.py",
-    "desktop/native/look_editor.py",
     "desktop/native/look.py",
 )
 

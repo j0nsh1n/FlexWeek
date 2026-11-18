@@ -1,4 +1,4 @@
-"""Retro dresses Settings, a sheet and Setup as old desktop windows: a title bar with caption buttons
+"""Retro dresses a sheet and Setup as old desktop windows: a title bar with caption buttons
 that work, bevels on the controls, and a frame that is built once, owned by its page, and safe to free."""
 
 from __future__ import annotations
@@ -11,15 +11,12 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QEvent, QObject, QPointF, Qt
-from PySide6.QtGui import QHoverEvent
+from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QApplication,
     QLabel,
     QPushButton,
-    QRadioButton,
-    QScrollArea,
     QSlider,
     QWidget,
 )
@@ -32,17 +29,13 @@ from desktop.native.feel import (
     Win98TitleBar,
     apply_feel,
     bevel_css,
-    bevel_kind,
     extra_stylesheet,
     set_current,
 )
-from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.look import sanitize_look
-from desktop.native.settings import SettingsPage
-from desktop.native.setup import SetupPage, style_layout
+from desktop.native.setup import SetupPage
 from desktop.native.widgets import HomeworkDialog
-from desktop.tests.settings.support_feel import STYLE, _dressed, _host
-from desktop.tests.waiting import wait_until
+from desktop.tests.settings.support_feel import _dressed, _host
 from desktop.tests.window_support import free, qapp  # noqa: F401
 
 
@@ -52,24 +45,10 @@ def nothing_is_left_dressed() -> Iterator[None]:
     set_current(None)
 
 
-def a_retro_settings_page(host: QWidget, ctx: Context) -> SettingsPage:
-    prefs = {"alarms": [], "reminders_enabled": True, "theme_pack": "light-frost"}
-    page = SettingsPage(host, prefs, ctx.look, {}, style_layout(STYLE["retro"], sanitize_layout(None)))
-    page.resize(1280, 800)
-    return page
-
-
 def test_retro_titles_its_windows_and_the_drawn_x_and_escape_close_a_sheet(
     qapp: QApplication,  # noqa: F811
 ) -> None:
     host, ctx = _host(qapp, "retro")
-    page = a_retro_settings_page(host, ctx)
-    apply_feel(page, ctx)
-    qapp.processEvents()
-    assert page.findChild(QWidget, "win98TitleBar") is not None
-    words = page.findChild(QLabel, "win98Title")
-    assert words is not None
-    assert words.text() == "Settings - FlexWeek"
     dialog = HomeworkDialog(host, today="2026-10-01")
     dialog.show()
     apply_feel(dialog, ctx)
@@ -92,26 +71,9 @@ def test_retro_titles_its_windows_and_the_drawn_x_and_escape_close_a_sheet(
     QTest.keyClick(dialog, Qt.Key.Key_Escape)
     qapp.processEvents()
     assert not dialog.isVisible()
-    free(page)
     free(host)
 
 
-def test_retro_settings_close_caption_closes_the_page(qapp: QApplication) -> None:  # noqa: F811
-    """The drawn x on Retro's Settings frame does what Done does."""
-    host, ctx = _host(qapp, "retro")
-    page = a_retro_settings_page(host, ctx)
-    page.show()
-    apply_feel(page, ctx)
-    qapp.processEvents()
-    closed: list[bool] = []
-    page.closed.connect(lambda *_: closed.append(True))
-    close = page.findChild(QPushButton, "win98Cap-close")
-    assert close is not None
-    close.click()
-    qapp.processEvents()
-    assert closed == [True]
-    free(page)
-    free(host)
 
 
 def test_retro_bevels_are_raised_and_sunken(qapp: QApplication) -> None:  # noqa: F811
@@ -159,8 +121,7 @@ def test_collecting_a_retro_page_raises_nothing(
     # Collector off while the page is built, so what it breaks up later is in the order it was made.
     gc.disable()
     try:
-        # A bare page: SettingsPage and SetupPage hold themselves in closures, so the collector never
-        # frees them.
+        # A bare page: SetupPage holds itself in closures, so the collector never frees it.
         page = QWidget()
         page.setObjectName("settingsPage")
         QSlider(page)
@@ -189,7 +150,10 @@ def test_an_emptied_retro_frame_ignores_its_hosts_events(
 ) -> None:
     errors = _record_errors(monkeypatch)
     host, ctx = _host(qapp, "retro")
-    page = a_retro_settings_page(host, ctx)
+    page = QWidget()
+    page.setObjectName("settingsPage")
+    QSlider(page)
+    page.resize(1280, 800)
     page.show()
     apply_feel(page, ctx)
     frame = page.findChild(Win98Chrome)
@@ -214,12 +178,11 @@ def test_every_retro_widget_is_owned_by_the_page_it_dresses(qapp: QApplication) 
     large = sanitize_look({**ctx.look, "knobs": {**ctx.look.get("knobs", {}), "text": "large"}})
     restyled = Context(ctx.feel, large, ctx.palette, ctx.tokens, ctx.base_sheet)
     before = frames()
-    page = a_retro_settings_page(host, ctx)
     dialog = HomeworkDialog(host, today="2026-10-01")
     dialog.show()
     setup = SetupPage(host)
     setup.motion = "off"
-    for root in (page, dialog, setup):
+    for root in (dialog, setup):
         apply_feel(root, ctx)
         apply_feel(root, restyled)
         qapp.processEvents()
@@ -229,7 +192,6 @@ def test_every_retro_widget_is_owned_by_the_page_it_dresses(qapp: QApplication) 
     assert strays == []
     dialog.close()
     free(dialog)
-    free(page)
     free(setup)
     free(host)
 
@@ -245,51 +207,3 @@ class _PaintCount(QObject):
         return False
 
 
-def test_retro_bevel_pane_is_idle_when_nothing_moves(qapp: QApplication) -> None:  # noqa: F811
-    host, ctx = _host(qapp, "retro")
-    page = a_retro_settings_page(host, ctx)
-    page.show()
-    apply_feel(page, ctx)
-    qapp.processEvents()
-    page.grab()
-    qapp.processEvents()
-    pane = page.findChild(QWidget, "win98Bevels")
-    assert pane is not None
-    counter = _PaintCount(page)
-    page.installEventFilter(counter)
-    pane.installEventFilter(counter)
-    # The page's overlay scroll bar shows and fades as it appears, which is movement, not a pane that
-    # never rests. The bevels must come to rest: a layout loop repainting them would never be quiet,
-    # and this wait would then run out. Quiet is many looks at the event loop with no paint between.
-    quiet = {"seen": counter.count, "looks": 0}
-
-    def at_rest() -> bool:
-        if counter.count != quiet["seen"]:
-            quiet["seen"], quiet["looks"] = counter.count, 0
-        else:
-            quiet["looks"] += 1
-        return quiet["looks"] >= 40
-
-    wait_until(qapp, at_rest, what="the settings page and its bevels to stop painting")
-    done = page.findChild(QPushButton, "settingsDone")
-    assert done is not None
-    done.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
-    mid = QPointF(done.width() / 2, done.height() / 2)
-    qapp.sendEvent(done, QHoverEvent(QEvent.Type.HoverEnter, mid, done.mapToGlobal(mid), mid))
-    qapp.processEvents()
-    assert bevel_kind(done) == "raised"
-    segments = [child for child in page.findChildren(QRadioButton) if child.property("segment")]
-    assert segments, "settings has segmented choices, and each segment is a radio button"
-    target = next((item for item in segments if not item.isChecked()), segments[0])
-    target.click()
-    qapp.processEvents()
-    if target.isChecked():
-        assert bevel_kind(target) == "raised"
-    area = page.findChild(QScrollArea, "settingsScroll")
-    assert area is not None
-    area.verticalScrollBar().setValue(min(area.verticalScrollBar().maximum(), 80))
-    qapp.processEvents()
-    tiles = [child for child in page.findChildren(QWidget, "setupChoice") if child.isVisible()]
-    assert tiles
-    free(page)
-    free(host)

@@ -84,7 +84,7 @@ def test_no_glyph_stands_in_for_an_icon_in_the_chrome(qapp: QApplication, window
             if widget.isVisible() and any(glyph in widget.text() for glyph in GLYPHS)
         ]
         assert written == [], view
-    for name in ("prevWeek", "nextWeek", "settingsGear", "addArrow", "weekZoomOut", "weekZoomIn"):
+    for name in ("prevWeek", "nextWeek", "addArrow", "weekZoomOut", "weekZoomIn"):
         button = bar(window, name)
         assert button.text() == "" and not button.icon().isNull(), name
         assert button.accessibleName() or button.toolTip(), f"{name} has no words for a screen reader"
@@ -113,7 +113,7 @@ def test_the_bars_icons_are_drawn_again_in_the_new_words_colour_when_the_look_ch
     """Each icon is drawn in its button's words colour, and drawn again when the look changes: a dark
     icon kept from Light on Dark's page could not be seen. The icon each button was last drawn with is
     recorded on it as its name and colours."""
-    names = ("prevWeek", "nextWeek", "settingsGear", "addArrow")
+    names = ("prevWeek", "nextWeek", "addArrow")
 
     def dress(pack: str) -> dict[str, tuple[str, str, int]]:
         window.session.preferences = {**(window.session.preferences or {}), "theme_pack": pack}
@@ -136,7 +136,7 @@ def test_the_bars_icons_are_drawn_again_in_the_new_words_colour_when_the_look_ch
         assert dark[name][2] != light[name][2], (name, "its icon was drawn again")
 
 
-def test_the_hours_month_and_settings_scroll_under_overlay_bars(
+def test_the_hours_and_month_scroll_under_overlay_bars(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     """The bars lie over the content instead of taking a strip beside it: each is marked overlay, and the
@@ -152,12 +152,6 @@ def test_the_hours_month_and_settings_scroll_under_overlay_bars(
     show_view(qapp, window, "month")
     wait_until(qapp, lambda: window.session.month_data is not None and window.month_grid.scroll.height() > 0)
     assert overlaid(window.month_grid.scroll), "Month"
-    window._open_settings()
-    wait_until(qapp, lambda: window._settings is not None and window._settings.isVisible())
-    try:
-        assert overlaid(window._settings.stack.currentWidget()), "Settings"
-    finally:
-        window._settings.close_page()
 
 
 def keyed_row(qapp: QApplication, host: QWidget) -> tuple[QPushButton, QPushButton, QPushButton]:

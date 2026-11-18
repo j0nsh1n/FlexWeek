@@ -1,11 +1,10 @@
 """Material 3 Settings > Planning: the time step the student drags and picks times in, 5 or 15 minutes.
-It is the same account preference Widgets Settings and both Setups set, so a pick here shows there."""
+It is the account preference Setup sets too, and the hand moves by it."""
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QApplication, QRadioButton
+from PySide6.QtWidgets import QApplication
 
-from desktop.native.settings import SettingsPage
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.settings.support_material_settings import (
@@ -20,21 +19,6 @@ from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
 
 # ruff: noqa: F811
-
-
-def _widgets_choice(window: NativeWindow) -> int:
-    """The step Widgets Settings shows as chosen, read from the saved preferences."""
-    page = SettingsPage(
-        window, window.session.preferences or {}, window._look, window.session.reminder_limits
-    )
-    try:
-        return next(
-            minutes
-            for minutes in (5, 15)
-            if page.findChild(QRadioButton, f"prefDragStep-{minutes}").isChecked()
-        )
-    finally:
-        page.deleteLater()
 
 
 def test_planning_offers_a_dragging_step_of_5_or_15_minutes_marked_as_saved(
@@ -56,29 +40,26 @@ def test_planning_offers_a_dragging_step_of_5_or_15_minutes_marked_as_saved(
     wait_until(qapp, lambda: _named(root, "dragStep")[0].property("current") == "5")
 
 
-def test_a_step_picked_in_material_settings_is_saved_and_shown_by_widgets_settings(
+def test_a_step_picked_in_material_settings_is_saved_and_given_to_the_hand(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root = _open_settings(qapp, window, "planning")
     _click_segment(qapp, window, _named(root, "dragStep")[0], "5 min")
     wait_until(qapp, lambda: _prefs(window).get("drag_step_min") == 5)
     wait_until(qapp, lambda: _named(root, "dragStep")[0].property("current") == "5")
-    assert _widgets_choice(window) == 5
     assert window.hand.step == 5
 
     # 15 is the default, which the server leaves out.
     _click_segment(qapp, window, _named(root, "dragStep")[0], "15 min")
     wait_until(qapp, lambda: "drag_step_min" not in _prefs(window))
     wait_until(qapp, lambda: _named(root, "dragStep")[0].property("current") == "15")
-    assert _widgets_choice(window) == 15
     assert window.hand.step == 15
 
 
-def test_an_account_that_never_chose_a_step_shows_15_picked_in_both_looks(
+def test_an_account_that_never_chose_a_step_shows_15_picked(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     window.session.preferences.pop("drag_step_min", None)
     root = _open_settings(qapp, window, "planning")
     _panel(window)._publish()
     wait_until(qapp, lambda: _named(root, "dragStep")[0].property("current") == "15")
-    assert _widgets_choice(window) == 15

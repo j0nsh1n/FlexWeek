@@ -1,6 +1,6 @@
-"""Settings pictures: the looks and their colours, the controls, the toast and menus, the style preview's
-place on the Look page, and the audit screens (R3.4 forms lane, chunk H2). The checks are what the old
-code tests asserted about colours, contrast, positions and sizes, with their numbers."""
+"""Settings pictures: the looks and their colours, the controls, the toast and menus, and the audit screens
+(R3.4 forms lane, chunk H2). The checks are what the old code tests asserted about colours, contrast,
+positions and sizes, with their numbers."""
 
 from __future__ import annotations
 
@@ -11,75 +11,6 @@ from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.settings import support_pictures as pictures
 from desktop.tests.window_support import still
-
-LOOK_SOURCES = (
-    "desktop/native/look.py",
-    "desktop/native/tokens.py",
-    "desktop/native/calendar.py",
-    "desktop/native/hours",
-    "desktop/native/settings.py",
-    "desktop/native/style_preview.py",
-    "desktop/native/previews.py",
-)
-
-# What the old token tests measured for every look, shown on the Look page's preview week.
-EVERY_LOOK = (
-    "Text reads at 4.5 to 1 (7 to 1 in High contrast) on its ground: the text on the page, cards, fields and "
-    "grid; the muted words on the page and cards; error words on the page and cards; the accent's own words "
-    "(today's name, the side panel's headings, links) on the page and cards; locked and flexible "
-    "block words; "
-    "and every category block's words on its fill. "
-    "Every category fill sits at one lightness: within 0.02 (OKLab) of the others, Sleep apart. "
-    "Homework's mark is at least 20 (OKLab times 100) from every other category's mark after a deuteranope's "
-    "colour-blindness simulation, so homework and sports are told apart. "
-    "The Now line and the selection reach 3 to 1 over every category block in each block style. "
-    "A category icon is its category's mark, only as light or dark as 4.5 to 1 on its own block "
-    "takes, in each "
-    "block style; free time has no icon; the School icon is not cut off and its 3 px edge keeps the "
-    "category's "
-    "colour. A one-hour homework block keeps its 16 px book icon inside the block with its padding "
-    "(INNER_PAD) "
-    "on every side, at Normal and Large text. "
-    "The accent never fills a page, card or wash. "
-    "In the dark looks (Dark, Nocturne, Ink, Terminal) the rail's homework red reaches 3 to 1 on the page, "
-    "cards and fields."
-)
-EXTRA = {
-    "Slate": "",
-    "Nocturne": "",
-    "High contrast": (
-        " The Today's app picture's top band (the day names) is the look's own dark page, lightness under "
-        "0.15, not a pale row over a black week. The High contrast look card's title stays on one line at "
-        "Normal and Large text. Every choice in Settings is in the text colour on the page and the chosen "
-        "one is filled with the accent (#ffd400) in its ink."
-    ),
-    "Paper": (
-        " The card edge is the warm 1 px hairline (#8f877a) and reaches 3 to 1 on the page, the card and "
-        "the second card shade. There are no shadows."
-    ),
-    "Ink": " The card edge is the warm 1 px hairline (#706c65) and reaches 3 to 1 on the page and the card.",
-    "Terminal": "",
-    "Poster": "",
-    "Pastel": " Cards are tinted, not white, and corners are rounder than the default look's.",
-}
-
-
-def look_screen(name: str, main: bool = False) -> Screen:
-    slug = name.lower().replace(" ", "_")
-
-    def prepare(window: NativeWindow) -> object:
-        pictures.wear(window, name)
-        return pictures.settings_at(window, 0)
-
-    return Screen(
-        id=f"settings.look_{slug}",
-        area="settings",
-        prepare=prepare,
-        checks=f"The Look page wearing {name}. " + EVERY_LOOK + EXTRA[name],
-        sources=LOOK_SOURCES,
-        main=main,
-        styles=("widgets",),
-    )
 
 
 def top_bar_choice(window: NativeWindow) -> object:
@@ -129,28 +60,6 @@ def next_card_in_terminal(window: NativeWindow) -> object:
     host.show()
     still(host)
     return host
-
-
-def look_preview(row: int, size: tuple[int, int], *, large: bool = False, motion_off: bool = False):
-    def prepare(window: NativeWindow) -> object:
-        page = pictures.settings_at(window, row, size)
-        if large:
-            pictures.wear_large_text(page)
-        if motion_off:
-            page.motion.setCurrentIndex(page.motion.findData("off"))
-            page.motion_level = "off"
-            pictures.pump(lambda: False)
-        return page
-
-    return prepare
-
-
-def look_preview_scrolled(window: NativeWindow) -> object:
-    page = pictures.settings_at(window, 0, (1400, 900))
-    area = page.stack.currentWidget()
-    area.verticalScrollBar().setValue(area.verticalScrollBar().maximum())
-    pictures.pump(lambda: False)
-    return page
 
 
 def unfinished_panel(window: NativeWindow) -> object:
@@ -213,10 +122,6 @@ def material_tokens(window: NativeWindow) -> object:
 
 
 SCREENS: list[Screen] = [
-    *(
-        look_screen(name, main=name in {"Paper", "High contrast"})
-        for name in ("Slate", "Nocturne", "High contrast", "Paper", "Ink", "Terminal", "Poster", "Pastel")
-    ),
     Screen(
         id="settings.top_bar_choice",
         area="settings",
@@ -310,116 +215,6 @@ SCREENS: list[Screen] = [
             "sentence wraps and its label is as tall as the wrapped text needs, nothing cut off."
         ),
         sources=("desktop/native/hours/rail.py", "desktop/native/look.py"),
-        styles=("widgets",),
-    ),
-    Screen(
-        id="settings.look_preview_side",
-        area="settings",
-        prepare=look_preview(0, (1400, 900)),
-        checks=(
-            "At 1400 by 900 the style preview sits on the right of the Look cards, about 60 % of the stage "
-            "(between 55 % and 65 %), and its bottom is above the footer. Fit fills that column's width: the "
-            "picture is wider than 500 px and at least 1000 px wide in the picture's own size. The preview's "
-            "controls sit right under the fitted picture, no more than 16 px below it. Choosing Actual size "
-            "gives the preview at least 70 % of the stage's height."
-        ),
-        sources=LOOK_SOURCES,
-        main=True,
-        styles=("widgets",),
-    ),
-    Screen(
-        id="settings.look_preview_wide",
-        area="settings",
-        prepare=look_preview(0, (1600, 1000)),
-        checks=(
-            "At 1600 by 1000 a wide window gives the preview a real share of the stage: at least 35 % of the "
-            "stage's height, with the picture shown at least 240 px tall, so Fit fills the room instead of "
-            "squeezing the window picture into a thin strip between empty bars."
-        ),
-        sources=LOOK_SOURCES,
-        styles=("widgets",),
-    ),
-    Screen(
-        id="settings.look_preview_threshold",
-        area="settings",
-        prepare=look_preview(0, (1000, 800)),
-        checks=(
-            "At 1000 by 800, the width where the side-by-side layout starts, the preview's controls (the "
-            "surface choice and the size choice) are visible and each is at least as wide as it asks for."
-        ),
-        sources=LOOK_SOURCES,
-        styles=("widgets",),
-    ),
-    Screen(
-        id="settings.look_preview_scrolled",
-        area="settings",
-        prepare=look_preview_scrolled,
-        checks=(
-            "The Look cards scrolled to their end: the preview has not moved from where it was "
-            "unscrolled."
-        ),
-        sources=LOOK_SOURCES,
-        styles=("widgets",),
-    ),
-    Screen(
-        id="settings.look_preview_two_tiles",
-        area="settings",
-        prepare=look_preview(0, (1050, 800)),
-        checks=(
-            "At 1050 by 800 (between 1000 and 1100) the Look cards stay wide enough for two tiles on the "
-            "first row, level with each other. The preview's controls (the surface choice and the size "
-            "choice) are not squeezed: each is at least as wide as it asks for."
-        ),
-        sources=LOOK_SOURCES,
-        styles=("widgets",),
-    ),
-    Screen(
-        id="settings.look_preview_large_text",
-        area="settings",
-        prepare=look_preview(0, (1280, 800), large=True),
-        checks=(
-            "At 1280 by 800 with Large text the Look tiles are wider than at Normal text and two "
-            "still sit on "
-            "a row, beside the preview or, when that no longer fits, under the strip. The preview's controls "
-            "are not squeezed. At 1000, 1050 and 1400 wide the same holds."
-        ),
-        sources=LOOK_SOURCES,
-        styles=("widgets",),
-    ),
-    Screen(
-        id="settings.look_preview_strip",
-        area="settings",
-        prepare=look_preview(0, (900, 700)),
-        checks=(
-            "Below 1000 px wide the preview stays a strip above the cards at the stage's full width, and "
-            "the cards take the full width too."
-        ),
-        sources=LOOK_SOURCES,
-        styles=("widgets",),
-    ),
-    Screen(
-        id="settings.look_preview_short_window",
-        area="settings",
-        prepare=look_preview(0, (1024, 640), large=True, motion_off=True),
-        checks=(
-            "At 1024 by 640 with Large text and animations off, the preview sits inside the window (nothing "
-            "past the window's right or bottom edge), is at least 160 px wide and 240 px tall, and the Look "
-            "cards under it keep at least 200 px to scroll in. The Fit choice is on screen and more than "
-            "20 px wide."
-        ),
-        sources=LOOK_SOURCES,
-        main=True,
-        styles=("widgets",),
-    ),
-    Screen(
-        id="settings.planning_page_no_preview",
-        area="settings",
-        prepare=look_preview(1, (1600, 1000)),
-        checks=(
-            "Another Settings page (Planning) at 1600 by 1000 has no preview and no leftover column: its "
-            "cards start at the top of the stage and use the full stage width."
-        ),
-        sources=("desktop/native/settings.py",),
         styles=("widgets",),
     ),
     Screen(

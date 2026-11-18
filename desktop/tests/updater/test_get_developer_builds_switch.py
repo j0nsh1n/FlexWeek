@@ -1,6 +1,6 @@
 # ruff: noqa: F811
-"""The Get developer builds switch in Settings, This computer: both designs show the one saved setting,
-and a developer build says so beside its version."""
+"""The Get developer builds switch in Settings, This computer: it saves the setting, shows only on the
+Linux tarball, and a developer build says so beside its version."""
 
 from __future__ import annotations
 
@@ -12,9 +12,8 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QObject, QPoint, QPointF, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication
 
-from desktop.native import window as window_module
 from desktop.native.material import bridge_settings
 from desktop.native.version import VERSION
 from desktop.native.window import NativeWindow
@@ -135,51 +134,10 @@ def test_a_developer_build_says_so_beside_its_version_in_material_settings(
     assert "developer build" in words
 
 
-def test_widgets_settings_has_the_same_switch(qapp: QApplication, window: NativeWindow) -> None:
-    """The switch was only in Material's Settings; Widgets This computer shows the same saved setting."""
-    window._surface = "widgets"
-    window._material_gave_up = False
-    window._on_week()
-    window._updates["developer_builds"] = True
-    window._save_look()
-    assert json.loads(look_file().read_text(encoding="utf-8"))["updates"]["developer_builds"] is True
-    window._open_settings()
-    switch = window._settings.findChild(QWidget, "prefDeveloperBuilds")
-    assert switch is not None and switch.isChecked() is True
-    switch.click()
-    qapp.processEvents()
-    assert window._updates["developer_builds"] is False
-    assert json.loads(look_file().read_text(encoding="utf-8"))["updates"]["developer_builds"] is False
-    window._close_settings()
-    window._updates["developer_builds"] = True  # as Material's switch would
-    window._open_settings()
-    assert window._settings.findChild(QWidget, "prefDeveloperBuilds").isChecked() is True
 
 
-@pytest.mark.parametrize("kind", ["windows", "appimage"])
-def test_widgets_settings_hides_the_switch_off_the_linux_tarball(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str
-) -> None:
-    """Developer builds are published for the Linux tarball only; elsewhere the switch would do nothing."""
-    monkeypatch.setattr(window_module, "install_kind", lambda *_args, **_kw: kind)
-    window._surface = "widgets"
-    window._material_gave_up = False
-    window._on_week()
-    window._open_settings()
-    switch = window._settings.findChild(QWidget, "prefDeveloperBuilds")
-    assert switch is not None and switch.isHidden() is True
 
 
-def test_widgets_settings_shows_the_switch_on_the_linux_tarball(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(window_module, "install_kind", lambda *_args, **_kw: "tarball")
-    window._surface = "widgets"
-    window._material_gave_up = False
-    window._on_week()
-    window._open_settings()
-    switch = window._settings.findChild(QWidget, "prefDeveloperBuilds")
-    assert switch is not None and switch.isHidden() is False
 
 
 @pytest.mark.parametrize(("kind", "shown"), [("windows", False), ("appimage", False), ("tarball", True)])

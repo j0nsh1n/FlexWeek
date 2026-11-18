@@ -1,12 +1,5 @@
 [
  {
-  "file": "desktop/native/window.py",
-  "name": "the gear a glyph again",
-  "old": "        icons.tint(gear, \"settings\")\n",
-  "new": "        gear.setText(\"\\u2699\")\n",
-  "test": "desktop/tests/week/test_top_bar_controls.py::test_no_glyph_stands_in_for_an_icon_in_the_chrome"
- },
- {
   "file": "desktop/native/hours/zoom.py",
   "name": "the zoom's minus written as text",
   "old": "        button = ZoomButton()\n",
@@ -32,14 +25,14 @@
   "name": "scroll bars beside the content again",
   "old": "        if hint == QStyle.StyleHint.SH_ScrollBar_Transient and overlaid(widget):\n",
   "new": "        if False:\n",
-  "test": "desktop/tests/week/test_top_bar_controls.py::test_the_hours_month_and_settings_scroll_under_overlay_bars"
+  "test": "desktop/tests/week/test_top_bar_controls.py::test_the_hours_and_month_scroll_under_overlay_bars"
  },
  {
   "file": "desktop/native/hours/month.py",
   "name": "Month keeps a strip for its bar",
   "old": "        overlay_scroll_bars(self)\n",
   "new": "",
-  "test": "desktop/tests/week/test_top_bar_controls.py::test_the_hours_month_and_settings_scroll_under_overlay_bars"
+  "test": "desktop/tests/week/test_top_bar_controls.py::test_the_hours_and_month_scroll_under_overlay_bars"
  },
  {
   "file": "desktop/native/icons.py",

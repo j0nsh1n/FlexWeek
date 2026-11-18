@@ -12,7 +12,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QTime, QTimer
-from PySide6.QtWidgets import QApplication, QComboBox, QPushButton
+from PySide6.QtWidgets import QApplication, QPushButton
 
 from desktop.native.setup import DONE, FIRST, HOMEWORK, REMINDERS
 from desktop.native.widgets import AvailabilityDialog
@@ -31,7 +31,7 @@ SPOTIFY = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
 NEXT_SCHOOL_DAY = "2026-11-06"
 
 
-def test_a_style_look_is_saved_and_selected_in_settings(qapp: QApplication, launcher: Launcher) -> None:
+def test_a_style_look_is_saved(qapp: QApplication, launcher: Launcher) -> None:
     window = new_account(qapp, launcher, "setup_style_look")
     setup = window.setup_page
     setup.carousel.look_swatches["preset:high-contrast"].click()
@@ -46,10 +46,6 @@ def test_a_style_look_is_saved_and_selected_in_settings(qapp: QApplication, laun
     assert setup.summary_text()[0] == "Today's app in High contrast"
     setup.skip_all.click()
     written(qapp, window)
-    window._open_settings()
-    choice = window._settings.findChild(QComboBox, "layoutMain-look")
-    assert choice is not None
-    assert choice.currentData() == "preset:high-contrast"
 
 
 def test_setup_saves_the_account_pack_when_a_pack_look_is_picked(

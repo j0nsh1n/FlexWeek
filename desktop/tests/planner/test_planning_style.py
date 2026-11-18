@@ -8,9 +8,8 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QDialog, QRadioButton  # noqa: E402
+from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
 
-from desktop.native.settings import SettingsPage  # noqa: E402
 from desktop.native.widgets import HomeworkDialog  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_layouts_window import (  # noqa: E402
@@ -68,9 +67,6 @@ def test_by_default_new_homework_waits_for_plan_my_homework(
 
 
 def test_placing_by_hand_turns_plan_into_suggest_times(qapp: QApplication, window: NativeWindow) -> None:
-    dialog = SettingsPage(window, window.session.preferences, window._look, {}, window._layout)
-    dialog.findChild(QRadioButton, "prefPlanning-manual").setChecked(True)
-    assert dialog.updates()["planning_style"] == "manual"
     window.session.preferences = {**(window.session.preferences or {}), "planning_style": "manual"}
     window._sync_chrome()
     assert window.solve_button.text() == "Suggest times"

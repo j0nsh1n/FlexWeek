@@ -112,9 +112,8 @@ def test_the_overdue_chip_hides_with_the_unfinished_list_and_returns_when_it_is_
     assert window.left_chip.isVisibleTo(window)
 
 
-@pytest.mark.parametrize("page", ["week", "settings"])
 def test_the_deadline_passing_refreshes_tags_the_sidebar_and_the_focus_list(
-    qapp, window, monkeypatch, page
+    qapp, window, monkeypatch
 ) -> None:
     session = window.session
     monday = date.fromisoformat(session.week_start)
@@ -127,9 +126,6 @@ def test_the_deadline_passing_refreshes_tags_the_sidebar_and_the_focus_list(
     assert session.hand_move(block["id"], -1, WEDNESDAY, 15 * 60 + 15, 16 * 60 + 15)
     session.save()
     settled(qapp, window)
-    if page == "settings":
-        window._open_settings()
-        settled(qapp, window)
     announcements = []
     monkeypatch.setattr(
         "desktop.native.window.announce",
@@ -154,7 +150,7 @@ def test_the_deadline_passing_refreshes_tags_the_sidebar_and_the_focus_list(
     assert bio_rows == [expected]
     assert window.rail.none_waiting.text() == "Bio reading · 1 h left"
     assert any(item["title"] == "Bio reading, overdue" for item in session.focus_tasks())
-    target = window if page == "settings" else window.more_button
+    target = window.more_button
     assert target.isVisible()
     said = [item for item in announcements if item[0] is target]
     assert said == [(target, "1 overdue", False)]

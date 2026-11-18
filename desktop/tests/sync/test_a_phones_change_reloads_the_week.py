@@ -7,7 +7,7 @@ import pytest
 from flexweek_engine import SyncService
 
 from desktop.native.window import NativeWindow
-from desktop.tests.sync.support import PHONE_NAME, GenerationProxy, devices_panel, pair_a_phone
+from desktop.tests.sync.support import PHONE_NAME, GenerationProxy, pair_a_phone
 from desktop.tests.waiting import wait_until
 
 pytest_plugins = ["desktop.tests.sync.support"]
@@ -39,6 +39,5 @@ def test_a_phone_change_reloads_the_week_unless_this_window_has_unsaved_edits(
 
 
 def test_the_status_dot_is_hidden_until_a_phone_is_linked(light_desk: NativeWindow) -> None:
-    devices_panel(light_desk)
     light_desk._sync_tick()
     assert light_desk.sync_dot.isHidden()

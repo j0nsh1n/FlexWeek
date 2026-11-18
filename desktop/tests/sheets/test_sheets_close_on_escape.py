@@ -13,12 +13,10 @@ from PySide6.QtCore import QStandardPaths, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton, QWidget
 
-from desktop.native.look_editor import LEAVE_TITLE, PICKER_HUES, ColourField
 from desktop.native.widgets import Dialog
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.sheets.support_dialogs import when_open
-from desktop.tests.test_look_editor import open_editor
 
 PREVIEW_ROWS = [
     {
@@ -145,25 +143,5 @@ def test_saving_the_recovery_codes_starts_on_a_sheet_and_esc_never_reaches_the_f
     assert path == ""
 
 
-def test_the_accent_picker_is_a_sheet_that_esc_closes_and_puts_the_colour_back(
-    qapp: QApplication, window: NativeWindow  # noqa: F811
-) -> None:
-    _page, editor = open_editor(qapp, window)
-    field = editor.findChild(ColourField, "lookColour-accent")
-    tried: list[str] = []
-    field.picked.connect(tried.append)
-    before = field._colour
-
-    def try_one(sheet: Dialog) -> None:
-        sheet.dots[6].click()
-
-    escape_closes(qapp, window, field.swatch.click, "Any colour", field.swatch, try_one)
-    assert tried[-1] == before and tried[0] == PICKER_HUES[1], "tried live, then put back"
 
 
-def test_leaving_the_look_editor_asks_on_a_sheet_that_esc_closes_and_stays(
-    qapp: QApplication, window: NativeWindow  # noqa: F811
-) -> None:
-    _page, editor = open_editor(qapp, window)
-    answer = escape_closes(qapp, window, editor.ask_leave, LEAVE_TITLE, editor.back)
-    assert answer is None, "Esc stays in the editor"

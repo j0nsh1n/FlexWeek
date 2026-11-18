@@ -1,5 +1,5 @@
 """Screens of the style feel (Retro's windows, Bento's hero, Night owl's paper, and Plain as the baseline) on
-Settings, the Add homework sheet and Setup. These are the looks the code tests of the feel used to
+the Add homework sheet and Setup. These are the looks the code tests of the feel used to
 measure: title bars and their contrast, titles at Large text, caption buttons, bevels and card depth."""
 
 from __future__ import annotations
@@ -33,29 +33,10 @@ FEELS = (
     ("retro", "retro", "Retro"),
 )
 
-# What every title picture checks; Large text comes from the edge set, which every feel screen is in.
-TITLE_CHECKS = (
-    "the page's title is whole at 800 and 1280 pixels wide (its words fit the label, neither cut off nor "
-    "wrapped past the label's height) at Large text"
-)
-SCROLL_CHECK = (
-    "at Large text the page scrolls no more than the Plain feel's does (Retro's frame and Setup's style "
-    "picker may make Settings and Add homework scroll)"
-)
-
 
 def _wear(window, main: str) -> None:  # noqa: ANN001
     window._layout = sanitize_layout({"main": main, "day": "one"})
     window._apply_appearance()
-
-
-def _settings(main: str) -> Callable[..., object]:
-    def prepare(window):  # noqa: ANN001, ANN202
-        _wear(window, main)
-        window._open_settings()
-        return window._settings
-
-    return prepare
 
 
 def _sheet(main: str) -> Callable[..., object]:
@@ -100,31 +81,6 @@ def _bevel_swatch(window) -> QWidget:  # noqa: ANN001
 SCREENS: list[Screen] = []
 
 for key, main, name in FEELS:
-    extra = {
-        "plain": "the baseline the other feels' scrolling is compared with",
-        "night_owl": "cards wear the paper edge and the titles the serif face",
-        "dashboard": (
-            "the title sits on the hero bar and its text is at least 4.5 to 1 against the bar's fill in "
-            "the light and the dark pack; cards have the small shadow (0 offset across, 1 down, 3 blur) "
-            "in the Bento corner radius"
-        ),
-        "retro": (
-            "the title bar runs the full width of the page less the 8 pixel frame (page width - 8); its "
-            "words are at least 4.5 to 1 against the bar in the light and the dark pack; the caption "
-            "buttons lie wholly inside the bar and are at least their size hint at Normal and Large "
-            "text; the bevels are not drawn over the footer; cards have no shadow and square corners"
-        ),
-    }[key]
-    SCREENS.append(
-        Screen(
-            id=f"settings.feel_{key}_settings",
-            area="settings",
-            prepare=_settings(main),
-            checks=f"Settings in the {name} feel: {extra}; {TITLE_CHECKS}; {SCROLL_CHECK}",
-            sources=SOURCES,
-            main=True,
-        )
-    )
     if key == "plain":
         continue
     SCREENS.append(

@@ -1,5 +1,5 @@
-"""A look of the student's own is checked for readability: each pair under 4.5 to 1 is named in plain
-English, its Fix moves the colour the student chose until it reads, and Fix all leaves nothing failing."""
+"""A look of the student's own is checked for readability: each pair under 4.5 to 1 is named, and its fix
+moves the colour the student chose until it reads."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ import re
 
 import pytest
 
-from desktop.native import look_editor
 from desktop.native.calendar import CATEGORIES
 from desktop.native.custom_look import apply_fix, readability
 from desktop.native.look import (
@@ -19,20 +18,14 @@ from desktop.native.look import (
     pack_stylesheet,
     resolved_palette,
 )
-from desktop.native.look_editor import fix_all, problem_rows
 from desktop.native.tokens import oklch_of
 
 LIME = {"name": "Lime", "base": "light", "accent": "#dfff00"}
-GREY_AND_LIME = {**LIME, "colours": {"text": "#9aa0a6", "muted": "#c0c4c8"}}
 PALE = ["#dfff00", "#f5d76e", "#ffd1dc", "#bff3ff", "#98ff98", "#00ffff", "#ffff99"]
 
 
 def worn(custom: dict) -> dict:
     return {"preset": "default", "knobs": {}, "custom": custom}
-
-
-def sentences(custom: dict) -> list[str]:
-    return [row.words for row in problem_rows(readability(custom))]
 
 
 def fixed_until_it_reads(custom: dict) -> dict:
@@ -128,48 +121,6 @@ def test_grey_text_names_every_block_colour_and_its_fix_reads_on_the_blocks_too(
     text = next(p for p in readability(dark_study) if p.field == ("colours", "text"))
     left = readability(apply_fix(dark_study, text))
     assert [p.field for p in left if p.field != ("accent",)] == [("categories", "study")]
-
-
-def test_the_plan_buttons_warning_reads_in_plain_english() -> None:
-    said = sentences(LIME)
-    plan = next(words for words in said if "Plan" in words)
-    assert re.fullmatch(r"The Plan button's words are \d\.\d:1", plan), plan
-    # A singular subject keeps "is".
-    assert any(re.fullmatch(r"Today's day name is \d\.\d:1", words) for words in said), said
-
-
-def test_a_text_colour_warning_still_says_is() -> None:
-    assert any(re.fullmatch(r"Text on the page is \d\.\d:1", words) for words in sentences(GREY_AND_LIME))
-
-
-def test_every_warning_row_is_a_sentence_with_a_verb_and_a_ratio() -> None:
-    for words in sentences(GREY_AND_LIME):
-        assert re.search(r" (is|are) \d\.\d:1", words), words
-
-
-@pytest.mark.parametrize("custom", [LIME, GREY_AND_LIME], ids=["lime", "grey text and lime"])
-def test_one_rows_fix_leaves_no_row_of_the_same_colour_failing(custom: dict) -> None:
-    for row in problem_rows(readability(custom)):
-        fixed = custom
-        for problem in row.fixes:
-            fixed = apply_fix(fixed, problem)
-        fields = {problem.field for problem in row.fixes}
-        left = [problem for problem in readability(fixed) if problem.field in fields]
-        assert not left, (row.words, [(problem.words, problem.ratio) for problem in left])
-
-
-def test_fix_all_fixes_every_problem_not_only_the_first(monkeypatch: pytest.MonkeyPatch) -> None:
-    custom = GREY_AND_LIME
-    assert len({problem.field for problem in readability(custom)}) > 4
-    # Two rounds are enough only if each round fixes every problem, not one of them.
-    monkeypatch.setattr(look_editor, "FIX_ALL_ROUNDS", 2)
-    assert readability(fix_all(custom, False)) == []
-
-
-def test_fix_all_leaves_a_look_that_reads_in_the_dark_too() -> None:
-    dark = {"name": "D", "base": "dark", "colours": {"text": "#3a3f47", "muted": "#2a2f36"}}
-    assert len(readability(dark, True)) > 1
-    assert readability(fix_all(dark, True), True) == []
 
 
 @pytest.mark.parametrize("accent", PALE)

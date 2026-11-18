@@ -1,4 +1,4 @@
-"""The plain look's one-key shortcuts: 1 to 5 under Number keys (on), the letters under Letter keys (off),
+"""The plain look's one-key shortcuts: 1 to 4 under Number keys (on), the letters under Letter keys (off),
 the same two saved settings Material reads. Ctrl+Shift+F is Quick focus. Expected values come from the
 decision (one Google-style set in both looks), not from what the window does."""
 
@@ -16,10 +16,9 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QLineEdit
 
-from desktop.native.material.theme import read_letter_keys, read_shortcuts
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import pump, show_material, show_widgets
+from desktop.tests.material_support import pump
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import look_file, qapp, turn_on_letter_keys  # noqa: F401
 
@@ -61,7 +60,7 @@ def acted(window: NativeWindow, monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return calls
 
 
-def test_number_keys_open_day_week_month_my_day_and_settings_by_default(
+def test_number_keys_open_day_week_month_and_my_day_by_default(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     session = window.session
@@ -74,8 +73,6 @@ def test_number_keys_open_day_week_month_my_day_and_settings_by_default(
     assert window._day_mode is False
     _press(window, Qt.Key.Key_4)
     assert window._day_mode is True, "4 is My day"
-    _press(window, Qt.Key.Key_5)
-    assert _page(window) == "settingsPage"
 
 
 def test_with_number_keys_off_the_number_keys_do_nothing(qapp: QApplication, window: NativeWindow) -> None:
@@ -256,51 +253,9 @@ def test_ctrl_shift_f_does_nothing_while_typing(qapp: QApplication, window: Nati
     box.deleteLater()
 
 
-def _open_settings(window: NativeWindow):
-    window._open_settings()
-    page = window._settings
-    assert page is not None
-    return page
 
 
-def test_the_plain_settings_have_the_two_key_switches_with_letters_off(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    page = _open_settings(window)
-    assert page.number_keys.text() == "Number keys" and page.number_keys.isChecked() is True
-    assert page.letter_keys.text() == "Letter keys" and page.letter_keys.isChecked() is False
 
 
-def test_turning_a_switch_over_saves_it_in_the_settings_material_reads(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    look_file().write_text(json.dumps({"material": {"preset": "Sea"}, "zoom": {}}))
-    page = _open_settings(window)
-    page.letter_keys.setChecked(True)
-    stored = json.loads(look_file().read_text())
-    assert read_letter_keys(stored) is True and read_shortcuts(stored) is True
-    page.number_keys.setChecked(False)
-    stored = json.loads(look_file().read_text())
-    assert read_shortcuts(stored) is False and read_letter_keys(stored) is True
-    assert stored["material"]["preset"] == "Sea", "the rest of Material's settings stay as they were"
-    assert "zoom" in stored, "so does the rest of the look file"
-    page.letter_keys.setChecked(False)
-    assert read_letter_keys(json.loads(look_file().read_text())) is False
 
 
-def test_a_switch_turned_over_in_one_look_is_turned_over_in_the_other(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    page = _open_settings(window)
-    page.letter_keys.setChecked(True)
-    page.number_keys.setChecked(False)
-    show_material(qapp, window)
-    bridge = window._material_page.bridge
-    assert bridge.property("letterKeys") is True and bridge.property("shortcuts") is False
-    # And back: Material turns Letter keys off and the plain page shows it off.
-    bridge.settingsBridge.setLetterKeys(False)
-    bridge.settingsBridge.setShortcuts(True)
-    show_widgets(window)
-    pump(qapp)
-    page = _open_settings(window)
-    assert page.letter_keys.isChecked() is False and page.number_keys.isChecked() is True

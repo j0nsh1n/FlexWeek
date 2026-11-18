@@ -84,13 +84,6 @@
   "test": "desktop/tests/settings/test_block_reminders.py::test_reminders_turned_off_after_the_update_stay_off"
  },
  {
-  "file": "desktop/native/settings.py",
-  "name": "reminder settings grey while reminders are off",
-  "old": "        self.reminders.toggled.connect(self.reminder_controls.setEnabled)\n",
-  "new": "",
-  "test": "desktop/tests/settings/test_alerts_settings.py::test_the_reminder_controls_are_greyed_while_reminders_are_off"
- },
- {
   "file": "desktop/native/widgets.py",
   "name": "the wheel scrolls past a box nobody clicked into",
   "old": "            event.ignore()\n            return True\n",
@@ -194,27 +187,6 @@
   "old": "border-radius: {item}px; font-size: {pt['body']}; }}",
   "new": "border-radius: {item}px; }}",
   "test": "desktop/tests/settings/test_more_menu.py::test_a_description_is_as_large_as_the_text_the_student_chose"
- },
- {
-  "file": "desktop/native/layouts/dialog.py",
-  "name": "Settings opens on Main view with one sentence on designs",
-  "old": "lines = (DESIGN_LINE, blurb) if slot == \"main\" else (blurb,)",
-  "new": "lines = (blurb,)",
-  "test": "desktop/tests/settings/test_settings_page_words.py::test_appearance_names_the_design_the_look_the_text_size_and_says_what_a_design_is"
- },
- {
-  "file": "desktop/native/settings.py",
-  "name": "Long break after counts focus sessions",
-  "old": "        self.long_every.setSuffix(\" focus sessions\")\n",
-  "new": "",
-  "test": "desktop/tests/settings/test_settings_page_words.py::test_focus_says_what_the_long_break_counts"
- },
- {
-  "file": "desktop/native/settings.py",
-  "name": "Play that hears nothing says what to do",
-  "old": "\" and not muted, then press Play again.\"",
-  "new": "\" and not muted.\"",
-  "test": "desktop/tests/settings/test_settings_page_words.py::test_play_that_hears_nothing_says_what_to_do"
  },
  {
   "file": "desktop/native/look.py",

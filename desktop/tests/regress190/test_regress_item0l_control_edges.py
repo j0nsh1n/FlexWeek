@@ -24,7 +24,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QPoint, QRect, QSignalBlocker, Qt
+from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
@@ -32,13 +32,10 @@ from PySide6.QtWidgets import (
     QComboBox,
     QLineEdit,
     QPushButton,
-    QScrollArea,
-    QStyle,
     QWidget,
 )
 
 from desktop.native.fields import ClockField
-from desktop.native.settings import SECTIONS
 from desktop.native.widgets import BlockDialog
 from desktop.tests.window_support import free, qapp, server, settled, signed_out, window  # noqa: F401
 
@@ -63,7 +60,6 @@ CASES = [(f"classic-{name}", pack, preset, "classic", False) for name, pack, pre
     for shade, pack in (("light", "light-frost"), ("dark", "dark-frost"))
 ]
 AA_GRAPHIC = 3.0
-KNOWN_KNOB = "known failure (0l-R): the off switch's knob is hard-coded #ffffff (widgets.py control_art)"
 KNOWN_CHIP = (
     "known failure (0l, reopened as 0l-R): chips take _depth_rules' 1px hairline edge (look.py setup_rules), "
     "1.2-1.3:1"
@@ -71,18 +67,13 @@ KNOWN_CHIP = (
 KNOWN_RETRO = (
     "known failure (0l, reopened as 0l-R): Retro's BevelPane paints its bevel over the 2 px focus ring"
 )
-# Measured on 0.19.0 (0204dfe3) offscreen.
-KNOB_TODAY = set()
 CHIP_TODAY = set()
 FOCUS_TODAY = set()
 SLACK = 0.02  # 8-bit rounding of a colour that the look computed to exactly 3:1
 
 
 KNOWN_CHIP_FOCUS = "known failure (0l-R.1): a focused chip gets the 40 % button ring, not a 2 px accent ring"
-KNOWN_DISABLED = "known failure (0l-R.2): a disabled switch's outline falls under 3:1 on its card"
 CHIP_FOCUS_TODAY = set()
-DISABLED_OFF_TODAY = set()
-DISABLED_ON_TODAY = set()
 
 
 def luminance(colour: QColor) -> float:
@@ -179,12 +170,9 @@ def known(today: set[str], reason: str) -> list:
     ]
 
 
-KNOB_CASES = known(KNOB_TODAY, KNOWN_KNOB)
 CHIP_CASES = known(CHIP_TODAY, KNOWN_CHIP)
 FOCUS_CASES = known(FOCUS_TODAY, KNOWN_RETRO)
 CHIP_FOCUS_CASES = known(CHIP_FOCUS_TODAY, KNOWN_CHIP_FOCUS)
-DISABLED_OFF_CASES = known(DISABLED_OFF_TODAY, KNOWN_DISABLED)
-DISABLED_ON_CASES = known(DISABLED_ON_TODAY, KNOWN_DISABLED)
 
 
 @pytest.mark.parametrize(("name", "pack", "preset", "design", "day"), CASES, ids=IDS)
@@ -240,35 +228,6 @@ def test_0l_a_focused_field_has_a_2px_ring_at_3_to_1_stronger_than_its_edge(
         assert focus > rest, f"focus ring {focus:.2f}:1 is not stronger than the resting edge {rest:.2f}:1"
 
 
-def track_on_card(track: QColor, card: QColor, _knob: QColor) -> None:
-    ratio = contrast(track, card)
-    said = f"track {track.name()} is {ratio:.2f}:1 on the card {card.name()}"
-    assert ratio >= AA_GRAPHIC - SLACK, said
-
-
-def knob_on_track(track: QColor, _card: QColor, knob: QColor) -> None:
-    ratio = contrast(knob, track)
-    said = f"off knob {knob.name()} is {ratio:.2f}:1 on its track {track.name()}"
-    assert ratio >= AA_GRAPHIC - SLACK, said
-
-
-@pytest.mark.parametrize(("name", "pack", "preset", "design", "day"), CASES, ids=IDS)
-def test_0l_the_off_switch_track_reaches_3_to_1_on_its_card(
-    qapp, window, name, pack, preset, design, day
-) -> None:
-    off_switch(qapp, window, pack, preset, design, day, track_on_card)
-
-
-
-
-@pytest.mark.parametrize(("name", "pack", "preset", "design", "day"), KNOB_CASES, ids=IDS)
-def test_0l_r_the_off_switch_knob_reaches_3_to_1_on_its_track(
-    qapp, window, name, pack, preset, design, day
-) -> None:
-    """0l-R (QA, 0.19.0): the off knob is hard-coded white, unseen on the near-white track of dark looks."""
-    off_switch(qapp, window, pack, preset, design, day, knob_on_track)
-
-
 @pytest.mark.parametrize(("name", "pack", "preset", "design", "day"), CHIP_FOCUS_CASES, ids=IDS)
 def test_0l_a_focused_day_chip_has_a_2px_ring_at_3_to_1_stronger_than_its_edge(
     qapp, window, block_sheet, name, pack, preset, design, day
@@ -292,58 +251,3 @@ def test_0l_a_focused_day_chip_has_a_2px_ring_at_3_to_1_stronger_than_its_edge(
     focus = min(contrast(ring["edge"], ring["fill"]), contrast(ring["edge"], ring["card"]))
     if preset != "high-contrast":
         assert focus > rest, f"focus ring {focus:.2f}:1 is not stronger than the resting edge {rest:.2f}:1"
-
-
-@pytest.mark.parametrize(("name", "pack", "preset", "design", "day"), DISABLED_OFF_CASES, ids=IDS)
-def test_0l_r_a_disabled_off_switch_keeps_a_3_to_1_outline_on_its_card(
-    qapp, window, name, pack, preset, design, day
-) -> None:
-    """0l-R.2: "disabled versions stay readable at 3:1 for the outline" (the track against the card)."""
-    off_switch(qapp, window, pack, preset, design, day, track_on_card, enabled=False, on=False)
-
-
-@pytest.mark.parametrize(("name", "pack", "preset", "design", "day"), DISABLED_ON_CASES, ids=IDS)
-def test_0l_r_a_disabled_on_switch_keeps_a_3_to_1_outline_on_its_card(
-    qapp, window, name, pack, preset, design, day
-) -> None:
-    off_switch(qapp, window, pack, preset, design, day, track_on_card, enabled=False, on=True)
-
-
-def off_switch(
-    qapp, window, pack, preset, design, day, check, *, enabled: bool = True, on: bool = False
-) -> None:
-    dress(qapp, window, pack, preset, design, day)
-    window._open_settings()
-    page = window._settings
-    page.nav.setCurrentRow(SECTIONS.index("Look"))
-    settled(qapp, window)
-    QTest.qWait(150)
-    switch = page.fine_tune
-    blocker = QSignalBlocker(switch)  # a checked Fine-tune would open its panel and move the page
-    switch.setChecked(on)
-    switch.setEnabled(enabled)
-    del blocker
-    switch.update()
-    scroll = switch.parentWidget()
-    while scroll is not None and not isinstance(scroll, QScrollArea):
-        scroll = scroll.parentWidget()
-    if scroll is not None:  # below the fold of the Look section, and the footer sits over the bottom
-        scroll.ensureWidgetVisible(switch, 40, 160)  # 160: clear of the "Changes are saved" footer
-    QApplication.processEvents()
-    assert switch.isVisible()
-    option, _ = switch._toggle()
-    box = switch.style().subElementRect(QStyle.SubElement.SE_CheckBoxIndicator, option, switch)
-    origin = switch.mapTo(window, QPoint(0, 0))
-    image = window.grab().toImage()
-    middle = origin.y() + box.center().y()
-    outline_x = box.left() + 1 if on else box.right() - 1
-    outline = pixel(image, QPoint(origin.x() + outline_x, middle))
-    track = pixel(image, QPoint(origin.x() + box.left() + box.width() * 3 // 4, middle))
-    card = pixel(image, QPoint(origin.x() + box.left() - 3, middle))
-    knob = pixel(image, QPoint(origin.x() + box.left() + box.width() * 3 // 10, middle))
-    try:
-        check(outline if check is track_on_card else track, card, knob)
-    finally:
-        switch.setEnabled(True)
-        window._close_settings(save=False)
-        settled(qapp, window)

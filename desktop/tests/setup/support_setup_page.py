@@ -31,7 +31,6 @@ def show_setup(
     """The window's setup page, filled from this state and open on `step`, with no animation unless
     `motion` says so."""
     window.resize(*size)
-    window._close_settings(show_week=False)
     window._setup_active = True
     state = SetupState(
         pack,

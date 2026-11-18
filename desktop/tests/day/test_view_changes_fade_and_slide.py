@@ -12,12 +12,10 @@ pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QApplication, QLabel  # noqa: E402
 
 from desktop.native.motion import SLIDE_NAME, busy  # noqa: E402
-from desktop.native.settings import SettingsPage  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_layouts_window import (  # noqa: E402
     at_motion_level,
     click,
-    combo,
     fades,
     qapp,  # noqa: F401
     wait_until,
@@ -55,22 +53,6 @@ def test_a_new_view_is_live_at_once_while_the_old_one_fades(qapp: QApplication, 
     _over(qapp, window)
 
 
-def test_settings_slide_in_over_the_week_and_away_again(qapp: QApplication, window: NativeWindow) -> None:
-    at_motion_level(qapp, window, "normal")
-    window._open_settings()
-    settings = window._settings
-    assert window._stack.currentWidget() is settings
-    (coming,) = [label for label in window._stack.findChildren(QLabel, SLIDE_NAME) if label.isVisible()]
-    assert coming.x() == window._stack.width(), "from the right edge"
-    (week,) = fades(window._stack)
-    _over(qapp, window)
-    assert fades(window) == [] and settings.graphicsEffect() is None
-    assert window._stack.findChildren(QLabel, SLIDE_NAME) == [] or not coming.isVisible()
-    settings.close_page()
-    assert window._stack.currentWidget().objectName() == "weekPage", "the week is live at once"
-    (leaving,) = fades(window._stack)
-    _over(qapp, window)
-    assert fades(window) == []
 
 
 def test_the_next_week_slides_in_as_the_last_one_drifts_away(
@@ -91,6 +73,3 @@ def test_animations_off_turns_every_fade_off(qapp: QApplication, window: NativeW
     click(window, "viewMonth")
     assert fades(window) == []
     assert window.planner.currentWidget().graphicsEffect() is None
-    dialog = SettingsPage(None, window.session.preferences, window._look, {}, window._layout)
-    assert combo(dialog, "prefMotion").currentData() == "off"
-    assert dialog.updates()["motion"] == "off"

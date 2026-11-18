@@ -10,7 +10,7 @@ import pytest
 from flexweek_engine import SyncService
 from PySide6.QtWidgets import QApplication
 
-from desktop.native.devices import DOT_WORDS, RELAY_SENTENCE, UNREACHABLE_WORDS
+from desktop.native.settings_copy import DOT_WORDS, RELAY_SENTENCE, UNREACHABLE_WORDS
 from desktop.native.window import NativeWindow
 from desktop.tests.settings.support_material_settings import (
     _click,

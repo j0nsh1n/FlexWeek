@@ -30,7 +30,6 @@ from PySide6.QtWidgets import (
 )
 
 from desktop.native.fields import ClockField
-from desktop.native.settings import SettingsPage
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import (
     AvailabilityDialog,
@@ -178,27 +177,6 @@ def _study_hours(qapp, host, end: bool) -> Box:
     return Box(dialog, field, read, dialog.picker_add, [dialog])
 
 
-def alarm_time(qapp, host):
-    page = SettingsPage(host, {"reminders_enabled": True, "alarms": []}, {}, {})
-    QVBoxLayout(host).addWidget(page)
-    host.resize(1000, 900)
-    _up(qapp, host)
-    for row in range(page.nav.count()):
-        page.nav.setCurrentRow(row)
-        qapp.processEvents()
-        if page.alarm_time.isVisible():
-            break
-    page.alarm_name.setText("Wake up")
-    add = page.findChild(QPushButton, "addAlarm")
-    page._scroll_to = None
-    page.alarm_time.setTime(QTime(7, 0))
-
-    def read() -> str:
-        if not page.updates()["alarms"]:
-            add.click()
-        return page.updates()["alarms"][-1]["time"]
-
-    return Box(host, page.alarm_time, read, add, [])
 
 
 BOXES: dict[str, Callable] = {
@@ -215,7 +193,6 @@ BOXES: dict[str, Callable] = {
     "choose-a-time": choose_a_time_start,
     "study-hours-start": lambda qapp, host: _study_hours(qapp, host, False),
     "study-hours-end": lambda qapp, host: _study_hours(qapp, host, True),
-    "alarm-time": alarm_time,
 }
 
 
@@ -487,15 +464,14 @@ DIALOGS = (
 def _saved_anything(name: str, box: Box) -> bool:
     if name in DIALOGS:
         return box.top.result() == QDialog.DialogCode.Accepted or not box.top.isVisible()
-    if name.startswith("study-hours"):
-        return bool(box.top.work_windows())
-    return bool(box.top.findChild(SettingsPage).updates()["alarms"])
+    assert name.startswith("study-hours"), name
+    return bool(box.top.work_windows())
 
 
-# Enter in a picker or a Settings box presses no Add button, so only the dialogs are left by Enter.
+# Enter in a picker presses no Add button, so only the dialogs are left by Enter.
 LEAVINGS = [
     *((name, way) for name in DIALOGS for way in ("next", "enter")),
-    *((name, "next") for name in ("study-hours-start", "study-hours-end", "alarm-time")),
+    *((name, "next") for name in ("study-hours-start", "study-hours-end")),
 ]
 
 

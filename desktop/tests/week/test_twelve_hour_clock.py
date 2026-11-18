@@ -14,14 +14,13 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QTimeEdit, QWidget
 
-from desktop.native import settings
 from desktop.native.hours.canvas import Drawn
 from desktop.native.hours.geometry import Span
 from desktop.native.hours.hand import span_words
 from desktop.native.hours.month import MonthChip
 from desktop.native.setup import QuarterTime, span_label
 from desktop.native.weekmodel import clock_text, range_label, set_clock_24h
-from desktop.native.widgets import BlockDialog, LateDialog, PreviewDialog, Segmented
+from desktop.native.widgets import BlockDialog, LateDialog, PreviewDialog
 from desktop.native.window import NativeWindow
 from desktop.native.work_windows import WorkWindowsEditor
 from desktop.tests.light_app import window  # noqa: F401
@@ -97,20 +96,6 @@ def test_editors_show_12_hour_times_and_keep_hh_mm(
     assert windows.windows() == [{"days": [0], "start": "15:45", "end": "24:00"}]
 
 
-def test_settings_offers_the_clock_under_this_computer_and_saves_it(
-    qapp: QApplication,
-    window: NativeWindow,
-) -> None:
-    dialog = settings.SettingsPage(window, window.session.preferences or {}, window._look, window._layout)
-    clock = dialog.findChild(Segmented, "prefClock")
-    assert [clock.itemText(index) for index in range(clock.count())] == ["24-hour", "12-hour"]
-    assert clock.currentText() == "12-hour", "a new account starts on the 12-hour clock"
-    assert dialog.updates()["clock_24h"] is False
-    clock.setCurrentIndex(0)
-    assert dialog.updates()["clock_24h"] is True
-    clock.setCurrentIndex(1)
-    assert dialog.updates()["clock_24h"] is False
-    dialog.close()
 
 
 def visible_words(shown: NativeWindow) -> list[str]:

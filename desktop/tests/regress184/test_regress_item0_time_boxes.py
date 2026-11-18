@@ -5,7 +5,7 @@ grepping desktop/native for `ClockField(` / `QuarterTime(`):
 
   Setup school start/end and activity start/end (setup.py TimeRange -> QuarterTime), School hours
   start/end, the block editor start/end, Add homework's due time, Do it at, Choose a time, Study hours
-  start/end (AvailabilityDialog picker) and the alarm time (SettingsPage).
+  start/end (AvailabilityDialog picker).
 
 All input goes through the window's QWindow (QTest on `window.windowHandle()`), the same path the
 window system uses, so a key never reaches a box before the window's own focus/activation events.
@@ -45,7 +45,6 @@ from PySide6.QtWidgets import (
 )
 
 from desktop.native.fields import ClockField
-from desktop.native.settings import SettingsPage
 from desktop.native.setup import SetupPage
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import (
@@ -327,29 +326,6 @@ def study_hours_end(qapp, host):
     return _study_hours(qapp, host, True)
 
 
-def alarm_time(qapp, host):
-    page = SettingsPage(host, {"reminders_enabled": True, "alarms": []}, {}, {})
-    QVBoxLayout(host).addWidget(page)
-    host.resize(1000, 900)
-    _up(qapp, host)
-    for row in range(page.nav.count()):
-        page.nav.setCurrentRow(row)
-        qapp.processEvents()
-        if page.alarm_time.isVisible():
-            break
-    page.alarm_name.setText("Wake up")
-    add = page.findChild(QPushButton, "addAlarm")
-    page._scroll_to = None
-    page.alarm_time.setTime(QTime(7, 0))
-
-    def read() -> str:
-        if not page.updates()["alarms"]:
-            add.click()
-        return page.updates()["alarms"][-1]["time"]
-
-    return Box(host, page.alarm_time, read, add, [])
-
-
 BOXES: dict[str, Callable] = {
     "setup-school-start": setup_school_start,
     "setup-school-end": setup_school_end,
@@ -364,7 +340,6 @@ BOXES: dict[str, Callable] = {
     "choose-a-time": choose_a_time_start,
     "study-hours-start": study_hours_start,
     "study-hours-end": study_hours_end,
-    "alarm-time": alarm_time,
 }
 
 

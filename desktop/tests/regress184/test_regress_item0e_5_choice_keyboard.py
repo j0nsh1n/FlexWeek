@@ -19,21 +19,16 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QLabel, QWidget
+from PySide6.QtWidgets import QApplication, QWidget
 
-from desktop.native.settings import KNOB_LABELS, SECTIONS
 from desktop.native.widgets import HomeworkDialog, Segmented
 from desktop.tests.window_support import free, qapp, server, signed_out, window  # noqa: F401
 
 KNOWN_0E = (
     "known failure (item 0e): only the first segment is a Tab stop and Left/Right/Home/End do nothing"
 )
-KNOWN_5 = "known failure (item 5): Text size is hidden until 'Show shape, spacing and type' is on"
 # (section of Settings, or "homework" for the Add homework sheet; objectName), found on 0.18.4.
 CONTROLS = [
-    (0, "prefThemeMain"), (0, "lookSurface"), (0, "lookCorners"), (0, "lookDepth"), (0, "lookFont"),
-    (0, "lookBlocks"), (0, "lookDensity"), (0, "lookText"), (0, "prefMotion"),
-    (1, "prefDragStep"), (4, "prefPreferredView"), (4, "prefClock"),
     ("homework", "homeworkWhen"), ("homework", "homeworkSpread"),
 ]
 
@@ -44,19 +39,12 @@ def press(widget: QWidget, key) -> None:
 
 
 def control(qapp, window, where, name: str, made: list) -> Segmented:
-    if where == "homework":
-        dialog = HomeworkDialog(window, today=window.session.week_start, category="assignments")
-        dialog.show()
-        assert QTest.qWaitForWindowExposed(dialog)
-        dialog.activateWindow()
-        made.append(dialog)
-        root = dialog
-    else:
-        window._open_settings()
-        page = window._settings
-        page.fine_tune.setChecked(True)
-        page.nav.setCurrentRow(where)
-        root = page
+    dialog = HomeworkDialog(window, today=window.session.week_start, category="assignments")
+    dialog.show()
+    assert QTest.qWaitForWindowExposed(dialog)
+    dialog.activateWindow()
+    made.append(dialog)
+    root = dialog
     qapp.processEvents()
     found = root.findChild(Segmented, name)
     assert found is not None and found.isVisible(), f"{name} not shown in {where}"
@@ -101,48 +89,3 @@ def test_a_choice_control_works_from_the_keyboard(qapp, window, where, name) -> 
         for widget in made:
             widget.hide()
             free(widget)
-
-
-def appearance(qapp, window):
-    window.resize(1280, 800)
-    window._open_settings()
-    page = window._settings
-    # 0.19.0 renamed the section "Appearance & layout" to "Look".
-    page.nav.setCurrentRow(SECTIONS.index("Look" if "Look" in SECTIONS else "Appearance & layout"))
-    for _ in range(5):
-        qapp.processEvents()
-    return page
-
-
-@pytest.mark.xfail(strict=True, reason=KNOWN_5)
-def test_5_text_size_is_shown_on_a_fresh_account_without_any_switch(qapp, window) -> None:
-    page = appearance(qapp, window)
-    assert not page.fine_tune.isChecked()
-    text = page.findChild(Segmented, "lookText")
-    assert text is not None and text.isVisible()
-    viewport = page.stack.currentWidget().viewport()
-    top = text.mapTo(viewport, text.rect().topLeft()).y()
-    assert top >= 0 and top + text.height() <= viewport.height(), "not visible without scrolling at 1280x800"
-
-
-@pytest.mark.xfail(strict=True, reason=KNOWN_5)
-def test_5_choosing_large_leaves_the_switch_off(qapp, window) -> None:
-    page = appearance(qapp, window)
-    text = page.findChild(Segmented, "lookText")
-    assert text.isVisible(), "Text size not reachable without the switch"
-    text.setCurrentIndex(text.findData("large"))
-    qapp.processEvents()
-    assert not page.fine_tune.isChecked()
-
-
-def test_5_text_size_is_listed_once_with_the_switch_on(qapp, window) -> None:
-    """Guard (acceptance check 3)."""
-    page = appearance(qapp, window)
-    page.fine_tune.setChecked(True)
-    qapp.processEvents()
-    rows = [
-        label
-        for label in page.findChildren(QLabel)
-        if label.isVisible() and label.text() == KNOB_LABELS["text"]
-    ]
-    assert len(rows) == 1

@@ -20,8 +20,6 @@ def show_material(qapp: QApplication, window: NativeWindow) -> QObject:
     window._surface = "material"
     window._material_gave_up = False
     window._cpu_drawing_version = ""
-    if window._settings is not None and window._stack.currentWidget() is window._settings:
-        window._close_settings(save=False)
     window.resize(1280, 800)
     window._on_week()
     pump(qapp)

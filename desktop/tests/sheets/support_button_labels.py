@@ -8,7 +8,6 @@ from collections.abc import Callable, Iterator
 from PySide6.QtWidgets import QApplication, QPushButton, QStyle, QStyleOptionButton, QWidget
 
 from desktop.native.look import VIEW_BUTTONS
-from desktop.native.settings import SECTIONS
 from desktop.native.widgets import (
     AvailabilityDialog,
     BlockDialog,
@@ -79,16 +78,8 @@ def sheet_makers(w) -> dict[str, Callable[[], QWidget]]:
 
 
 def each_screen(qapp: QApplication, w) -> Iterator[tuple[str, QWidget]]:
-    """Yield (screen name, root widget) for the window, every Settings section and the sheets."""
+    """Yield (screen name, root widget) for the window and the sheets."""
     yield "week", w
-    w._open_settings()
-    settled(qapp, w)
-    for index, section in enumerate(SECTIONS):
-        w._settings.nav.setCurrentRow(index)
-        qapp.processEvents()
-        yield f"settings/{section}", w
-    w._close_settings(save=False)
-    settled(qapp, w)
     for name, make in sheet_makers(w).items():
         dialog = make()
         dialog.show()

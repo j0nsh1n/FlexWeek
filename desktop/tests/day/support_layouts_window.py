@@ -20,7 +20,6 @@ from PySide6.QtGui import QAction, QMouseEvent  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QAbstractButton,
     QApplication,
-    QComboBox,
     QDialog,
     QLabel,
     QPushButton,
@@ -31,8 +30,6 @@ from PySide6.QtWidgets import (  # noqa: E402
 from desktop.native.calendar import CATEGORIES, sunday_due  # noqa: E402
 from desktop.native.layouts.registry import DESIGN_LOOKS, sanitize_layout  # noqa: E402
 from desktop.native.motion import FADE_NAME  # noqa: E402
-from desktop.native.settings import SettingsPage  # noqa: E402
-from desktop.native.widgets import Segmented  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import LightWindows  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
@@ -260,35 +257,6 @@ def press(dialog: QDialog, name: str) -> int:
     return QDialog.DialogCode.Accepted
 
 
-# Settings -------------------------------------------------------------------------------------------
-
-
-def combo(dialog: SettingsPage, name: str) -> QComboBox:
-    """A choice by name, whether a dropdown, a segmented control or the design cards: all three
-    answer a dropdown's calls."""
-    return dialog.findChild(QWidget, name)
-
-
-def rows(dialog: SettingsPage, slot: str) -> list[str]:
-    return sorted(
-        box.objectName()
-        for box in dialog.findChildren(QWidget)
-        if isinstance(box, (QComboBox, Segmented)) and box.objectName().startswith(f"layout{slot}-")
-    )
-
-
-def open_settings(window: NativeWindow) -> SettingsPage:
-    """Settings as the gear opens it, in place of the week."""
-    window._open_settings()
-    page = window._settings
-    assert page is not None and window._stack.currentWidget() is page
-    return page
-
-
-def prefs_layout(choice: dict | None = None) -> SettingsPage:
-    return SettingsPage(None, {}, {}, {}, choice)
-
-
 def preference_puts(window: NativeWindow) -> list[dict]:
     """Every preferences save the session sends, with what it sent."""
     sent: list[dict] = []
@@ -463,7 +431,6 @@ __all__ = [
     "at_motion_level",
     "busy_thursday",
     "click",
-    "combo",
     "drag_on_the_week",
     "drop_chip",
     "fades",
@@ -477,13 +444,10 @@ __all__ = [
     "more_sections",
     "no_spotify",
     "one_thing",
-    "open_settings",
     "own_accent",
     "preference_puts",
-    "prefs_layout",
     "press",
     "qapp",
-    "rows",
     "school_week",
     "settled",
     "signature",

@@ -5,7 +5,6 @@ A test module loads the fixtures with `pytest_plugins = ["desktop.tests.sync.sup
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
@@ -15,7 +14,7 @@ from PySide6.QtWidgets import QLabel, QWidget
 
 from backend.storage import initialize
 from desktop.native import devices
-from desktop.native.devices import DevicesPanel, SyncHost
+from desktop.native.devices import SyncHost
 from desktop.native.window import NativeWindow
 from desktop.tests import light_app
 from desktop.tests.waiting import wait_until
@@ -46,9 +45,6 @@ def attach_sync(window: NativeWindow, host: SyncHost) -> None:
     host.started.connect(window._sync_started)
     if host.service is not None:
         window._sync_started(host.service)
-    # The light app builds Settings in the background right after opening, before this host existed;
-    # a Devices card built then has no host. Settings is built again, with it, the next time it opens.
-    window._discard_settings_page()
 
 
 def stop_sync_timer(window: NativeWindow) -> None:
@@ -116,34 +112,16 @@ def phone(tmp_path: Path) -> Iterator[SyncService]:
     made.stop()
 
 
-def devices_panel(window: NativeWindow) -> DevicesPanel:
-    window._open_settings()
-    still(window)
-    panel = window._settings.findChild(DevicesPanel)
-    assert panel is not None, "Settings has a Devices card"
-    return panel
-
-
-def listed_phones(panel: DevicesPanel) -> list[str]:
-    return [label.text() for label in panel.findChildren(QLabel, "phoneName")]
-
-
 def label_texts(parent: QWidget) -> list[str]:
     return [label.text() for label in parent.findChildren(QLabel)]
 
 
-def pair_a_phone(window: NativeWindow, phone: SyncService) -> DevicesPanel:
-    """Pairs `phone` by passing it the pairing payload the sheet holds, as scanning its code would."""
-    panel = devices_panel(window)
-    panel.pair_button.click()
-    sheet = panel.dialog
-    code = sheet.findChild(QLabel, "pairCode")
-    wait_until(None, lambda: re.fullmatch(r"\d{4} \d{4}", code.text()) is not None)
-    text = sheet._qr_payload
-    assert text.startswith("flexweek://pair/2?c=" + code.text().replace(" ", ""))
-    phone.pair_from_qr(text, PAIR_DEADLINE_MS)
-    wait_until(None, lambda: listed_phones(panel) == [PHONE_NAME])
-    return panel
+def pair_a_phone(window: NativeWindow, phone: SyncService) -> None:
+    """Pairs `phone` with the window's service, as scanning the code Settings shows would, and waits for
+    the window to list it."""
+    offer = window._sync_host.service.pair_start(int(window.session.account["id"]))
+    phone.pair_from_qr(offer["qr"], PAIR_DEADLINE_MS)
+    wait_until(None, lambda: [row["name"] for row in window._linked_phones()] == [PHONE_NAME])
 
 
 class GenerationProxy:

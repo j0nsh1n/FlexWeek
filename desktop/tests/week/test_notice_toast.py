@@ -151,10 +151,10 @@ def test_the_toast_belongs_to_the_page_it_was_said_on(qapp: QApplication, window
     window._set_notice("Planned 2 homework blocks.", "Undo", lambda: None)
     qapp.processEvents()
     assert window.toast.isVisible()
-    window._open_settings()
+    window._show_page("setupPage")
     qapp.processEvents()
     assert not window.toast.isVisible() and not window.toast.button.isVisible()
-    window._settings.close_page()
+    window._show_page("weekPage")
     qapp.processEvents()
     assert not window.toast.isVisible(), "it does not come back with the page"
     window._set_notice("Moved History essay to Fri 18:00.", "Undo", lambda: None)

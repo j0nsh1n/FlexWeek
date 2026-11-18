@@ -123,10 +123,6 @@ def test_todays_app_keeps_its_scroll_after_a_page_or_look_change(
         window._apply_appearance()
         window._on_week()
 
-    def settings() -> None:
-        window._open_settings()
-        window._close_settings(save=False)
-
     press("viewWeek")
     opens_at(qapp, window, NOW, "Week")
     away()
@@ -137,7 +133,6 @@ def test_todays_app_keeps_its_scroll_after_a_page_or_look_change(
     for how, act in (
         ("after Month", lambda: (press("viewMonth"), press("viewWeek"))),
         ("in a new look", new_look),
-        ("back from Settings", settings),
     ):
         away()
         act()

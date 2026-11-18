@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
 
 from desktop.native.look import resolved_palette, sanitize_look
 from desktop.native.menus import Menu, menu_colours
-from desktop.native.settings import SettingsPage
 from desktop.native.widgets import Segment, Segmented, SegmentTrack, Switch, add_heading
 from desktop.native.window import NativeWindow
 from desktop.tests.settings.support_tokens import LOOKS
@@ -57,24 +56,8 @@ def palette_of(window: NativeWindow) -> dict:
     return resolved_palette(pack, system_dark, window._worn_look(), accent)
 
 
-def settings_at(window: NativeWindow, row: int = 0, size: tuple[int, int] | None = None) -> SettingsPage:
-    """Settings open on a section, at a window size, with the style preview drawn when the section has one."""
-    if size is not None:
-        window.resize(*size)
-    window._open_settings_at(row)
-    page = window._settings
-    assert page is not None, "Settings did not open"
-    if row == 0:
-        preview = page.style_preview
-        pump(lambda: preview.isVisible() and not preview.stage.pictures[0].source.isNull())
-    still(window)
-    return page
 
 
-def wear_large_text(page: SettingsPage) -> None:
-    text = page.knobs["text"]
-    text.setCurrentIndex(text.findData("large"))
-    pump(lambda: False)
 
 
 def controls_sample(window: NativeWindow) -> QWidget:

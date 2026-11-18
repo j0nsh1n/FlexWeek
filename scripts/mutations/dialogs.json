@@ -40,26 +40,5 @@
   "old": "    def _action(self, words: str, name: str, action: str, outlined: bool = True) -> QPushButton:\n",
   "new": "    def _action(self, words: str, name: str, action: str, outlined: bool = False) -> QPushButton:\n",
   "test": "desktop/tests/sheets/test_manage_account_sheet.py::test_manage_account_keeps_one_filled_button_and_its_actions"
- },
- {
-  "name": "the section list without its icons",
-  "file": "desktop/native/settings.py",
-  "old": "            self.nav.item(row).setIcon(made)\n",
-  "new": "            pass\n",
-  "test": "desktop/tests/settings/test_settings_look_choices.py::test_each_section_has_its_icon"
- },
- {
-  "name": "a segment keeps claiming a look chosen under More looks",
-  "file": "desktop/native/settings.py",
-  "old": "        self.main.setCurrentIndex(self.main.findData(token))\n",
-  "new": "",
-  "test": "desktop/tests/settings/test_settings_look_choices.py::test_light_dark_or_system_and_the_other_looks_are_under_more_looks"
- },
- {
-  "name": "High contrast silent about its own yellow",
-  "file": "desktop/native/settings.py",
-  "old": "        own_accent = custom is None and self._look[\"preset\"] in OWN_ACCENT\n",
-  "new": "        own_accent = False\n",
-  "test": "desktop/tests/settings/test_settings_look_choices.py::test_high_contrast_says_it_keeps_its_own_yellow_and_black"
  }
 ]

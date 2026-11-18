@@ -29,7 +29,6 @@ from PySide6.QtWidgets import QApplication, QPushButton, QStyle, QStyleOptionBut
 
 from desktop.native.layouts.registry import LAYOUTS
 from desktop.native.look import LOOK_PRESETS, ROOMY_MIN, ROOMY_MIN_LARGE, ROOMY_SIDE
-from desktop.native.settings import SECTIONS
 from desktop.native.widgets import (
     AvailabilityDialog,
     BlockDialog,
@@ -108,16 +107,8 @@ def visible_buttons(root: QWidget) -> list[QPushButton]:
 
 
 def each_screen(qapp: QApplication, w):
-    """Yield (screen name, root widget) for the window, every Settings section and the sheets."""
+    """Yield (screen name, root widget) for the window and the sheets."""
     yield "week", w
-    w._open_settings()
-    settled(qapp, w)
-    for index, section in enumerate(SECTIONS):
-        w._settings.nav.setCurrentRow(index)
-        qapp.processEvents()
-        yield f"settings/{section}", w
-    w._close_settings(save=False)
-    settled(qapp, w)
     week = w.session.week_start
     waiting = {
         "id": "h1", "title": "Essay", "duration_min": 60, "days": list(range(7)), "assignment_id": "a1"

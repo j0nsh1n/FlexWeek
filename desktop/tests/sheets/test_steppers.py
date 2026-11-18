@@ -1,7 +1,6 @@
 """Numbers and times without Qt's tiny arrows: a length or a count is − value +, a homework's length has
 15/30/45/60/90 pills under it, and a clock time is typed. Setup, Focus and Alerts each had big boxes with
-arrows too small to hit. That the Focus page's steppers and timer preset line up is a picture:
-screens_settings_h7.py."""
+arrows too small to hit."""
 
 from __future__ import annotations
 
@@ -14,14 +13,11 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QAbstractSpinBox, QApplication, QButtonGroup, QDateEdit, QSpinBox, QWidget
 
 from desktop.native.fields import QUICK_LENGTHS, Stepper
-from desktop.native.settings import SettingsPage
 from desktop.native.setup import SetupPage
 from desktop.native.widgets import AvailabilityDialog, BlockDialog, ChooseTimeDialog, HomeworkDialog
-from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import free, host, qapp  # noqa: F401
 
 WEEK = "2026-09-21"
-FOCUS, ALERTS = 2, 3
 
 
 def arrows(root: QWidget) -> list[str]:
@@ -45,7 +41,7 @@ def unstepped(root: QWidget) -> list[str]:
     ]
 
 
-def test_no_number_or_time_in_the_sheets_setup_or_settings_has_arrows(
+def test_no_number_or_time_in_the_sheets_or_setup_has_arrows(
     qapp: QApplication,  # noqa: F811
     host: QWidget,  # noqa: F811
 ) -> None:
@@ -58,7 +54,6 @@ def test_no_number_or_time_in_the_sheets_setup_or_settings_has_arrows(
         BlockDialog(host, {**block, "days": [1]}),
         ChooseTimeDialog(host, homework, WEEK, [1, 2], [], None, 1),
         AvailabilityDialog(host, {}),
-        SettingsPage(None, {"alarms": []}, {}, {}),
         setup,
     ]
     for root in made:
@@ -141,11 +136,3 @@ def test_a_stepper_greys_with_its_box(qapp: QApplication) -> None:  # noqa: F811
     free(setup)
 
 
-def test_volume_reads_80_percent(qapp: QApplication) -> None:  # noqa: F811
-    page = SettingsPage(None, {"alarms": [], "alert_volume": 80}, {}, {})
-    page.resize(1280, 800)
-    page.show()
-    page.nav.setCurrentRow(FOCUS)
-    wait_until(qapp, lambda: page.stack.widget(FOCUS).isVisible(), what="the Focus page showing")
-    assert page.volume.text() == "80%"
-    free(page)

@@ -131,7 +131,7 @@ from desktop.native.controller import ROUTINE_STATUS, NativeSession, _late_summa
 from desktop.native.custom_look import sanitize_saved
 from desktop.native.devices import SyncDot, SyncHost, live_phones, run_off_ui
 from desktop.native.elevation import flatten, lift
-from desktop.native.feel import Context, apply_feel, context_for, current, extra_stylesheet, set_current
+from desktop.native.feel import Context, apply_feel, context_for, extra_stylesheet, set_current
 from desktop.native.fields import ProblemLine, announce, week_start_day, week_start_notice
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.focus import focus_now, phase_duration_ms
@@ -161,7 +161,7 @@ from desktop.native.look import (
     text_scale,
     toast_colours,
 )
-from desktop.native.material.theme import kept_material, read_letter_keys, read_shortcuts, store_material
+from desktop.native.material.theme import kept_material, read_letter_keys, read_shortcuts
 from desktop.native.menus import Menu, mark, menu_colours
 from desktop.native.motion import (
     DRIFT_PX,
@@ -175,7 +175,6 @@ from desktop.native.motion import (
     retake_slide,
     settle,
     slide_down,
-    slide_over,
     slide_view,
     sliding_in,
     switch_page,
@@ -193,14 +192,12 @@ from desktop.native.reuse import (
     week_label,
 )
 from desktop.native.settings import (
-    SECTIONS,
     AboutDialog,
     AccountDialog,
     AlarmRingDialog,
     FocusPanel,
     HelpDialog,
     RestoreDialog,
-    SettingsPage,
     TransferPreviewDialog,
     UpdateDialog,
 )
@@ -214,8 +211,6 @@ from desktop.native.tones import FALLBACK
 from desktop.native.update import (
     RELEASE_PAGE,
     due_for_check,
-    install_kind,
-    offers_developer_builds,
     sanitize_updates,
 )
 from desktop.native.updater import Updater, apply_update
@@ -317,7 +312,6 @@ BUSY_BUTTONS = (
     "unfinishedOpen",
     "runningLate",
     "availabilityButton",
-    "settingsButton",
     "restoreButton",
     "accountButton",
     "openSpotify",
@@ -702,13 +696,6 @@ class NativeWindow(QMainWindow):
         # to write lives on the session.
         self._setup_active = False
         self._setup_checked = False
-        # Settings while it is on screen, and what closing it has to save.
-        self._settings: SettingsPage | None = None
-        self._settings_finish: Callable[[bool], None] | None = None
-        # Send a changed Settings page now, and say whether the server still lacks something on it.
-        self._settings_save: Callable[[], None] | None = None
-        self._settings_unsaved: Callable[[], bool] | None = None
-        self._settings_prepare_scheduled = False
         self._block_spare: BlockDialog | None = None
         self._block_spare_account: str | None = None
         self._block_prepare_scheduled = False
@@ -1168,12 +1155,7 @@ class NativeWindow(QMainWindow):
                         self._clear_auth_status()
                 else:
                     left = ""
-                if name == "settingsPage":
-                    slide_over(self._stack, page, self._motion)
-                elif leaving is not None and leaving.objectName() == "settingsPage":
-                    slide_over(self._stack, page, self._motion, back=True)
-                else:
-                    switch_page(self._stack, page, self._motion)
+                switch_page(self._stack, page, self._motion)
                 if page is not leaving and left == "recoveryPage":
                     self._discard_recovery_page(leaving)
                 if left in ENTRY_PAGES and name not in ENTRY_PAGES:
@@ -1235,15 +1217,13 @@ class NativeWindow(QMainWindow):
     def _material_owns(self) -> bool:
         """Material is the saved surface and this version has not given up on it.
 
-        Focus and Settings can cover it. They do not hand the window to the Widgets week.
+        Focus can cover it. It does not hand the window to the Widgets week.
         """
         return self._surface == "material" and not self._setup_active and not self._material_gave_up
 
     def _cover_holds(self) -> bool:
-        """Setup, Focus, or Settings is the page the student is looking at."""
-        current = self._stack.currentWidget()
-        on_settings = self._settings is not None and current is self._settings
-        return self._setup_active or on_settings
+        """Setup is the page the student is looking at."""
+        return self._setup_active
 
     def _show_surface(self) -> bool:
         """Show the surface that owns the window. True when Material is on screen."""
@@ -1888,9 +1868,6 @@ class NativeWindow(QMainWindow):
         availability = QPushButton("Study hours")
         availability.setObjectName("availabilityButton")
         availability.clicked.connect(self._open_availability)
-        settings = QPushButton("Settings")
-        settings.setObjectName("settingsButton")
-        settings.clicked.connect(self._open_settings)
         restore = QPushButton("Copies of this week…")
         restore.setObjectName("restoreButton")
         restore.clicked.connect(self._open_restore)
@@ -1932,7 +1909,7 @@ class NativeWindow(QMainWindow):
         )
         save.setParent(overflow)
         save.hide()
-        for leftover in (availability, settings, account, updates):
+        for leftover in (availability, account, updates):
             leftover.setParent(overflow)
             leftover.hide()
         for index, (heading, buttons) in enumerate(self._groups):
@@ -1980,14 +1957,6 @@ class NativeWindow(QMainWindow):
         more_menu.aboutToShow.connect(self._sync_more_menu)
         more.setMenu(more_menu)
         self.more_menu = more_menu
-        gear = QPushButton()
-        gear.setObjectName("settingsGear")
-        gear.setProperty("quiet", True)
-        gear.setToolTip("Settings")
-        gear.setAccessibleName("Settings")
-        gear.setIconSize(QSize(BAR_ICON_PX, BAR_ICON_PX))
-        icons.tint(gear, "settings")
-        gear.clicked.connect(self._open_settings)
         # The week saves itself. Ctrl+S still flushes. Retry appears only when a save has failed.
         self.sync_dot = SyncDot()
         self._sync_timer = QTimer(self)
@@ -1999,11 +1968,9 @@ class NativeWindow(QMainWindow):
         for shown in (solve, retry, more):
             self._bar_views.addWidget(shown)
         self._bar_views.addWidget(self.sync_dot, 0, Qt.AlignmentFlag.AlignVCenter)
-        self._bar_views.addWidget(gear)
         self._retry_bar_index = self._bar_views.indexOf(retry)
         self.solve_button = solve
         self.more_button = more
-        self.settings_gear = gear
         self.week_list_row = week_list
         for hidden in (add_homework, add_fixed, save, self.quick_focus):
             actions.addWidget(hidden)
@@ -2633,9 +2600,6 @@ class NativeWindow(QMainWindow):
             self._kept_adds.clear()
         if account is None:
             self._discard_block_spare()
-            if self._settings is not None and self._stack.currentWidget() is self._settings:
-                self._show_page("weekPage")
-            self._discard_settings_page()
             self._day_mode = False
             self._opened_on_preference = False
             self._entry_mode = SIGN_IN
@@ -2657,8 +2621,6 @@ class NativeWindow(QMainWindow):
             self._discard_block_spare()
         self._carry_look()
         self._apply_appearance()
-        if self._settings is not None and self._settings.account_id != account["id"]:
-            self._discard_settings_page()
         self.account_name.setText(account["username"])
 
     def _on_recovery(self) -> bool:
@@ -2739,7 +2701,6 @@ class NativeWindow(QMainWindow):
         )
 
     def _open_setup(self, step: int, *, first_run: bool) -> None:
-        self._close_settings(show_week=False)
         self._setup_active = True
         state = self._setup_state(first_run)
         if self._surface == "material" and not self._material_gave_up:
@@ -3053,11 +3014,10 @@ class NativeWindow(QMainWindow):
             # The account's preferences may only now have arrived, and what setup kept before they did,
             # a skip included, is written with them.
             QTimer.singleShot(0, self, self._flush_setup)
-        # Focus, Settings and Setup stay where they are. Anything else shows the surface that owns
+        # Setup stays where it is. Anything else shows the surface that owns
         # the window. A failed Material open falls through to the Widgets week inside _show_surface.
         if not self._cover_holds():
             self._show_surface()
-        self._maybe_prepare_settings()
         self._maybe_prepare_block_spare()
         if self.plan_review.isVisible():
             self._layout_plan_review()
@@ -3150,52 +3110,7 @@ class NativeWindow(QMainWindow):
         if getattr(self, "_redo_focus_pending", False):
             self._redo_focus_pending = False
             QTimer.singleShot(0, self, self._focus_after_redo)
-        self._maybe_show_new_look_notice()
         self._finish_turn(turn)
-
-    def _maybe_show_new_look_notice(self) -> None:
-        session = self.session
-        account = session.account
-        if (
-            account is None
-            or session.new_account
-            or self._has_saved_design_look
-            or self._setup_active
-            or self._stack.currentWidget() is not self.findChild(QWidget, "weekPage")
-        ):
-            return
-        progress = (session.preferences or {}).get("setup")
-        if not isinstance(progress, dict) or not progress.get("finished_at"):
-            return
-        account_id = str(account["id"])
-        if account_id in self._new_look_notice_seen or account_id in self._new_look_notice_exempt:
-            return
-        if self.toast.isVisible() and self.toast.text() == "New in 1.0.0: each design has its own looks.":
-            return
-
-        def dismiss() -> None:
-            self._dismiss_new_look_notice(account_id)
-
-        self._notice_step = None
-        # A B3a3 card of the look, with one action and the x: the x is "Not now" (UI21/A18).
-        self.toast.show_message(
-            "New in 1.0.0: each design has its own looks.",
-            "Choose a look",
-            lambda: self._choose_look_from_notice(account_id),
-            close_callback=dismiss,
-            dismiss_callback=dismiss,
-            card=True,
-        )
-
-    def _dismiss_new_look_notice(self, account_id: str) -> None:
-        if account_id in self._new_look_notice_seen:
-            return
-        self._new_look_notice_seen.add(account_id)
-        self._save_look()
-
-    def _choose_look_from_notice(self, account_id: str) -> None:
-        self._dismiss_new_look_notice(account_id)
-        self._open_settings_at(0)
 
     def _retake_slide(self) -> None:
         self._week_page.layout().activate()
@@ -5602,12 +5517,6 @@ class NativeWindow(QMainWindow):
             return
         open_in_app(url)
 
-    def _open_settings_at(self, section: int) -> None:
-        """Settings, open at one of its SECTIONS."""
-        self._open_settings()
-        if self._settings is not None and 0 <= section < len(SECTIONS):
-            self._settings.nav.setCurrentRow(section)
-
     def _layout_plan_review(self) -> None:
         """The plan bar floats over the planner, under the panels above it, without pushing them."""
         host = self._week_page
@@ -5624,73 +5533,6 @@ class NativeWindow(QMainWindow):
         self.plan_review.raise_()
         # Raised over everything, it would be drawn over a picture sliding or fading across the page.
         raise_pictures(host)
-
-    def _maybe_prepare_settings(self) -> None:
-        if (
-            self._settings is not None
-            or self._settings_prepare_scheduled
-            or self.session.account is None
-            or self.session.preferences is None
-            or self._setup_active
-        ):
-            return
-        self._settings_prepare_scheduled = True
-        QTimer.singleShot(0, self, self._prepare_settings_page)
-
-    def _prepare_settings_page(self) -> None:
-        self._settings_prepare_scheduled = False
-        if self._settings is not None or self.session.account is None or self.session.preferences is None:
-            return
-        self._attach_settings_page(self._build_settings_page())
-        self._warm_settings_pictures()
-
-    def _warm_settings_pictures(self) -> None:
-        """Draw each design's picture while Settings is still off screen, at the width it will open
-        at. Drawn as the page slides in, the pictures were one long turn."""
-        page = self._settings
-        if page is None or not isValid(page) or self._stack.currentWidget() is page:
-            return
-        size = self._stack.size()
-        if size.width() <= 0 or size.height() <= 0:
-            return
-        page.resize(size)
-        page.ensurePolished()
-        layout = page.layout()
-        if layout is not None:
-            layout.activate()
-        from PySide6.QtWidgets import QScrollArea
-
-        from desktop.native.layouts.dialog import DesignPicker
-
-        for area in page.findChildren(QScrollArea):
-            inner = area.widget()
-            view = area.viewport()
-            if inner is None or view.width() <= 0:
-                continue
-            inner.resize(view.size())
-            box = inner.layout()
-            if box is not None:
-                box.activate()
-        # One picture a turn: drawn all at once, about a tenth of a second each, they held every key
-        # and click for most of a second just after the window opened.
-        for picker in page.findChildren(DesignPicker):
-            picker.draw_soon()
-
-    def _build_settings_page(self) -> SettingsPage:
-        account = self.session.account
-        assert account is not None and self.session.preferences is not None
-        page = SettingsPage(
-            self,
-            self.session.preferences,
-            self._look,
-            self.session.reminder_limits,
-            self._layout,
-            saved_looks=self._saved_looks,
-            sync=self._sync_host,
-        )
-        page.account_id = account["id"]
-        page.devices.refresh()
-        return page
 
     def _sync_started(self, service: SyncService) -> None:
         self._sync = service
@@ -5770,181 +5612,6 @@ class NativeWindow(QMainWindow):
         if changed and not session.accept_remote_week("your assistant" if assistant else "another program"):
             return
         watch.settle(stored)
-
-    def _attach_settings_page(self, page: SettingsPage) -> None:
-        if self._settings is not None:
-            return
-        page.motion_level = self._motion
-        page.account_requested.connect(self._open_account)
-        page.availability_requested.connect(self._open_availability)
-        page.updates_requested.connect(lambda: self._check_updates(asked=True))
-        page.developer_builds_changed.connect(self._set_developer_builds)
-        page.number_keys_changed.connect(lambda on: self._set_key_switch("shortcuts", on))
-        page.letter_keys_changed.connect(lambda on: self._set_key_switch("letters", on))
-        page.setup_requested.connect(self._run_setup_again)
-        page.closed.connect(self._close_settings)
-        stored = page.updates()
-        sending: dict | None = None
-        login = bool(stored["start_at_login"])
-
-        def save() -> None:
-            nonlocal sending
-            wanted = page.updates()
-            if wanted != stored and wanted != sending:
-                sending = wanted
-                if not self.session.save_preferences(wanted, lambda kept: remember(wanted, kept)):
-                    sending = None
-
-        def remember(saved: dict, kept: bool) -> None:
-            # Only the server's answer makes a value stored: a request that failed leaves the page
-            # still holding a change to send again when Settings close.
-            nonlocal stored, sending
-            sending = None
-            if kept:
-                stored = saved
-
-        def apply() -> None:
-            nonlocal login
-            look, layout = page.look_choice(), page.layout_choice()
-            if (
-                look != self._look
-                or layout != self._layout
-                or page.saved_looks != self._saved_looks
-            ):
-                self._look = look
-                self.session.look = look
-                self._layout = layout
-                self._saved_looks = list(page.saved_looks)
-                self._save_look()
-                self._on_week()
-            wanted = page.updates()
-            if self.session.preferences is not None:
-                live = (
-                    "theme_pack",
-                    "accent",
-                    "accent_chips",
-                    "motion",
-                    "alarm_tone",
-                    "planning_style",
-                    "drag_step_min",
-                    "clock_24h",
-                )
-                shown = {key: wanted[key] for key in live}
-                self.session.preferences = {**self.session.preferences, **shown}
-            if bool(wanted["start_at_login"]) != login:
-                login = bool(wanted["start_at_login"])
-                self._apply_start_at_login(login)
-            self._apply_appearance()
-            self._sync_chrome()
-            saver.start()
-
-        def finish(keep: bool) -> None:
-            saver.stop()
-            if getattr(page, "_hears_status", False):
-                page._hears_status = False  # type: ignore[attr-defined]
-                with contextlib.suppress(RuntimeError, TypeError):
-                    self.session.status.disconnect(page.say)
-            if keep:
-                save()
-
-        def save_now() -> None:
-            saver.stop()
-            save()
-
-        saver = QTimer(page)
-        saver.setSingleShot(True)
-        saver.setInterval(SETTINGS_SAVE_MS)
-        saver.timeout.connect(save)
-        page.changed.connect(apply)
-        self._settings = page
-        self._settings_finish = finish
-        self._settings_save = save_now
-        self._settings_unsaved = lambda: page.updates() != stored
-        self._stack.addWidget(page)
-        ctx = current()
-        if ctx is not None:
-            extra = extra_stylesheet(
-                ctx.base_sheet, ctx.feel, ctx.palette, ctx.tokens, ctx.look, ("settingsTitle",)
-            )
-            page.setStyleSheet(ctx.base_sheet + extra)
-            apply_feel(page, ctx)
-
-    def _refresh_settings_page(self) -> None:
-        page = self._settings
-        account = self.session.account
-        if page is None or account is None or self.session.preferences is None:
-            return
-        if page.account_id != account["id"]:
-            self._discard_settings_page()
-            self._attach_settings_page(self._build_settings_page())
-            page = self._settings
-            assert page is not None
-        # Material's Settings can flip the same switch while this page is kept; show what is saved.
-        page.developer_builds.setVisible(offers_developer_builds(install_kind()))
-        page.developer_builds.blockSignals(True)
-        page.developer_builds.setChecked(bool(self._updates.get("developer_builds")))
-        page.developer_builds.blockSignals(False)
-        for switch, saved in zip((page.number_keys, page.letter_keys), self._key_switches(), strict=True):
-            switch.blockSignals(True)
-            switch.setChecked(saved)
-            switch.blockSignals(False)
-        if self._settings_unsaved is not None and self._settings_unsaved():
-            page.motion_level = self._motion
-            return
-        page.sync_open(
-            self.session.preferences,
-            self._look,
-            self._layout,
-            self._saved_looks,
-            self.session.reminder_limits,
-        )
-        page.motion_level = self._motion
-
-    def _discard_settings_page(self) -> None:
-        page, finish = self._settings, self._settings_finish
-        if page is None:
-            return
-        self._settings, self._settings_finish = None, None
-        self._settings_save = self._settings_unsaved = None
-        if finish is not None:
-            finish(False)
-        self._stack.removeWidget(page)
-        page.deleteLater()
-
-    def _open_settings(self) -> None:
-        """Settings fill the window in place of the week. Every change shows the moment it is made;
-        there is no OK. The look and layout live on this device and are written at once. The
-        account's choices are saved a moment after the last change, so typing "45" saves once rather
-        than twice, and going back to the week saves whatever is left."""
-        if self.session.preferences is None:
-            self.session._say("Still loading your settings…")
-            return
-        if self._settings is None:
-            self._attach_settings_page(self._build_settings_page())
-        self._refresh_settings_page()
-        page = self._settings
-        if page is None:
-            return
-        # Connected once while it is open. Disconnecting what was never connected only warns, so the
-        # page keeps whether it hears the status.
-        if not getattr(page, "_hears_status", False):
-            self.session.status.connect(page.say)
-            page._hears_status = True  # type: ignore[attr-defined]
-        self._show_page("settingsPage")
-        page.nav.setFocus()
-
-    def _close_settings(self, *, save: bool = True, show_week: bool = True) -> None:
-        """Back from Settings: what is not saved yet is saved. The page stays built for the next open."""
-        page, finish = self._settings, self._settings_finish
-        if page is None or finish is None:
-            return
-        finish(save and self.session.account is not None)
-        if show_week and self.session.account is not None:
-            self._show_surface()
-
-    def _set_developer_builds(self, on: bool) -> None:
-        self._updates["developer_builds"] = bool(on)
-        self._save_look()
 
     def _apply_start_at_login(self, wanted: bool) -> None:
         """The setting used to be stored on the account and obeyed by nothing. It is applied to this
@@ -6279,15 +5946,13 @@ class NativeWindow(QMainWindow):
         self._refresh_layout()
 
     def _feel_roots(self) -> list[QWidget]:
-        """Pages J13 dresses: Settings, Setup, sign-in and recovery. Not the week, day, rail or bar."""
+        """Pages J13 dresses: Setup, sign-in and recovery. Not the week, day, rail or bar."""
         roots: list[QWidget] = []
         for name in ("authPage", "recoveryPage", "forgotPage"):
             page = self.findChild(QWidget, name)
             if page is not None:
                 roots.append(page)
         roots.append(self.setup_page)
-        if self._settings is not None:
-            roots.append(self._settings)
         roots.extend(dialog for dialog in self.findChildren(QDialog) if dialog.isVisible())
         return roots
 
@@ -6358,15 +6023,6 @@ class NativeWindow(QMainWindow):
             self._tray_icon.hide()
         QApplication.quit()
 
-    def _settings_unsent(self) -> bool:
-        """A Settings change the server does not have yet, on whatever page is showing.
-
-        Swapping to Material and back keeps that draft. Closing still has to send it.
-        """
-        if self._settings is None or self._settings_unsaved is None:
-            return False
-        return bool(self._settings_unsaved())
-
     def _save_before_leaving(self, leave: Callable[[], None], *, again: str = "close FlexWeek again") -> bool:
         """Leave once what is unsaved has reached the server. Returns True when there was nothing to
         wait for and `leave` has not been called; otherwise it saves in the background and calls
@@ -6378,14 +6034,12 @@ class NativeWindow(QMainWindow):
         session = self.session
         if self._leaving is not None:
             return False
-        if session.account is None or not (
-            self._settings_unsent() or session._held() or session.parked_unsaved_week()
-        ):
+        if session.account is None or not (session._held() or session.parked_unsaved_week()):
             return True
         timer = QTimer(self)
         timer.setInterval(LEAVE_POLL_MS)
         self._leaving = timer
-        tried = {"settings": False, "week": False}
+        tried = {"week": False}
         waited = 0
 
         def stop() -> None:
@@ -6408,13 +6062,6 @@ class NativeWindow(QMainWindow):
                 give_up()
                 return
             if session.busy:
-                return
-            if self._settings_unsent():
-                if tried["settings"] or self._settings_save is None:
-                    give_up()
-                    return
-                tried["settings"] = True
-                self._settings_save()
                 return
             if session._held():
                 if tried["week"]:
@@ -6559,14 +6206,8 @@ class NativeWindow(QMainWindow):
             self._key_stamp = stamp
         return self._key_values
 
-    def _set_key_switch(self, name: str, on: bool) -> None:
-        """Write one of the two key switches into the look file's material object and leave the rest of
-        it as it was."""
-        path = self._look_path()
-        store_material(path, {**(kept_material(path) or {}), name: bool(on)})
-
     def _shared_key_action(self, event: QKeyEvent) -> Callable[[], None] | None:
-        """What a bare 1 to 5 or letter does in the plain look, when its switch is on: the one key set
+        """What a bare 1 to 4 or letter does in the plain look, when its switch is on: the one key set
         Material shares. None for any other key, a key with a modifier, or a page that is not the week or
         the focus screen. Typing in a box and open dialogs are ruled out before this is asked."""
         if event.modifiers() & KEY_MODIFIERS:
@@ -6582,7 +6223,6 @@ class NativeWindow(QMainWindow):
                 Qt.Key.Key_2: lambda: self._choose_view("week"),
                 Qt.Key.Key_3: lambda: self._choose_view("month"),
                 Qt.Key.Key_4: self._enter_day,
-                Qt.Key.Key_5: self._open_settings,
             }
         if letters:
             views |= {
@@ -6613,10 +6253,6 @@ class NativeWindow(QMainWindow):
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if self.session.account is None or QApplication.activeModalWidget() is not None:
-            super().keyPressEvent(event)
-            return
-        if self._settings is not None and self._stack.currentWidget() is self._settings:
-            # The week's keys do nothing to a week that is not on screen; Esc is Settings' own.
             super().keyPressEvent(event)
             return
         current = self._stack.currentWidget()

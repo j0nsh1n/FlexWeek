@@ -89,28 +89,6 @@ def test_a_session_never_shows_a_detached_child_as_a_window(
         window.unfinished_panel.findChild(QPushButton, "unfinishedDismiss").click()
         wait_until(qapp, lambda: not window.unfinished_panel.isVisible())
 
-        window._open_settings()
-        page = window._settings
-        assert page is not None
-        page._open_customise()
-        editor = page.editor
-        assert editor is not None and editor.accents is not None
-        editor.accents.setCurrentIndex((editor.accents.currentIndex() + 1) % editor.accents.count())
-        editor.done.click()
-        wait_until(qapp, lambda: page.editor is None)
-
-        main_layout = page.layout_sections[0].pick
-        main_layout.setCurrentIndex(main_layout.findData("timeline"))
-        window._close_settings()
-        settled(qapp, window)
-        window._open_settings()
-        page = window._settings
-        assert page is not None
-        main_layout = page.layout_sections[0].pick
-        main_layout.setCurrentIndex(main_layout.findData("classic"))
-        window._close_settings()
-        settled(qapp, window)
-
         assert guard.unexpected == [], "Unexpected top-level Show events:\n" + "\n".join(guard.unexpected)
     finally:
         qapp.removeEventFilter(guard)

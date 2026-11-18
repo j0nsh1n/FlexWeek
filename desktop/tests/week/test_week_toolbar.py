@@ -75,7 +75,6 @@ def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, win
         "addArrow",
         "solveButton",
         "moreButton",
-        "settingsGear",
     ]
 
 

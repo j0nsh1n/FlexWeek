@@ -162,10 +162,6 @@ def test_every_main_transition_at_off_starts_no_clock_and_leaves_nothing_moving(
     for button in zooms:
         button.click()
         check(f"zoom {button.objectName()}")
-    window._open_settings()
-    check("Settings opened")
-    window._settings.close_page()
-    check("Settings closed")
     window.toast.show_message("Moved History essay to Fri 18:00.", "Undo", lambda: None)
     check("a notice said")
     window.toast.hide()
@@ -196,31 +192,6 @@ def test_a_sheet_at_off_has_a_plain_backdrop_and_takes_it_away_when_it_closes(
     assert not motion.busy()
 
 
-def test_choosing_off_in_settings_stops_its_own_sections_moving_at_once(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch  # noqa: F811
-) -> None:
-    """The page took the Animations level when it opened, so the section switch right after choosing
-    Off still faded and slid at the level it had been opened with."""
-    apply_ui_effects("normal")
-    window._motion = "normal"
-    window._open_settings()
-    still(window)
-    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-    page = window._settings
-    assert page is not None and page.motion_level == "normal"
-    assert moving(window) == []
-    starts: list[int] = []
-    real_start = motion.Clock.start
-
-    def counted(self: motion.Clock, total: int, step: Callable[[float], None]) -> None:
-        starts.append(total)
-        real_start(self, total, step)
-
-    monkeypatch.setattr(motion.Clock, "start", counted)
-    page.motion.setCurrentIndex(page.motion.findData("off"))
-    page.nav.setCurrentRow(1 if page.nav.currentRow() == 0 else 0)
-    assert moving(window) == []
-    assert starts == [] and not motion.busy()
 
 
 def test_animations_off_means_no_animation_anywhere(qapp: QApplication) -> None:  # noqa: F811

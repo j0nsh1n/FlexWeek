@@ -117,7 +117,7 @@ def test_enter_on_the_menu_entry_opens_the_first_row_and_esc_returns_to_more(qap
 
 def test_ctrl_shift_l_from_the_top_bar_opens_the_list_and_esc_goes_back_to_the_top_bar(qapp, window) -> None:
     with_school(qapp, window)
-    bar = window.settings_gear
+    bar = window.more_button
     assert isinstance(bar, QPushButton) and bar.isVisible()
     bar.setFocus(Qt.FocusReason.OtherFocusReason)
     QApplication.processEvents()

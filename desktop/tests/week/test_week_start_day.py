@@ -193,29 +193,6 @@ def test_setup_school_and_activity_days_start_on_a_day_as_soon_as_it_is_picked(
         host.deleteLater()
 
 
-def test_the_settings_control_saves_the_week_start_on_this_computer(
-    qapp: QApplication,
-    kept: Path,
-) -> None:
-    from desktop.native.settings import SettingsPage
-
-    host = QWidget()
-    page = SettingsPage(host, {"clock_24h": False}, {"preset": "default", "knobs": {}}, {})
-    try:
-        choice = page.findChild(QComboBox, "prefWeekStart")
-        assert [choice.itemText(at) for at in range(choice.count())] == SEVEN
-        assert choice.currentText() == "Monday"
-        words = [label.text() for label in page.findChildren(QLabel)]
-        assert not [text for text in words if "Monday to Sunday" in text], words
-        choice.setCurrentIndex(SEVEN.index("Sunday"))
-        assert fields.week_starts_on() == "sunday"
-        assert fields.first_day_of_week() == Qt.DayOfWeek.Sunday
-        choice.setCurrentIndex(SEVEN.index("Thursday"))
-        assert fields.week_starts_on() == "thursday"
-        assert fields.first_day_of_week() == Qt.DayOfWeek.Thursday
-    finally:
-        host.close()
-        host.deleteLater()
 
 
 def _pills_in_order(picker: QWidget) -> list[str]:

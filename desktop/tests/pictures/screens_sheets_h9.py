@@ -1,6 +1,6 @@
-"""Screens for the sheets area (chunk H9): button labels in every sheet, Settings section and the week, the
-Material week's long homework title, Text size on the Look page, the sign-up error, and the week list opened
-from the keyboard. Looks the old regression tests measured in code: they are judged on these pictures."""
+"""Screens for the sheets area (chunk H9): button labels in every sheet and the week, the Material week's
+long homework title, the sign-up error, and the week list opened from the keyboard. Looks the old regression
+tests measured in code: they are judged on these pictures."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from collections.abc import Callable
 from PySide6.QtWidgets import QApplication, QPushButton
 
 from desktop.native.layouts.registry import LAYOUTS
-from desktop.native.settings import SECTIONS
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.sheets.support_button_labels import LATE_WORDS, sheet_makers
@@ -38,16 +37,6 @@ WEEK_WINDOW_CHECKS = (
 
 def week_window(window: NativeWindow) -> None:
     return None
-
-
-def settings_section(index: int) -> Callable[[NativeWindow], None]:
-    def prepare(window: NativeWindow) -> None:
-        window._open_settings()
-        settled(QApplication.instance(), window)
-        window._settings.nav.setCurrentRow(index)
-        QApplication.instance().processEvents()
-
-    return prepare
 
 
 def sheet(name: str) -> Callable[[NativeWindow], object]:
@@ -93,16 +82,6 @@ def running_late_after_text_size_changes(window: NativeWindow) -> object:
     return dialog
 
 
-def look_with_high_contrast(window: NativeWindow) -> None:
-    """The Look page wearing High contrast, which shows the Large text suggestion beside the preview."""
-    qapp = QApplication.instance()
-    window._open_settings()
-    page = window._settings
-    page.nav.setCurrentRow(0)
-    page.look.setCurrentIndex(page.look.findData("preset:high-contrast"))
-    settled(qapp, window)
-
-
 def long_homework_title(window: NativeWindow) -> None:
     # Imported here: it needs the views lane's Material helpers, which a screens module need not load.
     from desktop.tests.sheets.support_material_sheets import material_week
@@ -115,15 +94,6 @@ def long_homework_title(window: NativeWindow) -> None:
     from desktop.tests.material_support import pump
 
     pump(qapp)
-
-
-def look_page(window: NativeWindow) -> None:
-    qapp = QApplication.instance()
-    window.resize(1280, 800)
-    window._open_settings()
-    window._settings.nav.setCurrentRow(SECTIONS.index("Look"))
-    for _ in range(5):
-        qapp.processEvents()
 
 
 def sign_up_username_error(window: NativeWindow) -> None:
@@ -180,17 +150,6 @@ SCREENS: list[Screen] = [
     ),
     *(
         Screen(
-            id=f"settings.buttons_{section.lower().replace(' ', '_')}",
-            area="settings",
-            prepare=settings_section(index),
-            checks=BUTTON_RULE,
-            sources=("desktop/native/settings.py", "desktop/native/look.py"),
-            styles=WIDGETS,
-        )
-        for index, section in enumerate(SECTIONS)
-    ),
-    *(
-        Screen(
             id=f"sheets.buttons_{name.replace('-', '_')}",
             area="sheets",
             prepare=sheet(name),
@@ -207,18 +166,6 @@ SCREENS: list[Screen] = [
             "running-late",
             "study-hours",
         )
-    ),
-    Screen(
-        id="settings.look_high_contrast_suggestion",
-        area="settings",
-        prepare=look_with_high_contrast,
-        checks=(
-            "With High contrast worn, the suggestion 'High contrast is easiest to read with Large text.' "
-            "and its 'Use Large text' button keep their words (the label is not cut off) at Small, Normal "
-            "and Large text, and the style preview sits to the right of the settings list, not under it."
-        ),
-        sources=("desktop/native/settings.py", "desktop/native/look.py"),
-        styles=WIDGETS,
     ),
     Screen(
         id="sheets.running_late_after_preview",
@@ -258,19 +205,6 @@ SCREENS: list[Screen] = [
         ),
         sources=("desktop/native/material",),
         styles=MATERIAL,
-    ),
-    Screen(
-        id="settings.look_text_size_without_scrolling",
-        area="settings",
-        prepare=look_page,
-        checks=(
-            "On a fresh account at 1280x800 the Look page shows the Text size row whole inside its "
-            "visible area "
-            "(top edge at or below the top, bottom edge above the bottom), without scrolling and with 'Show "
-            "shape, spacing and type' off."
-        ),
-        sources=("desktop/native/settings.py",),
-        styles=WIDGETS,
     ),
     Screen(
         id="account.sign_up_username_error",

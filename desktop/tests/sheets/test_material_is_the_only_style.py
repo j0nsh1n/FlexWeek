@@ -19,12 +19,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication
 
 from desktop.native.material.bridge import MaterialBridge
 from desktop.native.material.bridge_account import AccountBridge
 from desktop.native.material.host import MaterialPage
-from desktop.native.settings import SettingsPage
 from desktop.tests.account.support import (
     LightLaunches,
     account,
@@ -76,10 +75,7 @@ def test_the_bridges_and_the_page_have_no_slot_or_signal_to_them() -> None:
             assert not hasattr(owner, name), (owner.__name__, name)
 
 
-def test_widgets_settings_has_no_material_card_and_the_more_menu_no_way_back(qapp: QApplication) -> None:
-    settings = SettingsPage(None, {}, {}, {}, None)
-    assert settings.findChild(QPushButton, "chooseMaterial") is None
-    assert not hasattr(settings.look, "material_requested")
+def test_the_window_has_no_way_back_from_material(qapp: QApplication) -> None:
     assert not re.search(r"backToMaterial", (MATERIAL.parent / "window.py").read_text(encoding="utf-8"))
 
 

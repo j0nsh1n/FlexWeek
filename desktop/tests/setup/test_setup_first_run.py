@@ -12,7 +12,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton
+from PySide6.QtWidgets import QApplication, QLabel
 
 from backend.tests.fake_clock import FakeClock
 from desktop.native.calendar import sunday_due
@@ -273,9 +273,7 @@ def test_run_setup_again_opens_filled_in_with_the_current_choices(
     written(qapp, window)
     assert page(window) == "weekPage"
 
-    window._open_settings()
-    assert page(window) == "settingsPage"
-    window._settings.findChild(QPushButton, "prefsRunSetup").click()
+    window._run_setup_again()
     wait_until(qapp, lambda: page(window) == "setupPage", what="setup opened again")
     assert setup.step == STYLE
     assert setup.style_cards["night"].is_selected(), "the style in use shows as picked"

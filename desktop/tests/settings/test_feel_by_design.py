@@ -14,8 +14,6 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication, QGraphicsDropShadowEffect, QLabel, QWidget
 
-import desktop.native.feel as feel_module
-import desktop.native.window as native_window
 from desktop.native.feel import (
     Context,
     PaperEdge,
@@ -31,9 +29,8 @@ from desktop.native.feel import (
 from desktop.native.layouts.registry import options_for, sanitize_layout, tokens_for
 from desktop.native.look import design_look, pack_stylesheet, sanitize_look
 from desktop.native.motion import apply_ui_effects
-from desktop.native.settings import SettingsPage
 from desktop.native.setup import STYLE as SETUP_STEP
-from desktop.native.setup import SetupPage, style_layout
+from desktop.native.setup import SetupPage
 from desktop.native.tokens import (
     RADIUS_CARD,
     RADIUS_SHEET,
@@ -47,7 +44,7 @@ from desktop.native.tokens import (
 from desktop.native.widgets import HomeworkDialog, control_art
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.settings.support_feel import HEROES, STYLE, _dressed, _host, _setup_style
+from desktop.tests.settings.support_feel import HEROES, STYLE, _dressed, _host
 from desktop.tests.window_support import free, look_file, qapp, still  # noqa: F401
 
 
@@ -125,7 +122,7 @@ def test_feel_sizes_are_on_the_scale(qapp: QApplication) -> None:  # noqa: F811
     assert checked, "the pattern found no size to check"
 
 
-def test_settings_and_a_sheet_and_setup_show_the_feel(qapp: QApplication) -> None:  # noqa: F811
+def test_a_sheet_and_setup_show_the_feel(qapp: QApplication) -> None:  # noqa: F811
     for style_key, radius, font, frame in (
         ("plain", None, None, False),
         ("night", RADIUS_CARD, "Newsreader", False),
@@ -133,20 +130,11 @@ def test_settings_and_a_sheet_and_setup_show_the_feel(qapp: QApplication) -> Non
         ("retro", 0, "Pixelify", True),
     ):
         host, ctx = _host(qapp, style_key)
-        chosen = _setup_style(style_key)
-        prefs = {"alarms": [], "reminders_enabled": True, "theme_pack": chosen.pack}
-        layout = style_layout(chosen, sanitize_layout(None))
-        page = SettingsPage(host, prefs, ctx.look, {}, layout)
-        apply_feel(page, ctx)
-        qapp.processEvents()
         extra = extra_stylesheet(
             ctx.base_sheet, ctx.feel, ctx.palette, ctx.tokens, ctx.look, ("settingsTitle",)
         )
         if font:
             assert font in host.styleSheet() or font in extra
-        assert (page.findChild(QWidget, "win98Frame") is not None) is frame
-        if ctx.feel.chrome == "hero":
-            assert page.findChild(QWidget, "bentoHeroIcon") is not None
         dialog = HomeworkDialog(host, today="2026-10-01")
         dialog.show()
         apply_feel(dialog, ctx)
@@ -164,7 +152,6 @@ def test_settings_and_a_sheet_and_setup_show_the_feel(qapp: QApplication) -> Non
         assert (setup.findChild(QWidget, "win98Frame") is not None) is frame
         dialog.close()
         free(dialog)
-        free(page)
         free(setup)
         free(host)
 
@@ -370,8 +357,3 @@ def test_card_depth_follows_the_feel_and_the_shared_small_shadow(qapp: QApplicat
             free(host)
 
 
-def test_window_imports_current_once() -> None:
-    assert native_window.current is feel_module.current
-    source = Path(native_window.__file__).read_text()
-    assert source.count("from desktop.native.feel import current") == 0
-    assert "current," in source.split("from desktop.native.feel import", 1)[1].split("\n", 1)[0]

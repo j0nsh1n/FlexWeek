@@ -14,26 +14,15 @@ from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QPushButton
 from desktop.native import remind
 from desktop.native.calendar import monday_of
 from desktop.native.layouts.registry import sanitize_layout
-from desktop.native.settings import SPOTIFY_TONE_NOTE, AlarmRingDialog, SettingsPage
+from desktop.native.settings import SPOTIFY_TONE_NOTE, AlarmRingDialog
 from desktop.native.setup import NOTES, REMINDERS, WEEK, SetupPage, SetupState
 from desktop.native.widgets import AvailabilityDialog
 from desktop.tests.window_support import qapp  # noqa: F401
 
 # ruff: noqa: F811
 
-ALERTS = 3
 HINT = "Plays when a block starts if the alarm sound is Spotify, and when focus is set to Spotify."
-TRACK = "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"
 NO_HOMEWORK_AFTER = ["No limit", "20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00"]
-
-
-def settings(qapp: QApplication, **preferences: object) -> SettingsPage:
-    dialog = SettingsPage(None, {"reminders_enabled": True, "alarms": [], **preferences}, {}, {})
-    dialog.show()
-    dialog.nav.setCurrentRow(ALERTS)
-    for _ in range(10):
-        qapp.processEvents()
-    return dialog
 
 
 def setup_page(qapp: QApplication, **changes: object) -> SetupPage:
@@ -63,16 +52,6 @@ def texts(box: QComboBox) -> list[tuple[str, object]]:
 # The Spotify link
 
 
-def test_settings_names_the_link_spotify_and_says_who_uses_it(qapp: QApplication) -> None:
-    dialog = settings(qapp, alarm_tone="chime")
-    label = dialog._alerts_form.labelForField(dialog.spotify)
-    hint = dialog.findChild(QLabel, "prefSpotifyHint")
-    assert isinstance(label, QLabel) and label.text() == "Spotify link"
-    assert isinstance(hint, QLabel) and hint.text() == HINT
-    assert dialog.spotify.isHidden() is False
-    dialog.close()
-
-
 def test_the_link_note_does_not_say_a_block_without_a_link_plays_nothing(qapp: QApplication) -> None:
     assert SPOTIFY_TONE_NOTE.startswith(HINT)
     assert "without a link" not in SPOTIFY_TONE_NOTE
@@ -97,34 +76,6 @@ def test_setup_does_not_say_one_sound_covers_everything(qapp: QApplication) -> N
     assert "One sound" not in words
     assert "A block starts with the Spotify link from Settings" in words
     assert "Chime" in words
-
-
-def test_play_previews_the_default_link_when_the_sound_is_spotify(qapp: QApplication) -> None:
-    dialog = settings(qapp, alarm_tone="spotify", default_spotify_url=TRACK)
-    asked: list[str] = []
-    rung: list[str] = []
-    dialog._spotify_player.play = lambda link: asked.append(link) or True
-    dialog._tone_bell.once = lambda tone, _volume: rung.append(tone) or True
-    dialog.play_tone.click()
-    assert asked == [TRACK] and rung == []
-    dialog.close()
-
-
-def test_play_chimes_when_the_sound_is_spotify_and_there_is_no_link(qapp: QApplication) -> None:
-    # Play previews the alarm sound. With no link, Spotify falls back to Chime.
-    dialog = settings(qapp, alarm_tone="spotify")
-    rung: list[str] = []
-    dialog._tone_bell.once = lambda tone, _volume: rung.append(tone) or True
-    dialog.play_tone.click()
-    assert rung == ["chime"]
-    dialog.close()
-
-
-def test_play_says_it_previews_the_chosen_sound(qapp: QApplication) -> None:
-    """Play hears the alarm sound. A block start uses the Settings link, not this button."""
-    dialog = settings(qapp)
-    assert dialog.play_tone.toolTip() == "Hear this sound"
-    dialog.close()
 
 
 # The reminder lead
@@ -158,7 +109,6 @@ def test_setup_settings_and_the_summary_start_from_the_one_default(qapp: QApplic
     later._show(REMINDERS)
     assert later.lead.value() == 5
     later.close()
-    assert settings(qapp).lead.value() == 5
     summary = setup_page(qapp, preferences={"reminders_enabled": True})
     assert summary_reminders(summary).startswith("5 min before things start")
     summary.close()
@@ -173,9 +123,6 @@ def test_every_page_follows_the_default_when_it_changes(qapp: QApplication, lead
     later._show(REMINDERS)
     assert later.lead.value() == lead_of_seven
     later.close()
-    dialog = settings(qapp)
-    assert dialog.lead.value() == lead_of_seven
-    dialog.close()
     summary = setup_page(qapp, preferences={"reminders_enabled": True})
     assert summary_reminders(summary).startswith(f"{lead_of_seven} min before things start")
     summary.close()

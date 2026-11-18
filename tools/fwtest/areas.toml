@@ -294,12 +294,10 @@ paths = [
 ]
 areas = ["focus"]
 
-# --- Settings and the look editor.
+# --- Settings.
 [[rule]]
 paths = [
-  "desktop/native/custom_look.py", "desktop/native/look_editor.py",
-  "desktop/native/look_preview.py", "desktop/native/style_preview.py",
-  "desktop/native/previews.py", "desktop/native/layouts/dialog.py",
+  "desktop/native/custom_look.py", "desktop/native/previews.py",
   "desktop/native/autostart.py", "desktop/native/remind.py",
   "desktop/native/material/bridge_settings.py", "desktop/native/material/dynamic_color.py",
   "desktop/native/material/qml/settings/",

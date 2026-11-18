@@ -161,7 +161,7 @@ def test_ctrl_shift_l_opens_the_week_list_and_esc_returns_focus(
     window: NativeWindow,  # noqa: F811
 ) -> None:
     seeded(qapp, window)
-    gear = window.settings_gear
+    gear = window.more_button
     window.activateWindow()
     gear.setFocus(Qt.FocusReason.OtherFocusReason)
     qapp.processEvents()

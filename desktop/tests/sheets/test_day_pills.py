@@ -1,6 +1,5 @@
 """Days are picked with pills everywhere: the block editor's Add fixed time used check boxes while setup
-used pills, so one choice looked two ways. That the alarm's pills sit on one row is a picture:
-screens_settings_h7.py."""
+used pills, so one choice looked two ways."""
 
 from __future__ import annotations
 
@@ -63,20 +62,6 @@ def test_routines_school_hours_and_work_hours_pick_days_with_pills(
     free(work)
 
 
-def test_alarm_days_are_pills_on_one_row(qapp: QApplication) -> None:  # noqa: F811
-    """The alarm's days wrapped into two rows of check boxes, Monday to Thursday then Friday to Sunday."""
-    from desktop.native.settings import SettingsPage
-
-    page = SettingsPage(None, {"alarms": []}, {}, {})
-    page.resize(1280, 800)
-    page.show()
-    page.nav.setCurrentRow(3)
-    qapp.processEvents()
-    days = [pill for pill in pills(page) if pill.objectName().startswith("alarmDay")]
-    assert [pill.text() for pill in days] == list(DAYS)
-    assert [pill.isChecked() for pill in days] == [True] * 5 + [False] * 2
-    assert day_boxes(page) == []
-    free(page)
 
 
 def test_setup_picks_school_and_activity_days_with_pills(qapp: QApplication) -> None:  # noqa: F811

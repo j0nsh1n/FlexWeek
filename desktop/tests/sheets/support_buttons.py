@@ -4,7 +4,6 @@ button tests and the filled-button screens share these; test_sheets_0183 imports
 from __future__ import annotations
 
 from collections.abc import Callable
-from unittest.mock import Mock
 
 import pytest
 
@@ -13,7 +12,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QDialog, QPushButton, QWidget
 
-from desktop.native import devices, look_editor, settings, widgets
+from desktop.native import settings, widgets
 
 HOMEWORK = {"id": "essay", "title": "Essay", "due": "2026-09-27T23:59", "estimate_min": 60, "revision": 0}
 RESTORE_POINT = {"id": "a", "label": "Monday", "weeks_count": 2}
@@ -57,9 +56,6 @@ def makers() -> dict[type, list[Callable[[QWidget], QDialog]]]:
         "checked": True,
     }
     windows = {"work_windows": [{"days": [0, 1], "start": "16:00", "end": "18:00"}]}
-    sync = Mock(spec=devices.SyncService)
-    sync.pair_start.return_value = None
-    sync.pair_status.return_value = {"state": "idle", "expires_at_ms": 0, "tries_left": 0}
     return {
         widgets.BlockDialog: [
             lambda host: widgets.BlockDialog(host, school(), occurrence_day=1),
@@ -98,10 +94,6 @@ def makers() -> dict[type, list[Callable[[QWidget], QDialog]]]:
                 default="stay",
             )
         ],
-        look_editor.ColourSheet: [lambda host: look_editor.ColourSheet(host, "#3d6fc4")],
-        look_editor.StartSheet: [lambda host: look_editor.StartSheet(host, "base:light", [])],
-        devices.PairDialog: [lambda host: devices.PairDialog(host, sync, 1)],
-        devices.RemoveDialog: [lambda host: devices.RemoveDialog(host, "Pixel")],
         settings.RestoreDialog: [
             lambda host: settings.RestoreDialog(host, [RESTORE_POINT], None, None)
         ],

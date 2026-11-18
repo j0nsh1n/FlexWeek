@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (  # noqa: E402
     QWidget,
 )
 
-from desktop.native.settings import SettingsPage  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests import light_app, window_support  # noqa: E402
 from desktop.tests.waiting import exposed, wait_until  # noqa: E402
@@ -135,17 +134,3 @@ def test_the_wheel_still_changes_a_box_the_student_clicked_into(
     assert spin.value() == 49
 
 
-def test_scrolling_down_settings_leaves_the_focus_minutes_alone(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    window._open_settings()
-    dialog = window._settings
-    assert isinstance(dialog, SettingsPage)
-    dialog.nav.setCurrentRow(2)
-    qapp.processEvents()
-    dialog.nav.setFocus()
-    before = dialog.work.value()
-    at = QPointF(dialog.work.mapTo(window, QPoint(12, dialog.work.height() // 2)))
-    send_wheel(qapp, window.windowHandle(), at)
-    assert dialog.work.value() == before
-    dialog.close_page()

@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from desktop.native.look_editor import leave_sheet
 from desktop.native.settings import AboutDialog, AccountDialog, HelpDialog
 from desktop.native.setup import WEEK as SETUP_WEEK
 from desktop.native.setup import SetupPage
@@ -148,10 +147,6 @@ def _late_after_preview(window: NativeWindow) -> QDialog:
 def _choose_time_clash(window: NativeWindow) -> QDialog:
     waiting = {"id": "w", "title": "Essay", "duration_min": 60, "days": [1, 2]}
     return shown(_app(), ChooseTimeDialog(window, waiting, WEEK, [1, 2], [soccer()], None, 1))
-
-
-def _leave_look_editor(window: NativeWindow) -> QDialog:
-    return shown(_app(), leave_sheet(window, "Evening", True))
 
 
 def _confirm(danger: bool) -> Callable[[NativeWindow], QDialog]:
@@ -295,15 +290,6 @@ def _plan_review(window: NativeWindow) -> QWidget:
 
 def _recovery_continue_off(window: NativeWindow) -> None:
     window._show_recovery(["aaaa-bbbb", "cccc-dddd"])
-    _settle()
-    return None
-
-
-def _settings_labels(window: NativeWindow) -> None:
-    window.resize(1280, 800)
-    window._open_settings()
-    _settle()
-    window._settings.nav.setCurrentRow(2)
     _settle()
     return None
 
@@ -537,18 +523,6 @@ SCREENS: list[Screen] = [
         sources=SOURCES,
     ),
     Screen(
-        id="sheets.leave_look_editor_question",
-        area="sheets",
-        prepare=_leave_look_editor,
-        checks=(
-            "The question on leaving the look editor with changes unsaved: Save is the one filled "
-            "answer, Discard changes is outlined with an edge in the error colour, and Cancel and Keep "
-            "without saving are quiet. All four answers are as wide as their words, none squeezed, at "
-            "Normal and Large text."
-        ),
-        sources=SOURCES + ("desktop/native/look_editor.py",),
-    ),
-    Screen(
         id="sheets.confirm_destroying",
         area="sheets",
         prepare=_confirm(True),
@@ -711,18 +685,6 @@ SCREENS: list[Screen] = [
             "to continue.' under it says why."
         ),
         sources=SOURCES + ("desktop/native/window.py",),
-    ),
-    Screen(
-        id="settings.labels_beside_fields",
-        area="settings",
-        prepare=_settings_labels,
-        checks=(
-            "Settings, on the page with the timers: each label sits beside its field, level with the "
-            "words inside the field and not with the field's top edge, 4 px above them. For the stepped "
-            "numbers (work, preset timer, long break every) the label sits on the number box, between "
-            "the minus and the plus. The labels' middles are within 1 px of the boxes'."
-        ),
-        sources=("desktop/native/settings.py", "desktop/native/widgets.py"),
     ),
     Screen(
         id="setup.problem_under_school_end",

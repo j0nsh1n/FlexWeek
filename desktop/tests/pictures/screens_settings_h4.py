@@ -1,4 +1,4 @@
-"""Pictures of Settings > Alerts, the reminders and More menu sheets, School hours and the look notice.
+"""Pictures of the reminders and More menu sheets, School hours, Help and About.
 
 Each screen carries the looks checks the code tests of these pages used to make (contrast, cut-off
 labels, positions, sizes), so the reviewer judges them on the picture."""
@@ -14,37 +14,15 @@ from desktop.native.settings import AboutDialog, HelpDialog
 from desktop.native.widgets import SchoolHoursDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
-from desktop.tests.settings.support_alerts import WEEKDAYS, settings_page
 from desktop.tests.settings.support_more import add, due_in
-from desktop.tests.settings.support_new_looks_notice import NOTICE, become_an_old_account
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import still
-
-ALARM = {"id": "a", "name": "Wake up", "time": "07:00", "days": WEEKDAYS, "enabled": True, "sound": "chime"}
 
 
 def _large_text(window: NativeWindow) -> None:
     knobs = {**(window._look.get("knobs") or {}), "text": "large"}
     window._look = sanitize_look({**window._look, "knobs": knobs})
     window._apply_appearance()
-
-
-def _alerts_page(window: NativeWindow) -> object:
-    return settings_page(QApplication.instance(), window, alarms=[ALARM])
-
-
-def _alerts_spotify_large_text(window: NativeWindow) -> object:
-    window.resize(1150, 768)
-    window.show()
-    _large_text(window)
-    return settings_page(QApplication.instance(), window, alarm_tone="spotify")
-
-
-def _alerts_alarm_row(window: NativeWindow) -> object:
-    dialog = settings_page(QApplication.instance(), window, alarms=[ALARM])
-    dialog._dress()
-    dialog.alarm_list.setFocus()
-    return dialog.alarm_list
 
 
 def _school_hours_dialog(window: NativeWindow) -> object:
@@ -120,14 +98,6 @@ def _about_dialog(window: NativeWindow) -> object:
     return dialog
 
 
-def _new_looks_notice(window: NativeWindow) -> object:
-    window.resize(1280, 800)
-    become_an_old_account(window)
-    window._on_week()
-    QApplication.processEvents()
-    return window
-
-
 def _ordinary_toast(window: NativeWindow) -> object:
     window.toast.show_message("Placed 1 homework block.", "Undo", lambda: None)
     QApplication.processEvents()
@@ -135,39 +105,6 @@ def _ordinary_toast(window: NativeWindow) -> object:
 
 
 SCREENS: list[Screen] = [
-    Screen(
-        id="settings.alerts_page",
-        area="settings",
-        prepare=_alerts_page,
-        checks=(
-            "Reminders is the first group and Alarms the second. The switch 'Remind me before each block"
-            " starts' is above the lead, reminder sound, alarm sound and 'Leave reminders on screen'"
-            " controls, and each of those is above the alarm list."
-        ),
-        sources=("desktop/native/settings.py",),
-        main=True,
-    ),
-    Screen(
-        id="settings.alerts_spotify_large_text",
-        area="settings",
-        prepare=_alerts_spotify_large_text,
-        checks=(
-            "At 1150 by 768 with Large text, every box on the page that shows a hint (the Spotify link's"
-            " address hint among them) is wide enough for it: the hint is not cut off mid-address, with"
-            " at least 24 px to spare beside the words."
-        ),
-        sources=("desktop/native/settings.py", "desktop/native/look.py"),
-    ),
-    Screen(
-        id="settings.alerts_alarm_row",
-        area="settings",
-        prepare=_alerts_alarm_row,
-        checks=(
-            "The alarm list with focus shows its first row selected and outlined (a border in the"
-            " list's own colour), so a student sees which alarm Remove will take."
-        ),
-        sources=("desktop/native/settings.py",),
-    ),
     Screen(
         id="settings.school_hours_dialog",
         area="settings",
@@ -256,22 +193,6 @@ SCREENS: list[Screen] = [
             " fade into the sheet they sit on."
         ),
         sources=("desktop/native/settings.py",),
-    ),
-    Screen(
-        id="settings.new_looks_notice",
-        area="settings",
-        prepare=_new_looks_notice,
-        checks=(
-            f"The one-time notice '{NOTICE}' with its 'Choose a look' action and the x is a card of the"
-            " look, not the dark toast: the card colour is the look's panel colour, it has a 1 px edge in"
-            " the look's hairline colour and 8 px rounded corners (not the sheet's 16 px). The message,"
-            " the 'Choose a look' action (in the accent) and the x each reach at least 4.5 to 1 on the"
-            " card, in Light, Dark and High contrast. The week behind it has not moved or shrunk: the"
-            " notice floats over the window without pushing the planner down or making it smaller (0 px"
-            " difference from the same week without the notice)."
-        ),
-        sources=("desktop/native/window.py", "desktop/native/look.py", "desktop/native/widgets.py"),
-        main=True,
     ),
     Screen(
         id="settings.ordinary_toast",

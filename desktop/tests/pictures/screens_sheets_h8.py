@@ -6,13 +6,11 @@ above fields, buttons that fit their words, and the account cards that keep thei
 from __future__ import annotations
 
 from collections.abc import Callable
-from unittest.mock import Mock
 
 from PySide6.QtCore import QTime
 from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QVBoxLayout, QWidget
 
 from desktop.native import widgets
-from desktop.native.devices import PairDialog, RemoveDialog, SyncService
 from desktop.native.fields import ClockField
 from desktop.native.settings import AccountDialog, RestoreDialog
 from desktop.native.setup import ActivityRow, HomeworkRow
@@ -101,12 +99,6 @@ def _time_row_problem(window: NativeWindow) -> QWidget:
     return dialog
 
 
-def _sync() -> Mock:
-    sync = Mock(spec=SyncService)
-    sync.pair_start.return_value = None
-    return sync
-
-
 def _delete_school(window: NativeWindow) -> QWidget:
     return ConfirmSheet(
         window,
@@ -145,18 +137,6 @@ def _homework_more_details(window: NativeWindow) -> QWidget:
 
 
 SHEETS: tuple[tuple[str, str, Callable[[NativeWindow], QWidget], tuple[str, ...]], ...] = (
-    (
-        "pair-device",
-        "Pair a device",
-        lambda w: _settled(PairDialog(w, _sync(), 1)),
-        ("desktop/native/devices.py",),
-    ),
-    (
-        "remove-device",
-        "Remove a device",
-        lambda w: _settled(RemoveDialog(w, "Pixel")),
-        ("desktop/native/devices.py",),
-    ),
     ("fixed-time", "Edit fixed time", _editor_answers, WIDGETS),
     ("homework", "Edit homework", lambda w: _settled(HomeworkDialog(w, _essay(), today=WEEK)), WIDGETS),
     ("homework-more-details", "Edit homework with More details open", _homework_more_details, WIDGETS),

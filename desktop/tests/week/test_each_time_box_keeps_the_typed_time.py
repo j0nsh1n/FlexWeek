@@ -12,7 +12,6 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication, QWidget
 
-from desktop.native.settings import SettingsPage
 from desktop.native.setup import WEEK
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import AvailabilityDialog, BlockDialog, HomeworkDialog, SchoolHoursDialog
@@ -99,11 +98,3 @@ def test_study_hours_keep_the_typed_times(qapp: QApplication, host: QWidget, twe
     assert dialog.work_windows() == [{"days": [4], "start": "16:30", "end": "18:00"}]
 
 
-@CLOCKS
-def test_an_alarm_keeps_the_typed_time(qapp: QApplication, host: QWidget, twenty_four: bool) -> None:
-    set_clock_24h(twenty_four)
-    page = SettingsPage(host, {"reminders_enabled": True, "alarms": []}, {}, {})
-    type_over(page.alarm_time, "6:45 am")
-    page.alarm_name.setText("Wake up")
-    page.findChild(QWidget, "addAlarm").click()
-    assert [alarm["time"] for alarm in page.updates()["alarms"]] == ["06:45"]
