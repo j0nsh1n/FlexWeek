@@ -793,6 +793,8 @@ class NativeWindow(QMainWindow):
         self._tray_hinted = False
         self._icon = icon or QIcon()
         self._alarm_dialog: AlarmRingDialog | None = None
+        # An alarm is ringing on Material's own screen, not in the Widgets dialog.
+        self._alarm_on_material = False
         self._bell = Bell(self)
         # A Spotify alarm plays in the student's Spotify app. Until it is heard the tone rings, so an
         # alarm is never silent, and once it is the tone stops.
@@ -5596,9 +5598,11 @@ class NativeWindow(QMainWindow):
     def _on_alarm(self, alarm: object) -> None:
         if not isinstance(alarm, dict):
             return
-        if self._alarm_dialog is not None:
+        if self._alarm_dialog is not None or self._alarm_on_material:
             return
         url = self.session.spotify_url(alarm.get("spotify_url"))
+        if self._ring_on_material(alarm, url):
+            return
         dialog = AlarmRingDialog(self, alarm, url)
         self._alarm_dialog = dialog
         self._ring(alarm, url)
@@ -5611,6 +5615,23 @@ class NativeWindow(QMainWindow):
             self._spotify.stop()
         snoozed = dialog.snoozed
         self._alarm_dialog = None
+        self.session.finish_alarm(snoozed)
+
+    def _ring_on_material(self, alarm: dict, url: str) -> bool:
+        """Ring on Material's screen when Material is what the window shows. False leaves it to the dialog."""
+        page = self._material_page
+        if page is None or not self._material_owns() or self._stack.currentWidget() is not page:
+            return False
+        self._alarm_on_material = True
+        self._ring(alarm, url)
+        page.bridge.ring.show_alarm(alarm, url, self._finish_material_alarm)
+        return True
+
+    def _finish_material_alarm(self, snoozed: bool) -> None:
+        # The same ending as the dialog's: the noise stops, Spotify included, then the next alarm rings.
+        self._bell.stop()
+        self._spotify.stop()
+        self._alarm_on_material = False
         self.session.finish_alarm(snoozed)
 
     def _ring(self, alarm: dict, url: str) -> None:
@@ -5627,13 +5648,16 @@ class NativeWindow(QMainWindow):
         self._bell.start(FALLBACK if tone == "spotify" else tone, prefs.get("alert_volume", 80))
 
     def _spotify_late(self) -> None:
-        if self._alarm_dialog is not None:
+        if self._alarm_dialog is not None or self._alarm_on_material:
             self._bell.start(FALLBACK, (self.session.preferences or {}).get("alert_volume", 80))
 
     def _spotify_heard(self, words: str) -> None:
         if self._alarm_dialog is not None:
             self._bell.stop()
             self._alarm_dialog.show_playing(words)
+        elif self._alarm_on_material and self._material_page is not None:
+            self._bell.stop()
+            self._material_page.bridge.ring.show_playing(words)
 
     def _check_updates(self, *, asked: bool) -> None:
         """Look for a newer release. Asked for by the student, or once a day on its own.

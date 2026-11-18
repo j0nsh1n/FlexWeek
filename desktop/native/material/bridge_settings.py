@@ -27,6 +27,7 @@ from desktop.native.fields import (
     week_starts_on,
 )
 from desktop.native.hours.geometry import DRAG_STEPS, drag_step
+from desktop.native.material.bridge_alarms import MAX_ALARMS, alarm_rows
 from desktop.native.material.bridge_hours import SchoolHours, StudyHours
 from desktop.native.material.bridge_month import _ROLES, read_cells
 from desktop.native.material.bridge_rows import Labels, Rows
@@ -77,6 +78,7 @@ from desktop.native.material.theme import (
 )
 from desktop.native.reuse import AVAILABILITY_LIMIT, PROTECTED_KINDS
 from desktop.native.settings_copy import (
+    ALARM_NOTE,
     ALARM_TONE_LABELS,
     BLOCK_SONG_NOTE,
     DND_NOTE,
@@ -1024,6 +1026,9 @@ class SettingsBridge(QObject):
             "autoMute": prefs.get("focus_auto_mute", True) is not False,
             "reminderSound": prefs.get("reminder_sound", True) is not False,
             "tone": prefs.get("alarm_tone") or FALLBACK,
+            "alarms": alarm_rows(list(prefs.get("alarms") or [])),
+            "alarmsFull": len(prefs.get("alarms") or []) >= MAX_ALARMS,
+            "alarmNote": ALARM_NOTE,
             "toneChoices": list(TONES),
             "toneNote": prefs.get("alarm_tone") == "spotify",
             "dnd": prefs.get("reminder_dnd_override") is True,
@@ -1451,6 +1456,11 @@ class SettingsBridge(QObject):
     def setTone(self, value: str) -> None:
         if value in SOUNDS and "alarm_tone" in _FIELDS:
             self._write({"alarm_tone": value})
+
+    @Slot(str)
+    def openAlarm(self, alarm_id: str) -> None:
+        """Add (an empty id) or edit an alarm. The sheet is the shared one over every screen."""
+        self._bridge.sheets.openAlarm(alarm_id)  # type: ignore[attr-defined]
 
     @Slot()
     def playTone(self) -> None:

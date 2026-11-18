@@ -76,6 +76,38 @@ SectionPage {
         }
     }
     Group {
+        objectName: "alarmsGroup"
+        visible: !!page.st.showReminder
+        GroupHeader { title: "Alarms" }
+        NoteRow {
+            key: "alarmNote"
+            text: page.st.alarmNote || ""
+        }
+        NoteRow {
+            key: "alarmEmpty"
+            visible: !(page.st.alarms && page.st.alarms.length)
+            text: "No alarms yet."
+        }
+        Repeater {
+            model: page.st.alarms || []
+            delegate: ActionRow {
+                required property var modelData
+                key: "alarm_" + modelData.id
+                title: modelData.title
+                subtitle: modelData.subtitle
+                buttonText: "Edit"
+                onActivated: page.panel.openAlarm(modelData.id)
+            }
+        }
+        ActionRow {
+            key: "addAlarm"
+            title: "New alarm"
+            subtitle: page.st.alarmsFull ? "You can have up to 20 alarms." : "Rings at a time on the days you pick."
+            buttonText: "Add alarm"
+            onActivated: page.panel.openAlarm("")
+        }
+    }
+    Group {
         visible: !!page.st.showReminder
         GroupHeader { title: "While a session runs" }
         ToggleRow {

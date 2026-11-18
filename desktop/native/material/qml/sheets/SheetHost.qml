@@ -112,6 +112,7 @@ Item {
             case "unfinished": return unfinished
             case "weekList": return weekList
             case "routines": return routines
+            case "alarm": return alarm
             }
             return null
         }
@@ -121,6 +122,7 @@ Item {
     Component { id: late; LateSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: unfinished; UnfinishedSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: weekList; WeekListSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
+    Component { id: alarm; AlarmSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: routines; RoutinesSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
 
     Loader {
@@ -159,7 +161,7 @@ Item {
     Shortcut {
         sequence: "Escape"
         context: Qt.WindowShortcut
-        enabled: root.active
+        enabled: root.active && !(root.bridge && root.bridge.ring && root.bridge.ring.open)
         onActivated: root.menu ? root.sheets.closeMore() : root.sheets.escapeSheet()
     }
 

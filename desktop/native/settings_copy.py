@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from desktop.native.calendar import DAY_FULL
+
 SPORT_FALLBACK = "Sport or club"
 ALARM_TONE_LABELS = {"spotify": "A Spotify song or playlist"}
+ALARM_NOTE = "An alarm rings at its time on the days you pick, until you dismiss or snooze it."
 # Said above the choice, where it can wrap: as the choice's label it was wider than the page at large text.
 DRAG_STEP_QUESTION = "When you drag a block, it moves in steps of this length."
 DRAG_STEP_CHOICES = ((5, "5 minutes (more control)"), (15, "15 minutes (quarter hours)"))
@@ -48,3 +51,20 @@ NO_SOUND = (
     " and not muted, then press Play again."
 )
 SPLIT_ROUNDED = "Focus lengths rounded to {step} minutes, which splitting needs."
+
+
+def ring_days(days: list[int]) -> str:
+    """The days an alarm rings, as a student would say them."""
+    chosen = sorted(set(days))
+    if chosen == list(range(7)):
+        return "every day"
+    if chosen == [0, 1, 2, 3, 4]:
+        return "Monday to Friday"
+    if chosen == [5, 6]:
+        return "Saturday and Sunday"
+    if not chosen:
+        return "no days"
+    if len(chosen) == 1:
+        return DAY_FULL[chosen[0]]
+    short = [DAY_FULL[day][:3] for day in chosen]
+    return ", ".join(short[:-1]) + " and " + short[-1]

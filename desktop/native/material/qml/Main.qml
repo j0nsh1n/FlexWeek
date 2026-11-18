@@ -50,8 +50,10 @@ Item {
     readonly property bool gridHeld: bridge !== undefined && bridge !== null
         && ((bridge.screen === "week" && (weekView.menuOpen || weekView.handing))
             || (bridge.screen === "day" && (dayView.menuOpen || dayView.handing)))
+    // An alarm is ringing: Material's ring screen is over everything.
+    readonly property bool ringOpen: bridge !== undefined && bridge !== null && bridge.ring !== undefined && bridge.ring.open
     readonly property bool modalActive: typing || focusOpen || accountLayer.active || settingsPromptOpen
-        || widgetsDialogOpen || datePicker.open || gridHeld
+        || widgetsDialogOpen || datePicker.open || gridHeld || ringOpen
 
     function _field(item) {
         while (item) {
@@ -718,6 +720,18 @@ Item {
         onRestoreFocus: root.focusDestination()
     }
 
+    RingScreen {
+        id: ringScreen
+        z: 40
+        bridge: root.bridge
+        theme: root.theme
+        density: root.density
+        reduceMotion: root.reduceMotion
+        highContrast: root.highContrast
+        phone: root.phone
+        onRestoreFocus: root.focusDestination()
+    }
+
     // A clock tick also emits changed. The enter animation follows the screen only.
     property string shownScreen: bridge.screen
     onShownScreenChanged: enter.restart()
@@ -832,7 +846,7 @@ Item {
         sequence: "Escape"
         context: Qt.WindowShortcut
         // An open Week or Day menu takes its own Escape, so it can close and give the focus back.
-        enabled: !accountLayer.active && !focusOverlay.ending && !sheetHost.active && !settingsPromptOpen
+        enabled: !accountLayer.active && !focusOverlay.ending && !sheetHost.active && !settingsPromptOpen && !ringOpen
                  && !widgetsDialogOpen && !datePicker.open
                  && !(bridge.screen === "week" && (weekView.menuOpen || weekView.handing))
                  && !(bridge.screen === "day" && (dayView.menuOpen || dayView.handing))

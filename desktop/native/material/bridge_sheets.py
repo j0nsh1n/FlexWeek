@@ -26,6 +26,7 @@ from desktop.native.calendar import (
 )
 from desktop.native.fields import announce
 from desktop.native.hours.geometry import drag_step, next_slot
+from desktop.native.material.bridge_alarms import FULL, MAX_ALARMS, NOT_SAVED, AlarmDraft, with_alarm
 from desktop.native.material.sheet_block import BlockDraft
 from desktop.native.material.sheet_homework import HomeworkDraft
 from desktop.native.reuse import (
@@ -100,6 +101,7 @@ class SheetsBridge(QObject):
         self._notice_undo = False
         self._homework: HomeworkDraft | None = None
         self._block: BlockDraft | None = None
+        self._alarm: AlarmDraft | None = None
         # What was typed into a new Add sheet that Esc closed, kept for the next Add of that kind.
         self._kept_homework: HomeworkDraft | None = None
         self._kept_block: BlockDraft | None = None
@@ -222,6 +224,7 @@ class SheetsBridge(QObject):
         self._drag_range_active = False
         self._homework = None
         self._block = None
+        self._alarm = None
         session = self._session
         if late and session is not None and session.late_preview is not None:
             session.late_preview = None
@@ -388,6 +391,10 @@ class SheetsBridge(QObject):
             return
         draft = self._homework if self._kind == "homework" else self._block if self._kind == "block" else None
         if draft is not None and draft.dirty():
+            self._ask = dict(DISCARD)
+            self._publish()
+            return
+        if self._kind == "alarm" and self._alarm is not None and self._alarm.dirty():
             self._ask = dict(DISCARD)
             self._publish()
             return
@@ -632,6 +639,9 @@ class SheetsBridge(QObject):
         elif asked == "delete-block" and choice in ("delete", "day", "week", "every"):
             self._delete_block(choice)
             return
+        elif asked == "delete-alarm" and choice == "delete":
+            self._delete_alarm()
+            return
         elif asked == "delete-unfinished" and choice == "delete":
             self._delete_unfinished(self._pending_delete)
             return
@@ -684,6 +694,111 @@ class SheetsBridge(QObject):
             self._say(f"Deleted {title} on {name} from this week.", undo=True)
         else:
             self._say(f"Deleted {title} from this week.", undo=True)
+
+    # Alarms -----------------------------------------------------------------------------
+
+    def _alarms_now(self) -> list[dict]:
+        session = self._session
+        return list((getattr(session, "preferences", None) or {}).get("alarms") or [])
+
+    @Slot(str)
+    def openAlarm(self, alarm_id: str) -> None:
+        """Add (an empty id) or edit an alarm of Settings > Alerts."""
+        session = self._session
+        if session is None or session.account is None or session.preferences is None:
+            return
+        alarms = self._alarms_now()
+        found = next((item for item in alarms if item.get("id") == alarm_id), None) if alarm_id else None
+        if alarm_id and found is None:
+            return
+        if found is None and len(alarms) >= MAX_ALARMS:
+            self._say(FULL)
+            return
+        self._alarm = AlarmDraft(found, str(session.preferences.get("alarm_tone") or "chime"))
+        self._open("alarm")
+
+    @Slot(str, str)
+    def setAlarmText(self, name: str, value: str) -> None:
+        if self._alarm is not None:
+            self._alarm.set_text(name, value)
+            self._publish()
+
+    @Slot(str, int)
+    def setAlarmNumber(self, name: str, value: int) -> None:
+        if self._alarm is not None:
+            self._alarm.set_number(name, value)
+            self._publish()
+
+    @Slot(bool)
+    def setAlarmEnabled(self, on: bool) -> None:
+        if self._alarm is not None:
+            self._alarm.set_enabled(on)
+            self._publish()
+
+    @Slot(int)
+    def toggleAlarmDay(self, day: int) -> None:
+        if self._alarm is not None:
+            self._alarm.toggle_day(day)
+            self._publish()
+
+    def _write_alarms(self, alarms: list[dict], said: str) -> None:
+        session = self._session
+
+        def then(ok: bool) -> None:
+            if ok:
+                self._close()
+                self._say(said)
+            elif self._alarm is not None:
+                self._alarm.error = NOT_SAVED
+                self._publish()
+
+        if not session.save_preferences({"alarms": alarms}, then):
+            if self._alarm is not None:
+                self._alarm.error = NOT_SAVED
+            self._publish()
+
+    @Slot()
+    def saveAlarm(self) -> None:
+        draft, session = self._alarm, self._session
+        if draft is None or session is None or self._kind != "alarm":
+            return
+        if self._hold_for_save():
+            return
+        alarms = self._alarms_now()
+        if not draft.existing and len(alarms) >= MAX_ALARMS:
+            draft.error = FULL
+            self._publish()
+            return
+        made = draft.candidate()
+        if made is None:
+            self._publish()
+            return
+        self._write_alarms(with_alarm(alarms, made), "Saved the alarm.")
+
+    @Slot()
+    def removeAlarm(self) -> None:
+        """Delete, on the edit sheet. It asks first."""
+        draft = self._alarm
+        if draft is None or not draft.existing:
+            return
+        name = draft.name.strip() or "this alarm"
+        self._ask = {
+            "id": "delete-alarm",
+            "title": "Delete alarm",
+            "body": f"Delete {name}? It will not ring again.",
+            "answers": [
+                {"id": "stay", "label": "Cancel", "kind": "text"},
+                {"id": "delete", "label": "Delete", "kind": "filled"},
+            ],
+        }
+        self._publish()
+
+    def _delete_alarm(self) -> None:
+        draft = self._alarm
+        if draft is None or self._hold_for_save():
+            return
+        left = [item for item in self._alarms_now() if item.get("id") != draft.id]
+        self._write_alarms(left, "Deleted the alarm.")
 
     # Running late -----------------------------------------------------------------------
 
@@ -1313,6 +1428,8 @@ class SheetsBridge(QObject):
             self._form = self._week_list_form()
         elif kind == "routines":
             self._form = self._routine_form()
+        elif kind == "alarm" and self._alarm is not None:
+            self._form = {**self._alarm.form(), "canSave": self.canSave}
         else:
             self._form = {}
         # The moved-day note is said aloud when it appears or changes in a sheet that is already open. A

@@ -21,6 +21,7 @@ from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 from desktop.native.fields import week_start_day, week_start_notice
 from desktop.native.hours.scale import Scale
 from desktop.native.material.bridge_account import AccountBridge
+from desktop.native.material.bridge_alarms import RingBridge
 from desktop.native.material.bridge_day import DayBridge
 from desktop.native.material.bridge_focus import FocusBridge
 from desktop.native.material.bridge_month import MonthBridge
@@ -125,6 +126,7 @@ class MaterialBridge(QObject):
         self._account.setParent(self)
         self._focus = FocusBridge(window, self)
         self._sheets = SheetsBridge(window, self)
+        self._ring = RingBridge(self)
         self._following = False
         week_start_notice().changed.connect(self._on_week_start)
         # Save finishes on this signal. The day lists and the Undo button read it then,
@@ -459,6 +461,10 @@ class MaterialBridge(QObject):
     @Property(QObject, constant=True)
     def sheets(self) -> QObject:
         return self._sheets
+
+    @Property(QObject, constant=True)
+    def ring(self) -> QObject:
+        return self._ring
 
     @Property(QObject, constant=True)
     def settingsBridge(self) -> QObject:

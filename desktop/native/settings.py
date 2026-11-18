@@ -107,6 +107,7 @@ from desktop.native.motion import switch_page
 from desktop.native.previews import CANVAS
 from desktop.native.remind import ALARM_SNOOZE_MIN, reminder_lead_min
 from desktop.native.settings_copy import (
+    ALARM_NOTE,
     ALARM_TONE_LABELS,
     DRAG_STEP_CHOICES,
     DRAG_STEP_QUESTION,
@@ -115,6 +116,7 @@ from desktop.native.settings_copy import (
     SPOTIFY_LINK_HINT,
     SPOTIFY_TONE_NOTE,  # noqa: F401
     SPOTIFY_TONE_REST,
+    ring_days,
 )
 from desktop.native.sound import Bell
 from desktop.native.spotify import SpotifyPlayer, open_in_app
@@ -306,7 +308,6 @@ FOCUS_AUDIO_CHOICES = (
     ("White noise", "white-noise"),
     ("Spotify", "spotify"),
 )
-ALARM_NOTE = "An alarm rings at its time on the days you pick, until you dismiss or snooze it."
 # A checkbox's words do not wrap, so what needs more than a few words says it underneath.
 DND_NOTE = "Each one stays in the window until you press Got it."
 TRAY_NOTE = "FlexWeek waits in the tray, so reminders and alarms still come."
@@ -314,23 +315,6 @@ NO_SOUND = (
     "No sound played. Check that Volume is above 0 % and that your speakers or headphones are connected"
     " and not muted, then press Play again."
 )
-
-
-def ring_days(days: list[int]) -> str:
-    """The days an alarm rings, as a student would say them."""
-    chosen = sorted(set(days))
-    if chosen == list(range(7)):
-        return "every day"
-    if chosen == [0, 1, 2, 3, 4]:
-        return "Monday to Friday"
-    if chosen == [5, 6]:
-        return "Saturday and Sunday"
-    if not chosen:
-        return "no days"
-    if len(chosen) == 1:
-        return DAY_FULL[chosen[0]]
-    short = [DAY_FULL[day][:3] for day in chosen]
-    return ", ".join(short[:-1]) + " and " + short[-1]
 
 
 def _note(words: str, name: str) -> QLabel:
