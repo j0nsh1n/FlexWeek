@@ -104,3 +104,37 @@ def test_planning_style_shows_the_saved_choice_and_saves_a_change(
     _panel(window).setPlanningStyle("sometimes")
     _pump(qapp)
     assert _panel(window).property("state")["planningStyle"] == "suggest"
+
+
+def test_reminder_lead_takes_any_minute_from_0_to_120(qapp: QApplication, window: NativeWindow) -> None:
+    root = _open_settings(qapp, window, "alerts")
+    slider = _named(root, "reminderLead")[0]
+    assert (slider.parentItem().property("from"), slider.parentItem().property("to")) == (0, 120)
+    for minutes in (20, 0, 120, 45):
+        _panel(window).setReminderLead(minutes)
+        wait_until(qapp, lambda minutes=minutes: _prefs(window).get("reminder_lead_min") == minutes)
+        state = _panel(window).property("state")
+        assert state["reminderLead"] == minutes
+        assert slider.parentItem().property("value") == minutes
+
+
+def test_reminder_lead_refuses_what_is_out_of_range_with_the_same_words(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _open_settings(qapp, window, "alerts")
+    _panel(window).setReminderLead(30)
+    wait_until(qapp, lambda: _prefs(window).get("reminder_lead_min") == 30)
+    sent: list[dict] = []
+    monkeypatch.setattr(window.session, "save_preferences", lambda updates, then=None: sent.append(updates))
+    for bad in (-1, 121, 5000):
+        _panel(window).setReminderLead(bad)
+        assert sent == [], "nothing is sent to the server"
+        assert _prefs(window).get("reminder_lead_min") == 30
+        assert _panel(window).property("state")["notice"] == "Could not save that."
+
+
+def test_the_lead_slider_is_hidden_while_reminders_are_off(qapp: QApplication, window: NativeWindow) -> None:
+    root = _open_settings(qapp, window, "alerts")
+    _click_segment(qapp, window, _named(root, "reminder")[0], "Off")
+    wait_until(qapp, lambda: _prefs(window).get("reminders_enabled") is False)
+    assert not _named(root, "reminderLead")[0].parentItem().property("visible")

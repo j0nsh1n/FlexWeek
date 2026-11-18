@@ -30,6 +30,17 @@ SectionPage {
             current: page.st.reminder || ""
             onChosen: (value) => page.panel.setReminder(value)
         }
+        SliderRow {
+            key: "reminderLead"
+            visible: page.st.reminder !== "off"
+            title: "Minutes before"
+            unit: " min"
+            from: 0
+            to: page.st.reminderLeadMax === undefined ? 120 : page.st.reminderLeadMax
+            step: 1
+            value: page.st.reminderLead === undefined ? 5 : page.st.reminderLead
+            onMoved: (value) => page.panel.setReminderLead(Math.round(value))
+        }
         ToggleRow {
             key: "reminderSound"
             title: "Play a sound"

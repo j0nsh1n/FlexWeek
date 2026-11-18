@@ -76,6 +76,7 @@ from desktop.native.material.theme import (
     store_material,
     theme_object,
 )
+from desktop.native.remind import reminder_lead_min
 from desktop.native.reuse import AVAILABILITY_LIMIT, PROTECTED_KINDS
 from desktop.native.settings_copy import (
     ALARM_NOTE,
@@ -108,6 +109,8 @@ _FIELDS = frozenset(Preferences.model_fields)
 SECTIONS = ("look", "planning", "focus", "alerts", "computer")
 CUTOFFS = ("20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00")
 REMINDERS = ("off", "5", "10", "15")
+# Minutes before a block that a reminder may fire: the Widgets spinner's range, one minute a step.
+LEAD_MAX = 120
 REMINDER_CHIPS = (
     {"label": "Off", "value": "off"},
     {"label": "5m", "value": "5"},
@@ -1037,6 +1040,8 @@ class SettingsBridge(QObject):
             "spotifyError": self._spotify_error,
             "reminder": reminder,
             "reminderChoices": reminder_choices,
+            "reminderLead": reminder_lead_min(prefs),
+            "reminderLeadMax": LEAD_MAX,
             **timer,
             "timerNote": self._timer_note,
             "autoSplit": prefs.get("auto_split_pomodoro") is True,
@@ -1403,6 +1408,14 @@ class SettingsBridge(QObject):
             self._write({"reminders_enabled": False})
             return
         self._write({"reminders_enabled": True, "reminder_lead_min": int(value)})
+
+    @Slot(int)
+    def setReminderLead(self, minutes: int) -> None:
+        if isinstance(minutes, bool) or not 0 <= minutes <= LEAD_MAX:
+            self._notice = SAVE_REFUSED
+            self._publish()
+            return
+        self._write({"reminder_lead_min": int(minutes)})
 
     def _round_to_grid(self, updates: dict[str, Any], prefs: dict[str, Any]) -> bool:
         """Splitting needs 15-minute lengths (the backend refuses others). Puts the rounded ones in
