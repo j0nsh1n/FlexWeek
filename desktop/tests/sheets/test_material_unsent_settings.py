@@ -1,6 +1,6 @@
 # ruff: noqa: F811
 """Settings and Material 3 in one window: a Settings change the account refused to save is still on the
-page after switching between Material and the Widgets styles and after Sign out, and Settings stays open
+page after Sign out, and Settings stays open
 (or comes back) around a refresh and Done.
 """
 
@@ -20,7 +20,11 @@ from PySide6.QtWidgets import QApplication, QDialog, QPushButton, QSpinBox, QWid
 from desktop.native.remind import reminder_lead_min  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_window import material_window, qapp  # noqa: E402, F401
-from desktop.tests.material_support import pump, show_material  # noqa: E402
+from desktop.tests.material_support import (  # noqa: E402
+    pump,
+    show_material,
+    show_widgets,  # noqa: E402
+)
 from desktop.tests.waiting import wait_until  # noqa: E402
 
 SIGN_OUT_REFUSED = (
@@ -66,72 +70,6 @@ def _accept_sign_out() -> None:
             QTimer.singleShot(20, press)
 
     QTimer.singleShot(0, press)
-
-
-def test_an_unsent_settings_change_survives_the_swap(
-    qapp: QApplication, material_window: NativeWindow
-) -> None:
-    window = material_window
-    page = _open_widgets_settings(window)
-    clock = page.findChild(QWidget, "prefClock")
-    # The change is whatever the open page is showing, not the account dict. A week refresh can
-    # have built this page before a later test wrote the account's clock.
-    wanted = not bool(clock.currentData())
-    window.session.save_preferences = lambda _wanted, _done: False
-
-    clock.setCurrentIndex(0 if wanted else 1)
-    _hold_the_page_still(page)
-    page.findChild(QPushButton, "chooseMaterial").click()
-    pump(qapp)
-
-    assert window._stack.currentWidget().objectName() == "materialPage"
-    assert page.updates()["clock_24h"] is wanted
-    assert window._settings_unsent() is True
-    window._use_widgets_styles()
-    pump(qapp)
-    assert window._stack.currentWidget().objectName() == "weekPage"
-    assert window._settings is page
-    assert page.updates()["clock_24h"] is wanted
-    window._open_settings()
-    assert window._settings_unsent() is True
-    assert bool(page.findChild(QWidget, "prefClock").currentData()) is wanted
-
-
-def test_an_unsent_reminder_lead_survives_the_swap_back(
-    qapp: QApplication, material_window: NativeWindow
-) -> None:
-    """A refused preference save must still be on the lead control after Material and after reopening."""
-    window = material_window
-    page = _open_widgets_settings(window)
-    lead = page.findChild(QSpinBox, "prefLead")
-    assert lead.value() == 5
-    assert lead.value() == reminder_lead_min(window.session.preferences)
-    saved: list[object] = []
-
-    def refuse(wanted: dict, _done: object) -> bool:
-        saved.append(wanted.get("reminder_lead_min"))
-        return False
-
-    window.session.save_preferences = refuse
-    try:
-        lead.setValue(17)
-        _hold_the_page_still(page)
-        page.findChild(QPushButton, "chooseMaterial").click()
-        pump(qapp)
-        assert window._stack.currentWidget().objectName() == "materialPage"
-        window._use_widgets_styles()
-        pump(qapp)
-        assert window._stack.currentWidget().objectName() == "weekPage"
-        assert window._settings_unsent() is True
-        assert lead.value() == 17
-        assert window._save_before_leaving(lambda: None) is False
-        wait_until(qapp, lambda: 17 in saved, what="the refused save to be offered the lead")
-        window._open_settings()
-        pump(qapp)
-        assert window._stack.currentWidget().objectName() == "settingsPage"
-        assert page.findChild(QSpinBox, "prefLead").value() == 17
-    finally:
-        _stop_leaving(window)
 
 
 def test_sign_out_keeps_an_unsent_settings_change_on_both_surfaces(
@@ -185,7 +123,7 @@ def test_sign_out_keeps_an_unsent_settings_change_on_both_surfaces(
         assert root.objectName() == "materialShell"
 
         offered.clear()
-        window._use_widgets_styles()
+        show_widgets(window)
         pump(qapp)
         assert window._stack.currentWidget().objectName() == "weekPage"
         assert window._settings_unsent() is True

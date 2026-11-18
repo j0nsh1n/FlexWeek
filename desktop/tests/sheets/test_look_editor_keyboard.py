@@ -14,13 +14,13 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import pump
+from desktop.tests.material_support import pump, show_widgets
 from desktop.tests.sheets.support_settings_keys import open_editor
 from desktop.tests.window_support import qapp  # noqa: F401
 
 
 def test_escape_closes_the_look_editor(qapp: QApplication, window: NativeWindow) -> None:
-    window._use_widgets_styles()
+    show_widgets(window)
     page, editor = open_editor(qapp, window)
     window.activateWindow()
     pump(qapp)
@@ -34,7 +34,7 @@ def test_escape_closes_the_look_editor(qapp: QApplication, window: NativeWindow)
 def test_tab_reaches_done_in_the_look_editor_in_five_presses(
     qapp: QApplication, window: NativeWindow
 ) -> None:
-    window._use_widgets_styles()
+    show_widgets(window)
     _page, editor = open_editor(qapp, window)
     window.activateWindow()
     pump(qapp)

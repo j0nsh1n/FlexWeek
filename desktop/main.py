@@ -62,7 +62,7 @@ try:
     from PySide6.QtCore import QStandardPaths, QTimer
     from PySide6.QtGui import QIcon, QImage
     from PySide6.QtNetwork import QLocalSocket
-    from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
+    from PySide6.QtWidgets import QApplication, QMessageBox
 
     import backend
     from desktop.native.calendar import sunday_due
@@ -71,7 +71,6 @@ try:
     from desktop.native.devices import SyncHost
     from desktop.native.fonts import load_fonts
     from desktop.native.kept import KeptSession
-    from desktop.native.setup import DONE as SETUP_DONE
     from desktop.native.updater import collect_stale_downloads
     from desktop.native.version import VERSION
     from desktop.native.window import NativeWindow
@@ -177,8 +176,6 @@ class NativeSmoke:
         self._stage = "first screen"
         self._material_ok = False
         self._material_colors = 0
-        # The saved style belongs to the computer, not to this run: it is put back before the quit.
-        self._style_before = window._surface
         self._verdict: tuple[bool, str] | None = None
         self._poll = QTimer(window)
         self._poll.setInterval(SMOKE_POLL_MS)
@@ -196,45 +193,42 @@ class NativeSmoke:
         if not window.isVisible():
             return
         page = window._stack.currentWidget().objectName() if window._stack.currentWidget() else ""
+        bridge = window._account_bridge()
+        phase = bridge.phase if bridge is not None else ""
         if not self._walk:
-            if page == "authPage":
+            if page == "materialPage" and phase == "sign-in":
                 self._finish(True, "first screen shown")
             return
         if self._stage == "first screen":
-            if page != "authPage":
+            if page != "materialPage" or phase != "sign-in":
                 return
             username = "smoke_" + secrets.token_hex(6)
             password = secrets.token_urlsafe(18)
-            window.username.setText(username)
-            window.password.setText(password)
-            create = window.findChild(QPushButton, "createAccount")
-            if create is None:
-                self._finish(False, "create account control missing")
-                return
-            create.click()
+            bridge.showCreate()
+            bridge.setUsername(username)
+            bridge.setPassword(password)
+            bridge.submit()
             self._stage = "recovery codes"
             return
         if self._stage == "recovery codes":
-            if page != "recoveryPage":
+            if phase != "recovery" or len(bridge.codes) != 8:
                 return
-            codes = [line for line in window.recovery_list.text().splitlines() if line.strip()]
-            if len(codes) != 8:
+            bridge.setRecoveryAck(True)
+            if not bridge.recoveryReady:
                 return
-            window.recovery_ack.setChecked(True)
-            window.recovery_continue.click()
+            bridge.finishRecovery()
             self._stage = "setup"
             return
         if self._stage == "setup":
-            # One page per poll, each skipped, so every page of setup is drawn in the build under test.
-            if page == "setupPage":
-                setup = window.setup_page
-                (setup.next if setup.step == SETUP_DONE else setup.skip).click()
+            # Every page of setup is skipped at once; the pages themselves are drawn by the tests.
+            if phase == "setup":
+                bridge.setupSkipAll()
                 return
-            if page == "weekPage":
+            if phase == "app":
                 self._stage = "week"
             return
         if self._stage == "week":
-            if page != "weekPage" or window.session.account is None or window.session.busy:
+            if phase != "app" or window.session.account is None or window.session.busy:
                 return
             if window._setup_prefs or window._setup_week:
                 return
@@ -270,8 +264,7 @@ class NativeSmoke:
                 self._finish(False, "window blank after setup Solve")
                 return
             self._facts_colors = painted_colors(window.grab().toImage())
-            # The release is for Material too: switch to it and require the Material window itself.
-            window._back_to_material()
+            # The release must show the Material window itself, not the draw-error page.
             self._stage = "material window"
             return
         if self._stage == "material window":
@@ -280,29 +273,11 @@ class NativeSmoke:
                 return
             self._material_colors = colors
             if state == "fallback":
-                self._verdict = (False, "Material 3 did not open: the fallback is showing")
+                self._verdict = (False, "Material 3 did not open: the draw-error page is showing")
             else:
                 self._material_ok = True
                 self._verdict = (True, SMOKE_PASSED)
-            self._restore_style()
-            self._stage = "style restore"
-            return
-        if self._stage == "style restore" and self._verdict is not None and self._style_restored(page):
             self._finish(*self._verdict)
-
-    def _restore_style(self) -> None:
-        window = self._window
-        if window._surface == self._style_before:
-            return
-        if self._style_before == "material":
-            window._back_to_material()
-        else:
-            window._use_widgets_styles()
-
-    def _style_restored(self, page: str) -> bool:
-        if self._window._surface != self._style_before:
-            return False
-        return self._style_before != "widgets" or page == "weekPage"
 
     def _finish(self, ok: bool, stage: str) -> None:
         if self._done:
@@ -310,7 +285,6 @@ class NativeSmoke:
         self._done = True
         self._poll.stop()
         window = self._window
-        self._restore_style()
         facts = {
             "ok": ok and (self._material_ok or not self._walk),
             "stage": stage,

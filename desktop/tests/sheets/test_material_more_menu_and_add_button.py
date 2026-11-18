@@ -19,7 +19,13 @@ from PySide6.QtWidgets import QApplication, QWidget  # noqa: E402
 
 from desktop.native.window import WEEK_LIST_NAME, NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_window import material_window, qapp  # noqa: E402, F401
-from desktop.tests.material_support import named, pump, qml, show_material  # noqa: E402
+from desktop.tests.material_support import (  # noqa: E402
+    named,
+    pump,
+    qml,
+    show_material,
+    show_widgets,  # noqa: E402
+)
 
 
 def _menu_labels(menu: QWidget) -> list[str]:
@@ -64,7 +70,7 @@ def test_material_more_lists_the_planning_actions_and_leaves_the_widgets_menu_al
         "Sign out",
     ]
     bridge.sheets.closeMore()
-    window._use_widgets_styles()
+    show_widgets(window)
     pump(qapp)
     window.more_menu.popup(window.more_button.mapToGlobal(window.more_button.rect().bottomLeft()))
     pump(qapp)

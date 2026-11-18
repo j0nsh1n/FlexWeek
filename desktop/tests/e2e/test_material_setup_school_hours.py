@@ -20,7 +20,6 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 from desktop.tests.day.support_material_window import qapp  # noqa: E402, F401
 from desktop.tests.test_material_account_setup import (  # noqa: E402
     Launches,
-    account,
     create,
     look_file,
     through_recovery,
@@ -37,10 +36,8 @@ def test_setup_wizard_school_row_format(qapp: QApplication, tmp_path: Path) -> N
         win = made.launch()
         win.resize(1280, 800)
         account_pump(qapp, 10)
-        bridge = account(win)
         create(qapp, win, "audit_student")
         through_recovery(qapp, win)
-        bridge.setupNext()  # Style -> Week
         account_pump(qapp, 10)
 
         start_inputs = account_named(win, "setupSchoolStartInput")

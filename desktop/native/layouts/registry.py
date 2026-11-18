@@ -312,21 +312,17 @@ def sanitize_layout(raw: object) -> dict:
     return clean
 
 
-SURFACES = ("widgets", "material")
-SURFACE_DEFAULT = "widgets"
+SURFACES = ("material",)
+SURFACE_DEFAULT = "material"
 
 
 def sanitize_surface(raw: object) -> str:
-    """The whole-window surface named by a look file.
+    """The whole-window surface a look file names.
 
-    `surface` is a top-level key, never one of the layout's main, day or options.
-    A missing key, an old file, or a name this build does not know means the
-    Widgets styles. The saved choice is not rewritten.
+    Material 3 is the only style a student can reach, so whatever the file says, including the
+    Widgets value an older build wrote, opens Material. The file is not rewritten for keys this
+    does not own.
     """
-    if isinstance(raw, dict):
-        raw = raw.get("surface", SURFACE_DEFAULT)
-    if isinstance(raw, str) and raw in SURFACES:
-        return raw
     return SURFACE_DEFAULT
 
 

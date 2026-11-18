@@ -22,7 +22,7 @@ from desktop.native.material import bridge_sheets as bridge_sheets_module
 from desktop.native.widgets import ACTION_TOAST_MS
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import pump, qml
+from desktop.tests.material_support import pump, qml, show_widgets
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material_page import fresh_material
 
@@ -62,7 +62,7 @@ def test_the_undo_toast_stays_at_least_ten_seconds(qapp: QApplication, window: N
 
     # Widgets toast duration
     assert ACTION_TOAST_MS >= 10000
-    window._use_widgets_styles()
+    show_widgets(window)
     window.toast.show_message("Homework scheduled", "Undo")
     assert window.toast._timer.interval() >= 10000
     window.toast.hide()
@@ -133,7 +133,7 @@ def test_the_undo_toast_pauses_while_hovered_and_while_focused(
     bridge.sheets.dismissNotice()
 
     # Widgets toast pause
-    window._use_widgets_styles()
+    show_widgets(window)
     window.activateWindow()
     wait_until(qapp, window.isActiveWindow)
     window.toast.show_message("History essay moved", "Undo")
@@ -171,7 +171,7 @@ def test_undo_toasts_show_the_ctrl_z_hint(qapp: QApplication, window: NativeWind
 
     # Widgets toast
     window._surface = "widgets"
-    window._use_widgets_styles()
+    show_widgets(window)
     window._show_surface()
     window.toast.show_message("Placed 1 homework block.", "Undo")
     pump(qapp)

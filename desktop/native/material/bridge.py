@@ -87,7 +87,6 @@ class MaterialBridge(QObject):
     changed = Signal()
     blocksChanged = Signal()
     homeworkChanged = Signal()
-    widgetsRequested = Signal()
 
     def __init__(self, window: QObject) -> None:
         super().__init__(window)
@@ -602,10 +601,6 @@ class MaterialBridge(QObject):
     @Slot()
     def addHomework(self) -> None:
         self._sheets.openHomework()
-
-    @Slot()
-    def useWidgets(self) -> None:
-        self.widgetsRequested.emit()
 
     @Slot()
     def showWeek(self) -> None:

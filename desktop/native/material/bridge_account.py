@@ -77,20 +77,6 @@ from desktop.native.fields import (
     week_starts_on,
 )
 from desktop.native.hours.geometry import drag_step
-from desktop.native.layouts.registry import (
-    DESIGN_LOOKS,
-    LAYOUTS,
-    layouts_for,
-    options_for,
-    sanitize_layout,
-)
-from desktop.native.look import (
-    KNOB_VALUE_LABELS,
-    LOOK_KNOBS,
-    effective_look,
-    parse_look_menu_token,
-    sanitize_look,
-)
 from desktop.native.remind import reminder_lead_min
 from desktop.native.settings_copy import (
     ALARM_TONE_LABELS,
@@ -100,26 +86,20 @@ from desktop.native.settings_copy import (
     SPORT_FALLBACK,
     SPOTIFY_TONE_NOTE,
 )
-from desktop.native.setup import STYLES, Style, style_layout, style_look
 from desktop.native.setup_steps import (
-    COLOURS,
     DONE,
     FINISH_LABEL,
     FIRST,
     HOMEWORK,
-    LOOK,
-    LOOK_STEPS,
     MAX_ACTIVITIES,
     MAX_FIRST_HOMEWORK,
     NEXT_LABEL,
     NOTES,
-    OWN_LOOK_LABEL,
     RAIL,
     RAIL_STATES,
     REMINDERS,
     SKIP_ALL_LABEL,
     SKIP_STEP_LABEL,
-    STYLE,
     TITLES,
     WEEK,
     activity_category_for,
@@ -134,18 +114,8 @@ from desktop.native.work_windows import MAX_WORK_WINDOWS, PRESETS, PRESETS_NOTE
 
 log = logging.getLogger("flexweek.material")
 
-# The four shipped styles, plus Material 3. The widgets list is unchanged.
-# Material 3 uses the classic light pack, so Next keeps a light week and the
-# saved surface stays Material.
-MATERIAL_STYLE = Style(
-    "material",
-    "Material 3",
-    "The Material week",
-    "classic",
-    "pack:light-frost",
-    "light-frost",
-)
-MATERIAL_STYLES = (MATERIAL_STYLE, *STYLES)
+# The rail starts at Your week: Material has no style page, since Material 3 is the only style.
+RAIL_STEPS = RAIL[1:]
 RECOVERY_HEADING = "Save these recovery codes"
 RECOVERY_NOTE = (
     "They are the only way to reset your password. FlexWeek can't email you. "
@@ -245,10 +215,6 @@ class Table(QAbstractListModel):
 
 # model name -> the list property it follows
 TABLES = {
-    "stylesModel": "styles",
-    "mainsModel": "mains",
-    "knobsModel": "knobRows",
-    "dayLayoutsModel": "dayLayouts",
     "activitiesModel": "activities",
     "workModel": "workWindows",
     "homeworkModel": "homeworkRows",
@@ -287,15 +253,8 @@ class AccountBridge(QObject):
         self._ask: dict = {}
         self._edited_done = None
         self._state: Any = None
-        self._step = STYLE
-        self._furthest = STYLE
-        self._own_look = False
-        self._style_key = "material"
-        self._style_tokens: dict[str, str] = {}
-        self._pack = "system"
-        self._look = sanitize_look(None)
-        self._layout = sanitize_layout(None)
-        self._entered = (self._pack, deepcopy(self._look), deepcopy(self._layout))
+        self._step = WEEK
+        self._furthest = WEEK
         self._clock_24h = False
         self._week_start = "monday"
         self._school_days = [0, 1, 2, 3, 4]
@@ -322,8 +281,6 @@ class AccountBridge(QObject):
         self._skip_dismiss = ""
         self._skip_dismiss_keeps = False
         self._summary: list[dict[str, str]] = []
-        # The surface the student picked on the style page, written when setup ends.
-        self._surface_pick: str | None = None
         self._tables = {name: Table(self) for name in TABLES}
         # Before QML's own handlers, so a binding that reads a table sees the new rows.
         self.changed.connect(self._sync_tables)
@@ -339,18 +296,6 @@ class AccountBridge(QObject):
     @property
     def setup_step(self) -> int:
         return self._step
-
-    def apply_surface(self) -> None:
-        """Make the style picked in setup the window's surface. Material stays unless a standard style won."""
-        pick = self._surface_pick
-        self._surface_pick = None
-        window = self._window
-        if pick is None or pick == window._surface:  # type: ignore[attr-defined]
-            return
-        window._surface = pick  # type: ignore[attr-defined]
-        window._save_look()  # type: ignore[attr-defined]
-        if pick == "widgets":
-            window._week_keys(True)  # type: ignore[attr-defined]
 
     # Sign-in
 
@@ -511,87 +456,18 @@ class AccountBridge(QObject):
     def open_setup(self, state: Any, step: int) -> None:
         """Fill setup from this account's own state. A previous account's rows are not kept."""
         self._state = deepcopy(state)
-        self._pack = str(state.pack)
-        self._look = sanitize_look(state.look)
-        self._layout = sanitize_layout(state.layout)
-        self._entered = (self._pack, deepcopy(self._look), deepcopy(self._layout))
-        self._own_look = step in (LOOK, COLOURS)
-        self._style_tokens = {}
         self._load_fields()
-        self._step = step if step in range(DONE + 1) else STYLE
+        # A saved step before Your week is from the removed style pages: setup starts at Your week.
+        self._step = step if step in range(WEEK, DONE + 1) else WEEK
         self._furthest = self._step
         self._problem_text = ""
         self._test_result = ""
         self._skip_open = False
         self._made = {}
-        if self._step == STYLE and state.first_run:
-            self._style_key = MATERIAL_STYLE.key
-        else:
-            matched = self._matching_style()
-            self._style_key = matched or (MATERIAL_STYLE.key if state.first_run else "plain")
         self._phase = "setup"
-        if self._step == STYLE:
-            self._apply_style(self._style_key, preview=True)
-        else:
-            self._apply_clock()
+        self._apply_clock()
         if self._step == DONE:
             self._summary = self._build_summary()
-        self.changed.emit()
-
-    @Slot(str)
-    def chooseStyle(self, key: str) -> None:  # noqa: N802 — QML slot
-        if self._style(key) is None:
-            return
-        self._apply_style(key, preview=True)
-        self.changed.emit()
-
-    @Slot()
-    def chooseOwnLook(self) -> None:  # noqa: N802 — QML slot
-        self._own_look = True
-        self._surface_pick = "widgets"
-        self._leave(LOOK, keep=False)
-
-    @Slot(str)
-    def chooseMain(self, layout_id: str) -> None:  # noqa: N802 — QML slot
-        if layout_id not in DESIGN_LOOKS:
-            return
-        options = deepcopy(self._layout["options"])
-        if "look" not in options.get(layout_id, {}):
-            options[layout_id] = {**options.get(layout_id, {}), "look": DESIGN_LOOKS[layout_id][0][0]}
-        self._layout = sanitize_layout({**self._layout, "main": layout_id, "options": options})
-        self._preview()
-        self.changed.emit()
-
-    @Slot(str)
-    def chooseColour(self, token: str) -> None:  # noqa: N802 — QML slot
-        main = self._layout["main"]
-        options = deepcopy(self._layout["options"])
-        options[main] = {**options.get(main, {}), "look": token}
-        parsed = parse_look_menu_token(token)
-        if parsed is not None and parsed[0] == "pack":
-            self._pack = parsed[1]
-        self._layout = sanitize_layout({**self._layout, "options": options})
-        self._preview()
-        self.changed.emit()
-
-    @Slot(str, str)
-    def chooseKnob(self, knob: str, value: str) -> None:  # noqa: N802 — QML slot
-        if knob not in {"text", "density", "font", "depth"} or value not in LOOK_KNOBS[knob]:
-            return
-        knobs = dict(sanitize_look(self._look)["knobs"])
-        knobs[knob] = value
-        if knob == "density" and self._layout["main"] == "timeline":
-            options = deepcopy(self._layout["options"])
-            options.setdefault("timeline", {})["density"] = value or "comfortable"
-            self._layout = sanitize_layout({**self._layout, "options": options})
-        self._look = sanitize_look({"preset": "default", "knobs": knobs})
-        self._preview()
-        self.changed.emit()
-
-    @Slot(str)
-    def chooseDay(self, layout_id: str) -> None:  # noqa: N802 — QML slot
-        self._layout = sanitize_layout({**self._layout, "day": layout_id})
-        self._preview()
         self.changed.emit()
 
     @Slot(int)
@@ -900,7 +776,7 @@ class AccountBridge(QObject):
 
     @Slot()
     def setupBack(self) -> None:  # noqa: N802 — QML slot
-        if self._step != STYLE:
+        if self._step != WEEK:
             self._leave(self._before(), keep=False)
 
     @Slot()
@@ -916,10 +792,7 @@ class AccountBridge(QObject):
 
     @Slot()
     def setupSkipAll(self) -> None:  # noqa: N802 — QML slot
-        if self._step in LOOK_STEPS:
-            self._restore_entered()
-            self._preview()
-        elif self._step == WEEK:
+        if self._step == WEEK:
             self._clock_24h = (self._state.preferences.get("clock_24h") is True) if self._state else False
             self._apply_clock()
         self._window._finish_setup()  # type: ignore[attr-defined]
@@ -937,7 +810,7 @@ class AccountBridge(QObject):
     @Slot(int, result=int)
     def stepFor(self, index: int) -> int:  # noqa: N802 — QML slot
         """The first step of the rail's `index`th entry."""
-        return RAIL[index][1][0] if 0 <= index < len(RAIL) else STYLE
+        return RAIL_STEPS[index][1][0] if 0 <= index < len(RAIL_STEPS) else WEEK
 
     @Slot(str)
     def answerSkip(self, choice: str) -> None:  # noqa: N802 — QML slot
@@ -1018,22 +891,6 @@ class AccountBridge(QObject):
     @Property(str, notify=changed)
     def statusLine(self) -> str:  # noqa: N802 — QML name
         return self._status
-
-    @Property(QObject, constant=True)
-    def stylesModel(self) -> QObject:  # noqa: N802 — QML name
-        return self._tables["stylesModel"]
-
-    @Property(QObject, constant=True)
-    def mainsModel(self) -> QObject:  # noqa: N802 — QML name
-        return self._tables["mainsModel"]
-
-    @Property(QObject, constant=True)
-    def knobsModel(self) -> QObject:  # noqa: N802 — QML name
-        return self._tables["knobsModel"]
-
-    @Property(QObject, constant=True)
-    def dayLayoutsModel(self) -> QObject:  # noqa: N802 — QML name
-        return self._tables["dayLayoutsModel"]
 
     @Property(QObject, constant=True)
     def activitiesModel(self) -> QObject:  # noqa: N802 — QML name
@@ -1137,7 +994,7 @@ class AccountBridge(QObject):
 
     @Property(bool, notify=changed)
     def backVisible(self) -> bool:  # noqa: N802 — QML name
-        return self._phase == "setup" and self._step != STYLE
+        return self._phase == "setup" and self._step != WEEK
 
     @Property(bool, notify=changed)
     def skipVisible(self) -> bool:  # noqa: N802 — QML name
@@ -1155,10 +1012,6 @@ class AccountBridge(QObject):
     def backLabel(self) -> str:  # noqa: N802 — QML name
         return "Back"
 
-    @Property(str, constant=True)
-    def ownLookLabel(self) -> str:  # noqa: N802 — QML name
-        return OWN_LOOK_LABEL
-
     @Property(str, notify=changed)
     def setupProblem(self) -> str:  # noqa: N802 — QML name
         return self._problem_text
@@ -1166,7 +1019,7 @@ class AccountBridge(QObject):
     @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
     def rail(self) -> list:
         rows = []
-        for index, (name, steps) in enumerate(RAIL):
+        for index, (name, steps) in enumerate(RAIL_STEPS):
             current = self._step in steps
             done = max(steps) < self._step or (self._furthest >= DONE and steps[0] != DONE)
             state = "current" if current else "finished" if done else "pending"
@@ -1180,74 +1033,6 @@ class AccountBridge(QObject):
                 }
             )
         return rows
-
-    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
-    def styles(self) -> list:
-        return [
-            {
-                "key": style.key,
-                "name": style.name,
-                "note": style.note,
-                "selected": style.key == self._style_key and not self._own_look,
-            }
-            for style in MATERIAL_STYLES
-        ]
-
-    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
-    def mains(self) -> list:
-        return [
-            {
-                "id": spec.id,
-                "label": spec.label,
-                "note": spec.summary,
-                "selected": spec.id == self._layout["main"],
-            }
-            for spec in layouts_for("plan")
-        ]
-
-    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
-    def colours(self) -> list:
-        main = self._layout["main"]
-        current = options_for(self._layout, main).get("look")
-        rows = [
-            {"value": value, "label": label, "selected": value == current}
-            for value, label in (*DESIGN_LOOKS[main], ("your", "Your look"))
-        ]
-        return rows
-
-    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
-    def knobRows(self) -> list:  # noqa: N802 — QML name
-        knobs = effective_look(self._look)
-        labels = (("text", "Text size"), ("density", "Spacing"), ("font", "Font"), ("depth", "Shadows"))
-        rows = []
-        for key, label in labels:
-            rows.append(
-                {
-                    "key": key,
-                    "label": label,
-                    "choices": [
-                        {
-                            "value": value,
-                            "label": KNOB_VALUE_LABELS.get(value, value.title()),
-                            "selected": knobs.get(key) == value,
-                        }
-                        for value in LOOK_KNOBS[key]
-                    ],
-                }
-            )
-        return rows
-
-    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
-    def dayLayouts(self) -> list:  # noqa: N802 — QML name
-        return [
-            {
-                "id": spec.id,
-                "label": spec.label,
-                "note": spec.summary,
-                "selected": spec.id == self._layout["day"],
-            }
-            for spec in layouts_for("day")
-        ]
 
     @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
     def schoolDays(self) -> list:  # noqa: N802 — QML name
@@ -1560,55 +1345,8 @@ class AccountBridge(QObject):
         self._save_label = RECOVERY_SAVE
         self.changed.emit()
 
-    def _style(self, key: str) -> Style | None:
-        return next((style for style in MATERIAL_STYLES if style.key == key), None)
-
-    def _matching_style(self) -> str | None:
-        from desktop.native.setup import matching_style
-
-        return matching_style(self._pack, self._look, self._layout)
-
-    def _apply_style(self, key: str, *, preview: bool) -> None:
-        style = self._style(key)
-        if style is None:
-            return
-        self._style_key = style.key
-        self._own_look = False
-        self._pack = style.pack
-        self._look = style_look(style)
-        self._layout = style_layout(style, self._layout)
-        token = self._style_tokens.get(style.main) or style.colour or DESIGN_LOOKS[style.main][0][0]
-        self._style_tokens[style.main] = token
-        self._layout["options"][style.main]["look"] = token
-        self._layout = sanitize_layout(self._layout)
-        if preview:
-            self._preview()
-
-    def _preview(self) -> None:
-        """Dress the window in the look being tried, then republish Material.
-
-        The saved surface is not changed. A standard style still stores its own
-        pack for the day the student switches back to the widgets styles.
-        """
-        self._window._preview_setup_look(  # type: ignore[attr-defined]
-            {"pack": self._pack, "look": deepcopy(self._look), "layout": deepcopy(self._layout)}
-        )
-        page = getattr(self._window, "_material_page", None)
-        if page is None or not getattr(page, "_ready", False):
-            return
-        try:
-            page.publish()
-        except Exception as error:
-            log.warning("Material 3 could not be re-dressed: %s", error)
-
     def _apply_clock(self) -> None:
         set_clock_24h(self._clock_24h)
-
-    def _restore_entered(self) -> None:
-        pack, look, layout = self._entered
-        self._pack = pack
-        self._look = deepcopy(look)
-        self._layout = deepcopy(layout)
 
     def _load_fields(self) -> None:
         prefs = dict(self._state.preferences)
@@ -1702,10 +1440,6 @@ class AccountBridge(QObject):
             return None
 
     def _answer(self) -> dict | None:
-        if self._step == STYLE:
-            self._apply_style(self._style_key, preview=False)
-        if self._step in LOOK_STEPS:
-            return {"pack": self._pack, "look": deepcopy(self._look), "layout": deepcopy(self._layout)}
         if self._step == WEEK:
             return {
                 "blocks": self._week_blocks(),
@@ -1784,12 +1518,7 @@ class AccountBridge(QObject):
     def _absorb(self, answer: dict) -> None:
         if self._state is None:
             return
-        if self._step in LOOK_STEPS:
-            self._state.pack = answer["pack"]
-            self._state.look = deepcopy(answer["look"])
-            self._state.layout = deepcopy(answer["layout"])
-            self._entered = (self._pack, deepcopy(self._look), deepcopy(self._layout))
-        elif self._step == WEEK:
+        if self._step == WEEK:
             kept = [block for block in self._state.blocks if not is_setup_block(block)]
             self._state.blocks = kept + deepcopy(answer["blocks"])
             self._state.preferences["day_cutoff"] = answer["day_cutoff"]
@@ -1811,8 +1540,6 @@ class AccountBridge(QObject):
                 self.changed.emit()
                 return
             answer = self._answer()
-            if self._step == STYLE and not self._own_look:
-                self._surface_pick = "material" if self._style_key == MATERIAL_STYLE.key else "widgets"
             if self._step == WEEK and answer is not None:
                 # Cancel stays on this page: nothing typed is kept, and the week-start file is not
                 # written, until the student answers.
@@ -1821,9 +1548,6 @@ class AccountBridge(QObject):
                     return
                 answer["edited"] = choice
                 save_week_starts_on(self._week_start)
-        elif self._step in LOOK_STEPS and destination not in LOOK_STEPS:
-            self._restore_entered()
-            self._preview()
         elif self._step == WEEK:
             self._clock_24h = (self._state.preferences.get("clock_24h") is True) if self._state else False
             self._apply_clock()
@@ -1833,28 +1557,20 @@ class AccountBridge(QObject):
         self._show(destination)
 
     def _show(self, step: int) -> None:
-        if step in LOOK_STEPS and self._step not in LOOK_STEPS:
-            self._entered = (self._pack, deepcopy(self._look), deepcopy(self._layout))
         self._step = step
         self._furthest = max(self._furthest, step)
         self._problem_text = ""
         self._skip_open = False
-        if step == STYLE and self._style_key:
-            self._apply_style(self._style_key, preview=True)
         self._apply_clock()
         if step == DONE:
             self._summary = self._build_summary()
         self.changed.emit()
 
     def _after(self) -> int:
-        if self._step == STYLE:
-            return WEEK
         return min(self._step + 1, DONE)
 
     def _before(self) -> int:
-        if self._step == WEEK:
-            return COLOURS if self._own_look else STYLE
-        return max(self._step - 1, STYLE)
+        return max(self._step - 1, WEEK)
 
     def _open_skip(self, names: list[str]) -> None:
         what = " and ".join(names)
@@ -1882,19 +1598,6 @@ class AccountBridge(QObject):
         if self._state is None:
             return []
         state = self._state
-        if self._style_key == MATERIAL_STYLE.key and not self._own_look:
-            look = MATERIAL_STYLE.name
-        else:
-            main = state.layout["main"]
-            spec = LAYOUTS[main]
-            selected = options_for(state.layout, main).get("look")
-            colour_name = next(
-                (label for value, label in DESIGN_LOOKS[main] if value == selected), "Your look"
-            )
-            text = effective_look(state.look)["text"]
-            look = f"{spec.label} in {colour_name}"
-            if text != "normal":
-                look += f", {text} text"
         week_parts = []
         for block in state.blocks:
             if is_setup_block(block) and block.get("start"):
@@ -1928,8 +1631,8 @@ class AccountBridge(QObject):
         else:
             reminders = f"Off · alarms ring {sound}"
         homework = " · ".join(state.homework) or "None yet"
-        values = (look, " · ".join(week_parts) or "Nothing fixed yet", planning, reminders, homework)
-        names = [name for name, _steps in RAIL[:-1]]
+        values = (" · ".join(week_parts) or "Nothing fixed yet", planning, reminders, homework)
+        names = [name for name, _steps in RAIL_STEPS[:-1]]
         return [{"name": name, "value": value} for name, value in zip(names, values, strict=True)]
 
     @staticmethod

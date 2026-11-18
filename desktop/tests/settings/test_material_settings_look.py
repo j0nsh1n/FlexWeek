@@ -95,20 +95,12 @@ def test_choosing_auto_mode_keeps_system_in_the_look_file(qapp: QApplication, wi
     assert _material_file().get("mode") != "auto"
 
 
-def test_the_style_row_goes_back_to_the_widgets_styles(qapp: QApplication, window: NativeWindow) -> None:
-    root = _open_settings(qapp, window)
-    button = _named(root, "useWidgets")[0]
-    assert button.property("text") == "Widgets styles"
-    _click(qapp, window, button)
-    wait_until(qapp, lambda: window._surface == "widgets")
-
-
-def test_widgets_styles_is_a_text_button_and_look_keeps_at_most_one_filled(
+def test_look_has_no_way_to_the_widgets_styles_and_keeps_at_most_one_filled(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root = _open_settings(qapp, window)
-    button = _named(root, "useWidgets")[0]
-    assert button.property("kind") == "text"
+    assert _named(root, "useWidgets") == []
+    assert _named(root, "row_style") == []
     look = _named(root, "lookSection")[0]
     filled = [
         item

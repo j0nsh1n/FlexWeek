@@ -35,7 +35,6 @@ class MaterialPage(QWidget):
     """One QQuickWidget. `load` is safe to call again after a failure."""
 
     failed = Signal(str)
-    widgets_requested = Signal()
 
     def __init__(self, window: QWidget) -> None:
         super().__init__(window)
@@ -47,7 +46,6 @@ class MaterialPage(QWidget):
         self.break_load = False
         self.bridge = MaterialBridge(window)
         self.bridge.setParent(self)
-        self.bridge.widgetsRequested.connect(self.widgets_requested)
         QQuickStyle.setStyle("Material")
         self._quick = QQuickWidget(self)
         self._quick.setObjectName("materialQuick")

@@ -22,10 +22,12 @@ from starlette.testclient import TestClient
 from backend.storage import connect, create_session
 from backend.tests.fake_clock import CLOCK
 from desktop.native import controller as controller_module
+from desktop.native import window as window_module
 from desktop.native.client import NativeClient
 from desktop.native.kept import KeptSession
 from desktop.native.window import NativeWindow
 from desktop.tests.logic_support import past_setup
+from desktop.tests.material_support import widgets_start_rule
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import PASSWORD, USERNAME, free, look_file, still
 
@@ -162,7 +164,9 @@ def account(qapp: QApplication, root: Path) -> Account:
     CLOCK.reset()
     api = InProcessApi(database)
     look_file().unlink(missing_ok=True)
-    with _client_for(api):
+    # The account is made through the Widgets sign-up pages, which only the Widgets start shows.
+    with _client_for(api), pytest.MonkeyPatch.context() as widgets:
+        widgets.setattr(window_module, "sanitize_surface", widgets_start_rule)
         window = NativeWindow(ORIGIN)
     window.show()
     try:

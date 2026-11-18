@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.calendar import sunday_due
 from desktop.native.window import NativeWindow
-from desktop.tests.material_support import faded_in
+from desktop.tests.material_support import faded_in, show_widgets
 from desktop.tests.window_support import look_file, settled
 
 
@@ -155,7 +155,7 @@ def _reset(window: NativeWindow) -> None:
     look_file().unlink(missing_ok=True)
     window._material_page.bridge.reload_material()
     panel.note_applied()
-    window._use_widgets_styles()
+    show_widgets(window)
 
 
 def school_week_with_an_essay(qapp: QApplication, window: NativeWindow) -> None:

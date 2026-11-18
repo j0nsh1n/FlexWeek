@@ -16,7 +16,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication
 
-from desktop.native.setup import STYLE
+from desktop.native.setup import WEEK
 from desktop.tests.account.support import (
     OTHER_PASSWORD,
     WRONG_PASSWORD,
@@ -115,10 +115,10 @@ def test_create_account_validates_then_shows_the_codes_then_setup(
     wait_until(qapp, lambda: bridge.recoveryReady)
     bridge.finishRecovery()
     wait_until(qapp, lambda: bridge.phase == "setup")
-    assert bridge.setupStep == STYLE
+    assert bridge.setupStep == WEEK
     assert page(window) == "materialPage"
     assert shown(window, "setupFlow")
-    assert qml(window, "setupTitle").property("text") == "Start from a style"
+    assert qml(window, "setupTitle").property("text") == "Your week"
 
 
 def test_wrong_password_names_neither_field_and_explains_why(

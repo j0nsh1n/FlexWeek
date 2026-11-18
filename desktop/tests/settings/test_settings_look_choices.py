@@ -33,7 +33,6 @@ MORE = [
     "Paper",
     "Ink",
     "Pastel",
-    "Material",
 ]
 HIGH_CONTRAST = look_menu_token("preset", "high-contrast")
 
@@ -259,62 +258,12 @@ def test_general_look_choice_sets_both_layouts_to_your_look(
     assert [section.values()["look"] for section in dialog.layout_sections] == ["your", "your"]
 
 
-def test_material_is_one_more_card_and_choosing_it_wears_material(
+def test_the_look_grid_has_no_material_card_to_leave_the_widgets_styles_by(
     qapp: QApplication, window: NativeWindow
 ) -> None:
-    """Material sits in the Look grid as one more card; choosing it switches to Material, and it says
-    Current while the Material window is the one worn."""
     dialog = prefs(window)
-    material = dialog.look.material
-    assert material.accessibleName() == "Material"
-    assert material.note.text() == " "
-    material.chosen.emit()
-    for _ in range(10):
-        qapp.processEvents()
-    assert window._stack.currentWidget().objectName() == "materialPage"
-    assert material.note.text() == "Current"
-    assert not any(card.is_selected() for card in dialog.look.more.cards if card is not material)
-    window._use_widgets_styles()
-    for _ in range(10):
-        qapp.processEvents()
-    assert window._stack.currentWidget().objectName() == "weekPage"
-    assert material.note.text() == " "
-
-
-def test_choosing_material_again_retries_a_failed_open_and_current_follows_the_landing(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    """Activating the Material card always asks to open Material, even when the hidden toggle is
-    already checked, so a failed open can be retried. Current follows whether Material opened.
-    A failure on the CPU leaves the error page up, not the Widgets week."""
-    import os
-
-    from desktop.native import cpu_drawing
-
-    previous = os.environ.get(cpu_drawing.BACKEND_ENV)
-    os.environ[cpu_drawing.BACKEND_ENV] = cpu_drawing.SOFTWARE
-    try:
-        dialog = prefs(window)
-        host = window._ensure_material()
-        assert host is not None
-        material = dialog.look.material
-        host.break_load = True
-        material.chosen.emit()
-        for _ in range(20):
-            qapp.processEvents()
-        assert window._stack.currentWidget().objectName() == "drawErrorPage"
-        assert material.note.text() != "Current"
-        host.break_load = False
-        material.chosen.emit()
-        for _ in range(20):
-            qapp.processEvents()
-        assert window._stack.currentWidget().objectName() == "materialPage"
-        assert material.note.text() == "Current"
-    finally:
-        if previous is None:
-            os.environ.pop(cpu_drawing.BACKEND_ENV, None)
-        else:
-            os.environ[cpu_drawing.BACKEND_ENV] = previous
+    assert not hasattr(dialog.look, "material")
+    assert "Material" not in [card.accessibleName() for card in dialog.look.more.cards]
 
 
 def test_retro_gives_the_settings_text_its_own_ink_whatever_look_is_worn(

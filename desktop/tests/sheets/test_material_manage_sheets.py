@@ -586,7 +586,7 @@ def test_make_a_copy_lists_it_with_its_time_and_the_name_box_empties(
     point = shell.session.restore_points[0]
     assert point["label"] == "Before term 2"
     # The week the seed saved is the one week the copy holds.
-    assert _labels(shell) == [f"Before term 2 · {point['created_at']} · 1 weeks"]
+    assert _labels(shell) == [f"Before term 2 · {point['created_at']} · 1 week"]
     assert _text(shell, "restoreLabel") == "", "ready for the next name"
     assert shell.session.message == "Saved restore point Before term 2."
 

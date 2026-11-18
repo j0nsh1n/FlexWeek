@@ -18,7 +18,12 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_window import material_window, qapp  # noqa: E402, F401
-from desktop.tests.material_support import pump, qml, show_material  # noqa: E402
+from desktop.tests.material_support import (  # noqa: E402
+    pump,
+    qml,
+    show_material,
+    show_widgets,  # noqa: E402
+)
 
 
 def test_choosing_material_shows_the_shell_and_swapping_back_keeps_the_blocks(
@@ -32,7 +37,7 @@ def test_choosing_material_shows_the_shell_and_swapping_back_keeps_the_blocks(
         assert qml(root, "navDay").property("visible") is True
         assert qml(root, "navMonth").property("visible") is True
         assert qml(root, "navMyDay").property("visible") is True
-        material_window._use_widgets_styles()
+        show_widgets(material_window)
         pump(qapp)
         assert material_window._stack.currentWidget().objectName() == "weekPage"
         assert material_window._surface == "widgets"
@@ -56,7 +61,7 @@ def test_a_refresh_stays_on_material_and_does_not_take_the_plan_prompt(
     assert session.consume_plan_review() == trace
     session.trace = trace
     session._fresh_plan = True
-    material_window._use_widgets_styles()
+    show_widgets(material_window)
     pump(qapp)
     assert material_window._stack.currentWidget().objectName() == "weekPage"
     assert session.consume_plan_review() is None

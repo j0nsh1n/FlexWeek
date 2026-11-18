@@ -8,25 +8,6 @@ SectionPage {
     readonly property var panel: Ui.settings
 
     Group {
-        GroupHeader { title: "Style" }
-        SettingsRow {
-            objectName: "row_style"
-            title: "Style"
-            subtitle: "Material 3 · switch to the other styles"
-            Button {
-                objectName: "useWidgets"
-                theme: Ui.theme
-                density: Ui.density
-                reduceMotion: Ui.reduceMotion
-                highContrast: Ui.highContrast
-                kind: "text"
-                text: "Widgets styles"
-                accessName: "Widgets styles"
-                onClicked: Ui.bridge.useWidgets()
-            }
-        }
-    }
-    Group {
         GroupHeader { title: "Colours" }
         PresetRow {
             subtitle: "Colours for the whole app."

@@ -1,6 +1,5 @@
-"""Material 3 imports nothing from the Qt Widgets side of the desktop app, bar a short list that later
-steps of the Material-only work (plan step 3 and step 7) remove. Shared rules and wording live in small
-modules of their own (sheet_rules, account_copy, setup_steps, settings_copy, hours.scale,
+"""Material 3 imports nothing from the Qt Widgets side of the desktop app. Shared rules and wording live in
+small modules of their own (sheet_rules, account_copy, setup_steps, settings_copy, hours.scale,
 hours.month_cells) so the Widgets files can be deleted without breaking Material."""
 
 from __future__ import annotations
@@ -33,29 +32,10 @@ FORBIDDEN = (
     "previews",
 )
 
-# (file under material/, module, name) imports that are still there, and the plan step that removes each.
+# (file under material/, module, name) imports that are still there, with the plan step that removes each.
 # Exact: a new forbidden import in an allowed file fails, and so does an entry nothing imports any more.
-ALLOWED = {
-    # Step 7: setup's style pick goes (the Widgets designs and their looks).
-    **{
-        ("bridge_account.py", "layouts.registry", name): "step 7"
-        for name in ("DESIGN_LOOKS", "LAYOUTS", "layouts_for", "options_for", "sanitize_layout")
-    },
-    **{
-        ("bridge_account.py", "look", name): "step 7"
-        for name in (
-            "KNOB_VALUE_LABELS",
-            "LOOK_KNOBS",
-            "effective_look",
-            "parse_look_menu_token",
-            "sanitize_look",
-        )
-    },
-    **{
-        ("bridge_account.py", "setup", name): "step 7"
-        for name in ("STYLES", "Style", "style_layout", "style_look", "matching_style")
-    },
-}
+# Step 7 removed the last ones (setup's style pick), so nothing is allowed.
+ALLOWED: dict[tuple[str, str, str], str] = {}
 
 
 def _forbidden(module: str) -> str | None:

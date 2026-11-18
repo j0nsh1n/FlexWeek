@@ -20,7 +20,8 @@ FocusScope {
     M3Palette { id: m3Palette; theme: root.theme }
 
     function pageFor(step) {
-        return [stylePage, lookPage, coloursPage, weekPage, homeworkPage, remindersPage, firstPage, donePage][step]
+        // Steps 0 to 2 were the style pages; setup starts at Your week, step 3.
+        return [weekPage, homeworkPage, remindersPage, firstPage, donePage][step - 3]
     }
 
     // Side rail: one row per step.
@@ -289,9 +290,6 @@ FocusScope {
         }
     }
 
-    Component { id: stylePage; StylePage { bridge: root.bridge; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
-    Component { id: lookPage; LookPage { bridge: root.bridge; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
-    Component { id: coloursPage; ColoursPage { bridge: root.bridge; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: weekPage; WeekPage { bridge: root.bridge; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: homeworkPage; HomeworkPage { bridge: root.bridge; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: remindersPage; RemindersPage { bridge: root.bridge; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }

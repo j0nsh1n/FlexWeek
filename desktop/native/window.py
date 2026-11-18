@@ -416,7 +416,6 @@ MORE_ICONS = {
     "reloadWeek": "rotate-ccw",
     "helpButton": "circle-question-mark",
     "aboutButton": "info",
-    "backToMaterial": "sparkles",
     "signOut": "log-out",
 }
 # Hover words for More and its submenu, by the object name of the button each action presses.
@@ -450,7 +449,6 @@ MORE_TIPS = {
     "reloadWeek": "Load this week again as it's saved. Use it if something looks out of date.",
     "helpButton": "What each screen is for, and the keyboard shortcuts.",
     "aboutButton": "The version, and where your plans are saved.",
-    "backToMaterial": "Switch back to the Material 3 style. Your week and homework stay the same.",
     "signOut": "Sign out on this computer. Your plans stay saved in your account.",
 }
 # Why an action is greyed, when the reason is not simply that FlexWeek is busy.
@@ -676,7 +674,7 @@ class NativeWindow(QMainWindow):
         self.setCentralWidget(self._stack)
         self._more_pairs = []
         self._layout = sanitize_layout(None)
-        # Widgets until a look file names Material. The QML page is built the first time it is shown.
+        # Material 3 is the only style. The QML page is built the first time it is shown.
         self._surface = sanitize_surface(None)
         self._material_page = None
         self._account_showing = False
@@ -1289,7 +1287,6 @@ class NativeWindow(QMainWindow):
             self._give_up_material(show_week=not quiet)
             return None
         page.failed.connect(self._on_material_failed)
-        page.widgets_requested.connect(self._use_widgets_styles)
         self._material_page = page
         # Material's focus rules (hold reminders, finish the block) ask whether Material is in use.
         self.session.material_owns = self._material_owns
@@ -1333,8 +1330,6 @@ class NativeWindow(QMainWindow):
         self._stop_material_ring()
         if cpu_drawing.drawing_on_cpu():
             self._material_gave_up = True
-            if self._settings is not None:
-                self._settings.look.show_material(False)
             self._week_keys(False)
             self._show_draw_error()
             return
@@ -1449,27 +1444,6 @@ class NativeWindow(QMainWindow):
         if self._stack.currentWidget() is not page:
             return
         page.bridge.refresh()
-
-    def _use_widgets_styles(self) -> None:
-        """The Material settings stub's way back. The settings draft, if one is open, stays."""
-        self._surface = "widgets"
-        self._material_gave_up = False
-        settings = self._settings
-        if settings is not None and settings.layout_sections:
-            settings.layout_sections[0].show_surface("widgets")
-        self._save_look()
-        self._week_keys(True)
-        self._on_week()
-
-    def _back_to_material(self) -> None:
-        """Switch back to Material 3 styles."""
-        self._surface = "material"
-        self._material_gave_up = False
-        settings = self._settings
-        if settings is not None and settings.layout_sections:
-            settings.layout_sections[0].show_surface("material")
-        self._save_look()
-        self._show_surface()
 
     def _entry_card(self, name: str, pinned: bool = False) -> QVBoxLayout:
         """A page for signing in or for the recovery codes: the wordmark on the page, and under it the
@@ -2007,16 +1981,7 @@ class NativeWindow(QMainWindow):
         about = QPushButton("About FlexWeek")
         about.setObjectName("aboutButton")
         about.clicked.connect(self._open_about)
-        back_material = QPushButton("Back to Material")
-        back_material.setObjectName("backToMaterial")
-        back_material.clicked.connect(self._back_to_material)
         # Its own line, so Help and About stay together and Sign out stays apart (Decision 22).
-        more_menu.addSeparator()
-        back_material.setParent(overflow)
-        back_material.hide()
-        action = mark(more_menu.addAction(back_material.text()), MORE_ICONS["backToMaterial"])
-        action.triggered.connect(back_material.click)
-        self._more_pairs.append((action, back_material))
         more_menu.addSeparator()
         add_heading(more_menu, HELP_HEADING)
         for button in (help_button, about, sign_out):
@@ -2905,8 +2870,6 @@ class NativeWindow(QMainWindow):
         )
         step = bridge.setup_step if on_material else self.setup_page.step
         progress = {"version": SETUP_VERSION, "step": step, "finished_at": stamp}
-        if on_material:
-            bridge.apply_surface()
         if self.session.new_account and self.session.account is not None:
             self._new_look_notice_exempt.add(str(self.session.account["id"]))
             self._save_look()
@@ -5861,12 +5824,6 @@ class NativeWindow(QMainWindow):
         )
         page.account_id = account["id"]
         page.devices.refresh()
-        # Before the page's changed signal is wired to apply, so restoring the saved surface
-        # does not swap in the middle of building Settings.
-        if self._surface == "material" and page.layout_sections:
-            page.layout_sections[0].show_surface("material")
-            # The saved choice, not the landing: after a failed open the Widgets week is up (UI22).
-            page.look.show_material(not self._material_gave_up)
         return page
 
     def _sync_started(self, service: SyncService) -> None:
@@ -5983,30 +5940,16 @@ class NativeWindow(QMainWindow):
         def apply() -> None:
             nonlocal login
             look, layout = page.look_choice(), page.layout_choice()
-            surface = page.layout_sections[0].surface() if page.layout_sections else "widgets"
-            surface_changed = surface != self._surface
-            # A failed open leaves Material saved and the control unchecked. Checking it is the
-            # retry. A refresh must not do this while Settings is still the page on screen.
-            choosing_material_again = surface == "material" and self._material_gave_up
             if (
                 look != self._look
                 or layout != self._layout
                 or page.saved_looks != self._saved_looks
-                or surface_changed
-                or choosing_material_again
             ):
                 self._look = look
                 self.session.look = look
                 self._layout = layout
                 self._saved_looks = list(page.saved_looks)
-                self._surface = sanitize_surface(surface)
-                if self._surface == "material":
-                    self._material_gave_up = False
                 self._save_look()
-                if surface_changed or choosing_material_again:
-                    opened = self._show_surface()
-                    # Current follows whether Material actually opened, not the saved choice (UI22).
-                    page.look.show_material(opened)
                 self._on_week()
             wanted = page.updates()
             if self.session.preferences is not None:

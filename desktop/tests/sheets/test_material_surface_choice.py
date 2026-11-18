@@ -1,5 +1,5 @@
 # ruff: noqa: F811
-"""Which surface a look file chooses (Widgets styles or Material 3), and how the Material choice
+"""Which surface a look file chooses (always Material 3), and how the Material choice
 (preset, mode, contrast, density) is read from it.
 
 Expected words are written out here. They are not read back from the function under test.
@@ -16,29 +16,27 @@ from desktop.native.layouts.registry import (
 from desktop.native.material.theme import read_material_choice, resolved_mode
 
 
-def test_surface_names_and_the_default() -> None:
-    assert SURFACES == ("widgets", "material")
-    assert SURFACE_DEFAULT == "widgets"
+def test_material_is_the_only_surface_and_the_default() -> None:
+    assert SURFACES == ("material",)
+    assert SURFACE_DEFAULT == "material"
 
 
-def test_an_old_look_file_with_no_surface_is_the_widgets_styles() -> None:
-    assert sanitize_surface({"preset": "paper", "layout": {"main": "timeline"}}) == "widgets"
-    assert sanitize_surface({}) == "widgets"
-    assert sanitize_surface(None) == "widgets"
-
-
-def test_an_unknown_surface_is_the_widgets_styles() -> None:
-    assert sanitize_surface({"surface": "nope"}) == "widgets"
-    assert sanitize_surface({"surface": 7}) == "widgets"
-    assert sanitize_surface({"surface": None}) == "widgets"
-
-
-def test_material_is_only_the_top_level_surface_key() -> None:
-    assert sanitize_surface({"surface": "material"}) == "material"
-    assert sanitize_surface("material") == "material"
-    # A surface buried inside the layout is not the window's surface.
-    buried = {"layout": {"main": "classic", "surface": "material"}}
-    assert sanitize_surface(buried) == "widgets"
+def test_every_look_file_opens_material() -> None:
+    """The Widgets value an older build wrote, a missing key, junk, and a surface buried in the layout all
+    give Material: a student has no way to reach the Widgets styles."""
+    files = [
+        {"surface": "widgets"},
+        {"preset": "paper", "layout": {"main": "timeline"}},
+        {},
+        None,
+        {"surface": "nope"},
+        {"surface": 7},
+        {"surface": None},
+        {"surface": "material"},
+        "widgets",
+        {"layout": {"main": "classic", "surface": "widgets"}},
+    ]
+    assert [sanitize_surface(stored) for stored in files] == ["material"] * len(files)
 
 
 def test_sanitize_layout_still_returns_only_the_layout() -> None:

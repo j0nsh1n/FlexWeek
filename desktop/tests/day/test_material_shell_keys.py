@@ -64,7 +64,7 @@ def test_number_keys_open_each_screen_and_escape_returns_focus(
     pump(qapp)
     settings = qml(root, "materialSettings")
     assert settings.property("visible") is True
-    assert named(settings, "useWidgets")[0].property("text") == "Widgets styles"
+    assert named(settings, "useWidgets") == []
     QTest.keyClick(quick, Qt.Key.Key_Escape)
     pump(qapp)
     assert qml(root, "navSettings").property("activeFocus") is True

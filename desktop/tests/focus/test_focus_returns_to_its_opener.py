@@ -17,7 +17,7 @@ from PySide6.QtWidgets import QApplication, QPushButton
 from desktop.native.window import NativeWindow
 from desktop.tests.day.support_layouts_window import add_school_week
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import pump, qml
+from desktop.tests.material_support import pump, qml, show_widgets
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material_page import fresh_material
 
@@ -51,7 +51,7 @@ def test_after_focus_mode_ends_focus_returns_to_the_control_that_started_it(
     assert scene.activeFocusItem() is control
 
     # Widgets
-    window._use_widgets_styles()
+    show_widgets(window)
     button = window.findChild(QPushButton, "addButton")
     button.setFocus(Qt.FocusReason.TabFocusReason)
     pump(qapp)
@@ -97,7 +97,7 @@ def test_focus_mode_return_when_origin_is_deleted_falls_back_without_error(
     # Widgets
     # An empty week shows the empty-week page, which has no hours to return to.
     add_school_week(qapp, window)
-    window._use_widgets_styles()
+    show_widgets(window)
     wait_until(qapp, lambda: bool(window._week_surfaces()), what="the week drawn")
     temporary = QPushButton("Temp Button", window)
     temporary.show()

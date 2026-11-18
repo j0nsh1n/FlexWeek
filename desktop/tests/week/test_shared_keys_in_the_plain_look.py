@@ -19,7 +19,7 @@ from PySide6.QtWidgets import QApplication, QDialog, QLineEdit
 from desktop.native.material.theme import read_letter_keys, read_shortcuts
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import pump, show_material
+from desktop.tests.material_support import pump, show_material, show_widgets
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import look_file, qapp, turn_on_letter_keys  # noqa: F401
 
@@ -301,7 +301,7 @@ def test_a_switch_turned_over_in_one_look_is_turned_over_in_the_other(
     # And back: Material turns Letter keys off and the plain page shows it off.
     bridge.settingsBridge.setLetterKeys(False)
     bridge.settingsBridge.setShortcuts(True)
-    window._use_widgets_styles()
+    show_widgets(window)
     pump(qapp)
     page = _open_settings(window)
     assert page.letter_keys.isChecked() is False and page.number_keys.isChecked() is True
