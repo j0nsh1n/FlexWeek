@@ -11,7 +11,6 @@ from datetime import date, datetime
 from typing import Any
 
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
-from PySide6.QtWidgets import QAbstractButton
 
 from backend.slots import DAY_END_MIN, SLOT_MIN, hhmm_to_minutes
 from desktop.native.calendar import (
@@ -60,20 +59,20 @@ DISCARD = {
         {"id": "discard", "label": "Discard", "kind": "tonal"},
     ],
 }
-# The More menu, in one place. A row names the Widgets button it presses, when it has one.
+# The More menu, in one place: id, words, icon.
 MORE_ROWS = (
     ("heading", "Planning"),
-    ("runningLate", "Running late", "schedule", "runningLate"),
-    ("unfinishedOpen", "Unfinished", "event_busy", ""),
-    ("weekListRow", "Week as a list", "list", ""),
-    ("routinesButton", "Routines", "repeat", ""),
-    ("quickFocusAction", "Quick focus", "timer", "quickFocusAction"),
-    ("replanAll", "Replan all my homework", "autorenew", "replanAll"),
+    ("runningLate", "Running late", "schedule"),
+    ("unfinishedOpen", "Unfinished", "event_busy"),
+    ("weekListRow", "Week as a list", "list"),
+    ("routinesButton", "Routines", "repeat"),
+    ("quickFocusAction", "Quick focus", "timer"),
+    ("replanAll", "Replan all my homework", "autorenew"),
     ("heading", "Help and info"),
-    ("helpButton", "Help", "help", "helpButton"),
-    ("aboutButton", "About FlexWeek", "info", "aboutButton"),
+    ("helpButton", "Help", "help"),
+    ("aboutButton", "About FlexWeek", "info"),
     ("heading", "Account"),
-    ("signOut", "Sign out", "logout", "signOut"),
+    ("signOut", "Sign out", "logout"),
 )
 
 
@@ -1148,9 +1147,6 @@ class SheetsBridge(QObject):
 
     # The More menu ----------------------------------------------------------------------
 
-    def _button(self, name: str) -> QAbstractButton | None:
-        return self._window.findChild(QAbstractButton, name)
-
     def _more_entries(self) -> list[dict]:
         session = self._session
         rows: list[dict] = []
@@ -1161,15 +1157,13 @@ class SheetsBridge(QObject):
                     {"heading": row[1], "id": "", "label": row[1], "icon": "", "detail": "", "enabled": False}
                 )
                 continue
-            name, label, icon, button_name = row
-            button = self._button(button_name) if button_name else None
+            name, label, icon = row
             enabled = True
             detail = ""
-            if button is not None:
-                enabled = button.isEnabled()
-                label = button.text() or label
             if name == "runningLate":
-                enabled = enabled and not session.busy and not self._late_other_week()
+                enabled = not session.busy and not self._late_other_week()
+            elif name == "signOut":
+                enabled = not session.busy
             elif name == "unfinishedOpen":
                 enabled = bool(left)
                 detail = f"{left} left" if left else NOTHING_UNFINISHED
@@ -1204,7 +1198,7 @@ class SheetsBridge(QObject):
 
     @Slot(str)
     def moreAction(self, name: str) -> None:
-        """A row of More. Each opens a sheet, or presses the button the Widgets menu presses."""
+        """A row of More. Each opens a sheet or runs the same window action the Widgets menu runs."""
         entry = next((item for item in self._more_entries() if item["id"] == name), None)
         if entry is None or not entry["enabled"]:
             return
@@ -1218,11 +1212,15 @@ class SheetsBridge(QObject):
         if opening is not None:
             opening()
             return
-        row = next(item for item in MORE_ROWS if item[0] == name)
-        button = self._button(row[3])
         self._publish()
-        if button is not None:
-            button.click()
+        window = self._window
+        {
+            "quickFocusAction": window._quick_focus,
+            "replanAll": lambda: window._plan_with_left_over(everything=True),
+            "helpButton": window._open_help,
+            "aboutButton": window._open_about,
+            "signOut": window._log_out,
+        }[name]()
 
     # Notice -----------------------------------------------------------------------------
 

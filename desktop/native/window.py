@@ -32,7 +32,6 @@ from PySide6.QtGui import (
     QCloseEvent,
     QColor,
     QContextMenuEvent,
-    QCursor,
     QDesktopServices,
     QFont,
     QFontMetrics,
@@ -683,8 +682,6 @@ class NativeWindow(QMainWindow):
         self._material_gave_up = False
         # The app version that last failed to open Material, or "" when the student may try it.
         self._material_failed = ""
-        # Built with the week. Appearance can run before that menu exists.
-        self.material_more = None
         self._day_mode = False
         self._opened_on_preference = False
         # Number keys and Letter keys as the look file holds them, and the file's stamp when read.
@@ -1985,8 +1982,6 @@ class NativeWindow(QMainWindow):
         more_menu.aboutToShow.connect(self._sync_more_menu)
         more.setMenu(more_menu)
         self.more_menu = more_menu
-        # The week page is not in the window yet, so findChild cannot see these buttons.
-        self._build_material_more((undo, redo, help_button, about, sign_out))
         gear = QPushButton()
         gear.setObjectName("settingsGear")
         gear.setProperty("quiet", True)
@@ -3278,28 +3273,6 @@ class NativeWindow(QMainWindow):
         undo = self.findChild(QPushButton, "undoButton")
         if undo is not None:
             undo.setEnabled(not self.session.busy and (self.session.can_undo() or self._toast_offers_undo()))
-
-    def _build_material_more(self, buttons: tuple[QPushButton, ...]) -> None:
-        """The More menu Material can act on. Widgets-only rows stay on the Widgets menu."""
-        menu = Menu(self)
-        menu.setObjectName("materialMoreMenu")
-        self._material_more_pairs = []
-        for button in buttons:
-            name = button.objectName()
-            action = menu.add(button.text(), MORE_ICONS[name], name=name)
-            action.triggered.connect(button.click)
-            self._material_more_pairs.append((action, button))
-        menu.aboutToShow.connect(self._sync_material_more)
-        self.material_more = menu
-
-    def _sync_material_more(self) -> None:
-        self._sync_undo_enabled()
-        for action, button in self._material_more_pairs:
-            action.setEnabled(button.isEnabled())
-            action.setText(button.text())
-
-    def open_material_more(self) -> None:
-        self.material_more.popup(QCursor.pos())
 
     def _sync_more_menu(self) -> None:
         self._sync_undo_enabled()
@@ -6419,10 +6392,7 @@ class NativeWindow(QMainWindow):
         self.toast.set_look(toast_colours(palette)["action"], SHADOW_SMALL if lifted else None, dark)
         self.command_bar.set_look(palette, SHADOW_LARGE if lifted else None, dark)
         colours = menu_colours(palette, lifted=lifted, corner=corner)
-        menus = [self.more_menu, self.add_menu]
-        if self.material_more is not None:
-            menus.append(self.material_more)
-        for menu in menus:
+        for menu in (self.more_menu, self.add_menu):
             menu.set_colours(colours)
 
     def _install_tray(self) -> None:
