@@ -9,7 +9,6 @@ save is not built; the flags below say which those are.
 from __future__ import annotations
 
 import copy
-import time
 from typing import Any
 
 from pydantic import ValidationError
@@ -1268,7 +1267,7 @@ class SettingsBridge(QObject):
             rows = found() or []
         except Exception:
             return []
-        now_ms = int(time.time() * 1000)
+        now_ms = int(self._window.session.now_ms())
         shown: list[dict[str, str]] = []
         for row in rows:
             if isinstance(row, dict):
