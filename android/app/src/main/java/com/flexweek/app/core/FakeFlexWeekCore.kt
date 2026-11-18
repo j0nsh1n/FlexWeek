@@ -211,6 +211,7 @@ class FakeFlexWeekCore : FlexWeekCore {
         if (digits != DemoSchedule.VALID_PAIR_CODE) {
             return jsonString {
                 put("ok", false)
+                put("kind", "wrong_code")
                 put("error", "mismatch")
             }
         }

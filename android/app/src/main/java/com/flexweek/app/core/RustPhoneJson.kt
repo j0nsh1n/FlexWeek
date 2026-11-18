@@ -92,13 +92,18 @@ internal object RustPhoneJson {
         return root.toString()
     }
 
-    fun sync(raw: String, zone: ZoneId = ZoneId.systemDefault()): String {
+    fun sync(raw: String, zone: ZoneId = ZoneId.systemDefault(), errorKind: String? = null): String {
         if (!raw.startsWith("{")) return JSONObject().put("paired", false)
             .put("state", "unreachable").put("line", "No computer linked. Your week is saved here.").toString()
         val root = JSONObject(raw)
         if (root.optString("state") == "unreachable" && root.optBoolean("paired") && !root.isNull("last_sync_ms")) {
             val at = Instant.ofEpochMilli(root.getLong("last_sync_ms")).atZone(zone).format(timeFormat)
             root.put("line", "Your computer isn't reachable. Showing what synced at $at.")
+        }
+        // A failure that is not "the computer is off" says what it is, so the student does not wait for a computer
+        // that is already on.
+        if (root.optString("state") == "unreachable" && root.optBoolean("paired") && errorKind != null && !SyncWords.isOff(errorKind)) {
+            root.put("line", if (SyncWords.needsUpdate(errorKind)) SyncWords.NEEDS_UPDATE else SyncWords.OTHER)
         }
         return root.toString()
     }

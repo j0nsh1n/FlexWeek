@@ -74,7 +74,7 @@ class RefusedAnswersTest {
             }
             val vm = RemindersViewModel(core, workerDispatcher = dispatcher)
             vm.syncNow()
-            assertEquals("the sync took too long and was stopped", vm.state.problem)
+            assertEquals(com.flexweek.app.core.SyncWords.OFF, vm.state.problem)
         } finally {
             Dispatchers.resetMain()
         }

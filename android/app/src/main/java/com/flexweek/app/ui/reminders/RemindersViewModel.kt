@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Context
 import com.flexweek.app.core.FlexWeekCore
+import com.flexweek.app.core.SyncWords
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CancellationException
@@ -169,7 +170,7 @@ class RemindersViewModel(
         viewModelScope.launch {
             val answer = JSONObject(withContext(workerDispatcher) { core.syncOnce(45_000) })
             val failure = if (answer.optBoolean("ok", true)) null
-            else answer.optString("error").ifBlank { "Sync did not finish. Try again." }
+            else SyncWords.syncProblem(answer.optString("kind"), answer.optString("error"))
             state = state.copy(syncing = false, problem = failure)
             reload()
         }

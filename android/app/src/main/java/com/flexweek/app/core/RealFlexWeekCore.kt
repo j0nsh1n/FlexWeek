@@ -78,8 +78,14 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
         localSettings.edit().putBoolean("exact-reminders", on).apply()
         onDataChanged("phone_settings")
     }
-    override fun syncStatus(): String = RustPhoneJson.sync(native.syncStatus())
-    override fun syncOnce(deadlineMs: Long): String = native.syncOnce(deadlineMs)
+    override fun syncStatus(): String =
+        RustPhoneJson.sync(native.syncStatus(), errorKind = localSettings.getString("sync-error-kind", null))
+    override fun syncOnce(deadlineMs: Long): String {
+        val answer = native.syncOnce(deadlineMs)
+        val kept = SyncWords.kindToRemember(answer, localSettings.getString("sync-error-kind", null))
+        localSettings.edit().apply { if (kept == null) remove("sync-error-kind") else putString("sync-error-kind", kept) }.apply()
+        return answer
+    }
     override fun pairWithCode(code: String): String = native.pairWithCode(code)
     override fun pairFromQr(text: String): String = native.pairFromQr(text)
     override fun cancelSync() { native.cancelSync() }
