@@ -5,21 +5,39 @@ history and in `CHANGELOG.md` (pruned 2026-11-06: Phase 8, 1.1.1, the 0.18.x ser
 list, all shipped).
 
 ## Where things stand (2026-11-17)
-- v1.3.0 is the latest release (2026-11-10). Main (5788750e) is prepared as 1.4.0 on branch `release/1.4.0`: the week
-  can start on any day, Plan and Replan move a session whose time passed unfinished, School and activity changes
-  across weeks, Material drag, menus and the Dragging step, the assistant helper's live clock and Spread over days.
-- The phone work is not in 1.4.0 (Jonathan, 2026-11-17: release "besides mobile", then "Both": an Android 1.4.0 from
-  main ships with it). The phone's fixes, sync dating and the layout B restyle wait on PR #137 (`fix/phone-1.4.0`).
+- v1.4.0 is the latest release (2026-11-17, PR #138): the week can start on any day, Plan and Replan move a session
+  whose time passed unfinished, School and activity changes across weeks, Material drag, menus and the Dragging step,
+  the assistant helper's live clock and Spread over days. Its Android app was built from main, without PR #137.
+- Hack Club certificate: README (#139) merged and the gallery PR (hackclub/capitol#82) open; Jonathan submits the
+  certificate form.
+- 1.5.0 started on `feat/material-only` (plan: `~/.flexweek-ui-harness/scratch/material-only/plan.md`).
 
 ### Release 1.3.0
 - Status: [x] released 2026-11-10 (main d61235ee, PR #111).
 
 ### Release 1.4.0
 - Done: version 1.4.0 (app, changelog, phone: versionCode 6), `docs/release-notes-v1.4.0.md`.
-- Open: the release pull request, the tag, the Windows and Linux files from "Release packages", checked checksums.
-- Complete when: v1.4.0 is the latest release with all ten files (the Android app built from main without the phone
-  work of PR #137) and checked checksums.
-- Status: [ ] in preparation.
+- Status: [x] released 2026-11-17 (main 2dd91027, PR #138), all ten files with checked checksums.
+
+### Release 1.5.0 — Material only (Jonathan, 2026-11-17)
+- Jonathan: "we should just offer only Material 3"; auditing six designs on two ways of building UI "is just way too
+  much right now". The Widgets styles and designs go; Material 3 is the desktop's only interface.
+- Kept and rebuilt in Material (his picks): alerts, sounds and alarms with a ring screen; study hours and school hours
+  in Settings; the focus timer's own lengths; Ctrl+N, Ctrl+C, Ctrl+D, Delete and F1, Copies of this week, Copy day and
+  Copy last week (no command bar); Account, Help, About and Update as Material sheets; some of the old looks as
+  Material presets (which ones: his pick, from a page of them). Dropped: the Ctrl+K command bar, the other designs.
+- From R5's settings decisions (2026-11-08): each setting in the section it belongs to, with group titles; an accent
+  colour on top of the preset ("Same as preset" by default) and a font choice; the timer as Short / Standard / Long /
+  Custom with a slider per length; switches for "mute alerts while a session runs" and "mark homework finished when
+  its session ends"; a Material colours step in setup.
+- If Material cannot draw with the graphics card, it relaunches drawing on the CPU; an error screen only if that fails.
+- Material gets its own Qt Quick window, so it draws at the screen's rate (measured 2026-11-17: 62.5 frames a second
+  in today's QQuickWidget on a 360 Hz screen, 359.7 in a QQuickView).
+- Also in 1.5.0: PR #137's phone work with its review-1 fixes; #118's weekly fixed times with an end date and
+  reminders that stay with Snooze, rebuilt on main; the multi-answer dialogs as picked cards (B2) with stacking.
+- Complete when: v1.5.0 is the latest release with all files and checked checksums, no Widgets interface is left, each
+  kept feature above works in Material, and Material draws at the screen's rate on a high-refresh screen.
+- Status: [ ] started 2026-11-17.
 
 ## After FIX-SPEC 1.3 (planned 2026-11-06)
 FIX-SPEC 1.3 and the J lanes (J21 Week zoom, J22 Day hours, J23 Month study fill, J25 Look preview side by side)
