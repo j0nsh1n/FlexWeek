@@ -38,7 +38,7 @@ The app calls the Rust core through UniFFI. Gradle builds it: every build task (
 
 ## Screenshots
 
-`android/capture-shots.sh` and `android/capture-v2-shots.sh` take screenshots from a running emulator with `adb`. Each script writes its PNG files to a folder set by `OUT` near the top of the script. Both scripts default `OUT` to a lane folder outside this repository, so set `OUT` to a folder of your own before you run either script.
+`android/capture-shots.sh` and `android/capture-v2-shots.sh` take screenshots from a running emulator with `adb`. Each script writes its PNG files to a folder set by `OUT` near the top of the script. Both scripts default `OUT` to a folder outside this repository, so set `OUT` to a folder of your own before you run either script.
 
 ## Permissions
 

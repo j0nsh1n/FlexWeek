@@ -20,8 +20,8 @@ it needs no internet, and it uses no AI service. Made for the Congressional App 
 - **Your week, your way**: the week can start on any day; School hours and activities repeat every week, with one-week
   changes when you need them.
 - **Focus timer** that counts toward the homework it is for, and **reminders and alarms** for what comes next.
-- **Two looks**: the standard Widgets designs with ten looks and a look editor, and a Material 3 style; light and dark;
-  keyboard shortcuts throughout.
+- **Two styles**: the standard style, with several page designs, ten colour themes and an editor for your own, and a
+  Material 3 style; both light and dark, with keyboard shortcuts throughout.
 - **Phone app** for Android that syncs with your computer, and an optional **assistant helper** for AI assistants
   that speak MCP.
 
@@ -76,7 +76,7 @@ On Debian or Ubuntu without a full desktop, such as a container or a minimal ins
 
 FlexWeek also runs on an Android phone (Android 8.0 or newer). Pair it with your computer in Settings > This computer > Devices: the computer shows an 8-digit code, you type it on the phone, and the code works once and lasts 5 minutes. The phone runs the same engine as your computer and syncs your real homework both ways. When your computer isn't on the same Wi-Fi, FlexWeek uses a public relay run by n0. It sees that two devices are talking, not what they send. With no phone linked, the computer opens no network connection and contacts no relay. How to build the app is in [docs/android.md](docs/android.md).
 
-**Get it.** Download `FlexWeek-Android-<version>.apk` from the [latest GitHub Release](https://github.com/j0nsh1n/FlexWeek/releases/latest), open it on the phone and allow installs from your browser or file manager when Android asks. The app is signed with the project's own key, not Google Play's. After that, the app offers each new release itself (Settings), and installing it over the old one keeps your data. The phone has Today, Week, Add homework, Plan, Running late, a focus timer, reminders and an Up next home-screen widget, and syncs; it does not have Month or Day screens yet.
+**Get it.** Download `FlexWeek-Android-<version>.apk` from the [latest GitHub Release](https://github.com/j0nsh1n/FlexWeek/releases/latest), open it on the phone and allow installs from your browser or file manager when Android asks. The app is signed with the project's own key, not Google Play's. After that, the app offers each new release itself (Settings), and installing it over the old one keeps your data. The phone has Today, Week, Add homework, Plan, Running late, a focus timer, reminders and an Up next home-screen widget, and syncs; it does not have Month or Day screens.
 
 ## Assistant helper
 
@@ -117,43 +117,28 @@ On Linux, pip's PySide6 does not include the X11 helpers and keyboard libraries 
 
 Building the Linux download (`./desktop/build_linux.sh`) also needs a C compiler (GCC), Python 3.14's development headers, `patchelf` (installed by `requirements-desktop.txt`) and `readelf` (binutils). The six X11 helpers and the two xkbcommon libraries must be installed, because the build copies them into the bundle. A release is built on Ubuntu 24.04, so nothing in it needs a glibc newer than 2.38; [DESKTOP.md](DESKTOP.md) has the details.
 
-The backend starts inside the app on a loopback port; there is no separate
-server to run and no page to open in a browser. The first screen is Sign in,
-with "New here? Create an account" under it. Usernames use 3–32 letters,
-numbers or underscores; passwords use 12–128 characters. A new account opens
-setup a page at a time: a style, the week (school, activities and a cutoff),
-how homework gets a time, reminders and the alarm sound, and up to three first
-homework. You can skip any page, and Settings can run it again.
+The backend starts inside the app on a loopback port; there is no separate server to run and no page to open in a
+browser.
 
-To add more, press **Add** in the top bar for homework, or its arrow for a fixed
-time or School hours, or drag on the calendar. A **Fixed time** (school,
-practice) never moves when you plan; **Homework** is placed by Plan my homework
-in a free time before it is due. The type you picked determines which you get. A
-click opens anything on the calendar and a right-click offers Open, Duplicate,
-Finished and Delete; homework, with all its times, is deleted from its editor,
-its right-click menu or the Unfinished list, and Undo brings it back. Ctrl+K
-finds any action or homework by typing. Every change saves to your account on
-its own; planning previews placement without replacing what you entered.
+## Using FlexWeek
 
-The look starts on System, which follows your device's light or dark setting,
-in Today's app with Day dial as the day screen. Material 3 is one more style, chosen
-from a card under Settings > Look: it opens its own window with Day, Week, Month,
-My day, Focus and Settings, takes a seed colour, a palette style and a contrast, and
-choosing another style swaps back with no restart. The gear opens Settings in
-place of the week, where look and layout live together; Timeline is the other
-standard design, and the rest are under Experimental styles. Every design can
-be dark: Today's app through its look, the others through a dark colourway of
-their own. Under Look there are ten looks, and **Customise…** opens the Look
-editor, where any look's colours, categories, corners, type, blocks, grid and
-motion can be changed, checked for readability and saved as your own. Animations
-can be Normal, More, Reduce (fades only) or Off. The week saves itself a moment after each change and retries on
-its own if a save fails. A save that conflicts with another window is never written over: saving
-stops and FlexWeek asks you to reload the saved week. A forgotten password is recovered
-with one of the eight recovery codes shown when the account was made.
+Usernames use 3–32 letters, numbers or underscores, and passwords 12–128 characters. A forgotten password is reset with
+one of the eight recovery codes shown when the account was made.
 
-Weeks exported from an older browser-based build can be explicitly imported
-after logging in. Import replaces the account's current week after confirmation;
-invalid legacy data is left untouched.
+- **Adding**: press **Add** in the top bar for homework, or its arrow for a fixed time or School hours, or drag on the
+  calendar. A **fixed time** (school, practice) never moves when you plan; **homework** is placed by Plan my homework
+  in free time before it is due.
+- **Changing**: a click opens anything on the calendar, and a right-click offers Open, Duplicate, Finished and Delete.
+  Undo brings back what you deleted or moved. Ctrl+K finds any action or homework by typing.
+- **Saving**: every change saves on its own a moment later and retries if a save fails. A save that clashes with
+  another window is never written over; FlexWeek asks you to reload the saved week instead.
+- **Looks**: the look starts on System, which follows your device's light or dark setting. Settings (the gear) holds
+  the look and layout: Today's app and Timeline are the standard designs, the rest are under Experimental styles, and
+  **Customise…** edits any of the ten colour themes and saves it as your own. Material 3 is one more style, chosen
+  under Settings > Look, with its own seed colour, palette style and contrast; you can switch back without a restart.
+  Animations can be Normal, More, Reduce (fades only) or Off.
+- **Older weeks**: a week exported from an older browser-based build can be imported after you sign in. Import
+  replaces the current week after you confirm it, and leaves invalid data untouched.
 
 ## Data and configuration
 
@@ -164,7 +149,7 @@ loopback port. Nothing needs configuring to use it.
 | Setting | Effect |
 |---|---|
 | `--database FILE` | Use this database file instead of the one in your data folder |
-| `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) | Use a FlexWeek API running elsewhere instead of starting one; an invalid value is an error, never a quiet fall back to local |
+| `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) | Use a FlexWeek API running elsewhere instead of starting one; an invalid value is an error, never a quiet fall back to local. Accounts there are separate from local ones and do not sync |
 
 The API can also run on its own, for development or as a server other copies
 point at: `uvicorn backend.app:app` reads `FLEXWEEK_DATABASE` (default
@@ -206,56 +191,30 @@ spec.md under Validation & Tooling.
 
 ## Progress
 
-FlexWeek is a native desktop app for Windows and Linux with an Android phone app that syncs
-with it. [CHANGELOG.md](CHANGELOG.md) lists what each version changed, and the
-[roadmap](roadmap.md) lists what is being worked on and what is waiting. Developer builds
-of the newest work are published on GitHub as a pre-release named `dev` (Linux tarball only);
-turn them on with Settings > This computer > Get developer builds. Windows packages are
-built on GitHub Actions when a release is made; nobody has yet run the installers on a
-real Windows PC for this project, so a first install there still needs a person to
-click through SmartScreen and report back.
+[CHANGELOG.md](CHANGELOG.md) lists what each version changed, and the [roadmap](roadmap.md) lists what is being worked
+on. Developer builds of the newest work are published on GitHub as a pre-release named `dev` (Linux tarball only); turn
+them on with Settings > This computer > Get developer builds. Windows packages are built on GitHub Actions when a
+release is made; nobody has yet run the installers on a real Windows PC for this project, so a first install there
+still needs a person to click through SmartScreen and report back. How the downloads are built and released is in
+[DESKTOP.md](DESKTOP.md) and [docs/github-release.md](docs/github-release.md).
 
-The Linux app is a native Qt window with the FastAPI backend
-bundled inside it. It needs no separate server, no Python install and no
-Chromium. Build it with `pip install -r requirements-desktop.txt` then
-`./desktop/build_linux.sh`. Package the download with
-`./desktop/package_linux.sh` to get `FlexWeek-Linux-x86_64.tar.gz` (and a
-`.sha256`) containing README, icon, `.desktop` file and the app. Releases
-attach that archive rather than committing `dist/`; see [DESKTOP.md](DESKTOP.md).
-The paste-ready GitHub release text is in [docs/github-release.md](docs/github-release.md).
-Set `FLEXWEEK_DESKTOP_ORIGIN` to point the window at a hosted deployment instead;
-local and hosted accounts are separate, without automatic synchronization.
-
-Windows packages are built on GitHub Actions when a release is published
-(`desktop/build_windows.ps1`, then `packaging/windows/`) and attached as the
-installers `FlexWeek-Windows-x64-Setup.exe` (Inno Setup, per account) and
-`FlexWeek-Windows-x64.msi` (WiX, every account).
-ICU (`icuuc`/`icuin`) is part of Windows 10 1809+; the bundle check requires
-those imports to be satisfied without copying Microsoft's DLLs. The saved
-theme names `nocturne` and `slate` come from Daily Scheduler (the GPL-3.0
-`Local-Schedule-Assistant` project); the hybrid frost colors replaced its
-palette in September 2026.
-
-AI assistance was used throughout development. These models wrote, reviewed
-or checked code, tests and documents under j0nsh1n's direction, who decided
-what was built and checked what shipped:
+AI assistance was used throughout development. These models wrote, reviewed or checked code, tests and documents under
+j0nsh1n's direction, who decided what was built and checked what shipped:
 - Claude (Anthropic): Opus 5 and 5.5, Fable 5.1 and 5.2, Sonnet 5.5, Haiku 5.5.
 - Grok 4.6 and 4.7 (xAI) and Composer 2.5, through Cursor.
 - ChatGPT and Codex (OpenAI): GPT-6.1 Sol, GPT-6 Luna.
 - GLM-5.3 Flash (Z.ai), through OpenCode.
 - Kimi K3.1 Pro (Moonshot AI): bug hunting and picture reviews.
-- TypeSafe's Jev and Laya: small typed-decision models used for checks of
-  wording and documents.
+- Jev and Laya (TypeSafe): small models that run on the developer's computer and sort wording and document checks.
 
 The app itself uses no AI service.
-
-The original Sep 6 contest brief (working title Reslot) is in git history. The
-living schedule is the [roadmap](roadmap.md).
 
 ## Credits
 
 - **Jonathan Shin** ([j0nsh1n](https://github.com/j0nsh1n)): design, development and direction.
 - **Caleb** ([maruzenskymambo](https://github.com/maruzenskymambo)): ideas.
+- The saved theme names `nocturne` and `slate` come from Daily Scheduler (the GPL-3.0 `Local-Schedule-Assistant`
+  project); FlexWeek's own colours replaced its palette in September 2026.
 
 ## License
 
