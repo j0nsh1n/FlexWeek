@@ -155,10 +155,6 @@ fun RemindersScreen(
                     )
                 },
             )
-            SettingRow(
-                title = "Sound",
-                subtitle = "Chime, as on your computer. Alarm sounds stay on the computer.",
-            )
             Text(
                 "What a reminder looks like",
                 style = MaterialTheme.typography.bodyMedium,
@@ -169,8 +165,8 @@ fun RemindersScreen(
             Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp)) {
                     Text("FlexWeek · now", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("History essay starts in ${state.leadMinutes} min", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
-                    Text("7:00 PM · 1 h · then free until 10 PM", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(ReminderSample.TITLE, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+                    Text(ReminderSample.body(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Text(

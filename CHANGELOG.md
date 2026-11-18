@@ -131,6 +131,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - On the phone, a sync after an edit no longer cancels a sync that is already running, background syncs get the same 45 seconds as the computer's, a computer that is off is asked less and less often while the app is open, and the sync after an edit can start on Android 11 and older.
 - On the phone, the Week tab's "X h of homework" total and the "heavy" tag count only the time still planned, not sessions you already finished, the same way the computer's planned line keeps planned and done apart.
 - On the phone, a failed update check (for example offline) no longer counts as today's check, so the next daily check is not blocked for 24 hours, and the updater no longer keeps the old screen after you rotate the phone.
+- On the phone, Settings no longer shows a Sound row that had no control, and the sample reminder shows what a real reminder says (the homework's name, then its start and length).
 
 ## [1.3.0] - 2026-11-10
 
