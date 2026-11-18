@@ -40,6 +40,10 @@ Item {
     signal toggled()
     signal opened()
     signal menuAsked(real x, real y)
+    // Ctrl+C, Ctrl+D and Delete on the block that has the keyboard focus: its menu's Copy, Duplicate and Delete.
+    signal copyAsked()
+    signal duplicateAsked()
+    signal deleteAsked()
     signal focused()
 
     M3Palette { id: m3; theme: cell.theme }
@@ -271,7 +275,17 @@ Item {
     Keys.onPressed: (event) => {
         if (!cell.canOpen)
             return
-        if (cell.dayOpen && cell.homework && event.key === Qt.Key_Space) {
+        var ctrl = (event.modifiers & Qt.ControlModifier) && !(event.modifiers & (Qt.ShiftModifier | Qt.AltModifier))
+        if (ctrl && event.key === Qt.Key_C) {
+            cell.copyAsked()
+            event.accepted = true
+        } else if (ctrl && event.key === Qt.Key_D) {
+            cell.duplicateAsked()
+            event.accepted = true
+        } else if (event.key === Qt.Key_Delete && !event.modifiers) {
+            cell.deleteAsked()
+            event.accepted = true
+        } else if (cell.dayOpen && cell.homework && event.key === Qt.Key_Space) {
             cell.toggled()
             event.accepted = true
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter

@@ -2510,8 +2510,13 @@ def _line(words: str, name: str) -> QLabel:
 _MATERIAL_OTHER_KEYS = frozenset(
     {
         "[Ctrl]+[Shift]+[F]",
+        "[F1]",
+        "[Ctrl]+[N]",
         "[Ctrl]+[Z]",
         "[Ctrl]+[Y] or [Ctrl]+[Shift]+[Z]",
+        "[Ctrl]+[C] then [Ctrl]+[V]",
+        "[Ctrl]+[D]",
+        "[Delete]",
         "[Ctrl]+[S]",
         "[Ctrl]+[=] [-] [0]",
         "[Ctrl] and the mouse wheel",

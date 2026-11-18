@@ -155,8 +155,11 @@ def test_help_in_material_lists_the_number_keys_by_default_and_no_letter_keys(
     assert "Ctrl+Z" in rows and "Ctrl+Y or Ctrl+Shift+Z" in rows and "Ctrl+S" in rows
     assert "Ctrl+Shift+F" in rows, "Quick focus answers to neither switch"
     # Keys the Widgets looks answer to and Material does not.
-    for key in ("T", "B or Esc", "F1", "Ctrl+N", "Ctrl+K", "Delete"):
+    for key in ("T", "B or Esc", "Ctrl+K"):
         assert key not in rows, key
+    # Keys Material gained with the week tools.
+    for key in ("F1", "Ctrl+N", "Ctrl+D", "Delete", "Ctrl+C then Ctrl+V"):
+        assert key in rows, key
     # Ctrl+Shift+L is switched off in Material, and Esc does not put a held card back there.
     for key in ("Ctrl+Shift+L", "Esc while dragging"):
         assert key not in rows, key

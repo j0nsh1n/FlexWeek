@@ -590,6 +590,10 @@ class MaterialBridge(QObject):
         self._sheets.openMore()
 
     @Slot()
+    def openHelp(self) -> None:
+        self._window._open_help()  # type: ignore[attr-defined]
+
+    @Slot()
     def addHomework(self) -> None:
         self._sheets.openHomework()
 

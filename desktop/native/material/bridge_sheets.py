@@ -68,6 +68,10 @@ MORE_ROWS = (
     ("routinesButton", "Routines", "repeat"),
     ("quickFocusAction", "Quick focus", "timer"),
     ("replanAll", "Replan all my homework", "autorenew"),
+    ("copyDay", "Copy day", "calendar_view_day"),
+    ("copyLastWeek", "Copy last week's fixed times", "content_copy"),
+    ("reloadWeek", "Reload this week", "autorenew"),
+    ("openSpotify", "Open Spotify link", "link"),
     ("heading", "Help and info"),
     ("helpButton", "Help", "help"),
     ("aboutButton", "About FlexWeek", "info"),
@@ -1169,6 +1173,17 @@ class SheetsBridge(QObject):
                 detail = f"{left} left" if left else NOTHING_UNFINISHED
             elif name in ("weekListRow", "routinesButton"):
                 enabled = session.account is not None
+            elif name == "openSpotify":
+                # Only with a link set in Settings, as the plain look's More shows it.
+                if not session.spotify_url():
+                    continue
+                enabled = not session.busy
+            elif name in ("copyDay", "copyLastWeek", "reloadWeek"):
+                enabled = session.account is not None and not session.busy
+                if name == "copyDay":
+                    destination = session.paste_destination()
+                    if destination is not None:
+                        detail = day_full_names(session.week_start)[destination[0]]
             rows.append(
                 {
                     "heading": "",
@@ -1214,8 +1229,13 @@ class SheetsBridge(QObject):
             return
         self._publish()
         window = self._window
+        session = self._session
         {
             "quickFocusAction": window._quick_focus,
+            "copyDay": window._copy_day,
+            "copyLastWeek": window._copy_last_week_fixed,
+            "reloadWeek": session.reload,
+            "openSpotify": window._open_spotify,
             "replanAll": lambda: window._plan_with_left_over(everything=True),
             "helpButton": window._open_help,
             "aboutButton": window._open_about,

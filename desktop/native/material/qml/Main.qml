@@ -783,6 +783,19 @@ Item {
         enabled: !modalActive
         onActivated: bridge.redo()
     }
+    // New homework and Help, as in the plain look. Not in a field, a sheet, Focus or sign-in (modalActive).
+    Shortcut {
+        sequence: "Ctrl+N"
+        context: Qt.WindowShortcut
+        enabled: !modalActive && bridge.screen !== "settings"
+        onActivated: bridge.addHomework()
+    }
+    Shortcut {
+        sequence: "F1"
+        context: Qt.WindowShortcut
+        enabled: !modalActive
+        onActivated: bridge.openHelp()
+    }
     // Quick focus, the same as the Quick focus row in More. A Ctrl chord, so neither Settings switch
     // touches it. Ctrl+F is left free for search.
     Shortcut {

@@ -839,6 +839,10 @@ Item {
                     homework: model.homework
                     onToggled: if (root.bridge && root.bridge.week) root.bridge.week.toggleDone(model.assignmentId)
                     onOpened: if (root.bridge && root.bridge.sheets) root.bridge.sheets.editBlock(model.blockId, model.day)
+                    onCopyAsked: if (root.bridge && root.bridge.week) root.bridge.week.copyBlock(model.blockId, model.day)
+                    onDuplicateAsked: if (root.bridge && root.bridge.week) root.bridge.week.duplicateBlock(model.blockId, model.day)
+                    onDeleteAsked: root.askDelete({ blockId: model.blockId, assignmentId: model.assignmentId,
+                                                    day: model.day, homework: model.homework })
                     onMenuAsked: (mx, my) => root.openBlockMenu(blockCell, {
                         blockId: model.blockId,
                         assignmentId: model.assignmentId,
@@ -961,6 +965,18 @@ Item {
         blockMenu.forceActiveFocus()
     }
 
+    // Delete from the block's menu or the Delete key: the same question either way.
+    function askDelete(target) {
+        if (!root.bridge || !root.bridge.sheets)
+            return
+        if (!target.homework)
+            root.bridge.sheets.askDeleteBlock(target.blockId, target.day)
+        else if (root.bridge.sheets.askDeleteHomework)
+            root.bridge.sheets.askDeleteHomework(target.assignmentId)
+        else
+            root.bridge.sheets.askDeleteUnfinished(target.assignmentId)
+    }
+
     function closeBlockMenu(giveFocusBack) {
         slotDay = -1
         menuMode = "block"
@@ -1057,14 +1073,7 @@ Item {
                     if (root.bridge.week)
                         root.bridge.week.toggleDone(target.assignmentId)
                 } else if (label === "Delete") {
-                    if (root.bridge.sheets) {
-                        if (!target.homework)
-                            root.bridge.sheets.askDeleteBlock(target.blockId, target.day)
-                        else if (root.bridge.sheets.askDeleteHomework)
-                            root.bridge.sheets.askDeleteHomework(target.assignmentId)
-                        else
-                            root.bridge.sheets.askDeleteUnfinished(target.assignmentId)
-                    }
+                    root.askDelete(target)
                 }
             }
             onDismissed: {
