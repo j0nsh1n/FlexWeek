@@ -148,7 +148,7 @@ pub(crate) fn running_late(
     );
     let moves = phone_moves(&trace_value, &settled, &assignments);
     let moved = moves.len();
-    let current = current_late_block(&timed, clock_min, &from_start, minutes);
+    let current = current_late_block(&timed, &settled, day, clock_min, &from_start, minutes);
     let end_min =
         flexweek_engine::time::hhmm_to_minutes(current["end"].as_str().unwrap_or("00:00"))
             .unwrap_or(0);
@@ -172,28 +172,60 @@ pub(crate) fn running_late(
     .to_string())
 }
 
-fn current_late_block(blocks: &[Value], clock_min: i64, late_start: &str, minutes: i64) -> Value {
-    let active = blocks.iter().find(|block| {
-        if block.get("kind").and_then(Value::as_str) != Some("flexible") {
-            return false;
-        }
-        let Some(start) = block.get("start").and_then(Value::as_str) else {
-            return false;
-        };
-        let Ok(start) = flexweek_engine::time::hhmm_to_minutes(start) else {
-            return false;
-        };
-        let duration = block
-            .get("duration_min")
-            .and_then(Value::as_i64)
-            .unwrap_or(0);
-        start <= clock_min && clock_min < start + duration
-    });
-    let title = active
-        .and_then(|block| block.get("title").and_then(Value::as_str))
+/// The homework the student is late for: the session on now, else the next one today. The sheet names it
+/// and gives its new end (after the move), not the end of the inserted "Running late" block.
+fn current_late_block(
+    blocks: &[Value],
+    settled: &[Value],
+    day: i64,
+    clock_min: i64,
+    late_start: &str,
+    minutes: i64,
+) -> Value {
+    let candidates: Vec<(&Value, i64, i64)> = blocks
+        .iter()
+        .filter(|block| block.get("kind").and_then(Value::as_str) == Some("flexible"))
+        .filter(|block| {
+            block
+                .get("days")
+                .and_then(Value::as_array)
+                .is_some_and(|days| days.iter().any(|value| value.as_i64() == Some(day)))
+        })
+        .filter_map(|block| {
+            let start = block.get("start").and_then(Value::as_str)?;
+            let start = flexweek_engine::time::hhmm_to_minutes(start).ok()?;
+            let duration = block
+                .get("duration_min")
+                .and_then(Value::as_i64)
+                .unwrap_or(0);
+            Some((block, start, duration))
+        })
+        .collect();
+    let target = candidates
+        .iter()
+        .find(|(_, start, duration)| *start <= clock_min && clock_min < start + duration)
+        .or_else(|| {
+            candidates
+                .iter()
+                .filter(|(_, start, _)| *start > clock_min)
+                .min_by_key(|(_, start, _)| *start)
+        });
+    let title = target
+        .and_then(|(block, _, _)| block.get("title").and_then(Value::as_str))
         .unwrap_or("Running late");
-    let start_min = flexweek_engine::time::hhmm_to_minutes(late_start).unwrap_or(clock_min);
-    let end = flexweek_engine::time::minutes_to_hhmm(start_min + minutes);
+    let moved_end = target.and_then(|(block, _, duration)| {
+        let id = block.get("id").and_then(Value::as_str)?;
+        let after = settled
+            .iter()
+            .find(|item| item.get("id").and_then(Value::as_str) == Some(id))?;
+        let start = after.get("start").and_then(Value::as_str)?;
+        let start = flexweek_engine::time::hhmm_to_minutes(start).ok()?;
+        Some(start + duration)
+    });
+    let end_min = moved_end.unwrap_or_else(|| {
+        flexweek_engine::time::hhmm_to_minutes(late_start).unwrap_or(clock_min) + minutes
+    });
+    let end = flexweek_engine::time::minutes_to_hhmm(end_min);
     json!({"title": title, "end": end, "minutes": minutes})
 }
 
@@ -467,8 +499,8 @@ mod tests {
             "current block title comes from the active timed block"
         );
         assert_eq!(
-            result["current"]["end"], "16:30",
-            "30 minutes extends the current block to 4:30 PM"
+            result["current"]["end"], "17:00",
+            "the current block's end is where the moved session now ends, not the late block's end"
         );
         let spanish = result["moves"]
             .as_array()
@@ -593,6 +625,50 @@ mod tests {
         assert_eq!(
             android, saved,
             "the Android copy differs from the engine fixture"
+        );
+    }
+
+    #[test]
+    fn the_sheet_names_the_homework_and_its_new_end_not_the_late_block() {
+        // Late at 16:05: the Essay (16:00, 60 min) is on now and moves to 16:30, so it ends at 17:30.
+        let result = late_monday("late-current");
+        assert_eq!(result["current"]["title"], "History essay");
+        assert_eq!(result["current"]["end"], "17:30");
+    }
+
+    #[test]
+    fn with_nothing_on_now_the_sheet_names_the_next_homework() {
+        let (week, _) = open_at("late-up-next", "2026-10-05T15:50:00");
+        let db = week.db.lock().unwrap();
+        flexweek_store::insert_assignment(
+            &db,
+            week.user_id.unwrap(),
+            "essay",
+            r#"{"id":"essay","title":"History essay","due":"2026-10-08T21:00","estimate_min":60,"focus_minutes":0,"completed":false}"#,
+        )
+        .unwrap();
+        drop(db);
+        save_week(
+            &week,
+            "2026-10-05",
+            &json!([
+                {"id":"essay-session","title":"History essay","kind":"flexible","days":[0],"start":"16:30","duration_min":60,"assignment_id":"essay","category":"assignments"}
+            ]),
+        );
+        let result: Value = serde_json::from_str(&week.running_late(0, 30, 0.0).unwrap()).unwrap();
+        assert_eq!(result["current"]["title"], "History essay", "{result}");
+        let placed = result["placed"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|block| block["id"] == "essay-session")
+            .expect("the session is still placed");
+        let start =
+            flexweek_engine::time::hhmm_to_minutes(placed["start"].as_str().unwrap()).unwrap();
+        assert_eq!(
+            result["current"]["end"],
+            json!(flexweek_engine::time::minutes_to_hhmm(start + 60)),
+            "the end is the session's new end"
         );
     }
 

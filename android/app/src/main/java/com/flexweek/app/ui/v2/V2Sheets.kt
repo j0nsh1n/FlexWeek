@@ -214,7 +214,7 @@ fun RunningLateSheet(
             Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
                 if (preview != null) {
                     Text("${preview.current.title} is running late", style = MaterialTheme.typography.titleLarge)
-                    Text("Ends at ${lateClockLabel(preview.current.end)} (+${minutes} min)", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Now ends at ${lateClockLabel(preview.current.end)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     Text("Running late", style = MaterialTheme.typography.titleLarge)
                 }

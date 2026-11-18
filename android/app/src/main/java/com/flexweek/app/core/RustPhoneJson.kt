@@ -168,6 +168,17 @@ internal object RustPhoneJson {
 
     fun late(raw: String, minutes: Int): String {
         val root = JSONObject(raw)
+        val moves = root.getJSONArray("moves")
+        for (i in 0 until moves.length()) {
+            val move = moves.getJSONObject(i)
+            // "from 4 PM to 4:30 PM": the engine's detail only said where it moved from.
+            if (move.optString("from_start").isNotBlank() && move.optString("to_start").isNotBlank()) {
+                move.put("detail", TimeLabel.lateDetail(
+                    if (move.isNull("from_day")) null else move.getInt("from_day"), move.getString("from_start"),
+                    if (move.isNull("to_day")) null else move.getInt("to_day"), move.getString("to_start"),
+                ))
+            }
+        }
         return root.put("ok", true).put("preview_id", root.getString("applied_preview"))
             .put("minutes", minutes).toString()
     }

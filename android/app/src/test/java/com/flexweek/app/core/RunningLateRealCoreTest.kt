@@ -20,10 +20,11 @@ class RunningLateRealCoreTest {
         val preview = V2Json.parseRunningLate(RustPhoneJson.late(fixture(), 30))
         assertEquals(1, preview.moves.size)
         assertEquals("History essay", preview.moves[0].title)
-        assertEquals("moves from 4 PM", preview.moves[0].detail)
+        assertEquals("4 PM → 4:30 PM", preview.moves[0].detail)
         assertEquals(60, preview.moves[0].durationMin)
         assertEquals("History essay", preview.current.title)
-        assertEquals("16:30", preview.current.end)
+        // The essay now ends at 5:30 PM (moved to 4:30 PM), not at the end of the 30 late minutes.
+        assertEquals("17:30", preview.current.end)
         assertEquals(listOf("Soccer"), preview.stays)
         assertEquals(null, preview.warning)
     }
