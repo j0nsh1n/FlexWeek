@@ -21,7 +21,7 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
     private val main = Handler(Looper.getMainLooper())
     private val localSettings = context.getSharedPreferences("phone-settings", Context.MODE_PRIVATE)
     private lateinit var native: FlexWeek
-    private var selected: String? = null
+    private val selection = DaySelection { LocalDate.parse(currentDate()) }
     private val ticks = RowTicks { week, id, day, done, opId -> native.setBlockDone(week, id, day.toLong(), done, opId) }
     private val host = object : Host {
         private val random = SecureRandom()
@@ -46,10 +46,10 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
     }
 
     override fun engineVersion(): String = native.engineVersion()
-    override fun selectedDate(): String = selected ?: currentDate()
+    override fun selectedDate(): String = selection.date().toString()
     override fun selectDay(index: Int) {
         require(index in 0..6)
-        selected = LocalDate.parse(currentWeekStart()).plusDays(index.toLong()).toString()
+        selection.select(LocalDate.parse(currentWeekStart()).plusDays(index.toLong()))
     }
 
     override fun today(date: String, nowMinute: Int): String {

@@ -83,6 +83,8 @@ internal object RustPhoneJson {
             item.put("due_label", if (item.isNull("due")) "" else LocalDate.parse(item.getString("due").take(10))
                 .format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)))
         }
+        // Dates, not weekday numbers: last Wednesday is not today even when today is a Wednesday.
+        root.put("selected_is_today", selected == current)
         root.put("selected_day", selected.dayOfWeek.value - 1)
         root.put("today_index", current.dayOfWeek.value - 1)
         root.put("day_title", if (selected == current) "Today" else selected.dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH))

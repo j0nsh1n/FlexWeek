@@ -122,6 +122,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - On the phone, Settings no longer says "No computer linked" at the top while the Devices row shows a paired computer. Both read from one answer, and a computer that is off says "Your computer isn't reachable" with the last sync time. "Reachable" replaces "on the same Wi-Fi", which the phone cannot know.
 - On the phone, a failed sync or pairing says what went wrong: the computer is off or not reachable, it needs an update, or another problem. "That code didn't match" now appears only for a wrong code.
 - On the phone, the Week tab refreshes after every sync and rolls over to the new week on Monday, instead of keeping the old week until the app is restarted.
+- On the phone, Today follows the real date when a new day starts, instead of staying on the day you last tapped, and the jump back to Today shows when you are on the same weekday of another week.
 
 ## [1.3.0] - 2026-11-10
 
