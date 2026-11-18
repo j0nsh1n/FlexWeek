@@ -3,7 +3,7 @@ package com.flexweek.app.ui.reminders
 /** The Devices row in Settings, from the same sync answer as the top line. */
 object DeviceWords {
     const val NOT_LINKED_TITLE = "No computer linked"
-    const val NOT_LINKED_LINE = "Your week is saved here. Pair again from your computer."
+    const val NOT_LINKED_LINE = "Your week is saved here."
 
     fun title(state: RemindersUiState): String = if (state.paired) state.deviceName else NOT_LINKED_TITLE
 

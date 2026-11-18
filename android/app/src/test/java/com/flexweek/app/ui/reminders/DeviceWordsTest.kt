@@ -40,5 +40,6 @@ class DeviceWordsTest {
         val shown = state(RustPhoneJson.phoneSettings(prefs, RustPhoneJson.sync("not paired"), false, zone))
         assertEquals(DeviceWords.NOT_LINKED_TITLE, DeviceWords.title(shown))
         assertFalse(DeviceWords.line(shown).contains("Paired"))
+        assertFalse("the card says how to pair once, in its own line below", DeviceWords.line(shown).contains("Pair"))
     }
 }
