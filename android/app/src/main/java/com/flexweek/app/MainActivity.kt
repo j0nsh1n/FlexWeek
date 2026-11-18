@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -33,6 +34,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.flexweek.app.model.SyncLine
 import com.flexweek.app.ui.pair.PairScreen
 import com.flexweek.app.ui.pair.PairViewModel
+import com.flexweek.app.ui.nav.BackStep
+import com.flexweek.app.ui.nav.BackSteps
 import com.flexweek.app.ui.nav.MainTab
 import com.flexweek.app.ui.nav.MainTabs
 import com.flexweek.app.ui.reminders.AndroidPermissions
@@ -186,12 +189,15 @@ private fun FlexWeekRoot(
     activity: ComponentActivity,
 ) {
     val demo = core is com.flexweek.app.core.FakeFlexWeekCore
-    var paired by remember { mutableStateOf(initiallyPaired || (demo && tweaks.prePaired)) }
-    var pairingRequested by remember { mutableStateOf(false) }
+    // Saved, so a rotation keeps them; Unpair also tells the app (see below) so the next start agrees.
+    var paired by rememberSaveable { mutableStateOf(initiallyPaired || (demo && tweaks.prePaired)) }
+    var pairingRequested by rememberSaveable { mutableStateOf(false) }
     // Survives rotation so a second pair screen cannot start while the first pairing is still running.
     var pairEpoch by rememberSaveable { mutableIntStateOf(0) }
     var pendingNotifPrompt by remember { mutableStateOf(false) }
-    var tab by remember {
+    // Each Add gets its own draft; it is kept over a rotation and dropped when the sheet closes.
+    var addEpoch by rememberSaveable { mutableIntStateOf(0) }
+    var tab by rememberSaveable {
         mutableStateOf(
             when (tweaks.startScreen) {
                 ScreenshotTweaks.StartScreen.Reminders -> MainTab.Settings
@@ -200,7 +206,7 @@ private fun FlexWeekRoot(
             },
         )
     }
-    var sheet by remember {
+    var sheet by rememberSaveable {
         mutableStateOf(
             when (tweaks.openSheet) {
                 ScreenshotTweaks.V2Sheet.Add -> ActiveSheet.Add
@@ -222,6 +228,7 @@ private fun FlexWeekRoot(
         LaunchedEffect(pairState.paired) {
             if (pairState.paired) {
                 paired = true
+                (activity.application as? FlexWeekApp)?.setPaired(true)
                 pairingRequested = false
                 pendingNotifPrompt = true
             }
@@ -285,9 +292,20 @@ private fun FlexWeekRoot(
         }
     val syncLine = remindersVm.state.problem?.let { SyncLine("unreachable", it) } ?: todayVm.uiState.syncLine
     val closeSheet: () -> Unit = {
+        if (sheet == ActiveSheet.Add) addEpoch += 1
         sheet = ActiveSheet.None
         todayVm.refreshAgenda()
         weekVm.refresh()
+    }
+    BackHandler(enabled = BackSteps.next(sheet != ActiveSheet.None, tab) != BackStep.Leave) {
+        when (BackSteps.next(sheet != ActiveSheet.None, tab)) {
+            BackStep.CloseSheet -> {
+                if (sheet == ActiveSheet.Add) addEpoch += 1
+                sheet = ActiveSheet.None
+            }
+            BackStep.GoToToday -> tab = MainTab.Today
+            BackStep.Leave -> Unit
+        }
     }
     Scaffold(
         bottomBar = {
@@ -398,6 +416,8 @@ private fun FlexWeekRoot(
                             onUnpair = {
                                 remindersVm.unpair {
                                     pairEpoch += 1
+                                    paired = false
+                                    (activity.application as? FlexWeekApp)?.setPaired(false)
                                     pairingRequested = true
                                 }
                             },
@@ -419,13 +439,12 @@ private fun FlexWeekRoot(
                 }
             }
             if (sheet == ActiveSheet.Add) {
-                val addVm =
-                    remember {
-                        AddHomeworkViewModel(core) { message ->
-                            todayVm.showMessage(message)
-                            closeSheet()
-                        }
-                    }
+                // A ViewModel keeps the half-typed draft over a rotation; the callback is rebound each time.
+                val addVm = viewModel(key = "add-homework-$addEpoch") { AddHomeworkViewModel(core) {} }
+                addVm.onSaved = { message ->
+                    todayVm.showMessage(message)
+                    closeSheet()
+                }
                 AddHomeworkSheet(
                     draft = addVm.draft,
                     recentTitles = addVm.recentTitles,

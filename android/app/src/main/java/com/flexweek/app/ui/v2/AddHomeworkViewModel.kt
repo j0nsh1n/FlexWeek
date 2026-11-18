@@ -20,7 +20,7 @@ import java.time.LocalDate
 class AddHomeworkViewModel(
     private val core: FlexWeekCore,
     private val workerDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val onSaved: (String) -> Unit,
+    var onSaved: (String) -> Unit,
 ) : ViewModel() {
     // A nice-to-have row: if the core cannot list them, the sheet opens without it.
     var recentTitles: List<String> by mutableStateOf(emptyList())
