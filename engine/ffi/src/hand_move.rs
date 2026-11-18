@@ -112,7 +112,7 @@ pub(crate) fn hand_move(
     }
     db.execute_batch("COMMIT").map_err(failure)?;
     drop(db);
-    week.host.data_changed("week".into());
+    week.local_change("week");
     Ok(response)
 }
 

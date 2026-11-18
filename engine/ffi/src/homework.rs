@@ -316,7 +316,7 @@ pub(crate) fn save_homework(
     let mut saved = views.get(&assignment_id).cloned().unwrap_or(body);
     saved["revision"] = json!(saved_revision);
     drop(db);
-    week.host.data_changed("homework".into());
+    week.local_change("homework");
     Ok(saved.to_string())
 }
 

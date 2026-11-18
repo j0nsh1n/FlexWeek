@@ -428,7 +428,7 @@ pub(crate) fn accept_plan(week: &FlexWeek, preview_id: &str) -> Result<String, F
     }
     db.execute_batch("COMMIT").map_err(failure)?;
     drop(db);
-    week.host.data_changed("week".into());
+    week.local_change("week");
     Ok(
         json!({"accepted": true, "week_start": preview.week_start, "placed_ids": placed_ids})
             .to_string(),

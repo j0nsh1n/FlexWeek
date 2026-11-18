@@ -17,6 +17,9 @@ pub(crate) trait SyncApi: Send + Sync {
     fn cancel_sync(&self) -> String;
     fn unlink(&self) -> String;
     fn join_from_pairing(&self, payload: &str) -> String;
+    /// Stamp this device's edits now, so each carries the time it was made rather than the time of
+    /// the next sync that reaches the computer.
+    fn stamp_local_edits(&self) {}
 }
 
 pub(crate) struct NativeSync {
@@ -222,6 +225,32 @@ impl SyncApi for NativeSync {
     }
     fn join_from_pairing(&self, payload: &str) -> String {
         self.pair_from_qr(payload)
+    }
+    fn stamp_local_edits(&self) {
+        let Some(user_id) = self.account_id() else {
+            return;
+        };
+        let Ok(mut db) = flexweek_store::open_connection(&self.db_path) else {
+            return;
+        };
+        let paired: bool = db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='sync_account')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false)
+            && db
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM sync_account WHERE user_id = ?1)",
+                    [user_id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+        if paired {
+            // A failed stamp loses nothing: the next sync scans again, only with a later time.
+            let _ = flexweek_sync::scan(&mut db, user_id, self.host.now_unix_ms());
+        }
     }
 }
 
