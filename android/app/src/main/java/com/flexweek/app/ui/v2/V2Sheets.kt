@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.flexweek.app.core.TimeLabel
 import com.flexweek.app.model.HomeworkDraft
 import com.flexweek.app.model.PlanRecordState
 import com.flexweek.app.model.RunningLatePreview
@@ -259,15 +260,7 @@ fun RunningLateSheet(
     }
 }
 
-private fun lateClockLabel(value: String): String {
-    val parts = value.split(":")
-    if (parts.size != 2) return value
-    val hour = parts[0].toIntOrNull() ?: return value
-    val minute = parts[1].toIntOrNull() ?: return value
-    val displayHour = when (hour % 12) { 0 -> 12; else -> hour % 12 }
-    val suffix = if (hour < 12) "AM" else "PM"
-    return if (minute == 0) "$displayHour $suffix" else "$displayHour:${minute.toString().padStart(2, '0')} $suffix"
-}
+private fun lateClockLabel(value: String): String = runCatching { TimeLabel.short(value) }.getOrDefault(value)
 
 @Composable
 private fun ChipRow(options: List<String>, selected: String, onPick: (String) -> Unit) {

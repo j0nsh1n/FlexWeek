@@ -13,7 +13,11 @@ internal object RustPhoneJson {
     private val timeFormat = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
     private val dayFormat = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.ENGLISH)
 
-    fun time(value: String): String = LocalTime.parse(value).format(timeFormat)
+    // The engine's "24:00" (a block that ends at midnight) is not an ISO time, so read hour and minute by hand.
+    fun time(value: String): String {
+        val (hour, minute) = value.split(":").map(String::toInt)
+        return LocalTime.of(hour % 24, minute).format(timeFormat)
+    }
 
     fun length(minutes: Long): String {
         if (minutes < 60) return "$minutes min"

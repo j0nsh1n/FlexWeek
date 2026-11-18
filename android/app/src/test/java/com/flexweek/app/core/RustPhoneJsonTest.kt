@@ -105,4 +105,12 @@ class RustPhoneJsonTest {
         assertEquals("History essay", saved.getString("title"))
         assertEquals("2026-10-23T23:59", saved.getString("due"))
     }
+
+    @Test fun aBlockThatEndsAtMidnightReadsAsTwelveAM() {
+        assertEquals("12:00 AM", RustPhoneJson.time("24:00"))
+        val raw = JSONObject(agenda())
+        raw.getJSONArray("rows").getJSONObject(0).put("start", "22:00").put("end", "24:00").put("duration_min", 120)
+        val state = TodayJson.parse(RustPhoneJson.today(raw.toString(), "2026-10-08", sync))
+        assertEquals("10:00 PM–12:00 AM · 2 h", (state.rows.single() as AgendaRow.Now).whenLine)
+    }
 }

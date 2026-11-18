@@ -6,7 +6,8 @@ object TimeLabel {
 
     fun short(hhmm: String): String {
         val (hour, minute) = hhmm.split(":").map(String::toInt)
-        val half = if (hour < 12) "AM" else "PM"
+        // The engine writes the end of a block that runs to midnight as "24:00".
+        val half = if (hour % 24 < 12) "AM" else "PM"
         val clock = if (hour % 12 == 0) 12 else hour % 12
         return if (minute == 0) "$clock $half" else "$clock:${"%02d".format(minute)} $half"
     }

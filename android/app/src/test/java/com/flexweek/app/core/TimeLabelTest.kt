@@ -13,6 +13,8 @@ class TimeLabelTest {
         assertEquals("12 PM", TimeLabel.short("12:00"))
     }
 
+    @Test fun theEndOfADayIsMidnightNotNoon() = assertEquals("12 AM", TimeLabel.short("24:00"))
+
     @Test fun aMoveOnTheSameDaySaysOnlyTheTimes() =
         assertEquals("4 PM → 4:30 PM", TimeLabel.lateDetail(0, "16:00", 0, "16:30"))
 
