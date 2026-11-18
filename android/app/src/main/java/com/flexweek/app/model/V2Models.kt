@@ -16,7 +16,9 @@ data class HomeworkDraft(
     val sessions: String = "one",
 ) {
     /** Save needs a title, a due day and a length. */
-    val canSave: Boolean get() = title.trim().isNotEmpty() && due.isNotBlank() && estimateMin > 0
+    val canSave: Boolean get() = title.trim().isNotEmpty() && due.isNotBlank() && validLength
+    /** The engine takes 15-minute steps only, up to a day. */
+    val validLength: Boolean get() = estimateMin in 15..1440 && estimateMin % 15 == 0
 }
 
 data class PlanRecordLine(
@@ -288,6 +290,7 @@ object V2Json {
 object AddHomeworkWords {
     const val TIME_NOTE = "Save puts it in No time yet. Plan gives it a time."
     const val NEEDS_TITLE = "Give the homework a title."
+    const val NEEDS_STEPS = "Use 15-minute steps, for example 45 or 75."
     val LENGTHS: List<Pair<String, Int>> =
         listOf("15 min" to 15, "30 min" to 30, "45 min" to 45, "1 h" to 60, "1 h 30" to 90, "2 h" to 120)
     const val OTHER = "Other"

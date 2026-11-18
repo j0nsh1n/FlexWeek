@@ -30,15 +30,22 @@ class AddHomeworkViewModel(
         private set
     private var saving = false
 
+    var problem: String? by mutableStateOf(null)
+        private set
+
     init {
-        draft = draft.copy(due = DueChips.forToday(LocalDate.now()).first().date.toString())
+        reset()
         viewModelScope.launch {
             recentTitles = withContext(workerDispatcher) { runCatching { core.recentTitles() }.getOrDefault(emptyList()) }
         }
     }
 
-    var problem: String? by mutableStateOf(null)
-        private set
+    /** A fresh form, with the due day taken again from today, for the next time Add opens. */
+    fun reset() {
+        draft = HomeworkDraft(due = DueChips.forToday(LocalDate.now()).first().date.toString())
+        problem = null
+        saving = false
+    }
 
     fun onTitleChange(value: String) {
         draft = draft.copy(title = value)
@@ -71,7 +78,11 @@ class AddHomeworkViewModel(
 
     fun save() {
         if (!draft.canSave) {
-            problem = if (draft.title.trim().isEmpty()) AddHomeworkWords.NEEDS_TITLE else null
+            problem = when {
+                draft.title.trim().isEmpty() -> AddHomeworkWords.NEEDS_TITLE
+                draft.estimateMin > 0 && !draft.validLength -> AddHomeworkWords.NEEDS_STEPS
+                else -> null
+            }
             return
         }
         send()

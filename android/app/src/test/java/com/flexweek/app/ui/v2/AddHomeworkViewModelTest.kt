@@ -30,6 +30,35 @@ class AddHomeworkViewModelTest {
     }
 
     @Test
+    fun otherLengthsOffTheFifteenMinuteStepsKeepSaveOff() {
+        var saved: String? = null
+        val vm = AddHomeworkViewModel(core, main.dispatcher) { saved = it }
+        vm.onTitleChange("Essay")
+        vm.onOtherLength()
+        for (bad in listOf("20", "999", "7")) {
+            vm.onOtherMinutes(bad)
+            assertFalse("$bad is not a valid length", vm.draft.canSave)
+        }
+        vm.onOtherMinutes("20")
+        vm.save()
+        assertEquals("Use 15-minute steps, for example 45 or 75.", vm.problem)
+        assertNull(saved)
+        vm.onOtherMinutes("75")
+        assertTrue(vm.draft.canSave)
+    }
+
+    @Test
+    fun resetEmptiesTheDraftForTheNextTimeAddOpens() {
+        val vm = AddHomeworkViewModel(core, main.dispatcher) {}
+        vm.onTitleChange("Lab report")
+        vm.onEstimate(45)
+        vm.reset()
+        assertEquals("", vm.draft.title)
+        assertEquals(0, vm.draft.estimateMin)
+        assertTrue("a due day is chosen again", vm.draft.due.isNotBlank())
+    }
+
+    @Test
     fun saveWithNoTitleAsksForOneAndDoesNotCallTheCore() {
         var saved: String? = null
         val vm = AddHomeworkViewModel(core, main.dispatcher) { saved = it }
