@@ -162,13 +162,15 @@ fun RemindersScreen(
             ComputerCard(state, onSyncNow, onUnpair)
 
             Heading("Help")
-            SettingRow(
-                icon = R.drawable.ic_bug_report,
-                title = "Report a problem",
-                subtitle = "Opens a short form with your app version filled in",
-                onClick = onReportProblem,
-                trailing = { Icon(painterResource(R.drawable.ic_open_in_new), null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-            )
+            if (FeedbackForm.available()) {
+                SettingRow(
+                    icon = R.drawable.ic_bug_report,
+                    title = "Report a problem",
+                    subtitle = "Opens a short form with your app version filled in",
+                    onClick = onReportProblem,
+                    trailing = { Icon(painterResource(R.drawable.ic_open_in_new), null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                )
+            }
             UpdatesBlock(
                 updateState, updateDaily, onCheckUpdates, onDownloadUpdate, onUpdateDaily, onUpdateLater, onUpdateSteps, onUpdatePermission,
             )
