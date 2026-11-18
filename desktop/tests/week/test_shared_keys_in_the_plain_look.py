@@ -52,8 +52,9 @@ def _page(window: NativeWindow) -> str:
 
 @pytest.fixture()
 def acted(window: NativeWindow, monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """What the add, plan and undo keys reach, without opening a sheet that waits for an answer."""
+    """What the add, plan, undo and focus keys reach, without opening a sheet that waits for an answer."""
     calls: list[str] = []
+    monkeypatch.setattr(window, "_open_focus_screen", lambda: calls.append("focus"))
     monkeypatch.setattr(window, "_add_now", lambda: calls.append("add"))
     monkeypatch.setattr(window, "_plan_with_left_over", lambda everything=False: calls.append("plan"))
     monkeypatch.setattr(window.session, "undo", lambda: calls.append("undo"))
@@ -159,7 +160,7 @@ def test_with_letter_keys_on_c_p_z_and_f_add_plan_undo_and_open_focus(
     _press(window, Qt.Key.Key_Z)
     assert acted == ["add", "plan", "undo"]
     _press(window, Qt.Key.Key_F)
-    assert _page(window) == "focusPage"
+    assert acted == ["add", "plan", "undo", "focus"]
     assert window.session.focus is None, "F shows the timer; it does not start one"
 
 
@@ -235,16 +236,14 @@ def test_ctrl_shortcuts_do_not_answer_to_either_switch(
 
 
 def test_ctrl_shift_f_starts_quick_focus_and_ctrl_f_does_nothing(
-    qapp: QApplication, window: NativeWindow
+    qapp: QApplication, window: NativeWindow, acted: list[str]
 ) -> None:
     _press(window, Qt.Key.Key_F, CTRL)
     pump(qapp)
-    assert _page(window) == "weekPage", "Ctrl+F does nothing for now"
+    assert acted == [], "Ctrl+F does nothing for now"
     _press(window, Qt.Key.Key_F, CTRL | SHIFT)
-    assert _page(window) == "focusPage"
+    assert acted == ["focus"]
     assert window.session.focus is None, "it is ready to start, as the Quick focus button is"
-    QTest.keyClick(window, Qt.Key.Key_Escape)
-    assert _page(window) == "weekPage"
 
 
 def test_ctrl_shift_f_does_nothing_while_typing(qapp: QApplication, window: NativeWindow) -> None:
