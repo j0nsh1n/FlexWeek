@@ -132,7 +132,7 @@ enum class CategoryKind { School, Sports, Homework }
 
 fun categoryKind(category: String): CategoryKind? = when (category) {
     "school" -> CategoryKind.School
-    "sports" -> CategoryKind.Sports
+    "sports", "sport", "activity", "activities" -> CategoryKind.Sports
     "homework", "hw" -> CategoryKind.Homework
     else -> null
 }

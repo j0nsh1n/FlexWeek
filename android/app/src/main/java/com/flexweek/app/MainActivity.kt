@@ -394,7 +394,12 @@ private fun FlexWeekRoot(
                         weekVm.let { vm ->
                             WeekScreen(
                                 state = vm.state,
+                                today = vm.today,
+                                isCurrentWeek = vm.weekOffset == 0,
                                 syncLine = syncLine,
+                                onPreviousWeek = vm::previousWeek,
+                                onNextWeek = vm::nextWeek,
+                                onThisWeek = vm::thisWeek,
                                 onOpenDay = { day ->
                                     todayVm.selectDay(day)
                                     tab = MainTab.Today
