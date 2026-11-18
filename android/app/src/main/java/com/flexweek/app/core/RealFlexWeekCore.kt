@@ -142,15 +142,25 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
         answer.toString()
     }
 
-    override fun focusFinish(): String = result {
+    override fun focusFinish(): String = try {
         // Ending early keeps the whole minutes worked, as the End question says and the computer does.
-        FocusJson.earlyCredit(focusState(), System.currentTimeMillis())?.let {
-            native.creditFocus(it.assignmentId, it.minutes.toLong(), it.operation)
-        }
-        val answer = native.focusFinish(focusState())
-        localSettings.edit().remove("focus-state").apply()
-        com.flexweek.app.system.FocusRuntime.update(appContext, "null")
-        answer
+        FocusEnd.run(
+            credit = {
+                FocusJson.earlyCredit(focusState(), System.currentTimeMillis())?.let {
+                    native.creditFocus(it.assignmentId, it.minutes.toLong(), it.operation)
+                }
+            },
+            finish = { native.focusFinish(focusState()) },
+            clearSavedTimer = {
+                localSettings.edit().remove("focus-state").apply()
+                com.flexweek.app.system.FocusRuntime.update(appContext, "null")
+            },
+            refusalText = { (it as? FfiException)?.let(RustPhoneJson::ffiText) ?: UNREADABLE },
+        )
+    } catch (error: FfiException) {
+        JSONObject().put("ok", false).put("error", RustPhoneJson.ffiText(error)).toString()
+    } catch (error: org.json.JSONException) {
+        JSONObject().put("ok", false).put("error", UNREADABLE).toString()
     }
 
     override fun focusComplete(): String {

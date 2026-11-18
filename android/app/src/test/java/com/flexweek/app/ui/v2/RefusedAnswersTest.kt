@@ -121,3 +121,53 @@ class ThreadingTest {
         }
     }
 }
+
+class RefusedTicksTest {
+    @get:org.junit.Rule val main = com.flexweek.app.testing.MainThreadRule()
+
+    private fun core(refuse: Boolean = true) = object : FlexWeekCore by FakeFlexWeekCore() {
+        override fun setHomeworkDone(id: String, done: Boolean, opId: String) {
+            if (refuse) throw IllegalStateException("block was not found")
+        }
+    }
+
+    @Test fun aTickTheEngineRefusesShowsItsMessageInsteadOfCrashing() {
+        val vm = TodayViewModel(core(), workerDispatcher = main.dispatcher)
+        vm.toggleHomework("gone")
+        assertEquals("block was not found", vm.uiState.snackbar?.message)
+    }
+
+    @Test fun anUndoTheEngineRefusesShowsItsMessage() {
+        var refuseNow = false
+        val delegate = object : FlexWeekCore by FakeFlexWeekCore() {
+            override fun setHomeworkDone(id: String, done: Boolean, opId: String) {
+                if (refuseNow) throw IllegalStateException("day is not one of the block's days")
+            }
+        }
+        val vm = TodayViewModel(delegate, workerDispatcher = main.dispatcher)
+        val row = vm.uiState.rows.filterIsInstance<com.flexweek.app.model.AgendaRow.Item>().first { it.homework && !it.done }
+        vm.toggleHomework(row.id)
+        refuseNow = true
+        vm.undoLast()
+        assertEquals("day is not one of the block's days", vm.uiState.snackbar?.message)
+    }
+
+    @Test fun aRefusedEarlyCreditStillEndsTheTimerAndSaysWhy() {
+        val finished = core(refuse = false).let { delegate ->
+            object : FlexWeekCore by delegate {
+                override fun focusFinish() = """{"ok":false,"error":"homework was not found"}"""
+            }
+        }
+        val vm = TodayViewModel(finished, workerDispatcher = main.dispatcher)
+        vm.endFocus()
+        assertNull(vm.focusState)
+        assertEquals("homework was not found", vm.uiState.snackbar?.message)
+    }
+
+    @Test fun aTickedSessionSaysSessionMarkedDone() {
+        val vm = TodayViewModel(core(refuse = false), workerDispatcher = main.dispatcher)
+        val row = vm.uiState.rows.filterIsInstance<com.flexweek.app.model.AgendaRow.Item>().first { it.homework && !it.done }
+        vm.toggleHomework(row.id)
+        assertEquals("Session marked done", vm.uiState.snackbar?.message)
+    }
+}

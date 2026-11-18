@@ -51,6 +51,7 @@ fun WeekScreen(
     today: LocalDate?,
     isCurrentWeek: Boolean,
     syncLine: SyncLine,
+    problem: String? = null,
     onPreviousWeek: () -> Unit,
     onNextWeek: () -> Unit,
     onThisWeek: () -> Unit,
@@ -76,6 +77,7 @@ fun WeekScreen(
             }
             Text(state.homeworkTotal, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             SyncLineBar(syncLine)
+            problem?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp)) }
         }
         val entries = if (today == null) emptyList() else WeekList.build(state.days, today)
         LazyColumn(

@@ -313,7 +313,7 @@ private fun AgendaItemRow(row: AgendaRow.Item, onToggle: (String) -> Unit) {
         if (row.homework) {
             Box(
                 Modifier.size(48.dp).clip(CircleShape).clickable { onToggle(row.id) }.semantics {
-                    contentDescription = if (row.done) "Mark ${row.title} not finished" else "Mark ${row.title} finished"
+                    contentDescription = if (row.done) "Mark ${row.title} session not done" else "Mark ${row.title} session done"
                 },
                 contentAlignment = Alignment.Center,
             ) {
@@ -531,7 +531,7 @@ private fun SnackbarBar(
             Text("Undo", color = MaterialTheme.colorScheme.primary)
         }
         TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) {
-            Text("✕")
+            Icon(painterResource(R.drawable.ic_close), contentDescription = "Dismiss")
         }
     }
 }

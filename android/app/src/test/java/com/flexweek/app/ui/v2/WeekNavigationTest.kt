@@ -80,4 +80,16 @@ class WeekNavigationTest {
         assertEquals("No homework planned", WeekRowWords.summary(0, 0))
         assertFalse(WeekRowWords.summary(60, 60).contains("2 h"))
     }
+
+    @Test fun aWeekTheEngineRefusesShowsItsMessageInsteadOfCrashing() {
+        val refusing: FlexWeekCore = object : FlexWeekCore by FakeFlexWeekCore() {
+            override fun currentWeekStart() = "2026-11-16"
+            override fun currentDate() = "2026-11-17"
+            override fun weekRows(weekStart: String): String = throw IllegalStateException("that week is not available")
+        }
+        val vm = WeekViewModel(refusing, main.dispatcher)
+        assertEquals("that week is not available", vm.problem)
+        val ok = WeekViewModel(core, main.dispatcher)
+        assertEquals(null, ok.problem)
+    }
 }

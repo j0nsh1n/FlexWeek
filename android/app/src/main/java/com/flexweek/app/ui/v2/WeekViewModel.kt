@@ -30,6 +30,10 @@ class WeekViewModel(
     var weekOffset by mutableIntStateOf(0)
         private set
 
+    /** The engine's reason when a week could not be read; the screen shows it in place of the rows. */
+    var problem by mutableStateOf<String?>(null)
+        private set
+
     // Only the newest answer is applied, so tapping an arrow twice quickly cannot end on the earlier week.
     private var request = 0
 
@@ -42,13 +46,24 @@ class WeekViewModel(
         val offset = weekOffset
         viewModelScope.launch {
             // The current Monday is read with the rows, so a new week is picked up by the same refresh.
-            val (loaded, date) = withContext(workerDispatcher) {
-                val monday = LocalDate.parse(core.currentWeekStart()).plusWeeks(offset.toLong())
-                V2Json.parseWeekRows(core.weekRows(monday.toString())) to LocalDate.parse(core.currentDate())
+            val answer = withContext(workerDispatcher) {
+                try {
+                    val monday = LocalDate.parse(core.currentWeekStart()).plusWeeks(offset.toLong())
+                    Result.success(V2Json.parseWeekRows(core.weekRows(monday.toString())) to LocalDate.parse(core.currentDate()))
+                } catch (error: Exception) {
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    Result.failure(error)
+                }
             }
             if (asked == request) {
-                state = loaded
-                today = date
+                answer.onSuccess { (loaded, date) ->
+                    state = loaded
+                    today = date
+                    problem = null
+                }.onFailure { error ->
+                    problem = (error as? com.flexweek.app.bindings.FfiException)?.let(com.flexweek.app.core.RustPhoneJson::ffiText)
+                        ?: error.message ?: "This week could not be loaded."
+                }
             }
         }
     }

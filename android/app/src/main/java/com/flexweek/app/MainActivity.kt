@@ -208,8 +208,8 @@ private fun FlexWeekRoot(
     // Survives rotation so a second pair screen cannot start while the first pairing is still running.
     var pairEpoch by rememberSaveable { mutableIntStateOf(0) }
     var pendingNotifPrompt by remember { mutableStateOf(false) }
-    // Each Add gets its own draft; it is kept over a rotation and dropped when the sheet closes.
-    var addEpoch by rememberSaveable { mutableIntStateOf(0) }
+    // One Add draft is kept over a rotation and emptied when the sheet closes.
+    val addDraft = remember { arrayOfNulls<AddHomeworkViewModel>(1) }
     var tab by rememberSaveable {
         mutableStateOf(
             when (tweaks.startScreen) {
@@ -307,7 +307,7 @@ private fun FlexWeekRoot(
         }
     val syncLine = remindersVm.state.problem?.let { SyncLine("unreachable", it) } ?: todayVm.uiState.syncLine
     val closeSheet: () -> Unit = {
-        if (sheet == ActiveSheet.Add) addEpoch += 1
+        if (sheet == ActiveSheet.Add) addDraft[0]?.reset()
         sheet = ActiveSheet.None
         todayVm.refreshAgenda()
         weekVm.refresh()
@@ -315,7 +315,7 @@ private fun FlexWeekRoot(
     BackHandler(enabled = BackSteps.next(sheet != ActiveSheet.None, tab) != BackStep.Leave) {
         when (BackSteps.next(sheet != ActiveSheet.None, tab)) {
             BackStep.CloseSheet -> {
-                if (sheet == ActiveSheet.Add) addEpoch += 1
+                if (sheet == ActiveSheet.Add) addDraft[0]?.reset()
                 sheet = ActiveSheet.None
             }
             BackStep.GoToToday -> tab = MainTab.Today
@@ -400,6 +400,7 @@ private fun FlexWeekRoot(
                                 today = vm.today,
                                 isCurrentWeek = vm.weekOffset == 0,
                                 syncLine = syncLine,
+                                problem = vm.problem,
                                 onPreviousWeek = vm::previousWeek,
                                 onNextWeek = vm::nextWeek,
                                 onThisWeek = vm::thisWeek,
@@ -528,7 +529,8 @@ private fun FlexWeekRoot(
     }
     if (sheet == ActiveSheet.Add) {
         // A ViewModel keeps the half-typed draft over a rotation; the callback is rebound each time.
-        val addVm = viewModel(key = "add-homework-$addEpoch") { AddHomeworkViewModel(core) {} }
+        val addVm = viewModel(key = "add-homework") { AddHomeworkViewModel(core) {} }
+        addDraft[0] = addVm
         addVm.onSaved = { message ->
             todayVm.showMessage(message)
             closeSheet()
