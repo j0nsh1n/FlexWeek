@@ -3,6 +3,9 @@ and the app reacts."""
 
 from __future__ import annotations
 
+import re
+import time
+
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
@@ -173,3 +176,45 @@ def test_this_computer_account_setup_updates_and_pairing_are_wired(
     _click(qapp, window, _named(root, "row_pair")[0])
     wait_until(qapp, lambda: _panel(window).property("state")["pairCode"] == "ABCD-1234")
     assert "ABCD-1234" in str(_named(root, "row_pair")[0].property("subtitle"))
+
+
+def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_tries_and_its_problems(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Widgets pairing sheet said these; Material's Pair a phone row only showed the code."""
+    status: dict = {}
+    monkeypatch.setattr(
+        window.session, "begin_pairing", lambda done: done({"display_code": "1234 5678"}, None) or True
+    )
+    monkeypatch.setattr(window.session, "pairing_status", lambda: dict(status))
+    root = _open_settings(qapp, window, "computer")
+    row = _named(root, "row_pair")[0]
+
+    def subtitle() -> str:
+        _pump(qapp, 5)
+        return str(row.property("subtitle"))
+
+    status.update(state="waiting", expires_at_ms=int(time.time() * 1000) + 300_500, tries_left=3)
+    _click(qapp, window, row)
+    wait_until(qapp, lambda: "1234 5678" in subtitle())
+    words = subtitle()
+    assert re.search(r"Code works for (5:00|4:59)\. 3 tries left\. It works once\.", words), words
+    status.update(tries_left=1)
+    _panel(window)._pair_tick()
+    assert "1 try left." in subtitle()
+
+    for state, problem in (
+        ("expired", "That code has expired. Start a new one."),
+        ("too_many_tries", "Too many wrong tries. Start a new code."),
+        ("idle", "That code is no longer open. Start a new one."),
+    ):
+        status.clear()
+        status.update(state="waiting", expires_at_ms=int(time.time() * 1000) + 60_000, tries_left=3)
+        _click(qapp, window, row)
+        wait_until(qapp, lambda: "1234 5678" in subtitle())
+        status.clear()
+        status.update(state=state)
+        _panel(window)._pair_tick()
+        assert _panel(window).property("state")["pairError"] == problem, state
+        assert subtitle() == "Show a code to link a phone.", state
+        assert problem in str(_named(root, "row_pairError")[0].property("subtitle")), state

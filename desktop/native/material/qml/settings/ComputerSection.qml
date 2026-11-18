@@ -64,7 +64,9 @@ SectionPage {
         LinkRow {
             key: "pair"
             title: "Pair a phone"
-            subtitle: page.st.pairCode ? "Enter this code on the phone: " + page.st.pairCode : "Show a code to link a phone."
+            subtitle: page.st.pairCode
+                ? "Enter this code on the phone: " + page.st.pairCode + (page.st.pairStatus ? ". " + page.st.pairStatus : "")
+                : "Show a code to link a phone."
             trailing: ""
             onClicked: page.panel.pair()
         }

@@ -9,6 +9,7 @@ save is not built; the flags below say which those are.
 from __future__ import annotations
 
 import copy
+import time
 from typing import Any
 
 from pydantic import ValidationError
@@ -92,6 +93,8 @@ from desktop.native.settings_copy import (
     NO_SCHOOL_DAYS,
     NO_SOUND,
     NO_STUDY_HOURS,
+    PAIR_CLOSED,
+    PAIR_ONCE,
     PLANNING_STYLES,
     PROTECTED_WORDS,
     RELAY_SENTENCE,
@@ -103,8 +106,11 @@ from desktop.native.settings_copy import (
     TRAY_NOTE,
     UNREACHABLE_WORDS,
     clock_warning_words,
+    countdown_words,
+    pair_problem,
     seen_words,
     sync_state,
+    tries_words,
 )
 from desktop.native.sound import Bell
 from desktop.native.spotify import SpotifyPlayer
@@ -120,6 +126,8 @@ CUTOFFS = ("20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00")
 REMINDERS = ("off", "5", "10", "15")
 # Minutes before a block that a reminder may fire: the Widgets spinner's range, one minute a step.
 LEAD_MAX = 120
+# How often an open pairing code's countdown and tries are read again.
+PAIR_TICK_MS = 1000
 REMINDER_CHIPS = (
     {"label": "Off", "value": "off"},
     {"label": "5m", "value": "5"},
@@ -931,6 +939,12 @@ class SettingsBridge(QObject):
         self._save_error = ""
         self._pair_code = ""
         self._pair_error = ""
+        # While a code is open: how long it lasts and the tries left, read once a second as the old
+        # pairing sheet did.
+        self._pair_status = ""
+        self._pair_watch = QTimer(self)
+        self._pair_watch.setInterval(PAIR_TICK_MS)
+        self._pair_watch.timeout.connect(self._pair_tick)
         self._sync_busy = False
         self._clock_warning = ""
         self._sync_problem = ""
@@ -1173,6 +1187,7 @@ class SettingsBridge(QObject):
                 f"FlexWeek {VERSION} (developer build)" if CHANNEL == "dev" else f"FlexWeek {VERSION}"
             ),
             "pairCode": self._pair_code,
+            "pairStatus": self._pair_status,
             "pairError": self._pair_error,
             "phones": phones,
             "phoneRows": phone_rows,
@@ -2332,6 +2347,9 @@ class SettingsBridge(QObject):
                 else:
                     self._pair_code = str(offer.get("display_code") or "")
                     self._pair_error = ""
+                    self._pair_watch.start()
+                    self._pair_tick()
+                    return
                 self._publish()
 
             # Owned by this bridge: a bridge dropped before the turn ends takes the timer with it.
@@ -2341,6 +2359,23 @@ class SettingsBridge(QObject):
             self._pair_code = ""
             self._pair_error = "Pairing needs an account on this computer."
             self._publish()
+
+    def _pair_tick(self) -> None:
+        """The open code's words: its countdown and tries while it waits, else why it closed."""
+        status = self._window.session.pairing_status()
+        state = status.get("state") if isinstance(status, dict) else None
+        if state == "waiting":
+            left = (int(status["expires_at_ms"]) - int(time.time() * 1000)) // 1000
+            tries = tries_words(int(status["tries_left"]))
+            self._pair_status = f"{countdown_words(left)}. {tries}. {PAIR_ONCE}"
+        else:
+            self._pair_watch.stop()
+            self._pair_status = ""
+            if state is not None:
+                self._pair_code = ""
+                if state != "paired":
+                    self._pair_error = pair_problem(state) or PAIR_CLOSED
+        self._publish()
 
     @Slot()
     def openAccount(self) -> None:

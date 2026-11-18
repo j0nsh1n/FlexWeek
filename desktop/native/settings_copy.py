@@ -330,3 +330,25 @@ def sync_state(status: dict, linked: bool) -> str:
     if status["last_sync_ms"] is None:
         return "idle"
     return "synced"
+
+
+# The pairing code's own words while it is open, and why it closed. The engine allows one phone per code.
+PAIR_ONCE = "It works once."
+PAIR_CLOSED = "That code is no longer open. Start a new one."
+
+
+def countdown_words(seconds: int) -> str:
+    minutes, rest = divmod(max(0, seconds), 60)
+    return f"Code works for {minutes}:{rest:02d}"
+
+
+def tries_words(tries: int) -> str:
+    return "1 try left" if tries == 1 else f"{tries} tries left"
+
+
+def pair_problem(state: str) -> str:
+    if state == "expired":
+        return "That code has expired. Start a new one."
+    if state == "too_many_tries":
+        return "Too many wrong tries. Start a new code."
+    return ""

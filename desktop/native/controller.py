@@ -1293,6 +1293,14 @@ class NativeSession(QObject):
         ensure(ready)
         return True
 
+    def pairing_status(self) -> dict | None:
+        """The open pairing code's state, tries left and expiry, or None with no running service."""
+        found = self._sync_service()
+        if found is None:
+            return None
+        _host, service, _user_id = found
+        return service.pair_status()
+
     def end_pairing(self, done: Callable[[Any, Exception | None], None]) -> bool:
         """Close the open pairing code. False with no host, service or account."""
         found = self._sync_service()
