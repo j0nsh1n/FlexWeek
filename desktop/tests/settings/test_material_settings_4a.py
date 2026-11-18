@@ -474,6 +474,31 @@ def test_the_new_presets_apply_in_their_own_mode_whatever_mode_is_chosen(
     assert _state(window)["oneMode"] == ("dark" if dark else "light")
 
 
+@pytest.mark.parametrize(
+    ("preset", "shown", "other"),
+    [("Ink", "Dark", "Light"), ("Terminal", "Dark", "Light"), ("High contrast", "Dark", "Light"), ("Paper", "Light", "Dark")],
+)
+def test_a_one_mode_preset_shows_the_mode_in_use_and_cannot_pick_another(
+    qapp: QApplication, window: NativeWindow, preset: str, shown: str, other: str
+) -> None:
+    root = _open_settings(qapp, window, "look")
+    _panel(window).setMode("system")
+    _panel(window).setPreset(preset)
+    wait_until(qapp, lambda: _material_file().get("preset") == preset)
+    _pump(qapp, 10)
+    seg = _named(root, "mode")[0]
+    assert str(seg.property("current")) == shown.lower(), "the highlighted choice is the mode in use"
+    by_label = {c["label"]: c["enabled"] for c in seg.property("choices").toVariant()}
+    assert by_label == {"Auto": False, "Light": shown == "Light", "Dark": shown == "Dark"}
+    _click_segment(qapp, window, seg, other)
+    _pump(qapp, 10)
+    assert _material_file().get("mode") == "system", "the disabled choice does nothing"
+    _panel(window).setPreset(_state(window)["swatches"][0]["name"])
+    wait_until(qapp, lambda: not _state(window)["oneMode"])
+    _pump(qapp, 10)
+    assert all(c["enabled"] for c in seg.property("choices").toVariant()), "a two-mode preset keeps all three"
+
+
 def test_a_click_on_a_group_title_row_is_not_a_control(qapp: QApplication, window: NativeWindow) -> None:
     root = _open_settings(qapp, window, "alerts")
     assert _named(root, "header_reminders") and _named(root, "header_all alerts")

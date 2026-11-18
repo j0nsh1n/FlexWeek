@@ -43,8 +43,13 @@ SectionPage {
                 : (page.st.oneMode === "light"
                     ? "This preset is a light look, so it stays light."
                     : "Follow this device, or choose.")
-            choices: [{ label: "Auto", value: "system" }, { label: "Light", value: "light" }, { label: "Dark", value: "dark" }]
-            current: page.st.mode || ""
+            // A one-mode preset shows the mode it is drawn in and leaves the other two off.
+            choices: [
+                { label: "Auto", value: "system", enabled: !page.st.oneMode },
+                { label: "Light", value: "light", enabled: !page.st.oneMode || page.st.oneMode === "light" },
+                { label: "Dark", value: "dark", enabled: !page.st.oneMode || page.st.oneMode === "dark" }
+            ]
+            current: page.st.oneMode ? page.st.oneMode : (page.st.mode || "")
             onChosen: (value) => page.panel.setMode(value)
         }
         ChoiceRow {
