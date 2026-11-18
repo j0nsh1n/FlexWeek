@@ -37,10 +37,9 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
         if (saved != "null") {
             if (!isPaired()) localSettings.edit().remove("focus-state").apply()
             else {
-                val restored = JSONObject(native.focusRestore(saved))
-                val persisted = restored.opt("persist")
-                if (persisted == null || persisted == JSONObject.NULL) localSettings.edit().remove("focus-state").apply()
-                else localSettings.edit().putString("focus-state", persisted.toString()).apply()
+                val kept = FocusRestore.keep(saved) { native.focusRestore(it) }
+                if (kept == null) localSettings.edit().remove("focus-state").apply()
+                else localSettings.edit().putString("focus-state", kept).apply()
             }
         }
         com.flexweek.app.system.FocusRuntime.update(appContext, focusState())
