@@ -127,15 +127,17 @@ def device_is_dark() -> bool:
 def appearance_of(window: Any) -> tuple[str, str]:
     """Light or dark, and standard or high contrast, from Material's own saved choice.
 
-    System follows the device; Light and Dark win over it. Nobody signed in follows the device with
-    standard contrast. The Widgets look and the account's theme pack play no part.
+    System follows the device; Light and Dark win over it. Nobody signed in follows the device's light
+    or dark but keeps the contrast last chosen on this computer (the look file is the computer's, not
+    the account's), so a student who needs High contrast still has it on the sign-in screens. The
+    Widgets look and the account's theme pack play no part.
     """
     dark = device_is_dark()
-    if window._wears_carried_look():
-        return resolved_mode("system", dark), "std"
     try:
         stored = json.loads(window._look_path().read_text(encoding="utf-8"))
     except OSError, ValueError:
         stored = None
     choice = read_material_choice(stored)
+    if window._wears_carried_look():
+        return resolved_mode("system", dark), choice["contrast"]
     return resolved_mode(choice["mode"], dark), choice["contrast"]

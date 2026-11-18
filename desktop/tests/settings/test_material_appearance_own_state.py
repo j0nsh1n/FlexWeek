@@ -79,12 +79,14 @@ def test_the_contrast_is_materials_own_choice(qapp, window, monkeypatch) -> None
     assert appearance_of(window)[1] == "std", "a Widgets High contrast preset is not Material's contrast"
 
 
-def test_signed_out_follows_the_device(qapp, window, monkeypatch) -> None:
+def test_signed_out_follows_the_device_and_keeps_this_computers_contrast(qapp, window, monkeypatch) -> None:
     store({"mode": "dark", "contrast": "high"})
     monkeypatch.setattr(window, "_wears_carried_look", lambda: True)
     device(monkeypatch, False)
-    assert appearance_of(window) == ("light", "std")
+    assert appearance_of(window) == ("light", "high")
     device(monkeypatch, True)
+    assert appearance_of(window) == ("dark", "high")
+    store({"mode": "light", "contrast": "std"})
     assert appearance_of(window) == ("dark", "std")
 
 
