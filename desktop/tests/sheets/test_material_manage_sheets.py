@@ -143,7 +143,7 @@ def test_more_has_account_and_copies_of_this_week_and_nothing_opens_a_widgets_di
     sheets.moreAction("restoreButton")
     pump(qapp, 40)
     assert _kind(sheets) == "restore"
-    assert _text(shell, "sheetTitle") == "Restore points"
+    assert _text(shell, "sheetTitle") == "Copies of this week"
     # The window's own entry points, which Settings and the keys use, land on the sheets too.
     sheets.forceClose()
     shell._open_account()
@@ -363,7 +363,7 @@ def test_import_backup_asks_first_and_only_imports_on_the_answer(
     ask = sheets.property("ask")
     assert ask["title"] == "Import backup file?"
     assert f"From {USERNAME}'s backup: " in ask["body"]
-    assert ask["body"].endswith("FlexWeek saves a restore point first, so you can go back.")
+    assert ask["body"].endswith("FlexWeek saves a copy of this week first, so you can go back.")
     assert _answer_buttons(sheets) == {"stay": "Cancel", "import": "Import"}
     assert applied == [], "nothing is imported before the answer"
     _press(shell, Qt.Key.Key_Escape)
@@ -645,7 +645,7 @@ def test_preview_says_what_going_back_would_change(qapp: QApplication, shell: Na
     _open_restore(qapp, shell, sheets)
     # Nothing chosen: it asks for a choice.
     _click(shell, "restorePreview")
-    assert _text(shell, "restoreNote") == "Choose a restore point."
+    assert _text(shell, "restoreNote") == "Choose a copy."
     _click(shell, "restorePoint")
     assert sheets.property("form")["selected"] == point_id
     _click(shell, "restorePreview")
@@ -664,14 +664,14 @@ def test_restore_asks_first_and_not_now_restores_nothing(
     applied: list[str] = []
     monkeypatch.setattr(shell.session, "apply_restore_point", applied.append)
     _click(shell, "restoreApply")
-    assert _text(shell, "restoreNote") == "Choose a restore point."
+    assert _text(shell, "restoreNote") == "Choose a copy."
     assert _asking(sheets) == ""
     _click(shell, "restorePoint")
     _click(shell, "restoreApply")
     assert _asking(sheets) == "restore-copy" and applied == []
     ask = sheets.property("ask")
     assert ask["title"] == "Restore"
-    assert ask["body"] == "Restore this snapshot? FlexWeek saves a restore point first."
+    assert ask["body"] == "Restore this copy? FlexWeek saves a copy of this week first."
     assert _answer_buttons(sheets) == {"not": "Not now", "restore": "Restore"}
     assert ask["answers"][0]["default"] is True and ask["answers"][0]["id"] == "not"
     _press(shell, Qt.Key.Key_Escape)
@@ -735,3 +735,26 @@ def test_esc_closes_the_restore_sheet_and_the_keyboard_goes_back(
     _press(shell, Qt.Key.Key_Escape)
     assert _kind(sheets) == ""
     assert quick.quickWindow().activeFocusItem() is fab
+
+
+def test_material_calls_restore_points_copies_of_this_week_in_every_student_facing_string() -> None:
+    from pathlib import Path
+
+    from desktop.native.material import bridge_manage
+
+    material = Path(bridge_manage.__file__).parent
+    qml = "\n".join(
+        line
+        for line in (material / "qml/sheets/RestoreSheet.qml").read_text().splitlines()
+        if not line.strip().startswith("//")
+    )
+    words = [
+        bridge_manage.RESTORE_FIRST,
+        bridge_manage.RESTORE_QUESTION["body"],
+        bridge_manage.restore_form([], None, None, "", "", "")["heading"],
+        bridge_manage.import_question({})["body"],
+        qml,
+    ]
+    for text in words:
+        for old in ("restore point", "Restore point", "snapshot"):
+            assert old not in text, f"{old!r} in {text[:60]!r}"

@@ -30,7 +30,7 @@ SheetFrame {
         density: root.density
         reduceMotion: root.reduceMotion
         highContrast: root.highContrast
-        label: "Restore point name"
+        label: "Copy name"
         wanted: root.f.label ? root.f.label : ""
         onTextEdited: (value) => root.sheets.setRestoreLabel(value)
         Keys.onReturnPressed: root.sheets.createRestore()
@@ -43,8 +43,8 @@ SheetFrame {
         reduceMotion: root.reduceMotion
         highContrast: root.highContrast
         kind: "tonal"
-        text: "Save restore point"
-        accessName: "Save restore point"
+        text: "Save a copy"
+        accessName: "Save a copy"
         onClicked: root.sheets.createRestore()
     }
     Repeater {

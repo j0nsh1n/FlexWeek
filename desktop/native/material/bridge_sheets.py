@@ -30,6 +30,7 @@ from desktop.native.hours.geometry import drag_step, next_slot
 from desktop.native.material.bridge_alarms import FULL, MAX_ALARMS, NOT_SAVED, AlarmDraft, with_alarm
 from desktop.native.material.bridge_info import SIGN_OUT, about_form, help_form, update_form
 from desktop.native.material.bridge_manage import (
+    RESTORE_FIRST,
     RESTORE_QUESTION,
     AccountActions,
     account_form,
@@ -43,7 +44,6 @@ from desktop.native.reuse import (
     late_locked_line,
     running_late_refusal,
 )
-from desktop.native.settings_copy import RESTORE_FIRST
 from desktop.native.sheet_rules import (
     LATE_WAIT,
     _late_move,

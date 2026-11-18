@@ -42,10 +42,12 @@ DATA_ACTIONS = (
     ("exportDay", "day", "Export day"),
     ("importFile", "import-week", "Import week or day file"),
 )
+# What Material says for the Widgets dialog's "Choose a restore point."
+RESTORE_FIRST = "Choose a copy."
 RESTORE_QUESTION = {
     "id": "restore-copy",
     "title": "Restore",
-    "body": "Restore this snapshot? FlexWeek saves a restore point first.",
+    "body": "Restore this copy? FlexWeek saves a copy of this week first.",
     "answers": [
         {"id": "not", "label": "Not now", "kind": "text", "default": True},
         {"id": "restore", "label": "Restore", "kind": "filled"},
@@ -78,7 +80,7 @@ def restore_form(
     """Restore points: the saved copies with their times, a name for a new one, and what the previewed one
     would change."""
     return {
-        "heading": "Restore points",
+        "heading": "Copies of this week",
         "where": (storage or {}).get("label") or NO_LOCATION,
         "label": label,
         "points": [
@@ -114,7 +116,7 @@ def import_question(preview: dict) -> dict[str, Any]:
         "id": "import-account",
         "title": "Import backup file?",
         "body": f"From {source}'s backup: {transfer_summary(preview)}\n"
-        "FlexWeek saves a restore point first, so you can go back.",
+        "FlexWeek saves a copy of this week first, so you can go back.",
         "answers": [
             {"id": "stay", "label": "Cancel", "kind": "text", "default": True},
             {"id": "import", "label": "Import", "kind": "filled"},
