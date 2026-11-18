@@ -92,7 +92,25 @@ def _sign_out(window: NativeWindow) -> object:
     return None
 
 
+def _more(window: NativeWindow) -> object:
+    from desktop.tests.settings.support_material_settings import _pump
+
+    sheets, qapp = _material(window)
+    sheets.openMore()
+    _pump(qapp, 30)
+    _show()
+    return None
+
+
 SCREENS: list[Screen] = [
+    Screen(
+        id="sheets.m3_more",
+        area="sheets",
+        prepare=_more,
+        checks="The More menu: Replan all my homework and Reload this week have different icons.",
+        sources=SOURCES,
+        styles=("material",),
+    ),
     Screen(
         id="sheets.m3_help",
         area="sheets",
