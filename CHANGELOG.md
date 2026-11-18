@@ -5,6 +5,28 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- Material Settings has every setting the other styles had. Alerts: the reminder sound and tone with a test play, a Spotify link, volume, the end chime, tray notices, letting reminders through Do not disturb, and muting alerts while a focus session runs. Focus: Short, Standard, Long or Custom timer lengths, with a slider for each length under Custom, splitting long homework into focus sessions, and marking homework finished when its session ends. Planning: Study hours and School hours, which you can change any time. Look: an accent colour on top of the preset ("Same as preset" by default) and a font choice (Sans, Serif or Mono).
+- High contrast, Paper, Ink and Terminal are Material colour presets.
+- Alarms in Material: add, edit and delete them under Settings → Alerts, and a Material screen with Dismiss and Snooze when one rings.
+- Material keys: Ctrl+N starts a new homework, F1 opens Help, and Ctrl+C, Ctrl+D and Delete copy, duplicate and delete the block that has keyboard focus (Delete asks first and can be undone). None of them act while you are typing.
+- More → Planning in Material has Copy day, Copy last week's fixed times, Reload this week, Copies of this week and, when you have set a link, Open Spotify link.
+
+### Changed
+- FlexWeek's desktop app has one style, Material 3. Every start opens it, including for anyone who had picked another style; setup starts at Your week.
+- Help, About, Update, the Sign out question, Manage account and Copies of this week open as Material sheets.
+- Deleting one day of School or an activity, and the question about edited weeks, show their choices as cards: the choice you can undo is picked first, each card says what it keeps and whether it can be undone, and Delete or Save confirms the picked one. Up and Down move the pick, Enter confirms and Esc cancels.
+- If FlexWeek cannot draw with the graphics card, it starts again drawing without it and says so once, instead of switching to another style. If that fails too, a page says what happened, with Quit and Try again.
+- The Focus page's single 25/5 switch is replaced by the timer choice; a saved 25/5 timer shows as Custom.
+
+### Fixed
+- A dialog's buttons no longer run out of the dialog when they do not fit side by side (for example deleting one day of School at Large text); they stack one per line.
+- Copies of this week shows how many weeks each copy holds, instead of "0 weeks", and says "1 week" for one.
+
+### Removed
+- The Widgets styles and their designs (Today's app, Timeline, Mission control, Bento, Retro desktop, Clay deck, Day dial, One thing) can no longer be chosen, and the switch between them and Material 3 is gone.
+- The Ctrl+K command bar and the older focus screen.
+
 ## [1.4.0] - 2026-11-17
 
 ### Added
