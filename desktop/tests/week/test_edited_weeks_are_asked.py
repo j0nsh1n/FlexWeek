@@ -19,7 +19,7 @@ from desktop.native import window as window_module  # noqa: E402
 from desktop.native.client import ApiError  # noqa: E402
 from desktop.native.fields import week_starts_on  # noqa: E402
 from desktop.native.material.bridge_sheets import SheetsBridge  # noqa: E402
-from desktop.native.setup import WEEK  # noqa: E402
+from desktop.native.setup_steps import WEEK  # noqa: E402
 from desktop.native.widgets import ConfirmSheet, SchoolHoursDialog  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402, F401
@@ -176,33 +176,6 @@ def test_material_defaults_to_except_edited_and_cancel_saves_nothing(
     assert school_of(after_setup) == ([0, 1, 3, 4], "08:30", 405, [])
 
 
-def test_cancel_on_the_setup_week_page_stays_there_and_saves_nothing(
-    qapp, window, after_setup, monkeypatch
-) -> None:
-    skip_wednesday(qapp, after_setup)
-    before = school_of(after_setup)
-    cutoff_before = (after_setup.preferences or {}).get("day_cutoff")
-    starts = week_starts_on()
-    window._open_setup(WEEK, first_run=False)
-    page = window.setup_page
-    page.school_times.set_span("08:30", 360)
-    page.cutoff.setCurrentIndex(page.cutoff.findData("21:00"))
-    page.week_start.setCurrentIndex(page.week_start.findData("wednesday"))
-
-    def cancel(sheet: ConfirmSheet) -> int:
-        sheet.buttons["stay"].click()
-        return 0
-
-    monkeypatch.setattr(ConfirmSheet, "exec", cancel)
-    page.next.click()
-    assert page._step == WEEK
-    assert page.school_times.span() == ("08:30", 360)
-    assert page.cutoff.currentData() == "21:00"
-    assert page.week_start.currentData() == "wednesday"
-    assert week_starts_on() == starts
-    assert school_of(after_setup) == before
-    assert (after_setup.preferences or {}).get("day_cutoff") == cutoff_before
-    assert not after_setup.dirty
 
 
 def test_cancel_on_the_material_setup_week_page_stays_there_and_saves_nothing(

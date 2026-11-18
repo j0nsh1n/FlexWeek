@@ -42,7 +42,6 @@ from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_typing import (
     NONE,
     Box,
-    _setup,
     _up,
     drain,
     end_of,
@@ -180,10 +179,6 @@ def _study_hours(qapp, host, end: bool) -> Box:
 
 
 BOXES: dict[str, Callable] = {
-    "setup-school-start": lambda qapp, host: _setup(qapp, "school-start"),
-    "setup-school-end": lambda qapp, host: _setup(qapp, "school-end"),
-    "setup-activity-start": lambda qapp, host: _setup(qapp, "activity-start"),
-    "setup-activity-end": lambda qapp, host: _setup(qapp, "activity-end"),
     "school-hours-start": lambda qapp, host: _school_hours(qapp, host, False),
     "school-hours-end": lambda qapp, host: _school_hours(qapp, host, True),
     "block-editor-start": lambda qapp, host: _block_editor(qapp, host, False),

@@ -1,4 +1,4 @@
-"""Retro dresses a sheet and Setup as old desktop windows: a title bar with caption buttons
+"""Retro dresses a sheet as an old desktop window: a title bar with caption buttons
 that work, bevels on the controls, and a frame that is built once, owned by its page, and safe to free."""
 
 from __future__ import annotations
@@ -33,7 +33,6 @@ from desktop.native.feel import (
     set_current,
 )
 from desktop.native.look import sanitize_look
-from desktop.native.setup import SetupPage
 from desktop.native.widgets import HomeworkDialog
 from desktop.tests.settings.support_feel import _dressed, _host
 from desktop.tests.window_support import free, qapp  # noqa: F401
@@ -121,7 +120,7 @@ def test_collecting_a_retro_page_raises_nothing(
     # Collector off while the page is built, so what it breaks up later is in the order it was made.
     gc.disable()
     try:
-        # A bare page: SetupPage holds itself in closures, so the collector never frees it.
+        # A bare page: a real page holds itself in closures, so the collector never frees it.
         page = QWidget()
         page.setObjectName("settingsPage")
         QSlider(page)
@@ -180,9 +179,7 @@ def test_every_retro_widget_is_owned_by_the_page_it_dresses(qapp: QApplication) 
     before = frames()
     dialog = HomeworkDialog(host, today="2026-10-01")
     dialog.show()
-    setup = SetupPage(host)
-    setup.motion = "off"
-    for root in (dialog, setup):
+    for root in (dialog,):
         apply_feel(root, ctx)
         apply_feel(root, restyled)
         qapp.processEvents()
@@ -192,7 +189,6 @@ def test_every_retro_widget_is_owned_by_the_page_it_dresses(qapp: QApplication) 
     assert strays == []
     dialog.close()
     free(dialog)
-    free(setup)
     free(host)
 
 

@@ -1,5 +1,5 @@
 """Screens for the sheets area (chunk H9): button labels in every sheet and the week, the Material week's
-long homework title, the sign-up error, and the week list opened from the keyboard. Looks the old regression
+long homework title, and the week list opened from the keyboard. Looks the old regression
 tests measured in code: they are judged on these pictures."""
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.sheets.support_button_labels import LATE_WORDS, sheet_makers
 from desktop.tests.sheets.support_keys import press
-from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import settled
 
 # Widgets designs only: the screens below build Widgets sheets and pages.
@@ -94,19 +93,6 @@ def long_homework_title(window: NativeWindow) -> None:
     from desktop.tests.material_support import pump
 
     pump(qapp)
-
-
-def sign_up_username_error(window: NativeWindow) -> None:
-    qapp = QApplication.instance()
-    window.session.logout()
-    wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "authPage")
-    window.resize(1280, 860)
-    window.findChild(QPushButton, "authSwitch").click()
-    qapp.processEvents()
-    window.username.setText("jo")
-    window.password.setText("short")
-    window.findChild(QPushButton, "createAccount").click()
-    wait_until(qapp, lambda: window.username_problem.isVisibleTo(window))
 
 
 def week_with_school(window: NativeWindow) -> None:
@@ -205,18 +191,6 @@ SCREENS: list[Screen] = [
         ),
         sources=("desktop/native/material",),
         styles=MATERIAL,
-    ),
-    Screen(
-        id="account.sign_up_username_error",
-        area="account",
-        prepare=sign_up_username_error,
-        checks=(
-            "After a too-short username and password on Create account, the message 'Use 3 to 32 ...' sits "
-            "directly under the Username field: its top edge is no more than 24 px below the field's bottom "
-            "edge and not above it."
-        ),
-        sources=("desktop/native/window.py",),
-        styles=WIDGETS,
     ),
     Screen(
         id="week.week_list_closed",

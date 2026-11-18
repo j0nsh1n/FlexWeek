@@ -1,8 +1,6 @@
-"""What the sign-in card tests share: a computer (one database and one kept-session folder) that
-windows are launched on, answered in this process by the light app's backend, with no server.
-
-`card_of`, `go` and `pump` are also imported by the form tests through desktop/tests/test_sign_in_0185.py,
-which only re-exports them."""
+"""What the sign-in tests share: a computer (one database and one kept-session folder) that windows are
+launched on, answered in this process by the light app's backend, with no server. The account is made
+and signed in on Material's card."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 
@@ -16,17 +14,16 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtGui import QGuiApplication, QPalette
-from PySide6.QtWidgets import QApplication, QFrame, QWidget
+from PySide6.QtWidgets import QApplication
 
 from desktop.native.kept import KeptSession
 from desktop.native.look import sanitize_look
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import ORIGIN, InProcessApi, _client_for, _close
-from desktop.tests.logic_support import past_setup
+from desktop.tests.logic_support import card_phase, past_recovery, past_setup, sign_up
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import PASSWORD, look_file, qapp  # noqa: F401
 
-MODES = ("sign in", "create", "reset")
 LARGE = {"preset": "default", "knobs": {"text": "large"}}
 LARGE_HIGH_CONTRAST = {"preset": "high-contrast", "knobs": {"text": "large"}}
 
@@ -38,20 +35,6 @@ def pump() -> None:
 
 def page(window: NativeWindow) -> str:
     return window._stack.currentWidget().objectName()
-
-
-def go(window: NativeWindow, mode: str) -> None:
-    window._entry_mode = mode
-    window._sync_auth_mode()
-    pump()
-
-
-def card_of(window: NativeWindow) -> QFrame:
-    return window._stack.currentWidget().findChild(QFrame, "authCard")
-
-
-def shown(window: NativeWindow, name: str) -> bool:
-    return window.findChild(QWidget, name).isVisibleTo(window)
 
 
 def system_dark() -> bool:
@@ -83,19 +66,26 @@ class Computer:
         window.hide()
         return self.launch()
 
-    def reach_recovery(self, window: NativeWindow, name: str, *, keep: bool = False) -> None:
-        window.username.setText(name)
-        window.password.setText(PASSWORD)
-        window.keep_signed_in.setChecked(keep)
-        window.create_button.click()
-        wait_until(self.qapp, lambda: page(window) == "recoveryPage", what="the recovery codes page")
-
     def create_account(self, window: NativeWindow, name: str) -> None:
         """Make the account and leave setup, on the week."""
-        self.reach_recovery(window, name)
-        window.recovery_ack.setChecked(True)
-        window.recovery_continue.click()
+        window._account_bridge().setKeepSignedIn(False)
+        sign_up(self.qapp, window, name, PASSWORD)
+        past_recovery(self.qapp, window)
         past_setup(self.qapp, window)
+
+    def sign_in(self, window: NativeWindow, name: str) -> None:
+        """Sign in on Material's card and wait for the week."""
+        bridge = window._account_bridge()
+        bridge.showSignIn()
+        bridge.setUsername(name)
+        bridge.setPassword(PASSWORD)
+        bridge.submit()
+        wait_until(
+            self.qapp,
+            lambda: window.session.account is not None and bridge.phase == "app" and not window.session.busy,
+            what="the week after signing in",
+        )
+        pump()
 
     def wear(self, window: NativeWindow, look: dict) -> None:
         window._look = sanitize_look(look)
@@ -106,7 +96,7 @@ class Computer:
         window.session.logout()
         wait_until(
             self.qapp,
-            lambda: page(window) == "authPage" and window.session.account is None,
+            lambda: card_phase(window) == "sign-in" and window.session.account is None,
             what="the sign-in page after Log out",
         )
         pump()

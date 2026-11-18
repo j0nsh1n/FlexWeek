@@ -13,7 +13,6 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QAbstractSpinBox, QApplication, QButtonGroup, QDateEdit, QSpinBox, QWidget
 
 from desktop.native.fields import QUICK_LENGTHS, Stepper
-from desktop.native.setup import SetupPage
 from desktop.native.widgets import AvailabilityDialog, BlockDialog, ChooseTimeDialog, HomeworkDialog
 from desktop.tests.window_support import free, host, qapp  # noqa: F401
 
@@ -41,20 +40,17 @@ def unstepped(root: QWidget) -> list[str]:
     ]
 
 
-def test_no_number_or_time_in_the_sheets_or_setup_has_arrows(
+def test_no_number_or_time_in_the_sheets_has_arrows(
     qapp: QApplication,  # noqa: F811
     host: QWidget,  # noqa: F811
 ) -> None:
     block = {"id": "s", "title": "Soccer", "kind": "locked", "start": "16:00", "duration_min": 60}
     homework = {"id": "e", "title": "Essay", "due": WEEK, "estimate_min": 60, "duration_min": 60, "days": [1]}
-    setup = SetupPage()
-    setup.add_homework.click()
     made = [
         HomeworkDialog(host, today=WEEK),
         BlockDialog(host, {**block, "days": [1]}),
         ChooseTimeDialog(host, homework, WEEK, [1, 2], [], None, 1),
         AvailabilityDialog(host, {}),
-        setup,
     ]
     for root in made:
         assert arrows(root) == [], type(root).__name__
@@ -126,13 +122,14 @@ def test_length_chips_are_one_group_with_arrows_and_one_tab_stop(
 
 
 def test_a_stepper_greys_with_its_box(qapp: QApplication) -> None:  # noqa: F811
-    """Setup turns the reminder lead off with its switch; the − and + went on looking pressable."""
-    setup = SetupPage()
-    setup.reminders.setChecked(True)
-    stepper = setup.lead.parentWidget()
+    """Setup turned the reminder lead off with its switch; the − and + went on looking pressable."""
+    lead = QSpinBox()
+    lead.setRange(0, 120)
+    lead.setValue(10)
+    stepper = Stepper(lead)
     assert stepper.more.isEnabled()
-    setup.reminders.setChecked(False)
-    assert not setup.lead.isEnabled() and not stepper.more.isEnabled() and not stepper.less.isEnabled()
-    free(setup)
+    lead.setEnabled(False)
+    assert not stepper.more.isEnabled() and not stepper.less.isEnabled()
+    free(stepper)
 
 

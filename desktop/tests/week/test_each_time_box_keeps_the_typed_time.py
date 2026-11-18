@@ -12,38 +12,10 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication, QWidget
 
-from desktop.native.setup import WEEK
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import AvailabilityDialog, BlockDialog, HomeworkDialog, SchoolHoursDialog
-from desktop.tests.week.support_typing import CLOCKS, go_when, opened_setup, type_over
+from desktop.tests.week.support_typing import CLOCKS, go_when, type_over
 from desktop.tests.window_support import host, qapp  # noqa: F401
-
-
-@CLOCKS
-def test_setup_school_hours_keep_the_typed_times(qapp: QApplication, twenty_four: bool) -> None:
-    set_clock_24h(twenty_four)
-    setup = opened_setup(qapp)
-    setup._show(WEEK)
-    type_over(setup.school_times.start, "8:15 am")
-    type_over(setup.school_times.end, "3:15 pm")
-    (school,) = setup.week_blocks()
-    assert (school["start"], school["duration_min"]) == ("08:15", 7 * 60)
-    setup.close()
-
-
-@CLOCKS
-def test_setup_activity_hours_keep_the_typed_times(qapp: QApplication, twenty_four: bool) -> None:
-    set_clock_24h(twenty_four)
-    setup = opened_setup(qapp)
-    setup._show(WEEK)
-    row = setup.activities[0]
-    row.name.setText("Soccer")
-    row.days.set_days([1])
-    type_over(row.times.start, "4:45 pm")
-    type_over(row.times.end, "1830")
-    activity = next(block for block in setup.week_blocks() if block["title"] == "Soccer")
-    assert (activity["start"], activity["duration_min"]) == ("16:45", 105)
-    setup.close()
 
 
 @CLOCKS

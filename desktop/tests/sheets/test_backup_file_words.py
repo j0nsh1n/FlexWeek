@@ -23,7 +23,8 @@ from desktop.native.reuse import week_label
 from desktop.native.settings import AccountDialog, TransferPreviewDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.logic_support import fixed
+from desktop.tests.logic_support import card_phase, fixed
+from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import free, qapp  # noqa: F401
 
 PREVIEW = {
@@ -159,10 +160,12 @@ def test_reset_password_says_what_to_do_without_recovery_codes(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
 ) -> None:
-    window._show_page("authPage")
-    window.forgot_button.click()
+    window.session.logout()
+    wait_until(qapp, lambda: card_phase(window) == "sign-in")
+    bridge = window._account_bridge()
+    bridge.showReset()
     qapp.processEvents()
-    note = window.auth_note.text()
+    note = bridge.note
     assert note.startswith("Use one of the recovery codes you saved when you made your account.")
     assert "Lost them too?" in note
     assert "Create a new account and import a backup file" in note
@@ -173,7 +176,9 @@ def test_create_account_asks_for_a_backup_now_and_then(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
 ) -> None:
-    window._show_page("authPage")
-    window.auth_switch.click()
+    window.session.logout()
+    wait_until(qapp, lambda: card_phase(window) == "sign-in")
+    bridge = window._account_bridge()
+    bridge.showCreate()
     qapp.processEvents()
-    assert "Export a backup file now and then" in window.auth_note.text()
+    assert "Export a backup file now and then" in bridge.note

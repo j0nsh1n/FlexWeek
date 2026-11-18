@@ -140,9 +140,3 @@ def test_a_narrow_week_still_gives_a_long_name_its_two_lines(
         assert "Science" in titled and "poster" in titled, (width, titled)
 
 
-def test_new_recovery_codes_are_listed_one_to_a_line(hours_window: NativeWindow) -> None:
-    """The codes' page is gone once the week is open, and made again when new codes come. The face
-    they are written in is checked in a picture (week.recovery-codes-in-mono)."""
-    codes = [f"aaaa-bbbb-cccc-dd{n:02d}" for n in range(8)]
-    hours_window.session.recovery_codes.emit(codes)
-    assert hours_window.recovery_list.text().splitlines() == codes

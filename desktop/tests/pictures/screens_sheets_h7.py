@@ -1,5 +1,5 @@
-"""Pictures of the homework sheets' parts (R3 forms lane, chunk H7): which dialog button is filled, the date
-picker's month, the overdue card. These replace the pixel checks of test_one_filled_button, test_date_picker,
+"""Pictures of the homework sheets' parts (R3 forms lane, chunk H7): which dialog button is filled, and
+the overdue card. These replace the pixel checks of test_one_filled_button, test_date_picker,
 test_date_typing and test_overdue_card_fit."""
 
 from __future__ import annotations
@@ -12,13 +12,11 @@ from PySide6.QtWidgets import QApplication, QDialog, QToolButton, QVBoxLayout, Q
 
 from desktop.native.fields import DateField
 from desktop.native.motion import settle
-from desktop.native.setup import FIRST
 from desktop.native.widgets import UnfinishedPanel
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.sheets.support_buttons import RESTORE_POINT, makers
 from desktop.tests.sheets.support_date_picker import opened, picked_near_today
 from desktop.tests.sheets.support_overdue_card import DESIGNS, LONG_WORDS, show_overdue_card
-from desktop.tests.waiting import wait_until
 
 
 def _pump() -> None:
@@ -81,32 +79,6 @@ def _unfinished(window: QWidget) -> QWidget:
 
 def _month(window: QWidget) -> QWidget:
     _dialog, popup, _month = opened(QApplication.instance(), window, picked_near_today())
-    return popup
-
-
-def _setup_month(window: QWidget) -> QWidget:
-    """The month of the first homework's due date in setup, opened by a click on its arrow."""
-    window._open_setup(FIRST, first_run=True)
-    setup = window.setup_page
-    # Setup draws its style pictures in windows of their own, one at a time; each one shown closes any
-    # calendar that is open.
-    wait_until(
-        None,
-        lambda: not setup._pending_pictures and not setup._warm.isActive(),
-        what="setup's style pictures drawn",
-    )
-    setup._show(FIRST)
-    _pump()
-    field = setup.homework_rows[0].due.date
-    QTest.mouseClick(
-        field,
-        Qt.MouseButton.LeftButton,
-        Qt.KeyboardModifier.NoModifier,
-        QPoint(field.width() - 6, field.height() // 2),
-    )
-    popup = field.findChild(QWidget, "qt_datetimedit_calendar")
-    wait_until(None, lambda: popup is not None and popup.isVisible(), what="the month opening")
-    _pump()
     return popup
 
 
@@ -190,18 +162,6 @@ SCREENS: list[Screen] = [
             "and the popup lies inside the screen (at Normal and at Large text)."
         ),
         sources=("desktop/native/fields.py", "desktop/native/look.py"),
-        main=True,
-    ),
-    Screen(
-        id="sheets.date_picker_month_in_setup",
-        area="sheets",
-        prepare=_setup_month,
-        checks=(
-            "The month opened from setup's first homework due date shows its whole grid: the last "
-            "column (Sunday) and the last week are not cut off, and the popup lies inside the screen "
-            "(at Normal and at Large text)."
-        ),
-        sources=("desktop/native/fields.py", "desktop/native/setup.py", "desktop/native/look.py"),
         main=True,
     ),
     Screen(

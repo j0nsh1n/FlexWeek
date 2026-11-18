@@ -141,12 +141,6 @@ def _clay_now(window: NativeWindow) -> object:
     return probe
 
 
-def _recovery_codes(window: NativeWindow) -> object:
-    window.session.recovery_codes.emit([f"aaaa-bbbb-cccc-dd{n:02d}" for n in range(8)])
-    QApplication.processEvents()
-    return window.recovery_list
-
-
 SCREENS: list[Screen] = [
     Screen(
         id="week.now-line-through-school",
@@ -211,15 +205,5 @@ SCREENS: list[Screen] = [
             "(11:00) is written."
         ),
         sources=("desktop/native/layouts/clay.py",),
-    ),
-    Screen(
-        id="week.recovery-codes-in-mono",
-        area="week",
-        prepare=_recovery_codes,
-        checks=(
-            "The recovery codes are written in the bundled monospace face (JetBrains Mono), one code to "
-            "a line, so every digit and letter has the same width."
-        ),
-        sources=("desktop/native/look.py", "desktop/native/window.py"),
     ),
 ]

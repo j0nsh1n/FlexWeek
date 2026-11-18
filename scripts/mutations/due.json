@@ -33,12 +33,5 @@
   "old": "        self.time.setTime(QTime(minute // 60, minute % 60) if timed else QTime(fallback // 60, fallback % 60))\n",
   "new": "        self.time.setTime(QTime(fallback // 60, fallback % 60))\n",
   "test": "desktop/tests/sheets/test_widgets_homework_editor.py::test_a_due_time_is_shown_and_can_be_taken_away"
- },
- {
-  "file": "desktop/native/setup.py",
-  "name": "setup writes the old timed stamp",
-  "old": "                    \"due\": row.due.value(),",
-  "new": "                    \"due\": row.due.value() if row.due.timed.isChecked() else row.due.value() + \"T23:59\",",
-  "test": "desktop/tests/setup/test_setup_answers.py::test_a_first_homework_due_at_a_set_time_keeps_it_and_one_without_has_none"
  }
 ]

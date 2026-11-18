@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from PySide6.QtCore import QByteArray, QObject, QTimer, QUrl
 from PySide6.QtNetwork import QNetworkCookie, QNetworkReply
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication
 from shiboken6 import isValid
 from starlette.testclient import TestClient
 
@@ -26,7 +26,7 @@ from desktop.native import window as window_module
 from desktop.native.client import NativeClient
 from desktop.native.kept import KeptSession
 from desktop.native.window import NativeWindow
-from desktop.tests.logic_support import past_setup
+from desktop.tests.logic_support import past_recovery, past_setup, sign_up
 from desktop.tests.material_support import widgets_start_rule
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import PASSWORD, USERNAME, free, look_file, still
@@ -164,18 +164,14 @@ def account(qapp: QApplication, root: Path) -> Account:
     CLOCK.reset()
     api = InProcessApi(database)
     look_file().unlink(missing_ok=True)
-    # The account is made through the Widgets sign-up pages, which only the Widgets start shows.
+    # Made under the Widgets start, as the windows the tests open from it are.
     with _client_for(api), pytest.MonkeyPatch.context() as widgets:
         widgets.setattr(window_module, "sanitize_surface", widgets_start_rule)
         window = NativeWindow(ORIGIN)
     window.show()
     try:
-        window.username.setText(USERNAME)
-        window.password.setText(PASSWORD)
-        window.findChild(QPushButton, "createAccount").click()
-        wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "recoveryPage")
-        window.recovery_ack.setChecked(True)
-        window.recovery_continue.click()
+        sign_up(qapp, window, USERNAME, PASSWORD)
+        past_recovery(qapp, window)
         past_setup(qapp, window)
         assert window.session.account is not None, "signing up left no account"
         user_id = int(window.session.account["id"])

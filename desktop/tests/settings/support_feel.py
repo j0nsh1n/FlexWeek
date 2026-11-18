@@ -1,15 +1,87 @@
-"""What the style-feel tests share: a style dressed from its Setup choice, and a host widget wearing it.
-`_host` is also used by the sheet-dim tests."""
+"""What the style-feel tests share: a style (one of the four Setup used to offer) dressed, and a host
+widget wearing it. `_host` is also used by the sheet-dim tests."""
 
 from __future__ import annotations
+
+from copy import deepcopy
+from dataclasses import dataclass, field
 
 from PySide6.QtWidgets import QApplication, QWidget
 
 from desktop.native.feel import Context, extra_stylesheet, feel_for, set_current
 from desktop.native.layouts.registry import MATCH, sanitize_layout, tokens_for
-from desktop.native.look import pack_stylesheet, resolved_palette
-from desktop.native.setup import STYLES, style_layout, style_look
+from desktop.native.look import pack_stylesheet, resolved_palette, sanitize_look
 from desktop.native.widgets import control_art
+
+# The four styles first-run setup offered before Material was the only interface, each a design
+# dressed in a look: what the feel tests dress a page in.
+
+
+@dataclass(frozen=True)
+class Style:
+    key: str
+    name: str
+    note: str
+    main: str
+    colour: str | None
+    pack: str
+    knobs: dict = field(default_factory=dict)
+    options: dict = field(default_factory=dict)
+
+
+STYLES = (
+    Style(
+        "plain",
+        "Plain calendar",
+        "Your week as a timetable grid",
+        "classic",
+        "pack:light-frost",
+        "light-frost",
+    ),
+    Style(
+        "dashboard",
+        "Dashboard",
+        "Next up and due soon, as tiles",
+        "bento",
+        "preset:bento-indigo",
+        "light-frost",
+    ),
+    Style(
+        "night",
+        "Night owl",
+        "Dark colours, compact spacing",
+        "timeline",
+        "pack:dark-frost",
+        "dark-frost",
+        {"density": "compact"},
+        {"density": "compact"},
+    ),
+    Style(
+        "retro",
+        "Retro",
+        "A 90s desktop, with large text",
+        "retro",
+        "preset:retro-teal",
+        "light-frost",
+        {"text": "large"},
+    ),
+)
+
+
+def style_layout(style: Style, layout: dict) -> dict:
+    options = deepcopy(sanitize_layout(layout)["options"])
+    if style.colour is not None or style.options:
+        chosen = dict(options.get(style.main, {}))
+        if style.colour is not None:
+            chosen["look"] = style.colour
+        chosen.update(style.options)
+        options[style.main] = chosen
+    return sanitize_layout({"main": style.main, "day": sanitize_layout(layout)["day"], "options": options})
+
+
+def style_look(style: Style) -> dict:
+    return sanitize_look({"preset": "default", "knobs": dict(style.knobs)})
+
 
 HEROES = ("settingsTitle", "sheetTitle", "setupTitle", "authBrand")
 

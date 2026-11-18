@@ -24,6 +24,7 @@ from desktop.tests.day.support_layouts_window import (  # noqa: E402
     wait_until,
     window,  # noqa: F401
 )
+from desktop.tests.logic_support import card_phase  # noqa: E402
 
 
 def test_my_day_puts_planning_away_and_back_brings_it_back(qapp: QApplication, window: NativeWindow) -> None:
@@ -121,7 +122,7 @@ def test_signing_out_of_a_day_screen_does_not_leave_the_next_student_in_one(
     monkeypatch.setattr(window_module, "confirm", lambda *_args, **_kwargs: True)
     click(window, "viewMyDay")
     click(window, "signOut")
-    wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "authPage")
+    wait_until(qapp, lambda: card_phase(window) == "sign-in")
     assert window._day_mode is False
 
 

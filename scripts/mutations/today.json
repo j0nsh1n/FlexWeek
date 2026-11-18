@@ -144,7 +144,7 @@
   "name": "sign-in says what went wrong before asking",
   "old": "    if not password:\n        return SIGN_IN_NO_PASSWORD\n",
   "new": "",
-  "test": "desktop/tests/account/test_wrong_sign_in_and_sign_up_words.py::test_sign_in_says_what_went_wrong"
+  "test": "desktop/tests/account/test_material_sign_in_and_create_account.py::test_empty_fields_say_what_is_missing_before_asking_the_server"
  },
  {
   "file": "desktop/native/window.py",

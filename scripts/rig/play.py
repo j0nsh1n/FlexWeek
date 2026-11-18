@@ -287,8 +287,7 @@ def list_item_targets(widget: object, wanted: str) -> list[tuple[int, object, st
 
 
 def apply_play_look(window, session, setup: Setup) -> str | None:
-    """Wear the play's look and text size. Setup otherwise keeps the style default (preset default,
-    normal text) because it opened before this ran. Returns a theme pack name when `look` is a pack."""
+    """Wear the play's look and text size. Returns a theme pack name when `look` is a pack."""
     from desktop.native.look import LOOK_PRESETS, sanitize_look
 
     pack = None
@@ -301,8 +300,6 @@ def apply_play_look(window, session, setup: Setup) -> str | None:
     look = sanitize_look({"preset": preset, "knobs": {"text": setup.text}})
     window._look = look
     session.look = look
-    if setup.seed == "empty":
-        window.setup_page.wear_look(look)
     window._carry_look()
     window._carried = window._read_carried()
     return pack
@@ -448,7 +445,7 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
 
     from backend import clock as wall_clock
     from desktop.native.layouts.registry import sanitize_layout
-    from desktop.tests.logic_support import past_setup, wait_until
+    from desktop.tests.logic_support import card_phase, past_setup, wait_until
 
     out.mkdir(parents=True, exist_ok=True)
     log_file = (out / "log.txt").open("w", buffering=1)
@@ -487,7 +484,7 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
             wait_until(app, lambda: True, 0.6)
             return
         if setup.seed == "empty":
-            wait_until(app, lambda: window._stack.currentWidget().objectName() == "setupPage", 20)
+            wait_until(app, lambda: card_phase(window) == "setup", 20)
         else:
             past_setup(app, window)
         monday = datetime.fromisoformat(session.week_start)

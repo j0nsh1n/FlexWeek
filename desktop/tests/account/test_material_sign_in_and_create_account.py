@@ -16,7 +16,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication
 
-from desktop.native.setup import WEEK
+from desktop.native.setup_steps import WEEK
 from desktop.tests.account.support import (
     OTHER_PASSWORD,
     WRONG_PASSWORD,
@@ -37,10 +37,14 @@ from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import PASSWORD, qapp  # noqa: F401
 
 
-def test_widgets_surface_keeps_the_widgets_sign_in(qapp: QApplication, light_launches: LightLaunches) -> None:
+def test_sign_in_is_materials_even_on_the_widgets_start(
+    qapp: QApplication, light_launches: LightLaunches
+) -> None:
+    """The tests' Widgets start still opens the Widgets week after sign-in; sign-in itself is Material's."""
     window = light_launches.launch()
-    assert page(window) == "authPage"
-    assert window._material_page is None
+    assert window._surface == "widgets"
+    assert page(window) == "materialPage"
+    assert account(window).phase == "sign-in"
 
 
 def test_material_surface_opens_on_the_material_sign_in(

@@ -18,7 +18,7 @@ from PySide6.QtTest import QTest
 
 from desktop.native.weekmodel import range_label, set_clock_24h
 from desktop.native.widgets import BlockDialog
-from desktop.tests.regress184.test_regress_item0_time_boxes import _setup, _up, enter, press, type_text
+from desktop.tests.regress184.test_regress_item0_time_boxes import _up, enter, press, type_text
 from desktop.tests.window_support import free, qapp  # noqa: F401
 
 KNOWN_F3 = (
@@ -60,20 +60,6 @@ def test_f3_block_editor_bare_end_after_830_am_reads_pm(block_editor, typed) -> 
     assert dialog.end.minutes() == 15 * 60 + 15, dialog.end.lineEdit().text()
 
 
-def test_f3_setup_school_bare_end_after_830_am_reads_pm(qapp) -> None:
-    set_clock_24h(False)
-    box = _setup(qapp, "school-end")
-    try:
-        box.field.setFocus()
-        box.field.lineEdit().selectAll()
-        type_text(box.field, "3:15")
-        press(box.field, Qt.Key.Key_Tab)
-        assert box.field.minutes() == 15 * 60 + 15, box.field.lineEdit().text()
-    finally:
-        QTest.qWait(20)
-        for widget in box.owned:
-            widget.hide()
-            free(widget)
 
 
 def test_f3_end_before_a_9_pm_start_shows_the_problem_under_end(block_editor) -> None:

@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from PySide6.QtCore import QPoint
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QAbstractButton, QApplication, QComboBox, QLineEdit, QPushButton
+from PySide6.QtWidgets import QAbstractButton, QApplication, QComboBox, QLineEdit, QPushButton, QWidget
 
 from desktop.native.settings import RestoreDialog
 from desktop.native.widgets import BlockDialog, PreviewDialog
@@ -151,7 +151,10 @@ def test_the_toast_belongs_to_the_page_it_was_said_on(qapp: QApplication, window
     window._set_notice("Planned 2 homework blocks.", "Undo", lambda: None)
     qapp.processEvents()
     assert window.toast.isVisible()
-    window._show_page("setupPage")
+    other = QWidget()
+    other.setObjectName("otherPage")
+    window._stack.addWidget(other)
+    window._show_page("otherPage")
     qapp.processEvents()
     assert not window.toast.isVisible() and not window.toast.button.isVisible()
     window._show_page("weekPage")

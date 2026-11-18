@@ -11,7 +11,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QWidget
 
 from desktop.native import fields
 from desktop.tests.window_support import qapp  # noqa: F401
@@ -111,88 +111,6 @@ def test_only_the_seven_day_names_can_be_saved(kept: Path) -> None:
         with pytest.raises(ValueError):
             fields.save_week_starts_on(wrong)
     assert not kept.exists()
-
-
-def _setup_page(qapp: QApplication):
-    from desktop.native.calendar import monday_of
-    from desktop.native.layouts.registry import sanitize_layout
-    from desktop.native.look import pack_stylesheet, resolved_palette
-    from desktop.native.setup import SetupPage, SetupState
-    from desktop.native.widgets import control_art
-
-    palette = resolved_palette("light-frost", False, None)
-    host = QWidget()
-    host.setStyleSheet(pack_stylesheet("light-frost", False, None, "default", palette, control_art(palette)))
-    setup = SetupPage(host)
-    setup.motion = "off"
-    setup.set_palette(palette)
-    setup.open(
-        SetupState(
-            "light-frost",
-            {"preset": "default", "knobs": {}},
-            sanitize_layout(None),
-            {},
-            [],
-            monday_of("2026-09-23"),
-        )
-    )
-    host.resize(1600, 800)
-    setup.resize(1600, 800)
-    host.show()
-    qapp.processEvents()
-    return host, setup
-
-
-def test_the_setup_week_question_is_saved_when_kept_and_not_when_skipped(
-    qapp: QApplication,
-    kept: Path,
-) -> None:
-    from desktop.native.setup import HOMEWORK, WEEK
-
-    host, setup = _setup_page(qapp)
-    try:
-        choice = setup.findChild(QComboBox, "setupWeekStart")
-        assert [choice.itemText(at) for at in range(choice.count())] == SEVEN
-        assert choice.currentText() == "Monday"
-        assert choice.accessibleName() == "Week starts on"
-        # Week starts on the chosen day too, so the page no longer says it runs Monday to Sunday.
-        words = [label.text() for label in setup.findChildren(QLabel)]
-        assert not [text for text in words if "Monday to Sunday" in text], words
-        setup._show(WEEK)
-        choice.setCurrentIndex(SEVEN.index("Wednesday"))
-        setup._leave(HOMEWORK, keep=False)
-        assert not kept.exists()
-        setup._show(WEEK)
-        choice.setCurrentIndex(SEVEN.index("Wednesday"))
-        setup._leave(HOMEWORK, keep=True)
-        assert fields.week_starts_on() == "wednesday"
-    finally:
-        host.close()
-        host.deleteLater()
-
-
-def test_setup_school_and_activity_days_start_on_a_day_as_soon_as_it_is_picked(
-    qapp: QApplication,
-    kept: Path,
-) -> None:
-    host, setup = _setup_page(qapp)
-    try:
-        setup._add_activity("Soccer", [1, 3])
-        choice = setup.findChild(QComboBox, "setupWeekStart")
-        choice.setCurrentIndex(SEVEN.index("Wednesday"))
-        qapp.processEvents()
-        wednesday_first = ["Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday"]
-        assert _pills_in_order(setup.school_days) == wednesday_first
-        assert _pills_in_order(setup.activities[-1].days) == wednesday_first
-        # Nothing is saved until the page is kept, and each pill still means its weekday.
-        assert not kept.exists()
-        assert setup.school_days.days() == [0, 1, 2, 3, 4]
-        assert setup.activities[-1].days.days() == [1, 3]
-    finally:
-        host.close()
-        host.deleteLater()
-
-
 
 
 def _pills_in_order(picker: QWidget) -> list[str]:

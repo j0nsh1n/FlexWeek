@@ -62,7 +62,7 @@ from PySide6.QtWidgets import (
 )
 
 from backend import clock as wall_clock
-from backend.slots import SLOT_MIN
+from backend.slots import SLOT_MIN, minutes_to_hhmm
 from desktop.native import icons
 from desktop.native.calendar import DAY_FULL, DAYS, day_full_names, day_names, weekday_order
 from desktop.native.tokens import WEIGHT_STRONG
@@ -1116,6 +1116,24 @@ class ClockField(QTimeEdit):
                 self.lineEdit().selectAll()
                 return True
         return super().eventFilter(watched, event)
+
+
+class QuarterTime(ClockField):
+    """A time of day, typed. The arrow keys and the wheel move it a quarter hour at a time; a time typed
+    between quarters keeps its minute, as the block editor does."""
+
+    def __init__(self, hhmm: str, *, end: bool = False) -> None:
+        # QTime holds no 24:00; an end box reads 00:00 as the end of the day.
+        super().__init__(QTime(0, 0) if hhmm == "24:00" else QTime.fromString(hhmm, "HH:mm"), end=end)
+        self.setObjectName("setupTime")
+        self.setCorrectionMode(QAbstractSpinBox.CorrectionMode.CorrectToNearestValue)
+
+    def set_minutes(self, minutes: int) -> None:
+        minutes = max(0, min(minutes, END_OF_DAY if self._end else END_OF_DAY - 1))
+        self.setTime(QTime(minutes // 60 % 24, minutes % 60))
+
+    def hhmm(self) -> str:
+        return minutes_to_hhmm(self.minutes())
 
 
 class Stepper(QWidget):

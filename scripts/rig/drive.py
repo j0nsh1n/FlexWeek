@@ -317,7 +317,7 @@ def child_main(args: argparse.Namespace) -> int:
     from desktop.native.widgets import BlockDialog, _give_focus_back
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
-    from desktop.tests.logic_support import past_setup, wait_until
+    from desktop.tests.logic_support import past_recovery, past_setup, sign_up, wait_until
 
     out = Path(args.out)
     server = LocalServer(Path(tempfile.mkdtemp()) / "rig.db")
@@ -332,12 +332,8 @@ def child_main(args: argparse.Namespace) -> int:
     window.show()
     if material_new:
         return run_play(app, window, window.session, server, out, play, seed_rig_week, python_errors)
-    window.username.setText("rig_student")
-    window.password.setText(PASSWORD)
-    window.findChild(QPushButton, "createAccount").click()
-    wait_until(app, lambda: window._stack.currentWidget().objectName() == "recoveryPage", 20)
-    window.recovery_ack.setChecked(True)
-    window.recovery_continue.click()
+    sign_up(app, window, "rig_student", PASSWORD)
+    past_recovery(app, window)
     if play is not None:
         return run_play(app, window, window.session, server, out, play, seed_rig_week, python_errors)
     past_setup(app, window)

@@ -9,13 +9,13 @@ from pathlib import Path
 
 import pytest
 from flexweek_engine import SyncService
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication
 
 from desktop.native.devices import SyncHost
 from desktop.native.settings_copy import DOT_WORDS
 from desktop.native.window import NativeWindow
 from desktop.server import LocalServer
-from desktop.tests.logic_support import past_setup
+from desktop.tests.logic_support import past_recovery, past_setup, sign_up
 from desktop.tests.sync.support import (
     PHONE_NAME,
     loopback_service,
@@ -39,12 +39,8 @@ def desk(qapp: QApplication, server: LocalServer, tmp_path: Path) -> Iterator[Na
     window = NativeWindow(server.origin, sync=host)
     window.show()
     try:
-        window.username.setText(USERNAME)
-        window.password.setText(PASSWORD)
-        window.findChild(QPushButton, "createAccount").click()
-        wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "recoveryPage")
-        window.recovery_ack.setChecked(True)
-        window.recovery_continue.click()
+        sign_up(qapp, window, USERNAME, PASSWORD)
+        past_recovery(qapp, window)
         past_setup(qapp, window)
         still(window)
         yield window

@@ -20,7 +20,6 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtCore import QEvent, QObject, Qt
     from PySide6.QtWidgets import QApplication, QPushButton, QWidget
 
-    from desktop.native.previews import render
     from desktop.native.widgets import ChoiceCard, WhyOff
 
 
@@ -77,5 +76,3 @@ def test_the_line_under_an_off_button_opens_no_window(qapp: QApplication) -> Non
     holder.close()
 
 
-def test_a_dial_picture_opens_no_window_of_its_own(qapp: QApplication) -> None:
-    assert windows_shown(lambda: render("dial", None, "light-frost", None, 320)) == []

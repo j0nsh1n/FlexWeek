@@ -20,7 +20,7 @@ from PySide6.QtGui import QKeyEvent
 from PySide6.QtQuickWidgets import QQuickWidget
 from PySide6.QtWidgets import QApplication
 
-from desktop.native.setup import HOMEWORK, REMINDERS, WEEK
+from desktop.native.setup_steps import HOMEWORK, REMINDERS, WEEK
 from desktop.native.weekmodel import hhmm_text
 from desktop.tests.account.support import (
     LightLaunches,
@@ -229,7 +229,6 @@ def test_graphics_failure_during_material_setup_asks_for_a_cpu_copy_and_keeps_th
     settle(qapp, window)
 
     assert launched == [True]
-    assert window.setup_page.isVisible() is False
     assert window._surface == "material"
     stored = json.loads(look_file().read_text())
     assert stored["surface"] == "material"
@@ -251,8 +250,6 @@ def test_setup_focus_and_tab_ownership_stays_on_visible_material_controls(
     assert bridge.setupStep == WEEK
 
     # Widgets setup must NOT be opened underneath Material setup
-    assert window.setup_page.carousel.hasFocus() is False
-    assert window.setup_page.isVisible() is False
 
     # Window focus ownership: Material quick surface owns keyboard focus; Widgets setup is not opened
     quick = window.findChild(QQuickWidget, "materialQuick")
@@ -272,7 +269,6 @@ def test_setup_focus_and_tab_ownership_stays_on_visible_material_controls(
         item = qw.activeFocusItem()
         assert item is not None
         assert window.focusWidget() is quick
-        assert window.setup_page.carousel.hasFocus() is False
         tabbed_names.append(item.property("objectName") or "")
 
     # Visible step rail, choice cards, and footer buttons are in the tab sequence
@@ -286,7 +282,6 @@ def test_setup_focus_and_tab_ownership_stays_on_visible_material_controls(
         item = qw.activeFocusItem()
         assert item is not None
         assert window.focusWidget() is quick
-        assert window.setup_page.carousel.hasFocus() is False
 
 
 def test_setup_keeps_a_saved_cutoff_that_is_not_on_the_list(

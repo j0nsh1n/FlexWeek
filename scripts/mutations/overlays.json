@@ -2,8 +2,8 @@
   {
     "file": "desktop/native/window.py",
     "name": "the toast stays when the student leaves its page",
-    "old": "                    self.toast.hide()\n                    left = \"\" if leaving is None",
-    "new": "                    pass\n                    left = \"\" if leaving is None",
+    "old": "                    # What the toast said was about the page the student is leaving.\n                    self.toast.hide()\n",
+    "new": "                    # What the toast said was about the page the student is leaving.\n                    pass\n",
     "test": "desktop/tests/week/test_notice_toast.py::test_the_toast_belongs_to_the_page_it_was_said_on"
   },
   {

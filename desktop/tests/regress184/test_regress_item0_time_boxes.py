@@ -45,7 +45,6 @@ from PySide6.QtWidgets import (
 )
 
 from desktop.native.fields import ClockField
-from desktop.native.setup import SetupPage
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import (
     AvailabilityDialog,
@@ -54,7 +53,6 @@ from desktop.native.widgets import (
     HomeworkDialog,
     SchoolHoursDialog,
 )
-from desktop.tests.test_setup_wizard import WEEK, state
 from desktop.tests.window_support import free, qapp  # noqa: F401
 
 CLICKS = ("click-start", "click-middle", "click-end")
@@ -171,51 +169,6 @@ def _accepted(dialog: QDialog) -> None:
         dialog.accept()
 
 
-def _setup(qapp, which: str) -> Box:
-    setup = SetupPage()
-    setup.motion = "off"
-    setup.resize(1100, 720)
-    setup.open(state())
-    setup._show(WEEK)
-    _up(qapp, setup)
-    if which.startswith("school"):
-        times = setup.school_times
-        title = "School"
-    else:
-        row = setup.activities[0]
-        row.name.setText("Soccer")
-        row.days.set_days([1])
-        times = row.times
-        title = "Soccer"
-    if which.endswith("start"):
-        times.end.setTime(QTime(18, 0))
-    else:
-        times.start.setTime(QTime(8, 0))
-
-    def read() -> str:
-        block = next(b for b in setup.week_blocks() if b["title"] == title)
-        return block["start"] if which.endswith("start") else _end(block["start"], block["duration_min"])
-
-    field = times.start if which.endswith("start") else times.end
-    return Box(setup, field, read, setup.next, [setup])
-
-
-def setup_school_start(qapp, host):
-    return _setup(qapp, "school-start")
-
-
-def setup_school_end(qapp, host):
-    return _setup(qapp, "school-end")
-
-
-def setup_activity_start(qapp, host):
-    return _setup(qapp, "activity-start")
-
-
-def setup_activity_end(qapp, host):
-    return _setup(qapp, "activity-end")
-
-
 def _school_hours(qapp, host, end: bool) -> Box:
     dialog = _up(qapp, SchoolHoursDialog(host))
     (dialog.times.start if end else dialog.times.end).setTime(QTime(8, 0) if end else QTime(18, 0))
@@ -327,10 +280,6 @@ def study_hours_end(qapp, host):
 
 
 BOXES: dict[str, Callable] = {
-    "setup-school-start": setup_school_start,
-    "setup-school-end": setup_school_end,
-    "setup-activity-start": setup_activity_start,
-    "setup-activity-end": setup_activity_end,
     "school-hours-start": school_hours_start,
     "school-hours-end": school_hours_end,
     "block-editor-start": block_editor_start,

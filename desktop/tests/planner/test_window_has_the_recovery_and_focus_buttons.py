@@ -1,4 +1,4 @@
-"""The window carries the buttons for account recovery, quick focus, restore points and More."""
+"""The window carries the buttons for quick focus, restore points, the account and More."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 
@@ -11,9 +11,8 @@ from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.window_support import qapp  # noqa: F401
 
 
-def test_native_window_exposes_recovery_and_focus_controls(window: NativeWindow) -> None:
+def test_native_window_exposes_focus_restore_and_account_controls(window: NativeWindow) -> None:
     for name in (
-        "forgotPassword",
         "focusQuick",
         "restoreButton",
         "accountButton",

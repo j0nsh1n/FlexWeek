@@ -9,12 +9,11 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt, QTime
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication
 
-from desktop.native.setup import DONE, WEEK, SetupPage
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import BlockDialog, SchoolHoursDialog
-from desktop.tests.week.support_typing import _setup, _up, drain, enter, press, state, type_text
+from desktop.tests.week.support_typing import _up, drain, enter, press, type_text
 from desktop.tests.window_support import free, qapp  # noqa: F401
 
 
@@ -102,44 +101,8 @@ def test_the_24_hour_clock_reads_a_bare_time_as_written(editor) -> None:
     assert "End needs to be later than Start" in dialog.end.problem()
 
 
-@pytest.mark.parametrize("which", ["school-end", "activity-end"])
-def test_setup_reads_a_bare_end_by_its_start(qapp: QApplication, which: str) -> None:
-    set_clock_24h(False)
-    box = _setup(qapp, which)
-    try:
-        typed_end(box.field, "315")
-        assert box.field.minutes() == 15 * 60 + 15
-        assert box.field.problem() == ""
-    finally:
-        drain(qapp)
-        for widget in box.owned:
-            widget.hide()
-            free(widget)
 
 
-def test_setup_offers_the_other_half_and_next_stays_on_the_end(qapp: QApplication) -> None:
-    set_clock_24h(False)
-    box = _setup(qapp, "school-end")
-    setup = box.top
-    try:
-        setup.school_times.start.setTime(QTime(8, 30))
-        typed_end(box.field, "3:15a")
-        assert box.field.problem() == (
-            "School ends at 3:15 AM, before it starts at 8:30 AM. Did you mean 3:15 PM?"
-        )
-        step = setup._step
-        setup.next.click()
-        assert setup._step == step and box.field.hasFocus(), "Next keeps the keyboard on End"
-        use = next(b for b in setup.findChildren(QPushButton, "clockErrorUse") if b.isVisible())
-        assert use.text() == "Use 3:15 PM"
-        use.click()
-        assert box.field.minutes() == 15 * 60 + 15
-        assert box.field.problem() == ""
-    finally:
-        drain(qapp)
-        for widget in box.owned:
-            widget.hide()
-            free(widget)
 
 
 def test_school_hours_reads_a_bare_end_by_its_start(qapp: QApplication) -> None:
@@ -155,22 +118,3 @@ def test_school_hours_reads_a_bare_end_by_its_start(qapp: QApplication) -> None:
         free(dialog)
 
 
-def test_skip_on_an_unchanged_week_asks_nothing_and_the_summary_says_skipped(qapp: QApplication) -> None:
-    """Skip asks only about what the student changed; a skipped Your week reads "skipped" on the last
-    page, not "Nothing fixed yet"."""
-    setup = SetupPage()
-    setup.motion = "off"
-    setup.open(state())
-    setup._show(WEEK)
-    _up(qapp, setup)
-    try:
-        setup.skip.click()
-        assert QApplication.activeModalWidget() is None, "nothing was typed, so nothing is asked"
-        assert setup.step != WEEK
-        setup._show(DONE)
-        week = setup.summary_rows[1][1].text()
-        assert week == "skipped"
-    finally:
-        drain(qapp)
-        setup.hide()
-        free(setup)

@@ -1,11 +1,5 @@
-"""The form grammar every sheet and account card follows: a problem is one line under its field, a row
-of answers stacks when it cannot hold them side by side, and an account card shows one problem at a
-time and sends the keyboard to that field.
-
-How wide the problem line is, where captions sit, that no button clips its words and that an account
-card does not move when a problem appears are pictures: desktop/tests/pictures/screens_sheets_h8.py
-(sheets.problem-lines, sheets.captions-*, sheets.account-card-*).
-"""
+"""The form grammar every sheet follows: a problem is one line under its field, and a row of answers
+stacks when it cannot hold them side by side."""
 
 from __future__ import annotations
 
@@ -26,20 +20,9 @@ from PySide6.QtWidgets import (
 
 from desktop.native.fields import ClockField, ProblemLine
 from desktop.native.widgets import SHEET_PAD, AnswerRow, AvailabilityDialog, BlockDialog
-from desktop.native.window import NativeWindow
-from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.sheets.support_clock_typing import show_and_focus, type_over
 from desktop.tests.sheets.support_soccer import soccer
 from desktop.tests.window_support import free, host, qapp  # noqa: F401
-
-
-def _show_account_card(app: QApplication, opened: NativeWindow, mode: str) -> None:
-    """The sign-in page on the card for `mode` ("sign in", "create" or "reset")."""
-    opened._show_page("authPage")
-    opened._entry_mode = mode
-    opened._sync_auth_mode()
-    for _ in range(4):
-        app.processEvents()
 
 
 def test_a_clock_field_shows_a_problem_line_for_words_that_are_not_a_time(
@@ -113,28 +96,3 @@ def test_a_row_of_answers_stacks_when_it_is_too_narrow_and_stands_in_a_row_when_
     free(row)
 
 
-def test_an_account_card_shows_one_problem_and_sends_the_keyboard_to_that_field(
-    qapp: QApplication,  # noqa: F811
-    window: NativeWindow,  # noqa: F811
-) -> None:
-    """Only the first problem shows, and the keyboard moves to its field."""
-    _show_account_card(qapp, window, "create")
-    window.username.setText("ab")
-    window.password.setText("short")
-    window.create_button.click()
-    for _ in range(4):
-        qapp.processEvents()
-    lines = (
-        window.username_problem,
-        window.password_problem,
-        window.recovery_code_problem,
-        window.recovery_password_problem,
-    )
-    assert [line for line in lines if line.isVisibleTo(window)] == [window.username_problem]
-    assert window.focusWidget() is window.username
-    window.username.setText("ada_1")
-    window.create_button.click()
-    for _ in range(4):
-        qapp.processEvents()
-    assert [line for line in lines if line.isVisibleTo(window)] == [window.password_problem]
-    assert window.focusWidget() is window.password

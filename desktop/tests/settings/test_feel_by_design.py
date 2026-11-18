@@ -1,12 +1,10 @@
-"""A Setup style's feel on Settings, a sheet, Setup and sign-in: the feel follows the main view, each
-style adds its own faces, radii and frame, and the week's own chrome is left alone."""
+"""A style's feel on a sheet: the feel follows the main view, each style adds its own faces, radii and
+frame, and the week's own chrome is left alone."""
 
 from __future__ import annotations
 
-import json
 import re
 from collections.abc import Iterator
-from pathlib import Path
 
 import pytest
 
@@ -29,8 +27,6 @@ from desktop.native.feel import (
 from desktop.native.layouts.registry import options_for, sanitize_layout, tokens_for
 from desktop.native.look import design_look, pack_stylesheet, sanitize_look
 from desktop.native.motion import apply_ui_effects
-from desktop.native.setup import STYLE as SETUP_STEP
-from desktop.native.setup import SetupPage
 from desktop.native.tokens import (
     RADIUS_CARD,
     RADIUS_SHEET,
@@ -44,7 +40,7 @@ from desktop.native.tokens import (
 from desktop.native.widgets import HomeworkDialog, control_art
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.settings.support_feel import HEROES, STYLE, _dressed, _host
+from desktop.tests.settings.support_feel import HEROES, _dressed, _host
 from desktop.tests.window_support import free, look_file, qapp, still  # noqa: F401
 
 
@@ -122,7 +118,7 @@ def test_feel_sizes_are_on_the_scale(qapp: QApplication) -> None:  # noqa: F811
     assert checked, "the pattern found no size to check"
 
 
-def test_a_sheet_and_setup_show_the_feel(qapp: QApplication) -> None:  # noqa: F811
+def test_a_sheet_shows_the_feel(qapp: QApplication) -> None:  # noqa: F811
     for style_key, radius, font, frame in (
         ("plain", None, None, False),
         ("night", RADIUS_CARD, "Newsreader", False),
@@ -145,14 +141,8 @@ def test_a_sheet_and_setup_show_the_feel(qapp: QApplication) -> None:  # noqa: F
                 ctx.base_sheet, ctx.feel, ctx.palette, ctx.tokens, ctx.look, ("sheetTitle",)
             )
             assert f"border-radius: {radius}px" in extra
-        setup = SetupPage(host)
-        setup.motion = "off"
-        apply_feel(setup, ctx)
-        qapp.processEvents()
-        assert (setup.findChild(QWidget, "win98Frame") is not None) is frame
         dialog.close()
         free(dialog)
-        free(setup)
         free(host)
 
 
@@ -206,32 +196,6 @@ def test_week_page_chrome_is_not_changed_by_a_designs_feel(
             assert extra not in window.planner.styleSheet(), main
 
 
-def test_sign_in_wears_the_last_design_this_computer_used(
-    qapp: QApplication, window: NativeWindow  # noqa: F811
-) -> None:
-    path = look_file()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(
-            {
-                "preset": "default",
-                "knobs": {},
-                "layout": {"main": "retro", "day": "dial", "options": {}},
-            }
-        )
-    )
-    window._load_look()
-    window._apply_appearance()
-    # The sign-in page is dressed whichever page is showing; the light window is signed in already.
-    window._show_page("authPage")
-    still(window)
-    assert page_feel().key == "retro"
-    assert window.findChild(QWidget, "win98Frame") is not None
-    assert "Pixelify" in window.findChild(QWidget, "authPage").styleSheet()
-    window._save_look()
-    saved = json.loads(path.read_text())
-    assert "design" not in saved
-    assert saved["layout"]["main"] == "retro"
 
 
 def test_a_sheet_keeps_one_feel_stylesheet_across_shows(qapp: QApplication) -> None:  # noqa: F811
@@ -251,34 +215,8 @@ def test_a_sheet_keeps_one_feel_stylesheet_across_shows(qapp: QApplication) -> N
     free(host)
 
 
-def test_plain_pages_inherit_the_window_sheet(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
-    window._layout = sanitize_layout({"main": "classic", "day": "dial"})
-    window._apply_appearance()
-    still(window)
-    for name in ("authPage", "recoveryPage"):
-        page = window.findChild(QWidget, name)
-        if page is not None:
-            assert page.styleSheet() == ""
-    assert window.setup_page.styleSheet() == ""
-    text = Path(__file__).resolve().parents[2].joinpath("native/window.py").read_text()
-    assert text.count("self._dress_entry(palette, look)") == 1
 
 
-def test_setup_style_page_wears_the_style_being_picked(
-    qapp: QApplication, window: NativeWindow  # noqa: F811
-) -> None:
-    window._open_setup(SETUP_STEP, first_run=True)
-    still(window)
-    assert page_feel().key == "plain"
-    window.setup_page._choose_style(STYLE["retro"])
-    still(window)
-    qapp.processEvents()
-    assert page_feel().key == "retro"
-    assert window.setup_page.findChild(QWidget, "win98Frame") is not None
-    window.setup_page._choose_style(STYLE["plain"])
-    still(window)
-    qapp.processEvents()
-    assert page_feel().key == "plain"
 
 
 def test_card_depth_follows_the_feel_and_the_shared_small_shadow(qapp: QApplication) -> None:  # noqa: F811

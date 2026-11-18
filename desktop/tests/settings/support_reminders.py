@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 from backend.tests.fake_clock import CLOCK, START
 from desktop.native.window import NativeWindow
 from desktop.server import LocalServer
-from desktop.tests.logic_support import past_setup
+from desktop.tests.logic_support import past_recovery, past_setup, sign_in, sign_up
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import settled
 
@@ -118,19 +118,13 @@ def launch(
     opened.append(window)
     window.resize(1280, 860)
     window.show()
-    window.username.setText(name)
-    window.password.setText(PASSWORD)
     if create:
-        window.findChild(QPushButton, "createAccount").click()
-        wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "recoveryPage")
-        window.recovery_ack.setChecked(True)
-        window.recovery_continue.click()
+        sign_up(qapp, window, name, PASSWORD)
+        past_recovery(qapp, window)
         past_setup(qapp, window)
     else:
-        if window.sign_in_button.isHidden():
-            window.findChild(QPushButton, "authSwitch").click()
-        window.keep_signed_in.setChecked(False)
-        window.sign_in_button.click()
+        window._account_bridge().setKeepSignedIn(False)
+        sign_in(qapp, window, name, PASSWORD)
         wait_until(qapp, lambda: window.session.preferences is not None and not window.session.busy)
     return with_stand_ins(window)
 

@@ -12,7 +12,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QApplication
 
 from desktop.native import fields
-from desktop.native.setup import HOMEWORK, WEEK
+from desktop.native.setup_steps import HOMEWORK, WEEK
 from desktop.tests.account.support import (
     LightLaunches,
     account,

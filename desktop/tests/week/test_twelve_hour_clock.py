@@ -14,15 +14,15 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QTimeEdit, QWidget
 
+from desktop.native.fields import QuarterTime
 from desktop.native.hours.canvas import Drawn
 from desktop.native.hours.geometry import Span
 from desktop.native.hours.hand import span_words
 from desktop.native.hours.month import MonthChip
-from desktop.native.setup import QuarterTime, span_label
+from desktop.native.setup_steps import span_label
 from desktop.native.weekmodel import clock_text, range_label, set_clock_24h
 from desktop.native.widgets import BlockDialog, LateDialog, PreviewDialog
 from desktop.native.window import NativeWindow
-from desktop.native.work_windows import WorkWindowsEditor
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import host, qapp, settled  # noqa: F401
@@ -89,11 +89,6 @@ def test_editors_show_12_hour_times_and_keep_hh_mm(
     assert (start.currentText(), start.currentData()) == ("4:00 PM", "16:00")
     start.setCurrentIndex(start.findData("17:15"))
     assert preview.rows()[0]["block"]["start"] == "17:15"
-    windows = WorkWindowsEditor([{"days": [0], "start": "15:45", "end": "24:00"}], parent=host)
-    row = windows.findChild(QWidget, "workWindowRow")
-    assert row.findChild(QComboBox, "workWindowStart").currentText() == "3:45 PM"
-    assert row.findChild(QComboBox, "workWindowEnd").currentText() == "12:00 AM"
-    assert windows.windows() == [{"days": [0], "start": "15:45", "end": "24:00"}]
 
 
 

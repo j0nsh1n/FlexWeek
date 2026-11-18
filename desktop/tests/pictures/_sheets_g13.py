@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QTime
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -18,8 +17,6 @@ from PySide6.QtWidgets import (
 )
 
 from desktop.native.settings import AboutDialog, AccountDialog, HelpDialog
-from desktop.native.setup import WEEK as SETUP_WEEK
-from desktop.native.setup import SetupPage
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import (
     BlockDialog,
@@ -39,7 +36,6 @@ from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.sheets.support_dialogs import ESSAY, WEEK, choose_time, school, shown, soccer
 from desktop.tests.test_homework_form import essay, go_when
-from desktop.tests.test_regress_item0_time_boxes import state
 
 SOURCES = ("desktop/native/widgets.py", "desktop/native/look.py", "desktop/native/tokens.py")
 SETTLE_TURNS = 6
@@ -292,52 +288,6 @@ def _recovery_continue_off(window: NativeWindow) -> None:
     window._show_recovery(["aaaa-bbbb", "cccc-dddd"])
     _settle()
     return None
-
-
-def _setup_page(window: NativeWindow) -> SetupPage:
-    set_clock_24h(False)
-    setup = SetupPage(window)
-    setup.motion = "off"
-    setup.setGeometry(window.rect())
-    setup.open(state())
-    setup._show(SETUP_WEEK)
-    setup.show()
-    setup.raise_()
-    _settle()
-    return setup
-
-
-def _bad_end(times: object) -> None:
-    times.start.setTime(QTime(8, 30))
-    end = times.end
-    end.lineEdit().setText("3:15a")
-    end._edited("3:15a")
-    end._settle()
-    _settle()
-
-
-def _setup_bad_school_end(window: NativeWindow) -> SetupPage:
-    setup = _setup_page(window)
-    _bad_end(setup.school_times)
-    return setup
-
-
-def _setup_bad_activity_end(window: NativeWindow) -> SetupPage:
-    setup = _setup_page(window)
-    row = setup.activities[0]
-    row.name.setText("Soccer")
-    row.days.set_days([1])
-    _settle()
-    _bad_end(row.times)
-    return setup
-
-
-def _setup_bad_school_end_with_an_activity(window: NativeWindow) -> SetupPage:
-    setup = _setup_page(window)
-    setup.activities[0].name.setText("Soccer")
-    _settle()
-    _bad_end(setup.school_times)
-    return setup
 
 
 SCREENS: list[Screen] = [
@@ -685,39 +635,5 @@ SCREENS: list[Screen] = [
             "to continue.' under it says why."
         ),
         sources=SOURCES + ("desktop/native/window.py",),
-    ),
-    Screen(
-        id="setup.problem_under_school_end",
-        area="setup",
-        prepare=_setup_bad_school_end,
-        checks=(
-            "Setup's Your week with a bad School End time (3:15a after a 8:30 start): the problem line "
-            "takes its own row under End. Start, End and the day chips stay exactly where they were; "
-            "End keeps its width; the line is under End and overlaps no other widget."
-        ),
-        sources=("desktop/native/setup.py", "desktop/native/fields.py"),
-    ),
-    Screen(
-        id="setup.problem_under_activity_end",
-        area="setup",
-        prepare=_setup_bad_activity_end,
-        checks=(
-            "Setup's Your week with a bad End time on an activity (Soccer on Tuesday): the problem "
-            "line takes its own row under End; Start, End and the day chips stay exactly where they "
-            "were, End keeps its width, and the line overlaps no other widget."
-        ),
-        sources=("desktop/native/setup.py", "desktop/native/fields.py"),
-    ),
-    Screen(
-        id="setup.problem_pushes_the_activities_down",
-        area="setup",
-        prepare=_setup_bad_school_end_with_an_activity,
-        checks=(
-            "Setup's Your week with a bad School End time and an activity below: the activity section "
-            "has moved down by the line's height (at least its height less 1 px), and the line ends "
-            "above the activity section's top. When the problem is fixed the activity goes back to "
-            "where it was."
-        ),
-        sources=("desktop/native/setup.py", "desktop/native/fields.py"),
     ),
 ]

@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.hours.rail import BOOK_GAP, SPACING, TITLE_GAP
 from desktop.native.window import NativeWindow
-from desktop.tests.pictures import planner_keep_signed_in_screens, planner_moves_screens
+from desktop.tests.pictures import planner_moves_screens
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.planner.support import (
     LONG_FOCUS_TASKS,
@@ -237,4 +237,3 @@ SCREENS: list[Screen] = [
 ]
 
 SCREENS = [*SCREENS, *planner_moves_screens.SCREENS]
-SCREENS = [*SCREENS, *planner_keep_signed_in_screens.SCREENS]

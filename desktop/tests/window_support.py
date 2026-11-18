@@ -13,12 +13,12 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QEvent, QStandardPaths
-from PySide6.QtWidgets import QApplication, QPushButton, QWidget
+from PySide6.QtWidgets import QApplication, QWidget
 
 from desktop.native.motion import settle
 from desktop.native.window import NativeWindow
 from desktop.server import LocalServer
-from desktop.tests.logic_support import past_setup
+from desktop.tests.logic_support import past_recovery, past_setup, sign_up
 from desktop.tests.waiting import wait_until  # noqa: F401
 
 PASSWORD = "a-long-test-password"
@@ -105,12 +105,8 @@ def signed_out(qapp: QApplication, server: LocalServer) -> Iterator[NativeWindow
 def window(qapp: QApplication, signed_out: NativeWindow) -> NativeWindow:
     """Signed in on the week page, setup skipped, preferences loaded. The week page has finished
     fading in: a test that read the top bar's pixels straight away read them through the fade."""
-    signed_out.username.setText(USERNAME)
-    signed_out.password.setText(PASSWORD)
-    signed_out.findChild(QPushButton, "createAccount").click()
-    wait_until(qapp, lambda: signed_out._stack.currentWidget().objectName() == "recoveryPage")
-    signed_out.recovery_ack.setChecked(True)
-    signed_out.recovery_continue.click()
+    sign_up(qapp, signed_out, USERNAME, PASSWORD)
+    past_recovery(qapp, signed_out)
     past_setup(qapp, signed_out)
     still(signed_out)
     return signed_out

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 from backend import clock as wall_clock
 from backend.slots import hhmm_to_minutes
+from desktop.native.calendar import DAYS
 from desktop.native.weekmodel import clock_text, hhmm_text
-from desktop.native.widgets import (
-    DAYS,
-)
 
 STYLE, LOOK, COLOURS, WEEK, HOMEWORK, REMINDERS, FIRST, DONE = range(8)
 # The rail names six steps. Style has two more pages behind it for a student who builds their own.
@@ -156,3 +155,23 @@ def next_school_day(school_days: list[int], today: date | None = None) -> str:
         if not school_days or day.weekday() in school_days:
             return day.isoformat()
     return (today + timedelta(days=1)).isoformat()
+
+
+SETUP_VERSION = 1
+
+
+@dataclass
+class SetupState:
+    """What is in place now: setup opens on it, and keeps it up to date as pages are kept."""
+
+    pack: str
+    look: dict
+    layout: dict
+    preferences: dict
+    blocks: list[dict]
+    week_start: str
+    subjects: list[str] = field(default_factory=list)
+    # "This week: no School on Wednesday." when the open week differs from the repeats in `blocks`.
+    this_week: str | None = None
+    first_run: bool = True
+    homework: list[str] = field(default_factory=list)

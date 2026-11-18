@@ -285,11 +285,11 @@ def _window_on_setup(tmp_path):
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtCore import QStandardPaths
-    from PySide6.QtWidgets import QApplication, QPushButton
+    from PySide6.QtWidgets import QApplication
 
     from desktop.native.window import NativeWindow
     from desktop.server import LocalServer
-    from desktop.tests.logic_support import PASSWORD, wait_until
+    from desktop.tests.logic_support import PASSWORD, card_phase, past_recovery, sign_up, wait_until
     from desktop.tests.window_support import look_file
 
     QStandardPaths.setTestModeEnabled(True)
@@ -299,13 +299,9 @@ def _window_on_setup(tmp_path):
     server.start()
     window = NativeWindow(server.origin)
     window.show()
-    window.username.setText("play_student")
-    window.password.setText(PASSWORD)
-    window.findChild(QPushButton, "createAccount").click()
-    wait_until(app, lambda: window._stack.currentWidget().objectName() == "recoveryPage")
-    window.recovery_ack.setChecked(True)
-    window.recovery_continue.click()
-    wait_until(app, lambda: window._stack.currentWidget().objectName() == "setupPage")
+    sign_up(app, window, "play_student", PASSWORD)
+    past_recovery(app, window)
+    wait_until(app, lambda: card_phase(window) == "setup")
     return app, server, window
 
 
@@ -319,7 +315,6 @@ def test_empty_seed_honours_large_text(tmp_path):
         window._apply_appearance()
         app.processEvents()
         assert effective_look(window._worn_look())["text"] == "large"
-        assert effective_look(window.setup_page._look)["text"] == "large"
     finally:
         window.hide()
         free(window)
@@ -338,7 +333,6 @@ def test_the_look_setup_key_wears_the_preset(tmp_path):
         window._apply_appearance()
         app.processEvents()
         assert window._worn_look()["preset"] == "high-contrast"
-        assert window.setup_page._look["preset"] == "high-contrast"
         past_setup(app, window)
         play.apply_play_look(window, window.session, play.Setup(look="terminal"))
         window._apply_appearance()

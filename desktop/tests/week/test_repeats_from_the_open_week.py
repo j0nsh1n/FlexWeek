@@ -20,7 +20,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
 
 from desktop.native import window as window_module  # noqa: E402
-from desktop.native.setup import WEEK  # noqa: E402
+from desktop.native.setup_steps import WEEK  # noqa: E402
 from desktop.native.widgets import ConfirmSheet, SchoolHoursDialog  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402,F401
@@ -166,10 +166,10 @@ def test_item10_removing_the_first_activity_in_setup_leaves_the_second_with_its_
 
     go_to(qapp, session, NEXT_WEEK)
     window._open_setup(WEEK, first_run=False)
-    setup = window.setup_page
-    assert [row.name.text() for row in setup.activities] == ["Soccer", "Saturday job"]
-    setup._remove_activity(setup.activities[0])
-    blocks = setup.week_blocks()
+    setup = window._account_bridge()
+    assert [row["title"] for row in setup._activities] == ["Soccer", "Saturday job"]
+    setup.removeActivity(0)
+    blocks = setup._week_blocks()
     assert [item["id"] for item in blocks] == ["school", "activity-2"]
     session.set_setup_blocks(blocks)
     save_and_settle(qapp, session)

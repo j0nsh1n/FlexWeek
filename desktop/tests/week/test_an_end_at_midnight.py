@@ -12,8 +12,7 @@ from PySide6.QtCore import Qt, QTime
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QWidget
 
-from desktop.native.fields import ClockField
-from desktop.native.setup import WEEK, QuarterTime
+from desktop.native.fields import ClockField, QuarterTime
 from desktop.native.weekmodel import clock_text, length_label, set_clock_24h
 from desktop.native.widgets import AvailabilityDialog, BlockDialog, SchoolHoursDialog
 from desktop.tests.week.support_typing import (
@@ -22,7 +21,6 @@ from desktop.tests.week.support_typing import (
     enter,
     go_when,
     line_of,
-    opened_setup,
     press,
     shown,
     type_over,
@@ -82,25 +80,6 @@ def test_the_block_editor_still_refuses_an_end_before_its_start(qapp: QApplicati
     assert dialog.duration_line.text() == "End needs to be later than Start (22:00)."
 
 
-@CLOCKS
-@pytest.mark.parametrize("way", WAYS)
-def test_setup_school_and_activity_hours_take_an_end_at_midnight(
-    qapp: QApplication, twenty_four: bool, way: str
-) -> None:
-    set_clock_24h(twenty_four)
-    setup = opened_setup(qapp)
-    setup._show(WEEK)
-    type_over(setup.school_times.start, "22:00")
-    type_over(setup.school_times.end, way)
-    row = setup.activities[0]
-    row.name.setText("Night shift")
-    row.days.set_days([5])
-    type_over(row.times.start, "23:00")
-    type_over(row.times.end, way)
-    assert setup._problem(WEEK) is None
-    made = {block["title"]: (block["start"], block["duration_min"]) for block in setup.week_blocks()}
-    assert made == {"School": ("22:00", 120), "Night shift": ("23:00", 60)}
-    setup.close()
 
 
 @CLOCKS
@@ -151,7 +130,7 @@ def test_study_hours_take_an_end_at_midnight(
     assert dialog.work_windows() == [{"days": [0], "start": "22:00", "end": "24:00"}]
 
 
-def test_a_setup_end_box_steps_up_to_the_end_of_the_day_and_no_further(qapp: QApplication) -> None:
+def test_a_quarter_end_box_steps_up_to_the_end_of_the_day_and_no_further(qapp: QApplication) -> None:
     box = QuarterTime("23:45", end=True)
     box.stepBy(1)
     assert box.minutes() == 24 * 60

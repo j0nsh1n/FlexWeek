@@ -1,6 +1,5 @@
-"""Settings, Setup and the Availability sheet agree: the Spotify link, the reminder lead, the homework
-cutoff and the snooze length each have one place that decides them, and every page that shows them reads
-it."""
+"""The words and numbers that have one place that decides them: the Spotify link note, the reminder lead,
+the Availability sheet's homework cutoff and the snooze length."""
 
 from __future__ import annotations
 
@@ -8,14 +7,10 @@ import ast
 import inspect
 
 import flexweek_engine  # type: ignore[import-untyped]
-import pytest
 from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QPushButton
 
 from desktop.native import remind
-from desktop.native.calendar import monday_of
-from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.settings import SPOTIFY_TONE_NOTE, AlarmRingDialog
-from desktop.native.setup import NOTES, REMINDERS, WEEK, SetupPage, SetupState
 from desktop.native.widgets import AvailabilityDialog
 from desktop.tests.window_support import qapp  # noqa: F401
 
@@ -23,26 +18,6 @@ from desktop.tests.window_support import qapp  # noqa: F401
 
 HINT = "Plays when a block starts if the alarm sound is Spotify, and when focus is set to Spotify."
 NO_HOMEWORK_AFTER = ["No limit", "20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00"]
-
-
-def setup_page(qapp: QApplication, **changes: object) -> SetupPage:
-    state = SetupState(
-        pack="system",
-        look={"preset": "default", "knobs": {}},
-        layout=sanitize_layout(None),
-        preferences={},
-        blocks=[],
-        week_start=monday_of("2026-09-23"),
-    )
-    for key, value in changes.items():
-        setattr(state, key, value)
-    page = SetupPage()
-    page.motion = "off"
-    page.resize(1100, 720)
-    page.open(state)
-    page.show()
-    qapp.processEvents()
-    return page
 
 
 def texts(box: QComboBox) -> list[tuple[str, object]]:
@@ -58,39 +33,7 @@ def test_the_link_note_does_not_say_a_block_without_a_link_plays_nothing(qapp: Q
     assert "Reminders before a block and the end of a focus session play Chime." in SPOTIFY_TONE_NOTE
 
 
-def test_setup_says_the_same_about_the_link_as_settings(qapp: QApplication) -> None:
-    page = setup_page(qapp)
-    page._show(REMINDERS)
-    page.tone_buttons["spotify"].setChecked(True)
-    assert page.spotify_label.text() == "Spotify link"
-    assert page.spotify.accessibleName() == "Spotify link"
-    assert page.spotify_note.text() == SPOTIFY_TONE_NOTE
-    assert page.spotify_note.isVisible() and page.spotify_label.isVisible()
-    page.tone_buttons["bright"].setChecked(True)
-    assert not page.spotify_note.isVisible() and not page.spotify_label.isVisible()
-    page.close()
-
-
-def test_setup_does_not_say_one_sound_covers_everything(qapp: QApplication) -> None:
-    words = NOTES[REMINDERS]
-    assert "One sound" not in words
-    assert "A block starts with the Spotify link from Settings" in words
-    assert "Chime" in words
-
-
 # The reminder lead
-
-
-@pytest.fixture()
-def lead_of_seven(monkeypatch: pytest.MonkeyPatch) -> int:
-    """The engine's default moved to 7: every page has to ask the engine rather than hold its own 5."""
-    real = flexweek_engine.remind_lead_min
-    monkeypatch.setattr(
-        flexweek_engine,
-        "remind_lead_min",
-        lambda prefs, default: real(prefs, 7 if default is None else default),
-    )
-    return 7
 
 
 def test_the_default_lead_is_the_engines_and_is_five() -> None:
@@ -100,49 +43,14 @@ def test_the_default_lead_is_the_engines_and_is_five() -> None:
     assert remind.reminder_lead_min({"reminder_lead_min": 12}) == 12
 
 
-def test_setup_settings_and_the_summary_start_from_the_one_default(qapp: QApplication) -> None:
-    first = setup_page(qapp)
-    first._show(REMINDERS)
-    assert first.lead.value() == 5
-    first.close()
-    later = setup_page(qapp, first_run=False, preferences={"reminders_enabled": True})
-    later._show(REMINDERS)
-    assert later.lead.value() == 5
-    later.close()
-    summary = setup_page(qapp, preferences={"reminders_enabled": True})
-    assert summary_reminders(summary).startswith("5 min before things start")
-    summary.close()
-
-
-def test_every_page_follows_the_default_when_it_changes(qapp: QApplication, lead_of_seven: int) -> None:
-    first = setup_page(qapp)
-    first._show(REMINDERS)
-    assert first.lead.value() == lead_of_seven
-    first.close()
-    later = setup_page(qapp, first_run=False, preferences={"reminders_enabled": True})
-    later._show(REMINDERS)
-    assert later.lead.value() == lead_of_seven
-    later.close()
-    summary = setup_page(qapp, preferences={"reminders_enabled": True})
-    assert summary_reminders(summary).startswith(f"{lead_of_seven} min before things start")
-    summary.close()
-
-
-def summary_reminders(page: SetupPage) -> str:
-    page._fill_summary()
-    return page.summary_text()[3]
-
-
 # The homework cutoff
 
 
-def test_setup_and_availability_offer_the_same_cutoffs(qapp: QApplication) -> None:
-    setup_box = setup_page(qapp, preferences={"clock_24h": True}).cutoff
+def test_availability_offers_the_cutoffs(qapp: QApplication) -> None:
     availability = AvailabilityDialog(None, {})
-    assert [words for words, _ in texts(setup_box)] == NO_HOMEWORK_AFTER
-    assert texts(availability.cutoff) == texts(setup_box)
-    assert texts(setup_box)[0] == ("No limit", None)
-    assert texts(setup_box)[1:] == [(hhmm, hhmm) for hhmm in NO_HOMEWORK_AFTER[1:]]
+    assert [words for words, _ in texts(availability.cutoff)] == NO_HOMEWORK_AFTER
+    assert texts(availability.cutoff)[0] == ("No limit", None)
+    assert texts(availability.cutoff)[1:] == [(hhmm, hhmm) for hhmm in NO_HOMEWORK_AFTER[1:]]
     availability.close()
 
 
@@ -165,10 +73,6 @@ def test_a_cutoff_saved_off_the_list_is_kept_not_dropped(qapp: QApplication) -> 
         "No limit", "20:00", "20:30", "21:00", "21:30", "22:00", "22:15", "22:30", "23:00",
     ]  # fmt: skip
     availability.close()
-    page = setup_page(qapp, preferences={"day_cutoff": "22:15"})
-    page._show(WEEK)
-    assert page.cutoff.currentData() == "22:15"
-    page.close()
 
 
 # The constants

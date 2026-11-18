@@ -1,7 +1,7 @@
 """What the tests of typing a time share: input sent the way the window system sends it, one place
 for each time box, the Week windows the time tests open on, and the clock they hold.
 
-Other test files import `_setup`, `_up`, `enter`, `press`, `type_text`, `state`, `THURSDAY` and
+Other test files import `_up`, `enter`, `press`, `type_text`, `THURSDAY` and
 `hold_clock` from here."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
@@ -15,16 +15,14 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import Qt, QTime
+from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QAbstractButton, QApplication, QLineEdit, QPushButton, QWidget
 
 from backend.tests.fake_clock import CLOCK
-from desktop.native.calendar import monday_of, sunday_due
+from desktop.native.calendar import sunday_due
 from desktop.native.fields import ClockField
 from desktop.native.hours.zoom import HoursScroll
-from desktop.native.layouts.registry import sanitize_layout
-from desktop.native.setup import WEEK, SetupPage, SetupState
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import open_light  # noqa: F401
 from desktop.tests.waiting import exposed, wait_until
@@ -164,33 +162,6 @@ def go_when(dialog) -> None:
     QApplication.processEvents()
 
 
-# The setup wizard --------------------------------------------------------------------------------
-
-
-def state(**changes: object) -> SetupState:
-    base = SetupState(
-        pack="system",
-        look={"preset": "default", "knobs": {}},
-        layout=sanitize_layout(None),
-        preferences={},
-        blocks=[],
-        week_start=monday_of("2026-09-23"),
-    )
-    for key, value in changes.items():
-        setattr(base, key, value)
-    return base
-
-
-def opened_setup(qapp: QApplication, **changes: object) -> SetupPage:
-    setup = SetupPage()
-    setup.motion = "off"
-    setup.resize(1100, 720)
-    setup.open(state(**changes))
-    setup.show()
-    qapp.processEvents()
-    return setup
-
-
 @dataclass
 class Box:
     top: QWidget
@@ -204,35 +175,6 @@ def end_of(start: str, minutes: int) -> str:
     h, m = map(int, start.split(":"))
     total = h * 60 + m + minutes
     return f"{total // 60:02d}:{total % 60:02d}"
-
-
-def _setup(qapp, which: str) -> Box:
-    setup = SetupPage()
-    setup.motion = "off"
-    setup.resize(1100, 720)
-    setup.open(state())
-    setup._show(WEEK)
-    _up(qapp, setup)
-    if which.startswith("school"):
-        times = setup.school_times
-        title = "School"
-    else:
-        row = setup.activities[0]
-        row.name.setText("Soccer")
-        row.days.set_days([1])
-        times = row.times
-        title = "Soccer"
-    if which.endswith("start"):
-        times.end.setTime(QTime(18, 0))
-    else:
-        times.start.setTime(QTime(8, 0))
-
-    def read() -> str:
-        block = next(b for b in setup.week_blocks() if b["title"] == title)
-        return block["start"] if which.endswith("start") else end_of(block["start"], block["duration_min"])
-
-    field = times.start if which.endswith("start") else times.end
-    return Box(setup, field, read, setup.next, [setup])
 
 
 # The Week windows the time tests open on ----------------------------------------------------------

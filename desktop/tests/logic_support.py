@@ -50,6 +50,49 @@ def server(qapp: QApplication, tmp_path: Path) -> Iterator[LocalServer]:
     running.stop()
 
 
+def card_phase(window: object) -> str | None:
+    """The Material account card's phase (sign-in, create, reset, recovery, setup, app), or None while the
+    page is not built: a sign-out from the tests' Widgets week builds it again."""
+    bridge = window._account_bridge()  # type: ignore[attr-defined]
+    return None if bridge is None else bridge.phase
+
+
+def sign_up(
+    qapp: QApplication, window: object, username: str, password: str = PASSWORD, timeout: float = 30.0
+) -> list[str]:
+    """Make an account on Material's sign-up card, as a student types it, and stop on the recovery codes.
+    Returns the codes."""
+    wait_until(qapp, lambda: window._account_bridge() is not None)  # type: ignore[attr-defined]
+    bridge = window._account_bridge()  # type: ignore[attr-defined]
+    bridge.showCreate()
+    bridge.setUsername(username)
+    bridge.setPassword(password)
+    bridge.submit()
+    wait_until(qapp, lambda: bridge.phase == "recovery", timeout)
+    return list(bridge.codes)
+
+
+def sign_in(
+    qapp: QApplication, window: object, username: str, password: str = PASSWORD, timeout: float = 30.0
+) -> None:
+    """Sign in on Material's card, as a student types it. Returns once the session has answered."""
+    wait_until(qapp, lambda: window._account_bridge() is not None)  # type: ignore[attr-defined]
+    bridge = window._account_bridge()  # type: ignore[attr-defined]
+    bridge.showSignIn()
+    bridge.setUsername(username)
+    bridge.setPassword(password)
+    bridge.submit()
+    wait_until(qapp, lambda: not window.session.busy, timeout)  # type: ignore[attr-defined]
+
+
+def past_recovery(qapp: QApplication, window: object) -> None:
+    """Tick that the codes are kept and continue, as the recovery page asks."""
+    bridge = window._account_bridge()  # type: ignore[attr-defined]
+    bridge.setRecoveryAck(True)
+    wait_until(qapp, lambda: bridge.recoveryReady)
+    bridge.finishRecovery()
+
+
 def past_setup(qapp: QApplication, window: object) -> None:
     """A new account opens on setup. A test about the week skips it, and waits for the skip to be
     saved, since a save still in flight turns the test's own save away."""
@@ -57,8 +100,12 @@ def past_setup(qapp: QApplication, window: object) -> None:
     def on(name: str) -> bool:
         return window._stack.currentWidget().objectName() == name  # type: ignore[attr-defined]
 
-    wait_until(qapp, lambda: on("setupPage"))
-    window.setup_page.skip_all.click()  # type: ignore[attr-defined]
+    def in_setup() -> bool:
+        bridge = window._account_bridge()  # type: ignore[attr-defined]
+        return bridge is not None and bridge.phase == "setup"
+
+    wait_until(qapp, in_setup)
+    window._account_bridge().setupSkipAll()  # type: ignore[attr-defined]
     wait_until(
         qapp,
         lambda: (

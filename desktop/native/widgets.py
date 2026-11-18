@@ -141,6 +141,7 @@ from desktop.native.fields import (
     ClockField,
     DateField,
     DayPicker,
+    QuarterTime,
     Stepper,
     announce,
     held_on_problem,
@@ -4341,9 +4342,6 @@ class SchoolHoursDialog(Dialog):
         self, parent: QWidget | None, school: dict | None = None, this_week: str | None = None
     ) -> None:
         super().__init__(parent, sheet=True)
-        # Setup's own time box, imported here: setup imports this module.
-        from desktop.native.setup import QuarterTime
-
         self._original = deepcopy(school) if school is not None else None
         self._result: dict | None = None
         self.setObjectName("schoolHoursDialog")

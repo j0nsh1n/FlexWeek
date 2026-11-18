@@ -1,5 +1,5 @@
 """Screens of the style feel (Retro's windows, Bento's hero, Night owl's paper, and Plain as the baseline) on
-the Add homework sheet and Setup. These are the looks the code tests of the feel used to
+the Add homework sheet. These are the looks the code tests of the feel used to
 measure: title bars and their contrast, titles at Large text, caption buttons, bevels and card depth."""
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ from PySide6.QtWidgets import QLabel, QWidget
 from backend.tests.fake_clock import CLOCK
 from desktop.native.layouts import retro
 from desktop.native.layouts.registry import sanitize_layout
-from desktop.native.setup import STYLE as SETUP_STEP
 from desktop.native.widgets import HomeworkDialog
 from desktop.tests.pictures.screen import Screen
 
@@ -45,15 +44,6 @@ def _sheet(main: str) -> Callable[..., object]:
         dialog = HomeworkDialog(window, today=CLOCK.today().isoformat())
         dialog.show()
         return dialog
-
-    return prepare
-
-
-def _setup(main: str) -> Callable[..., object]:
-    def prepare(window):  # noqa: ANN001, ANN202
-        _wear(window, main)
-        window._open_setup(SETUP_STEP, first_run=True)
-        return window.setup_page
 
     return prepare
 
@@ -98,20 +88,6 @@ for key, main, name in FEELS:
                 )
             ),
             sources=SOURCES + ("desktop/native/widgets.py",),
-            main=True,
-        )
-    )
-    SCREENS.append(
-        Screen(
-            id=f"settings.feel_{key}_setup",
-            area="settings",
-            prepare=_setup(main),
-            checks=(
-                f"Setup's style page in the {name} feel: the setup title is whole at 800 and 1280 pixels "
-                "wide at Large text, and the page scrolls no more than Plain's (Setup's style picker may "
-                "make it scroll in Retro)"
-            ),
-            sources=SOURCES,
             main=True,
         )
     )

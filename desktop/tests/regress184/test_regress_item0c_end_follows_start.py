@@ -18,7 +18,7 @@ from PySide6.QtCore import Qt, QTime
 from PySide6.QtWidgets import QLabel, QWidget
 
 from desktop.native.widgets import BlockDialog, SchoolHoursDialog
-from desktop.tests.regress184.test_regress_item0_time_boxes import _setup, _up, enter, press, type_text
+from desktop.tests.regress184.test_regress_item0_time_boxes import _up, enter, press, type_text
 from desktop.tests.window_support import free, qapp  # noqa: F401
 
 KNOWN_EACH_KEY = (
@@ -107,19 +107,12 @@ def test_the_duration_line_says_end_moved(editor) -> None:
     assert "End moved to 17:30" in dialog.duration_line.text()
 
 
-@pytest.mark.parametrize("where", ["setup-school", "setup-activity", "school-hours"])
-def test_setup_and_school_hours_start_never_moves_end(qapp, where) -> None:
-    """Item 0c.5 guard: these carry no length, so retyping Start leaves End alone."""
-    if where == "school-hours":
-        host = QWidget()
-        top = _up(qapp, SchoolHoursDialog(host))
-        start, end = top.times.start, top.times.end
-        owned = [top, host]
-    else:
-        box = _setup(qapp, "school-start" if where == "setup-school" else "activity-start")
-        top, owned = box.top, box.owned
-        start = box.field
-        end = top.school_times.end if where == "setup-school" else top.activities[0].times.end
+def test_school_hours_start_never_moves_end(qapp) -> None:
+    """Item 0c.5 guard: School hours carries no length, so retyping Start leaves End alone."""
+    host = QWidget()
+    top = _up(qapp, SchoolHoursDialog(host))
+    start, end = top.times.start, top.times.end
+    owned = [top, host]
     try:
         before = hhmm(end)
         enter(start, "tab-in")

@@ -1,6 +1,6 @@
 """Pictures of the sheets whose look the old block-editor, form-grammar and wording tests checked in code:
 the fixed-time editor's buttons and repeat note, the delete and sign-out questions, problem lines, captions
-above fields, buttons that fit their words, and the account cards that keep their top.
+above fields, and buttons that fit their words.
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QVBoxLayout, QWi
 from desktop.native import widgets
 from desktop.native.fields import ClockField
 from desktop.native.settings import AccountDialog, RestoreDialog
-from desktop.native.setup import ActivityRow, HomeworkRow
 from desktop.native.widgets import (
     AvailabilityDialog,
     BlockDialog,
@@ -26,7 +25,6 @@ from desktop.native.widgets import (
     SpreadDialog,
 )
 from desktop.native.window import NativeWindow
-from desktop.native.work_windows import WorkWindowsEditor
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.sheets.support_clock_typing import type_over
 from desktop.tests.sheets.support_fixed_time import go_when
@@ -195,46 +193,6 @@ def _sheet_screen(
     )
 
 
-def _setup_row(make: Callable[[], QWidget]) -> Callable[[NativeWindow], QWidget]:
-    def prepare(window: NativeWindow) -> QWidget:
-        row = make()
-        row.setParent(window)
-        row.resize(720, 220)
-        row.show()
-        return row
-
-    return prepare
-
-
-def _work_windows(window: NativeWindow) -> QWidget:
-    editor = WorkWindowsEditor([{"days": [0], "start": "16:00", "end": "18:00"}])
-    editor.setParent(window)
-    editor.resize(640, 240)
-    editor.show()
-    return editor
-
-
-def _account_card(mode: str, with_problem: bool) -> Callable[[NativeWindow], None]:
-    def prepare(window: NativeWindow) -> None:
-        window._show_page("authPage")
-        window._entry_mode = mode
-        window._sync_auth_mode()
-        if with_problem:
-            if mode == "create":
-                window.username.setText("ab")
-                window.password.setText("short")
-                window.create_button.click()
-            elif mode == "reset":
-                window.recover_button.click()
-            else:
-                window.sign_in_button.click()
-        still(window)
-
-    return prepare
-
-
-_MODES = (("sign-in", "sign in"), ("create", "create"), ("reset", "reset"))
-
 SCREENS: list[Screen] = [
     Screen(
         id="sheets.fixed-time-editor-answers",
@@ -304,47 +262,4 @@ SCREENS: list[Screen] = [
         main=True,
     ),
     *(_sheet_screen(*sheet) for sheet in SHEETS),
-    Screen(
-        id="sheets.captions-setup-homework-row",
-        area="sheets",
-        prepare=_setup_row(lambda: HomeworkRow("2026-10-16")),
-        checks=f"Setup's homework row, 720 px wide: its name, minutes and due fields. {CAPTIONS}",
-        sources=("desktop/native/setup.py",),
-    ),
-    Screen(
-        id="sheets.captions-setup-activity-row",
-        area="sheets",
-        prepare=_setup_row(lambda: ActivityRow("Soccer")),
-        checks=f"Setup's activity row, 720 px wide: its name and category fields. {CAPTIONS}",
-        sources=("desktop/native/setup.py",),
-    ),
-    Screen(
-        id="sheets.captions-work-windows-editor",
-        area="sheets",
-        prepare=_work_windows,
-        checks=(f"The work-windows editor with one row: its start, end and subject fields. {CAPTIONS}"),
-        sources=("desktop/native/work_windows.py",),
-    ),
-    *(
-        Screen(
-            id=f"sheets.account-card-{slug}{'-problem' if with_problem else ''}",
-            area="sheets",
-            prepare=_account_card(mode, with_problem),
-            checks=(
-                f"The {mode} card. "
-                + (
-                    "A problem is showing: only the first problem line is visible, its field is marked and "
-                    "has the keyboard, and the card's top is exactly where it is in sheets.account-card-"
-                    f"{slug} (no problem), so the card did not jump. "
-                    if with_problem
-                    else "No problem shows. This is the reference for the card's top. "
-                )
-                + CAPTIONS
-            ),
-            sources=("desktop/native/window.py", "desktop/native/fields.py"),
-            main=with_problem and slug == "create",
-        )
-        for slug, mode in _MODES
-        for with_problem in (False, True)
-    ),
 ]

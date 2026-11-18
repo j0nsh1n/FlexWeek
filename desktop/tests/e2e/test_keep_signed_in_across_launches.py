@@ -16,7 +16,8 @@ from PySide6.QtWidgets import QApplication
 from desktop.native.kept import KeptSession
 from desktop.native.window import NativeWindow
 from desktop.server import LocalServer
-from desktop.tests.logic_support import past_setup
+from desktop.tests.logic_support import past_recovery, past_setup, sign_up
+from desktop.tests.logic_support import sign_in as signed_in
 from desktop.tests.waiting import wait_until
 
 PASSWORD = "a-long-test-password"
@@ -73,23 +74,27 @@ def launches(qapp: QApplication, tmp_path: Path) -> Iterator[Launches]:
     made.close()
 
 
+def card(qapp: QApplication, window: NativeWindow):  # noqa: ANN201
+    wait_until(qapp, lambda: window._account_bridge() is not None)
+    return window._account_bridge()
+
+
 def create_account(qapp: QApplication, window: NativeWindow, name: str, *, keep: bool = True) -> None:
-    window.username.setText(name)
-    window.password.setText(PASSWORD)
-    window.keep_signed_in.setChecked(keep)
-    window.create_button.click()
-    wait_until(qapp, lambda: page(window) == "recoveryPage")
-    window.recovery_ack.setChecked(True)
-    window.recovery_continue.click()
+    card(qapp, window).setKeepSignedIn(keep)
+    sign_up(qapp, window, name, PASSWORD)
+    past_recovery(qapp, window)
     past_setup(qapp, window)
 
 
 def sign_in(qapp: QApplication, window: NativeWindow, name: str, *, keep: bool = True) -> None:
-    window.username.setText(name)
-    window.password.setText(PASSWORD)
-    window.keep_signed_in.setChecked(keep)
-    window.sign_in_button.click()
+    card(qapp, window).setKeepSignedIn(keep)
+    signed_in(qapp, window, name, PASSWORD)
     wait_until(qapp, lambda: page(window) == "weekPage" and not window.session.busy)
+
+
+def on_sign_in(window: NativeWindow) -> bool:
+    bridge = window._account_bridge()
+    return bridge is not None and bridge.phase == "sign-in" and window.session.account is None
 
 
 def opens_on_sign_in(qapp: QApplication, window: NativeWindow) -> bool:
@@ -97,16 +102,9 @@ def opens_on_sign_in(qapp: QApplication, window: NativeWindow) -> bool:
     wait_until(qapp, lambda: not window.session.busy)
     for _ in range(20):
         qapp.processEvents()
-    return page(window) == "authPage" and window.session.account is None
+    return on_sign_in(window)
 
 
-def test_the_sign_in_card_offers_it_and_it_starts_on(qapp: QApplication, launches: Launches) -> None:
-    window = launches.launch()
-    assert window.keep_signed_in.text() == "Keep me signed in on this computer"
-    assert window.keep_signed_in.isChecked() is True
-    assert window.keep_signed_in.isVisibleTo(window)
-    window._toggle_auth_mode()
-    assert window.keep_signed_in.isVisibleTo(window), "creating an account offers it too"
 
 
 def test_a_kept_session_opens_the_week_at_the_next_launch(qapp: QApplication, launches: Launches) -> None:
@@ -136,7 +134,7 @@ def test_signing_in_without_it_forgets_a_session_kept_before(qapp: QApplication,
     window = launches.launch()
     create_account(qapp, window, "changed_mind")
     window.session.logout()
-    wait_until(qapp, lambda: page(window) == "authPage" and not window.session.busy)
+    wait_until(qapp, lambda: on_sign_in(window) and not window.session.busy)
     launches.kept.keep(TOKEN_LIKE)
     sign_in(qapp, window, "changed_mind", keep=False)
     assert launches.kept.token() is None
@@ -146,7 +144,7 @@ def test_log_out_forgets_it(qapp: QApplication, launches: Launches) -> None:
     window = launches.launch()
     create_account(qapp, window, "signs_out")
     window.session.logout()
-    wait_until(qapp, lambda: page(window) == "authPage" and not window.session.busy)
+    wait_until(qapp, lambda: on_sign_in(window) and not window.session.busy)
     assert launches.kept.token() is None
     launches.quit(window)
     assert opens_on_sign_in(qapp, launches.launch())
@@ -156,10 +154,7 @@ def test_the_recovery_codes_are_seen_before_anything_is_kept(qapp: QApplication,
     """Kept at registration, quitting on the codes page would open the week next time, and the codes
     would never be shown again."""
     window = launches.launch()
-    window.username.setText("quits_early")
-    window.password.setText(PASSWORD)
-    window.create_button.click()
-    wait_until(qapp, lambda: page(window) == "recoveryPage")
+    sign_up(qapp, window, "quits_early", PASSWORD)
     assert launches.kept.token() is None
     launches.quit(window)
     assert opens_on_sign_in(qapp, launches.launch())
@@ -170,7 +165,7 @@ def test_a_session_the_server_ended_falls_back_to_sign_in(qapp: QApplication, la
     window = launches.launch()
     assert opens_on_sign_in(qapp, window)
     assert launches.kept.token() is None, "a dead session is not tried again at every launch"
-    assert "sign in" in window.auth_status.text().lower()
+    assert "sign in" in window._account_bridge().statusLine.lower()
 
 
 def test_a_new_password_keeps_the_new_session(qapp: QApplication, launches: Launches) -> None:
