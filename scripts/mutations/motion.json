@@ -63,13 +63,6 @@
     "test": "desktop/tests/settings/test_notice_and_sheet_motion.py::test_a_sheet_fades_its_card_and_shadow_as_one_and_keeps_the_shadow"
   },
   {
-    "name": "Ctrl+K's box appears where it stays",
-    "file": "desktop/native/command_bar.py",
-    "old": "        self.box.move(home.topLeft() + QPoint(0, distance(BAR_RISE_PX, self.motion)))\n",
-    "new": "",
-    "test": "desktop/tests/week/test_command_bar.py::test_the_box_rises_into_place_as_the_window_dims_and_not_at_all_under_reduce"
-  },
-  {
     "name": "the segmented selection jumps",
     "file": "desktop/native/widgets.py",
     "old": "        if on and self._drawn is not None and self.isVisible() and length:",
@@ -152,20 +145,6 @@
     "old": "        return self._colours.arc\n",
     "new": "        return self._colours.track if self._waiting else self._colours.arc\n",
     "test": "desktop/tests/focus/test_countdown_ring.py::test_a_timer_not_started_draws_its_arc_in_the_accent_itself"
-  },
-  {
-    "name": "Ctrl+K rises only a notice's 8 pixels",
-    "file": "desktop/native/command_bar.py",
-    "old": "BAR_RISE_PX, BAR_RISE_MS = 2 * RISE_PX, EASE_MS + 80\n",
-    "new": "BAR_RISE_PX, BAR_RISE_MS = RISE_PX, EASE_MS + 80\n",
-    "test": "desktop/tests/week/test_command_bar.py::test_the_box_rises_into_place_as_the_window_dims_and_not_at_all_under_reduce"
-  },
-  {
-    "name": "a notice said under Ctrl+K stays bright over its dimming",
-    "file": "desktop/native/widgets.py",
-    "old": "                    cover.raise_()\n",
-    "new": "                    pass\n",
-    "test": "desktop/tests/week/test_command_bar.py::test_a_notice_said_while_ctrl_k_is_open_goes_under_its_dimming"
   },
   {
     "name": "the top bar greys the moment it is busy",

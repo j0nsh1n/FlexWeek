@@ -53,7 +53,7 @@ WALKED = {
 }
 
 
-#: The shape that overflowed in 1.4.0: four plain answers. No prompt asks it now; the frame must still hold it.
+#: The shape that overflowed in 1.4.0: four plain answers. No prompt asks it now; the frame must hold it.
 FOUR_ANSWERS = {
     "id": "four-answers",
     "title": "Delete School?",

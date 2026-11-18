@@ -127,7 +127,6 @@ from desktop.native.client import (
     sign_in_problem,
     sign_up_problem,
 )
-from desktop.native.command_bar import Command, CommandBar
 from desktop.native.controller import ROUTINE_STATUS, NativeSession, _late_summary, left_sentence
 from desktop.native.custom_look import sanitize_saved
 from desktop.native.devices import SyncDot, SyncHost, live_phones, run_off_ui, sync_state
@@ -195,7 +194,6 @@ from desktop.native.reuse import (
     week_label,
 )
 from desktop.native.settings import (
-    EDIT_OWN_LOOK,
     SECTIONS,
     AboutDialog,
     AccountDialog,
@@ -761,8 +759,6 @@ class NativeWindow(QMainWindow):
         self._build_week()
         self._build_setup()
         self._build_focus_screen()
-        self.command_bar = CommandBar(self)
-        self.command_bar.chosen.connect(self._run_command)
         self.session.account_changed.connect(self._on_account)
         self.session.recovery_codes.connect(self._show_recovery)
         self.session.week_changed.connect(self._on_week)
@@ -1841,7 +1837,7 @@ class NativeWindow(QMainWindow):
         add_split.setSpacing(0)
         add_split.addWidget(add_button)
         add_split.addWidget(add_arrow)
-        # Kept so the shortcuts, the command bar and the tests that press them still have something to
+        # Kept so the shortcuts and the tests that press them still have something to
         # press; the Add menu reaches the same actions.
         add_fixed = QPushButton("Add fixed time")
         add_fixed.setObjectName("addFixed")
@@ -5461,81 +5457,6 @@ class NativeWindow(QMainWindow):
         if self.session.finish_focused_homework():
             self._close_focus_screen()
 
-    def _commands(self) -> list[Command]:
-        """What the command bar offers: the actions a student reaches for most, then each homework."""
-        manual = (self.session.preferences or {}).get("planning_style") == "manual"
-        plan = SUGGEST_LABEL if manual else PLAN_LABEL
-        made = [
-            Command("addHomework", "Add homework", MORE_TIPS["addHomework"], "Add", "book-open", "Ctrl+N"),
-            Command("addFixed", "Add fixed time", MORE_TIPS["addFixed"], "Add", "clock"),
-            Command("schoolHours", "School hours", MORE_TIPS["schoolHours"], "Add", "school"),
-            Command("day", "Day", "One day as a list", "Go to", "list", "D"),
-            Command("week", "Week", "The week you're planning", "Go to", "calendar-days", "W"),
-            Command("month", "Month", "The month as a calendar", "Go to", "calendar", "M"),
-            Command("myDay", "My day", "Watch today", "Go to", "sun", "T"),
-            Command("focus", "Focus screen", "The focus timer on its own, large.", "Go to", "timer", "F"),
-            Command("settingsGear", "Settings", "", "Go to", "settings"),
-            Command("helpButton", "Help", MORE_TIPS["helpButton"], "Go to", "circle-question-mark", "F1"),
-            Command("solveButton", plan, SUGGEST_TIP if manual else PLAN_TIP, "Homework", "sparkles"),
-            Command(
-                "chooseTime",
-                "Choose a time…",
-                "Pick a time for homework that needs one",
-                "Homework",
-                "clock",
-            ),
-            # Settings' pages by what they hold: "look" found nothing (Grok Bot's 0.17.0 audit, X1).
-            Command("settings:0", "Look", "Look, accent and design", "Settings", "palette"),
-            Command("customise", EDIT_OWN_LOOK, "Make a look of your own", "Settings", "swatch-book"),
-            Command("settings:1", "Planning settings", "How homework gets a time", "Settings", "calendar"),
-            Command("settings:2", "Focus settings", "The focus timer's lengths", "Settings", "timer"),
-            Command("settings:3", "Alerts", "Reminders, alarms and sounds", "Settings", "bell"),
-            Command("settings:4", "This computer", "Account, setup and updates", "Settings", "laptop"),
-        ]
-        homework = sorted(
-            self.session.assignments.values(),
-            key=lambda item: (bool(item.get("completed")), item.get("due") or "", item.get("title") or ""),
-        )
-        made.extend(
-            Command(
-                "homework:" + item["id"],
-                item.get("title") or "Homework",
-                "Open this homework",
-                "Homework",
-                "book-open",
-            )
-            for item in homework
-        )
-        return made
-
-    def _open_command_bar(self) -> None:
-        if self.session.account is not None:
-            self.command_bar.open(self._commands())
-
-    def _run_command(self, key: str) -> None:
-        """As the button or the click the command stands for: a button greyed while FlexWeek is busy
-        does nothing here either."""
-        if key != "focus":
-            self._close_focus_screen()
-        if key.startswith("homework:"):
-            self._edit_homework(key.removeprefix("homework:"))
-        elif key in {"day", "week", "month"}:
-            self._choose_view(key)
-        elif key == "myDay":
-            self._enter_day()
-        elif key == "focus":
-            self._open_focus_screen()
-        elif key == "chooseTime":
-            self._choose_time_for_homework()
-        elif key.startswith("settings:") or key == "customise":
-            self._open_settings_at(0 if key == "customise" else int(key.removeprefix("settings:")))
-            if key == "customise" and self._settings is not None:
-                self._settings._open_customise()
-        else:
-            button = self.findChild(QPushButton, key)
-            if button is not None:
-                button.click()
-
     def _on_focus(self) -> None:
         self.focus_panel.set_state(self.session)
         self.focus_screen.set_state(self.session)
@@ -6418,7 +6339,6 @@ class NativeWindow(QMainWindow):
             self._keep_bar_whole()
             apply_ui_effects(self._motion)
             self.toast.motion = self._motion
-            self.command_bar.motion = self._motion
             self._dress_overlays(palette)
             self.week_table.set_look(look, palette)
             self.day_view.set_look(look, palette)
@@ -6482,7 +6402,6 @@ class NativeWindow(QMainWindow):
         corner = look_measures(self._look)["card_radius"]
         self.focus_screen.set_palette(palette, text_scale(self._look))
         self.toast.set_look(toast_colours(palette)["action"], SHADOW_SMALL if lifted else None, dark)
-        self.command_bar.set_look(palette, SHADOW_LARGE if lifted else None, dark)
         colours = menu_colours(palette, lifted=lifted, corner=corner)
         for menu in (self.more_menu, self.add_menu):
             menu.set_colours(colours)
@@ -6831,10 +6750,6 @@ class NativeWindow(QMainWindow):
             event.accept()
             return
         if mods & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier):
-            if key == Qt.Key.Key_K and planning:
-                self._open_command_bar()
-                event.accept()
-                return
             if key == Qt.Key.Key_N and planning:
                 self._add_homework()
                 event.accept()

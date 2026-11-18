@@ -6,11 +6,9 @@ import contextlib
 from collections.abc import Iterator
 
 from PySide6.QtCore import QPoint
-from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QAbstractButton, QApplication, QWidget
 
 from backend.tests.fake_clock import CLOCK
-from desktop.native.command_bar import Command
 from desktop.native.look import resolved_palette
 from desktop.native.menus import Menu, menu_colours
 from desktop.native.motion import settle
@@ -72,43 +70,6 @@ def _delete_row(window: NativeWindow) -> QWidget:
     menu.popup(window.mapToGlobal(QPoint(100, 100)))
     QApplication.processEvents()
     return menu
-
-
-def _bar_open(window: NativeWindow, width: int = 1280, height: int = 860) -> QWidget:
-    _week_with_school(window, width, height)
-    window.week_table.hours.setFocus()
-    window._open_command_bar()
-    bar = window.command_bar
-    QApplication.processEvents()
-    settle(bar)
-    settle(bar.box)
-    return bar.box
-
-
-def _bar_with_highlight(window: NativeWindow) -> QWidget:
-    _week_with_school(window)
-    bar = window.command_bar
-    bar.open(
-        [
-            Command(
-                "plan", "Plan my homework after school on Friday afternoon", group="Homework", keys="Ctrl+K"
-            )
-        ]
-    )
-    QTest.keyClicks(bar.input, "p")
-    QApplication.processEvents()
-    settle(bar)
-    settle(bar.box)
-    return bar.box
-
-
-def _bar_tall(window: NativeWindow) -> QWidget:
-    # Tall enough for every command, Settings' group included.
-    return _bar_open(window, 1280, 1200)
-
-
-def _bar_short(window: NativeWindow) -> QWidget:
-    return _bar_open(window, 1280, 460)
 
 
 @contextlib.contextmanager
@@ -196,48 +157,6 @@ SCREENS: list[Screen] = [
             "delete apart"
         ),
         sources=("desktop/native/menus.py",),
-    ),
-    Screen(
-        id="week.command-bar-open",
-        area="week",
-        prepare=_bar_open,
-        checks=(
-            "Ctrl+K's box is 560 px wide, centred left to right on the window and in its top third; the "
-            "window behind it is dimmed 40 percent black; the box is lifted with the large shadow"
-        ),
-        sources=("desktop/native/command_bar.py", "desktop/native/look.py"),
-        main=True,
-    ),
-    Screen(
-        id="week.command-bar-highlighted-row",
-        area="week",
-        prepare=_bar_with_highlight,
-        checks=(
-            "a row whose words are highlighted for what was typed keeps 56 px clear of the key caps at "
-            "its right edge, as unmatched text does: no text or accent colour reaches that strip"
-        ),
-        sources=("desktop/native/command_bar.py",),
-    ),
-    Screen(
-        id="week.command-bar-every-row",
-        area="week",
-        prepare=_bar_tall,
-        checks=(
-            "in a window tall enough for every command the list shows every row at once with no scroll "
-            "bar; the chosen row is tinted with the accent (not the grey of a row under the pointer); "
-            "each key (for example Week) is drawn in a cap with an edge"
-        ),
-        sources=("desktop/native/command_bar.py",),
-    ),
-    Screen(
-        id="week.command-bar-in-a-short-window",
-        area="week",
-        prepare=_bar_short,
-        checks=(
-            "in a window shorter than the list, the list scrolls under the app's thin overlay bar and "
-            "the box stays inside the window"
-        ),
-        sources=("desktop/native/command_bar.py",),
     ),
     Screen(
         id="week.sheet-dim-over-the-week-add-homework",

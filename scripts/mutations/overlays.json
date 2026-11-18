@@ -68,26 +68,5 @@
     "old": "        if colours.lifted:\n",
     "new": "        if False:\n",
     "test": "desktop/tests/settings/test_toast_and_menus.py::test_a_menu_casts_the_large_shadow_only_in_a_look_with_depth"
-  },
-  {
-    "file": "desktop/native/command_bar.py",
-    "name": "Ctrl+K lists its groups in a fixed order, so Enter may run a worse match",
-    "old": "    order = sorted(rows, key=place)",
-    "new": "    order = sorted(rows, key=lambda group: GROUPS.index(group))",
-    "test": "desktop/tests/week/test_command_bar.py::test_the_group_with_the_best_match_comes_first_so_enter_runs_it"
-  },
-  {
-    "file": "desktop/native/command_bar.py",
-    "name": "Ctrl+K's arrows land on a group label",
-    "old": "            if self.list.item(row).data(KEY_ROLE):\n",
-    "new": "            if True:\n",
-    "test": "desktop/tests/week/test_command_bar.py::test_every_row_has_an_icon_and_the_views_their_keys"
-  },
-  {
-    "file": "desktop/native/command_bar.py",
-    "name": "Ctrl+K's box casts no shadow",
-    "old": "            lift(self.box, shadow, dark)\n",
-    "new": "            self.box.setGraphicsEffect(None)\n",
-    "test": "desktop/tests/week/test_command_bar.py::test_the_box_is_lifted_with_a_shadow_the_fade_leaves_alone"
   }
 ]

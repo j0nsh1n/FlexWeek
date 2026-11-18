@@ -169,10 +169,6 @@ def test_every_main_transition_at_off_starts_no_clock_and_leaves_nothing_moving(
     window.toast.show_message("Moved History essay to Fri 18:00.", "Undo", lambda: None)
     check("a notice said")
     window.toast.hide()
-    window._open_command_bar()
-    check("Ctrl+K opened")
-    window.command_bar.hide()
-    check("Ctrl+K closed")
     wrong = {what: sorted(set(found)) for what, found in seen if found}
     assert wrong == {}, "something moved at Off"
     assert starts == [], "a clock started at Off"

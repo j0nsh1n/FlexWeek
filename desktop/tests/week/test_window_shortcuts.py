@@ -1,6 +1,4 @@
-"""F1, Ctrl+N and Ctrl+K pressed on the Week: Help opens, Add homework opens, and the command bar lists the
-pages and actions a student can reach by typing. How the bar's rows look is a picture
-(desktop/tests/pictures/_sheets_g14.py)."""
+"""F1 and Ctrl+N pressed on the Week: Help opens and Add homework opens."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
@@ -16,7 +14,6 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog
 
 from desktop.native.calendar import sunday_due
-from desktop.native.command_bar import match_span
 from desktop.native.settings import HELP_KEYS, HelpDialog
 from desktop.native.widgets import HomeworkDialog
 from desktop.native.window import NativeWindow
@@ -90,40 +87,3 @@ def test_help_lists_f1_and_ctrl_n() -> None:
     assert ("[Ctrl]+[N]", "Add homework") in HELP_KEYS
 
 
-def test_ctrl_k_lists_help_add_homework_choose_time_and_settings_pages(week: NativeWindow) -> None:
-    QTest.keyClick(week.week_table.hours, Qt.Key.Key_K, CTRL)
-    bar = week.command_bar
-    try:
-        words = bar.shown_words()
-        assert "Help" in words
-        assert "Add homework" in words
-        assert "Choose a time…" in words
-        assert "Alerts" in words
-        assert "This computer" in words
-        assert "Edit look…" in words
-        assert "Customise…" not in words
-    finally:
-        bar.close_bar()
-
-
-def test_typing_choose_finds_choose_a_time(week: NativeWindow) -> None:
-    QTest.keyClick(week.week_table.hours, Qt.Key.Key_K, CTRL)
-    bar = week.command_bar
-    try:
-        QTest.keyClicks(bar.input, "choose")
-        assert bar.shown_words() == ["Choose a time…"]
-    finally:
-        bar.close_bar()
-
-
-def test_typed_letters_pick_out_the_homework_whose_title_they_match(week: NativeWindow) -> None:
-    # The letters the row marks are the leading ones of the first word.
-    assert match_span("ma", "Math worksheet") == [(0, 2)]
-    QTest.keyClick(week.week_table.hours, Qt.Key.Key_K, CTRL)
-    bar = week.command_bar
-    try:
-        QTest.keyClicks(bar.input, "hist")
-        rows = [bar.list.item(row).text() for row in range(bar.list.count())]
-        assert "History essay" in rows
-    finally:
-        bar.close_bar()

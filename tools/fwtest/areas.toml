@@ -309,7 +309,7 @@ areas = ["settings"]
 # --- Sheets: every form, dialog and sheet.
 [[rule]]
 paths = [
-  "desktop/native/reuse.py", "desktop/native/work_windows.py", "desktop/native/command_bar.py",
+  "desktop/native/reuse.py", "desktop/native/work_windows.py",
   "desktop/native/material/bridge_sheets.py", "desktop/native/material/sheet_block.py",
   "desktop/native/material/sheet_homework.py", "desktop/native/material/qml/sheets/",
 ]
