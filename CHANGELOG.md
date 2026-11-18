@@ -129,6 +129,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - On the phone, Back closes an open sheet, then goes to Today, and only then leaves the app. Rotating the phone keeps the tab, an open sheet and a half-typed Add homework, and after Unpair a rotation no longer brings the main screens back.
 - On the phone, pausing or finishing the focus timer from the notification now shows on the open Today card, and a paused timer is never counted as a full session.
 - On the phone, a sync after an edit no longer cancels a sync that is already running, background syncs get the same 45 seconds as the computer's, a computer that is off is asked less and less often while the app is open, and the sync after an edit can start on Android 11 and older.
+- On the phone, the Week tab's "X h of homework" total and the "heavy" tag count only the time still planned, not sessions you already finished, the same way the computer's planned line keeps planned and done apart.
 
 ## [1.3.0] - 2026-11-10
 

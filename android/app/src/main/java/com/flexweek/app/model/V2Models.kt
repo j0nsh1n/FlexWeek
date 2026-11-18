@@ -140,7 +140,8 @@ object V2Json {
                     date = LocalDate.parse(row.getString("date")).dayOfMonth,
                     names = row.getJSONArray("names").let { list -> (0 until list.length()).map(list::getString) },
                     minutes = row.getInt("minutes"),
-                    heavy = WeekRows.isHeavy(row.getInt("minutes")),
+                    // The engine's own answer: it counts only time still planned, and a second rule here drifted from it.
+                    heavy = if (row.has("heavy")) row.getBoolean("heavy") else WeekRows.isHeavy(row.getInt("minutes")),
                     unplaced = row.getJSONArray("unplaced").let { list -> (0 until list.length()).map(list::getString) },
                     lastClassEnd = if (row.isNull("last_class_end")) null else row.getInt("last_class_end"),
                 ))

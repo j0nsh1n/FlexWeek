@@ -35,7 +35,7 @@ pub(crate) fn week_rows(week: &FlexWeek, week_start: &str) -> Result<String, Ffi
     let occurrences = model["occurrences"].as_array().cloned().unwrap_or_default();
     let mut days = Vec::new();
     for day in 0..DAYS_IN_WEEK {
-        let mut planned: Vec<(i64, String, i64)> = occurrences
+        let mut planned: Vec<(i64, String, i64, bool)> = occurrences
             .iter()
             .filter(|item| item["day"].as_i64() == Some(day) && is_homework(item))
             .filter_map(|item| {
@@ -43,14 +43,21 @@ pub(crate) fn week_rows(week: &FlexWeek, week_start: &str) -> Result<String, Ffi
                     item["start"].as_i64()?,
                     item["title"].as_str()?.to_string(),
                     item["end"].as_i64()? - item["start"].as_i64()?,
+                    item["done"].as_bool().unwrap_or(false),
                 ))
             })
             .collect();
-        planned.sort_by_key(|(minute, _, _)| *minute);
-        let minutes: i64 = planned.iter().map(|(_, _, length)| *length).sum();
+        planned.sort_by_key(|(minute, _, _, _)| *minute);
+        // Time still planned: a finished session is named but is not counted, as the computer's planned line
+        // keeps planned and done apart (the engine marks each occurrence's `done`).
+        let minutes: i64 = planned
+            .iter()
+            .filter(|(_, _, _, done)| !done)
+            .map(|(_, _, length, _)| *length)
+            .sum();
         let mut named: Vec<(i64, String)> = planned
             .iter()
-            .map(|(at, title, _)| (*at, title.clone()))
+            .map(|(at, title, _, _)| (*at, title.clone()))
             .collect();
         for item in occurrences
             .iter()
@@ -233,6 +240,36 @@ mod tests {
         assert!(
             week_rows::is_heavy(HEAVY_SAMPLE_MINUTES),
             "195 minutes is heavy"
+        );
+    }
+
+    #[test]
+    fn week_rows_counts_only_time_still_planned_not_finished_sessions() {
+        let (week, _) = open_test("week-rows-done");
+        save_week(
+            &week,
+            MONDAY,
+            &json!([
+                {"id":"a","title":"Essay","kind":"flexible","days":[0],"start":"09:00","duration_min":120,"category":"assignments","work":true,"completed":true},
+                {"id":"b","title":"Reading","kind":"flexible","days":[0],"start":"12:00","duration_min":120,"category":"assignments","work":true,"completed":true},
+                {"id":"c","title":"Lab","kind":"flexible","days":[0],"start":"15:00","duration_min":60,"category":"assignments","work":true}
+            ]),
+        );
+        let output = rows(&week);
+        assert_eq!(
+            output["days"][0]["minutes"],
+            json!(60),
+            "two finished 2 h sessions are not planned time any more"
+        );
+        assert_eq!(
+            output["days"][0]["heavy"],
+            json!(false),
+            "a day with 1 h left is not heavy because 4 h are done"
+        );
+        assert_eq!(
+            output["days"][0]["names"],
+            json!(["Essay", "Reading", "Lab"]),
+            "finished sessions are still named"
         );
     }
 
