@@ -765,7 +765,9 @@ class SheetsBridge(QObject):
             self._say(FULL)
             return
         self._alarm = AlarmDraft(
-            found, str(session.preferences.get("alarm_tone") or "chime"), session.preferences.get("clock_24h") is True
+            found,
+            str(session.preferences.get("alarm_tone") or "chime"),
+            session.preferences.get("clock_24h") is True,
         )
         self._open("alarm")
 

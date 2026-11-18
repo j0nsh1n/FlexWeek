@@ -228,7 +228,8 @@ def test_a_taller_account_sheet_shows_a_scroll_bar_and_every_action_is_reachable
     _open_account(qapp, shell, sheets)
     body = _one(shell, "sheetBody")
     bar = _one(shell, "sheetScrollBar")
-    assert float(body.property("contentHeight")) > float(body.property("height")), "the sheet is taller than its room"
+    taller = float(body.property("contentHeight")) > float(body.property("height"))
+    assert taller, "the sheet is taller than its room"
     assert bar.property("visible") is True, "the cue shows there is more below"
     assert float(bar.property("size")) < 1.0
     for name in ("exportDay", "importFile", "deleteAccount"):

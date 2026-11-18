@@ -476,7 +476,12 @@ def test_the_new_presets_apply_in_their_own_mode_whatever_mode_is_chosen(
 
 @pytest.mark.parametrize(
     ("preset", "shown", "other"),
-    [("Ink", "Dark", "Light"), ("Terminal", "Dark", "Light"), ("High contrast", "Dark", "Light"), ("Paper", "Light", "Dark")],
+    [
+        ("Ink", "Dark", "Light"),
+        ("Terminal", "Dark", "Light"),
+        ("High contrast", "Dark", "Light"),
+        ("Paper", "Light", "Dark"),
+    ],
 )
 def test_a_one_mode_preset_shows_the_mode_in_use_and_cannot_pick_another(
     qapp: QApplication, window: NativeWindow, preset: str, shown: str, other: str

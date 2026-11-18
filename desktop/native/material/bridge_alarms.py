@@ -29,7 +29,9 @@ ALARM_SOUNDS = tuple(
 )
 HOURS = tuple({"label": f"{hour:02d}", "value": hour} for hour in range(24))
 # The same hours for a student on a 12-hour clock: the value stays 0 to 23, the label says AM or PM.
-HOURS_12 = tuple({"label": f"{hour % 12 or 12} {'AM' if hour < 12 else 'PM'}", "value": hour} for hour in range(24))
+HOURS_12 = tuple(
+    {"label": f"{hour % 12 or 12} {'AM' if hour < 12 else 'PM'}", "value": hour} for hour in range(24)
+)
 MINUTES = tuple({"label": f"{minute:02d}", "value": minute} for minute in range(60))
 
 

@@ -25,8 +25,10 @@ from desktop.tests.settings.support_material_settings import (
     _pump,
 )
 from desktop.tests.waiting import wait_until
-from desktop.tests.window_support import look_file
-from desktop.tests.window_support import qapp  # noqa: F401
+from desktop.tests.window_support import (
+    look_file,
+    qapp,  # noqa: F401
+)
 
 # ruff: noqa: F811
 
@@ -107,7 +109,8 @@ def test_the_alarm_hour_picker_follows_the_twelve_or_twenty_four_hour_setting(
     sheets.openAlarm("")
     labels = [item["label"] for item in _form(window)["hours"]]
     assert labels[0] == "12 AM" and labels[7] == "7 AM" and labels[12] == "12 PM" and labels[16] == "4 PM"
-    assert [item["value"] for item in _form(window)["hours"]] == list(range(24)), "the saved hour is still 0 to 23"
+    values = [item["value"] for item in _form(window)["hours"]]
+    assert values == list(range(24)), "the saved hour is still 0 to 23"
     sheets.closeSheet()
     window.session.preferences["clock_24h"] = True
     sheets.openAlarm("")

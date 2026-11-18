@@ -16,7 +16,9 @@ def test_no_two_more_rows_share_an_icon() -> None:
 
 
 def test_every_more_icon_is_a_file_the_sheet_icon_can_find() -> None:
-    own = set(re.findall(r'"(\w+)"', re.search(r"own: \[(.*?)\]", (SHEETS / "SIcon.qml").read_text(), re.S).group(1)))
+    listed = re.search(r"own: \[(.*?)\]", (SHEETS / "SIcon.qml").read_text(), re.S)
+    assert listed is not None
+    own = set(re.findall(r'"(\w+)"', listed.group(1)))
     shared = {path.stem for path in (SHEETS.parent / "icons").glob("*.svg")}
     for row in MORE_ROWS:
         if len(row) == 3:
