@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import SIGN_OUT_QUESTION, NativeWindow
@@ -22,6 +23,12 @@ UPDATE = {
 }
 
 
+def _show(milliseconds: int = 200) -> None:
+    """Real time for the Quick view's render timer: a second layer that appears after the first (the
+    download's bar and problem line) is otherwise grabbed before it is drawn, most often in dark."""
+    QTest.qWait(milliseconds)
+
+
 def _material(window: NativeWindow):
     from desktop.tests.settings.support_material_settings import _pump, _show_material
 
@@ -37,6 +44,7 @@ def _help(window: NativeWindow) -> object:
     sheets, qapp = _material(window)
     sheets.openHelp()
     _pump(qapp, 30)
+    _show()
     return None
 
 
@@ -47,6 +55,7 @@ def _about(window: NativeWindow) -> object:
     window.session.storage_info = {"mode": "local"}
     sheets.openAbout()
     _pump(qapp, 30)
+    _show()
     return None
 
 
@@ -63,9 +72,11 @@ def _update(window: NativeWindow, *, state: str) -> object:
         sheets.updateInstall()
         window._on_update_progress(40, 100)
         _pump(qapp, 20)
+        _show()
     if state == "problem":
         window._on_update_problem("The download stopped. Check your connection and try again.")
         _pump(qapp, 20)
+        _show()
 
     return None
 
