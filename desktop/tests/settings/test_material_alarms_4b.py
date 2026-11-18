@@ -341,3 +341,32 @@ def test_on_widgets_the_alarm_still_opens_the_dialog(
     monkeypatch.setattr("desktop.native.window.AlarmRingDialog.exec", lambda self: opened.append(self) or 0)
     window._on_alarm({"id": "w1", "name": "Practice", "time": "07:00", "sound": "low"})
     assert len(opened) == 1 and window._alarm_on_material is False
+
+
+def test_closing_the_window_stops_an_alarm_ringing_on_material(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _open_settings(qapp, window, "alerts")
+    recorder = _rig(window, monkeypatch)
+    _ring(window, {"id": "c1", "name": "Practice", "time": "07:00", "sound": "low"})
+    _pump(qapp)
+    assert recorder.ringing is True and window._alarm_on_material is True
+    window._saved_to_leave = True
+    window._tray_icon = None
+    window.close()
+    assert recorder.ringing is False
+    assert window._alarm_on_material is False
+
+
+def test_material_giving_up_stops_an_alarm_ringing_on_its_screen(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _open_settings(qapp, window, "alerts")
+    recorder = _rig(window, monkeypatch)
+    monkeypatch.setattr("desktop.native.window.cpu_drawing.drawing_on_cpu", lambda: True)
+    _ring(window, {"id": "g1", "name": "Practice", "time": "07:00", "sound": "low"})
+    _pump(qapp)
+    assert recorder.ringing is True
+    window._give_up_material()
+    assert recorder.ringing is False
+    assert window._alarm_on_material is False

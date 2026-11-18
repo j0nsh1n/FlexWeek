@@ -1299,6 +1299,7 @@ class NativeWindow(QMainWindow):
 
     def _drop_partial_material(self) -> None:
         """A failed build must not leave a half-made page in the stack or as a child."""
+        self._stop_material_ring()
         page = self._material_page
         self._material_page = None
         doomed: list[QObject] = []
@@ -1330,6 +1331,7 @@ class NativeWindow(QMainWindow):
         """
         if self._relaunching or self._material_gave_up:
             return
+        self._stop_material_ring()
         if cpu_drawing.drawing_on_cpu():
             self._material_gave_up = True
             if self._settings is not None:
@@ -5627,6 +5629,18 @@ class NativeWindow(QMainWindow):
         page.bridge.ring.show_alarm(alarm, url, self._finish_material_alarm)
         return True
 
+    def _stop_material_ring(self) -> None:
+        """The window closes or Material gives up while an alarm rings on its screen: the screen has no
+        dialog to stop the noise as it closes, so the ring is ended here, as a dismiss."""
+        if not self._alarm_on_material:
+            return
+        page = self._material_page
+        ring = getattr(getattr(page, "bridge", None), "ring", None)
+        if ring is not None and ring.open:
+            ring.dismiss()
+        else:
+            self._finish_material_alarm(False)
+
     def _finish_material_alarm(self, snoozed: bool) -> None:
         # The same ending as the dialog's: the noise stops, Spotify included, then the next alarm rings.
         self._bell.stop()
@@ -6614,6 +6628,7 @@ class NativeWindow(QMainWindow):
         if not self._saved_to_leave and not self._save_before_leaving(self.close):
             event.ignore()
             return
+        self._stop_material_ring()
         for bridge in self.findChildren(QObject, "materialBridge"):
             dispose = getattr(bridge, "dispose", None)
             if callable(dispose):
