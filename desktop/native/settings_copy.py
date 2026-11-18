@@ -191,3 +191,87 @@ def key_parts(marked: str) -> list[tuple[str, bool]]:
         cap = part.startswith("[")
         parts.append((part[1:-1] if cap else part.strip(), cap))
     return parts
+
+
+# Manage account and Copies of this week: the words the Widgets dialogs and the Material sheets share.
+ACCOUNT_PASSWORD_NOTE = "Your current password is needed for every change on this page."
+ACCOUNT_CODES_NOTE = "Each code signs you in once if you forget your password."
+ACCOUNT_DATA_NOTE = "Keep a copy of your account, or of one week or day, in a file."
+RESTORE_FIRST = "Choose a restore point."
+
+
+def recovery_status(remaining: int | None) -> str:
+    """How many recovery codes are left, in the words the account dialog uses."""
+    if remaining == 0:
+        return "No unused recovery codes remain. Replace them before signing out."
+    if remaining == 1:
+        return "1 unused recovery code remains."
+    if isinstance(remaining, int):
+        return f"{remaining} unused recovery codes remain."
+    return "Recovery-code status unavailable."
+
+
+def restore_parts(point: dict) -> tuple[str, str]:
+    """A restore point as its name and, apart, when it was made and how many weeks it holds."""
+    weeks = point.get("weeks_count", point.get("week_count", point.get("weeks", 0)))
+    return str(point.get("label")), f"{point.get('created_at') or ''} · {weeks} weeks"
+
+
+def restore_row(point: dict) -> str:
+    """One restore point in the list: its name, when it was made and how many weeks it holds."""
+    name, detail = restore_parts(point)
+    return f"{name} · {detail}"
+
+
+def restore_summary(preview: dict | None) -> str:
+    """What going back to the previewed restore point would change."""
+    if not preview:
+        return ""
+    changes = preview.get("changes") or {}
+    weeks = changes.get("weeks") or {}
+    homework = changes.get("assignments") or {}
+    added = len(weeks.get("added") or []) + len(homework.get("added") or [])
+    changed = len(weeks.get("changed") or []) + len(homework.get("changed") or [])
+    removed = len(weeks.get("removed") or []) + len(homework.get("removed") or [])
+    return f"{added} added, {changed} changed, {removed} removed."
+
+
+def _joined(parts: list[str]) -> str:
+    """"a", "a and b", "a, b, and c"."""
+    if len(parts) < 3:
+        return " and ".join(parts)
+    return ", ".join(parts[:-1]) + ", and " + parts[-1]
+
+
+def _gone_from_backup(count: int, noun: str) -> str:
+    return f"{count} of your {noun} that {'isn' if count == 1 else 'aren'}'t in the backup"
+
+
+def transfer_summary(preview: dict) -> str:
+    """What importing a backup file will do, in sentences: the weeks it adds, replaces and deletes (the
+    deleted ones are the account's own, named as such), the homework and routines that change, and
+    whether the settings change."""
+    changes = preview.get("changes") or {}
+    weeks = changes.get("weeks") or {}
+    added, replaced, deleted = (len(weeks.get(kind) or []) for kind in ("added", "changed", "removed"))
+    parts = []
+    if added:
+        parts.append(f"adds {added} {'week' if added == 1 else 'weeks'}")
+    if replaced:
+        parts.append(f"replaces {replaced} of your weeks")
+    if deleted:
+        parts.append("deletes " + _gone_from_backup(deleted, "weeks"))
+    lines = [_joined(parts) + "."] if parts else []
+    for key, one, many in (("assignments", "homework", "homework"), ("routines", "routine", "routines")):
+        part = changes.get(key) or {}
+        differ = len(part.get("added") or []) + len(part.get("changed") or [])
+        gone = len(part.get("removed") or [])
+        if differ:
+            lines.append(f"{differ} {one if differ == 1 else many} {'changes' if differ == 1 else 'change'}.")
+        if gone:
+            lines.append("It also deletes " + _gone_from_backup(gone, many) + ".")
+    if changes.get("preferences_changed"):
+        lines.append("Your settings will be replaced.")
+    if not lines:
+        lines.append("Nothing in it is different from your account.")
+    return " ".join(lines)

@@ -109,6 +109,9 @@ from desktop.native.remind import ALARM_SNOOZE_MIN, reminder_lead_min
 from desktop.native.settings_copy import (
     ABOUT_HERE,
     ABOUT_LINE,
+    ACCOUNT_CODES_NOTE,
+    ACCOUNT_DATA_NOTE,
+    ACCOUNT_PASSWORD_NOTE,
     ALARM_NOTE,
     ALARM_TONE_LABELS,
     DRAG_STEP_CHOICES,
@@ -117,6 +120,7 @@ from desktop.native.settings_copy import (
     HELP_PLANNING,
     HELP_SCREENS,
     PLANNING_STYLES,
+    RESTORE_FIRST,
     SPORT_FALLBACK,  # noqa: F401
     SPOTIFY_LINK_HINT,
     SPOTIFY_TONE_NOTE,  # noqa: F401
@@ -124,7 +128,11 @@ from desktop.native.settings_copy import (
     first_lines,
     help_keys,
     keys_words,
+    recovery_status,
+    restore_row,
+    restore_summary,
     ring_days,
+    transfer_summary,
 )
 from desktop.native.sound import Bell
 from desktop.native.spotify import SpotifyPlayer, open_in_app
@@ -228,9 +236,6 @@ KNOB_LABELS = {
 ALARM_LIST_MAX_HEIGHT = 200
 ACCOUNT_MAX_WIDTH = 520
 ACCOUNT_MIN_WIDTH = 560
-ACCOUNT_PASSWORD_NOTE = "Your current password is needed for every change on this page."
-ACCOUNT_CODES_NOTE = "Each code signs you in once if you forget your password."
-ACCOUNT_DATA_NOTE = "Keep a copy of your account, or of one week or day, in a file."
 # What only Today's app reads. Every other design has its own colours and shapes, so these changed
 # nothing there (measured 2026-09-21: not the view, not the top bar, apart from Corners on the bar).
 TODAYS_APP_KNOBS = ("surface", "corners", "blocks")
@@ -2154,23 +2159,13 @@ class RestoreDialog(Dialog):
         self.list.setObjectName("restoreList")
         self.list.setFixedHeight(ROUTINE_LIST_HEIGHT)
         for point in points:
-            item = QListWidgetItem(
-                f"{point.get('label')} · {point.get('created_at') or ''} · "
-                f"{point.get('weeks_count', point.get('week_count', 0))} weeks"
-            )
+            item = QListWidgetItem(restore_row(point))
             item.setData(Qt.ItemDataRole.UserRole, point.get("id"))
             self.list.addItem(item)
         layout.addWidget(self.list)
         self.summary = QLabel()
         self.summary.setObjectName("restorePreviewSummary")
-        if preview:
-            changes = preview.get("changes") or {}
-            weeks = changes.get("weeks") or {}
-            homework = changes.get("assignments") or {}
-            added = len(weeks.get("added") or []) + len(homework.get("added") or [])
-            changed = len(weeks.get("changed") or []) + len(homework.get("changed") or [])
-            removed = len(weeks.get("removed") or []) + len(homework.get("removed") or [])
-            self.summary.setText(f"{added} added, {changed} changed, {removed} removed.")
+        self.summary.setText(restore_summary(preview))
         layout.addWidget(self.summary)
         preview_btn = QPushButton("Preview")
         preview_btn.setObjectName("restorePreview")
@@ -2202,7 +2197,7 @@ class RestoreDialog(Dialog):
     def _preview(self) -> None:
         chosen = self._selected()
         if not chosen:
-            self.summary.setText("Choose a restore point.")
+            self.summary.setText(RESTORE_FIRST)
             return
         self.selected_id = chosen
         self.action = "preview"
@@ -2211,7 +2206,7 @@ class RestoreDialog(Dialog):
     def _restore(self) -> None:
         chosen = self._selected()
         if not chosen:
-            self.summary.setText("Choose a restore point.")
+            self.summary.setText(RESTORE_FIRST)
             return
         self.selected_id = chosen
         self.action = "restore"
@@ -2232,13 +2227,7 @@ class AccountDialog(Dialog):
         info.setWordWrap(True)
         info.setObjectName("accountLocation")
         layout.addWidget(info)
-        remaining_text = "Recovery-code status unavailable."
-        if remaining == 0:
-            remaining_text = "No unused recovery codes remain. Replace them before signing out."
-        elif remaining == 1:
-            remaining_text = "1 unused recovery code remains."
-        elif isinstance(remaining, int):
-            remaining_text = f"{remaining} unused recovery codes remain."
+        remaining_text = recovery_status(remaining)
         status = QLabel(remaining_text)
         status.setObjectName("recoveryCount")
         status.setProperty("problem", remaining == 0)
@@ -2375,47 +2364,6 @@ class AlarmRingDialog(QDialog):
         """What Spotify is playing for this alarm, once it is heard."""
         self.playing.setText(words)
         self.playing.show()
-
-
-def _joined(parts: list[str]) -> str:
-    """"a", "a and b", "a, b, and c"."""
-    if len(parts) < 3:
-        return " and ".join(parts)
-    return ", ".join(parts[:-1]) + ", and " + parts[-1]
-
-
-def _gone_from_backup(count: int, noun: str) -> str:
-    return f"{count} of your {noun} that {'isn' if count == 1 else 'aren'}'t in the backup"
-
-
-def transfer_summary(preview: dict) -> str:
-    """What importing a backup file will do, in sentences: the weeks it adds, replaces and deletes (the
-    deleted ones are the account's own, named as such), the homework and routines that change, and
-    whether the settings change."""
-    changes = preview.get("changes") or {}
-    weeks = changes.get("weeks") or {}
-    added, replaced, deleted = (len(weeks.get(kind) or []) for kind in ("added", "changed", "removed"))
-    parts = []
-    if added:
-        parts.append(f"adds {added} {'week' if added == 1 else 'weeks'}")
-    if replaced:
-        parts.append(f"replaces {replaced} of your weeks")
-    if deleted:
-        parts.append("deletes " + _gone_from_backup(deleted, "weeks"))
-    lines = [_joined(parts) + "."] if parts else []
-    for key, one, many in (("assignments", "homework", "homework"), ("routines", "routine", "routines")):
-        part = changes.get(key) or {}
-        differ = len(part.get("added") or []) + len(part.get("changed") or [])
-        gone = len(part.get("removed") or [])
-        if differ:
-            lines.append(f"{differ} {one if differ == 1 else many} {'changes' if differ == 1 else 'change'}.")
-        if gone:
-            lines.append("It also deletes " + _gone_from_backup(gone, many) + ".")
-    if changes.get("preferences_changed"):
-        lines.append("Your settings will be replaced.")
-    if not lines:
-        lines.append("Nothing in it is different from your account.")
-    return " ".join(lines)
 
 
 class TransferPreviewDialog(QDialog):

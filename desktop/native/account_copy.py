@@ -28,3 +28,16 @@ RECOVERY_SAVE = "Save…"
 RECOVERY_FILE = "flexweek-recovery-codes.txt"
 # How long Copy says Copied, and Save says Saved.
 RECOVERY_SAID_MS = 2000
+
+# Said without the system's own words, which a student cannot act on.
+READ_FAILED = "Couldn't open that file. Choose a FlexWeek backup file (it ends in .json)."
+READ_WEEK_FAILED = "Couldn't open that file. Choose a FlexWeek week or day file (it ends in .json)."
+WRITE_FAILED = "Couldn't save there. Choose another folder, like Documents."
+ACCOUNT_SAVED = "Saved your backup file to {path}. Keep it private: it has all your weeks and homework."
+REPLACE_WEEK_QUESTION = (
+    "Replace everything in {week} with this file? Other weeks aren't changed. You can undo this."
+)
+DELETE_ACCOUNT_QUESTION = (
+    "Delete the account {name}? Every week, all your homework and your settings are removed "
+    "from {where}. This can't be undone."
+)
