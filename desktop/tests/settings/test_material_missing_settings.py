@@ -138,3 +138,35 @@ def test_the_lead_slider_is_hidden_while_reminders_are_off(qapp: QApplication, w
     _click_segment(qapp, window, _named(root, "reminder")[0], "Off")
     wait_until(qapp, lambda: _prefs(window).get("reminders_enabled") is False)
     assert not _named(root, "reminderLead")[0].parentItem().property("visible")
+
+
+def test_alerts_show_the_spotify_block_note_and_the_servers_reminder_limits(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    from desktop.native.settings_copy import BLOCK_SONG_NOTE
+
+    window.session.reminder_limits = {
+        "spotify": "A Spotify link is best-effort.",
+        "duplicate": "The same block start fires at most one reminder until it is handled.",
+        "web_open": "not shown on the desktop",
+    }
+    root = _open_settings(qapp, window, "alerts")
+    _panel(window)._publish()
+    _pump(qapp)
+    song = _named(root, "note_blockSongNote")[0]
+    assert str(song.property("text")) == BLOCK_SONG_NOTE
+    limits = _named(root, "note_reminderLimits")[0]
+    assert str(limits.property("text")) == (
+        "A Spotify link is best-effort. The same block start fires at most one reminder until it is handled."
+    )
+    assert "browser" not in str(limits.property("text")) and "not shown" not in str(limits.property("text"))
+
+
+def test_no_limit_line_is_shown_before_the_server_has_answered(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    window.session.reminder_limits = {}
+    root = _open_settings(qapp, window, "alerts")
+    _panel(window)._publish()
+    _pump(qapp)
+    assert not _named(root, "note_reminderLimits")[0].property("visible")

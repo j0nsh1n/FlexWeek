@@ -78,6 +78,11 @@ SectionPage {
             visible: !!page.st.toneNote
             text: page.st.spotifyRest || ""
         }
+        NoteRow {
+            key: "blockSongNote"
+            visible: !!page.st.showSpotify
+            text: page.st.blockSongNote || ""
+        }
         ToggleRow {
             key: "dnd"
             title: "Leave reminders on screen"
@@ -155,6 +160,11 @@ SectionPage {
             subtitle: page.st.trayNote || ""
             isOn: !!page.st.tray
             onFlipped: (value) => page.panel.setTray(value)
+        }
+        NoteRow {
+            key: "reminderLimits"
+            visible: !!page.st.reminderLimits
+            text: page.st.reminderLimits || ""
         }
     }
 }

@@ -1082,6 +1082,7 @@ class SettingsBridge(QObject):
             "dndNote": DND_NOTE,
             "trayNote": TRAY_NOTE,
             "blockSongNote": BLOCK_SONG_NOTE,
+            "reminderLimits": self._reminder_limits(),
             "focusAudioNote": FOCUS_AUDIO_NOTE,
             "spotifyHint": SPOTIFY_LINK_HINT,
             "spotifyRest": SPOTIFY_TONE_REST,
@@ -1185,6 +1186,12 @@ class SettingsBridge(QObject):
             "savedNames": [item["name"] for item in self._saved],
             "dirty": self._dirty,
         }
+
+    def _reminder_limits(self) -> str:
+        """The server's two reminder-limit sentences, as the Widgets Alerts page showed them."""
+        found = getattr(getattr(self._window, "session", None), "reminder_limits", None)
+        limits = found if isinstance(found, dict) else {}
+        return " ".join(str(limits.get(key, "")) for key in ("spotify", "duplicate")).strip()
 
     def _problem_rows(self) -> list[dict[str, Any]]:
         mode = mode_of(self._draft_choice, self._worn_dark())
