@@ -33,6 +33,7 @@ import com.flexweek.app.core.TimeLabel
 import com.flexweek.app.model.HomeworkDraft
 import com.flexweek.app.model.PlanRecordState
 import com.flexweek.app.model.RunningLatePreview
+import com.flexweek.app.model.AddHomeworkWords
 import com.flexweek.app.model.DueChips
 import java.time.LocalDate
 import java.time.ZoneId
@@ -104,7 +105,7 @@ fun AddHomeworkSheet(
                                 datePicker.minDate = today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
                             }.show()
                         }) { Text("Pick a day") }
-                        Text("FlexWeek picks the time to do it", modifier = Modifier.padding(top = 8.dp))
+                        Text(AddHomeworkWords.TIME_NOTE, modifier = Modifier.padding(top = 8.dp))
                     }
                     else -> {
                         Text("How long will it take?", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
@@ -151,7 +152,7 @@ private fun StepCrumbs(draft: HomeworkDraft, onStepJump: (Int) -> Unit) {
         if (draft.step > 1) {
             TextButton(onClick = { onStepJump(1) }) {
                 val due = runCatching { DueChips.label(LocalDate.parse(draft.due), LocalDate.now()) }.getOrDefault(draft.due)
-                Text("✓ due $due, FlexWeek picks the time")
+                Text(AddHomeworkWords.dueCrumb(due))
             }
             Text("·")
         }

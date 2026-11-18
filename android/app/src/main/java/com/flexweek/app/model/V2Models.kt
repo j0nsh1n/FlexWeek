@@ -251,6 +251,12 @@ object V2Json {
             .toString()
 }
 
+/** What step 2 says about the time: Save leaves the homework in "No time yet" until Plan gives it one. */
+object AddHomeworkWords {
+    const val TIME_NOTE = "Save puts it in No time yet. Plan gives it a time."
+    fun dueCrumb(due: String) = "✓ due $due"
+}
+
 data class DueChip(val label: String, val date: LocalDate)
 
 object DueChips {
