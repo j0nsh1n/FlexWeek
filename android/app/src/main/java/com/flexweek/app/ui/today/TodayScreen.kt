@@ -127,7 +127,7 @@ fun TodayScreen(
                     ) {
                         Text(sub, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (state.showTodayJump) {
-                            TextButton(onClick = onJumpToday, modifier = Modifier.height(48.dp)) {
+                            TextButton(onClick = onJumpToday, modifier = Modifier.heightIn(min = 48.dp)) {
                                 Text("Today")
                             }
                         }
@@ -170,20 +170,6 @@ fun TodayScreen(
                 Spacer(Modifier.height(96.dp))
             }
         }
-        v2Extras?.let { extras ->
-            if (extras.showFab) {
-                Button(
-                    onClick = extras.onAdd,
-                    modifier =
-                        Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(end = 16.dp, bottom = 88.dp)
-                            .height(56.dp),
-                ) {
-                    Text("+ Add")
-                }
-            }
-        }
         state.snackbar?.let { snack ->
             SnackbarBar(
                 snack.message,
@@ -214,8 +200,6 @@ fun TodayScreen(
 }
 
 data class TodayV2Extras(
-    val showFab: Boolean,
-    val onAdd: () -> Unit,
     val onPlan: () -> Unit,
 )
 
@@ -536,17 +520,17 @@ private fun SnackbarBar(
         modifier =
             modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 76.dp)
+                .padding(start = 12.dp, end = 12.dp, bottom = 88.dp)
                 .heightIn(min = 48.dp)
                 .background(MaterialTheme.colorScheme.inverseSurface, RoundedCornerShape(8.dp))
                 .padding(start = 16.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(message, color = MaterialTheme.colorScheme.inverseOnSurface, modifier = Modifier.weight(1f))
-        TextButton(onClick = onUndo, modifier = Modifier.height(48.dp)) {
+        TextButton(onClick = onUndo, modifier = Modifier.heightIn(min = 48.dp)) {
             Text("Undo", color = MaterialTheme.colorScheme.primary)
         }
-        TextButton(onClick = onDismiss, modifier = Modifier.height(48.dp)) {
+        TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) {
             Text("✕")
         }
     }

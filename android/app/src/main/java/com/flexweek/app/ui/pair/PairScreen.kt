@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -70,7 +71,7 @@ fun PairScreen(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 12.dp),
             )
-            TextButton(onClick = onShowCode, modifier = Modifier.padding(top = 8.dp).height(48.dp)) {
+            TextButton(onClick = onShowCode, modifier = Modifier.padding(top = 8.dp).heightIn(min = 48.dp)) {
                 Text("Type the code instead")
             }
         } else {
@@ -87,7 +88,7 @@ fun PairScreen(
                     Modifier
                         .fillMaxWidth()
                         .padding(top = 4.dp)
-                        .height(48.dp)
+                        .heightIn(min = 48.dp)
                         .border(
                             width = if (state.problem != null) 2.dp else 1.dp,
                             color = if (state.problem != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
@@ -108,11 +109,11 @@ fun PairScreen(
             }
             Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (state.canScan) {
-                    TextButton(onClick = onShowQr, modifier = Modifier.weight(1f).height(48.dp)) {
+                    TextButton(onClick = onShowQr, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
                         Text("Scan instead")
                     }
                 }
-                Button(onClick = onPair, enabled = !state.joining, modifier = Modifier.weight(1f).height(48.dp)) {
+                Button(onClick = onPair, enabled = !state.joining, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
                     Text(if (state.joining) "Pairing…" else "Pair")
                 }
             }

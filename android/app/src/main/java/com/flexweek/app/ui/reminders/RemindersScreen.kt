@@ -82,8 +82,8 @@ fun RemindersScreen(
                 style = MaterialTheme.typography.bodyLarge,
             )
             Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onUpdateSteps, modifier = Modifier.height(48.dp)) { Text("Back") }
-                TextButton(onClick = onUpdateLater, modifier = Modifier.height(48.dp)) { Text("Later") }
+                TextButton(onClick = onUpdateSteps, modifier = Modifier.heightIn(min = 48.dp)) { Text("Back") }
+                TextButton(onClick = onUpdateLater, modifier = Modifier.heightIn(min = 48.dp)) { Text("Later") }
             }
         }
         return

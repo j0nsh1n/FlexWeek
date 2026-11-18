@@ -387,9 +387,6 @@ private fun FlexWeekRoot(
                             onEndSession = todayVm::endFocus,
                             lateEnabled = true,
                             v2Extras = TodayV2Extras(
-                                        // Add is the frame's button on every tab now.
-                                        showFab = false,
-                                        onAdd = { sheet = ActiveSheet.Add },
                                         onPlan = {
                                             sheet = ActiveSheet.Plan
                                         },
