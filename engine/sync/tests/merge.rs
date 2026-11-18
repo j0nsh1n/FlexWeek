@@ -1,6 +1,6 @@
 use flexweek_sync::{
     Batch, Record, acknowledge_pull, acknowledge_push, apply_batch, export_since, list_peers,
-    migrate, revoke_peer, scan, set_account, set_device, upsert_peer,
+    migrate, retry_quarantine, revoke_peer, scan, set_account, set_device, upsert_peer,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
@@ -514,6 +514,53 @@ fn future_and_malformed_records_quarantine_without_stopping_batch() {
         .query_row("SELECT COUNT(*) FROM sync_quarantine", [], |row| row.get(0))
         .unwrap();
     assert_eq!(count, 3);
+}
+
+#[test]
+fn held_back_records_apply_on_a_later_try_or_go_when_replaced() {
+    let mut a = db("a", true);
+    let mut b = db("b", true);
+    scan(&mut a, 1, 1_000).unwrap();
+    let mut batch = batch(&a, 0, "b");
+    // Sent while the sender's clock looked more than a day ahead: set aside, not lost.
+    batch.records.push(Record {
+        entity: "assignment".into(),
+        key: "ahead".into(),
+        body: Some(assignment("ahead", "Ahead")),
+        hlc: (86_400_001_i64 + 1_000) << 16,
+        device_id: "a".into(),
+        seq: 100,
+    });
+    // Also set aside, but b's own newer edit replaces it before the retry.
+    batch.records.push(Record {
+        entity: "assignment".into(),
+        key: "replaced".into(),
+        body: Some(assignment("replaced", "Old title")),
+        hlc: (86_400_001_i64 + 1_000) << 16,
+        device_id: "a".into(),
+        seq: 101,
+    });
+    let report = apply_batch(&mut b, &batch, 1_000).unwrap();
+    assert_eq!(report.quarantined, 2);
+    put_assignment(&b, "replaced", "New title");
+    let later = 2 * 86_400_000;
+    scan(&mut b, 1, later).unwrap();
+    let still_held = retry_quarantine(&mut b, 1, later).unwrap();
+    assert_eq!(still_held, 0, "nothing is left set aside");
+    assert_eq!(
+        get_assignment(&b, "ahead"),
+        Some(assignment("ahead", "Ahead")),
+        "the held record applies once its time is no longer ahead"
+    );
+    assert_eq!(
+        get_assignment(&b, "replaced").unwrap()["title"],
+        "New title",
+        "a newer local edit is not overwritten by an old held record"
+    );
+    let count: i64 = b
+        .query_row("SELECT COUNT(*) FROM sync_quarantine", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(count, 0);
 }
 
 #[test]

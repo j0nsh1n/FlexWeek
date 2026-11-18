@@ -315,6 +315,52 @@ fn quarantine(
     Ok(())
 }
 
+/// Tries again the records this device set aside. One held back because its sender's clock looked
+/// more than a day ahead, or because this app was older than the sender's, applies once that is no
+/// longer so; one that a newer edit has since replaced is dropped. Returns how many are still set aside.
+pub fn retry_quarantine(conn: &mut Connection, user_id: i64, now_ms: i64) -> SyncResult<usize> {
+    let held: Vec<(i64, String)> = conn
+        .prepare("SELECT id, body FROM sync_quarantine WHERE user_id = ?1 ORDER BY id")?
+        .query_map([user_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    let mut retried = Vec::new();
+    let mut records = Vec::new();
+    for (id, body) in &held {
+        // A row that is not even a record can never apply; it goes with the retried ones.
+        retried.push(*id);
+        if let Ok(record) = serde_json::from_str::<Value>(body)
+            .map_err(|error| SyncError::Invalid(error.to_string()))
+            .and_then(|value| Record::from_value(&value))
+        {
+            records.push(record);
+        }
+    }
+    if !retried.is_empty() {
+        let batch = Batch {
+            account_uuid: crate::account_uuid(conn, user_id)?,
+            from_device: String::new(),
+            records,
+            next_since: 0,
+            more: false,
+        };
+        // Whatever still fails is set aside again as a new row, so the old rows can go.
+        if !batch.records.is_empty() {
+            apply_batch(conn, &batch, now_ms)?;
+        }
+        let tx = conn.transaction()?;
+        for id in retried {
+            tx.execute("DELETE FROM sync_quarantine WHERE id = ?1", [id])?;
+        }
+        tx.commit()?;
+    }
+    let left: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sync_quarantine WHERE user_id = ?1",
+        [user_id],
+        |row| row.get(0),
+    )?;
+    Ok(usize::try_from(left).unwrap_or(0))
+}
+
 pub fn apply_batch(conn: &mut Connection, batch: &Batch, now_ms: i64) -> SyncResult<ApplyReport> {
     let mut tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     let mut report = ApplyReport::default();

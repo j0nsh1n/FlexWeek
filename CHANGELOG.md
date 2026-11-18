@@ -134,6 +134,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - On the phone, a failed update check (for example offline) no longer counts as today's check, so the next daily check is not blocked for 24 hours, and the updater no longer keeps the old screen after you rotate the phone.
 - On the phone, Settings no longer shows a Sound row that had no control, and the sample reminder shows what a real reminder says (the homework's name, then its start and length).
 - A change made on the phone while it cannot reach your computer keeps the time you made it. Before, it took the time of the next sync, so an older phone edit could undo a newer change on the computer (an old due date came back) or bring back homework you had deleted there.
+- A change from your computer that the phone could not use (an older phone app, or a phone clock far off) is no longer lost. Each sync tries it again, so it arrives after the update, and the phone's sync line says how many changes are waiting and what to do.
 
 ## [1.3.0] - 2026-11-10
 

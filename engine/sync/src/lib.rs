@@ -33,7 +33,7 @@ mod net_relay;
 #[path = "../tests/net_sync.rs"]
 mod net_sync;
 
-pub use apply::apply_batch;
+pub use apply::{apply_batch, retry_quarantine};
 pub use clock::{next_hlc, observe};
 pub use peers::{Peer, acknowledge_pull, acknowledge_push, list_peers, revoke_peer, upsert_peer};
 pub use records::{Record, export_since};

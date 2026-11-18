@@ -52,6 +52,9 @@ pub(crate) fn scan_and_export(
     requester_device: &str,
     limit: usize,
 ) -> NetResult<Batch> {
+    // Records set aside on an earlier sync get another try first, so an app update or a corrected
+    // clock lets them in without anyone editing them again.
+    crate::retry_quarantine(conn, user_id, now_ms)?;
     scan(conn, user_id, now_ms)?;
     match export_since(conn, user_id, since, requester_device, limit) {
         Err(SyncError::Invalid(message)) if message == "record changed since last scan" => {
