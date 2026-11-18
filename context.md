@@ -1,7 +1,12 @@
 # context.md — FlexWeek
 
-## Current State (2026-11-15)
-- Branch `fix/planner-spread-and-left-over`, PR #135 (main 90f02c94 merged in; #134, the week-start follow-ups 3, merged as 90f02c94): Jonathan's 2026-11-15 planner picks. The helper's "spread over days" works as the app's Spread over days (saved, cut into hour sessions from today, only when this week holds at most one open session); "left from last week" lists only minutes with no time and Plan into this week places them, missed sessions included; done time is the larger of focus minutes and minutes ticked done (`plan::done_time`), taken off in every count (Day, Month, list, spread previews, phone, helper), and a desktop edit keeps it. Local CI passed apart from the mutation-pattern steps, fixed after.
+## Current State (2026-11-17)
+- Branch `release/1.4.0`: the 1.4.0 version bump from main 5788750e (#128-#136: week start on any day, the planner
+  leftovers). Desktop only: the phone stays 1.3.0. Done time is the larger of focus minutes and minutes ticked done
+  (`plan::done_time`), taken off in every count.
+- PR #137 (`fix/phone-1.4.0`, draft): the phone's 20 fixes, phone edits stamped when made, set-aside sync records
+  retried, the layout B restyle and Report a problem (phone and desktop, hidden until the form link is set). Review 1
+  FIX-PASS; its fixes are not done yet. Not in 1.4.0.
 - Latest release: v1.3.0, published 2026-11-10 from main d61235ee (PR #111, the version bump). The Linux tarball and
   the Android APK were built on this computer (`scripts/build-linux-local.sh` in an Ubuntu 24.04 container; the APK
   signed with the 1.2.0 key); the AppImage and the Windows installers came from the tagged "Release packages" run.
@@ -13,12 +18,12 @@
   area, light app, looks judged by review, CI as the gate), Material review fixes (#89-#96, #98-#105), CI/build work
   (#106-#109) and the release blockers from the 2026-11-10 review (#110, #112, #113, #114: developer-builds switch
   hidden off the tarball, the packaged smoke test opens Material, tag/version check, two flaky-test fixes).
-- 1.3.1 is in progress on local branches cut from the v1.3.0 tag, not pushed: `fix/131-helper-and-keys` (the
-  assistant helper's clock, Material's letter keys, Help from the keyboard) and `fix/131-material-week-sheets`.
+- The 1.3.1 fixes (the assistant helper's clock, Material's letter keys, Help from the keyboard) are in 1.4.0; no
+  1.3.1 is released.
 - Checks: CI is the gate (Verify: engine, verify-python, both rigs, four desktop shards; mutation jobs on pull
   requests). CodeQL had 0 open alerts at the release review.
 - Known gaps: Ctrl+wheel zoom in Material fails on Jonathan's Wayland desktop (parked probe in `scratch/ctrl-wheel`;
-  named under Known limits in the 1.3.0 notes); Material memory growth (1.9 GB after 49 min, 2026-11-05) is unmeasured
+  named under Known limits in the 1.4.0 notes); Material memory growth (1.9 GB after 49 min, 2026-11-05) is unmeasured
   (also named there); no Windows package has been tried with Material on a real PC; native AT-SPI delivery is
   unverified; the static audit's F1 and W3 are open; `fwtest flaky` lists the tests still logged flaky; the assistant
   helper's stderr test (`engine/mcp/tests/hygiene.rs`) was changed in 606ad095 to wait for its line.
