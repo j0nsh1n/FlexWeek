@@ -20,6 +20,7 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 from desktop.native.material.bridge import MaterialBridge
 from desktop.native.material.focus_visible import install as install_focus_visible
 from desktop.native.material.theme import (
+    mode_of,
     qml_dir,
     qml_path,
     read_material_choice,
@@ -140,4 +141,4 @@ def appearance_of(window: Any) -> tuple[str, str]:
     choice = read_material_choice(stored)
     if window._wears_carried_look():
         return resolved_mode("system", dark), choice["contrast"]
-    return resolved_mode(choice["mode"], dark), choice["contrast"]
+    return mode_of(choice, dark), choice["contrast"]

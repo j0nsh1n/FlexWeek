@@ -32,14 +32,17 @@ from desktop.native.material.theme import (
     DEFAULT_CONTRAST,
     DEFAULT_DENSITY,
     DEFAULT_PRESET,
+    accented,
     advanced_default,
     dress_theme,
     hour_row_px,
+    mode_of,
+    read_accent,
     read_advanced,
+    read_font,
     read_letter_keys,
     read_material_choice,
     read_shortcuts,
-    resolved_mode,
     scheme,
     stroke_for,
     theme_object,
@@ -110,6 +113,7 @@ class MaterialBridge(QObject):
         self._advanced = advanced_default()
         self._shortcuts = True
         self._letter_keys = False
+        self._font = ""
         self._colours = scheme(DEFAULT_PRESET, "light", DEFAULT_CONTRAST)
         self._theme = theme_object(self._colours, self._density, False, False)
         self._week = WeekBridge(window, self)
@@ -139,7 +143,8 @@ class MaterialBridge(QObject):
         self._shortcuts = read_shortcuts(stored)
         self._letter_keys = read_letter_keys(stored)
         worn_dark = mode == "dark"
-        resolved = resolved_mode(choice["mode"], worn_dark)
+        resolved = mode_of(choice, worn_dark)
+        self._font = read_font(stored)
         try:
             colours = scheme(choice["preset"], resolved, choice["contrast"])
         except KeyError:
@@ -188,9 +193,20 @@ class MaterialBridge(QObject):
 
     def _publish_theme(self) -> None:
         self._reduce_motion = self._motion_reduced() or self._advanced.get("motion") == "Off"
+        prefs = self._window.session.preferences or {}
+        accent = read_accent(prefs)
+        colours = accented(self._colours, accent, self._preset, self._mode, self._contrast)
         self._theme = dress_theme(
-            theme_object(self._colours, self._density, self._reduce_motion, self._contrast == "high"),
+            theme_object(
+                colours,
+                self._density,
+                self._reduce_motion,
+                self._contrast == "high",
+                prefs.get("accent_chips") is True,
+            ),
             self._advanced,
+            self._preset,
+            self._font,
         )
 
     def _motion_reduced(self) -> bool:

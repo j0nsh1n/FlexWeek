@@ -23,6 +23,16 @@ Item {
         value: root.theme && root.theme.typeScale ? root.theme.typeScale : 1
     }
     Binding {
+        target: M3Font
+        property: "bodyName"
+        value: root.theme && root.theme.fontFamily ? root.theme.fontFamily : "Inter"
+    }
+    Binding {
+        target: M3Font
+        property: "headingName"
+        value: root.theme && root.theme.headingFamily ? root.theme.headingFamily : "Inter"
+    }
+    Binding {
         target: WeekStart
         property: "firstDay"
         value: root.bridge ? root.bridge.firstWeekday : 0
@@ -309,7 +319,7 @@ Item {
                     anchors.right: tools.left
                     text: bridge.title
                     color: root.theme.onSurface
-                    font.family: M3Font.family
+                    font.family: M3Font.heading
                     font.pixelSize: M3Font.px(22)
                     font.weight: 500
                     elide: Text.ElideRight
