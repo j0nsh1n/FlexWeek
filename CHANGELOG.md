@@ -5,6 +5,39 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- Settings has Report a problem (in the Widgets styles under Account, setup and updates; in Material under Computer). It opens a short form in your browser with your FlexWeek version and computer already filled in.
+
+### Changed
+
+- The phone app has a new look matching the computer's Material style: the same Blue colours in light and dark, real icons, and an agenda-style Today with an Up next card, a single Add homework form, a Week list with each session's time and arrows for other weeks, and Settings grouped as This phone, Your computer and Help. Report a problem in Settings opens an online form with your app version and phone model filled in.
+
+### Fixed
+
+- On the phone, ticking a session marks that session done for that day only; the homework's other sessions stay planned. The widget tick does the same.
+- On the phone, a session that ends at midnight no longer crashes Today, the widget or Running late, and shows as 12 AM.
+- On the phone, ending a focus session early now counts the whole minutes you worked toward the homework, the same as the dialog says and the computer does.
+- On the phone, a focus timer saved for a homework that was deleted is cleared when the app opens, instead of stopping it from opening at every launch.
+- On the phone, Plan, Accept, Running late's Move it, Start focus and Sync now now say why when they cannot act (nothing to place, the week changed on another device, the homework is gone, the sync failed), instead of an empty "Placed 0 of 0" sheet or nothing at all.
+- On the phone, the Running late sheet names the homework you are late for (not "Running late is running late"), says when that homework now ends, and shows each moved session as from and to ("4 PM → 4:30 PM").
+- On the phone, Add homework no longer says "FlexWeek picks the time"; it says Save puts the homework in No time yet and Plan gives it a time.
+- On the phone, Settings no longer says "No computer linked" at the top while the Your computer card shows a paired computer. Both read from one answer, and a computer that is off says "Your computer isn't reachable" with the last sync time. "Reachable" replaces "on the same Wi-Fi", which the phone cannot know.
+- On the phone, a failed sync or pairing says what went wrong: the computer is off or not reachable, it needs an update, or another problem. "That code didn't match" now appears only for a wrong code.
+- On the phone, the Week tab refreshes after every sync and rolls over to the new week on Monday, instead of keeping the old week until the app is restarted.
+- On the phone, Today follows the real date when a new day starts, instead of staying on the day you last tapped, and the jump back to Today shows when you are on the same weekday of another week.
+- On the phone, the notification banner asks Android whether notifications are allowed (it goes when they are, and comes back a few days after "Not now" if they are still off), Allow sends you to Android's own switch once Android will not ask again, and the On-time reminders switch reads on only when Android allows exact alarms and re-plans reminders when you allow them.
+- On the phone, Plan, each Running late slider step, saving a homework and the Week tab no longer make the screen wait on the planner or a sync; they run in the background and show their result when ready.
+- On the phone, Add homework on a Thursday or a Sunday no longer shows a second "Pick a day" chip that set the due date to Monday.
+- On the phone, Back closes an open sheet, then goes to Today, and only then leaves the app. Rotating the phone keeps the tab, an open sheet and a half-typed Add homework, and after Unpair a rotation no longer brings the main screens back.
+- On the phone, pausing or finishing the focus timer from the notification now shows on the open Today card, and a paused timer is never counted as a full session.
+- On the phone, a sync after an edit no longer cancels a sync that is already running, background syncs get the same 45 seconds as the computer's, a computer that is off is asked less and less often while the app is open, and the sync after an edit can start on Android 11 and older.
+- On the phone, the Week tab's "X h of homework" total and the "heavy" tag count only the time still planned, not sessions you already finished, the same way the computer's planned line keeps planned and done apart.
+- On the phone, a failed update check (for example offline) no longer counts as today's check, so the next daily check is not blocked for 24 hours (it waits an hour before trying again), and the updater no longer keeps the old screen after you rotate the phone.
+- On the phone, Settings no longer shows a Sound row that had no control, and the sample reminder shows what a real reminder says (the homework's name, then its start and length).
+- A change made on the phone while it cannot reach your computer keeps the time you made it. Before, it took the time of the next sync, so an older phone edit could undo a newer change on the computer (an old due date came back) or bring back homework you had deleted there.
+- A change from your computer that the phone could not use (an older phone app, or a phone clock far off) is no longer lost. Each sync, on the phone and on your computer, tries it again, so it arrives after the update, and the phone's sync line says how many changes are waiting and what to do. Changes that no update or clock fix can help are not counted there.
+
 ## [1.4.0] - 2026-11-17
 
 ### Added
@@ -15,7 +48,6 @@ All notable changes to FlexWeek are documented here. Format follows
 - In the Material style, that free-time menu has "Paste here" while something is copied: it shows the paste preview for the copy on that day. A copied fixed time starts on the mark of your Dragging step nearest where you clicked (11:45 PM at the latest) and keeps its length; copied homework goes onto that day with no time yet, and a day copied in a Widgets style keeps each block's own time, as there. With nothing copied, or while a save is under way, the entry is not there.
 - The week can start on any of the seven days. Widgets Settings, Material Settings and Setup in both looks offer them in a drop-down list, Monday to Sunday; the choice is still kept on this computer. Month, Day's small month, the date pickers, the Day rail's month, the study hours strip and the dial's row of days start on it, and so does Week.
 - Material Settings → Planning starts with Your week: Week starts on. It is the same setting as Week starts on in Widgets Settings and Setup, so a pick in one shows in the others.
-- Settings has Report a problem (in the Widgets styles under Account, setup and updates; in Material under Computer). It opens a short form in your browser with your FlexWeek version and computer already filled in.
 
 ### Changed
 - Replan all my homework now moves a homework session whose time has passed and that you did not finish. A session has passed once its end is at or before the minute on the clock, so one you are in the middle of stays. It gets a new time from now on, by the same rules as any other session, or no time, counted in "still needs a time", when there is no room before it is due. The minutes it comes back for are what the homework still needs after its focus timer time and its other sessions this week, shared out in time order when several have passed, and never more than the session's own length. A session on now, one you put at a time by hand (pinned) and a finished one stay where they are, and nothing is ever placed in the past. Plan my homework keeps the other times already planned (it now also moves this week's session that passed unfinished, when you did not pin it; see below), and "Everything has a time" no longer shows while a session's time has passed unfinished: the status line and the plan review say how long it still needs. This replaces "Plan and Replan all leave past time alone" in an earlier release, which kept a missed session for good.
@@ -53,7 +85,6 @@ All notable changes to FlexWeek are documented here. Format follows
 - A sheet kept with Esc and opened again after the week start changed carries over only the days you ticked, each on its weekday, with the moved mark and note. A day still as FlexWeek put it when the sheet first opened is picked again for the new week, as a fresh sheet would, with no mark or note. This holds for Add fixed time, Add homework's pinned day and the Routines sheet, in both looks.
 - A screen reader says the moved-day note ("Monday 2 isn't in this week any more, so it moved to Monday 9.") when it appears or changes in a sheet that is already open, once and politely, for example in the Routines sheet when the first day of the week is switched. A sheet that opens with the note is read with it, and a note that clears is not said.
 - Plan my homework now also moves a session of this week whose time has passed and that you did not finish (its end is at or before the current minute) to a time still ahead, as Replan all my homework does, with the same notice. A pinned session, a finished one, one on now and one later today stay where they are, and every other planned time stays. The assistant helper's Plan and the phone's Plan do the same. If no room is left before it is due, it is left with no time rather than put in the past. The Help text for planning says so.
-- The phone app has a new look matching the computer's Material style: the same Blue colours in light and dark, real icons, and an agenda-style Today with an Up next card, a single Add homework form, a Week list with each session's time and arrows for other weeks, and Settings grouped as This phone, Your computer and Help. Report a problem in Settings opens an online form with your app version and phone model filled in.
 
 ### Fixed
 - In the Widgets styles, a new Add fixed time sheet says its length ("1 h") under the times again; it could say "End moved to 8:15 PM to keep it 1 h." although nothing had been moved.
@@ -116,28 +147,6 @@ All notable changes to FlexWeek are documented here. Format follows
 - In a week that is over, a session you pinned that passed unfinished now reads "pinned, in the past" in the homework list, the status line and the side panel, in both looks, where an unpinned one reads "missed". Its minutes still count as needing a time.
 - Plan my homework no longer fails with "Check the required fields, dates, times and lengths" after you move a new session it made onto a time by hand and that time passes too, or when such a session is still waiting while more time is needed (after you raise the estimate): the minutes get one more new session of their own, and a session you placed keeps its time.
 - In the Material style, Place now on a homework card waiting for a time places that session, instead of picking a session of the homework whose time has passed and showing "Check the required fields...".
-- On the phone, ticking a session marks that session done for that day only; the homework's other sessions stay planned. The widget tick does the same.
-- On the phone, a session that ends at midnight no longer crashes Today, the widget or Running late, and shows as 12 AM.
-- On the phone, ending a focus session early now counts the whole minutes you worked toward the homework, the same as the dialog says and the computer does.
-- On the phone, a focus timer saved for a homework that was deleted is cleared when the app opens, instead of stopping it from opening at every launch.
-- On the phone, Plan, Accept, Running late's Move it, Start focus and Sync now now say why when they cannot act (nothing to place, the week changed on another device, the homework is gone, the sync failed), instead of an empty "Placed 0 of 0" sheet or nothing at all.
-- On the phone, the Running late sheet names the homework you are late for (not "Running late is running late"), says when that homework now ends, and shows each moved session as from and to ("4 PM → 4:30 PM").
-- On the phone, Add homework no longer says "FlexWeek picks the time"; it says Save puts the homework in No time yet and Plan gives it a time.
-- On the phone, Settings no longer says "No computer linked" at the top while the Your computer card shows a paired computer. Both read from one answer, and a computer that is off says "Your computer isn't reachable" with the last sync time. "Reachable" replaces "on the same Wi-Fi", which the phone cannot know.
-- On the phone, a failed sync or pairing says what went wrong: the computer is off or not reachable, it needs an update, or another problem. "That code didn't match" now appears only for a wrong code.
-- On the phone, the Week tab refreshes after every sync and rolls over to the new week on Monday, instead of keeping the old week until the app is restarted.
-- On the phone, Today follows the real date when a new day starts, instead of staying on the day you last tapped, and the jump back to Today shows when you are on the same weekday of another week.
-- On the phone, the notification banner asks Android whether notifications are allowed (it goes when they are, and comes back a few days after "Not now" if they are still off), Allow sends you to Android's own switch once Android will not ask again, and the On-time reminders switch reads on only when Android allows exact alarms and re-plans reminders when you allow them.
-- On the phone, Plan, each Running late slider step, saving a homework and the Week tab no longer make the screen wait on the planner or a sync; they run in the background and show their result when ready.
-- On the phone, Add homework on a Thursday or a Sunday no longer shows a second "Pick a day" chip that set the due date to Monday.
-- On the phone, Back closes an open sheet, then goes to Today, and only then leaves the app. Rotating the phone keeps the tab, an open sheet and a half-typed Add homework, and after Unpair a rotation no longer brings the main screens back.
-- On the phone, pausing or finishing the focus timer from the notification now shows on the open Today card, and a paused timer is never counted as a full session.
-- On the phone, a sync after an edit no longer cancels a sync that is already running, background syncs get the same 45 seconds as the computer's, a computer that is off is asked less and less often while the app is open, and the sync after an edit can start on Android 11 and older.
-- On the phone, the Week tab's "X h of homework" total and the "heavy" tag count only the time still planned, not sessions you already finished, the same way the computer's planned line keeps planned and done apart.
-- On the phone, a failed update check (for example offline) no longer counts as today's check, so the next daily check is not blocked for 24 hours (it waits an hour before trying again), and the updater no longer keeps the old screen after you rotate the phone.
-- On the phone, Settings no longer shows a Sound row that had no control, and the sample reminder shows what a real reminder says (the homework's name, then its start and length).
-- A change made on the phone while it cannot reach your computer keeps the time you made it. Before, it took the time of the next sync, so an older phone edit could undo a newer change on the computer (an old due date came back) or bring back homework you had deleted there.
-- A change from your computer that the phone could not use (an older phone app, or a phone clock far off) is no longer lost. Each sync, on the phone and on your computer, tries it again, so it arrives after the update, and the phone's sync line says how many changes are waiting and what to do. Changes that no update or clock fix can help are not counted there.
 
 ## [1.3.0] - 2026-11-10
 
