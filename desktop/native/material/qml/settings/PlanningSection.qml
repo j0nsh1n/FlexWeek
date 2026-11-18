@@ -6,7 +6,6 @@ SectionPage {
     objectName: "planningSection"
     readonly property var st: Ui.st
     readonly property var panel: Ui.settings
-    readonly property bool any: !!(st.showWeekendFree || st.showBuffer || st.showUrgent || st.showSplit || st.showCutoff || st.showDragStep)
 
     Group {
         // Kept on this computer, so it is always offered.
@@ -24,7 +23,8 @@ SectionPage {
         }
     }
     Group {
-        visible: page.any
+        visible: !!(page.st.showWeekendFree || page.st.showBuffer || page.st.showUrgent || page.st.showSplit)
+        GroupHeader { title: "How homework is planned" }
         ToggleRow {
             key: "weekendFree"
             visible: !!page.st.showWeekendFree
@@ -58,6 +58,9 @@ SectionPage {
             isOn: !!page.st.split
             onFlipped: (value) => page.panel.setSplit(value)
         }
+    }
+    Group {
+        GroupHeader { title: "Study hours" }
         ChoiceRow {
             key: "cutoff"
             visible: !!page.st.showCutoff
@@ -67,6 +70,15 @@ SectionPage {
             current: page.st.cutoff || ""
             onChosen: (value) => page.panel.setCutoff(value)
         }
+        StudyHoursEditor {}
+    }
+    Group {
+        GroupHeader { title: "School hours" }
+        SchoolHoursEditor {}
+    }
+    Group {
+        visible: !!page.st.showDragStep
+        GroupHeader { title: "Dragging" }
         ChoiceRow {
             key: "dragStep"
             visible: !!page.st.showDragStep

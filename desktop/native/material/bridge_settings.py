@@ -11,10 +11,14 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from pydantic import ValidationError
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from backend.app import Preferences
-from backend.models import valid_spotify_url
+from backend.comfort import TIMER_PRESETS, snap_minutes
+from backend.models import TimeBlock, WeekRequest, valid_spotify_url
+from backend.slots import hhmm_to_minutes, minutes_to_hhmm
+from desktop.native.calendar import DAY_FULL, DAYS, SETUP_SCHOOL_ID, this_week_line
 from desktop.native.fields import (
     WEEK_STARTS,
     save_week_starts_on,
@@ -23,17 +27,24 @@ from desktop.native.fields import (
     week_starts_on,
 )
 from desktop.native.hours.geometry import DRAG_STEPS, drag_step
+from desktop.native.material.bridge_hours import SchoolHours, StudyHours
 from desktop.native.material.bridge_month import _ROLES, read_cells
 from desktop.native.material.bridge_rows import Labels, Rows
 from desktop.native.material.theme import (
+    ACCENT_LABELS,
+    ACCENT_LOCKED,
+    ACCENTS,
     BLOCK_STYLES,
     CATEGORY_KEYS,
     CORNER_RANGE,
     DEFAULT_CONTRAST,
     DEFAULT_PRESET,
+    FONT_LABELS,
+    FONTS,
     HOUR_LINES,
     HOUR_RANGE,
     MOTION_SPEEDS,
+    ONE_MODE,
     PAD_RANGE,
     PRESETS,
     SAVED_MODES,
@@ -41,14 +52,18 @@ from desktop.native.material.theme import (
     SHADOW_RANGE,
     _float_in,
     _hex,
+    accented,
     advanced_default,
     advanced_overrides,
     dress_theme,
     export_document,
     hour_row_px,
     import_document,
+    mode_of,
     pack_material,
+    read_accent,
     read_advanced,
+    read_font,
     read_letter_keys,
     read_material_choice,
     read_saved_material,
@@ -56,12 +71,35 @@ from desktop.native.material.theme import (
     reading_problems,
     resolved_mode,
     scheme,
+    shown_font,
     store_material,
     theme_object,
 )
+from desktop.native.reuse import AVAILABILITY_LIMIT, PROTECTED_KINDS
+from desktop.native.settings_copy import (
+    ALARM_TONE_LABELS,
+    BLOCK_SONG_NOTE,
+    DND_NOTE,
+    FOCUS_AUDIO_NOTE,
+    NO_PROTECTED,
+    NO_SCHOOL_DAYS,
+    NO_SOUND,
+    NO_STUDY_HOURS,
+    PROTECTED_WORDS,
+    SCHOOL_HOURS_NOTE,
+    SPLIT_ROUNDED,
+    SPOTIFY_LINK_HINT,
+    SPOTIFY_TONE_REST,
+    STUDY_HOURS_LINE,
+    TRAY_NOTE,
+)
+from desktop.native.sound import Bell
+from desktop.native.spotify import SpotifyPlayer
+from desktop.native.tones import FALLBACK, SOUNDS
 from desktop.native.update import install_kind, offers_developer_builds
 from desktop.native.version import CHANNEL, VERSION
 from desktop.native.weekmodel import hhmm_text
+from desktop.native.work_windows import PRESETS as WORK_PRESETS
 
 _FIELDS = frozenset(Preferences.model_fields)
 SECTIONS = ("look", "planning", "focus", "alerts", "computer")
@@ -81,6 +119,22 @@ AUDIO = (
     ("Spotify", "spotify"),
 )
 AUDIO_VALUES = {value for _label, value in AUDIO}
+TONES = tuple(
+    {"label": ALARM_TONE_LABELS.get(name, name.title()), "value": name} for name in SOUNDS
+)
+# (key, saved field, smallest, largest) of the focus timer's lengths, in minutes. The ranges are the
+# backend's (Preferences).
+TIMER_LENGTHS = {
+    "work": ("timer_work_min", 1, 180),
+    "break": ("timer_break_min", 1, 60),
+    "long": ("timer_long_break_min", 1, 120),
+    "every": ("timer_long_break_every", 2, 12),
+}
+TIMER_CHOICES = (
+    *({"label": item["label"], "value": item["id"]} for item in TIMER_PRESETS),
+    {"label": "Custom", "value": "custom"},
+)
+SAVE_REFUSED = "Could not save that."
 # The planner lane names these. The first one that exists on Preferences is the one we write.
 _WEEKEND_FREE = next(
     (
@@ -130,6 +184,36 @@ def _reminder_state(prefs: dict[str, Any]) -> tuple[str, list[dict[str, str]]]:
         chips.append({"label": f"{lead}m", "value": str(lead)})
         return str(lead), chips
     return "", chips
+
+
+def _timer_state(prefs: dict[str, Any], custom_open: bool) -> dict[str, Any]:
+    """The focus timer as the page shows it: which of Short, Standard and Long the saved lengths are, or
+    Custom, and each length with the slider's smallest value and step (15 while splitting)."""
+    defaults = {"work": 30, "break": 15, "long": 30, "every": 4}
+    values = {key: int(prefs.get(field) or defaults[key]) for key, (field, _lo, _hi) in TIMER_LENGTHS.items()}
+    chosen = "custom"
+    for item in TIMER_PRESETS:
+        if (
+            item["timer_work_min"] == values["work"]
+            and item["timer_break_min"] == values["break"]
+            and item["timer_long_break_min"] == values["long"]
+            and item["timer_long_break_every"] == values["every"]
+        ):
+            chosen = str(item["id"])
+            break
+    if custom_open:
+        chosen = "custom"
+    split = prefs.get("auto_split_pomodoro") is True
+    return {
+        "timerPreset": chosen,
+        "timerChoices": list(TIMER_CHOICES),
+        "timerWork": values["work"],
+        "timerBreak": values["break"],
+        "timerLong": values["long"],
+        "timerEvery": values["every"],
+        "timerStep": 15 if split else 1,
+        "timerFrom": 15 if split else 1,
+    }
 
 
 class PassiveWeekBridge(QObject):
@@ -785,7 +869,14 @@ class SettingsBridge(QObject):
         self._draft = copy.deepcopy(self._advanced)
         self._shortcuts = True
         self._letter_keys = False
+        self._font = ""
         self._saved: list[dict[str, Any]] = []
+        self._study = StudyHours()
+        self._school = SchoolHours()
+        self._timer_custom = False
+        self._timer_note = ""
+        self._bell = Bell(self)
+        self._spotify_player = SpotifyPlayer(self)
         self._dirty = False
         self._prompt = ""
         self._notice = ""
@@ -822,6 +913,7 @@ class SettingsBridge(QObject):
         self._advanced = read_advanced(stored)
         self._shortcuts = read_shortcuts(stored)
         self._letter_keys = read_letter_keys(stored)
+        self._font = read_font(stored)
         self._saved = read_saved_material(stored)
         if not keep_draft:
             self._draft_choice = dict(self._choice)
@@ -842,9 +934,12 @@ class SettingsBridge(QObject):
         return mode == "dark"
 
     def _colours(self, choice: dict[str, str]) -> dict[str, str]:
-        mode = resolved_mode(choice["mode"], self._worn_dark())
+        mode = mode_of(choice, self._worn_dark())
         try:
-            return scheme(choice["preset"], mode, choice["contrast"])
+            colours = scheme(choice["preset"], mode, choice["contrast"])
+            return accented(
+                colours, read_accent(_prefs_of(self._window)), choice["preset"], mode, choice["contrast"]
+            )
         except KeyError, ValueError, OSError:
             try:
                 return scheme(DEFAULT_PRESET, "light", DEFAULT_CONTRAST)
@@ -867,8 +962,9 @@ class SettingsBridge(QObject):
         if not colours:
             return dict(self._draft_theme or {})
         reduced = advanced.get("motion") == "Off" or bool(self._bridge.reduceMotion)  # type: ignore[attr-defined]
-        base = theme_object(colours, choice["density"], reduced, choice["contrast"] == "high")
-        return dress_theme(base, advanced)
+        chips = _prefs_of(self._window).get("accent_chips") is True
+        base = theme_object(colours, choice["density"], reduced, choice["contrast"] == "high", chips)
+        return dress_theme(base, advanced, choice["preset"], self._font)
 
     def _build(self) -> dict[str, Any]:
         prefs = {**_prefs_of(self._window), **self._unsaved}
@@ -891,8 +987,13 @@ class SettingsBridge(QObject):
                 }
             )
         reminder, reminder_choices = _reminder_state(prefs)
-        work = int(prefs.get("timer_work_min") or 30)
-        rest = int(prefs.get("timer_break_min") or 15)
+        if not self._study.dirty:
+            self._study.load(prefs)
+        if not self._school.dirty:
+            self._school.load(self._school_block())
+        timer = _timer_state(prefs, self._timer_custom)
+        accent = read_accent(prefs)
+        preset = self._choice["preset"]
         audio = prefs.get("focus_audio") or "off"
         cutoff = prefs.get("day_cutoff") or ""
         motion = prefs.get("motion")
@@ -916,7 +1017,52 @@ class SettingsBridge(QObject):
             "spotifyError": self._spotify_error,
             "reminder": reminder,
             "reminderChoices": reminder_choices,
-            "pomodoro": work == 25 and rest == 5,
+            **timer,
+            "timerNote": self._timer_note,
+            "autoSplit": prefs.get("auto_split_pomodoro") is True,
+            "autoComplete": prefs.get("focus_auto_complete") is True,
+            "autoMute": prefs.get("focus_auto_mute", True) is not False,
+            "reminderSound": prefs.get("reminder_sound", True) is not False,
+            "tone": prefs.get("alarm_tone") or FALLBACK,
+            "toneChoices": list(TONES),
+            "toneNote": prefs.get("alarm_tone") == "spotify",
+            "dnd": prefs.get("reminder_dnd_override") is True,
+            "volume": int(prefs.get("alert_volume", 80)),
+            "endChime": prefs.get("end_chime") is True,
+            "tray": prefs.get("tray_notifications", True) is not False,
+            "accent": accent,
+            "accentChoices": [{"label": ACCENT_LABELS[name], "value": name} for name in ACCENTS],
+            "accentLocked": preset in ACCENT_LOCKED,
+            "accentChips": prefs.get("accent_chips") is True,
+            "font": shown_font(preset, self._font),
+            "fontChoices": [{"label": FONT_LABELS[name], "value": name} for name in FONTS],
+            "oneMode": ONE_MODE.get(preset, ""),
+            "workWindows": self._study.window_rows(),
+            "workPresets": [{"name": name} for name, *_rest in WORK_PRESETS],
+            "protectedWindows": self._study.protected_view(),
+            "studyDirty": self._study.dirty,
+            "studyError": self._study.error,
+            "schoolDays": list(self._school.days),
+            "schoolStart": hhmm_text(self._school.start),
+            "schoolEnd": hhmm_text(self._school.end),
+            "schoolDirty": self._school.dirty,
+            "schoolError": self._school.error,
+            "schoolExists": self._school.exists,
+            "thisWeek": self._this_week(),
+            "dayNames": [{"day": day, "short": DAYS[day], "full": DAY_FULL[day]} for day in range(7)],
+            "protectedKinds": [{"label": PROTECTED_WORDS[kind], "value": kind} for kind in PROTECTED_KINDS],
+            "dndNote": DND_NOTE,
+            "trayNote": TRAY_NOTE,
+            "blockSongNote": BLOCK_SONG_NOTE,
+            "focusAudioNote": FOCUS_AUDIO_NOTE,
+            "spotifyHint": SPOTIFY_LINK_HINT,
+            "spotifyRest": SPOTIFY_TONE_REST,
+            "studyNote": STUDY_HOURS_LINE,
+            "schoolNote": SCHOOL_HOURS_NOTE,
+            "noStudyHours": NO_STUDY_HOURS,
+            "noProtected": NO_PROTECTED,
+            "noSchoolDays": NO_SCHOOL_DAYS,
+            "limit": AVAILABILITY_LIMIT,
             "split": bool(prefs.get(_SPLIT)) if _SPLIT else False,
             "cutoff": cutoff,
             "cutoffChoices": [
@@ -1003,7 +1149,7 @@ class SettingsBridge(QObject):
         }
 
     def _problem_rows(self) -> list[dict[str, Any]]:
-        mode = resolved_mode(self._draft_choice["mode"], self._worn_dark())
+        mode = mode_of(self._draft_choice, self._worn_dark())
         return [
             {"words": item["words"], "role": item["role"], "ratio": item["ratio"]}
             for item in reading_problems(mode, self._draft)
@@ -1052,7 +1198,7 @@ class SettingsBridge(QObject):
     def _commit(self) -> None:
         path = self._window._look_path()
         material = pack_material(
-            self._choice, self._advanced, self._shortcuts, self._letter_keys, self._saved
+            self._choice, self._advanced, self._shortcuts, self._letter_keys, self._saved, self._font
         )
         store_material(path, material)
         self._bridge._shortcuts = self._shortcuts  # type: ignore[attr-defined]
@@ -1225,17 +1371,330 @@ class SettingsBridge(QObject):
             return
         self._write({"reminders_enabled": True, "reminder_lead_min": int(value)})
 
-    @Slot(bool)
-    def setPomodoro(self, on: bool) -> None:
+    def _round_to_grid(self, updates: dict[str, Any], prefs: dict[str, Any]) -> bool:
+        """Splitting needs 15-minute lengths (the backend refuses others). Puts the rounded ones in
+        `updates` and says whether any moved."""
+        moved = False
+        for key in ("work", "break", "long"):
+            field, _lo, high = TIMER_LENGTHS[key]
+            have = int(updates.get(field) or prefs.get(field) or {"work": 30, "break": 15, "long": 30}[key])
+            snapped = snap_minutes(have, 1, high)
+            if snapped != have:
+                updates[field] = snapped
+                moved = True
+        return moved
+
+    @Slot(str)
+    def setTimerPreset(self, value: str) -> None:
         if "timer_work_min" not in _FIELDS:
             return
-        if on:
-            updates: dict[str, Any] = {"timer_work_min": 25, "timer_break_min": 5}
-            if _prefs_of(self._window).get("auto_split_pomodoro"):
-                updates["auto_split_pomodoro"] = False
-            self._write(updates)
+        if value == "custom":
+            self._timer_custom = True
+            self._publish()
             return
-        self._write({"timer_work_min": 30, "timer_break_min": 15})
+        item = next((row for row in TIMER_PRESETS if row["id"] == value), None)
+        if item is None:
+            return
+        self._timer_custom = False
+        self._timer_note = ""
+        self._write(
+            {
+                "timer_work_min": item["timer_work_min"],
+                "timer_break_min": item["timer_break_min"],
+                "timer_long_break_min": item["timer_long_break_min"],
+                "timer_long_break_every": item["timer_long_break_every"],
+            }
+        )
+
+    @Slot(str, int)
+    def setTimerLength(self, key: str, value: int) -> None:
+        """One length of the Custom timer. A value outside the backend's range, or off the 15-minute
+        grid while splitting is on, is refused and what was saved stays."""
+        if key not in TIMER_LENGTHS or "timer_work_min" not in _FIELDS:
+            return
+        field, low, high = TIMER_LENGTHS[key]
+        split = _prefs_of(self._window).get("auto_split_pomodoro") is True
+        if isinstance(value, bool) or not low <= value <= high or (split and key != "every" and value % 15):
+            self._notice = SAVE_REFUSED
+            self._publish()
+            return
+        self._timer_custom = True
+        self._timer_note = ""
+        self._write({field: int(value)})
+
+    @Slot(bool)
+    def setAutoSplit(self, on: bool) -> None:
+        if "auto_split_pomodoro" not in _FIELDS:
+            return
+        updates: dict[str, Any] = {"auto_split_pomodoro": bool(on)}
+        self._timer_note = ""
+        if on and self._round_to_grid(updates, _prefs_of(self._window)):
+            self._timer_note = SPLIT_ROUNDED.format(step=15)
+        self._write(updates)
+
+    @Slot(bool)
+    def setAutoComplete(self, on: bool) -> None:
+        if "focus_auto_complete" in _FIELDS:
+            self._write({"focus_auto_complete": bool(on)})
+
+    @Slot(bool)
+    def setAutoMute(self, on: bool) -> None:
+        if "focus_auto_mute" in _FIELDS:
+            self._write({"focus_auto_mute": bool(on)})
+
+    @Slot(bool)
+    def setReminderSound(self, on: bool) -> None:
+        if "reminder_sound" in _FIELDS:
+            self._write({"reminder_sound": bool(on)})
+
+    @Slot(str)
+    def setTone(self, value: str) -> None:
+        if value in SOUNDS and "alarm_tone" in _FIELDS:
+            self._write({"alarm_tone": value})
+
+    @Slot()
+    def playTone(self) -> None:
+        """Test play: the chosen tone at the saved volume. Spotify plays its link, and the built-in
+        chime when no link plays. Silent under FLEXWEEK_SILENT, as every Bell is."""
+        prefs = _prefs_of(self._window)
+        tone = str(prefs.get("alarm_tone") or FALLBACK)
+        if tone == "spotify":
+            link = prefs.get("default_spotify_url")
+            if link and self._spotify_player.play(str(link)):
+                return
+            tone = FALLBACK
+        if not self._bell.once(tone, int(prefs.get("alert_volume", 80))):
+            self._notice = NO_SOUND
+            self._publish()
+
+    @Slot(bool)
+    def setDnd(self, on: bool) -> None:
+        if "reminder_dnd_override" in _FIELDS:
+            self._write({"reminder_dnd_override": bool(on)})
+
+    @Slot(int)
+    def setVolume(self, value: int) -> None:
+        if "alert_volume" not in _FIELDS:
+            return
+        if isinstance(value, bool) or not 0 <= value <= 100:
+            self._notice = SAVE_REFUSED
+            self._publish()
+            return
+        self._write({"alert_volume": int(value)})
+
+    @Slot(bool)
+    def setEndChime(self, on: bool) -> None:
+        if "end_chime" in _FIELDS:
+            self._write({"end_chime": bool(on)})
+
+    @Slot(bool)
+    def setTray(self, on: bool) -> None:
+        if "tray_notifications" in _FIELDS:
+            self._write({"tray_notifications": bool(on)})
+
+    @Slot(str)
+    def setAccent(self, name: str) -> None:
+        if name in ACCENTS and "accent" in _FIELDS:
+            self._write({"accent": name})
+
+    @Slot(bool)
+    def setAccentChips(self, on: bool) -> None:
+        if "accent_chips" in _FIELDS:
+            self._write({"accent_chips": bool(on)})
+
+    @Slot(str)
+    def setFont(self, name: str) -> None:
+        if name in FONTS:
+            self._font = name
+            self._notice = ""
+            self._commit()
+
+    # Study hours and School hours. Each is a draft until its Save, as the Widgets dialogs are.
+    def _school_block(self) -> dict[str, Any] | None:
+        repeats = getattr(getattr(self._window, "session", None), "repeats", None) or []
+        return next((item for item in repeats if item.get("id") == SETUP_SCHOOL_ID), None)
+
+    def _this_week(self) -> str:
+        """'This week: no School on Wednesday.' for the usual School, or ''."""
+        school = self._school_block()
+        session = getattr(self._window, "session", None)
+        if school is None or session is None:
+            return ""
+        clock_24h = (_prefs_of(self._window)).get("clock_24h") is True
+        try:
+            return this_week_line(session.blocks, [school], clock_24h, session.week_start) or ""
+        except (KeyError, TypeError, ValueError):
+            return ""
+
+    def _redraw_study(self) -> None:
+        self._publish()
+
+    @Slot(str)
+    def addWorkPreset(self, name: str) -> None:
+        for label, days, start, end in WORK_PRESETS:
+            if label == name:
+                self._study.add_window({"days": list(days), "start": start, "end": end})
+                self._redraw_study()
+                return
+
+    @Slot()
+    def addWorkCustom(self) -> None:
+        self._study.add_window()
+        self._redraw_study()
+
+    @Slot(int)
+    def removeWorkWindow(self, index: int) -> None:
+        self._study.remove(self._study.windows, index)
+        self._redraw_study()
+
+    @Slot(int, int)
+    def toggleWorkDay(self, index: int, day: int) -> None:
+        self._study.toggle_day(self._study.windows, index, day)
+        self._redraw_study()
+
+    @Slot(int, str)
+    def setWorkStart(self, index: int, text: str) -> None:
+        self._study.set_time(self._study.windows, index, "start", text)
+        self._redraw_study()
+
+    @Slot(int, str)
+    def setWorkEnd(self, index: int, text: str) -> None:
+        self._study.set_time(self._study.windows, index, "end", text)
+        self._redraw_study()
+
+    @Slot(int, str)
+    def setWorkSubject(self, index: int, text: str) -> None:
+        self._study.set_text(self._study.windows, index, "subject", text)
+        self._redraw_study()
+
+    @Slot()
+    def addProtected(self) -> None:
+        self._study.add_protected()
+        self._redraw_study()
+
+    @Slot(int)
+    def removeProtected(self, index: int) -> None:
+        self._study.remove(self._study.protected_rows, index)
+        self._redraw_study()
+
+    @Slot(int, int)
+    def toggleProtectedDay(self, index: int, day: int) -> None:
+        self._study.toggle_day(self._study.protected_rows, index, day)
+        self._redraw_study()
+
+    @Slot(int, str)
+    def setProtectedStart(self, index: int, text: str) -> None:
+        self._study.set_time(self._study.protected_rows, index, "start", text)
+        self._redraw_study()
+
+    @Slot(int, str)
+    def setProtectedEnd(self, index: int, text: str) -> None:
+        self._study.set_time(self._study.protected_rows, index, "end", text)
+        self._redraw_study()
+
+    @Slot(int, str)
+    def setProtectedTitle(self, index: int, text: str) -> None:
+        self._study.set_text(self._study.protected_rows, index, "title", text)
+        self._redraw_study()
+
+    @Slot(int, str)
+    def setProtectedKind(self, index: int, kind: str) -> None:
+        self._study.set_kind(index, kind)
+        self._redraw_study()
+
+    @Slot()
+    def saveStudyHours(self) -> None:
+        problem = self._study.problem()
+        if problem:
+            self._study.error = problem
+            self._publish()
+            return
+        session = self._window.session
+        cutoff = _prefs_of(self._window).get("day_cutoff") or None
+        if session.save_availability(
+            self._study.saved_protected(), cutoff, self._study.saved_windows()
+        ):
+            self._study.dirty = False
+            self._study.error = ""
+        self._publish()
+
+    @Slot()
+    def discardStudyHours(self) -> None:
+        self._study.load(_prefs_of(self._window))
+        self._publish()
+
+    @Slot(int)
+    def toggleSchoolDay(self, day: int) -> None:
+        self._school.toggle_day(day)
+        self._publish()
+
+    @Slot(str)
+    def setSchoolStart(self, text: str) -> None:
+        self._school.set_time("start", text)
+        self._publish()
+
+    @Slot(str)
+    def setSchoolEnd(self, text: str) -> None:
+        self._school.set_time("end", text)
+        self._publish()
+
+    @Slot()
+    def discardSchoolHours(self) -> None:
+        self._school.load(self._school_block())
+        self._publish()
+
+    @Slot()
+    def saveSchoolHours(self) -> None:
+        """School's days and times every week, saved from this week on as the Widgets dialog saves
+        them. No day ticked takes School off the calendar."""
+        school = self._school
+        problem = school.problem()
+        if problem:
+            school.error = problem
+            self._publish()
+            return
+        window = self._window
+        repeats = window.session.repeats
+        usual = self._school_block()
+        if not school.days:
+            if usual is not None:
+                after = [item for item in repeats if item.get("id") != SETUP_SCHOOL_ID]
+                if window._apply_standing(after, "deleting School"):
+                    window.session.save()
+                    window._set_notice("Deleted School from this week and every week after.", "", None)
+                else:
+                    return
+            school.dirty = False
+            self._publish()
+            return
+        made = copy.deepcopy(usual) if usual is not None else {
+            "id": SETUP_SCHOOL_ID,
+            "kind": "locked",
+            "title": "School",
+            "category": "class",
+        }
+        made.update(days=sorted(school.days), start=school.start, duration_min=school.minutes())
+        try:
+            WeekRequest(blocks=[TimeBlock.model_validate(made)])
+        except ValidationError as error:
+            from desktop.native.sheet_rules import _block_problem
+
+            school.error = _block_problem(error)
+            self._publish()
+            return
+        after = [made if item.get("id") == SETUP_SCHOOL_ID else item for item in repeats]
+        if usual is None:
+            after = [made, *repeats]
+        start = hhmm_text(made["start"])
+        end_minutes = hhmm_to_minutes(made["start"]) + made["duration_min"]
+        end = hhmm_text(minutes_to_hhmm(end_minutes) if end_minutes < 1440 else "24:00")
+        school.dirty = False
+        window._save_standing(
+            after,
+            "editing School hours",
+            lambda: window._set_notice(f"School now {start}–{end} every week", "", None),
+        )
+        self._publish()
 
     @Slot(bool)
     def setSplit(self, on: bool) -> None:
@@ -1561,7 +2020,7 @@ class SettingsBridge(QObject):
 
     @Slot(str)
     def fixRole(self, role: str) -> None:
-        mode = resolved_mode(self._draft_choice["mode"], self._worn_dark())
+        mode = mode_of(self._draft_choice, self._worn_dark())
         for item in reading_problems(mode, self._draft):
             if item["role"] != role:
                 continue
@@ -1574,7 +2033,7 @@ class SettingsBridge(QObject):
 
     @Slot()
     def fixAll(self) -> None:
-        mode = resolved_mode(self._draft_choice["mode"], self._worn_dark())
+        mode = mode_of(self._draft_choice, self._worn_dark())
         for item in reading_problems(mode, self._draft):
             role = item["role"]
             if role == "now":

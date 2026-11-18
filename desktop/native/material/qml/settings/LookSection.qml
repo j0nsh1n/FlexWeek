@@ -8,6 +8,7 @@ SectionPage {
     readonly property var panel: Ui.settings
 
     Group {
+        GroupHeader { title: "Style" }
         SettingsRow {
             objectName: "row_style"
             title: "Style"
@@ -26,18 +27,41 @@ SectionPage {
         }
     }
     Group {
+        GroupHeader { title: "Colours" }
         PresetRow {
             subtitle: "Colours for the whole app."
             swatches: page.st.swatches || []
             current: page.st.preset || ""
             onChosen: (name) => page.panel.setPreset(name)
         }
+        ChoiceRow {
+            key: "accent"
+            title: "Accent colour"
+            subtitle: page.st.accentLocked
+                ? "High contrast keeps its yellow."
+                : "On top of the preset."
+            choices: page.st.accentChoices || []
+            current: page.st.accent || "default"
+            onChosen: (value) => page.panel.setAccent(value)
+        }
+        ToggleRow {
+            key: "accentChips"
+            title: "Use the accent on category chips"
+            subtitle: "Every category wears the accent instead of its own colour."
+            isOn: !!page.st.accentChips
+            onFlipped: (value) => page.panel.setAccentChips(value)
+        }
     }
     Group {
+        GroupHeader { title: "Light and dark" }
         ChoiceRow {
             key: "mode"
             title: "Mode"
-            subtitle: "Follow this device, or choose."
+            subtitle: page.st.oneMode === "dark"
+                ? "This preset is a dark look, so it stays dark."
+                : (page.st.oneMode === "light"
+                    ? "This preset is a light look, so it stays light."
+                    : "Follow this device, or choose.")
             choices: [{ label: "Auto", value: "system" }, { label: "Light", value: "light" }, { label: "Dark", value: "dark" }]
             current: page.st.mode || ""
             onChosen: (value) => page.panel.setMode(value)
@@ -58,6 +82,17 @@ SectionPage {
             current: page.st.density || ""
             onChosen: (value) => page.panel.setDensity(value)
         }
+    }
+    Group {
+        GroupHeader { title: "Text" }
+        ChoiceRow {
+            key: "font"
+            title: "Font"
+            subtitle: "Sans is Inter. Serif is Newsreader headings over Inter. Mono is JetBrains Mono."
+            choices: page.st.fontChoices || []
+            current: page.st.font || "sans"
+            onChosen: (value) => page.panel.setFont(value)
+        }
         ChoiceRow {
             key: "textSize"
             title: "Text size"
@@ -74,6 +109,7 @@ SectionPage {
     }
     Group {
         visible: !!page.st.showWeekendsRow || !!page.st.showClock
+        GroupHeader { title: "Calendar" }
         ToggleRow {
             key: "showWeekends"
             visible: !!page.st.showWeekendsRow
@@ -147,6 +183,7 @@ SectionPage {
     }
 
     Group {
+        GroupHeader { title: "More" }
         LinkRow {
             id: openAdvanced
             key: "advanced"

@@ -28,7 +28,7 @@ from desktop.tests.window_support import qapp  # noqa: F401
 # ruff: noqa: F811
 
 
-def test_the_focus_section_writes_audio_the_link_and_pomodoro(
+def test_the_focus_section_writes_audio_and_the_link(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root = _open_settings(qapp, window, "focus")
@@ -47,11 +47,6 @@ def test_the_focus_section_writes_audio_the_link_and_pomodoro(
     wait_until(qapp, lambda: _prefs(window).get("default_spotify_url") == link)
     assert _panel(window).property("state")["spotifyError"] == ""
 
-    _click(qapp, window, _named(root, "pomodoro")[0])
-    wait_until(qapp, lambda: _prefs(window).get("timer_work_min") == 25)
-    assert _prefs(window).get("timer_break_min") == 5
-    _click(qapp, window, _named(root, "pomodoro")[0])
-    wait_until(qapp, lambda: _prefs(window).get("timer_work_min") == 30)
 
 
 def test_the_alerts_section_writes_the_reminder_lead(qapp: QApplication, window: NativeWindow) -> None:

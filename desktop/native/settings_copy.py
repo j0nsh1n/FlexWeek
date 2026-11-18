@@ -24,3 +24,27 @@ SPOTIFY_TONE_REST = (
     " end of a focus session play Chime. Without the Spotify app, the link opens and Chime rings too."
 )
 SPOTIFY_TONE_NOTE = f"{SPOTIFY_LINK_HINT} {SPOTIFY_TONE_REST}"
+
+# Wording the Material Settings pages share with the Widgets pages (copied from settings.py and
+# widgets.py; the Widgets originals go with the Widgets styles).
+STUDY_HOURS_LINE = "Choose when FlexWeek may plan homework, including hours kept for one class."
+SCHOOL_HOURS_NOTE = "The days and times you're at school, so nothing is planned then."
+NO_SCHOOL_DAYS = "No school days picked means no school on the calendar."
+NO_STUDY_HOURS = "No study hours yet, so homework can go at any time of day."
+NO_PROTECTED = "Nothing protected yet. Add practice, family time or a job."
+PROTECTED_WORDS = {"downtime": "Downtime", "commute": "Commute", "meal": "Meal"}
+DND_NOTE = "Each one stays in the window until you press Got it."
+TRAY_NOTE = "FlexWeek waits in the tray, so reminders and alarms still come."
+BLOCK_SONG_NOTE = (
+    "When a block starts and the alarm sound is Spotify, the Spotify link in Settings plays. Dismiss or"
+    " snooze it as you would an alarm."
+)
+FOCUS_AUDIO_NOTE = (
+    "Rain, Lo-Fi and White noise play inside FlexWeek and pause with the timer. Spotify opens the link"
+    " from Alerts when focus starts."
+)
+NO_SOUND = (
+    "No sound played. Check that Volume is above 0 % and that your speakers or headphones are connected"
+    " and not muted, then press Play again."
+)
+SPLIT_ROUNDED = "Focus lengths rounded to {step} minutes, which splitting needs."

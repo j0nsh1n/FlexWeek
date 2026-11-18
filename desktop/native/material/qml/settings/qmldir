@@ -20,3 +20,7 @@ AlertsSection 1.0 AlertsSection.qml
 ComputerSection 1.0 ComputerSection.qml
 AdvancedPage 1.0 AdvancedPage.qml
 PreviewStage 1.0 PreviewStage.qml
+ActionRow 1.0 ActionRow.qml
+NoteRow 1.0 NoteRow.qml
+StudyHoursEditor 1.0 StudyHoursEditor.qml
+SchoolHoursEditor 1.0 SchoolHoursEditor.qml
