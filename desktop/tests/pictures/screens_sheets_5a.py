@@ -54,16 +54,19 @@ def _update(window: NativeWindow, *, state: str) -> object:
     from desktop.tests.settings.support_material_settings import _pump
 
     sheets, qapp = _material(window)
+    # The real download would go to the network; the picture only needs the sheet's own state.
+    window._updater.download = lambda _update: None
     window._update_asked = True
     window._on_update_found(UPDATE)
     _pump(qapp, 30)
-    if state in ("downloading", "problem"):
+    if state == "downloading":
         sheets.updateInstall()
         window._on_update_progress(40, 100)
         _pump(qapp, 20)
     if state == "problem":
         window._on_update_problem("The download stopped. Check your connection and try again.")
         _pump(qapp, 20)
+
     return None
 
 
