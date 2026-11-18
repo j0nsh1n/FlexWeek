@@ -169,6 +169,10 @@ FocusScope {
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 24
             height: root.stacked ? trailingRow.y + trailingRow.height : 40
+            // Hidden until the first fit has run, so the sheet never shows one frame of buttons laid side
+            // by side that are about to stack (the fit waits a turn for the buttons' widths).
+            property bool fitted: false
+            opacity: fitted ? 1 : 0
             function natural(grid) {
                 var total = 0
                 var count = 0
@@ -186,6 +190,7 @@ FocusScope {
                 var lead = natural(leadingRow)
                 var trail = natural(trailingRow)
                 root.stacked = lead + trail + (lead > 0 && trail > 0 ? 8 : 0) > footer.width
+                fitted = true
             }
             onWidthChanged: Qt.callLater(fit)
             Component.onCompleted: Qt.callLater(fit)
