@@ -149,10 +149,11 @@ pub(crate) fn running_late(
     let moves = phone_moves(&trace_value, &settled, &assignments);
     let moved = moves.len();
     let current = current_late_block(&timed, &settled, day, clock_min, &from_start, minutes);
-    let end_min =
-        flexweek_engine::time::hhmm_to_minutes(current["end"].as_str().unwrap_or("00:00"))
-            .unwrap_or(0);
-    let stays = unchanged_fixed_blocks(&timed, &settled, end_min);
+    // A fixed block between the late block and the moved homework is unchanged too, so "stays" counts
+    // from the end of the late block, not from where the moved session ends.
+    let late_end =
+        flexweek_engine::time::hhmm_to_minutes(&from_start).unwrap_or(clock_min) + minutes;
+    let stays = unchanged_fixed_blocks(&timed, &settled, late_end);
     let warning = running_late_warning(&trace_value, &timed, &moves);
     Ok(json!({
         "week_start": week_start,
@@ -634,6 +635,33 @@ mod tests {
         let result = late_monday("late-current");
         assert_eq!(result["current"]["title"], "History essay");
         assert_eq!(result["current"]["end"], "17:30");
+    }
+
+    #[test]
+    fn a_fixed_block_between_the_late_block_and_the_moved_homework_still_stays() {
+        // Late 30 min from 16:00 puts the Essay at 16:30-17:30. Soccer starts at 16:30, after the late block
+        // ends but before the Essay does, and it did not move.
+        let (week, _) = open_at("late-between", "2026-10-05T16:05:00");
+        let db = week.db.lock().unwrap();
+        flexweek_store::insert_assignment(
+            &db,
+            week.user_id.unwrap(),
+            "essay",
+            r#"{"id":"essay","title":"History essay","due":"2026-10-08T21:00","estimate_min":60,"focus_minutes":0,"completed":false}"#,
+        )
+        .unwrap();
+        drop(db);
+        save_week(
+            &week,
+            "2026-10-05",
+            &json!([
+                {"id":"soccer","title":"Soccer","kind":"locked","days":[0],"start":"16:30","duration_min":90,"category":"extra"},
+                {"id":"essay-session","title":"History essay","kind":"flexible","days":[0],"start":"16:00","duration_min":60,"assignment_id":"essay","category":"assignments"}
+            ]),
+        );
+        let result: Value = serde_json::from_str(&week.running_late(0, 30, 0.0).unwrap()).unwrap();
+        assert_eq!(result["current"]["end"], "17:30", "{result}");
+        assert_eq!(result["stays"][0]["title"], "Soccer", "{result}");
     }
 
     #[test]
