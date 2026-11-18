@@ -81,7 +81,7 @@ MORE_ROWS = (
     ("copyDay", "Copy day", "calendar_view_day"),
     ("copyLastWeek", "Copy last week's fixed times", "content_copy"),
     ("restoreButton", "Copies of this week", "save"),
-    ("reloadWeek", "Reload this week", "autorenew"),
+    ("reloadWeek", "Reload this week", "refresh"),
     ("openSpotify", "Open Spotify link", "link"),
     ("heading", "Help and info"),
     ("helpButton", "Help", "help"),
