@@ -565,6 +565,37 @@ fn held_back_records_apply_on_a_later_try_or_go_when_replaced() {
 }
 
 #[test]
+fn a_retry_that_cannot_remove_its_old_rows_applies_nothing() {
+    let mut b = db("b", true);
+    let body = Record {
+        entity: "assignment".into(),
+        key: "x".into(),
+        body: Some(assignment("x", "X")),
+        hlc: 1 << 16,
+        device_id: "a".into(),
+        seq: 1,
+    }
+    .to_value()
+    .to_string();
+    b.execute(
+        "INSERT INTO sync_quarantine(user_id, entity, key, reason, body, at) VALUES (1, 'assignment', 'x', 'clock is more than 24 hours ahead', ?1, '0')",
+        [body],
+    )
+    .unwrap();
+    // Stands in for a crash between the apply and the delete.
+    b.execute_batch(
+        "CREATE TRIGGER no_delete BEFORE DELETE ON sync_quarantine BEGIN SELECT RAISE(ABORT, 'no'); END;",
+    )
+    .unwrap();
+    assert!(retry_quarantine(&mut b, 1, 0).is_err());
+    assert_eq!(get_assignment(&b, "x"), None, "applied without the delete");
+    let held: i64 = b
+        .query_row("SELECT COUNT(*) FROM sync_quarantine", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(held, 1);
+}
+
+#[test]
 fn records_no_retry_can_fix_are_neither_counted_nor_churned() {
     let mut b = db("b", true);
     let body = Record {
