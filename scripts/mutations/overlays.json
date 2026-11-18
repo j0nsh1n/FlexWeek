@@ -1,13 +1,6 @@
 [
   {
     "file": "desktop/native/window.py",
-    "name": "Quick focus starts at once instead of waiting for Start",
-    "old": "        \"\"\"The focus screen, ready: nothing starts until Start, as with F (decision 19 of 0.17).\"\"\"\n        self._open_focus_screen()\n",
-    "new": "        \"\"\"The focus screen, ready: nothing starts until Start, as with F (decision 19 of 0.17).\"\"\"\n        self._start_quick_focus()\n",
-    "test": "desktop/tests/focus/test_focus_screen_open_and_close.py::test_quick_focus_fills_the_window_and_esc_comes_back"
-  },
-  {
-    "file": "desktop/native/window.py",
     "name": "the toast stays when the student leaves its page",
     "old": "                    self.toast.hide()\n                    left = \"\" if leaving is None",
     "new": "                    pass\n                    left = \"\" if leaving is None",
@@ -33,20 +26,6 @@
     "old": "            \"action\": mix_oklab(palette[\"accent\"], palette[\"window\"], 0.45),\n",
     "new": "            \"action\": palette[\"accent\"],\n",
     "test": "desktop/tests/settings/test_toast_and_menus.py::test_undo_is_the_accents_light_shade_on_a_light_look_and_the_accent_on_a_dark_one"
-  },
-  {
-    "file": "desktop/native/ring.py",
-    "name": "the ring's arc runs anticlockwise",
-    "old": "    return 90 * 16, -round(share * 360 * 16)",
-    "new": "    return 90 * 16, round(share * 360 * 16)",
-    "test": "desktop/tests/focus/test_countdown_ring.py::test_the_arc_is_the_time_left_from_the_top_clockwise"
-  },
-  {
-    "file": "desktop/native/focus_screen.py",
-    "name": "the ring stays full while the timer runs",
-    "old": "            self.ring.set_left(min(left, whole) / whole if running else 0.0)",
-    "new": "            self.ring.set_left(1.0 if running else 0.0)",
-    "test": "desktop/tests/focus/test_focus_screen_timer.py::test_the_ring_counts_down_with_the_timer"
   },
   {
     "file": "desktop/native/window.py",

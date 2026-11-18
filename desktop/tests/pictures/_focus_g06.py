@@ -1,6 +1,6 @@
-"""Pictures from the views lane's group G06: the focus screen's buttons, ring and look, the end-session
-sheet, Material's focus screen, and the keyboard rings of the top bar and Manage account. The lead gathers
-this fragment into screens_focus.py (and routes the `week.` and `sheets.` ids to their areas).
+"""Pictures from the views lane's group G06: the focus strip, Material's focus screen, and the keyboard
+rings of the top bar and Manage account. The lead gathers this fragment into screens_focus.py (and routes
+the `week.` and `sheets.` ids to their areas).
 
 Each one is what an old pixel, position or style-property test read back."""
 
@@ -14,73 +14,19 @@ from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton
 
 from desktop.native.look import sanitize_look
 from desktop.native.settings import AccountDialog
-from desktop.native.widgets import ConfirmSheet
 from desktop.tests.material_support import pump, show_material
 from desktop.tests.pictures.screen import Screen
 
 if TYPE_CHECKING:
     from desktop.native.window import NativeWindow
 
-SCREEN_SOURCES = (
-    "desktop/native/focus_screen.py",
-    "desktop/native/ring.py",
-    "desktop/native/look.py",
-    "desktop/native/window.py",
-)
 MATERIAL_SOURCES = ("desktop/native/material", "desktop/native/window.py")
 BAR_SOURCES = ("desktop/native/widgets.py", "desktop/native/window.py", "desktop/native/look.py")
-
-
-def _widgets_focus_screen(window: NativeWindow) -> object:
-    """The focus timer opened ready, as the Quick focus button does. The Widgets focus screen is
-    returned; Material draws its own timer, so for it the whole window is photographed (None)."""
-    window._open_focus_screen()
-    screen = window.focus_screen
-    return screen if window._stack.currentWidget() is screen else None
-
-
-def _ready(window: NativeWindow) -> object:
-    return _widgets_focus_screen(window)
-
-
-def _running(window: NativeWindow) -> object:
-    _widgets_focus_screen(window)
-    window._start_quick_focus()
-    screen = window.focus_screen
-    return screen if window._stack.currentWidget() is screen else None
-
-
-def _paused(window: NativeWindow) -> object:
-    _running(window)
-    window.session.toggle_focus_pause()
-    screen = window.focus_screen
-    return screen if window._stack.currentWidget() is screen else None
-
-
-def _end_session_sheet(window: NativeWindow) -> object:
-    if _running(window) is None:
-        return None
-    # Shown beside the window instead of waiting for an answer, so it can be photographed.
-    with mock.patch.object(ConfirmSheet, "exec", lambda sheet: (sheet.show(), 0)[1]):
-        window._stop_focus()
-    return window.findChild(ConfirmSheet)
 
 
 def _strip_running(window: NativeWindow) -> object:
     window.session.start_quick_focus()
     return window.focus_panel
-
-
-def _look(pack: str, preset: str):
-    """The focus screen ready, worn in this pack and look preset."""
-
-    def prepare(window: NativeWindow) -> object:
-        window.session.preferences = {**(window.session.preferences or {}), "theme_pack": pack}
-        window._look = sanitize_look({"preset": preset})
-        window._apply_appearance()
-        return _widgets_focus_screen(window)
-
-    return prepare
 
 
 def _material_focus(running: bool, paused: bool = False):
@@ -101,60 +47,7 @@ def _material_focus(running: bool, paused: bool = False):
     return prepare
 
 
-_BUTTONS_STILL = (
-    "Pause and Resume, Skip and Finish keep the same left edge and the same width when the timer is "
-    "paused and resumed (compare this picture with focus.{other}). "
-)
-
 SCREENS: list[Screen] = [
-    Screen(
-        id="focus.screen_ready",
-        area="focus",
-        prepare=_ready,
-        checks=(
-            "The focus screen before Start. Back is words with a left chevron (not an outlined button) "
-            "at the top left. Start is the one filled button under the ring. Every button, shown or not, "
-            "reserves the same height, at least the tallest one's own, so the row does not change height "
-            "when Pause, Skip and Finish take Start's place. The task label (Quick focus) inside the ring "
-            "and the ring itself are in the same place as in focus.screen_running (compare the two "
-            "pictures): pressing Start moves neither."
-        ),
-        sources=SCREEN_SOURCES,
-    ),
-    Screen(
-        id="focus.screen_running",
-        area="focus",
-        prepare=_running,
-        checks=(
-            "A timer running on the focus screen. Pause is the one filled button; Skip and Finish are "
-            "outlined with words, not filled. Back is words with a left chevron. The three buttons are "
-            "in one row, centred on one line, in the order Pause, Skip, Finish from left to right, "
-            "and all of them sit below the ring's bottom edge. The task label and the ring are where "
-            "they were in focus.screen_ready. " + _BUTTONS_STILL.format(other="screen_paused")
-        ),
-        sources=SCREEN_SOURCES,
-        main=True,
-    ),
-    Screen(
-        id="focus.screen_paused",
-        area="focus",
-        prepare=_paused,
-        checks=(
-            "The same screen paused: the phase reads Focus, Paused and the first button reads Resume, "
-            "still the one filled button. " + _BUTTONS_STILL.format(other="screen_running")
-        ),
-        sources=SCREEN_SOURCES,
-    ),
-    Screen(
-        id="focus.end_session_sheet",
-        area="focus",
-        prepare=_end_session_sheet,
-        checks=(
-            "The sheet Finish opens, headed End this session?: Keep going is an outlined button (the "
-            "safe answer) and End session is the filled one. The question reads the minutes done."
-        ),
-        sources=SCREEN_SOURCES,
-    ),
     Screen(
         id="focus.strip_running",
         area="focus",
@@ -200,35 +93,6 @@ SCREENS: list[Screen] = [
         sources=MATERIAL_SOURCES,
         styles=("material",),
     ),
-]
-
-_LOOK_CHECKS = (
-    "The focus timer set but not started, worn in {look}. The ring is painted in the look's accent "
-    "(the arc is drawn in it, not only told it) and the arc reads at least 3:1 against the window "
-    "colour. The screen's background is the look's window colour and the Back chevron follows its text "
-    "colour."
-)
-_LOOKS = {
-    "pack_system": ("system", "default", "the System pack"),
-    "pack_dark_frost": ("dark-frost", "default", "the Dark pack"),
-    "pack_nocturne": ("nocturne", "default", "the Nocturne pack"),
-    "pack_slate": ("slate", "default", "the Slate pack"),
-    "preset_high_contrast": ("light-frost", "high-contrast", "the High contrast look"),
-    "preset_paper": ("light-frost", "paper", "the Paper look"),
-    "preset_ink": ("light-frost", "ink", "the Ink look"),
-    "preset_terminal": ("light-frost", "terminal", "the Terminal look"),
-    "preset_poster": ("light-frost", "poster", "the Poster look"),
-    "preset_pastel": ("light-frost", "pastel", "the Pastel look"),
-}
-SCREENS += [
-    Screen(
-        id=f"focus.ring_before_start_{name}",
-        area="focus",
-        prepare=_look(pack, preset),
-        checks=_LOOK_CHECKS.format(look=words),
-        sources=SCREEN_SOURCES,
-    )
-    for name, (pack, preset, words) in _LOOKS.items()
 ]
 
 

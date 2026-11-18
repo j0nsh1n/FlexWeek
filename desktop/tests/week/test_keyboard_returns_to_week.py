@@ -86,18 +86,6 @@ def test_redo_leaves_the_keyboard_on_the_week(qapp: QApplication, window: Native
     assert window.focusWidget() is grid(window)
 
 
-def test_leaving_focus_with_escape_puts_the_keyboard_on_the_week(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    window.prev_nav.setFocus(Qt.FocusReason.TabFocusReason)
-    window._open_focus_screen()
-    qapp.processEvents()
-    key(window, Qt.Key.Key_Escape)
-    assert window._stack.currentWidget() is window._week_page
-    assert not stray(window)
-    assert window.focusWidget() is grid(window)
-
-
 def test_a_dropped_block_keeps_the_keyboard_on_the_week(qapp: QApplication, window: NativeWindow) -> None:
     add_piano(qapp, window)
     hours = grid(window)

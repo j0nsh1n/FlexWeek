@@ -146,15 +146,15 @@ def test_the_notice_sits_in_the_right_half_of_the_page_and_lets_the_pointer_thro
 
 
 def test_the_toast_belongs_to_the_page_it_was_said_on(qapp: QApplication, window: NativeWindow) -> None:
-    """Decision 20: "Planned 2 homework blocks." stayed over the focus screen, which has nothing to do
-    with planning. Leaving the page takes the toast; coming back does not bring it."""
+    """Decision 20: "Planned 2 homework blocks." stayed over a page that has nothing to do with planning.
+    Leaving the page takes the toast; coming back does not bring it."""
     window._set_notice("Planned 2 homework blocks.", "Undo", lambda: None)
     qapp.processEvents()
     assert window.toast.isVisible()
-    window._open_focus_screen()
+    window._open_settings()
     qapp.processEvents()
     assert not window.toast.isVisible() and not window.toast.button.isVisible()
-    window._close_focus_screen()
+    window._settings.close_page()
     qapp.processEvents()
     assert not window.toast.isVisible(), "it does not come back with the page"
     window._set_notice("Moved History essay to Fri 18:00.", "Undo", lambda: None)

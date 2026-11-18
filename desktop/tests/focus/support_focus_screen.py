@@ -16,12 +16,10 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt
-from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog, QPushButton
+from PySide6.QtWidgets import QAbstractButton, QApplication
 
 from backend.tests.fake_clock import CLOCK
 from desktop.native.calendar import sunday_due
-from desktop.native.widgets import ConfirmSheet
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import LightWindows
 from desktop.tests.waiting import wait_until
@@ -108,41 +106,6 @@ def rules(window: NativeWindow, owned: bool = True, **prefs: object) -> Iterator
         session.reset_focus()
         session.preferences = before
         session.material_owns = before_owner
-
-
-def on_screen(window: NativeWindow) -> str:
-    return window._stack.currentWidget().objectName()
-
-
-def visible_buttons(widget) -> list[str]:
-    return [button.text() for button in widget.findChildren(QPushButton) if button.isVisible()]
-
-
-def quick_focus(window: NativeWindow) -> None:
-    """More > Quick focus, then Just a timer: Quick focus opens the screen ready, as F does (decision 19).
-    The essay is on now in these windows, so the screen offers it and the timer is the second choice."""
-    window.findChild(QPushButton, "quickFocusAction").click()
-    assert window.session.focus is None, "Quick focus waits for Start"
-    assert on_screen(window) == "focusPage"
-    assert visible_buttons(window.focus_screen) == ["Back", "Start", "Just a timer"]
-    assert window.focus_screen.ring._waiting, "set but not started"
-    QTest.mouseClick(window.focus_screen.just_timer, LEFT)
-    assert window.session.focus is not None
-    assert not window.focus_screen.ring._waiting
-
-
-def end_sheet_answer(monkeypatch: pytest.MonkeyPatch, window: NativeWindow, key: str) -> list[ConfirmSheet]:
-    """Press Finish and answer the sheet it opens with `key`; the sheets seen are returned."""
-    seen: list[ConfirmSheet] = []
-
-    def run(sheet: ConfirmSheet) -> int:
-        seen.append(sheet)
-        sheet.buttons[key].click()
-        return QDialog.DialogCode.Accepted
-
-    monkeypatch.setattr(ConfirmSheet, "exec", run)
-    QTest.mouseClick(window.focus_screen.stop, LEFT)
-    return seen
 
 
 SLOT = itertools.count()

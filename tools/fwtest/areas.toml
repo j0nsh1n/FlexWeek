@@ -286,7 +286,7 @@ areas = ["month"]
 # --- Focus.
 [[rule]]
 paths = [
-  "desktop/native/focus.py", "desktop/native/focus_screen.py", "desktop/native/pomodoro.py",
+  "desktop/native/focus.py", "desktop/native/pomodoro.py",
   "desktop/native/ambient.py", "desktop/native/ring.py", "desktop/native/sound.py",
   "desktop/native/tones.py", "desktop/native/spotify.py",
   "desktop/native/material/bridge_focus.py", "desktop/native/material/focus_visible.py",

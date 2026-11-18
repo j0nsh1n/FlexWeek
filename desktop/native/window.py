@@ -135,7 +135,6 @@ from desktop.native.feel import Context, apply_feel, context_for, current, extra
 from desktop.native.fields import ProblemLine, announce, week_start_day, week_start_notice
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.focus import focus_now, phase_duration_ms
-from desktop.native.focus_screen import QUICK_TITLE, FocusScreen
 from desktop.native.fonts import load_fonts, without_ligatures
 from desktop.native.hours.canvas import Drawn, HoursCanvas, plan_placed
 from desktop.native.hours.classic import ClassicDay, ClassicWeek
@@ -289,20 +288,6 @@ KEY_MODIFIERS = (
     | Qt.KeyboardModifier.ControlModifier
     | Qt.KeyboardModifier.AltModifier
     | Qt.KeyboardModifier.MetaModifier
-)
-# What leaves the focus screen for the week, as W, D, M and T always have.
-LEAVES_FOCUS_KEYS = frozenset(
-    {
-        Qt.Key.Key_1,
-        Qt.Key.Key_2,
-        Qt.Key.Key_3,
-        Qt.Key.Key_4,
-        Qt.Key.Key_5,
-        Qt.Key.Key_T,
-        Qt.Key.Key_D,
-        Qt.Key.Key_W,
-        Qt.Key.Key_M,
-    }
 )
 BUSY_BUTTONS = (
     "createAccount",
@@ -758,7 +743,7 @@ class NativeWindow(QMainWindow):
         self._build_recovery()
         self._build_week()
         self._build_setup()
-        self._build_focus_screen()
+        self._build_focus_audio()
         self.session.account_changed.connect(self._on_account)
         self.session.recovery_codes.connect(self._show_recovery)
         self.session.week_changed.connect(self._on_week)
@@ -1257,7 +1242,7 @@ class NativeWindow(QMainWindow):
         """Setup, Focus, or Settings is the page the student is looking at."""
         current = self._stack.currentWidget()
         on_settings = self._settings is not None and current is self._settings
-        return self._setup_active or current is self.focus_screen or on_settings
+        return self._setup_active or on_settings
 
     def _show_surface(self) -> bool:
         """Show the surface that owns the window. True when Material is on screen."""
@@ -5357,14 +5342,6 @@ class NativeWindow(QMainWindow):
         """The focus screen, ready: nothing starts until Start, as with F (decision 19 of 0.17)."""
         self._open_focus_screen()
 
-    def _start_quick_focus(self) -> None:
-        if self.session.start_focus_on_offer():
-            self._open_focus_screen()
-
-    def _start_just_a_timer(self) -> None:
-        if self.session.start_quick_focus():
-            self._open_focus_screen()
-
     def _confirm_replace_focus(self, current: str, incoming: str) -> None:
         sheet = ConfirmSheet(
             self,
@@ -5377,18 +5354,7 @@ class NativeWindow(QMainWindow):
         if sheet.answer == "replace" and self.session.confirm_replace_focus():
             self._open_focus_screen()
 
-    def _build_focus_screen(self) -> None:
-        self.focus_screen = FocusScreen()
-        screen = self.focus_screen
-        screen.back_requested.connect(self._close_focus_screen)
-        screen.start_requested.connect(self._start_quick_focus)
-        screen.timer_requested.connect(self._start_just_a_timer)
-        screen.pause_requested.connect(self.session.toggle_focus_pause)
-        screen.skip_requested.connect(lambda: self.session.advance_focus(False))
-        screen.stop_requested.connect(self._stop_focus)
-        screen.finished_requested.connect(self._finish_focus_homework)
-        screen.break_requested.connect(self.session.take_focus_break)
-        self._stack.addWidget(screen)
+    def _build_focus_audio(self) -> None:
         # Rain, lo-fi or white noise while the focus timer works; the timer's own phases drive it.
         self._focus_audio = FocusAudio(self.session, self)
 
@@ -5400,66 +5366,21 @@ class NativeWindow(QMainWindow):
         return page.bridge.focus
 
     def _open_focus_screen(self) -> None:
-        if self.session.account is None:
+        if self.session.account is None or not self._material_owns():
             return
-        if self._material_owns():
-            if self._stack.currentWidget() is not self._material_page and not self._show_surface():
-                return
-            material = self._material_focus()
-            if material is not None:
-                material.show()
-                return
-        self._focus_origin_widget = QApplication.focusWidget()
-        self.focus_screen.set_state(self.session)
-        self._show_page("focusPage")
-        self.focus_screen.setFocus()
+        if self._stack.currentWidget() is not self._material_page and not self._show_surface():
+            return
+        material = self._material_focus()
+        if material is not None:
+            material.show()
 
     def _close_focus_screen(self) -> None:
         material = self._material_focus()
         if material is not None:
             material.hide()
-        if self._stack.currentWidget() is self.focus_screen:
-            self._show_surface()
-            origin = getattr(self, "_focus_origin_widget", None)
-            self._focus_origin_widget = None
-            if (
-                origin is not None
-                and isValid(origin)
-                and origin not in (self.prev_nav, self.next_nav)
-                and origin.isVisible()
-                and origin.isEnabled()
-            ):
-                origin.setFocus(Qt.FocusReason.OtherFocusReason)
-            else:
-                self._focus_week()
-
-    def _stop_focus(self) -> None:
-        state = self.session.focus
-        title = (state or {}).get("title") or QUICK_TITLE
-        homework = (state or {}).get("assignmentId") in (self.session.assignments or {})
-        question = f"You have done {self.session.focus_elapsed_min()} min of {title}."
-        if homework:
-            question += " It counts toward the homework."
-        sheet = ConfirmSheet(
-            self,
-            "End this session?",
-            question,
-            (("stay", "Keep going", "outlined"), ("yes", "End session", "")),
-            default="stay",
-        )
-        sheet.exec()
-        if sheet.answer != "yes":
-            return
-        self.session.end_focus_early()
-        self._close_focus_screen()
-
-    def _finish_focus_homework(self) -> None:
-        if self.session.finish_focused_homework():
-            self._close_focus_screen()
 
     def _on_focus(self) -> None:
         self.focus_panel.set_state(self.session)
-        self.focus_screen.set_state(self.session)
         self._sync_chrome()
         self._refresh_layout()
         released = self.session.release_held_alerts()
@@ -5710,7 +5631,6 @@ class NativeWindow(QMainWindow):
             or self.session.account is None
             or self.session.preferences is None
             or self._setup_active
-            or self._stack.currentWidget() is self.focus_screen
         ):
             return
         self._settings_prepare_scheduled = True
@@ -6400,7 +6320,6 @@ class NativeWindow(QMainWindow):
         lifted = knobs["depth"] == "soft"
         dark = palette.get("axis") == "dark"
         corner = look_measures(self._look)["card_radius"]
-        self.focus_screen.set_palette(palette, text_scale(self._look))
         self.toast.set_look(toast_colours(palette)["action"], SHADOW_SMALL if lifted else None, dark)
         colours = menu_colours(palette, lifted=lifted, corner=corner)
         for menu in (self.more_menu, self.add_menu):
@@ -6652,7 +6571,7 @@ class NativeWindow(QMainWindow):
         if event.modifiers() & KEY_MODIFIERS:
             return None
         current = self._stack.currentWidget()
-        if current is not self.focus_screen and current is not self.findChild(QWidget, "weekPage"):
+        if current is not self.findChild(QWidget, "weekPage"):
             return None
         numbers, letters = self._key_switches()
         views: dict[Qt.Key, Callable[[], None]] = {}
@@ -6680,17 +6599,6 @@ class NativeWindow(QMainWindow):
         action = views.get(event.key())
         if action is None:
             return None
-        if current is self.focus_screen:
-            if event.key() == Qt.Key.Key_F:
-                return action
-            if event.key() not in LEAVES_FOCUS_KEYS:
-                return None
-
-            def leave_then() -> None:
-                self._close_focus_screen()
-                action()
-
-            return leave_then
         return action
 
     def _next_if_shown(self) -> None:
@@ -6744,11 +6652,7 @@ class NativeWindow(QMainWindow):
             self._focus_top_bar()
             event.accept()
             return
-        planning = self._stack.currentWidget() in (self.focus_screen, self.findChild(QWidget, "weekPage"))
-        if self._stack.currentWidget() is self.focus_screen and key == Qt.Key.Key_Escape:
-            self._close_focus_screen()
-            event.accept()
-            return
+        planning = self._stack.currentWidget() is self.findChild(QWidget, "weekPage")
         if mods & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier):
             if key == Qt.Key.Key_N and planning:
                 self._add_homework()

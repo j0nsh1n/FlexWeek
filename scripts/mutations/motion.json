@@ -133,20 +133,6 @@
     "test": "desktop/tests/day/test_view_changes_fade_and_slide.py::test_a_new_view_is_live_at_once_while_the_old_one_fades"
   },
   {
-    "name": "the focus ring before Start looks finished again",
-    "file": "desktop/native/focus_screen.py",
-    "old": "        self.ring.set_waiting(state is None)\n",
-    "new": "",
-    "test": "desktop/tests/focus/test_focus_screen_open_and_close.py::test_quick_focus_fills_the_window_and_esc_comes_back"
-  },
-  {
-    "name": "a waiting ring is drawn softer than the accent",
-    "file": "desktop/native/ring.py",
-    "old": "        return self._colours.arc\n",
-    "new": "        return self._colours.track if self._waiting else self._colours.arc\n",
-    "test": "desktop/tests/focus/test_countdown_ring.py::test_a_timer_not_started_draws_its_arc_in_the_accent_itself"
-  },
-  {
     "name": "the top bar greys the moment it is busy",
     "file": "desktop/native/window.py",
     "old": "            self._busy_look.start()\n",
