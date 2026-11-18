@@ -92,6 +92,8 @@ HELP_PLANNING = (
     "starts fresh but keeps pinned homework. Anything that doesn't "
     "fit stays under Not placed yet, and Details says why. From the keyboard, press Ctrl+K and type Plan."
 )
+# Material has no command bar, so its Help ends the planning paragraph before the Ctrl+K sentence.
+HELP_PLANNING_MATERIAL = HELP_PLANNING.removesuffix(" From the keyboard, press Ctrl+K and type Plan.")
 # Each key in brackets is drawn as a keycap; the words between are drawn plain.
 # One group per Settings switch: Number keys, then Letter keys. A group whose switch is off is left out.
 HELP_NUMBER_KEYS = (("[1] to [5]", "Day, Week, Month, My day, Settings"),)

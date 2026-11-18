@@ -21,6 +21,7 @@ from desktop.native.settings_copy import (
     ABOUT_HERE,
     ABOUT_LINE,
     HELP_PLANNING,
+    HELP_PLANNING_MATERIAL,
     HELP_SCREENS,
     first_lines,
     help_keys,
@@ -93,7 +94,10 @@ def test_help_opens_from_its_more_row_as_a_sheet_with_the_widgets_content(
     _sheets(window).moreAction("helpButton")
     pump(qapp, 40)
     assert _sheets(window).property("kind") == "help"
-    assert _text(root, "helpPlanning") == HELP_PLANNING
+    assert _text(root, "helpPlanning") == HELP_PLANNING_MATERIAL
+    assert "Ctrl+K" not in HELP_PLANNING_MATERIAL and "command bar" not in HELP_PLANNING_MATERIAL
+    assert HELP_PLANNING_MATERIAL.endswith("Details says why.")
+    assert "Ctrl+K" in HELP_PLANNING, "the Widgets Help keeps its own sentence"
     cards = named(root, "helpScreen")
     assert len(cards) == len(HELP_SCREENS)
     for card, (name, words) in zip(cards, HELP_SCREENS, strict=True):

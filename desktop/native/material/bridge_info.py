@@ -11,7 +11,7 @@ from PySide6.QtCore import QUrl
 from desktop.native.settings_copy import (
     ABOUT_HERE,
     ABOUT_LINE,
-    HELP_PLANNING,
+    HELP_PLANNING_MATERIAL,
     HELP_SCREENS,
     first_lines,
     help_keys,
@@ -35,7 +35,7 @@ def help_form(numbers: bool, letters: bool) -> dict[str, Any]:
     """Help: how planning works, the four screens, and the keys as this look answers to them."""
     return {
         "heading": "Help",
-        "planning": HELP_PLANNING,
+        "planning": HELP_PLANNING_MATERIAL,
         "screens": [{"name": name, "words": words} for name, words in HELP_SCREENS],
         "keys": [
             {
