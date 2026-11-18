@@ -246,7 +246,7 @@ private fun FlexWeekRoot(
     val remindersVm = viewModel {
         RemindersViewModel(core, SharedPreferenceReminderPrefs(activity), permissions = AndroidPermissions(activity))
     }
-    val updateVm = viewModel { UpdateViewModel(BuildConfig.VERSION_NAME, HttpUpdateSource(), PackageUpdateInstaller(activity), SharedPreferenceUpdatePrefs(activity), activity.filesDir.resolve("updates")) }
+    val updateVm = viewModel { UpdateViewModel(BuildConfig.VERSION_NAME, HttpUpdateSource(), PackageUpdateInstaller(activity.applicationContext), SharedPreferenceUpdatePrefs(activity), activity.filesDir.resolve("updates")) }
     val updateState by updateVm.state
     DisposableEffect(updateVm) {
         com.flexweek.app.update.UpdateInstallReceiver.onResult = updateVm::onInstallResult

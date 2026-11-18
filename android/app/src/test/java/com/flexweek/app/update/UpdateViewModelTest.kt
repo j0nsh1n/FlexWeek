@@ -85,13 +85,20 @@ class UpdateViewModelTest {
         assertTrue(prefs.checkDaily)
     }
 
-    @Test fun everyCheckRecordsItsTimeEvenWhenItFails() = main {
+    @Test fun aFailedCheckDoesNotUseUpTheDay() = main {
+        // One check made offline used to block the next daily check for 24 hours.
         val prefs = FakePrefs()
         viewModel(FakeSource(), FakeInstaller(), prefs).start()
-        assertEquals(NOW, prefs.lastChecked)
+        assertNull(prefs.lastChecked)
         val manualPrefs = FakePrefs()
         viewModel(FakeSource(), FakeInstaller(), manualPrefs).checkNow()
-        assertEquals(NOW, manualPrefs.lastChecked)
+        assertNull(manualPrefs.lastChecked)
+    }
+
+    @Test fun aCheckThatGotAnAnswerRecordsItsTime() = main {
+        val prefs = FakePrefs()
+        viewModel(FakeSource().also { it.release = "available" }, FakeInstaller(), prefs).start()
+        assertEquals(NOW, prefs.lastChecked)
     }
 
     @Test fun dailyCheckWithoutNetworkStaysSilent() = main {

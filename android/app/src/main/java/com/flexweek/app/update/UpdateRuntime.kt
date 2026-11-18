@@ -188,7 +188,9 @@ class SharedPreferenceUpdatePrefs(private val prefs: SharedPreferences) : Update
         set(value) { prefs.edit().apply { if (value == null) remove("last_checked") else putLong("last_checked", value) }.apply() }
 }
 
-class PackageUpdateInstaller(private val context: Context) : UpdateInstaller {
+// A ViewModel outlives the Activity it was first made with; holding that Activity leaked it at every rotation.
+class PackageUpdateInstaller(context: Context) : UpdateInstaller {
+    private val context: Context = context.applicationContext
     override fun canInstall() = context.packageManager.canRequestPackageInstalls()
     override fun validApk(file: File, version: String): Boolean {
         return try {
@@ -228,7 +230,7 @@ class UpdateViewModel(private val installedVersion: String, private val source: 
     private fun check(loud: Boolean) {
         if (busy) return
         busy = true; state.value = UpdateState.Checking
-        viewModelScope.launch { try { val found = withContext(worker) { lookup() }; state.value = found ?: if (loud) UpdateState.Failed("Could not check for updates.") else UpdateState.Idle } finally { prefs.lastChecked = now(); busy = false } }
+        viewModelScope.launch { try { val found = withContext(worker) { lookup() }; if (found != null) prefs.lastChecked = now(); state.value = found ?: if (loud) UpdateState.Failed("Could not check for updates.") else UpdateState.Idle } finally { busy = false } }
     }
     private suspend fun lookup(): UpdateState? {
         val json = source.get("https://api.github.com/repos/j0nsh1n/FlexWeek/releases/latest")
