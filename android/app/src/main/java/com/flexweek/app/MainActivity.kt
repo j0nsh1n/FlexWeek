@@ -55,6 +55,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import com.flexweek.app.system.SyncRefresh
 import com.flexweek.app.system.syncWhileForeground
 import com.flexweek.app.system.widget.WidgetRuntime
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -252,12 +253,12 @@ private fun FlexWeekRoot(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    val weekVm = viewModel { WeekViewModel(core) }
     LaunchedEffect(core, lifecycleOwner) {
         if (!demo) {
+            val refresh = SyncRefresh(todayVm::tick, remindersVm::reload, weekVm::refresh) { WidgetRuntime.refreshAsync(activity) }
             syncWhileForeground(core, lifecycleOwner.lifecycle) {
-                todayVm.tick(java.time.LocalTime.now().let { it.hour * 60 + it.minute })
-                remindersVm.reload()
-                WidgetRuntime.refreshAsync(activity)
+                refresh.afterSync(java.time.LocalTime.now().let { it.hour * 60 + it.minute })
             }
         }
     }
@@ -276,7 +277,6 @@ private fun FlexWeekRoot(
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             remindersVm.onNotificationPermissionResult(granted)
         }
-    val weekVm = viewModel { WeekViewModel(core) }
     val syncLine = remindersVm.state.problem?.let { SyncLine("unreachable", it) } ?: todayVm.uiState.syncLine
     val closeSheet: () -> Unit = {
         sheet = ActiveSheet.None
