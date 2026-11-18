@@ -29,6 +29,12 @@ from desktop.native.fields import announce
 from desktop.native.hours.geometry import drag_step, next_slot
 from desktop.native.material.bridge_alarms import FULL, MAX_ALARMS, NOT_SAVED, AlarmDraft, with_alarm
 from desktop.native.material.bridge_info import SIGN_OUT, about_form, help_form, update_form
+from desktop.native.material.bridge_manage import (
+    RESTORE_QUESTION,
+    AccountActions,
+    account_form,
+    restore_form,
+)
 from desktop.native.material.sheet_block import BlockDraft
 from desktop.native.material.sheet_homework import HomeworkDraft
 from desktop.native.reuse import (
@@ -37,6 +43,7 @@ from desktop.native.reuse import (
     late_locked_line,
     running_late_refusal,
 )
+from desktop.native.settings_copy import RESTORE_FIRST
 from desktop.native.sheet_rules import (
     LATE_WAIT,
     _late_move,
@@ -73,12 +80,14 @@ MORE_ROWS = (
     ("replanAll", "Replan all my homework", "autorenew"),
     ("copyDay", "Copy day", "calendar_view_day"),
     ("copyLastWeek", "Copy last week's fixed times", "content_copy"),
+    ("restoreButton", "Copies of this week", "save"),
     ("reloadWeek", "Reload this week", "autorenew"),
     ("openSpotify", "Open Spotify link", "link"),
     ("heading", "Help and info"),
     ("helpButton", "Help", "help"),
     ("aboutButton", "About FlexWeek", "info"),
     ("heading", "Account"),
+    ("accountButton", "Account", "user"),
     ("signOut", "Sign out", "logout"),
 )
 
@@ -114,6 +123,13 @@ class SheetsBridge(QObject):
         # An update found while another sheet is open waits for it to close, so no typing is lost.
         self._update_waiting: tuple | None = None
         self._sign_out_done: Any = None
+        # The Account and Restore points sheets: the answer to a prompt that is up, what the student picked
+        # in the list, the name typed for a new copy, and the last thing the session said.
+        self._ask_handlers: dict[str, Any] | None = None
+        self._restore_selected = ""
+        self._restore_label = ""
+        self._manage_note = ""
+        self._account_actions = AccountActions(window, self._ask_then, self._close)
         # What was typed into a new Add sheet that Esc closed, kept for the next Add of that kind.
         self._kept_homework: HomeworkDraft | None = None
         self._kept_block: BlockDraft | None = None
@@ -225,6 +241,8 @@ class SheetsBridge(QObject):
         self._kind = kind
         self._more = False
         self._ask = {}
+        self._ask_handlers = None
+        self._manage_note = ""
         self._noted = None
         self._publish()
 
@@ -234,6 +252,8 @@ class SheetsBridge(QObject):
         update_done = self._finish_update() if self._kind == "update" else None
         self._kind = ""
         self._ask = {}
+        self._ask_handlers = None
+        self._restore_label = ""
         self._drag_range_active = False
         self._homework = None
         self._block = None
@@ -400,6 +420,7 @@ class SheetsBridge(QObject):
             edited = self._ask.get("id") == "edited-weeks"
             done, self._edited_done = self._edited_done, None
             self._sign_out_done = None
+            self._ask_handlers = None
             self._ask = {}
             self._publish()
             if edited and done is not None:
@@ -645,6 +666,13 @@ class SheetsBridge(QObject):
                 done(choice if choice in ("keep", "replace", "from_today") else None)
             return
         self._ask = {}
+        handlers, self._ask_handlers = self._ask_handlers, None
+        if handlers is not None:
+            self._publish()
+            run = handlers.get(choice)
+            if run is not None:
+                run()
+            return
         if asked == "sign-out":
             signing_out, self._sign_out_done = self._sign_out_done, None
             self._publish()
@@ -954,6 +982,10 @@ class SheetsBridge(QObject):
     def _on_status(self, text: str) -> None:
         """The session says "Replanning…" and the preview's count through the same signal. The sheet
         shows the count itself, so only a real problem goes under it."""
+        if self._kind == "restore":
+            self._manage_note = text
+            self._publish()
+            return
         if self._kind != "late":
             return
         session = self._session
@@ -1305,6 +1337,8 @@ class SheetsBridge(QObject):
                 enabled = not session.busy and not self._late_other_week()
             elif name == "signOut":
                 enabled = not session.busy
+            elif name in ("restoreButton", "accountButton"):
+                enabled = session.account is not None
             elif name == "unfinishedOpen":
                 enabled = bool(left)
                 detail = f"{left} left" if left else NOTHING_UNFINISHED
@@ -1339,6 +1373,7 @@ class SheetsBridge(QObject):
             return
         self._kind = ""
         self._ask = {}
+        self._ask_handlers = None
         self._more = True
         self._publish()
 
@@ -1360,6 +1395,8 @@ class SheetsBridge(QObject):
             "unfinishedOpen": self.openUnfinished,
             "weekListRow": self.openWeekList,
             "routinesButton": self.openRoutines,
+            "restoreButton": self.openRestore,
+            "accountButton": self.openAccount,
         }.get(name)
         if opening is not None:
             opening()
@@ -1468,6 +1505,107 @@ class SheetsBridge(QObject):
         if self._kind == "update":
             self._close()
 
+    # Account and Restore points ----------------------------------------------------------
+
+    def _ask_then(self, question: dict, handlers: dict[str, Any]) -> None:
+        """A prompt whose answers run `handlers`; Cancel and Esc run none."""
+        self._more = False
+        self._ask = dict(question)
+        self._ask_handlers = handlers
+        self._publish()
+
+    @Slot()
+    def openAccount(self) -> None:
+        if self._session is None or self._session.account is None:
+            return
+        self._open("account")
+
+    @Slot(str, str, str)
+    def accountAct(self, action: str, password: str, new_password: str) -> None:
+        """A button of the Account sheet. It closes, then does what the Widgets dialog did once it had
+        closed. Delete stays open under its question, so Cancel finds the fields as they were."""
+        if self._kind != "account":
+            return
+        acts = self._account_actions
+        if action == "delete":
+            acts.delete(password)
+            return
+        run = {
+            "password": lambda: acts.change_password(password, new_password),
+            "codes": lambda: acts.replace_codes(password),
+            "export": lambda: acts.export_account(password),
+            "import": acts.import_account,
+            "week": acts.export_week,
+            "day": acts.export_day,
+            "import-week": acts.import_file,
+        }.get(action)
+        if run is None:
+            return
+        self._close()
+        run()
+
+    @Slot()
+    def openRestore(self) -> None:
+        session = self._session
+        if session is None or session.account is None:
+            return
+        preview = session.restore_preview or {}
+        self._restore_selected = str(preview.get("id") or "")
+        self._restore_label = ""
+        self._open("restore")
+
+    @Slot(str)
+    def selectRestore(self, point_id: str) -> None:
+        if self._kind == "restore" and any(
+            str(point.get("id")) == point_id for point in self._session.restore_points
+        ):
+            self._restore_selected = point_id
+            self._manage_note = ""
+            self._publish()
+
+    @Slot(str)
+    def setRestoreLabel(self, value: str) -> None:
+        if self._kind == "restore":
+            self._restore_label = value
+
+    @Slot()
+    def createRestore(self) -> None:
+        if self._kind != "restore":
+            return
+        label = self._restore_label
+        self._session.create_restore_point(label.strip())
+        if label.strip():
+            self._restore_label = ""
+            self._publish()
+
+    @Slot()
+    def previewRestore(self) -> None:
+        if self._kind != "restore":
+            return
+        if not self._restore_selected:
+            self._manage_note = RESTORE_FIRST
+            self._publish()
+            return
+        self._manage_note = ""
+        self._session.preview_restore_point(self._restore_selected, self._publish)
+
+    @Slot()
+    def restoreSelected(self) -> None:
+        """Restore asks first. Yes closes the sheet, then FlexWeek saves its own "Before restore" copy and
+        goes back."""
+        if self._kind != "restore":
+            return
+        chosen = self._restore_selected
+        if not chosen:
+            self._manage_note = RESTORE_FIRST
+            self._publish()
+            return
+        self._ask_then(RESTORE_QUESTION, {"restore": lambda: self._restored(chosen)})
+
+    def _restored(self, point_id: str) -> None:
+        self._close()
+        self._session.apply_restore_point(point_id)
+
     # Notice -----------------------------------------------------------------------------
 
     def _say(self, text: str, *, undo: bool = False) -> None:
@@ -1522,7 +1660,7 @@ class SheetsBridge(QObject):
 
     def refresh(self) -> None:
         """The session changed. A sheet that reads it, such as a late preview, shows what it has now."""
-        if self._kind in ("late", "unfinished", "weekList", "routines"):
+        if self._kind in ("late", "unfinished", "weekList", "routines", "account", "restore"):
             self._publish()
 
     def _publish(self) -> None:
@@ -1550,6 +1688,18 @@ class SheetsBridge(QObject):
             self._form = about_form(getattr(self._session, "storage_info", None))
         elif kind == "update" and self._update is not None:
             self._form = update_form(self._update, self._update_current, self._update_state)
+        elif kind == "account":
+            self._form = account_form(self._session.storage_info, self._session.recovery_remaining)
+        elif kind == "restore":
+            session = self._session
+            self._form = restore_form(
+                session.restore_points,
+                session.restore_preview,
+                session.storage_info,
+                self._restore_selected,
+                self._restore_label,
+                self._manage_note,
+            )
         else:
             self._form = {}
         # The moved-day note is said aloud when it appears or changes in a sheet that is already open. A

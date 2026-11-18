@@ -116,6 +116,8 @@ Item {
             case "help": return help
             case "about": return about
             case "update": return update
+            case "account": return account
+            case "restore": return restore
             }
             return null
         }
@@ -129,6 +131,8 @@ Item {
     Component { id: help; HelpSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: about; AboutSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: update; UpdateSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
+    Component { id: account; AccountSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
+    Component { id: restore; RestoreSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: routines; RoutinesSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
 
     Loader {

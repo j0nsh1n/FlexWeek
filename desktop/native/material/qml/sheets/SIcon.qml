@@ -7,7 +7,7 @@ Item {
     property string name: "check"
     property alias color: image.color
     readonly property var own: ["expand_more", "expand_less", "list", "repeat", "timer", "event_busy",
-        "autorenew", "save", "help", "info", "logout", "delete", "link"]
+        "autorenew", "save", "help", "info", "logout", "delete", "link", "user"]
     width: 24
     height: 24
     IconImage {

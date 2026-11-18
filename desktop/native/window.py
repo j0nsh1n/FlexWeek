@@ -80,17 +80,23 @@ from backend import clock as wall_clock
 from backend.slots import DAY_END_MIN, SLOT_MIN, hhmm_to_minutes, minutes_to_hhmm
 from desktop.native import autostart, cpu_drawing, icons
 from desktop.native.account_copy import (
+    ACCOUNT_SAVED,
     CREATE_HEADING,
     CREATE_NOTE,
+    DELETE_ACCOUNT_QUESTION,
+    READ_FAILED,
+    READ_WEEK_FAILED,
     RECOVERY_COPY,
     RECOVERY_FILE,
     RECOVERY_KEEP,
     RECOVERY_SAID_MS,
     RECOVERY_SAVE,
     RECOVERY_WAIT,
+    REPLACE_WEEK_QUESTION,
     RESET_HEADING,
     RESET_NOTE,
     SIGN_IN_HEADING,
+    WRITE_FAILED,
 )
 from desktop.native.ambient import FocusAudio
 from desktop.native.calendar import (
@@ -456,14 +462,6 @@ GREYED_TIPS = {
     "pasteBlock": "Copy a block or a day first.",
     "runningLate": "Open this week to use Running late.",
 }
-# Said without the system's own words, which a student cannot act on.
-READ_FAILED = "Couldn't open that file. Choose a FlexWeek backup file (it ends in .json)."
-READ_WEEK_FAILED = "Couldn't open that file. Choose a FlexWeek week or day file (it ends in .json)."
-WRITE_FAILED = "Couldn't save there. Choose another folder, like Documents."
-ACCOUNT_SAVED = "Saved your backup file to {path}. Keep it private: it has all your weeks and homework."
-REPLACE_WEEK_QUESTION = (
-    "Replace everything in {week} with this file? Other weeks aren't changed. You can undo this."
-)
 WAIT_TIP = "Saving your last change… this will work in a moment."
 PLANNING_TIP = "Planning… one moment."
 CONFLICT_TIP = "This week changed in another window. Choose More > Reload this week, then try again."
@@ -6146,6 +6144,10 @@ class NativeWindow(QMainWindow):
             self.session._say("This machine doesn't support starting at login.")
 
     def _open_restore(self) -> None:
+        page = self._material_shown()
+        if page is not None:
+            page.bridge.sheets.openRestore()
+            return
         dialog = RestoreDialog(
             self, self.session.restore_points, self.session.restore_preview, self.session.storage_info
         )
@@ -6208,6 +6210,10 @@ class NativeWindow(QMainWindow):
         AboutDialog(self, self.session.storage_info, str(self._look_path().parent)).exec()
 
     def _open_account(self) -> None:
+        page = self._material_shown()
+        if page is not None:
+            page.bridge.sheets.openAccount()
+            return
         qml_focus_item = None
         if hasattr(self, "_material_page") and self._material_page is not None:
             quick = getattr(self._material_page, "_quick", None)
@@ -6234,10 +6240,7 @@ class NativeWindow(QMainWindow):
                     if (self.session.storage_info or {}).get("mode") == "hosted"
                     else "this computer"
                 )
-                question = (
-                    f"Delete the account {name}? Every week, all your homework and your settings are removed "
-                    f"from {where}. This can't be undone."
-                )
+                question = DELETE_ACCOUNT_QUESTION.format(name=name, where=where)
                 if confirm(self, "Delete account", question, f"Delete {name}"):
                     self.session.delete_account(password)
             elif dialog.action == "export":

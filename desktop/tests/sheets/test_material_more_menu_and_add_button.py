@@ -56,9 +56,11 @@ def test_material_more_lists_the_planning_actions_and_leaves_the_widgets_menu_al
         "Replan all my homework",
         "Copy day",
         "Copy last week's fixed times",
+        "Copies of this week",
         "Reload this week",
         "Help",
         "About FlexWeek",
+        "Account",
         "Sign out",
     ]
     bridge.sheets.closeMore()
