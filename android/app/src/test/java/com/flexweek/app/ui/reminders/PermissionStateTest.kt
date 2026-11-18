@@ -8,6 +8,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PermissionStateTest {
+    @get:org.junit.Rule val main = com.flexweek.app.testing.MainThreadRule()
+
     private class Permissions(var notifications: Boolean, var exact: Boolean) : SystemPermissions {
         override fun notificationsAllowed() = notifications
         override fun canScheduleExact() = exact
@@ -30,6 +32,25 @@ class PermissionStateTest {
         system.notifications = false
         vm.refreshPermissions()
         assertTrue(vm.state.showPermissionBanner)
+    }
+
+    @Test fun theRemindersSwitchReadsWhatAndroidSaysNotASavedWish() {
+        val system = Permissions(notifications = false, exact = true)
+        val vm = RemindersViewModel(core(), Prefs(), permissions = system)
+        assertFalse(vm.state.notificationsAllowed)
+        system.notifications = true
+        vm.refreshPermissions()
+        assertTrue(vm.state.notificationsAllowed)
+        system.notifications = false
+        vm.refreshPermissions()
+        assertFalse("switching it off in Android's own screen is seen on return", vm.state.notificationsAllowed)
+    }
+
+    @Test fun syncNowShowsItsResultUnderTheButton() {
+        val vm = RemindersViewModel(core(), Prefs(), main.dispatcher, Permissions(true, true))
+        vm.syncNow()
+        assertTrue("a sync that worked says so", vm.state.syncedJustNow)
+        assertEquals(null, vm.state.problem)
     }
 
     @Test fun grantedBeforeTheFirstOpenShowsNoBannerAfterAColdStart() {

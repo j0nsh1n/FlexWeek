@@ -26,6 +26,10 @@ data class RemindersUiState(
     val lastSync: String = "",
     val syncing: Boolean = false,
     val problem: String? = null,
+    // What Android says now about notifications: the Reminders switch shows this, not a saved wish.
+    val notificationsAllowed: Boolean = false,
+    // True after a Sync now that worked, so the Your computer card can say so under the button.
+    val syncedJustNow: Boolean = false,
 )
 
 private data class ReminderSettings(
@@ -70,7 +74,9 @@ class RemindersViewModel(
     constructor(core: FlexWeekCore, workerDispatcher: CoroutineDispatcher) :
         this(core, InMemoryReminderPrefs(), workerDispatcher)
 
-    var state by mutableStateOf(RemindersUiState(showPermissionBanner = bannerShown()))
+    var state by mutableStateOf(
+        RemindersUiState(showPermissionBanner = bannerShown(), notificationsAllowed = permissions.notificationsAllowed()),
+    )
         private set
 
     init {
@@ -82,7 +88,7 @@ class RemindersViewModel(
 
     /** Asks Android again (on return from a system screen): the banner and the exact switch follow the answer. */
     fun refreshPermissions() {
-        state = state.copy(showPermissionBanner = bannerShown())
+        state = state.copy(showPermissionBanner = bannerShown(), notificationsAllowed = permissions.notificationsAllowed())
         reload()
     }
 
@@ -174,7 +180,7 @@ class RemindersViewModel(
     }
 
     fun allowNotifications() {
-        state = state.copy(showPermissionBanner = false)
+        state = state.copy(showPermissionBanner = false, notificationsAllowed = true)
     }
 
     fun dismissPermissionBanner() {
@@ -188,12 +194,12 @@ class RemindersViewModel(
 
     fun syncNow() {
         if (state.syncing) return
-        state = state.copy(syncing = true, problem = null)
+        state = state.copy(syncing = true, problem = null, syncedJustNow = false)
         viewModelScope.launch {
             val answer = JSONObject(withContext(workerDispatcher) { core.syncOnce(45_000) })
             val failure = if (answer.optBoolean("ok", true)) null
             else SyncWords.syncProblem(answer.optString("kind"), answer.optString("error"))
-            state = state.copy(syncing = false, problem = failure)
+            state = state.copy(syncing = false, problem = failure, syncedJustNow = failure == null)
             reload()
         }
     }

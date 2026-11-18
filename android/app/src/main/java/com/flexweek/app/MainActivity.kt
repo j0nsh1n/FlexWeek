@@ -442,6 +442,11 @@ private fun FlexWeekRoot(
                             onSyncNow = {
                                 remindersVm.syncNow()
                             },
+                            onReportProblem = {
+                                val device = com.flexweek.app.ui.reminders.FeedbackForm.device(Build.MANUFACTURER, Build.MODEL, Build.VERSION.RELEASE)
+                                val url = com.flexweek.app.ui.reminders.FeedbackForm.url(BuildConfig.VERSION_NAME, device)
+                                runCatching { activity.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+                            },
                             onUnpair = {
                                 remindersVm.unpair {
                                     pairEpoch += 1
