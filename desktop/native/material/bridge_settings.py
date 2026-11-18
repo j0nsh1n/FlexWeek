@@ -44,6 +44,7 @@ from desktop.native.material.theme import (
     FONTS,
     HOUR_LINES,
     HOUR_RANGE,
+    LOOK_TIERS,
     MOTION_SPEEDS,
     ONE_MODE,
     PAD_RANGE,
@@ -60,12 +61,14 @@ from desktop.native.material.theme import (
     export_document,
     hour_row_px,
     import_document,
+    kept_material,
     mode_of,
     pack_material,
     read_accent,
     read_advanced,
     read_font,
     read_letter_keys,
+    read_look_tier,
     read_material_choice,
     read_saved_material,
     read_shortcuts,
@@ -182,6 +185,20 @@ _URGENT = next((name for name in ("urgent_first", "prioritize_urgent") if name i
 # auto_split_pomodoro is the focus-timer split, not this planner row.
 _SPLIT = "split_long_tasks" if "split_long_tasks" in _FIELDS else None
 _SHOW_WEEKENDS = "show_weekends" if "show_weekends" in _FIELDS else None
+TEXT_SIZES = {"small": 0.9, "normal": 1.0, "large": 1.3, "larger": 1.6}
+# Sharp and pill are the two ends of the corner dial; rounded leaves it on the preset's own radius.
+CORNER_SHAPES: dict[str, int | None] = {"sharp": 0, "rounded": None, "pill": CORNER_RANGE[1]}
+DENSITY_CHOICES = ("comfortable", "compact")
+
+
+def _corner_shape(corner: int | None) -> str:
+    """The shape card a corner radius matches, or empty when a slider put it between."""
+    for name, value in CORNER_SHAPES.items():
+        if corner == value:
+            return name
+    return ""
+
+
 _GROUPS = {
     "shape": ("corner",),
     "density": ("hour", "padding", "rail"),
@@ -898,6 +915,7 @@ class SettingsBridge(QObject):
         self._shortcuts = True
         self._letter_keys = False
         self._font = ""
+        self._tier = ""
         self._saved: list[dict[str, Any]] = []
         self._study = StudyHours()
         self._school = SchoolHours()
@@ -960,6 +978,7 @@ class SettingsBridge(QObject):
         self._shortcuts = read_shortcuts(stored)
         self._letter_keys = read_letter_keys(stored)
         self._font = read_font(stored)
+        self._tier = read_look_tier(stored)
         self._saved = read_saved_material(stored)
         if not keep_draft:
             self._draft_choice = dict(self._choice)
@@ -1184,6 +1203,9 @@ class SettingsBridge(QObject):
             "padding": 6 if draft["padding"] is None else draft["padding"],
             "shadow": 0 if draft["shadow"] is None else draft["shadow"],
             "scale": draft["scale"],
+            "tier": self._tier or "simple",
+            "draftOneMode": ONE_MODE.get(choice["preset"], ""),
+            "cornerShape": _corner_shape(draft["corner"]),
             "textSize": (
                 "larger"
                 if (draft.get("scale") or self._advanced.get("scale") or 1.0) >= 1.5
@@ -1360,7 +1382,13 @@ class SettingsBridge(QObject):
     def _commit(self) -> None:
         path = self._window._look_path()
         material = pack_material(
-            self._choice, self._advanced, self._shortcuts, self._letter_keys, self._saved, self._font
+            self._choice,
+            self._advanced,
+            self._shortcuts,
+            self._letter_keys,
+            self._saved,
+            self._font,
+            self._tier,
         )
         store_material(path, material)
         self._bridge._shortcuts = self._shortcuts  # type: ignore[attr-defined]
@@ -1481,13 +1509,7 @@ class SettingsBridge(QObject):
 
     @Slot(str)
     def setTextSize(self, size: str) -> None:
-        scales = {
-            "small": 0.9,
-            "normal": 1.0,
-            "large": 1.3,
-            "larger": 1.6,
-        }
-        val = scales.get(size)
+        val = TEXT_SIZES.get(size)
         if val is None:
             try:
                 val = float(size)
@@ -1499,6 +1521,77 @@ class SettingsBridge(QObject):
         self._advanced["scale"] = number
         self._draft["scale"] = number
         self._commit()
+
+    # The Advanced page's Simple tier edits the same draft as its other tiers, so Done applies the lot and
+    # Back drops it. Its preset, mode and row size are the draft's own choice.
+    @Slot(str)
+    def setDraftPreset(self, name: str) -> None:
+        if name in PRESETS:
+            self._draft_choice["preset"] = name
+            self._mark_draft()
+
+    @Slot(str)
+    def setDraftMode(self, mode: str) -> None:
+        if mode in SAVED_MODES:
+            self._draft_choice["mode"] = mode
+            self._mark_draft()
+
+    @Slot(str)
+    def setDraftDensity(self, density: str) -> None:
+        if density in ("comfortable", "compact"):
+            self._draft_choice["density"] = density
+            self._mark_draft()
+
+    @Slot(str)
+    def setDraftTextSize(self, size: str) -> None:
+        number = _float_in(TEXT_SIZES.get(size), SCALE_RANGE)
+        if number is not None:
+            self._draft["scale"] = number
+            self._mark_draft()
+
+    @Slot(str)
+    def setCornerShape(self, shape: str) -> None:
+        if shape in CORNER_SHAPES:
+            self._draft["corner"] = CORNER_SHAPES[shape]
+            self._mark_draft()
+
+    @Slot(str)
+    def setLookTier(self, tier: str) -> None:
+        """Simple, More or All. It only changes which controls show: no value moves. It is kept on this
+        computer in the look file."""
+        if tier not in LOOK_TIERS or tier == self._tier:
+            return
+        self._tier = tier
+        self._store_tier()
+        self._publish()
+
+    def seed_look_tier(self, tier: str) -> None:
+        """Setup read as power: the Advanced page starts on `tier`, unless a tier was already chosen."""
+        if tier in LOOK_TIERS and not self._tier:
+            self._tier = tier
+            self._store_tier()
+            self._publish()
+
+    def _store_tier(self) -> None:
+        path = self._window._look_path()
+        kept = kept_material(path)
+        if kept is None:
+            self._commit()
+            return
+        store_material(path, {**kept, "lookTier": self._tier})
+
+    def apply_setup_look(self, **parts: str) -> None:
+        """Setup's look cards: applied and kept now, as the Look section does, with no question asked."""
+        preset = parts.get("preset")
+        if preset in PRESETS and preset != self._choice["preset"]:
+            self._apply_preset(preset, keep=True)
+        rest = {
+            key: value
+            for key, value in parts.items()
+            if (key == "mode" and value in SAVED_MODES) or (key == "density" and value in DENSITY_CHOICES)
+        }
+        if rest:
+            self._set_choice(**rest)
 
     @Slot(bool)
     def setClock(self, on: bool) -> None:

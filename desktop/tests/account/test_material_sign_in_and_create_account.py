@@ -118,7 +118,7 @@ def test_create_account_validates_then_shows_the_codes_then_setup(
     assert bridge.setupStep == WEEK
     assert page(window) == "materialPage"
     assert shown(window, "setupFlow")
-    assert qml(window, "setupTitle").property("text") == "Your week"
+    assert qml(window, "setupTitle").property("text") == "School hours"
 
 
 def test_wrong_password_names_neither_field_and_explains_why(

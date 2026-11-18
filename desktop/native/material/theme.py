@@ -611,6 +611,17 @@ def advanced_overrides(advanced: dict[str, Any]) -> dict[str, Any]:
     return changed
 
 
+LOOK_TIERS = ("simple", "more", "all")
+
+
+def read_look_tier(stored: object) -> str:
+    """How many Look controls the Advanced page shows on this computer: simple, more or all. An empty string
+    means nobody chose yet, so the page starts on simple (or on all after a setup that read as power)."""
+    material = stored.get("material") if isinstance(stored, dict) else None
+    tier = material.get("lookTier") if isinstance(material, dict) else None
+    return tier if isinstance(tier, str) and tier in LOOK_TIERS else ""
+
+
 def pack_material(
     choice: dict[str, str],
     advanced: dict[str, Any],
@@ -618,6 +629,7 @@ def pack_material(
     letters: bool,
     saved: list[dict[str, Any]],
     font: str = "",
+    tier: str = "",
 ) -> dict[str, Any]:
     """The `material` object written into the look file."""
     body: dict[str, Any] = {
@@ -633,6 +645,8 @@ def pack_material(
         body["saved"] = saved
     if font in FONTS:
         body["font"] = font
+    if tier in LOOK_TIERS:
+        body["lookTier"] = tier
     return body
 
 

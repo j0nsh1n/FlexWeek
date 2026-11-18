@@ -15,7 +15,12 @@ All notable changes to FlexWeek are documented here. Format follows
 - Material keys: Ctrl+N starts a new homework, F1 opens Help, and Ctrl+C, Ctrl+D and Delete copy, duplicate and delete the block that has keyboard focus (Delete asks first and can be undone). None of them act while you are typing.
 - More → Planning in Material has Copy day, Copy last week's fixed times, Reload this week, Copies of this week and, when you have set a link, Open Spotify link.
 
+- Setup is three steps of multiple-choice cards, with your week drawn beside them as you pick: School hours, Study hours, and Look & alerts. Cards for the usual school days, when homework may be planned, how long before things start to remind you, the colour preset, light or dark, and row size. The detailed controls (sports and jobs, the clock, the week start, the evening cutoff, the drag step, hours for each day, the alarm sound and Spotify link) show only after you pick a card that means them, such as "Different times, sports, or a job…". The week only shows what you have picked.
+- Settings > Look > Advanced settings has a Simple, More and All switch: Simple is the preset, mode, corner shape, block style, row size and text size; More adds the layout and grid dials; All adds the colour codes and the readability check. Switching never changes a value, the choice is kept on this computer, and it starts on All after a setup where you opened the detailed controls.
+
 ### Changed
+- Setup no longer asks for first homework or ends on a summary page; the last step has Open my week. Setup that was left on one of those pages resumes on Look & alerts.
+- The default school hours in setup are Mon-Fri 8:00 AM to 3:00 PM (they were 8:00 AM to 2:30 PM).
 - FlexWeek's desktop app has one style, Material 3. Every start opens it, including for anyone who had picked another style; setup starts at Your week.
 - Help, About, Update, the Sign out question, Manage account and Copies of this week open as Material sheets.
 - Deleting one day of School or an activity, and the question about edited weeks, show their choices as cards: the choice you can undo is picked first, each card says what it keeps and whether it can be undone, and Delete or Save confirms the picked one. Up and Down move the pick, Enter confirms and Esc cancels.

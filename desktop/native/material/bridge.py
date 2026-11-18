@@ -131,6 +131,7 @@ class MaterialBridge(QObject):
         self._settings_bridge = SettingsBridge(self)
         self._account = AccountBridge(window)
         self._account.setParent(self)
+        self._account.use_settings(self._settings_bridge)
         self._focus = FocusBridge(window, self)
         self._sheets = SheetsBridge(window, self)
         self._ring = RingBridge(self)

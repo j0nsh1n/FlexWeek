@@ -3,8 +3,9 @@ import QtQuick.Layouts
 import components 1.0
 import "../sheets"
 
-// First-run setup: the steps down the side (a line of text on a phone), one page at a time, and
-// Back, Skip this step, Skip setup and Next under it. Every answer goes to the account bridge.
+// First-run setup: three steps down the side (a line of text on a phone), one page at a time with the week it
+// is building beside it (under it when narrow), and Back, Skip this step, Skip setup and Next under the
+// cards. Every answer goes to the account bridge.
 FocusScope {
     id: root
     objectName: "setupFlow"
@@ -19,9 +20,13 @@ FocusScope {
 
     M3Palette { id: m3Palette; theme: root.theme }
 
+    // The week and the picked list sit beside the cards, or under them when the column is narrow.
+    readonly property bool split: !phone && column.width >= 640
+    readonly property real cardsWidth: split ? Math.floor((column.width - 24) * 0.54) : column.width
+
     function pageFor(step) {
-        // Steps 0 to 2 were the style pages; setup starts at Your week, step 3.
-        return [weekPage, homeworkPage, remindersPage, firstPage, donePage][step - 3]
+        // Steps 0 to 2 were the style pages; setup starts at School hours, step 3.
+        return [weekPage, homeworkPage, remindersPage][step - 3]
     }
 
     // Side rail: one row per step.
@@ -160,11 +165,11 @@ FocusScope {
             Column {
                 id: head
                 y: root.phone ? 16 : 32
-                width: parent.width
+                width: root.cardsWidth
                 spacing: 8
                 Text {
                     visible: root.phone
-                    text: "Step " + Math.min(root.step + 1, 6) + " of 6"
+                    text: "Step " + Math.max(1, Math.min(root.step - 2, 3)) + " of 3"
                     color: m3Palette.inkMuted
                     font.family: M3Font.family
                     font.pixelSize: M3Font.px(12)
@@ -200,7 +205,7 @@ FocusScope {
                 anchors.topMargin: 16
                 anchors.bottom: footer.top
                 anchors.bottomMargin: 8
-                width: parent.width
+                width: root.cardsWidth
                 contentWidth: width
                 contentHeight: pageHolder.height + 16
                 clip: true
@@ -209,21 +214,48 @@ FocusScope {
                 Item {
                     id: pageHolder
                     width: scroller.width
-                    height: pageLoader.item ? pageLoader.item.implicitHeight : 0
-                    Loader {
-                        id: pageLoader
+                    height: stack.implicitHeight
+                    Column {
+                        id: stack
                         width: parent.width
-                        sourceComponent: root.pageFor(root.step)
-                        onLoaded: scroller.contentY = 0
+                        spacing: 16
+                        Loader {
+                            id: pageLoader
+                            width: parent.width
+                            sourceComponent: root.pageFor(root.step)
+                            onLoaded: scroller.contentY = 0
+                        }
+                        SetupPreview {
+                            visible: !root.split
+                            width: parent.width
+                            gridHeight: 220
+                            bridge: root.bridge
+                            theme: root.theme
+                            density: root.density
+                            reduceMotion: root.reduceMotion
+                            highContrast: root.highContrast
+                        }
                     }
                 }
+            }
+
+            SetupPreview {
+                visible: root.split
+                x: root.cardsWidth + 24
+                y: head.y
+                width: column.width - root.cardsWidth - 24
+                bridge: root.bridge
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
             }
 
             Column {
                 id: footer
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: root.phone ? 16 : 24
-                width: parent.width
+                width: root.cardsWidth
                 spacing: 8
 
                 Text {
@@ -255,7 +287,7 @@ FocusScope {
                     }
                     Button {
                         objectName: "setupSkip"
-                        visible: bridge ? bridge.skipVisible : false
+                        visible: bridge ? bridge.skipStepVisible : false
                         theme: root.theme
                         density: root.density
                         reduceMotion: root.reduceMotion
@@ -293,8 +325,6 @@ FocusScope {
     Component { id: weekPage; WeekPage { bridge: root.bridge; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: homeworkPage; HomeworkPage { bridge: root.bridge; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: remindersPage; RemindersPage { bridge: root.bridge; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
-    Component { id: firstPage; FirstPage { bridge: root.bridge; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
-    Component { id: donePage; DonePage { bridge: root.bridge; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
 
     // Skip-without-keeping asks first when the Your week page holds times the student typed.
     Connections {

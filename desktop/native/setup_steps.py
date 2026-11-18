@@ -53,6 +53,52 @@ OWN_LOOK_LABEL = "Choose my own look instead"
 MAX_ACTIVITIES = 8
 MAX_FIRST_HOMEWORK = 3
 
+# Material's setup is three steps over the same step numbers: School hours (WEEK), Study hours (HOMEWORK)
+# and Look and alerts (REMINDERS). A saved step past the last one comes from the older five-step flow.
+MATERIAL_RAIL = (
+    ("School hours", (WEEK,)),
+    ("Study hours", (HOMEWORK,)),
+    ("Look & alerts", (REMINDERS,)),
+)
+MATERIAL_LAST = REMINDERS
+MATERIAL_TITLES = {
+    WEEK: "School hours",
+    HOMEWORK: "Homework and study hours",
+    REMINDERS: "Reminders and your look",
+}
+MATERIAL_NOTES = {
+    WEEK: "Pick the closest school day. Homework is never planned during these hours.",
+    HOMEWORK: "Pick how homework gets a time and when it may be planned. Also in Settings, under Planning.",
+    REMINDERS: "Pick when reminders show up and how FlexWeek looks. All of this is also in Settings.",
+}
+# A school-day card: key, start, end, what it is, tag. Every one is Monday to Friday.
+SCHOOL_CARDS = (
+    ("8to3", "08:00", "15:00", "Standard school day", "Most common"),
+    ("830to315", "08:30", "15:15", "Later morning bell", ""),
+    ("9to330", "09:00", "15:30", "Late start", ""),
+)
+SCHOOL_DAYS_CARD = [0, 1, 2, 3, 4]
+SCHOOL_CUSTOM_TITLE = "Different times, sports, or a job…"
+SCHOOL_CUSTOM_NOTE = "Pick your own days and times, add sports, clubs or a job, and set when homework stops."
+# A study-hours card: key, the work-hours preset it adds (None: none), what it is, tag.
+STUDY_CARDS = (
+    ("after_school", "After school", "Plan homework in the afternoon before dinner", "Popular"),
+    ("evenings", "Evenings", "Keep afternoons free for sports and rest", ""),
+    ("anytime", None, "FlexWeek uses any free time outside school", ""),
+    ("custom", None, "Set hours for each day or class, and how far a drag moves a block", "More options"),
+)
+REMINDER_LEADS = (10, 5, 15)
+SOUND_CARD_TITLE = "Choose an alarm sound or Spotify link…"
+LOOK_MODE_CARDS = (
+    ("system", "Same as this computer", "Follows light or dark from your system"),
+    ("light", "Light", "A bright page with dark text"),
+    ("dark", "Dark", "A dark page that's easy on the eyes at night"),
+)
+ROW_SIZE_CARDS = (
+    ("comfortable", "Comfortable rows", "Roomier hour rows on your week"),
+    ("compact", "Compact rows", "Tighter hour rows, so more of your day fits"),
+)
+
 PENDING, CURRENT, FINISHED, SKIPPED = "pending", "current", "finished", "skipped"
 # What the side list says of each step's state, as the step's accessible description.
 RAIL_STATES = {CURRENT: "Current step", FINISHED: "Done", SKIPPED: "Skipped", PENDING: ""}

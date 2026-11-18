@@ -20,7 +20,7 @@ from PySide6.QtGui import QKeyEvent
 from PySide6.QtQuickWidgets import QQuickWidget
 from PySide6.QtWidgets import QApplication
 
-from desktop.native.setup import DONE, FIRST, HOMEWORK, REMINDERS, WEEK
+from desktop.native.setup import HOMEWORK, REMINDERS, WEEK
 from desktop.native.weekmodel import hhmm_text
 from desktop.tests.account.support import (
     LightLaunches,
@@ -48,21 +48,16 @@ def test_setup_keeps_each_step_in_order_and_what_was_answered(
     create(qapp, window, "setup_student")
     through_recovery(qapp, window)
     session = window.session
-    # Material 3 is the only style, so setup opens on Your week and the rail has five rows.
-    assert [row["name"] for row in bridge.rail] == [
-        "Your week",
-        "Homework time",
-        "Reminders and alarm",
-        "First homework",
-        "Done",
-    ]
+    # Material 3 is the only style and setup is three steps of cards, so the rail has three rows.
+    assert [row["name"] for row in bridge.rail] == ["School hours", "Study hours", "Look & alerts"]
     seen = [bridge.setupStep]
 
     def step_saved(step: int) -> bool:
         wanted = (session.preferences or {}).get("setup", {}).get("step")
         return wanted == step
 
-    # Your week
+    # School hours: the card that means more opens the detailed controls
+    bridge.setSchoolPreset("custom")
     bridge.setClock24(True)
     bridge.setCutoff("21:00")
     bridge.toggleSchoolDay(5)
@@ -81,43 +76,33 @@ def test_setup_keeps_each_step_in_order_and_what_was_answered(
     assert session.preferences["clock_24h"] is True
     soccer = next(block for block in session.blocks if block["title"] == "Soccer")
     assert soccer["days"] == [1, 3] and soccer["start"] == "16:00" and soccer["duration_min"] == 90
-    # Homework time
+    # Study hours
     bridge.setPlanning("manual")
-    bridge.setDragStep(15)
+    bridge.setStudyPreset("custom")
+    bridge.setDragStep(5)
     bridge.addWorkPreset("After school")
     bridge.setupNext()
     seen.append(bridge.setupStep)
     wait_until(qapp, lambda: step_saved(REMINDERS))
     assert session.preferences["planning_style"] == "manual"
-    assert session.preferences.get("drag_step_min", 15) == 15
+    assert session.preferences["drag_step_min"] == 5
     settle(qapp, window)
     assert session.preferences["work_windows"][0]["start"] == "15:30"
-    # Reminders
+    # Look and alerts
+    bridge.setSoundOpen(True)
     bridge.setReminders(True)
     bridge.setLead(20)
     # Not the default tone: the server leaves a default out of the preferences it answers with.
     tone = next(row["value"] for row in bridge.tones if row["value"] not in {"spotify", "chime"})
     bridge.setTone(tone)
-    bridge.setupNext()
-    seen.append(bridge.setupStep)
-    wait_until(qapp, lambda: step_saved(FIRST))
-    assert session.preferences["reminder_lead_min"] == 20
-    assert session.preferences["alarm_tone"] == tone
-    # First homework
-    bridge.setHomeworkTitle(0, "Chemistry lab")
-    bridge.setHomeworkMinutes(0, 45)
-    bridge.setupNext()
-    seen.append(bridge.setupStep)
-    wait_until(qapp, lambda: step_saved(DONE))
-    assert seen == [WEEK, HOMEWORK, REMINDERS, FIRST, DONE]
-    assert any(item["title"] == "Chemistry lab" for item in session.assignments.values())
-    assert "Chemistry lab" in " ".join(row["value"] for row in bridge.summaryRows)
-    assert [row["name"] for row in bridge.summaryRows][0] == "Your week"
     assert bridge.nextLabel == "Open my week"
-    # Finish: the Material week opens.
     bridge.setupNext()
     wait_until(qapp, lambda: bridge.phase == "app")
     settle(qapp, window)
+    assert seen == [WEEK, HOMEWORK, REMINDERS]
+    assert session.preferences["reminder_lead_min"] == 20
+    assert session.preferences["alarm_tone"] == tone
+    # Finish: the Material week opens.
     assert page(window) == "materialPage"
     assert shown(window, "materialRail")
     assert (session.preferences.get("setup") or {}).get("finished_at")
@@ -164,15 +149,13 @@ def test_a_second_account_does_not_inherit_the_first_ones_answers(
     bridge = account(window)
     create(qapp, window, "first_student")
     through_recovery(qapp, window)
+    bridge.setSchoolPreset("custom")
     bridge.setCutoff("20:00")
     bridge.setActivityTitle(0, "Robotics club")
     bridge.toggleActivityDay(0, 2)
     bridge.setupNext()
     bridge.setupNext()
-    bridge.setupNext()
-    bridge.setHomeworkTitle(0, "Essay for first")
-    bridge.setupNext()
-    wait_until(qapp, lambda: bridge.setupStep == DONE)
+    wait_until(qapp, lambda: bridge.setupStep == REMINDERS)
     bridge.setupNext()
     wait_until(qapp, lambda: bridge.phase == "app")
     settle(qapp, window)
@@ -185,10 +168,7 @@ def test_a_second_account_does_not_inherit_the_first_ones_answers(
     assert bridge.activities == [
         {"title": "", "days": [], "start": "3:30 PM", "end": "5:00 PM", "category": "extra"}
     ]
-    for _ in range(3):
-        bridge.setupNext()
-    assert bridge.setupStep == FIRST
-    assert [row["title"] for row in bridge.homeworkRows] == [""]
+    assert bridge.power is False
     assert not any(block["title"] == "Robotics club" for block in window.session.blocks)
 
 

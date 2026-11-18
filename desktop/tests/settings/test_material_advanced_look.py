@@ -191,6 +191,8 @@ def test_readability_lists_failing_colours_and_fix_makes_them_read(
     panel = _panel(window)
     panel.setMode("light")
     panel.openAdvanced()
+    # The colour codes and the Fix buttons sit on the All tier.
+    panel.setLookTier("all")
     _pump(qapp)
     assert panel.property("state")["problems"] == []
     school_ink = category_paint("school", "light")[1]
