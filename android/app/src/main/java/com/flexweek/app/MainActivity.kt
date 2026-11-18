@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.layout.Box
@@ -15,7 +16,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -76,6 +82,8 @@ import com.flexweek.app.update.UpdateState
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Edge to edge with the status and navigation bar icons dark on light and light on dark.
+        enableEdgeToEdge()
         val app = application as FlexWeekApp
         val tweaks = ScreenshotTweaks.fromIntent(intent)
         setContent {
@@ -175,7 +183,7 @@ private enum class ActiveSheet {
 @Composable
 private fun StartupScreen(problem: String?) {
     Surface(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().padding(24.dp)) {
+        Box(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp)) {
             Text(problem ?: "Opening FlexWeek…", style = MaterialTheme.typography.bodyLarge)
         }
     }
@@ -233,13 +241,15 @@ private fun FlexWeekRoot(
                 pendingNotifPrompt = true
             }
         }
-        PairScreen(
-            state = pairState,
-            onShowCode = vm::showCodeEntry,
-            onShowQr = vm::showQr,
-            onCodeChange = vm::onCodeChange,
-            onPair = vm::submitPair,
-        )
+        Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+            PairScreen(
+                state = pairState,
+                onShowCode = vm::showCodeEntry,
+                onShowQr = vm::showQr,
+                onCodeChange = vm::onCodeChange,
+                onPair = vm::submitPair,
+            )
+        }
         return
     }
     val todayVm = viewModel { TodayViewModel(core) }
@@ -309,20 +319,33 @@ private fun FlexWeekRoot(
     }
     Scaffold(
         bottomBar = {
-            NavigationBar(Modifier.height(64.dp)) {
+            NavigationBar {
                 MainTabs.releaseTabs.forEach { item ->
                     NavigationBarItem(
                         selected = tab == item,
                         onClick = { tab = item },
-                        icon = { Text(item.icon) },
-                        label = { Text(item.label) },
+                        icon = {
+                            Icon(
+                                painterResource(if (tab == item) item.selectedIcon else item.icon),
+                                contentDescription = null,
+                            )
+                        },
+                        label = { Text(item.label, maxLines = 1) },
                     )
                 }
             }
         },
         floatingActionButton = {
             if (sheet == ActiveSheet.None && MainTabs.addAvailable(tab)) {
-                Button(onClick = { sheet = ActiveSheet.Add }, modifier = Modifier.height(56.dp)) { Text("+ Add") }
+                ExtendedFloatingActionButton(
+                    onClick = { sheet = ActiveSheet.Add },
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ) {
+                    Icon(painterResource(R.drawable.ic_add), contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add")
+                }
             }
         },
     ) { padding ->

@@ -1,9 +1,12 @@
 package com.flexweek.app.ui.nav
 
-enum class MainTab(val label: String, val icon: String) {
-    Today("Today", "▤"),
-    Week("Week", "▦"),
-    Settings("Settings", "⚙"),
+import androidx.annotation.DrawableRes
+import com.flexweek.app.R
+
+enum class MainTab(val label: String, @DrawableRes val icon: Int, @DrawableRes val selectedIcon: Int) {
+    Today("Today", R.drawable.ic_today, R.drawable.ic_today_filled),
+    Week("Week", R.drawable.ic_calendar_view_week, R.drawable.ic_calendar_view_week_filled),
+    Settings("Settings", R.drawable.ic_settings, R.drawable.ic_settings_filled),
 }
 
 /** The bottom bar's tabs, in order, and where Add shows: MainActivity draws both from here. */

@@ -14,9 +14,9 @@ class WidgetPaletteTest {
 
     @Test fun schoolSportsAndHomeworkUseTheThemesColours() {
         val expected = mapOf(
-            "school" to (0xFF3D6FC4.toInt() to 0xFF7FA8FF.toInt()),
-            "sports" to (0xFF2F7D4A.toInt() to 0xFF7ED39A.toInt()),
-            "hw" to (0xFFB42318.toInt() to 0xFFFF8A7A.toInt()),
+            "school" to (0xFF4A6FB5.toInt() to 0xFF9DB8F0.toInt()),
+            "sports" to (0xFF2F7D55.toInt() to 0xFF7FCF9F.toInt()),
+            "hw" to (0xFF9A6A12.toInt() to 0xFFE3B65A.toInt()),
         )
         assertTrue("there are colours to check", expected.isNotEmpty())
         for ((category, pair) in expected) {
@@ -32,9 +32,9 @@ class WidgetPaletteTest {
     }
 
     @Test fun anyOtherCategoryGetsTheThemesOutlineColour() {
-        assertEquals(0xFFC3CCD9.toInt(), WidgetPalette.categoryArgb("study", dark = false))
-        assertEquals(0xFF3A3F46.toInt(), WidgetPalette.categoryArgb("study", dark = true))
-        assertTrue(inTheme(0xFFC3CCD9.toInt()))
-        assertTrue(inTheme(0xFF3A3F46.toInt()))
+        assertEquals(0xFF74777F.toInt(), WidgetPalette.categoryArgb("study", dark = false))
+        assertEquals(0xFF8E9099.toInt(), WidgetPalette.categoryArgb("study", dark = true))
+        assertTrue(inTheme(0xFF74777F.toInt()))
+        assertTrue(inTheme(0xFF8E9099.toInt()))
     }
 }
