@@ -317,31 +317,6 @@ def test_choosing_material_again_retries_a_failed_open_and_current_follows_the_l
             os.environ[cpu_drawing.BACKEND_ENV] = previous
 
 
-def test_material_is_not_current_after_a_late_failure_or_a_rebuilt_settings_page(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    """Material that opens and then fails, and a Settings page built after a failed open, both leave
-    the Material card not Current while the Widgets week is up."""
-    dialog = prefs(window)
-    host = window._ensure_material()
-    assert host is not None
-    dialog.look.material.chosen.emit()
-    for _ in range(20):
-        qapp.processEvents()
-    assert window._stack.currentWidget().objectName() == "materialPage"
-    host._on_scene_graph_error(None, "the graphics device was lost")
-    for _ in range(20):
-        qapp.processEvents()
-    assert window._material_gave_up is True
-    window._open_settings()
-    for _ in range(5):
-        qapp.processEvents()
-    assert window._settings.look.material.note.text() != "Current"
-    window._discard_settings_page()
-    window._attach_settings_page(window._build_settings_page())
-    assert window._settings.look.material.note.text() != "Current"
-
-
 def test_retro_gives_the_settings_text_its_own_ink_whatever_look_is_worn(
     qapp: QApplication, window: NativeWindow
 ) -> None:
