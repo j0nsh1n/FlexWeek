@@ -19,8 +19,8 @@ use super::protocol::{
 use super::service::Ctx;
 use super::{NetError, NetResult, SyncSummary, blocking, open_db};
 use crate::{
-    ApplyReport, Batch, Peer, SyncError, acknowledge_pull, acknowledge_push, apply_batch, export_since,
-    list_peers, revoke_peer, scan,
+    ApplyReport, Batch, Peer, SyncError, acknowledge_pull, acknowledge_push, apply_batch,
+    export_since, list_peers, revoke_peer, scan,
 };
 
 const IDLE_MS: u64 = 60_000;

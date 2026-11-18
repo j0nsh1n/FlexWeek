@@ -20,4 +20,8 @@ class TimeLabelTest {
 
     @Test fun aMoveToAnotherDayNamesBothDays() =
         assertEquals("Thu 7 PM → Fri 3:30 PM", TimeLabel.lateDetail(3, "19:00", 4, "15:30"))
+
+    @Test fun nowEndsOnTheSameDayHasNoDay() = assertEquals("Now ends at 7 PM", TimeLabel.nowEnds("19:00", null))
+
+    @Test fun nowEndsOnAnotherDayNamesTheDay() = assertEquals("Now ends Thu 7 PM", TimeLabel.nowEnds("19:00", 3))
 }

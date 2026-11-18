@@ -18,5 +18,11 @@ object TimeLabel {
         return "${at(fromDay, fromStart)} → ${at(toDay, toStart)}"
     }
 
+    /** "Now ends at 7 PM" on the same day, "Now ends Thu 7 PM" when the session moved to another day. */
+    fun nowEnds(end: String, endDay: Int?): String {
+        val time = runCatching { short(end) }.getOrDefault(end)
+        return if (endDay == null) "Now ends at $time" else "Now ends ${DAYS[endDay]} $time"
+    }
+
     fun dayAndTime(dayIndex: Int, hhmm: String): String = "${DAYS[dayIndex]} ${short(hhmm)}"
 }

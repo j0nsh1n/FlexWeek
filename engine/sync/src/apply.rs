@@ -387,11 +387,7 @@ pub fn apply_batch(conn: &mut Connection, batch: &Batch, now_ms: i64) -> SyncRes
     Ok(report)
 }
 
-fn apply_in(
-    tx: &mut Transaction<'_>,
-    batch: &Batch,
-    now_ms: i64,
-) -> SyncResult<ApplyReport> {
+fn apply_in(tx: &mut Transaction<'_>, batch: &Batch, now_ms: i64) -> SyncResult<ApplyReport> {
     let mut report = ApplyReport::default();
     let mut user_id: Option<i64> = tx
         .query_row(

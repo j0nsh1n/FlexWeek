@@ -221,13 +221,23 @@ fn current_late_block(
             .find(|item| item.get("id").and_then(Value::as_str) == Some(id))?;
         let start = after.get("start").and_then(Value::as_str)?;
         let start = flexweek_engine::time::hhmm_to_minutes(start).ok()?;
-        Some(start + duration)
+        let new_day = after
+            .get("days")
+            .and_then(Value::as_array)
+            .and_then(|days| days.first())
+            .and_then(Value::as_i64);
+        Some((start + duration, new_day))
     });
+    // The day is only given when the session left today, so the sheet can name it.
+    let end_day = moved_end
+        .and_then(|(_, new_day)| new_day)
+        .filter(|new_day| *new_day != day);
+    let moved_end = moved_end.map(|(end, _)| end);
     let end_min = moved_end.unwrap_or_else(|| {
         flexweek_engine::time::hhmm_to_minutes(late_start).unwrap_or(clock_min) + minutes
     });
     let end = flexweek_engine::time::minutes_to_hhmm(end_min);
-    json!({"title": title, "end": end, "minutes": minutes})
+    json!({"title": title, "end": end, "end_day": end_day, "minutes": minutes})
 }
 
 fn unchanged_fixed_blocks(before: &[Value], after: &[Value], after_min: i64) -> Vec<Value> {
@@ -661,7 +671,26 @@ mod tests {
         );
         let result: Value = serde_json::from_str(&week.running_late(0, 30, 0.0).unwrap()).unwrap();
         assert_eq!(result["current"]["end"], "17:30", "{result}");
+        assert!(result["current"]["end_day"].is_null(), "{result}");
         assert_eq!(result["stays"][0]["title"], "Soccer", "{result}");
+    }
+
+    #[test]
+    fn a_session_pushed_to_another_day_gives_that_day_and_a_same_day_one_gives_none() {
+        let before = [
+            json!({"id":"s","title":"History essay","kind":"flexible","days":[0],"start":"22:00","duration_min":60}),
+        ];
+        let tuesday = [
+            json!({"id":"s","title":"History essay","kind":"flexible","days":[1],"start":"19:00","duration_min":60}),
+        ];
+        let same_day = [
+            json!({"id":"s","title":"History essay","kind":"flexible","days":[0],"start":"23:00","duration_min":60}),
+        ];
+        let moved = current_late_block(&before, &tuesday, 0, 1325, "22:05", 60);
+        assert_eq!(moved["end"], "20:00", "{moved}");
+        assert_eq!(moved["end_day"], 1, "{moved}");
+        let stayed = current_late_block(&before, &same_day, 0, 1325, "22:05", 60);
+        assert!(stayed["end_day"].is_null(), "{stayed}");
     }
 
     #[test]

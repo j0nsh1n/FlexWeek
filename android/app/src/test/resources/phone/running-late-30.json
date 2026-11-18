@@ -69,6 +69,7 @@
   "current": {
     "title": "History essay",
     "end": "17:30",
+    "end_day": null,
     "minutes": 30
   },
   "stays": [

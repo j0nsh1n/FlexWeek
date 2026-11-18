@@ -41,7 +41,8 @@ data class RunningLateMove(
     val durationMin: Int,
 )
 
-data class RunningLateCurrent(val title: String, val end: String)
+/** [endDay] is the weekday (0 = Monday) the session now ends on, only when it left today. */
+data class RunningLateCurrent(val title: String, val end: String, val endDay: Int? = null)
 
 data class RunningLatePreview(
     val previewId: String,
@@ -239,7 +240,7 @@ object V2Json {
             previewId = root.getString("preview_id"),
             minutes = root.getInt("minutes"),
             moves = moves,
-            current = root.getJSONObject("current").let { RunningLateCurrent(it.getString("title"), it.getString("end")) },
+            current = root.getJSONObject("current").let { RunningLateCurrent(it.getString("title"), it.getString("end"), if (it.isNull("end_day")) null else it.optInt("end_day", -1).takeIf { day -> day in 0..6 }) },
             stays = root.getJSONArray("stays").let { values -> buildList { for (i in 0 until values.length()) add(values.getJSONObject(i).getString("title")) } },
             warning = if (root.isNull("warning")) null else root.optString("warning").takeIf { it.isNotBlank() },
         )

@@ -106,7 +106,7 @@ fun RunningLateSheet(
             Column(Modifier.padding(24.dp).verticalScroll(rememberScrollState())) {
                 if (preview != null) {
                     Text("${preview.current.title} is running late", style = MaterialTheme.typography.titleLarge)
-                    Text("Now ends at ${lateClockLabel(preview.current.end)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(TimeLabel.nowEnds(preview.current.end, preview.current.endDay), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     Text("Running late", style = MaterialTheme.typography.titleLarge)
                 }
@@ -150,5 +150,3 @@ fun RunningLateSheet(
         }
     }
 }
-
-private fun lateClockLabel(value: String): String = runCatching { TimeLabel.short(value) }.getOrDefault(value)

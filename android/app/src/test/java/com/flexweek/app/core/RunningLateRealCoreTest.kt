@@ -29,6 +29,14 @@ class RunningLateRealCoreTest {
         assertEquals(null, preview.warning)
     }
 
+    @Test fun theDayTheSessionMovedToComesThroughAndIsAbsentOnTheSameDay() {
+        val same = V2Json.parseRunningLate(RustPhoneJson.late(fixture(), 30))
+        assertEquals(null, same.current.endDay)
+        val moved = org.json.JSONObject(fixture())
+        moved.getJSONObject("current").put("end_day", 3)
+        assertEquals(3, V2Json.parseRunningLate(RustPhoneJson.late(moved.toString(), 30)).current.endDay)
+    }
+
     @Test fun realRunningLateWhyIsTheCoresSentence() {
         val move = V2Json.parseRunningLate(RustPhoneJson.late(fixture(), 30)).moves.single()
         assertTrue("why is the core's words, not the phone's default: ${move.why}", move.why != "Running late")
