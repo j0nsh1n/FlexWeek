@@ -222,6 +222,22 @@ def test_the_account_sheet_has_the_widgets_words_and_hides_the_passwords(
     ]
 
 
+def test_a_taller_account_sheet_shows_a_scroll_bar_and_every_action_is_reachable(
+    qapp: QApplication, shell: NativeWindow, sheets
+) -> None:
+    _open_account(qapp, shell, sheets)
+    body = _one(shell, "sheetBody")
+    bar = _one(shell, "sheetScrollBar")
+    assert float(body.property("contentHeight")) > float(body.property("height")), "the sheet is taller than its room"
+    assert bar.property("visible") is True, "the cue shows there is more below"
+    assert float(bar.property("size")) < 1.0
+    for name in ("exportDay", "importFile", "deleteAccount"):
+        found = named(_root(shell), name)
+        assert len(found) == 1 and found[0].property("visible") is True, name
+    _click(shell, "deleteAccount")
+    assert _asking(sheets) != "", "Delete account is reached by scrolling and asks first"
+
+
 def test_no_recovery_codes_left_is_said_as_a_problem(qapp: QApplication, shell: NativeWindow, sheets) -> None:
     shell.session.recovery_remaining = 0
     _open_account(qapp, shell, sheets)

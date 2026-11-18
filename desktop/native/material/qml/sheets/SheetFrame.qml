@@ -153,6 +153,29 @@ FocusScope {
             contentHeight: body.implicitHeight
             clip: true
             boundsBehavior: Flickable.StopAtBounds
+            // A sheet taller than the window scrolls; the bar in the card's margin, always shown while
+            // there is more below, is how a student sees there is more to reach.
+            ScrollBar.vertical: ScrollBar {
+                id: scrollCue
+                objectName: "sheetScrollBar"
+                parent: scroller.parent
+                x: scroller.x + scroller.width + 8
+                y: scroller.y
+                height: scroller.height
+                width: 8
+                policy: scroller.contentHeight > scroller.height + 1 ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
+                interactive: true
+                contentItem: Rectangle {
+                    implicitWidth: 6
+                    radius: 3
+                    color: root.highContrast ? pal.outline : pal.inkMuted
+                    opacity: scrollCue.pressed ? 0.9 : 0.6
+                }
+                background: Rectangle {
+                    radius: 3
+                    color: pal.surfaceContainerHighest
+                }
+            }
             // The ring of a focused field sits 4px outside it; the padding keeps it from being cut.
             Column {
                 id: body
