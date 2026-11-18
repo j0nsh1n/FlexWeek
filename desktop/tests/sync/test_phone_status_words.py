@@ -14,9 +14,9 @@ from desktop.native.devices import (
     countdown_words,
     pair_problem,
     seen_words,
-    sync_state,
     tries_words,
 )
+from desktop.native.settings_copy import sync_state
 
 pytest_plugins = ["desktop.tests.window_support"]
 

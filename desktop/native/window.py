@@ -129,7 +129,7 @@ from desktop.native.client import (
 )
 from desktop.native.controller import ROUTINE_STATUS, NativeSession, _late_summary, left_sentence
 from desktop.native.custom_look import sanitize_saved
-from desktop.native.devices import SyncDot, SyncHost, live_phones, run_off_ui, sync_state
+from desktop.native.devices import SyncDot, SyncHost, live_phones, run_off_ui
 from desktop.native.elevation import flatten, lift
 from desktop.native.feel import Context, apply_feel, context_for, current, extra_stylesheet, set_current
 from desktop.native.fields import ProblemLine, announce, week_start_day, week_start_notice
@@ -204,6 +204,7 @@ from desktop.native.settings import (
     TransferPreviewDialog,
     UpdateDialog,
 )
+from desktop.native.settings_copy import sync_state
 from desktop.native.setup import REMINDERS, SETUP_VERSION, STYLE, SetupPage, SetupState
 from desktop.native.sheet_rules import moved_day_names, same_weekday, turn_days_keeping_weekdays
 from desktop.native.sound import Bell

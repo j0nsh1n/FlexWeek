@@ -21,26 +21,21 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVB
 from shiboken6 import isValid
 
 from desktop.native.feel import current
+from desktop.native.settings_copy import (
+    DOT_WORDS,
+    RELAY_SENTENCE,
+    UNREACHABLE_WORDS,
+    clock_warning_words,
+    seen_words,
+)
 from desktop.native.widgets import Dialog, sheet_button, sheet_footer
 
 SYNC_SCAN_MS = 1000
 # The whole of one "Sync now" call. flexweek-sync's own default is 45 s.
 SYNC_DEADLINE_MS = 45_000
 PAIR_TICK_MS = 1000
-RELAY_SENTENCE = (
-    "When your computer isn't on the same Wi-Fi, FlexWeek uses a public relay run by n0. "
-    "It sees that two devices are talking, not what they send."
-)
-UNREACHABLE_WORDS = "Could not reach your phone. Make sure FlexWeek is open on it."
 NO_SYNC_WORDS = "Syncing isn't available on this computer right now. Your week is still saved here."
 NO_PHONE_WORDS = "No phone is linked yet."
-DOT_WORDS = {
-    "off": "",
-    "idle": "Waiting for a linked phone to sync",
-    "syncing": "Syncing with your phone",
-    "synced": "Synced with your phone",
-    "problem": "Could not reach your phone",
-}
 
 
 def start_service(database: Path) -> SyncService | None:
@@ -118,48 +113,13 @@ def live_phones(sync: SyncService, user_id: int | None) -> list[dict]:
     return [row for row in sync.peers(user_id) if not row["revoked"]]
 
 
-def seen_words(last_seen_ms: str | None, now_ms: int) -> str:
-    """When a phone last synced, in the card's words. last_seen is Unix milliseconds as text."""
-    if not last_seen_ms:
-        return "Not synced yet"
-    seen = int(last_seen_ms)
-    minutes = max(0, now_ms - seen) // 60_000
-    if minutes < 1:
-        return "Synced just now"
-    if minutes < 60:
-        return f"Synced {minutes} min ago"
-    if minutes < 24 * 60:
-        return f"Synced {minutes // 60} h ago"
-    return f"Not seen since {datetime.fromtimestamp(seen / 1000):%A}"
-
-
 def countdown_words(seconds: int) -> str:
     minutes, rest = divmod(max(0, seconds), 60)
     return f"Code works for {minutes}:{rest:02d}"
 
 
-def clock_warning_words(count: int) -> str:
-    if count <= 0:
-        return ""
-    noun, verb = ("change", "was") if count == 1 else ("changes", "were")
-    return f"Your phone's clock looks wrong. {count} {noun} {verb} held back."
-
-
 def tries_words(tries: int) -> str:
     return "1 try left" if tries == 1 else f"{tries} tries left"
-
-
-def sync_state(status: dict, linked: bool) -> str:
-    """Which picture the status dot shows. A failed call stays a problem until one call works."""
-    if not linked:
-        return "off"
-    if status["syncing"]:
-        return "syncing"
-    if status["last_error"]:
-        return "problem"
-    if status["last_sync_ms"] is None:
-        return "idle"
-    return "synced"
 
 
 def pair_problem(state: str) -> str:

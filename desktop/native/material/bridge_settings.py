@@ -19,16 +19,6 @@ from backend.comfort import TIMER_PRESETS, snap_minutes
 from backend.models import TimeBlock, WeekRequest, valid_spotify_url
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm
 from desktop.native.calendar import DAY_FULL, DAYS, SETUP_SCHOOL_ID, this_week_line
-from desktop.native.devices import (
-    DOT_WORDS,
-    RELAY_SENTENCE,
-    UNREACHABLE_WORDS,
-    clock_warning_words,
-    seen_words,
-    sync_linked_phones,
-    sync_state,
-    unlink_phone,
-)
 from desktop.native.fields import (
     WEEK_STARTS,
     save_week_starts_on,
@@ -93,6 +83,7 @@ from desktop.native.settings_copy import (
     ALARM_TONE_LABELS,
     BLOCK_SONG_NOTE,
     DND_NOTE,
+    DOT_WORDS,
     FOCUS_AUDIO_NOTE,
     NO_PROTECTED,
     NO_SCHOOL_DAYS,
@@ -100,12 +91,17 @@ from desktop.native.settings_copy import (
     NO_STUDY_HOURS,
     PLANNING_STYLES,
     PROTECTED_WORDS,
+    RELAY_SENTENCE,
     SCHOOL_HOURS_NOTE,
     SPLIT_ROUNDED,
     SPOTIFY_LINK_HINT,
     SPOTIFY_TONE_REST,
     STUDY_HOURS_LINE,
     TRAY_NOTE,
+    UNREACHABLE_WORDS,
+    clock_warning_words,
+    seen_words,
+    sync_state,
 )
 from desktop.native.sound import Bell
 from desktop.native.spotify import SpotifyPlayer
@@ -1292,12 +1288,11 @@ class SettingsBridge(QObject):
 
     @Slot()
     def syncNow(self) -> None:
-        service = self._sync_service()
-        if service is None or self._sync_busy:
+        if self._sync_service() is None or self._sync_busy:
             return
         self._sync_busy = True
         self._publish()
-        sync_linked_phones(self, service, self._synced)
+        self._window.session.sync_linked_phones(self._synced)
 
     def _synced(self, rows: list | None, problem: Exception | None) -> None:
         self._sync_busy = False
@@ -1324,9 +1319,7 @@ class SettingsBridge(QObject):
     @Slot(str)
     def answerRemovePhone(self, choice: str) -> None:
         ask, self._remove_ask = self._remove_ask, {}
-        service = self._sync_service()
-        account = self._window.session.account
-        if choice != "remove" or not ask or service is None or account is None:
+        if choice != "remove" or not ask:
             self._publish()
             return
 
@@ -1335,7 +1328,7 @@ class SettingsBridge(QObject):
             self._window._sync_tick()  # type: ignore[attr-defined]
             self._publish()
 
-        unlink_phone(self, service, int(account["id"]), ask["id"], gone)
+        self._window.session.unlink_phone(ask["id"], gone)
         self._publish()
 
     def _write(self, updates: dict[str, Any], *, login: bool | None = None) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 
 from desktop.native.calendar import DAY_FULL
 
@@ -278,3 +279,54 @@ def transfer_summary(preview: dict) -> str:
     if not lines:
         lines.append("Nothing in it is different from your account.")
     return " ".join(lines)
+
+
+# Linked phones and syncing: the words and rules the Devices card, the status dot and Material's
+# Settings > This computer share.
+RELAY_SENTENCE = (
+    "When your computer isn't on the same Wi-Fi, FlexWeek uses a public relay run by n0. "
+    "It sees that two devices are talking, not what they send."
+)
+UNREACHABLE_WORDS = "Could not reach your phone. Make sure FlexWeek is open on it."
+DOT_WORDS = {
+    "off": "",
+    "idle": "Waiting for a linked phone to sync",
+    "syncing": "Syncing with your phone",
+    "synced": "Synced with your phone",
+    "problem": "Could not reach your phone",
+}
+
+
+def seen_words(last_seen_ms: str | None, now_ms: int) -> str:
+    """When a phone last synced, in the card's words. last_seen is Unix milliseconds as text."""
+    if not last_seen_ms:
+        return "Not synced yet"
+    seen = int(last_seen_ms)
+    minutes = max(0, now_ms - seen) // 60_000
+    if minutes < 1:
+        return "Synced just now"
+    if minutes < 60:
+        return f"Synced {minutes} min ago"
+    if minutes < 24 * 60:
+        return f"Synced {minutes // 60} h ago"
+    return f"Not seen since {datetime.fromtimestamp(seen / 1000):%A}"
+
+
+def clock_warning_words(count: int) -> str:
+    if count <= 0:
+        return ""
+    noun, verb = ("change", "was") if count == 1 else ("changes", "were")
+    return f"Your phone's clock looks wrong. {count} {noun} {verb} held back."
+
+
+def sync_state(status: dict, linked: bool) -> str:
+    """Which picture the status dot shows. A failed call stays a problem until one call works."""
+    if not linked:
+        return "off"
+    if status["syncing"]:
+        return "syncing"
+    if status["last_error"]:
+        return "problem"
+    if status["last_sync_ms"] is None:
+        return "idle"
+    return "synced"
