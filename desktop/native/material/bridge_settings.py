@@ -15,6 +15,7 @@ from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from backend.app import Preferences
 from backend.models import valid_spotify_url
+from desktop.native import feedback
 from desktop.native.fields import (
     WEEK_STARTS,
     save_week_starts_on,
@@ -938,6 +939,7 @@ class SettingsBridge(QObject):
             "letters": self._letter_keys,
             "developerBuilds": self._window._updates.get("developer_builds") is True,
             "developerBuildsOffered": offers_developer_builds(install_kind()),
+            "feedbackAvailable": feedback.available(),
             "version": (
                 f"FlexWeek {VERSION} (developer build)" if CHANNEL == "dev" else f"FlexWeek {VERSION}"
             ),
@@ -1622,3 +1624,7 @@ class SettingsBridge(QObject):
     @Slot()
     def checkUpdates(self) -> None:
         self._window._check_updates(asked=True)
+
+    @Slot()
+    def reportProblem(self) -> None:
+        feedback.open_form()

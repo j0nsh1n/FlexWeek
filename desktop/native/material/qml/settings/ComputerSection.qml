@@ -67,6 +67,14 @@ SectionPage {
             subtitle: page.st.version || ""
             onClicked: page.panel.checkUpdates()
         }
+        LinkRow {
+            objectName: "reportProblemRow"
+            visible: !!page.st.feedbackAvailable
+            key: "report"
+            title: "Report a problem"
+            subtitle: "Opens a short form in your browser, with your FlexWeek version filled in."
+            onClicked: page.panel.reportProblem()
+        }
     }
     Group {
         LinkRow {

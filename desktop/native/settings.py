@@ -59,7 +59,7 @@ from PySide6.QtWidgets import (
 from backend.comfort import TIMER_PRESETS, snap_minutes
 from backend.models import valid_spotify_url
 from backend.slots import SLOT_MIN
-from desktop.native import autostart
+from desktop.native import autostart, feedback
 from desktop.native.calendar import DAY_FULL
 from desktop.native.controller import ROUTINE_STATUS
 from desktop.native.custom_look import UNNAMED, sanitize_saved, wear
@@ -1358,6 +1358,11 @@ class SettingsPage(QWidget):
         update_col.addWidget(self.developer_builds)
         update_col.addWidget(check_updates)
         computer_form.addRow("Updates", update_col)
+        if feedback.available():
+            report = _page_button("Report a problem…", "prefsReportProblem")
+            report.setToolTip("Opens a short form in your browser, with your FlexWeek version filled in.")
+            report.clicked.connect(feedback.open_form)
+            computer_form.addRow("Help", report)
         self.computer_buttons = (open_account, run_setup, check_updates)
         keys_card, keys_form = _card("Keyboard")
         # The same two switches as Material's Settings > Computer; the window sets them and saves them.
