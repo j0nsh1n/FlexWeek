@@ -201,3 +201,17 @@ def test_comfort_routes_require_a_session(client: TestClient) -> None:
         ).status_code
         == 401
     )
+
+
+@pytest.mark.parametrize("view", ["week", "day", "month", "myday"])
+def test_open_on_keeps_each_of_the_four_screens(alice: TestClient, view: str) -> None:
+    payload = {**defaults(), "preferred_view": view}
+    saved = alice.put("/api/preferences", json=payload, headers=WRITE)
+    assert saved.status_code == 200, saved.text
+    assert alice.get("/api/preferences").json()["preferred_view"] == view
+
+
+@pytest.mark.parametrize("view", ["year", "settings", ""])
+def test_open_on_still_refuses_other_screens(alice: TestClient, view: str) -> None:
+    refused = alice.put("/api/preferences", json={**defaults(), "preferred_view": view}, headers=WRITE)
+    assert refused.status_code == 422

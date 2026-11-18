@@ -685,7 +685,7 @@ class Preferences(BaseModel):
     end_chime: bool = Field(default=False, exclude_if=lambda value: value is False)
     tray_notifications: bool = Field(default=True, exclude_if=lambda value: value is True)
     start_at_login: bool = Field(default=False, exclude_if=lambda value: value is False)
-    preferred_view: Literal["week", "day"] | None = Field(
+    preferred_view: Literal["week", "day", "month", "myday"] | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
     sidebar_collapsed: bool = Field(default=False, exclude_if=lambda value: value is False)

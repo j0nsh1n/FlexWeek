@@ -34,6 +34,18 @@ SectionPage {
         }
     }
     Group {
+        visible: !!page.st.showMotion
+        GroupHeader { title: "Animations" }
+        ChoiceRow {
+            key: "animations"
+            title: "Animations"
+            subtitle: "How much moves when screens change. Reduce keeps only what you need to follow, Off stops it all."
+            choices: page.st.animationChoices || []
+            current: page.st.animations || "normal"
+            onChosen: (value) => page.panel.setAnimations(value)
+        }
+    }
+    Group {
         GroupHeader { title: "Light and dark" }
         ChoiceRow {
             key: "mode"

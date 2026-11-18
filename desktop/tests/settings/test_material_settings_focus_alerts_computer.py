@@ -92,7 +92,7 @@ def test_a_custom_saved_reminder_lead_stays_visible_and_is_not_rewritten_on_open
     assert _prefs(window).get("reminders_enabled") is True
 
 
-def test_this_computer_login_motion_and_shortcuts(
+def test_this_computer_login_and_shortcuts(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     applied: list[bool] = []
@@ -105,11 +105,7 @@ def test_this_computer_login_motion_and_shortcuts(
     assert applied == [True]
 
     assert bridge.property("reduceMotion") is False
-    _click(qapp, window, _named(root, "reduceMotion")[0])
-    wait_until(qapp, lambda: _prefs(window).get("motion") == "reduce")
-    wait_until(qapp, lambda: bridge.property("reduceMotion") is True)
-    _click(qapp, window, _named(root, "reduceMotion")[0])
-    wait_until(qapp, lambda: _prefs(window).get("motion") == "normal")
+    assert _named(root, "reduceMotion") == [], "the switch is now Animations, in Look"
 
     assert bridge.property("shortcuts") is True
     _click(qapp, window, _named(root, "shortcuts")[0])

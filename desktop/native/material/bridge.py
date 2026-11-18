@@ -53,6 +53,7 @@ from desktop.native.weekmodel import clock_label
 
 # Keys 1–5, and the StackLayout order. Week is the screen a new shell opens on.
 SCREENS = ("day", "week", "month", "myday", "settings")
+OPEN_ON = ("week", "day", "month", "myday")
 SNACK_MS = 10000
 WEEK_ZOOM = Scale("material.week", (32, 44, 56, 72, 96, 128, 192, 256), 56)
 DAY_ZOOM = Scale("material.day", (32, 44, 56, 72, 96, 128, 192, 256), 56)
@@ -95,6 +96,7 @@ class MaterialBridge(QObject):
         self._week_follow = None
         self._window = cast(_Window, window)
         self._screen = "week"
+        self._opened_for: str | None = None
         self._snack = ""
         self._snack_action = "UNDO"
         self._snack_target = ""
@@ -161,8 +163,25 @@ class MaterialBridge(QObject):
         self._publish_theme()
         self._settings_bridge.note_applied()
 
+    def _open_on_saved_screen(self) -> None:
+        """Open on the screen "Open on" names, once per sign-in. A later change in Settings waits for the
+        next sign-in, so it never moves a student who is already somewhere."""
+        session = self._window.session
+        account = session.account
+        if account is None:
+            self._opened_for = None
+            return
+        prefs = session.preferences
+        if prefs is None or self._opened_for == str(account["id"]):
+            return
+        self._opened_for = str(account["id"])
+        wanted = prefs.get("preferred_view")
+        if wanted in OPEN_ON:
+            self.open_page(wanted)
+
     def refresh(self) -> None:
         """Read the session again. Does not consume a Widgets prompt."""
+        self._open_on_saved_screen()
         self._publish_theme()
         self._week.reload(self._mode)
         self._day.reload(self._mode)

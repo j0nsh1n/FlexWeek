@@ -30,14 +30,6 @@ SectionPage {
             isOn: !!page.st.letters
             onFlipped: (value) => page.panel.setLetterKeys(value)
         }
-        ToggleRow {
-            key: "reduceMotion"
-            visible: !!page.st.showMotion
-            title: "Reduce motion"
-            subtitle: "Stops transitions and animations."
-            isOn: !!page.st.reduceMotion
-            onFlipped: (value) => page.panel.setReduceMotion(value)
-        }
     }
     Group {
         LinkRow {

@@ -87,6 +87,7 @@ from desktop.native.settings_copy import (
     NO_SCHOOL_DAYS,
     NO_SOUND,
     NO_STUDY_HOURS,
+    PLANNING_STYLES,
     PROTECTED_WORDS,
     SCHOOL_HOURS_NOTE,
     SPLIT_ROUNDED,
@@ -137,6 +138,22 @@ TIMER_CHOICES = (
     {"label": "Custom", "value": "custom"},
 )
 SAVE_REFUSED = "Could not save that."
+# Open on: the four screens FlexWeek can start on. Nothing saved opens on the week.
+OPEN_ON = (
+    {"label": "Week", "value": "week"},
+    {"label": "Day", "value": "day"},
+    {"label": "Month", "value": "month"},
+    {"label": "My day", "value": "myday"},
+)
+OPEN_ON_VALUES = {item["value"] for item in OPEN_ON}
+ANIMATIONS = (
+    {"label": "Off", "value": "off"},
+    {"label": "Reduce", "value": "reduce"},
+    {"label": "Normal", "value": "normal"},
+    {"label": "More", "value": "extra"},
+)
+ANIMATION_VALUES = {item["value"] for item in ANIMATIONS}
+PLANNING_VALUES = {value for value, _label, _note in PLANNING_STYLES}
 # The planner lane names these. The first one that exists on Preferences is the one we write.
 _WEEKEND_FREE = next(
     (
@@ -999,6 +1016,7 @@ class SettingsBridge(QObject):
         audio = prefs.get("focus_audio") or "off"
         cutoff = prefs.get("day_cutoff") or ""
         motion = prefs.get("motion")
+        open_on = prefs.get("preferred_view")
         phones = self._phone_names()
         problems = self._problem_rows()
         return {
@@ -1085,6 +1103,16 @@ class SettingsBridge(QObject):
             "showWeekends": bool(prefs.get(_SHOW_WEEKENDS, True)) if _SHOW_WEEKENDS else True,
             "startAtLogin": prefs.get("start_at_login") is True,
             "reduceMotion": motion in ("reduce", "off"),
+            "animations": motion if motion in ANIMATION_VALUES else "normal",
+            "animationChoices": list(ANIMATIONS),
+            "openOn": open_on if open_on in OPEN_ON_VALUES else "week",
+            "openOnChoices": list(OPEN_ON),
+            "showOpenOn": "preferred_view" in _FIELDS,
+            "planningStyle": prefs.get("planning_style") or "suggest",
+            "planningStyleChoices": [
+                {"value": value, "label": label, "note": note} for value, label, note in PLANNING_STYLES
+            ],
+            "showPlanningStyle": "planning_style" in _FIELDS,
             "shortcuts": self._shortcuts,
             "letters": self._letter_keys,
             "developerBuilds": self._window._updates.get("developer_builds") is True,
@@ -1760,10 +1788,20 @@ class SettingsBridge(QObject):
         if "start_at_login" in _FIELDS:
             self._write({"start_at_login": bool(on)}, login=bool(on))
 
-    @Slot(bool)
-    def setReduceMotion(self, on: bool) -> None:
-        if "motion" in _FIELDS:
-            self._write({"motion": "reduce" if on else "normal"})
+    @Slot(str)
+    def setAnimations(self, value: str) -> None:
+        if value in ANIMATION_VALUES and "motion" in _FIELDS:
+            self._write({"motion": value})
+
+    @Slot(str)
+    def setOpenOn(self, value: str) -> None:
+        if value in OPEN_ON_VALUES and "preferred_view" in _FIELDS:
+            self._write({"preferred_view": value})
+
+    @Slot(str)
+    def setPlanningStyle(self, value: str) -> None:
+        if value in PLANNING_VALUES and "planning_style" in _FIELDS:
+            self._write({"planning_style": value})
 
     @Slot(bool)
     def setShortcuts(self, on: bool) -> None:
