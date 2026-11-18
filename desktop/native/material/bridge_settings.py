@@ -9,6 +9,7 @@ save is not built; the flags below say which those are.
 from __future__ import annotations
 
 import copy
+import time
 from typing import Any
 
 from pydantic import ValidationError
@@ -19,6 +20,16 @@ from backend.comfort import TIMER_PRESETS, snap_minutes
 from backend.models import TimeBlock, WeekRequest, valid_spotify_url
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm
 from desktop.native.calendar import DAY_FULL, DAYS, SETUP_SCHOOL_ID, this_week_line
+from desktop.native.devices import (
+    DOT_WORDS,
+    RELAY_SENTENCE,
+    UNREACHABLE_WORDS,
+    clock_warning_words,
+    seen_words,
+    sync_linked_phones,
+    sync_state,
+    unlink_phone,
+)
 from desktop.native.fields import (
     WEEK_STARTS,
     save_week_starts_on,
@@ -907,6 +918,10 @@ class SettingsBridge(QObject):
         self._save_error = ""
         self._pair_code = ""
         self._pair_error = ""
+        self._sync_busy = False
+        self._clock_warning = ""
+        self._sync_problem = ""
+        self._remove_ask: dict[str, str] = {}
         self._export_text = ""
         self._ask_preset = False
         self._pending_preset = ""
@@ -923,7 +938,21 @@ class SettingsBridge(QObject):
         if signal is not None:
             signal.connect(self._on_session)
         week_start_notice().changed.connect(self._on_week_start)
+        # The phone list and the sync dot change on the window's own clock, so This computer is read again
+        # every few seconds while it is the page on view.
+        self._phones_seen: tuple = ()
+        self._watch = QTimer(self)
+        self._watch.setInterval(2000)
+        self._watch.timeout.connect(self._watch_phones)
+        self._watch.start()
         self._load_applied(keep_draft=False)
+
+    def _watch_phones(self) -> None:
+        if self._section != "computer" or self._bridge.screen != "settings":  # type: ignore[attr-defined]
+            return
+        seen = (self._phone_rows(), self._sync_words())
+        if seen != self._phones_seen:
+            self._publish()
 
     def note_applied(self) -> None:
         """The shell re-read the look file. Keep a draft the student is still editing."""
@@ -1021,6 +1050,9 @@ class SettingsBridge(QObject):
         motion = prefs.get("motion")
         open_on = prefs.get("preferred_view")
         phones = self._phone_names()
+        phone_rows = self._phone_rows()
+        sync_words = self._sync_words()
+        self._phones_seen = (phone_rows, sync_words)
         problems = self._problem_rows()
         return {
             "section": self._section,
@@ -1129,6 +1161,15 @@ class SettingsBridge(QObject):
             "pairCode": self._pair_code,
             "pairError": self._pair_error,
             "phones": phones,
+            "phoneRows": phone_rows,
+            "syncWords": sync_words,
+            "syncBusy": self._sync_busy,
+            "canSync": self._sync_service() is not None and bool(phone_rows),
+            "clockWarning": self._clock_warning,
+            "syncProblem": self._sync_problem,
+            "relayNote": RELAY_SENTENCE,
+            "askRemove": bool(self._remove_ask),
+            "removeName": self._remove_ask.get("name", ""),
             "showClock": "clock_24h" in _FIELDS,
             "showAudio": "focus_audio" in _FIELDS,
             "showSpotify": "default_spotify_url" in _FIELDS,
@@ -1214,6 +1255,90 @@ class SettingsBridge(QObject):
                 names.append(str(row.get("name") or "Phone"))
         return names
 
+    def _sync_service(self) -> Any:
+        host = getattr(self._window, "_sync_host", None)
+        return getattr(host, "service", None)
+
+    def _phone_rows(self) -> list[dict[str, str]]:
+        """Each linked phone with when it last synced, as the Widgets Devices card said it."""
+        found = getattr(self._window, "_linked_phones", None)
+        if not callable(found):
+            return []
+        try:
+            rows = found() or []
+        except Exception:
+            return []
+        now_ms = int(time.time() * 1000)
+        shown: list[dict[str, str]] = []
+        for row in rows:
+            if isinstance(row, dict):
+                shown.append(
+                    {
+                        "id": str(row.get("device_id") or ""),
+                        "name": str(row.get("name") or "Phone"),
+                        "seen": seen_words(row.get("last_seen"), now_ms),
+                    }
+                )
+        return shown
+
+    def _sync_words(self) -> str:
+        """The status the Widgets dot's tooltip gave: waiting, syncing, synced or could not reach."""
+        service = getattr(self._window, "_sync", None)
+        if service is None:
+            return ""
+        try:
+            return DOT_WORDS[sync_state(service.status(), bool(self._phone_rows()))]
+        except Exception:
+            return ""
+
+    @Slot()
+    def syncNow(self) -> None:
+        service = self._sync_service()
+        if service is None or self._sync_busy:
+            return
+        self._sync_busy = True
+        self._publish()
+        sync_linked_phones(self, service, self._synced)
+
+    def _synced(self, rows: list | None, problem: Exception | None) -> None:
+        self._sync_busy = False
+        if problem is not None:
+            self._sync_problem = f"Sync failed: {problem}"
+            self._clock_warning = ""
+            self._publish()
+            return
+        skewed = sum(
+            row[1].get("clock_skewed", 0) for row in rows or [] if row[1] is not None and row[2] is None
+        )
+        self._clock_warning = clock_warning_words(skewed)
+        self._sync_problem = UNREACHABLE_WORDS if any(row[2] is not None for row in rows or []) else ""
+        self._publish()
+
+    @Slot(str)
+    def askRemovePhone(self, device_id: str) -> None:
+        row = next((item for item in self._phone_rows() if item["id"] == device_id), None)
+        if row is None:
+            return
+        self._remove_ask = {"id": device_id, "name": row["name"]}
+        self._publish()
+
+    @Slot(str)
+    def answerRemovePhone(self, choice: str) -> None:
+        ask, self._remove_ask = self._remove_ask, {}
+        service = self._sync_service()
+        account = self._window.session.account
+        if choice != "remove" or not ask or service is None or account is None:
+            self._publish()
+            return
+
+        def gone(_answer: Any, problem: Exception | None) -> None:
+            self._sync_problem = f"Could not remove {ask['name']}: {problem}" if problem is not None else ""
+            self._window._sync_tick()  # type: ignore[attr-defined]
+            self._publish()
+
+        unlink_phone(self, service, int(account["id"]), ask["id"], gone)
+        self._publish()
+
     def _write(self, updates: dict[str, Any], *, login: bool | None = None) -> None:
         session = self._window.session
         self._unsaved.update(updates)
@@ -1267,7 +1392,7 @@ class SettingsBridge(QObject):
 
     @Property(bool, notify=changed)
     def promptOpen(self) -> bool:
-        return bool(self._prompt) or self._ask_preset
+        return bool(self._prompt) or self._ask_preset or bool(self._remove_ask)
 
     @Property("QVariantMap", notify=changed)  # type: ignore[arg-type]
     def draftTheme(self) -> dict[str, Any]:

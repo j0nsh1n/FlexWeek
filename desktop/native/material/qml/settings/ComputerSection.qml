@@ -68,17 +68,47 @@ SectionPage {
             trailing: ""
             onClicked: page.panel.pair()
         }
-        SettingsRow {
-            visible: (page.st.phones || []).length > 0
-            title: "Linked phones"
-            subtitle: (page.st.phones || []).join(", ")
-            objectName: "row_phones"
+        Repeater {
+            model: page.st.phoneRows || []
+            delegate: ActionRow {
+                required property var modelData
+                key: "phone_" + modelData.id
+                title: modelData.name
+                subtitle: modelData.seen
+                buttonText: "Remove"
+                onActivated: page.panel.askRemovePhone(modelData.id)
+            }
+        }
+        ActionRow {
+            key: "syncNow"
+            visible: !!page.st.canSync
+            title: "Sync now"
+            subtitle: page.st.syncWords || "Send and fetch changes with your linked phones."
+            buttonText: page.st.syncBusy ? "Syncing..." : "Sync now"
+            buttonEnabled: !page.st.syncBusy
+            onActivated: page.panel.syncNow()
+        }
+        NoteRow {
+            key: "clockWarning"
+            visible: !!page.st.clockWarning
+            problem: true
+            text: page.st.clockWarning || ""
+        }
+        NoteRow {
+            key: "syncProblem"
+            visible: !!page.st.syncProblem
+            problem: true
+            text: page.st.syncProblem || ""
         }
         SettingsRow {
             visible: !!page.st.pairError
             title: "Pairing"
             subtitle: page.st.pairError || ""
             objectName: "row_pairError"
+        }
+        NoteRow {
+            key: "relayNote"
+            text: page.st.relayNote || ""
         }
     }
 }

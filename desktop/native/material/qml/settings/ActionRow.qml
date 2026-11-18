@@ -6,6 +6,7 @@ SettingsRow {
     id: row
     property string key: ""
     property string buttonText: ""
+    property bool buttonEnabled: true
     signal activated()
     objectName: "row_" + key
 
@@ -16,6 +17,7 @@ SettingsRow {
         reduceMotion: row.reduceMotion
         highContrast: row.highContrast
         kind: "tonal"
+        enabled: row.buttonEnabled
         text: row.buttonText
         accessName: row.buttonText
         onClicked: row.activated()
