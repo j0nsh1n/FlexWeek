@@ -12,11 +12,12 @@ import pytest
 from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QObject, QPoint, QPointF, Qt
 from PySide6.QtGui import QGuiApplication, QWheelEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import CLOCK
+from desktop.native.material.bridge_sheets import SheetsBridge
+from desktop.native.material.sheet_preview import PreviewDraft
 from desktop.native.weekmodel import set_clock_24h
-from desktop.native.widgets import PreviewDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import open_light  # noqa: F401
 from desktop.tests.material_support import faded_in
@@ -775,11 +776,10 @@ def _preview_rows(monkeypatch: pytest.MonkeyPatch) -> list[list[dict]]:
     """The paste preview, turned away: what it was asked to show is what these tests read."""
     seen: list[list[dict]] = []
 
-    def look(dialog: PreviewDialog) -> int:
-        seen.append(dialog.rows())
-        return int(QDialog.DialogCode.Rejected)
+    def look(_sheets: object, draft: PreviewDraft) -> None:
+        seen.append(draft.rows)
 
-    monkeypatch.setattr(PreviewDialog, "exec", look)
+    monkeypatch.setattr(SheetsBridge, "open_preview", look)
     return seen
 
 

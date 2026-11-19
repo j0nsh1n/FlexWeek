@@ -18,9 +18,9 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QObject, QPoint, QPointF, Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QComboBox  # noqa: E402
 
-from desktop.native.widgets import PreviewDialog  # noqa: E402
+from desktop.native.material.bridge_sheets import SheetsBridge  # noqa: E402
+from desktop.native.material.sheet_preview import PreviewDraft  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402,F401
 from desktop.tests.material_support import named, pump, qml  # noqa: E402
@@ -126,17 +126,18 @@ def choose_by_mouse(qapp, window: NativeWindow, menu: QObject, label: str) -> No
 
 
 def accept_preview_on(monkeypatch: pytest.MonkeyPatch, day_index: int) -> list[str]:
-    """The paste preview, answered as the plain look's tests do: put the copy on a free day, save it."""
+    """The paste preview, answered on its sheet: put the copy on a free day, save it."""
     seen: list[str] = []
 
-    def preview(dialog: PreviewDialog) -> int:
-        seen.append("preview")
-        dialog.show()
-        dialog.findChild(QComboBox, "previewDay0").setCurrentIndex(day_index)
-        QTest.mouseClick(dialog.confirm, Qt.MouseButton.LeftButton)
-        return dialog.result()
+    real = SheetsBridge.open_preview
 
-    monkeypatch.setattr(PreviewDialog, "exec", preview)
+    def preview(sheets: SheetsBridge, draft: PreviewDraft) -> None:
+        seen.append("preview")
+        real(sheets, draft)
+        sheets.previewDay(0, day_index)
+        sheets.savePreview()
+
+    monkeypatch.setattr(SheetsBridge, "open_preview", preview)
     return seen
 
 

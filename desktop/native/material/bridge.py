@@ -682,7 +682,11 @@ class MaterialBridge(QObject):
             return 0
         if self._snack_paused:
             return max(0, self._snack_remaining_ms)
-        return max(0, min(SNACK_MS, self._snack_deadline - self._now()))
+        left = min(SNACK_MS, self._snack_deadline - self._now())
+        if self._snack_timer.isActive():
+            # The wall timer can be shorter than the session's clock says (a notice resumed late).
+            left = min(left, self._snack_timer.remainingTime())
+        return max(0, left)
 
     def _on_snack_tick(self) -> None:
         if not self._snack:

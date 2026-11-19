@@ -17,9 +17,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from desktop.native.widgets import PreviewDialog  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.material_support import pump  # noqa: E402
 from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: E402,F401
@@ -131,7 +130,7 @@ def _block_ids(session) -> set[str]:
 def test_unfinished_find_a_time_leaves_non_overdue_blocks_unchanged_until_accept(
     qapp: QApplication, shell: NativeWindow, sheets, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Homework that still has a deadline must wait for the Widgets preview's Accept."""
+    """Homework that still has a deadline must wait for the preview sheet's Save."""
     session = shell.session
     current = session.week_start
     try:
@@ -141,36 +140,26 @@ def test_unfinished_find_a_time_leaves_non_overdue_blocks_unchanged_until_accept
             session.load_week(current)
             wait_until(qapp, lambda: session.week_start == current and not session.busy)
     before = _block_ids(session)
-    opened: list[str] = []
     assert assignment_id not in session._overdue_assignment_ids()
     assert session.remaining_for(assignment_id) >= 15, session.assignments.get(assignment_id)
     assert session.plan_unfinished(assignment_id)
-
-    def cancel(dialog: PreviewDialog) -> int:
-        opened.append(dialog.objectName())
-        assert _block_ids(session) == before
-        assert not any(item.get("assignment_id") == assignment_id for item in session.blocks)
-        return QDialog.DialogCode.Rejected
-
-    monkeypatch.setattr(PreviewDialog, "exec", cancel)
     sheets.openUnfinished()
     found = next(row for row in sheets.form["rows"] if row["id"] == assignment_id)
     assert found["overdue"] is False
     sheets.findTime(assignment_id)
-    assert opened == ["stage3PreviewDialog"]
+    assert sheets.kind == "preview", "the preview sheet comes first"
     assert _block_ids(session) == before
     assert not any(item.get("assignment_id") == assignment_id for item in session.blocks)
+    sheets.closeSheet()
+    assert sheets.kind == "" and _block_ids(session) == before, "Cancel saves nothing"
 
-    def accept(dialog: PreviewDialog) -> int:
-        opened.append(dialog.objectName())
-        assert not any(item.get("assignment_id") == assignment_id for item in session.blocks)
-        return QDialog.DialogCode.Accepted
-
-    monkeypatch.setattr(PreviewDialog, "exec", accept)
+    sheets.openUnfinished()
     sheets.findTime(assignment_id)
+    assert sheets.kind == "preview"
+    assert not any(item.get("assignment_id") == assignment_id for item in session.blocks)
+    sheets.savePreview()
     wait_until(
         qapp,
         lambda: any(item.get("assignment_id") == assignment_id for item in session.blocks),
     )
-    assert opened == ["stage3PreviewDialog", "stage3PreviewDialog"]
     settle(qapp, shell)

@@ -5,7 +5,6 @@ Material's snackbar and sheet notice, and Widgets' toast, are held to the same r
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
 
-import time
 from collections.abc import Iterator
 from datetime import date, timedelta
 
@@ -248,8 +247,7 @@ def test_undo_toast_expiry_solely_owned_by_shell_and_held_toast_survives(
     assert bridge.property("snackText").startswith("Finished")
 
     # Also the _on_status path (a plan answer that places nothing)
-    bridge.week._said_plan = time.monotonic()
-    bridge.week._on_status("Nothing to place")
+    window._on_status("Nothing to place")
     pump(qapp, 5)
     assert bridge.property("snackText") == "Nothing to place"
 
