@@ -15,7 +15,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 
-from desktop.native.settings import HELP_PLANNING, HELP_SCREENS
+from desktop.native.settings_copy import HELP_PLANNING, HELP_SCREENS
 from desktop.tests.window_support import qapp  # noqa: F401
 
 NATIVE = Path(__file__).resolve().parents[2] / "native"

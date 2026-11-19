@@ -176,7 +176,7 @@ paths = ["desktop/tests/setup/", "desktop/tests/pictures/screens_setup.py"]
 areas = ["setup"]
 
 [[rule]]
-paths = ["desktop/tests/account/", "desktop/tests/pictures/screens_account.py"]
+paths = ["desktop/tests/account/"]
 areas = ["account"]
 
 [[rule]]

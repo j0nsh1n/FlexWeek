@@ -118,14 +118,18 @@ def test_day_buttons_start_on_the_chosen_day_and_still_mean_the_same_weekday(
 def test_day_buttons_that_carry_the_open_weeks_dates_start_on_its_first_day(
     qapp: QApplication, kept: Path
 ) -> None:
-    from desktop.native.calendar import day_full_names
-    from desktop.native.widgets import dated_day_labels
+    from datetime import date, timedelta
+
+    from desktop.native.calendar import day_full_names, day_names
 
     kept.write_text('{"week_starts_on": "wednesday"}', encoding="utf-8")
     picker = fields.DayPicker([3], "homeworkWhenDay", dated=True)
     try:
         # The week from Wednesday 4 November 2026; day 3 is Saturday 7.
-        picker.set_day_labels(dated_day_labels("2026-11-04"), day_full_names("2026-11-04"))
+        start = date(2026, 11, 4)
+        names = day_names("2026-11-04")
+        dated = [f"{name}\n{(start + timedelta(days=at)).day}" for at, name in enumerate(names)]
+        picker.set_day_labels(dated, day_full_names("2026-11-04"))
         assert _pills_in_order(picker) == [
             "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday"
         ]

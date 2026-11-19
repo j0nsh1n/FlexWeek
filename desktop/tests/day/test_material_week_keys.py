@@ -18,7 +18,7 @@ from PySide6.QtCore import QObject, Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from desktop.native.settings import help_keys  # noqa: E402
+from desktop.native.settings_copy import help_keys  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_window import material_window, qapp  # noqa: E402, F401
 from desktop.tests.material_support import named, pump, show_material  # noqa: E402

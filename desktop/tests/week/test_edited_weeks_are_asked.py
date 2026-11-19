@@ -13,13 +13,12 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QTimer  # noqa: E402
-from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.client import ApiError  # noqa: E402
 from desktop.native.fields import week_starts_on  # noqa: E402
 from desktop.native.material.bridge_sheets import SheetsBridge  # noqa: E402
 from desktop.native.setup_steps import WEEK  # noqa: E402
-from desktop.native.widgets import ConfirmSheet, SchoolHoursDialog  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402, F401
 from desktop.tests.material_support import named, pump, show_material  # noqa: E402
@@ -46,12 +45,6 @@ LATER = "2026-11-16"
 END = 14 * 60 + 30
 
 
-def shorten(dialog: SchoolHoursDialog) -> QDialog.DialogCode:
-    dialog.times.end.set_minutes(END)
-    dialog.accept()
-    return QDialog.DialogCode.Accepted
-
-
 def skip_wednesday(qapp: QApplication, session) -> str:
     """A one-week edit in the week of 16 November, then back to the week the change starts from."""
     home = session.week_start
@@ -63,7 +56,7 @@ def skip_wednesday(qapp: QApplication, session) -> str:
 
 
 def school_hours(qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch) -> None:
-    school_hours_form(window, shorten)
+    school_hours_form(window, END)
     wait_until(qapp, lambda: not window.session.busy and not window.session.dirty)
     settled(qapp, window)
 
@@ -71,10 +64,10 @@ def school_hours(qapp: QApplication, window: NativeWindow, monkeypatch: pytest.M
 def test_school_hours_asks_nothing_when_no_later_week_was_edited(
     qapp, window, after_setup, monkeypatch
 ) -> None:
-    def asked(sheet: ConfirmSheet) -> int:
-        pytest.fail(f"asked: {sheet.question.text()}")
+    def asked(line: str) -> None:
+        pytest.fail(f"asked: {line}")
 
-    monkeypatch.setattr(ConfirmSheet, "exec", asked)
+    monkeypatch.setattr(window, "_pose_edited", asked)
     school_hours(qapp, window, monkeypatch)
     assert school_of(after_setup)[:3] == ([0, 1, 2, 3, 4], "08:30", 360)
 
@@ -88,7 +81,6 @@ def test_material_asks_nothing_when_no_later_week_was_edited(
         pytest.fail("asked")
 
     monkeypatch.setattr(window._material_page.bridge._sheets, "pose_edited", asked)
-    monkeypatch.setattr(ConfirmSheet, "exec", lambda _sheet: pytest.fail("widgets sheet"))
     school_hours(qapp, window, monkeypatch)
     assert school_of(after_setup)[:3] == ([0, 1, 2, 3, 4], "08:30", 360)
 
@@ -120,7 +112,7 @@ def test_material_defaults_to_except_edited_and_cancel_saves_nothing(
         click(window, named(prompts[0], "prompt_stay")[0])
 
     QTimer.singleShot(0, poke)
-    school_hours_form(window, shorten)
+    school_hours_form(window, END)
     assert seen["label"] == "Save changes"
     assert seen["focused"] is True
     assert seen["body"] == "The week of 16 November has its own School times."
@@ -352,13 +344,9 @@ def test_a_preview_does_not_apply_after_the_week_changes(
             0, lambda: ok({"line": "The week of 16 November has its own School times.", "weeks": [LATER]})
         )
 
-    def answer(sheet: ConfirmSheet) -> int:
-        sheet.buttons["keep"].click()
-        return 0
-
     monkeypatch.setattr(window.session, "preview_repeats", preview)
-    monkeypatch.setattr(ConfirmSheet, "exec", answer)
-    school_hours_form(window, shorten)
+    monkeypatch.setattr(window, "_pose_edited", lambda _line: "keep")
+    school_hours_form(window, END)
     wait_until(qapp, lambda: not window.session.busy)
     assert school_of(after_setup) == before
 
@@ -438,7 +426,9 @@ def test_deleting_from_this_week_on_asks_and_keeps_the_edited_week(
     answer_edited(window, "keep", seen)
     school = block(after_setup, "school")
     assert school is not None
-    window._delete_block(school, "series", None, True)
+    after = [item for item in after_setup.repeats if item["id"] != school["id"]]
+    assert window._apply_standing(after, "deleting School")
+    after_setup.save()
     wait_until(qapp, lambda: not after_setup.busy and not after_setup.dirty)
     assert seen["body"] == "The week of 16 November has its own School times."
     assert block(after_setup, "school") is None

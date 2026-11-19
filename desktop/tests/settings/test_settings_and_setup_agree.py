@@ -7,11 +7,11 @@ import ast
 import inspect
 
 import flexweek_engine  # type: ignore[import-untyped]
-from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QPushButton
+from PySide6.QtWidgets import QApplication, QComboBox, QPushButton
 
 from desktop.native import remind
-from desktop.native.settings import SPOTIFY_TONE_NOTE, AlarmRingDialog
-from desktop.native.widgets import AvailabilityDialog
+from desktop.native.settings import AlarmRingDialog
+from desktop.native.settings_copy import SPOTIFY_TONE_NOTE
 from desktop.tests.window_support import qapp  # noqa: F401
 
 # ruff: noqa: F811
@@ -41,38 +41,6 @@ def test_the_default_lead_is_the_engines_and_is_five() -> None:
     assert remind.reminder_lead_min({}) == 5
     assert remind.reminder_lead_min({"reminder_lead_min": None}) == 5
     assert remind.reminder_lead_min({"reminder_lead_min": 12}) == 12
-
-
-# The homework cutoff
-
-
-def test_availability_offers_the_cutoffs(qapp: QApplication) -> None:
-    availability = AvailabilityDialog(None, {})
-    assert [words for words, _ in texts(availability.cutoff)] == NO_HOMEWORK_AFTER
-    assert texts(availability.cutoff)[0] == ("No limit", None)
-    assert texts(availability.cutoff)[1:] == [(hhmm, hhmm) for hhmm in NO_HOMEWORK_AFTER[1:]]
-    availability.close()
-
-
-def test_the_availability_cutoff_says_what_it_is_for(qapp: QApplication) -> None:
-    availability = AvailabilityDialog(None, {})
-    availability.show()
-    availability.tabs.setCurrentIndex(availability.tabs.findData("cutoff"))
-    qapp.processEvents()
-    assert availability.cutoff.accessibleName() == "No homework after"
-    labels = [label for label in availability.findChildren(QLabel) if label.text() == "No homework after"]
-    assert len(labels) == 1 and labels[0].isVisible()
-    availability.close()
-
-
-def test_a_cutoff_saved_off_the_list_is_kept_not_dropped(qapp: QApplication) -> None:
-    # Availability used to offer every quarter hour, so a saved 22:15 is real and must survive a save.
-    availability = AvailabilityDialog(None, {"day_cutoff": "22:15"})
-    assert availability.day_cutoff() == "22:15"
-    assert [words for words, _ in texts(availability.cutoff)] == [
-        "No limit", "20:00", "20:30", "21:00", "21:30", "22:00", "22:15", "22:30", "23:00",
-    ]  # fmt: skip
-    availability.close()
 
 
 # The constants

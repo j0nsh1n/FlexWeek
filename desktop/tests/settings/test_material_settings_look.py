@@ -14,8 +14,8 @@ from PySide6.QtWidgets import QApplication
 
 from backend.app import Preferences
 from desktop.native.material import bridge_settings
+from desktop.native.sheet_rules import CUTOFFS as WIDGET_CUTOFFS
 from desktop.native.weekmodel import hhmm_text, set_clock_24h
-from desktop.native.widgets import CUTOFFS as WIDGET_CUTOFFS
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.settings.support_material_settings import (

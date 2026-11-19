@@ -13,7 +13,6 @@ from PySide6.QtQml import QQmlProperty
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
-from desktop.native import window as window_module
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.material_support import named, pump, visuals
@@ -33,10 +32,8 @@ def _card(prompt, card_id: str):
 
 
 def test_replacing_a_running_timer_asks_on_a_material_prompt(qapp, window: NativeWindow, monkeypatch) -> None:
-    """Start focus while a timer runs: the question is Material's, keep first, and no Widgets sheet opens."""
+    """Start focus while a timer runs: the question is Material's, keep first."""
     week_with_school(qapp, window)
-    widgets_sheet = lambda sheet: pytest.fail("a Widgets sheet opened")  # noqa: E731
-    monkeypatch.setattr(window_module.ConfirmSheet, "exec", widgets_sheet)
     replaced: list[bool] = []
     monkeypatch.setattr(window.session, "confirm_replace_focus", lambda: replaced.append(True) or False)
     window.session.focus_replace_needed.emit("History essay", "Math worksheet")

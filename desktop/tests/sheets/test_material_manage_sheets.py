@@ -109,14 +109,6 @@ def _said(shell: NativeWindow, words: str, qapp: QApplication) -> None:
     wait_until(qapp, lambda: shell.session.message == words, what=lambda: shell.session.message)
 
 
-def _no_widgets_dialogs(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in ("AccountDialog", "TransferPreviewDialog"):
-        monkeypatch.setattr(f"desktop.native.window.{name}", _refuse(name))
-    monkeypatch.setattr("desktop.native.settings.RestoreDialog", _refuse("RestoreDialog"))
-    monkeypatch.setattr("desktop.native.window.confirm", _refuse("question"))
-    monkeypatch.setattr("desktop.native.window.ConfirmSheet", _refuse("confirm sheet"))
-
-
 def _open_account(qapp: QApplication, shell: NativeWindow, sheets) -> None:
     sheets.openMore()
     pump(qapp, 10)
@@ -131,7 +123,6 @@ def _open_account(qapp: QApplication, shell: NativeWindow, sheets) -> None:
 def test_more_has_account_and_copies_of_this_week_and_nothing_opens_a_widgets_dialog(
     qapp: QApplication, shell: NativeWindow, sheets, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _no_widgets_dialogs(monkeypatch)
     sheets.openMore()
     rows = {row["id"]: row for row in sheets.moreEntries if row["id"]}
     assert rows["accountButton"]["label"] == "Account"
@@ -159,7 +150,6 @@ def test_more_has_account_and_copies_of_this_week_and_nothing_opens_a_widgets_di
 def test_settings_this_computer_manage_account_opens_the_sheet(
     qapp: QApplication, shell: NativeWindow, sheets, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _no_widgets_dialogs(monkeypatch)
     panel = shell._material_page.bridge.settingsBridge
     panel.openAccount()
     pump(qapp, 40)
@@ -339,7 +329,6 @@ def test_import_backup_asks_first_and_only_imports_on_the_answer(
 ) -> None:
     backup = tmp_path / "backup.json"
     _backup(qapp, shell, sheets, backup, monkeypatch)
-    _no_widgets_dialogs(monkeypatch)
     applied: list[bool] = []
     real_apply = shell.session.apply_account_import
     monkeypatch.setattr(shell.session, "apply_account_import", lambda: applied.append(True) or real_apply())
@@ -422,7 +411,6 @@ def test_a_file_that_will_not_open_says_how_to_choose_one(
 def test_delete_account_asks_first_and_cancel_leaves_the_sheet_as_it_was(
     qapp: QApplication, shell: NativeWindow, sheets, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _no_widgets_dialogs(monkeypatch)
     deleted: list[str] = []
     monkeypatch.setattr(shell.session, "delete_account", deleted.append)
     wait_until(qapp, lambda: shell.session.storage_info is not None)
@@ -510,7 +498,6 @@ def _week_file(shell: NativeWindow, tmp_path: Path) -> Path:
 def test_import_week_asks_before_replacing_and_only_replaces_on_the_answer(
     qapp: QApplication, shell: NativeWindow, sheets, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _no_widgets_dialogs(monkeypatch)
     path = _week_file(shell, tmp_path)
     assert json.loads(path.read_text())["format"] == EXPORT_FORMAT
     imported: list[dict] = []
@@ -608,7 +595,6 @@ def _labels(shell: NativeWindow) -> list[str]:
 def test_make_a_copy_lists_it_with_its_time_and_the_name_box_empties(
     qapp: QApplication, shell: NativeWindow, sheets, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _no_widgets_dialogs(monkeypatch)
     _open_restore(qapp, shell, sheets)
     assert _labels(shell) == []
     _make_copy(qapp, shell, sheets, "Before term 2")
@@ -671,7 +657,6 @@ def test_preview_says_what_going_back_would_change(qapp: QApplication, shell: Na
 def test_restore_asks_first_and_not_now_restores_nothing(
     qapp: QApplication, shell: NativeWindow, sheets, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _no_widgets_dialogs(monkeypatch)
     _open_restore(qapp, shell, sheets)
     _make_copy(qapp, shell, sheets, "Before the club")
     applied: list[str] = []
