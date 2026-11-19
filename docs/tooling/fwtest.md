@@ -264,7 +264,7 @@ A play file is JSON, with `setup` (all of it optional) and `steps`:
     {"shot": "label"},
     {"tree": "label"},
     {"say": "a note for the log"},
-    {"see": "School"}
+    {"see": "Soccer"}
   ]
 }
 ```
@@ -316,17 +316,20 @@ unless `--out` names it.
 A setup key that is not in the table (`design`, `look` and the others the Widgets interface used) is
 refused, with the keys that are valid.
 
-Example: the rig's week, open Day, finish the current item, see Undo, look at the result.
+Example: the rig's week, mark History essay finished by its circle, see the notice and the circle's new
+name, take it back with Ctrl+Z, look at the result. (`see "UNDO"` would also match the toolbar's Undo
+button, so a play checks what changed instead.)
 
 ```json
 {
   "setup": {"seed": "rig", "mode": "light"},
   "steps": [
-    {"click": "navDay"},
-    {"see": "materialDay"},
-    {"click": "dayFinish"},
-    {"see": "UNDO"},
-    {"shot": "day-finished"}
+    {"click": {"text": "Mark History essay finished"}},
+    {"see": "materialSnackbar"},
+    {"see": "Open History essay again"},
+    {"key": "ctrl+z"},
+    {"see": "Mark History essay finished"},
+    {"shot": "undone"}
   ]
 }
 ```
