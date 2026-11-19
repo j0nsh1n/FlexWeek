@@ -248,11 +248,11 @@ def test_a_reminder_left_on_screen_says_so_in_the_window(
     choose(qapp, window, reminder_lead_min=10, reminder_dnd_override=True)
     add_practice(qapp, window)
     tick(qapp, window, 35)
-    assert _snack(window) == REMINDER
     strip = _qml(window._material_page.root, "materialAlertStrip")
     assert strip.property("visible") is True
     assert str(_qml(strip, "alertStripText").property("text")) == REMINDER
+    assert _snack(window) == "", "a reminder kept on screen is said once, in the strip"
     _click(window, _qml(strip, "alertStripDismiss"))
     settled(qapp, window)
     assert strip.property("visible") is False
-    assert _snack(window) == "", "Got it takes the reminder off the snackbar too"
+    assert _snack(window) == ""

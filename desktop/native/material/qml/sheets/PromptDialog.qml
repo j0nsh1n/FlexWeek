@@ -29,7 +29,8 @@ SheetFrame {
            { "id": "confirm", "label": ask.confirm ? ask.confirm : "OK",
              "kind": ask.confirmKind ? ask.confirmKind : "filled", "default": true }]
         : (ask.answers ? ask.answers : [])
-    onAskChanged: pick = 0
+    // A prompt names the card picked first when the safe answer is not the first card.
+    onAskChanged: pick = ask.pick !== undefined ? ask.pick : 0
 
     function movePick(step) {
         if (cards.length > 0)

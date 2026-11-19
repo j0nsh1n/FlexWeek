@@ -4036,7 +4036,7 @@ class NativeWindow(QMainWindow):
         if page is not None:
             page.bridge.sheets.pose_question(
                 self.before_planning_question(", ".join(parts)),
-                {"plan": plan_them, "did": did_them, "not": not_now, "dismiss": not_now},
+                {"plan": plan_them, "did": did_them, "not": not_now, "stay": not_now, "dismiss": not_now},
             )
             return
         sheet = ConfirmSheet(
@@ -4061,16 +4061,28 @@ class NativeWindow(QMainWindow):
 
     @staticmethod
     def before_planning_question(body: str) -> dict:
-        """What Plan asks when homework is left over, for Material's prompt: the Widgets words and answers."""
+        """What Plan asks when homework is left over, for Material's prompt: three choice cards, Not now
+        picked first as the answer that changes nothing (Jonathan, 2026-11-18)."""
         return {
             "id": "before-planning",
             "title": "Before planning",
             "body": body,
-            "answers": [
-                {"id": "plan", "label": "Plan into this week", "kind": "filled"},
-                {"id": "did", "label": "Mark as finished", "kind": "tonal"},
-                {"id": "not", "label": "Not now", "kind": "text", "default": True},
+            "answers": [{"id": "stay", "label": "Cancel", "kind": "text"}],
+            "cards": [
+                {"id": "plan", "title": "Plan into this week", "line": "Give them times this week."},
+                {
+                    "id": "did",
+                    "title": "Mark as finished",
+                    "line": "You already did them. They leave the list.",
+                },
+                {
+                    "id": "not",
+                    "title": "Not now",
+                    "line": "They stay on the list, and you won't be asked again this week.",
+                },
             ],
+            "pick": 2,
+            "confirm": "Continue",
         }
 
     def _copy_last_week_fixed(self) -> None:
@@ -4362,16 +4374,18 @@ class NativeWindow(QMainWindow):
                 reminders.append(words)
             elif tray is None:
                 self.session._say(words)
+        kept = bool(notices) and bool(prefs.get("reminder_dnd_override"))
         if reminders:
             # A desktop can hide a tray message, and FlexWeek cannot tell that it did, so the window
             # says it as well, wherever the student is.
             self._reminder_said = "; ".join(reminders)
             snack = self._snack_bridge()
-            if snack is not None:
-                self._say_in_snack(snack, self._reminder_said)
-            else:
+            if snack is None:
                 self._say_in_toast(self._reminder_said)
-        if notices and prefs.get("reminder_dnd_override"):
+            elif not kept:
+                # A reminder kept on screen is said once, by Material's strip with its Got it.
+                self._say_in_snack(snack, self._reminder_said)
+        if kept:
             # A tray message is gone in eight seconds and a machine may suppress it outright. This
             # one sits in the window until it is dealt with, which is what the setting promises.
             self.alert_strip.add(notices)

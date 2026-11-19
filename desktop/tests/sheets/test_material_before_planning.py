@@ -37,29 +37,38 @@ def test_the_question_uses_the_widgets_words_and_answers(qapp, window, monkeypat
     ask = window._material_page.bridge.sheets.ask
     assert ask["title"] == "Before planning"
     assert ask["body"] == "1 overdue, 1 left from last week"
-    labels = [answer["label"] for answer in ask["answers"]]
-    assert labels == ["Plan into this week", "Mark as finished", "Not now"]
+    cards = [(card["title"], card["line"]) for card in ask["cards"]]
+    assert cards == [
+        ("Plan into this week", "Give them times this week."),
+        ("Mark as finished", "You already did them. They leave the list."),
+        ("Not now", "They stay on the list, and you won't be asked again this week."),
+    ]
     assert find(root, "sheetPrompt").property("visible")
+    picked = find(root, "prompt_card_not").property("picked")
+    assert picked is True, "the answer that changes nothing is picked first"
     assert said == []
 
 
 @pytest.mark.parametrize(
     ("button", "expected"),
-    [("prompt_plan", [("plan", ["late", "carry"])]), ("prompt_did", [("did", ["late", "carry"])])],
+    [("prompt_card_plan", [("plan", ["late", "carry"])]), ("prompt_card_did", [("did", ["late", "carry"])])],
 )
 def test_the_answers_do_what_the_widgets_sheet_did(qapp, window, monkeypatch, button, expected) -> None:
     root, said = _asked(qapp, window, monkeypatch)
     click(window, find(root, button))
+    click(window, find(root, "prompt_confirm"))
     assert said == expected
     assert not window._material_page.bridge.sheets.ask
 
 
-@pytest.mark.parametrize("how", ["not", "esc"])
-def test_not_now_and_escape_do_not_ask_again_this_week(qapp, window, monkeypatch, how) -> None:
+@pytest.mark.parametrize("how", ["not", "cancel", "esc"])
+def test_not_now_cancel_and_escape_do_not_ask_again_this_week(qapp, window, monkeypatch, how) -> None:
     root, said = _asked(qapp, window, monkeypatch)
     window.session.plan_asked_week = None
     if how == "not":
-        click(window, find(root, "prompt_not"))
+        click(window, find(root, "prompt_confirm"))
+    elif how == "cancel":
+        click(window, find(root, "prompt_stay"))
     else:
         window._material_page.bridge.sheets.closeSheet()
     assert said == []
