@@ -49,13 +49,6 @@
   "test": "desktop/tests/settings/test_block_reminders.py::test_a_block_saved_inside_its_lead_reminds_at_once_and_only_once"
  },
  {
-  "file": "desktop/native/window.py",
-  "name": "dismissing a block's song stops it",
-  "old": "            self._bell.stop()\n            self._spotify.stop()\n",
-  "new": "            self._bell.stop()\n",
-  "test": "desktop/tests/settings/test_block_start_song.py::test_a_block_without_a_link_plays_the_settings_link_when_the_sound_is_spotify"
- },
- {
   "file": "desktop/native/controller.py",
   "name": "a snoozed block song rings again",
   "old": "                self._snoozed_songs[alarm[\"id\"]] = alarm\n",

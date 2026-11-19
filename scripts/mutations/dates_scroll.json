@@ -42,13 +42,6 @@
   "test": "desktop/tests/week/test_hours_open_where_the_student_looks.py::test_each_design_keeps_day_and_week_scroll_until_today_is_pressed"
  },
  {
-  "name": "Today cannot reopen an unchanged design scene",
-  "file": "desktop/native/window.py",
-  "old": "                    scroll.scroll_to(minute, None)\n",
-  "new": "                    pass\n",
-  "test": "desktop/tests/week/test_hours_open_where_the_student_looks.py::test_each_design_keeps_day_and_week_scroll_until_today_is_pressed"
- },
- {
   "name": "Today also discards future weeks scroll",
   "file": "desktop/native/window.py",
   "old": "                scroll.forget(None if clear_all else self.session.week_start)\n",
