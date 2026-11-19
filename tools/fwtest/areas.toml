@@ -286,6 +286,43 @@ paths = [
 ]
 areas = ["focus"]
 
+# Moved out of the Widgets files for Material in 1.5.0 (step 1 and later).
+[[rule]]
+paths = ["desktop/native/hours/scale.py"]
+areas = ["week", "day", "month"]
+
+[[rule]]
+paths = ["desktop/native/hours/month_cells.py"]
+areas = ["month"]
+
+[[rule]]
+paths = ["desktop/native/hours/words.py", "desktop/native/material/sheet_preview.py"]
+areas = ["week", "sheets"]
+
+[[rule]]
+paths = [
+  "desktop/native/material/bridge_alarms.py", "desktop/native/material/bridge_hours.py",
+  "desktop/native/settings_copy.py",
+]
+areas = ["settings"]
+
+[[rule]]
+paths = ["desktop/native/material/bridge_info.py"]
+areas = ["sheets", "updater"]
+
+[[rule]]
+paths = ["desktop/native/material/bridge_manage.py", "desktop/native/account_copy.py"]
+areas = ["account", "sheets"]
+
+[[rule]]
+paths = ["desktop/native/sheet_rules.py"]
+areas = ["sheets"]
+
+# The drawing fallback and the Animations levels reach every screen.
+[[rule]]
+paths = ["desktop/native/cpu_drawing.py", "desktop/native/motion_level.py"]
+everything = true
+
 # --- Settings.
 [[rule]]
 paths = [
