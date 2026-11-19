@@ -10,11 +10,10 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QStandardPaths
-from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton
+from PySide6.QtWidgets import QApplication, QPushButton
 
 from backend.tests.fake_clock import FakeClock
 from desktop.native.calendar import sunday_due
-from desktop.native.look import VIEW_BUTTONS
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.rig.support_top_level_guard import (
@@ -59,10 +58,6 @@ def test_a_session_never_shows_a_detached_child_as_a_window(
 
         for view in ("week", "month", "day"):
             show_view(qapp, window, view)
-        my_day = window.findChild(QAbstractButton, VIEW_BUTTONS[-1])
-        assert my_day is not None, f"My day view control {VIEW_BUTTONS[-1]} is not available"
-        my_day.click()
-        settled(qapp, window)
         show_view(qapp, window, "week")
         window.next_nav.click()
         settled(qapp, window)

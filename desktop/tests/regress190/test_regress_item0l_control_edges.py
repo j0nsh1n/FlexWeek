@@ -52,8 +52,7 @@ TEN_LOOKS = [
     ("ink", "light-frost", "ink"),
     ("pastel", "light-frost", "pastel"),
 ]
-DESIGNS = [("retro", False), ("clay", False), ("bento", False), ("mission", False), ("timeline", False),
-           ("dial", True), ("one", True)]
+DESIGNS = [("retro", False), ("bento", False), ("timeline", False)]
 CASES = [(f"classic-{name}", pack, preset, "classic", False) for name, pack, preset in TEN_LOOKS] + [
     (f"{design}-{shade}", pack, "default", design, day)
     for design, day in DESIGNS
@@ -95,12 +94,8 @@ def dress(qapp, w, pack: str, preset: str, design: str, day: bool) -> None:
     w.session.preferences = {**(w.session.preferences or {}), "theme_pack": pack, "motion": "off"}
     w._look = {"preset": preset, "knobs": {}}
     w.session.look = w._look
-    if day:
-        w._layout = {"main": "classic", "day": design, "options": {}}
-        w._day_mode = True
-    else:
-        w._layout = {"main": design, "day": "one", "options": {}}
-        w._day_mode = False
+    assert not day
+    w._layout = {"main": design, "day": "dial", "options": {}}
     w._apply_appearance()
     settled(qapp, w)
 

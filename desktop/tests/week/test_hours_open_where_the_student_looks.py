@@ -55,7 +55,7 @@ def test_todays_app_opens_an_empty_next_week_at_eight_once_there_is_homework(
     for name in ("viewWeek", "nextWeek"):
         window.findChild(QAbstractButton, name).click()
         wait_until(qapp, lambda: not session.busy)
-    assert window.planner.currentWidget() is not window.empty_week
+    assert window.planner.currentWidget() is window.week_table
     opens_at(qapp, window, 8 * 60, "classic next Week, empty")
 
 
@@ -76,12 +76,7 @@ def test_every_design_opens_at_now_or_the_first_block_and_again_on_another_day_o
         press("viewWeek")
         opens_at(qapp, window, NOW, f"{design} Week")
         press("nextWeek")
-        if design == "classic":
-            # #16: a later empty week keeps its hours, with the offers on a card over them.
-            assert window.planner.currentWidget() is window.week_table
-            assert window.empty_week.parentWidget() is window.week_table and window.empty_week.isVisible()
-        else:
-            opens_at(qapp, window, 8 * 60, f"{design} next Week, empty")
+        opens_at(qapp, window, 8 * 60, f"{design} next Week, empty")
         press("prevWeek")
         opens_at(qapp, window, NOW, f"{design} Week again")
         press("viewDay")

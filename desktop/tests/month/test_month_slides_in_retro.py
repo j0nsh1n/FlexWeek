@@ -119,19 +119,6 @@ def test_in_retro_day_and_week_still_crossfade(
     nothing_left_over(window)
 
 
-def test_another_design_keeps_its_month_crossfade(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch  # noqa: F811
-) -> None:
-    """Mission has no rail, so Week and Month only fade through; Today's app slides (test_motion_0185)."""
-    in_design(qapp, window, "mission")
-    seen = watch(window, monkeypatch)
-    press(qapp, window, "viewMonth", lambda: window.session.planner_view == "month")
-    assert seen.with_fade(), "the week fades through to the month"
-    assert seen.with_dim() == [] and seen.with_slide() == []
-    seen.frames.clear()
-    press(qapp, window, "viewWeek", lambda: window.session.planner_view == "week")
-    assert seen.with_fade() and seen.with_dim() == [] and seen.with_slide() == []
-    nothing_left_over(window)
 
 
 @pytest.mark.parametrize("level", ["reduce", "off"])

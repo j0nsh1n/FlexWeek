@@ -57,12 +57,8 @@ def test_the_feel_is_the_main_view_not_the_colourway() -> None:
     assert feel_for("timeline").key == "night_owl"
     assert feel_for("bento").key == "dashboard"
     assert feel_for("retro").key == "retro"
-    assert feel_for("clay").key == "plain"
-    assert feel_for("mission").key == "plain"
-    assert feel_for("dial").key == "plain"
-    assert feel_for("one").key == "plain"
     assert design_key("bento") == "bento"
-    assert design_key("clay") == "classic"
+    assert design_key("nope") == "classic"
     assert sanitize_design("retro") == "retro"
     assert sanitize_design("nope") == "classic"
 

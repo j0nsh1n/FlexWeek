@@ -20,16 +20,6 @@ from desktop.tests.day.support_layouts_window import (  # noqa: E402
 )
 
 
-def test_a_changed_look_reaches_a_design_that_matches_it(qapp: QApplication, window: NativeWindow) -> None:
-    window._layout = {"main": "classic", "day": "one", "options": {"one": {"look": "your"}}}
-    click(window, "viewMyDay")
-    view = window.planner.currentWidget()
-    before = view.scene.tokens["bg"]
-    window._look = {"preset": "terminal", "knobs": {}}
-    window._apply_appearance()
-    assert view.scene.tokens["bg"] != before
-
-
 def test_the_chrome_and_canvas_follow_the_same_look(qapp: QApplication, window: NativeWindow) -> None:
     """The active design look supplies every canvas view, and the hours the week draws."""
     from desktop.native.layouts.registry import tokens_for
@@ -37,9 +27,9 @@ def test_the_chrome_and_canvas_follow_the_same_look(qapp: QApplication, window: 
 
     pack, system_dark, accent = window._look_inputs()
 
-    for layout_id in ("classic", "timeline", "mission", "bento", "retro", "clay"):
+    for layout_id in ("classic", "timeline", "bento", "retro"):
         colour = signature(layout_id)
-        window._layout = {"main": layout_id, "day": "one", "options": {layout_id: {"look": colour}}}
+        window._layout = {"main": layout_id, "day": "dial", "options": {layout_id: {"look": colour}}}
         for view in ("week", "day", "month"):
             window.session.set_view(view)
             window._apply_appearance()
@@ -55,9 +45,7 @@ def test_the_chrome_and_canvas_follow_the_same_look(qapp: QApplication, window: 
     ("pack", "look", "dark"),
     [("system", "high-contrast", False), ("nocturne", "default", True)],
 )
-@pytest.mark.parametrize(
-    "layout_id", ("classic", "timeline", "mission", "bento", "retro", "clay", "dial", "one")
-)
+@pytest.mark.parametrize("layout_id", ("classic", "timeline", "bento", "retro"))
 def test_missing_design_look_keeps_the_accounts_own_palette(
     qapp: QApplication, window: NativeWindow, pack: str, look: str, dark: bool, layout_id: str
 ) -> None:
@@ -68,14 +56,9 @@ def test_missing_design_look_keeps_the_accounts_own_palette(
     palette = resolved_palette(pack, dark, window._worn_look())
     expected_bg = "#000000" if look == "high-contrast" else "#0a0e27"
     assert palette["window"] == expected_bg
-    if layout_id in {"dial", "one"}:
-        window._layout = {"main": "classic", "day": layout_id, "options": {}}
-        window._day_mode = True
-    else:
-        window._layout = {"main": layout_id, "day": "dial", "options": {}}
-        window._day_mode = False
+    window._layout = {"main": layout_id, "day": "dial", "options": {}}
     window._on_week()
-    click(window, "viewMyDay" if layout_id in {"dial", "one"} else "viewWeek")
+    click(window, "viewWeek")
     qapp.processEvents()
     shown = window.planner.currentWidget()
     if layout_id == "classic":
@@ -84,19 +67,3 @@ def test_missing_design_look_keeps_the_accounts_own_palette(
         assert shown.scene.tokens["bg"] == expected_bg, layout_id
 
 
-def test_a_day_screen_uses_its_selected_look_for_every_token(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    from desktop.native.layouts.registry import tokens_for
-    from desktop.native.look import design_look
-
-    window._layout = {"main": "classic", "day": "one", "options": {}}
-    window._on_week()
-    qapp.processEvents()
-    pack, system_dark, accent = window._look_inputs()
-    palette, _ = design_look(signature("one"), pack, system_dark, window._worn_look(), accent)
-    colour = signature("one")
-    window._layout = {"main": "classic", "day": "one", "options": {"one": {"look": colour}}}
-    click(window, "viewMyDay")
-    qapp.processEvents()
-    assert window.planner.currentWidget().scene.tokens == tokens_for("one", colour, palette)

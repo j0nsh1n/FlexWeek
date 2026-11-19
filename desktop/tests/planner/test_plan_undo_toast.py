@@ -86,24 +86,8 @@ def _week_has_the_keyboard(window: NativeWindow) -> None:
     assert focus.objectName() != "moreButton"
 
 
-def test_after_plan_clay_leaves_the_keyboard_on_the_week(qapp: QApplication, window: NativeWindow) -> None:
-    """A day header used to take the keyboard, and Space there changed the day."""
-    window._day_mode = False
-    window._layout = {"main": "clay", "day": "dial", "options": {}}
-    window._on_week()
-    settled(qapp, window)
-    planned(qapp, window)
-    _week_has_the_keyboard(window)
 
 
-def test_after_plan_dial_leaves_the_keyboard_on_the_week(qapp: QApplication, window: NativeWindow) -> None:
-    """The keyboard used to stay on More."""
-    window._day_mode = True
-    window._layout = {"main": "classic", "day": "dial", "options": {}}
-    window._on_week()
-    settled(qapp, window)
-    planned(qapp, window)
-    _week_has_the_keyboard(window)
 
 
 @pytest.mark.parametrize("mode", ["joined-save", "queued-save", "auto-split"])

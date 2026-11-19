@@ -16,12 +16,8 @@ from PySide6.QtWidgets import QApplication, QListWidget
 
 from desktop.native.calendar import DAY_FULL
 from desktop.native.hours.classic import DaySummary
-from desktop.native.layouts.base import Scene
 from desktop.native.layouts.bento import planned_words
-from desktop.native.layouts.one_thing import OneThingView
-from desktop.native.layouts.registry import options_for, tokens_for
-from desktop.native.look import resolved_palette
-from desktop.native.weekmodel import build_week, minute_of, set_clock_24h
+from desktop.native.weekmodel import build_week
 from desktop.native.window import NativeWindow
 from desktop.tests.window_support import qapp  # noqa: F401
 
@@ -41,7 +37,6 @@ def test_an_empty_week_list_says_nothing_planned_for_every_day(qapp: QApplicatio
     host = SimpleNamespace(
         week_access_list=listing,
         session=SimpleNamespace(planner_view="week"),
-        _day_mode=False,
         _show_week_list_row=lambda _shown: None,
     )
     NativeWindow._sync_week_access_list(host, build_week(WEEK, []))
@@ -50,15 +45,3 @@ def test_an_empty_week_list_says_nothing_planned_for_every_day(qapp: QApplicatio
     assert rows[1] == "Tuesday: Nothing planned"
 
 
-def test_the_one_thing_design_captions_an_empty_day_as_a_sentence(qapp: QApplication) -> None:  # noqa: F811
-    set_clock_24h(True)
-    options = options_for(None, "one")
-    palette = resolved_palette("light-frost", False, None)
-    scene = Scene(
-        build_week(WEEK, []),
-        3,
-        minute_of("13:40"),
-        options,
-        tokens_for("one", options["look"], palette),
-    )
-    assert OneThingView()._bar_caption(scene) == "Today, 06:00 to 22:00. Nothing planned."

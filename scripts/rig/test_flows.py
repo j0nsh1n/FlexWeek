@@ -31,6 +31,6 @@ def test_every_flow_is_recorded_in_widgets_and_material():
 
 @pytest.mark.parametrize("path", sorted(FLOWS.glob("*.json")), ids=lambda path: path.stem)
 def test_a_flow_is_a_play_the_rig_accepts(path):
-    got = play.load_play(path, (*drive.DESIGNS, *drive.MY_DAY), drive.play_looks())
+    got = play.load_play(path, drive.DESIGNS, drive.play_looks())
     assert got.steps, "a flow does something"
     assert any(step.action == "shot" for step in got.steps), "a flow photographs what it did"

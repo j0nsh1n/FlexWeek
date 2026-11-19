@@ -121,22 +121,6 @@ def test_bento_lift_keeps_its_cubic_path_and_end(qapp, level):
     view.close()
 
 
-@pytest.mark.parametrize("level", LEVELS)
-def test_dial_hand_keeps_its_cubic_path_and_end(qapp, level):
-    from desktop.native.layouts.dial import DialFace
-
-    motion.apply_ui_effects(level)
-    face = DialFace(2, False)
-    face._now = 900
-    face.ease_hand(780)
-    if level in ("reduce", "off"):
-        assert face._hand_at is None
-    else:
-        clock_at(face._easing, motion.duration(240, level))
-        assert face._hand_at == pytest.approx(885)
-        face._easing.setCurrentTime(face._easing.duration())
-        assert face._hand_at is None
-    face.close()
 
 
 @pytest.mark.parametrize("level", LEVELS)
@@ -166,32 +150,5 @@ def test_retro_zoom_keeps_its_linear_path_and_end(qapp, level):
     view.close()
 
 
-@pytest.mark.parametrize("level", LEVELS)
-def test_ring_keeps_its_cubic_arc_and_end(qapp, level):
-    from desktop.native.ring import CountdownRing
-
-    ring = CountdownRing()
-    ring.run_down(1.0, 0.2, level)
-    if level in ("reduce", "off"):
-        assert ring.left() == 0.2
-    else:
-        clock_at(ring._ease, motion.duration(300, level))
-        assert ring.left() == pytest.approx(0.3)
-        ring._ease.setCurrentTime(ring._ease.duration())
-        assert ring.left() == pytest.approx(0.2)
-    ring.run_down(0.2, 0.8, level)
-    assert ring.left() == 0.8, "a new countdown never eases backwards"
-    ring.close()
 
 
-def test_dials_finished_clock_clears_its_hand_even_if_the_live_minute_changed(qapp):
-    from desktop.native.layouts.dial import DialFace
-
-    motion.apply_ui_effects("normal")
-    face = DialFace(2, False)
-    face._now = 900
-    face.ease_hand(780)
-    face._now = None
-    face._easing.setCurrentTime(240)
-    assert face._hand_at is None
-    face.close()

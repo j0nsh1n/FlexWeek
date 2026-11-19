@@ -12,8 +12,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QPoint, Qt
-from PySide6.QtTest import QTest
+from PySide6.QtCore import QPoint
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.hours.geometry import Span
@@ -24,7 +23,6 @@ from desktop.tests.light_app import open_light  # noqa: F401
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_design_plan import (
     SIZE,
-    named,
     placed,
     plan_week,
     session_of,
@@ -42,19 +40,6 @@ def window(qapp: QApplication, open_light: Callable[..., NativeWindow]) -> Nativ
     return plan_week(qapp, open_light(SIZE))
 
 
-def test_clay_week_day_name_opens_the_day_without_placing_homework(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    view = use(qapp, window, "clay")
-    pick = named(view, "clayDay5")
-    QTest.mouseClick(pick, Qt.MouseButton.LeftButton)
-    settled(qapp, window)
-    assert window.session.planner_view == "day"
-    assert (
-        window.session.selected_day
-        == (date.fromisoformat(window.session.week_start) + timedelta(days=5)).isoformat()
-    )
-    assert placed(window, "math")[1] is None
 
 
 def test_a_drop_after_the_due_date_is_refused_and_changes_nothing(
@@ -89,7 +74,7 @@ def test_a_drop_after_the_due_date_is_refused_and_changes_nothing(
 def test_a_drop_while_a_save_is_under_way_lands_once_it_is_done(
     qapp: QApplication, window: NativeWindow
 ) -> None:
-    use(qapp, window, "clay")
+    use(qapp, window, "timeline")
     window.session.add_block(
         {
             "id": "band",

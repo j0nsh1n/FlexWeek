@@ -1815,7 +1815,7 @@ def button_rules(
     return "".join(rules)
 
 
-VIEW_BUTTONS = ("viewDay", "viewWeek", "viewMonth", "viewMyDay")
+VIEW_BUTTONS = ("viewDay", "viewWeek", "viewMonth")
 BAR_BUTTON_NAMES = (
     "prevWeek", "nextWeek", "todayWeek", "addButton", "addArrow", "solveButton", "retrySave",
     "moreButton", "settingsGear",

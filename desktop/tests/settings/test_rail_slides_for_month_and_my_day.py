@@ -92,25 +92,6 @@ def test_week_to_month_and_back_slide_as_settings_does_when_the_rail_goes_and_re
     nothing_left_over(window)
 
 
-def test_week_to_my_day_and_back_slide_too(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch  # noqa: F811
-) -> None:
-    classic_with_panels(qapp, window)
-    seen = watch(window, monkeypatch)
-    page = window._week_page
-    length = duration(OVER_MS, "normal")
-    press(qapp, window, "viewMyDay", lambda: window._day_mode and not motion.busy())
-    settle_everything(qapp, window)
-    going = [frame for frame in seen.with_slide() if frame.total == length]
-    assert going and going[0].slides == [page.width()] and going[-1].slides == [0]
-    assert not window.rail.isVisible()
-    seen.frames.clear()
-    press(qapp, window, "viewWeek", lambda: not window._day_mode and not motion.busy())
-    settle_everything(qapp, window)
-    leaving = seen.slid(length)
-    assert leaving and leaving[0].offsets == [0] and leaving[-1].offsets == [page.width()]
-    assert window.rail.isVisible()
-    nothing_left_over(window)
 
 
 def test_a_panel_is_drawn_once_while_the_rail_slides_away_not_at_both_of_its_places(

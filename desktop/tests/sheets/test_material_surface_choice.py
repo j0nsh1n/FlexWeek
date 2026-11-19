@@ -43,15 +43,15 @@ def test_sanitize_layout_still_returns_only_the_layout() -> None:
     cleaned = sanitize_layout(
         {
             "main": "timeline",
-            "day": "one",
-            "options": {"one": {"daybar": "hide"}},
+            "day": "dial",
+            "options": {"timeline": {"density": "compact"}},
             "surface": "material",
         }
     )
     assert set(cleaned) == {"main", "day", "options"}
     assert cleaned["main"] == "timeline"
-    assert cleaned["day"] == "one"
-    assert cleaned["options"] == {"one": {"daybar": "hide"}}
+    assert cleaned["day"] == "dial"
+    assert cleaned["options"] == {"timeline": {"density": "compact"}}
 
 
 def test_a_missing_or_unknown_material_choice_is_slate_system_standard_comfortable() -> None:

@@ -56,13 +56,6 @@
     "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_day_names_its_date_once"
   },
   {
-    "name": "Clay writes an hour label under its Now pill",
-    "file": "desktop/native/layouts/clay.py",
-    "old": "an hour label under it is left out.\n    now_in_gutter = True\n",
-    "new": "an hour label under it is left out.\n    now_in_gutter = False\n",
-    "test": "desktop/tests/week/test_the_day_and_the_now_line.py::test_clays_now_pill_takes_the_place_of_the_hour_label_under_it"
-  },
-  {
     "name": "Agenda adds a misleading Now row inside School",
     "file": "desktop/native/hours/classic.py",
     "old": "        self.rows = rows\n",

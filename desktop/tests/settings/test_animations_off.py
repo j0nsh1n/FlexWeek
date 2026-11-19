@@ -83,11 +83,10 @@ def go_off(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
     qapp.processEvents()
 
 
-def design(qapp: QApplication, window: NativeWindow, main: str, day: str = "one") -> None:  # noqa: F811
-    window._layout = sanitize_layout({"main": main, "day": day})
+def design(qapp: QApplication, window: NativeWindow, main: str) -> None:  # noqa: F811
+    window._layout = sanitize_layout({"main": main})
     window._apply_appearance()
     window.session.set_view("week")
-    window._day_mode = False
     window._on_week()
     qapp.processEvents()
 
@@ -119,10 +118,10 @@ def test_every_main_transition_at_off_starts_no_clock_and_leaves_nothing_moving(
         qapp.processEvents()
         seen.append((what + ", a turn later", now()))
 
-    for main in ("classic", "timeline", "mission", "bento", "retro", "clay"):
+    for main in ("classic", "timeline", "bento", "retro"):
         design(qapp, window, main)
         check(f"{main} chosen")
-        for name in ("viewDay", "viewMonth", "viewWeek", "viewMyDay", "viewWeek"):
+        for name in ("viewDay", "viewMonth", "viewWeek", "viewWeek"):
             press(qapp, window, name)
             check(f"{main}: {name}")
             if name == "viewMonth":
@@ -132,22 +131,12 @@ def test_every_main_transition_at_off_starts_no_clock_and_leaves_nothing_moving(
         check(f"{main}: next week")
         window._go_previous()
         check(f"{main}: previous week")
-    design(qapp, window, "clay")
-    for name in ("clayAhead", "clayBack"):
-        arrow = window.findChild(QPushButton, name)
-        assert arrow is not None, name
-        arrow.click()
-        check(f"Clay: {name}")
     design(qapp, window, "retro")
     retro = window._layout_view("retro")
     for key in list(retro._windows):
         retro._hide(key)
         retro._bring(key, window.findChild(QAbstractButton, "viewWeek"))
         check(f"Retro: window {key} opened")
-    for day in ("dial", "one"):
-        design(qapp, window, "classic", day)
-        press(qapp, window, "viewMyDay")
-        check(f"My day as {day}")
     design(qapp, window, "classic")
     window._open_focus_screen()
     check("Focus opened")

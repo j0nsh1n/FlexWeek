@@ -1,6 +1,6 @@
 """The hours leave room for their clock words in every design: the column beside them is as wide as the
 widest hour word and the time-now pill on the student's clock and text size, a changed clock format or
-a minute passing makes it again, and Mission names fewer hours when the words are wide.
+a minute passing makes it again.
 
 How the labels look (fit inside their boxes, never cut by an edge, never running together) is judged on
 the pictures (pictures/week_clock.py, screen week.hour-labels-and-now-pill)."""
@@ -10,25 +10,22 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from datetime import datetime
-from itertools import pairwise
 
 import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QRectF
-from PySide6.QtGui import QFont, QFontMetricsF, QImage, QPainter
+from PySide6.QtGui import QFontMetricsF
 from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import CLOCK
-from desktop.native.fonts import at_scale, load_fonts, time_font, weighted
-from desktop.native.hours.geometry import Axis, LinearTrack
+from desktop.native.fonts import at_scale, time_font, weighted
+from desktop.native.hours.geometry import Axis
 from desktop.native.hours.zoom import HoursScroll
-from desktop.native.layouts.mission import MissionPainter
-from desktop.native.layouts.registry import MATCH, sanitize_layout, tokens_for
-from desktop.native.look import resolved_palette, sanitize_look
+from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.look import sanitize_look
 from desktop.native.tokens import WEIGHT_STRONG
-from desktop.native.weekmodel import clock_label, set_clock_24h
+from desktop.native.weekmodel import clock_label
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import open_light  # noqa: F401
 from desktop.tests.waiting import wait_until
@@ -122,7 +119,7 @@ def wait_for_the_pill(qapp: QApplication, scroll: HoursScroll, minute_now: int, 
 def show(window: NativeWindow, design: str, clock: str, text_size: str, window_px: int) -> None:
     session = window.session
     session.preferences = {**session.preferences, "clock_24h": clock == "24h"}
-    window._layout = sanitize_layout({"main": design, "day": "one"})
+    window._layout = sanitize_layout({"main": design})
     window._look = sanitize_look({"knobs": {"text": text_size}})
     window._apply_appearance()
     window.resize(window_px, 800)
@@ -168,7 +165,7 @@ def test_a_new_text_size_gives_the_hours_the_room_their_words_need(
 ) -> None:
     session = window.session
     session.preferences = {**session.preferences, "clock_24h": False}
-    window._layout = sanitize_layout({"main": design, "day": "one"})
+    window._layout = sanitize_layout({"main": design})
     window.resize(810, 800)
     for text_size in ("normal", "large", "small", "large"):
         window._look = sanitize_look({"knobs": {"text": text_size}})
@@ -244,68 +241,7 @@ def hour_words_on(qapp: QApplication, window: NativeWindow, written: list[str]) 
     return [words for words in written if words.endswith(":00") or ":00 " in words]
 
 
-def test_mission_names_fewer_hours_when_the_words_are_wide(
-    qapp: QApplication,
-    window: NativeWindow,
-    written_clock_words: list[str],  # noqa: F811
-) -> None:
-    # A minute that is not on the hour, so the pill is never taken for an hour word.
-    CLOCK.set(CLOCK.now().replace(hour=19, minute=37))
-    show(window, "mission", "24h", "normal", 810)
-    narrow = hour_words_on(qapp, window, written_clock_words)
-    show(window, "mission", "12h", "large", 810)
-    wide = hour_words_on(qapp, window, written_clock_words)
-    assert narrow, "Mission wrote no hours"
-    assert wide, "Mission wrote no hours at Large on the 12-hour clock"
-    assert len(wide) < len(narrow), (narrow, wide)
 
 
-def mission_hours_written(now: int | None) -> list[int]:
-    """The hours Mission writes over a whole day at 14 points on the 12-hour clock, where every other
-    hour's words would run together, in the order it writes them."""
-    load_fonts()
-    painting = MissionPainter(tokens_for("mission", MATCH, resolved_palette("light-frost", False, None)))
-    painting.now_minute = now
-    words: list[str] = []
-
-    class Marks(QPainter):
-        def drawText(self, box, flags, text):  # noqa: N802
-            words.append(text)
-            return super().drawText(box, flags, text)
-
-    track = LinearTrack(0, QRectF(60, 60, 400, 300), first=0, last=24 * 60)
-    picture = QImage(600, 400, QImage.Format.Format_ARGB32)
-    paint = Marks(picture)
-    paint.setFont(QFont("Inter", 14))
-    set_clock_24h(False)
-    try:
-        painting.hour_labels(paint, track, 56)
-    finally:
-        paint.end()
-        set_clock_24h(True)
-    hours: list[int] = []
-    for text in words:
-        clock, _, half = text.partition(" ")
-        if not clock.endswith(":00"):
-            continue  # the pill's minute, not an hour
-        hour = int(clock.split(":")[0]) % 12 + (12 if half == "PM" else 0)
-        while hours and hour <= hours[-1]:
-            hour += 24
-        hours.append(hour)
-    return hours
 
 
-@pytest.mark.parametrize("now", [None, 10 * 60 + 20], ids=["no pill", "pill at 10:20"])
-def test_mission_writes_its_hours_at_one_even_step_when_the_words_are_wide(
-    qapp: QApplication, now: int | None
-) -> None:
-    """Every other hour, or every fourth, sixth or twelfth when the words would run together: the
-    hours written keep that one step through the day, before and after the pill, never 8 AM, 2 PM."""
-    hours = mission_hours_written(now)
-    assert len(hours) >= 2, hours
-    gaps = [later - earlier for earlier, later in pairwise(hours)]
-    # The pill may take the place of one hour, so one gap may be two steps.
-    assert any(
-        all(hour % step == 0 for hour in hours) and all(gap in (step, 2 * step) for gap in gaps)
-        for step in (2, 4, 6, 12)
-    ), hours

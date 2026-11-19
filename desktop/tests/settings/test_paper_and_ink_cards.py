@@ -13,7 +13,6 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.fonts import TABULAR
 from desktop.native.look import pack_stylesheet, resolved_palette
-from desktop.native.ring import CountdownRing
 from desktop.native.settings import FocusPanel
 from desktop.tests.window_support import qapp  # noqa: F401
 
@@ -57,13 +56,6 @@ def test_paper_keeps_its_flat_look_when_shadows_are_off_and_bold_when_bold() -> 
     assert "border-bottom: 4px" in card_rule(sheet({"preset": "paper", "knobs": {"depth": "bold"}}))
 
 
-def test_a_countdown_ring_writes_its_figures_at_one_width_so_29_59_and_28_11_agree(
-    qapp: QApplication,  # noqa: F811
-) -> None:
-    ring = CountdownRing()
-    ring.set_number("29:59")
-    number, _unit = ring._fonts()
-    assert number.featureValue(QFont.Tag(TABULAR)) == 1
 
 
 def test_the_focus_timer_line_is_in_the_serif_looks_face_not_mono() -> None:

@@ -34,14 +34,10 @@ LEVELS = {
     ("classic", "day"): [96, 128, 160, 128, 96],
     ("timeline", "week"): [36, 48, 64, 48, 36],
     ("timeline", "day"): [45, 60, 80, 60, 45],
-    ("mission", "week"): [56, 72, 96, 72, 56],
-    ("mission", "day"): [56, 72, 96, 72, 56],
     ("bento", "week"): [44, 64, 96, 64, 44],
     ("bento", "day"): [44, 64, 96, 64, 44],
     ("retro", "week"): [40, 56, 72, 56, 40],
     ("retro", "day"): [40, 56, 72, 56, 40],
-    ("clay", "week"): [38, 48, 64, 48, 38],
-    ("clay", "day"): [38, 48, 64, 48, 38],
 }
 KEYS = {"=": Qt.Key.Key_Equal, "-": Qt.Key.Key_Minus, "0": Qt.Key.Key_0}
 

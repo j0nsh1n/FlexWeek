@@ -42,9 +42,7 @@ def test_bentos_buttons_reach_the_products_own_add_and_plan(
     assert window.planner.currentWidget().findChild(QPushButton, "bentoAdd") is None
     click(window, "addButton")
     click(window, "solveButton")
-    click(window, "viewMyDay")
     assert asked == ["add", "plan"]
-    assert type(window.planner.currentWidget()).__name__ == "OneThingView"
 
 
 def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, window: NativeWindow) -> None:
@@ -70,7 +68,6 @@ def test_the_week_toolbar_keeps_only_what_is_reached_for(qapp: QApplication, win
         "viewDay",
         "viewWeek",
         "viewMonth",
-        "viewMyDay",
         "addButton",
         "addArrow",
         "solveButton",
@@ -82,7 +79,6 @@ def test_no_button_appears_twice_on_the_week_page(qapp: QApplication, window: Na
     """Moving Quick focus into the action row left the focus panel's own copy on screen, so the same
     button was offered twice. The action row is not the only place a button can come from, so this counts
     them across the whole page rather than inside one container."""
-    window._day_mode = False
     window._on_week()
     qapp.processEvents()
     page = window._stack.currentWidget()

@@ -41,7 +41,7 @@ from desktop.tests.week.support_sheet_keyboard import (
 )
 from desktop.tests.window_support import host  # noqa: F401
 
-DESIGNS = ("timeline", "mission", "bento", "retro")
+DESIGNS = ("timeline", "bento", "retro")
 
 
 def in_design(qapp, window, design: str) -> HoursCanvas:

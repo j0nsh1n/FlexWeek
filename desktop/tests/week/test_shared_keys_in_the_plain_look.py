@@ -60,7 +60,7 @@ def acted(window: NativeWindow, monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return calls
 
 
-def test_number_keys_open_day_week_month_and_my_day_by_default(
+def test_number_keys_open_day_week_and_month_by_default(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     session = window.session
@@ -70,9 +70,6 @@ def test_number_keys_open_day_week_month_and_my_day_by_default(
     wait_until(qapp, lambda: session.planner_view == "month" and not session.busy)
     _press(window, Qt.Key.Key_2)
     wait_until(qapp, lambda: session.planner_view == "week" and not session.busy)
-    assert window._day_mode is False
-    _press(window, Qt.Key.Key_4)
-    assert window._day_mode is True, "4 is My day"
 
 
 def test_with_number_keys_off_the_number_keys_do_nothing(qapp: QApplication, window: NativeWindow) -> None:
@@ -81,7 +78,6 @@ def test_with_number_keys_off_the_number_keys_do_nothing(qapp: QApplication, win
         _press(window, key)
         pump(qapp)
         assert window.session.planner_view == "week", key
-        assert window._day_mode is False, key
         assert _page(window) == "weekPage", key
 
 
@@ -95,7 +91,6 @@ def test_by_default_the_letters_do_nothing(
         pump(qapp)
         assert session.planner_view == "week", key
         assert session.week_start == home, key
-        assert window._day_mode is False, key
         assert _page(window) == "weekPage", key
     assert acted == []
 
@@ -197,7 +192,6 @@ def test_no_key_of_the_set_acts_while_typing_in_a_box(
         QTest.keyClick(box, key)
         pump(qapp)
     assert window.session.planner_view == "week"
-    assert window._day_mode is False
     assert _page(window) == "weekPage"
     assert acted == []
     box.deleteLater()
@@ -215,12 +209,11 @@ def test_no_key_of_the_set_acts_while_a_dialog_is_open(
             QTest.keyClick(window, key)
             pump(qapp, 3)
         seen["view"] = window.session.planner_view
-        seen["day_mode"] = window._day_mode
         dialog.reject()
 
     QTimer.singleShot(0, type_into_the_window)
     dialog.exec()
-    assert seen == {"view": "week", "day_mode": False}
+    assert seen == {"view": "week"}
     assert acted == []
 
 

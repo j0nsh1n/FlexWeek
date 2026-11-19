@@ -10,16 +10,10 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QRectF
-from PySide6.QtGui import QFont, QImage, QPainter
-from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton
+from PySide6.QtGui import QPainter
+from PySide6.QtWidgets import QAbstractButton, QApplication
 
-from desktop.native.calendar import sunday_due
-from desktop.native.fonts import load_fonts
 from desktop.native.hours import classic
-from desktop.native.hours.geometry import LinearTrack
-from desktop.native.layouts.clay import ClayPainter
-from desktop.native.layouts.registry import MATCH, tokens_for
-from desktop.native.look import resolved_palette
 from desktop.native.weekmodel import clock_label, set_clock_24h
 from desktop.native.window import NativeWindow
 from desktop.tests.waiting import wait_until
@@ -35,30 +29,6 @@ def test_day_names_its_date_once(qapp: QApplication, hours_window: NativeWindow)
     assert window.day_view.name.text() == "Hours"
 
 
-def test_my_day_offers_running_late_for_a_late_session(
-    qapp: QApplication, hours_window: NativeWindow
-) -> None:
-    window = hours_window
-    session = window.session
-    # Due at the end of the held week: a fixed date went past and left nothing to run late on.
-    session.add_homework(
-        {
-            "id": "essay",
-            "title": "Essay",
-            "due": sunday_due(session.week_start),
-            "estimate_min": 60,
-            "revision": 0,
-        }
-    )
-    block = next(item for item in session.blocks if item.get("assignment_id") == "essay")
-    session.hand_move(block["id"], -1, 3, 19 * 60, 19 * 60 + block["duration_min"])
-    session.save()
-    wait_until(qapp, lambda: not session.busy and not session.dirty)
-    window.findChild(QAbstractButton, "viewMyDay").click()
-    for _ in range(4):
-        qapp.processEvents()
-    late = window.findChild(QPushButton, "dialLate")
-    assert late is not None and late.isVisible()
 
 
 def test_the_day_agenda_writes_each_time_on_the_twelve_hour_clock(
@@ -103,35 +73,3 @@ def test_running_school_has_no_agenda_now_row(qapp: QApplication, hours_window: 
     assert view.hours.now_min == 620
 
 
-def test_clays_now_pill_takes_the_place_of_the_hour_label_under_it(qapp: QApplication) -> None:
-    """The pill left of the hours lies where their labels are. At 10:20 on hours 40 pixels each, the
-    10:00 label was written and the pill drawn over it; 11:00, clear of the pill, stays."""
-    load_fonts()
-    painting = ClayPainter(tokens_for("clay", MATCH, resolved_palette("light-frost", False, None)), full=True)
-    painting.now_minute = 10 * 60 + 20
-    pills: list[QRectF] = []
-    labels: set[str] = set()
-
-    class Marks(QPainter):
-        def drawRoundedRect(self, box, *args):  # noqa: N802
-            pills.append(QRectF(box))
-            return super().drawRoundedRect(box, *args)
-
-        def drawText(self, box, flags, words):  # noqa: N802
-            labels.add(words)
-            return super().drawText(box, flags, words)
-
-    track = LinearTrack(0, QRectF(120, 20, 600, 480), first=8 * 60, last=20 * 60)
-    picture = QImage(800, 520, QImage.Format.Format_ARGB32)
-    paint = Marks(picture)
-    paint.setFont(QFont("Inter", 12))
-    set_clock_24h(True)
-    try:
-        painting.hour_labels(paint, track, 56)
-        written = set(labels)
-        painting.now(paint, track, painting.now_minute)
-    finally:
-        paint.end()
-    assert len(pills) == 1
-    assert "11:00" in written, "an hour clear of the pill keeps its label"
-    assert "10:00" not in written, "the hour label under the pill is left out"

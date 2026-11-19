@@ -37,7 +37,6 @@ def _notice_in_todays_app(window: NativeWindow) -> object:
 def _notice_over_retro(window: NativeWindow) -> object:
     school_week(window)
     window._layout = sanitize_layout({"main": "retro", "day": "one"})
-    window._day_mode = False
     window.session.set_view("week")
     window._on_week()
     settled(QApplication.instance(), window)

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QWidget
 
-from desktop.native.weekmodel import Occurrence, WeekModel
+from desktop.native.weekmodel import WeekModel
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.settings import support_pictures as pictures
@@ -89,21 +89,6 @@ def timeline_fold(window: NativeWindow) -> object:
     return view
 
 
-def mission_school(window: NativeWindow) -> object:
-    from desktop.native.layouts.base import Scene
-    from desktop.native.layouts.mission import MissionView
-    from desktop.native.layouts.registry import tokens_for
-    from desktop.native.look import PRESET_PALETTES
-
-    view = MissionView(window)
-    view.setGeometry(0, 0, 1280, 800)
-    school = Occurrence("school", "School", "class", 0, 480, 870, False, False, False, None, None, None)
-    tokens = tokens_for("mission", "flight-deck", PRESET_PALETTES["flight-deck"])
-    view.show_week(Scene(WeekModel("2026-10-12", (school,)), 0, 900, {}, tokens, 1.0))
-    view.raise_()
-    view.show()
-    still(view)
-    return view
 
 
 def week_list_drawer(window: NativeWindow) -> object:
@@ -238,17 +223,6 @@ SCREENS: list[Screen] = [
             "clear of the fold."
         ),
         sources=("desktop/native/layouts/timeline.py",),
-        styles=("widgets",),
-    ),
-    Screen(
-        id="settings.audit_mission_school",
-        area="settings",
-        prepare=mission_school,
-        checks=(
-            "Mission control at 1280 by 800: Monday's School block (08:00 to 14:30) lies inside its lane's "
-            "track, neither before its left edge nor past its right, with inner clearance for its text."
-        ),
-        sources=("desktop/native/layouts/mission.py",),
         styles=("widgets",),
     ),
     Screen(

@@ -4,14 +4,13 @@ is fetched before it is shown."""
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import datetime
 
 import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QEvent, Qt  # noqa: E402
-from PySide6.QtTest import QTest  # noqa: E402
+from PySide6.QtCore import QEvent  # noqa: E402
 from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QWidget  # noqa: E402
 
 from backend.tests.fake_clock import CLOCK  # noqa: E402
@@ -86,14 +85,6 @@ def test_month_and_mini_month_use_today_at_a_week_boundary(
     assert session.selected_day == today
     window.findChild(QAbstractButton, "viewWeek").click()
     wait_until(qapp, lambda: not session.busy)
-    window.findChild(QAbstractButton, "viewMyDay").click()
-    qapp.processEvents()
-    expected = {
-        "2026-09-29": "Tuesday 29 September",
-        "2026-10-01": "Thursday 1 October",
-        "2026-10-04": "Sunday 4 October",
-    }
-    assert window.week_title.full_text() == expected[today]
 
 
 def test_open_week_month_is_prefetched_without_waiting_for_it(
@@ -163,17 +154,3 @@ def test_month_keeps_a_picked_day_and_uses_thursday_for_a_week_without_today(
     assert session.selected_month == "2026-10"
 
 
-def test_my_day_title_names_the_day_chosen_on_its_strip(qapp: QApplication, window: NativeWindow) -> None:
-    from desktop.native.layouts.dial import DialFace
-
-    window._layout = sanitize_layout({"main": "classic", "day": "dial"})
-    window._enter_day()
-    for _ in range(4):
-        qapp.processEvents()
-    face = next(
-        face for face in window.planner.currentWidget().findChildren(DialFace) if face.mini and face.day == 4
-    )
-    QTest.mouseClick(face, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, face.rect().center())
-    qapp.processEvents()
-    chosen = date.fromisoformat(window.session.week_start) + timedelta(days=4)
-    assert window.week_title.full_text() == f"Friday {chosen.day} {chosen.strftime('%B')}"

@@ -16,7 +16,6 @@ from desktop.tests.week.support_bar_pictures import idle, pump, text_size
 def _timeline_day_at_large_text(window: NativeWindow) -> None:
     text_size(window, "large")
     window._layout = sanitize_layout({"main": "timeline", "day": "one"})
-    window._day_mode = True
     window._on_week()
     window.resize(1150, 768)
     idle(window)

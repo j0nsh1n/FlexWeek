@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QAbstractScrollArea, QApplication, QWidget
 from desktop.native.layouts.registry import sanitize_layout
 from desktop.tests.window_support import qapp, server, settled, signed_out, window  # noqa: F401
 
-DESIGNS = ("classic", "retro", "clay", "bento", "mission", "timeline")
+DESIGNS = ("classic", "retro", "bento", "timeline")
 SCHOOL = {"id": "school", "title": "School", "kind": "locked", "category": "class", "start": "08:30",
           "duration_min": 405, "days": [0, 1, 2, 3, 4]}
 CTRL_SHIFT = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier

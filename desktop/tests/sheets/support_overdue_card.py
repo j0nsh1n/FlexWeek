@@ -15,7 +15,7 @@ from desktop.native.window import NativeWindow
 from desktop.tests.blocks_helper import put_block
 from desktop.tests.waiting import wait_until
 
-DESIGNS = ("classic", "timeline", "mission", "bento", "retro", "clay")
+DESIGNS = ("classic", "timeline", "bento", "retro")
 LONG_WORDS = "1 overdue · 3 left from last week"
 
 

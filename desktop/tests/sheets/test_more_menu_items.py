@@ -107,7 +107,6 @@ def test_retros_start_opens_mores_menu(qapp: QApplication, window: NativeWindow)
     """Start is the app's own menu, More's: it asks for nothing More does not already offer. (That it
     opens up from the taskbar is a picture: week.retro_start_menu_opens_up.)"""
     window._layout = sanitize_layout({"main": "retro", "day": "one"})
-    window._day_mode = False
     window.session.set_view("week")
     window._on_week()
     qapp.processEvents()

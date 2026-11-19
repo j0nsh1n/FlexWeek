@@ -77,13 +77,6 @@ DESIGN_LOOKS: dict[str, tuple[tuple[str, str], ...]] = {
         ("pack:dark-frost", "Dark"),
         ("preset:terminal", "Terminal"),
     ),
-    "mission": (
-        ("preset:flight-deck", "Flight deck"),
-        ("preset:high-contrast", "High contrast"),
-        ("preset:terminal", "Terminal"),
-        ("pack:dark-frost", "Dark"),
-        ("pack:light-frost", "Light"),
-    ),
     "bento": (
         ("preset:bento-indigo", "Indigo"),
         ("preset:high-contrast", "High contrast"),
@@ -95,27 +88,6 @@ DESIGN_LOOKS: dict[str, tuple[tuple[str, str], ...]] = {
         ("preset:retro-teal", "Teal desktop"),
         ("preset:high-contrast", "High contrast"),
         ("preset:pastel", "Pastel"),
-        ("pack:dark-frost", "Dark"),
-        ("pack:light-frost", "Light"),
-    ),
-    "clay": (
-        ("preset:clay-lavender", "Clay"),
-        ("preset:high-contrast", "High contrast"),
-        ("preset:pastel", "Pastel"),
-        ("preset:poster", "Poster"),
-        ("pack:dark-frost", "Dark"),
-    ),
-    "dial": (
-        ("preset:dial-midnight", "Night"),
-        ("preset:high-contrast", "High contrast"),
-        ("pack:light-frost", "Daylight"),
-        ("pack:dark-frost", "Dark"),
-        ("preset:terminal", "Terminal"),
-    ),
-    "one": (
-        ("preset:one-poster", "Poster"),
-        ("preset:high-contrast", "High contrast"),
-        ("preset:one-paper", "Paper and ink"),
         ("pack:dark-frost", "Dark"),
         ("pack:light-frost", "Light"),
     ),
@@ -169,15 +141,6 @@ LAYOUTS: dict[str, LayoutSpec] = {
             purpose="Agenda",
         ),
         LayoutSpec(
-            "mission",
-            "plan",
-            "Mission control",
-            "Today in numbers across the top, the days as lanes of hours, and deadlines by time left.",
-            (_look("mission"), _show("figures", "Figures across the top")),
-            purpose="Dashboard",
-            experimental=True,
-        ),
-        LayoutSpec(
             "bento",
             "plan",
             "Bento",
@@ -210,46 +173,6 @@ LAYOUTS: dict[str, LayoutSpec] = {
             purpose="Dashboard",
             experimental=True,
         ),
-        LayoutSpec(
-            "clay",
-            "plan",
-            "Clay deck",
-            "One day at a time on a large card, the days either side peeking, moved with the arrows.",
-            (_look("clay"), _show("peek", "Days either side")),
-            purpose="Agenda",
-            experimental=True,
-        ),
-        LayoutSpec(
-            "dial",
-            "day",
-            "Day dial",
-            "The day as a clock face, read out hour by hour beside it.",
-            (
-                _look("dial"),
-                _show("list", "Hour by hour list"),
-                _show("week", "Small dials for the week"),
-            ),
-            purpose="Clock",
-        ),
-        LayoutSpec(
-            "one",
-            "day",
-            "One thing",
-            "The whole window is the thing that's on now.",
-            (
-                _look("one"),
-                Option(
-                    "lead",
-                    "Lead with",
-                    "detail",
-                    (Choice("now", "What is on now"), Choice("next", "What is next")),
-                ),
-                _show("actions", "Buttons"),
-                _show("daybar", "Day bar"),
-            ),
-            purpose="Focus",
-            experimental=True,
-        ),
     )
 }
 MAIN_DEFAULT, DAY_DEFAULT = "classic", "dial"
@@ -257,10 +180,6 @@ LEVELS = (("style", "Style"), ("detail", "Fine-tune"))
 EXPERIMENTAL = "Experimental styles"
 LEGACY_COLOURS = {
     "timeline": {"match": "your", "paper": "preset:timeline-paper", "night": "pack:dark-frost"},
-    "mission": {
-        "match": "your", "deck": "preset:flight-deck", "cyan": "preset:terminal",
-        "amber": "pack:light-frost", "green": "pack:dark-frost",
-    },
     "bento": {
         "match": "your", "indigo": "preset:bento-indigo", "sunset": "preset:poster",
         "mono": "pack:light-frost", "midnight": "pack:dark-frost",
@@ -268,12 +187,6 @@ LEGACY_COLOURS = {
     "retro": {
         "match": "your", "teal": "preset:retro-teal", "plum": "preset:pastel", "slate": "pack:dark-frost",
     },
-    "clay": {
-        "match": "your", "pastel": "preset:clay-lavender", "mint": "preset:pastel",
-        "sunset": "preset:poster", "dusk": "pack:dark-frost",
-    },
-    "one": {"match": "your", "black": "preset:one-poster", "paper": "preset:one-paper"},
-    "dial": {"match": "your", "midnight": "preset:dial-midnight", "daylight": "pack:light-frost"},
 }
 
 

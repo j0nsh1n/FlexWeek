@@ -237,10 +237,8 @@ everything = true
 [[rule]]
 paths = [
   "desktop/native/hours/classic.py", "desktop/native/hours/chips.py",
-  "desktop/native/layouts/bento.py", "desktop/native/layouts/clay.py",
-  "desktop/native/layouts/mission.py", "desktop/native/layouts/retro.py",
+  "desktop/native/layouts/bento.py", "desktop/native/layouts/retro.py",
   "desktop/native/layouts/timeline.py", "desktop/native/layouts/views.py",
-  "desktop/native/layouts/empty.py",
 ]
 areas = ["week", "day"]
 
@@ -269,10 +267,7 @@ paths = [
 areas = ["day"]
 
 [[rule]]
-paths = [
-  "desktop/native/layouts/one_thing.py", "desktop/native/layouts/dial.py",
-  "desktop/native/material/bridge_myday.py",
-]
+paths = ["desktop/native/material/bridge_myday.py"]
 areas = ["myday", "day"]
 
 # --- Month.
@@ -287,7 +282,7 @@ areas = ["month"]
 [[rule]]
 paths = [
   "desktop/native/focus.py", "desktop/native/pomodoro.py",
-  "desktop/native/ambient.py", "desktop/native/ring.py", "desktop/native/sound.py",
+  "desktop/native/ambient.py", "desktop/native/sound.py",
   "desktop/native/tones.py", "desktop/native/spotify.py",
   "desktop/native/material/bridge_focus.py", "desktop/native/material/focus_visible.py",
   "desktop/native/material/qml/focus/",

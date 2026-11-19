@@ -26,18 +26,6 @@ def _show_week(window: NativeWindow, main: str) -> None:
     QApplication.processEvents()
 
 
-def _empty_week_card(window: NativeWindow) -> QWidget:
-    window._layout = {"main": "classic", "day": "one", "options": {}}
-    window.findChild(QAbstractButton, "viewWeek").click()
-    QApplication.processEvents()
-    card = window.empty_week
-    # The copy-last row is the one the card must be tall enough for.
-    card.set_blank(True)
-    card.set_over_hours(True)
-    card.heading.setWordWrap(True)
-    card.line.setWordWrap(True)
-    QApplication.processEvents()
-    return card
 
 
 def _weekend(design: str, with_saturday: bool):
@@ -154,17 +142,6 @@ def _late_preview(window: NativeWindow) -> QWidget:
 
 
 SCREENS: list[Screen] = [
-    Screen(
-        id="week.empty-week-card",
-        area="week",
-        prepare=_empty_week_card,
-        checks=(
-            "the empty-week card is tall enough for its heading, its wrapped line and the copy-last "
-            "row, with nothing cut off, at Large text in High contrast (not a fixed 200 px box)"
-        ),
-        sources=("desktop/native/layouts/empty.py",),
-        main=True,
-    ),
     *[
         Screen(
             id=f"week.empty-weekend-{design}",

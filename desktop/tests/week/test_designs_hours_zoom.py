@@ -66,7 +66,7 @@ class ZoomingDesign(LayoutView):
     """The least a design with hours of its own does: hours that scroll and zoom, made anew on every
     render, as a design that rebuilds its page does."""
 
-    layout_id = "mission"
+    layout_id = "timeline"
 
     def __init__(self, parent: QWidget | None = None, *, hand: Hand | None = None) -> None:
         super().__init__(parent, hand=hand)
@@ -85,9 +85,9 @@ class ZoomingDesign(LayoutView):
 def zooming_design(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> ZoomingDesign:
-    """The test design, where a real design goes: chosen as the main view, in Mission's place."""
-    monkeypatch.setitem(VIEW_CLASSES, "mission", ZoomingDesign)
-    view = use(qapp, window, "mission")
+    """The test design, where a real design goes: chosen as the main view, in Timeline's place."""
+    monkeypatch.setitem(VIEW_CLASSES, "timeline", ZoomingDesign)
+    view = use(qapp, window, "timeline")
     assert isinstance(view, ZoomingDesign)
     return view
 
@@ -144,7 +144,7 @@ def test_a_new_window_opens_a_designs_hours_at_the_remembered_level(
     again = another_window()
     try:
         # The window reads the look file as it opens; the design it makes later takes the level.
-        shown = again._layout_view("mission")
+        shown = again._layout_view("timeline")
         assert isinstance(shown, ZoomingDesign) and shown.scroll is not None
         assert shown.scroll.px == 64
     finally:

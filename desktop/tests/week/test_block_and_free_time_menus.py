@@ -388,7 +388,7 @@ def test_the_menu_key_and_shift_f10_ask_at_the_next_free_time_after_now_when_not
     assert hours.focus_slot() == (3, 14 * 60 + 30)
 
 
-@pytest.mark.parametrize("design", ["timeline", "mission", "bento", "retro", "clay"])
+@pytest.mark.parametrize("design", ["timeline", "bento", "retro"])
 def test_every_design_with_shared_hours_has_the_free_time_menu(
     qapp: QApplication, window: NativeWindow, menus: dict, design: str
 ) -> None:

@@ -1,4 +1,4 @@
-"""The Clay deck, Retro desktop and Timeline weeks as pictures: what the old layout tests asserted about
+"""The Retro desktop and Timeline weeks as pictures: what the old layout tests asserted about
 where things sit, how big they are, their colours and what fits. The aggregator collects SCREENS."""
 
 from __future__ import annotations
@@ -6,9 +6,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QEvent
-from PySide6.QtWidgets import QPushButton
 
-from desktop.native import motion
 from desktop.native.look import sanitize_look
 from desktop.native.window import NativeWindow
 from desktop.tests.day.support_designs import at, locked, seed_week, show_design
@@ -16,7 +14,6 @@ from desktop.tests.pictures.screen import Screen
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_timeline import canvas, centre_of, handle_of, over, press
 
-CLAY = ("desktop/native/layouts/clay.py", "desktop/native/hours", "desktop/native/layouts/base.py")
 RETRO = ("desktop/native/layouts/retro.py", "desktop/native/hours", "desktop/native/layouts/base.py")
 TIMELINE = ("desktop/native/layouts/timeline.py", "desktop/native/hours", "desktop/native/layouts/base.py")
 LOOKS = ("desktop/native/look.py", "desktop/native/tokens.py", "desktop/native/layouts/registry.py")
@@ -46,40 +43,8 @@ def design(
 # Clay: the row of cards
 
 
-# Short blocks on Wednesday's card, which sits beside the one in front: a half hour (Dinner is on every
-# day), quarter hours one after the other, a lesson with room for its icon, and two blocks that share
-# their time on Tuesday.
-CLAY_SIDE_BLOCKS = (
-    locked("call", "Call", "extra", "15:00", 15, [2]),
-    locked("tidy", "Tidy", "extra", "15:15", 15, [2]),
-    locked("stretch", "Stretch", "extra", "16:30", 15, [2]),
-    locked("piano", "Piano lesson", "extra", "17:00", 30, [2]),
-    locked("soccer", "Soccer practice", "extra", "16:00", 90, [1]),
-    locked("choir", "Choir", "extra", "16:00", 90, [1]),
-)
 
 
-def clay_slide(window: NativeWindow, *, on_day: bool, last: bool) -> object:
-    """The row of cards part-way (or at the end of) its slide to Friday, under Normal motion."""
-    at(13, 40)
-    seed_week(window, shared=False)
-    motion.apply_ui_effects("normal")
-    view = show_design(window, "clay", surface="day" if on_day else "week")
-    if on_day:
-        session = window.session
-        session.open_day("2026-11-06")
-        window._on_week()
-    else:
-        view.findChild(QPushButton, "clayAhead").click()
-    row = view.row
-    wait_until(None, lambda: row._snaps is not None, what="the row starting to slide")
-    row._slide.pause()
-    if last:
-        row._on_clock(float(row._slide.duration()))
-    else:
-        row._slid(0.3)
-    row.repaint()
-    return row
 
 
 # Retro: the desktop
@@ -149,76 +114,6 @@ def timeline_mid_drag(window: NativeWindow) -> object:
 
 
 SCREENS: list[Screen] = [
-    # Clay
-    Screen(
-        id="week.clay_deck_row",
-        area="week",
-        prepare=design("clay"),
-        checks=(
-            "At 1280 wide the card in front is 452 px wide at x 414 and 600 px tall (row 632 px high); each "
-            "neighbour is 70 % of that (316 by 420), centred on the same line, with 32 px between cards, "
-            "and the leftmost neighbour starts near x 66. The day after a neighbour waits wholly past the "
-            "window's edge rather than being cut by it. A card is seen whole or not at all, whichever day "
-            "is in front and at 900, 1024, 1150 (Large text), 1280 and 1600 wide. The fade at the row's "
-            "ends reaches no further in than the room outside the two cards in view. The cards beside "
-            "the front label their whole hours to the left of their blocks, as the front does. Neighbours "
-            "sit under a veil of the page colour (60 % page over 40 % card, in the Slate look where they "
-            "differ the most); the card in front shows its own colour with no veil."
-        ),
-        sources=CLAY,
-        main=True,
-    ),
-    Screen(
-        id="week.clay_deck_dark_veil",
-        area="week",
-        prepare=design("clay", look="pack:dark-frost"),
-        checks=(
-            "On a dark look the neighbours still sit under the 60 % veil of the page colour, a pixel of "
-            "Friday's card beside its hours is the page laid 60 % over the card colour, and the card in "
-            "front shows its own colour."
-        ),
-        sources=(*CLAY, *LOOKS),
-    ),
-    Screen(
-        id="week.clay_side_card_blocks",
-        area="week",
-        prepare=design("clay", extra=CLAY_SIDE_BLOCKS, shared=True),
-        checks=(
-            "On Wednesday's card at 70 % a half hour (Dinner, 10 px tall) is still named, with the name "
-            "shortened at a word and an ellipsis where the block is narrow, and left as its colour alone "
-            "where not even three letters fit, at 9 pt and at 13 pt. The icon gives way where it would "
-            "cost the name: room for 'Piano lesson' says the name, room for the icon and 'Piano' says "
-            "the name shortened, room for both has both. A half hour says its start time rather than its "
-            "icon: name, then time, then icon, only when all three fit. The quarter hours Call (15:00), "
-            "Tidy (15:15) and Stretch (16:30) are under 8 px tall and each is named by its name or else "
-            "its start time, beside its bar, inside the card, not over each other nor over School or "
-            "Dinner. Two blocks that share their time (Soccer practice and Choir on Tuesday) sit side by "
-            "side with no dot at the corner of either."
-        ),
-        sources=CLAY,
-    ),
-    Screen(
-        id="week.clay_slide_midway",
-        area="week",
-        prepare=lambda window: clay_slide(window, on_day=False, last=False),
-        checks=(
-            "Part-way into the slide to Friday each moving picture of a card is scaled by one factor on "
-            "both sides (its words are not stretched) and clipped to its card's own rectangle."
-        ),
-        sources=CLAY,
-    ),
-    Screen(
-        id="week.clay_slide_last_frame",
-        area="week",
-        prepare=lambda window: clay_slide(window, on_day=False, last=True),
-        checks=(
-            "At the last frame of the slide the row already looks as it does once landed: no hour, "
-            "heading or card is in another place than in the landed row (the biggest difference in any "
-            "colour channel between the two stays under 16 apart from a sliver of antialiasing at the "
-            "arrows' and cards' edges)."
-        ),
-        sources=CLAY,
-    ),
     # Retro
     Screen(
         id="week.retro_desktop",

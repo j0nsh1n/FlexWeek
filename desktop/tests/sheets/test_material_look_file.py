@@ -25,20 +25,20 @@ from desktop.tests.window_support import look_file  # noqa: E402
 
 pytestmark = pytest.mark.real_surface
 
-ONE_WITHOUT_ITS_BAR = {"main": "classic", "day": "one", "options": {"one": {"daybar": "hide"}}}
+TIMELINE_COMPACT = {"main": "classic", "day": "dial", "options": {"timeline": {"density": "compact"}}}
 
 
 def test_saved_looks_round_trip_with_surface(qapp: QApplication, material_window: NativeWindow) -> None:
     window = material_window
     window._look = wear(sanitize_look(None), NIGHT)
     window._saved_looks = save_look([], NIGHT, "Night study")
-    window._layout = sanitize_layout(ONE_WITHOUT_ITS_BAR)
+    window._layout = sanitize_layout(TIMELINE_COMPACT)
     window._surface = "material"
     window._save_look()
     stored = json.loads(look_file().read_text())
     assert stored["surface"] == "material"
     assert "surface" not in stored["layout"]
-    assert stored["layout"]["options"]["one"]["daybar"] == "hide"
+    assert stored["layout"]["options"]["timeline"]["density"] == "compact"
     assert stored["saved_looks"] == [NIGHT]
     assert stored["custom"] == NIGHT
 
@@ -48,7 +48,7 @@ def test_saved_looks_round_trip_with_surface(qapp: QApplication, material_window
     window._load_look()
     assert window._surface == "material"
     assert window._saved_looks == [NIGHT]
-    assert window._layout["options"]["one"]["daybar"] == "hide"
+    assert window._layout["options"]["timeline"]["density"] == "compact"
     assert window._look["custom"] == NIGHT
 
     # So is a surface nobody knows, and the Widgets value an older build wrote.
@@ -67,7 +67,7 @@ def test_saved_looks_round_trip_with_surface(qapp: QApplication, material_window
     assert window._surface == "material"
     assert "surface" not in window._layout
     assert window._saved_looks == [NIGHT]
-    assert window._layout["options"]["one"]["daybar"] == "hide"
+    assert window._layout["options"]["timeline"]["density"] == "compact"
 
 
 def test_setup_writes_material_beside_the_layout(qapp: QApplication, material_window: NativeWindow) -> None:
@@ -77,7 +77,7 @@ def test_setup_writes_material_beside_the_layout(qapp: QApplication, material_wi
     window._material_gave_up = False
     answer = {
         "look": sanitize_look(window._look),
-        "layout": sanitize_layout(ONE_WITHOUT_ITS_BAR),
+        "layout": sanitize_layout(TIMELINE_COMPACT),
         "pack": "system",
     }
 
@@ -86,9 +86,9 @@ def test_setup_writes_material_beside_the_layout(qapp: QApplication, material_wi
     stored = json.loads(look_file().read_text())
     assert stored["surface"] == "material"
     assert stored["layout"]["main"] == "classic"
-    assert stored["layout"]["options"]["one"]["daybar"] == "hide"
+    assert stored["layout"]["options"]["timeline"]["density"] == "compact"
     assert "surface" not in stored["layout"]
     window._surface = "widgets"
     window._load_look()
     assert window._surface == "material"
-    assert window._layout["options"]["one"]["daybar"] == "hide"
+    assert window._layout["options"]["timeline"]["density"] == "compact"

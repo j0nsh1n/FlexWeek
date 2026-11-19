@@ -12,8 +12,6 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog  # noqa: E402
 
-from desktop.native.hours.geometry import Axis  # noqa: E402
-from desktop.native.layouts.registry import sanitize_layout  # noqa: E402
 from desktop.native.widgets import BlockDialog  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402, F401
@@ -215,25 +213,3 @@ def test_no_ring_is_drawn_when_the_grid_is_not_focused(
     assert not hours.ring_shown
 
 
-def test_where_time_runs_across_left_and_right_move_the_time_and_up_and_down_the_day(
-    qapp: QApplication, classic_window: NativeWindow
-) -> None:
-    window = classic_window
-    window._layout = sanitize_layout({"main": "mission", "day": "one"})
-    window._apply_appearance()
-    window._on_week()
-    settled(qapp, window)
-    lanes = [
-        hours for hours in window._week_surfaces() if hours.tracks and hours.tracks[0].axis is Axis.ACROSS
-    ]
-    assert lanes, "Mission shows a lane for each day"
-    hours = lanes[0]
-    hours.setFocus(Qt.FocusReason.TabFocusReason)
-    day, minute = hours.focus_slot()
-    key(window, Qt.Key.Key_Right)
-    assert hours.focus_slot() == (day, minute + 15)
-    key(window, Qt.Key.Key_Down)
-    assert hours.focus_slot() == (day + 1, minute + 15)
-    key(window, Qt.Key.Key_Left)
-    key(window, Qt.Key.Key_Up)
-    assert hours.focus_slot() == (day, minute)

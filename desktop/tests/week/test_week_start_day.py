@@ -11,7 +11,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QLabel, QWidget
+from PySide6.QtWidgets import QApplication, QWidget
 
 from desktop.native import fields
 from desktop.tests.window_support import qapp  # noqa: F401
@@ -65,33 +65,6 @@ def test_a_saved_sunday_is_read_back_and_drives_the_calendar_popup(
     assert fields.LookCalendar().firstDayOfWeek() == Qt.DayOfWeek.Sunday
 
 
-@pytest.mark.parametrize(
-    ("week_start", "expected"),
-    (
-        # Monday 21 September 2026, and the weeks from Sunday 20, Wednesday 23 and Saturday 26.
-        ("2026-09-21", ["Mon 21", "Tue 22", "Wed 23", "Thu 24", "Fri 25", "Sat 26", "Sun 27"]),
-        ("2026-09-20", ["Sun 20", "Mon 21", "Tue 22", "Wed 23", "Thu 24", "Fri 25", "Sat 26"]),
-        ("2026-09-23", ["Wed 23", "Thu 24", "Fri 25", "Sat 26", "Sun 27", "Mon 28", "Tue 29"]),
-        ("2026-09-26", ["Sat 26", "Sun 27", "Mon 28", "Tue 29", "Wed 30", "Thu 1", "Fri 2"]),
-    ),
-)
-def test_my_day_dial_strip_shows_the_open_week_in_order_named_from_its_dates(
-    qapp: QApplication,
-    week_start: str,
-    expected: list[str],
-) -> None:
-    from desktop.native.layouts.base import Scene
-    from desktop.native.layouts.dial import DayDialView, DialFace
-    from desktop.native.weekmodel import build_week
-
-    week = build_week(week_start, [], {}, None)
-    strip = DayDialView()._week(Scene(week, 2, 0), 2)
-
-    assert [face.day for face in strip.findChildren(DialFace)] == [0, 1, 2, 3, 4, 5, 6]
-    names = [str(item.text()) for item in strip.findChildren(QLabel, "dialMiniName")]
-    dates = [str(item.text()) for item in strip.findChildren(QLabel, "dialMiniDate")]
-    assert [f"{name} {number}" for name, number in zip(names, dates, strict=True)] == expected
-    strip.deleteLater()
 
 
 def test_a_damaged_week_start_file_falls_back_to_monday(kept: Path) -> None:

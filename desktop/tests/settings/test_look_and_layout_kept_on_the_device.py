@@ -23,15 +23,19 @@ from desktop.tests.day.support_layouts_window import (  # noqa: E402
 
 def test_the_choice_is_saved_on_this_device_beside_the_look(qapp: QApplication, window: NativeWindow) -> None:
     window._look = {"preset": "paper", "knobs": {"corners": "rounded"}}
-    window._layout = {"main": "classic", "day": "one", "options": {"one": {"look": "preset:one-paper"}}}
+    window._layout = {
+        "main": "classic",
+        "day": "dial",
+        "options": {"timeline": {"look": "preset:timeline-paper"}},
+    }
     window._save_look()
     stored = json.loads(look_file().read_text())
     assert stored["preset"] == "paper"
     assert stored["knobs"] == {"corners": "rounded"}
     assert stored["layout"] == {
         "main": "classic",
-        "day": "one",
-        "options": {"one": {"look": "preset:one-paper"}},
+        "day": "dial",
+        "options": {"timeline": {"look": "preset:timeline-paper"}},
     }
     # Whether this computer checks for updates lives beside the look, because it is a property of
     # the computer rather than the account.
@@ -39,7 +43,7 @@ def test_the_choice_is_saved_on_this_device_beside_the_look(qapp: QApplication, 
     window._look, window._layout = {}, {}
     window._load_look()
     assert window._look == {"preset": "paper", "knobs": {"corners": "rounded"}}
-    assert window._layout["options"] == {"one": {"look": "preset:one-paper"}}
+    assert window._layout["options"] == {"timeline": {"look": "preset:timeline-paper"}}
 
 
 def test_a_look_file_from_before_layouts_still_loads(qapp: QApplication, window: NativeWindow) -> None:
@@ -54,10 +58,10 @@ def test_a_look_file_from_before_layouts_still_loads(qapp: QApplication, window:
 
 
 def test_saving_the_look_from_settings_keeps_the_layout(qapp: QApplication, window: NativeWindow) -> None:
-    window._layout = {"main": "classic", "day": "one", "options": {"one": {"daybar": "hide"}}}
+    window._layout = {"main": "classic", "day": "dial", "options": {"timeline": {"density": "compact"}}}
     window._look = {"preset": "ink", "knobs": {}}
     window._save_look()
-    assert json.loads(look_file().read_text())["layout"]["options"] == {"one": {"daybar": "hide"}}
+    assert json.loads(look_file().read_text())["layout"]["options"] == {"timeline": {"density": "compact"}}
 
 
 def test_a_custom_look_is_kept_with_the_saved_looks(qapp: QApplication, window: NativeWindow) -> None:

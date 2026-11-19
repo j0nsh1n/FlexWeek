@@ -5,13 +5,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from desktop.native import motion
 from desktop.native.window import NativeWindow
-from desktop.tests.day.support_designs import FRIDAY, at, locked, seed_week, show_design
+from desktop.tests.day.support_designs import at, locked, seed_week, show_design
 from desktop.tests.pictures.screen import Screen
-from desktop.tests.waiting import wait_until
 
-CLAY = ("desktop/native/layouts/clay.py", "desktop/native/hours", "desktop/native/layouts/base.py")
 RETRO = ("desktop/native/layouts/retro.py", "desktop/native/hours", "desktop/native/layouts/base.py")
 TIMELINE = ("desktop/native/layouts/timeline.py", "desktop/native/hours", "desktop/native/layouts/base.py")
 LOOKS = ("desktop/native/look.py", "desktop/native/tokens.py", "desktop/native/layouts/registry.py")
@@ -37,68 +34,11 @@ def on_day(
     return prepare
 
 
-# Wednesday's evening, which is on the card beside Thursday's when Day is open: the second session of the
-# essay, as homework, whose name was drawn past the window's edge once.
-ESSAY_ON_WEDNESDAY = (locked("essay-2", "Essay-2", "assignments", "19:00", 60, [2]),)
 
 
-def clay_day_slide(window: NativeWindow, *, last: bool) -> object:
-    """Day's row part-way (or at the end of) its slide from Thursday to Friday, under Normal motion."""
-    at(13, 40)
-    seed_week(window, shared=False)
-    motion.apply_ui_effects("normal")
-    view = show_design(window, "clay", surface="day")
-    window.session.open_day(FRIDAY)
-    window._on_week()
-    row = view.row
-    wait_until(None, lambda: row._snaps is not None, what="the row starting to slide")
-    row._slide.pause()
-    if last:
-        row._on_clock(float(row._slide.duration()))
-    else:
-        row._slid(0.3)
-    row.repaint()
-    return row
 
 
 SCREENS: list[Screen] = [
-    Screen(
-        id="day.clay_day_card",
-        area="day",
-        prepare=on_day("clay", extra=ESSAY_ON_WEDNESDAY),
-        checks=(
-            "Day opens the card in front 800 px wide at 1280 wide, with its summary to the right of the "
-            "hours (the summary's left edge is right of the hours' scroll area). The neighbours narrow to "
-            "the room beside the open card, whole inside the window, at least 140 px wide, at 70 % of "
-            "the open card's height, 32 px from it on both sides. The fade at the row's ends stays off "
-            "the cards in view (the two neighbours). Wednesday's homework (Essay-2) is written with its "
-            "name inside the row, not as a pink bar whose name lies past the window's left edge."
-        ),
-        sources=CLAY,
-        main=True,
-    ),
-    Screen(
-        id="day.clay_slide_midway",
-        area="day",
-        prepare=lambda window: clay_day_slide(window, last=False),
-        checks=(
-            "Part-way into Day's slide to Friday each moving picture of a card is scaled by one factor "
-            "on both sides (its words are not stretched) and clipped to its card's own rectangle."
-        ),
-        sources=CLAY,
-    ),
-    Screen(
-        id="day.clay_slide_last_frame",
-        area="day",
-        prepare=lambda window: clay_day_slide(window, last=True),
-        checks=(
-            "At the last frame of Day's slide the row already looks as it does once landed, with the new "
-            "day's hours and summary and not the hours where the last day left them: no hour, heading or "
-            "card is in another place (the biggest difference in any colour channel stays under 16 apart "
-            "from antialiasing at the arrows' and cards' edges)."
-        ),
-        sources=CLAY,
-    ),
     Screen(
         id="day.retro_day_window",
         area="day",

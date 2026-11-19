@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (  # noqa: E402
 )
 
 from desktop.native.calendar import CATEGORIES, sunday_due  # noqa: E402
-from desktop.native.layouts.registry import DESIGN_LOOKS, sanitize_layout  # noqa: E402
+from desktop.native.layouts.registry import DESIGN_LOOKS  # noqa: E402
 from desktop.native.motion import FADE_NAME  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import LightWindows  # noqa: E402
@@ -125,19 +125,8 @@ def click(window: NativeWindow, name: str) -> None:
     window.findChild(QAbstractButton, name).click()
 
 
-def one_thing(window: NativeWindow) -> None:
-    """One thing as the day screen. Day dial is the default since 0.16; these tests are about One
-    thing's own buttons."""
-    window._layout = sanitize_layout({**window._layout, "day": "one"})
 
 
-def use_layout(window: NativeWindow, main: str = "classic", day: str = "one", day_mode: bool = False) -> None:
-    """Put a main view and a day screen on and redraw the week."""
-    window._layout = {"main": main, "day": day, "options": {}}
-    window._day_mode = day_mode
-    window.session.set_view("week")
-    window._on_week()
-    QApplication.processEvents()
 
 
 def fades(host: QWidget) -> list[QLabel]:
@@ -443,7 +432,6 @@ __all__ = [
     "more_actions",
     "more_sections",
     "no_spotify",
-    "one_thing",
     "own_accent",
     "preference_puts",
     "press",
@@ -453,7 +441,6 @@ __all__ = [
     "signature",
     "still",
     "thursday_at",
-    "use_layout",
     "visible_copy",
     "wait_until",
     "waiting_math",

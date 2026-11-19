@@ -23,11 +23,11 @@ from desktop.native.look import ACCENTS, PACKS, design_look, resolved_palette
 from desktop.tests.week.support_design_registry import _lab
 
 
-def test_the_two_roles_hold_the_designs_the_owner_picked() -> None:
+def test_the_registry_holds_the_designs_still_offered_and_no_day_screen() -> None:
     assert [spec.id for spec in LAYOUTS.values() if spec.role == "plan"] == [
-        "classic", "timeline", "mission", "bento", "retro", "clay"
+        "classic", "timeline", "bento", "retro"
     ]
-    assert [spec.id for spec in LAYOUTS.values() if spec.role == "day"] == ["dial", "one"]
+    assert [spec.id for spec in LAYOUTS.values() if spec.role == "day"] == []
 
 
 def test_every_design_offers_its_signature_high_contrast_dark_and_your_look() -> None:
@@ -50,11 +50,10 @@ def test_options_are_known_and_defaults_are_shipped() -> None:
         for option in spec.options:
             assert option.default in option.values
     assert options_for(None, "classic")["look"] == "your"
-    assert options_for(None, "dial")["look"] == "your"
 
 
 def test_missing_design_looks_keep_the_account_look_for_every_design() -> None:
-    choice = sanitize_layout({"main": "bento", "day": "one", "options": {}})
+    choice = sanitize_layout({"main": "bento", "options": {}})
     assert choice["options"] == {}
     assert all(options_for(choice, layout_id)["look"] == "your" for layout_id in LAYOUTS)
 
@@ -74,7 +73,7 @@ def test_layout_sanitizer_drops_unknown_values_keys_and_non_dict_options() -> No
     assert clean == {"main": "bento", "day": "dial", "options": {}}
 
 
-def test_layout_sanitizer_keeps_a_valid_main_day_pair() -> None:
+def test_layout_sanitizer_keeps_a_valid_main_and_the_shipped_day_key() -> None:
     assert sanitize_layout({"main": "bento", "day": "dial"}) == {
         "main": "bento", "day": "dial", "options": {}
     }
@@ -82,14 +81,8 @@ def test_layout_sanitizer_keeps_a_valid_main_day_pair() -> None:
 
 def test_fold_bounds_options_merge_and_standard_layouts() -> None:
     assert [spec.id for spec in layouts_for("plan", experimental=False)] == ["classic", "timeline"]
-    assert {spec.id for spec in layouts_for("plan", experimental=True)} == {
-        "mission", "bento", "retro", "clay"
-    }
-    assert [spec.id for spec in layouts_for("day", experimental=False)] == ["dial"]
-    assert [spec.id for spec in layouts_for("day", experimental=True)] == ["one"]
-    assert options_for({"options": {"one": {"look": "preset:one-paper", "lead": "next"}}}, "one") == {
-        "look": "preset:one-paper", "lead": "next", "actions": "show", "daybar": "show"
-    }
+    assert {spec.id for spec in layouts_for("plan", experimental=True)} == {"bento", "retro"}
+    assert layouts_for("day") == ()
     for value in ("0", "7", "x", 3, None):
         assert "timeline" not in sanitize_layout({"options": {"timeline": {"fold": value}}})["options"]
         assert options_for({"options": {"timeline": {"fold": value}}}, "timeline")["fold"] == "3"
@@ -107,15 +100,15 @@ def test_old_colour_choices_migrate_to_the_corresponding_shared_look() -> None:
     migrated = sanitize_layout(
         {
             "main": "bento",
-            "day": "one",
-            "options": {"bento": {"colour": "indigo"}, "one": {"colour": "black"}},
+            "options": {"bento": {"colour": "indigo"}, "retro": {"colour": "teal"}},
         }
     )
     assert migrated["options"] == {
         "bento": {"look": "preset:bento-indigo"},
-        "one": {"look": "preset:one-poster"},
+        "retro": {"look": "preset:retro-teal"},
     }
-    assert sanitize_layout({"options": {"clay": {"colour": "unknown"}}})["options"]["clay"]["look"] == "your"
+    unknown = sanitize_layout({"options": {"bento": {"colour": "unknown"}}})
+    assert unknown["options"]["bento"]["look"] == "your"
 
 
 def test_every_legacy_colour_maps_to_a_selectable_look() -> None:

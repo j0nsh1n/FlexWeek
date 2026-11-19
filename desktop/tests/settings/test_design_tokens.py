@@ -150,9 +150,9 @@ def test_the_accent_is_never_a_page_card_or_wash(name: str, surface: str, accent
     probed = painted_backgrounds(pack_stylesheet(pack, dark, look_for(name, surface), accent, probe))
     assert painted == probed
     # A design in Match my look wears the look: its cards are not the accent either.
-    match = tokens_for("clay", MATCH, palette)
+    match = tokens_for("bento", MATCH, palette)
     large = [key for key in match if key.startswith("card_") or key in {"bg", "surface"}]
-    probed_match = tokens_for("clay", MATCH, probe)
+    probed_match = tokens_for("bento", MATCH, probe)
     assert {key: match[key] for key in large} == {key: probed_match[key] for key in large}
 
 
@@ -199,10 +199,8 @@ def test_the_type_scale_is_five_sizes_that_small_and_large_scale_together() -> N
 
 
 # The only modules that may set a font's size or weight: the stylesheet and the scale's own helpers.
-# ring.py fits the focus screen's countdown numeral to its ring, beyond the scale on purpose, as
-# 0.16's countdown was; its other words are the scale's. feel.py writes a style's extra stylesheet,
-# its sizes from type_pt; the style feel tests hold it to that.
-SCALE_KEEPERS = {"look.py", "fonts.py", "ring.py", "feel.py"}
+# feel.py writes a style's extra stylesheet, its sizes from type_pt; the style feel tests hold it to that.
+SCALE_KEEPERS = {"look.py", "fonts.py", "feel.py"}
 OWN_FONT = re.compile(r"\.set(Bold|Weight|PointSize|PointSizeF|PixelSize)\(|font-size|font-weight")
 
 

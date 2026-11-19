@@ -118,7 +118,6 @@ from desktop.native.hours.rail import MonthCard, Rail
 from desktop.native.hours.zoom import ZOOM_KEYS, HoursScroll, sanitize_zoom
 from desktop.native.kept import KeptSession
 from desktop.native.layouts.base import NARROW_WIDTH, LayoutView, Scene
-from desktop.native.layouts.empty import EmptyWeek, start_here_week
 from desktop.native.layouts.registry import options_for, sanitize_layout, sanitize_surface, tokens_for
 from desktop.native.layouts.views import VIEW_CLASSES
 from desktop.native.look import (
@@ -569,7 +568,7 @@ class NativeWindow(QMainWindow):
         self._dressed: tuple = ()
         self._travel_picture: QLabel | None = None
         self._travel_direction = 0
-        # What the planner last showed (_planner_now), so a change of view, My day or design is seen.
+        # What the planner last showed (_planner_now), so a change of view or design is seen.
         self._planner_shown: tuple | None = None
         self._stack.setObjectName("nativeStack")
         self.setCentralWidget(self._stack)
@@ -583,8 +582,6 @@ class NativeWindow(QMainWindow):
         # The app version that must draw Material on the CPU, or "" when the graphics card may be used.
         self._cpu_drawing_version = ""
         self._relaunching = False
-        self._day_mode = False
-        self._opened_on_preference = False
         # Number keys and Letter keys as the look file holds them, and the file's stamp when read.
         self._key_stamp: tuple[int, int] | None = None
         self._key_values = (True, False)
@@ -1098,12 +1095,6 @@ class NativeWindow(QMainWindow):
             button.setToolTip(tip)
             button.clicked.connect(lambda checked=False, value=view: self._choose_view(value))
             segments.add(button)
-        my_day = Segment("My day")
-        my_day.setObjectName("viewMyDay")
-        my_day.setCheckable(True)
-        my_day.setToolTip("Watch today")
-        my_day.clicked.connect(self._enter_day)
-        segments.add(my_day)
         self._bar_views.addWidget(segments)
         self.account_name = QLabel()
         self.account_name.setObjectName("accountName")
@@ -1465,11 +1456,6 @@ class NativeWindow(QMainWindow):
         self.month_grid = MonthGrid(hand=self.hand)
         self.month_grid.day_activated.connect(self.session.open_day)
         self.planner.addWidget(self.month_grid)
-        self.empty_week = EmptyWeek()
-        self.empty_week.add_requested.connect(self._add_homework)
-        self.empty_week.copy_last_requested.connect(self._copy_last_week_fixed)
-        self.empty_week.routine_requested.connect(self._open_routines)
-        self.planner.addWidget(self.empty_week)
         for widget in (
             self.week_table.hours,
             self.day_view.hours,
@@ -1495,69 +1481,13 @@ class NativeWindow(QMainWindow):
     def _planner_widget(self, view: str) -> QWidget:
         """The chosen main view stands in for the week grid, and for Day and Month too.
 
-        Today's app keeps the clock-order Day list and the chip Month. My day is still its own
-        screen. A design of its own rebuilds Day and Month in that design, so the app is not two
-        programs once you leave the week. A new account's empty week shows Today's app one button
-        instead of empty hours.
+        Today's app keeps the clock-order Day list and the chip Month. A design of its own rebuilds
+        Day and Month in that design, so the app is not two programs once you leave the week.
         """
-        if self._day_mode:
-            self._hide_empty_card()
-            return self._layout_view(self._layout["day"])
         main = self._layout["main"]
         if main in VIEW_CLASSES and view in {"week", "day", "month"}:
-            self._hide_empty_card()
             return self._layout_view(main)
-        session = self.session
-        if view in {"week", "day"} and self._layout["main"] == "classic":
-            week = build_week(session.week_start, session.blocks, session.assignments, session.trace)
-            if not session.blocks:
-                start = start_here_week(week, session.assignments, session.week_start, session.saved_weeks)
-                self.empty_week.set_blank(not start)
-                if start:
-                    self._host_empty_week(self.planner)
-                    return self.empty_week
-                host = self.day_view if view == "day" else self.week_table
-                self._host_empty_week(host)
-                return host
-        self._hide_empty_card()
         return {"day": self.day_view, "month": self.month_grid}.get(view, self.week_table)
-
-    def _host_empty_week(self, host: QWidget) -> None:
-        card = self.empty_week
-        over = host is not self.planner
-        card.set_over_hours(over)
-        if over:
-            if card.parent() is not host:
-                card.setParent(host)
-            if not host.property("emptyCardWatched"):
-                host.setProperty("emptyCardWatched", True)
-                host.installEventFilter(self)
-            card.show()
-            card.raise_()
-            self._center_empty_card()
-            return
-        if card.parent() is not self.planner:
-            self.planner.addWidget(card)
-        card.show()
-
-    def _hide_empty_card(self) -> None:
-        card = self.empty_week
-        parent = card.parentWidget()
-        if parent in (self.week_table, self.day_view):
-            card.hide()
-            card.set_over_hours(False)
-            self.planner.addWidget(card)
-
-    def _center_empty_card(self) -> None:
-        card = self.empty_week
-        host = card.parentWidget()
-        if host is None or host is self.planner:
-            return
-        card.adjustSize()
-        card.move(
-            max(0, (host.width() - card.width()) // 2),
-            max(0, (host.height() - card.height()) // 2),
-        )
 
     def _layout_view(self, layout_id: str) -> LayoutView:
         view = self._views.get(layout_id)
@@ -1572,11 +1502,8 @@ class NativeWindow(QMainWindow):
             view.finished_requested.connect(self._finish_homework)
             view.focus_requested.connect(self._start_focus)
             view.late_requested.connect(self._open_late)
-            view.my_day_requested.connect(self._enter_day)
-            view.back_requested.connect(self._leave_day)
             view.menu_requested.connect(self._menu_from)
             view.day_activated.connect(self.session.open_day)
-            view.watched_day_changed.connect(self._watched_day_title)
             view.remembered_zoom = self._zoom
             view.zoomed.connect(self._remember_zoom)
             view.option_set.connect(lambda key, value, chosen=layout_id: self._set_option(chosen, key, value))
@@ -1640,7 +1567,7 @@ class NativeWindow(QMainWindow):
         palette, applied_look = design_look(options["look"], pack, system_dark, self._worn_look(), accent)
         session = self.session
         surface = "week"
-        if not self._day_mode and layout_id in VIEW_CLASSES and session.planner_view in {"day", "month"}:
+        if layout_id in VIEW_CLASSES and session.planner_view in {"day", "month"}:
             surface = session.planner_view
         week = self._week_with_history(
             build_week(session.week_start, session.blocks, session.assignments, session.trace)
@@ -1762,7 +1689,7 @@ class NativeWindow(QMainWindow):
         words = self.session.now_next_text()
         today, minute = self._clock_in_week()
         self.rail.set_clock(today, minute)
-        month = self.session.planner_view == "month" and not self._day_mode
+        month = self.session.planner_view == "month"
         self.focus_panel.show_now_next("" if self._rail_shown() or month else words)
 
     def _sync_chrome(self) -> None:
@@ -1791,7 +1718,7 @@ class NativeWindow(QMainWindow):
         self.rail.set_tasks(self.session.focus_tasks(), self._clock_in_week()[0])
         # Quick focus is in the action row whenever there is one, so the panel's own copy would be
         # the same button twice; it belongs to the panel only where no action row is shown.
-        self.focus_panel.quick.setVisible(own and self._day_mode)
+        self.focus_panel.quick.setVisible(False)
         needed = self.session.homework_time_needed()
         self.more_button.set_count(0)
         self.solve_button.set_count(len(needed))
@@ -1904,51 +1831,18 @@ class NativeWindow(QMainWindow):
         self.setMinimumWidth(max(WINDOW_MIN_WIDTH, needed))
 
     def _choose_view(self, view: str) -> None:
-        self._day_mode = False
         self.session.set_view(view)
-
-    def _honour_preferred_view(self) -> None:
-        """Open on whatever "Open on" says, once per sign-in. The web reads the same preference at
-        startup; here it was saved and never looked at, so the app always came up on the week."""
-        if self._opened_on_preference or self.session.preferences is None:
-            return
-        self._opened_on_preference = True
-        wanted = (self.session.preferences or {}).get("preferred_view")
-        if wanted == "day":
-            self._day_mode = True
-        elif wanted == "week":
-            self._day_mode = False
 
     def _menu_from(self, point: QPoint) -> None:
         """More's menu, opening up from `point` on the screen, as Retro desktop's Start opens it."""
         menu = self.more_menu
         menu.popup(point - QPoint(0, menu.sizeHint().height() - 2 * MENU_EDGE))
 
-    def _enter_day(self) -> None:
-        if self.session.account is None:
-            return
-        self._day_mode = True
-        self._on_week()
-        self._views[self._layout["day"]].setFocus()
-
-    def _watched_day_title(self, iso: str) -> None:
-        if self._day_mode:
-            self.week_title.set_full_text(
-                planner_title(self.session, "day", selected_day=iso),
-                planner_title(self.session, "day", short=True, selected_day=iso),
-            )
-
-    def _leave_day(self) -> None:
-        self._day_mode = False
-        self._on_week()
-
     def _on_account(self, account: object) -> None:
         if account is None or str(account["id"]) != self._kept_adds_account:  # type: ignore[index]
             self._kept_adds.clear()
         if account is None:
             self._discard_block_spare()
-            self._day_mode = False
-            self._opened_on_preference = False
             self._setup_active = False
             self._setup_checked = False
             self._setup_prefs = {}
@@ -2201,7 +2095,6 @@ class NativeWindow(QMainWindow):
                 self._reset_hours(clear_all=current[0] != self._hours_week[0])
             self._hours_week = current
         turn = self._begin_turn()
-        self._honour_preferred_view()
         self._set_clock()
         self._check_updates(asked=False)
         self._fill_classic()
@@ -2230,10 +2123,10 @@ class NativeWindow(QMainWindow):
             self.planner.setCurrentWidget(shown)
         self._show_next()
         self._release_travel()
-        for name in ("viewDay", "viewWeek", "viewMonth", "viewMyDay"):
+        for name in ("viewDay", "viewWeek", "viewMonth"):
             button = self.findChild(QRadioButton, name)
             if button is not None:
-                button.setChecked(name == ("viewMyDay" if self._day_mode else f"view{view.title()}"))
+                button.setChecked(name == f"view{view.title()}")
         month = view == "month"
         day = view == "day"
         period = "month" if month else ("day" if day else "week")
@@ -2241,12 +2134,10 @@ class NativeWindow(QMainWindow):
         self.next_nav.setToolTip(f"Next {period}")
         self.prev_nav.setAccessibleName(f"Previous {period}")
         self.next_nav.setAccessibleName(f"Next {period}")
-        self._show_week_list_row(view == "week" and not self._day_mode)
-        title_view = "myday" if self._day_mode else view
-        watched = shown.watched_date() if self._day_mode and isinstance(shown, LayoutView) else None
+        self._show_week_list_row(view == "week")
         self.week_title.set_full_text(
-            planner_title(self.session, title_view, selected_day=watched),
-            planner_title(self.session, title_view, short=True, selected_day=watched),
+            planner_title(self.session, view),
+            planner_title(self.session, view, short=True),
         )
         self._maybe_open_setup()
         if self._setup_prefs or self._setup_work_windows is not None or self._setup_week:
@@ -2425,7 +2316,7 @@ class NativeWindow(QMainWindow):
             unfinished.setEnabled(not self.session.busy and bool(self._panel_items()))
         listed = self.findChild(QPushButton, "weekListRow")
         if listed is not None:
-            listed.setEnabled(self.session.planner_view == "week" and not self._day_mode)
+            listed.setEnabled(self.session.planner_view == "week")
         for action, button in self._more_pairs:
             action.setEnabled(button.isEnabled())
             tip = self._more_tip(button.objectName(), button.isEnabled())
@@ -2507,7 +2398,7 @@ class NativeWindow(QMainWindow):
 
     def _planner_now(self) -> tuple:
         """What the planner shows, as far as a change of it is a new page."""
-        return (self._day_mode, self.session.planner_view, self._layout["main"], self._layout["day"])
+        return (self.session.planner_view, self._layout["main"], self._layout["day"])
 
     def _turn_pieces(self) -> tuple[QWidget, ...]:
         """What sits under the top bar beside the planner, and may come or go with a view."""
@@ -2546,13 +2437,13 @@ class NativeWindow(QMainWindow):
         if picture is None:
             return None
         direction = 0
-        # Day, Week and Month slide toward the segment chosen; My day and a new design only fade.
-        if not was[0] and not now[0] and was[2:] == now[2:] and {was[1], now[1]} <= set(VIEW_ORDER):
-            step = VIEW_ORDER.index(now[1]) - VIEW_ORDER.index(was[1])
+        # Day, Week and Month slide toward the segment chosen; a new design only fades.
+        if was[1:] == now[1:] and {was[0], now[0]} <= set(VIEW_ORDER):
+            step = VIEW_ORDER.index(now[0]) - VIEW_ORDER.index(was[0])
             direction = (step > 0) - (step < 0)
         over = ""
-        if direction and now[2] == "retro" and "month" in (was[1], now[1]) and moves(self._motion):
-            over = "back" if was[1] == "month" else "in"
+        if direction and now[1] == "retro" and "month" in (was[0], now[0]) and moves(self._motion):
+            over = "back" if was[0] == "month" else "in"
         return picture, self._places(), direction, over
 
     def _finish_turn(self, turn: tuple[QLabel, dict, int, str] | None) -> None:
@@ -2626,7 +2517,7 @@ class NativeWindow(QMainWindow):
             # other week stays where it was left.
             self._reset_hours()
         self.session.load_week(today.isoformat())
-        if self.session.planner_view == "day" or self._day_mode:
+        if self.session.planner_view == "day":
             self.session.open_day(today.isoformat())
 
     def _shift_week(self, days: int) -> None:
@@ -3318,7 +3209,7 @@ class NativeWindow(QMainWindow):
                 row = QListWidgetItem(words)
                 row.setData(Qt.ItemDataRole.UserRole, (occurrence.block_id, day))
                 self.week_access_list.addItem(row)
-        self._show_week_list_row(self.session.planner_view == "week" and not self._day_mode)
+        self._show_week_list_row(self.session.planner_view == "week")
         if selected_key is not None:
             for index in range(self.week_access_list.count()):
                 row = self.week_access_list.item(index)
@@ -3426,7 +3317,6 @@ class NativeWindow(QMainWindow):
             session.planner_view,
             session.week_start,
             session.selected_day,
-            self._day_mode,
             repr(self._layout),
         )
 
@@ -5053,8 +4943,7 @@ class NativeWindow(QMainWindow):
         pack, system_dark, accent = self._look_inputs()
         look = self._worn_look()
         if not self._wears_carried_look():
-            layout_id = self._layout["day"] if self._day_mode else self._layout["main"]
-            token = options_for(self._layout, layout_id)["look"]
+            token = options_for(self._layout, self._layout["main"])["look"]
         else:
             token = "your"
         # Blocks and month cells are painted per item, which a stylesheet cannot reach.
@@ -5370,7 +5259,6 @@ class NativeWindow(QMainWindow):
                 Qt.Key.Key_1: lambda: self._choose_view("day"),
                 Qt.Key.Key_2: lambda: self._choose_view("week"),
                 Qt.Key.Key_3: lambda: self._choose_view("month"),
-                Qt.Key.Key_4: self._enter_day,
             }
         if letters:
             views |= {
@@ -5391,13 +5279,11 @@ class NativeWindow(QMainWindow):
         return action
 
     def _next_if_shown(self) -> None:
-        """J: the next week, day or month, whichever is shown. My day is today only."""
-        if not self._day_mode:
-            self._go_next()
+        """J: the next week, day or month, whichever is shown."""
+        self._go_next()
 
     def _previous_if_shown(self) -> None:
-        if not self._day_mode:
-            self._go_previous()
+        self._go_previous()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if self.session.account is None or QApplication.activeModalWidget() is not None:
@@ -5433,7 +5319,7 @@ class NativeWindow(QMainWindow):
             self.toast.close_button.click()
             event.accept()
             return
-        if key == Qt.Key.Key_Escape and not mods and isinstance(focus, HoursCanvas) and not self._day_mode:
+        if key == Qt.Key.Key_Escape and not mods and isinstance(focus, HoursCanvas):
             self._focus_top_bar()
             event.accept()
             return
@@ -5493,10 +5379,6 @@ class NativeWindow(QMainWindow):
             shared()
             event.accept()
             return
-        if self._day_mode and key in (Qt.Key.Key_B, Qt.Key.Key_Escape):
-            self._leave_day()
-            event.accept()
-            return
         super().keyPressEvent(event)
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
@@ -5529,11 +5411,6 @@ class NativeWindow(QMainWindow):
                     )
                     self._block_menu(block_id, day, point)
                 return True
-        if event.type() == QEvent.Type.Resize and watched in (
-            getattr(self, "week_table", None),
-            getattr(self, "day_view", None),
-        ):
-            self._center_empty_card()
         if event.type() in (QEvent.Type.Show, QEvent.Type.Hide) and watched in (
             getattr(self, "plan_review", None),
             getattr(self, "unfinished_panel", None),

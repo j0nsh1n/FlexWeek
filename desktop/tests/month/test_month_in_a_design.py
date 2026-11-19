@@ -32,9 +32,6 @@ def test_day_and_month_follow_the_week_layout(qapp: QApplication, window: Native
     assert shown.scene.surface == "month"
     click(window, "viewWeek")
     assert (window.solve_button.isVisible(), window.more_button.isVisible()) == (True, True)
-    click(window, "viewMyDay")
-    assert type(window.planner.currentWidget()).__name__ == "OneThingView"
-    assert (window.solve_button.isVisible(), window.more_button.isVisible()) == (True, True)
 
 
 def test_todays_app_keeps_the_clock_day_and_chip_month(qapp: QApplication, window: NativeWindow) -> None:
@@ -67,10 +64,9 @@ def test_bento_month_hides_the_week_up_next_card(qapp: QApplication, window: Nat
     assert board is not None and board.isVisible()
 
 
-@pytest.mark.parametrize("layout_id", ["timeline", "mission", "bento", "retro", "clay"])
+@pytest.mark.parametrize("layout_id", ["timeline", "bento", "retro"])
 def test_month_hides_the_whole_week_surface(qapp: QApplication, window: NativeWindow, layout_id: str) -> None:
     window._layout = {"main": layout_id, "day": "one", "options": {}}
-    window._day_mode = False
     window.session.set_view("week")
     window._on_week()
     qapp.processEvents()

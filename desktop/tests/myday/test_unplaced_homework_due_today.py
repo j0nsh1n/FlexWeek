@@ -35,12 +35,8 @@ FREE_TODAY = (
 SCREENS = (
     ("classic", "week"),
     ("timeline", "week"),
-    ("mission", "week"),
     ("bento", "week"),
     ("retro", "week"),
-    ("clay", "week"),
-    ("one", "day"),
-    ("dial", "day"),
 )
 
 
@@ -65,24 +61,11 @@ def test_unplaced_homework_due_today_is_named_on_every_screen(
     )
     session.save()
     settled(qapp, window)
-    if surface == "day":
-        window._layout = {"main": "classic", "day": layout_id, "options": {}}
-        window._day_mode = True
-    else:
-        window._layout = {"main": layout_id, "day": "one", "options": {}}
-        window._day_mode = False
-        session.set_view("week")
+    window._layout = {"main": layout_id, "day": "dial", "options": {}}
+    session.set_view("week")
     window._on_week()
-    if layout_id == "dial":
-        wait_until(qapp, lambda: "not placed yet" in visible_copy(window).lower(), what="the dial's strip")
-    else:
-        wait_until(qapp, lambda: "math worksheet" in visible_copy(window).lower(), what="the homework named")
+    wait_until(qapp, lambda: "math worksheet" in visible_copy(window).lower(), what="the homework named")
     said = visible_copy(window).lower()
-    if layout_id == "dial":
-        # The demo's not-placed strip on the day dial gives the count only; the names are not listed.
-        assert "1 homework not placed yet" in said, said
-        assert "math worksheet" not in said, said
-    else:
-        assert "math worksheet" in said, said
+    assert "math worksheet" in said, said
     for phrase in FREE_TODAY:
         assert phrase not in said, f"{layout_id} still says {phrase!r} in:\n{said}"

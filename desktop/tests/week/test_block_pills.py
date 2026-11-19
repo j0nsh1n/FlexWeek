@@ -86,15 +86,12 @@ def test_only_unfinished_unpinned_homework_is_placed_by_plan(
 
 
 def test_a_design_that_writes_its_own_words_draws_no_pills_yet(qapp: QApplication) -> None:
-    """The base painter lays out words it knows about; a design that writes its own (Clay, Retro,
-    Bento, Mission) or has none (the one-thing bar) would draw a pill over them, so none of them does."""
+    """The base painter lays out words it knows about; a design that writes its own (Retro and
+    Bento) would draw a pill over them, so none of them does."""
     from desktop.native.layouts.bento import BentoPainter
-    from desktop.native.layouts.clay import ClayPainter
-    from desktop.native.layouts.mission import MissionPainter
-    from desktop.native.layouts.one_thing import BarPainter
     from desktop.native.layouts.retro import RetroPainter
 
-    for design in (BarPainter, BentoPainter, ClayPainter, MissionPainter, RetroPainter):
+    for design in (BentoPainter, RetroPainter):
         assert design.draws_pills is False, design.__name__
     assert BlockPainter.draws_pills is True
 

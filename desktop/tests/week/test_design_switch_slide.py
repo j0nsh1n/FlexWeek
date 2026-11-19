@@ -31,7 +31,7 @@ def qapp() -> Iterator[QApplication]:
     yield QApplication.instance() or QApplication(["flexweek-design-switch-test"])
 
 
-@pytest.mark.parametrize("design", ["mission", "timeline", "bento", "clay", "retro"])
+@pytest.mark.parametrize("design", ["timeline", "bento", "retro"])
 def test_switching_design_slides_it_in_and_the_slide_ends_on_the_new_page(
     qapp: QApplication,
     window: NativeWindow,  # noqa: F811

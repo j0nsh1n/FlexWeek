@@ -22,9 +22,6 @@ from desktop.native.hours.canvas import (
     block_layout,
 )
 from desktop.native.hours.geometry import Span
-from desktop.native.layouts.clay import ClayPainter
-from desktop.native.layouts.mission import MissionPainter
-from desktop.native.layouts.registry import MATCH, tokens_for
 from desktop.native.look import LOOK_BASES, resolved_palette, sanitize_look
 from desktop.native.weekmodel import clock_label, range_label
 from desktop.tests.test_hours_painter import Said, three_days, words_on
@@ -199,11 +196,8 @@ def test_a_line_with_room_for_the_name_the_time_and_the_icon_still_writes_one_ti
 
 
 def painter_for(design: str, palette: dict):
-    if design == "classic":
-        return BlockPainter(palette)
-    if design == "mission":
-        return MissionPainter(tokens_for("mission", MATCH, palette))
-    return ClayPainter(tokens_for("clay", MATCH, palette), full=True)
+    assert design == "classic"
+    return BlockPainter(palette)
 
 
 @pytest.mark.parametrize(
@@ -220,7 +214,7 @@ def painter_for(design: str, palette: dict):
         ("free", None),
     ],
 )
-@pytest.mark.parametrize("design", ["classic", "mission", "clay"])
+@pytest.mark.parametrize("design", ["classic"])
 def test_each_category_paints_its_approved_icon(
     qapp: QApplication,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,

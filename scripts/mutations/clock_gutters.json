@@ -40,12 +40,5 @@
   "old": "            self.today, self.now_min = today, now_min\n            self.labels_changed.emit()\n",
   "new": "            self.today, self.now_min = today, now_min\n",
   "test": "desktop/tests/week/test_hours_label_room.py::test_the_hours_make_room_again_when_the_time_now_moves"
- },
- {
-  "name": "Mission writes every other hour however wide the words",
-  "file": "desktop/native/layouts/mission.py",
-  "old": "        step = next((span for span in (120, 240, 360) if track.offset(span) - track.offset(0) >= room), 720)\n",
-  "new": "        step = 120\n",
-  "test": "desktop/tests/week/test_hours_label_room.py::test_mission_writes_its_hours_at_one_even_step_when_the_words_are_wide"
  }
 ]

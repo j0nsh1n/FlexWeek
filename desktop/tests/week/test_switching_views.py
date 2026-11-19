@@ -1,4 +1,4 @@
-"""Switching between My day, Day, Week and Month: the four view buttons are one keyboard radio group that a
+"""Switching between Day, Week and Month: the three view buttons are one keyboard radio group that a
 screen reader announces as one, and W, D and M switch views while a calendar holds the keyboard. How the
 labels fit their buttons is a picture (desktop/tests/pictures/_week_g14.py, week.view_switcher_labels)."""
 
@@ -66,12 +66,11 @@ def test_view_switcher_is_one_keyboard_radio_group(qapp: QApplication, window: N
         (Qt.Key.Key_Up, 0),
         (Qt.Key.Key_Down, 1),
         (Qt.Key.Key_Home, 0),
-        (Qt.Key.Key_End, 3),
+        (Qt.Key.Key_End, 2),
     ):
         press(window, key)
         assert selected(buttons) == expected
         assert QApplication.focusWidget() is buttons[expected]
-        assert bool(window._day_mode) is (expected == 3)
 
 
 def test_view_switcher_has_radio_roles_and_one_accessible_group(window: NativeWindow) -> None:
@@ -86,7 +85,7 @@ def test_view_switcher_has_radio_roles_and_one_accessible_group(window: NativeWi
         assert face.role() == QAccessible.Role.RadioButton
         assert bool(face.state().checked) is (index == chosen)
         assert face.text(QAccessible.Text.Name) == button.text()
-        assert face.text(QAccessible.Text.Description) == f"{index + 1} of 4"
+        assert face.text(QAccessible.Text.Description) == f"{index + 1} of 3"
         assert face.parent().object() is group
 
 

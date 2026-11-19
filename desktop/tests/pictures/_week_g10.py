@@ -21,13 +21,12 @@ from desktop.tests.day.support_layouts_window import (
 )
 from desktop.tests.pictures.screen import Screen
 
-DESIGNS = ("timeline", "mission", "bento", "retro", "clay")
+DESIGNS = ("timeline", "bento", "retro")
 PLAN_DESIGNS = ("classic", *DESIGNS)
 
 
 def _use(window: NativeWindow, main: str, day: str = "one") -> None:
     window._layout = {"main": main, "day": day, "options": {}}
-    window._day_mode = False
     window.session.set_view("week")
     window._on_week()
     QApplication.processEvents()
@@ -163,7 +162,7 @@ def _high_contrast(main: str) -> Callable[[NativeWindow], object]:
         window.findChild(QAbstractButton, "viewWeek").click()
         still(window)
         shown = window.planner.currentWidget()
-        return shown.findChild(QWidget, "missionPage") if main == "mission" else shown
+        return shown
 
     return prepare
 
@@ -174,7 +173,6 @@ def _own_look(main: str) -> Callable[[NativeWindow], object]:
         window.session.preferences = {**(window.session.preferences or {}), "theme_pack": "light-frost"}
         token = signature(main)
         window._layout = {"main": main, "day": "dial", "options": {main: {"look": token}}}
-        window._day_mode = False
         window._apply_appearance()
         window._on_week()
         window.findChild(QAbstractButton, "viewWeek").click()
@@ -197,7 +195,6 @@ def _fits_a_laptop(main: str) -> Callable[[NativeWindow], object]:
 def _retro_start(window: NativeWindow) -> object:
     school_week(window)
     window._layout = sanitize_layout({"main": "retro", "day": "one"})
-    window._day_mode = False
     window.session.set_view("week")
     window._on_week()
     QApplication.processEvents()

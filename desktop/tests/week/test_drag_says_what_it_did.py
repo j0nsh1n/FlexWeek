@@ -161,7 +161,7 @@ def test_the_notice_waits_for_the_pointer_and_goes_once_its_change_is_no_longer_
 def test_a_move_in_a_design_says_what_it_did_too(qapp: QApplication, window: NativeWindow) -> None:
     from desktop.native.layouts.registry import sanitize_layout
 
-    window._layout = sanitize_layout({"main": "mission", "day": "one"})
+    window._layout = sanitize_layout({"main": "timeline"})
     window._apply_appearance()
     window._on_week()
     settled(qapp, window)

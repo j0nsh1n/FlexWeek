@@ -28,13 +28,6 @@
   "test": "desktop/tests/week/test_month_and_my_day_follow_today.py::test_month_keeps_a_picked_day_and_uses_thursday_for_a_week_without_today"
  },
  {
-  "name": "My day shows the underlying view title",
-  "file": "desktop/native/window.py",
-  "old": "        title_view = \"myday\" if self._day_mode else view\n",
-  "new": "        title_view = view\n",
-  "test": "desktop/tests/week/test_month_and_my_day_follow_today.py::test_month_and_mini_month_use_today_at_a_week_boundary"
- },
- {
   "name": "Day loses a visited scroll position",
   "file": "desktop/native/hours/zoom.py",
   "old": "            if key in self._positions:\n",
@@ -54,13 +47,6 @@
   "old": "                    scroll.scroll_to(minute, None)\n",
   "new": "                    pass\n",
   "test": "desktop/tests/week/test_hours_open_where_the_student_looks.py::test_each_design_keeps_day_and_week_scroll_until_today_is_pressed"
- },
- {
-  "name": "My day ignores a day chosen on its strip",
-  "file": "desktop/native/layouts/dial.py",
-  "old": "        self.watched_day_changed.emit(scene.week.date_of(day).isoformat())\n",
-  "new": "        pass\n",
-  "test": "desktop/tests/week/test_month_and_my_day_follow_today.py::test_my_day_title_names_the_day_chosen_on_its_strip"
  },
  {
   "name": "Today also discards future weeks scroll",

@@ -134,15 +134,13 @@ def test_overlapping_blocks_cut_the_title_first_and_keep_the_time_whole(qapp) ->
     assert "extra" not in words, words
 
 
-def test_mission_timeline_and_clay_painters_at_810_keep_a_short_blocks_start_and_a_range_on_one_line(
+def test_timeline_painter_at_810_keeps_a_short_blocks_start_and_a_range_on_one_line(
     qapp, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """At 810 px a 45-minute Math worksheet keeps its name and its start; a 08:30–14:15 block never
     stacks those times as two events."""
     from desktop.native.fonts import load_fonts
     from desktop.native.hours import canvas as canvas_module
-    from desktop.native.layouts.clay import ClayPainter, slots
-    from desktop.native.layouts.mission import MissionPainter
     from desktop.native.layouts.registry import MATCH, tokens_for
     from desktop.native.layouts.timeline import TimelinePainter
 
@@ -156,22 +154,11 @@ def test_mission_timeline_and_clay_painters_at_810_keep_a_short_blocks_start_and
     start = clock_label(span.start)
     end = clock_label(span.end)
     page = QRectF(0, 0, 800, 800)
-    clay_w = slots(810, 632, 3, 1.0, wide=False)[3].width()
     painters = {
-        "mission": (
-            MissionPainter(tokens_for("mission", MATCH, palette)),
-            QRectF(40, 40, 39, 36),
-            QRectF(40, 90, 361, 36),
-        ),
         "timeline": (
             TimelinePainter(tokens_for("timeline", MATCH, palette)),
             QRectF(40, 40, 78.5, 24),
             QRectF(40, 90, 78.5, 231),
-        ),
-        "clay": (
-            ClayPainter(tokens_for("clay", MATCH, palette), full=True),
-            QRectF(40, 40, clay_w, 45 * 38 / 60),
-            QRectF(40, 90, clay_w, 6 * 38),
         ),
     }
 
@@ -185,8 +172,6 @@ def test_mission_timeline_and_clay_painters_at_810_keep_a_short_blocks_start_and
         return [text for text, _where in Said.words]
 
     for name, (painter, short_rect, range_rect) in painters.items():
-        if name == "mission":
-            painter.taken = {math.span.day: (0.0, 800.0, []), school.span.day: (0.0, 800.0, [])}
         short_words = said(painter, short_rect, math)
         # Timeline's 45-minute block at 810 is 78.5×24 px. The whole range does not fit, so the start
         # stands alone and the name goes to the tooltip. Mission writes the start beside the bar;

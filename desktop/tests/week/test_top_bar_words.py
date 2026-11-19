@@ -114,15 +114,14 @@ def test_suggest_times_keeps_a_whole_word_at_the_narrowest_window(
     assert window.solve_button.text() in ("Suggest times", "Suggest")
 
 
-def test_on_timeline_day_at_large_text_plan_and_more_keep_whole_words(
+def test_on_timeline_at_large_text_plan_and_more_keep_whole_words(
     qapp: QApplication, planned_week: NativeWindow
 ) -> None:
     """The bar wrapped to two rows here and pushed the Due chips off screen; the cure is a shorter Plan,
     the last of its steps, where it keeps the bar on one row."""
     window = planned_week
     text_size(window, "large")
-    window._layout = sanitize_layout({"main": "timeline", "day": "one"})
-    window._day_mode = True
+    window._layout = sanitize_layout({"main": "timeline"})
     window._on_week()
     window.resize(1150, 768)
     layout_settles(qapp, 6)

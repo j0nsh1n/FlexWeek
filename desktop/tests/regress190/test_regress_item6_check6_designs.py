@@ -39,7 +39,7 @@ from desktop.tests.regress184.test_regress_item6_keyboard_after_sheet import (
     name_and_save,
 )
 
-DESIGNS = ("timeline", "mission", "bento", "retro")
+DESIGNS = ("timeline", "bento", "retro")
 
 
 def in_design(qapp, window, design: str):

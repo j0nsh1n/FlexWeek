@@ -19,7 +19,7 @@ from desktop.native.weekmodel import set_clock_24h
 
 NATIVE = Path(__file__).resolve().parents[2] / "native"
 # Every place the range of a block is written; the week list reads it through Drawn.detail.
-CALLERS = ("hours/canvas.py", "layouts/one_thing.py", "layouts/dial.py", "layouts/mission.py")
+CALLERS = ("hours/canvas.py",)
 CLOCK_WORDS = {"clock_label", "clock_text", "short_clock", "hhmm_text"}
 
 

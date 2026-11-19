@@ -5,18 +5,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from PySide6.QtCore import QRectF
-from PySide6.QtGui import QFont, QPainter
-from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton, QWidget
+from PySide6.QtWidgets import QAbstractButton, QApplication
 
 from backend.tests.fake_clock import CLOCK
-from desktop.native.calendar import sunday_due
-from desktop.native.hours.geometry import LinearTrack
 from desktop.native.hours.zoom import HoursScroll
-from desktop.native.layouts.clay import ClayPainter
-from desktop.native.layouts.dial import DialFace
-from desktop.native.layouts.registry import MATCH, tokens_for
-from desktop.native.look import resolved_palette
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
@@ -75,31 +67,8 @@ def _narrow_week(window: NativeWindow) -> object:
     return window
 
 
-def _my_day_late(window: NativeWindow) -> object:
-    session = window.session
-    session.add_homework(
-        {
-            "id": "essay",
-            "title": "Essay",
-            "due": sunday_due(session.week_start),
-            "estimate_min": 60,
-            "revision": 0,
-        }
-    )
-    block = next(item for item in session.blocks if item.get("assignment_id") == "essay")
-    session.hand_move(block["id"], -1, 3, 19 * 60, 19 * 60 + block["duration_min"])
-    session.save()
-    wait_until(QApplication.instance(), lambda: not session.busy and not session.dirty)
-    window.findChild(QAbstractButton, "viewMyDay").click()
-    QApplication.processEvents()
-    return window.findChild(QPushButton, "dialLate")
 
 
-def _my_day_dial(window: NativeWindow) -> object:
-    _school_week(window, clock="10:00")
-    window.findChild(QAbstractButton, "viewMyDay").click()
-    QApplication.processEvents()
-    return window.findChild(DialFace, "dialFace")
 
 
 def _day_agenda(window: NativeWindow) -> object:
@@ -111,34 +80,8 @@ def _day_agenda(window: NativeWindow) -> object:
     return window.day_view.agenda
 
 
-class _ClayNow(QWidget):
-    """Clay's hour labels and its now pill on a track of hours 40 pixels each, left of the hours."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.resize(800, 520)
-        self.painting = ClayPainter(
-            tokens_for("clay", MATCH, resolved_palette("light-frost", False, None)), full=True
-        )
-        self.painting.now_minute = 10 * 60 + 20
-        self.track = LinearTrack(0, QRectF(120, 20, 600, 480), first=8 * 60, last=20 * 60)
-
-    def paintEvent(self, event) -> None:  # noqa: N802
-        paint = QPainter(self)
-        try:
-            paint.fillRect(self.rect(), self.palette().window())
-            paint.setFont(QFont("Inter", 12))
-            self.painting.hour_labels(paint, self.track, 56)
-            self.painting.now(paint, self.track, self.painting.now_minute)
-        finally:
-            paint.end()
 
 
-def _clay_now(window: NativeWindow) -> object:
-    set_clock_24h(True)
-    probe = _ClayNow()
-    window._clay_now_probe = probe  # keeps the widget alive while it is photographed
-    return probe
 
 
 SCREENS: list[Screen] = [
@@ -166,26 +109,6 @@ SCREENS: list[Screen] = [
         sources=("desktop/native/window.py",),
     ),
     Screen(
-        id="week.my-day-late-button-icon",
-        area="week",
-        prepare=_my_day_late,
-        checks=(
-            "Running late's icon is at least 4 px wider than it is tall and leaves a clear gap on its "
-            "right, so the icon does not touch the button's words."
-        ),
-        sources=("desktop/native/layouts",),
-    ),
-    Screen(
-        id="week.my-day-dial-ticks",
-        area="week",
-        prepare=_my_day_dial,
-        checks=(
-            "The dial labels every second hour and draws a tick only between labels (12 ticks), so no "
-            "tick next to a label reads as a minus sign."
-        ),
-        sources=("desktop/native/layouts/dial.py",),
-    ),
-    Screen(
         id="week.day-agenda-times",
         area="week",
         prepare=_day_agenda,
@@ -194,16 +117,5 @@ SCREENS: list[Screen] = [
             "column, at normal and at large text, with no cut or wrapped AM or PM."
         ),
         sources=("desktop/native/hours/classic.py",),
-    ),
-    Screen(
-        id="week.clay-now-pill",
-        area="week",
-        prepare=_clay_now,
-        checks=(
-            "Clay's now pill lies left of the hours, outside the blocks, and never over their words; "
-            "the hour label under the pill (10:00 at 10:20) is left out and the label clear of it "
-            "(11:00) is written."
-        ),
-        sources=("desktop/native/layouts/clay.py",),
     ),
 ]

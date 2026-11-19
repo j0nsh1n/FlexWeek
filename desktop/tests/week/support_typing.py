@@ -27,7 +27,7 @@ from desktop.native.window import NativeWindow
 from desktop.tests.light_app import open_light  # noqa: F401
 from desktop.tests.waiting import exposed, wait_until
 
-DESIGNS = ("classic", "timeline", "mission", "bento", "retro", "clay")
+DESIGNS = ("classic", "timeline", "bento", "retro")
 # Thursday 15:40 of the week beginning 2026-10-12.
 HELD = datetime.fromisoformat("2026-10-15T15:40")
 
