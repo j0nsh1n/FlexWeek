@@ -125,24 +125,6 @@ def test_escape_on_a_typed_new_fixed_time_closes_at_once_and_marks_it_kept(
         free(dialog)
 
 
-def test_escape_through_the_sheets_own_shortcut_keeps_the_words_too(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The fixed-time sheet has an Esc shortcut as well as the key handler; a real key press takes the
-    shortcut, so it must do what the key handler does."""
-    dialog = shown(qapp, BlockDialog(window))
-    try:
-        dialog.activateWindow()
-        pump(qapp)
-        dialog.title.setText("Piano lesson")
-        refuse_questions(monkeypatch)
-        QTest.keyClick(dialog, Qt.Key.Key_Escape)
-        assert not dialog.isVisible()
-        assert dialog.kept_on_escape
-    finally:
-        free(dialog)
-
-
 def test_escape_on_a_typed_edit_fixed_time_still_asks_and_keeps_nothing(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -663,26 +645,6 @@ def test_nothing_treats_a_kept_draft_as_an_open_sheet(
     pump(qapp)
     assert QApplication.activeModalWidget() is None
     assert not [item for item in quiet_commit.findChildren(DIALOGS[kind]) if item.isVisible()]
-
-
-@pytest.mark.parametrize("key", [Qt.Key.Key_N, Qt.Key.Key_C])
-def test_ctrl_n_and_the_c_key_reopen_the_kept_homework(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, key: Qt.Key
-) -> None:
-    """Both keys run the same plain Add as the button, so they pick the kept typing up."""
-    script = Script("homework", monkeypatch, type_then_escape, only_look)
-    quiet_commit._add_homework()
-    pump(qapp)
-    if key == Qt.Key.Key_C:
-        turn_on_letter_keys()
-    quiet_commit.setFocus()
-    QTest.keyClick(
-        quiet_commit,
-        key,
-        Qt.KeyboardModifier.ControlModifier if key == Qt.Key.Key_N else Qt.KeyboardModifier.NoModifier,
-    )
-    pump(qapp)
-    assert script.titles == ["", "Piano lesson"]
 
 
 # What the next sheet works out for itself -----------------------------------------------

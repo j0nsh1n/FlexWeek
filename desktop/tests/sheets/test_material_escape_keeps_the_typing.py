@@ -80,6 +80,25 @@ def test_the_other_kinds_add_opens_empty(qapp, shell, focused, kind: str, other:
     assert title_now(sheets) == ""
 
 
+@pytest.mark.parametrize("key", [Qt.Key.Key_N, Qt.Key.Key_C])
+def test_ctrl_n_and_the_c_key_reopen_the_kept_homework(qapp, shell, focused, key: Qt.Key) -> None:
+    """Both keys run the same Add as the button, so they pick the kept typing up."""
+    from desktop.tests.week.support_material import _look
+
+    sheets = focused
+    open_add(sheets, "homework")
+    type_title(sheets, "Piano lesson")
+    press_escape(shell)
+    assert sheets.kind == ""
+    if key == Qt.Key.Key_C:
+        _look(shell, letters=True)
+    modifiers = Qt.KeyboardModifier.ControlModifier if key == Qt.Key.Key_N else Qt.KeyboardModifier.NoModifier
+    QTest.keyClick(shell._material_page._quick, key, modifiers)
+    pump(QApplication.instance(), 30)
+    assert sheets.kind == "homework"
+    assert title_now(sheets) == "Piano lesson"
+
+
 @pytest.mark.parametrize("kind", KINDS)
 def test_escape_with_nothing_typed_closes_and_keeps_nothing(qapp, shell, focused, kind: str) -> None:
     sheets = focused
