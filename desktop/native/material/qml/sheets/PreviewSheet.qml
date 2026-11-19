@@ -29,6 +29,9 @@ SheetFrame {
             height: inner.implicitHeight + 24
             radius: 12
             color: pal.surfaceContainerLow
+            // The same edge as a choice card: the sheet and the row share a fill in some looks.
+            border.width: 1
+            border.color: pal.outlineVariant
             Column {
                 id: inner
                 x: 12
