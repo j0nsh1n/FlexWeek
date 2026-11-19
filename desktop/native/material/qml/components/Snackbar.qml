@@ -9,6 +9,10 @@ Item {
     property string message: "Placed 2 of 2"
     property string actionText: "UNDO"
     property string accessName: ""
+    // What a screen reader says for the button; the seconds on Undo are not read as they change.
+    property string accessActionText: actionText
+    // The line along the bottom, 0 to 1. Hidden when animations are reduced or off.
+    property real fraction: 1
     signal actionClicked()
     signal pauseRequested()
     signal resumeRequested()
@@ -53,6 +57,16 @@ Item {
         // Takes the presses on the bar so a click on it never reaches the Week grid underneath.
         TapHandler { gesturePolicy: TapHandler.WithinBounds }
     }
+    Rectangle {
+        id: timeLine
+        objectName: "timeLine"
+        visible: !root.reduceMotion && root.actionText !== ""
+        anchors.left: shape.left
+        anchors.bottom: shape.bottom
+        height: 2
+        width: shape.width * Math.max(0, Math.min(1, root.fraction))
+        color: palette.inversePrimary
+    }
     Text {
         id: messageText
         anchors.left: parent.left
@@ -87,7 +101,7 @@ Item {
             Text {
                 id: shortcutHintItem
                 objectName: "shortcutHint"
-                visible: root.actionText === "UNDO" || root.actionText.indexOf("Undo") !== -1
+                visible: root.accessActionText === "UNDO" || root.accessActionText.indexOf("Undo") !== -1
                 text: "Ctrl+Z"
                 color: palette.inversePrimary
                 opacity: 0.85
@@ -119,7 +133,7 @@ Item {
     property bool keyDown: false
     activeFocusOnTab: actionText !== ""
     Accessible.role: actionText !== "" ? Accessible.Button : Accessible.StaticText
-    Accessible.name: (accessName !== "" ? accessName : message) + (actionText !== "" ? ", " + actionText : "") + (shortcutHintItem.visible ? " (Ctrl+Z)" : "")
+    Accessible.name: (accessName !== "" ? accessName : message) + (actionText !== "" ? ", " + accessActionText : "") + (shortcutHintItem.visible ? " (Ctrl+Z)" : "")
     Accessible.onPressAction: if (actionText !== "") root.actionClicked()
     Keys.enabled: actionText !== ""
     Keys.onPressed: (event) => {

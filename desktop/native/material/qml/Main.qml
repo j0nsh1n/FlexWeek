@@ -730,7 +730,10 @@ Item {
                 visible: bridge.snackText !== ""
                 z: 3
                 message: bridge.snackText
-                actionText: bridge.snackAction
+                // Undo shows the seconds left; a screen reader says "UNDO" and no number.
+                actionText: bridge.snackAction === "UNDO" ? "Undo " + bridge.snackSeconds : bridge.snackAction
+                accessActionText: bridge.snackAction
+                fraction: bridge.snackFraction
                 onActionClicked: if (bridge.snackAction !== "") bridge.snackActed()
                 onPauseRequested: if (bridge) bridge.pauseSnack()
                 onResumeRequested: if (bridge) bridge.resumeSnack()

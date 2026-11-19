@@ -86,11 +86,6 @@ def test_the_drawer_counts_what_the_notice_counts(qapp: QApplication, window: Na
     assert _qml(root, "homeworkCount").property("text") == str(waiting)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Material shows nothing when a commitment lands over planned homework: the window hands the "
-    "Find a new time notice to the Widgets toast, which is not on screen on Material",
-)
 def test_a_commitment_over_planned_homework_offers_find_a_new_time(
     qapp: QApplication, window: NativeWindow
 ) -> None:
@@ -103,11 +98,6 @@ def test_a_commitment_over_planned_homework_offers_find_a_new_time(
     assert str(_bridge(window).property("snackAction")).lower() == "find a new time"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="same gap: Material has no Find a new time notice, so every homework that lost its time "
-    "goes unnamed",
-)
 def test_every_homework_that_lost_its_time_is_named_on_the_notice(
     qapp: QApplication, window: NativeWindow
 ) -> None:
@@ -199,11 +189,6 @@ def test_what_is_too_short_for_plan_is_counted_in_minutes(qapp: QApplication, wi
     assert window.session.plan_remainders == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="the Plan key with only too-short minutes left says nothing on Material: the button is off and "
-    "the snackbar takes only the answer of the button; the Widgets toast showed the line",
-)
 def test_the_plan_key_with_too_short_minutes_left_says_how_many(
     qapp: QApplication, window: NativeWindow
 ) -> None:

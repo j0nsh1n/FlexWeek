@@ -87,7 +87,8 @@ def test_plan_places_the_queue_and_undo_puts_it_back(qapp, window) -> None:
     )
     assert _qml(root, "planHomework").property("enabled") is True
     assert _qml(root, "homeworkEmpty").property("visible") is False
-    assert _snack(window) == ""
+    assert _snack(window).startswith("Undid"), "Undo says what it did, with no Undo of its own"
+    assert str(_bridge(window).property("snackAction")) == ""
     after = [block for block in window.session.blocks if block["id"] in waiting_before]
     assert all(not block.get("start") for block in after)
     texts = _repeater_texts(root, "homeworkRows", "homeworkTitle")
@@ -138,7 +139,8 @@ def test_ctrl_z_undoes_place_now_like_the_snackbar_undo(qapp, window) -> None:
     _place_now(window, qapp, root, "sheet", "Math worksheet")
     _press(window, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
     _waiting_again(window, qapp, root, "sheet")
-    assert _snack(window) == ""
+    assert _snack(window).startswith("Undid"), "Undo says what it did, with no Undo of its own"
+    assert str(_bridge(window).property("snackAction")) == ""
     assert window.session.can_redo()
 
 
@@ -361,7 +363,8 @@ def test_ctrl_z_takes_back_a_place_now_in_one_step(qapp, window) -> None:
     assert _homework_block(window, "sheet")["start"] == "20:00"
     _press(window, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
     _waiting_again(window, qapp, root, "sheet")
-    assert _snack(window) == ""
+    assert _snack(window).startswith("Undid"), "Undo says what it did, with no Undo of its own"
+    assert str(_bridge(window).property("snackAction")) == ""
     # The one step was the placement: the essay is where it was.
     assert _homework_block(window, "essay")["start"] == "18:45"
 
@@ -591,7 +594,7 @@ def test_dragging_a_card_onto_the_grid_gives_it_the_time_under_the_pointer(qapp,
     # The active Material snackbar is the only presenter; the Widgets toast stays hidden.
     assert "Math worksheet" in _snack(window)
     assert window.toast.isHidden()
-    assert _qml(root, "materialSnackbar").property("actionText") == "UNDO"
+    assert str(_qml(root, "materialSnackbar").property("actionText")).startswith("Undo ")
 
 
 def test_a_drop_off_the_grid_changes_nothing(qapp, window) -> None:

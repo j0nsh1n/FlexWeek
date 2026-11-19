@@ -111,11 +111,6 @@ def test_delete_from_one_day_asks_once_names_the_day_and_offers_three_ways(qapp,
     assert not _soccer(soccer_week).get("missed_days")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="product gap: saving School hours says 'School now 9:00 AM–3:00 PM every week' through the "
-    "Widgets toast (window._set_notice with no button), which Material's screen never shows",
-)
 def test_new_school_hours_say_every_week_and_offer_no_undo(qapp, shell, sheets) -> None:
     from desktop.tests.settings.support_material_settings import _open_settings, _panel
     from desktop.tests.week.support_material import _snack

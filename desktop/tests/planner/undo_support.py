@@ -80,6 +80,10 @@ def planned_in_material(qapp: QApplication, window: NativeWindow) -> QObject:
     settled(qapp, window)
     CLOCK.set(datetime.fromisoformat(session.week_start) + timedelta(days=2, minutes=14 * 60 + 7))
     root = fresh_material(qapp, window)
+    # The notice's clock waits while its window is not the active one, so the tests look at a window
+    # that is.
+    window.activateWindow()
+    wait_until(qapp, window.isActiveWindow, what="the window to be the active one")
     _click(window, _qml(root, "planHomework"))
     wait_until(
         qapp, lambda: _snack(window).startswith("Placed") and not session.busy, what="Plan's Undo notice"

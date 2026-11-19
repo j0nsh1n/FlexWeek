@@ -82,7 +82,8 @@ def test_plan_says_what_it_did_with_an_undo_that_takes_it_all_back(
 
     _undo_on_the_snackbar(qapp, window, root)
     assert stored_blocks(window) == before, "one Undo takes back every block the plan placed"
-    assert _snack(window) == ""
+    assert _snack(window) == "Undid planning the week.", "Undo says what it did, with no Undo of its own"
+    assert _action(window) == ""
     assert session.can_redo()
 
     session.redo()
@@ -135,7 +136,7 @@ def test_automatic_plan_stays_in_the_add_homework_undo_step(
     added = next(item for item in session.assignments.values() if item["title"] == "Spanish vocab")
     assignment_id = added["id"]
     assert session_of(window, assignment_id).get("start")
-    assert _snack(window) == "", "the added homework owns this Undo step; Plan adds no notice of its own"
+    assert _action(window) == "", "the added homework owns this Undo step; Plan offers no Undo of its own"
 
     session.undo()
     settled(qapp, window)
@@ -147,11 +148,6 @@ def test_automatic_plan_stays_in_the_add_homework_undo_step(
     assert session_of(window, assignment_id).get("start")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="product gap: Material's snackbar keeps Plan's Undo after a later save; the Widgets toast "
-    "dropped it",
-)
 def test_plan_undo_notice_disappears_after_a_later_save(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811

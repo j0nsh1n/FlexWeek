@@ -167,10 +167,18 @@ def tick(qapp: QApplication, window: NativeWindow, minute: int) -> None:
     wait_until(qapp, lambda: not window.session.busy)
 
 
+def _notice_on_screen(window: NativeWindow) -> str:
+    """The reminder line the student reads in the window: Material's snackbar, or the Widgets toast."""
+    snack = window._snack_bridge()
+    if snack is not None:
+        return str(snack.snackText)
+    return window.toast.text() if window.toast.isVisible() else ""
+
+
 def seen(window: NativeWindow) -> dict:
     return {
         "tray": list(window._tray_icon.shown),
-        "toast": window.toast.text() if window.toast.isVisible() else "",
+        "toast": _notice_on_screen(window),
     }
 
 

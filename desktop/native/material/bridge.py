@@ -12,12 +12,14 @@ from __future__ import annotations
 
 import contextlib
 import json
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, cast
 
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
+from desktop.native import fields
 from desktop.native.fields import week_start_day, week_start_notice
 from desktop.native.hours.scale import Scale
 from desktop.native.material.bridge_account import AccountBridge
@@ -55,6 +57,8 @@ from desktop.native.weekmodel import clock_label
 SCREENS = ("day", "week", "month", "myday", "settings")
 OPEN_ON = ("week", "day", "month", "myday")
 SNACK_MS = 10000
+# How often the seconds on Undo and the shrinking line are read, and the window's presence checked.
+SNACK_TICK_MS = 100
 WEEK_ZOOM = Scale("material.week", (32, 44, 56, 72, 96, 128, 192, 256), 56)
 DAY_ZOOM = Scale("material.day", (32, 44, 56, 72, 96, 128, 192, 256), 56)
 
@@ -93,6 +97,7 @@ class MaterialBridge(QObject):
 
     changed = Signal()
     blocksChanged = Signal()
+    snackClockChanged = Signal()
     homeworkChanged = Signal()
 
     def __init__(self, window: QObject) -> None:
@@ -109,10 +114,18 @@ class MaterialBridge(QObject):
         self._snack_paused = False
         self._snack_held = False
         self._snack_remaining_ms = SNACK_MS
+        self._snack_callback: Callable[[], None] | None = None
+        # The notice's clock follows the session's clock, so the seconds on Undo and the shrinking line
+        # agree with it; the wall timer below still ends the notice.
+        self._snack_deadline = 0
+        self._snack_away = False
         self._snack_timer = QTimer(self)
         self._snack_timer.setSingleShot(True)
         self._snack_timer.setInterval(SNACK_MS)
         self._snack_timer.timeout.connect(self._on_snack_timeout)
+        self._snack_tick = QTimer(self)
+        self._snack_tick.setInterval(SNACK_TICK_MS)
+        self._snack_tick.timeout.connect(self._on_snack_tick)
         self._preset = DEFAULT_PRESET
         self._mode = "light"
         self._contrast = DEFAULT_CONTRAST
@@ -494,6 +507,10 @@ class MaterialBridge(QObject):
     def snackActed(self) -> None:
         if self._snack_action == "RETRY":
             self.retrySave()
+        elif self._snack_callback is not None:
+            act = self._snack_callback
+            self._clear_snack(self._snack)
+            act()
         else:
             self.undo()
 
@@ -589,23 +606,104 @@ class MaterialBridge(QObject):
     def nowMinute(self) -> int:
         return self._week.nowMinute
 
-    def note(self, text: str, *, action: str = "UNDO") -> None:
-        """One snackbar line. Day uses it after a homework check."""
+    def note(
+        self, text: str, *, action: str = "UNDO", on_action: Callable[[], None] | None = None
+    ) -> None:
+        """One snackbar line. `on_action` is what its button does; Undo and Retry need none."""
+        said_before = self._snack
         self._snack = text
         self._snack_action = action
+        self._snack_callback = on_action
         self._snack_target = text
         self._snack_remaining_ms = SNACK_MS
+        self._snack_away = self._window_away()
         if not text:
             self._snack_timer.stop()
+            self._snack_tick.stop()
             self._snack_paused = False
         else:
-            if self._snack_held:
+            if self._snack_held or self._snack_away:
                 self._snack_paused = True
                 self._snack_timer.stop()
             else:
                 self._snack_paused = False
+                self._snack_deadline = self._now() + SNACK_MS
                 self._snack_timer.start(SNACK_MS)
+            self._snack_tick.start()
+            if text != said_before:
+                # Said once, politely, when it appears; a screen reader does not repeat it as the
+                # seconds on Undo count down.
+                fields.announce(self._window, text)
         self.changed.emit()
+        self.snackClockChanged.emit()
+
+    def bump_snack(self) -> None:
+        """The same notice said again: its time starts over, nothing is announced."""
+        if not self._snack:
+            return
+        self._snack_remaining_ms = SNACK_MS
+        if self._snack_paused:
+            self.snackClockChanged.emit()
+            return
+        self._snack_deadline = self._now() + SNACK_MS
+        self._snack_timer.start(SNACK_MS)
+        self.snackClockChanged.emit()
+
+    def _now(self) -> int:
+        return int(self._window.session.now_ms())
+
+    def _window_away(self) -> bool:
+        """The window is hidden, minimised or not the one in front: the notice waits for the student."""
+        window = self._window
+        return (
+            not window.isVisible()  # type: ignore[attr-defined]
+            or window.isMinimized()  # type: ignore[attr-defined]
+            or not window.isActiveWindow()  # type: ignore[attr-defined]
+        )
+
+    def _snack_left_ms(self) -> int:
+        if not self._snack:
+            return 0
+        if self._snack_paused:
+            return max(0, self._snack_remaining_ms)
+        return max(0, min(SNACK_MS, self._snack_deadline - self._now()))
+
+    def _on_snack_tick(self) -> None:
+        if not self._snack:
+            self._snack_tick.stop()
+            return
+        away = self._window_away()
+        if away != self._snack_away:
+            self._snack_away = away
+            self._apply_snack_hold()
+        elif not self._snack_paused and self._snack_left_ms() <= 0:
+            self._clear_snack(self._snack_target)
+            return
+        self.snackClockChanged.emit()
+
+    def _apply_snack_hold(self) -> None:
+        """The clock waits while the pointer or keyboard is on the notice or the window is away, and
+        starts again, with at least a second left, when none of them is."""
+        hold = self._snack_held or self._snack_away
+        if hold and not self._snack_paused:
+            self._snack_remaining_ms = self._snack_left_ms()
+            self._snack_timer.stop()
+            self._snack_paused = True
+        elif not hold and self._snack_paused and self._snack:
+            self._snack_paused = False
+            self._snack_remaining_ms = max(1000, self._snack_remaining_ms)
+            self._snack_deadline = self._now() + self._snack_remaining_ms
+            self._snack_timer.start(self._snack_remaining_ms)
+
+    @Property(int, notify=snackClockChanged)
+    def snackSeconds(self) -> int:
+        """Whole seconds left, as the Undo button shows them."""
+        return (self._snack_left_ms() + 999) // 1000
+
+    @Property(float, notify=snackClockChanged)
+    def snackFraction(self) -> float:
+        """How much of the notice's time is left, for the line along its bottom."""
+        return self._snack_left_ms() / SNACK_MS
 
     def _on_snack_timeout(self) -> None:
         self._clear_snack(self._snack_target)
@@ -614,34 +712,28 @@ class MaterialBridge(QObject):
         # A newer line, or Undo, has already replaced this one.
         if self._snack == text:
             self._snack = ""
+            self._snack_callback = None
             self._snack_timer.stop()
+            self._snack_tick.stop()
             self._snack_paused = False
             self._snack_held = False
             self.changed.emit()
+            self.snackClockChanged.emit()
 
     @Slot()
     def pauseSnack(self) -> None:
         self._snack_held = True
-        self._snack_paused = True
-        if self._snack_timer.isActive():
-            self._snack_remaining_ms = max(0, self._snack_timer.remainingTime())
-            self._snack_timer.stop()
+        self._apply_snack_hold()
 
     @Slot()
     def resumeSnack(self) -> None:
         self._snack_held = False
-        if self._snack_paused:
-            self._snack_paused = False
-            if self._snack:
-                self._snack_timer.start(max(1000, self._snack_remaining_ms))
+        self._apply_snack_hold()
 
     @Slot()
     def undo(self) -> None:
         if self._snack:
-            self._snack = ""
-            self._snack_timer.stop()
-            self._snack_paused = False
-            self._snack_held = False
+            self._clear_snack(self._snack)
         self._window.session.undo()
         self.refresh()
 

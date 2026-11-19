@@ -67,12 +67,6 @@ def test_every_advanced_action_says_what_it_did_in_the_session_words(qapp, windo
     ]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="product gap: Material's snackbar shows none of what Copy, Copy day, Undo, Redo and Reload say; "
-    "the words stay in the session's status line, which Material does not draw. Paste, Duplicate and "
-    "Copies of are not tried here: Paste and Duplicate still open the Widgets preview sheet over Material",
-)
 def test_every_advanced_action_shows_what_it_did_on_the_snackbar(qapp, window) -> None:
     _with_piano(qapp, window)
     shown = {words: text for words, _message, text in _said_by_each_action(qapp, window)}
@@ -112,7 +106,8 @@ def test_the_snackbar_sits_inside_the_window_clear_of_the_rail_and_its_undo_take
     assert bottom_right.x() <= window._material_page._quick.width()
     _click(window, bar, dx=int(bar.property("width")) // 2 - 30)
     settled(qapp, window)
-    assert _snack(window) == "", "its Undo takes a click and the notice goes"
+    assert _snack(window) != PLACED_WORDS, "its Undo takes a click and the notice goes"
+    assert str(_bridge(window).property("snackAction")) == "", "what Undo says carries no Undo of its own"
 
 
 def test_a_view_switch_keeps_the_snackbar_and_its_undo(qapp, window) -> None:
@@ -136,11 +131,6 @@ def test_a_routine_save_says_nothing_on_the_snackbar(qapp, window) -> None:
     assert _snack(window) == ""
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="product gap: a refusal such as 'Select a block before copying it.' reaches only the session's "
-    "status line; Material's snackbar stays empty, so the student is not told why nothing happened",
-)
 def test_a_refusal_says_why_on_the_snackbar(qapp, window) -> None:
     _reset(window, qapp)
     window.session._say("Select a block before copying it.")

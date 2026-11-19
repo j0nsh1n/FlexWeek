@@ -62,7 +62,8 @@ def drawer_card(qapp, window: NativeWindow, root: QObject) -> QObject:
 
 def undo_notice(root: QObject) -> QObject | None:
     for item in named(root, "sheetNotice") + named(root, "materialSnackbar"):
-        if item.property("visible") and item.property("actionText") == "UNDO":
+        shown = str(item.property("actionText"))
+        if item.property("visible") and (shown == "UNDO" or shown.startswith("Undo ")):
             return item
     return None
 

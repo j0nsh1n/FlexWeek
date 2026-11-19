@@ -2137,17 +2137,44 @@ class NativeWindow(QMainWindow):
 
     def _on_status(self, message: str) -> None:
         """What the session says goes in the toast, on the week's page, unless it is still going
-        ("Saving…") or routine ("Saved."). The student's own request is answered either way."""
+        ("Saving…") or routine ("Saved."). The student's own request is answered either way. On Material
+        the same words go on its snackbar, on every screen: it is the shell's and is never covered."""
+        snack = self._snack_bridge()
         if not message:
             # The session took back what it said, as Cancel on Running late's preview does.
-            if not self.toast.button.isVisible():
+            if snack is not None:
+                if snack.snackText and snack.snackAction == "":
+                    snack.note("")
+            elif not self.toast.button.isVisible():
                 self.toast.hide()
             return
         if message.endswith("…"):
             return
         asked, self._telling = self._telling, False
-        if (asked or message not in ROUTINE_STATUS) and self._stack.currentWidget() is self._week_page:
+        if not (asked or message not in ROUTINE_STATUS):
+            return
+        if snack is not None:
+            self._say_in_snack(snack, message)
+        elif self._stack.currentWidget() is self._week_page:
             self._say_in_toast(message)
+
+    def _snack_bridge(self):
+        """Material's bridge while Material is what the student sees; its snackbar takes the notices."""
+        page = self._material_page
+        if page is None or not self._material_owns() or self._stack.currentWidget() is not page:
+            return None
+        return page.bridge
+
+    def _say_in_snack(self, snack, message: str) -> None:
+        """`_say_in_toast` for Material: the same notice is not said twice, and Plan finding nothing new
+        leaves its Undo where it is."""
+        if snack.snackText == message:
+            return
+        if snack.snackAction == "UNDO" and snack.snackText and self._keeps_undo(message):
+            snack.bump_snack()
+            return
+        self._notice_step = None
+        snack.note(message, action="")
 
     def _say_in_toast(self, message: str) -> None:
         if self.toast.isVisible() and self.toast.text() == message:
@@ -2179,10 +2206,17 @@ class NativeWindow(QMainWindow):
 
     def _reminder_handled(self) -> None:
         """Got it on a reminder left on screen: the toast saying the same goes too."""
-        if self.toast.isVisible() and self.toast.text() == self._reminder_said:
+        snack = self._snack_bridge()
+        if snack is not None:
+            if snack.snackText == self._reminder_said:
+                snack.note("")
+        elif self.toast.isVisible() and self.toast.text() == self._reminder_said:
             self.toast.hide()
 
     def _toast_offers_undo(self) -> bool:
+        snack = self._snack_bridge()
+        if snack is not None:
+            return bool(snack.snackText) and snack.snackAction == "UNDO"
         return (
             self.toast.isVisible()
             and self.toast.button.isVisible()
@@ -3349,9 +3383,12 @@ class NativeWindow(QMainWindow):
     def _set_notice(self, text: str, button: str, callback) -> None:
         """Words with one thing to do about them, such as Undo, in the active surface's presenter."""
         self._notice_step = None
-        if button == "Undo" and self._material_owns() and self._material_page is not None:
+        if self._material_owns() and self._material_page is not None:
             self.toast.hide()
-            self._material_page.bridge.note(text)
+            if button == "Undo":
+                self._material_page.bridge.note(text)
+            else:
+                self._material_page.bridge.note(text, action=button, on_action=callback if button else None)
         else:
             self.toast.show_message(text, button, callback)
         if button == "Undo":
@@ -4154,6 +4191,9 @@ class NativeWindow(QMainWindow):
             # A later change, or an Undo, has taken the notice's step off the top: its Undo would now
             # take back something else.
             self.toast.hide()
+            snack = self._snack_bridge()
+            if snack is not None and snack.snackAction == "UNDO":
+                snack.note("")
             self._notice_step = None
         if self._late_waiting is None:
             return
@@ -4270,7 +4310,11 @@ class NativeWindow(QMainWindow):
             # A desktop can hide a tray message, and FlexWeek cannot tell that it did, so the window
             # says it as well, wherever the student is.
             self._reminder_said = "; ".join(reminders)
-            self._say_in_toast(self._reminder_said)
+            snack = self._snack_bridge()
+            if snack is not None:
+                self._say_in_snack(snack, self._reminder_said)
+            else:
+                self._say_in_toast(self._reminder_said)
         if notices and prefs.get("reminder_dnd_override"):
             # A tray message is gone in eight seconds and a machine may suppress it outright. This
             # one sits in the window until it is dealt with, which is what the setting promises.

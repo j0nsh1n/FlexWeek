@@ -159,7 +159,7 @@ def test_a_block_saved_before_its_lead_reminds_when_the_lead_begins(
         tick(qapp, window, minute)
         assert window._bell.once_rung == [], f"reminded at 18:{minute}"
     tick(qapp, window, 35)
-    assert window.toast.isVisible() and window.toast.text() == REMINDER
+    assert _snack(window) == REMINDER
     for minute in range(36, 50):
         tick(qapp, window, minute)
     assert window._bell.once_rung == ["chime"]
@@ -212,7 +212,6 @@ ON_THE_SCREEN = (
 )
 
 
-@pytest.mark.xfail(strict=True, reason=ON_THE_SCREEN)
 def test_the_snackbar_keeps_a_reminder_until_something_more_important(
     qapp: QApplication, new_window: NativeWindow
 ) -> None:
@@ -240,7 +239,6 @@ def test_the_snackbar_keeps_a_reminder_until_something_more_important(
     assert _snack(window) == "Select a block before copying it."
 
 
-@pytest.mark.xfail(strict=True, reason=ON_THE_SCREEN + "; Material has no strip with a Got it button")
 def test_a_reminder_left_on_screen_says_so_in_the_window(
     qapp: QApplication, new_window: NativeWindow
 ) -> None:

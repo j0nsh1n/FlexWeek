@@ -401,8 +401,7 @@ class WeekBridge(QObject):
             return
         asked, self._said_plan = self._said_plan, 0.0
         if time.monotonic() - asked < PLAN_WINDOW_S:
-            # Nothing was changed, so there is nothing to undo; UNDO would take back an earlier change.
-            self._note(message, action="")
+            # The window puts the words on the snackbar, with no Undo and keeping an Undo already there.
             self.planFinished.emit()
 
     @Slot(str)

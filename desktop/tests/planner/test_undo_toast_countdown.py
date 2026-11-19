@@ -1,7 +1,6 @@
 """The Undo notice's clock on Material's snackbar: it waits while the pointer, the keyboard or the window's
 absence says the student is not ready, shows how long is left, is announced once, and follows the Animations
-setting. The Widgets toast showed "Undo · 7 s" and a progress line; where Material does not, the test is a
-strict xfail."""
+setting. Material's button reads "Undo 7" with a line along the bottom that shrinks."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
@@ -29,7 +28,7 @@ pytestmark = pytest.mark.real_surface
 
 # Leaving the notice starts its clock again with at least this much left (bridge.resumeSnack).
 RESUME_MS = 1_000
-SAYS_SECONDS = r"UNDO · (\d+) s"
+SAYS_SECONDS = r"Undo (\d+)"
 
 
 def _planned_and_let_go(qapp: QApplication, window: NativeWindow):
@@ -91,11 +90,6 @@ def test_the_notice_counts_the_pointer_over_its_card_above_the_week(
     assert not bridge._snack_timer.isActive()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Material's snackbar clock does not look at the window: it keeps running while the window is "
-    "hidden, minimized or not the active one; the Widgets toast held its remaining time",
-)
 @pytest.mark.parametrize("which", ["hidden", "minimized", "inactive"])
 def test_the_notice_holds_its_remaining_time_while_the_window_is_unavailable(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, which: str
@@ -123,11 +117,6 @@ def test_the_notice_is_one_item_for_a_screen_reader(qapp: QApplication, window: 
     assert name == f"{MATERIAL_PLACED}, UNDO (Ctrl+Z)", name
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Material's snackbar does not call announce(); only a sheet notice does. The Widgets toast"
-    " announced its message once, politely",
-)
 def test_the_snackbar_announces_once_and_politely(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -141,23 +130,22 @@ def test_the_snackbar_announces_once_and_politely(
     assert said.count(MATERIAL_PLACED) == 1, said
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Material's snackbar shows no countdown: its button says UNDO, not UNDO and the seconds left, "
-    "and it has no progress line. The Widgets toast counted down and followed the Animations setting",
-)
 @pytest.mark.parametrize("motion", ["reduce", "off"])
 def test_the_undo_countdown_keeps_its_accessible_name_and_decreases(
     qapp: QApplication, window: NativeWindow, motion: str
 ) -> None:
     window.session.preferences = {**(window.session.preferences or {}), "motion": motion}
     window._apply_appearance()
-    root = planned_in_material(qapp, window)
+    root = _planned_and_let_go(qapp, window)
     snackbar = _qml(root, "materialSnackbar")
     initial = re.fullmatch(SAYS_SECONDS, str(snackbar.property("actionText")))
     assert initial
     CLOCK.move(seconds=3)
-    _pump(qapp)
+    wait_until(
+        qapp,
+        lambda: str(snackbar.property("actionText")) != initial.group(0),
+        what="the seconds to change",
+    )
     remaining = re.fullmatch(SAYS_SECONDS, str(snackbar.property("actionText")))
     assert remaining and int(remaining.group(1)) < int(initial.group(1))
     assert _snack(window) == MATERIAL_PLACED

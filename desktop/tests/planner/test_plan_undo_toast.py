@@ -62,16 +62,14 @@ def test_the_plan_key_with_nothing_to_do_keeps_the_undo_notice(
     assert undo_still_offered(window) == (MATERIAL_PLACED, "UNDO")
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="flaky product gap: the P key's Plan with nothing to do does not restart Material's snackbar time "
-    "(the call sets no plan marker); about half the runs it is restarted by a late save message anyway",
-)
 def test_a_second_plan_with_nothing_to_do_starts_the_notices_time_over(
     qapp: QApplication, window: NativeWindow
 ) -> None:
-    planned_in_material(qapp, window)
+    root = planned_in_material(qapp, window)
+    # Plan leaves the keyboard on the snackbar, which holds its clock; let go first so the clock runs.
+    root.forceActiveFocus()
     timer = _bridge(window)._snack_timer
+    wait_until(qapp, timer.isActive, what="the notice's clock to run")
     timer.start(5_000)
     _bridge(window).plan()
     settled(qapp, window)
