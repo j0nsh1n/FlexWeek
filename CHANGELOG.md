@@ -19,6 +19,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - Settings > Look > Advanced settings has a Simple, More and All switch: Simple is the preset, mode, corner shape, block style, row size and text size; More adds the layout and grid dials; All adds the colour codes and the readability check. Switching never changes a value, the choice is kept on this computer, and it starts on All after a setup where you opened the detailed controls.
 
 ### Changed
+- On Material's Day screen, free time shows a sofa instead of the clock that exercise and activities use.
 - Setup no longer asks for first homework or ends on a summary page; the last step has Open my week. Setup that was left on one of those pages resumes on Look & alerts.
 - The default school hours in setup are Mon-Fri 8:00 AM to 3:00 PM (they were 8:00 AM to 2:30 PM).
 - A new School made in Settings starts at 8:00 AM to 3:00 PM, the same as setup, instead of 8:00 AM to 2:30 PM.

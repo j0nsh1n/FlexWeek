@@ -21,6 +21,8 @@ ICONS = {
     "study": "edit_note",
     "assignments": "edit_note",
 }
+# Free time has its own sofa, so it does not look like exercise or an activity (Jonathan, 2026-11-19).
+CATEGORY_ICONS = {"free": "weekend"}
 TAG_KINDS = {
     "Tight": "tight",
     "Plenty of time": "plenty",
@@ -277,7 +279,7 @@ def _row(item: object, on: date, now: datetime, mode: str, *, dim: bool, finish:
     return DayRow(
         title=str(item.title),
         subtitle=" · ".join(parts),
-        icon=ICONS.get(role or "", "schedule"),
+        icon=CATEGORY_ICONS.get(str(item.category or ""), ICONS.get(role or "", "schedule")),
         # ListRow keeps its own fill and paints the class colour on the edge.
         bar=bar_for_category(str(item.category or "")),
         fill=fill,
