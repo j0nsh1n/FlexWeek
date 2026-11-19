@@ -125,6 +125,7 @@ from desktop.native.look import (
     sanitize_look,
     toast_colours,
 )
+from desktop.native.material.sheet_preview import PreviewDraft
 from desktop.native.material.theme import kept_material, read_letter_keys, read_shortcuts
 from desktop.native.menus import Menu, mark, menu_colours
 from desktop.native.motion import (
@@ -3789,6 +3790,29 @@ class NativeWindow(QMainWindow):
         """`done` is the verb that says what saving the rows did, as in "Pasted Piano"."""
         if not rows:
             return
+
+        def save(saved: list[dict]) -> None:
+            chosen = [row for row in saved if row.get("checked")]
+            what = chosen[0]["block"]["title"] if len(chosen) == 1 else f"{len(chosen)} blocks"
+            said = f"{done} {what}." if done and chosen else None
+            self.session.confirm_preview(
+                saved,
+                label=label,
+                snapshot_label=snapshot_label,
+                attempt_key=attempt_key,
+                existing=existing,
+                destination=destination,
+                said=said,
+            )
+
+        page = self._material_shown()
+        if page is not None:
+            page.bridge.sheets.open_preview(
+                PreviewDraft(
+                    title, summary, rows, existing if existing is not None else self.session.blocks, save
+                )
+            )
+            return
         dialog = PreviewDialog(
             self,
             title,
@@ -3798,18 +3822,7 @@ class NativeWindow(QMainWindow):
         )
         if not self._run_sheet(dialog):
             return
-        chosen = [row for row in dialog.rows() if row.get("checked")]
-        what = chosen[0]["block"]["title"] if len(chosen) == 1 else f"{len(chosen)} blocks"
-        said = f"{done} {what}." if done and chosen else None
-        self.session.confirm_preview(
-            dialog.rows(),
-            label=label,
-            snapshot_label=snapshot_label,
-            attempt_key=attempt_key,
-            existing=existing,
-            destination=destination,
-            said=said,
-        )
+        save(dialog.rows())
 
     def _copy_selected(self) -> None:
         self.session.copy_selected()

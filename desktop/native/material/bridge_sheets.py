@@ -38,6 +38,7 @@ from desktop.native.material.bridge_manage import (
 )
 from desktop.native.material.sheet_block import BlockDraft
 from desktop.native.material.sheet_homework import HomeworkDraft
+from desktop.native.material.sheet_preview import PreviewDraft
 from desktop.native.reuse import (
     LATE_MINUTES,
     late_from_start,
@@ -126,6 +127,7 @@ class SheetsBridge(QObject):
         # The Account and Restore points sheets: the answer to a prompt that is up, what the student picked
         # in the list, the name typed for a new copy, and the last thing the session said.
         self._ask_handlers: dict[str, Any] | None = None
+        self._preview: PreviewDraft | None = None
         self._restore_selected = ""
         self._restore_label = ""
         self._manage_note = ""
@@ -258,6 +260,7 @@ class SheetsBridge(QObject):
         self._homework = None
         self._block = None
         self._alarm = None
+        self._preview = None
         session = self._session
         if late and session is not None and session.late_preview is not None:
             session.late_preview = None
@@ -1066,6 +1069,45 @@ class SheetsBridge(QObject):
             "empty": "Nothing is left over." if not rows else "",
         }
 
+    def open_preview(self, draft: PreviewDraft) -> None:
+        """What a paste or a copy proposes, as a sheet. Save hands the rows back; Cancel and Esc drop them."""
+        self._preview = draft
+        self._open("preview")
+
+    @Slot(int, bool)
+    def previewCheck(self, index: int, checked: bool) -> None:
+        if self._kind == "preview" and self._preview is not None:
+            self._preview.check(index, checked)
+            self._publish()
+
+    @Slot(int, int)
+    def previewDay(self, index: int, day: int) -> None:
+        if self._kind == "preview" and self._preview is not None:
+            self._preview.set_day(index, day)
+            self._publish()
+
+    @Slot(int, str)
+    def previewStart(self, index: int, start: str) -> None:
+        if self._kind == "preview" and self._preview is not None:
+            self._preview.set_start(index, start)
+            self._publish()
+
+    @Slot(int, int)
+    def previewLength(self, index: int, minutes: int) -> None:
+        if self._kind == "preview" and self._preview is not None:
+            self._preview.set_duration(index, minutes)
+            self._publish()
+
+    @Slot()
+    def savePreview(self) -> None:
+        draft = self._preview
+        if self._kind != "preview" or draft is None or not draft.can_save():
+            return
+        rows = draft.rows
+        save = draft.save
+        self._close()
+        save(rows)
+
     @Slot()
     def openUnfinished(self) -> None:
         if self._session is None or self._session.account is None:
@@ -1670,7 +1712,7 @@ class SheetsBridge(QObject):
 
     def refresh(self) -> None:
         """The session changed. A sheet that reads it, such as a late preview, shows what it has now."""
-        if self._kind in ("late", "unfinished", "weekList", "routines", "account", "restore"):
+        if self._kind in ("late", "unfinished", "weekList", "routines", "account", "restore", "preview"):
             self._publish()
 
     def _publish(self) -> None:
@@ -1685,6 +1727,8 @@ class SheetsBridge(QObject):
             self._form = self._unfinished_form()
         elif kind == "weekList":
             self._form = self._week_list_form()
+        elif kind == "preview" and self._preview is not None:
+            self._form = self._preview.form()
         elif kind == "routines":
             self._form = self._routine_form()
         elif kind == "alarm" and self._alarm is not None:

@@ -111,6 +111,7 @@ Item {
             case "late": return late
             case "unfinished": return unfinished
             case "weekList": return weekList
+            case "preview": return preview
             case "routines": return routines
             case "alarm": return alarm
             case "help": return help
@@ -127,6 +128,7 @@ Item {
     Component { id: late; LateSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: unfinished; UnfinishedSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: weekList; WeekListSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
+    Component { id: preview; PreviewSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: alarm; AlarmSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: help; HelpSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: about; AboutSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
