@@ -24,6 +24,7 @@ from desktop.tests.month.support_material_month import (  # noqa: E402
     hold_month_requests,
     idle,
     open_month_preview,
+    preview_calls,
     snap,
     totals,
 )
@@ -126,6 +127,61 @@ def test_after_undo_the_preview_shows_the_new_counts_without_reopening(
     assert totals(preview) == (0, 0)
 
 
+def test_after_a_save_and_after_a_plan_the_preview_asks_again(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    session = window.session
+    held = hold_month_requests(window)
+    _root, _settings, preview = open_month_preview(qapp, window)
+    wait_until(qapp, lambda: len(preview_calls(held)) >= 1)
+    preview_calls(held)[-1][3](snap("2026-11"))
+    wait_until(qapp, lambda: not preview.loading)
+    assert preview._preview_snapshot is not None
+    asked = len(preview_calls(held))
+
+    session.add_block(
+        {
+            "id": "save_blk",
+            "title": "Art",
+            "kind": "flexible",
+            "category": "homework",
+            "start": "15:00",
+            "duration_min": 30,
+            "days": [3],
+        }
+    )
+    session.save()
+    wait_until(qapp, lambda: idle(window))
+
+    wait_until(qapp, lambda: len(preview_calls(held)) > asked, what="the preview asking again after a save")
+    assert preview.loading
+    preview_calls(held)[-1][3](snap("2026-11", "Art"))
+    wait_until(qapp, lambda: not preview.loading)
+
+    # The homework's own save asks once; answer it, so only Plan can ask again.
+    session.add_homework(
+        {
+            "id": "hw_plan",
+            "title": "Bio report",
+            "due": "2026-11-08T23:59",
+            "estimate_min": 45,
+            "revision": 0,
+        }
+    )
+    session.save()
+    wait_until(qapp, lambda: idle(window))
+    if preview.loading and preview_calls(held):
+        preview_calls(held)[-1][3](snap("2026-11", "Art"))
+        wait_until(qapp, lambda: not preview.loading)
+    asked = len(preview_calls(held))
+    session.solve(everything=True)
+    wait_until(qapp, lambda: idle(window))
+
+    placed = [block for block in session.blocks if block.get("assignment_id") == "hw_plan"]
+    assert placed, "Plan placed the homework"
+    wait_until(qapp, lambda: len(preview_calls(held)) > asked, what="the preview asking again after a plan")
+    preview_calls(held)[-1][3](snap("2026-11", "Bio report"))
+    wait_until(qapp, lambda: not preview.loading)
 
 
 def test_a_late_reply_after_a_save_does_not_land_in_the_cache(

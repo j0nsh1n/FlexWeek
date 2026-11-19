@@ -15,11 +15,12 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QStandardPaths, Qt  # noqa: E402
+from PySide6.QtCore import QPoint, QPointF, QStandardPaths, Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.client import ApiError  # noqa: E402
+from desktop.native.fields import save_week_starts_on  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402, F401
 from desktop.tests.material_support import named, pump, show_material  # noqa: E402
@@ -30,7 +31,10 @@ from desktop.tests.month.support_material_month import (  # noqa: E402
     open_month_preview,
     panel,
     preview_calls,
+    preview_month,
     snap,
+    state,
+    totals,
 )
 from desktop.tests.waiting import wait_until  # noqa: E402
 
@@ -62,8 +66,102 @@ def test_no_month_is_asked_for_the_preview_before_settings_is_opened(
     assert [name for name in asked if "PassiveMonthBridge" in name] == []
 
 
+def test_a_month_preview_that_cannot_load_says_why_and_loads_again_when_reopened(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    session = window.session
+    held = hold_month_requests(window)
+    root = show_material(qapp, window)
+    wait_until(qapp, lambda: idle(window))
+    before = state(session)
+
+    bridge(window).showPage("settings")
+    settings = panel(window)
+    preview = settings._preview._passive_month
+    settings.openAdvanced()
+    settings.setPreviewView("month")
+
+    # The calendar is drawn while it loads: every date and weekday has its words.
+    def drawn() -> bool:
+        month = preview_month(root)
+        return (
+            month is not None
+            and preview.dates.rowCount() >= 28
+            and len(named(month, "monthDayNumber")) == preview.dates.rowCount()
+            and len(named(month, "monthWeekday")) == 7
+        )
+
+    wait_until(qapp, drawn)
+    month = preview_month(root)
+    assert preview.weekdays.rowCount() == 7
+    assert all(str(item.property("text")) for item in named(month, "monthDayNumber"))
+    assert state(session) == before, "opening the preview changed the live session"
+    wait_until(qapp, lambda: preview.loading)
+    assert preview_calls(held), "the preview asked for its month"
+    status_banner = named(root, "monthPreviewStatus")[0]
+    wait_until(qapp, lambda: status_banner.isVisible(), what="the loading banner")
+
+    for call in list(held):
+        call[4](ApiError(503, "review month service unavailable"))
+    held.clear()
+
+    wait_until(qapp, lambda: not preview.loading)
+    assert preview.loadError == "review month service unavailable"
+    wait_until(qapp, lambda: status_banner.isVisible(), what="the failure banner")
+    status_text = named(root, "monthPreviewStatusText")[0]
+    wait_until(qapp, lambda: str(status_text.property("text")) == "review month service unavailable")
+    retry_button = named(root, "monthPreviewRetry")[0]
+    wait_until(qapp, lambda: retry_button.isVisible(), what="the Retry button")
+    assert state(session) == before
+
+    # Reopening Advanced and switching to Month forgets the failure and asks again.
+    settings.closeAdvanced()
+    settings.openAdvanced()
+    settings.setPreviewView("week")
+    settings.setPreviewView("month")
+    wait_until(qapp, lambda: len(preview_calls(held)) >= 1, what="a new request on reopening")
+    assert preview.loading
+
+    preview_calls(held)[-1][3]({"month": "2026-11", "days": []})
+    wait_until(qapp, lambda: not preview.loading)
+    assert preview.loadError == ""
+    reopened_banner = named(window._material_page.root, "monthPreviewStatus")[0]
+    wait_until(qapp, lambda: not reopened_banner.isVisible(), what="the banner going away")
+    assert preview.dates.rowCount() >= 28
+    assert state(session) == before
 
 
+def test_a_failed_preview_asks_again_by_itself_after_a_save(qapp: QApplication, window: NativeWindow) -> None:
+    session = window.session
+    held = hold_month_requests(window)
+    _root, _settings, preview = open_month_preview(qapp, window)
+    wait_until(qapp, lambda: len(preview_calls(held)) >= 1)
+
+    preview_calls(held)[-1][4](ApiError(503, "Service unavailable"))
+    wait_until(qapp, lambda: not preview.loading)
+    assert preview.loadError == "Service unavailable"
+    asked = len(preview_calls(held))
+
+    session.add_block(
+        {
+            "id": "new_block",
+            "title": "Math HW",
+            "kind": "flexible",
+            "category": "homework",
+            "start": "16:00",
+            "duration_min": 45,
+            "days": [2],
+        }
+    )
+    session.save()
+    wait_until(qapp, lambda: idle(window))
+
+    wait_until(qapp, lambda: len(preview_calls(held)) > asked, what="the preview asking again after the save")
+    assert preview.loading
+    preview_calls(held)[-1][3](snap("2026-11", "Math HW"))
+    wait_until(qapp, lambda: not preview.loading)
+    assert preview.loadError == ""
+    assert totals(preview) == (120, 75)
 
 
 def _fail_the_first_load(
@@ -85,8 +183,48 @@ def _fail_the_first_load(
     return root, preview, held
 
 
+def test_retry_works_by_click_through_the_shield(qapp: QApplication, window: NativeWindow) -> None:
+    root, preview, held = _fail_the_first_load(qapp, window, "Service unavailable")
+    retry_button = named(root, "monthPreviewRetry")[0]
+    asked = len(preview_calls(held))
+
+    # Click directly on Retry through the shield.
+    centre = retry_button.mapToScene(QPointF(retry_button.width() / 2, retry_button.height() / 2))
+    QTest.mouseClick(
+        window._material_page._quick,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+        QPoint(int(centre.x()), int(centre.y())),
+    )
+
+    wait_until(qapp, lambda: len(preview_calls(held)) > asked, what="Retry asking again")
+    assert preview.loading
 
 
+def test_retry_works_by_tab_and_space(qapp: QApplication, window: NativeWindow) -> None:
+    root, preview, held = _fail_the_first_load(qapp, window, "Failed to load")
+    retry_button = named(root, "monthPreviewRetry")[0]
+    assert retry_button.property("activeFocusOnTab") is True
+    accessible_name = retry_button.property("Accessible.name") or retry_button.property("accessName")
+    assert accessible_name == "Retry loading the month preview"
+
+    quick = window._material_page._quick
+    preview_view = named(root, "previewView")[0]
+    preview_view.forceActiveFocus()
+    wait_until(qapp, lambda: preview_view.property("activeFocus") is True)
+
+    # Reach Retry by Tab presses, without forcing focus onto it.
+    for _ in range(10):
+        if quick.quickWindow().activeFocusItem() is retry_button:
+            break
+        QTest.keyClick(quick, Qt.Key.Key_Tab)
+        pump(qapp)
+    assert quick.quickWindow().activeFocusItem() is retry_button, "Retry button could not be reached via Tab"
+
+    asked = len(preview_calls(held))
+    QTest.keyClick(quick, Qt.Key.Key_Space)
+    wait_until(qapp, lambda: len(preview_calls(held)) > asked, what="Space on Retry asking again")
+    assert preview.loading
 
 
 def test_tab_passes_the_preview_in_three_stops_or_fewer(qapp: QApplication, window: NativeWindow) -> None:
@@ -209,3 +347,18 @@ def test_tab_passes_the_preview_in_three_stops_or_fewer(qapp: QApplication, wind
     assert "monthPreviewRetry" in err_stops
 
 
+@pytest.mark.parametrize(("start", "query"), [("monday", ""), ("wednesday", "&first_day=2")])
+def test_the_preview_asks_for_its_month_from_the_week_start_and_as_always_from_monday(
+    qapp: QApplication, window: NativeWindow, start: str, query: str
+) -> None:
+    save_week_starts_on(start)
+    held = hold_month_requests(window)
+    show_material(qapp, window)
+    wait_until(qapp, lambda: idle(window))
+    bridge(window).showPage("settings")
+    settings = panel(window)
+    settings.openAdvanced()
+    settings.setPreviewView("month")
+    wait_until(qapp, lambda: preview_calls(held))
+    month = settings._preview._passive_month._target_month()
+    assert {call[1] for call in preview_calls(held)} == {f"/api/month?month={month}{query}"}
