@@ -215,6 +215,7 @@ paths = [
   "desktop/__init__.py", "desktop/main.py", "desktop/assets/",
   "desktop/native/__init__.py", "desktop/native/__main__.py",
   "desktop/native/window.py", "desktop/native/controller.py", "desktop/native/widgets.py",
+  "desktop/native/kept_alerts.py",
   "desktop/native/look.py", "desktop/native/tokens.py", "desktop/native/weekmodel.py",
   "desktop/native/calendar.py", "desktop/native/settings.py", "desktop/native/fonts.py",
   "desktop/native/fields.py", "desktop/native/motion.py",
