@@ -26,7 +26,8 @@ SheetFrame {
     readonly property bool choosing: cards.length > 0
     readonly property var footerAnswers: choosing
         ? [{ "id": "stay", "label": "Cancel", "kind": "text" },
-           { "id": "confirm", "label": ask.confirm ? ask.confirm : "OK", "kind": "filled", "default": true }]
+           { "id": "confirm", "label": ask.confirm ? ask.confirm : "OK",
+             "kind": ask.confirmKind ? ask.confirmKind : "filled", "default": true }]
         : (ask.answers ? ask.answers : [])
     onAskChanged: pick = 0
 

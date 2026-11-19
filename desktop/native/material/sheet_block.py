@@ -419,7 +419,7 @@ class BlockDraft:
                     }
                 )
             answers.append({"id": "week", "label": "This week only", "kind": "tonal"})
-            answers.append({"id": "every", "label": "This week and later", "kind": "filled"})
+            answers.append({"id": "every", "label": "This week and later", "kind": "danger"})
             cards.append(
                 {
                     "id": "week",
@@ -441,6 +441,7 @@ class BlockDraft:
                 "answers": answers,
                 "cards": cards,
                 "confirm": "Delete",
+                "confirmKind": "danger",
             }
         return {
             "id": "delete-block",
@@ -448,7 +449,7 @@ class BlockDraft:
             "body": question + " You can undo this.",
             "answers": [
                 {"id": "stay", "label": "Cancel", "kind": "text"},
-                {"id": "delete", "label": "Delete", "kind": "filled"},
+                {"id": "delete", "label": "Delete", "kind": "danger"},
             ],
         }
 

@@ -6,7 +6,7 @@ Item {
     property string density: "comfortable"
     property bool reduceMotion: false
     property bool highContrast: false
-    // filled, tonal, outlined, or text.
+    // filled, tonal, outlined, text, or danger (an answer that deletes or cannot be taken back: the error colour).
     property string kind: "filled"
     property string text: "Button"
     property string icon: ""
@@ -32,6 +32,8 @@ Item {
             return root.quiet ? "transparent" : palette.disabledFill
         if (root.kind === "filled")
             return palette.primary
+        if (root.kind === "danger")
+            return palette.error
         if (root.kind === "tonal")
             return palette.secondaryContainer
         return "transparent"
@@ -41,6 +43,8 @@ Item {
             return root.mutedWhenDisabled ? palette.inkMuted : palette.disabledInk
         if (root.kind === "filled")
             return palette.inkPrimary
+        if (root.kind === "danger")
+            return palette.inkError
         if (root.kind === "tonal")
             return palette.inkSecondaryContainer
         return palette.primary

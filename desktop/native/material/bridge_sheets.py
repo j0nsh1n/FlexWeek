@@ -67,7 +67,7 @@ DISCARD = {
     "body": "Your changes will be lost.",
     "answers": [
         {"id": "keep", "label": "Keep editing", "kind": "text"},
-        {"id": "discard", "label": "Discard", "kind": "tonal"},
+        {"id": "discard", "label": "Discard", "kind": "danger"},
     ],
 }
 # The More menu, in one place: id, words, icon.
@@ -644,7 +644,7 @@ class SheetsBridge(QObject):
                 ),
                 "answers": [
                     {"id": "stay", "label": "Cancel", "kind": "text"},
-                    {"id": "delete", "label": "Delete", "kind": "filled"},
+                    {"id": "delete", "label": "Delete", "kind": "danger"},
                 ],
             }
         elif self._block is not None and self._block.existing and session is not None:
@@ -847,7 +847,7 @@ class SheetsBridge(QObject):
             "body": f"Delete {name}? It will not ring again.",
             "answers": [
                 {"id": "stay", "label": "Cancel", "kind": "text"},
-                {"id": "delete", "label": "Delete", "kind": "filled"},
+                {"id": "delete", "label": "Delete", "kind": "danger"},
             ],
         }
         self._publish()
@@ -1138,7 +1138,7 @@ class SheetsBridge(QObject):
             ),
             "answers": [
                 {"id": "stay", "label": "Cancel", "kind": "text"},
-                {"id": "delete", "label": "Delete", "kind": "filled"},
+                {"id": "delete", "label": "Delete", "kind": "danger"},
             ],
         }
         self.changed.emit()

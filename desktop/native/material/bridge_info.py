@@ -26,7 +26,7 @@ SIGN_OUT = {
     "title": "Sign out",
     "answers": [
         {"id": "stay", "label": "Cancel", "kind": "text", "default": True},
-        {"id": "yes", "label": "Sign out", "kind": "filled"},
+        {"id": "yes", "label": "Sign out", "kind": "danger"},
     ],
 }
 

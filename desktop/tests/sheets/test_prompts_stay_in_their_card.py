@@ -50,6 +50,8 @@ WALKED = {
     "delete-alarm",
     "delete-unfinished",
     "edited-weeks",
+    "before-planning",
+    "recovery-file",
 }
 
 
@@ -75,7 +77,7 @@ def alarm_question() -> dict:
         "body": "Delete Wake up? It will not ring again.",
         "answers": [
             {"id": "stay", "label": "Cancel", "kind": "text"},
-            {"id": "delete", "label": "Delete", "kind": "filled"},
+            {"id": "delete", "label": "Delete", "kind": "danger"},
         ],
     }
 
@@ -103,6 +105,8 @@ def poses(window: NativeWindow) -> list[tuple[str, object]]:
         ("delete-homework", lambda: sheets.askDeleteHomework("essay")),
         ("delete-alarm", put(alarm_question())),
         ("delete-unfinished", lambda: sheets.askDeleteUnfinished("essay")),
+        ("before-planning", put(NativeWindow.before_planning_question("2 overdue, 1 left from last week"))),
+        ("recovery-file", put(NativeWindow.recovery_file_question())),
         ("four-plain-answers", put(FOUR_ANSWERS)),
         ("edited-weeks", lambda: sheets.pose_edited(NativeWindow._edited_ask(EDITED_LINE), lambda _a: None)),
     ]

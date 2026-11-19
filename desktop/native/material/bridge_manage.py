@@ -50,7 +50,7 @@ RESTORE_QUESTION = {
     "body": "Restore this copy? FlexWeek saves a copy of this week first.",
     "answers": [
         {"id": "not", "label": "Not now", "kind": "text", "default": True},
-        {"id": "restore", "label": "Restore", "kind": "filled"},
+        {"id": "restore", "label": "Restore", "kind": "danger"},
     ],
 }
 
@@ -105,7 +105,7 @@ def delete_question(name: str, storage: dict | None) -> dict[str, Any]:
         "body": DELETE_ACCOUNT_QUESTION.format(name=name, where=_where(storage)),
         "answers": [
             {"id": "stay", "label": "Cancel", "kind": "text", "default": True},
-            {"id": "delete", "label": f"Delete {name}", "kind": "filled"},
+            {"id": "delete", "label": f"Delete {name}", "kind": "danger"},
         ],
     }
 
@@ -131,7 +131,7 @@ def replace_week_question(week: str) -> dict[str, Any]:
         "body": REPLACE_WEEK_QUESTION.format(week=week),
         "answers": [
             {"id": "stay", "label": "Cancel", "kind": "text", "default": True},
-            {"id": "replace", "label": "Replace week", "kind": "filled"},
+            {"id": "replace", "label": "Replace week", "kind": "danger"},
         ],
     }
 

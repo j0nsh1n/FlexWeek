@@ -4035,16 +4035,7 @@ class NativeWindow(QMainWindow):
         page = self._material_shown()
         if page is not None:
             page.bridge.sheets.pose_question(
-                {
-                    "id": "before-planning",
-                    "title": "Before planning",
-                    "body": ", ".join(parts),
-                    "answers": [
-                        {"id": "plan", "label": "Plan into this week", "kind": "filled"},
-                        {"id": "did", "label": "Mark as finished", "kind": "tonal"},
-                        {"id": "not", "label": "Not now", "kind": "text", "default": True},
-                    ],
-                },
+                self.before_planning_question(", ".join(parts)),
                 {"plan": plan_them, "did": did_them, "not": not_now, "dismiss": not_now},
             )
             return
@@ -4067,6 +4058,20 @@ class NativeWindow(QMainWindow):
             did_them()
         else:
             not_now()
+
+    @staticmethod
+    def before_planning_question(body: str) -> dict:
+        """What Plan asks when homework is left over, for Material's prompt: the Widgets words and answers."""
+        return {
+            "id": "before-planning",
+            "title": "Before planning",
+            "body": body,
+            "answers": [
+                {"id": "plan", "label": "Plan into this week", "kind": "filled"},
+                {"id": "did", "label": "Mark as finished", "kind": "tonal"},
+                {"id": "not", "label": "Not now", "kind": "text", "default": True},
+            ],
+        }
 
     def _copy_last_week_fixed(self) -> None:
         def offer(rows: list[dict] | None) -> None:
