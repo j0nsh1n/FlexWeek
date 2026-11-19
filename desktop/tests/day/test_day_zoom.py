@@ -23,7 +23,7 @@ from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from backend.tests.fake_clock import FakeClock  # noqa: E402
-from desktop.native.hours.zoom import sanitize_zoom  # noqa: E402
+from desktop.native.hours.scale import sanitize_zoom  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_day import (  # noqa: E402
     bridge_of,

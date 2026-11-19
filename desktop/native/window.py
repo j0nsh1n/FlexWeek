@@ -110,8 +110,8 @@ from desktop.native.hours.hand import Create, Gesture, Hand, Move, MoveDate, Pla
 from desktop.native.hours.hand import Verdict as HandVerdict
 from desktop.native.hours.month import MonthGrid
 from desktop.native.hours.rail import MonthCard, Rail
-from desktop.native.hours.scale import NARROW_WIDTH
-from desktop.native.hours.zoom import ZOOM_KEYS, HoursScroll, sanitize_zoom
+from desktop.native.hours.scale import NARROW_WIDTH, sanitize_zoom
+from desktop.native.hours.zoom import ZOOM_KEYS, HoursScroll
 from desktop.native.kept import KeptSession
 from desktop.native.layout_choice import options_for, sanitize_layout, sanitize_surface
 from desktop.native.look import (
@@ -133,8 +133,6 @@ from desktop.native.motion import (
     fade_away,
     fade_through,
     hold_picture,
-    motion_level,
-    moves,
     raise_pictures,
     retake_slide,
     settle,
@@ -144,6 +142,7 @@ from desktop.native.motion import (
     switch_page,
     trim_picture,
 )
+from desktop.native.motion_level import motion_level, moves
 from desktop.native.outside import OutsideWatch, differs
 from desktop.native.remind import REMINDER_POLL_MS, clock_parts
 from desktop.native.reuse import (

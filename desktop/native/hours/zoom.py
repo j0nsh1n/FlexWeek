@@ -36,10 +36,10 @@ from desktop.native.fonts import at_scale
 from desktop.native.hours.canvas import HoursCanvas
 from desktop.native.hours.geometry import FIRST, LAST, Axis
 from desktop.native.hours.scale import (
-    KEY,
     OPENS,  # noqa: F401
     Scale,
     opening_minute,  # noqa: F401
+    sanitize_zoom,  # noqa: F401
 )
 from desktop.native.look import ZOOM_PILL_PX
 from desktop.native.motion import EASE_MS, OUT, Clock, duration, moves
@@ -53,20 +53,6 @@ NOW_MARGIN = 45
 ZOOM_ICON_PX = 14
 # How long "Smallest zoom reached" stays under the pill after the student zooms to a limit.
 REASON_MS = 3000
-
-
-def sanitize_zoom(raw: object) -> dict[str, int]:
-    """The remembered levels, whatever the file on disk says."""
-    if not isinstance(raw, dict):
-        return {}
-    clean: dict[str, int] = {}
-    for key, px in raw.items():
-        if len(clean) >= 32:
-            break
-        named = isinstance(key, str) and len(key) <= 40 and KEY.fullmatch(key) is not None
-        if named and isinstance(px, int) and not isinstance(px, bool) and 8 <= px <= 480:
-            clean[key] = px
-    return clean
 
 
 class ZoomButton(QPushButton):

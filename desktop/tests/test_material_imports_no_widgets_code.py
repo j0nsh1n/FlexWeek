@@ -20,6 +20,7 @@ FORBIDDEN = (
     "layouts",
     "look",
     "menus",
+    "motion",
     "command_bar",
     "devices",
     "hours.canvas",

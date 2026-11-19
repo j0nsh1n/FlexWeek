@@ -55,3 +55,17 @@ def short_length(minutes: int) -> str:
 
 # Below this width the week gives up a column rather than make the student scroll sideways to Run plan.
 NARROW_WIDTH = 1150
+
+
+def sanitize_zoom(raw: object) -> dict[str, int]:
+    """The remembered levels, whatever the file on disk says."""
+    if not isinstance(raw, dict):
+        return {}
+    clean: dict[str, int] = {}
+    for key, px in raw.items():
+        if len(clean) >= 32:
+            break
+        named = isinstance(key, str) and len(key) <= 40 and KEY.fullmatch(key) is not None
+        if named and isinstance(px, int) and not isinstance(px, bool) and 8 <= px <= 480:
+            clean[key] = px
+    return clean

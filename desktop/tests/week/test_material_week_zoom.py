@@ -19,7 +19,7 @@ from PySide6.QtCore import QPointF, Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from desktop.native.hours.zoom import sanitize_zoom  # noqa: E402
+from desktop.native.hours.scale import sanitize_zoom  # noqa: E402
 from desktop.native.material.theme import advanced_default, hour_row_px  # noqa: E402
 from desktop.native.weekmodel import set_clock_24h  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
