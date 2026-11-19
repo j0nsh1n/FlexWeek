@@ -71,5 +71,3 @@ def test_running_late_has_preview_then_accept_in_its_place_and_a_bare_cancel(qap
     assert late.accept_button.isVisible()
     free(late)
     free(parent)
-
-

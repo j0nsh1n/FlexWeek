@@ -270,11 +270,3 @@ def test_spread_summary_starts_with_the_homework_title() -> None:
 
 
 # Through the window and its session. The clock is held at Thursday 10:00 of the week on screen.
-
-
-
-
-
-
-
-

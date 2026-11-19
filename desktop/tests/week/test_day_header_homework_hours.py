@@ -21,5 +21,3 @@ def test_a_short_homework_length_is_hours_and_minutes_not_a_time_of_day() -> Non
     assert short_length(90) == "1h 30m"
     assert short_length(60) == "1h"
     assert short_length(45) == "45 min"
-
-

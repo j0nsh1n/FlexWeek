@@ -66,7 +66,3 @@ def dropdown_list(window: NativeWindow) -> QWidget:
     combo.showPopup()
     pump(lambda: combo.view().isVisible())
     return combo.view()
-
-
-
-

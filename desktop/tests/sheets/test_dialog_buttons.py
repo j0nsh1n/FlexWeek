@@ -79,5 +79,3 @@ class _Session:
 
     def focus_tasks(self) -> list:
         return []
-
-

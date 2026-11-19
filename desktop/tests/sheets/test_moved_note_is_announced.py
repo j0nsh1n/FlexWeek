@@ -133,5 +133,3 @@ def test_widgets_note_is_announced_when_it_appears_in_an_open_sheet(
         assert said == [(FIRST, False)], "a note that clears is not read out"
     finally:
         dialog.reject()
-
-

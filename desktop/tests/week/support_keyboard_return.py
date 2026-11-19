@@ -43,5 +43,3 @@ def plan(qapp: QApplication, window: NativeWindow, with_keys: bool) -> None:
         QTest.mouseClick(solve, Qt.MouseButton.LeftButton)
     wait_until(qapp, lambda: window.toast.isVisible() and window.toast.button.isVisible())
     settled(qapp, window)
-
-

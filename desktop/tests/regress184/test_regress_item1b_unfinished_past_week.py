@@ -118,7 +118,3 @@ def test_plan_them_places_it_in_week_two_before_wednesday(qapp, window) -> None:
     settled(qapp, window)
     placed = [b for b in lab_sessions(window) if b.get("start")]
     assert placed and all(b["days"][0] < WEDNESDAY or b["days"] == [WEDNESDAY] for b in placed), placed
-
-
-
-

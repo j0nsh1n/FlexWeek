@@ -533,19 +533,3 @@ def switch_page(stack: QStackedWidget, page: QWidget, level: str, direction: int
     picture = hold_picture(stack, level)
     stack.setCurrentWidget(page)
     fade_through(picture, [page], level, direction)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -126,5 +126,3 @@ def test_homework_added_today_is_not_left_over_and_plan_gives_it_a_time(
     assert asked == []
     (poster,) = [block for block in session.blocks if block.get("assignment_id") == "poster"]
     assert poster.get("start") and poster["duration_min"] == 60, (poster, session.message)
-
-

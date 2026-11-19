@@ -64,5 +64,3 @@ def test_the_focus_timer_line_is_in_the_serif_looks_face_not_mono() -> None:
         rule = focus_time(sheet({"preset": preset}))
         assert "Newsreader" in rule and "Mono" not in rule, preset
     assert "Mono" in focus_time(sheet({"preset": "light"}))
-
-

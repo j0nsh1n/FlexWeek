@@ -537,7 +537,3 @@ def _pick_monday_then_escape(dialog: QDialog) -> int:
 def _moved_pill(picker, day: int) -> tuple[bool, bool, str]:
     button = picker.buttons[day]
     return button.isChecked(), bool(button.property("moved")), button.accessibleName()
-
-
-
-

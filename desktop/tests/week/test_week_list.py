@@ -76,5 +76,3 @@ def test_the_week_list_no_longer_resizes_the_window_with_focus() -> None:
     from desktop.native import window as module
 
     assert not hasattr(module, "WEEK_LIST_OPEN") and not hasattr(module, "WEEK_LIST_FOLDED")
-
-

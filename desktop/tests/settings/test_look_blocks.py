@@ -98,21 +98,3 @@ def test_a_block_shows_its_category_colour_in_the_place_the_knob_names() -> None
     outlined_pale = block_paint(knobs_of(blocks="outline"), palette, pale, "locked", strong)
     assert outlined_pale["outline"] == strong
     assert block_paint(knobs_of(blocks="edge"), palette, pale, "locked", strong)["edge"] == strong
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

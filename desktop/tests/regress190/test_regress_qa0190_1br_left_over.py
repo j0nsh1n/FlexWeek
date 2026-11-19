@@ -94,5 +94,3 @@ def test_1br_guard_plan_never_moves_the_overdue_session(qapp, window) -> None:
     settled(qapp, window)
     bio = next(b for b in window.session.blocks if b["id"] == session_id)
     assert (bio.get("days"), bio.get("start")) == ([WEDNESDAY], "15:15")
-
-

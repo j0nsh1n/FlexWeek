@@ -50,5 +50,3 @@ def test_the_built_week_upgrades_plenty_when_due_within_24_hours() -> None:
     found = next(item for item in model.occurrences if item.block_id == "essay-1")
     assert found.slack_words(now) == "Tight"
     assert found.slack_words(None) == "Plenty of time"
-
-

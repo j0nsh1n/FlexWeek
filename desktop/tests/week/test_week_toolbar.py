@@ -27,5 +27,3 @@ def test_no_button_appears_twice_on_the_week_page(qapp: QApplication, window: Na
     labels = [b.text() for b in page.findChildren(QPushButton) if b.isVisible() and b.text()]
     repeated = sorted({text for text in labels if labels.count(text) > 1})
     assert repeated == [], f"offered twice: {repeated}"
-
-

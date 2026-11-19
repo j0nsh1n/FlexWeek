@@ -160,7 +160,3 @@ def _widgets_pick(days: list[int] | None):
         return int(dialog.result())
 
     return pick
-
-
-
-

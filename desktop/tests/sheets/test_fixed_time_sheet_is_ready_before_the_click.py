@@ -68,13 +68,3 @@ def test_a_change_of_look_drops_the_spare_built_in_the_old_one(
     window._apply_appearance()
     spare_is_ready(qapp, window)
     assert window._block_spare is not old
-
-
-
-
-
-
-
-
-
-

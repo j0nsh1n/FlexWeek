@@ -30,7 +30,3 @@ def test_homework_moved_by_hand_to_another_day_is_saved_pinned(
     settled(qapp, window)
     moved = next(block for block in window.session.blocks if block["id"] == work["id"])
     assert (moved["days"], moved["start"], moved.get("pinned")) == ([4], "19:00", True)
-
-
-
-

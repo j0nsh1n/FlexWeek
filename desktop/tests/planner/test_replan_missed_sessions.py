@@ -580,5 +580,3 @@ def test_plan_places_a_missed_session_together_with_new_homework(
     assert session.plan_counts == (2, 0)
     assert session.plan_open == 0
     assert session.message == "Placed 2 homework blocks."
-
-

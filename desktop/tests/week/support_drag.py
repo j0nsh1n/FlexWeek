@@ -151,5 +151,3 @@ def right_click(widget: QWidget, at: QPoint) -> None:
 
 
 # The classic Week on a Wednesday afternoon, for the tests that press the system's own mouse.
-
-

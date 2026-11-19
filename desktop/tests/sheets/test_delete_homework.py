@@ -171,9 +171,3 @@ def test_the_editor_offers_delete_only_for_homework_that_exists(
     editing.delete_button.click()
     assert editing.requested() == "delete"
     assert asked and "History essay" in asked[0] and "undo" in asked[0]
-
-
-
-
-
-

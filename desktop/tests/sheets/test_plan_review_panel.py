@@ -26,5 +26,3 @@ def test_plan_sentence_and_the_panel_share_one_placed_wording() -> None:
     assert plan_sentence(2, 1) == "Placed 2 homework blocks. 1 with no time yet."
     assert plan_sentence(1, 0) == "Placed 1 homework block."
     assert plan_sentence(0, 1) == "Nothing placed. 1 with no time yet."
-
-

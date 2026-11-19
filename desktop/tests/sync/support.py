@@ -109,7 +109,3 @@ class GenerationProxy:
 
     def __getattr__(self, name: str) -> object:
         return getattr(self.real, name)
-
-
-
-

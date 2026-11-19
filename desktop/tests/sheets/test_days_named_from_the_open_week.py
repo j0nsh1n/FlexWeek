@@ -115,5 +115,3 @@ def test_a_new_school_block_is_on_monday_to_friday_of_the_week(
     finally:
         free(dialog)
     assert BlockDraft(window.session, None, category="class").days == school_days
-
-

@@ -63,5 +63,3 @@ def test_school_is_the_school_building_everywhere_it_has_an_icon() -> None:
     assert CATEGORIES["class"]["icon"] == "school"
     assert calendar.category_icon("class") == "school", "the engine draws the block with it"
     assert "school" in icons.names()
-
-

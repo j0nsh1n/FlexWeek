@@ -24,9 +24,3 @@ def test_there_is_no_bar_above_the_week_for_the_count(window: NativeWindow) -> N
     assert window.findChild(QPushButton, "unfinishedBadge") is None
     assert not hasattr(window, "unfinished_badge")
     assert not hasattr(window.session, "homework_time_needed_elsewhere")
-
-
-
-
-
-

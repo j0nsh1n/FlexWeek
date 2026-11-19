@@ -63,11 +63,3 @@ def _contrast(first: QColor, second: QColor) -> float:
 
     high, low = sorted((luminance(first), luminance(second)), reverse=True)
     return (high + 0.05) / (low + 0.05)
-
-
-
-
-
-
-
-

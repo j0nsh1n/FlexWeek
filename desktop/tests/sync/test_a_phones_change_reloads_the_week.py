@@ -36,5 +36,3 @@ def test_a_phone_change_reloads_the_week_unless_this_window_has_unsaved_edits(
     assert desk.session.conflict is True
     desk.session.dirty = False
     desk.session.conflict = False
-
-

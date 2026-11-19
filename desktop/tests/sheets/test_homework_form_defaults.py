@@ -113,5 +113,3 @@ def test_editing_homework_keeps_its_title(qapp: QApplication) -> None:  # noqa: 
     dialog = HomeworkDialog(None, essay(), "2026-09-24")
     assert dialog.title.text() == "History essay"
     free(dialog)
-
-

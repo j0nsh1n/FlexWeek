@@ -65,9 +65,3 @@ def shadow_drawn(widget: QWidget) -> bool:
     if not isinstance(effect, QGraphicsDropShadowEffect):
         return False
     return bool(effect.isEnabled() and effect.blurRadius() > 0 and effect.color().alpha() > 0)
-
-
-
-
-
-

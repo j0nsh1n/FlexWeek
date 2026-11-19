@@ -102,9 +102,3 @@ def test_stacking_keeps_the_default_answer_and_the_tab_order(
         QTest.keyClick(sheet, Qt.Key.Key_Tab)
     assert order == ["stay", "week", "every"]
     free(sheet)
-
-
-
-
-
-

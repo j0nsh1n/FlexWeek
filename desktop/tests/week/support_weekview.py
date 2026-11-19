@@ -149,9 +149,3 @@ def fixed(block_id: str, title: str, day: int, start: str) -> dict:
 
 def titles(blocks: list[dict]) -> list[str]:
     return [item["title"] for item in blocks]
-
-
-
-
-
-

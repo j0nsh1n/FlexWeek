@@ -205,5 +205,3 @@ _error_colour: str | None = None
 def set_error_colour(colour: str | None) -> None:
     global _error_colour
     _error_colour = colour
-
-

@@ -197,5 +197,3 @@ def tick_focus_after_half_an_hour(qapp: QApplication, session: NativeSession) ->
     session.now_ms = lambda: FOCUS_START_MS + 30 * 60_000
     session.tick_focus()
     settled(qapp, session)
-
-

@@ -21,17 +21,3 @@ def test_the_window_is_never_narrower_than_800(qapp, window) -> None:
     window.resize(650, 720)
     pump(qapp, 3)
     assert window.width() == 800
-
-
-
-
-
-
-
-
-
-
-
-
-
-

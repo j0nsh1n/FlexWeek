@@ -40,17 +40,3 @@ def test_the_next_slot_keeps_to_the_hours_it_is_given() -> None:
     assert next_slot(3 * 60 + 10, first=6 * 60, last=23 * 60) == (0, 6 * 60), "not before the first"
     assert next_slot(23 * 60 + 1, first=6 * 60, last=23 * 60) == (1, 6 * 60), "none left: tomorrow's first"
     assert next_slot(22 * 60 + 50, first=6 * 60, last=23 * 60) == (0, 23 * 60)
-
-
-
-
-
-
-
-
-
-
-
-
-
-

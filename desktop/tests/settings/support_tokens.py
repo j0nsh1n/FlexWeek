@@ -41,9 +41,3 @@ def look_for(name: str, surface: str = "layered") -> dict:
 def palette_for(name: str, surface: str = "layered", accent: str = "default") -> dict:
     pack, dark, _look = LOOKS[name]
     return resolved_palette(pack, dark, look_for(name, surface), accent)
-
-
-
-
-
-

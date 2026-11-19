@@ -173,5 +173,3 @@ def test_0k_a_week_list_names_each_block_with_its_day_and_times(qapp, window) ->
     # In the user's time format (0.18.5 made new accounts 12-hour; 0.18.4's test assumed 24-hour).
     start, end = clock_text(8 * 60 + 30), clock_text(15 * 60 + 15)
     assert school and any("Mon" in r and start in r and end in r for r in school), rows[:10]
-
-

@@ -182,5 +182,3 @@ def test_widgets_the_same_note_is_said_once(
         assert len(said) == 2, said
     finally:
         dialog.reject()
-
-

@@ -77,5 +77,3 @@ def key(window: NativeWindow, which: Qt.Key, mods: Qt.KeyboardModifier = NONE) -
     """A key from the system, to whatever the window has focused."""
     QTest.keyClick(window.windowHandle(), which, mods)
     QApplication.processEvents()
-
-
