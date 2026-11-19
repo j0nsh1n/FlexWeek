@@ -10,6 +10,7 @@ from collections.abc import Callable
 import pytest
 
 pytest.importorskip("PySide6")
+pytestmark = pytest.mark.real_surface
 
 from PySide6.QtWidgets import QApplication
 

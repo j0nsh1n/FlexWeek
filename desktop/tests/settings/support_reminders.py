@@ -175,9 +175,25 @@ def seen(window: NativeWindow) -> dict:
 
 
 def answer_alarm(window: NativeWindow, button: str, heard: list) -> None:
-    """Press a button on the alarm when it rings, noting what it said. The alarm's dialog is modal, so
-    this runs inside its event loop once the dialog is up."""
+    """Press a button on the alarm when it rings, noting what it said: Material's ring screen, or the
+    Widgets dialog, which is modal, so this runs inside its event loop once the dialog is up."""
     tries = [0]
+
+    def act_on_material() -> None:
+        tries[0] += 1
+        with contextlib.suppress(RuntimeError):
+            ring = window._material_page.bridge.property("ring")
+            if not ring.property("open"):
+                if tries[0] < 1000:
+                    QTimer.singleShot(0, act_on_material)
+                return
+            form = dict(ring.property("form"))
+            heard.append([form["title"], form["detail"]])
+            (ring.snooze if button == "alarmSnooze" else ring.dismiss)()
+
+    if window._material_owns() and window._material_page is not None:
+        QTimer.singleShot(0, act_on_material)
+        return
 
     def act() -> None:
         tries[0] += 1

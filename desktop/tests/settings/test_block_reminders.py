@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 pytest.importorskip("PySide6")
+pytestmark = pytest.mark.real_surface
 
 from PySide6.QtWidgets import QApplication
 
@@ -31,6 +32,7 @@ from desktop.tests.settings.support_reminders import (
     tick,
     with_stand_ins,
 )
+from desktop.tests.week.support_material import _snack
 from desktop.tests.window_support import free, qapp, settled  # noqa: F401
 
 # The preferences table as 0.14 left it, for an account made before reminders were on by default.
@@ -203,7 +205,14 @@ def test_reminders_turned_off_after_the_update_stay_off(
     assert window._bell.once_rung == []
 
 
-def test_the_toast_keeps_a_reminder_until_something_more_important(
+ON_THE_SCREEN = (
+    "product gap: a reminder reaches the tray and the Widgets toast, which Material's screen never shows; "
+    "Material's snackbar says nothing, so a student looking at the window sees no reminder"
+)
+
+
+@pytest.mark.xfail(strict=True, reason=ON_THE_SCREEN)
+def test_the_snackbar_keeps_a_reminder_until_something_more_important(
     qapp: QApplication, new_window: NativeWindow
 ) -> None:
     """"Saved preferences." wrote over the reminder. A save's confirmation is less than a reminder, so
@@ -213,32 +222,31 @@ def test_the_toast_keeps_a_reminder_until_something_more_important(
     choose(qapp, window, reminder_lead_min=10)
     add_practice(qapp, window)
     tick(qapp, window, 35)
-    assert window.toast.text() == REMINDER
+    assert _snack(window) == REMINDER
     window.session.save_preferences({"alert_volume": 70})
     settled(qapp, window)
     assert window.session.message == "Saved preferences."
-    assert window.toast.text() == REMINDER
+    assert _snack(window) == REMINDER
     window.session.add_block(
         {"id": "dinner", "title": "Dinner", "kind": "locked", "category": "meals", "start": "19:30",
          "duration_min": 30, "days": [3]}
     )
     window.session.save()
     settled(qapp, window)
-    assert window.toast.text() == REMINDER
+    assert _snack(window) == REMINDER
     window.session.select_block(None, None)
     window.session.copy_selected()
-    assert window.toast.text() == "Select a block before copying it."
+    assert _snack(window) == "Select a block before copying it."
 
 
-def test_got_it_on_a_reminder_left_on_screen_takes_its_toast_away_too(
+@pytest.mark.xfail(strict=True, reason=ON_THE_SCREEN + "; Material has no strip with a Got it button")
+def test_a_reminder_left_on_screen_says_so_in_the_window(
     qapp: QApplication, new_window: NativeWindow
 ) -> None:
+    """With "keep reminders on screen" on, the reminder sits in the window until the student deals with it."""
     window = new_window
     at(18, 30)
     choose(qapp, window, reminder_lead_min=10, reminder_dnd_override=True)
     add_practice(qapp, window)
     tick(qapp, window, 35)
-    assert window.alert_strip.isVisible() and window.toast.text() == REMINDER
-    window.alert_strip.dismiss.click()
-    assert not window.alert_strip.isVisible()
-    assert not window.toast.isVisible()
+    assert _snack(window) == REMINDER
