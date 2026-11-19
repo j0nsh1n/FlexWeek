@@ -35,6 +35,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - In Material, the answers that delete something or cannot be taken back (Delete, This week and later, Replace week, Restore, Discard, Sign out) are drawn in the error colour in every question and sheet, in light and dark.
 
 ### Fixed
+- In Material's Paste and Duplicate preview and the Unfinished list, each row has a thin edge like the choice cards, so its fields no longer look out of line with the sheet.
 - In Material, Duplicate's preview is titled Preview duplicate, and a pasted or duplicated row at a taken time says both will show one slightly over the other, as the week draws them.
 - In Material, a reminder strip moves up above a notice that grew to several lines, so Got it stays reachable; the notice's Undo gives the keyboard back to the block it came from.
 - In Material's Edited weeks question, All weeks and From today on, which cannot be undone, are red when picked.
