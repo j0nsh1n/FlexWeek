@@ -192,11 +192,6 @@ def test_the_week_list_row_says_overdue_with_the_due_date(qapp, window) -> None:
     assert [row for row in rows if "Overdue" in row or "Pinned" in row] == [expected]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="product gap: a deadline passing refreshes the Widgets pages only (_deadline_changed); "
-    "Material's overdue row keeps its old words until something else changes the week",
-)
 def test_the_deadline_passing_updates_materials_overdue_row(qapp, window) -> None:
     friday = _bio_on_wednesday(qapp, window)
     root = _show_material(qapp, window)
@@ -204,6 +199,8 @@ def test_the_deadline_passing_updates_materials_overdue_row(qapp, window) -> Non
     CLOCK.set(before)
     window.session.week_changed.emit()
     settled(qapp, window)
+    _pump(qapp)
+    assert _qml(root, "leftOverWords").property("text") == "", "two minutes before the deadline: nothing late"
     CLOCK.set(before + timedelta(minutes=3))
     window._deadline_tick.timeout.emit()
     settled(qapp, window)

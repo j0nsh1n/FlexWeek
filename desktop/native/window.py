@@ -1563,6 +1563,8 @@ class NativeWindow(QMainWindow):
         self._sync_left_chip()
         self._show_next()
         self.rail.set_tasks(self.session.focus_tasks(), self._clock_in_week()[0])
+        # Material's overdue row and words come from the same list, so a deadline passing updates them too.
+        self._tick_material_clock()
         self._schedule_deadline_tick()
 
     def _application_state_changed(self, state: Qt.ApplicationState) -> None:
