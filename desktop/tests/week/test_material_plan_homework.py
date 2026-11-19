@@ -217,6 +217,27 @@ def test_ctrl_z_in_a_text_field_leaves_the_schedule_alone(qapp, window) -> None:
         assert window.session.can_undo() and not window.session.can_redo(), key
     _bridge(window).sheets.forceClose()
 
+def test_ctrl_z_with_typed_words_in_a_text_field_takes_the_typing_back_and_leaves_the_schedule_alone(
+    qapp, window
+) -> None:
+    root = _reset(window, qapp)
+    _place_now(window, qapp, root, "sheet", "Math worksheet")
+    _bridge(window).addHomework()
+    wait_until(qapp, lambda: _bridge(window).sheets.kind == "homework")
+    _pump(qapp)
+    title = _qml(root, "homeworkTitle")
+    title.forceActiveFocus()
+    _pump(qapp)
+    for letter in (Qt.Key.Key_A, Qt.Key.Key_B):
+        _press(window, letter)
+    assert str(title.property("text")) == "ab"
+    _press(window, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+    _pump(qapp, 6)
+    assert str(title.property("text")) == "", "the field's own undo took the typing back"
+    assert window.session.can_undo() and not window.session.can_redo(), "the week was left alone"
+    assert next(b for b in window.session.blocks if b.get("assignment_id") == "sheet").get("start")
+
+
 
 def test_place_now_that_changes_nothing_does_not_offer_undo(qapp, window) -> None:
     root = _reset(window, qapp)

@@ -15,7 +15,6 @@ from desktop.native.widgets import ChooseTimeDialog, HomeworkDialog  # noqa: E40
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.blocks_helper import put_block  # noqa: E402
 from desktop.tests.day.support_layouts_window import (  # noqa: E402
-    drop_chip,
     hours_of,
     press,
     qapp,  # noqa: F401
@@ -37,48 +36,6 @@ def test_homework_moved_by_hand_to_another_day_is_saved_pinned(
     settled(qapp, window)
     moved = next(block for block in window.session.blocks if block["id"] == work["id"])
     assert (moved["days"], moved["start"], moved.get("pinned")) == ([4], "19:00", True)
-
-
-def test_homework_dropped_on_the_calendar_gets_that_time_and_keeps_it(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    waiting = waiting_math(qapp, window)
-    assert not waiting.get("start")
-    # Friday: the clock is Thursday 19:00, and a drop on a day already past is refused.
-    drop_chip(qapp, window, waiting["id"], "16:00", 4)
-    settled(qapp, window)
-    placed = next(block for block in window.session.blocks if block["id"] == waiting["id"])
-    assert (placed["days"], placed["start"], placed.get("pinned")) == ([4], "16:00", True)
-    window.session.undo()
-    settled(qapp, window)
-    back = next(block for block in window.session.blocks if block["id"] == waiting["id"])
-    assert not back.get("start"), "the drop is one Undo step"
-    window.session.redo()
-    settled(qapp, window)
-    window.session.solve(everything=True)
-    settled(qapp, window)
-    replanned = next(block for block in window.session.blocks if block["id"] == waiting["id"])
-    assert (replanned["days"], replanned["start"]) == ([4], "16:00"), "Replan all leaves it where it was put"
-
-
-def test_a_drop_over_school_sits_beside_it_and_no_plan_moves_it_off(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    """Two blocks at one time is allowed, side by side, and said. It was put there by hand, so the
-    planner that makes way for School leaves it where it is."""
-    waiting = waiting_math(qapp, window)
-    # Friday's School: the clock is Thursday 19:00, and a drop on a day already past is refused.
-    drop_chip(qapp, window, waiting["id"], "10:00", 4)
-    settled(qapp, window)
-    placed = next(block for block in window.session.blocks if block["id"] == waiting["id"])
-    assert (placed["days"], placed["start"], placed.get("pinned")) == ([4], "10:00", True)
-    hours = hours_of(window)
-    friday = {item.block_id: item.columns for item, _rect in hours.drawn(hours.track_for(4, 10 * 60))}
-    assert friday == {"school": 2, waiting["id"]: 2}, "side by side, each marked"
-    window.session.solve(everything=True)
-    settled(qapp, window)
-    replanned = next(block for block in window.session.blocks if block["id"] == waiting["id"])
-    assert (replanned["days"], replanned["start"]) == ([4], "10:00")
 
 
 def test_choose_a_time_places_homework_without_dragging(

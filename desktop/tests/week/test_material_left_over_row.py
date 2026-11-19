@@ -53,6 +53,18 @@ def test_the_row_counts_overdue_homework(qapp, window) -> None:
     assert _qml(root, "leftOverWords").property("text") == "1 overdue"
 
 
+def test_a_homework_left_overdue_shows_the_row_with_its_two_buttons_on(qapp, window) -> None:
+    overdue_this_week(qapp, window)
+    root = _show_material(qapp, window)
+    _pump(qapp)
+
+    assert _row(root).property("visible") is True, "the overdue row is not showing"
+    for name in ("leftOverPlan", "leftOverDone"):
+        button = _qml(root, name)
+        assert button.property("visible") is True and button.property("enabled") is True, name
+        assert str(button.property("text") or button.property("accessName")), name
+
+
 def test_plan_into_this_week_places_the_left_over_session(qapp, window) -> None:
     left_in_week_one(qapp, window)
     root = _show_material(qapp, window)
