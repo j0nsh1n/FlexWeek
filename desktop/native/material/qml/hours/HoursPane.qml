@@ -331,6 +331,14 @@ Item {
             scroller.contentY = Math.min(Math.max(0, scroller.contentHeight - scroller.height), itemY + itemHeight - scroller.height + 8)
     }
 
+    // A new text size changes the row height. The student's place is a time of day, so the same time stays at
+    // the top: the Widgets week kept it, and the grid does not jump back to now. A zoom places itself.
+    property real lastRow: 0
+    onRowChanged: {
+        if (lastRow > 0 && root.row > 0 && !root.zooming && scroller.contentHeight > 0)
+            scroller.contentY = Math.max(0, scroller.contentY * root.row / lastRow)
+        lastRow = root.row
+    }
     property string revealedKey: ""
     // Today was pressed: show the line once this week has it, however the grid was scrolled before.
     property bool nowAsked: false
@@ -343,7 +351,7 @@ Item {
         var view = scroller.height
         if (!bridge || view < 40 || bridge.nowDay < 0)
             return
-        var key = bridge.nowDay + ":" + (bridge.week ? bridge.week.columns : 7) + ":" + root.typeScale + ":" + root.density
+        var key = bridge.nowDay + ":" + (bridge.week ? bridge.week.columns : 7) + ":" + root.density
         if (revealedKey === key && !nowAsked)
             return
         revealedKey = key
@@ -1175,6 +1183,7 @@ Item {
     }
 
     Component.onCompleted: {
+        lastRow = root.row
         if (root.followOpening)
             Qt.callLater(function() {
                 if (typeof root.revealOpening === "function")

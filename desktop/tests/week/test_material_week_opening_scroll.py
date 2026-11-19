@@ -99,11 +99,6 @@ def test_a_page_change_leaves_the_week_where_the_student_scrolled_it(qapp, windo
     assert float(_scroller(root).property("contentY")) == 0.0, "the week moved after Month"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="product difference, listed in group-5b1.md: a new text size scrolls Material's Week back to "
-    "now (HoursPane.qml revealNow keys on typeScale); the Widgets week kept the student's place",
-)
 def test_a_new_text_size_leaves_the_week_where_the_student_scrolled_it(qapp, window) -> None:
     root = _reset(window, qapp)
     scroller = _scroller(root)
@@ -119,3 +114,16 @@ def test_today_brings_now_back_after_the_student_scrolled_away(qapp, window) -> 
     assert not _in_view(_named(root, "nowLine")[0], scroller)
     _turn(qapp, window, "today")
     assert _in_view(_named(root, "nowLine")[0], _scroller(root)), "Today left now out of view"
+
+
+def test_a_new_text_size_keeps_the_time_at_the_top_of_the_week(qapp, window) -> None:
+    """The row grows with the text, so the same distance down is an earlier time: the place is the time."""
+    root = _reset(window, qapp)
+    scroller = _scroller(root)
+    row = float(_bridge(window).property("hourRow"))
+    scroller.setProperty("contentY", 3 * row)
+    _pump(qapp, 20)
+    with _text_size(window, qapp, "large"):
+        grown = float(_bridge(window).property("hourRow"))
+        assert grown > row, "the text size did not change the row, so the test says nothing"
+        assert float(_scroller(root).property("contentY")) == pytest.approx(3 * grown, abs=2)
