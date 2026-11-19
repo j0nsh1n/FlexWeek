@@ -300,15 +300,17 @@ paths = ["desktop/native/hours/words.py", "desktop/native/material/sheet_preview
 areas = ["week", "sheets"]
 
 [[rule]]
-paths = [
-  "desktop/native/material/bridge_alarms.py", "desktop/native/material/bridge_hours.py",
-  "desktop/native/settings_copy.py",
-]
+paths = ["desktop/native/material/bridge_alarms.py", "desktop/native/material/bridge_hours.py"]
 areas = ["settings"]
+
+# Settings' words also fill Help, About, Update, restore points, sync status and the pairing row.
+[[rule]]
+paths = ["desktop/native/settings_copy.py"]
+areas = ["settings", "sheets", "sync", "e2e", "week", "day"]
 
 [[rule]]
 paths = ["desktop/native/material/bridge_info.py"]
-areas = ["sheets", "updater"]
+areas = ["sheets"]
 
 [[rule]]
 paths = ["desktop/native/material/bridge_manage.py", "desktop/native/account_copy.py"]
