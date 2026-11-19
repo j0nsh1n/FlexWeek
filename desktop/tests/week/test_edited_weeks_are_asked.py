@@ -26,7 +26,12 @@ from desktop.tests.light_app import window  # noqa: E402, F401
 from desktop.tests.material_support import named, pump, show_material  # noqa: E402
 from desktop.tests.sheets.support_material_sheets import click  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
-from desktop.tests.week.test_repeats_from_the_open_week import WEDNESDAY, block, school_of  # noqa: E402
+from desktop.tests.week.test_repeats_from_the_open_week import (  # noqa: E402
+    WEDNESDAY,
+    answer_edited,
+    block,
+    school_of,
+)
 from desktop.tests.week.test_standing_week import (  # noqa: E402, F401
     JOB,
     SCHOOL,
@@ -377,28 +382,6 @@ def test_a_sign_out_during_the_preview_ends_the_wait(qapp, window, after_setup, 
         window._choice_for_edits([{"id": "school", "scope": "from", "from_date": "2026-11-02"}])
         is None
     )
-
-
-def answer_edited(window: NativeWindow, choice: str, seen: dict | None = None) -> None:
-    """Answer the edited-weeks question on Material's prompt when it comes up, noting what it asked."""
-    sheets = window._material_page.bridge.sheets
-    tries = {"n": 0}
-
-    def poll() -> None:
-        tries["n"] += 1
-        ask = dict(sheets.ask)
-        if ask.get("id") != "edited-weeks":
-            if tries["n"] < 400:
-                QTimer.singleShot(5, poll)
-            return
-        if seen is not None:
-            seen["body"] = ask["body"]
-            seen["answers"] = [
-                (a["id"], a["label"], a["kind"], bool(a.get("default"))) for a in ask["answers"]
-            ]
-        sheets.answer(choice)
-
-    QTimer.singleShot(0, poll)
 
 
 def test_the_question_defaults_to_except_edited(qapp, window, after_setup, monkeypatch) -> None:
