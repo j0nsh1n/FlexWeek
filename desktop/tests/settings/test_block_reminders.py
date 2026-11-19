@@ -34,8 +34,6 @@ from desktop.tests.settings.support_reminders import (
 from desktop.tests.week.support_material import _click, _qml, _snack
 from desktop.tests.window_support import free, qapp, settled  # noqa: F401
 
-pytestmark = pytest.mark.real_surface
-
 # The preferences table as 0.14 left it, for an account made before reminders were on by default.
 PREFERENCES_0_14 = """
     CREATE TABLE preferences (

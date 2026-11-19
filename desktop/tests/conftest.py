@@ -43,11 +43,6 @@ def pytest_configure(config: pytest.Config) -> None:
         "slot_errors_allowed(reason): the test may raise inside a Qt slot; the reason names the error"
         " left unfixed",
     )
-    config.addinivalue_line(
-        "markers",
-        "real_surface: the test opens windows with the shipped surface rule (Material is the only start);"
-        " every other test still gets the Widgets start its Widgets screens need until they are removed",
-    )
 
 
 @pytest.fixture(autouse=True)
@@ -73,23 +68,6 @@ def no_error_is_lost_inside_a_qt_slot(request: pytest.FixtureRequest) -> Iterato
     finally:
         sys.excepthook = previous
     assert raised == [], "an error was raised inside a Qt slot:\n" + "\n".join(raised)
-
-
-@pytest.fixture(autouse=True)
-def widgets_tests_still_start_on_the_widgets_surface(
-    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Every start opens Material now, but the tests of the Widgets screens (deleted in steps 8 and 9 of
-    the Material-only work) still need a window that starts on them. The look file's old rule is put back
-    for them here, in the tests only; a test marked `real_surface` gets the shipped rule."""
-    if request.node.get_closest_marker("real_surface") is not None:
-        return
-    if importlib.util.find_spec("PySide6") is None:
-        return
-    from desktop.native import window
-    from desktop.tests.material_support import widgets_start_rule
-
-    monkeypatch.setattr(window, "sanitize_surface", widgets_start_rule)
 
 
 @pytest.fixture(autouse=True)

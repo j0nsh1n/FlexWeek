@@ -11,13 +11,12 @@ from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtWidgets import QApplication, QDialog, QLabel
 
 from backend.tests.fake_clock import CLOCK
-from desktop.native.calendar import sunday_due
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import LateDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.waiting import wait_until
-from desktop.tests.week.support_pastnext import THURSDAY, settled_session
+from desktop.tests.week.support_pastnext import settled_session
 from desktop.tests.window_support import qapp, settled  # noqa: F401
 
 
@@ -54,52 +53,8 @@ def running_late_says(
 # Where it starts ------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("twenty_four", [True, False])
-@pytest.mark.parametrize(
-    ("now", "start_24", "start_12", "from_start"),
-    [
-        ("22:56", "23:00", "11:00 PM", (23, 0)),
-        ("22:46", "23:00", "11:00 PM", (23, 0)),
-        ("22:45", "22:45", "10:45 PM", (22, 45)),
-        ("22:45:30", "22:45", "10:45 PM", (22, 45)),
-        ("22:01", "22:15", "10:15 PM", (22, 15)),
-        ("23:50", "23:45", "11:45 PM", (23, 45)),
-    ],
-)
-def test_running_late_starts_from_the_next_quarter_hour(
-    qapp, window, monkeypatch, now, start_24, start_12, from_start, twenty_four
-) -> None:
-    window.session.preferences = {**(window.session.preferences or {}), "clock_24h": twenty_four}
-    window._sync_chrome()
-    hold_clock(window, THURSDAY, now)
-    said, asked = running_late_says(window, monkeypatch)
-    assert said == f"Starting from {start_24 if twenty_four else start_12} today (Thursday)."
-    assert asked == [from_start], "the preview is asked for the start the words name"
 
 
-def test_running_late_names_the_block_already_in_progress(qapp, window, monkeypatch) -> None:
-    window.session.preferences = {**(window.session.preferences or {}), "clock_24h": False}
-    hold_clock(window, THURSDAY, "17:00")
-    window.session.blocks = [
-        {
-            "id": "late-test",
-            "title": "Late test",
-            "kind": "flexible",
-            "duration_min": 60,
-            "days": [3],
-            "start": "16:45",
-            "pinned": False,
-        }
-    ]
-    contexts: list[str] = []
-
-    def inspect(dialog: LateDialog) -> int:
-        contexts.append(dialog.context.text())
-        return QDialog.DialogCode.Rejected
-
-    monkeypatch.setattr(LateDialog, "exec", inspect)
-    window._open_late()
-    assert contexts == ["Late test, 4:45 PM, moves 30 min later"]
 
 
 def test_running_late_leaves_homework_that_waits_for_a_time_out_of_the_replan(qapp, window) -> None:
@@ -302,58 +257,6 @@ def test_running_late_second_preview_replaces_the_rows(qapp) -> None:
     dialog.close()
 
 
-def test_running_late_summary_is_status_not_an_error(qapp, window, monkeypatch) -> None:
-    session = window.session
-    CLOCK.set(datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=15, minutes=40))
-    # Running late moves what already has a time and never places homework that waits, so the
-    # Math worksheet is given Thursday 4 PM first.
-    session.add_homework(
-        {
-            "id": "math",
-            "title": "Math worksheet",
-            "due": sunday_due(session.week_start),
-            "estimate_min": 60,
-            "revision": 0,
-        }
-    )
-    session.save()
-    settled(qapp, window)
-    math = next(block for block in session.blocks if block.get("assignment_id") == "math")
-    session.add_block({**math, "start": "16:00", "days": [3]})
-    session.save()
-    settled_session(qapp, session)
-    seen: dict = {}
-
-    def run(dialog: LateDialog) -> int:
-        dialog.show()
-        for press in ("first", "second"):
-            dialog.preview_requested.emit()
-            wait_until(qapp, lambda: session.late_preview is not None and not session.busy)
-            qapp.processEvents()
-            seen[press] = (
-                dialog.summary.text(),
-                dialog.summary.isVisibleTo(dialog),
-                dialog.error.text(),
-                dialog.changes.count(),
-                len(_row_labels(dialog)),
-                len(session.late_preview["trace"].get("moves") or []),
-            )
-        window._late_problem(dialog, "Choose 15, 30 or 60 minutes.")
-        seen["problem"] = dialog.error.text()
-        dialog.reject()
-        return dialog.result()
-
-    monkeypatch.setattr(LateDialog, "exec", run)
-    window._open_late()
-    for press in ("first", "second"):
-        summary, shown, error, rows, labels, moves = seen[press]
-        assert moves == 1
-        assert shown
-        assert summary == "1 task moves"
-        assert error == ""
-        assert rows == 1
-        assert labels == 1
-    assert seen["problem"] == "Choose 15, 30 or 60 minutes."
 
 
 # Plan and Replan from the time that has passed --------------------------------------------------

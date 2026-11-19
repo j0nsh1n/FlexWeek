@@ -10,10 +10,9 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication, QFrame, QLabel, QPushButton
 
-from desktop.native import settings, widgets
+from desktop.native import widgets
 from desktop.tests.sheets.support_buttons import (
     HOMEWORK,
-    RESTORE_POINT,
     ROUTINE,
     dialog_classes,
     makers,
@@ -42,23 +41,6 @@ def test_the_filled_button_is_the_answer(qapp: QApplication) -> None:  # noqa: F
     assert not late.accept_button.property("quiet")
 
 
-def test_hide_preview_and_save_restore_point_are_outlined_and_close_stays_plain(
-    qapp: QApplication,  # noqa: F811
-) -> None:
-    """The three bare-text actions are outlined, as Delete beside Hide is; Restore stays the one filled
-    button and Close, which only dismisses, stays plain."""
-    panel = widgets.UnfinishedPanel(None)
-    dialog = settings.RestoreDialog(None, [RESTORE_POINT], None, None)
-    close = dialog.findChild(QPushButton, "sheetClose")
-    for button in (
-        panel.findChild(QPushButton, "unfinishedDismiss"),
-        dialog.findChild(QPushButton, "restorePreview"),
-        dialog.findChild(QPushButton, "restoreCreate"),
-    ):
-        assert button.property("outlined") is True and not button.property("quiet"), button.text()
-    assert close.property("quiet") is True and not close.property("outlined")
-    restore = dialog.findChild(QPushButton, "restoreApply")
-    assert not restore.property("quiet") and not restore.property("outlined")
 
 
 def test_routines_and_running_late_say_what_each_part_is_for(qapp: QApplication) -> None:  # noqa: F811
@@ -99,23 +81,3 @@ class _Session:
         return []
 
 
-@pytest.mark.parametrize(("phase", "answer"), [("work", "Focus screen"), ("ended", "Finished")])
-def test_quick_focus_is_a_card_with_one_filled_button(
-    qapp: QApplication,  # noqa: F811
-    phase: str,
-    answer: str,
-) -> None:
-    panel = settings.FocusPanel()
-    panel.set_state(_Session(phase))
-    card = panel.findChild(QFrame, "dialogCard")
-    assert card.isVisibleTo(panel)
-    assert card.findChild(QLabel, "focusTask").text() == "Quick focus"
-    assert card.findChild(QLabel, "cardNote").text()
-    loud = [
-        button.text()
-        for button in card.findChildren(QPushButton)
-        if button.isVisibleTo(panel) and not button.property("quiet")
-    ]
-    assert loud == [answer]
-    panel.set_state(_Session(None))
-    assert not card.isVisibleTo(panel), "no card while no timer runs"

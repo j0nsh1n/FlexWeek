@@ -25,8 +25,6 @@ from desktop.tests.week.support_material import _bridge, _click, _snack
 from desktop.tests.week.support_material_page import fresh_material
 from desktop.tests.window_support import qapp  # noqa: F401
 
-pytestmark = pytest.mark.real_surface
-
 
 def _action(window: NativeWindow) -> str:
     return str(_bridge(window).property("snackAction"))

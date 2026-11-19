@@ -10,27 +10,14 @@ from PySide6.QtWidgets import QApplication, QDialog
 from desktop.native.look import resolved_palette
 from desktop.native.widgets import AvailabilityDialog, HomeworkDialog
 from desktop.native.window import NativeWindow
-from desktop.tests.day.support_layouts_window import school_week, settled, still
+from desktop.tests.day.support_layouts_window import school_week, still
 from desktop.tests.pictures.screen import Screen
 
 NOTICE = "Running late: 16:30–17:00 is now locked. 2 moved."
 
 
-def _notice_under_the_bar(window: NativeWindow) -> object:
-    school_week(window)
-    window.toast.show_message("OK")
-    window.toast.show_message(NOTICE)
-    settled(QApplication.instance(), window)
-    return None
 
 
-def _notice_in_todays_app(window: NativeWindow) -> object:
-    school_week(window)
-    window.resize(1280, 800)
-    settled(QApplication.instance(), window)
-    window.toast.show_message("Moved History essay to Fri 18:00.", "Undo", lambda: None)
-    QApplication.processEvents()
-    return None
 
 
 def _opened(call: Callable[[], object]) -> QDialog:
@@ -54,14 +41,8 @@ def _opened(call: Callable[[], object]) -> QDialog:
     return held[0]
 
 
-def _add_homework_sheet(window: NativeWindow) -> object:
-    school_week(window)
-    return _opened(window._add_homework)
 
 
-def _add_fixed_sheet(window: NativeWindow) -> object:
-    school_week(window)
-    return _opened(window._add_fixed)
 
 
 def _account_sheet(window: NativeWindow) -> object:
@@ -101,51 +82,6 @@ def _availability_strip(window: NativeWindow) -> object:
 
 
 SCREENS: list[Screen] = [
-    Screen(
-        id="sheets.notice_under_the_bar",
-        area="sheets",
-        prepare=_notice_under_the_bar,
-        checks=(
-            "A notice, \"Running late: 16:30–17:00 is now locked. 2 moved.\", is longer than the pill's "
-            "420 px allow on one line at either text size: it takes two lines and the pill grows to "
-            "them (the label's height is at least its height for its width, so the second line is not "
-            "cut), and the notice sits over the foot of the hours, below the bottom of the Plan, More "
-            "and Settings buttons, never covering the bar. Look at Normal and Large text."
-        ),
-        sources=("desktop/native/widgets.py", "desktop/native/window.py"),
-    ),
-    Screen(
-        id="sheets.notice_in_todays_app",
-        area="sheets",
-        prepare=_notice_in_todays_app,
-        checks=(
-            "Today's app has no bar of its own: the notice \"Moved History essay to Fri 18:00.\" with "
-            "Undo stays 16 px (TOAST_FOOT) in from the page's bottom edge: its card's bottom edge is "
-            "16 px above the week page's foot."
-        ),
-        sources=("desktop/native/widgets.py", "desktop/native/window.py"),
-    ),
-    Screen(
-        id="sheets.add_homework_fits_a_laptop",
-        area="sheets",
-        prepare=_add_homework_sheet,
-        checks=(
-            "Add homework is a panel, not a window: its card is at most 700 px wide and 768 px high and "
-            "at least 320 px wide, so it fits a 1366 x 768 laptop. (The first question, What, is title "
-            "only.)"
-        ),
-        sources=("desktop/native/widgets.py",),
-    ),
-    Screen(
-        id="sheets.add_fixed_time_fits_a_laptop",
-        area="sheets",
-        prepare=_add_fixed_sheet,
-        checks=(
-            "Add fixed time is a panel: its card is at most 700 px wide and 768 px high and at least "
-            "320 px wide."
-        ),
-        sources=("desktop/native/widgets.py",),
-    ),
     Screen(
         id="sheets.account_fits_a_laptop",
         area="sheets",

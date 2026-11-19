@@ -20,13 +20,13 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QTimer  # noqa: E402
 from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
 
-from desktop.native import window as window_module  # noqa: E402
 from desktop.native.setup_steps import WEEK  # noqa: E402
 from desktop.native.widgets import SchoolHoursDialog  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402,F401
 from desktop.tests.sheets.support_material_sheets import bridge, material_week, snack  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
+from desktop.tests.week.support_school_hours import school_hours as school_hours_form  # noqa: E402
 from desktop.tests.week.test_standing_week import (  # noqa: E402,F401
     JOB,
     SCHOOL,
@@ -37,8 +37,6 @@ from desktop.tests.week.test_standing_week import (  # noqa: E402,F401
     save_and_settle,
 )
 from desktop.tests.window_support import qapp, settled  # noqa: E402,F401
-
-pytestmark = pytest.mark.real_surface
 
 WEDNESDAY = 2
 SETUP_WEEK = "2026-11-02"
@@ -73,8 +71,7 @@ def school_hours(
         dialog.accept()
         return QDialog.DialogCode.Accepted
 
-    monkeypatch.setattr(window_module.SchoolHoursDialog, "exec", run)
-    window._school_hours()
+    school_hours_form(window, run)
     wait_until(qapp, lambda: not window.session.busy and not window.session.dirty)
     settled(qapp, window)
     return seen

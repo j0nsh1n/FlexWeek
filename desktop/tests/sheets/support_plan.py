@@ -12,12 +12,11 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton
+from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import CLOCK, START_MONDAY
 from desktop.native.calendar import date_for_day, sunday_due
-from desktop.native.widgets import ConfirmSheet, HomeworkDialog
+from desktop.native.widgets import HomeworkDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import LightWindows
 from desktop.tests.waiting import wait_until
@@ -101,16 +100,8 @@ def opened_with(
     return seen
 
 
-def _plan_them_if_asked() -> None:
-    """Solve asks 'Before planning' when homework was left over; answer it with Plan into this week."""
-    sheet = QApplication.activeModalWidget()
-    if isinstance(sheet, ConfirmSheet) and sheet.findChild(QLabel, "sheetTitle").text() == "Before planning":
-        sheet.buttons["plan"].click()
 
 
-def press_solve(window: NativeWindow) -> None:
-    QTimer.singleShot(0, _plan_them_if_asked)
-    window.findChild(QPushButton, "solveButton").click()
 
 
 def held_solves(window: NativeWindow) -> tuple[list[dict], list[Callable[[], None]]]:
@@ -128,3 +119,7 @@ def held_solves(window: NativeWindow) -> tuple[list[dict], list[Callable[[], Non
 
     window.session.client.request = request  # type: ignore[method-assign]
     return sent, waiting
+
+
+
+

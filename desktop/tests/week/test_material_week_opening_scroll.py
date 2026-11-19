@@ -30,6 +30,13 @@ from desktop.tests.window_support import qapp, settled  # noqa: E402,F401
 ROW_PX = 56
 
 
+def _opened(window, qapp) -> QObject:
+    """Material built fresh on a week that already holds its blocks, as a sign-in opens it: the window
+    starts on Material before the seed adds anything, and the hours open only once."""
+    window._drop_partial_material()
+    return _reset(window, qapp)
+
+
 def _scroller(root: QObject) -> QObject:
     return _qml(root, "weekScroller")
 
@@ -55,7 +62,7 @@ def _turn(qapp, window, name: str) -> None:
 
 
 def test_this_week_opens_on_its_first_block_with_now_and_the_essay_in_view(qapp, window) -> None:
-    root = _reset(window, qapp)
+    root = _opened(window, qapp)
     _pump(qapp, 60)
     scroller = _scroller(root)
     school = _named(root, "weekBlock")[0]
@@ -69,7 +76,7 @@ def test_when_the_first_block_and_now_do_not_fit_together_now_is_low_in_the_view
     window.session.add_block({**school, "start": "01:00"})
     window.session.save()
     settled(qapp, window)
-    root = _reset(window, qapp)
+    root = _opened(window, qapp)
     _pump(qapp, 60)
     scroller = _scroller(root)
     line = _named(root, "nowLine")[0]
@@ -79,7 +86,7 @@ def test_when_the_first_block_and_now_do_not_fit_together_now_is_low_in_the_view
 
 
 def test_an_empty_next_week_opens_at_eight(qapp, window) -> None:
-    root = _reset(window, qapp)
+    root = _opened(window, qapp)
     _pump(qapp, 60)
     _turn(qapp, window, "next")
     scroller = _scroller(root)
@@ -89,7 +96,7 @@ def test_an_empty_next_week_opens_at_eight(qapp, window) -> None:
 
 
 def test_a_page_change_leaves_the_week_where_the_student_scrolled_it(qapp, window) -> None:
-    root = _reset(window, qapp)
+    root = _opened(window, qapp)
     scroller = _scroller(root)
     _away(qapp, scroller)
     _bridge(window).showPage("month")
@@ -100,7 +107,7 @@ def test_a_page_change_leaves_the_week_where_the_student_scrolled_it(qapp, windo
 
 
 def test_a_new_text_size_leaves_the_week_where_the_student_scrolled_it(qapp, window) -> None:
-    root = _reset(window, qapp)
+    root = _opened(window, qapp)
     scroller = _scroller(root)
     _away(qapp, scroller)
     with _text_size(window, qapp, "large"):
@@ -108,7 +115,7 @@ def test_a_new_text_size_leaves_the_week_where_the_student_scrolled_it(qapp, win
 
 
 def test_today_brings_now_back_after_the_student_scrolled_away(qapp, window) -> None:
-    root = _reset(window, qapp)
+    root = _opened(window, qapp)
     scroller = _scroller(root)
     _away(qapp, scroller)
     assert not _in_view(_named(root, "nowLine")[0], scroller)
@@ -118,7 +125,7 @@ def test_today_brings_now_back_after_the_student_scrolled_away(qapp, window) -> 
 
 def test_a_new_text_size_keeps_the_time_at_the_top_of_the_week(qapp, window) -> None:
     """The row grows with the text, so the same distance down is an earlier time: the place is the time."""
-    root = _reset(window, qapp)
+    root = _opened(window, qapp)
     scroller = _scroller(root)
     row = float(_bridge(window).property("hourRow"))
     scroller.setProperty("contentY", 3 * row)

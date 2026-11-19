@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from PySide6.QtWidgets import QAbstractButton, QApplication
+from PySide6.QtWidgets import QApplication
 
 from backend.slots import minutes_to_hhmm
 from backend.tests.fake_clock import CLOCK
@@ -18,19 +18,17 @@ MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY = range(7)
 
 
 def classic_week(qapp: QApplication, window: NativeWindow) -> NativeWindow:
-    """The light window on the classic Week at the size a laptop shows."""
+    """The light window on the Week at the size a laptop shows."""
     window.resize(1280, 860)
-    window._layout = {"main": "classic", "day": "one", "options": {}}
-    window.findChild(QAbstractButton, "viewWeek").click()
+    window.session.set_view("week")
     settled(qapp, window)
     wait_until(qapp, window.isVisible)
     return window
 
 
 def hold_clock(window: NativeWindow, day: int, minute: int) -> None:
-    """The one clock at `minute` of the day on `day` of the open week, and the hours redrawn."""
+    """The one clock at `minute` of the day on `day` of the open week, """
     CLOCK.set(datetime.fromisoformat(window.session.week_start) + timedelta(days=day, minutes=minute))
-    window._fill_classic()
     QApplication.processEvents()
 
 

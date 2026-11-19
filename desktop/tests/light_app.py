@@ -7,7 +7,6 @@ it starts where the signed-in `window` fixture of window_support.py did."""
 from __future__ import annotations
 
 import contextlib
-import json
 import sqlite3
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -23,12 +22,10 @@ from starlette.testclient import TestClient
 from backend.storage import connect, create_session
 from backend.tests.fake_clock import CLOCK
 from desktop.native import controller as controller_module
-from desktop.native import window as window_module
 from desktop.native.client import NativeClient
 from desktop.native.kept import KeptSession
 from desktop.native.window import NativeWindow
 from desktop.tests.logic_support import past_recovery, past_setup, sign_up
-from desktop.tests.material_support import widgets_start_rule
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import PASSWORD, USERNAME, free, look_file, still
 
@@ -165,37 +162,22 @@ def account(qapp: QApplication, root: Path) -> Account:
     CLOCK.reset()
     api = InProcessApi(database)
     look_file().unlink(missing_ok=True)
-    # Made under the Widgets start, as the windows the tests open from it are, from building the window
-    # until its look file is kept: the worker's first asking test may be a real_surface one, and a look
-    # saved under the shipped rule would open every later window of this worker on Material.
-    with pytest.MonkeyPatch.context() as widgets:
-        widgets.setattr(window_module, "sanitize_surface", widgets_start_rule)
-        with _client_for(api):
-            window = NativeWindow(ORIGIN)
-        window.show()
-        try:
-            sign_up(qapp, window, USERNAME, PASSWORD)
-            past_recovery(qapp, window)
-            past_setup(qapp, window)
-            assert window.session.account is not None, "signing up left no account"
-            user_id = int(window.session.account["id"])
-            look = look_file().read_bytes() if look_file().exists() else None
-        finally:
-            _close(window)
-            api.close()
-            CLOCK.set(held)
+    with _client_for(api):
+        window = NativeWindow(ORIGIN)
+    window.show()
+    try:
+        sign_up(qapp, window, USERNAME, PASSWORD)
+        past_recovery(qapp, window)
+        past_setup(qapp, window)
+        assert window.session.account is not None, "signing up left no account"
+        user_id = int(window.session.account["id"])
+        look = look_file().read_bytes() if look_file().exists() else None
+    finally:
+        _close(window)
+        api.close()
+        CLOCK.set(held)
     _ACCOUNT = Account(database, look, user_id)
     return _ACCOUNT
-
-
-def _look_for_this_start(made: bytes) -> bytes:
-    """The shared account's look was saved under the Widgets start, whichever test asked first. A test on
-    the shipped start (`real_surface`) has the surface its own sign-up would have saved: Material."""
-    if window_module.sanitize_surface is widgets_start_rule:
-        return made
-    saved = json.loads(made)
-    saved["surface"] = "material"
-    return json.dumps(saved).encode()
 
 
 def open_light_window(
@@ -211,7 +193,7 @@ def open_light_window(
     if made.look is None:
         look_file().unlink(missing_ok=True)
     else:
-        look_file().write_bytes(_look_for_this_start(made.look))
+        look_file().write_bytes(made.look)
     kept = KeptSession(tmp_path / "kept-session")
     kept.keep(token)
     api = InProcessApi(database)

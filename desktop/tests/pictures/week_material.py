@@ -5,12 +5,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import CLOCK
 from desktop.native.calendar import sunday_due
-from desktop.native.hours.hand import Hand, Verdict
-from desktop.native.hours.rail import Rail
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.week.support_material import (
@@ -86,49 +84,10 @@ def _rail_next_start_focus(window: NativeWindow) -> None:
     pump(app)
 
 
-def _rail_one_go(window: NativeWindow) -> None:
-    app = _app()
-    seeded(app, window)
-    window.rail.set_week(
-        window.rail._week,
-        window.rail._today,
-        window.rail._minute,
-        {"chemistry": {"title": "Long chemistry report", "due": sunday_due(window.session.week_start)}},
-        [{"assignment_id": "chemistry", "title": "Long chemistry report", "minutes": 2400}],
-        {"chemistry"},
-    )
-    app.processEvents()
 
 
-def _rail_many_rows(window: NativeWindow) -> None:
-    app = _app()
-    seeded(app, window)
-    window.rail.set_tasks(
-        [{"id": f"t{n}", "day": 4, "start": "17:00", "title": f"Task {n}"} for n in range(9)], 0
-    )
-    app.processEvents()
 
 
-def _rail_focus_row(window: NativeWindow) -> QWidget:
-    """The rail alone, with one early focus row whose name is long, so its time must stay whole."""
-    from PySide6.QtGui import QFont
-
-    from desktop.native.fonts import load_fonts
-    from desktop.native.look import resolved_palette
-
-    load_fonts()
-    host = QWidget()
-    rail = Rail(Hand(lambda *_a, **_k: Verdict(True, ""), host))
-    rail.setFont(QFont("Inter", 11))
-    rail.set_look(None, resolved_palette("system", False, None))
-    rail.set_tasks(
-        [{"id": "essay", "title": "History essay that is quite long", "day": 0, "start": "06:00"}], 3
-    )
-    rail.resize(280, 120)
-    # The picture's owner is the window, so the host outlives this call.
-    window._picture_host = host
-    rail.tasks.resize(280, 60)
-    return rail.tasks
 
 
 def _day_header(window: NativeWindow) -> None:
@@ -265,36 +224,6 @@ SCREENS: list[Screen] = [
             "The Next card's 'Start focus' button and the card's right foot stay inside the rail's width."
         ),
         sources=RAIL,
-    ),
-    Screen(
-        id="week.rail-one-go-message",
-        area="week",
-        prepare=lambda window: _rail_one_go(window),
-        checks=(
-            "The 'does not fit in one go' message wraps in at most four lines inside the rail at Large text; "
-            "'Allow splitting' sits on its own line below the message and its whole words are not clipped."
-        ),
-        sources=RAIL,
-    ),
-    Screen(
-        id="week.rail-many-focus-rows",
-        area="week",
-        prepare=lambda window: _rail_many_rows(window),
-        checks=(
-            "Nine focus rows do not change the rail's height (the rail scrolls as a whole) and no row is "
-            "clipped."
-        ),
-        sources=RAIL,
-    ),
-    Screen(
-        id="week.rail-focus-row-time",
-        area="week",
-        prepare=lambda window: _rail_focus_row(window),
-        checks=(
-            "In a focus row 'Mon 06:00' is written whole and inside the row; the long name is what is "
-            "shortened, not the time."
-        ),
-        sources=("desktop/native/hours/rail.py",),
     ),
     Screen(
         id="week.day-header-homework-length",

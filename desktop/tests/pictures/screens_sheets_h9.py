@@ -12,7 +12,6 @@ from desktop.native.layout_choice import LAYOUTS
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.sheets.support_button_labels import LATE_WORDS, sheet_makers
-from desktop.tests.sheets.support_keys import press
 from desktop.tests.window_support import settled
 
 # Widgets designs only: the screens below build Widgets sheets and pages.
@@ -115,14 +114,6 @@ def week_list_closed(window: NativeWindow) -> None:
     week_with_school(window)
 
 
-def week_list_open(window: NativeWindow) -> None:
-    from PySide6.QtCore import Qt
-
-    week_with_school(window)
-    window.week_table.hours.setFocus(Qt.FocusReason.OtherFocusReason)
-    ctrl_shift = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier
-    press(window.week_table.hours, Qt.Key.Key_L, ctrl_shift)
-    settled(QApplication.instance(), window)
 
 
 SCREENS: list[Screen] = [
@@ -200,18 +191,6 @@ SCREENS: list[Screen] = [
             "The week list is hidden and takes no room: with the grid shown, note the top edge of "
             "the grid, to "
             "compare with week.week_list_open."
-        ),
-        sources=("desktop/native/window.py", "desktop/native/hours"),
-        styles=("classic",),
-    ),
-    Screen(
-        id="week.week_list_open",
-        area="week",
-        prepare=week_list_open,
-        checks=(
-            "Opened with Ctrl+Shift+L, the week list is at least 100 px tall and the grid's top edge "
-            "is at the "
-            "same height as in week.week_list_closed (the list opens without pushing the grid down)."
         ),
         sources=("desktop/native/window.py", "desktop/native/hours"),
         styles=("classic",),

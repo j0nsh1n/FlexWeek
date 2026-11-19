@@ -16,7 +16,7 @@ import pytest
 from PySide6.QtCore import QObject, QPoint, QPointF, QRect, QRectF, Qt
 from PySide6.QtGui import QFont, QFontMetricsF, QPainter
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import CLOCK
 from desktop.native.calendar import sunday_due
@@ -106,18 +106,6 @@ def seeded(qapp: QApplication, window: NativeWindow) -> None:
 def pump(qapp: QApplication, count: int = 5) -> None:
     for _ in range(count):
         qapp.processEvents()
-
-
-def use_clock(qapp: QApplication, window: NativeWindow, twenty_four: bool) -> None:
-    """Chooses the clock the way Settings does, so every surface redraws its times."""
-    window.session.preferences = {**(window.session.preferences or {}), "clock_24h": twenty_four}
-    window._sync_chrome()
-    pump(qapp)
-
-
-def chips(window: NativeWindow) -> list[QPushButton]:
-    found = window.rail.findChildren(QPushButton)
-    return [chip for chip in found if chip.property("tray") and chip.isVisible()]
 
 
 # -- the Material week -----------------------------------------------------

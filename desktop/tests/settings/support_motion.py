@@ -3,14 +3,10 @@ the animation time (desktop/tests/motion_support.py) in place of waiting."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QRectF
-from PySide6.QtWidgets import QApplication, QLabel, QStackedWidget, QVBoxLayout, QWidget
+from PySide6.QtCore import QEvent
+from PySide6.QtWidgets import QApplication, QLabel, QStackedWidget, QWidget
 
 from desktop.native import motion
-from desktop.native.hours.canvas import BlockPainter, HoursCanvas
-from desktop.native.hours.geometry import LinearTrack
-from desktop.native.hours.hand import Hand, Verdict
-from desktop.native.look import resolved_palette
 from desktop.native.motion import (
     FADE_NAME,
     PAGE_IN_AFTER_MS,
@@ -68,25 +64,7 @@ def occurrence(block_id: str, day: int, start: int, end: int) -> Occurrence:
     return Occurrence(block_id, title, "class", day, start, end, False, False, False, None, None, None)
 
 
-class Hours:
-    """A week of hours on screen, with the hand that the window would own."""
 
-    def __init__(self, qapp: QApplication) -> None:
-        self.window = QWidget()
-        self.window.resize(420, 500)
-        self.hand = Hand(lambda block_id, from_day, span: Verdict(True, ""), self.window)
-        self.canvas = HoursCanvas(
-            self.hand,
-            BlockPainter(resolved_palette("system", False, None)),
-            lambda area: [
-                LinearTrack(day, QRectF(area.left() + day * 60, area.top(), 60, area.height()), first=480)
-                for day in range(7)
-            ],
-        )
-        QVBoxLayout(self.window).addWidget(self.canvas)
-        self.canvas.set_week([occurrence("essay", 1, 9 * 60, 10 * 60)])
-        self.window.show()
-        qapp.processEvents()
 
 
 LATER = [occurrence("essay", 3, 15 * 60, 16 * 60), occurrence("club", 5, 12 * 60, 13 * 60)]

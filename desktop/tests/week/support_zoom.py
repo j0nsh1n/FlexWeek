@@ -17,36 +17,21 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import (  # noqa: E402
-    QAbstractAnimation,
-    QEvent,
     QObject,
     QPoint,
     QPointF,
-    QRect,
-    QRectF,
     QStandardPaths,
     Qt,
 )
-from PySide6.QtGui import QMouseEvent, QWheelEvent  # noqa: E402
+from PySide6.QtGui import QWheelEvent  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
-    QFrame,
-    QLabel,
-    QPushButton,
-    QVBoxLayout,
     QWidget,
 )
 
 from backend.tests.fake_clock import CLOCK  # noqa: E402
 from desktop.native import motion  # noqa: E402
-from desktop.native.hours.canvas import BlockPainter, HoursCanvas  # noqa: E402
-from desktop.native.hours.classic import ClassicDay, ClassicWeek  # noqa: E402
-from desktop.native.hours.geometry import Axis, LinearTrack  # noqa: E402
-from desktop.native.hours.hand import Hand, Verdict, span_words  # noqa: E402
-from desktop.native.hours.zoom import HoursScroll, Scale  # noqa: E402
-from desktop.native.look import resolved_palette  # noqa: E402
-from desktop.native.weekmodel import build_week  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import LightWindows  # noqa: E402
 from desktop.tests.material_support import faded_in  # noqa: E402
@@ -62,13 +47,11 @@ SCHOOL = {
     "start": "08:00",
     "duration_min": 390,
 }
-QUARTER = {"id": "quiz", "title": "Quiz", "kind": "locked", "days": [3], "start": "16:00", "duration_min": 15}
 ESSAY = {"id": "essay", "title": "Essay", "kind": "locked", "days": [3], "start": "19:00", "duration_min": 90}
 NOW = 15 * 60 + 40
 # Thursday 15:40 of the week beginning 2026-10-12, so the week the window opens on is not the
 # machine's own.
 HELD = datetime.fromisoformat("2026-10-15T15:40")
-HELD_MONDAY = "2026-10-12"
 
 # The hosts of the hands these tests make. A hand is its host's Qt child and holds no reference of
 # its own to it, so the host has to be kept for as long as the hand is used.
@@ -115,52 +98,14 @@ def settle(qapp: QApplication) -> None:
 # Standalone hours
 
 
-def a_hand(words: bool = False) -> Hand:
-    """A hand that allows everything, saying a held block's times when `words` is set."""
-    host = QWidget()
-    HOSTS.append(host)
-    return Hand(lambda block_id, from_day, span: Verdict(True, span_words(span) if words else ""), host)
 
 
-def a_week(qapp: QApplication, blocks: list[dict] | None = None, hand: Hand | None = None) -> ClassicWeek:
-    # Inside the offscreen screen (800 by 800), where QApplication.widgetAt can find it.
-    view = ClassicWeek(hand if hand is not None else a_hand())
-    view.set_look(None, resolved_palette("system", False, None))
-    view.set_week(build_week(MONDAY, blocks or [], {}, None), 3, NOW)
-    view.move(0, 0)
-    view.resize(760, 520)
-    view.show()
-    settle(qapp)
-    return view
 
 
-def a_day(qapp: QApplication, blocks: list[dict], day: int) -> ClassicDay:
-    view = ClassicDay(a_hand())
-    view.set_look(None, resolved_palette("system", False, None))
-    view.move(0, 0)
-    view.resize(760, 560)
-    view.set_day(build_week(MONDAY, blocks, {}, None), day, 3, NOW)
-    view.show()
-    settle(qapp)
-    return view
 
 
-def minute_at(view: ClassicWeek | ClassicDay, y: float) -> float:
-    """The minute at a height in the hours' viewport."""
-    track = view.hours.tracks[0]
-    inside = view.scroll.verticalScrollBar().value() + y
-    return track.first + (inside - track.area.top()) / track.per_minute()
 
 
-def hours_placed_by_hand(qapp: QApplication) -> ClassicWeek:
-    """A week whose hours are placed by hand, as Clay's row places its card's, so they can be given no
-    width at all: the week's own layout keeps them at least as wide as their gutter and a scroll bar,
-    and whether that bar takes room depends on the app's style."""
-    view = a_week(qapp)
-    view.layout().removeWidget(view.scroll)
-    view.scroll.setGeometry(0, 0, 760, 520)
-    settle(qapp)
-    return view
 
 
 def wheel(widget: QWidget, at: QPointF, notches: float, ctrl: bool = True) -> None:
@@ -178,88 +123,19 @@ def wheel(widget: QWidget, at: QPointF, notches: float, ctrl: bool = True) -> No
     QApplication.sendEvent(widget, event)
 
 
-def press_and_drag(widget: QWidget, local: QPointF, step: QPointF) -> None:
-    """Press at `local` and move twice by `step`, holding the left button, so a block is picked up."""
-    held = Qt.MouseButton.LeftButton
-    for kind, point in (
-        (QEvent.Type.MouseButtonPress, local),
-        (QEvent.Type.MouseMove, local + step),
-        (QEvent.Type.MouseMove, local + step * 2),
-    ):
-        global_at = QPointF(widget.mapToGlobal(point.toPoint()))
-        QApplication.sendEvent(
-            widget, QMouseEvent(kind, point, global_at, held, held, Qt.KeyboardModifier.NoModifier)
-        )
 
 
-def hold_still(canvas: HoursCanvas, day: int, minute: int) -> None:
-    """Press the block at this day and minute and carry it a little across its time, so it is held
-    where it is drawn."""
-    press = QPointF(canvas.mapFromGlobal(canvas.point_for(day, minute)))
-    step = QPointF(0, 6) if canvas.track_for(day).axis is Axis.ACROSS else QPointF(6, 0)
-    press_and_drag(canvas, press, step)
-    assert canvas.hand.preview is not None, f"nothing was picked up on day {day} at minute {minute}"
 
 
-def shown(canvas: HoursCanvas, scroll: HoursScroll) -> QRect:
-    """What shows of the canvas: the viewport, in the canvas's coordinates."""
-    port = scroll.viewport()
-    return QRect(canvas.mapFrom(port, QPoint(0, 0)), port.size())
 
 
 # Lanes
 
 
-def a_lane_week(qapp: QApplication, hand: Hand | None = None) -> HoursScroll:
-    """Seven lanes whose time runs across, as Mission control's week lays them out, with their names
-    kept in a strip on the left."""
-
-    def lanes(area: QRectF) -> list[LinearTrack]:
-        tall = area.height() / 7
-        return [
-            LinearTrack(
-                day, QRectF(area.left() + 8, area.top() + day * tall, area.width() - 16, tall), Axis.ACROSS
-            )
-            for day in range(7)
-        ]
-
-    hand = hand if hand is not None else a_hand()
-    canvas = HoursCanvas(hand, BlockPainter(resolved_palette("system", False, None)), lanes, header=24)
-    scroll = HoursScroll(
-        canvas,
-        Scale("lanes.week", (32, 48, 64, 96), 48),
-        lambda px: 24 * px + 16,
-        name="lanes",
-        gutter=70,
-        axis=Axis.ACROSS,
-    )
-    names = QWidget()
-    column = QVBoxLayout(names)
-    column.setContentsMargins(0, 0, 0, 0)
-    column.setSpacing(0)
-    for day in range(7):
-        label = QLabel(f"Day {day}")
-        label.setObjectName(f"laneName{day}")
-        column.addWidget(label, 1)
-    scroll.set_header(names)
-    scroll.move(0, 0)
-    scroll.resize(760, 420)
-    scroll.show()
-    settle(qapp)
-    return scroll
 
 
-def minute_across(scroll: HoursScroll, x: float) -> float:
-    track = scroll.canvas.tracks[0]
-    return track.first + (scroll.horizontalScrollBar().value() + x - track.area.left()) / track.per_minute()
 
 
-def a_side(host: QWidget) -> QWidget:
-    """A panel beside the hours, with something to take the focus, as Mission's radar."""
-    side = QFrame(host)
-    side.setFixedWidth(300)
-    QVBoxLayout(side).addWidget(QPushButton("Science poster", side))
-    return side
 
 
 # The light window
@@ -303,62 +179,10 @@ def window(qapp: QApplication, tmp_path_factory: pytest.TempPathFactory, tmp_pat
         windows.close()
 
 
-def hours(window: NativeWindow) -> HoursScroll:
-    shown_now = [
-        scroll for scroll in window.planner.currentWidget().findChildren(HoursScroll) if scroll.isVisible()
-    ]
-    assert len(shown_now) == 1, f"{len(shown_now)} hours on screen"
-    return shown_now[0]
 
 
-def span_shown(scroll: HoursScroll) -> tuple[float, float]:
-    """The first and last minute on screen, along the way time runs."""
-    canvas, port = scroll.canvas, scroll.viewport()
-    track = next(track for track in canvas.tracks if not track.turn)
-    start = QPointF(canvas.mapFrom(port, QPoint(0, 0)))
-    end = QPointF(canvas.mapFrom(port, QPoint(port.width(), port.height())))
-    if track.axis is Axis.DOWN:
-        start.setX(track.area.center().x())
-        end.setX(track.area.center().x())
-    else:
-        start.setY(track.area.center().y())
-        end.setY(track.area.center().y())
-    return track.minute_at(start), track.minute_at(end)
 
 
-def opens_at(qapp: QApplication, window: NativeWindow, minute: int, where: str) -> None:
-    """`minute` is on screen, with at most half of what shows before it, or the hours go no further:
-    now opens in the middle, a first block a little below the top. Clay deck slides its row to the day
-    asked for, so the day is measured where it lands."""
-    view = window.planner.currentWidget()
-    running = QAbstractAnimation.State.Running
-    # The app's own motion runs on `motion.Clock`, which is not a Qt animation.
-    wait_until(
-        qapp,
-        lambda: (
-            not motion.busy()
-            and all(item.state() != running for item in view.findChildren(QAbstractAnimation))
-        ),
-    )
-    for _ in range(4):
-        qapp.processEvents()
-    scroll = hours(window)
-    first, last = span_shown(scroll)
-    if scroll.axis is Axis.ACROSS:
-        # Mission control's lanes: now always shows when it is in what is shown, and 22:00 does too
-        # when both fit, else now sits 30 to 60 minutes from the left edge. Another week, or another
-        # day, opens with the evening's end at the right edge.
-        if minute == NOW:
-            assert first <= minute <= last, f"{where}: now is not on screen"
-            assert last >= 22 * 60 or 30 <= minute - first <= 60, f"{where}: now is not near the left edge"
-        else:
-            assert last >= 22 * 60, f"{where}: the lanes do not reach 22:00"
-        return
-    assert first <= minute <= last, f"{where}: {minute // 60:02d}:{minute % 60:02d} is not on screen"
-    bar = scroll.verticalScrollBar() if scroll.axis is Axis.DOWN else scroll.horizontalScrollBar()
-    at_end = bar.value() == bar.maximum()
-    half = (last - first) / 2 + 1
-    assert minute - first <= half or at_end, f"{where}: opens {minute - first:.0f} minutes above it"
 
 
 # The Material week

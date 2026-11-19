@@ -33,12 +33,5 @@
   "old": "    made.setWeight(QFont.Weight(weight))\n",
   "new": "    made.setWeight(QFont.Weight.Bold)\n",
   "test": "desktop/tests/settings/test_fonts.py::test_a_strong_word_is_600_not_bold"
- },
- {
-  "file": "desktop/native/hours/canvas.py",
-  "name": "a block's name bold by its own hand",
-  "old": "        title = at_scale(base, \"body\" if self.wide else \"caption\", scale, WEIGHT_STRONG)\n",
-  "new": "        title = at_scale(base, \"body\" if self.wide else \"caption\", scale)\n        title.setBold(True)\n",
-  "test": "desktop/tests/settings/test_design_tokens.py::test_no_widget_outside_the_designs_sets_a_size_or_weight_of_its_own"
  }
 ]

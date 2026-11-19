@@ -23,8 +23,6 @@ from desktop.tests.material_support import faded_in
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
 
-pytestmark = pytest.mark.real_surface
-
 
 def pump(qapp: QApplication, count: int = 30) -> None:
     for _ in range(count):

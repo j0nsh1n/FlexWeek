@@ -5,7 +5,7 @@ test_r11_view_group, test_tray_chip, test_pr5b_toast_rings_textsize)."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import (
     QApplication,
@@ -13,20 +13,13 @@ from PySide6.QtWidgets import (
     QPushButton,
     QStyle,
     QStyleOptionButton,
-    QVBoxLayout,
     QWidget,
 )
 
-from desktop.native.hours.chips import TrayChip
-from desktop.native.hours.hand import Hand
-from desktop.native.hours.rail import PAD, RAIL_PX, RailChip
-from desktop.native.weekmodel import Waiting
-from desktop.native.widgets import SegmentTrack
 from desktop.native.window import NativeWindow
 from desktop.tests.material_support import pump as pump_material
 from desktop.tests.material_support import show_material
 from desktop.tests.pictures.screen import Screen
-from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_bar_pictures import (
     WIDGETS_DESIGNS,
     idle,
@@ -114,42 +107,12 @@ def _large_text_bar_just_wide_enough(window: NativeWindow) -> None:
     return None
 
 
-def _suggest_times_and_retry(window: NativeWindow) -> None:
-    show_view(window, "week")
-    window.session.preferences = {**(window.session.preferences or {}), "planning_style": "manual"}
-    window.retry_button.setVisible(True)
-    window._sync_chrome()
-    text_size(window, "large")
-    window.resize(640, 768)
-    pump()
-    return None
 
 
-def _while_the_week_saves(window: NativeWindow) -> None:
-    """A save on its way, a reply landing on the week: Retry save must not show and the view buttons must
-    stay where they are."""
-    show_view(window, "month")
-    wait_until(None, lambda: window.session.month_data is not None and not window.session.busy)
-    window.session.client.hold()
-    window.session.dirty = True
-    window.session.save()
-    window.session.week_changed.emit()
-    window._week_page.layout().activate()
-    pump()
-    return None
 
 
-def _hours_scroll_bar(window: NativeWindow) -> QWidget:
-    window.resize(1280, 800)
-    show_view(window, "week")
-    return window.week_table.scroll
 
 
-def _hours_scroll_bar_under_the_pointer(window: NativeWindow) -> QWidget:
-    area = _hours_scroll_bar(window)
-    QApplication.sendEvent(area.verticalScrollBar(), QEvent(QEvent.Type.Enter))
-    pump()
-    return area
 
 
 def _laptop_window(window: NativeWindow) -> None:
@@ -166,32 +129,8 @@ def _calendar_room(window: NativeWindow) -> None:
     return None
 
 
-def _view_switcher(window: NativeWindow) -> QWidget:
-    window.resize(1280, 860)
-    show_view(window, "week")
-    return window.findChild(SegmentTrack, "segments")
 
 
-def _not_placed_chips(window: NativeWindow) -> QWidget:
-    """A tray chip made wider than its words at 11 pt and then given 16 pt, and a rail chip at the rail's
-    width with 16 pt: the large title must give way before the length does."""
-    host = QWidget()
-    host.setObjectName("notPlacedChips")
-    host.setStyleSheet("QPushButton { font-size: 11pt; padding: 4px 8px; }")
-    waiting = Waiting("poster", "Science poster for the fair", "assignments", 90, "poster", None, "")
-    tray = TrayChip(Hand(lambda *_args: None, host), waiting, host)
-    rail = RailChip(Hand(lambda *_args: None, host), waiting, host)
-    rail.setMaximumWidth(RAIL_PX - 2 * PAD)
-    column = QVBoxLayout(host)
-    column.addWidget(tray)
-    column.addWidget(rail)
-    host.show()
-    pump()
-    tray.setFixedWidth(tray.sizeHint().width())
-    pump()
-    host.setStyleSheet("QPushButton { font-size: 16pt; padding: 4px 8px; }")
-    pump()
-    return host
 
 
 def _material_week_rows(window: NativeWindow) -> None:
@@ -282,48 +221,6 @@ SCREENS: list[Screen] = [
         styles=WIDGETS_DESIGNS,
     ),
     Screen(
-        id="week.top_bar_suggest_and_retry",
-        area="week",
-        prepare=_suggest_times_and_retry,
-        checks=(
-            "At 640 px with Large text, Suggest times (or Suggest) and Retry save, which widen the bar, "
-            "are never cut and nothing runs past the window's edge."
-        ),
-        sources=BAR_SOURCES,
-        styles=WIDGETS_DESIGNS,
-    ),
-    Screen(
-        id="week.top_bar_while_saving",
-        area="week",
-        prepare=_while_the_week_saves,
-        checks=(
-            "A save is on its way and the week is drawn again by a reply: Retry save is not showing and "
-            "the Day / Week / Month / My day buttons are where they are when no save is running (they "
-            "once jumped 129 px left under the pointer)."
-        ),
-        sources=BAR_SOURCES,
-        styles=WIDGETS_DESIGNS,
-    ),
-    Screen(
-        id="week.hours_scroll_bar",
-        area="week",
-        prepare=_hours_scroll_bar,
-        checks=(
-            "The hours' scroll bar lies over their right edge, thin (at most 6 px), not in a strip beside "
-            "them."
-        ),
-        sources=("desktop/native/widgets.py", "desktop/native/hours"),
-        styles=WIDGETS_DESIGNS,
-    ),
-    Screen(
-        id="week.hours_scroll_bar_under_the_pointer",
-        area="week",
-        prepare=_hours_scroll_bar_under_the_pointer,
-        checks="With the pointer on it the hours' scroll bar is wider than at rest and still over the hours.",
-        sources=("desktop/native/widgets.py", "desktop/native/hours"),
-        styles=WIDGETS_DESIGNS,
-    ),
-    Screen(
         id="week.laptop_window",
         area="week",
         prepare=_laptop_window,
@@ -340,36 +237,6 @@ SCREENS: list[Screen] = [
         prepare=_calendar_room,
         checks="In a 1280x820 window the calendar is at least half of the window's height (410 px).",
         sources=("desktop/native/window.py", "desktop/native/hours"),
-        styles=WIDGETS_DESIGNS,
-    ),
-    Screen(
-        id="week.view_switcher_labels",
-        area="week",
-        prepare=_view_switcher,
-        checks=(
-            "At Small, Normal and Large text, in every design and look preset, each of Day / Week / Month "
-            "/ My day shows its whole label inside its button (not clipped) in both the regular and the "
-            "strong weight, each button is at least 24x24 px, and at Large text all four have equal "
-            "padding around their words."
-        ),
-        sources=("desktop/native/widgets.py", "desktop/native/look.py", "desktop/native/window.py"),
-        main=True,
-        styles=WIDGETS_DESIGNS,
-    ),
-    Screen(
-        id="week.not_placed_chips",
-        area="week",
-        prepare=_not_placed_chips,
-        checks=(
-            "A Not placed yet chip given larger words after it was sized keeps all of them inside: the "
-            "title gives way with an ellipsis and the length '1 h 30 min' stays whole. A rail chip at the "
-            "rail's width wraps its title inside the rail and nothing is drawn past the rail's edge."
-        ),
-        sources=(
-            "desktop/native/hours/chips.py",
-            "desktop/native/hours/rail.py",
-            "desktop/native/widgets.py",
-        ),
         styles=WIDGETS_DESIGNS,
     ),
     Screen(

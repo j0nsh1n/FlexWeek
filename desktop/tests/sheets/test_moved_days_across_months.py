@@ -15,10 +15,9 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QDialog, QLabel  # noqa: E402
+from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
 
 from desktop.native.widgets import BlockDialog  # noqa: E402
-from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402,F401
 from desktop.tests.material_support import pump  # noqa: E402
 from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: E402,F401
@@ -28,8 +27,6 @@ from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: E402
     shell,
 )
 from desktop.tests.sheets.test_fixed_time_discard_on_escape import (  # noqa: E402
-    Script,
-    only_look,
     press_escape,
 )
 from desktop.tests.sheets.test_material_escape_keeps_the_typing import (  # noqa: E402,F401
@@ -74,60 +71,8 @@ def _tick_widgets(days: list[int]):
     return pick
 
 
-@pytest.mark.parametrize(
-    "days, note, pills",
-    [
-        ([0, 2], CROSSING, {5: "Monday 7 December, moved from Monday 30 November"}),
-        (
-            [0, 1],
-            TWO_PAIRS,
-            {
-                5: "Monday 7 December, moved from Monday 30 November",
-                6: "Tuesday 8, moved from Tuesday 1",
-            },
-        ),
-    ],
-)
-def test_widgets_block_names_the_month_where_a_move_crosses_it(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, days, note, pills
-) -> None:
-    seen: dict = {}
-
-    def inspect(dialog: QDialog) -> int:
-        seen["note"] = dialog.findChild(QLabel, "blockMovedNote").text()
-        seen["pills"] = {day: dialog.day_picker.buttons[day].accessibleName() for day in pills}
-        return only_look(dialog)
-
-    Script("block", monkeypatch, _tick_widgets(days), inspect)
-    _go(qapp, window.session, "2026-11-30")
-    window._add_fixed()
-    pump(qapp)
-    _wednesday(qapp, window.session)
-    window._add_fixed()
-    pump(qapp)
-    assert seen["note"] == note
-    assert seen["pills"] == pills
 
 
-def test_widgets_homework_pin_names_the_month_where_the_move_crosses_it(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    seen: dict = {}
-
-    def inspect(dialog: QDialog) -> int:
-        seen["note"] = dialog.findChild(QLabel, "homeworkMovedNote").text()
-        seen["pill"] = dialog.when_day.buttons[5].accessibleName()
-        return only_look(dialog)
-
-    Script("homework", monkeypatch, _tick_widgets([0]), inspect)
-    _go(qapp, window.session, "2026-11-30")
-    window._add_homework()
-    pump(qapp)
-    _wednesday(qapp, window.session)
-    window._add_homework()
-    pump(qapp)
-    assert seen["note"] == CROSSING
-    assert seen["pill"] == "Monday 7 December, moved from Monday 30 November"
 
 
 @pytest.mark.parametrize(

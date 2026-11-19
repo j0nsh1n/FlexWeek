@@ -14,8 +14,6 @@ from desktop.tests.material_support import show_material
 from desktop.tests.sheets.support_material_sheets import click, find
 from desktop.tests.window_support import qapp  # noqa: F401
 
-pytestmark = pytest.mark.real_surface
-
 LEFT = [
     {"id": "late", "title": "Essay", "left_over_state": "overdue"},
     {"id": "carry", "title": "Math", "left_over_state": "carried"},

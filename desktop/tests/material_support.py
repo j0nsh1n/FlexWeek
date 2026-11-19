@@ -33,24 +33,6 @@ def show_material(qapp: QApplication, window: NativeWindow) -> QObject:
     return root
 
 
-def widgets_start_rule(raw: object) -> str:
-    """The look file's surface rule before the Material-only work: a missing or unknown value is the
-    Widgets styles. Only the tests of Widgets screens, removed in steps 8 and 9, run on it."""
-    if isinstance(raw, dict):
-        raw = raw.get("surface", "widgets")
-    return raw if raw in ("widgets", "material") else "widgets"  # type: ignore[return-value]
-
-
-def show_widgets(window: NativeWindow) -> None:
-    """Put the Widgets week on screen, for the tests of Widgets screens that the Material-only work removes
-    in steps 8 and 9. A student has no way to do this: it exists only for those tests."""
-    window._surface = "widgets"
-    window._material_gave_up = False
-    window._save_look()
-    window._week_keys(True)
-    window._on_week()
-
-
 def faded_in(qapp: QApplication, root: QObject) -> None:
     """Wait for the screen's 300 ms fade-in to end. It runs whenever Material is built or changes
     screen; a test that reads geometry or pixels during it reads them half-faded."""

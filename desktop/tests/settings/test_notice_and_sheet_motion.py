@@ -1,5 +1,5 @@
-"""Notices rise into place, dialogs and sheets fade in through their content, the plan bar slides down
-over the planner, and a marker glides: each ends where it belongs and leaves no effect behind."""
+"""Notices rise into place and dialogs and sheets fade in through their content: each ends where it
+belongs and leaves no effect behind."""
 
 from __future__ import annotations
 
@@ -16,11 +16,10 @@ pytestmark = pytest.mark.skipif(
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if importlib.util.find_spec("PySide6") is not None:
-    from PySide6.QtCore import QPoint, QRect
+    from PySide6.QtCore import QPoint
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import (
         QApplication,
-        QFrame,
         QGraphicsDropShadowEffect,
         QLabel,
         QLineEdit,
@@ -34,10 +33,8 @@ if importlib.util.find_spec("PySide6") is not None:
         appear,
         apply_ui_effects,
         duration,
-        glide,
-        slide_down,
     )
-    from desktop.native.widgets import TOAST_FOOT, Dialog, PlanReview, Toast
+    from desktop.native.widgets import Dialog
     from desktop.tests.motion_support import ManualTime, manual_time  # noqa: F401
     from desktop.tests.settings.support_motion import move_on
     from desktop.tests.window_support import qapp  # noqa: F401
@@ -93,49 +90,8 @@ def test_an_animation_cut_short_by_another_leaves_the_widget_where_it_belongs(
     host.close()
 
 
-def test_a_notice_that_arrives_while_the_last_one_rises_lands_where_it_belongs(
-    qapp: QApplication, manual_time: ManualTime  # noqa: F811
-) -> None:
-    """The hours a notice floats over can move while one rises, as large text grows the bar. A rise
-    still running from the last notice carried the new one back to where the last was meant to go."""
-    host = QWidget()
-    host.resize(600, 400)
-    hours = QWidget(host)
-    hours.setGeometry(0, 60, 600, 300)
-    toast = Toast(host, hours)
-    toast.motion = "extra"
-    host.show()
-    qapp.processEvents()
-    toast.show_message("Moved History essay to Fri 18:00.")
-    manual_time.advance(30)
-    hours.setGeometry(0, 72, 600, 280)
-    toast.show_message("Running late: 16:30-17:00 is now locked.")
-    manual_time.advance(duration(EASE_MS, "extra"))
-    # The card, inside the room the toast keeps round it for its shadow.
-    assert toast.y() + toast.card.geometry().bottom() + 1 == 72 + 280 - TOAST_FOOT
-    host.close()
 
 
-def test_a_glide_ends_on_its_target(qapp: QApplication, manual_time: ManualTime) -> None:  # noqa: F811
-    host = QWidget()
-    host.resize(200, 300)
-    marker = QFrame(host)
-    marker.setGeometry(QRect(10, 10, 3, 20))
-    host.show()
-    qapp.processEvents()
-    glide(marker, QRect(10, 120, 3, 24), "normal")
-    manual_time.advance(40)
-    # 40 of the 280 ms shared glide (the 220 ms planning ease plus 60) on the out-cubic curve:
-    # 1 - (6/7)^3 of the way. Qt rounds each edge half away from zero: y 50.73 -> 51, height 21.48 -> 21.
-    assert marker.geometry() == QRect(10, 51, 3, 21), "it moves there rather than jumping"
-    glide(marker, QRect(10, 200, 3, 24), "normal")
-    manual_time.advance(duration(EASE_MS + 60, "normal"))
-    assert marker.geometry() == QRect(10, 200, 3, 24)
-    glide(marker, QRect(10, 40, 3, 24), "off")
-    assert marker.geometry() == QRect(10, 40, 3, 24), "with animations off it is simply there"
-    glide(marker, QRect(10, 90, 3, 24), "reduce")
-    assert marker.geometry() == QRect(10, 90, 3, 24), "under Reduce it does not travel either"
-    host.close()
 
 
 def test_a_dialog_fades_and_rises_through_its_content_once(
@@ -257,69 +213,3 @@ def test_a_sheet_does_not_repaint_the_page_under_it_every_frame(
     assert all(child.updatesEnabled() for child in children)
     sheet.close()
     window.close()
-
-
-def opening_review(qapp: QApplication, level: str) -> tuple[QWidget, PlanReview, QWidget]:  # noqa: F811
-    from desktop.tests.test_plan_review import TITLES, TRACE, WEEK
-
-    host = QWidget()
-    column = QVBoxLayout(host)
-    review = PlanReview(host)
-    below = QLabel("The page below", host)
-    column.addWidget(review)
-    column.addWidget(below)
-    column.addStretch(1)
-    host.resize(500, 400)
-    host.show()
-    qapp.processEvents()
-    review.set_trace(TRACE, TITLES, WEEK, (2, 1))
-    slide_down(review, level)
-    return host, review, below
-
-
-def test_the_plan_review_slides_down_over_the_planner_without_pushing_it(
-    qapp: QApplication, manual_time: ManualTime  # noqa: F811
-) -> None:
-    """The bar grew in the column, so Got it was a grey strip for a frame and the week jumped."""
-    host = QWidget()
-    host.resize(500, 400)
-    planner = QLabel("Week hours", host)
-    planner.setGeometry(0, 120, 500, 280)
-    review = PlanReview(host)
-    review.set_trace(
-        {"unplaced": [], "moves": [], "explanations": []},
-        {},
-        "2026-01-05",
-        (2, 0),
-    )
-    review.setGeometry(0, 40, 500, review.sizeHint().height())
-    host.show()
-    qapp.processEvents()
-    before = planner.y()
-    slide_down(review, "normal")
-    qapp.processEvents()
-    assert planner.y() == before, "the planner stays put while the bar moves over it"
-    assert review.height() == review.sizeHint().height(), "the bar is drawn at full height from the start"
-    move_on(manual_time, duration(EASE_MS, "normal") + 100)
-    assert planner.y() == before
-    host.close()
-
-
-def test_the_plan_review_opened_again_before_it_finished_still_ends_free(qapp: QApplication) -> None:  # noqa: F811
-    host, review, _below = opening_review(qapp, "normal")
-    review._motion_running[0].setCurrentTime(40)
-    slide_down(review, "normal")
-    review._motion_running[0].setCurrentTime(duration(EASE_MS, "normal"))
-    assert review.maximumHeight() == 16777215
-    host.close()
-
-
-@pytest.mark.parametrize("level", ["reduce", "off"])
-def test_where_nothing_travels_the_plan_review_is_full_height_at_once(
-    qapp: QApplication, level: str  # noqa: F811
-) -> None:
-    host, review, _below = opening_review(qapp, level)
-    assert review.maximumHeight() == 16777215
-    qapp.processEvents()
-    assert review.height() == review.sizeHint().height()
-    host.close()

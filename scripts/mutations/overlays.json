@@ -12,26 +12,5 @@
     "old": "            \"action\": mix_oklab(palette[\"accent\"], palette[\"window\"], 0.45),\n",
     "new": "            \"action\": palette[\"accent\"],\n",
     "test": "desktop/tests/settings/test_toast_and_menus.py::test_undo_is_the_accents_light_shade_on_a_light_look_and_the_accent_on_a_dark_one"
-  },
-  {
-    "file": "desktop/native/window.py",
-    "name": "the deletes are not set apart by a line",
-    "old": "        menu.addSeparator()\n        menu.add(\"Delete\", \"trash\"",
-    "new": "        menu.add(\"Delete\", \"trash\"",
-    "test": "desktop/tests/week/test_block_and_free_time_menus.py::test_a_right_click_offers_four_things_and_finished_only_for_homework"
-  },
-  {
-    "file": "desktop/native/window.py",
-    "name": "Log out sits with Help and About",
-    "old": "                more_menu.addSeparator()\n                add_heading(more_menu, ACCOUNT_HEADING)\n",
-    "new": "                add_heading(more_menu, ACCOUNT_HEADING)\n",
-    "test": "desktop/tests/settings/test_more_menu.py::test_every_row_under_more_has_an_icon_and_log_out_stands_apart"
-  },
-  {
-    "file": "desktop/native/menus.py",
-    "name": "a menu keeps no shadow in a look with depth",
-    "old": "        if colours.lifted:\n",
-    "new": "        if False:\n",
-    "test": "desktop/tests/settings/test_toast_and_menus.py::test_a_menu_casts_the_large_shadow_only_in_a_look_with_depth"
   }
 ]

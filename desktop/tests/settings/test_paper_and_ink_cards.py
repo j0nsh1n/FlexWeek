@@ -8,12 +8,8 @@ from __future__ import annotations
 import re
 
 import pytest
-from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QApplication
 
-from desktop.native.fonts import TABULAR
 from desktop.native.look import pack_stylesheet, resolved_palette
-from desktop.native.settings import FocusPanel
 from desktop.tests.window_support import qapp  # noqa: F401
 
 # Worked out from the requirement (mock-up round 3): only the lightness of Paper's strong hairline moves.
@@ -70,9 +66,3 @@ def test_the_focus_timer_line_is_in_the_serif_looks_face_not_mono() -> None:
     assert "Mono" in focus_time(sheet({"preset": "light"}))
 
 
-def test_the_settings_focus_timer_keeps_one_width_for_every_figure(qapp: QApplication) -> None:  # noqa: F811
-    panel = FocusPanel()
-    panel.setStyleSheet(sheet({"preset": "paper"}))
-    panel.time.ensurePolished()
-    assert panel.time.font().featureValue(QFont.Tag(TABULAR)) == 1
-    assert panel.time.font().family() == "Newsreader"

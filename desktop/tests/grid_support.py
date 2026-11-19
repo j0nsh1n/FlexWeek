@@ -1,4 +1,4 @@
-"""A signed-in classic Week with the clock held, and what the grid's pointer and keyboard tests share."""
+"""A signed-in window with the clock held on a Wednesday, and what the tests that need that share."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
@@ -11,14 +11,11 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QAbstractButton, QApplication
+from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import CLOCK
-from desktop.native import window as window_module
-from desktop.native.hours.canvas import HoursCanvas
-from desktop.native.menus import Menu
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import LightWindows
 from desktop.tests.light_app import window as signed_in  # noqa: F401
@@ -45,7 +42,6 @@ PIANO = {
 
 def hold_clock(window: NativeWindow, day: int, minute: int) -> None:
     CLOCK.set(datetime.fromisoformat(window.session.week_start) + timedelta(days=day, minutes=minute))
-    window._fill_classic()
     QApplication.processEvents()
 
 
@@ -53,23 +49,21 @@ def hold_clock(window: NativeWindow, day: int, minute: int) -> None:
 def window(
     qapp: QApplication, tmp_path_factory: pytest.TempPathFactory, tmp_path: Path
 ) -> Iterator[NativeWindow]:
-    """The classic Week on Wednesday 14:07 of the open week, with one early block on Monday: a week
-    with nothing in it shows a button in place of the hours. Opened here, so a test file needs only
-    this fixture and qapp."""
+    """A signed-in window on Wednesday 14:07 of the open week, with one early block on Monday. Opened
+    here, so a test file needs only this fixture and qapp."""
     windows = LightWindows(qapp, tmp_path_factory.getbasetemp(), tmp_path)
     try:
-        yield from _classic_week(qapp, windows.open())
+        yield from _week_with_an_early_block(qapp, windows.open())
     finally:
         windows.close()
 
 
-def _classic_week(qapp: QApplication, signed_in: NativeWindow) -> Iterator[NativeWindow]:
+def _week_with_an_early_block(qapp: QApplication, signed_in: NativeWindow) -> Iterator[NativeWindow]:
     signed_in.resize(1280, 860)
-    signed_in._layout = {"main": "classic", "day": "one", "options": {}}
     signed_in.session.add_block({**PIANO, "id": "early", "title": "Early", "start": "06:00", "days": [0]})
     signed_in.session.save()
     settled(qapp, signed_in)
-    signed_in.findChild(QAbstractButton, "viewWeek").click()
+    signed_in.session.set_view("week")
     settled(qapp, signed_in)
     signed_in.show()
     assert QTest.qWaitForWindowExposed(signed_in)
@@ -79,61 +73,9 @@ def _classic_week(qapp: QApplication, signed_in: NativeWindow) -> Iterator[Nativ
     yield signed_in
 
 
-@pytest.fixture()
-def menus(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
-    """Every menu shown, with its name and words and where it was asked for. None is chosen."""
-    seen: list[dict] = []
-
-    class Shown(Menu):
-        def exec(self, at: QPoint | None = None, *_rest: object) -> object:
-            seen.append({"name": self.objectName(), "rows": [a.text() for a in self.actions()], "at": at})
-            return None
-
-    monkeypatch.setattr(window_module, "Menu", Shown)
-    return seen
-
-
-def grid(window: NativeWindow) -> HoursCanvas:
-    return window.week_table.hours
-
-
 def key(window: NativeWindow, which: Qt.Key, mods: Qt.KeyboardModifier = NONE) -> None:
     """A key from the system, to whatever the window has focused."""
     QTest.keyClick(window.windowHandle(), which, mods)
     QApplication.processEvents()
 
 
-def tab_to_grid(window: NativeWindow) -> None:
-    """Tab from the top of the page until the week is reached."""
-    window.prev_nav.setFocus(Qt.FocusReason.TabFocusReason)
-    for _ in range(40):
-        key(window, Qt.Key.Key_Tab)
-        focus = window.focusWidget()
-        if focus is not None and (focus is window.week_table or window.week_table.isAncestorOf(focus)):
-            if window.week_table.scroll.header.isAncestorOf(focus):
-                continue  # the zoom buttons come first, in the corner
-            assert focus is grid(window), f"Tab reached {type(focus).__name__} before the grid"
-            return
-    raise AssertionError("Tab never reached the week")
-
-
-def in_window(window: NativeWindow, day: int, minute: int) -> QPoint:
-    hours = grid(window)
-    hours.reveal(day, minute, minute + 15)
-    QApplication.processEvents()
-    return window.mapFromGlobal(hours.point_for(day, minute))
-
-
-def right_click(window: NativeWindow, at: QPoint, jitter: QPoint | None = None) -> None:
-    """A right press and release through the window's handle, as the system sends them."""
-    handle = window.windowHandle()
-    QTest.mousePress(handle, Qt.MouseButton.RightButton, NONE, at)
-    QTest.mouseRelease(handle, Qt.MouseButton.RightButton, NONE, at + (jitter or QPoint(0, 0)))
-    QApplication.processEvents()
-
-
-def add_piano(qapp: QApplication, window: NativeWindow) -> None:
-    window.session.add_block(dict(PIANO))
-    window.session.save()
-    settled(qapp, window)
-    hold_clock(window, WEDNESDAY, 14 * 60 + 7)

@@ -4,11 +4,8 @@ pill and its line). The renderer gathers this module's SCREENS."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QWidget
 
-from desktop.native.hours.classic import WEEK_SCALE
 from desktop.native.weekmodel import build_week
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
@@ -87,15 +84,6 @@ def _held_words_on_a_column(_window: NativeWindow) -> QWidget:
     return view
 
 
-def _zoom_pill_at_a_limit(_window: NativeWindow) -> QWidget:
-    app = _app()
-    view = a_week(app)
-    for _ in range(8):
-        QTest.mouseClick(view.scroll.buttons.into, Qt.MouseButton.LeftButton)
-    assert view.scroll.px == WEEK_SCALE.levels[-1]
-    settle(app)
-    _KEPT.append(view)
-    return view
 
 
 def _day_heading_today(_window: NativeWindow) -> QWidget:
@@ -185,17 +173,6 @@ SCREENS: list[Screen] = [
         checks=(
             "School is held by its end with its start scrolled away above; the pill with its times is "
             "inside what shows, not beside the start off the top."
-        ),
-        sources=HOURS,
-    ),
-    Screen(
-        id="week.zoom-pill-at-a-limit",
-        area="week",
-        prepare=_zoom_pill_at_a_limit,
-        checks=(
-            "At the largest zoom the + button is greyed but still visible, and one caption line "
-            "('Largest zoom reached') sits under the pill and above the hours, never covering them. "
-            "The pill is 24 px tall; each button is drawn smaller than its 24 px square press area."
         ),
         sources=HOURS,
     ),

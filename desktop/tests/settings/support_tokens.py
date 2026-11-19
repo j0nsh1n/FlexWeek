@@ -10,7 +10,6 @@ from __future__ import annotations
 from itertools import product
 
 from desktop.native.look import ACCENTS, LOOK_KNOBS, resolved_palette
-from desktop.native.tokens import linear_rgb, oklab_from_linear
 
 
 def preset(name: str) -> dict:
@@ -32,11 +31,6 @@ LOOKS = {
     "Pastel": ("system", True, preset("pastel")),
 }
 CASES = [(name, surface, accent) for name, surface, accent in product(LOOKS, LOOK_KNOBS["surface"], ACCENTS)]
-DEUTERANOPIA = (
-    (0.367322, 0.860646, -0.227968),
-    (0.280085, 0.672501, 0.047413),
-    (-0.011820, 0.042940, 0.968881),
-)
 
 
 def look_for(name: str, surface: str = "layered") -> dict:
@@ -49,11 +43,7 @@ def palette_for(name: str, surface: str = "layered", accent: str = "default") ->
     return resolved_palette(pack, dark, look_for(name, surface), accent)
 
 
-def floor_for(palette: dict) -> float:
-    return 7.0 if palette["family"] == "contrast" else 4.5
 
 
-def deuteranope_sees(colour: str) -> tuple[float, float, float]:
-    red, green, blue = linear_rgb(colour)
-    seen = (min(max(r * red + g * green + b * blue, 0.0), 1.0) for r, g, b in DEUTERANOPIA)
-    return oklab_from_linear(*seen)
+
+

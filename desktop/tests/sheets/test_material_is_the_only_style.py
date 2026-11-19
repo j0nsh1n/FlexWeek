@@ -36,8 +36,6 @@ from desktop.tests.account.support import (
 )
 from desktop.tests.window_support import look_file, qapp  # noqa: F401
 
-pytestmark = pytest.mark.real_surface
-
 MATERIAL = Path(__file__).resolve().parents[2] / "native" / "material"
 # Words and names that only the way to the Widgets styles used.
 WAYS_TO_WIDGETS = (

@@ -17,12 +17,10 @@ from desktop.native.widgets import ChooseTimeDialog, HomeworkDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.week.support_pastnext import (
-    SUNDAY,
     TUESDAY,
     WEDNESDAY,
     classic_week,
     hold_clock,
-    put_block,
 )
 from desktop.tests.window_support import free, qapp, settled  # noqa: F401
 
@@ -84,43 +82,14 @@ def where(window: NativeWindow, block_id: str) -> tuple[list[int], str | None]:
 # Drag and drop -------------------------------------------------------------------------------
 
 
-def test_dragging_a_block_to_earlier_today_is_refused_in_preview_and_drop(qapp, window) -> None:
-    block = homework(qapp, window, "16:00")
-    verdict = window._judge_span(block["id"], WEDNESDAY, WEDNESDAY, 7 * 60, 8 * 60)
-    assert (verdict.ok, verdict.words) == (False, PAST_REFUSAL), "the live preview must refuse"
-    window._move_block(block["id"], WEDNESDAY, WEDNESDAY, 7 * 60, 8 * 60)
-    settled(qapp, window)
-    assert where(window, block["id"]) == ([WEDNESDAY], "16:00"), "the drop must leave it where it was"
 
 
-def test_dropping_homework_that_needs_a_time_on_earlier_today_is_refused(qapp, window) -> None:
-    block = homework(qapp, window)
-    assert block.get("start") is None
-    window._move_block(block["id"], -1, WEDNESDAY, 9 * 60, 10 * 60)
-    settled(qapp, window)
-    assert where(window, block["id"])[1] is None
 
 
-def test_dragging_a_block_to_an_earlier_day_is_refused(qapp, window) -> None:
-    block = homework(qapp, window, "16:00")
-    verdict = window._judge_span(block["id"], WEDNESDAY, TUESDAY, 16 * 60, 17 * 60)
-    # A past day cannot offer a later time today, so its words say the day is over.
-    assert (verdict.ok, verdict.words) == (False, PAST_DAY_REFUSAL)
 
 
-def test_dragging_a_block_to_later_today_is_allowed(qapp, window) -> None:
-    block = homework(qapp, window, "16:00")
-    window._move_block(block["id"], WEDNESDAY, WEDNESDAY, 18 * 60, 19 * 60)
-    settled(qapp, window)
-    assert where(window, block["id"]) == ([WEDNESDAY], "18:00")
 
 
-def test_stretching_the_end_of_a_block_already_under_way_is_allowed(qapp, window) -> None:
-    """A block that started at 14:00 may keep its start while its end moves."""
-    block = homework(qapp, window)
-    put_block(window.session, block["id"], WEDNESDAY, 14 * 60, 15 * 60, pinned=True)
-    verdict = window._judge_span(block["id"], WEDNESDAY, WEDNESDAY, 14 * 60, 16 * 60)
-    assert verdict.ok, verdict.words
 
 
 # Choose a time -------------------------------------------------------------------------------
@@ -143,40 +112,10 @@ def choose(window: NativeWindow, monkeypatch: pytest.MonkeyPatch, day: int, minu
     return seen[0]
 
 
-@pytest.mark.parametrize(
-    ("day", "minute", "expected"),
-    [
-        (TUESDAY, 16 * 60, PAST_DAY_REFUSAL),
-        (WEDNESDAY, 14 * 60, PAST_REFUSAL),
-    ],
-    ids=["Tue16:00", "Wed14:00"],
-)
-def test_choose_a_time_refuses_a_past_time(qapp, window, monkeypatch, day, minute, expected) -> None:
-    homework(qapp, window)
-    assert choose(window, monkeypatch, day, minute) == (False, expected)
 
 
-def test_choose_a_time_accepts_later_today(qapp, window, monkeypatch) -> None:
-    homework(qapp, window)
-    ok, _problem = choose(window, monkeypatch, WEDNESDAY, 14 * 60 + 15)
-    assert ok
 
 
-def test_choose_a_time_never_suggests_a_past_time(qapp, window, monkeypatch) -> None:
-    homework(qapp, window)
-    hold_clock(window, SUNDAY, 23 * 60 + 30)
-    seen: list[tuple[int, int, bool]] = []
-
-    def look(dialog: ChooseTimeDialog) -> int:
-        day, start = dialog.choice()
-        seen.append((day, start, dialog.buttons.button(QDialogButtonBox.StandardButton.Ok).isEnabled()))
-        return QDialog.DialogCode.Rejected
-
-    monkeypatch.setattr(ChooseTimeDialog, "exec", look)
-    window._choose_time("essay")
-    day, start, ok = seen[0]
-    said = f"suggested day {day} {start // 60:02d}:{start % 60:02d}"
-    assert (day, start) >= (SUNDAY, 23 * 60 + 30) or not ok, said
 
 
 # Do it at ------------------------------------------------------------------------------------

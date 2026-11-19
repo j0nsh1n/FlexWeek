@@ -23,8 +23,6 @@ from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_window import NIGHT, material_window, qapp  # noqa: E402, F401
 from desktop.tests.window_support import look_file  # noqa: E402
 
-pytestmark = pytest.mark.real_surface
-
 CLASSIC_PAPER = {"main": "classic", "day": "dial", "options": {"classic": {"look": "preset:paper"}}}
 
 

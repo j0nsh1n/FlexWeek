@@ -10,19 +10,17 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-import pytest
 from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import CLOCK
-from desktop.native.window import NONE_UNFINISHED, NativeWindow
+from desktop.native.material.bridge_sheets import NOTHING_UNFINISHED as NONE_UNFINISHED
+from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.material_support import pump, show_material
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material import _click, _qml
 from desktop.tests.week.support_pastnext import FRIDAY, WEDNESDAY, classic_week
 from desktop.tests.window_support import qapp, settled  # noqa: F401
-
-pytestmark = pytest.mark.real_surface
 
 PLAN_IT = "leftOverPlan"
 FINISHED = "leftOverDone"
@@ -129,17 +127,6 @@ def test_marking_it_finished_empties_more_and_plan_places_nothing(qapp, window) 
     assert [b for b in lab_sessions(window) if b.get("start")] == []
 
 
-def test_left_over_session_turns_overdue_when_the_clock_passes_its_due_time(qapp, window) -> None:
-    _week1, week2 = left_in_week_one(qapp, window)
-    session = window.session
-    item = next(item for item in session.unfinished() if item["id"] == "lab")
-    assert item["left_over_state"] == "left_from_last_week"
-    CLOCK.set(datetime.fromisoformat(week2) + timedelta(days=WEDNESDAY + 1, minutes=1))
-    window._sync_more_menu()
-    session.week_changed.emit()
-    settled(qapp, window)
-    item = next(item for item in session.unfinished() if item["id"] == "lab")
-    assert item["left_over_state"] == "overdue"
 
 
 def test_the_past_week_tag_survives_editing_the_assignment(qapp, window) -> None:

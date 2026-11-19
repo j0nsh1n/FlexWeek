@@ -12,9 +12,8 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QStandardPaths, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QPushButton
+from PySide6.QtWidgets import QApplication, QDialog
 
-from desktop.native.settings import AccountDialog
 from desktop.native.widgets import ConfirmSheet, confirm, confirm_sheet
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
@@ -105,71 +104,7 @@ def test_stacking_keeps_the_default_answer_and_the_tab_order(
     free(sheet)
 
 
-def test_the_app_says_sign_out_and_never_log_out(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
-    """The top bar's button, and the Manage account note about the codes."""
-    from PySide6.QtWidgets import QLabel
-
-    assert window.findChild(QPushButton, "signOut").text() == "Sign out"
-    account = AccountDialog(window, 0, {"username": "student"})
-    assert account.findChild(QLabel, "recoveryCount").text() == (
-        "No unused recovery codes remain. Replace them before signing out."
-    )
-    free(account)
 
 
-def test_replace_timer_asks_in_a_sheet_not_a_message_box(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch  # noqa: F811
-) -> None:
-    calls: list[object] = []
-
-    def message_box(*_args: object) -> QMessageBox.StandardButton:
-        calls.append("message box")
-        return QMessageBox.StandardButton.No
-
-    monkeypatch.setattr(QMessageBox, "question", message_box)
-    seen: list[tuple[str, str, dict[str, str], str | None]] = []
-
-    def show(sheet: ConfirmSheet) -> int:
-        title = sheet.findChild(type(sheet.question), "sheetTitle")
-        assert title is not None, "the confirmation sheet has a title"
-        seen.append(
-            (
-                title.text(),
-                sheet.question.text(),
-                {key: button.text() for key, button in sheet.buttons.items()},
-                next((key for key, button in sheet.buttons.items() if button.isDefault()), None),
-            )
-        )
-        return QDialog.DialogCode.Rejected
-
-    monkeypatch.setattr(ConfirmSheet, "exec", show)
-    window._confirm_replace_focus("History essay", "Chem lab report")
-    assert not calls, "Replace timer does not open a system message box"
-    assert seen == [
-        (
-            "Replace timer",
-            "Stop the timer for History essay and start Chem lab report instead?",
-            {"keep": "Keep current timer", "replace": "Replace timer"},
-            "keep",
-        )
-    ], "Replace timer uses a sheet with the safe answer as default"
 
 
-@pytest.mark.parametrize(("answer", "replaced"), [("replace", True), ("keep", False), (None, False)])
-def test_replace_timer_replaces_only_when_the_student_says_so(
-    qapp: QApplication,  # noqa: F811
-    window: NativeWindow,  # noqa: F811
-    monkeypatch: pytest.MonkeyPatch,
-    answer: str | None,
-    replaced: bool,
-) -> None:
-    asked: list[bool] = []
-    monkeypatch.setattr(window.session, "confirm_replace_focus", lambda: asked.append(True) or False)
-
-    def show(sheet: ConfirmSheet) -> int:
-        sheet.answer = answer
-        return QDialog.DialogCode.Accepted
-
-    monkeypatch.setattr(ConfirmSheet, "exec", show)
-    window._confirm_replace_focus("History essay", "Chem lab report")
-    assert bool(asked) is replaced, f"answer {answer!r} replaces the timer: {replaced}"

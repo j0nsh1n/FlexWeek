@@ -21,8 +21,6 @@ from desktop.tests.week.support_material import (
 )
 from desktop.tests.window_support import qapp, settled  # noqa: F401
 
-pytestmark = pytest.mark.real_surface
-
 
 def _with_copied_piano(qapp, window):
     root = _reset(window, qapp)
