@@ -1,13 +1,13 @@
 [
  {
-  "file": "desktop/native/hours/month.py",
+  "file": "desktop/native/hours/month_cells.py",
   "name": "the open week read from the reply, not what the student has now",
   "old": "        if iso in open_days:\n",
   "new": "        if False:\n",
   "test": "desktop/tests/month/test_month_chips.py::test_a_date_lists_what_is_due_then_its_blocks_at_their_times"
  },
  {
-  "file": "desktop/native/hours/month.py",
+  "file": "desktop/native/hours/month_cells.py",
   "name": "a deadline carried like a block",
   "old": "        return self.block_id is not None and self.start is not None and not self.due\n",
   "new": "        return True\n",
@@ -112,14 +112,14 @@
   "test": "desktop/tests/month/test_month_opens_at_its_first_row.py::test_month_opens_at_its_first_row_when_the_grid_scrolls"
  },
  {
-  "file": "desktop/native/hours/month.py",
+  "file": "desktop/native/hours/month_cells.py",
   "name": "a deadline gone by said Due, not Overdue",
   "old": "            return \"Overdue\"\n",
   "new": "            return f\"Due {hhmm_text(self.due_time)}\" if self.due_time else \"Due\"\n",
   "test": "desktop/tests/month/test_month_chips.py::test_a_deadline_says_overdue_in_words_once_its_date_has_gone"
  },
  {
-  "file": "desktop/native/hours/month.py",
+  "file": "desktop/native/hours/month_cells.py",
   "name": "a deadline gone by not flagged",
   "old": "                    late=iso < today_iso and not item.get(\"completed\"),\n",
   "new": "                    late=False,\n",

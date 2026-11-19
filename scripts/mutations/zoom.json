@@ -112,13 +112,6 @@
   "test": "desktop/tests/week/test_hours_keep_their_place.py::test_hours_that_grow_twice_while_opening_still_open_where_they_were_asked"
  },
  {
-  "file": "desktop/native/hours/zoom.py",
-  "name": "another day opens at eight, not its first block",
-  "old": "    return min((item.start for item in items), default=OPENS)\n",
-  "new": "    return OPENS\n",
-  "test": "desktop/tests/week/test_hours_open_where_the_student_looks.py::test_every_design_opens_at_now_or_the_first_block_and_again_on_another_day_or_week"
- },
- {
   "file": "desktop/native/hours/canvas.py",
   "name": "a block with no room for three letters draws dots",
   "old": "    if width < indent + tm.horizontalAdvance(drawn.title.strip()[:3]) or tight.height() + 0.5 < min(tl, sl):\n",

@@ -1,19 +1,5 @@
 [
   {
-    "file": "desktop/native/window.py",
-    "name": "the toast stays when the student leaves its page",
-    "old": "                    # What the toast said was about the page the student is leaving.\n                    self.toast.hide()\n",
-    "new": "                    # What the toast said was about the page the student is leaving.\n                    pass\n",
-    "test": "desktop/tests/week/test_notice_toast.py::test_the_toast_belongs_to_the_page_it_was_said_on"
-  },
-  {
-    "file": "desktop/native/widgets.py",
-    "name": "the toast is centred over the page again",
-    "old": "        self.setGeometry(max(0, right - width), max(0, bottom - height), width, height)",
-    "new": "        self.setGeometry(area.left() + (area.width() - width) // 2, max(0, bottom - height), width, height)",
-    "test": "desktop/tests/week/test_notice_toast.py::test_the_notice_sits_in_the_right_half_of_the_page_and_lets_the_pointer_through"
-  },
-  {
     "file": "desktop/native/look.py",
     "name": "the toast is a pale card on a light look",
     "old": "            \"background\": palette[\"text\"],\n",

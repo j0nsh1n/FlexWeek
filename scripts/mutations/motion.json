@@ -1,7 +1,7 @@
 [
   {
     "name": "Reduce lets things travel",
-    "file": "desktop/native/motion.py",
+    "file": "desktop/native/motion_level.py",
     "old": "    \"reduce\": Level(1.0, 0.0),",
     "new": "    \"reduce\": Level(1.0, 1.0),",
     "test": "desktop/tests/settings/test_animation_levels.py::test_normal_runs_the_plans_numbers_and_the_other_levels_scale_them"

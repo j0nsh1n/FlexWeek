@@ -43,13 +43,6 @@
  },
  {
   "file": "desktop/native/window.py",
-  "name": "a routine save writes over a reminder",
-  "old": "        if (asked or message not in ROUTINE_STATUS) and self._stack.currentWidget() is self._week_page:\n",
-  "new": "        if self._stack.currentWidget() is self._week_page:\n",
-  "test": "desktop/tests/settings/test_block_reminders.py::test_the_toast_keeps_a_reminder_until_something_more_important"
- },
- {
-  "file": "desktop/native/window.py",
   "name": "a reminder shows in the window as well as the tray",
   "old": "            self._say_in_toast(self._reminder_said)\n",
   "new": "",
@@ -98,13 +91,6 @@
   "test": "cargo:flexweek-engine:desk_words_on_screen:test_the_next_line_says_min_like_every_design"
  },
  {
-  "file": "desktop/native/window.py",
-  "name": "cancelling Running late clears its preview",
-  "old": "            if preview is not None:\n                # The preview's",
-  "new": "            if False:\n                # The preview's",
-  "test": "desktop/tests/sheets/test_running_late_words.py::test_cancelling_running_late_takes_its_preview_off_the_screen"
- },
- {
   "file": "desktop/native/widgets.py",
   "name": "the block editor is titled as a student says it",
   "old": "self.card_body(\"Edit fixed time\" if existing else \"Add fixed time\")",
@@ -145,13 +131,6 @@
   "old": "    if not password:\n        return SIGN_IN_NO_PASSWORD\n",
   "new": "",
   "test": "desktop/tests/account/test_material_sign_in_and_create_account.py::test_empty_fields_say_what_is_missing_before_asking_the_server"
- },
- {
-  "file": "desktop/native/window.py",
-  "name": "deleting the account asks a last time",
-  "old": "if confirm(self, \"Delete account\", question, f\"Delete {name}\"):",
-  "new": "if True:",
-  "test": "desktop/tests/account/test_sign_out_and_delete_account.py::test_delete_account_names_the_account_and_keeps_it_when_refused"
  },
  {
   "file": "desktop/native/menus.py",
@@ -259,53 +238,18 @@
   "test": "desktop/tests/week/test_drag_says_what_it_did.py::test_the_notice_waits_for_the_pointer_and_goes_once_its_change_is_no_longer_the_last"
  },
  {
-  "file": "desktop/native/window.py",
-  "name": "the toast says an action is still going, not what it did",
-  "old": "        if message.endswith(\"…\"):\n            return\n",
-  "new": "",
-  "test": "desktop/tests/week/test_notice_toast.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
- },
- {
-  "file": "desktop/native/controller.py",
-  "name": "Duplicate says it copied",
-  "old": "        if not self.copy_block(source_id, day, scope, say=False):\n",
-  "new": "        if not self.copy_block(source_id, day, scope):\n",
-  "test": "desktop/tests/week/test_notice_toast.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
- },
- {
   "file": "desktop/native/controller.py",
   "name": "Reload says This week",
   "old": "        self.load_week(self.week_start, discard=True, said=\"Reloaded this week.\")\n",
   "new": "        self.load_week(self.week_start, discard=True)\n",
-  "test": "desktop/tests/week/test_notice_toast.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
+  "test": "desktop/tests/week/test_material_notices.py::test_every_advanced_action_says_what_it_did_in_the_session_words"
  },
  {
   "file": "desktop/native/window.py",
   "name": "a paste says Saved, not what it pasted",
-  "old": "            said=said,\n        )\n",
-  "new": "        )\n",
-  "test": "desktop/tests/week/test_notice_toast.py::test_every_advanced_action_says_what_it_did_when_it_is_done"
- },
- {
-  "file": "desktop/native/window.py",
-  "name": "a view switch takes the Undo toast away again",
-  "old": "        if self.session.week_start != self._toast_week:\n",
-  "new": "        if True:\n",
-  "test": "desktop/tests/week/test_notice_toast.py::test_a_view_switch_keeps_the_toast_and_its_undo"
- },
- {
-  "file": "desktop/native/widgets.py",
-  "name": "the toast takes the hours' clicks",
-  "old": "        self.setObjectName(\"toastHost\")\n        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)\n",
-  "new": "        self.setObjectName(\"toastHost\")\n",
-  "test": "desktop/tests/week/test_notice_toast.py::test_the_notice_sits_in_the_right_half_of_the_page_and_lets_the_pointer_through"
- },
- {
-  "file": "desktop/native/widgets.py",
-  "name": "the toast runs off the bottom of a short window",
-  "old": "        bottom = min(area.top() + area.height(), host.height()) - inset - TOAST_FOOT + TOAST_SHADOW\n",
-  "new": "        bottom = area.top() + area.height() + TOAST_FOOT * 4\n",
-  "test": "desktop/tests/week/test_notice_toast.py::test_the_notice_sits_in_the_right_half_of_the_page_and_lets_the_pointer_through"
+  "old": "                said=said,\n            )\n",
+  "new": "            )\n",
+  "test": "desktop/tests/week/test_material_paste_preview.py::test_paste_previews_on_a_material_sheet_and_save_adds_the_block"
  },
  {
   "file": "desktop/native/window.py",

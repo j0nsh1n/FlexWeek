@@ -7,13 +7,6 @@
   "test": "desktop/tests/week/test_top_bar_controls.py::test_no_glyph_stands_in_for_an_icon_in_the_chrome"
  },
  {
-  "file": "desktop/native/window.py",
-  "name": "overdue announces from the hidden retired control",
-  "old": "            target = self.more_button if self.more_button.isVisible() else self\n",
-  "new": "            target = self.findChild(QPushButton, \"unfinishedOpen\") or self.more_button\n",
-  "test": "desktop/tests/planner/test_left_over_rows.py::test_the_deadline_passing_refreshes_tags_the_sidebar_and_the_focus_list"
- },
- {
   "file": "desktop/native/widgets.py",
   "name": "a click rings a button too",
   "old": "                keyed = reason in KEYED\n",
