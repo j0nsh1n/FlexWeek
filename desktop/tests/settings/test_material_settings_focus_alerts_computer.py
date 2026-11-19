@@ -4,13 +4,13 @@ and the app reacts."""
 from __future__ import annotations
 
 import re
-import time
 
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from backend import clock as wall_clock
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.settings.support_material_settings import (
@@ -194,7 +194,7 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
         _pump(qapp, 5)
         return str(row.property("subtitle"))
 
-    status.update(state="waiting", expires_at_ms=int(time.time() * 1000) + 300_500, tries_left=3)
+    status.update(state="waiting", expires_at_ms=wall_clock.now_ms() + 300_500, tries_left=3)
     _click(qapp, window, row)
     wait_until(qapp, lambda: "1234 5678" in subtitle())
     words = subtitle()
@@ -209,7 +209,7 @@ def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_trie
         ("idle", "That code is no longer open. Start a new one."),
     ):
         status.clear()
-        status.update(state="waiting", expires_at_ms=int(time.time() * 1000) + 60_000, tries_left=3)
+        status.update(state="waiting", expires_at_ms=wall_clock.now_ms() + 60_000, tries_left=3)
         _click(qapp, window, row)
         wait_until(qapp, lambda: "1234 5678" in subtitle())
         status.clear()

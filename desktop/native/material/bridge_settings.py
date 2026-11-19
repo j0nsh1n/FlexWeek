@@ -9,12 +9,12 @@ save is not built; the flags below say which those are.
 from __future__ import annotations
 
 import copy
-import time
 from typing import Any
 
 from pydantic import ValidationError
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
+from backend import clock as wall_clock
 from backend.app import Preferences
 from backend.comfort import TIMER_PRESETS, snap_minutes
 from backend.models import TimeBlock, WeekRequest, valid_spotify_url
@@ -2365,7 +2365,7 @@ class SettingsBridge(QObject):
         status = self._window.session.pairing_status()
         state = status.get("state") if isinstance(status, dict) else None
         if state == "waiting":
-            left = (int(status["expires_at_ms"]) - int(time.time() * 1000)) // 1000
+            left = (int(status["expires_at_ms"]) - wall_clock.now_ms()) // 1000
             tries = tries_words(int(status["tries_left"]))
             self._pair_status = f"{countdown_words(left)}. {tries}. {PAIR_ONCE}"
         else:
