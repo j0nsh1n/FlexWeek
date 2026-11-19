@@ -75,7 +75,7 @@ SheetFrame {
                     density: root.density
                     reduceMotion: root.reduceMotion
                     highContrast: root.highContrast
-                    kind: "outlined"
+                    kind: "text"
                     text: "Start focus"
                     accessName: "Start focus on " + modelData.title
                     onClicked: root.sheets.startFocusOn(modelData.id)
