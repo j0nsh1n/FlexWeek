@@ -13,7 +13,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from backend.tests.fake_clock import CLOCK
-from desktop.native.weekmodel import range_label
+from desktop.native.weekmodel import length_label, range_label
 from desktop.tests.planner.support import FRIDAY, WEDNESDAY, left_in_week_one, overdue_this_week
 from desktop.tests.week.support_material import (
     _bridge,
@@ -186,10 +186,24 @@ def test_the_week_list_row_says_overdue_with_the_due_date(qapp, window) -> None:
     due = date.fromisoformat(window.session.assignments["bio"]["due"][:10])
     due_words = f"Overdue, was due {_short(due)}"
     times = range_label(15 * 60 + 15, 16 * 60 + 15)
-    expected = f"Wednesday: Bio reading, {times} · {due_words} · Pinned"
+    expected = f"Wednesday: Bio reading, {times} · 1 h · {due_words} · Pinned"
     assert [row for row in rows if row.startswith("Wednesday: Bio reading, ")] == [expected]
     # Only the late, hand-placed block says so: the other rows carry neither word.
     assert [row for row in rows if "Overdue" in row or "Pinned" in row] == [expected]
+
+
+def test_week_list_rows_say_each_blocks_length_placed_by_plan_and_fixed_time(qapp, window) -> None:
+    """As the Widgets week list did: length after the times, Placed by Plan on homework Plan placed, and
+    Fixed time on a block that is not homework."""
+    _show_material(qapp, window)
+    sheets = _bridge(window).sheets
+    sheets.openWeekList()
+    _pump(qapp, 40)
+    rows = [item["words"] for item in sheets.form["rows"] if item.get("type") == "item"]
+    school = [row for row in rows if row.startswith("Monday: School, ")]
+    assert school and school[0].endswith(f"{length_label(390)} · Fixed time")
+    essay = [row for row in rows if row.startswith("Thursday: History essay, ")]
+    assert essay and essay[0].endswith(f"{range_label(18 * 60 + 45, 19 * 60 + 45)} · 1 h · Placed by Plan")
 
 
 def test_the_deadline_passing_updates_materials_overdue_row(qapp, window) -> None:

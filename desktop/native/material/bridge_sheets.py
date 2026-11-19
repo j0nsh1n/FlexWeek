@@ -27,6 +27,7 @@ from desktop.native.calendar import (
 )
 from desktop.native.fields import announce
 from desktop.native.hours.geometry import drag_step, next_slot
+from desktop.native.hours.words import detail_words, plan_placed
 from desktop.native.material.bridge_alarms import FULL, MAX_ALARMS, NOT_SAVED, AlarmDraft, with_alarm
 from desktop.native.material.bridge_info import SIGN_OUT, about_form, help_form, update_form
 from desktop.native.material.bridge_manage import (
@@ -55,7 +56,7 @@ from desktop.native.sheet_rules import (
     same_weekday,
     turn_days_keeping_weekdays,
 )
-from desktop.native.weekmodel import added_words, hhmm_text, length_label, range_label
+from desktop.native.weekmodel import added_words, hhmm_text, length_label
 
 NOTHING_UNFINISHED = "None left"
 NOTICE_MS = 10000
@@ -1189,17 +1190,18 @@ class SheetsBridge(QObject):
             if not items:
                 rows.append({"type": "none", "text": "Nothing planned"})
             for occurrence in items:
-                detail = range_label(int(occurrence.start), int(occurrence.end))
+                detail = detail_words(
+                    int(occurrence.start),
+                    int(occurrence.end),
+                    done=occurrence.done,
+                    missed=occurrence.missed,
+                    pinned=occurrence.pinned,
+                    history=states.get(occurrence.assignment_id or "", ""),
+                    history_due=str(occurrence.due) if occurrence.due else None,
+                    placed_by_plan=plan_placed(occurrence),
+                )
                 if not occurrence.work:
                     detail += " · Fixed time"
-                state = states.get(occurrence.assignment_id or "")
-                if state == "Overdue" and occurrence.due:
-                    due = date.fromisoformat(str(occurrence.due)[:10])
-                    detail += f" · Overdue, was due {due.strftime('%a')} {due.day} {due.strftime('%b')}"
-                elif state:
-                    detail += f" · {state}"
-                if occurrence.pinned and not occurrence.done:
-                    detail += " · Pinned"
                 rows.append(
                     {
                         "type": "item",

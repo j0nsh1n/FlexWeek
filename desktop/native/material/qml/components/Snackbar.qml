@@ -113,7 +113,6 @@ Item {
                 visible: root.accessActionText === "UNDO" || root.accessActionText.indexOf("Undo") !== -1
                 text: "Ctrl+Z"
                 color: palette.inversePrimary
-                opacity: 0.85
                 font.family: M3Font.family
                 font.pixelSize: M3Font.px(11)
                 font.weight: 500

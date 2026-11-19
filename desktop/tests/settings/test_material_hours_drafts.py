@@ -97,15 +97,18 @@ def test_there_is_room_for_21_protected_times_and_no_more() -> None:
     assert study.error == "Up to 21 protected times."
 
 
-def test_school_hours_start_as_monday_to_friday_eight_to_half_past_two() -> None:
+def test_school_hours_start_as_monday_to_friday_eight_to_three_as_setup_offers() -> None:
+    """Setup's School card says 8:00 to 3:00 PM; a School made in Settings starts the same."""
+    fresh = SchoolHours()
     school = SchoolHours()
     school.load(None)
-    assert (school.days, school.start, school.end, school.minutes()) == (
-        [0, 1, 2, 3, 4],
-        "08:00",
-        "14:30",
-        390,
-    )
+    for hours in (fresh, school):
+        assert (hours.days, hours.start, hours.end, hours.minutes()) == (
+            [0, 1, 2, 3, 4],
+            "08:00",
+            "15:00",
+            420,
+        )
 
 
 def test_school_hours_load_the_usual_school_and_refuse_an_end_before_the_start() -> None:

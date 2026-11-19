@@ -35,9 +35,12 @@ def _saved(window: NativeWindow) -> None:
     wait_until(None, lambda: not session.busy and not session.dirty)
 
 
-def _week_with_school(window: NativeWindow, width: int = 1280, height: int = 860) -> None:
-    """The classic Week with School on weekdays, the clock at Thursday 10:00."""
-    window.resize(width, height)
+def _week_with_school(window: NativeWindow, width: int | None = None) -> None:
+    """The classic Week with School on weekdays, the clock at Thursday 10:00. The window keeps the size
+    the renderer opened it at, so a picture is the size its variant says; only a screen that needs a
+    narrower window asks for a width."""
+    if width is not None:
+        window.resize(width, window.height())
     window._layout = {"main": "classic", "day": "one", "options": {}}
     session = window.session
     session.add_block(dict(SCHOOL))
@@ -49,7 +52,7 @@ def _week_with_school(window: NativeWindow, width: int = 1280, height: int = 860
     QApplication.processEvents()
 
 
-def _notice(text: str, button: str, width: int = 1280) -> object:
+def _notice(text: str, button: str, width: int | None = None) -> object:
     def prepare(window: NativeWindow) -> None:
         _week_with_school(window, width)
         window._set_notice(text, button, (lambda: None) if button else None)
@@ -119,7 +122,7 @@ SCREENS: list[Screen] = [
     Screen(
         id="week.notice-with-undo",
         area="week",
-        prepare=_notice("Moved History essay to Fri 6:00 PM.", "Undo"),
+        prepare=_notice("Moved School to Thu 8:00 AM.", "Undo"),
         checks=(
             "the notice sits at the bottom right of the page, clear of the rail on the left, its card "
             "16 px in from the page's corner and wholly inside the window (also in the short edge "

@@ -21,17 +21,22 @@ All notable changes to FlexWeek are documented here. Format follows
 ### Changed
 - Setup no longer asks for first homework or ends on a summary page; the last step has Open my week. Setup that was left on one of those pages resumes on Look & alerts.
 - The default school hours in setup are Mon-Fri 8:00 AM to 3:00 PM (they were 8:00 AM to 2:30 PM).
+- A new School made in Settings starts at 8:00 AM to 3:00 PM, the same as setup, instead of 8:00 AM to 2:30 PM.
+- The recovery codes page says "Turn on “I have saved these codes” to continue." under the switch.
 - FlexWeek's desktop app has one style, Material 3. Every start opens it, including for anyone who had picked another style; setup starts at Your week.
 - Help, About, Update, the Sign out question, Manage account and Copies of this week open as Material sheets.
 - Deleting one day of School or an activity, and the question about edited weeks, show their choices as cards: the choice you can undo is picked first, each card says what it keeps and whether it can be undone, and Delete or Save confirms the picked one. Up and Down move the pick, Enter confirms and Esc cancels.
 - If FlexWeek cannot draw with the graphics card, it starts again drawing without it and says so once, instead of switching to another style. If that fails too, a page says what happened, with Quit and Try again.
 - The Focus page's single 25/5 switch is replaced by the timer choice; a saved 25/5 timer shows as Custom.
 - In Material, the notice at the bottom of the window says what Copy, Copy day, Undo, Redo, Reload this week, a refused action ("Select a block before copying it."), Plan with nothing to place, a commitment that lands over planned homework ("Find a new time"), a reminder, and School hours saved for every week each say. Its Undo button reads "Undo 8" with a thin line along the bottom that shrinks as the time runs out (no moving line with Animations Off or Reduce, and the number still counts), the notice is read out once to a screen reader, and its clock waits while the window is hidden, minimised or not in front, or while the pointer or keyboard is on it.
-- In Material, Plan's question about overdue or left-over homework is a Material question, Paste and Duplicate show their preview in a Material sheet (untick a row, change its day, start or minutes, then Save preview), and Save on the recovery codes asks first, in a Material question, what the file is.
+- In Material, Plan's question about overdue or left-over homework is a Material question, Paste and Duplicate show their preview in a Material sheet (untick a row, change its day, start or minutes, then choose Paste or Duplicate; the line above says "Nothing changes until you choose Paste."), and Save on the recovery codes asks first, in a Material question, what the file is.
 - In Material, a reminder you asked to keep on screen shows in a strip with a Got it button as well as in the notice, and Plan's button reads Suggest times when you place homework by hand.
 - In Material, the answers that delete something or cannot be taken back (Delete, This week and later, Replace week, Restore, Discard, Sign out) are drawn in the error colour in every question and sheet, in light and dark.
 
 ### Fixed
+- In Material's dark theme, the "Ctrl+Z" hint on the notice's Undo is easier to read.
+- In Material's questions and sheets, the title, the words, the choice cards and the fields all start at the same left edge.
+- Week as a list in Material says each block's length and "Placed by Plan" for homework Plan placed, and "Fixed time" for fixed blocks, as the earlier styles' list did.
 - In Material, a new text size keeps the same time at the top of the Week instead of scrolling back to now.
 - In Material, the keyboard stays on the week after Plan, Undo, redo and dropping a block (on the block you acted on when it is still there), instead of landing on the notice or on nothing. The notice's Undo is still a Tab away.
 - When a deadline passes while FlexWeek is open, Material's overdue row and its words update at once.

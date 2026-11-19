@@ -16,7 +16,6 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
-from datetime import date
 from functools import cached_property
 
 from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, Signal
@@ -51,6 +50,8 @@ from desktop.native.hours.geometry import (
     snap,
 )
 from desktop.native.hours.hand import Create, Gesture, Hand, Held, Verdict, span_words
+from desktop.native.hours.words import length_words, tag_words, tail_words
+from desktop.native.hours.words import plan_placed as plan_placed  # noqa: F401 - others import it from here
 from desktop.native.look import (
     AA_TEXT,
     block_paint,
@@ -65,7 +66,7 @@ from desktop.native.look import (
 )
 from desktop.native.motion import EASE_MS, OUT, Clock, between, duration, moves
 from desktop.native.tokens import RADIUS_CONTROL, TYPE_PT, WEIGHT_REGULAR, WEIGHT_STRONG, fit_lightness
-from desktop.native.weekmodel import Occurrence, clock_label, length_label, range_label, short_clock
+from desktop.native.weekmodel import Occurrence, clock_label, range_label, short_clock
 
 # A press this close to a block's start or end edge resizes it, on a block long enough to have edges.
 EDGE_PX = 7
@@ -146,27 +147,21 @@ class Drawn:
     @property
     def length(self) -> str:
         """Its length, then what became of it: "1 h", "1 h · Missed"."""
-        words = length_label(self.span.minutes)
-        for flag, word in ((self.done, "Finished"), (self.missed, "Missed")):
-            if flag:
-                words += f" · {word}"
-        return words
+        return length_words(self.span.minutes, self.done, self.missed)
 
     @property
     def detail(self) -> str:
         """Everything a block says under its name, on one line, for a screen reader and the tests."""
         if self.held and self.verdict is not None:
             return self.verdict.words
-        words = f"{self.times} · {self.length}"
-        for tag in block_tag_words(self):
-            if tag.startswith("Overdue") and self.history_due:
-                try:
-                    due = date.fromisoformat(self.history_due[:10])
-                    tag = f"{tag}, was due {due.strftime('%a')} {due.day} {due.strftime('%b')}"
-                except ValueError:
-                    pass
-            words += f" · {tag}"
-        return words + " · Pinned" if self.pinned and not self.done else words
+        return tail_words(
+            f"{self.times} · {self.length}",
+            done=self.done,
+            pinned=self.pinned,
+            history=self.history,
+            history_due=self.history_due,
+            placed_by_plan=self.placed_by_plan,
+        )
 
 
 class Started(Drawn):
@@ -178,22 +173,9 @@ class Started(Drawn):
         return clock_label(self.span.start)
 
 
-def plan_placed(item: Occurrence) -> bool:
-    """Homework that Plan placed and nobody has moved since. A hand move or a chosen time pins it, and
-    a finished or missed session has nothing left for Plan to place (N11)."""
-    return item.work and not item.pinned and not item.done and not item.missed
-
-
 def block_tag_words(drawn: Drawn) -> tuple[str, ...]:
     """Pill labels on a block, in order: Overdue, Left from last week, Placed by Plan."""
-    tags: list[str] = []
-    if drawn.history == "Overdue":
-        tags.append("Overdue")
-    if drawn.history == "Left from last week":
-        tags.append("Left from last week")
-    if drawn.placed_by_plan:
-        tags.append("Placed by Plan")
-    return tuple(tags)
+    return tag_words(drawn.history, drawn.placed_by_plan)
 
 
 class BlockPainter:
