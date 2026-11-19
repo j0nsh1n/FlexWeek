@@ -23,6 +23,8 @@ from desktop.tests.waiting import wait_until
 PASSWORD = "a-long-test-password"
 TOKEN_LIKE = "A" * 43
 
+pytestmark = pytest.mark.real_surface
+
 
 @pytest.fixture(scope="module")
 def qapp() -> Iterator[QApplication]:
@@ -89,7 +91,7 @@ def create_account(qapp: QApplication, window: NativeWindow, name: str, *, keep:
 def sign_in(qapp: QApplication, window: NativeWindow, name: str, *, keep: bool = True) -> None:
     card(qapp, window).setKeepSignedIn(keep)
     signed_in(qapp, window, name, PASSWORD)
-    wait_until(qapp, lambda: page(window) == "weekPage" and not window.session.busy)
+    wait_until(qapp, lambda: page(window) == "materialPage" and not window.session.busy)
 
 
 def on_sign_in(window: NativeWindow) -> bool:
@@ -115,7 +117,7 @@ def test_a_kept_session_opens_the_week_at_the_next_launch(qapp: QApplication, la
     launches.quit(window)
 
     later = launches.launch()
-    wait_until(qapp, lambda: page(later) == "weekPage" and not later.session.busy)
+    wait_until(qapp, lambda: page(later) == "materialPage" and not later.session.busy)
     assert later.session.account is not None
     assert later.session.account["username"] == "kept_student"
     assert later.account_name.text() == "kept_student"
@@ -178,7 +180,7 @@ def test_a_new_password_keeps_the_new_session(qapp: QApplication, launches: Laun
     assert launches.kept.token() not in {None, before}
     launches.quit(window)
     later = launches.launch()
-    wait_until(qapp, lambda: page(later) == "weekPage" and not later.session.busy)
+    wait_until(qapp, lambda: page(later) == "materialPage" and not later.session.busy)
     assert later.session.account is not None and later.session.account["username"] == "new_password"
 
 

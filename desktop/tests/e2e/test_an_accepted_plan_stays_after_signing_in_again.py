@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
+import pytest
 from PySide6.QtWidgets import QApplication, QPushButton
 
 from backend.tests.fake_clock import FakeClock
@@ -25,6 +26,8 @@ from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
 
 MONDAY_MORNING = datetime(2026, 11, 2, 0, 0)
+
+pytestmark = pytest.mark.real_surface
 
 
 def two_assignments(session: NativeSession) -> None:
@@ -117,7 +120,7 @@ def test_an_accepted_plan_is_on_the_grid_after_closing_and_signing_in(
     wait_until(
         qapp,
         lambda: (
-            second._stack.currentWidget().objectName() == "weekPage"
+            second._stack.currentWidget().objectName() == "materialPage"
             and not second.session.busy
             and len(second.session.assignments) >= 2
         ),

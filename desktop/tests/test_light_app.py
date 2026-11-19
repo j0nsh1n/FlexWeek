@@ -17,6 +17,8 @@ from desktop.tests.light_app import account, open_light, open_light_window  # no
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import free, look_file, qapp, server, signed_out, window  # noqa: F401
 
+pytestmark = pytest.mark.real_surface
+
 
 def seen(opened: NativeWindow) -> dict:
     session = opened.session
