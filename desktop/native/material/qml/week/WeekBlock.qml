@@ -301,16 +301,16 @@ Item {
     // A block that just got a time lands with the emphasized curve.
     Component.onCompleted: {
         updateStrikeout()
-        if (fresh && !reduceMotion) land.start()
+        if (fresh && Motion.pace > 0) land.start()
     }
     ParallelAnimation {
         id: land
         NumberAnimation {
-            target: cell; property: "scale"; from: 0.9; to: 1; duration: 500
+            target: cell; property: "scale"; from: 1 - 0.1 * Motion.reach; to: 1; duration: Motion.travel(500, cell.reduceMotion)
             easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1]
         }
         NumberAnimation {
-            target: cell; property: "opacity"; from: 0; to: 1; duration: 500
+            target: cell; property: "opacity"; from: 0; to: 1; duration: Motion.fade(500, cell.reduceMotion)
             easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1]
         }
     }

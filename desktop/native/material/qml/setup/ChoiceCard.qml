@@ -32,7 +32,7 @@ Item {
         border.width: root.selected ? 2 : (root.highContrast ? 1.5 : 1)
         border.color: root.selected ? palette.primary : palette.outlineVariant
         Behavior on color {
-            ColorAnimation { duration: root.reduceMotion ? 0 : 200 }
+            ColorAnimation { duration: Motion.fade(200, root.reduceMotion) }
         }
     }
     M3StateLayer {

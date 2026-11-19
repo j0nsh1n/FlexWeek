@@ -37,16 +37,16 @@ Item {
         border.width: 2
         border.color: root.checked ? palette.primary : palette.outline
         Behavior on color {
-            enabled: root.animate && !root.reduceMotion
+            enabled: root.animate
             ColorAnimation {
-                duration: 200
+                duration: Motion.fade(200, root.reduceMotion)
                 easing.type: Easing.BezierSpline
                 easing.bezierCurve: [0.2, 0, 0, 1, 1, 1]
             }
         }
         Behavior on border.color {
-            enabled: root.animate && !root.reduceMotion
-            ColorAnimation { duration: 200 }
+            enabled: root.animate
+            ColorAnimation { duration: Motion.fade(200, root.reduceMotion) }
         }
     }
 
@@ -62,16 +62,16 @@ Item {
         radius: width / 2
         color: root.checked ? palette.inkPrimary : palette.outline
         Behavior on x {
-            enabled: root.animate && !root.reduceMotion
-            NumberAnimation { duration: 300; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1] }
+            enabled: root.animate
+            NumberAnimation { duration: Motion.travel(300, root.reduceMotion); easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1] }
         }
         Behavior on y {
-            enabled: root.animate && !root.reduceMotion
-            NumberAnimation { duration: 300; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1] }
+            enabled: root.animate
+            NumberAnimation { duration: Motion.travel(300, root.reduceMotion); easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1] }
         }
         Behavior on width {
-            enabled: root.animate && !root.reduceMotion
-            NumberAnimation { duration: 300; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1] }
+            enabled: root.animate
+            NumberAnimation { duration: Motion.travel(300, root.reduceMotion); easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1] }
         }
         M3Icon {
             anchors.centerIn: parent

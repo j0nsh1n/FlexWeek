@@ -16,7 +16,9 @@ Item {
     readonly property string density: bridge ? bridge.density : "comfortable"
     readonly property bool reduceMotion: bridge ? bridge.reduceMotion : false
     readonly property bool highContrast: bridge ? bridge.highContrast : false
-    readonly property int enterMs: reduceMotion ? 0 : 300
+    readonly property int enterMs: Motion.fade(300, false)
+    Binding { target: Motion; property: "pace"; value: root.bridge ? root.bridge.motionPace : 1 }
+    Binding { target: Motion; property: "reach"; value: root.bridge ? root.bridge.motionReach : 1 }
     Binding {
         target: M3Font
         property: "scale"

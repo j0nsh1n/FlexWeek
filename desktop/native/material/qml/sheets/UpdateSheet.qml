@@ -63,10 +63,10 @@ SheetFrame {
             width: track.value >= 0 ? track.width * track.value : track.width * 0.3
             x: 0
             SequentialAnimation on x {
-                running: track.visible && track.value < 0 && !root.reduceMotion
+                running: track.visible && track.value < 0 && !root.reduceMotion && Motion.pace > 0
                 loops: Animation.Infinite
-                NumberAnimation { from: 0; to: track.width * 0.7; duration: 900 }
-                NumberAnimation { from: track.width * 0.7; to: 0; duration: 900 }
+                NumberAnimation { from: 0; to: track.width * 0.7; duration: Motion.travel(900, false) }
+                NumberAnimation { from: track.width * 0.7; to: 0; duration: Motion.travel(900, false) }
             }
         }
     }

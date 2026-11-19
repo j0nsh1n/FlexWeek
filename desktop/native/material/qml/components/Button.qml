@@ -60,7 +60,7 @@ Item {
         border.color: palette.outline
         Behavior on color {
             ColorAnimation {
-                duration: root.reduceMotion ? 0 : 200
+                duration: Motion.fade(200, root.reduceMotion)
                 easing.type: Easing.BezierSpline
                 easing.bezierCurve: [0.2, 0, 0, 1, 1, 1]
             }

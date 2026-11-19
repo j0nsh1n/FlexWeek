@@ -35,6 +35,7 @@ from desktop.native.material.theme import (
     DEFAULT_CONTRAST,
     DEFAULT_DENSITY,
     DEFAULT_PRESET,
+    MOTION_SPEED_PACE,
     accented,
     advanced_default,
     dress_theme,
@@ -50,6 +51,7 @@ from desktop.native.material.theme import (
     stroke_for,
     theme_object,
 )
+from desktop.native.motion_level import LEVELS, moves
 from desktop.native.reuse import planner_title
 from desktop.native.weekmodel import clock_label
 
@@ -131,6 +133,8 @@ class MaterialBridge(QObject):
         self._contrast = DEFAULT_CONTRAST
         self._density = DEFAULT_DENSITY
         self._reduce_motion = False
+        self._motion_pace = 1.0
+        self._motion_reach = 1.0
         self._advanced = advanced_default()
         self._shortcuts = True
         self._letter_keys = False
@@ -256,7 +260,10 @@ class MaterialBridge(QObject):
         self.changed.emit()
 
     def _publish_theme(self) -> None:
-        self._reduce_motion = self._motion_reduced() or self._advanced.get("motion") == "Off"
+        level = self._motion_level()
+        self._reduce_motion = not moves(level)
+        self._motion_pace = LEVELS[level].pace * MOTION_SPEED_PACE.get(self._advanced.get("motion"), 1.0)
+        self._motion_reach = LEVELS[level].reach
         prefs = self._window.session.preferences or {}
         accent = read_accent(prefs)
         colours = accented(self._colours, accent, self._preset, self._mode, self._contrast)
@@ -273,11 +280,16 @@ class MaterialBridge(QObject):
             self._font,
         )
 
-    def _motion_reduced(self) -> bool:
-        prefs = self._window.session.preferences or {}
-        chosen = prefs.get("motion")
+    def _motion_level(self) -> str:
+        """The Animations level in force: the student's choice, else the window's (the look's own). The
+        advanced page's Motion speed Off is the Off level."""
+        if self._advanced.get("motion") == "Off":
+            return "off"
+        chosen = (self._window.session.preferences or {}).get("motion")
+        if chosen in LEVELS:
+            return str(chosen)
         level = getattr(self._window, "_motion", "normal")
-        return chosen in ("reduce", "off") or level in ("reduce", "off")
+        return str(level) if level in LEVELS else "normal"
 
     def _stored_look(self) -> object:
         try:
@@ -453,6 +465,14 @@ class MaterialBridge(QObject):
     @Property(bool, notify=changed)
     def reduceMotion(self) -> bool:
         return self._reduce_motion
+
+    @Property(float, notify=changed)
+    def motionPace(self) -> float:
+        return self._motion_pace
+
+    @Property(float, notify=changed)
+    def motionReach(self) -> float:
+        return self._motion_reach
 
     @Property(bool, notify=changed)
     def highContrast(self) -> bool:

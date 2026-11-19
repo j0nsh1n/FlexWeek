@@ -451,6 +451,8 @@ HOUR_RANGE = (36, 90)
 PAD_RANGE = (4, 24)
 SHADOW_RANGE = (0, 3)
 MOTION_SPEEDS = ("Slower", "Normal", "Faster", "Off")
+# Motion speed times the level's own pace: Slower takes half as long again, Faster 0.6 as long.
+MOTION_SPEED_PACE = {"Slower": 1.5, "Faster": 0.6}
 BLOCK_STYLES = ("Edge", "Filled", "Outline")
 HOUR_LINES = ("None", "Faint", "Clear")
 CATEGORY_KEYS = ("school", "sports", "study", "homework")
