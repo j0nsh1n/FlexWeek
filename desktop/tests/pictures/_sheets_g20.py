@@ -153,12 +153,13 @@ SCREENS: list[Screen] = [
         styles=("material",),
     ),
     Screen(
-        id="sheets.material_before_planning_stacked",
+        id="sheets.material_before_planning_large",
         area="sheets",
         prepare=_before_planning,
         checks=(
-            "Before planning at Large text in a 1024 by 640 window: the three choice cards, Not now picked, "
-            "and Cancel and Continue stacked inside the card when they do not fit side by side."
+            "Before planning at Large text in a 1024 by 640 window: the three choice cards with their lines "
+            "wrapped inside them, Not now picked, and Cancel and Continue side by side inside the card (the "
+            "card stays 560 px wide, so they still fit; nothing is cut off)."
         ),
         sources=_SOURCES,
         main=True,

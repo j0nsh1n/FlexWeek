@@ -18,7 +18,7 @@ NEW_SCREENS = {
     "account.material_recovery_save_prompt": "recoveryPrompt",
     "sheets.material_delete_block_cards_prompt": "sheetPrompt",
     "sheets.material_replace_week_prompt": "sheetPrompt",
-    "sheets.material_before_planning_stacked": "sheetPrompt",
+    "sheets.material_before_planning_large": "sheetPrompt",
     "sheets.material_restore_prompt": "sheetPrompt",
     "sheets.material_delete_block_every_picked": "sheetPrompt",
 }
