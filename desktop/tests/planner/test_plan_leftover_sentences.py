@@ -8,6 +8,7 @@ from __future__ import annotations
 import pytest
 
 pytest.importorskip("PySide6")
+pytestmark = pytest.mark.real_surface
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -20,6 +21,8 @@ from desktop.tests.day.support_layouts_window import (  # noqa: E402
     wait_until,
     window,  # noqa: F401
 )
+from desktop.tests.week.support_material import _pump, _snack  # noqa: E402
+from desktop.tests.week.support_material_page import fresh_material  # noqa: E402
 
 
 def test_the_leftover_sentence_names_two_and_counts_the_rest() -> None:
@@ -67,12 +70,13 @@ def test_three_homework_with_minutes_left_name_two_and_count_one(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     """Each of three homework misses 10 minutes after Plan: two are named, "And 1 more." takes the third."""
+    fresh_material(qapp, window)
     _three_homework_each_missing_ten_minutes(qapp, window)
     window.session.solve()
-    wait_until(qapp, lambda: not window.session.busy and window.toast.text().startswith("Placed"))
-    qapp.processEvents()
-    assert window.toast.text() == (
-        "Placed 3 homework blocks. Art still has 10 min with no time. "
+    wait_until(qapp, lambda: not window.session.busy and _snack(window).startswith("Placed"))
+    _pump(qapp)
+    assert _snack(window) == (
+        "Placed 3 of 3. Art still has 10 min with no time. "
         "Biology still has 10 min with no time. And 1 more."
     )
     assert window.session.plan_remainders == [("Art", 10), ("Biology", 10), ("Chemistry", 10)]
@@ -99,6 +103,7 @@ def test_a_focus_timer_shortens_what_is_still_needed(qapp: QApplication, window:
     """60 minutes of homework with no session and 25 minutes of timer: 35 are still needed, counted at once
     even before the server's number is read again. Plan places 30 of them (two quarter hours) and names the
     5 that remain."""
+    fresh_material(qapp, window)
     session = window.session
     due = sunday_due(session.week_start)
     session.add_homework({"id": "timer", "title": "Timer homework", "due": due, "estimate_min": 60})
@@ -114,9 +119,9 @@ def test_a_focus_timer_shortens_what_is_still_needed(qapp: QApplication, window:
     settled(qapp, window)
     wait_until(qapp, lambda: session.assignments["timer"].get("unplanned_min") == 35)
     session.solve()
-    wait_until(qapp, lambda: not session.busy and window.toast.text().startswith("Placed"))
-    qapp.processEvents()
-    assert window.toast.text() == "Placed 1 homework block. Timer homework still has 5 min with no time."
+    wait_until(qapp, lambda: not session.busy and _snack(window).startswith("Placed"))
+    _pump(qapp)
+    assert _snack(window) == "Placed 1 of 1. Timer homework still has 5 min with no time."
     placed = [item for item in session.blocks if item.get("assignment_id") == "timer"]
     assert [item["duration_min"] for item in placed] == [30]
 
