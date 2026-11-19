@@ -420,11 +420,13 @@ class SheetsBridge(QObject):
             edited = self._ask.get("id") == "edited-weeks"
             done, self._edited_done = self._edited_done, None
             self._sign_out_done = None
-            self._ask_handlers = None
+            handlers, self._ask_handlers = self._ask_handlers, None
             self._ask = {}
             self._publish()
             if edited and done is not None:
                 done(None)
+            elif handlers is not None and "dismiss" in handlers:
+                handlers["dismiss"]()
             return
         draft = self._homework if self._kind == "homework" else self._block if self._kind == "block" else None
         if draft is not None and draft.dirty():
@@ -1511,8 +1513,12 @@ class SheetsBridge(QObject):
 
     # Account and Restore points ----------------------------------------------------------
 
+    def pose_question(self, question: dict, handlers: dict[str, Any]) -> None:
+        """A prompt from the window. Each answer runs its handler; Esc runs "dismiss" when there is one."""
+        self._ask_then(question, handlers)
+
     def _ask_then(self, question: dict, handlers: dict[str, Any]) -> None:
-        """A prompt whose answers run `handlers`; Cancel and Esc run none."""
+        """A prompt whose answers run `handlers`; Cancel and Esc run none, unless "dismiss" is given."""
         self._more = False
         self._ask = dict(question)
         self._ask_handlers = handlers

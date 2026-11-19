@@ -3996,6 +3996,32 @@ class NativeWindow(QMainWindow):
             parts.append(f"{overdue} overdue")
         if carried:
             parts.append(f"{carried} left from last week")
+        def plan_them() -> None:
+            self.session.plan_left([item["id"] for item in items])
+
+        def did_them() -> None:
+            self.session.did_these([item["id"] for item in items])
+
+        def not_now() -> None:
+            self.session.plan_asked_week = self.session.week_start
+            self._sync_left_chip()
+
+        page = self._material_shown()
+        if page is not None:
+            page.bridge.sheets.pose_question(
+                {
+                    "id": "before-planning",
+                    "title": "Before planning",
+                    "body": ", ".join(parts),
+                    "answers": [
+                        {"id": "plan", "label": "Plan into this week", "kind": "filled"},
+                        {"id": "did", "label": "Mark as finished", "kind": "tonal"},
+                        {"id": "not", "label": "Not now", "kind": "text", "default": True},
+                    ],
+                },
+                {"plan": plan_them, "did": did_them, "not": not_now, "dismiss": not_now},
+            )
+            return
         sheet = ConfirmSheet(
             self,
             "Before planning",
@@ -4010,12 +4036,11 @@ class NativeWindow(QMainWindow):
         )
         sheet.exec()
         if sheet.answer == "plan":
-            self.session.plan_left([item["id"] for item in items])
+            plan_them()
         elif sheet.answer == "did":
-            self.session.did_these([item["id"] for item in items])
+            did_them()
         else:
-            self.session.plan_asked_week = self.session.week_start
-            self._sync_left_chip()
+            not_now()
 
     def _copy_last_week_fixed(self) -> None:
         def offer(rows: list[dict] | None) -> None:
