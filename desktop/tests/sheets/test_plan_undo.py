@@ -1,3 +1,4 @@
+# ruff: noqa: F811  (pytest fixtures imported by name)
 """One Plan is one Undo: the notice says what the plan did and its Undo takes every block back, Replan all
 is one step, a plan made as homework is added belongs to the add's step, a later save drops the notice, a
 plan that places nothing offers no Undo, and a plan waits for a failed save. Run on the Material week."""
@@ -7,7 +8,6 @@ from __future__ import annotations
 import pytest
 
 pytest.importorskip("PySide6")
-pytestmark = pytest.mark.real_surface
 
 from PySide6.QtWidgets import QApplication
 
@@ -24,6 +24,8 @@ from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material import _bridge, _click, _snack
 from desktop.tests.week.support_material_page import fresh_material
 from desktop.tests.window_support import qapp  # noqa: F401
+
+pytestmark = pytest.mark.real_surface
 
 
 def _action(window: NativeWindow) -> str:
@@ -147,7 +149,8 @@ def test_automatic_plan_stays_in_the_add_homework_undo_step(
 
 @pytest.mark.xfail(
     strict=True,
-    reason="product gap: Material's snackbar keeps Plan's Undo after a later save; the Widgets toast dropped it",
+    reason="product gap: Material's snackbar keeps Plan's Undo after a later save; the Widgets toast "
+    "dropped it",
 )
 def test_plan_undo_notice_disappears_after_a_later_save(
     qapp: QApplication,  # noqa: F811

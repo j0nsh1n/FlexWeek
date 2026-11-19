@@ -81,6 +81,8 @@ def planned_in_material(qapp: QApplication, window: NativeWindow) -> QObject:
     CLOCK.set(datetime.fromisoformat(session.week_start) + timedelta(days=2, minutes=14 * 60 + 7))
     root = fresh_material(qapp, window)
     _click(window, _qml(root, "planHomework"))
-    wait_until(qapp, lambda: _snack(window).startswith("Placed") and not session.busy, what="Plan's Undo notice")
+    wait_until(
+        qapp, lambda: _snack(window).startswith("Placed") and not session.busy, what="Plan's Undo notice"
+    )
     settled(qapp, window)
     return root

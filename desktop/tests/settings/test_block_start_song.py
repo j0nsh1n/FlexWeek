@@ -10,7 +10,6 @@ from collections.abc import Callable
 import pytest
 
 pytest.importorskip("PySide6")
-pytestmark = pytest.mark.real_surface
 
 from PySide6.QtWidgets import QApplication
 
@@ -32,6 +31,8 @@ from desktop.tests.settings.support_reminders import (
     with_stand_ins,
 )
 from desktop.tests.window_support import qapp  # noqa: F401
+
+pytestmark = pytest.mark.real_surface
 
 
 @pytest.fixture()

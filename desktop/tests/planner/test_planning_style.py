@@ -7,7 +7,6 @@ from __future__ import annotations
 import pytest
 
 pytest.importorskip("PySide6")
-pytestmark = pytest.mark.real_surface
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -20,6 +19,8 @@ from desktop.tests.day.support_layouts_window import (  # noqa: E402
 )
 from desktop.tests.material_support import pump, qml  # noqa: E402
 from desktop.tests.week.support_material_page import fresh_material  # noqa: E402
+
+pytestmark = pytest.mark.real_surface
 
 
 def _add_through_the_sheet(qapp: QApplication, window: NativeWindow) -> dict:

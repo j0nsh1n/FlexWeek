@@ -11,9 +11,8 @@ import re
 import pytest
 
 pytest.importorskip("PySide6")
-pytestmark = pytest.mark.real_surface
 
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QPoint
 from PySide6.QtGui import QAccessible
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
@@ -25,6 +24,8 @@ from desktop.tests.planner.undo_support import MATERIAL_PLACED, planned_in_mater
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material import _bridge, _pump, _qml, _snack
 from desktop.tests.window_support import qapp  # noqa: F401
+
+pytestmark = pytest.mark.real_surface
 
 # Leaving the notice starts its clock again with at least this much left (bridge.resumeSnack).
 RESUME_MS = 1_000
@@ -92,8 +93,8 @@ def test_the_notice_counts_the_pointer_over_its_card_above_the_week(
 
 @pytest.mark.xfail(
     strict=True,
-    reason="Material's snackbar clock does not look at the window: it keeps running while the window is hidden,"
-    " minimized or not the active one; the Widgets toast held its remaining time",
+    reason="Material's snackbar clock does not look at the window: it keeps running while the window is "
+    "hidden, minimized or not the active one; the Widgets toast held its remaining time",
 )
 @pytest.mark.parametrize("which", ["hidden", "minimized", "inactive"])
 def test_the_notice_holds_its_remaining_time_while_the_window_is_unavailable(
@@ -142,8 +143,8 @@ def test_the_snackbar_announces_once_and_politely(
 
 @pytest.mark.xfail(
     strict=True,
-    reason="Material's snackbar shows no countdown: its button says UNDO, not UNDO and the seconds left, and it"
-    " has no progress line. The Widgets toast counted down and followed the Animations setting",
+    reason="Material's snackbar shows no countdown: its button says UNDO, not UNDO and the seconds left, "
+    "and it has no progress line. The Widgets toast counted down and followed the Animations setting",
 )
 @pytest.mark.parametrize("motion", ["reduce", "off"])
 def test_the_undo_countdown_keeps_its_accessible_name_and_decreases(

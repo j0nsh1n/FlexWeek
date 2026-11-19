@@ -1,5 +1,6 @@
 # ruff: noqa: F811
-"""What Plan my homework says about its result on the Material week: the notice's words and counts, the homework
+"""What Plan my homework says about its result on the Material week: the notice's words and counts, the
+homework
 drawer's list of what has no time, the notice that offers Find a new time when a commitment lands over planned
 homework, and the line after Replan all."""
 
@@ -10,7 +11,6 @@ from datetime import date, timedelta
 import pytest
 
 pytest.importorskip("PySide6")
-pytestmark = pytest.mark.real_surface
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -25,6 +25,8 @@ from desktop.tests.day.support_layouts_window import (  # noqa: E402
 )
 from desktop.tests.week.support_material import _bridge, _pump, _qml, _repeater_texts, _snack  # noqa: E402
 from desktop.tests.week.support_material_page import fresh_material  # noqa: E402
+
+pytestmark = pytest.mark.real_surface
 
 
 def _friday_noon(window: NativeWindow) -> str:
@@ -103,7 +105,8 @@ def test_a_commitment_over_planned_homework_offers_find_a_new_time(
 
 @pytest.mark.xfail(
     strict=True,
-    reason="same gap: Material has no Find a new time notice, so every homework that lost its time goes unnamed",
+    reason="same gap: Material has no Find a new time notice, so every homework that lost its time "
+    "goes unnamed",
 )
 def test_every_homework_that_lost_its_time_is_named_on_the_notice(
     qapp: QApplication, window: NativeWindow
@@ -188,7 +191,9 @@ def test_what_is_too_short_for_plan_is_counted_in_minutes(qapp: QApplication, wi
     fresh_material(qapp, window)
     _cut_the_essay_to(qapp, window, 50)
     window.session.solve()
-    wait_until(qapp, lambda: not window.session.busy and window.session.message == "10 min still needs a time")
+    wait_until(
+        qapp, lambda: not window.session.busy and window.session.message == "10 min still needs a time"
+    )
     kept = next(block for block in window.session.blocks if block.get("pinned"))
     assert (kept["duration_min"], kept["start"], kept["days"]) == (50, "19:30", [3])
     assert window.session.plan_remainders == []
@@ -196,10 +201,12 @@ def test_what_is_too_short_for_plan_is_counted_in_minutes(qapp: QApplication, wi
 
 @pytest.mark.xfail(
     strict=True,
-    reason="the Plan key with only too-short minutes left says nothing on Material: the button is off and the "
-    "snackbar takes only the answer of the button; the Widgets toast showed the line",
+    reason="the Plan key with only too-short minutes left says nothing on Material: the button is off and "
+    "the snackbar takes only the answer of the button; the Widgets toast showed the line",
 )
-def test_the_plan_key_with_too_short_minutes_left_says_how_many(qapp: QApplication, window: NativeWindow) -> None:
+def test_the_plan_key_with_too_short_minutes_left_says_how_many(
+    qapp: QApplication, window: NativeWindow
+) -> None:
     fresh_material(qapp, window)
     _cut_the_essay_to(qapp, window, 50)
     _bridge(window).plan()

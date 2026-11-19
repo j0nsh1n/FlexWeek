@@ -9,7 +9,6 @@ from datetime import date, timedelta
 import pytest
 
 pytest.importorskip("PySide6")
-pytestmark = pytest.mark.real_surface
 
 from PySide6.QtWidgets import QApplication
 
@@ -29,6 +28,8 @@ from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material import _bridge, _snack
 from desktop.tests.week.support_material_page import fresh_material
 from desktop.tests.window_support import qapp  # noqa: F401
+
+pytestmark = pytest.mark.real_surface
 
 
 def test_nothing_placed_says_nothing_placed_not_planned_zero() -> None:
@@ -110,7 +111,9 @@ def test_plan_it_as_i_add_it_starts_no_earlier_than_now(
     sheets.setText("title", "Spanish vocab")
     pump(qapp, 20)
     sheets.save()
-    wait_until(qapp, lambda: any(item["title"] == "Spanish vocab" for item in window.session.assignments.values()))
+    wait_until(
+        qapp, lambda: any(item["title"] == "Spanish vocab" for item in window.session.assignments.values())
+    )
     settled(qapp, window)
     added = next(item for item in window.session.assignments.values() if item["title"] == "Spanish vocab")
     placed = session_of(window, added["id"])

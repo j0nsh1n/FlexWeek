@@ -7,7 +7,6 @@ from __future__ import annotations
 import pytest
 
 pytest.importorskip("PySide6")
-pytestmark = pytest.mark.real_surface
 
 from PySide6.QtGui import QDesktopServices  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
@@ -20,6 +19,8 @@ from desktop.tests.day.support_layouts_window import (  # noqa: E402
     qapp,  # noqa: F401
     window,  # noqa: F401
 )
+
+pytestmark = pytest.mark.real_surface
 
 
 def _rung(window: NativeWindow, monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:

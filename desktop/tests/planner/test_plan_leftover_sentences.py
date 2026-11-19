@@ -8,7 +8,6 @@ from __future__ import annotations
 import pytest
 
 pytest.importorskip("PySide6")
-pytestmark = pytest.mark.real_surface
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -23,6 +22,8 @@ from desktop.tests.day.support_layouts_window import (  # noqa: E402
 )
 from desktop.tests.week.support_material import _pump, _snack  # noqa: E402
 from desktop.tests.week.support_material_page import fresh_material  # noqa: E402
+
+pytestmark = pytest.mark.real_surface
 
 
 def test_the_leftover_sentence_names_two_and_counts_the_rest() -> None:
