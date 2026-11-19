@@ -181,7 +181,7 @@ def test_undo_toasts_show_the_ctrl_z_hint(qapp: QApplication, window: NativeWind
     window.toast.hide()
 
 
-def test_after_plan_focus_is_on_the_toast_or_the_plan_button(
+def test_after_plan_focus_is_on_the_week_or_the_plan_button(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root = fresh_material(qapp, window)
@@ -210,9 +210,12 @@ def test_after_plan_focus_is_on_the_toast_or_the_plan_button(
     assert active is not None
     assert active is not scene
 
-    snackbar = qml(root, "materialSnackbar")
     if drawer.property("count") == 0:
-        assert active is snackbar or snackbar.isAncestorOf(active)
+        # On the week, never on the notice (its Undo is a Tab away).
+        grid = qml(root, "weekScroller")
+        while active is not None and active is not grid:
+            active = active.parentItem()
+        assert active is grid
     else:
         assert active is plan_btn
 

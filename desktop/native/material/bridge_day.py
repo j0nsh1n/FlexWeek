@@ -510,7 +510,7 @@ class DayBridge(QObject):
 def _waiting_for_a_time(week: object, day_index: int, when: str) -> tuple[int, tuple[str, str] | None]:
     """How many homework items due today have no time yet, and the week model's words for them (its name, then
     what to do), as the Widgets My day said them. The words are None while something placed is still ahead."""
-    if when != "today" or week is None or day_index < 0:
+    if when != "today" or week is None or day_index < 0 or not hasattr(week, "due_today_unplaced"):
         return 0, None
     waiting = week.due_today_unplaced(day_index)  # type: ignore[attr-defined]
     if not waiting:

@@ -17,7 +17,6 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.tests.week.support_material import (
-    NOW_MINUTE,
     _bridge,
     _named,
     _pref,
@@ -40,7 +39,7 @@ def _text_size(window: NativeWindow, scale: float) -> None:
     _pump(QApplication.instance(), 6)
 
 
-def test_a_larger_text_size_brings_the_time_now_back_into_view(
+def test_a_larger_text_size_keeps_the_time_at_the_top_of_the_grid(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root = _reset(window, qapp)
@@ -54,9 +53,8 @@ def test_a_larger_text_size_brings_the_time_now_back_into_view(
         row = int(_bridge(window).property("hourRow"))
         assert row > row_before, "the text size did not grow the rows, so this test would prove nothing"
 
-        now_y = NOW_MINUTE / 60 * row
-        top = float(grid.property("contentY"))
-        assert top <= now_y <= top + float(grid.property("height"))
+        # The student's place is a time: the top of the grid still shows the morning.
+        assert float(grid.property("contentY")) == 0.0
     finally:
         look_file().unlink(missing_ok=True)
         window._material_page.publish()
