@@ -31,14 +31,21 @@ Item {
             root.resumeRequested()
     }
 
+    // The notice held the keyboard and has gone: the shell says where the keyboard goes next.
+    signal focusReleased()
+
     onVisibleChanged: {
-        if (!visible && activeFocus && parent)
+        if (!visible && activeFocus && parent) {
             parent.forceActiveFocus()
+            root.focusReleased()
+        }
     }
 
     onActionTextChanged: {
-        if (actionText === "" && activeFocus && parent)
+        if (actionText === "" && activeFocus && parent) {
             parent.forceActiveFocus()
+            root.focusReleased()
+        }
     }
 
     implicitHeight: 48

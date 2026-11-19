@@ -32,6 +32,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - In Material, the answers that delete something or cannot be taken back (Delete, This week and later, Replace week, Restore, Discard, Sign out) are drawn in the error colour in every question and sheet, in light and dark.
 
 ### Fixed
+- In Material, the keyboard stays on the week after Plan, Undo, redo and dropping a block (on the block you acted on when it is still there), instead of landing on the notice or on nothing. The notice's Undo is still a Tab away.
 - When a deadline passes while FlexWeek is open, Material's overdue row and its words update at once.
 - The Unfinished sheet has a Start focus button on overdue and left-over homework, as the earlier styles' list did.
 - Week as a list says when a block is overdue (with the day it was due), left from last week, or pinned.

@@ -416,6 +416,81 @@ Item {
         }
     }
 
+    // The keyboard stays on the week through a rebuild (Plan, Undo, redo, a drop). The blocks are rebuilt when the
+    // week changes, and the one holding the keyboard goes with them: the keyboard goes to the block with the same
+    // id, or to the grid when that block is gone, and never to nothing. `keptBlockId` is the block it was on,
+    // empty when it was on the grid itself.
+    property string keptBlockId: ""
+    property bool keyboardOnWeek: false
+
+    function blockOf(item) {
+        while (item) {
+            if (item.objectName === "weekBlock")
+                return item
+            item = item.parentItem
+        }
+        return null
+    }
+
+    function insideGrid(item) {
+        while (item) {
+            if (item === scroller)
+                return true
+            item = item.parentItem
+        }
+        return false
+    }
+
+    // Put the keyboard on the block `blockId`, else on the grid.
+    function focusWeek(blockId) {
+        if (blockId) {
+            for (var at = 0; at < hours.children.length; at++) {
+                var child = hours.children[at]
+                if (child.objectName === "weekBlock" && child.blockId === blockId) {
+                    child.forceActiveFocus()
+                    return
+                }
+            }
+        }
+        hours.forceActiveFocus()
+    }
+
+    function followKeyboard(item) {
+        var window = root.Window.window
+        if (!window || root.passive)
+            return
+        var block = blockOf(item)
+        if (block) {
+            keptBlockId = block.blockId
+            keyboardOnWeek = true
+        } else if (insideGrid(item)) {
+            keptBlockId = ""
+            keyboardOnWeek = true
+        } else if (item === null || item === window.contentItem) {
+            if (keyboardOnWeek)
+                Qt.callLater(root.restoreKeyboard)
+        } else {
+            keyboardOnWeek = false
+        }
+    }
+
+    function restoreKeyboard() {
+        var window = root.Window.window
+        if (!keyboardOnWeek || !root.visible || !window)
+            return
+        var now = window.activeFocusItem
+        if (now && now !== window.contentItem)
+            return
+        focusWeek(keptBlockId)
+    }
+
+    Connections {
+        target: root.passive ? null : root.Window.window
+        function onActiveFocusItemChanged() {
+            root.followKeyboard(root.Window.window.activeFocusItem)
+        }
+    }
+
     ZoomPill {
         id: zoomPill
         visible: root.showPill && !root.phone && !root.passive

@@ -789,6 +789,8 @@ Item {
                 accessActionText: bridge.snackAction
                 fraction: bridge.snackFraction
                 onActionClicked: if (bridge.snackAction !== "") bridge.snackActed()
+                // Undo pressed by keyboard: the keyboard returns to the week it undid, not to nothing.
+                onFocusReleased: if (bridge && bridge.screen === "week") weekView.focusWeek("")
                 onPauseRequested: if (bridge) bridge.pauseSnack()
                 onResumeRequested: if (bridge) bridge.resumeSnack()
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -805,7 +807,8 @@ Item {
                 function onPlanFinished() {
                     Qt.callLater(function() {
                         if (weekView.drawer && weekView.drawer.count === 0) {
-                            materialSnackbar.forceActiveFocus()
+                            // The week, not the snackbar: its Undo is a Tab away, and Ctrl+Z works from the week.
+                            weekView.focusWeek("")
                         } else if (weekView.drawer && weekView.drawer.count > 0 && weekView.drawer.planButton) {
                             weekView.drawer.planButton.forceActiveFocus()
                         }

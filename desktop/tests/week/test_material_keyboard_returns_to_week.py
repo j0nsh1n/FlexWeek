@@ -61,6 +61,16 @@ def _on_the_week(window) -> bool:
     return False
 
 
+def _on_block(window) -> str:
+    """The title of the week block holding the keyboard, or an empty string."""
+    item = _focus(window)
+    while item is not None:
+        if str(item.objectName()) == "weekBlock":
+            return str(item.property("title"))
+        item = item.parentItem()
+    return ""
+
+
 def _where(window) -> str:
     item = _focus(window)
     names = []
@@ -102,12 +112,6 @@ def test_a_sheet_that_closes_gives_the_keyboard_back_to_the_block_that_opened_it
     assert _on_the_week(window), f"the keyboard is on {_where(window)}, not on the week"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="product difference, listed in group-5b1.md: after Plan the keyboard goes to the snackbar's "
-    "Undo (Main.qml onPlanFinished), not to the week or the block Plan placed; the Widgets week put it "
-    "on the block",
-)
 def test_after_plan_by_keyboard_the_keyboard_is_on_the_week(qapp, window) -> None:
     root = _reset(window, qapp)
     _waiting_homework(qapp, window)
@@ -120,11 +124,6 @@ def test_after_plan_by_keyboard_the_keyboard_is_on_the_week(qapp, window) -> Non
     assert _on_the_week(window), f"the keyboard is on {_where(window)}, not on the week"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="product difference, listed in group-5b1.md: Ctrl+Z from a block leaves the keyboard on "
-    "nothing (the week is rebuilt and the focus is not put back); the Widgets week kept it on the week",
-)
 def test_ctrl_z_from_a_block_leaves_the_keyboard_on_the_week(qapp, window) -> None:
     root = _reset(window, qapp)
     _waiting_homework(qapp, window)
@@ -139,12 +138,9 @@ def test_ctrl_z_from_a_block_leaves_the_keyboard_on_the_week(qapp, window) -> No
         for label in _named(block, "title")
     ), "Undo did not take the plan back, so the test says nothing"
     assert _on_the_week(window), f"the keyboard is on {_where(window)}, not on the week"
+    assert _on_block(window) == "School", "the block acted on keeps the keyboard"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="product difference, listed in group-5b1.md: redo leaves the keyboard on nothing, like Undo",
-)
 def test_redo_leaves_the_keyboard_on_the_week(qapp, window) -> None:
     root = _reset(window, qapp)
     _waiting_homework(qapp, window)
@@ -164,11 +160,6 @@ def test_redo_leaves_the_keyboard_on_the_week(qapp, window) -> None:
     assert _on_the_week(window), f"the keyboard is on {_where(window)}, not on the week"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="product difference, listed in group-5b1.md: pressing the snackbar's Undo with the keyboard "
-    "leaves the keyboard on nothing once the snackbar has gone",
-)
 def test_the_snackbars_undo_by_keyboard_leaves_the_keyboard_on_the_week(qapp, window) -> None:
     root = _reset(window, qapp)
     _waiting_homework(qapp, window)
@@ -182,11 +173,6 @@ def test_the_snackbars_undo_by_keyboard_leaves_the_keyboard_on_the_week(qapp, wi
     assert _on_the_week(window), f"the keyboard is on {_where(window)}, not on the week"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="product difference, listed in group-5b1.md: after a drag-and-drop the keyboard is on nothing "
-    "(the dropped block is rebuilt); the Widgets week kept it on the week",
-)
 def test_a_dropped_block_keeps_the_keyboard_on_the_week(qapp, window) -> None:
     block = on_screen(qapp, window, "week", "Club")
     block.forceActiveFocus()
@@ -197,3 +183,23 @@ def test_a_dropped_block_keeps_the_keyboard_on_the_week(qapp, window) -> None:
     assert club(window)["start"] == "11:00", "the block was not moved, so the test says nothing"
     _pump(qapp, 40)
     assert _on_the_week(window), f"the keyboard is on {_where(window)}, not on the week"
+    assert _on_block(window) == "Club", "the dropped block keeps the keyboard"
+
+
+def test_the_snackbars_undo_is_still_a_tab_away_after_plan(qapp, window) -> None:
+    """Plan no longer puts the keyboard on the notice, but its Undo stays a Tab away from the week."""
+    root = _reset(window, qapp)
+    _waiting_homework(qapp, window)
+    _plan_by_button(qapp, window)
+    _focus_school(window, root)
+    bar = _qml(root, "materialSnackbar")
+    for _ in range(60):
+        _press(window, Qt.Key.Key_Tab)
+        if bool(bar.property("activeFocus")) or _focus(window) is bar:
+            break
+    else:
+        pytest.fail(f"Tab never reached the notice's Undo; the keyboard ended on {_where(window)}")
+    _press(window, Qt.Key.Key_Return)
+    wait_until(qapp, lambda: not window.session.busy)
+    _pump(qapp, 60)
+    assert _snack(window).startswith("Undid"), _snack(window)
