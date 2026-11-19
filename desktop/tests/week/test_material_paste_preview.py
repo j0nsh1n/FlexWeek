@@ -48,7 +48,8 @@ def test_paste_previews_on_a_material_sheet_and_save_adds_the_block(qapp, window
     sheets = _bridge(window).sheets
     assert sheets.kind == "preview"
     assert sheets.form["heading"] == "Preview paste"
-    assert sheets.form["intro"] == "Nothing changes until you save this preview."
+    assert sheets.form["intro"] == "Nothing changes until you choose Paste."
+    assert sheets.form["confirm"] == "Paste"
     assert len(window.session.blocks) == before, "nothing changes until the preview is saved"
     _click(window, _qml(root, "previewSave"))
     settled(qapp, window)

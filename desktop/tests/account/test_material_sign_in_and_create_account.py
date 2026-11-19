@@ -114,7 +114,7 @@ def test_create_account_validates_then_shows_the_codes_then_setup(
     assert bridge.recoveryReady is False
     bridge.finishRecovery()
     assert bridge.phase == "recovery"
-    assert bridge.recoveryStatus == "Tick the box above to continue."
+    assert bridge.recoveryStatus == "Turn on “I have saved these codes” to continue."
     bridge.setRecoveryAck(True)
     wait_until(qapp, lambda: bridge.recoveryReady)
     bridge.finishRecovery()
