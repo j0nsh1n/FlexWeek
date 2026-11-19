@@ -194,14 +194,3 @@ def sync_linked_phones(
 ) -> None:
     """Sync every linked phone, with the same deadline Sync now already uses."""
     run_off_ui(owner, lambda: service.sync_all(SYNC_DEADLINE_MS), done)
-
-
-
-
-# The error colour of the look in force, set by the window each time it dresses itself.
-_error_colour: str | None = None
-
-
-def set_error_colour(colour: str | None) -> None:
-    global _error_colour
-    _error_colour = colour
