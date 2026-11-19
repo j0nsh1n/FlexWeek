@@ -1937,6 +1937,19 @@ class NativeWindow(QMainWindow):
             return ""
         return self._pick_recovery_file()
 
+    @staticmethod
+    def recovery_file_question() -> dict:
+        """The question before the file dialog, for Material's prompt: the same words and answers."""
+        return {
+            "id": "recovery-file",
+            "title": "Save recovery codes",
+            "body": RECOVERY_KEEP,
+            "answers": [
+                {"id": "stay", "label": "Cancel", "kind": "text"},
+                {"id": "choose", "label": RECOVERY_CHOOSE, "kind": "filled", "default": True},
+            ],
+        }
+
     def _pick_recovery_file(self) -> str:
         """The file dialog, opened on Documents (#50); a test answers it with a path."""
         documents = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)

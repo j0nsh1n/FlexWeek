@@ -130,8 +130,8 @@ def test_plan_homework_is_a_sheet_that_esc_closes(qapp: QApplication, window: Na
 
 @pytest.mark.xfail(
     strict=True,
-    reason="not portable (step 9, group 5b part 2): Material Save still opens the Widgets ConfirmSheet, "
-    "which part 3 has to replace first",
+    reason="not portable (step 9, group 5b part 2): this drives the Widgets sheet; Material's Save prompt "
+    "is held by sheets/test_material_recovery_save.py",
 )
 def test_saving_the_recovery_codes_starts_on_a_sheet_and_esc_never_reaches_the_file_dialog(
     qapp: QApplication,  # noqa: F811

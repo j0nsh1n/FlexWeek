@@ -246,6 +246,7 @@ class AccountBridge(QObject):
         self._said.setInterval(RECOVERY_SAID_MS)
         self._said.timeout.connect(self._reset_recovery_labels)
         self._ask: dict = {}
+        self._ask_handlers: dict[str, Any] | None = None
         self._edited_done = None
         self._state: Any = None
         self._step = WEEK
@@ -419,7 +420,13 @@ class AccountBridge(QObject):
 
     @Slot()
     def saveCodes(self) -> None:  # noqa: N802 — QML slot
-        path = self._window._choose_recovery_file()  # type: ignore[attr-defined]
+        """Save: the sheet says what the file is first, then the system's file dialog picks where it goes."""
+        self.pose_question(
+            self._window.recovery_file_question(),  # type: ignore[attr-defined]
+            {"choose": lambda: self._write_codes(self._window._pick_recovery_file())},  # type: ignore[attr-defined]
+        )
+
+    def _write_codes(self, path: str) -> None:
         if not path:
             return
         try:
@@ -785,12 +792,32 @@ class AccountBridge(QObject):
     def ask(self) -> dict:
         return self._ask
 
+    def pose_question(self, question: dict, handlers: dict[str, Any]) -> None:
+        """A question over the account screens (the recovery codes' file). Each answer runs its handler;
+        Cancel and Esc run none."""
+        self._ask = dict(question)
+        self._ask_handlers = handlers
+        self.changed.emit()
+
     @Slot(str)
     def answer(self, choice: str) -> None:
+        if self._ask_handlers is not None:
+            handlers, self._ask_handlers = self._ask_handlers, None
+            self._ask = {}
+            self.changed.emit()
+            run = handlers.get(choice)
+            if run is not None:
+                run()
+            return
         self._finish_edited(choice if choice in ("keep", "replace", "from_today") else None)
 
     @Slot()
     def closeSheet(self) -> None:  # noqa: N802 — QML name
+        if self._ask_handlers is not None:
+            self._ask_handlers = None
+            self._ask = {}
+            self.changed.emit()
+            return
         self._finish_edited(None)
 
     def _finish_edited(self, choice: str | None) -> None:
