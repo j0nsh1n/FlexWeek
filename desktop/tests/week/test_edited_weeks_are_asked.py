@@ -37,6 +37,8 @@ from desktop.tests.week.test_standing_week import (  # noqa: E402, F401
 )
 from desktop.tests.window_support import qapp, settled  # noqa: E402, F401
 
+pytestmark = pytest.mark.real_surface
+
 LATER = "2026-11-16"
 END = 14 * 60 + 30
 
@@ -73,55 +75,6 @@ def test_school_hours_asks_nothing_when_no_later_week_was_edited(
     monkeypatch.setattr(ConfirmSheet, "exec", asked)
     school_hours(qapp, window, monkeypatch)
     assert school_of(after_setup)[:3] == ([0, 1, 2, 3, 4], "08:30", 360)
-
-
-def test_the_question_defaults_to_except_edited(qapp, window, after_setup, monkeypatch) -> None:
-    skip_wednesday(qapp, after_setup)
-    seen: dict = {}
-
-    def answer(sheet: ConfirmSheet) -> int:
-        seen["body"] = sheet.question.text()
-        seen["default"] = sheet._default
-        seen["label"] = sheet.buttons["keep"].text()
-        seen["marked"] = sheet.buttons["keep"].isDefault()
-        seen["filled"] = sheet.buttons["keep"].property("filled") is True
-        seen["others_outlined"] = (
-            sheet.buttons["replace"].property("outlined") is True
-            and sheet.buttons["from_today"].property("outlined") is True
-        )
-        sheet.buttons["keep"].click()
-        return 0
-
-    monkeypatch.setattr(ConfirmSheet, "exec", answer)
-    school_hours(qapp, window, monkeypatch)
-    assert seen["body"] == "The week of 16 November has its own School times."
-    assert seen["default"] == "keep"
-    assert seen["label"] == "Except edited"
-    assert seen["marked"] is True
-    assert seen["filled"] is True
-    assert seen["others_outlined"] is True
-    go_to(qapp, after_setup, LATER)
-    assert school_of(after_setup) == ([0, 1, 3, 4], "08:30", 360, [])
-
-
-def test_cancel_saves_nothing(qapp, window, after_setup, monkeypatch) -> None:
-    home = skip_wednesday(qapp, after_setup)
-    before = school_of(after_setup)
-
-    def cancel(sheet: ConfirmSheet) -> int:
-        sheet.buttons["stay"].click()
-        return 0
-
-    monkeypatch.setattr(ConfirmSheet, "exec", cancel)
-    monkeypatch.setattr(window_module.SchoolHoursDialog, "exec", lambda dialog: shorten(dialog))
-    window._school_hours()
-    wait_until(qapp, lambda: not window.session.busy)
-    assert school_of(after_setup) == before
-    assert not after_setup.dirty
-    go_to(qapp, after_setup, LATER)
-    assert school_of(after_setup) == ([0, 1, 3, 4], "08:30", 405, [])
-    go_to(qapp, after_setup, home)
-    assert school_of(after_setup) == before
 
 
 def test_material_asks_nothing_when_no_later_week_was_edited(
@@ -410,23 +363,6 @@ def test_a_preview_does_not_apply_after_the_week_changes(
     assert school_of(after_setup) == before
 
 
-def test_answering_setup_does_not_skip_the_next_question(
-    qapp, window, after_setup, monkeypatch
-) -> None:
-    skip_wednesday(qapp, after_setup)
-    asked = {"n": 0}
-
-    def answer(sheet: ConfirmSheet) -> int:
-        asked["n"] += 1
-        sheet.buttons["keep"].click()
-        return 0
-
-    monkeypatch.setattr(ConfirmSheet, "exec", answer)
-    assert window.confirm_standing(_shorter()) == "keep"
-    school_hours(qapp, window, monkeypatch)
-    assert asked["n"] == 2
-
-
 def test_a_sign_out_during_the_preview_ends_the_wait(qapp, window, after_setup, monkeypatch) -> None:
     real = window.session.client.request
 
@@ -443,18 +379,85 @@ def test_a_sign_out_during_the_preview_ends_the_wait(qapp, window, after_setup, 
     )
 
 
+def answer_edited(window: NativeWindow, choice: str, seen: dict | None = None) -> None:
+    """Answer the edited-weeks question on Material's prompt when it comes up, noting what it asked."""
+    sheets = window._material_page.bridge.sheets
+    tries = {"n": 0}
+
+    def poll() -> None:
+        tries["n"] += 1
+        ask = dict(sheets.ask)
+        if ask.get("id") != "edited-weeks":
+            if tries["n"] < 400:
+                QTimer.singleShot(5, poll)
+            return
+        if seen is not None:
+            seen["body"] = ask["body"]
+            seen["answers"] = [
+                (a["id"], a["label"], a["kind"], bool(a.get("default"))) for a in ask["answers"]
+            ]
+        sheets.answer(choice)
+
+    QTimer.singleShot(0, poll)
+
+
+def test_the_question_defaults_to_except_edited(qapp, window, after_setup, monkeypatch) -> None:
+    show_material(qapp, window)
+    skip_wednesday(qapp, after_setup)
+    seen: dict = {}
+    answer_edited(window, "keep", seen)
+    school_hours(qapp, window, monkeypatch)
+    assert seen["body"] == "The week of 16 November has its own School times."
+    assert seen["answers"] == [
+        ("keep", "Except edited", "filled", True),
+        ("replace", "All weeks", "tonal", False),
+        ("from_today", "From today on", "tonal", False),
+        ("stay", "Cancel", "text", False),
+    ]
+    go_to(qapp, after_setup, LATER)
+    assert school_of(after_setup) == ([0, 1, 3, 4], "08:30", 360, [])
+
+
+def test_cancel_saves_nothing(qapp, window, after_setup, monkeypatch) -> None:
+    show_material(qapp, window)
+    home = skip_wednesday(qapp, after_setup)
+    before = school_of(after_setup)
+    answer_edited(window, "stay")
+    school_hours(qapp, window, monkeypatch)
+    assert school_of(after_setup) == before
+    assert not after_setup.dirty
+    go_to(qapp, after_setup, LATER)
+    assert school_of(after_setup) == ([0, 1, 3, 4], "08:30", 405, [])
+    go_to(qapp, after_setup, home)
+    assert school_of(after_setup) == before
+
+
+def test_answering_setup_does_not_skip_the_next_question(qapp, window, after_setup, monkeypatch) -> None:
+    show_material(qapp, window)
+    skip_wednesday(qapp, after_setup)
+    asked = {"n": 0}
+    sheets = window._material_page.bridge.sheets
+    real_pose = sheets.pose_edited
+
+    def counting(ask: dict, done) -> None:
+        asked["n"] += 1
+        real_pose(ask, done)
+
+    monkeypatch.setattr(sheets, "pose_edited", counting)
+    answer_edited(window, "keep")
+    assert window.confirm_standing(_shorter()) == "keep"
+    answer_edited(window, "keep")
+    school_hours(qapp, window, monkeypatch)
+    assert asked["n"] == 2
+
+
 def test_deleting_from_this_week_on_asks_and_keeps_the_edited_week(
     qapp, window, after_setup, monkeypatch
 ) -> None:
+    show_material(qapp, window)
     skip_wednesday(qapp, after_setup)
     seen: dict = {}
-
-    def answer(sheet: ConfirmSheet) -> int:
-        seen["body"] = sheet.question.text()
-        sheet.buttons["keep"].click()
-        return 0
-
-    monkeypatch.setattr(ConfirmSheet, "exec", answer)
+    answer_edited(window, "keep", seen)
     school = block(after_setup, "school")
     assert school is not None
     window._delete_block(school, "series", None, True)
