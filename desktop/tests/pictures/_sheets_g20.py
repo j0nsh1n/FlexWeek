@@ -60,9 +60,8 @@ def _undo_snackbar(window: NativeWindow) -> None:
 
 
 def _reminder_strip(window: NativeWindow) -> None:
-    bridge = _bridge(window)
+    _bridge(window)
     window.alert_strip.add([{"title": "Guitar practice starts soon", "body": "6:45 PM · Thu"}])
-    bridge.note("Guitar practice starts soon — 6:45 PM · Thu", action="")
     pump(QApplication.instance(), 30)
 
 
@@ -117,8 +116,8 @@ SCREENS: list[Screen] = [
         area="week",
         prepare=_reminder_strip,
         checks=(
-            "A reminder kept on screen: a strip just above the snackbar with the reminder's words and a "
-            "filled Got it button, and the same words on the snackbar. Neither covers the day names."
+            "A reminder kept on screen: a strip at the foot of the week with the reminder's words and a "
+            "filled Got it button, said once (no snackbar line under it). It does not cover the day names."
         ),
         sources=_SOURCES,
         styles=("material",),
