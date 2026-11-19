@@ -69,6 +69,18 @@ SheetFrame {
                 height: 40
                 spacing: 8
                 Button {
+                    objectName: "focusUnfinished-" + modelData.id
+                    visible: modelData.focusable
+                    theme: root.theme
+                    density: root.density
+                    reduceMotion: root.reduceMotion
+                    highContrast: root.highContrast
+                    kind: "outlined"
+                    text: "Start focus"
+                    accessName: "Start focus on " + modelData.title
+                    onClicked: root.sheets.startFocusOn(modelData.id)
+                }
+                Button {
                     objectName: "planUnfinished-" + modelData.id
                     visible: modelData.plannable
                     theme: root.theme

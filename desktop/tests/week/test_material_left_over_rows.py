@@ -17,6 +17,7 @@ from desktop.native.weekmodel import range_label
 from desktop.tests.planner.support import FRIDAY, WEDNESDAY, left_in_week_one, overdue_this_week
 from desktop.tests.week.support_material import (
     _bridge,
+    _click,
     _named,
     _pump,
     _qml,
@@ -44,17 +45,42 @@ def test_the_unfinished_sheet_names_each_homework_with_its_time_left_due_date_an
     assert _named(root, "unfinishedRow"), "the sheet draws its rows"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="product gap: the Widgets Unfinished row had a Start focus button; Material's Unfinished sheet "
-    "has none (its rows offer Find a time and Delete)",
-)
-def test_an_unfinished_row_has_a_start_focus_button(qapp, window) -> None:
+def test_an_unfinished_row_has_a_start_focus_button_that_starts_the_timer_on_it(qapp, window) -> None:
     left_in_week_one(qapp, window)
+    root = _show_material(qapp, window)
+    sheets = _bridge(window).sheets
+    sheets.openUnfinished()
+    _pump(qapp, 40)
+    (button,) = _named(root, "focusUnfinished-lab")
+    assert button.property("text") == "Start focus"
+    assert button.property("accessName") == "Start focus on Lab report"
+    _click(window, button)
+    _pump(qapp, 20)
+    assert window.session.focus["assignmentId"] == "lab", "the timer runs on the homework"
+    assert sheets.kind == "", "the sheet gave way to the Focus screen"
+    assert _bridge(window).focus.active is True
+
+
+def test_homework_that_only_needs_a_time_has_no_start_focus_button(qapp, window) -> None:
+    """Only overdue and left-over homework offers the timer, as on the Widgets row."""
+    left_in_week_one(qapp, window)
+    window.session.add_homework(
+        {
+            "id": "extra",
+            "title": "Extra reading",
+            "due": window.session.week_start + "T23:00",
+            "estimate_min": 45,
+            "revision": 0,
+        }
+    )
     root = _show_material(qapp, window)
     _bridge(window).sheets.openUnfinished()
     _pump(qapp, 40)
-    assert _named(root, "focusUnfinished-lab"), "no Start focus on the row"
+    rows = {row["id"]: row["focusable"] for row in _bridge(window).sheets.form["rows"]}
+    assert rows.get("lab") is True
+    for ident, focusable in rows.items():
+        (button,) = _named(root, f"focusUnfinished-{ident}") or [None]
+        assert (button is not None and button.property("visible") is True) is focusable, ident
 
 
 def test_the_overdue_row_is_still_there_while_the_unfinished_sheet_is_open(qapp, window) -> None:

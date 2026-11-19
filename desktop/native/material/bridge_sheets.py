@@ -1059,6 +1059,8 @@ class SheetsBridge(QObject):
                     "detail": f"{line} · {words}" if words else line,
                     "plannable": bool(item.get("plannable", True)),
                     "overdue": state == "overdue",
+                    # Homework with no time left over to place has nothing to start a timer on yet.
+                    "focusable": state in ("overdue", "left_from_last_week"),
                 }
             )
         return {
@@ -1122,6 +1124,16 @@ class SheetsBridge(QObject):
             return
         self._window._plan_unfinished(assignment_id)
         self._publish()
+
+    @Slot(str)
+    def startFocusOn(self, assignment_id: str) -> None:
+        """Start focus on one unfinished homework, as the Widgets row did. The sheet closes first,
+        so the Focus screen opens on the page and not under the sheet."""
+        session = self._session
+        if session is None or session.assignments.get(assignment_id) is None:
+            return
+        self._close()
+        self._window._start_focus(assignment_id, None)
 
     @Slot(str)
     def askDeleteUnfinished(self, assignment_id: str) -> None:
