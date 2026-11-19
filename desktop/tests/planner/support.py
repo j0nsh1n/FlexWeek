@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton
+from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import CLOCK
 from desktop.native.calendar import sunday_due
@@ -55,28 +55,7 @@ TRACE = {
         },
     ],
 }
-ONE_UNPLACED = {
-    "placed": [],
-    "unplaced": [{"id": "poster", "title": "Science fair poster"}],
-    "moves": [],
-    "explanations": [],
-}
 
-LONG_FOCUS_TASKS = [
-    {
-        "id": "long",
-        "day": 0,
-        "start": "19:00",
-        "title": "A long history essay title with many words that must wrap",
-    },
-    {
-        "id": "next",
-        "day": 0,
-        "start": "20:00",
-        "title": "Another long chemistry report title that must also wrap",
-    },
-    {"id": "short", "day": 1, "start": "19:00", "title": "Math"},
-]
 
 
 def overdue_this_week(qapp: QApplication | None, window: NativeWindow) -> str:
@@ -132,19 +111,8 @@ def open_unfinished(window: NativeWindow) -> None:
         QApplication.processEvents()
 
 
-def unfinished_row_buttons(window: NativeWindow):
-    """The first Unfinished row and its Start focus, Plan and Delete buttons."""
-    row = window.unfinished_panel.list.itemWidget(window.unfinished_panel.list.item(0))
-    return row, [
-        button
-        for button in row.findChildren(QPushButton)
-        if button.objectName().split("-")[0] in {"focusUnfinished", "planUnfinished", "deleteUnfinished"}
-    ]
 
 
-def unfinished_words(window: NativeWindow) -> QLabel:
-    row, _buttons = unfinished_row_buttons(window)
-    return row.findChild(QLabel, "unfinishedRow")
 
 
 def agenda_week(window: NativeWindow) -> None:
@@ -200,3 +168,7 @@ def week_list_action(window: NativeWindow):
         if button.objectName() == "weekListRow":
             return action
     raise AssertionError("More has no Week as a list")
+
+
+
+

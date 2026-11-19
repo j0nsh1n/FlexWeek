@@ -26,8 +26,6 @@ from desktop.tests.day.support_layouts_window import (  # noqa: E402
 from desktop.tests.week.support_material import _bridge, _pump, _qml, _repeater_texts, _snack  # noqa: E402
 from desktop.tests.week.support_material_page import fresh_material  # noqa: E402
 
-pytestmark = pytest.mark.real_surface
-
 
 def _friday_noon(window: NativeWindow) -> str:
     return f"{(date.fromisoformat(window.session.week_start) + timedelta(days=4)).isoformat()}T12:00"

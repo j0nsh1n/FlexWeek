@@ -20,8 +20,6 @@ from desktop.tests.day.support_layouts_window import (  # noqa: E402
 from desktop.tests.material_support import pump, qml  # noqa: E402
 from desktop.tests.week.support_material_page import fresh_material  # noqa: E402
 
-pytestmark = pytest.mark.real_surface
-
 
 def _add_through_the_sheet(qapp: QApplication, window: NativeWindow) -> dict:
     fresh_material(qapp, window)

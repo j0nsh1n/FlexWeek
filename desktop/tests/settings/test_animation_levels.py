@@ -27,7 +27,6 @@ if importlib.util.find_spec("PySide6") is not None:
         PAGE_IN_MS,
         PAGE_OUT_MS,
         RISE_PX,
-        SEGMENT_MS,
         SLIDE_PX,
         appear,
         apply_ui_effects,
@@ -62,9 +61,9 @@ def test_normal_runs_the_plans_numbers_and_the_other_levels_scale_them() -> None
     """The page change: 120 ms out, 160 in starting 30 ms after, a 24-pixel slide (at 12 none was
     seen), an 8-pixel rise, Settings in 200 ms and the segment in 160. Reduce keeps every fade at
     Normal's length and moves nothing; More is longer and further; Off is at once."""
-    timings = (PAGE_OUT_MS, PAGE_IN_MS, PAGE_IN_AFTER_MS, OVER_MS, SEGMENT_MS)
+    timings = (PAGE_OUT_MS, PAGE_IN_MS, PAGE_IN_AFTER_MS, OVER_MS)
     normal = [duration(ms, "normal") for ms in timings]
-    assert normal == [120, 160, 30, 200, 160]
+    assert normal == [120, 160, 30, 200]
     assert (distance(SLIDE_PX, "normal"), distance(RISE_PX, "normal")) == (24, 8)
     for ms in normal:
         assert duration(ms, "reduce") == ms
@@ -85,9 +84,9 @@ def test_more_is_clearly_longer_than_normal_with_the_standard_ease_at_550_ms() -
     assert duration(EASE_MS, "off") == 0
     assert duration(EASE_MS + 60, "normal") == 280
     assert (distance(SLIDE_PX, "reduce"), distance(RISE_PX, "reduce")) == (0, 0)
-    page = (PAGE_OUT_MS, PAGE_IN_MS, PAGE_IN_AFTER_MS, OVER_MS, SEGMENT_MS)
-    assert [duration(ms, "normal") for ms in page] == [120, 160, 30, 200, 160]
-    for ms in (PAGE_OUT_MS, PAGE_IN_MS, PAGE_IN_AFTER_MS, OVER_MS, SEGMENT_MS, EASE_MS):
+    page = (PAGE_OUT_MS, PAGE_IN_MS, PAGE_IN_AFTER_MS, OVER_MS)
+    assert [duration(ms, "normal") for ms in page] == [120, 160, 30, 200]
+    for ms in (PAGE_OUT_MS, PAGE_IN_MS, PAGE_IN_AFTER_MS, OVER_MS, EASE_MS):
         assert duration(ms, "extra") >= 2 * duration(ms, "normal"), ms
     assert distance(SLIDE_PX, "extra") > distance(SLIDE_PX, "normal")
 

@@ -15,32 +15,19 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QWidget  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from desktop.native.window import WEEK_LIST_NAME, NativeWindow  # noqa: E402
+from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_window import material_window, qapp  # noqa: E402, F401
 from desktop.tests.material_support import (  # noqa: E402
     named,
     pump,
     qml,
     show_material,
-    show_widgets,  # noqa: E402
 )
 
 
-def _menu_labels(menu: QWidget) -> list[str]:
-    labels: list[str] = []
-    for action in menu.actions():
-        if action.isSeparator() or not action.isVisible():
-            continue
-        labels.append(action.text().split("\t", 1)[0])
-        inner = action.menu()
-        if inner is not None:
-            labels.extend(_menu_labels(inner))
-    return labels
-
-
-def test_material_more_lists_the_planning_actions_and_leaves_the_widgets_menu_alone(
+def test_material_more_lists_the_planning_actions(
     qapp: QApplication, material_window: NativeWindow
 ) -> None:
     window = material_window
@@ -70,15 +57,6 @@ def test_material_more_lists_the_planning_actions_and_leaves_the_widgets_menu_al
         "Sign out",
     ]
     bridge.sheets.closeMore()
-    show_widgets(window)
-    pump(qapp)
-    window.more_menu.popup(window.more_button.mapToGlobal(window.more_button.rect().bottomLeft()))
-    pump(qapp)
-    try:
-        assert "Unfinished" in _menu_labels(window.more_menu)
-        assert WEEK_LIST_NAME in _menu_labels(window.more_menu)
-    finally:
-        window.more_menu.close()
 
 
 def test_the_add_button_opens_homework_from_the_keyboard(

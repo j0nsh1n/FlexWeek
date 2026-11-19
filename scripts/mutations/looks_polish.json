@@ -28,20 +28,6 @@
     "test": "desktop/tests/settings/test_look_character.py::test_sand_is_a_different_colour_from_gold[light]"
   },
   {
-    "name": "Terminal time sentence stops wrapping",
-    "file": "desktop/native/hours/rail.py",
-    "old": "self.when.setWordWrap(True)",
-    "new": "self.when.setWordWrap(False)",
-    "test": "desktop/tests/settings/test_next_card_time_sentence.py::test_terminals_next_card_wraps_and_ends_with_the_time_left"
-  },
-  {
-    "name": "Non-homework blocks lose their category icons",
-    "file": "engine/engine/src/desk/calendar.rs",
-    "old": "    CATEGORIES\n        .iter()\n        .find(|(key, _)| Some(*key) == category)\n        .and_then(|(_, info)| info.icon)\n",
-    "new": "    None\n",
-    "test": "desktop/tests/settings/test_block_words_and_icons.py::test_each_category_paints_its_approved_icon"
-  },
-  {
     "name": "Plan pale accent drops out of Readability",
     "file": "engine/engine/src/desk/custom_look.rs",
     "old": "            \"The Plan button's words\",\n            palette.accent.as_str(),\n            tint.as_str(),\n            \"accent\",\n",
@@ -54,40 +40,5 @@
     "old": "        if field == \"accent\" && !own_accent {\n            continue;\n        }\n",
     "new": "        if field == \"accent\" && !own_accent && field.len() > 100 {\n            continue;\n        }\n",
     "test": "desktop/tests/settings/test_look_character.py::test_stock_accents_have_no_readability_warning[default]"
-  },
-  {
-    "name": "Small blocks keep icons at their name's expense",
-    "file": "desktop/native/hours/canvas.py",
-    "old": "    return bare if said(bare) > said(lay) else lay\n",
-    "new": "    return lay\n",
-    "test": "desktop/tests/settings/test_block_words_and_icons.py::test_the_icon_gives_way_where_it_would_cost_the_name"
-  },
-  {
-    "name": "The icon gives way though it costs the name nothing",
-    "file": "desktop/native/hours/canvas.py",
-    "old": "    return bare if said(bare) > said(lay) else lay\n",
-    "new": "    return bare if said(bare) >= said(lay) else lay\n",
-    "test": "desktop/tests/settings/test_block_words_and_icons.py::test_a_block_with_room_for_the_name_the_time_and_the_icon_has_all_three"
-  },
-  {
-    "name": "A half hour's time loses to its icon",
-    "file": "desktop/native/hours/canvas.py",
-    "old": "    return bare if said(bare) > said(lay) else lay\n",
-    "new": "    return bare if said(bare)[0] > said(lay)[0] else lay\n",
-    "test": "desktop/tests/settings/test_block_words_and_icons.py::test_the_icon_gives_way_where_it_would_cost_the_name"
-  },
-  {
-    "name": "Free time gets its icon back",
-    "file": "engine/engine/src/desk/calendar.rs",
-    "old": "        \"free\",\n        CategoryInfo {\n            icon: None,\n",
-    "new": "        \"free\",\n        CategoryInfo {\n            icon: Some(\"wind\"),\n",
-    "test": "desktop/tests/settings/test_block_words_and_icons.py::test_only_free_time_has_no_icon_colour_in_every_look_and_block_style"
-  },
-  {
-    "name": "The hours' painter is left active when a design's painter raises",
-    "file": "desktop/native/hours/canvas.py",
-    "old": "            self._paint_hours(painter)\n        finally:\n",
-    "new": "            self._paint_hours(painter)\n        except ZeroDivisionError:\n            raise\n        else:\n",
-    "test": "desktop/tests/week/test_a_failed_paint.py::test_a_paint_that_raises_still_ends_its_painter"
   }
 ]

@@ -45,6 +45,3 @@ def plan(qapp: QApplication, window: NativeWindow, with_keys: bool) -> None:
     settled(qapp, window)
 
 
-def stray(window: NativeWindow) -> bool:
-    """Whether the keyboard sits on a button that turns the page."""
-    return window.focusWidget() in (window.prev_nav, window.next_nav)

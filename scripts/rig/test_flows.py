@@ -1,4 +1,4 @@
-"""The flows recorded as clips (spec.md, Testing structure rule 6): each in Widgets and in Material 3,
+"""The flows recorded as clips (spec.md, Testing structure rule 6): each in Material 3,
 and every file a play the rig accepts."""
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import pytest
 from scripts.rig import drive, play
 
 FLOWS = Path(__file__).with_name("flows")
-# The actions rule 6 lists as meant to behave the same in Widgets and Material 3.
+# The actions rule 6 lists.
 EXPECTED = {
     "add-homework",
     "done-and-undo",
@@ -24,9 +24,9 @@ EXPECTED = {
 }
 
 
-def test_every_flow_is_recorded_in_widgets_and_material():
+def test_every_flow_is_recorded_in_material():
     found = {path.stem for path in FLOWS.glob("*.json")}
-    assert found == {f"{flow}.{surface}" for flow in EXPECTED for surface in ("widgets", "material")}
+    assert found == {f"{flow}.material" for flow in EXPECTED}
 
 
 @pytest.mark.parametrize("path", sorted(FLOWS.glob("*.json")), ids=lambda path: path.stem)

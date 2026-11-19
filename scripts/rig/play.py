@@ -461,7 +461,6 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
     session.now_ms = lambda: int(held["now"].timestamp() * 1000)
     # The server inside the app counts what homework still needs against its own clock: hold it too.
     wall_clock.use(lambda: held["now"].timestamp())
-    window.toast.clock_ms = session.now_ms
     setup = play.setup
 
     # Setup
@@ -778,7 +777,6 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
         window._alert_tick.timeout.emit()
         window._layout_tick.timeout.emit()
         session.tick_focus()
-        window.toast.sync_progress()
 
     def do_step(number: int, step: Step):
         action, value = step.action, step.value

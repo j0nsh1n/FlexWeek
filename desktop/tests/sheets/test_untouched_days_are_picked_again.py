@@ -15,10 +15,9 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QDialog, QLabel  # noqa: E402
+from PySide6.QtWidgets import QDialog  # noqa: E402
 
 from desktop.native.widgets import BlockDialog  # noqa: E402
-from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402,F401
 from desktop.tests.material_support import pump  # noqa: E402
 from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: E402,F401
@@ -28,8 +27,6 @@ from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: E402
     shell,
 )
 from desktop.tests.sheets.test_fixed_time_discard_on_escape import (  # noqa: E402
-    Script,
-    only_look,
     press_escape,
 )
 from desktop.tests.sheets.test_material_escape_keeps_the_typing import (  # noqa: E402,F401
@@ -165,61 +162,5 @@ def _widgets_pick(days: list[int] | None):
     return pick
 
 
-@pytest.mark.parametrize(
-    "ticked, picked, note",
-    [
-        (None, [0], ""),
-        ([1], [6], TUESDAY_NOTE),
-        ([0, 2], [0, 5], MONDAY_NOTE),
-    ],
-    ids=["untouched", "ticked", "mix"],
-)
-def test_widgets_block_carries_only_ticked_days(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, ticked, picked, note
-) -> None:
-    seen: dict = {}
-
-    def inspect(dialog: QDialog) -> int:
-        seen["days"] = dialog.day_picker.days()
-        seen["note"] = dialog.findChild(QLabel, "blockMovedNote").text()
-        seen["moved"] = [
-            day for day, button in enumerate(dialog.day_picker.buttons) if button.property("moved")
-        ]
-        return only_look(dialog)
-
-    Script("block", monkeypatch, _widgets_pick(ticked), inspect)
-    _go(qapp, window.session, "2026-11-30")
-    window._add_fixed()
-    pump(qapp)
-    _wednesday(qapp, window.session)
-    window._add_fixed()
-    pump(qapp)
-    assert seen["days"] == picked
-    assert seen["note"] == note
-    assert seen["moved"] == ([] if not note else [day for day in picked if day in (5, 6)])
 
 
-@pytest.mark.parametrize(
-    "ticked, picked, note",
-    [(None, [0], ""), ([1], [6], TUESDAY_NOTE)],
-    ids=["untouched", "ticked"],
-)
-def test_widgets_homework_pin_carries_only_a_picked_day(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, ticked, picked, note
-) -> None:
-    seen: dict = {}
-
-    def inspect(dialog: QDialog) -> int:
-        seen["days"] = dialog.when_day.days()
-        seen["note"] = dialog.findChild(QLabel, "homeworkMovedNote").text()
-        return only_look(dialog)
-
-    Script("homework", monkeypatch, _widgets_pick(ticked), inspect)
-    _go(qapp, window.session, "2026-11-30")
-    window._add_homework()
-    pump(qapp)
-    _wednesday(qapp, window.session)
-    window._add_homework()
-    pump(qapp)
-    assert seen["days"] == picked
-    assert seen["note"] == note

@@ -30,15 +30,15 @@ def toasted(material_focus_window: NativeWindow) -> Iterator[list[str]]:
     """The reminder words the window really put on screen, after the session's holding back."""
     window = material_focus_window
     seen: list[str] = []
-    original = window._say_in_toast
+    original = window._say_in_snack
 
-    def spy(words: str, *args: object, **kwargs: object) -> None:
+    def spy(snack: object, words: str, *args: object, **kwargs: object) -> None:
         seen.append(words)
-        original(words, *args, **kwargs)  # type: ignore[arg-type]
+        original(snack, words, *args, **kwargs)  # type: ignore[arg-type]
 
-    window._say_in_toast = spy  # type: ignore[method-assign]
+    window._say_in_snack = spy  # type: ignore[method-assign]
     yield seen
-    del window._say_in_toast
+    del window._say_in_snack
 
 
 def test_reminders_wait_during_a_focus_work_phase_and_come_when_it_ends(

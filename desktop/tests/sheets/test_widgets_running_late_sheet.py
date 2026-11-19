@@ -5,20 +5,18 @@ week with the reason. How the buttons are drawn is a look: pictures/_sheets_g13.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import date, timedelta
 
 import pytest
 
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QStandardPaths
-from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QPushButton
+from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 
 from desktop.native.widgets import LateDialog
-from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.sheets.support_dialogs import shown, styled
-from desktop.tests.window_support import free, settled, still
+from desktop.tests.window_support import free, still
 
 NO_MOVES = {"moves": [], "unplaced": []}
 
@@ -75,21 +73,3 @@ def test_running_late_has_preview_then_accept_in_its_place_and_a_bare_cancel(qap
     free(parent)
 
 
-def test_running_late_is_greyed_on_another_week_with_the_reason(
-    qapp: QApplication, window: NativeWindow  # noqa: F811
-) -> None:
-    """Greyed while viewing next week, instead of refusing after the click."""
-    window.findChild(QAbstractButton, "viewWeek").click()
-    settled(qapp, window)
-    late = window.findChild(QPushButton, "runningLate")
-    assert late.isEnabled()
-    window.session.load_week(
-        (date.fromisoformat(window.session.week_start) + timedelta(days=7)).isoformat()
-    )
-    settled(qapp, window)
-    assert late.isEnabled() is False
-    assert late.toolTip() == "Open this week to use Running late."
-    opened: list[str] = []
-    window._open_late = lambda: opened.append("opened")  # type: ignore[method-assign]
-    late.click()
-    assert opened == []

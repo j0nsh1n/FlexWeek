@@ -12,7 +12,6 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.widgets import HomeworkDialog
-from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.sheets.support_homework import SCHOOL, TODAY, essay, go_when, host, opened
 from desktop.tests.window_support import free, qapp  # noqa: F401
@@ -116,17 +115,3 @@ def test_editing_homework_keeps_its_title(qapp: QApplication) -> None:  # noqa: 
     free(dialog)
 
 
-def test_add_homework_from_the_window_opens_with_the_hint_not_the_word(
-    qapp: QApplication,  # noqa: F811
-    window: NativeWindow,  # noqa: F811
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    seen: list[tuple[str, str]] = []
-
-    def run(dialog: HomeworkDialog) -> int:
-        seen.append((dialog.title.text(), dialog.title.placeholderText()))
-        return 0
-
-    monkeypatch.setattr(HomeworkDialog, "exec", run)
-    window._add_homework()
-    assert seen == [("", "e.g. History essay")]

@@ -19,7 +19,6 @@ from PySide6.QtWidgets import QApplication, QWidget
 
 from desktop.native.calendar import CATEGORIES
 from desktop.native.elevation import flatten, lift
-from desktop.native.hours.rail import Colours
 from desktop.native.look import category_paint, pack_stylesheet, resolved_palette
 from desktop.native.material.theme import _schemes
 from desktop.native.tokens import (
@@ -101,20 +100,8 @@ def test_a_computed_fill_is_richer_than_the_saved_family() -> None:
     assert oklch_of(mark)[0] - oklch_of(homework)[0] == pytest.approx(HOMEWORK_DARKER, abs=0.01)
 
 
-@pytest.mark.parametrize("name", ["Dark", "Nocturne", "Ink", "Terminal"])
-def test_the_rails_homework_red_keeps_the_categorys_hue_on_the_dark_surfaces(name: str) -> None:
-    """The rail draws a lighter red in the dark looks (3 to 1 on its surfaces, judged on the
-    pictures), and the same hue as the category's own mark, which stays as it was."""
-    palette = palette_for(name)
-    rail = Colours.of(palette).homework
-    mark = category_paint("assignments", palette)[1]
-    assert abs(oklch_of(rail)[2] - oklch_of(mark)[2]) < 3, (rail, mark)
 
 
-@pytest.mark.parametrize("name", ["Light", "Slate", "High contrast"])
-def test_the_rails_homework_red_is_the_categorys_own_in_the_light_looks(name: str) -> None:
-    palette = palette_for(name)
-    assert Colours.of(palette).homework == category_paint("assignments", palette)[1]
 
 
 # The rules that paint a page, a card or a panel. A background named in one may be neutral or the

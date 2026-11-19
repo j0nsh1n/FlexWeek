@@ -217,13 +217,12 @@ paths = [
   "desktop/native/window.py", "desktop/native/controller.py", "desktop/native/widgets.py",
   "desktop/native/look.py", "desktop/native/tokens.py", "desktop/native/weekmodel.py",
   "desktop/native/calendar.py", "desktop/native/settings.py", "desktop/native/fonts.py",
-  "desktop/native/fields.py", "desktop/native/motion.py", "desktop/native/menus.py",
+  "desktop/native/fields.py", "desktop/native/motion.py",
   "desktop/native/icons.py", "desktop/native/client.py",
   "desktop/native/wire.py", "desktop/native/history.py", "desktop/native/elevation.py",
   "desktop/native/files.py", "desktop/native/collector.py",
   "desktop/native/layout_choice.py",
-  "desktop/native/hours/__init__.py", "desktop/native/hours/canvas.py",
-  "desktop/native/hours/geometry.py",
+  "desktop/native/hours/__init__.py", "desktop/native/hours/geometry.py",
   "desktop/native/material/__init__.py", "desktop/native/material/bridge.py",
   "desktop/native/material/theme.py", "desktop/native/material/host.py",
   "desktop/native/material/tokens.json", "desktop/native/material/bridge_rows.py",
@@ -233,20 +232,6 @@ paths = [
 everything = true
 
 # --- Week: the hours grid, its designs and the Week screen.
-[[rule]]
-paths = [
-  "desktop/native/hours/classic.py", "desktop/native/hours/chips.py",
-]
-areas = ["week", "day"]
-
-[[rule]]
-paths = ["desktop/native/hours/zoom.py", "desktop/native/hours/hand.py"]
-areas = ["week", "day", "month"]
-
-[[rule]]
-paths = ["desktop/native/hours/rail.py"]
-areas = ["week", "planner"]
-
 [[rule]]
 paths = ["desktop/native/material/bridge_week.py", "desktop/native/material/qml/week/"]
 areas = ["week"]
@@ -270,7 +255,7 @@ areas = ["myday", "day"]
 # --- Month.
 [[rule]]
 paths = [
-  "desktop/native/hours/month.py", "desktop/native/material/bridge_month.py",
+  "desktop/native/material/bridge_month.py",
   "desktop/native/material/qml/month/",
 ]
 areas = ["month"]

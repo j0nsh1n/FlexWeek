@@ -26,9 +26,6 @@ if importlib.util.find_spec("PySide6") is not None:
 PASSWORD = "a-long-test-password"
 HELD: list[object] = []
 FOCUS_START_MS = 1_000_000
-NEEDS_DESKTOP = pytest.mark.skipif(
-    importlib.util.find_spec("PySide6") is None, reason="Desktop dependencies absent"
-)
 
 
 @pytest.fixture(scope="module")
@@ -200,3 +197,5 @@ def tick_focus_after_half_an_hour(qapp: QApplication, session: NativeSession) ->
     session.now_ms = lambda: FOCUS_START_MS + 30 * 60_000
     session.tick_focus()
     settled(qapp, session)
+
+

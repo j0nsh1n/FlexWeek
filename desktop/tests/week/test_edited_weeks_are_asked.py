@@ -15,7 +15,6 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QTimer  # noqa: E402
 from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
 
-from desktop.native import window as window_module  # noqa: E402
 from desktop.native.client import ApiError  # noqa: E402
 from desktop.native.fields import week_starts_on  # noqa: E402
 from desktop.native.material.bridge_sheets import SheetsBridge  # noqa: E402
@@ -26,6 +25,7 @@ from desktop.tests.light_app import window  # noqa: E402, F401
 from desktop.tests.material_support import named, pump, show_material  # noqa: E402
 from desktop.tests.sheets.support_material_sheets import click  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
+from desktop.tests.week.support_school_hours import school_hours as school_hours_form  # noqa: E402
 from desktop.tests.week.test_repeats_from_the_open_week import (  # noqa: E402
     WEDNESDAY,
     answer_edited,
@@ -41,8 +41,6 @@ from desktop.tests.week.test_standing_week import (  # noqa: E402, F401
     save_and_settle,
 )
 from desktop.tests.window_support import qapp, settled  # noqa: E402, F401
-
-pytestmark = pytest.mark.real_surface
 
 LATER = "2026-11-16"
 END = 14 * 60 + 30
@@ -65,8 +63,7 @@ def skip_wednesday(qapp: QApplication, session) -> str:
 
 
 def school_hours(qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(window_module.SchoolHoursDialog, "exec", lambda dialog: shorten(dialog))
-    window._school_hours()
+    school_hours_form(window, shorten)
     wait_until(qapp, lambda: not window.session.busy and not window.session.dirty)
     settled(qapp, window)
 
@@ -123,8 +120,7 @@ def test_material_defaults_to_except_edited_and_cancel_saves_nothing(
         click(window, named(prompts[0], "prompt_stay")[0])
 
     QTimer.singleShot(0, poke)
-    monkeypatch.setattr(window_module.SchoolHoursDialog, "exec", lambda dialog: shorten(dialog))
-    window._school_hours()
+    school_hours_form(window, shorten)
     assert seen["label"] == "Save changes"
     assert seen["focused"] is True
     assert seen["body"] == "The week of 16 November has its own School times."
@@ -362,8 +358,7 @@ def test_a_preview_does_not_apply_after_the_week_changes(
 
     monkeypatch.setattr(window.session, "preview_repeats", preview)
     monkeypatch.setattr(ConfirmSheet, "exec", answer)
-    monkeypatch.setattr(window_module.SchoolHoursDialog, "exec", lambda dialog: shorten(dialog))
-    window._school_hours()
+    school_hours_form(window, shorten)
     wait_until(qapp, lambda: not window.session.busy)
     assert school_of(after_setup) == before
 

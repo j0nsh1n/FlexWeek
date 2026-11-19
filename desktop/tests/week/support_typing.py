@@ -22,7 +22,6 @@ from PySide6.QtWidgets import QAbstractButton, QApplication, QLineEdit, QPushBut
 from backend.tests.fake_clock import CLOCK
 from desktop.native.calendar import sunday_due
 from desktop.native.fields import ClockField
-from desktop.native.hours.zoom import HoursScroll
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import open_light  # noqa: F401
 from desktop.tests.waiting import exposed, wait_until
@@ -180,46 +179,8 @@ def end_of(start: str, minutes: int) -> str:
 # The Week windows the time tests open on ----------------------------------------------------------
 
 
-@pytest.fixture()
-def hours_window(qapp: QApplication, open_light: Callable[..., NativeWindow]) -> Iterator[NativeWindow]:
-    """Signed in with the clock held at Thursday 15:40 on 2026-10-15 from before the week is first
-    shown: school on weekdays from 08:00, dinner every day at 18:00, and nothing next week."""
-    CLOCK.set(HELD)
-    made = open_light((1280, 860))
-    session = made.session
-    session.add_block(
-        {
-            "id": "school",
-            "title": "School",
-            "kind": "locked",
-            "category": "class",
-            "start": "08:00",
-            "duration_min": 390,
-            "days": [0, 1, 2, 3, 4],
-        }
-    )
-    session.add_block(
-        {
-            "id": "dinner",
-            "title": "Dinner",
-            "kind": "locked",
-            "category": "meals",
-            "start": "18:00",
-            "duration_min": 30,
-            "days": [0, 1, 2, 3, 4, 5, 6],
-        }
-    )
-    session.save()
-    wait_until(qapp, lambda: not session.busy and not session.dirty)
-    yield made
 
 
-def hours(window: NativeWindow) -> HoursScroll:
-    on_screen = [
-        scroll for scroll in window.planner.currentWidget().findChildren(HoursScroll) if scroll.isVisible()
-    ]
-    assert len(on_screen) == 1, f"{len(on_screen)} hours on screen"
-    return on_screen[0]
 
 
 def settled(qapp: QApplication, window: NativeWindow) -> None:

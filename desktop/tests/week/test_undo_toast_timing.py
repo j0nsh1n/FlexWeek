@@ -1,6 +1,6 @@
 """The Undo notice after a change: how long it stays, that hovering or focusing it holds it, the Ctrl+Z hint
 it shows, what a shorter-lived or replaced notice does to the clock, and where the keyboard is afterwards.
-Material's snackbar and sheet notice, and Widgets' toast, are held to the same rules."""
+Material's snackbar and sheet notice are held to the same rules."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
@@ -12,16 +12,15 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QPoint, QPointF, QStandardPaths, Qt, QTimer
+from PySide6.QtCore import QPoint, QPointF, QStandardPaths, QTimer
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.material import bridge as bridge_module
 from desktop.native.material import bridge_sheets as bridge_sheets_module
-from desktop.native.widgets import ACTION_TOAST_MS
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import pump, qml, show_widgets
+from desktop.tests.material_support import pump, qml
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material_page import fresh_material
 
@@ -58,13 +57,6 @@ def test_the_undo_toast_stays_at_least_ten_seconds(qapp: QApplication, window: N
     pump(qapp)
     assert bridge.sheets._timer.interval() >= 10000
     bridge.sheets.dismissNotice()
-
-    # Widgets toast duration
-    assert ACTION_TOAST_MS >= 10000
-    show_widgets(window)
-    window.toast.show_message("Homework scheduled", "Undo")
-    assert window.toast._timer.interval() >= 10000
-    window.toast.hide()
 
 
 def test_the_undo_toast_pauses_while_hovered_and_while_focused(
@@ -131,18 +123,6 @@ def test_the_undo_toast_pauses_while_hovered_and_while_focused(
     assert bridge.sheets._timer.isActive()
     bridge.sheets.dismissNotice()
 
-    # Widgets toast pause
-    show_widgets(window)
-    window.activateWindow()
-    wait_until(qapp, window.isActiveWindow)
-    window.toast.show_message("History essay moved", "Undo")
-    pump(qapp)
-    assert window.toast._timer.isActive()
-    window.toast.button.setFocus(Qt.FocusReason.TabFocusReason)
-    wait_until(qapp, lambda: window.toast._keys and not window.toast._timer.isActive())
-    assert not window.toast._timer.isActive()
-    window.toast.hide()
-
 
 def test_undo_toasts_show_the_ctrl_z_hint(qapp: QApplication, window: NativeWindow) -> None:
     # Material snackbar
@@ -167,18 +147,6 @@ def test_undo_toasts_show_the_ctrl_z_hint(qapp: QApplication, window: NativeWind
     assert float(sheet_hint.property("opacity")) > 0
     assert "Ctrl+Z" in str(sheet_hint.property("text"))
     bridge.sheets.dismissNotice()
-
-    # Widgets toast
-    window._surface = "widgets"
-    show_widgets(window)
-    window._show_surface()
-    window.toast.show_message("Placed 1 homework block.", "Undo")
-    pump(qapp)
-    widget_hint = getattr(window.toast, "shortcut_hint", None)
-    assert widget_hint is not None
-    assert widget_hint.isVisible() is True
-    assert "Ctrl+Z" in widget_hint.text()
-    window.toast.hide()
 
 
 def test_after_plan_focus_is_on_the_week_or_the_plan_button(

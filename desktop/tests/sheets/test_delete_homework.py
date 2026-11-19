@@ -3,22 +3,19 @@ editor, from Unfinished and from its right-click menu. Weeks are read back from 
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import Qt
-from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton
+from PySide6.QtWidgets import QApplication
 
-from backend.tests.fake_clock import FakeClock
 from desktop.native import widgets
 from desktop.native.calendar import sunday_due
 from desktop.native.controller import NativeSession
 from desktop.native.reuse import copied_homework_block
-from desktop.native.widgets import HomeworkDialog, UnfinishedPanel
+from desktop.native.widgets import HomeworkDialog
 from desktop.native.window import NativeWindow
 from desktop.tests import logic_support
 from desktop.tests.blocks_helper import put_block
@@ -176,83 +173,7 @@ def test_the_editor_offers_delete_only_for_homework_that_exists(
     assert asked and "History essay" in asked[0] and "undo" in asked[0]
 
 
-def test_each_unfinished_row_has_its_own_delete(qapp: QApplication) -> None:  # noqa: F811
-    panel = UnfinishedPanel()
-    panel.set_items(
-        [{"id": "essay", "title": "History essay", "remaining_min": 60, "due": "2000-01-15T12:00"}]
-    )
-    asked: list[str] = []
-    panel.delete_requested.connect(asked.append)
-    delete = panel.findChild(QPushButton, "deleteUnfinished-essay")
-    assert delete is not None and delete.property("outlined") is True and not delete.property("quiet")
-    delete.click()
-    assert asked == ["essay"]
 
 
-def test_the_unfinished_list_holds_only_overdue_homework(
-    qapp: QApplication,  # noqa: F811
-    clock: FakeClock,
-) -> None:
-    """Unfinished listed work due today and tomorrow. It keeps only what is already late."""
-    clock.set(datetime(2026, 10, 3, 18, 0))
-    panel = UnfinishedPanel()
-    panel.set_items(
-        [
-            {"id": "late", "title": "History essay", "remaining_min": 60, "due": "2026-10-02T21:00"},
-            {"id": "today", "title": "Math worksheet", "remaining_min": 45, "due": "2026-10-03T23:59"},
-            {"id": "tomorrow", "title": "Chem lab", "remaining_min": 90, "due": "2026-10-04T15:30"},
-            {"id": "earlier_today", "title": "Quiz", "remaining_min": 30, "due": "2026-10-03T09:00"},
-        ]
-    )
-    rows = [label.text() for label in panel.findChildren(QLabel) if label.objectName() == "unfinishedRow"]
-    assert rows == [
-        "History essay · 1 h left · due Fri 2 Oct · Overdue",
-        "Quiz · 30 min left · due Sat 3 Oct · Overdue",
-    ]
 
 
-def test_homework_rows_expose_state_and_tab_through_each_action(
-    qapp: QApplication,  # noqa: F811
-) -> None:
-    panel = UnfinishedPanel()
-    panel.set_items(
-        [
-            {
-                "id": "bio",
-                "title": "Bio reading",
-                "remaining_min": 60,
-                "due": "2026-10-14",
-                "left_over_state": "overdue",
-            },
-            {
-                "id": "chem",
-                "title": "Chem lab",
-                "remaining_min": 30,
-                "due": "2026-10-21",
-                "left_over_state": "left_from_last_week",
-            },
-        ],
-        datetime(2026, 10, 17),
-        {"bio", "chem"},
-    )
-    panel.show()
-    qapp.processEvents()
-    rows = [panel.list.itemWidget(panel.list.item(index)) for index in range(panel.list.count())]
-    assert [row.accessibleName() for row in rows] == [
-        "Bio reading · 1 h left · due Wed 14 Oct · Overdue",
-        "Chem lab · 30 min left · due Wed 21 Oct · Left from last week",
-    ]
-    # Overdue / left-from-last-week rows offer Start focus next to Find a time (overdue-focus).
-    actions = [
-        panel.findChild(QPushButton, "focusUnfinished-bio"),
-        panel.findChild(QPushButton, "planUnfinished-bio"),
-        panel.findChild(QPushButton, "deleteUnfinished-bio"),
-        panel.findChild(QPushButton, "focusUnfinished-chem"),
-        panel.findChild(QPushButton, "planUnfinished-chem"),
-        panel.findChild(QPushButton, "deleteUnfinished-chem"),
-    ]
-    assert all(button is not None for button in actions)
-    for current, following in zip(actions, actions[1:], strict=False):
-        current.setFocus()
-        QTest.keyClick(current, Qt.Key.Key_Tab)
-        assert qapp.focusWidget() is following

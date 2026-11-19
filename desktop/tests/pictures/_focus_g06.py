@@ -24,9 +24,6 @@ MATERIAL_SOURCES = ("desktop/native/material", "desktop/native/window.py")
 BAR_SOURCES = ("desktop/native/widgets.py", "desktop/native/window.py", "desktop/native/look.py")
 
 
-def _strip_running(window: NativeWindow) -> object:
-    window.session.start_quick_focus()
-    return window.focus_panel
 
 
 def _material_focus(running: bool, paused: bool = False):
@@ -48,16 +45,6 @@ def _material_focus(running: bool, paused: bool = False):
 
 
 SCREENS: list[Screen] = [
-    Screen(
-        id="focus.strip_running",
-        area="focus",
-        prepare=_strip_running,
-        checks=(
-            "The strip over the week with a timer running is one line: the task, the time and a Focus "
-            "screen button. The Focus screen button is outlined, not filled and not quiet."
-        ),
-        sources=("desktop/native/settings.py", "desktop/native/look.py"),
-    ),
     Screen(
         id="focus.material_ready",
         area="focus",

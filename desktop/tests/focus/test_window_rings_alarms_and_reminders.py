@@ -20,8 +20,6 @@ from desktop.tests.day.support_layouts_window import (  # noqa: E402
     window,  # noqa: F401
 )
 
-pytestmark = pytest.mark.real_surface
-
 
 def _rung(window: NativeWindow, monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
     heard: list[tuple[str, str]] = []

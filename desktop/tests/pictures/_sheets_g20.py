@@ -110,16 +110,6 @@ def _delete_homework(window: NativeWindow) -> None:
     pump(QApplication.instance(), 30)
 
 
-def _undo_snackbar(window: NativeWindow) -> None:
-    bridge = _bridge(window)
-    window.session.preferences = {**(window.session.preferences or {}), "motion": "normal"}
-    window._apply_appearance()
-    # The rig draws with Animations off; this picture is of the line, which Normal draws.
-    bridge._advanced = {**bridge._advanced, "motion": "Normal"}
-    bridge._publish_theme()
-    window.activateWindow()
-    bridge.note("Placed 1 of 1")
-    pump(QApplication.instance(), 30)
 
 
 def _reminder_strip(window: NativeWindow) -> None:
@@ -238,17 +228,6 @@ SCREENS: list[Screen] = [
         checks=(
             "The Delete homework question: Cancel is a text button and Delete is the only red button, in the "
             "error colour with its own ink, readable in light and dark."
-        ),
-        sources=_SOURCES,
-        styles=("material",),
-    ),
-    Screen(
-        id="week.material_snackbar_undo_countdown",
-        area="week",
-        prepare=_undo_snackbar,
-        checks=(
-            "The snackbar at the bottom of the week: 'Placed 1 of 1' and 'Undo 10' (seconds left, no '· s') "
-            "with Ctrl+Z, and a thin line along the bottom edge of the bar, full length when it appears."
         ),
         sources=_SOURCES,
         styles=("material",),

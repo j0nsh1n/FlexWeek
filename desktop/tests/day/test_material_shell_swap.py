@@ -1,6 +1,5 @@
 # ruff: noqa: F811
-"""Material 3 in the real window: choosing it shows the shell, going back to the Widgets styles keeps
-the student's week, and a refresh while Material is open stays on Material.
+"""Material 3 in the real window: a refresh while Material is open stays on Material.
 """
 
 from __future__ import annotations
@@ -20,28 +19,8 @@ from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_window import material_window, qapp  # noqa: E402, F401
 from desktop.tests.material_support import (  # noqa: E402
     pump,
-    qml,
     show_material,
-    show_widgets,  # noqa: E402
 )
-
-
-def test_choosing_material_shows_the_shell_and_swapping_back_keeps_the_blocks(
-    qapp: QApplication, material_window: NativeWindow
-) -> None:
-    session = material_window.session
-    block_ids = [block["id"] for block in session.blocks]
-
-    for _ in range(3):
-        root = show_material(qapp, material_window)
-        assert qml(root, "navDay").property("visible") is True
-        assert qml(root, "navMonth").property("visible") is True
-        assert qml(root, "navMyDay").property("visible") is True
-        show_widgets(material_window)
-        pump(qapp)
-        assert material_window._stack.currentWidget().objectName() == "weekPage"
-        assert material_window._surface == "widgets"
-        assert [block["id"] for block in session.blocks] == block_ids
 
 
 def test_a_refresh_stays_on_material_and_does_not_take_the_plan_prompt(
@@ -59,12 +38,6 @@ def test_a_refresh_stays_on_material_and_does_not_take_the_plan_prompt(
 
     assert material_window._stack.currentWidget().objectName() == "materialPage"
     assert session.consume_plan_review() == trace
-    session.trace = trace
-    session._fresh_plan = True
-    show_widgets(material_window)
-    pump(qapp)
-    assert material_window._stack.currentWidget().objectName() == "weekPage"
-    assert session.consume_plan_review() is None
 
 
 def test_a_disposed_bridge_stops_following_the_week(

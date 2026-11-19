@@ -47,13 +47,11 @@ def test_a_step_picked_in_material_settings_is_saved_and_given_to_the_hand(
     _click_segment(qapp, window, _named(root, "dragStep")[0], "5 min")
     wait_until(qapp, lambda: _prefs(window).get("drag_step_min") == 5)
     wait_until(qapp, lambda: _named(root, "dragStep")[0].property("current") == "5")
-    assert window.hand.step == 5
 
     # 15 is the default, which the server leaves out.
     _click_segment(qapp, window, _named(root, "dragStep")[0], "15 min")
     wait_until(qapp, lambda: "drag_step_min" not in _prefs(window))
     wait_until(qapp, lambda: _named(root, "dragStep")[0].property("current") == "15")
-    assert window.hand.step == 15
 
 
 def test_an_account_that_never_chose_a_step_shows_15_picked(

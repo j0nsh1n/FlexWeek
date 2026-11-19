@@ -52,7 +52,6 @@ def test_a_refresh_with_focus_open_keeps_focus_and_the_plan_prompt(
     focus = window._material_page.bridge.focus
     assert window._stack.currentWidget().objectName() == "materialPage"
     assert focus.open
-    assert window.plan_review.isHidden()
     assert window.session._fresh_plan is True
     focus.back()
     pump(qapp)

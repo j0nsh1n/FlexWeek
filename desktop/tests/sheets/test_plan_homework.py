@@ -29,8 +29,6 @@ from desktop.tests.week.support_material import _bridge, _snack
 from desktop.tests.week.support_material_page import fresh_material
 from desktop.tests.window_support import qapp  # noqa: F401
 
-pytestmark = pytest.mark.real_surface
-
 
 def test_nothing_placed_says_nothing_placed_not_planned_zero() -> None:
     assert plan_sentence(0, 1) == "Nothing placed. 1 with no time yet."

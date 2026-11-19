@@ -181,13 +181,6 @@ def test_help_follows_the_number_and_letter_switches(qapp: QApplication, window:
     assert "1 to 5" not in rows and "D W M" in rows
 
 
-def test_help_on_the_widgets_looks_still_opens_the_widgets_dialog(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    opened: list[object] = []
-    monkeypatch.setattr("desktop.native.window.HelpDialog.exec", lambda self: opened.append(self) or 0)
-    window._open_help()
-    assert len(opened) == 1
 
 
 # About
@@ -247,13 +240,6 @@ def test_about_closes_with_esc_and_the_keyboard_goes_back(qapp: QApplication, wi
     assert quick.quickWindow().activeFocusItem() is fab
 
 
-def test_about_on_the_widgets_looks_still_opens_the_widgets_dialog(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    opened: list[object] = []
-    monkeypatch.setattr("desktop.native.window.AboutDialog.exec", lambda self: opened.append(self) or 0)
-    window._open_about()
-    assert len(opened) == 1
 
 
 # Update
@@ -403,14 +389,6 @@ def test_an_update_waits_for_an_open_sheet_so_typing_is_not_lost(
     assert sheets.property("kind") == "update"
 
 
-def test_an_update_on_the_widgets_looks_still_opens_the_widgets_dialog(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    opened: list[object] = []
-    monkeypatch.setattr("desktop.native.window.UpdateDialog.exec", lambda self: opened.append(self) or 0)
-    window._update_asked = True
-    window._on_update_found(UPDATE)
-    assert len(opened) == 1
 
 
 # Sign out
@@ -504,13 +482,6 @@ def test_cancel_and_esc_keep_the_student_signed_in_and_the_keyboard_goes_back(
     assert quick.quickWindow().activeFocusItem() is fab
 
 
-def test_sign_out_on_the_widgets_looks_still_asks_with_the_widgets_question(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    asked: list[tuple] = []
-    monkeypatch.setattr("desktop.native.window.confirm", lambda *args, **kwargs: asked.append(args) or False)
-    window._log_out()
-    assert len(asked) == 1 and asked[0][1] == "Sign out"
 
 
 def test_the_about_logo_sits_on_a_rounded_tile_so_no_white_square_shows_in_dark(

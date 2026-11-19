@@ -73,23 +73,6 @@ def test_material_days_small_month_starts_its_rows_on_the_chosen_day(
     assert cells["cell0"] == str(first.day)
 
 
-@pytest.mark.parametrize("start", ["wednesday", "monday", "saturday", "sunday"])
-def test_the_widgets_day_rails_month_starts_its_rows_on_the_chosen_day(
-    qapp: QApplication, start: str
-) -> None:
-    from desktop.native.hours.rail import MiniMonth
-
-    _start_on(start)
-    month = MiniMonth()
-    month.month = date(2026, 11, 1)
-    shown = month.dates()
-    column, first, last = NOVEMBER[start]
-    assert shown[0] == first
-    assert shown[-1] == last
-    assert shown[column] == date(2026, 11, 1)
-    assert len(shown) % 7 == 0
-    assert list(month.letters()) == LETTERS[start]
-    month.deleteLater()
 
 
 @pytest.mark.parametrize("start", ["wednesday", "monday", "sunday"])

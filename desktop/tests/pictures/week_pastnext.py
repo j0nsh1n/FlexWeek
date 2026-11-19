@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
-
 from PySide6.QtWidgets import QAbstractButton, QApplication, QWidget
 
-from backend.tests.fake_clock import CLOCK
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.waiting import wait_until
@@ -73,40 +70,6 @@ def _weekend(design: str, with_saturday: bool):
     return prepare
 
 
-def _rail(window: NativeWindow) -> QWidget:
-    CLOCK.set(CLOCK.now().replace(hour=15, minute=40))
-    session = window.session
-    friday = date.fromisoformat(session.week_start) + timedelta(days=4)
-    session.add_block(
-        {
-            "id": "school",
-            "title": "School",
-            "kind": "locked",
-            "category": "class",
-            "start": "08:00",
-            "duration_min": 390,
-            "days": [0, 1, 2, 3, 4],
-        }
-    )
-    session.add_homework(
-        {
-            "id": "rail-work",
-            "title": LONG,
-            "due": f"{friday.isoformat()}T23:59",
-            "estimate_min": 60,
-            "revision": 0,
-        }
-    )
-    session.save()
-    _saved(window)
-    block = next(item["id"] for item in session.blocks if item.get("assignment_id") == "rail-work")
-    session.hand_move(block, -1, 3, 16 * 60, 17 * 60)
-    session.save()
-    _saved(window)
-    window.resize(1280, 860)
-    window.findChild(QAbstractButton, "viewWeek").click()
-    QApplication.processEvents()
-    return window.rail
 
 
 def _late_preview(window: NativeWindow) -> QWidget:
@@ -169,18 +132,6 @@ SCREENS: list[Screen] = [
         )
         for design in ("classic",)
     ],
-    Screen(
-        id="week.agenda-rail-long-title",
-        area="week",
-        prepare=_rail,
-        checks=(
-            "the Agenda rail is 260 px wide and nothing in it runs past its edge: the body fits the "
-            "scroll area, Start focus and each due day stay whole inside the rail, a long homework "
-            "title ends in an ellipsis, and the Next rows wrap whole beside a fully visible Start focus"
-        ),
-        sources=("desktop/native/hours/rail.py",),
-        main=True,
-    ),
     Screen(
         id="week.running-late-preview",
         area="week",

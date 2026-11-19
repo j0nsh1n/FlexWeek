@@ -13,8 +13,6 @@ from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.material_support import named, pump
 from desktop.tests.window_support import qapp  # noqa: F401
 
-pytestmark = pytest.mark.real_surface
-
 CODES = ["aaaa-bbbb", "cccc-dddd"]
 
 

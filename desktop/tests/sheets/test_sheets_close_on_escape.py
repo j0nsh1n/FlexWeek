@@ -18,8 +18,6 @@ from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.sheets.support_dialogs import when_open
 
-pytestmark = pytest.mark.real_surface
-
 PREVIEW_ROWS = [
     {
         "block": {

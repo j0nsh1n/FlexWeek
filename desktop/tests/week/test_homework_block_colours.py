@@ -18,12 +18,8 @@ pytestmark = [
 ]
 
 from PySide6.QtCore import QRectF  # noqa: E402
-from PySide6.QtGui import QColor, QFont, QImage, QPainter  # noqa: E402
+from PySide6.QtGui import QColor  # noqa: E402
 
-from desktop.native.hours.canvas import BlockPainter, Drawn  # noqa: E402
-from desktop.native.hours.classic import ClassicPainter  # noqa: E402
-from desktop.native.hours.geometry import Span  # noqa: E402
-from desktop.native.layout_choice import LAYOUTS  # noqa: E402
 from desktop.native.look import (  # noqa: E402
     EXPERIMENTAL_LOOKS,
     STANDARD_LOOKS,
@@ -41,8 +37,6 @@ CATEGORY = "assignments"
 DESIGN_LOOKS = {"light": ("light-frost", False), "dark": ("dark-frost", True)}
 
 
-def block(*, work: bool = True, **more: bool) -> Drawn:
-    return Drawn("essay", "History essay", CATEGORY, work, Span(3, 17 * 60, 18 * 60 + 30), 0, 1, **more)
 
 
 @pytest.mark.parametrize(("kind", "name"), STANDARD_LOOKS + EXPERIMENTAL_LOOKS)
@@ -71,53 +65,9 @@ def _contrast(first: QColor, second: QColor) -> float:
     return (high + 0.05) / (low + 0.05)
 
 
-@pytest.mark.parametrize("kind,name", STANDARD_LOOKS + EXPERIMENTAL_LOOKS)
-def test_history_tag_text_has_accessible_contrast_in_every_look(kind: str, name: str) -> None:
-    if kind == "pack":
-        look = None
-        palette = resolved_palette(name, name in {"dark-frost", "nocturne"}, look)
-    else:
-        look = {"preset": name, "knobs": {}}
-        palette = resolved_palette("light-frost", False, look)
-    fill, ink, _outline, _edge = BlockPainter(palette, look).fills(block(history="Overdue"))
-    assert _contrast(fill, ink) >= 4.5, name
 
 
-def test_a_30_minute_block_at_large_text_has_no_room_for_a_state_pill() -> None:
-    """A half-hour block at Large has no room for a pill above its words, so the paint loop does not
-    draw one (see BlockPainter.pills_fit); its state stays in the tooltip and the accessible name."""
-    look = {"preset": "default", "knobs": {"text": "large"}}
-    painter = BlockPainter(PALETTE, look)
-    for state in ("Overdue", "Left from last week"):
-        span = Span(3, 17 * 60, 17 * 60 + 30)
-        drawn = Drawn("essay", "History essay", CATEGORY, True, span, 0, 1, history=state)
-        pill_block = QRectF(0, 0, 128, 30 * 48 / 60 - 3)
-        assert not painter.pills_fit(QFont("Inter", 14), pill_block, drawn, QRectF(0, 0, 128, 200)), state
 
 
-def design_painter(design: str, palette: dict) -> BlockPainter | None:
-    """The painter that design actually hands the hours, in that look's colours."""
-    if design == "classic":
-        return ClassicPainter(palette)
-    raise AssertionError(f"no painter wired for {design}")
 
 
-@pytest.mark.parametrize("design", list(LAYOUTS))
-@pytest.mark.parametrize("look", DESIGN_LOOKS, ids=list(DESIGN_LOOKS))
-@pytest.mark.parametrize("pinned", [False, True], ids=["planned", "pinned"])
-def test_each_design_paints_homework_in_its_own_colours(design: str, look: str, pinned: bool) -> None:
-    """Every homework block carries a block_edge in both the light and the dark look."""
-    pack, dark = DESIGN_LOOKS[look]
-    palette = resolved_palette(pack, dark, None)
-    painter = design_painter(design, palette)
-    assert painter is not None
-    drawn = block(pinned=pinned)
-    image = QImage(200, 140, QImage.Format.Format_ARGB32)
-    image.fill(QColor("white"))
-    paint = QPainter(image)
-    paint.setFont(QFont("Inter", 12))
-    try:
-        painter.block(paint, RECT, drawn, RECT.adjusted(-4, -4, 4, 4))
-    finally:
-        paint.end()
-    assert "block_edge" in painter.colours

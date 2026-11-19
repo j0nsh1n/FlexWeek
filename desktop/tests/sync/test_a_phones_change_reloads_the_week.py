@@ -18,7 +18,7 @@ def test_a_phone_change_reloads_the_week_unless_this_window_has_unsaved_edits(
 ) -> None:
     desk = light_desk
     pair_a_phone(desk, phone)
-    wait_until(None, lambda: not desk.sync_dot.isHidden())
+    wait_until(None, lambda: bool(desk._linked_phones()))
     # The test makes the ticks itself, so the window's own once-a-second look cannot add one.
     desk._sync_timer.stop()
     loads: list[dict] = []
@@ -38,6 +38,3 @@ def test_a_phone_change_reloads_the_week_unless_this_window_has_unsaved_edits(
     desk.session.conflict = False
 
 
-def test_the_status_dot_is_hidden_until_a_phone_is_linked(light_desk: NativeWindow) -> None:
-    light_desk._sync_tick()
-    assert light_desk.sync_dot.isHidden()

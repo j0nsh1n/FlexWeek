@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from itertools import product
 
-from PySide6.QtWidgets import QApplication, QGraphicsDropShadowEffect, QLabel, QMenu, QWidget
+from PySide6.QtWidgets import QGraphicsDropShadowEffect, QWidget
 
 from desktop.native.look import (
     ACCENTS,
@@ -20,9 +20,6 @@ from desktop.native.look import (
     resolved_palette,
     toast_colours,
 )
-from desktop.native.menus import Menu, menu_colours
-from desktop.native.tokens import SHADOW_LARGE
-from desktop.native.widgets import add_heading, control_art
 from desktop.tests.window_support import qapp  # noqa: F401
 
 EVERY_LOOK = list(product(PACKS, (False, True), LOOK_PRESETS, ACCENTS, LOOK_KNOBS["surface"]))
@@ -70,77 +67,7 @@ def shadow_drawn(widget: QWidget) -> bool:
     return bool(effect.isEnabled() and effect.blurRadius() > 0 and effect.color().alpha() > 0)
 
 
-def test_a_menu_casts_the_large_shadow_only_in_a_look_with_depth(qapp: QApplication) -> None:  # noqa: F811
-    light = resolved_palette("light-frost", False, None)
-    menu = Menu()
-    menu.set_colours(menu_colours(light, lifted=True))
-    shadow = menu.graphicsEffect()
-    assert isinstance(shadow, QGraphicsDropShadowEffect)
-    assert (shadow.offset().y(), shadow.blurRadius()) == (SHADOW_LARGE.y, SHADOW_LARGE.blur)
-    inner = menu.add_menu("Undo, copy and save", "pencil")
-    assert isinstance(inner.graphicsEffect(), QGraphicsDropShadowEffect), "a submenu too"
-    menu.set_colours(menu_colours(light, lifted=False))
-    assert not shadow_drawn(menu) and not shadow_drawn(inner)
 
 
-def test_clearing_a_menu_shadow_keeps_the_effect_across_windows_and_palettes(
-    qapp: QApplication,  # noqa: F811
-) -> None:
-    """Deleting a drop shadow aborts in Shiboken when another window already lifted a menu."""
-    looks = (
-        resolved_palette("light-frost", False, None),
-        resolved_palette("dark-frost", True, None),
-        resolved_palette("light-frost", False, {"preset": "high-contrast"}),
-    )
-    first = QWidget()
-    second = QWidget()
-    first.resize(240, 160)
-    second.resize(240, 160)
-    first.show()
-    second.show()
-    qapp.processEvents()
-    menus = [Menu(first), Menu(second)]
-    try:
-        for palette in looks:
-            lifted = menu_colours(palette, lifted=True)
-            flat = menu_colours(palette, lifted=False)
-            for menu in menus:
-                menu.set_colours(lifted)
-                held = menu.graphicsEffect()
-                assert isinstance(held, QGraphicsDropShadowEffect)
-                assert shadow_drawn(menu)
-                inner = next((action.menu() for action in menu.actions() if action.menu()), None)
-                if inner is None:
-                    inner = menu.add_menu("Undo, copy and save", "pencil")
-                inner_held = inner.graphicsEffect()
-                menu.set_colours(flat)
-                assert menu.graphicsEffect() is held
-                assert inner.graphicsEffect() is inner_held
-                assert not shadow_drawn(menu)
-                assert not shadow_drawn(inner)
-                menu.set_colours(lifted)
-                assert menu.graphicsEffect() is held
-                assert inner.graphicsEffect() is inner_held
-                assert shadow_drawn(menu)
-                assert shadow_drawn(inner)
-    finally:
-        first.hide()
-        second.hide()
 
 
-def test_a_menu_heading_is_drawn_as_text(qapp: QApplication) -> None:  # noqa: F811
-    """Fusion drew `addSection` as a plain line, so More never showed Adding or Planning."""
-    palette = resolved_palette("light-frost", False, None)
-    page = QWidget()
-    page.setStyleSheet(pack_stylesheet("light-frost", False, None, "default", palette, control_art(palette)))
-    menu = QMenu(page)
-    add_heading(menu, "Adding")
-    menu.addAction("Add homework")
-    menu.popup(page.mapToGlobal(page.rect().center()))
-    for _ in range(5):
-        qapp.processEvents()
-    heading = menu.findChild(QLabel, "menuHeading")
-    assert heading is not None and heading.text() == "Adding"
-    assert heading.isVisible()
-    menu.hide()
-    page.close()
