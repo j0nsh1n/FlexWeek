@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from desktop.native.custom_look import import_look
-from desktop.native.look import resolved_palette, sanitize_custom, sanitize_look
+from desktop.native.look import effective_look, sanitize_custom, sanitize_look
 
 
 def test_unknown_settings_and_bad_values_are_dropped_and_said_never_a_crash() -> None:
@@ -41,7 +41,7 @@ def test_unknown_settings_and_bad_values_are_dropped_and_said_never_a_crash() ->
         try:
             sanitize_custom(broken)
             kept = sanitize_look({"preset": "default", "custom": broken}).get("custom")
-            resolved_palette("system", False, sanitize_look({"custom": broken}))
+            effective_look(sanitize_look({"custom": broken}))
         except Exception as error:
             raise AssertionError(f"{broken!r} crashed with {error!r}") from None
         assert kept in (None, {"base": "light"})

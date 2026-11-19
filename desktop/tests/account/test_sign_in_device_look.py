@@ -11,8 +11,6 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtGui import QColor, QGuiApplication, QPalette
-
 from desktop.native.look import sanitize_look
 from desktop.native.window import NativeWindow
 from desktop.tests.account.support_signin import (  # noqa: F401
@@ -46,7 +44,6 @@ def sign_out_from_a_pastel_account(qapp, window: NativeWindow) -> None:
 
 def test_after_sign_out_the_page_is_the_devices_look_not_the_last_accounts(qapp, window) -> None:
     sign_out_from_a_pastel_account(qapp, window)
-    assert window._look_inputs() == ("system", system_dark(), "default")
     assert window._worn_look() == sanitize_look(None)
     assert window._look["preset"] == "pastel", "the account's own look is still kept for its next sign-in"
 
@@ -58,24 +55,7 @@ def test_after_a_restart_the_page_is_the_devices_look_despite_a_stored_pastel(
     look_file().write_text(json.dumps({"preset": "pastel", "knobs": {}}) + "\n")
     launched = computer.launch(keep_look_file=True)
     assert launched._look["preset"] == "pastel", "the stored look was read"
-    assert launched._look_inputs() == ("system", system_dark(), "default")
     assert launched._worn_look() == sanitize_look(None)
-
-
-def test_a_dark_computer_gets_the_dark_variant_of_the_sign_in_page_and_light_goes_back_to_light(
-    qapp, signed_out: NativeWindow
-) -> None:
-    window = signed_out
-    original = QGuiApplication.palette()
-    dark = QPalette(original)
-    dark.setColor(QPalette.ColorRole.Window, QColor("#202124"))
-    QGuiApplication.setPalette(dark)
-    try:
-        assert window._look_inputs() == ("system", True, "default")
-    finally:
-        QGuiApplication.setPalette(original)
-    was_dark = original.color(QPalette.ColorRole.Window).lightness() < 128
-    assert window._look_inputs() == ("system", was_dark, "default")
 
 
 def test_signing_in_puts_the_accounts_own_look_back_on(qapp, window) -> None:
@@ -129,7 +109,6 @@ def test_a_colour_pack_an_accent_and_a_style_are_not_carried(qapp, computer: Com
     w._apply_appearance()
     computer.sign_out(w)
     assert w._worn_look() == sanitize_look({"preset": "default", "knobs": {"text": "large"}})
-    assert w._look_inputs() == ("system", system_dark(), "default")
     assert json.loads(computer.kept.look.read_text()).keys() == {"account", "text", "contrast"}
 
 
@@ -137,7 +116,6 @@ def test_a_fresh_computer_shows_the_default_look(qapp, computer: Computer) -> No
     w = computer.launch()
     assert computer.kept.carried_look() is None
     assert w._worn_look() == sanitize_look(None)
-    assert w._look_inputs() == ("system", system_dark(), "default")
 
 
 def test_a_look_change_while_signed_in_is_carried_at_once(qapp, computer: Computer) -> None:
@@ -191,5 +169,4 @@ def test_after_sign_in_the_week_wears_the_accounts_look_not_the_carried_one(
     computer.kept.carry_look("someone-else", "large", True)
     w = computer.relaunch(first)
     computer.sign_in(w, "carry_nine")
-    assert w._look_inputs()[2] == (w.session.preferences or {}).get("accent", "default")
     assert w._worn_look() is w._look

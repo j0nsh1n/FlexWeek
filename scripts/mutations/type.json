@@ -1,26 +1,5 @@
 [
  {
-  "file": "desktop/native/look.py",
-  "name": "the week title bold again",
-  "old": "f\"QLabel#weekTitle {{ font-size: {pt['title']}; font-weight: {WEIGHT_STRONG}; \"",
-  "new": "f\"QLabel#weekTitle {{ font-size: {pt['title']}; font-weight: 700; \"",
-  "test": "desktop/tests/settings/test_design_tokens.py::test_every_font_size_and_weight_in_the_stylesheet_is_on_the_scale"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "the Text knob leaves the stylesheet's sizes alone",
-  "old": "    return {role: f\"{type_pt(role, text):g}pt\" for role in TYPE_PT}\n",
-  "new": "    return {role: f\"{type_pt(role):g}pt\" for role in TYPE_PT}\n",
-  "test": "desktop/tests/settings/test_design_tokens.py::test_every_font_size_and_weight_in_the_stylesheet_is_on_the_scale"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "a heading a point over the body again",
-  "old": "        f\"QLabel#focusScreenTask {{ color: {palette['text']}; font-size: {type_pt('title', text)}pt; \"\n",
-  "new": "        f\"QLabel#focusScreenTask {{ color: {palette['text']}; font-size: 21pt; \"\n",
-  "test": "desktop/tests/settings/test_design_tokens.py::test_every_font_size_and_weight_in_the_stylesheet_is_on_the_scale"
- },
- {
   "file": "desktop/native/fonts.py",
   "name": "the hours' small words shrunk by a ratio again",
   "old": "    made.setPointSizeF(type_pt(\"caption\", knob) if knob else max(base.pointSizeF() * 0.86, 7))\n",

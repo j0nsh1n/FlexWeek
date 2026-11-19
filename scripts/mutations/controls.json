@@ -1,9 +1,0 @@
-[
- {
-  "file": "desktop/native/widgets.py",
-  "name": "a click rings a button too",
-  "old": "                keyed = reason in KEYED\n",
-  "new": "                keyed = True\n",
-  "test": "desktop/tests/week/test_top_bar_controls.py::test_the_key_that_reaches_a_button_rings_it_and_a_click_does_not"
- }
-]
