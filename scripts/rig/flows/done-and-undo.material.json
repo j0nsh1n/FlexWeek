@@ -13,12 +13,10 @@
    "see": "materialRail"
   },
   {
-   "see": "Mark History essay finished"
+   "see": "History essay"
   },
   {
-   "click": {
-    "text": "Mark History essay finished"
-   }
+   "click": "weekBlockFinish"
   },
   {
    "wait": 400
@@ -27,7 +25,7 @@
    "see": "materialSnackbar"
   },
   {
-   "see": "Open History essay again"
+   "see": "Finished History essay."
   },
   {
    "shot": "done"
@@ -37,9 +35,6 @@
   },
   {
    "wait": 400
-  },
-  {
-   "see": "Mark History essay finished"
   },
   {
    "shot": "undone"
