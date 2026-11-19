@@ -13,30 +13,33 @@
    "see": "materialRail"
   },
   {
-   "click": "navDay"
+   "see": "Mark History essay finished"
   },
   {
-   "see": "materialDay"
-  },
-  {
-   "click": "dayFinish"
+   "click": {
+    "text": "Mark History essay finished"
+   }
   },
   {
    "wait": 400
   },
   {
-   "see": "UNDO"
+   "see": "materialSnackbar"
+  },
+  {
+   "see": "Open History essay again"
   },
   {
    "shot": "done"
   },
   {
-   "click": {
-    "text": "UNDO"
-   }
+   "key": "ctrl+z"
   },
   {
    "wait": 400
+  },
+  {
+   "see": "Mark History essay finished"
   },
   {
    "shot": "undone"
