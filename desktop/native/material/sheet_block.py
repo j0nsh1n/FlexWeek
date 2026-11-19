@@ -441,7 +441,6 @@ class BlockDraft:
                 "answers": answers,
                 "cards": cards,
                 "confirm": "Delete",
-                "confirmKind": "danger",
             }
         return {
             "id": "delete-block",

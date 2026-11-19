@@ -48,9 +48,12 @@ Item {
         }
     }
 
-    implicitHeight: 48
-    height: 48
-    implicitWidth: Math.max(240, messageText.implicitWidth + action.width + 48)
+    // The widest the bar may be (the page sets it); a longer notice wraps and the bar grows with it.
+    property real maxWidth: 10000
+    readonly property real _room: action.visible ? action.width + 16 : 0
+    implicitHeight: Math.max(48, messageText.height + 28)
+    height: implicitHeight
+    implicitWidth: Math.max(240, Math.min(maxWidth, messageText.implicitWidth + _room + 32))
     width: implicitWidth
 
     M3Palette { id: palette; theme: root.theme }
@@ -81,6 +84,8 @@ Item {
         anchors.left: parent.left
         anchors.leftMargin: 16
         anchors.verticalCenter: parent.verticalCenter
+        width: Math.min(implicitWidth, root.width - 32 - root._room)
+        wrapMode: Text.Wrap
         text: root.message
         color: palette.inverseOnSurface
         font.family: M3Font.family

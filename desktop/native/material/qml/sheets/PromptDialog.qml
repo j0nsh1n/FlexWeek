@@ -24,10 +24,20 @@ SheetFrame {
     property int pick: 0
     readonly property var cards: ask.cards ? ask.cards : []
     readonly property bool choosing: cards.length > 0
+    // A card is destructive when its answer is (This week and later): it marks itself in the error colour
+    // when picked, and Confirm is red only while such a card is picked.
+    function cardIsDanger(id) {
+        var answers = ask.answers ? ask.answers : []
+        for (var i = 0; i < answers.length; i++)
+            if (answers[i].id === id)
+                return answers[i].kind === "danger"
+        return false
+    }
+    readonly property bool pickedDanger: choosing && pick >= 0 && pick < cards.length && cardIsDanger(cards[pick].id)
     readonly property var footerAnswers: choosing
         ? [{ "id": "stay", "label": "Cancel", "kind": "text" },
            { "id": "confirm", "label": ask.confirm ? ask.confirm : "OK",
-             "kind": ask.confirmKind ? ask.confirmKind : "filled", "default": true }]
+             "kind": "filled", "default": true }]
         : (ask.answers ? ask.answers : [])
     // A prompt names the card picked first when the safe answer is not the first card.
     onAskChanged: pick = ask.pick !== undefined ? ask.pick : 0
@@ -71,13 +81,14 @@ SheetFrame {
                 id: card
                 objectName: "prompt_card_" + modelData.id
                 readonly property bool picked: root.pick === index
+                readonly property color accent: root.cardIsDanger(modelData.id) ? pal.error : pal.primary
                 width: cardList.width
                 height: cardText.implicitHeight + 24
                 radius: 14
-                color: picked ? Qt.tint(pal.surfaceContainerHighest, Qt.rgba(pal.primary.r, pal.primary.g, pal.primary.b, 0.14))
+                color: picked ? Qt.tint(pal.surfaceContainerHighest, Qt.rgba(card.accent.r, card.accent.g, card.accent.b, 0.14))
                               : pal.surfaceContainerHighest
                 border.width: picked ? 2 : 1
-                border.color: picked ? pal.primary : pal.outlineVariant
+                border.color: picked ? card.accent : pal.outlineVariant
                 Accessible.role: Accessible.RadioButton
                 readonly property string spoken: modelData.title + ". " + modelData.line + (picked ? " Picked." : " Not picked.")
                 Accessible.name: spoken
@@ -120,7 +131,7 @@ SheetFrame {
                     anchors.right: parent.right
                     anchors.rightMargin: 16
                     anchors.verticalCenter: parent.verticalCenter
-                    color: card.picked ? pal.primary : "transparent"
+                    color: card.picked ? card.accent : "transparent"
                     border.width: card.picked ? 0 : 2
                     border.color: pal.outline
                     M3Icon {
@@ -129,7 +140,7 @@ SheetFrame {
                         width: parent.width - 6
                         height: width
                         name: "check"
-                        color: pal.inkPrimary
+                        color: root.cardIsDanger(modelData.id) ? pal.inkError : pal.inkPrimary
                     }
                 }
             }
@@ -144,7 +155,8 @@ SheetFrame {
             density: root.density
             reduceMotion: root.reduceMotion
             highContrast: root.highContrast
-            kind: modelData.kind
+            // Confirm turns red with the pick, without rebuilding the footer (which would drop the keyboard).
+            kind: modelData.id === "confirm" && root.pickedDanger ? "danger" : modelData.kind
             text: modelData.label
             accessName: modelData.label
             onClicked: modelData.id === "confirm" ? root.confirmPick() : root.sheets.answer(modelData.id)

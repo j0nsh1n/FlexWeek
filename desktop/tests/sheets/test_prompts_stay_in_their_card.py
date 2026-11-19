@@ -53,6 +53,7 @@ WALKED = {
     "delete-unfinished",
     "edited-weeks",
     "before-planning",
+    "replace-focus",
     "recovery-file",
 }
 
@@ -108,6 +109,7 @@ def poses(window: NativeWindow) -> list[tuple[str, object]]:
         ("delete-alarm", put(alarm_question())),
         ("delete-unfinished", lambda: sheets.askDeleteUnfinished("essay")),
         ("before-planning", put(NativeWindow.before_planning_question("2 overdue, 1 left from last week"))),
+        ("replace-focus", put(NativeWindow.replace_focus_question("Biology reading", "Chemistry worksheet"))),
         ("recovery-file", put(NativeWindow.recovery_file_question())),
         ("four-plain-answers", put(FOUR_ANSWERS)),
         ("edited-weeks", lambda: sheets.pose_edited(NativeWindow._edited_ask(EDITED_LINE), lambda _a: None)),

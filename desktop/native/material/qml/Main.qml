@@ -81,6 +81,19 @@ Item {
         item.forceActiveFocus()
     }
 
+    // After Plan, an Undo, a redo or the notice's Undo the keyboard returns to the screen the student
+    // is on: the block acted on when it still exists, else the screen itself, never the stage.
+    function keyboardBackToScreen(blockId) {
+        if (!bridge)
+            return
+        if (bridge.screen === "week")
+            weekView.focusWeek(blockId)
+        else if (bridge.screen === "day")
+            dayView.focusDay(blockId)
+        else
+            title.forceActiveFocus()
+    }
+
     // T: today in the view you are on (Week, Day, Month); My day and Settings open Day, which opens on today.
     function goToday() {
         if (bridge.screen === "week")
@@ -780,6 +793,8 @@ Item {
 
             Snackbar {
                 id: materialSnackbar
+                // Never wider than the page; long or several-line notices wrap and the bar grows.
+                maxWidth: Math.max(240, parent.width - 48)
                 objectName: "materialSnackbar"
                 visible: bridge.snackText !== ""
                 z: 3
@@ -790,7 +805,7 @@ Item {
                 fraction: bridge.snackFraction
                 onActionClicked: if (bridge.snackAction !== "") bridge.snackActed()
                 // Undo pressed by keyboard: the keyboard returns to the week it undid, not to nothing.
-                onFocusReleased: if (bridge && bridge.screen === "week") weekView.focusWeek("")
+                onFocusReleased: root.keyboardBackToScreen("")
                 onPauseRequested: if (bridge) bridge.pauseSnack()
                 onResumeRequested: if (bridge) bridge.resumeSnack()
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -806,12 +821,9 @@ Item {
                 target: bridge && bridge.week ? bridge.week : null
                 function onPlanFinished() {
                     Qt.callLater(function() {
-                        if (weekView.drawer && weekView.drawer.count === 0) {
-                            // The week, not the snackbar: its Undo is a Tab away, and Ctrl+Z works from the week.
-                            weekView.focusWeek("")
-                        } else if (weekView.drawer && weekView.drawer.count > 0 && weekView.drawer.planButton) {
-                            weekView.drawer.planButton.forceActiveFocus()
-                        }
+                        // The week, not the snackbar or Plan: its Undo is a Tab away, and Ctrl+Z works from
+                        // the week. Plan places several blocks, so no single one takes the keyboard.
+                        root.keyboardBackToScreen("")
                     })
                 }
             }

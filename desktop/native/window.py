@@ -4312,7 +4312,29 @@ class NativeWindow(QMainWindow):
         """The focus screen, ready: nothing starts until Start, as with F (decision 19 of 0.17)."""
         self._open_focus_screen()
 
+    @staticmethod
+    def replace_focus_question(current: str, incoming: str) -> dict:
+        """The Widgets "Replace timer" question for Material's prompt: same words and answers, keep first."""
+        return {
+            "id": "replace-focus",
+            "title": "Replace timer",
+            "body": f"Stop the timer for {current} and start {incoming} instead?",
+            "answers": [
+                {"id": "keep", "label": "Keep current timer", "kind": "text", "default": True},
+                {"id": "replace", "label": "Replace timer", "kind": "danger"},
+            ],
+        }
+
     def _confirm_replace_focus(self, current: str, incoming: str) -> None:
+        def replace() -> None:
+            if self.session.confirm_replace_focus():
+                self._open_focus_screen()
+
+        page = self._material_shown()
+        if page is not None:
+            question = self.replace_focus_question(current, incoming)
+            page.bridge.sheets.pose_question(question, {"replace": replace})
+            return
         sheet = ConfirmSheet(
             self,
             "Replace timer",
@@ -4321,8 +4343,8 @@ class NativeWindow(QMainWindow):
             default="keep",
         )
         sheet.exec()
-        if sheet.answer == "replace" and self.session.confirm_replace_focus():
-            self._open_focus_screen()
+        if sheet.answer == "replace":
+            replace()
 
     def _build_focus_audio(self) -> None:
         # Rain, lo-fi or white noise while the focus timer works; the timer's own phases drive it.

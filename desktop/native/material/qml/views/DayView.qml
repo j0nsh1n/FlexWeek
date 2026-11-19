@@ -13,6 +13,15 @@ Item {
     property bool passive: false
 
     readonly property var board: bridge && bridge.day ? bridge.day : null
+
+    // The keyboard back on the day after an Undo, a redo or the notice's Undo: the block acted on when it
+    // is still there, else the hours, else the page heading.
+    function focusDay(blockId) {
+        if (hoursLoader.item && hoursLoader.item.focusWeek)
+            hoursLoader.item.focusWeek(blockId)
+        else if (root.pageHeading)
+            root.pageHeading.forceActiveFocus()
+    }
     readonly property var theme: bridge && bridge.theme ? bridge.theme : ({})
     readonly property string density: bridge && bridge.density ? bridge.density : "comfortable"
     readonly property bool reduceMotion: bridge ? bridge.reduceMotion : false

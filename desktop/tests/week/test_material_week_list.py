@@ -67,9 +67,9 @@ def test_the_week_list_names_each_block_with_its_day_and_times_in_reading_order(
         day = monday + timedelta(days=offset)
         expected.append(("weekListDay", f"{name} {day.day} {day:%b}"))
         if offset < 5:
-            expected.append(("weekListItem", "School | 08:00–14:30 · Fixed time"))
+            expected.append(("weekListItem", "School | 08:00–14:30 · 6 h 30 min · Fixed time"))
         if offset == 3:
-            expected.append(("weekListItem", "History essay | 18:45–19:45"))
+            expected.append(("weekListItem", "History essay | 18:45–19:45 · 1 h · Placed by Plan"))
         if offset >= 5:
             expected.append(("weekListNone", "Nothing planned"))
     assert _rows(root) == expected
