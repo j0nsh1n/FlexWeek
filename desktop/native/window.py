@@ -242,6 +242,9 @@ class NativeWindow(QMainWindow):
         self._new_look_notice_exempt: set[str] = set()
         self._update_asked = False
         self._update_on_material = False
+        # An update found while Material is not on screen. The draw-error page offers it, since an update
+        # may be what fixes the drawing.
+        self._draw_error_update: dict | None = None
         self._updater = Updater(self)
         self._updater.found.connect(self._on_update_found)
         self._updater.none_found.connect(self._no_update)
@@ -578,12 +581,27 @@ class NativeWindow(QMainWindow):
             retry.clicked.connect(self._try_graphics_again)
             row.addWidget(quit_button)
             row.addWidget(retry)
+            update_line = QLabel()
+            update_line.setObjectName("drawErrorUpdateLine")
+            update_line.setWordWrap(True)
+            update_line.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            update_line.hide()
+            install = QPushButton("Update now")
+            install.setObjectName("drawErrorInstall")
+            install.clicked.connect(self._install_from_draw_error)
+            install.hide()
+            update_row = QHBoxLayout()
+            update_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            update_row.addWidget(install)
             box.addWidget(line)
             box.addWidget(version)
             box.addLayout(row)
+            box.addWidget(update_line)
+            box.addLayout(update_row)
             self._stack.addWidget(page)
         if self._stack.currentWidget() is not page:
             self._stack.setCurrentWidget(page)
+        self._offer_update_on_draw_error()
 
     def _try_graphics_again(self) -> None:
         """Forget that this version failed and start a new copy that uses the graphics card."""
@@ -1702,6 +1720,8 @@ class NativeWindow(QMainWindow):
             return
         page = self._material_shown()
         if page is None:
+            self._draw_error_update = update
+            self._offer_update_on_draw_error()
             return
         self._update_on_material = True
 
@@ -1719,13 +1739,41 @@ class NativeWindow(QMainWindow):
         sheets = None if page is None else page.bridge.sheets
         return sheets if sheets is not None and sheets.update_open() else None
 
+    def _draw_error_update_row(self) -> tuple[QLabel, QPushButton] | None:
+        """The draw-error page's update line and Update now button while that page is up and offers one."""
+        page = self.findChild(QWidget, "drawErrorPage")
+        if page is None or self._draw_error_update is None or self._stack.currentWidget() is not page:
+            return None
+        return page.findChild(QLabel, "drawErrorUpdateLine"), page.findChild(QPushButton, "drawErrorInstall")
+
+    def _offer_update_on_draw_error(self) -> None:
+        if (row := self._draw_error_update_row()) is None or self._draw_error_update is None:
+            return
+        line, install = row
+        line.setText(f"FlexWeek {self._draw_error_update['version']} is ready")
+        line.show()
+        install.show()
+
+    def _install_from_draw_error(self) -> None:
+        if (row := self._draw_error_update_row()) is None or self._draw_error_update is None:
+            return
+        line, install = row
+        install.setEnabled(False)
+        line.setText("Downloading…")
+        self._updater.download(self._draw_error_update)
+
     def _on_update_progress(self, got: int, total: int) -> None:
         if (sheet := self._update_sheet()) is not None:
             sheet.update_progress(got, total)
+        elif (row := self._draw_error_update_row()) is not None and total > 0:
+            row[0].setText(f"Downloading… {min(100, got * 100 // total)}%")
 
     def _on_update_problem(self, why: str) -> None:
         if (sheet := self._update_sheet()) is not None:
             sheet.update_problem(why)
+        elif (row := self._draw_error_update_row()) is not None:
+            row[0].setText(why)
+            row[1].setEnabled(True)
         elif self._update_asked:
             self.session._say(why)
 
@@ -1737,10 +1785,16 @@ class NativeWindow(QMainWindow):
         if problem is not None:
             if (sheet := self._update_sheet()) is not None:
                 sheet.update_problem(problem + " Open the release page to update by hand.")
+            elif (row := self._draw_error_update_row()) is not None:
+                row[0].setText(problem + " Open the release page to update by hand.")
+                row[1].setEnabled(True)
             return
         if (sheet := self._update_sheet()) is not None:
             sheet.update_done()
-        self.session._say("Update installed. FlexWeek will close so the new version can start.")
+        installed = "Update installed. FlexWeek will close so the new version can start."
+        if (row := self._draw_error_update_row()) is not None:
+            row[0].setText(installed)
+        self.session._say(installed)
         QTimer.singleShot(UPDATE_QUIT_MS, self.quit_app)
 
     def _no_update(self) -> None:

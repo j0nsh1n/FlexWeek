@@ -103,5 +103,12 @@
   "old": "        if not (asked or message not in ROUTINE_STATUS):\n            return\n",
   "new": "",
   "test": "desktop/tests/settings/test_block_reminders.py::test_the_snackbar_keeps_a_reminder_until_something_more_important"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "an update found on the draw-error page is not offered",
+  "old": "            self._draw_error_update = update\n            self._offer_update_on_draw_error()\n            return\n",
+  "new": "            return\n",
+  "test": "desktop/tests/day/test_material_shell_fallback.py::test_an_update_found_on_the_draw_error_page_is_offered_and_installed_there"
  }
 ]
