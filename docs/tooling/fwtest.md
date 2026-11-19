@@ -316,19 +316,18 @@ unless `--out` names it.
 A setup key that is not in the table (`design`, `look` and the others the Widgets interface used) is
 refused, with the keys that are valid.
 
-Example: the rig's week, mark History essay finished by its circle, see the notice and the circle's new
-name, take it back with Ctrl+Z, look at the result. (`see "UNDO"` would also match the toolbar's Undo
-button, so a play checks what changed instead.)
+Example: the rig's week, mark History essay finished by its circle, see the notice, take it back with
+Ctrl+Z, look at the result. (`see "UNDO"` would also match the toolbar's Undo button, so a play looks for
+the notice itself, `materialSnackbar`.)
 
 ```json
 {
   "setup": {"seed": "rig", "mode": "light"},
   "steps": [
-    {"click": {"text": "Mark History essay finished"}},
+    {"click": "weekBlockFinish"},
     {"see": "materialSnackbar"},
-    {"see": "Open History essay again"},
+    {"shot": "done"},
     {"key": "ctrl+z"},
-    {"see": "Mark History essay finished"},
     {"shot": "undone"}
   ]
 }
