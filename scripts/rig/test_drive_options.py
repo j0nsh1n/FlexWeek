@@ -1,42 +1,49 @@
-"""The rig's --option flag and where its runs are kept."""
+"""The rig's command line (only --play, --out and the hidden --child are left) and its hidden session."""
 
 from __future__ import annotations
+
+import argparse
+import json
 
 import pytest
 
 from scripts.rig import drive
 
 
-def test_option_is_checked_against_the_designs_own_options():
-    assert drive.parse_options("classic", ["look=preset:paper"]) == {"look": "preset:paper"}
-    assert drive.parse_options("classic", []) == {}
-
-
 @pytest.mark.parametrize(
-    ("design", "pair", "says"),
+    "flag",
     [
-        ("classic", "size=big", "options: look:"),
-        ("classic", "look=tomorrow", "pack:light-frost"),
-        ("classic", "look", "not key=value"),
-        (None, "look=your", "needs --design"),
+        ["--design", "classic"],
+        ["--tab", "day"],
+        ["--scenario", "x"],
+        ["--option", "look=your"],
+        ["--list"],
     ],
 )
-def test_bad_option_names_what_is_valid(design, pair, says):
+def test_the_widgets_flags_are_refused(flag, monkeypatch, capsys):
+    # The Widgets interface is gone, so its flags are not options any more; argparse exits with 2.
+    monkeypatch.setattr("sys.argv", ["drive.py", "--play", "p.json", *flag])
     with pytest.raises(SystemExit) as refused:
-        drive.parse_options(design, [pair])
-    assert says in str(refused.value)
+        drive.main()
+    assert refused.value.code == 2
+    assert "unrecognized arguments" in capsys.readouterr().err
 
 
-def test_runs_go_where_the_environment_says_and_only_the_newest_three_stay(tmp_path, monkeypatch):
-    monkeypatch.setenv("FLEXWEEK_RIG_RUNS", str(tmp_path))
-    folder = drive.default_runs_folder("abc-1")
-    assert folder == tmp_path / "abc-1"
-    names = [f"20260929-10000{n}-{n}" for n in range(5)]
-    for name in names:
-        (folder / name).mkdir(parents=True)
-    (folder / "notes").mkdir()
-    drive.prune_runs(folder)
-    assert sorted(item.name for item in folder.iterdir()) == [*names[2:], "notes"]
+def test_without_a_play_the_rig_stops_and_names_the_flag(monkeypatch, capsys):
+    monkeypatch.setattr("sys.argv", ["drive.py"])
+    with pytest.raises(SystemExit) as refused:
+        drive.main()
+    assert refused.value.code == 2
+    assert "--play" in capsys.readouterr().err
+
+
+def test_a_play_that_asks_for_a_removed_setup_key_is_refused(tmp_path):
+    for key, value in (("design", "classic"), ("look", "light-frost")):
+        path = tmp_path / f"{key}.json"
+        path.write_text(json.dumps({"setup": {key: value}, "steps": []}))
+        with pytest.raises(SystemExit) as refused:
+            drive.check_play(argparse.Namespace(play=str(path)))
+        assert f"setup {key}: is not a setup key" in str(refused.value)
 
 
 def _session(monkeypatch, display, bus="unix:path=/private"):
@@ -165,7 +172,7 @@ def test_the_rig_forgets_the_first_day_of_the_week_an_earlier_run_left_behind():
     assert fields.week_starts_on() == "monday"
 
 
-def test_material_new_forgets_an_earlier_kept_session_and_saves_the_surface():
+def test_every_seed_starts_on_material_in_the_mode_the_play_asks_without_an_earlier_kept_session():
     import json
 
     from PySide6.QtCore import QStandardPaths
@@ -174,9 +181,10 @@ def test_material_new_forgets_an_earlier_kept_session_and_saves_the_surface():
     kept = drive.kept_session_path()
     kept.parent.mkdir(parents=True, exist_ok=True)
     kept.write_text('{"token": "stale"}')
-    look = drive.write_material_new_look("dark")
-    assert not kept.exists()
+    look = drive.write_material_look("dark")
     assert json.loads(look.read_text()) == {"surface": "material", "material": {"mode": "dark"}}
+    # The run's server is new, so a token kept by the run before would only 401 at sign-up.
+    assert not kept.exists()
 
 
 def test_the_rig_forgets_the_carried_look_an_earlier_run_left_behind():

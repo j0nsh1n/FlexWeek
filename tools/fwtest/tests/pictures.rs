@@ -656,12 +656,11 @@ fn a_flow_file_names_its_flow_and_surface() {
 
 #[test]
 fn each_clip_runs_the_flow_with_its_motion_and_recording_on() {
-    let play =
-        json!({"setup": {"design": "classic", "motion": "on"}, "steps": [{"see": "School"}]});
+    let play = json!({"setup": {"seed": "rig", "motion": "on"}, "steps": [{"see": "School"}]});
     let off = clips::play_for(&play, "off").unwrap();
     assert_eq!(
         off["setup"],
-        json!({"design": "classic", "motion": "off", "record": true})
+        json!({"seed": "rig", "motion": "off", "record": true})
     );
     assert_eq!(off["steps"], play["steps"]);
     let bare = clips::play_for(&json!({"steps": []}), "on").unwrap();
