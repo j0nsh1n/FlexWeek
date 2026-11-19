@@ -1,15 +1,11 @@
 {
   "setup": {
     "seed": "rig",
-    "look": "dark-frost",
+    "mode": "dark",
     "size": [1280, 800],
     "clock_24h": false
   },
   "steps": [
-    {"click": "settingsGear"},
-    {"wait": 600},
-    {"click": "chooseMaterial"},
-    {"wait": 1000},
     {"click": "navDay"},
     {"see": "materialDay"},
     {"see": "dayLeftLine"},

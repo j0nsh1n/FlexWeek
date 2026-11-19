@@ -4,8 +4,8 @@
 
 The format and an example are in docs/tooling/fwtest.md, "Playing the app". This file has two halves.
 The top parses and checks a play file with no display and no Qt, so a mistake is named before the
-hidden session does any work. The bottom (run_play) runs it with the real pointer, as drive.py's
-scenarios do, and never touches anything but the rig's throwaway account and local server.
+hidden session does any work. The bottom (run_play) runs it with the real pointer and never touches
+anything but the rig's throwaway account and local server. Every play starts on Material 3.
 """
 
 from __future__ import annotations
@@ -33,9 +33,7 @@ ACTIONS = (
     "say",
     "see",
 )
-SETUP_KEYS = (
-    "clock", "seed", "size", "design", "clock_24h", "text", "look", "mode", "motion", "record", "live",
-)
+SETUP_KEYS = ("clock", "seed", "size", "clock_24h", "text", "mode", "motion", "record", "live")
 # A live play keeps the app open and runs the step files dropped in OUT/inbox/ until OUT/inbox/quit
 # appears or nothing comes for this long.
 LIVE_IDLE_S = 30 * 60
@@ -62,10 +60,8 @@ class Setup:
     clock: datetime | None = None
     seed: str = "rig"
     size: tuple[int, int] = DEFAULT_SIZE
-    design: str = "classic"
     clock_24h: bool = False
     text: str = "normal"
-    look: str | None = None
     mode: str = "light"
     motion: str | None = None
     record: bool = False
@@ -115,7 +111,7 @@ def _parse_clock(raw: object) -> datetime:
         raise ValueError(f'"clock" is local time like "2026-10-15T17:00"; got {raw!r}') from None
 
 
-def _parse_setup(raw: object, designs: tuple[str, ...], looks: tuple[str, ...], errors: list[str]) -> Setup:
+def _parse_setup(raw: object, errors: list[str]) -> Setup:
     if raw is None:
         return Setup()
     if not isinstance(raw, dict):
@@ -124,23 +120,19 @@ def _parse_setup(raw: object, designs: tuple[str, ...], looks: tuple[str, ...], 
     values: dict[str, object] = {}
     for key, value in raw.items():
         try:
-            values[key] = _setup_value(key, value, designs, looks)
+            values[key] = _setup_value(key, value)
         except ValueError as wrong:
             errors.append(f"setup {key}: {wrong}")
     return Setup(**values)  # type: ignore[arg-type]
 
 
-def _setup_value(key: str, value: object, designs: tuple[str, ...], looks: tuple[str, ...]) -> object:
+def _setup_value(key: str, value: object) -> object:
     if key == "clock":
         return _parse_clock(value)
     if key == "seed":
         return _one_of(value, SEEDS, key)
-    if key == "design":
-        return _one_of(value, designs, key)
     if key == "text":
         return _one_of(value, TEXT_SIZES, key)
-    if key == "look":
-        return _one_of(value, looks, key)
     if key == "mode":
         return _one_of(value, MODES, key)
     if key == "motion":
@@ -208,15 +200,15 @@ def _parse_step(raw: object) -> Step:
     raise ValueError(f"{action!r} is not an action. Actions: {', '.join(ACTIONS)}")
 
 
-def parse_play(raw: object, name: str, designs: tuple[str, ...], looks: tuple[str, ...]) -> Play:
-    """The play, or a PlayError naming every mistake. `designs` and `looks` are the names the app knows."""
+def parse_play(raw: object, name: str) -> Play:
+    """The play, or a PlayError naming every mistake."""
     errors: list[str] = []
     if not isinstance(raw, dict):
         raise PlayError('A play file is a JSON object with "setup" and "steps".')
     for key in raw:
         if key not in ("setup", "steps"):
             errors.append(f'{key!r} is not a play key. A play has "setup" and "steps".')
-    setup = _parse_setup(raw.get("setup"), designs, looks, errors)
+    setup = _parse_setup(raw.get("setup"), errors)
     steps: list[Step] = []
     listed = raw.get("steps")
     if not isinstance(listed, list):
@@ -232,18 +224,18 @@ def parse_play(raw: object, name: str, designs: tuple[str, ...], looks: tuple[st
     return Play(name, setup, tuple(steps))
 
 
-def load_play(path: Path, designs: tuple[str, ...], looks: tuple[str, ...]) -> Play:
+def load_play(path: Path) -> Play:
     try:
         raw = json.loads(path.read_text())
     except OSError as unreadable:
         raise PlayError(f"Cannot read {path}: {unreadable.strerror}") from None
     except ValueError as broken:
         raise PlayError(f"{path} is not valid JSON: {broken}") from None
-    return parse_play(raw, path.stem, designs, looks)
+    return parse_play(raw, path.stem)
 
 
 def default_play_folder(name: str, now: datetime) -> Path:
-    # On disk, not /tmp, which is RAM on Jonathan's machine (see drive.default_runs_folder).
+    # On disk, not /tmp, which is RAM on Jonathan's machine.
     safe = re.sub(r"[^A-Za-z0-9_.-]", "-", name) or "play"
     return Path.home() / ".flexweek-ui-harness" / "scratch" / "plays" / f"{now:%Y%m%d-%H%M%S}-{safe}"
 
@@ -286,23 +278,16 @@ def list_item_targets(widget: object, wanted: str) -> list[tuple[int, object, st
     return found
 
 
-def apply_play_look(window, session, setup: Setup) -> str | None:
-    """Wear the play's look and text size. Returns a theme pack name when `look` is a pack."""
-    from desktop.native.look import LOOK_PRESETS, sanitize_look
+def apply_play_look(window, session, setup: Setup) -> None:
+    """Wear the play's text size. Light or dark is `mode`, which drive.py writes to the look file
+    before the window is built."""
+    from desktop.native.look import sanitize_look
 
-    pack = None
-    preset = "default"
-    if setup.look is not None:
-        if setup.look in LOOK_PRESETS:
-            preset = setup.look
-        else:
-            pack = setup.look
-    look = sanitize_look({"preset": preset, "knobs": {"text": setup.text}})
+    look = sanitize_look({"preset": "default", "knobs": {"text": setup.text}})
     window._look = look
     session.look = look
     window._carry_look()
     window._carried = window._read_carried()
-    return pack
 
 
 def visual_items(root: object) -> list:
@@ -444,7 +429,6 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
     )
 
     from backend import clock as wall_clock
-    from desktop.native.layout_choice import sanitize_layout
     from desktop.tests.logic_support import card_phase, past_setup, wait_until
 
     out.mkdir(parents=True, exist_ok=True)
@@ -496,16 +480,12 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
             session.selected_day = held["now"].date().isoformat()
         if setup.seed == "rig":
             seed_week(app, session)
-        pack = apply_play_look(window, session, setup)
-        # Each slot takes the design only if it is that kind of screen; the other keeps its default.
-        window._layout = sanitize_layout({"main": setup.design, "day": setup.design, "options": {}})
+        apply_play_look(window, session, setup)
         if setup.seed == "empty":
-            if setup.clock_24h or pack:
-                log("setup note: clock_24h and a pack are chosen on the Setup pages when seed is empty")
+            if setup.clock_24h:
+                log("setup note: clock_24h is chosen on the Setup pages when seed is empty")
         else:
             updates = {"clock_24h": setup.clock_24h}
-            if pack:
-                updates["theme_pack"] = pack
             if setup.motion is not None:
                 updates["motion"] = MOTIONS[setup.motion]
             session.save_preferences(updates)
@@ -515,6 +495,10 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
         if setup.seed != "empty":
             session.set_view("week")
             window._on_week()
+            # Material is the only page: a play that cannot reach it fails here, not at its first click.
+            wait_until(app, lambda: window._stack.currentWidget().objectName() == "materialPage", 20)
+            settled = time.monotonic() + 1.0
+            wait_until(app, lambda: time.monotonic() >= settled, 5)
         # A hidden desktop starts with no active window, and a menu opened from one that is not active
         # closes at once, so the first click on a menu button did nothing.
         window.raise_()
@@ -933,7 +917,7 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
         server.stop()
         return 1
     log(
-        f"play {play.name}: seed {setup.seed}, design {setup.design}, window {whole_window()}, "
+        f"play {play.name}: seed {setup.seed}, {setup.mode} mode, window {whole_window()}, "
         f"clock {held['now']:%Y-%m-%d %H:%M} held, {len(play.steps)} steps"
     )
     started = time.monotonic()
