@@ -19,7 +19,6 @@ from PySide6.QtGui import QColor, QPainter, QPalette
 from PySide6.QtWidgets import QWidget
 from shiboken6 import isValid
 
-from desktop.native.feel import current
 from desktop.native.settings_copy import DOT_WORDS
 
 SYNC_SCAN_MS = 1000
@@ -232,12 +231,20 @@ class SyncDot(QWidget):
         painter.end()
 
 
+# The error colour of the look in force, set by the window each time it dresses itself.
+_error_colour: str | None = None
+
+
+def set_error_colour(colour: str | None) -> None:
+    global _error_colour
+    _error_colour = colour
+
+
 def dot_colour(state: str, palette: QPalette) -> QColor:
     """The dot's fill. A problem uses the look's error colour, so it reads in every look."""
     if state == "problem":
-        context = current()
-        if context is not None:
-            return QColor(context.palette["error"])
+        if _error_colour is not None:
+            return QColor(_error_colour)
         return palette.color(QPalette.ColorRole.Text)
     if state == "idle":
         return palette.color(QPalette.ColorRole.Mid)

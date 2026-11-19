@@ -1,28 +1,21 @@
 """Saturday and Sunday with nothing on them take less of the week wherever they fall: a week from
 Wednesday 23 September 2026 runs to Tuesday 29, so Saturday 26 and Sunday 27 are its fourth and fifth
-columns, and Monday 28 and Tuesday 29 its last two, which keep a weekday's width. Classic, Timeline and
-Bento narrow the same days."""
+columns, and Monday 28 and Tuesday 29 its last two, which keep a weekday's width."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 
 from __future__ import annotations
 
-from datetime import date
-
 import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QRectF  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.hours.classic import ClassicWeek, empty_days  # noqa: E402
-from desktop.native.layouts import bento  # noqa: E402
-from desktop.native.layouts.timeline import FOLD, _spread, pages_of  # noqa: E402
 from desktop.native.look import resolved_palette  # noqa: E402
 from desktop.native.weekmodel import build_week  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402, F401
-from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.week.support_hand import SCHOOL, a_hand  # noqa: E402
 from desktop.tests.window_support import qapp  # noqa: E402, F401
 
@@ -60,40 +53,5 @@ def test_classic_narrows_the_saturday_and_sunday_of_a_week_from_wednesday(qapp: 
     view.hours.relayout()
     qapp.processEvents()
     widths = [view.hours.track_for(day).area.width() for day in range(7)]
-    assert narrow(widths, (SATURDAY, SUNDAY)), widths
-    assert as_wide(widths, (1, 2, MONDAY, TUESDAY)), widths
-
-
-def test_timeline_narrows_the_saturday_and_sunday_of_a_week_from_wednesday() -> None:
-    week = build_week(WEDNESDAY_WEEK, [WEEKDAYS], {}, None)
-    tracks = _spread(24, FOLD, empty_days(week), QRectF(0, 0, 1400, 600))
-    widths = {track.day: track.area.width() for track in tracks}
-    for page in pages_of(FOLD):
-        quiet = [day for day in page if day in (SATURDAY, SUNDAY)]
-        busy = [day for day in page if day not in (SATURDAY, SUNDAY)]
-        assert all(abs(widths[day] - widths[busy[0]]) < 0.01 for day in busy), widths
-        assert all(widths[day] < widths[busy[0]] - 1 for day in quiet), widths
-
-
-def test_bento_narrows_the_saturday_and_sunday_of_a_week_from_wednesday(
-    qapp: QApplication, window, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    session = window.session
-    session.follow_first_weekday(2)
-    wait_until(qapp, lambda: not session.busy)
-    session.add_block(WEEKDAYS)
-    session.save()
-    wait_until(qapp, lambda: not session.busy and not session.dirty)
-    window._layout = {"main": "bento", "day": "one", "options": {}}
-    window._apply_appearance()
-    window._on_week()
-    window.resize(1280, 860)
-    wait_until(qapp, lambda: not session.busy and not session.dirty)
-    qapp.processEvents()
-    assert date.fromisoformat(session.week_start).weekday() == 2
-    shown = [item for item in window.findChildren(bento.BentoCanvas) if item.isVisible() and item.day_buttons]
-    canvas = shown[0]
-    canvas.relayout()
-    widths = [canvas.track_for(day).area.width() for day in range(7)]
     assert narrow(widths, (SATURDAY, SUNDAY)), widths
     assert as_wide(widths, (1, 2, MONDAY, TUESDAY)), widths

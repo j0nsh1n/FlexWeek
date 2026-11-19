@@ -8,7 +8,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QRectF
-from PySide6.QtGui import QFont, QFontMetricsF, QImage
+from PySide6.QtGui import QFont, QFontMetricsF
 
 from desktop.native.fonts import load_fonts
 from desktop.native.hours.canvas import (
@@ -23,7 +23,6 @@ from desktop.native.hours.canvas import (
 from desktop.native.hours.geometry import Span
 from desktop.native.look import resolved_palette
 from desktop.native.weekmodel import clock_label, range_label, set_clock_24h, short_clock
-from desktop.tests.week.support_material import Said
 from desktop.tests.window_support import qapp  # noqa: F401
 
 
@@ -132,56 +131,3 @@ def test_overlapping_blocks_cut_the_title_first_and_keep_the_time_whole(qapp) ->
     extras = [line.text for line in block_layout(practice, title, small, room) if not line.title]
     assert extras != [clock_label(span.start), clock_label(span.end)], words
     assert "extra" not in words, words
-
-
-def test_timeline_painter_at_810_keeps_a_short_blocks_start_and_a_range_on_one_line(
-    qapp, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """At 810 px a 45-minute Math worksheet keeps its name and its start; a 08:30–14:15 block never
-    stacks those times as two events."""
-    from desktop.native.fonts import load_fonts
-    from desktop.native.hours import canvas as canvas_module
-    from desktop.native.layouts.registry import MATCH, tokens_for
-    from desktop.native.layouts.timeline import TimelinePainter
-
-    load_fonts()
-    monkeypatch.setattr(canvas_module, "QPainter", Said)
-    palette = resolved_palette("light-frost", False, None, "default")
-    math = Drawn("math", "Math worksheet", "assignments", True, Span(1, 17 * 60, 17 * 60 + 45), 0, 1)
-    span = Span(0, 8 * 60 + 30, 14 * 60 + 15)
-    school = Drawn("school", "School", "class", False, span, 0, 1)
-    ranged = range_label(span.start, span.end)
-    start = clock_label(span.start)
-    end = clock_label(span.end)
-    page = QRectF(0, 0, 800, 800)
-    painters = {
-        "timeline": (
-            TimelinePainter(tokens_for("timeline", MATCH, palette)),
-            QRectF(40, 40, 78.5, 24),
-            QRectF(40, 90, 78.5, 231),
-        ),
-    }
-
-    def said(painter, rect, drawn) -> list[str]:
-        image = QImage(900, 400, QImage.Format.Format_ARGB32)
-        paint = Said(image)
-        paint.setFont(QFont("Inter", 13))
-        Said.words = []
-        painter.block(paint, rect, drawn, page)
-        paint.end()
-        return [text for text, _where in Said.words]
-
-    for name, (painter, short_rect, range_rect) in painters.items():
-        short_words = said(painter, short_rect, math)
-        # Timeline's 45-minute block at 810 is 78.5×24 px. The whole range does not fit, so the start
-        # stands alone and the name goes to the tooltip. Mission writes the start beside the bar;
-        # Clay's card is wide enough for name and start.
-        if name == "timeline":
-            assert short_words == ["17:00"], (name, short_words)
-        else:
-            assert any("Math" in text for text in short_words), (name, short_words)
-            assert any("17:00" in text for text in short_words), (name, short_words)
-        range_words = said(painter, range_rect, school)
-        extras = [text for text in range_words if text in (start, end, ranged) or "–" in text]
-        assert extras != [start, end], (name, range_words)
-        assert ranged in range_words or start in extras, (name, range_words)

@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 from PySide6.QtWidgets import QApplication, QPushButton
 
-from desktop.native.layouts.registry import LAYOUTS
+from desktop.native.layout_choice import LAYOUTS
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.sheets.support_button_labels import LATE_WORDS, sheet_makers
@@ -131,7 +131,7 @@ SCREENS: list[Screen] = [
         area="sheets",
         prepare=week_window,
         checks=WEEK_WINDOW_CHECKS,
-        sources=("desktop/native/window.py", "desktop/native/look.py", "desktop/native/layouts"),
+        sources=("desktop/native/window.py", "desktop/native/look.py"),
         main=True,
     ),
     *(

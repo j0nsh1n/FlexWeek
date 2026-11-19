@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QAbstractButton, QWidget
 from backend.tests.fake_clock import CLOCK
 from desktop.native.calendar import sunday_due
 from desktop.native.hours.geometry import LAST
-from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.layout_choice import sanitize_layout
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.waiting import wait_until

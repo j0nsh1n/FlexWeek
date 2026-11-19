@@ -1,6 +1,5 @@
-"""What the Retro Month slide tests share: recording every frame of a motion, and the steps that put the
-window in a design and press a view button. (test_motion_0185.py reaches `in_design`, `nothing_left_over`,
-`press`, `settle_everything` and `watch` through the old module path test_retro_month_slide.py.)"""
+"""What the rail-slide tests share: recording every frame of a motion, and the steps that put the window
+in Today's app and press a view button."""
 
 from __future__ import annotations
 
@@ -11,7 +10,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QWidget
 
 import desktop.native.motion as motion
-from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.layout_choice import sanitize_layout
 from desktop.native.motion import FADE_NAME, SLIDE_NAME, Dim, apply_ui_effects
 from desktop.native.window import NativeWindow
 from desktop.tests.waiting import wait_until
@@ -110,36 +109,7 @@ def press(qapp: QApplication, window: NativeWindow, name: str, until: Callable[[
     settle_everything(qapp, window)
 
 
-def month_board(window: NativeWindow) -> QWidget | None:
-    return window.planner.currentWidget().findChild(QWidget, "layoutMonthBoard")
-
-
-def month_is_live(window: NativeWindow) -> bool:
-    board = month_board(window)
-    return window.session.planner_view == "month" and board is not None and board.isVisible()
-
-
 def nothing_left_over(window: NativeWindow) -> None:
     slides, fades, dims = pictures_over(window._week_page)
     assert slides == [] and fades == [] and dims == [], "no picture or dim stays on screen"
     assert window.planner.updatesEnabled(), "the planner paints again"
-
-
-def month_from_the_engine(qapp: QApplication, window: NativeWindow) -> dict:
-    """A real month snapshot, kept so a test can hand it over at the moment it chooses, then back to
-    the week."""
-    press(qapp, window, "viewMonth", lambda: month_is_live(window))
-    data = window.session.month_data
-    assert data is not None
-    press(qapp, window, "viewWeek", lambda: window.session.planner_view == "week")
-    return data
-
-
-def month_arrives(window: NativeWindow, data: dict) -> None:
-    window.session.month_data = data
-    window.session.week_changed.emit()
-
-
-def slide_in_progress(window: NativeWindow) -> QLabel | None:
-    slides, _fades, _dims = pictures_over(window._week_page)
-    return slides[0] if slides else None

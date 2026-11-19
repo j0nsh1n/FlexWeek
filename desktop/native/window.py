@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import time
-import weakref
 from collections.abc import Callable, Iterator
 from dataclasses import replace
 from datetime import date, datetime, timedelta
@@ -34,7 +33,6 @@ from PySide6.QtGui import (
     QColor,
     QContextMenuEvent,
     QDesktopServices,
-    QFont,
     QFontMetrics,
     QGuiApplication,
     QIcon,
@@ -44,7 +42,6 @@ from PySide6.QtGui import (
     QPalette,
     QResizeEvent,
     QShortcut,
-    QShowEvent,
 )
 from PySide6.QtNetwork import QLocalServer
 from PySide6.QtWidgets import (
@@ -57,7 +54,6 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QLayout,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
@@ -102,12 +98,11 @@ from desktop.native.calendar import (
 )
 from desktop.native.controller import ROUTINE_STATUS, NativeSession, _late_summary, left_sentence
 from desktop.native.custom_look import sanitize_saved
-from desktop.native.devices import SyncDot, SyncHost, live_phones, run_off_ui
-from desktop.native.feel import Context, apply_feel, context_for, extra_stylesheet, set_current
+from desktop.native.devices import SyncDot, SyncHost, live_phones, run_off_ui, set_error_colour
 from desktop.native.fields import announce, week_start_day, week_start_notice
 from desktop.native.files import EXPORT_FORMAT, parse_import_payload
-from desktop.native.focus import focus_now, phase_duration_ms
-from desktop.native.fonts import load_fonts, without_ligatures
+from desktop.native.focus import phase_duration_ms
+from desktop.native.fonts import load_fonts
 from desktop.native.hours.canvas import Drawn, HoursCanvas, plan_placed
 from desktop.native.hours.classic import ClassicDay, ClassicWeek
 from desktop.native.hours.geometry import Span, drag_step, next_slot
@@ -115,11 +110,10 @@ from desktop.native.hours.hand import Create, Gesture, Hand, Move, MoveDate, Pla
 from desktop.native.hours.hand import Verdict as HandVerdict
 from desktop.native.hours.month import MonthGrid
 from desktop.native.hours.rail import MonthCard, Rail
+from desktop.native.hours.scale import NARROW_WIDTH
 from desktop.native.hours.zoom import ZOOM_KEYS, HoursScroll, sanitize_zoom
 from desktop.native.kept import KeptSession
-from desktop.native.layouts.base import NARROW_WIDTH, LayoutView, Scene
-from desktop.native.layouts.registry import options_for, sanitize_layout, sanitize_surface, tokens_for
-from desktop.native.layouts.views import VIEW_CLASSES
+from desktop.native.layout_choice import options_for, sanitize_layout, sanitize_surface
 from desktop.native.look import (
     MENU_EDGE,
     design_look,
@@ -129,7 +123,6 @@ from desktop.native.look import (
     pack_stylesheet,
     resolved_palette,
     sanitize_look,
-    text_scale,
     toast_colours,
 )
 from desktop.native.material.theme import kept_material, read_letter_keys, read_shortcuts
@@ -482,37 +475,6 @@ class LastInput(QObject):
         return False
 
 
-class _BarStrip(QWidget):
-    """Retro's title-bar colour behind the top bar (T14): sized to the bar's rows across the page, under
-    every widget on it, and passing clicks through. Hidden for every other design."""
-
-    def __init__(self, page: QWidget, bar: QLayout) -> None:
-        super().__init__(page)
-        self._bar = bar
-        self.setObjectName("appBar")
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self.hide()
-        page.installEventFilter(self)
-
-    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt virtual
-        if event.type() in (QEvent.Type.Resize, QEvent.Type.LayoutRequest, QEvent.Type.Show):
-            self.follow()
-        return False
-
-    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 - Qt virtual
-        self.follow()
-        super().showEvent(event)
-
-    def follow(self) -> None:
-        page = self.parentWidget()
-        if page is None:
-            return
-        bottom = self._bar.geometry().bottom() + 1 + page.layout().contentsMargins().top()
-        self.setGeometry(0, 0, page.width(), max(0, bottom))
-        self.lower()
-
-
 class NativeWindow(QMainWindow):
     def __init__(
         self,
@@ -585,7 +547,6 @@ class NativeWindow(QMainWindow):
         # Number keys and Letter keys as the look file holds them, and the file's stamp when read.
         self._key_stamp: tuple[int, int] | None = None
         self._key_values = (True, False)
-        self._views: dict[str, LayoutView] = {}
         self._updates = sanitize_updates(None)
         self._zoom: dict[str, int] = {}
         # The student's own looks, kept by name (custom_look.py); Settings will list them.
@@ -1107,9 +1068,6 @@ class NativeWindow(QMainWindow):
         self._bar_views.addWidget(sign_out)
         self._top_bar = bar
         layout.addLayout(bar)
-        # Retro's title bar (T14) is a strip painted behind the bar, not a box around it, so the bar
-        # keeps its place on the page for every other design.
-        self._bar_strip = _BarStrip(page, bar)
         # Everything between the bar and the calendar is for planning, so a day screen can put it away.
         self.plan_chrome = QWidget()
         self.plan_chrome.setObjectName("planChrome")
@@ -1479,38 +1437,8 @@ class NativeWindow(QMainWindow):
         self._toast_week: str | None = None
 
     def _planner_widget(self, view: str) -> QWidget:
-        """The chosen main view stands in for the week grid, and for Day and Month too.
-
-        Today's app keeps the clock-order Day list and the chip Month. A design of its own rebuilds
-        Day and Month in that design, so the app is not two programs once you leave the week.
-        """
-        main = self._layout["main"]
-        if main in VIEW_CLASSES and view in {"week", "day", "month"}:
-            return self._layout_view(main)
+        """Today's app: the week grid, the clock-order Day list and the chip Month."""
         return {"day": self.day_view, "month": self.month_grid}.get(view, self.week_table)
-
-    def _layout_view(self, layout_id: str) -> LayoutView:
-        view = self._views.get(layout_id)
-        if view is None:
-            view = VIEW_CLASSES[layout_id](hand=self.hand)
-            # A layout only says what the student wants. What happens is what the window already does.
-            view.add_requested.connect(
-                lambda category: self._add_from_chip(category) if category else self._add_homework()
-            )
-            view.plan_requested.connect(self._plan_with_left_over)
-            view.block_activated.connect(self._edit_block)
-            view.finished_requested.connect(self._finish_homework)
-            view.focus_requested.connect(self._start_focus)
-            view.late_requested.connect(self._open_late)
-            view.menu_requested.connect(self._menu_from)
-            view.day_activated.connect(self.session.open_day)
-            view.remembered_zoom = self._zoom
-            view.zoomed.connect(self._remember_zoom)
-            view.option_set.connect(lambda key, value, chosen=layout_id: self._set_option(chosen, key, value))
-            self.planner.addWidget(view)
-            self._views[layout_id] = view
-        view.show_week(self._scene_for(layout_id))
-        return view
 
     def _finish_homework(self, assignment_id: str) -> None:
         item = self.session.assignments.get(assignment_id) or {}
@@ -1560,41 +1488,6 @@ class NativeWindow(QMainWindow):
         account = self.session.account
         return str(account["id"]) if account else None
 
-    def _scene_for(self, layout_id: str) -> Scene:
-        clock = clock_parts(self.session.now_ms())
-        options = options_for(self._layout, layout_id)
-        pack, system_dark, accent = self._look_inputs()
-        palette, applied_look = design_look(options["look"], pack, system_dark, self._worn_look(), accent)
-        session = self.session
-        surface = "week"
-        if layout_id in VIEW_CLASSES and session.planner_view in {"day", "month"}:
-            surface = session.planner_view
-        week = self._week_with_history(
-            build_week(session.week_start, session.blocks, session.assignments, session.trace)
-        )
-        running = session.focus_elapsed_min()
-        if running:
-            # A running session counts as it goes; the homework is credited only when it ends.
-            week = replace(week, focus_min=week.focus_min + running)
-        return Scene(
-            week=week,
-            today=session.today_column(clock["iso"]),
-            minute=clock["minute"],
-            options=options,
-            tokens=tokens_for(layout_id, options["look"], palette),
-            scale=text_scale(applied_look),
-            surface=surface,
-            month=session.month_data,
-            month_key=session.selected_month,
-            iso_day=session.selected_day,
-            dirty=session.dirty,
-            unsaved_weeks=session.unsaved_weeks(),
-            focus=focus_now(session.focus),
-            today_iso=clock["iso"],
-            account=self._account_id(),
-            missed=session.missed_block_ids(),
-        )
-
     def _week_with_history(self, week):
         states = {
             item["id"]: "Overdue" if item.get("left_over_state") == "overdue" else "Left from last week"
@@ -1622,9 +1515,7 @@ class NativeWindow(QMainWindow):
             self._fill_classic()
             self.solve_button.set_count(len(self.session.homework_time_needed()))
         shown = self.planner.currentWidget()
-        if isinstance(shown, LayoutView) and self.session.account is not None:
-            shown.show_week(self._scene_for(shown.layout_id))
-        elif shown in (self.week_table, self.day_view) and self.session.account is not None:
+        if shown in (self.week_table, self.day_view) and self.session.account is not None:
             # The line that says now moves with the minute.
             today, minute = self._clock_in_week()
             for hours in (self.week_table.hours, self.day_view.hours):
@@ -1707,13 +1598,12 @@ class NativeWindow(QMainWindow):
         self._sync_retry_bar_slot()
         self._keep_bar_whole()
         self._fit_plan_and_more()
-        own = isinstance(self.planner.currentWidget(), LayoutView)
         # The rail holds what is next and the focus list, so beside it the panel is only the running
         # timer, which is the rail's first card (decision 15 of 0.17).
         side = self._rail_shown()
-        self.plan_chrome.setVisible(not own)
+        self.plan_chrome.setVisible(True)
         self._place_rail(side)
-        self.focus_panel.setVisible((not own and not side) or self.session.focus is not None)
+        self.focus_panel.setVisible(not side or self.session.focus is not None)
         self._show_next()
         self.rail.set_tasks(self.session.focus_tasks(), self._clock_in_week()[0])
         # Quick focus is in the action row whenever there is one, so the panel's own copy would be
@@ -2442,8 +2332,6 @@ class NativeWindow(QMainWindow):
             step = VIEW_ORDER.index(now[0]) - VIEW_ORDER.index(was[0])
             direction = (step > 0) - (step < 0)
         over = ""
-        if direction and now[1] == "retro" and "month" in (was[0], now[0]) and moves(self._motion):
-            over = "back" if was[0] == "month" else "in"
         return picture, self._places(), direction, over
 
     def _finish_turn(self, turn: tuple[QLabel, dict, int, str] | None) -> None:
@@ -3320,18 +3208,6 @@ class NativeWindow(QMainWindow):
             repr(self._layout),
         )
 
-    def _set_option(self, layout_id: str, key: str, value: str) -> None:
-        """An option a design changed on its own page, kept with the look as Settings keeps one: only
-        while it differs from how the design ships."""
-        options = {name: dict(values) for name, values in self._layout["options"].items()}
-        chosen = options.setdefault(layout_id, {})
-        chosen[key] = value
-        if value == options_for(None, layout_id)[key]:
-            del chosen[key]
-        self._layout = sanitize_layout({**self._layout, "options": options})
-        self._save_look()
-        self._on_week()
-
     def _remember_zoom(self, key: str, px: int) -> None:
         """How close a surface's hours are is kept for this device, as the look is."""
         # In place: every design holds this dict and reads it for the hours it makes later.
@@ -3461,8 +3337,6 @@ class NativeWindow(QMainWindow):
 
     def _hold_renders(self, holding: bool) -> None:
         """Nothing a press started on is rebuilt until it is let go, whether it becomes a drag or a tap."""
-        for view in self._views.values():
-            view.hold(holding)
         if not holding:
             refresh_week = self.hand.release_kind is not Gesture.CREATE
             QTimer.singleShot(0, self, lambda: self._refresh_after_hold(refresh_week=refresh_week))
@@ -4950,41 +4824,18 @@ class NativeWindow(QMainWindow):
         palette, look = design_look(token, pack, system_dark, look, accent)
         art = control_art(palette)
         sheet = pack_stylesheet(pack, system_dark, look, accent, palette, art)
-        ctx = context_for(self._layout, look, palette, sheet)
-        heroes = ("settingsTitle", "sheetTitle", "setupTitle", "authBrand")
-        extra = extra_stylesheet(sheet, ctx.feel, palette, ctx.tokens, look, heroes)
         chips = bool((self.session.preferences or {}).get("accent_chips"))
         chosen_motion = (self.session.preferences or {}).get("motion")
         self._motion = motion_level(chosen_motion, look_motion(look))
-        dressed = (sheet, repr(look), repr(palette), chips, self._motion, ctx.feel.key)
+        dressed = (sheet, repr(look), repr(palette), chips, self._motion)
         # Every change to the week comes through here. Restyling the whole window each time, when the
         # look had not changed, cost about 26 ms a change and repainted everything on screen.
         if dressed != self._dressed:
             self._discard_block_spare()
-        set_current(ctx)
+        set_error_colour(palette["error"])
         if dressed != self._dressed:
             self._dressed = dressed
-            # Retro sets its words letter by letter (fonts.without_ligatures). Only the features change, so
-            # a time keeps its even figures and a strong word its weight; each sweep also reaches widgets made
-            # since the last, and leaving Retro gives every widget back the font it had, or its parent's.
-            if ctx.feel.key == "retro":
-                if not hasattr(self, "_retro_fonts"):
-                    self._retro_fonts = weakref.WeakKeyDictionary()
-                for child in (self, *self.findChildren(QWidget)):
-                    if child not in self._retro_fonts:
-                        own = child.testAttribute(Qt.WidgetAttribute.WA_SetFont)
-                        self._retro_fonts[child] = (QFont(child.font()), own)
-                    child.setFont(without_ligatures(child.font()))
-            elif hasattr(self, "_retro_fonts"):
-                for child, (font, own) in list(self._retro_fonts.items()):
-                    if isValid(child):
-                        child.setFont(font if own else QFont())
-                del self._retro_fonts
-            from desktop.native.feel import bar_chrome
-
-            retro_bar = ctx.feel.key == "retro"
-            self.setStyleSheet(sheet + (bar_chrome(ctx.tokens) if retro_bar else ""))
-            self._bar_strip.setVisible(retro_bar)
+            self.setStyleSheet(sheet)
             self._keep_bar_whole()
             apply_ui_effects(self._motion)
             self.toast.motion = self._motion
@@ -4997,23 +4848,11 @@ class NativeWindow(QMainWindow):
             self._dress_plan_button(palette)
             self.month_grid.set_palette(palette)
             self.add_menu.set_palette(palette, chips)
-            self._dress_feel(ctx, sheet, extra)
             self._maybe_prepare_block_spare()
             fit_buttons(self)
             self._keep_bar_whole()
         self._sync_add_button()
         self._refresh_layout()
-
-    def _feel_roots(self) -> list[QWidget]:
-        """What J13 dresses: the open dialogs. Not the week, day, rail or bar."""
-        roots: list[QWidget] = []
-        roots.extend(dialog for dialog in self.findChildren(QDialog) if dialog.isVisible())
-        return roots
-
-    def _dress_feel(self, ctx: Context, sheet: str, extra: str) -> None:
-        for root in self._feel_roots():
-            root.setStyleSheet(sheet + extra if extra else "")
-            apply_feel(root, ctx)
 
     def _dress_overlays(self, palette: dict) -> None:
         """What a style sheet cannot reach in the focus screen, the toast, Ctrl+K and the menus: the

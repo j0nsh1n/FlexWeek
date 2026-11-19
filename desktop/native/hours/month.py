@@ -75,7 +75,7 @@ TIGHT_CHIPS = 1
 BAND = 0.04
 # Layout passes to wait for the canvas's new height before scrolling to the first row.
 REVEAL_TRIES = 3
-# Date pane: rail-shaped card beside the grid, a drawer under this width (same as layouts.base).
+# Date pane: rail-shaped card beside the grid, a drawer under this width (same as hours.scale.NARROW_WIDTH).
 PANE_PX = 300
 PANE_NARROW = 1150
 CLOSE_PANE = "Close"

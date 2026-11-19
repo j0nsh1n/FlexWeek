@@ -1,4 +1,4 @@
-"""Homework blocks take their colours from the look in every design, and their state tags and
+"""Homework blocks take their colours from the look, and their state tags and
 outlines read in every look: never error red for an outline, and tag words at 4.5 to 1 on their pill."""
 
 from __future__ import annotations
@@ -23,10 +23,7 @@ from PySide6.QtGui import QColor, QFont, QImage, QPainter  # noqa: E402
 from desktop.native.hours.canvas import BlockPainter, Drawn  # noqa: E402
 from desktop.native.hours.classic import ClassicPainter  # noqa: E402
 from desktop.native.hours.geometry import Span  # noqa: E402
-from desktop.native.layouts.bento import BentoPainter  # noqa: E402
-from desktop.native.layouts.registry import LAYOUTS, MATCH, tokens_for  # noqa: E402
-from desktop.native.layouts.retro import RetroPainter, scheme  # noqa: E402
-from desktop.native.layouts.timeline import TimelinePainter  # noqa: E402
+from desktop.native.layout_choice import LAYOUTS  # noqa: E402
 from desktop.native.look import (  # noqa: E402
     EXPERIMENTAL_LOOKS,
     STANDARD_LOOKS,
@@ -102,13 +99,6 @@ def design_painter(design: str, palette: dict) -> BlockPainter | None:
     """The painter that design actually hands the hours, in that look's colours."""
     if design == "classic":
         return ClassicPainter(palette)
-    tokens = tokens_for(design, MATCH, palette)
-    if design == "timeline":
-        return TimelinePainter(tokens)
-    if design == "bento":
-        return BentoPainter(tokens)
-    if design == "retro":
-        return RetroPainter(scheme(tokens))
     raise AssertionError(f"no painter wired for {design}")
 
 
@@ -116,7 +106,7 @@ def design_painter(design: str, palette: dict) -> BlockPainter | None:
 @pytest.mark.parametrize("look", DESIGN_LOOKS, ids=list(DESIGN_LOOKS))
 @pytest.mark.parametrize("pinned", [False, True], ids=["planned", "pinned"])
 def test_each_design_paints_homework_in_its_own_colours(design: str, look: str, pinned: bool) -> None:
-    """Timeline and Bento used to raise KeyError: 'block_edge' on every homework block."""
+    """Every homework block carries a block_edge in both the light and the dark look."""
     pack, dark = DESIGN_LOOKS[look]
     palette = resolved_palette(pack, dark, None)
     painter = design_painter(design, palette)

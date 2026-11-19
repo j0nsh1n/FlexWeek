@@ -115,7 +115,7 @@ def _overdue(main: str, long_words: bool) -> Callable[[QWidget], QWidget]:
     return prepare
 
 
-OVERDUE_SOURCES = ("desktop/native/window.py", "desktop/native/layouts")
+OVERDUE_SOURCES = ("desktop/native/window.py",)
 OVERDUE_WHOLE = (
     "At 1024 x 640 with Large text and the long words '1 overdue · 3 left from last week', the Plan and "
     "Done buttons each show their whole label (neither is squeezed below its natural width, neither is "

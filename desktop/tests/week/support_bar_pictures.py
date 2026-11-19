@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QAbstractButton, QApplication
 
-from desktop.native.layouts.registry import LAYOUTS
+from desktop.native.layout_choice import LAYOUTS
 from desktop.native.look import sanitize_look
 from desktop.native.window import NativeWindow
 from desktop.tests.waiting import wait_until

@@ -18,7 +18,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QApplication, QPushButton
 
 from backend.tests.fake_clock import CLOCK
-from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.layout_choice import sanitize_layout
 from desktop.native.weekmodel import length_label
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401

@@ -218,11 +218,10 @@ paths = [
   "desktop/native/look.py", "desktop/native/tokens.py", "desktop/native/weekmodel.py",
   "desktop/native/calendar.py", "desktop/native/settings.py", "desktop/native/fonts.py",
   "desktop/native/fields.py", "desktop/native/motion.py", "desktop/native/menus.py",
-  "desktop/native/feel.py", "desktop/native/icons.py", "desktop/native/client.py",
+  "desktop/native/icons.py", "desktop/native/client.py",
   "desktop/native/wire.py", "desktop/native/history.py", "desktop/native/elevation.py",
   "desktop/native/files.py", "desktop/native/collector.py",
-  "desktop/native/layouts/__init__.py", "desktop/native/layouts/base.py",
-  "desktop/native/layouts/registry.py",
+  "desktop/native/layout_choice.py",
   "desktop/native/hours/__init__.py", "desktop/native/hours/canvas.py",
   "desktop/native/hours/geometry.py",
   "desktop/native/material/__init__.py", "desktop/native/material/bridge.py",
@@ -237,8 +236,6 @@ everything = true
 [[rule]]
 paths = [
   "desktop/native/hours/classic.py", "desktop/native/hours/chips.py",
-  "desktop/native/layouts/bento.py", "desktop/native/layouts/retro.py",
-  "desktop/native/layouts/timeline.py", "desktop/native/layouts/views.py",
 ]
 areas = ["week", "day"]
 

@@ -10,7 +10,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton  # noqa: E402
 
-from desktop.native.layouts.registry import LAYOUTS  # noqa: E402
+from desktop.native.layout_choice import LAYOUTS  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_layouts_window import (  # noqa: E402
     click,
@@ -30,16 +30,15 @@ def test_every_main_view_has_add_on_the_top_bar(qapp: QApplication, window: Nati
         assert window.findChild(QPushButton, "addButton").isVisible(), spec.id
 
 
-def test_bentos_buttons_reach_the_products_own_add_and_plan(
+def test_the_top_bars_buttons_reach_the_products_own_add_and_plan(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Bento draws no Add of its own: the top bar's is the one it uses."""
+    """Today's app draws no Add of its own: the top bar's is the one it uses."""
     asked: list[str] = []
     monkeypatch.setattr(NativeWindow, "_add_homework", lambda self: asked.append("add"))
     monkeypatch.setattr(type(window.session), "solve", lambda self: asked.append("plan"))
-    window._layout = {"main": "bento", "day": "one", "options": {}}
+    window._layout = {"main": "classic", "day": "one", "options": {}}
     window._on_week()
-    assert window.planner.currentWidget().findChild(QPushButton, "bentoAdd") is None
     click(window, "addButton")
     click(window, "solveButton")
     assert asked == ["add", "plan"]

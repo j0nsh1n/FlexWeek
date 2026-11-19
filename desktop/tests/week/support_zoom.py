@@ -52,7 +52,7 @@ from desktop.tests.light_app import LightWindows  # noqa: E402
 from desktop.tests.material_support import faded_in  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402, F401
 
-DESIGNS = ("classic", "timeline", "bento", "retro")
+DESIGNS = ("classic",)
 MONDAY = "2026-09-21"
 SCHOOL = {
     "id": "school",

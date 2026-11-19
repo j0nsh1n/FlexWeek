@@ -34,9 +34,6 @@ FREE_TODAY = (
 
 SCREENS = (
     ("classic", "week"),
-    ("timeline", "week"),
-    ("bento", "week"),
-    ("retro", "week"),
 )
 
 

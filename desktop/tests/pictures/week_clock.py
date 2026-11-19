@@ -131,7 +131,7 @@ SCREENS: list[Screen] = [
             "time-now pill 12:58 PM is whole beside the hours, clear of the first day's blocks in the "
             "Timeline design; at Large text on the 12-hour clock nothing is cut"
         ),
-        sources=("desktop/native/hours", "desktop/native/layouts"),
+        sources=("desktop/native/hours",),
         main=True,
     ),
     Screen(
@@ -142,7 +142,7 @@ SCREENS: list[Screen] = [
             "on Day, at each zoom level the hours offer, every hour word fits its box, is whole and runs "
             "into no other word, and the time-now pill 12:58 PM is whole"
         ),
-        sources=("desktop/native/hours", "desktop/native/layouts"),
+        sources=("desktop/native/hours",),
     ),
     Screen(
         id="week.block-time-range-in-narrow-column",

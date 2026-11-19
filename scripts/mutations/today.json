@@ -148,13 +148,6 @@
  },
  {
   "file": "desktop/native/window.py",
-  "name": "the sign-out sheet drawn in red",
-  "old": "        if confirm(\n            self, \"Sign out\", SIGN_OUT_QUESTION.format(where=where), \"Sign out\", danger=False\n        ) and self._save_before_leaving(self.session.logout, again=\"sign out again\"):\n",
-  "new": "        if confirm(\n            self, \"Sign out\", SIGN_OUT_QUESTION.format(where=where), \"Sign out\"\n        ) and self._save_before_leaving(self.session.logout, again=\"sign out again\"):\n",
-  "test": "desktop/tests/sheets/test_confirm_sheets.py::test_the_sign_out_sheet_says_where_the_week_lives_and_does_not_draw_sign_out_red"
- },
- {
-  "file": "desktop/native/window.py",
   "name": "deleting the account asks a last time",
   "old": "if confirm(self, \"Delete account\", question, f\"Delete {name}\"):",
   "new": "if True:",
@@ -201,20 +194,6 @@
   "old": "            if title.strip(\"…\"):\n                fitted = title + self._length\n",
   "new": "",
   "test": "desktop/tests/week/test_tray_and_rail_chips.py::test_a_tray_chip_shortens_its_title_and_keeps_its_length_whole"
- },
- {
-  "file": "desktop/native/layouts/retro.py",
-  "name": "a notepad line runs off the page",
-  "old": "    if len(line.title) <= title and title + 2 + len(rest) <= chars:\n",
-  "new": "    if True:\n",
-  "test": "desktop/tests/week/test_retro_notepad.py::test_a_notepad_line_short_of_room_puts_its_length_and_time_under_its_title"
- },
- {
-  "file": "desktop/native/layouts/retro.py",
-  "name": "Retro shows what has no time twice",
-  "old": "        if scene.week.waiting and not self._open.get(\"notes\"):\n",
-  "new": "        if scene.week.waiting:\n",
-  "test": "desktop/tests/week/test_retro_notepad.py::test_what_has_no_time_is_shown_once_in_the_notepad_or_under_the_hours_when_it_is_closed"
  },
  {
   "file": "desktop/native/window.py",
@@ -364,11 +343,11 @@
   "test": "desktop/tests/sheets/test_delete_homework.py::test_the_editor_offers_delete_only_for_homework_that_exists"
  },
  {
-  "file": "desktop/native/layouts/registry.py",
-  "name": "a missing per-design look falls back to the signature instead of 'your'",
+  "file": "desktop/native/layout_choice.py",
+  "name": "a missing look choice falls back to the account's look instead of the first curated one",
   "old": "    return Option(\"look\", \"Look\", \"style\", (*choices, Choice(\"your\", \"Your look\")), shipped=\"your\")\n",
   "new": "    return Option(\"look\", \"Look\", \"style\", (*choices, Choice(\"your\", \"Your look\")))\n",
-  "test": "desktop/tests/week/test_design_registry.py::test_missing_design_looks_keep_the_account_look_for_every_design"
+  "test": "desktop/tests/week/test_design_registry.py::test_missing_design_looks_keep_the_account_look"
  },
  {
   "file": "desktop/native/hours/chips.py",

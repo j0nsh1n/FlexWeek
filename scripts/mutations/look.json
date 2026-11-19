@@ -105,13 +105,6 @@
   "test": "desktop/tests/settings/test_design_tokens.py::test_the_accent_is_never_a_page_card_or_wash[Light-layered-default]"
  },
  {
-  "file": "desktop/native/layouts/registry.py",
-  "name": "Match my look's cards in the accent",
-  "old": "    card = surface if contrast(surface, page) >= 1.02 else mix(palette[\"text\"], page, 0.05)",
-  "new": "    card = mix(palette[\"accent\"], surface, 0.10)",
-  "test": "desktop/tests/settings/test_design_tokens.py::test_the_accent_is_never_a_page_card_or_wash[Light-layered-default]"
- },
- {
   "file": "desktop/native/look.py",
   "name": "the default accent teal again",
   "old": "    \"default\": {\"dark\": (\"#7fa8ff\", DARK_INK), \"light\": (\"#3d6fc4\", LIGHT_INK)},",

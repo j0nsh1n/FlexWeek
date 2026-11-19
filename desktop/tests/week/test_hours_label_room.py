@@ -22,7 +22,7 @@ from backend.tests.fake_clock import CLOCK
 from desktop.native.fonts import at_scale, time_font, weighted
 from desktop.native.hours.geometry import Axis
 from desktop.native.hours.zoom import HoursScroll
-from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.layout_choice import sanitize_layout
 from desktop.native.look import sanitize_look
 from desktop.native.tokens import WEIGHT_STRONG
 from desktop.native.weekmodel import clock_label
@@ -148,7 +148,7 @@ def test_the_hour_column_is_wide_enough_for_its_words_after_every_change_of_cloc
         wait_for_room(qapp, scroll, f"{design} {chosen} {text_size} {window_px}")
 
 
-@pytest.mark.parametrize("design", ["classic", "timeline"])
+@pytest.mark.parametrize("design", ["classic"])
 def test_these_designs_keep_their_hours_in_a_column_beside_the_blocks(
     qapp: QApplication, window: NativeWindow, design: str
 ) -> None:

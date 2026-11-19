@@ -10,11 +10,7 @@ control the edge pixel is compared with the control's own fill and with the card
 * the focused field: a 2 px ring >= 3:1 against fill and card, and stronger than the resting edge;
 * Settings' off switch: its track >= 3:1 against the card.
 
-Looks: the ten looks on Today's app (classic), then Retro desktop, Clay deck, Bento, Mission control,
-Timeline, and the Day dial and One thing day views, each in Light and in Dark. Every design ships on
-"Match my look" (checked in 0.19.0's registry), and sheets and Settings wear the look in every design
-(window.py `_apply_appearance`), so the design rows guard that dressing a design never changes the
-controls. Known failures are xfail(strict=True).
+Looks: the ten looks on Today's app (classic). Known failures are xfail(strict=True).
 """
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
@@ -52,12 +48,7 @@ TEN_LOOKS = [
     ("ink", "light-frost", "ink"),
     ("pastel", "light-frost", "pastel"),
 ]
-DESIGNS = [("retro", False), ("bento", False), ("timeline", False)]
-CASES = [(f"classic-{name}", pack, preset, "classic", False) for name, pack, preset in TEN_LOOKS] + [
-    (f"{design}-{shade}", pack, "default", design, day)
-    for design, day in DESIGNS
-    for shade, pack in (("light", "light-frost"), ("dark", "dark-frost"))
-]
+CASES = [(f"classic-{name}", pack, preset, "classic", False) for name, pack, preset in TEN_LOOKS]
 AA_GRAPHIC = 3.0
 KNOWN_CHIP = (
     "known failure (0l, reopened as 0l-R): chips take _depth_rules' 1px hairline edge (look.py setup_rules), "

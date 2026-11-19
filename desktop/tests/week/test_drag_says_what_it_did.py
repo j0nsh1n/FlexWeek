@@ -158,22 +158,6 @@ def test_the_notice_waits_for_the_pointer_and_goes_once_its_change_is_no_longer_
     )
 
 
-def test_a_move_in_a_design_says_what_it_did_too(qapp: QApplication, window: NativeWindow) -> None:
-    from desktop.native.layouts.registry import sanitize_layout
-
-    window._layout = sanitize_layout({"main": "timeline"})
-    window._apply_appearance()
-    window._on_week()
-    settled(qapp, window)
-    hours = window.planner.currentWidget().hours_surfaces()[0]
-    hours.reveal(3, 17 * 60, 21 * 60)
-    qapp.processEvents()
-    drag(qapp, hours, hours, hours.point_for(3, 19 * 60 + 30), hours.point_for(4, 18 * 60 + 30))
-    wait_until(qapp, lambda: session_of(window, "essay")["days"] == [4])
-    settled(qapp, window)
-    assert notice(window) == (True, "Moved History essay to Fri 6:00 PM.", "Undo")
-
-
 def test_a_chip_carried_on_month_says_what_it_did(qapp: QApplication, window: NativeWindow) -> None:
     # Inside the offscreen screen, 800 pixels square, where the hand can find the date under a point.
     window.move(0, 0)

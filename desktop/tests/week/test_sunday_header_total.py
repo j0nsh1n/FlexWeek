@@ -12,7 +12,7 @@ pytest.importorskip("PySide6")
 
 from desktop.native.calendar import sunday_due  # noqa: E402
 from desktop.native.hours.classic import GUTTER, Colours, DayName, column_widths  # noqa: E402
-from desktop.native.layouts.registry import sanitize_layout  # noqa: E402
+from desktop.native.layout_choice import sanitize_layout  # noqa: E402
 from desktop.native.look import resolved_palette, sanitize_look  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import open_light  # noqa: E402, F401

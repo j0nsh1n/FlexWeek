@@ -19,7 +19,6 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QWidget
 
 from desktop.native import window as window_module
-from desktop.native.feel import set_current
 from desktop.native.look import sanitize_look
 from desktop.native.motion import apply_ui_effects, busy
 from desktop.native.widgets import BlockDialog, SheetShade
@@ -38,7 +37,6 @@ def qapp() -> Iterator[QApplication]:
 def motion_is_put_back() -> Iterator[None]:
     yield
     apply_ui_effects("normal")
-    set_current(None)
 
 
 def shades(host: QWidget) -> list[SheetShade]:

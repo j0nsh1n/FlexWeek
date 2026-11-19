@@ -15,7 +15,7 @@ from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QPushButton, QWidget
 
-from desktop.native.layouts.base import NARROW_WIDTH
+from desktop.native.hours.scale import NARROW_WIDTH
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.window_support import qapp, settled  # noqa: F401
 

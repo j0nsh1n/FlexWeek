@@ -77,32 +77,11 @@
   "test": "desktop/tests/month/test_month_grid_lifetime.py::test_a_month_with_no_window_is_freed_without_the_garbage_collector"
  },
  {
-  "file": "desktop/native/layouts/base.py",
-  "name": "a design's month scrolls back on every refresh",
-  "old": "        if scene.month and scene.iso_day and opened != getattr(self, \"_month_revealed\", None):\n",
-  "new": "        if scene.month and scene.iso_day:\n",
-  "test": "desktop/tests/month/test_month_chip_drops_and_refresh_in_designs.py::test_a_designs_month_stays_where_the_student_scrolled_it_through_a_refresh"
- },
- {
   "file": "desktop/native/window.py",
   "name": "classic Month ignores weeks left unsaved",
   "old": "        self.month_grid.set_unsaved(self.session.unsaved_weeks())\n",
   "new": "",
   "test": "desktop/tests/month/test_month_chip_drops_and_refresh_in_designs.py::test_month_draws_a_week_left_unsaved_as_the_student_has_it[classic]"
- },
- {
-  "file": "desktop/native/layouts/base.py",
-  "name": "a design's Month ignores weeks left unsaved",
-  "old": "        board.set_unsaved(scene.unsaved_weeks)\n",
-  "new": "",
-  "test": "desktop/tests/month/test_month_chip_drops_and_refresh_in_designs.py::test_month_draws_a_week_left_unsaved_as_the_student_has_it[timeline]"
- },
- {
-  "file": "desktop/native/window.py",
-  "name": "the scene carries no weeks left unsaved",
-  "old": "            unsaved_weeks=session.unsaved_weeks(),\n",
-  "new": "",
-  "test": "desktop/tests/month/test_month_chip_drops_and_refresh_in_designs.py::test_month_draws_a_week_left_unsaved_as_the_student_has_it[timeline]"
  },
  {
   "file": "desktop/native/hours/month.py",

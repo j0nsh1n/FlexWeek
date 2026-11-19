@@ -85,14 +85,7 @@ def test_only_unfinished_unpinned_homework_is_placed_by_plan(
     assert plan_placed(occurrence(**changes)) is placed
 
 
-def test_a_design_that_writes_its_own_words_draws_no_pills_yet(qapp: QApplication) -> None:
-    """The base painter lays out words it knows about; a design that writes its own (Retro and
-    Bento) would draw a pill over them, so none of them does."""
-    from desktop.native.layouts.bento import BentoPainter
-    from desktop.native.layouts.retro import RetroPainter
-
-    for design in (BentoPainter, RetroPainter):
-        assert design.draws_pills is False, design.__name__
+def test_the_base_painter_draws_pills(qapp: QApplication) -> None:
     assert BlockPainter.draws_pills is True
 
 

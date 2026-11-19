@@ -32,8 +32,8 @@ from desktop.native.hours.canvas import BlockPainter, HoursCanvas
 from desktop.native.hours.geometry import FIRST, LAST, Axis, LinearTrack
 from desktop.native.hours.hand import Hand
 from desktop.native.hours.rail import Colours
+from desktop.native.hours.scale import short_length
 from desktop.native.hours.zoom import HoursScroll, Scale, opening_minute
-from desktop.native.layouts.base import short_length
 from desktop.native.look import category_paint, mix, readable_ink, text_scale
 from desktop.native.tokens import SPACING, WEIGHT_STRONG
 from desktop.native.weekmodel import (

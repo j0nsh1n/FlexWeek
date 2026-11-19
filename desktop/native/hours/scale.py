@@ -42,3 +42,16 @@ def opening_minute(week: WeekModel, today: int | None, now: int | None, day: int
         return now
     items = week.occurrences if day is None else week.on_day(day)
     return min((item.start for item in items), default=OPENS)
+
+
+def short_length(minutes: int) -> str:
+    """A length where room is short: "1h 30m", "45 min", "2h". Spaces around h made "2 h 15" look
+    like a time of day."""
+    hours, rest = divmod(max(minutes, 0), 60)
+    if not hours:
+        return f"{rest} min"
+    return f"{hours}h {rest}m" if rest else f"{hours}h"
+
+
+# Below this width the week gives up a column rather than make the student scroll sideways to Run plan.
+NARROW_WIDTH = 1150

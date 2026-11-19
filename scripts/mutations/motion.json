@@ -84,20 +84,6 @@
     "test": "desktop/tests/settings/test_hours_motion.py::test_under_reduce_a_moved_block_fades_in_where_it_went_rather_than_sliding"
   },
   {
-    "name": "Bento's tile rises under Reduce",
-    "file": "desktop/native/layouts/bento.py",
-    "old": "        self.moves = moves()\n",
-    "new": "        self.moves = True\n",
-    "test": "desktop/tests/week/test_bento_week.py::test_a_pointed_at_day_lifts_and_does_not_rise_with_animations_off_or_reduced"
-  },
-  {
-    "name": "Retro's windows open without the zoom rectangle",
-    "file": "desktop/native/layouts/retro.py",
-    "old": "        if start is None or not moves(level):\n",
-    "new": "        if True:\n",
-    "test": "desktop/tests/week/test_retro_desktop_windows.py::test_a_window_opens_with_windows_98s_zoom_rectangle_within_the_levels"
-  },
-  {
     "name": "the title fades with the page again",
     "file": "desktop/native/window.py",
     "old": "        self.week_title.set_full_text(\n            planner_title(self.session, view),\n",

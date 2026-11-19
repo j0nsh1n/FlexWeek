@@ -1,5 +1,5 @@
 # ruff: noqa: F811
-"""Every Widgets design that draws a Week names each day from its date, so a week from Wednesday
+"""Today's app names each day from its date, so a week from Wednesday
 reads Wednesday 4 to Tuesday 10 November 2026 (the clock is Thursday 5 November). A day name beside a
 date of another weekday is the bug this catches."""
 
@@ -15,7 +15,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QAbstractButton, QLabel, QWidget  # noqa: E402
 
 from desktop.native import fields  # noqa: E402
-from desktop.native.layouts.registry import layouts_for  # noqa: E402
+from desktop.native.layout_choice import LAYOUTS  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_layouts_window import qapp, window  # noqa: E402, F401
 from desktop.tests.waiting import wait_until  # noqa: E402
@@ -50,7 +50,7 @@ def _misnamed(texts: list[str]) -> list[str]:
     return wrong
 
 
-@pytest.mark.parametrize("design", [spec.id for spec in layouts_for("plan")])
+@pytest.mark.parametrize("design", [spec.id for spec in LAYOUTS.values() if spec.role == "plan"])
 def test_every_widgets_week_names_each_day_from_its_date(qapp, window, design: str) -> None:
     window._layout = {"main": design, "day": "one", "options": {}}
     window.session.set_view("week")

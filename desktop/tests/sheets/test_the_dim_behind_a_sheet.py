@@ -18,14 +18,12 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QWidget
 
 from desktop.native import window as window_module
-from desktop.native.feel import set_current
 from desktop.native.motion import EASE_MS, apply_ui_effects, busy, duration
 from desktop.native.widgets import Dialog, HomeworkDialog, SheetShade, dim_window
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.motion_support import ManualTime, manual_time  # noqa: F401
 from desktop.tests.sheets.support_dialogs import when_open
-from desktop.tests.test_feel import _host
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import free
 
@@ -40,7 +38,6 @@ def qapp() -> Iterator[QApplication]:
 def motion_is_put_back() -> Iterator[None]:
     yield
     apply_ui_effects("normal")
-    set_current(None)
 
 
 def shades(host: QWidget) -> list[SheetShade]:
@@ -144,10 +141,12 @@ def test_the_dim_has_finished_fading_and_holds_a_still_when_the_sheet_is_up(
     assert landed["covers"]
 
 
-@pytest.mark.parametrize("style_key", ["plain", "night", "dashboard", "retro"])
-def test_the_dim_finishes_the_same_way_in_every_design(qapp: QApplication, style_key: str) -> None:
+def test_the_dim_finishes_on_a_plain_host(qapp: QApplication) -> None:
     apply_ui_effects("normal")
-    host, _ctx = _host(qapp, style_key)
+    host = QWidget()
+    host.resize(1280, 800)
+    host.show()
+    qapp.processEvents()
     dim = dim_window(host)
     # The dim waits for its sheet; the sheet that takes it lets the fade go on.
     sheet = Dialog(host, sheet=True)

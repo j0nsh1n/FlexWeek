@@ -27,27 +27,13 @@ from desktop.native.hours import canvas as canvas_module  # noqa: E402
 from desktop.native.hours.canvas import BlockPainter  # noqa: E402
 from desktop.native.hours.classic import ClassicPainter, ClassicWeek  # noqa: E402
 from desktop.native.hours.geometry import Axis, LinearTrack  # noqa: E402
-from desktop.native.layouts.bento import BentoPainter  # noqa: E402
-from desktop.native.layouts.registry import MATCH, tokens_for  # noqa: E402
-from desktop.native.layouts.retro import RetroPainter, scheme  # noqa: E402
-from desktop.native.layouts.timeline import TimelinePainter  # noqa: E402
 from desktop.native.look import resolved_palette  # noqa: E402
 from desktop.native.weekmodel import build_week, set_clock_24h  # noqa: E402
 
 
 def painters() -> dict[str, BlockPainter]:
     palette = resolved_palette("light-frost", False, None)
-
-    def tokens(design: str) -> dict[str, str]:
-        return tokens_for(design, MATCH, palette)
-
-    return {
-        "plain": BlockPainter(tokens("timeline")),
-        "today": ClassicPainter(tokens("timeline")),
-        "bento": BentoPainter(tokens("bento")),
-        "retro": RetroPainter(scheme(tokens("retro"))),
-        "timeline": TimelinePainter(tokens("timeline")),
-    }
+    return {"plain": BlockPainter(palette), "today": ClassicPainter(palette)}
 
 
 def labels_of(painting: BlockPainter) -> list[str]:
@@ -73,8 +59,8 @@ def labels_of(painting: BlockPainter) -> list[str]:
 
 
 @pytest.mark.parametrize("twenty_four, midnight", [(True, "24:00"), (False, "12:00 AM")])
-@pytest.mark.parametrize("design", ["plain", "today", "bento", "retro", "timeline"])
-def test_the_last_hour_line_is_labelled_in_every_design_as_the_clock_writes_midnight(
+@pytest.mark.parametrize("design", ["plain", "today"])
+def test_the_last_hour_line_is_labelled_as_the_clock_writes_midnight(
     design: str, twenty_four: bool, midnight: str
 ) -> None:
     load_fonts()

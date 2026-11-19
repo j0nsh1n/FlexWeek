@@ -7,7 +7,7 @@ Expected words are written out here. They are not read back from the function un
 
 from __future__ import annotations
 
-from desktop.native.layouts.registry import (
+from desktop.native.layout_choice import (
     SURFACE_DEFAULT,
     SURFACES,
     sanitize_layout,
@@ -42,16 +42,16 @@ def test_every_look_file_opens_material() -> None:
 def test_sanitize_layout_still_returns_only_the_layout() -> None:
     cleaned = sanitize_layout(
         {
-            "main": "timeline",
+            "main": "classic",
             "day": "dial",
-            "options": {"timeline": {"density": "compact"}},
+            "options": {"classic": {"look": "preset:paper"}},
             "surface": "material",
         }
     )
     assert set(cleaned) == {"main", "day", "options"}
-    assert cleaned["main"] == "timeline"
+    assert cleaned["main"] == "classic"
     assert cleaned["day"] == "dial"
-    assert cleaned["options"] == {"timeline": {"density": "compact"}}
+    assert cleaned["options"] == {"classic": {"look": "preset:paper"}}
 
 
 def test_a_missing_or_unknown_material_choice_is_slate_system_standard_comfortable() -> None:

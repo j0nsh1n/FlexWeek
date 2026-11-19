@@ -26,8 +26,7 @@ from desktop.native.hours import hand as hand_module
 from desktop.native.hours.canvas import BlockPainter, HoursCanvas
 from desktop.native.hours.classic import ClassicWeek
 from desktop.native.hours.geometry import Axis, DialTrack, LinearTrack
-from desktop.native.hours.hand import Gesture, Hand, Held, Verdict, span_words
-from desktop.native.layouts.base import LayoutView
+from desktop.native.hours.hand import Gesture, Hand, Held, Verdict, is_surface, span_words
 from desktop.native.look import resolved_palette
 from desktop.native.menus import Menu
 from desktop.native.weekmodel import Occurrence, build_week
@@ -181,14 +180,13 @@ class Dial(QWidget):
         return self.track if day == self.track.day else None
 
 
-class Everything(LayoutView):
+class Everything(QWidget):
     """Monday and Tuesday down, Wednesday and Thursday across, Friday on a tilted card, Saturday in
     a morning tile and an afternoon tile, Sunday on a dial."""
 
-    layout_id = "targets"
-
     def __init__(self, hand: Hand) -> None:
-        super().__init__(hand=hand)
+        super().__init__()
+        self.hand = hand
         painter = BlockPainter(resolved_palette("system", False, None))
 
         def columns(area: QRectF) -> list[LinearTrack]:
@@ -226,6 +224,10 @@ class Everything(LayoutView):
         self.dial = Dial(6, self)
         self.dial.setGeometry(QRect(0, 520, 180, 180))
         self.morning.set_week([occurrence("run", 5, 8 * 60, 9 * 60)])
+
+    def hours_surfaces(self) -> list[QWidget]:
+        """Every surface of hours shown now, in reading order."""
+        return [widget for widget in self.findChildren(QWidget) if is_surface(widget) and widget.isVisible()]
 
 
 class Stage:

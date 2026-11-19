@@ -10,12 +10,12 @@ pytest.importorskip("PySide6")
 from datetime import date, datetime, timedelta
 
 from backend.tests.fake_clock import CLOCK
-from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.layout_choice import sanitize_layout
 from desktop.native.window import NativeWindow
 from desktop.tests.blocks_helper import put_block
 from desktop.tests.waiting import wait_until
 
-DESIGNS = ("classic", "timeline", "bento", "retro")
+DESIGNS = ("classic",)
 LONG_WORDS = "1 overdue · 3 left from last week"
 
 

@@ -13,7 +13,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QEvent, QPoint
 from PySide6.QtWidgets import QApplication, QPushButton
 
-from desktop.native.layouts.base import NARROW_WIDTH
+from desktop.native.hours.scale import NARROW_WIDTH
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.waiting import wait_until

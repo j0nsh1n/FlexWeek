@@ -392,7 +392,7 @@ def test_the_menu_key_and_shift_f10_ask_at_the_next_free_time_after_now_when_not
 def test_every_design_with_shared_hours_has_the_free_time_menu(
     qapp: QApplication, window: NativeWindow, menus: dict, design: str
 ) -> None:
-    from desktop.native.layouts.registry import sanitize_layout
+    from desktop.native.layout_choice import sanitize_layout
 
     # Clay's cards beside the day in front show the stretch of the day the front card has scrolled to,
     # and that card opens at now. Before about 09:00 that stretch ends before 17:00, so Tuesday would

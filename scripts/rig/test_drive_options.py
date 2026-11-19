@@ -8,21 +8,17 @@ from scripts.rig import drive
 
 
 def test_option_is_checked_against_the_designs_own_options():
-    assert drive.parse_options("bento", ["hero=today", "corners=square"]) == {
-        "hero": "today",
-        "corners": "square",
-    }
-    assert drive.parse_options("bento", []) == {}
+    assert drive.parse_options("classic", ["look=preset:paper"]) == {"look": "preset:paper"}
+    assert drive.parse_options("classic", []) == {}
 
 
 @pytest.mark.parametrize(
     ("design", "pair", "says"),
     [
-        ("bento", "size=big", "hero: week, today"),
-        ("bento", "hero=tomorrow", "week, today"),
-        ("bento", "hero", "not key=value"),
-        ("classic", "hero=today", "options: look:"),
-        (None, "hero=today", "needs --design"),
+        ("classic", "size=big", "options: look:"),
+        ("classic", "look=tomorrow", "pack:light-frost"),
+        ("classic", "look", "not key=value"),
+        (None, "look=your", "needs --design"),
     ],
 )
 def test_bad_option_names_what_is_valid(design, pair, says):
@@ -140,25 +136,25 @@ def test_drive_keeps_an_empty_caller_bus_when_the_live_one_changes(monkeypatch):
 
 def test_a_run_that_stops_before_the_last_scenario_is_a_failure():
     plan = [
-        ("timeline", "week", "week-move-day"),
-        ("timeline", "week", "week-resize-top"),
-        ("timeline", "week", "week-create"),
+        ("classic", "week", "week-move-day"),
+        ("classic", "week", "week-resize-top"),
+        ("classic", "week", "week-create"),
     ]
     results = [
-        {"design": "timeline", "tab": "week", "scenario": "week-move-day", "result": "PASS"},
-        {"design": "timeline", "tab": "week", "scenario": "week-resize-top", "result": "PASS"},
+        {"design": "classic", "tab": "week", "scenario": "week-move-day", "result": "PASS"},
+        {"design": "classic", "tab": "week", "scenario": "week-resize-top", "result": "PASS"},
     ]
     line, code, payload = drive.report_run(plan, results, finished=False, stopped_in="week-create")
     assert code == 1
     assert "passed" not in line.lower()
     assert "STOPPED" in line and "week-create" in line
     skipped = [item for item in payload if item["result"] == "SKIPPED"]
-    assert skipped == [{"design": "timeline", "tab": "week", "scenario": "week-create", "result": "SKIPPED"}]
+    assert skipped == [{"design": "classic", "tab": "week", "scenario": "week-create", "result": "SKIPPED"}]
 
 
 def test_a_python_error_from_the_app_is_a_failure():
-    plan = [("timeline", "week", "week-beside")]
-    results = [{"design": "timeline", "tab": "week", "scenario": "week-beside", "result": "PASS"}]
+    plan = [("classic", "week", "week-beside")]
+    results = [{"design": "classic", "tab": "week", "scenario": "week-beside", "result": "PASS"}]
     line, code, payload = drive.report_run(
         plan, results, finished=True, python_error="KeyError: 'block_edge'", stopped_in="week-beside"
     )
@@ -170,10 +166,10 @@ def test_a_python_error_from_the_app_is_a_failure():
 
 
 def test_a_finished_run_with_a_failed_scenario_counts_it_and_is_not_called_stopped():
-    plan = [("bento", "week", "week-move-day"), ("bento", "week", "week-create")]
+    plan = [("classic", "week", "week-move-day"), ("classic", "week", "week-create")]
     results = [
-        {"design": "bento", "tab": "week", "scenario": "week-move-day", "result": "PASS"},
-        {"design": "bento", "tab": "week", "scenario": "week-create", "result": "FAIL"},
+        {"design": "classic", "tab": "week", "scenario": "week-move-day", "result": "PASS"},
+        {"design": "classic", "tab": "week", "scenario": "week-create", "result": "FAIL"},
     ]
     line, code, payload = drive.report_run(plan, results, finished=True)
     assert code == 1
@@ -182,8 +178,8 @@ def test_a_finished_run_with_a_failed_scenario_counts_it_and_is_not_called_stopp
 
 
 def test_a_finished_run_where_every_scenario_passed_still_says_passed():
-    plan = [("bento", "week", "week-move-day")]
-    results = [{"design": "bento", "tab": "week", "scenario": "week-move-day", "result": "PASS"}]
+    plan = [("classic", "week", "week-move-day")]
+    results = [{"design": "classic", "tab": "week", "scenario": "week-move-day", "result": "PASS"}]
     line, code, payload = drive.report_run(plan, results, finished=True)
     assert code == 0
     assert line == "1/1 passed."

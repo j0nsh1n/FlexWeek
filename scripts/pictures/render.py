@@ -539,7 +539,7 @@ def render(root: Path, out: Path, chosen: list[str] | None, which: str) -> int:
     qapp = QApplication.instance() or QApplication(["flexweek-pictures"])
     nothing_leaves(qapp)
 
-    from desktop.native.layouts.registry import DAY_DEFAULT, LAYOUTS, MAIN_DEFAULT
+    from desktop.native.layout_choice import DAY_DEFAULT, LAYOUTS, MAIN_DEFAULT
     from desktop.native.tokens import TEXT_SCALE
     from desktop.tests.light_app import account
 

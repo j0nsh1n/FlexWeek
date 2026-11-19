@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 
 from backend.tests.fake_clock import CLOCK, FakeClock
 from desktop.native import settings
-from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.layout_choice import sanitize_layout
 from desktop.native.look import sanitize_look
 from desktop.native.tokens import type_pt
 from desktop.native.window import NativeWindow
@@ -216,7 +216,7 @@ def test_unfinished_opens_its_list_in_any_design(
     session.load_week(later)
     wait_until(qapp, lambda: session.week_start == later and not session.busy)
     window.unfinished_panel.hide()
-    window._layout = sanitize_layout({"main": "timeline", "day": "one"})
+    window._layout = sanitize_layout({"main": "classic", "day": "one"})
     window._on_week()
     qapp.processEvents()
     action = unfinished_action(window)
@@ -224,7 +224,7 @@ def test_unfinished_opens_its_list_in_any_design(
     action.trigger()
     qapp.processEvents()
     panel = window.unfinished_panel
-    assert panel.isVisibleTo(window), "Timeline showed nothing"
+    assert panel.isVisibleTo(window), "Today's app showed nothing"
     rows = [label.text() for label in panel.findChildren(QLabel) if label.isVisibleTo(window)]
     due = CLOCK.today() - timedelta(days=3)
     assert f"History essay · 2 h left · due {due:%a} {due.day} {due:%b} · Overdue" in rows

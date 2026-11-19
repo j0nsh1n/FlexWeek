@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QApplication, QPushButton  # noqa: E402
 
 from backend import clock as wall_clock  # noqa: E402
 from desktop.native.calendar import monday_of  # noqa: E402
-from desktop.native.layouts.registry import sanitize_layout  # noqa: E402
+from desktop.native.layout_choice import sanitize_layout  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_layouts_window import (  # noqa: E402
     click,

@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QWidget
 
 from desktop.native import window as window_module
-from desktop.native.layouts.base import NARROW_WIDTH
+from desktop.native.hours.scale import NARROW_WIDTH
 from desktop.native.menus import Menu
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen

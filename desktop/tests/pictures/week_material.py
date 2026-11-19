@@ -304,7 +304,7 @@ SCREENS: list[Screen] = [
             "At 810 px each day header writes its homework length whole ('1h' or '1h 30m'), never cut by the "
             "column edge, and it does not read as a time of day."
         ),
-        sources=("desktop/native/hours/classic.py", "desktop/native/layouts/base.py"),
+        sources=("desktop/native/hours/classic.py", "desktop/native/hours/scale.py"),
         main=True,
     ),
     Screen(

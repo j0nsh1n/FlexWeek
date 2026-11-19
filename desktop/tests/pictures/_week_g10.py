@@ -8,12 +8,10 @@ from collections.abc import Callable
 from PySide6.QtCore import QPoint
 from PySide6.QtWidgets import QAbstractButton, QApplication, QWidget
 
-from desktop.native.layouts.registry import LAYOUTS, sanitize_layout
-from desktop.native.look import LOOK_DEFAULTS, LOOK_KNOBS, sanitize_look
+from desktop.native.layout_choice import LAYOUTS, sanitize_layout
+from desktop.native.look import sanitize_look
 from desktop.native.window import NativeWindow
 from desktop.tests.day.support_layouts_window import (
-    busy_thursday,
-    own_accent,
     school_week,
     settled,
     signature,
@@ -21,8 +19,7 @@ from desktop.tests.day.support_layouts_window import (
 )
 from desktop.tests.pictures.screen import Screen
 
-DESIGNS = ("timeline", "bento", "retro")
-PLAN_DESIGNS = ("classic", *DESIGNS)
+PLAN_DESIGNS = ("classic",)
 
 
 def _use(window: NativeWindow, main: str, day: str = "one") -> None:
@@ -56,43 +53,6 @@ def _at_size(width: int, height: int) -> Callable[[NativeWindow], object]:
     return prepare
 
 
-def _bento(window: NativeWindow) -> object:
-    school_week(window)
-    _use(window, "bento")
-    return None
-
-
-def _timeline(window: NativeWindow) -> object:
-    school_week(window)
-    _use(window, "timeline")
-    still(window)
-    return window.planner.currentWidget()
-
-
-def _sticky_note(window: NativeWindow) -> object:
-    school_week(window)
-    session = window.session
-    session.add_homework(
-        {"id": "poster", "title": "Science poster", "due": f"{session.week_start}T23:59",
-         "estimate_min": 60, "revision": 0}
-    )  # fmt: skip
-    session.save()
-    settled(QApplication.instance(), window)
-    _use(window, "timeline")
-    QApplication.processEvents()
-    return window.planner.currentWidget().findChild(QWidget, "timelineWaiting0")
-
-
-def _timeline_in_paper(window: NativeWindow) -> object:
-    school_week(window)
-    _use(window, "timeline")
-    window._look = sanitize_look({"preset": "paper"})
-    window._apply_appearance()
-    _use(window, "timeline")
-    still(window)
-    return window.planner.currentWidget()
-
-
 def _custom_look(window: NativeWindow) -> object:
     from desktop.native.custom_look import save_look, wear
 
@@ -116,26 +76,6 @@ def _custom_look(window: NativeWindow) -> object:
     window._on_week()
     settled(QApplication.instance(), window)
     return None
-
-
-def _surface(main: str, other: bool) -> Callable[[NativeWindow], object]:
-    def prepare(window: NativeWindow) -> object:
-        school_week(window)
-        base = {**(window.session.preferences or {}), "motion": "off"}
-        window.session.preferences = base
-        knobs = {}
-        if other:
-            knobs = {"surface": next(v for v in LOOK_KNOBS["surface"] if v != LOOK_DEFAULTS["surface"])}
-        window._look = sanitize_look({"preset": "default", "knobs": knobs})
-        own = {main: {"look": own_accent(main)}}
-        window._layout = sanitize_layout({"main": main, "day": "one", "options": own})
-        window._apply_appearance()
-        window._on_week()
-        for _ in range(20):
-            QApplication.processEvents()
-        return window.planner.currentWidget()
-
-    return prepare
 
 
 def _chrome(main: str) -> Callable[[NativeWindow], object]:
@@ -182,28 +122,7 @@ def _own_look(main: str) -> Callable[[NativeWindow], object]:
     return prepare
 
 
-def _fits_a_laptop(main: str) -> Callable[[NativeWindow], object]:
-    def prepare(window: NativeWindow) -> object:
-        school_week(window)
-        busy_thursday(window)
-        _use(window, main, "dial")
-        return None
-
-    return prepare
-
-
-def _retro_start(window: NativeWindow) -> object:
-    school_week(window)
-    window._layout = sanitize_layout({"main": "retro", "day": "one"})
-    window.session.set_view("week")
-    window._on_week()
-    QApplication.processEvents()
-    window.planner.currentWidget().findChild(QWidget, "retroStart").click()
-    QApplication.processEvents()
-    return None
-
-
-SOURCES = ("desktop/native/layouts", "desktop/native/window.py", "desktop/native/look.py")
+SOURCES = ("desktop/native/layout_choice.py", "desktop/native/window.py", "desktop/native/look.py")
 
 SCREENS: list[Screen] = [
     Screen(
@@ -251,47 +170,6 @@ SCREENS: list[Screen] = [
         sources=("desktop/native/window.py",),
     ),
     Screen(
-        id="week.bento_fills_the_window",
-        area="week",
-        prepare=_bento,
-        checks="Bento's planner is taller than 80% of the window's height: it fills the window.",
-        sources=("desktop/native/layouts/bento.py", "desktop/native/window.py"),
-    ),
-    Screen(
-        id="week.timeline_pages_are_paper",
-        area="week",
-        prepare=_timeline,
-        checks=(
-            "Timeline's pages are its paper in the real window: left of the hour labels at half past "
-            "twelve (no label there), under the scroll bar at the right edge (clear of its handle), and "
-            "right of the zoom beside the week header are all the paper (surface) token, which differs "
-            "from the page (bg) token; no grey bands from the window's stylesheet on Qt's plain widgets."
-        ),
-        sources=("desktop/native/layouts/timeline.py", "desktop/native/window.py"),
-    ),
-    Screen(
-        id="week.timeline_sticky_note_small_print",
-        area="week",
-        prepare=_sticky_note,
-        checks=(
-            "A sticky note's small print is regular weight: its title (\"Science\") is bold (600), but "
-            "its length (\"1 h\") and due date are regular (400), not as bold as the title (the "
-            "window's stylesheet sets every button's font at 600 and a note is a button)."
-        ),
-        sources=("desktop/native/layouts/timeline.py", "desktop/native/window.py"),
-    ),
-    Screen(
-        id="week.timeline_heading_face",
-        area="week",
-        prepare=_timeline_in_paper,
-        checks=(
-            "Changing Timeline's look changes its colours without replacing its own type: the day "
-            "names and the figures use the look's heading face (Newsreader on Paper) after the change "
-            "and Inter before it."
-        ),
-        sources=("desktop/native/layouts/timeline.py", "desktop/native/look.py"),
-    ),
-    Screen(
         id="week.custom_look_dresses_the_window",
         area="week",
         prepare=_custom_look,
@@ -308,38 +186,6 @@ SCREENS: list[Screen] = [
     ),
 ]
 
-SCREENS.append(
-    Screen(
-        id="week.retro_start_menu_opens_up",
-        area="week",
-        prepare=_retro_start,
-        checks=(
-            "Retro's Start button opens More's menu up over the taskbar, as Windows 98's did: the "
-            "menu's panel (inside the MENU_EDGE shadow margin) ends at or above the top of the Start "
-            "button."
-        ),
-        sources=("desktop/native/layouts/retro.py", "desktop/native/menus.py"),
-    )
-)
-
-for _design in DESIGNS:
-    for _other in (False, True):
-        SCREENS.append(
-            Screen(
-                id=f"week.{_design}_surface_{'changed' if _other else 'default'}",
-                area="week",
-                prepare=_surface(_design, _other),
-                checks=(
-                    f"Surface is a palette token shared by the canvas and the chrome of every design: "
-                    f"{LAYOUTS[_design].label} in its own colours with Surface "
-                    f"{'set to a non-default value' if _other else 'left at the default'} (animations "
-                    "off). The reviewer compares this with its default/changed twin: changing Surface "
-                    "must change the picture."
-                ),
-                sources=SOURCES,
-            )
-        )
-
 for _design in PLAN_DESIGNS:
     SCREENS.append(
         Screen(
@@ -349,7 +195,7 @@ for _design in PLAN_DESIGNS:
             checks=(
                 f"{LAYOUTS[_design].label} on its signature look: the week page's top-left pixel (clear "
                 "of text and controls) is the design's page colour (bg token) so the top bar and the "
-                "canvas wear the same look; under Retro it is the colour of Retro's own title bar."
+                "canvas wear the same look."
             ),
             sources=SOURCES,
         )
@@ -374,25 +220,9 @@ for _design in PLAN_DESIGNS:
             prepare=_own_look(_design),
             checks=(
                 f"{LAYOUTS[_design].label} on its signature look in Light frost: somewhere on the applied "
-                "canvas is the design's background colour (the panel for Today's app, the desk colour "
-                "for Retro, the bg token for the rest), the same colour as the signature look's picture "
-                "on the setup page."
+                "canvas is the design's background colour (the panel for Today's app), the same colour as "
+                "the signature look's picture on the setup page."
             ),
             sources=SOURCES,
         )
     )
-    if _design != "classic":
-        SCREENS.append(
-            Screen(
-                id=f"week.{_design}_fits_a_laptop",
-                area="week",
-                prepare=_fits_a_laptop(_design),
-                checks=(
-                    f"{LAYOUTS[_design].label} on a busy Thursday (five more commitments, three "
-                    "homework with no time yet): the window's minimum size is at most 1366 x 768 so it "
-                    "fits a laptop, also at Large text (once signed in the sign-in card's held height "
-                    "must not push Retro to 782 px)."
-                ),
-                sources=SOURCES,
-            )
-        )

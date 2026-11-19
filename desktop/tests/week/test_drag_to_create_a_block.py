@@ -3,14 +3,10 @@
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
 
-from dataclasses import replace
-
 import pytest
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialogButtonBox, QWidget
 
-from desktop.native.hours.hand import Gesture
-from desktop.native.layouts.base import LayoutView
 from desktop.native.motion import apply_ui_effects
 from desktop.native.widgets import BlockDialog, HomeworkDialog, SheetShade
 from desktop.native.window import ClassicWeek, NativeWindow
@@ -87,24 +83,3 @@ def test_drag_create_clears_preview_without_refreshing_week_before_dim(
     qapp.processEvents()
     assert counts["set_week"] == before_add, "opening Add does not refresh the week"
     assert window.session.blocks == before, "the Add-button control leaves the week model unchanged"
-
-
-def test_create_release_keeps_a_scene_that_arrived_during_the_hold(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    view = window._layout_view("timeline")
-    assert isinstance(view, LayoutView) and view.scene is not None
-    arrived = replace(view.scene, minute=view.scene.minute + 1)
-    view.hold(True)
-    view.show_week(arrived)
-    assert view._held is arrived
-
-    window.hand._release_kind = Gesture.CREATE
-    try:
-        window._hold_renders(False)
-    finally:
-        window.hand._release_kind = None
-
-    assert view.scene is arrived, "release shows the latest scene before skipping the classic refresh"
-    qapp.processEvents()
-    assert view.scene is arrived, "the deferred refresh does not replace the held scene"

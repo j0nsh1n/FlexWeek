@@ -18,7 +18,7 @@ from PySide6.QtWidgets import QAbstractButton, QApplication
 
 from backend.tests.fake_clock import FakeClock
 from desktop.native.calendar import sunday_due
-from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.layout_choice import sanitize_layout
 from desktop.native.look import sanitize_look
 from desktop.native.reuse import planner_title
 from desktop.native.window import PLAN_LABEL, PLAN_SHORT, PLAN_TINY, NativeWindow
@@ -114,14 +114,14 @@ def test_suggest_times_keeps_a_whole_word_at_the_narrowest_window(
     assert window.solve_button.text() in ("Suggest times", "Suggest")
 
 
-def test_on_timeline_at_large_text_plan_and_more_keep_whole_words(
+def test_at_large_text_plan_and_more_keep_whole_words_at_1150(
     qapp: QApplication, planned_week: NativeWindow
 ) -> None:
     """The bar wrapped to two rows here and pushed the Due chips off screen; the cure is a shorter Plan,
     the last of its steps, where it keeps the bar on one row."""
     window = planned_week
     text_size(window, "large")
-    window._layout = sanitize_layout({"main": "timeline"})
+    window._layout = sanitize_layout({"main": "classic"})
     window._on_week()
     window.resize(1150, 768)
     layout_settles(qapp, 6)

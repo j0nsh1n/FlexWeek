@@ -11,12 +11,10 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import CLOCK
 from desktop.native.calendar import sunday_due
-from desktop.native.layouts.base import LayoutView
-from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.window import NativeWindow
 from desktop.tests.waiting import wait_until
 
@@ -75,20 +73,3 @@ def plan_week(qapp: QApplication, made: NativeWindow) -> NativeWindow:
     session.save()
     settled(qapp, made)
     return made
-
-
-def use(qapp: QApplication, window: NativeWindow, main: str, day: str = "one") -> LayoutView:
-    """Show `main` as the window's main view and return it."""
-    window._layout = sanitize_layout({"main": main, "day": day})
-    window._apply_appearance()
-    window._on_week()
-    spin(qapp)
-    shown = window.planner.currentWidget()
-    assert isinstance(shown, LayoutView)
-    return shown
-
-
-def named(view: QWidget, name: str) -> QWidget:
-    found = view.findChild(QWidget, name)
-    assert found is not None, name
-    return found

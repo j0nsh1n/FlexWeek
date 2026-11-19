@@ -20,7 +20,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QPushButton, QVBoxLayout, QWidget
 
     import desktop.native.motion as motion
-    from desktop.native.layouts.registry import sanitize_layout
+    from desktop.native.layout_choice import sanitize_layout
     from desktop.native.motion import (
         FADE_NAME,
         SLIDE_NAME,
@@ -118,7 +118,7 @@ def test_every_main_transition_at_off_starts_no_clock_and_leaves_nothing_moving(
         qapp.processEvents()
         seen.append((what + ", a turn later", now()))
 
-    for main in ("classic", "timeline", "bento", "retro"):
+    for main in ("classic",):
         design(qapp, window, main)
         check(f"{main} chosen")
         for name in ("viewDay", "viewMonth", "viewWeek", "viewWeek"):
@@ -131,13 +131,6 @@ def test_every_main_transition_at_off_starts_no_clock_and_leaves_nothing_moving(
         check(f"{main}: next week")
         window._go_previous()
         check(f"{main}: previous week")
-    design(qapp, window, "retro")
-    retro = window._layout_view("retro")
-    for key in list(retro._windows):
-        retro._hide(key)
-        retro._bring(key, window.findChild(QAbstractButton, "viewWeek"))
-        check(f"Retro: window {key} opened")
-    design(qapp, window, "classic")
     window._open_focus_screen()
     check("Focus opened")
     window._close_focus_screen()
@@ -200,18 +193,3 @@ def test_animations_off_means_no_animation_anywhere(qapp: QApplication) -> None:
     assert dialog.windowOpacity() == 1.0
     assert [child for child in dialog.findChildren(QWidget) if child.graphicsEffect()] == []
     dialog.close()
-
-
-def test_a_design_tile_built_with_motion_is_instant_once_animations_are_off(qapp: QApplication) -> None:  # noqa: F811
-    from desktop.native.layouts.bento import DayTile
-    from desktop.tests.test_layout_bento import shown
-
-    apply_ui_effects("normal")
-    view = shown(qapp, hero="today")
-    tile = view.findChild(DayTile)
-    tile._lifting.stop()
-    tile.lift = 0.0
-    apply_ui_effects("off")
-    tile._aim(True)
-    assert tile.lift == 1.0
-    view.close()

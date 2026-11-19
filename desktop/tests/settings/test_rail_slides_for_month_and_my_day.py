@@ -21,7 +21,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.motion import OVER_MS, PAGE_OUT_MS, apply_ui_effects, duration
     from desktop.native.window import NativeWindow
     from desktop.tests.light_app import window  # noqa: F401
-    from desktop.tests.test_retro_month_slide import (
+    from desktop.tests.month.support_slides import (
         in_design,
         nothing_left_over,
         press,

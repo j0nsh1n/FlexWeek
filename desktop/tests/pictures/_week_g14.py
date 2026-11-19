@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
 from desktop.native.hours.chips import TrayChip
 from desktop.native.hours.hand import Hand
 from desktop.native.hours.rail import PAD, RAIL_PX, RailChip
-from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.weekmodel import Waiting
 from desktop.native.widgets import SegmentTrack
 from desktop.native.window import NativeWindow
@@ -43,19 +42,6 @@ def _top_bar(window: NativeWindow) -> None:
     window.resize(1280, 800)
     show_view(window, "week")
     pump()
-    return None
-
-
-def _retro_bar(window: NativeWindow) -> None:
-    # Motion off: the switch between designs fades through a held picture, which a picture would catch.
-    window.session.preferences = {**(window.session.preferences or {}), "motion": "off"}
-    window._layout = sanitize_layout({"main": "retro", "day": "one"})
-    window._apply_appearance()
-    window.resize(1280, 800)
-    show_view(window, "week")
-    window._on_week()
-    idle(window)
-    pump(5)
     return None
 
 
@@ -240,17 +226,6 @@ SCREENS: list[Screen] = [
         sources=BAR_SOURCES + ("desktop/native/icons.py", "desktop/native/hours/zoom.py"),
         main=True,
         styles=WIDGETS_DESIGNS,
-    ),
-    Screen(
-        id="week.top_bar_retro",
-        area="week",
-        prepare=_retro_bar,
-        checks=(
-            "While Retro is the week's layout the bar strip wears the title bar's colour and Add is raised "
-            "on its light end, whatever look is worn; another layout leaves the frost bar alone."
-        ),
-        sources=BAR_SOURCES + ("desktop/native/layouts/retro.py", "desktop/native/feel.py"),
-        styles=("retro",),
     ),
     Screen(
         id="week.button_states",

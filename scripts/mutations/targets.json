@@ -56,27 +56,6 @@
   "test": "desktop/tests/week/test_one_hand_on_every_surface.py::test_a_days_name_opens_it_whichever_way_its_time_runs"
  },
  {
-  "file": "desktop/native/layouts/base.py",
-  "name": "a design lists no surfaces",
-  "old": "        return [widget for widget in self.findChildren(QWidget) if is_surface(widget) and widget.isVisible()]\n",
-  "new": "        return []\n",
-  "test": "desktop/tests/week/test_one_hand_on_every_surface.py::test_a_design_lists_every_surface_it_shows"
- },
- {
-  "file": "desktop/native/window.py",
-  "name": "the window holds renders only once a drag starts",
-  "old": "        self.hand.holding.connect(self._hold_renders)\n",
-  "new": "        self.hand.active_changed.connect(self._hold_renders)\n",
-  "test": "desktop/tests/week/test_designs_hand_drops.py::test_a_design_holds_its_renders_from_the_press_and_has_the_windows_hand"
- },
- {
-  "file": "desktop/native/window.py",
-  "name": "designs get a hand of their own",
-  "old": "            view = VIEW_CLASSES[layout_id](hand=self.hand)\n",
-  "new": "            view = VIEW_CLASSES[layout_id]()\n",
-  "test": "desktop/tests/week/test_designs_hand_drops.py::test_a_design_holds_its_renders_from_the_press_and_has_the_windows_hand"
- },
- {
   "file": "desktop/native/hours/hand.py",
   "name": "the hand snaps to quarter hours whatever the step",
   "old": "        origin, first, last, step = held.origin, track.first, track.last, self.step\n",

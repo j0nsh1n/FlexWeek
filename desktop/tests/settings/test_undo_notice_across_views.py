@@ -14,7 +14,7 @@ pytestmark = pytest.mark.skipif(
 if importlib.util.find_spec("PySide6") is not None:
     from PySide6.QtWidgets import QAbstractButton, QApplication
 
-    from desktop.native.layouts.registry import sanitize_layout
+    from desktop.native.layout_choice import sanitize_layout
     from desktop.native.window import NativeWindow
     from desktop.tests.light_app import window  # noqa: F401
     from desktop.tests.test_week_side import seeded
@@ -29,7 +29,7 @@ def test_the_undo_toast_survives_a_design_change_and_still_undoes(
     steps = len(window.session._undo)
     assert steps, "the seeding left a change to take back"
     window._set_notice("Moved History essay to Fri 18:00.", "Undo", window._undo_from_notice)
-    for main in ("bento", "retro", "classic"):
+    for main in ("classic",):
         window._layout = sanitize_layout({"main": main, "day": "one"})
         window._apply_appearance()
         window._on_week()

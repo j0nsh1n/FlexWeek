@@ -10,7 +10,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QAbstractButton, QApplication
 
-from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.layout_choice import sanitize_layout
 from desktop.native.look import sanitize_look
 from desktop.native.window import NativeWindow
 from desktop.tests.waiting import wait_until
@@ -40,8 +40,6 @@ def test_the_week_title_uses_the_same_short_date_at_every_width(
             qapp.processEvents()
         assert window.week_title.text() == "28 Sep – 4 Oct"
         assert window.week_title.full_text() == "28 Sep – 4 Oct"
-        if design == "retro":
-            assert window._views["retro"]._windows["week"].bar.text() == "Week.exe - 28 Sep – 4 Oct"
 
 
 def test_plan_says_a_whole_word_at_every_width_and_gives_the_words_back(

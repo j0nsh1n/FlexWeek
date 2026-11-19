@@ -95,7 +95,7 @@ SCREENS: list[Screen] = [
             "them with no gap round the words and does not read as crossing the name out; where the block "
             "has no words the line is whole. Holds in every Week design."
         ),
-        sources=("desktop/native/hours", "desktop/native/layouts"),
+        sources=("desktop/native/hours",),
         main=True,
     ),
     Screen(

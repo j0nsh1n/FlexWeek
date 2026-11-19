@@ -11,7 +11,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QLabel
 
 from desktop.native.hours.classic import DayName
-from desktop.native.layouts.base import short_length
+from desktop.native.hours.scale import short_length
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.week.support_material import pump, seeded
 from desktop.tests.window_support import qapp  # noqa: F401

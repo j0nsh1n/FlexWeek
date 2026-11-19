@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (  # noqa: E402
 )
 
 from desktop.native.calendar import CATEGORIES, sunday_due  # noqa: E402
-from desktop.native.layouts.registry import DESIGN_LOOKS  # noqa: E402
+from desktop.native.layout_choice import DESIGN_LOOKS  # noqa: E402
 from desktop.native.motion import FADE_NAME  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import LightWindows  # noqa: E402

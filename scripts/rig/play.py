@@ -444,7 +444,7 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
     )
 
     from backend import clock as wall_clock
-    from desktop.native.layouts.registry import sanitize_layout
+    from desktop.native.layout_choice import sanitize_layout
     from desktop.tests.logic_support import card_phase, past_setup, wait_until
 
     out.mkdir(parents=True, exist_ok=True)

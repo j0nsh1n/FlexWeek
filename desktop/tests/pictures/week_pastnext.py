@@ -152,9 +152,9 @@ SCREENS: list[Screen] = [
                 "weekday, about the same width as each other, and still wide enough to read their "
                 "header; the weekdays share one width"
             ),
-            sources=("desktop/native/layouts", "desktop/native/hours"),
+            sources=("desktop/native/hours",),
         )
-        for design in ("retro", "bento", "timeline")
+        for design in ("classic",)
     ],
     *[
         Screen(
@@ -165,9 +165,9 @@ SCREENS: list[Screen] = [
                 "at a narrow window (about 810 px) a Saturday with an event keeps a full weekday-wide "
                 "column, while the empty Sunday beside it is narrower"
             ),
-            sources=("desktop/native/layouts", "desktop/native/hours"),
+            sources=("desktop/native/hours",),
         )
-        for design in ("retro", "bento", "timeline")
+        for design in ("classic",)
     ],
     Screen(
         id="week.agenda-rail-long-title",
@@ -178,7 +178,7 @@ SCREENS: list[Screen] = [
             "scroll area, Start focus and each due day stay whole inside the rail, a long homework "
             "title ends in an ellipsis, and the Next rows wrap whole beside a fully visible Start focus"
         ),
-        sources=("desktop/native/hours/rail.py", "desktop/native/layouts"),
+        sources=("desktop/native/hours/rail.py",),
         main=True,
     ),
     Screen(

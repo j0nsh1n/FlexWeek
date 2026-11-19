@@ -16,7 +16,7 @@ from desktop.tests.waiting import wait_until
 
 SOURCES = (
     "desktop/native/hours/month.py",
-    "desktop/native/layouts/base.py",
+    "desktop/native/hours/scale.py",
     "desktop/native/window.py",
     "backend/month.py",
 )

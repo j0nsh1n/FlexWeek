@@ -10,7 +10,6 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication, QPushButton  # noqa: E402
 
-from desktop.native.layouts.registry import sanitize_layout  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_layouts_window import (  # noqa: E402
     SPOTIFY_TRACK,
@@ -18,30 +17,19 @@ from desktop.tests.day.support_layouts_window import (  # noqa: E402
     more_sections,
     qapp,  # noqa: F401
     settled,
-    wait_until,
     window,  # noqa: F401
 )
 
 
-def test_plan_and_more_stay_on_the_bar_in_every_layout(qapp: QApplication, window: NativeWindow) -> None:
+def test_plan_and_more_stay_on_the_bar(qapp: QApplication, window: NativeWindow) -> None:
     """A design of its own used to hide Plan my homework and More behind Tools. That rule is gone: the
     same two buttons stay in the top bar in every layout, every view, and My day."""
     assert window.findChild(QPushButton, "toolsButton") is None
-    sections = None
-    items = None
-    for main in ("classic", "bento", "timeline"):
-        window._layout = {"main": main, "day": "one", "options": {}}
-        window._on_week()
-        assert window.solve_button.isVisible() is True
-        assert window.more_button.isVisible() is True
-        assert window.more_button.text() == "More"
-        if sections is None:
-            sections, items = more_sections(window), set(more_actions(window))
-        else:
-            assert more_sections(window) == sections
-            assert set(more_actions(window)) == items
-    window._layout = {"main": "bento", "day": "one", "options": {}}
+    window._layout = {"main": "classic", "day": "one", "options": {}}
     window._on_week()
+    assert window.solve_button.isVisible() is True
+    assert window.more_button.isVisible() is True
+    assert window.more_button.text() == "More"
     qapp.processEvents()
     offered = more_actions(window)
     # Every group under a heading.
@@ -83,7 +71,7 @@ def test_more_groups_what_the_toolbar_does_not_keep(qapp: QApplication, window: 
 
 
 def test_a_more_item_does_what_its_button_does(qapp: QApplication, window: NativeWindow) -> None:
-    window._layout = {"main": "bento", "day": "one", "options": {}}
+    window._layout = {"main": "classic", "day": "one", "options": {}}
     window._on_week()
     before = len(window.session.blocks)
     menu = window.more_button.menu()
@@ -101,16 +89,3 @@ def test_more_hides_spotify_until_there_is_a_link(qapp: QApplication, window: Na
         "default_spotify_url": SPOTIFY_TRACK,
     }
     assert "Open Spotify link" in more_actions(window)
-
-
-def test_retros_start_opens_mores_menu(qapp: QApplication, window: NativeWindow) -> None:
-    """Start is the app's own menu, More's: it asks for nothing More does not already offer. (That it
-    opens up from the taskbar is a picture: week.retro_start_menu_opens_up.)"""
-    window._layout = sanitize_layout({"main": "retro", "day": "one"})
-    window.session.set_view("week")
-    window._on_week()
-    qapp.processEvents()
-    start = window.planner.currentWidget().findChild(QPushButton, "retroStart")
-    start.click()
-    wait_until(qapp, window.more_menu.isVisible)
-    window.more_menu.close()

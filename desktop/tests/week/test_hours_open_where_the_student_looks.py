@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QAbstractButton, QApplication, QScrollBar  # noqa:
 
 from desktop.native.calendar import sunday_due  # noqa: E402
 from desktop.native.hours.geometry import Axis  # noqa: E402
-from desktop.native.layouts.registry import sanitize_layout  # noqa: E402
+from desktop.native.layout_choice import sanitize_layout  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.week import support_zoom  # noqa: E402

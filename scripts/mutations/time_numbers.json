@@ -7,13 +7,6 @@
     "test": "desktop/tests/week/test_week_dates_and_times_at_every_width.py::test_the_week_title_uses_the_same_short_date_at_every_width"
   },
   {
-    "name": "Retro keeps its old internal week range",
-    "file": "desktop/native/layouts/retro.py",
-    "old": "        return f\"Week.exe - {week_range(week.week_start)}\"",
-    "new": "        return \"Week.exe - 28 September to 4 October\"",
-    "test": "desktop/tests/week/test_week_dates_and_times_at_every_width.py::test_the_week_title_uses_the_same_short_date_at_every_width"
-  },
-  {
     "name": "Narrow Week hides block times",
     "file": "desktop/native/window.py",
     "old": "        self.week_table.set_narrow(False)",

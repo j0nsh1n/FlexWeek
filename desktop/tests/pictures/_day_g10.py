@@ -10,15 +10,6 @@ from desktop.tests.day.support_layouts_window import school_week, still
 from desktop.tests.pictures.screen import Screen
 
 
-def _timeline_day(window: NativeWindow) -> object:
-    school_week(window)
-    window._layout = {"main": "timeline", "day": "one", "options": {}}
-    window._on_week()
-    window.findChild(QAbstractButton, "viewDay").click()
-    still(window)
-    return window.planner.currentWidget()
-
-
 def _todays_app_day(window: NativeWindow) -> object:
     school_week(window)
     window._layout = {"main": "classic", "day": "one", "options": {}}
@@ -28,17 +19,6 @@ def _todays_app_day(window: NativeWindow) -> object:
 
 
 SCREENS: list[Screen] = [
-    Screen(
-        id="day.timeline_notes_page_is_paper",
-        area="day",
-        prepare=_timeline_day,
-        checks=(
-            "Timeline's Day: the notes page is Timeline's paper, not a grey band the window's stylesheet "
-            "paints on Qt's own plain widgets. The pixel 3 px in from the notes page's right edge and "
-            "3 px down is the paper (surface) token, which differs from the page (bg) token."
-        ),
-        sources=("desktop/native/layouts/timeline.py", "desktop/native/window.py"),
-    ),
     Screen(
         id="day.day_view_buttons_keep_their_width",
         area="day",

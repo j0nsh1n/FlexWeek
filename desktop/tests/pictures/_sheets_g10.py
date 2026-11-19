@@ -7,7 +7,6 @@ from collections.abc import Callable
 
 from PySide6.QtWidgets import QApplication, QDialog
 
-from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.look import resolved_palette
 from desktop.native.widgets import AvailabilityDialog, HomeworkDialog
 from desktop.native.window import NativeWindow
@@ -28,17 +27,6 @@ def _notice_under_the_bar(window: NativeWindow) -> object:
 def _notice_in_todays_app(window: NativeWindow) -> object:
     school_week(window)
     window.resize(1280, 800)
-    settled(QApplication.instance(), window)
-    window.toast.show_message("Moved History essay to Fri 18:00.", "Undo", lambda: None)
-    QApplication.processEvents()
-    return None
-
-
-def _notice_over_retro(window: NativeWindow) -> object:
-    school_week(window)
-    window._layout = sanitize_layout({"main": "retro", "day": "one"})
-    window.session.set_view("week")
-    window._on_week()
     settled(QApplication.instance(), window)
     window.toast.show_message("Moved History essay to Fri 18:00.", "Undo", lambda: None)
     QApplication.processEvents()
@@ -136,16 +124,6 @@ SCREENS: list[Screen] = [
             "16 px above the week page's foot."
         ),
         sources=("desktop/native/widgets.py", "desktop/native/window.py"),
-    ),
-    Screen(
-        id="sheets.notice_over_retro_taskbar",
-        area="sheets",
-        prepare=_notice_over_retro,
-        checks=(
-            "Retro's tray (bell and clock) is on its taskbar, so the notice sits wholly above it: the "
-            "notice card's bottom edge is at or above the taskbar's top edge."
-        ),
-        sources=("desktop/native/widgets.py", "desktop/native/layouts/retro.py"),
     ),
     Screen(
         id="sheets.add_homework_fits_a_laptop",

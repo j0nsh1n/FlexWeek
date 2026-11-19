@@ -8,7 +8,7 @@ from __future__ import annotations
 from PySide6.QtCore import QStandardPaths
 from PySide6.QtWidgets import QApplication
 
-from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.layout_choice import sanitize_layout
 from desktop.native.look import sanitize_look
 from desktop.native.settings import AboutDialog, HelpDialog
 from desktop.native.widgets import SchoolHoursDialog

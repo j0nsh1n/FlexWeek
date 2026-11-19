@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QWidget
 
-from desktop.native.weekmodel import WeekModel
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.settings import support_pictures as pictures
@@ -71,24 +70,6 @@ def unfinished_panel(window: NativeWindow) -> object:
     panel.show()
     still(panel)
     return panel
-
-
-def timeline_fold(window: NativeWindow) -> object:
-    from desktop.native.layouts.base import Scene
-    from desktop.native.layouts.registry import tokens_for
-    from desktop.native.layouts.timeline import TimelineView
-    from desktop.native.look import PRESET_PALETTES
-
-    view = TimelineView(window)
-    view.setGeometry(0, 0, 1280, 800)
-    tokens = tokens_for("timeline", "paper", PRESET_PALETTES["timeline-paper"])
-    view.show_week(Scene(WeekModel("2026-10-12", ()), 2, 900, {"fold": "3"}, tokens, 1.0))
-    view.raise_()
-    view.show()
-    still(view)
-    return view
-
-
 
 
 def week_list_drawer(window: NativeWindow) -> object:
@@ -211,18 +192,6 @@ SCREENS: list[Screen] = [
             "and the dismiss button at the bottom, below the list."
         ),
         sources=("desktop/native/widgets.py",),
-        styles=("widgets",),
-    ),
-    Screen(
-        id="settings.audit_timeline_fold",
-        area="settings",
-        prepare=timeline_fold,
-        checks=(
-            "Timeline at 1280 by 800 with a fold at 3: the fold handle sits inside the row of day headings "
-            "(top at or below 0, bottom within the row) and Wednesday's title ends before the handle, "
-            "clear of the fold."
-        ),
-        sources=("desktop/native/layouts/timeline.py",),
         styles=("widgets",),
     ),
     Screen(

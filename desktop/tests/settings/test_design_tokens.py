@@ -20,7 +20,6 @@ from PySide6.QtWidgets import QApplication, QWidget
 from desktop.native.calendar import CATEGORIES
 from desktop.native.elevation import flatten, lift
 from desktop.native.hours.rail import Colours
-from desktop.native.layouts.registry import MATCH, tokens_for
 from desktop.native.look import category_paint, pack_stylesheet, resolved_palette
 from desktop.native.material.theme import _schemes
 from desktop.native.tokens import (
@@ -149,11 +148,6 @@ def test_the_accent_is_never_a_page_card_or_wash(name: str, surface: str, accent
     probe = {**palette, "accent": "#ff00ff"}
     probed = painted_backgrounds(pack_stylesheet(pack, dark, look_for(name, surface), accent, probe))
     assert painted == probed
-    # A design in Match my look wears the look: its cards are not the accent either.
-    match = tokens_for("bento", MATCH, palette)
-    large = [key for key in match if key.startswith("card_") or key in {"bg", "surface"}]
-    probed_match = tokens_for("bento", MATCH, probe)
-    assert {key: match[key] for key in large} == {key: probed_match[key] for key in large}
 
 
 SIZE = re.compile(r"font-size: ([^;}]+)")

@@ -17,7 +17,7 @@ from PySide6.QtWidgets import QAbstractButton, QApplication  # noqa: E402
 
 from backend.tests.fake_clock import CLOCK  # noqa: E402
 from desktop.native.hours.zoom import HoursScroll  # noqa: E402
-from desktop.native.layouts.registry import sanitize_layout  # noqa: E402
+from desktop.native.layout_choice import sanitize_layout  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests import light_app  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
@@ -32,12 +32,6 @@ PRESSES = ("0", "=", "=", "-", "0")
 LEVELS = {
     ("classic", "week"): [48, 64, 96, 64, 48],
     ("classic", "day"): [96, 128, 160, 128, 96],
-    ("timeline", "week"): [36, 48, 64, 48, 36],
-    ("timeline", "day"): [45, 60, 80, 60, 45],
-    ("bento", "week"): [44, 64, 96, 64, 44],
-    ("bento", "day"): [44, 64, 96, 64, 44],
-    ("retro", "week"): [40, 56, 72, 56, 40],
-    ("retro", "day"): [40, 56, 72, 56, 40],
 }
 KEYS = {"=": Qt.Key.Key_Equal, "-": Qt.Key.Key_Minus, "0": Qt.Key.Key_0}
 

@@ -1,4 +1,4 @@
-"""Month in Today's app and in the designs: it stays where the student scrolled it through a refresh,
+"""Month in Today's app: it stays where the student scrolled it through a refresh,
 draws a week left unsaved as the student has it, and judges a chip dropped from a week that is not open
 by that chip's own time and homework. A chip let go after a save failed is refused in words."""
 
@@ -12,7 +12,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QAbstractButton, QApplication, QWidget
+from PySide6.QtWidgets import QAbstractButton, QApplication
 
 from desktop.native.hours.hand import MoveDate
 from desktop.native.window import NativeWindow
@@ -25,7 +25,6 @@ from desktop.tests.week.support_design_plan import (
     session_of,
     settled,
     spin,
-    use,
 )
 from desktop.tests.window_support import qapp  # noqa: F401
 
@@ -68,38 +67,6 @@ def test_month_stays_where_the_student_scrolled_it_through_a_refresh(
     assert bar.value() == chosen
 
 
-def test_a_designs_month_stays_where_the_student_scrolled_it_through_a_refresh(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    window.resize(900, 560)
-    view = use(qapp, window, "timeline")
-    window.findChild(QAbstractButton, "viewMonth").click()
-    month_loaded(qapp, window)
-    board = view.findChild(QWidget, "layoutMonthBoard")
-    assert board is not None and board.isVisible()
-    bar = board.scroll.verticalScrollBar()
-    assert bar.maximum() > 0, "the month is taller than the window, so it scrolls"
-    bar.setValue(0 if bar.value() else bar.maximum())
-    chosen = bar.value()
-    # A real change, saved: the design draws a new scene, as it does after any edit.
-    window.session.add_block(
-        {
-            "id": "club",
-            "title": "Club",
-            "kind": "locked",
-            "category": "extra",
-            "start": "18:00",
-            "duration_min": 60,
-            "days": [5],
-        }
-    )
-    window.session.save()
-    settled(qapp, window)
-    month_loaded(qapp, window)
-    assert board.canvas.index_of(window.session.selected_day) is not None
-    assert bar.value() == chosen
-
-
 def test_a_chip_let_go_after_a_save_failed_is_refused_not_kept_for_later(
     qapp: QApplication, window: NativeWindow
 ) -> None:
@@ -120,9 +87,8 @@ def test_a_chip_let_go_after_a_save_failed_is_refused_not_kept_for_later(
     assert placed(window, "essay")[:2] == ([3], "19:00")
 
 
-@pytest.mark.parametrize("design", ["classic", "timeline"])
 def test_month_draws_a_week_left_unsaved_as_the_student_has_it(
-    qapp: QApplication, window: NativeWindow, design: str
+    qapp: QApplication, window: NativeWindow
 ) -> None:
     """The essay moved to 20:15 and its week left without saving. Month showed it at 19:00, where the
     server has it, and a chip there could be picked up and then refused."""
@@ -134,15 +100,8 @@ def test_month_draws_a_week_left_unsaved_as_the_student_has_it(
     session.load_week((first + timedelta(days=7)).isoformat())
     wait_until(qapp, lambda: not session.busy and session.week_start != first.isoformat())
     assert not session.dirty, "the week now open has no changes; the one left behind has"
-    if design == "classic":
-        canvas = window.month_grid.canvas
-    else:
-        view = use(qapp, window, design)
+    canvas = window.month_grid.canvas
     open_month_of(qapp, window, thursday)
-    if design != "classic":
-        board = view.findChild(QWidget, "layoutMonthBoard")
-        assert board is not None and board.isVisible()
-        canvas = board.canvas
     assert canvas.chip_words(essay["id"], thursday) == "8:15 PM History essay"
     window.session.preferences = {**(window.session.preferences or {}), "clock_24h": True}
     window._sync_chrome()

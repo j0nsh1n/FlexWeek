@@ -10,11 +10,9 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QEvent  # noqa: E402
 from PySide6.QtWidgets import QAbstractButton, QApplication, QLabel, QWidget  # noqa: E402
 
 from backend.tests.fake_clock import CLOCK  # noqa: E402
-from desktop.native.layouts.registry import sanitize_layout  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.week import support_zoom  # noqa: E402
@@ -31,31 +29,6 @@ def test_month_does_not_repeat_the_next_line_above_the_calendar(
     assert not window.focus_panel.now_next.isVisible()
     assert window.findChild(QWidget, "weekStatusStrip") is None
     assert window.findChild(QLabel, "weekStatusNext") is None
-
-
-def test_leaving_retro_after_unfinished_rows_rebuild_never_touches_deleted_widgets(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    session = window.session
-    session.add_homework(
-        {
-            "id": "retro-work",
-            "title": "Retro homework",
-            "due": "2026-10-16T23:59",
-            "estimate_min": 60,
-            "revision": 0,
-        }
-    )
-    session.save()
-    wait_until(qapp, lambda: not session.busy and not session.dirty)
-    window._show_unfinished()
-    window._layout = sanitize_layout({"main": "retro", "day": "one"})
-    window._apply_appearance()
-    window._on_week()
-    window._fill_unfinished(window._panel_items())
-    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-    window._layout = sanitize_layout({"main": "classic", "day": "one"})
-    window._apply_appearance()
 
 
 @pytest.mark.parametrize(
@@ -152,5 +125,3 @@ def test_month_keeps_a_picked_day_and_uses_thursday_for_a_week_without_today(
     session.set_view("month")
     wait_until(qapp, lambda: session.month_data is not None)
     assert session.selected_month == "2026-10"
-
-

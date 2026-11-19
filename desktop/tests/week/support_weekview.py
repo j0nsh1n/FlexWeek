@@ -119,7 +119,7 @@ def set_text_size(window: NativeWindow, size: str, *, carried: bool = False) -> 
 
 def show_large_classic(qapp: QApplication, window: NativeWindow, width: int, height: int) -> None:
     """The classic week at `width` x `height` with Large text, settled."""
-    from desktop.native.layouts.registry import sanitize_layout
+    from desktop.native.layout_choice import sanitize_layout
 
     set_text_size(window, "large", carried=True)
     window._layout = sanitize_layout(CLASSIC_ONE_DAY)

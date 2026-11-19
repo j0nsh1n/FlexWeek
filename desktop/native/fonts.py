@@ -1,9 +1,8 @@
 """The app's own typefaces, shipped beside the code so every computer draws the same app.
 
 Inter for the words, Newsreader for the Serif font's headings and JetBrains Mono for the Mono font
-(0.17's knobs), each in four weights, registered with Qt before the window is made; and Retro
-desktop's own two, Pixelify Sans with VT323's figures for its words and VT323 for its Notepad.
-Newsreader, JetBrains Mono and Pixelify Sans are static cuts of the mock-up's variable fonts
+(0.17's knobs), each in four weights, registered with Qt before the window is made.
+Newsreader and JetBrains Mono are static cuts of the mock-up's variable fonts
 (scripts/instance_fonts.py), since Qt draws a variable font at one weight whatever a stylesheet
 asks. When the files are missing, as in a checkout someone trimmed, the font stacks in look.py fall
 through to the system's faces.
@@ -20,13 +19,11 @@ from desktop.native.tokens import text_knob, type_pt
 
 FONT_DIR = Path(__file__).resolve().parents[1] / "assets" / "fonts"
 STYLES = ("Regular", "Medium", "SemiBold", "Bold")
-# Each family, the file name its faces start with, and its weights: VT323 has only the one.
+# Each family, the file name its faces start with, and its weights.
 FAMILIES = {
     "Inter": ("Inter", STYLES),
     "Newsreader": ("Newsreader", STYLES),
     "JetBrains Mono": ("JetBrainsMono", STYLES),
-    "Pixelify Sans": ("PixelifySans", STYLES),
-    "VT323": ("VT323", ("Regular",)),
 }
 FACES = {
     family: tuple(f"{stem}-{style}.ttf" for style in styles) for family, (stem, styles) in FAMILIES.items()
@@ -51,16 +48,6 @@ def time_font(base: QFont) -> QFont:
     """`base` with every figure the same width, for a time written where it is read against others."""
     made = QFont(base)
     made.setFeature(QFont.Tag(TABULAR), 1)
-    return made
-
-
-def without_ligatures(base: QFont) -> QFont:
-    """`base` with its ligatures and contextual alternates off. Pixelify Sans joins "fi" into one glyph
-    that reads as "A", so "Add fixed time" showed as "Add Axed time" in Retro. Stylesheets cannot set
-    font features, so this is set on the font the window hands its children."""
-    made = QFont(base)
-    for tag in ("liga", "calt"):
-        made.setFeature(QFont.Tag(tag), 0)
     return made
 
 

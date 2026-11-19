@@ -27,7 +27,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication, QPushButton, QStyle, QStyleOptionButton, QWidget
 
-from desktop.native.layouts.registry import LAYOUTS
+from desktop.native.layout_choice import LAYOUTS
 from desktop.native.look import LOOK_PRESETS, ROOMY_MIN, ROOMY_MIN_LARGE, ROOMY_SIDE
 from desktop.native.widgets import (
     AvailabilityDialog,
@@ -164,17 +164,3 @@ def test_no_button_clips_its_words(qapp, window, design, preset, size) -> None:
 def test_every_button_has_the_roomy_padding(qapp, window, design, preset, size) -> None:
     _, cramped = measure(qapp, window, design, preset, size)
     assert cramped == []
-
-
-def test_accept_late_start_keeps_its_words_at_large_in_retro(qapp, window) -> None:
-    """The known case, in the widest font (Retro's pixel font) at Large text."""
-    dress(qapp, window, "retro", "default", "large")
-    dialog = LateDialog(window, "Starting from 14:15 today (Wednesday).")
-    dialog.show()
-    qapp.processEvents()
-    try:
-        room, need = words_room(dialog.accept_button)
-        assert room >= need, f"'Accept late start' needs {need}px, has {room}px"
-    finally:
-        dialog.hide()
-        free(dialog)

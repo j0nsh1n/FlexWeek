@@ -20,7 +20,7 @@ from PySide6.QtWidgets import QApplication, QPushButton
 
 from backend.tests.fake_clock import CLOCK
 from desktop.native.calendar import sunday_due
-from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.layout_choice import sanitize_layout
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import LightWindows

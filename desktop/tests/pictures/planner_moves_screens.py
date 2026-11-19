@@ -7,11 +7,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from PySide6.QtWidgets import QApplication, QPushButton, QScrollArea
+from PySide6.QtWidgets import QApplication, QPushButton
 
 from backend.tests.fake_clock import CLOCK
 from desktop.native.calendar import sunday_due
-from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.layout_choice import sanitize_layout
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.waiting import wait_until
@@ -61,40 +61,6 @@ def _after_plan(window: NativeWindow) -> None:
         QApplication.processEvents()
 
 
-def _bento_with_unplaced_homework(window: NativeWindow) -> None:
-    """Bento's week with one homework that has no time, so its Not placed yet tile shows "Drag one onto the
-    week.", and the notice "Moved History essay to Fri 18:00." with Undo up over the page's foot."""
-    window._layout = sanitize_layout({"main": "bento", "day": "one", "options": {}})
-    window._apply_appearance()
-    window._on_week()
-    session = window.session
-    session.add_homework(
-        {
-            "id": "essay",
-            "title": "History essay",
-            "due": sunday_due(session.week_start),
-            "estimate_min": 60,
-            "revision": 0,
-        }
-    )
-    session.save()
-    settled(None, window)
-    window._on_week()
-    window._set_notice("Moved History essay to Fri 18:00.", "Undo", lambda: None)
-    for _ in range(EVENT_PASSES):
-        QApplication.processEvents()
-
-
-def _bento_footer_scrolled_to_the_bottom(window: NativeWindow) -> None:
-    _bento_with_unplaced_homework(window)
-    scroll = window.findChild(QScrollArea, "bentoScroll")
-    if scroll is not None:
-        bar = scroll.verticalScrollBar()
-        bar.setValue(bar.maximum())
-    for _ in range(EVENT_PASSES):
-        QApplication.processEvents()
-
-
 SCREENS: list[Screen] = [
     Screen(
         id="planner.undo_toast_after_plan",
@@ -111,35 +77,5 @@ SCREENS: list[Screen] = [
             "desktop/native/window.py",
         ),
         main=True,
-    ),
-    Screen(
-        id="planner.undo_toast_over_bento_footer",
-        area="planner",
-        prepare=_bento_with_unplaced_homework,
-        checks=(
-            "In Bento, the settled Undo toast ('Moved History essay to Fri 18:00.') does not cover the"
-            " 'Drag one onto the week.' instruction in the Not placed yet tile, or any other footer text:"
-            " the instruction's text sits clearly above the toast card, with the toast's top edge below"
-            " the text's bottom edge. This holds at 1280x800, 1280x820 and 1024x740, and at Large text."
-        ),
-        sources=(
-            "desktop/native/widgets.py",
-            "desktop/native/layouts/bento.py",
-        ),
-        main=True,
-    ),
-    Screen(
-        id="planner.undo_toast_over_bento_footer_scrolled",
-        area="planner",
-        prepare=_bento_footer_scrolled_to_the_bottom,
-        checks=(
-            "In Bento at the cramped 1024x740 size, with the page scrolled all the way down, no visible"
-            " label text in the page runs under the Undo toast's card: the last tile's words end above the"
-            " card, or the card sits where no text is."
-        ),
-        sources=(
-            "desktop/native/widgets.py",
-            "desktop/native/layouts/bento.py",
-        ),
     ),
 ]

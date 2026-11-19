@@ -1,4 +1,4 @@
-"""The week list remains reachable in every design without moving the grid."""
+"""The week list remains reachable in Today's app without moving the grid."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
@@ -11,10 +11,10 @@ from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QAbstractScrollArea, QApplication, QWidget
 
-from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.layout_choice import sanitize_layout
 from desktop.tests.window_support import qapp, server, settled, signed_out, window  # noqa: F401
 
-DESIGNS = ("classic", "retro", "bento", "timeline")
+DESIGNS = ("classic",)
 SCHOOL = {"id": "school", "title": "School", "kind": "locked", "category": "class", "start": "08:30",
           "duration_min": 405, "days": [0, 1, 2, 3, 4]}
 CTRL_SHIFT = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier
@@ -75,7 +75,7 @@ def test_0k_ctrl_shift_l_from_the_hours_opens_the_list_and_enter_opens_a_block(
     assert opened == ["school"]
 
 
-@pytest.mark.parametrize("design", ["classic", "timeline"])
+@pytest.mark.parametrize("design", ["classic"])
 def test_u19_tabbing_through_the_week_page_twice_never_moves_the_hours(qapp, window, design) -> None:
     hours = in_design(qapp, window, design)
     listing = window.week_access_list

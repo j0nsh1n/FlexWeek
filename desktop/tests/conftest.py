@@ -264,27 +264,24 @@ def _the_look_the_windows_last_wore() -> Iterator[None]:
     if importlib.util.find_spec("PySide6") is None:
         yield
         return
-    from desktop.native import feel
+    from desktop.native import devices
 
-    before = feel.current()
+    before = devices._error_colour
     yield
-    feel.set_current(before)
+    devices.set_error_colour(before)
 
 
 @pytest.fixture(autouse=True)
 def a_test_does_not_change_the_look_dialogs_open_in() -> Iterator[None]:
-    """A window sets the feel (feel.set_current) that every dialog opened after it is dressed in, and
-    nothing clears it when the window closes. A test that opened a Retro window left Retro's field
-    face (VT323) on the time boxes of a later test's dialogs, whose parent was a bare QWidget: the box
-    was narrower than its text and the click at the end of it missed, on whichever worker the two
-    tests shared. What a test set is put back when it ends."""
+    """A window sets the error colour the sync dot is drawn in (devices.set_error_colour), and nothing
+    clears it when the window closes. What a test set is put back when it ends."""
     yield from _the_look_the_windows_last_wore()
 
 
 @pytest.fixture(autouse=True, scope="module")
 def a_file_does_not_change_the_look_dialogs_open_in() -> Iterator[None]:
     """The same for a window a module fixture holds: it outlives each test, so the per-test fixture
-    above keeps its feel, and this one puts back what it set when the file ends."""
+    above keeps its colour, and this one puts back what it set when the file ends."""
     yield from _the_look_the_windows_last_wore()
 
 

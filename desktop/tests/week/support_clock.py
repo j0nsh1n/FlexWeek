@@ -26,7 +26,7 @@ from desktop.native.menus import Menu
 from desktop.native.window import NativeWindow
 from desktop.tests.waiting import wait_until
 
-DESIGNS = ("classic", "timeline", "bento", "retro")
+DESIGNS = ("classic",)
 CLOCK_WORDS = re.compile(r"\d{1,2}:\d{2}(?: [AP]M)?")
 
 
