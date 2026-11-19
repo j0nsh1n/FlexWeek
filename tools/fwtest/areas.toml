@@ -293,14 +293,18 @@ areas = ["week", "day", "month"]
 
 [[rule]]
 paths = ["desktop/native/hours/month_cells.py"]
-areas = ["month"]
+areas = ["month", "week", "sheets", "planner", "account"]
 
 [[rule]]
 paths = ["desktop/native/hours/words.py", "desktop/native/material/sheet_preview.py"]
 areas = ["week", "sheets"]
 
 [[rule]]
-paths = ["desktop/native/material/bridge_alarms.py", "desktop/native/material/bridge_hours.py"]
+paths = ["desktop/native/material/bridge_alarms.py"]
+areas = ["settings", "sheets", "week"]
+
+[[rule]]
+paths = ["desktop/native/material/bridge_hours.py"]
 areas = ["settings"]
 
 # Settings' words also fill Help, About, Update, restore points, sync status and the pairing row.
@@ -318,7 +322,7 @@ areas = ["account", "sheets"]
 
 [[rule]]
 paths = ["desktop/native/sheet_rules.py"]
-areas = ["sheets"]
+areas = ["sheets", "settings", "week"]
 
 # The drawing fallback and the Animations levels reach every screen.
 [[rule]]
