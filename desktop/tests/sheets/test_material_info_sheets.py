@@ -441,6 +441,25 @@ def test_sign_out_asks_in_a_material_prompt_with_the_same_words(
     assert _focused(quick) == "prompt_stay", "Cancel is the default, so Enter by habit changes nothing"
 
 
+def test_sign_out_says_in_full_where_the_week_lives(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _sign_out_rig(window, monkeypatch)
+    _material(qapp, window)
+    window._log_out()
+    pump(qapp, 20)
+    assert dict(_sheets(window).property("ask"))["body"] == (
+        "Your week is saved on this computer, under this account. Sign in again to see it."
+    )
+    _sheets(window).answer("stay")
+    window.session.storage_info = {"mode": "hosted"}
+    window._log_out()
+    pump(qapp, 20)
+    assert dict(_sheets(window).property("ask"))["body"] == (
+        "Your week is saved on your FlexWeek server, under this account. Sign in again to see it."
+    )
+
+
 def test_sign_out_on_a_server_names_the_server(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:

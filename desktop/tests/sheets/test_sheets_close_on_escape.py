@@ -18,6 +18,8 @@ from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.sheets.support_dialogs import when_open
 
+pytestmark = pytest.mark.real_surface
+
 PREVIEW_ROWS = [
     {
         "block": {
@@ -100,10 +102,20 @@ def week_anchor(window: NativeWindow) -> QWidget:  # noqa: F811
     return window.findChild(QPushButton, "todayWeek")
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="not portable (step 9, group 5b part 2): Material has no Study hours sheet; Study hours are a "
+    "Settings page",
+)
 def test_availability_is_a_sheet_that_esc_closes(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
     escape_closes(qapp, window, window._open_availability, "Study hours", week_anchor(window))
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="not portable (step 9, group 5b part 2): Material Plan has no review sheet; it places at once "
+    "and says so on the snackbar",
+)
 def test_plan_homework_is_a_sheet_that_esc_closes(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
     def launch() -> None:
         window._show_preview(
@@ -116,18 +128,11 @@ def test_plan_homework_is_a_sheet_that_esc_closes(qapp: QApplication, window: Na
     escape_closes(qapp, window, launch, "Plan homework", week_anchor(window))
 
 
-def test_manage_account_is_a_sheet_that_esc_closes(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
-    escape_closes(qapp, window, window._open_account, "Manage account", week_anchor(window))
-
-
-def test_the_sign_out_question_is_a_sheet_that_esc_closes_and_stays_signed_in(
-    qapp: QApplication, window: NativeWindow  # noqa: F811
-) -> None:
-    button = window.findChild(QPushButton, "signOut")
-    escape_closes(qapp, window, button.click, "Sign out", week_anchor(window))
-    assert window.session.account is not None
-
-
+@pytest.mark.xfail(
+    strict=True,
+    reason="not portable (step 9, group 5b part 2): Material Save still opens the Widgets ConfirmSheet, "
+    "which part 3 has to replace first",
+)
 def test_saving_the_recovery_codes_starts_on_a_sheet_and_esc_never_reaches_the_file_dialog(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
@@ -141,7 +146,3 @@ def test_saving_the_recovery_codes_starts_on_a_sheet_and_esc_never_reaches_the_f
         qapp, window, window._choose_recovery_file, "Save recovery codes", week_anchor(window)
     )
     assert path == ""
-
-
-
-

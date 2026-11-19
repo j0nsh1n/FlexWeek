@@ -14,13 +14,11 @@ from PySide6.QtCore import QStandardPaths, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QPushButton
 
-from desktop.native import window as window_module
-from desktop.native.settings import AccountDialog, RestoreDialog
+from desktop.native.settings import AccountDialog
 from desktop.native.widgets import ConfirmSheet, confirm, confirm_sheet
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.sheets.support_dialogs import shown, when_open
-from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import free
 
 THREE = (
@@ -107,35 +105,6 @@ def test_stacking_keeps_the_default_answer_and_the_tab_order(
     free(sheet)
 
 
-def test_the_sign_out_sheet_says_where_the_week_lives_and_does_not_draw_sign_out_red(
-    qapp: QApplication,  # noqa: F811
-    window: NativeWindow,  # noqa: F811
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    asked: list[tuple[str, str, str, bool]] = []
-
-    def confirm_it(_parent: object, title: str, question: str, yes: str, *, danger: bool = True) -> bool:
-        asked.append((title, question, yes, danger))
-        return False
-
-    monkeypatch.setattr(window_module, "confirm", confirm_it)
-    wait_until(qapp, lambda: window.session.storage_info is not None)
-    window.findChild(QPushButton, "signOut").click()
-    assert asked == [
-        (
-            "Sign out",
-            "Your week is saved on this computer, under this account. Sign in again to see it.",
-            "Sign out",
-            False,
-        )
-    ]
-    window.session.storage_info = {"mode": "hosted"}
-    window.findChild(QPushButton, "signOut").click()
-    assert asked[-1][1] == (
-        "Your week is saved on your FlexWeek server, under this account. Sign in again to see it."
-    )
-
-
 def test_the_app_says_sign_out_and_never_log_out(qapp: QApplication, window: NativeWindow) -> None:  # noqa: F811
     """The top bar's button, and the Manage account note about the codes."""
     from PySide6.QtWidgets import QLabel
@@ -186,52 +155,6 @@ def test_replace_timer_asks_in_a_sheet_not_a_message_box(
     ], "Replace timer uses a sheet with the safe answer as default"
 
 
-def test_restore_asks_in_a_sheet_not_a_message_box(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch  # noqa: F811
-) -> None:
-    calls: list[object] = []
-
-    def message_box(*_args: object) -> QMessageBox.StandardButton:
-        calls.append("message box")
-        return QMessageBox.StandardButton.No
-
-    monkeypatch.setattr(QMessageBox, "question", message_box)
-    window.session.restore_points = [{"id": "restore-1", "label": "Before exams"}]
-
-    def choose_restore(dialog: RestoreDialog) -> int:
-        dialog.action = "restore"
-        dialog.selected_id = "restore-1"
-        return QDialog.DialogCode.Accepted
-
-    monkeypatch.setattr(RestoreDialog, "exec", choose_restore)
-    seen: list[tuple[str, str, dict[str, str], str | None]] = []
-
-    def show(sheet: ConfirmSheet) -> int:
-        title = sheet.findChild(type(sheet.question), "sheetTitle")
-        assert title is not None, "the confirmation sheet has a title"
-        seen.append(
-            (
-                title.text(),
-                sheet.question.text(),
-                {key: button.text() for key, button in sheet.buttons.items()},
-                next((key for key, button in sheet.buttons.items() if button.isDefault()), None),
-            )
-        )
-        return QDialog.DialogCode.Rejected
-
-    monkeypatch.setattr(ConfirmSheet, "exec", show)
-    window._open_restore()
-    assert not calls, "Restore does not open a system message box"
-    assert seen == [
-        (
-            "Restore",
-            "Restore this snapshot? FlexWeek saves a restore point first.",
-            {"not": "Not now", "restore": "Restore"},
-            "not",
-        )
-    ], "Restore uses a sheet with the safe answer as default"
-
-
 @pytest.mark.parametrize(("answer", "replaced"), [("replace", True), ("keep", False), (None, False)])
 def test_replace_timer_replaces_only_when_the_student_says_so(
     qapp: QApplication,  # noqa: F811
@@ -250,30 +173,3 @@ def test_replace_timer_replaces_only_when_the_student_says_so(
     monkeypatch.setattr(ConfirmSheet, "exec", show)
     window._confirm_replace_focus("History essay", "Chem lab report")
     assert bool(asked) is replaced, f"answer {answer!r} replaces the timer: {replaced}"
-
-
-@pytest.mark.parametrize(("answer", "restored"), [("restore", True), ("not", False), (None, False)])
-def test_restore_applies_only_when_the_student_says_so(
-    qapp: QApplication,  # noqa: F811
-    window: NativeWindow,  # noqa: F811
-    monkeypatch: pytest.MonkeyPatch,
-    answer: str | None,
-    restored: bool,
-) -> None:
-    applied: list[str] = []
-    monkeypatch.setattr(window.session, "apply_restore_point", applied.append)
-    window.session.restore_points = [{"id": "restore-1", "label": "Before exams"}]
-
-    def choose_restore(dialog: RestoreDialog) -> int:
-        dialog.action = "restore"
-        dialog.selected_id = "restore-1"
-        return QDialog.DialogCode.Accepted
-
-    def show(sheet: ConfirmSheet) -> int:
-        sheet.answer = answer
-        return QDialog.DialogCode.Accepted
-
-    monkeypatch.setattr(RestoreDialog, "exec", choose_restore)
-    monkeypatch.setattr(ConfirmSheet, "exec", show)
-    window._open_restore()
-    assert applied == (["restore-1"] if restored else []), f"answer {answer!r} restores: {restored}"

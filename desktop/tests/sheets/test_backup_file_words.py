@@ -18,12 +18,11 @@ pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QLabel, QPlainTextEdit, QPushButton, QWidget
 
 from backend.tests.fake_clock import CLOCK
-from desktop.native import window as window_module
 from desktop.native.reuse import week_label
 from desktop.native.settings import AccountDialog, TransferPreviewDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.logic_support import card_phase, fixed
+from desktop.tests.logic_support import card_phase
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import free, qapp  # noqa: F401
 
@@ -81,56 +80,6 @@ def test_a_file_for_another_week_says_nothing_was_imported_and_where_to_go(
     assert session.message == (
         f"Nothing imported: this file is for {other_label}. Go to that week, then import again."
     )
-
-
-def test_replacing_a_week_from_a_file_asks_in_a_dialog_with_the_real_choice(
-    qapp: QApplication,  # noqa: F811
-    window: NativeWindow,  # noqa: F811
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    session = window.session
-    session.add_block(fixed("school", "School", 0, "08:00"))
-    path = tmp_path / "week.json"
-    path.write_text(json.dumps(session.week_file()))
-    asked: list[tuple[str, str, str]] = []
-
-    def refuse(_parent: object, title: str, question: str, yes: str, **_more: object) -> bool:
-        asked.append((title, question, yes))
-        return False
-
-    monkeypatch.setattr(window_module, "confirm", refuse)
-    monkeypatch.setattr(AccountDialog, "exec", lambda dialog: _choose(dialog, "import-week"))
-    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_args: (str(path), ""))
-    window._open_account()
-    label = week_label(session.week_start, window._today())
-    assert asked == [
-        (
-            "Replace week",
-            f"Replace everything in {label} with this file? Other weeks aren't changed. You can undo this.",
-            "Replace week",
-        )
-    ]
-
-
-@pytest.mark.parametrize("action", ["import", "import-week"])
-def test_a_file_that_will_not_open_says_how_to_choose_one(
-    qapp: QApplication,  # noqa: F811
-    window: NativeWindow,  # noqa: F811
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    action: str,
-) -> None:
-    missing = tmp_path / "gone.json"
-    monkeypatch.setattr(AccountDialog, "exec", lambda dialog: _choose(dialog, action))
-    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_args: (str(missing), ""))
-    window._open_account()
-    # Import week or day names week and day files; the backup import keeps its own wording.
-    expected = {
-        "import": "Couldn't open that file. Choose a FlexWeek backup file (it ends in .json).",
-        "import-week": "Couldn't open that file. Choose a FlexWeek week or day file (it ends in .json).",
-    }[action]
-    assert window.session.message == expected
 
 
 def test_a_file_that_will_not_be_written_says_to_choose_another_folder(

@@ -407,6 +407,31 @@ def test_import_backup_that_is_not_a_backup_says_so_and_asks_nothing(
     assert _asking(sheets) == ""
 
 
+@pytest.mark.parametrize(
+    ("row", "words"),
+    [
+        ("importAccount", "Couldn't open that file. Choose a FlexWeek backup file (it ends in .json)."),
+        ("importFile", "Couldn't open that file. Choose a FlexWeek week or day file (it ends in .json)."),
+    ],
+)
+def test_a_file_that_will_not_open_says_how_to_choose_one(
+    qapp: QApplication,
+    shell: NativeWindow,
+    sheets,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    row: str,
+    words: str,
+) -> None:
+    """Import backup names backup files; Import week or day names week and day files."""
+    missing = tmp_path / "gone.json"
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(lambda *a, **k: (str(missing), "")))
+    _open_account(qapp, shell, sheets)
+    _click(shell, row)
+    assert shell.session.message == words
+    assert _asking(sheets) == ""
+
+
 def test_delete_account_asks_first_and_cancel_leaves_the_sheet_as_it_was(
     qapp: QApplication, shell: NativeWindow, sheets, monkeypatch: pytest.MonkeyPatch
 ) -> None:
