@@ -1,0 +1,44 @@
+[
+ {
+  "file": "desktop/native/window.py",
+  "name": "a progress message shows on the notice",
+  "old": "        if message.endswith(\"…\"):\n            return\n",
+  "new": "        if False:\n            return\n",
+  "test": "desktop/tests/week/test_material_shared_rules.py::test_a_progress_message_never_shows_on_the_notice"
+ },
+ {
+  "file": "desktop/native/controller.py",
+  "name": "Duplicate says it copied",
+  "old": "        if not self.copy_block(source_id, day, scope, say=False):\n",
+  "new": "        if not self.copy_block(source_id, day, scope):\n",
+  "test": "desktop/tests/week/test_material_shared_rules.py::test_duplicate_says_nothing_is_copied_and_then_what_it_duplicated"
+ },
+ {
+  "file": "engine/engine/src/desk/datetext.rs",
+  "name": "Week goes back to full month names",
+  "old": "    let last = format!(\"{} {}\", end.day(), month_name(end, true));\n",
+  "new": "    let last = format!(\"{} {}\", end.day(), month_name(end, false));\n",
+  "test": "cargo:flexweek-engine:desk_reuse:test_the_planner_title_follows_the_one_date_format"
+ },
+ {
+  "file": "desktop/native/controller.py",
+  "name": "a block made by dragging is School whenever it starts",
+  "old": "        self.armed_category: str | None = None\n",
+  "new": "        self.armed_category: str | None = \"class\"\n",
+  "test": "desktop/tests/week/test_material_shared_rules.py::test_a_block_drawn_on_the_grid_is_not_school_by_default"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a notice keeps an Undo that would take back a later change",
+  "old": "        elif stored and self._notice_step is not None and self.session.last_step() is not self._notice_step:\n",
+  "new": "        elif False:\n",
+  "test": "desktop/tests/week/test_material_shared_rules.py::test_a_notice_loses_its_undo_when_a_later_change_is_saved"
+ },
+ {
+  "file": "desktop/native/hours/month_cells.py",
+  "name": "the open week read from the reply, not what the student has now",
+  "old": "        if iso in open_days:\n",
+  "new": "        if False:\n",
+  "test": "desktop/tests/month/test_month_chips.py::test_a_date_lists_what_is_due_then_its_blocks_at_their_times"
+ }
+]
