@@ -32,6 +32,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - In Material, the answers that delete something or cannot be taken back (Delete, This week and later, Replace week, Restore, Discard, Sign out) are drawn in the error colour in every question and sheet, in light and dark.
 
 ### Fixed
+- Week as a list says when a block is overdue (with the day it was due), left from last week, or pinned.
 - My day's card and ring count homework due tonight that has no time yet and name it, instead of calling the day free.
 - Animations and Motion speed now change what moves: Off has no animation, Reduce keeps short fades and moves nothing, More is slower and travels further than Normal, and Look > Advanced > Motion speed (Slower, Normal, Faster) stretches or shortens every duration. Before, More moved like Normal and Off like Reduce, and the speed was saved but did nothing.
 - A dialog's buttons no longer run out of the dialog when they do not fit side by side (for example deleting one day of School at Large text); they stack one per line.

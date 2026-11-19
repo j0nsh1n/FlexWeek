@@ -13,7 +13,7 @@ import pytest
 pytest.importorskip("PySide6")
 
 from backend.tests.fake_clock import CLOCK
-from desktop.native.weekmodel import length_label, range_label
+from desktop.native.weekmodel import range_label
 from desktop.tests.planner.support import FRIDAY, WEDNESDAY, left_in_week_one, overdue_this_week
 from desktop.tests.week.support_material import (
     _bridge,
@@ -150,11 +150,6 @@ def test_the_deadline_passing_makes_the_homework_overdue_in_the_focus_list_and_s
     assert again == said, "said once"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="product gap: the Widgets week list row also said 'Overdue, was due Fri 6 Nov' and 'Pinned'; "
-    "Material's Week as a list rows say only the day, the title and the times",
-)
 def test_the_week_list_row_says_overdue_with_the_due_date(qapp, window) -> None:
     overdue_this_week(qapp, window)
     _show_material(qapp, window)
@@ -165,8 +160,10 @@ def test_the_week_list_row_says_overdue_with_the_due_date(qapp, window) -> None:
     due = date.fromisoformat(window.session.assignments["bio"]["due"][:10])
     due_words = f"Overdue, was due {_short(due)}"
     times = range_label(15 * 60 + 15, 16 * 60 + 15)
-    expected = f"Wednesday: Bio reading, {times} · {length_label(60)} · {due_words} · Pinned"
+    expected = f"Wednesday: Bio reading, {times} · {due_words} · Pinned"
     assert [row for row in rows if row.startswith("Wednesday: Bio reading, ")] == [expected]
+    # Only the late, hand-placed block says so: the other rows carry neither word.
+    assert [row for row in rows if "Overdue" in row or "Pinned" in row] == [expected]
 
 
 @pytest.mark.xfail(

@@ -1162,6 +1162,11 @@ class SheetsBridge(QObject):
         week = session.built_week()
         monday = date.fromisoformat(session.week_start) if session.week_start else None
         rows: list[dict] = []
+        # What became of each homework that was not finished in time, as the Widgets week list put it.
+        states = {
+            item["id"]: "Overdue" if item.get("left_over_state") == "overdue" else "Left from last week"
+            for item in session.unfinished()
+        }
         for day in range(7):
             stamp = week.day_full(day)
             if monday:
@@ -1175,6 +1180,14 @@ class SheetsBridge(QObject):
                 detail = range_label(int(occurrence.start), int(occurrence.end))
                 if not occurrence.work:
                     detail += " · Fixed time"
+                state = states.get(occurrence.assignment_id or "")
+                if state == "Overdue" and occurrence.due:
+                    due = date.fromisoformat(str(occurrence.due)[:10])
+                    detail += f" · Overdue, was due {due.strftime('%a')} {due.day} {due.strftime('%b')}"
+                elif state:
+                    detail += f" · {state}"
+                if occurrence.pinned and not occurrence.done:
+                    detail += " · Pinned"
                 rows.append(
                     {
                         "type": "item",
