@@ -138,4 +138,70 @@ def test_after_the_notices_undo_on_day_the_keyboard_is_on_the_day(qapp, window: 
     while item is not None:
         names.append(str(item.objectName()))
         item = item.parentItem()
-    assert "materialDay" in names or "materialTitle" in names, " < ".join(names) or "nothing"
+    assert "weekBlock" in names or "dayScroller" in names, " < ".join(names) or "nothing"
+
+
+def _focus_chain(window: NativeWindow) -> list[str]:
+    item = window._material_page._quick.quickWindow().activeFocusItem()
+    names = []
+    while item is not None:
+        names.append(str(item.objectName()) + ":" + str(item.property("title") or ""))
+        item = item.parentItem()
+    return names
+
+
+def test_the_notices_undo_gives_the_keyboard_back_to_the_block_it_left(qapp, window: NativeWindow) -> None:
+    """On the Week: keyboard on School, Tab to the notice, Enter on Undo: the keyboard is on School again."""
+    week_with_school(qapp, window)
+    page = window._material_page
+    (school,) = [b for b in named(page.root, "weekBlock") if b.property("title") == "School"][:1]
+    school.forceActiveFocus()
+    pump(qapp)
+    page.bridge.note("Moved School to Thu 8:00 AM.", action="UNDO")
+    pump(qapp, 20)
+    (bar,) = [item for item in named(page.root, "materialSnackbar") if item.property("visible")]
+    bar.forceActiveFocus()
+    pump(qapp)
+    QTest.keyClick(page._quick, Qt.Key.Key_Return)
+    pump(QApplication.instance(), 60)
+    assert "weekBlock:School" in _focus_chain(window), " < ".join(_focus_chain(window))
+
+
+def test_a_reminder_strip_sits_above_a_notice_of_several_lines(qapp, window: NativeWindow) -> None:
+    """Got it stays clickable: the strip moves up with a notice that grew to several lines."""
+    week_with_school(qapp, window)
+    page = window._material_page
+    window.alert_strip.add([{"title": "Guitar practice starts soon", "body": "7:15 PM · Thu"}])
+    line = "Guitar practice now covers History essay. Find a new time for it."
+    page.bridge.note("\n".join([line] * 3), action="UNDO")
+    pump(qapp, 30)
+    (bar,) = [item for item in named(page.root, "materialSnackbar") if item.property("visible")]
+    (strip,) = [item for item in named(page.root, "materialAlertStrip") if item.property("visible")]
+    bar_top = bar.mapToScene(QPointF(0, 0)).y()
+    strip_bottom = strip.mapToScene(QPointF(0, float(strip.property("height")))).y()
+    assert float(bar.property("height")) > 48, "the notice did not grow, so the test says nothing"
+    assert strip_bottom <= bar_top - 8, (strip_bottom, bar_top)
+
+
+def test_the_notices_undo_text_reads_at_4_5_to_1_in_every_look() -> None:
+    import json
+    from pathlib import Path as _Path
+
+    from desktop.native.material import theme
+
+    tokens = json.loads((_Path(theme.__file__).parent / "tokens.json").read_text())
+
+    def lum(colour: str) -> float:
+        h = colour.lstrip("#")[-6:]
+        rgb = [int(h[i : i + 2], 16) / 255 for i in (0, 2, 4)]
+        lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in rgb]
+        return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+    low = []
+    for name, scheme in tokens.items():
+        if "inversePrimary" not in scheme:
+            continue
+        a, b = sorted((lum(scheme["inversePrimary"]), lum(scheme["inverseSurface"])), reverse=True)
+        if (a + 0.05) / (b + 0.05) < 4.5:
+            low.append((name, round((a + 0.05) / (b + 0.05), 2)))
+    assert low == []

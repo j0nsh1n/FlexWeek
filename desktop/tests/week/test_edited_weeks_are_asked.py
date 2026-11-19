@@ -393,8 +393,8 @@ def test_the_question_defaults_to_except_edited(qapp, window, after_setup, monke
     assert seen["body"] == "The week of 16 November has its own School times."
     assert seen["answers"] == [
         ("keep", "Except edited", "filled", True),
-        ("replace", "All weeks", "tonal", False),
-        ("from_today", "From today on", "tonal", False),
+        ("replace", "All weeks", "danger", False),
+        ("from_today", "From today on", "danger", False),
         ("stay", "Cancel", "text", False),
     ]
     go_to(qapp, after_setup, LATER)

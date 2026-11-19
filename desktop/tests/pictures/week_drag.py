@@ -124,10 +124,10 @@ SCREENS: list[Screen] = [
         area="week",
         prepare=_notice("Moved School to Thu 8:00 AM.", "Undo"),
         checks=(
-            "the notice sits at the bottom right of the page, clear of the rail on the left, its card "
-            "16 px in from the page's corner and wholly inside the window (also in the short edge "
-            "window); its words stay on one line and the card is not taller than two lines plus 40 px; "
-            "its Undo button sits inside the card; the hours under it are not pushed or resized"
+            "Material's notice sits centred at the foot of the page, 24 px up, wholly inside the window "
+            "(also in the Large text window); its words stay on one line, its Undo button reads 'Undo 10' "
+            "with Ctrl+Z beside it inside the bar; with Animations Off there is no countdown line; the "
+            "hours under it are not pushed or resized"
         ),
         sources=("desktop/native/widgets.py", "desktop/native/window.py"),
         main=True,

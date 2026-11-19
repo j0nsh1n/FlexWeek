@@ -47,6 +47,9 @@ Item {
     property bool holding: false
 
     // The keyboard goes back to the grid, or to the block `blockId` when it has one.
+    function keptBlockId() {
+        return hoursPane.keptBlockId
+    }
     function focusWeek(blockId) {
         hoursPane.focusWeek(blockId || "")
     }

@@ -25,7 +25,7 @@ NONE_CHOSEN = "Select at least one item before saving."
 
 def beside_words(clash: str) -> str:
     """What a time says when another block is already there: it is allowed, and both are drawn."""
-    return f"{clash} is at that time too. Both will show, side by side."
+    return f"{clash} is at that time too. Both will show, one slightly over the other."
 
 
 class PreviewDraft:

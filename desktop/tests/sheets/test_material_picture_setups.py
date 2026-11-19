@@ -20,6 +20,7 @@ NEW_SCREENS = {
     "sheets.material_replace_week_prompt": "sheetPrompt",
     "sheets.material_before_planning_stacked": "sheetPrompt",
     "sheets.material_restore_prompt": "sheetPrompt",
+    "sheets.material_delete_block_every_picked": "sheetPrompt",
 }
 
 

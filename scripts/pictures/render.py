@@ -509,6 +509,11 @@ def draw(qapp, made, folder: Path, screen, variant: Variant, picture: Path, setu
         wait_until(qapp, quiet, what="the variant's preferences saving")
         window._apply_appearance()
         target = screen.prepare(window)
+        # show_material() puts a test window at 1280x800; a smaller variant (Large text at 1024x640) is
+        # drawn at its own size, as its file name says. A screen that chose another size keeps it.
+        if (window.width(), window.height()) == (1280, 800) and (width, height) != (1280, 800):
+            window.resize(width, height)
+            qapp.processEvents()
         wait_until(qapp, quiet, what="the screen's own requests")
         still(window)
         qapp.processEvents()

@@ -86,7 +86,10 @@ SCREENS: list[Screen] = [
         id="sheets.m3_account_delete",
         area="sheets",
         prepare=lambda window: _account(window, asking=True),
-        checks="Delete account over Manage account: the whole question, Cancel first, then Delete student.",
+        checks=(
+            "Delete account over Manage account: the whole question, Cancel first, then Delete with the "
+            "account name, the same name as on the sheet behind it."
+        ),
         sources=SOURCES,
         styles=("material",),
     ),
