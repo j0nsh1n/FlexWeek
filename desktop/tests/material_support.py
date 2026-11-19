@@ -34,9 +34,11 @@ def show_material(qapp: QApplication, window: NativeWindow) -> QObject:
 
 
 def widgets_start_rule(raw: object) -> str:
-    """The start the tests of Widgets screens, removed in steps 8 and 9, run on: always the Widgets styles,
-    whatever the look file says, so a look saved by a test on the shipped rule cannot change the next one."""
-    return "widgets"
+    """The look file's surface rule before the Material-only work: a missing or unknown value is the
+    Widgets styles. Only the tests of Widgets screens, removed in steps 8 and 9, run on it."""
+    if isinstance(raw, dict):
+        raw = raw.get("surface", "widgets")
+    return raw if raw in ("widgets", "material") else "widgets"  # type: ignore[return-value]
 
 
 def show_widgets(window: NativeWindow) -> None:
