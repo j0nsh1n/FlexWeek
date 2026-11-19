@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QPushButton
 
@@ -52,3 +52,35 @@ def planned(qapp: QApplication, window: NativeWindow) -> QPushButton:
 def undo_still_offered(window: NativeWindow) -> tuple[bool, str, bool, str]:
     toast = window.toast
     return toast.isVisible(), toast.text(), toast.button.isVisible(), toast.button.accessibleName()
+
+
+MATERIAL_PLACED = "Placed 1 of 1"
+
+
+def planned_in_material(qapp: QApplication, window: NativeWindow) -> QObject:
+    """The Material week with the essay added and Plan pressed; returns with Undo offered on the snackbar.
+    Returns the QML root."""
+    from datetime import datetime, timedelta
+
+    from backend.tests.fake_clock import CLOCK
+    from desktop.tests.week.support_material import _click, _qml, _snack
+    from desktop.tests.week.support_material_page import fresh_material
+
+    session = window.session
+    session.add_homework(
+        {
+            "id": "essay",
+            "title": "History essay",
+            "due": sunday_due(session.week_start),
+            "estimate_min": 60,
+            "revision": 0,
+        }
+    )
+    session.save()
+    settled(qapp, window)
+    CLOCK.set(datetime.fromisoformat(session.week_start) + timedelta(days=2, minutes=14 * 60 + 7))
+    root = fresh_material(qapp, window)
+    _click(window, _qml(root, "planHomework"))
+    wait_until(qapp, lambda: _snack(window).startswith("Placed") and not session.busy, what="Plan's Undo notice")
+    settled(qapp, window)
+    return root
