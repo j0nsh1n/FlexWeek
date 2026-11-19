@@ -631,8 +631,8 @@ SCREENS: list[Screen] = [
         prepare=_recovery_continue_off,
         checks=(
             "The recovery codes page before the box is ticked: Continue to my week is off, a pale tint "
-            "with its words in the text colour at least 7 to 1 on it, and the line 'Tick the box above "
-            "to continue.' under it says why."
+            "with its words in the text colour at least 7 to 1 on it, and the line 'Turn on “I have saved "
+            "these codes” to continue.' under it says why."
         ),
         sources=SOURCES + ("desktop/native/window.py",),
     ),

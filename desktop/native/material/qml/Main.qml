@@ -83,13 +83,14 @@ Item {
 
     // After Plan, an Undo, a redo or the notice's Undo the keyboard returns to the screen the student
     // is on: the block acted on when it still exists, else the screen itself, never the stage.
+    // "kept" means the block the keyboard was on before it left the hours (the notice's Undo).
     function keyboardBackToScreen(blockId) {
         if (!bridge)
             return
         if (bridge.screen === "week")
-            weekView.focusWeek(blockId)
+            weekView.focusWeek(blockId === "kept" ? weekView.keptBlockId() : blockId)
         else if (bridge.screen === "day")
-            dayView.focusDay(blockId)
+            dayView.focusDay(blockId === "kept" ? dayView.keptBlockId() : blockId)
         else
             title.forceActiveFocus()
     }
@@ -745,8 +746,10 @@ Item {
                 visible: bridge.alertText !== ""
                 z: 3
                 // Above the snackbar, so it never covers the day names or the top bar.
+                // Just above the notice while it shows (it grows with wrapped lines), else where the notice sits.
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: (root.phone ? 96 : 24) + 48 + 12
+                anchors.bottomMargin: (root.phone ? 96 : 24)
+                    + (materialSnackbar.visible ? materialSnackbar.height + 12 : 48 + 12)
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: Math.min(parent.width - 32, 560)
                 height: stripRow.implicitHeight + 24
@@ -805,7 +808,7 @@ Item {
                 fraction: bridge.snackFraction
                 onActionClicked: if (bridge.snackAction !== "") bridge.snackActed()
                 // Undo pressed by keyboard: the keyboard returns to the week it undid, not to nothing.
-                onFocusReleased: root.keyboardBackToScreen("")
+                onFocusReleased: root.keyboardBackToScreen("kept")
                 onPauseRequested: if (bridge) bridge.pauseSnack()
                 onResumeRequested: if (bridge) bridge.resumeSnack()
                 anchors.horizontalCenter: parent.horizontalCenter

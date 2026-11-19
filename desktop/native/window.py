@@ -2995,8 +2995,8 @@ class NativeWindow(QMainWindow):
             "body": line,
             "answers": [
                 {"id": "keep", "label": "Except edited", "kind": "filled", "default": True},
-                {"id": "replace", "label": "All weeks", "kind": "tonal"},
-                {"id": "from_today", "label": "From today on", "kind": "tonal"},
+                {"id": "replace", "label": "All weeks", "kind": "danger"},
+                {"id": "from_today", "label": "From today on", "kind": "danger"},
                 {"id": "stay", "label": "Cancel", "kind": "text"},
             ],
             "cards": [
@@ -3882,7 +3882,7 @@ class NativeWindow(QMainWindow):
         )
         rows = self.session.duplicate_selected()
         self._show_preview(
-            "Preview paste",
+            "Preview duplicate",
             "Nothing changes until you choose Duplicate.",
             rows,
             label="duplicating " + (chosen or {}).get("title", "a block"),

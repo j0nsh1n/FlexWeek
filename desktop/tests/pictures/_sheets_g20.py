@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.material.bridge_manage import RESTORE_QUESTION, replace_week_question
 from desktop.native.window import NativeWindow
-from desktop.tests.material_support import pump
+from desktop.tests.material_support import named, pump
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.sheets.support_material_pictures import material, seed_school_and_essay
 
@@ -91,6 +91,13 @@ def _restore_copy(window: NativeWindow) -> None:
     pump(QApplication.instance(), 30)
 
 
+def _delete_block_every_picked(window: NativeWindow) -> None:
+    _delete_block_cards(window)
+    for item in named(window._material_page.root, "sheetPrompt"):
+        item.setProperty("pick", 2)
+    pump(QApplication.instance(), 20)
+
+
 def _replace_week(window: NativeWindow) -> None:
     sheets = _bridge(window).sheets
     sheets._ask = dict(replace_week_question("2026-11-02"))
@@ -138,8 +145,8 @@ SCREENS: list[Screen] = [
         area="sheets",
         prepare=_paste_preview,
         checks=(
-            "Preview paste: 'Nothing changes until you save this preview.', one row for the pasted School "
-            "with a tick, Day, Start and Minutes fields and its line about the time, Cancel and Save preview "
+            "Preview paste: 'Nothing changes until you choose Paste.', one row for the pasted School "
+            "with a tick, Day, Start and Minutes fields and its line about the time, Cancel and Paste "
             "(filled). The card has an 8 px radius and nothing runs outside it."
         ),
         sources=_SOURCES,
@@ -185,7 +192,18 @@ SCREENS: list[Screen] = [
         prepare=_delete_block_cards,
         checks=(
             "Delete School with its choice cards: the title, the line and the cards share one left edge, "
-            "the picked card has its ring and check, and 'This week and later' is in the error colour."
+            "the safe card (Just this day) is picked with its ring and check, and Delete is filled, not red."
+        ),
+        sources=_SOURCES,
+        styles=("material",),
+    ),
+    Screen(
+        id="sheets.material_delete_block_every_picked",
+        area="sheets",
+        prepare=_delete_block_every_picked,
+        checks=(
+            "Delete School with 'This week and every week after' picked: that card has a 2 px outline, tint "
+            "and check badge in the error colour, the other cards are plain, and Delete is red."
         ),
         sources=_SOURCES,
         styles=("material",),

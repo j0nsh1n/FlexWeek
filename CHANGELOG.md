@@ -35,6 +35,10 @@ All notable changes to FlexWeek are documented here. Format follows
 - In Material, the answers that delete something or cannot be taken back (Delete, This week and later, Replace week, Restore, Discard, Sign out) are drawn in the error colour in every question and sheet, in light and dark.
 
 ### Fixed
+- In Material, Duplicate's preview is titled Preview duplicate, and a pasted or duplicated row at a taken time says both will show one slightly over the other, as the week draws them.
+- In Material, a reminder strip moves up above a notice that grew to several lines, so Got it stays reachable; the notice's Undo gives the keyboard back to the block it came from.
+- In Material's Edited weeks question, All weeks and From today on, which cannot be undone, are red when picked.
+- In the Terminal look, the notice's Undo text is darker so it reads at 4.6 to 1.
 - In Material's dark theme, the "Ctrl+Z" hint on the notice's Undo is easier to read.
 - In Material's questions and sheets, the title, the words, the choice cards and the fields all start at the same left edge.
 - Week as a list in Material says each block's length and "Placed by Plan" for homework Plan placed, and "Fixed time" for fixed blocks, as the earlier styles' list did.

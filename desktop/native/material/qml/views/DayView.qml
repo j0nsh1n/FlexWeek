@@ -16,6 +16,9 @@ Item {
 
     // The keyboard back on the day after an Undo, a redo or the notice's Undo: the block acted on when it
     // is still there, else the hours, else the page heading.
+    function keptBlockId() {
+        return hoursLoader.item ? hoursLoader.item.keptBlockId : ""
+    }
     function focusDay(blockId) {
         if (hoursLoader.item && hoursLoader.item.focusWeek)
             hoursLoader.item.focusWeek(blockId)

@@ -180,6 +180,7 @@ Item {
     Snackbar {
         id: notice
         objectName: "sheetNotice"
+        maxWidth: Math.max(240, root.width - 48)
         visible: root.sheets !== null && root.sheets.notice !== ""
         z: 3
         message: root.sheets ? root.sheets.notice : ""

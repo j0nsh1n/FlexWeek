@@ -52,7 +52,17 @@ def test_duplicate_preview_says_duplicate_and_nothing_changes_until_you_choose_i
     window._duplicate_selected()
     pump(qapp, 30)
     assert _preview_words(window) == ("Duplicate", "Nothing changes until you choose Duplicate.")
+    assert sheets_of(window).form["heading"] == "Preview duplicate"
     sheets_of(window).forceClose()
+
+
+def test_a_pasted_row_at_a_taken_time_says_both_will_show_one_over_the_other() -> None:
+    """Jonathan, 2026-11-08: blocks at the same time are drawn overlapped, one a step over the other, so the
+    preview says so as the block sheet does, not "side by side"."""
+    from desktop.native.material.sheet_preview import beside_words
+
+    words = beside_words("School")
+    assert words == "School is at that time too. Both will show, one slightly over the other."
 
 
 def test_the_recovery_codes_line_names_the_switch_by_its_label(qapp, window) -> None:
