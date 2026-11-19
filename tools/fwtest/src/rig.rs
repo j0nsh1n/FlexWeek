@@ -231,7 +231,10 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(server, "xvfb");
-        assert_eq!(rest, ["--play", "scripts/rig/plays/material-day-light.json"]);
+        assert_eq!(
+            rest,
+            ["--play", "scripts/rig/plays/material-day-light.json"]
+        );
         let error = split_server(&["--server".to_string(), "weston".to_string()]).unwrap_err();
         assert_eq!(error, "Unknown server 'weston'");
     }

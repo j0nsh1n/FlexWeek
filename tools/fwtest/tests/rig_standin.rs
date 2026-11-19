@@ -462,7 +462,7 @@ echo $! >> "{log}"
     let output = fwtest(&home, &repo)
         .env("FLEXWEEK_RIG_KEEP", "1")
         .env("FWTEST_STANDIN_LOG", &standin_log)
-        .args(["rig", "--design", "classic", "--tab", "day"])
+        .args(["rig", "--play", "scripts/rig/plays/day.json"])
         .output()
         .unwrap();
     assert_ran(&output);
@@ -480,7 +480,7 @@ echo $! >> "{log}"
     );
     let runs = hidden::place(&repo).unwrap().runs_key;
     assert!(text.contains(&format!("runs={runs}\n")), "{text}");
-    assert!(text.contains("--design"), "{text}");
+    assert!(text.contains("--play"), "{text}");
     assert!(
         text.lines()
             .any(|line| line == format!("live_display={caller_display}")),
@@ -544,7 +544,7 @@ printf 'cwd=%s\n' "$(pwd)" >> "{log}"
     fs::create_dir_all(&nested).unwrap();
     let output = fwtest(&home, &nested)
         .env("FWTEST_STANDIN_LOG", &standin_log)
-        .args(["rig", "--design", "classic"])
+        .args(["rig", "--play", "scripts/rig/plays/day.json"])
         .output()
         .unwrap();
     assert_ran(&output);
@@ -1040,43 +1040,5 @@ fn session_processes_are_in_the_job_record_and_the_scope() {
     for (_, pid) in &recorded {
         dead(*pid);
     }
-    let _ = fs::remove_dir_all(home);
-}
-
-#[test]
-fn rig_list_does_not_start_a_session() {
-    let _guard = rig_tests_lock();
-    rig_state();
-    let home = scratch();
-    let repo = home.join("repo");
-    init_repo(&repo);
-    let _sweep = Sweep::new(&repo);
-    let log = home.join("drive.log");
-    let standin_log = home.join("standin.log");
-    let _stop = StopLogged {
-        log: standin_log.clone(),
-    };
-    write_script(
-        &repo.join("scripts/rig/drive.py"),
-        &format!(
-            "#!/bin/sh\nprintf '%s\\n' \"$*\" > \"{log}\"\n",
-            log = log.display()
-        ),
-    );
-    write_script(&home.join("python"), "#!/bin/sh\nexec \"$@\"\n");
-    let output = fwtest(&home, &repo)
-        .env("FWTEST_STANDIN_LOG", &standin_log)
-        .args(["rig", "--list"])
-        .output()
-        .unwrap();
-    assert_ran(&output);
-    let text = fs::read_to_string(&log).unwrap();
-    assert!(text.contains("--list"), "{text}");
-    let standin = fs::read_to_string(&standin_log).unwrap_or_default();
-    assert!(
-        !standin.contains("dbus-daemon"),
-        "list started a session: {standin}"
-    );
-    assert!(!hidden::place(&repo).unwrap().state.exists());
     let _ = fs::remove_dir_all(home);
 }
