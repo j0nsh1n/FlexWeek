@@ -65,14 +65,10 @@ def test_by_default_new_homework_waits_for_plan_my_homework(qapp: QApplication, 
     assert qml(window._material_page.root, "planHomework").property("text") == "Plan my homework"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Material's Plan button always reads Plan my homework; the Widgets week said Suggest times when "
-    "the student places homework by hand (planning style Manual)",
-)
 def test_placing_by_hand_turns_plan_into_suggest_times(qapp: QApplication, window: NativeWindow) -> None:
     window.session.preferences = {**(window.session.preferences or {}), "planning_style": "manual"}
     root = fresh_material(qapp, window)
     window._material_page.publish()
     pump(qapp)
     assert qml(root, "planHomework").property("text") == "Suggest times"
+    assert qml(root, "planHomework").property("accessName") == "Suggest times"

@@ -739,6 +739,12 @@ class WeekBridge(QObject):
         """Whether Plan my homework has anything to place, listed as a card or not."""
         return self._can_plan
 
+    @Property(str, notify=homeworkChanged)
+    def planLabel(self) -> str:
+        """The plan button's words: a student who places homework by hand asks for ideas, so Suggest times."""
+        prefs = self._window.session.preferences or {}  # type: ignore[attr-defined]
+        return "Suggest times" if prefs.get("planning_style") == "manual" else "Plan my homework"
+
     @Property(bool, notify=homeworkChanged)
     def allTimed(self) -> bool:
         return self._all_timed
