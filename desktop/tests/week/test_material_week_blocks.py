@@ -74,8 +74,8 @@ def test_a_default_one_hour_homework_in_week_has_its_done_circle_in_its_corner_o
     root = _reset(window, qapp)
     essay = _block_named(root, "History essay")
     # A block that has just got its time lands over half a second, growing from 90 %: measured during
-    # that, the 20 px circle is 18.1 px. On the shipped start the week is built before the essay is planned, so it
-    # lands; the student sees the full 20 px a moment later, which is what this waits for.
+    # that, the 20 px circle is 18.1 px. On the shipped start the week is built before the essay is
+    # planned, so it lands; the student sees the full 20 px a moment later, which is what this waits for.
     wait_until(qapp, lambda: float(essay.property("scale")) >= 1.0, what="the block to finish landing")
     work = next(b for b in window.session.blocks if b.get("assignment_id") == "essay")
     assert work["duration_min"] == 60
