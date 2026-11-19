@@ -60,24 +60,21 @@ def clean_look_file() -> Path:
 
 
 def write_material_look(mode: str) -> Path:
-    """The look file the window reads on start: Material, light or dark as the play asks."""
+    """The look file the window reads on start: Material, light or dark as the play asks.
+
+    Every run has a new server and an empty database, so an earlier run's kept token would 401 and
+    leave the card on "Please sign in again", where signing up never reaches the recovery codes.
+    The kept session is removed for every seed.
+    """
     from PySide6.QtCore import QStandardPaths
 
+    kept_session_path().unlink(missing_ok=True)
     root = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))
     root.mkdir(parents=True, exist_ok=True)
     look_path = root / "flexweek-look.json"
     look_path.write_text(json.dumps({"surface": "material", "material": {"mode": mode}}) + "\n")
     return look_path
 
-
-def write_material_new_look(mode: str) -> Path:
-    """Like write_material_look, and nobody is signed in.
-
-    An earlier rig run's kept token would 401 against this empty database and write
-    "Please sign in again" on the card, so that file is removed too.
-    """
-    kept_session_path().unlink(missing_ok=True)
-    return write_material_look(mode)
 
 
 def check_play(args: argparse.Namespace) -> None:
@@ -187,10 +184,7 @@ def child_main(args: argparse.Namespace) -> int:
     server.start()
     play = load_play(Path(args.play))
     material_new = play.setup.seed == "material-new"
-    if material_new:
-        write_material_new_look(play.setup.mode)
-    else:
-        write_material_look(play.setup.mode)
+    write_material_look(play.setup.mode)
     window = NativeWindow(server.origin, kept=KeptSession(kept_session_path()))
     window.resize(1280, 820)
     window.move(0, 0)

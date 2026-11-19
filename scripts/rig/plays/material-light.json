@@ -6,7 +6,7 @@
     "clock_24h": false
   },
   "steps": [
-    {"see": "School"},
+    {"see": "Soccer"},
     {"see": "materialRail"},
     {"click": "navDay"},
     {"see": "materialDay"},
@@ -17,7 +17,7 @@
     {"click": "navSettings"},
     {"see": "materialSettings"},
     {"click": "navWeek"},
-    {"see": "School"},
+    {"see": "Soccer"},
     {"see": "materialRail"},
     {"shot": "material-light"}
   ]

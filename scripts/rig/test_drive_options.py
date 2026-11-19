@@ -172,7 +172,7 @@ def test_the_rig_forgets_the_first_day_of_the_week_an_earlier_run_left_behind():
     assert fields.week_starts_on() == "monday"
 
 
-def test_material_new_forgets_an_earlier_kept_session_and_saves_the_surface():
+def test_every_seed_starts_on_material_in_the_mode_the_play_asks_without_an_earlier_kept_session():
     import json
 
     from PySide6.QtCore import QStandardPaths
@@ -181,25 +181,10 @@ def test_material_new_forgets_an_earlier_kept_session_and_saves_the_surface():
     kept = drive.kept_session_path()
     kept.parent.mkdir(parents=True, exist_ok=True)
     kept.write_text('{"token": "stale"}')
-    look = drive.write_material_new_look("dark")
-    assert not kept.exists()
-    assert json.loads(look.read_text()) == {"surface": "material", "material": {"mode": "dark"}}
-
-
-def test_every_seed_starts_on_material_in_the_mode_the_play_asks():
-    import json
-
-    from PySide6.QtCore import QStandardPaths
-
-    QStandardPaths.setTestModeEnabled(True)
-    kept = drive.kept_session_path()
-    kept.parent.mkdir(parents=True, exist_ok=True)
-    kept.write_text('{"token": "kept"}')
     look = drive.write_material_look("dark")
     assert json.loads(look.read_text()) == {"surface": "material", "material": {"mode": "dark"}}
-    # A signed-in seed signs up fresh; only material-new has to forget the kept session.
-    assert kept.exists()
-    kept.unlink()
+    # The run's server is new, so a token kept by the run before would only 401 at sign-up.
+    assert not kept.exists()
 
 
 def test_the_rig_forgets_the_carried_look_an_earlier_run_left_behind():
