@@ -12,7 +12,6 @@ from pathlib import Path
 
 from flexweek_engine import SyncService  # type: ignore[import-untyped]
 from PySide6.QtCore import (
-    QEvent,
     QEventLoop,
     QObject,
     QStandardPaths,
@@ -24,10 +23,8 @@ from PySide6.QtGui import (
     QCloseEvent,
     QContextMenuEvent,
     QDesktopServices,
-    QGuiApplication,
     QIcon,
     QKeyEvent,
-    QPalette,
     QResizeEvent,
 )
 from PySide6.QtNetwork import QLocalServer
@@ -44,7 +41,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from shiboken6 import isValid
 
 from backend import clock as wall_clock
 from backend.slots import minutes_to_hhmm
@@ -61,20 +57,14 @@ from desktop.native.calendar import (
 )
 from desktop.native.controller import ROUTINE_STATUS, NativeSession, left_sentence
 from desktop.native.custom_look import sanitize_saved
-from desktop.native.devices import SyncHost, live_phones, run_off_ui, set_error_colour
+from desktop.native.devices import SyncHost, live_phones, run_off_ui
 from desktop.native.fields import announce, week_start_day, week_start_notice
 from desktop.native.fonts import load_fonts
 from desktop.native.hours.scale import sanitize_zoom
 from desktop.native.kept import KeptSession
 from desktop.native.kept_alerts import KeptAlerts
 from desktop.native.layout_choice import sanitize_layout, sanitize_surface
-from desktop.native.look import (
-    design_look,
-    effective_look,
-    look_motion,
-    pack_stylesheet,
-    sanitize_look,
-)
+from desktop.native.look import effective_look, look_motion, sanitize_look
 from desktop.native.material.sheet_preview import PreviewDraft
 from desktop.native.material.theme import kept_material
 from desktop.native.motion import (
@@ -100,8 +90,6 @@ from desktop.native.weekmodel import (
     set_clock_24h,
 )
 from desktop.native.widgets import (
-    control_art,
-    keyboard_focus_rings,
     overdue_unfinished,
     steady_wheel,
     use_app_style,
@@ -143,33 +131,6 @@ NOTICE_LINES = 3
 
 
 
-class LastInput(QObject):
-    """Whether the student's last press was a key or the pointer, so keyboard focus put back on the
-    week is shown with its ring after a key and without one after a click. One for the whole
-    application: a filter for each window slowed every event down by the number of windows made."""
-
-    _shared: LastInput | None = None
-
-    def __init__(self, parent: QObject) -> None:
-        super().__init__(parent)
-        self.keyboard = False
-        QApplication.instance().installEventFilter(self)
-
-    @classmethod
-    def shared(cls) -> LastInput:
-        if cls._shared is None or not isValid(cls._shared):
-            cls._shared = cls(QApplication.instance())
-        return cls._shared
-
-    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
-        kind = event.type()
-        if kind == QEvent.Type.KeyPress:
-            self.keyboard = True
-        elif kind == QEvent.Type.MouseButtonPress:
-            self.keyboard = False
-        return False
-
-
 class NativeWindow(QMainWindow):
     def __init__(
         self,
@@ -183,7 +144,6 @@ class NativeWindow(QMainWindow):
         application = QApplication.instance()
         if isinstance(application, QApplication):
             steady_wheel(application)
-            keyboard_focus_rings(application)
             use_app_style(application)
         # main() has loaded them already; a window made anywhere else, as in the tests, is drawn alike.
         load_fonts()
@@ -289,8 +249,6 @@ class NativeWindow(QMainWindow):
         self.session.recovery_codes.connect(self._show_recovery)
         self.session.week_changed.connect(self._on_week)
         self.session.status.connect(self._on_status)
-        self._last_input = LastInput.shared()
-        self._last_input.keyboard = False
         self._relaying = False
         self.session.busy_changed.connect(self._on_busy)
         self.session.save_finished.connect(self._on_save_finished)
@@ -658,15 +616,6 @@ class NativeWindow(QMainWindow):
     def _wears_carried_look(self) -> bool:
         """Nobody is signed in: the sign-in screens wear the look carried on this computer."""
         return self.session.account is None
-
-    def _look_inputs(self) -> tuple[str, bool, str]:
-        system_dark = QGuiApplication.palette().color(QPalette.ColorRole.Window).lightness() < 128
-        if self._wears_carried_look():
-            # Nobody is signed in: the device's own look, not the last account's (#74).
-            return "system", system_dark, "default"
-        pack = (self.session.preferences or {}).get("theme_pack") or "system"
-        accent = (self.session.preferences or {}).get("accent") or "default"
-        return pack, system_dark, accent
 
     def _worn_look(self) -> dict:
         """The look on screen: before sign-in only the text size and High contrast of the last look
@@ -2015,22 +1964,13 @@ class NativeWindow(QMainWindow):
             self.session._say("Could not save the look for this device.")
 
     def _apply_appearance(self) -> None:
-        """Dress the app chrome and current design from the design's selected look."""
-        pack, system_dark, accent = self._look_inputs()
-        look = self._worn_look()
-        palette, look = design_look("your", pack, system_dark, look, accent)
-        art = control_art(palette)
-        sheet = pack_stylesheet(pack, system_dark, look, accent, palette, art)
-        chips = bool((self.session.preferences or {}).get("accent_chips"))
+        """Set the Animations level from the preference and the look worn."""
         chosen_motion = (self.session.preferences or {}).get("motion")
-        self._motion = motion_level(chosen_motion, look_motion(look))
-        dressed = (sheet, repr(look), repr(palette), chips, self._motion)
-        # Every change to the week comes through here. Restyling the whole window each time, when the
-        # look had not changed, cost about 26 ms a change and repainted everything on screen.
-        set_error_colour(palette["error"])
+        self._motion = motion_level(chosen_motion, look_motion(self._worn_look()))
+        # Every change to the week comes through here; the Qt effects are set only when the level moves.
+        dressed = (self._motion,)
         if dressed != self._dressed:
             self._dressed = dressed
-            self.setStyleSheet(sheet)
             apply_ui_effects(self._motion)
 
     def _install_tray(self) -> None:

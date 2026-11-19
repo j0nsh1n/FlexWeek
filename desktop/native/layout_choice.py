@@ -116,9 +116,3 @@ def sanitize_surface(raw: object) -> str:
     does not own.
     """
     return SURFACE_DEFAULT
-
-
-def options_for(choice: dict | None, layout_id: str) -> dict[str, str]:
-    """Every option of a layout, as the student set it or as the design ships."""
-    stored = sanitize_layout(choice)["options"].get(layout_id, {})
-    return {option.key: stored.get(option.key, option.default) for option in LAYOUTS[layout_id].options}

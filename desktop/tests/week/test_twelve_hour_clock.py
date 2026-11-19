@@ -14,7 +14,6 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication, QLabel
 
-from desktop.native.fields import QuarterTime
 from desktop.native.setup_steps import span_label
 from desktop.native.sheet_rules import _unbroken_time
 from desktop.native.weekmodel import clock_text, set_clock_24h
@@ -54,9 +53,6 @@ def test_setup_summaries_and_its_time_box_use_the_12_hour_clock(
     twelve: None,
 ) -> None:
     assert span_label("15:30", 90) == "3:30 PM–5:00 PM"
-    box = QuarterTime("16:00")
-    assert box.text() == "4:00 PM"
-    assert box.hhmm() == "16:00"
 
 
 def visible_words(shown: NativeWindow) -> list[str]:

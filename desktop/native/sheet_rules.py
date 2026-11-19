@@ -161,7 +161,6 @@ SPREAD_NOTHING = "Nothing left to spread: the rest is already done or focused."
 
 # No-break space before the last word, so a narrow sheet never leaves "45." alone on a line.
 SLOT_HINT = "Use a multiple of 15 minutes, such as 15, 30, or\u00a045."
-DUE_BY_HINT = "FlexWeek plans it before this time."
 
 DUE_PASSED = "That due time has passed. Choose a later one."
 ESTIMATE_ERROR = "That time isn't a multiple of 15 minutes."

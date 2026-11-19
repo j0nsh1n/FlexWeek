@@ -238,31 +238,6 @@ def forget_this_computer() -> None:
     set_clock_24h(True)
 
 
-def _the_look_the_windows_last_wore() -> Iterator[None]:
-    if importlib.util.find_spec("PySide6") is None:
-        yield
-        return
-    from desktop.native import devices
-
-    before = devices._error_colour
-    yield
-    devices.set_error_colour(before)
-
-
-@pytest.fixture(autouse=True)
-def a_test_does_not_change_the_look_dialogs_open_in() -> Iterator[None]:
-    """A window sets the error colour the sync dot is drawn in (devices.set_error_colour), and nothing
-    clears it when the window closes. What a test set is put back when it ends."""
-    yield from _the_look_the_windows_last_wore()
-
-
-@pytest.fixture(autouse=True, scope="module")
-def a_file_does_not_change_the_look_dialogs_open_in() -> Iterator[None]:
-    """The same for a window a module fixture holds: it outlives each test, so the per-test fixture
-    above keeps its colour, and this one puts back what it set when the file ends."""
-    yield from _the_look_the_windows_last_wore()
-
-
 @pytest.fixture(autouse=True)
 def every_test_starts_on_a_clean_computer() -> Iterator[None]:
     """No look file, Monday-first weeks, the 24-hour clock: what one test chose is not the next one's

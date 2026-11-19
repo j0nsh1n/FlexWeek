@@ -63,13 +63,6 @@
   "test": "desktop/tests/account/test_material_sign_in_and_create_account.py::test_empty_fields_say_what_is_missing_before_asking_the_server"
  },
  {
-  "file": "desktop/native/look.py",
-  "name": "a design's page colours keep text readable",
-  "old": "if contrast(tokens[\"bg_ink\"], tokens[\"surface\"]) >= AA_TEXT:",
-  "new": "if True:",
-  "test": "desktop/tests/settings/test_look_palettes.py::test_a_design_page_falls_back_to_readable_ink_when_its_own_ink_is_too_light"
- },
- {
   "file": "desktop/native/controller.py",
   "name": "Reload says This week",
   "old": "        self.load_week(self.week_start, discard=True, said=\"Reloaded this week.\")\n",

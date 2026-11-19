@@ -1,9 +1,0 @@
-[
- {
-  "file": "desktop/native/look.py",
-  "name": "a student's accent replaces Clay's preset accent",
-  "old": "OWN_ACCENT = (\"high-contrast\", \"bento-indigo\", \"retro-teal\", \"flight-deck\", \"timeline-paper\")\n",
-  "new": "OWN_ACCENT = (\"high-contrast\", \"bento-indigo\", \"retro-teal\", \"flight-deck\", \"timeline-paper\", \"clay-lavender\")\n",
-  "test": "desktop/tests/settings/test_look_palettes.py::test_a_students_accent_wins_over_the_presets_own"
- }
-]

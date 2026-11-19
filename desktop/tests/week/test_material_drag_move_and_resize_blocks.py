@@ -107,10 +107,35 @@ def hold_and_move(qapp, window: NativeWindow, start: QPoint, to: QPoint) -> None
 
 
 def drag(qapp, window: NativeWindow, start: QPoint, to: QPoint) -> None:
+    before = [dict(block) for block in window.session.blocks]
     hold_and_move(qapp, window, start, to)
     QTest.mouseRelease(quick_of(window), Qt.MouseButton.LeftButton, pos=to)
     pump(qapp, 10)
     settled(qapp, window)
+    if window.session.blocks == before and start != to:
+        # Drags that changed nothing failed now and then on CI only (2026-11-19). Printed output shows only
+        # for a failing test, so this says why the next time it happens.
+        print(why_nothing_moved(window, start))
+
+
+def why_nothing_moved(window: NativeWindow, at: QPoint) -> str:
+    """What was in the way of a drag at `at`: the item under it, the sheet, the focus, the sizes."""
+    quick = quick_of(window)
+    root = window._material_page.root
+    chain: list[str] = []
+    item = root
+    while item is not None:
+        chain.append(f"{type(item).__name__}:{item.objectName() or '-'}")
+        local = item.mapFromScene(QPointF(at))
+        item = item.childAt(local.x(), local.y())
+    focus = quick.quickWindow().activeFocusItem()
+    sheets = window._material_page.bridge.sheets
+    return (
+        f"drag changed nothing at {at.x()},{at.y()}: under the pointer {' > '.join(chain)}; "
+        f"sheet {sheets.property('kind')!r}; focus {focus.objectName() if focus is not None else None!r}; "
+        f"window {window.width()}x{window.height()}, quick {quick.width()}x{quick.height()}, "
+        f"root {root.width():.0f}x{root.height():.0f}"
+    )
 
 
 def body_of(block: QObject) -> QPoint:

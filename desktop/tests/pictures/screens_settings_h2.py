@@ -1,43 +1,12 @@
-"""Settings pictures: the looks and their colours, the controls, the toast and menus, and the audit screens
-(R3.4 forms lane, chunk H2). The checks are what the old code tests asserted about colours, contrast,
-positions and sizes, with their numbers."""
+"""Settings picture for Material's colour tokens (R3.4 forms lane, chunk H2). The check is what the old
+code tests asserted about colours and contrast, with their numbers. The Widgets looks, controls, toast
+and menu screens went with the Widgets painting."""
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QWidget
-
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
-from desktop.tests.settings import support_pictures as pictures
 from desktop.tests.window_support import still
-
-
-def top_bar_choice(window: NativeWindow) -> object:
-    window.show()
-    still(window)
-    return window.findChild(QWidget, "segments")
-
-
-def controls(window: NativeWindow) -> object:
-    return pictures.controls_sample(window)
-
-
-def dropdown(window: NativeWindow) -> object:
-    return pictures.dropdown_list(window)
-
-
-def toast(window: NativeWindow) -> object:
-    return pictures.toast_with_undo(window)
-
-
-def menu(window: NativeWindow) -> object:
-    return pictures.open_menu(window)
-
-
-
-
-
-
 
 
 def material_tokens(window: NativeWindow) -> object:
@@ -47,90 +16,6 @@ def material_tokens(window: NativeWindow) -> object:
 
 
 SCREENS: list[Screen] = [
-    Screen(
-        id="settings.top_bar_choice",
-        area="settings",
-        prepare=top_bar_choice,
-        checks=(
-            "The Day / Week / Month choice in the top bar. In a dark look the chosen segment's chip "
-            "is lighter "
-            "than the track by at least 0.05 (OKLab) and has a 1 px solid ring in #7fa8ff. In High contrast "
-            "every segment is in the text colour on the page and the chosen one is filled with the accent "
-            "(#ffd400) in its ink; yellow on grey could not be read."
-        ),
-        sources=("desktop/native/widgets.py", "desktop/native/look.py"),
-        main=True,
-        styles=("widgets",),
-    ),
-    Screen(
-        id="settings.controls",
-        area="settings",
-        prepare=controls,
-        checks=(
-            "Every control takes the look's colours and none disappears on a dark palette. An "
-            "unticked box and "
-            "an unselected radio button show a clear edge (at least 20 pixels well off the page). A "
-            "ticked box "
-            "is filled with the accent. A spin box shows its arrows in the muted ink. A switch shows "
-            "every line "
-            "of its words, at Normal and Large text; its tall form is not cut off at the foot. Settings' "
-            "two- and three-way choice and the top bar's choice read every option in the text colour "
-            "with the "
-            "chosen one filled with the accent. An action button (Check for updates) has an edge and is not "
-            "filled; the answer (Done) stays the filled accent. A tonal button's label reads 4.5 to 1 on its "
-            "tint and the tint is the accent's, not the card's. An outlined button's edge is seen at 3 to 1 "
-            "on the card and the page; a danger outline is words and edge in the error colour at 4.5 to 1. A "
-            "disabled main button is the text colour on a pale fill at about 7 to 1. A roomy button is at "
-            "least 36 px tall (40 at Large text). A placeholder reads 4.5 to 1 on its field and on its card, "
-            "in both single and multi-line fields, and is drawn in the look's colour, not Qt's default. Time "
-            "boxes write their figures at one width."
-        ),
-        sources=("desktop/native/widgets.py", "desktop/native/look.py", "desktop/native/fonts.py"),
-        main=True,
-        styles=("widgets",),
-    ),
-    Screen(
-        id="settings.dropdown_list",
-        area="settings",
-        prepare=dropdown,
-        checks=(
-            "An open dropdown list uses the look's colours, not Fusion's grey, and marks the chosen row with "
-            "the accent across more than 60 % of the row; the other rows stay below 5 % accent."
-        ),
-        sources=("desktop/native/widgets.py", "desktop/native/look.py"),
-        styles=("widgets",),
-    ),
-    Screen(
-        id="settings.toast",
-        area="settings",
-        prepare=toast,
-        checks=(
-            "The toast is dark with light words in every look (not a pale card on a light look): words and "
-            "Undo each at least 4.5 to 1 on it (7 to 1 in High contrast). Undo is the accent's light "
-            "shade on "
-            "a light look and the accent itself on a dark one. Its corners are 16 px."
-        ),
-        sources=("desktop/native/widgets.py", "desktop/native/look.py"),
-        main=True,
-        styles=("widgets",),
-    ),
-    Screen(
-        id="settings.menu",
-        area="settings",
-        prepare=menu,
-        checks=(
-            "A menu opens with its panel's corner at the pointer and its shadow round it: the corner outside "
-            "the panel is clear, the panel is solid. The heading (Adding) is drawn as text, at least "
-            "one line "
-            "tall. The row under the pointer shows against the card and its words keep 4.5 to 1 (7 to 1 in "
-            "High contrast, where the row stands off the card by at least 1.5 to 1); the red Delete "
-            "keeps 4.5 "
-            "to 1 on that row. The menu casts the large shadow in a look with depth and none in a flat one."
-        ),
-        sources=("desktop/native/menus.py", "desktop/native/look.py"),
-        main=True,
-        styles=("widgets",),
-    ),
     Screen(
         id="settings.material_tokens",
         area="settings",
