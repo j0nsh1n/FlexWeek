@@ -145,5 +145,12 @@
   "old": "        if self._pending is not None and self.isVisible():\n",
   "new": "        if False:\n",
   "test": "desktop/tests/week/test_hours_keep_their_place.py::test_a_time_asked_for_while_the_hours_have_no_room_is_shown_once_they_do"
+ },
+ {
+  "file": "desktop/native/hours/scale.py",
+  "name": "another day opens at eight, not its first block",
+  "old": "    return min((item.start for item in items), default=OPENS)\n",
+  "new": "    return OPENS\n",
+  "test": "desktop/tests/day/test_day_opening_scroll.py::test_opening_a_date_in_the_next_week_waits_for_that_week"
  }
 ]

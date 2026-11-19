@@ -33,5 +33,12 @@
   "old": "        if event.type() in (QEvent.Type.PaletteChange, QEvent.Type.StyleChange):\n",
   "new": "        if False:\n",
   "test": "desktop/tests/week/test_top_bar_controls.py::test_the_bars_icons_are_drawn_again_in_the_new_words_colour_when_the_look_changes"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "overdue announces from the hidden retired control",
+  "old": "            target = self.more_button if self.more_button.isVisible() else self\n",
+  "new": "            target = self.findChild(QPushButton, \"unfinishedOpen\") or self.more_button\n",
+  "test": "desktop/tests/week/test_material_left_over_rows.py::test_the_deadline_passing_makes_the_homework_overdue_in_the_focus_list_and_says_so_once"
  }
 ]

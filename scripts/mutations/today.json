@@ -299,5 +299,12 @@
   "old": "            tall = sum(self.tasks.visualItemRect(self.tasks.item(row)).height() for row in range(rows))\n",
   "new": "            tall = sum(self.tasks.visualItemRect(self.tasks.item(row)).height() for row in range(rows - 1))\n",
   "test": "desktop/tests/week/test_the_rail.py::test_the_focus_list_is_as_tall_as_all_its_rows_so_no_row_is_cut"
+ },
+ {
+  "file": "desktop/native/window.py",
+  "name": "a routine save writes over a reminder",
+  "old": "        if not (asked or message not in ROUTINE_STATUS):\n            return\n",
+  "new": "",
+  "test": "desktop/tests/settings/test_block_reminders.py::test_the_snackbar_keeps_a_reminder_until_something_more_important"
  }
 ]
