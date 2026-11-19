@@ -50,14 +50,10 @@ PAGE_OUT_MS, PAGE_IN_MS, PAGE_IN_AFTER_MS = 120, 160, 30
 # How far Day, Week and Month slide as they change, toward the segment chosen. At 12 no slide was seen.
 SLIDE_PX = 24
 LINEAR = QEasingCurve(QEasingCurve.Type.Linear)
-# How far a picture of the old week drifts as it fades, the way the student went with ‹ ›.
-DRIFT_PX = 16
 # How far a notice, a sheet, a dialog and Ctrl+K rise as they appear (decision 31).
 RISE_PX = 8
 # Settings sliding in over the week, and how much the week behind it dims (decision 30).
 OVER_MS, OVER_DIM = 200, 0.2
-# The segmented control's selection sliding to the segment chosen (decision 32).
-SEGMENT_MS = 160
 FADE_NAME = "motionFade"
 # The picture of a page sliding in over another, as Settings does.
 SLIDE_NAME = "motionSlide"
@@ -367,14 +363,6 @@ def _run(owner: QWidget, total: int, step: Callable[[float], None], done: Callab
     clock.start(total, step)
 
 
-def between(start: QRectF, end: QRectF, share: float) -> QRectF:
-    """The rectangle `share` of the way from `start` to `end`."""
-    return QRectF(
-        start.x() + (end.x() - start.x()) * share,
-        start.y() + (end.y() - start.y()) * share,
-        start.width() + (end.width() - start.width()) * share,
-        start.height() + (end.height() - start.height()) * share,
-    )
 
 
 def _along(at: float, wait: int, length: int) -> float:
@@ -397,13 +385,6 @@ def clear_fades(host: QWidget) -> None:
         leftover.deleteLater()
 
 
-def raise_pictures(host: QWidget) -> None:
-    """Put the pictures and dims over `host` back on top, in the order they were. A widget given a new
-    parent, or raised, lands above them and was drawn over the picture that is meant to cover it."""
-    for child in host.children():
-        picture = isinstance(child, QLabel) and child.objectName() in (FADE_NAME, SLIDE_NAME)
-        if picture or isinstance(child, Dim):
-            child.raise_()
 
 
 def hold_picture(
@@ -427,22 +408,6 @@ def hold_picture(
     return picture
 
 
-def trim_picture(picture: QLabel, area: QRect) -> None:
-    """Keep only `area` of the picture, given in its host's coordinates."""
-    inside = area.translated(-picture.pos()) & picture.rect()
-    whole = picture.pixmap()
-    ratio = whole.devicePixelRatio()
-    kept = whole.copy(
-        QRect(
-            round(inside.x() * ratio),
-            round(inside.y() * ratio),
-            round(inside.width() * ratio),
-            round(inside.height() * ratio),
-        )
-    )
-    kept.setDevicePixelRatio(ratio)
-    picture.setPixmap(kept)
-    picture.setGeometry(inside.translated(picture.pos()))
 
 
 def fade_away(
@@ -570,179 +535,17 @@ def switch_page(stack: QStackedWidget, page: QWidget, level: str, direction: int
     fade_through(picture, [page], level, direction)
 
 
-def slide_over(stack: QStackedWidget, page: QWidget, level: str, *, back: bool = False) -> None:
-    """Show `page` as Settings is shown (decision 30): it slides in from the right over the page it
-    covers, which dims. `back` slides the page on screen off to the right again and brightens the
-    one it uncovers. Where things may not travel the pages fade through instead, since one read
-    through the other is what the slide is for avoiding."""
-    if not moves(level):
-        switch_page(stack, page, level)
-        return
-    if stack.currentWidget() is page:
-        return
-    settle(stack.currentWidget())
-    settle(page)
-    picture = hold_picture(stack, level)
-    stack.setCurrentWidget(page)
-    if picture is None:
-        return
-    coming = None
-    if not back:
-        _fit_for_picture(page)
-        coming = page.grab()
-    _slide_pictures(stack, picture, stack.rect(), level, back=back, live=page, coming=coming)
 
 
-def slide_view(host: QWidget, picture: QLabel, live: QWidget, level: str, *, back: bool = False) -> None:
-    """Slide a view in or out as `slide_over` slides a page, for a view that lives inside `host`
-    rather than on a page of its own. `picture` is the one `hold_picture` took of `host` (or of an
-    area of it) before the view changed; `live` is the part of `host` that changed. Going in, the
-    picture of what was there stays under a dim and a picture of the new view slides over it. With
-    `back`, the picture is of the view going away: it slides off over the live view, which brightens."""
-    coming = None
-    if not back:
-        # The held picture lies over the very thing being grabbed.
-        picture.hide()
-        coming = host.grab(picture.geometry())
-        picture.show()
-    _slide_pictures(host, picture, picture.geometry(), level, back=back, live=live, coming=coming)
 
 
-def _slide_pictures(
-    host: QWidget,
-    picture: QLabel,
-    area: QRect,
-    level: str,
-    *,
-    back: bool,
-    live: QWidget,
-    coming: QPixmap | None,
-) -> None:
-    """The slide itself, over `area` of `host`. `picture` is held of what was there. Going in,
-    `coming` is a picture of what slides over it and `live` lies under both, with its painting
-    waiting, until it lands; going back, `picture` is what slides away. The clock is `live`'s going
-    in, so settling it ends the slide."""
-    length = duration(OVER_MS, level)
-    far = QPoint(area.width(), 0)
-    dim = Dim(host if back else picture)
-    dim.setGeometry(area if back else picture.rect())
-    dim.show()
-    # What moves is a picture either way: of the page going away, or of the page coming in. The page
-    # coming in used to move itself, drawn through an effect, which painted the whole of Settings
-    # again for every frame and made it stutter in.
-    if back:
-        moving = picture
-        dim.stackUnder(picture)
-        effect = Shift(moving, far, _kept(moving))
-        moving.setGraphicsEffect(effect)
-    else:
-        moving = QLabel(host)
-        moving.setObjectName(SLIDE_NAME)
-        moving.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        moving.setPixmap(coming)
-        # The page lies under both pictures until the slide ends. Qt would still paint it for every
-        # frame the picture above it moves, so its painting waits for the landing.
-        live.setUpdatesEnabled(False)
-        moving.setGeometry(area.translated(far))
-        moving.show()
-        moving.raise_()
-
-    def step(at: float) -> None:
-        share = _along(at, 0, length)
-        if back:
-            effect.set(1.0, far * share)
-        else:
-            moving.move(area.x() + round(far.x() * (1 - share)), area.y())
-        dim.share = 1 - share if back else share
-        dim.update()
-
-    def regrab() -> None:
-        # The held picture and the dim on it lie over the very thing being grabbed.
-        picture.hide()
-        moving.hide()
-        # A widget whose painting waits is drawn blank into a picture.
-        live.setUpdatesEnabled(True)
-        shot = host.grab(area)
-        live.setUpdatesEnabled(False)
-        picture.show()
-        moving.show()
-        moving.setPixmap(shot)
-
-    def done() -> None:
-        dim.deleteLater()
-        picture.deleteLater()
-        if not back:
-            live._slide_regrab = None  # type: ignore[attr-defined]
-            live.setUpdatesEnabled(True)
-            moving.deleteLater()
-
-    if not back:
-        live._slide_regrab = regrab  # type: ignore[attr-defined]
-    # The clock is the page's when it comes in, so settling the page ends its slide.
-    _run(picture if back else live, length, step, done)
 
 
-def sliding_in(live: QWidget) -> bool:
-    """Whether a view is sliding in over the desk on `live`."""
-    return getattr(live, "_slide_regrab", None) is not None
 
 
-def retake_slide(live: QWidget) -> None:
-    """If a view is sliding in over the desk, take its picture again: what it shows has changed since
-    the slide began, such as a month whose data has just arrived. Nothing otherwise."""
-    regrab = getattr(live, "_slide_regrab", None)
-    if regrab is not None:
-        regrab()
 
 
-def slide_down(widget: QWidget, level: str, *, ms: int = EASE_MS) -> None:
-    """Slide `widget` down into `target` from just above it. The widget keeps its full height on every
-    frame, over what stays underneath, instead of opening layout room first."""
-    settle(widget)
-    target = widget.geometry()
-    length = duration(ms, level)
-    if length == 0 or not moves(level) or target.height() <= 0:
-        widget.setGeometry(target)
-        widget.show()
-        return
-    start = QRect(target.x(), target.y() - target.height(), target.width(), target.height())
-    widget.setGeometry(start)
-    widget.show()
-    glide(widget, target, level, ms=ms)
 
 
-def glide(widget: QWidget, target: QRect, level: str, *, ms: int = EASE_MS + 60) -> None:
-    """Move and resize `widget` to `target`, easing there rather than jumping where things may
-    travel."""
-    settle(widget)
-    length = duration(ms, level)
-    if length == 0 or not moves(level) or not widget.isVisible() or widget.geometry() == target:
-        widget.setGeometry(target)
-        return
-    start = QRectF(widget.geometry())
-
-    def step(at: float) -> None:
-        widget.setGeometry(between(start, QRectF(target), _along(at, 0, length)).toRect())
-
-    _run(widget, length, step, lambda: widget.setGeometry(target))
 
 
-def vanish(widget: QWidget, level: str) -> None:
-    """Fade `widget` out, then hide it."""
-    settle(widget)
-    length = duration(EASE_MS, level)
-    if length == 0 or not widget.isVisible():
-        widget.hide()
-        return
-    effect = Shift(widget, QPoint(), _kept(widget))
-    widget.setGraphicsEffect(effect)
-    fading = QEasingCurve(QEasingCurve.Type.InCubic)
-
-    def step(at: float) -> None:
-        effect.set(1 - fading.valueForProgress(at / length), QPoint())
-
-    def done() -> None:
-        widget.hide()
-        widget.setGraphicsEffect(None)
-
-    _run(widget, length, step, done)
