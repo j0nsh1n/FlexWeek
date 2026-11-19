@@ -90,7 +90,3 @@ def test_asking_for_the_service_twice_starts_it_once(
     host.ensure(lambda service: None)
     host.ensure(lambda service: None)
     assert len(starts) == 1, "a second ask waits for the first start instead of starting another"
-
-
-
-

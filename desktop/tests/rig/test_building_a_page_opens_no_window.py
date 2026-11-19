@@ -74,5 +74,3 @@ def test_the_line_under_an_off_button_opens_no_window(qapp: QApplication) -> Non
     button.setEnabled(True)
     assert not made[0].isVisible()
     holder.close()
-
-

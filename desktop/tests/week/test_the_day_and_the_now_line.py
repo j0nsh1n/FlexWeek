@@ -71,5 +71,3 @@ def test_running_school_has_no_agenda_now_row(qapp: QApplication, hours_window: 
     school = next(row.item for row in view.agenda.list.rows if row.item.block_id == "school")
     assert school.start < 620 < school.end
     assert view.hours.now_min == 620
-
-

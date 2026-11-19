@@ -58,5 +58,3 @@ def test_missing_design_look_keeps_the_accounts_own_palette(
     click(window, "viewWeek")
     qapp.processEvents()
     assert window.week_table.hours.painter.colours["window"] == expected_bg
-
-

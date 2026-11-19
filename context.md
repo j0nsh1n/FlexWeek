@@ -121,4 +121,3 @@ preview. Recorded `operation_id` values make a retried write return the first re
   1.5.0: PR #137's review-1 fixes, #118's weekly fixed times and staying reminders rebuilt on main (GitHub keeps the
   old code as `refs/pull/118/head`), the dialog fix Jonathan picked (B2 cards with stacking,
   `scratch/visual-bugs/list.md`). Branches besides main: `fix/phone-1.4.0`, `feat/material-only`.
-

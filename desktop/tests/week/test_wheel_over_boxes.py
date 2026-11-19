@@ -132,5 +132,3 @@ def test_the_wheel_still_changes_a_box_the_student_clicked_into(
     spin.setFocus()
     roll(qapp, area, spin)
     assert spin.value() == 49
-
-

@@ -64,5 +64,3 @@ def test_a_drop_after_the_due_date_is_refused_and_changes_nothing(
     assert placed(window, "poster")[1] is None
     assert window.session.message == said.words
     assert window.session.revision == revision
-
-

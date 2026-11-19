@@ -94,5 +94,3 @@ def test_a_row_of_answers_stacks_when_it_is_too_narrow_and_stands_in_a_row_when_
     qapp.processEvents()
     assert row.row.direction() == QBoxLayout.Direction.LeftToRight
     free(row)
-
-

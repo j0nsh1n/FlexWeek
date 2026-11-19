@@ -244,11 +244,3 @@ def test_ctrl_shift_f_does_nothing_while_typing(qapp: QApplication, window: Nati
     pump(qapp)
     assert _page(window) == "weekPage"
     box.deleteLater()
-
-
-
-
-
-
-
-

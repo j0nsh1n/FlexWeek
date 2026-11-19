@@ -85,5 +85,3 @@ def test_ctrl_n_opens_add_homework_from_the_week(week: NativeWindow, monkeypatch
 def test_help_lists_f1_and_ctrl_n() -> None:
     assert ("[F1]", "Help") in HELP_KEYS
     assert ("[Ctrl]+[N]", "Add homework") in HELP_KEYS
-
-

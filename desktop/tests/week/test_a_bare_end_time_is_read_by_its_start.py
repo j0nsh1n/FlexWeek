@@ -116,5 +116,3 @@ def test_school_hours_reads_a_bare_end_by_its_start(qapp: QApplication) -> None:
         drain(qapp)
         dialog.hide()
         free(dialog)
-
-

@@ -211,5 +211,3 @@ def test_no_ring_is_drawn_when_the_grid_is_not_focused(
     tab_to_grid(classic_window)
     key(classic_window, Qt.Key.Key_Tab)
     assert not hours.ring_shown
-
-

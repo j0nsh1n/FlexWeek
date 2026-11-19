@@ -131,5 +131,3 @@ def test_a_stepper_greys_with_its_box(qapp: QApplication) -> None:  # noqa: F811
     lead.setEnabled(False)
     assert not stepper.more.isEnabled() and not stepper.less.isEnabled()
     free(stepper)
-
-

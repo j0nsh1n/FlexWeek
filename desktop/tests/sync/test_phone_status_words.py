@@ -59,5 +59,3 @@ def test_the_relay_sentence_is_the_agreed_one() -> None:
         "When your computer isn't on the same Wi-Fi, FlexWeek uses a public relay run by n0. "
         "It sees that two devices are talking, not what they send."
     )
-
-

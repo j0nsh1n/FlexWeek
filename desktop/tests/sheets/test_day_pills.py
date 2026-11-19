@@ -54,7 +54,3 @@ def test_routines_and_school_hours_pick_days_with_pills(
     assert school.days.days() == [1, 2, 3, 4]
     for made in (routines, school):
         free(made)
-
-
-
-

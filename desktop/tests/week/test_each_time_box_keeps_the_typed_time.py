@@ -68,5 +68,3 @@ def test_study_hours_keep_the_typed_times(qapp: QApplication, host: QWidget, twe
     type_over(dialog.picker_end, "1800")
     dialog.picker_add.click()
     assert dialog.work_windows() == [{"days": [4], "start": "16:30", "end": "18:00"}]
-
-

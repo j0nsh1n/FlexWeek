@@ -136,5 +136,3 @@ def test_a_narrow_week_still_gives_a_long_name_its_two_lines(
         titled.clear()
         assert not scroll.canvas.grab().isNull()
         assert "Science" in titled and "poster" in titled, (width, titled)
-
-

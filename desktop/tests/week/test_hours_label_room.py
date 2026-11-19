@@ -239,9 +239,3 @@ def hour_words_on(qapp: QApplication, window: NativeWindow, written: list[str]) 
 
     wait_until(qapp, drawn, what="the hours writing their words")
     return [words for words in written if words.endswith(":00") or ":00 " in words]
-
-
-
-
-
-
