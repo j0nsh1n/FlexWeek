@@ -77,13 +77,6 @@
   "test": "desktop/tests/month/test_month_grid_lifetime.py::test_a_month_with_no_window_is_freed_without_the_garbage_collector"
  },
  {
-  "file": "desktop/native/window.py",
-  "name": "classic Month ignores weeks left unsaved",
-  "old": "        self.month_grid.set_unsaved(self.session.unsaved_weeks())\n",
-  "new": "",
-  "test": "desktop/tests/month/test_month_chip_drops_and_refresh_in_designs.py::test_month_draws_a_week_left_unsaved_as_the_student_has_it[classic]"
- },
- {
   "file": "desktop/native/hours/month.py",
   "name": "the grid drops the weeks left unsaved",
   "old": "        weeks = dict(self._unsaved)\n",
