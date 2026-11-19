@@ -27,6 +27,28 @@ def _bridge(window: NativeWindow):
     return window._material_page.bridge
 
 
+def _unfinished_sheet(window: NativeWindow) -> None:
+    from desktop.tests.planner.support import left_in_week_one
+
+    qapp = QApplication.instance()
+    material(window)
+    left_in_week_one(qapp, window)
+    window._material_page.publish()
+    window._material_page.bridge.sheets.openUnfinished()
+    pump(qapp, 40)
+
+
+def _week_list_overdue(window: NativeWindow) -> None:
+    from desktop.tests.planner.support import overdue_this_week
+
+    qapp = QApplication.instance()
+    material(window)
+    overdue_this_week(qapp, window)
+    window._material_page.publish()
+    window._material_page.bridge.sheets.openWeekList()
+    pump(qapp, 40)
+
+
 def _before_planning(window: NativeWindow) -> None:
     _bridge(window).sheets.pose_question(
         NativeWindow.before_planning_question("1 overdue, 2 left from last week"), {}
@@ -118,6 +140,28 @@ SCREENS: list[Screen] = [
         checks=(
             "A reminder kept on screen: a strip at the foot of the week with the reminder's words and a "
             "filled Got it button, said once (no snackbar line under it). It does not cover the day names."
+        ),
+        sources=_SOURCES,
+        styles=("material",),
+    ),
+    Screen(
+        id="sheets.material_unfinished_sheet",
+        area="sheets",
+        prepare=_unfinished_sheet,
+        checks=(
+            "The Unfinished sheet: Lab report, '1 h left, due <day>, Left from last week', with Start focus "
+            "(text), Find a time (tonal) and Delete (text) on its row. Nothing runs outside the card."
+        ),
+        sources=_SOURCES,
+        styles=("material",),
+    ),
+    Screen(
+        id="sheets.material_week_list_overdue",
+        area="sheets",
+        prepare=_week_list_overdue,
+        checks=(
+            "Week as a list: the Wednesday row for Bio reading reads its times, 'Overdue, was due Fri <day>' "
+            "and 'Pinned'; no other row carries either word."
         ),
         sources=_SOURCES,
         styles=("material",),
