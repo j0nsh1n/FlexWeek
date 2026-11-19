@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import FakeClock
 from desktop.native.calendar import sunday_due
+from desktop.native.material.sheet_preview import beside_words
 from desktop.native.reuse import row_conflict
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import open_light, window  # noqa: F401
@@ -144,3 +145,5 @@ def test_the_paste_preview_keeps_a_block_that_lands_on_another_checked_and_says_
     assert rows is not None
     assert rows[0]["checked"] is True
     assert row_conflict(rows[0], rows, session.blocks) == "Soccer"
+    said = "Soccer is at that time too. Both will show, one slightly over the other."
+    assert beside_words(row_conflict(rows[0], rows, session.blocks)) == said

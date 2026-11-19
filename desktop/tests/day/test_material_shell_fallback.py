@@ -372,6 +372,12 @@ def test_an_update_found_on_the_draw_error_page_is_offered_and_installed_there(
     install.click()
     quits: list[bool] = []
     monkeypatch.setattr(window, "quit_app", lambda: quits.append(True))
+    monkeypatch.setattr(window_module, "apply_update", lambda _path: "The update could not be put in place.")
+    window._on_update_ready("/downloaded/flexweek")
+    assert line.text() == "The update could not be put in place. Open the release page to update by hand."
+    assert install.isEnabled() and quits == []
+
+    install.click()
     monkeypatch.setattr(window_module, "apply_update", lambda _path: None)
     window._on_update_ready("/downloaded/flexweek")
     assert line.text() == "Update installed. FlexWeek will close so the new version can start."
