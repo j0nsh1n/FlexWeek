@@ -149,3 +149,22 @@ def test_the_undo_countdown_keeps_its_accessible_name_and_decreases(
     remaining = re.fullmatch(SAYS_SECONDS, str(snackbar.property("actionText")))
     assert remaining and int(remaining.group(1)) < int(initial.group(1))
     assert _snack(window) == MATERIAL_PLACED
+
+
+@pytest.mark.parametrize(
+    ("motion", "line"), [("normal", True), ("more", True), ("reduce", False), ("off", False)]
+)
+def test_the_line_along_the_bottom_shrinks_and_follows_the_animations_setting(
+    qapp: QApplication, window: NativeWindow, motion: str, line: bool
+) -> None:
+    window.session.preferences = {**(window.session.preferences or {}), "motion": motion}
+    window._apply_appearance()
+    root = _planned_and_let_go(qapp, window)
+    snackbar = _qml(root, "materialSnackbar")
+    bar = _qml(snackbar, "timeLine")
+    assert bool(bar.property("visible")) is line
+    full = float(bar.property("width"))
+    assert full > 0
+    CLOCK.move(seconds=5)
+    wait_until(qapp, lambda: float(bar.property("width")) < full * 0.75, what="the line to shrink")
+    assert float(bar.property("width")) > 0

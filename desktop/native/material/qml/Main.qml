@@ -729,8 +729,9 @@ Item {
                 objectName: "materialAlertStrip"
                 visible: bridge.alertText !== ""
                 z: 3
-                anchors.top: topBar.bottom
-                anchors.topMargin: 8
+                // Above the snackbar, so it never covers the day names or the top bar.
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: (root.phone ? 96 : 24) + 48 + 12
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: Math.min(parent.width - 32, 560)
                 height: stripRow.implicitHeight + 24

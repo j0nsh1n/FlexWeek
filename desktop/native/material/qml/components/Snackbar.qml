@@ -62,9 +62,11 @@ Item {
         objectName: "timeLine"
         visible: !root.reduceMotion && root.actionText !== ""
         anchors.left: shape.left
+        anchors.leftMargin: 4
         anchors.bottom: shape.bottom
         height: 2
-        width: shape.width * Math.max(0, Math.min(1, root.fraction))
+        // Inside the bar's rounded corners, shrinking towards the left.
+        width: (shape.width - 8) * Math.max(0, Math.min(1, root.fraction))
         color: palette.inversePrimary
     }
     Text {
