@@ -307,10 +307,11 @@ areas = ["settings", "sheets", "week"]
 paths = ["desktop/native/material/bridge_hours.py"]
 areas = ["settings"]
 
-# Settings' words also fill Help, About, Update, restore points, sync status and the pairing row.
+# Settings' words also fill Help, About, Update, restore points, account transfers, sync status and the
+# pairing row: shared plumbing, so it selects every area.
 [[rule]]
 paths = ["desktop/native/settings_copy.py"]
-areas = ["settings", "sheets", "sync", "e2e", "week", "day"]
+everything = true
 
 [[rule]]
 paths = ["desktop/native/material/bridge_info.py"]
