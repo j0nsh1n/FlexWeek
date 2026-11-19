@@ -1,25 +1,31 @@
-"""Homework left unfinished in a past week shows in More and in Plan, and Plan never moves it alone.
+"""Homework left unfinished in a past week shows in More and in Plan, and Plan never moves it alone. Run on
+the Material week, whose line above the grid carries "N left from last week" with Plan into this week and
+Mark as finished.
 
 The case: homework due Wednesday of week 2 whose only session is on Friday of week 1, never ticked;
-week 2 is open at Monday 07:00. "1 left from last week" is hidden while the "Overdue and left from
-last week" panel is open, so the tests hide that panel before finding the chip."""
+week 2 is open at Monday 07:00."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton
+import pytest
+from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import CLOCK
 from desktop.native.window import NONE_UNFINISHED, NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.material_support import pump, show_material
 from desktop.tests.waiting import wait_until
+from desktop.tests.week.support_material import _click, _qml
 from desktop.tests.week.support_pastnext import FRIDAY, WEDNESDAY, classic_week
 from desktop.tests.window_support import qapp, settled  # noqa: F401
 
-PLAN_IT = "Plan into this week"
-FINISHED = "Mark as finished"
+pytestmark = pytest.mark.real_surface
+
+PLAN_IT = "leftOverPlan"
+FINISHED = "leftOverDone"
 
 
 def left_in_week_one(qapp: QApplication, window: NativeWindow) -> tuple[str, str]:
@@ -46,35 +52,38 @@ def left_in_week_one(qapp: QApplication, window: NativeWindow) -> tuple[str, str
 
 
 def more_unfinished_row(window: NativeWindow) -> tuple[bool, str]:
-    window._sync_more_menu()
-    for action, button in window._more_pairs:
-        if button.objectName() == "unfinishedOpen":
-            return action.isEnabled(), action.text()
-    raise AssertionError("More has no Unfinished row")
+    show_material(QApplication.instance(), window)
+    bridge = window._material_page.bridge
+    bridge.openMore()
+    row = next(item for item in bridge.sheets.moreEntries if item["id"] == "unfinishedOpen")
+    bridge.sheets.forceClose()
+    return bool(row["enabled"]), f"{row['label']} {row['detail']}"
 
 
 def lab_sessions(window: NativeWindow) -> list[dict]:
     return [b for b in window.session.blocks if b.get("assignment_id") == "lab"]
 
 
-def visible_button(window: NativeWindow, words: str) -> QPushButton | None:
-    for button in window.findChildren(QPushButton):
-        if button.isVisible() and button.text().replace("&", "") == words:
-            return button
-    return None
+def visible_button(window: NativeWindow, name: str):
+    """Material's button of this object name when its row is showing, else None."""
+    pump(QApplication.instance(), 10)
+    button = _qml(show_material(QApplication.instance(), window), name)
+    return button if button.property("visible") else None
+
+
+def chip_words(window: NativeWindow) -> str:
+    pump(QApplication.instance(), 10)
+    return str(_qml(show_material(QApplication.instance(), window), "leftOverWords").property("text"))
+
+
+def press(window: NativeWindow, button) -> None:
+    _click(window, button)
 
 
 def plan(qapp: QApplication, window: NativeWindow) -> None:
     window.session.solve()
     wait_until(qapp, lambda: not window.session.planning and not window.session.busy)
     settled(qapp, window)
-
-
-def hide_the_panel(qapp: QApplication, window: NativeWindow) -> None:
-    hide = window.findChild(QPushButton, "unfinishedDismiss")
-    if hide is not None and hide.isVisible():
-        hide.click()
-        settled(qapp, window)
 
 
 def test_more_counts_the_session_left_in_last_week(qapp, window) -> None:
@@ -92,19 +101,16 @@ def test_plan_never_moves_last_weeks_session_on_its_own(qapp, window) -> None:
 def test_plan_shows_the_unfinished_from_last_week_chip(qapp, window) -> None:
     left_in_week_one(qapp, window)
     plan(qapp, window)
-    hide_the_panel(qapp, window)
-    chip = [label.text() for label in window.findChildren(QLabel) if label.isVisible()]
-    assert "1 left from last week" in chip, chip
+    assert chip_words(window) == "1 left from last week"
     assert visible_button(window, PLAN_IT) and visible_button(window, FINISHED)
 
 
 def test_plan_them_places_it_in_week_two_before_wednesday(qapp, window) -> None:
     left_in_week_one(qapp, window)
     plan(qapp, window)
-    hide_the_panel(qapp, window)
     button = visible_button(window, PLAN_IT)
     assert button is not None, f"no {PLAN_IT}"
-    button.click()
+    press(window, button)
     settled(qapp, window)
     placed = [b for b in lab_sessions(window) if b.get("start")]
     assert placed and all(b["days"][0] < WEDNESDAY or b["days"] == [WEDNESDAY] for b in placed), placed
@@ -113,10 +119,9 @@ def test_plan_them_places_it_in_week_two_before_wednesday(qapp, window) -> None:
 def test_marking_it_finished_empties_more_and_plan_places_nothing(qapp, window) -> None:
     left_in_week_one(qapp, window)
     plan(qapp, window)
-    hide_the_panel(qapp, window)
     button = visible_button(window, FINISHED)
     assert button is not None, f"no {FINISHED}"
-    button.click()
+    press(window, button)
     settled(qapp, window)
     enabled, words = more_unfinished_row(window)
     assert not enabled and NONE_UNFINISHED in words
@@ -168,9 +173,7 @@ def test_time_already_planned_this_week_is_not_left_from_last_week(qapp, window)
     settled(qapp, window)
     assert session.unfinished() == []
     plan(qapp, window)
-    hide_the_panel(qapp, window)
-    chip = [label.text() for label in window.findChildren(QLabel) if label.isVisible()]
-    assert not [text for text in chip if "left from last week" in text], chip
+    assert "left from last week" not in chip_words(window)
     assert visible_button(window, PLAN_IT) is None
 
 
@@ -194,10 +197,9 @@ def test_the_line_shows_only_the_minutes_that_still_have_no_time(qapp, window) -
     settled(qapp, window)
     assert [(item["id"], item["remaining_min"]) for item in session.unfinished()] == [("lab", 30)]
     plan(qapp, window)
-    hide_the_panel(qapp, window)
     button = visible_button(window, PLAN_IT)
     assert button is not None, f"no {PLAN_IT}"
-    button.click()
+    press(window, button)
     settled(qapp, window)
     new_hours = [b for b in lab_sessions(window) if b["id"] != "lab-half" and b["duration_min"] == 30]
     assert new_hours, lab_sessions(window)
@@ -221,10 +223,9 @@ def test_plan_into_this_week_places_the_hour_this_week_already_holds_without_a_t
     session.save()
     settled(qapp, window)
     assert [(item["id"], item["remaining_min"]) for item in session.unfinished()] == [("lab", 60)]
-    hide_the_panel(qapp, window)
     button = visible_button(window, PLAN_IT)
     assert button is not None, f"no {PLAN_IT}"
-    button.click()
+    press(window, button)
     settled(qapp, window)
     assert [b for b in lab_sessions(window) if b.get("start")], lab_sessions(window)
     assert "fully planned" not in session.message, session.message
@@ -250,10 +251,9 @@ def hold_a_session(window: NativeWindow, start: str | None, *, pinned: bool = Fa
 def press_plan_into_this_week(qapp: QApplication, window: NativeWindow) -> None:
     window.session.week_changed.emit()
     settled(qapp, window)
-    hide_the_panel(qapp, window)
     button = visible_button(window, PLAN_IT)
     assert button is not None, f"no {PLAN_IT}"
-    button.click()
+    press(window, button)
     wait_until(qapp, lambda: not window.session.planning and not window.session.busy)
     settled(qapp, window)
 
