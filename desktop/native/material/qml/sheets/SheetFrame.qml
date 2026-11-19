@@ -148,9 +148,11 @@ FocusScope {
         Flickable {
             id: scroller
             objectName: "sheetBody"
-            x: root.margin
+            // Four wider each side than the text column: the ring of a focused field sits 4px outside
+            // it, and the title, the body, the cards and the fields all start at the margin.
+            x: root.margin - 4
             y: titleText.y + titleText.height + 16
-            width: card.width - 2 * root.margin
+            width: card.width - 2 * root.margin + 8
             height: card.height - y - 16 - footer.height - 24
             contentWidth: width
             contentHeight: body.implicitHeight
@@ -162,7 +164,7 @@ FocusScope {
                 id: scrollCue
                 objectName: "sheetScrollBar"
                 parent: scroller.parent
-                x: scroller.x + scroller.width + 8
+                x: scroller.x + scroller.width + 4
                 y: scroller.y
                 height: scroller.height
                 width: 8

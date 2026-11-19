@@ -3801,8 +3801,10 @@ class NativeWindow(QMainWindow):
         existing: list[dict] | None = None,
         destination: str | None = None,
         done: str | None = None,
+        confirm: str = "Save preview",
     ) -> None:
-        """`done` is the verb that says what saving the rows did, as in "Pasted Piano"."""
+        """`done` is the verb that says what saving the rows did, as in "Pasted Piano". `confirm` is what
+        Material's button says."""
         if not rows:
             return
 
@@ -3824,7 +3826,12 @@ class NativeWindow(QMainWindow):
         if page is not None:
             page.bridge.sheets.open_preview(
                 PreviewDraft(
-                    title, summary, rows, existing if existing is not None else self.session.blocks, save
+                    title,
+                    summary,
+                    rows,
+                    existing if existing is not None else self.session.blocks,
+                    save,
+                    confirm,
                 )
             )
             return
@@ -3861,11 +3868,12 @@ class NativeWindow(QMainWindow):
             )
         self._show_preview(
             "Preview paste",
-            "Nothing changes until you save this preview.",
+            "Nothing changes until you choose Paste.",
             rows,
             label=label,
             attempt_key=key,
             done="Pasted",
+            confirm="Paste",
         )
 
     def _duplicate_selected(self) -> None:
@@ -3875,10 +3883,11 @@ class NativeWindow(QMainWindow):
         rows = self.session.duplicate_selected()
         self._show_preview(
             "Preview paste",
-            "Nothing changes until you save this preview.",
+            "Nothing changes until you choose Duplicate.",
             rows,
             label="duplicating " + (chosen or {}).get("title", "a block"),
             done="Duplicated",
+            confirm="Duplicate",
         )
 
     def _copy_day(self) -> None:

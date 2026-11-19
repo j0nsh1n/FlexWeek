@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QApplication
 
+from desktop.native.material.bridge_manage import RESTORE_QUESTION, replace_week_question
 from desktop.native.window import NativeWindow
 from desktop.tests.material_support import pump
 from desktop.tests.pictures.screen import Screen
@@ -64,6 +65,39 @@ def _paste_preview(window: NativeWindow) -> None:
     pump(QApplication.instance(), 30)
 
 
+def _duplicate_preview(window: NativeWindow) -> None:
+    _bridge(window)
+    window.session.selected_block_id = "school"
+    window._duplicate_selected()
+    pump(QApplication.instance(), 30)
+
+
+def _recovery_save_prompt(window: NativeWindow) -> None:
+    window._show_recovery(["aaaa-bbbb", "cccc-dddd", "eeee-ffff"])
+    pump(QApplication.instance(), 30)
+    window._account_bridge().saveCodes()
+    pump(QApplication.instance(), 30)
+
+
+def _delete_block_cards(window: NativeWindow) -> None:
+    _bridge(window).sheets.askDeleteBlock("school", 1)
+    pump(QApplication.instance(), 30)
+
+
+def _restore_copy(window: NativeWindow) -> None:
+    sheets = _bridge(window).sheets
+    sheets._ask = dict(RESTORE_QUESTION)
+    sheets._publish()
+    pump(QApplication.instance(), 30)
+
+
+def _replace_week(window: NativeWindow) -> None:
+    sheets = _bridge(window).sheets
+    sheets._ask = dict(replace_week_question("2026-11-02"))
+    sheets._publish()
+    pump(QApplication.instance(), 30)
+
+
 def _delete_homework(window: NativeWindow) -> None:
     _bridge(window).sheets.askDeleteHomework("essay")
     pump(QApplication.instance(), 30)
@@ -83,7 +117,7 @@ def _undo_snackbar(window: NativeWindow) -> None:
 
 def _reminder_strip(window: NativeWindow) -> None:
     _bridge(window)
-    window.alert_strip.add([{"title": "Guitar practice starts soon", "body": "6:45 PM · Thu"}])
+    window.alert_strip.add([{"title": "Guitar practice starts soon", "body": "7:15 PM · Thu"}])
     pump(QApplication.instance(), 30)
 
 
@@ -107,6 +141,73 @@ SCREENS: list[Screen] = [
             "Preview paste: 'Nothing changes until you save this preview.', one row for the pasted School "
             "with a tick, Day, Start and Minutes fields and its line about the time, Cancel and Save preview "
             "(filled). The card has an 8 px radius and nothing runs outside it."
+        ),
+        sources=_SOURCES,
+        styles=("material",),
+    ),
+    Screen(
+        id="sheets.material_before_planning_stacked",
+        area="sheets",
+        prepare=_before_planning,
+        checks=(
+            "Before planning at Large text in a 1024 by 640 window: the three choice cards, Not now picked, "
+            "and Cancel and Continue stacked inside the card when they do not fit side by side."
+        ),
+        sources=_SOURCES,
+        main=True,
+        styles=("material",),
+    ),
+    Screen(
+        id="sheets.material_duplicate_preview",
+        area="sheets",
+        prepare=_duplicate_preview,
+        checks=(
+            "Duplicate's preview: 'Nothing changes until you choose Duplicate.', the copied School row with "
+            "its fields, and a filled Duplicate button beside Cancel. Nothing runs outside the card."
+        ),
+        sources=_SOURCES,
+        styles=("material",),
+    ),
+    Screen(
+        id="account.material_recovery_save_prompt",
+        area="account",
+        prepare=_recovery_save_prompt,
+        checks=(
+            "Save recovery codes asks to keep the file private: its title, body and buttons start on one "
+            "left edge, Cancel is a text button and Choose where to save is filled, over the dimmed codes."
+        ),
+        sources=_SOURCES + ("desktop/native/account_copy.py",),
+        styles=("material",),
+    ),
+    Screen(
+        id="sheets.material_delete_block_cards_prompt",
+        area="sheets",
+        prepare=_delete_block_cards,
+        checks=(
+            "Delete School with its choice cards: the title, the line and the cards share one left edge, "
+            "the picked card has its ring and check, and 'This week and later' is in the error colour."
+        ),
+        sources=_SOURCES,
+        styles=("material",),
+    ),
+    Screen(
+        id="sheets.material_replace_week_prompt",
+        area="sheets",
+        prepare=_replace_week,
+        checks=(
+            "Replace week: the whole question, Cancel as a text button and the replacing answer in the "
+            "error colour with its own readable ink."
+        ),
+        sources=_SOURCES,
+        styles=("material",),
+    ),
+    Screen(
+        id="sheets.material_restore_prompt",
+        area="sheets",
+        prepare=_restore_copy,
+        checks=(
+            "Restore a copy of this week: the whole question, Not now as a text button and Restore in the "
+            "error colour with its own readable ink."
         ),
         sources=_SOURCES,
         styles=("material",),

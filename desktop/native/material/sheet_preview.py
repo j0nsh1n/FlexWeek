@@ -38,7 +38,9 @@ class PreviewDraft:
         rows: list[dict],
         existing: list[dict],
         save: Callable[[list[dict]], None],
+        confirm: str = "Save preview",
     ) -> None:
+        self.confirm = confirm
         self.title = title
         self.summary = summary
         self.rows = deepcopy(rows)
@@ -132,6 +134,7 @@ class PreviewDraft:
             "kind": "preview",
             "heading": self.title,
             "intro": self.summary,
+            "confirm": self.confirm,
             "rows": rows,
             "canSave": self.can_save(),
             "whyOff": "" if self.can_save() else NONE_CHOSEN,

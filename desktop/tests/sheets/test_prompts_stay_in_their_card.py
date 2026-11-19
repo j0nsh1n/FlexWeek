@@ -12,6 +12,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import QPointF
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.material import bridge_info, bridge_manage, bridge_sheets
@@ -22,6 +23,7 @@ from desktop.tests.settings.support_material_settings import _open_settings, _pa
 from desktop.tests.sheets.support_prompt_walk import (
     SCALES,
     buttons_outside_card,
+    card_of,
     footer_buttons,
     looked,
     prompt_item,
@@ -133,6 +135,35 @@ def test_no_sheet_prompt_has_a_button_outside_its_card(
             sheets.forceClose()
             pump(qapp, 10)
     assert not problems, f"buttons outside their card at {size} {scale}: {problems}"
+
+
+def test_title_body_and_cards_of_every_prompt_start_on_one_left_inset(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """The title sat 4 px left of the body and the cards: the body made room for a field's focus ring."""
+    week_with_school(qapp, window)
+    sheets = sheets_of(window)
+    problems: list[str] = []
+    with looked(window, mode="light", scale=SCALES["Normal"], size=(1280, 800)):
+        for name, pose in poses(window):
+            pose()
+            pump(qapp, 30)
+            prompt = prompt_item(window)
+            assert prompt is not None, f"{name} did not come up"
+            card_left = card_of(prompt).mapToScene(QPointF(0, 0)).x()
+            lefts = {"title": named(prompt, "sheetTitle")[0].mapToScene(QPointF(0, 0)).x()}
+            body = str(sheets.property("ask").get("body") or "")
+            for item in visuals(prompt):
+                if body and str(item.property("text") or "") == body:
+                    lefts["body"] = item.mapToScene(QPointF(0, 0)).x()
+            for cards in named(prompt, "promptCards"):
+                if cards.property("visible"):
+                    lefts["cards"] = cards.mapToScene(QPointF(0, 0)).x()
+            if any(abs(left - (card_left + 24)) > 0.5 for left in lefts.values()):
+                problems.append(f"{name}: card left {card_left}, {lefts}")
+            sheets.forceClose()
+            pump(qapp, 10)
+    assert not problems, problems
 
 
 @pytest.mark.parametrize("size", SIZES, ids=lambda s: f"{s[0]}x{s[1]}")

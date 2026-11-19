@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
+from desktop.tests.window_support import USERNAME
 
 SOURCES = (
     "desktop/native/material/qml/sheets",
@@ -22,7 +23,7 @@ POINTS = [
     {"id": "b", "label": "Before restore — 2026-11-12 09:30", "created_at": "2026-11-12 09:30", "weeks": 5},
     {"id": "c", "label": "Weekend plan", "created_at": "2026-11-14 20:15", "weeks": 5},
 ]
-STORAGE = {"mode": "local", "username": "student", "label": "This computer, in the FlexWeek folder"}
+STORAGE = {"mode": "local", "username": USERNAME, "label": "This computer, in the FlexWeek folder"}
 
 
 def _material(window: NativeWindow):

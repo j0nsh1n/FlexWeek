@@ -201,7 +201,7 @@ class SchoolHours:
     def __init__(self) -> None:
         self.days: list[int] = [0, 1, 2, 3, 4]
         self.start = "08:00"
-        self.end = "14:30"
+        self.end = "15:00"
         self.exists = False
         self.dirty = False
         self.error = ""
@@ -214,7 +214,7 @@ class SchoolHours:
             end = hhmm_to_minutes(self.start) + int(school.get("duration_min") or 390)
             self.end = minutes_to_hhmm(end) if end < 1440 else "24:00"
         else:
-            self.days, self.start, self.end = [0, 1, 2, 3, 4], "08:00", "14:30"
+            self.days, self.start, self.end = [0, 1, 2, 3, 4], "08:00", "15:00"
         self.dirty = False
         self.error = ""
 

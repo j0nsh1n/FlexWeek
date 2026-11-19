@@ -177,8 +177,8 @@ SheetFrame {
             reduceMotion: root.reduceMotion
             highContrast: root.highContrast
             kind: "filled"
-            text: "Save preview"
-            accessName: "Save preview"
+            text: root.f.confirm ? root.f.confirm : "Save preview"
+            accessName: text
             onClicked: root.sheets.savePreview()
         }
     ]

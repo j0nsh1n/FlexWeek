@@ -4,7 +4,7 @@ from __future__ import annotations
 
 RECOVERY_KEEP = "Keep this file somewhere private. Anyone who has it can reset your password."
 
-RECOVERY_WAIT = "Tick the box above to continue."
+RECOVERY_WAIT = "Turn on “I have saved these codes” to continue."
 
 # One heading on the sign-in card, the same on a first launch and on a return, and what the page is for
 # when making an account.
