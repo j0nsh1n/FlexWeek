@@ -11,9 +11,6 @@ pytest.importorskip("PySide6")
 
 from desktop.native.hours.geometry import next_slot
 from desktop.tests.light_app import open_light  # noqa: F401
-from desktop.tests.week.support_typing import (
-    week_window,  # noqa: F401
-)
 from desktop.tests.window_support import qapp  # noqa: F401
 
 

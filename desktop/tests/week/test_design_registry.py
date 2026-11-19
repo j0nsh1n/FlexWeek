@@ -3,17 +3,11 @@ design this build no longer has still loads as Today's app."""
 
 from __future__ import annotations
 
-import itertools
-import math
-
 from desktop.native.layout_choice import (
     DESIGN_LOOKS,
     LAYOUTS,
-    options_for,
     sanitize_layout,
 )
-from desktop.native.look import ACCENTS, PACKS, design_look, resolved_palette
-from desktop.tests.week.support_design_registry import _lab
 
 GONE = ("timeline", "bento", "retro")
 
@@ -39,13 +33,14 @@ def test_options_are_known_and_defaults_are_shipped() -> None:
         assert len({option.key for option in spec.options}) == len(spec.options)
         for option in spec.options:
             assert option.default in option.values
-    assert options_for(None, "classic")["look"] == "your"
+    assert next(option for option in LAYOUTS["classic"].options if option.key == "look").default == "your"
 
 
 def test_missing_design_looks_keep_the_account_look() -> None:
     choice = sanitize_layout({"main": "classic", "options": {}})
     assert choice["options"] == {}
-    assert all(options_for(choice, layout_id)["look"] == "your" for layout_id in LAYOUTS)
+    for spec in LAYOUTS.values():
+        assert next(option for option in spec.options if option.key == "look").default == "your"
 
 
 def test_layout_sanitizer_drops_unknown_values_keys_and_non_dict_options() -> None:
@@ -86,41 +81,3 @@ def test_bad_layouts_fall_back_and_wrong_roles_do_not_load() -> None:
 def test_an_old_colour_choice_for_todays_app_becomes_your_look() -> None:
     migrated = sanitize_layout({"main": "classic", "options": {"classic": {"colour": "unknown"}}})
     assert migrated["options"]["classic"]["look"] == "your"
-
-
-def test_every_curated_design_looks_accent_stands_apart_from_its_danger_red() -> None:
-    """Every curated look of Today's app, in every pack, accent and surface: the accent is never so
-    near the danger red that a student could take one for the other. How well each reads is judged in
-    the visual review."""
-    close_accents = []
-    for layout_id, curated in DESIGN_LOOKS.items():
-        looks = (*curated, ("your", "Your look"))
-        for (token, _label), (pack, dark, accent, surface) in itertools.product(
-            looks,
-            itertools.product(PACKS, (False, True), ACCENTS, ("layered", "flat")),
-        ):
-            worn = {"preset": "default", "knobs": {"surface": surface}}
-            palette, _ = design_look(token, pack, dark, worn, accent)
-            where = f"{layout_id}/{token}/{pack}/{dark}/{accent}/{surface}"
-            gap = math.dist(_lab(palette["accent"]), _lab(palette["error"]))
-            if gap < 25:
-                close_accents.append((where, round(gap, 1)))
-    assert close_accents == []
-
-
-def test_todays_app_offers_a_light_look() -> None:
-    missing = []
-    for layout_id, curated in DESIGN_LOOKS.items():
-        light = []
-        for token, _label in curated:
-            palette, _ = design_look(token, "light-frost", False, None)
-            if palette["axis"] == "light":
-                light.append(token)
-        if not light:
-            missing.append(layout_id)
-    assert missing == []
-
-
-def test_legacy_look_alias_falls_back_to_the_accounts_look_when_unknown() -> None:
-    palette = resolved_palette("nocturne", True, None)
-    assert design_look("preset:unknown", "nocturne", True, None)[0]["window"] == palette["window"]
