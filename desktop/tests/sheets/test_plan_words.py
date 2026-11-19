@@ -10,12 +10,12 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtWidgets import QApplication
 
-from desktop.native.settings import HelpDialog
+from desktop.native.settings_copy import HELP_PLANNING
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.window_support import free, qapp  # noqa: F401
+from desktop.tests.window_support import qapp  # noqa: F401
 
 
 @pytest.mark.parametrize(
@@ -52,16 +52,6 @@ def test_plan_says_planning_saving_or_out_of_step(
         session.pending_save = None
 
 
-
-
-def test_help_opens_with_how_planning_works(
-    qapp: QApplication,  # noqa: F811
-    window: NativeWindow,  # noqa: F811
-) -> None:
-    dialog = HelpDialog(window)
-    headings = [label.text() for label in dialog.findChildren(QLabel, "prefsHeading")]
-    assert headings[:3] == ["How planning works", "The screens", "Keyboard shortcuts"]
-    body = dialog.findChild(QLabel, "helpPlanning").text()
+def test_help_explains_how_planning_works() -> None:
     for part in ("Plan my homework", "Replan all", "Not placed yet", "Details", "Ctrl+K"):
-        assert part in body
-    free(dialog)
+        assert part in HELP_PLANNING

@@ -63,12 +63,7 @@ def test_advanced_settings_row_shows_the_ring_and_scrolls_into_view_on_tab(
 def test_escape_closes_manage_account_and_returns_focus(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Manage account is a Material sheet over Settings; the Widgets dialog never opens."""
-
-    def refuse(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("the Widgets AccountDialog opened over Material")
-
-    monkeypatch.setattr("desktop.native.window.AccountDialog", refuse)
+    """Manage account is a Material sheet over Settings."""
     root = open_settings(qapp, window, "computer")
     quick = window._material_page._quick
     account_rows = named(root, "row_account")

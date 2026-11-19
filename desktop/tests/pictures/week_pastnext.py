@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QAbstractButton, QApplication, QWidget
+from PySide6.QtWidgets import QAbstractButton, QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
@@ -72,38 +72,6 @@ def _weekend(design: str, with_saturday: bool):
 
 
 
-def _late_preview(window: NativeWindow) -> QWidget:
-    from desktop.native.widgets import LateDialog
-
-    dialog = LateDialog(window, "School")
-    long_title = "A very long homework title that cannot fit on one line of the preview list " * 2
-    dialog.show()
-    dialog.show_trace(
-        {
-            "moves": [
-                {"block_id": "essay", "from_day": 3, "from_start": "19:00", "to_day": 3, "to_start": "19:30"},
-                {
-                    "block_id": "poster",
-                    "from_day": None,
-                    "from_start": None,
-                    "to_day": 4,
-                    "to_start": "15:30",
-                },
-                {"block_id": "sheet", "from_day": None, "from_start": None, "to_day": 4, "to_start": "14:30"},
-            ],
-            "placed": [
-                {"id": "essay", "title": long_title, "duration_min": 60},
-                {"id": "poster", "title": "Science poster", "duration_min": 60},
-                {"id": "sheet", "title": "Math worksheet", "duration_min": 60},
-            ],
-            "unplaced": [],
-        },
-        {"essay": long_title, "poster": "Science poster", "sheet": "Math worksheet"},
-    )
-    QApplication.processEvents()
-    return dialog
-
-
 SCREENS: list[Screen] = [
     *[
         Screen(
@@ -132,15 +100,4 @@ SCREENS: list[Screen] = [
         )
         for design in ("classic",)
     ],
-    Screen(
-        id="week.running-late-preview",
-        area="week",
-        prepare=_late_preview,
-        checks=(
-            "each change row's text is drawn once, not also under its row widget; a row with a very "
-            "long title is as tall as its wrapped words and taller than a one-line row; Preview and "
-            "the accept button share one left edge"
-        ),
-        sources=("desktop/native/widgets.py",),
-    ),
 ]

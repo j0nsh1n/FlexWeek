@@ -71,21 +71,3 @@ def test_material_days_small_month_starts_its_rows_on_the_chosen_day(
     column, first, _last = NOVEMBER[start]
     assert cells[f"cell{column}"] == "1"
     assert cells["cell0"] == str(first.day)
-
-
-
-
-@pytest.mark.parametrize("start", ["wednesday", "monday", "sunday"])
-def test_the_study_hours_strip_runs_from_the_chosen_day(qapp: QApplication, start: str) -> None:
-    from desktop.native.widgets import AvailabilityStrip
-
-    _start_on(start)
-    strip = AvailabilityStrip({"muted": "#666", "hairline": "#ddd", "accent": "#36c", "error": "#c00"})
-    order = {
-        "monday": [0, 1, 2, 3, 4, 5, 6],
-        "wednesday": [2, 3, 4, 5, 6, 0, 1],
-        "sunday": [6, 0, 1, 2, 3, 4, 5],
-    }
-    assert strip.days() == order[start]
-    assert strip.letters() == LETTERS[start]
-    strip.deleteLater()

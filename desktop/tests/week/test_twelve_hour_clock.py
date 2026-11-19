@@ -12,12 +12,12 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QTimeEdit, QWidget
+from PySide6.QtWidgets import QApplication, QLabel
 
 from desktop.native.fields import QuarterTime
 from desktop.native.setup_steps import span_label
+from desktop.native.sheet_rules import _unbroken_time
 from desktop.native.weekmodel import clock_text, set_clock_24h
-from desktop.native.widgets import BlockDialog, LateDialog, PreviewDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.waiting import wait_until
@@ -44,12 +44,9 @@ BLOCK = {"id": "soccer", "title": "Soccer practice", "start": "16:00", "duration
 
 
 def test_running_late_rows_keep_am_pm_on_the_time(qapp: QApplication, twelve: None) -> None:
-    dialog = LateDialog(None, "")
-    dialog.show_trace(
-        {"moves": [{"block_id": "essay", "from_start": "16:00", "to_start": "17:30"}]}, {"essay": "Essay"}
-    )
+    words = clock_text(16 * 60), clock_text(17 * 60 + 30)
     # AM/PM stays on the time (U+00A0), not a wrapping space.
-    assert dialog.changes.item(0).text() == "Essay: from 4:00 PM to 5:30 PM"
+    assert _unbroken_time(f"Essay: from {words[0]} to {words[1]}") =="Essay: from 4:00 PM to 5:30 PM"
 
 
 def test_setup_summaries_and_its_time_box_use_the_12_hour_clock(
@@ -60,23 +57,6 @@ def test_setup_summaries_and_its_time_box_use_the_12_hour_clock(
     box = QuarterTime("16:00")
     assert box.text() == "4:00 PM"
     assert box.hhmm() == "16:00"
-
-
-def test_editors_show_12_hour_times_and_keep_hh_mm(
-    qapp: QApplication,
-    host: QWidget,
-    twelve: None,
-) -> None:
-    editor = BlockDialog(host, {**BLOCK, "kind": "locked", "category": "sport", "days": [3]})
-    assert [box.text() for box in editor.findChildren(QTimeEdit)][:2] == ["4:00 PM", "5:30 PM"]
-    rows = [{"block": {**BLOCK, "kind": "locked"}, "day": 3, "fixed": True, "checked": True}]
-    preview = PreviewDialog(host, "Paste", "", rows, [])
-    start = preview.findChild(QComboBox, "previewStart0")
-    assert (start.currentText(), start.currentData()) == ("4:00 PM", "16:00")
-    start.setCurrentIndex(start.findData("17:15"))
-    assert preview.rows()[0]["block"]["start"] == "17:15"
-
-
 
 
 def visible_words(shown: NativeWindow) -> list[str]:

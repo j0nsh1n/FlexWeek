@@ -8,11 +8,10 @@ from collections.abc import Callable
 from datetime import datetime
 
 import pytest
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import CLOCK
 from desktop.native.calendar import sunday_due
-from desktop.native.widgets import HomeworkDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.waiting import wait_until
 
@@ -41,25 +40,6 @@ def sessions_of(window: NativeWindow, assignment_id: str) -> list[dict]:
         (block for block in window.session.blocks if block.get("assignment_id") == assignment_id),
         key=lambda block: (block["days"][0], block.get("start") or ""),
     )
-
-
-def opened_with(
-    monkeypatch: pytest.MonkeyPatch, act: Callable[[HomeworkDialog], int]
-) -> list[HomeworkDialog]:
-    """Every homework editor the window opens is handed to `act` instead of waiting for a student."""
-    seen: list[HomeworkDialog] = []
-
-    def run(dialog: HomeworkDialog) -> int:
-        seen.append(dialog)
-        return act(dialog)
-
-    monkeypatch.setattr(HomeworkDialog, "exec", run)
-    return seen
-
-
-def accepted(dialog: HomeworkDialog) -> int:
-    dialog.accept()
-    return QDialog.DialogCode.Accepted
 
 
 def homework_week(qapp: QApplication, open_light: Callable[..., NativeWindow]) -> NativeWindow:
