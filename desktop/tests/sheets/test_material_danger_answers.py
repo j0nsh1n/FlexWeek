@@ -33,8 +33,7 @@ DANGEROUS = {
     "restore-copy": "restore",
     "delete-account": "delete",
     "replace-week": "replace",
-    "delete-block": "confirm",
-    "delete-block-week": "confirm",
+    "replace-focus": "replace",
     "delete-homework": "delete",
     "delete-alarm": "delete",
     "delete-unfinished": "delete",
@@ -70,6 +69,30 @@ def test_the_destructive_answer_is_the_error_colour_and_the_others_are_not(qapp,
             pump(qapp, 10)
     assert not problems, problems
     assert named(window._material_page.root, "sheetPrompt") is not None
+
+
+@pytest.mark.parametrize("mode", ["light", "dark"])
+def test_a_card_that_cannot_be_undone_turns_delete_red_only_while_it_is_picked(qapp, window, mode) -> None:
+    """Jonathan, 2026-11-18: answers that cannot be undone are red. With choice cards the safe card is picked
+    first, so Delete is the filled colour; picking This week and later makes Delete red."""
+    week_with_school(qapp, window)
+    sheets = sheets_of(window)
+    with looked(window, mode=mode, scale=1.0, size=(1280, 800)):
+        error = str(window._material_page.bridge.theme["error"]).lower()
+        sheets.askDeleteBlock("school", 1)
+        pump(qapp, 30)
+        prompt = prompt_item(window)
+
+        def delete_is_red() -> bool:
+            (confirm,) = [b for b in footer_buttons(prompt) if str(b.objectName()) == "prompt_confirm"]
+            return _colour(confirm, "fill") == error
+
+        assert not delete_is_red(), "Delete is red while a card you can undo is picked"
+        prompt.setProperty("pick", 2)
+        pump(qapp, 10)
+        assert delete_is_red(), "Delete is not red with This week and later picked"
+        sheets.forceClose()
+        pump(qapp, 10)
 
 
 @pytest.mark.parametrize("preset", PRESETS)
