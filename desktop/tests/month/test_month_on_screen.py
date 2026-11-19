@@ -22,13 +22,11 @@ from PySide6.QtCore import QStandardPaths  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.calendar import sunday_due  # noqa: E402
-from desktop.native.hours.month import LOAD_WORDS  # noqa: E402
 from desktop.native.window import WINDOW_MIN_WIDTH, NativeWindow  # noqa: E402
 from desktop.tests.light_app import open_light  # noqa: E402, F401
 from desktop.tests.material_support import pump, qml  # noqa: E402
 from desktop.tests.month.support_material_month import (  # noqa: E402
     cell,
-    cells,
     click,
     grid,
     heading,
@@ -54,27 +52,6 @@ def window(qapp: QApplication, open_light: Callable[..., NativeWindow]) -> Nativ
     return made
 
 
-def test_the_month_screen_draws_the_dates_the_session_asked_for(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    root, _month = open_month(qapp, window)
-    today = date.fromisoformat(window.session.today_iso())
-    assert shown_dates(root) == grid(today.replace(day=1))
-    assert texts(qml(root, "materialMonth"), "monthWeekday") == [
-        "Mon",
-        "Tue",
-        "Wed",
-        "Thu",
-        "Fri",
-        "Sat",
-        "Sun",
-    ]
-    marked = [str(item.parent().objectName()) for item in named_on(root, "monthToday")]
-    assert marked == [f"monthDate-{today.isoformat()}"]
-    for item in cells(root):
-        iso = str(item.objectName())[len("monthDate-") :]
-        assert item.property("inMonth") is (iso[:7] == today.isoformat()[:7]), iso
-    assert texts(qml(root, "materialMonth"), "monthStudyCaption") == [LOAD_WORDS]
 
 
 def test_a_date_shows_its_chips_in_the_account_clock(qapp: QApplication, window: NativeWindow) -> None:

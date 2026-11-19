@@ -64,7 +64,6 @@ def test_clicking_homework_finishes_it_and_undo_opens_it_again(qapp, window) -> 
     assert _block_named(root, "History essay").property("done") is False
 
 
-@pytest.mark.real_surface
 def test_a_default_one_hour_homework_in_week_has_its_done_circle_in_its_corner_off_the_title(
     qapp, window
 ) -> None:

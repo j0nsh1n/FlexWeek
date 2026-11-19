@@ -30,14 +30,14 @@ def test_an_update_check_that_fails_says_so_only_when_asked(qapp: QApplication, 
     window._update_asked = False
     window._updater.unreachable.emit(CHECK_FAILED)
     qapp.processEvents()
-    assert window.toast.isVisible() is False, "a daily check that fails stays quiet"
+    bridge = window._material_page.bridge
+    assert bridge.snackText == "", "a daily check that fails stays quiet"
 
     window._update_asked = True
     window._updater.unreachable.emit(CHECK_FAILED)
     qapp.processEvents()
-    assert window.toast.button.isVisible() is True
-    assert window.toast.text() == CHECK_FAILED
-    assert window.toast.button.text() == "Open release page"
+    assert bridge.snackText == CHECK_FAILED
+    assert bridge.snackAction.lower() == "open release page"
 
 
 def test_the_app_checks_for_updates_once_a_day_not_every_week_refresh(

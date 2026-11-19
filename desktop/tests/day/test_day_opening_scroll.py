@@ -22,7 +22,6 @@ from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from desktop.native.hours.zoom import NOW_MARGIN  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_day import (  # noqa: E402
     bridge_of,
@@ -36,6 +35,10 @@ from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.window_support import qapp, settled  # noqa: E402, F401
 
 NOW_MINUTE = 19 * 60
+
+
+# Minutes of the day kept above now when the hours open on it (HoursPane.qml, `45 / 60 * root.row`).
+NOW_MARGIN = 45
 
 
 @pytest.fixture()

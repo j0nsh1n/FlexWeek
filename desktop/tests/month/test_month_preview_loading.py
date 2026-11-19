@@ -156,9 +156,7 @@ def test_a_failed_preview_asks_again_by_itself_after_a_save(qapp: QApplication, 
     session.save()
     wait_until(qapp, lambda: idle(window))
 
-    wait_until(
-        qapp, lambda: len(preview_calls(held)) > asked, what="the preview asking again after the save"
-    )
+    wait_until(qapp, lambda: len(preview_calls(held)) > asked, what="the preview asking again after the save")
     assert preview.loading
     preview_calls(held)[-1][3](snap("2026-11", "Math HW"))
     wait_until(qapp, lambda: not preview.loading)

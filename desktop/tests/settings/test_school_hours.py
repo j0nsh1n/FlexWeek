@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QLabel,
-    QPushButton,
     QWidget,
 )
 
@@ -72,57 +71,10 @@ def read_back(qapp: QApplication, window: NativeWindow) -> list[tuple]:
     return schools(window)
 
 
-def test_school_hours_adds_school_from_days_and_times(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    def four_days_till_three(dialog: SchoolHoursDialog) -> None:
-        dialog.days.buttons[4].setChecked(False)
-        dialog.times.start.set_minutes(8 * 60 + 15)
-        dialog.times.end.set_minutes(15 * 60)
-
-    assert schools(window) == []
-    seen = answer(monkeypatch, four_days_till_three)
-    window.findChild(QPushButton, "schoolHours").click()
-    settled(qapp, window)
-    assert seen == [{"heading": "School hours", "days": [0, 1, 2, 3, 4], "times": ("08:00", "14:30")}]
-    assert read_back(qapp, window) == [("school", "locked", "School", [0, 1, 2, 3], "08:15", 405)]
 
 
-def test_school_hours_changes_the_school_already_there(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    answer(monkeypatch, lambda dialog: None)
-    window.findChild(QPushButton, "schoolHours").click()
-    settled(qapp, window)
-
-    def later(dialog: SchoolHoursDialog) -> None:
-        dialog.days.buttons[5].setChecked(True)
-        dialog.times.end.set_minutes(15 * 60 + 15)
-
-    seen = answer(monkeypatch, later)
-    window.findChild(QPushButton, "schoolHours").click()
-    settled(qapp, window)
-    assert seen[0]["days"] == [0, 1, 2, 3, 4] and seen[0]["times"] == ("08:00", "14:30")
-    assert read_back(qapp, window) == [("school", "locked", "School", [0, 1, 2, 3, 4, 5], "08:00", 435)]
-    answer(monkeypatch, None)
-    window.findChild(QPushButton, "schoolHours").click()
-    settled(qapp, window)
-    assert schools(window) == [("school", "locked", "School", [0, 1, 2, 3, 4, 5], "08:00", 435)], "Cancel"
 
 
-def test_no_day_ticked_takes_school_off_the_calendar(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    answer(monkeypatch, lambda dialog: None)
-    window.findChild(QPushButton, "schoolHours").click()
-    settled(qapp, window)
-    answer(monkeypatch, lambda dialog: dialog.days.set_days([]))
-    window.findChild(QPushButton, "schoolHours").click()
-    settled(qapp, window)
-    # Before reading back: reloading the week says so, in the same toast. School stands in every week
-    # (item 1), so it goes from every week after this one too, and Undo would take back this week only.
-    assert window.toast.text() == "Deleted School from this week and every week after."
-    assert read_back(qapp, window) == []
 
 
 def test_an_end_before_the_start_is_said_and_nothing_is_saved(qapp: QApplication, host: QWidget) -> None:

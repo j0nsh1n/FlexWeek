@@ -24,8 +24,6 @@ from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material import _bridge, _pump, _qml, _snack
 from desktop.tests.window_support import qapp  # noqa: F401
 
-pytestmark = pytest.mark.real_surface
-
 # Leaving the notice starts its clock again with at least this much left (bridge.resumeSnack).
 RESUME_MS = 1_000
 SAYS_SECONDS = r"Undo (\d+)"

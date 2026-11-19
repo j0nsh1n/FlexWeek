@@ -10,10 +10,8 @@ from pathlib import Path
 
 import pytest
 from flexweek_engine import SyncService
-from PySide6.QtWidgets import QLabel, QWidget
 
 from backend.storage import initialize
-from desktop.native import devices
 from desktop.native.devices import SyncHost
 from desktop.native.window import NativeWindow
 from desktop.tests import light_app
@@ -75,30 +73,6 @@ def light_desk(open_light: Callable[..., NativeWindow], tmp_path: Path) -> Itera
         service.stop()
 
 
-@pytest.fixture()
-def lazy_light_desk(
-    open_light: Callable[..., NativeWindow],
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> Iterator[tuple[NativeWindow, SyncHost, list[Path]]]:
-    """A signed-in light window with no sync service yet. Starting one is counted, and it starts on
-    loopback only."""
-    window = open_light()
-    database = light_database(tmp_path)
-    started: list[Path] = []
-
-    def loopback_start(path: Path) -> SyncService:
-        started.append(path)
-        return loopback_service(path)
-
-    monkeypatch.setattr(devices, "start_service", loopback_start)
-    host = SyncHost(database)
-    attach_sync(window, host)
-    try:
-        yield window, host, started
-    finally:
-        stop_sync_timer(window)
-        host.stop()
 
 
 @pytest.fixture()
@@ -112,8 +86,6 @@ def phone(tmp_path: Path) -> Iterator[SyncService]:
     made.stop()
 
 
-def label_texts(parent: QWidget) -> list[str]:
-    return [label.text() for label in parent.findChildren(QLabel)]
 
 
 def pair_a_phone(window: NativeWindow, phone: SyncService) -> None:
@@ -137,3 +109,7 @@ class GenerationProxy:
 
     def __getattr__(self, name: str) -> object:
         return getattr(self.real, name)
+
+
+
+

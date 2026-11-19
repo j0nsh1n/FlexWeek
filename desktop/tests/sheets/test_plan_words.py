@@ -52,27 +52,6 @@ def test_plan_says_planning_saving_or_out_of_step(
         session.pending_save = None
 
 
-def test_the_greyed_plan_tip_names_the_same_three_causes(
-    qapp: QApplication,  # noqa: F811
-    window: NativeWindow,  # noqa: F811
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    session = window.session
-    session.conflict = True
-    assert window._more_tip("solveButton", False) == (
-        "This week changed in another window. Choose More > Reload this week, then try again."
-    )
-    session.conflict = False
-    monkeypatch.setattr(type(session), "planning", property(lambda _self: True))
-    assert window._more_tip("solveButton", False) == "Planning… one moment."
-    monkeypatch.undo()
-    session.pending_save = {"weeks": [], "assignments": [], "operation_id": "x"}
-    try:
-        assert (
-            window._more_tip("solveButton", False) == "Saving your last change… this will work in a moment."
-        )
-    finally:
-        session.pending_save = None
 
 
 def test_help_opens_with_how_planning_works(

@@ -31,7 +31,7 @@ def test_the_row_is_hidden_when_nothing_is_left_over(qapp, window) -> None:
     assert _qml(root, "leftOverPlan").property("visible") is False
 
 
-def test_the_row_says_what_the_widgets_line_says(qapp, window) -> None:
+def test_the_row_says_what_the_line_says(qapp, window) -> None:
     left_in_week_one(qapp, window)
     root = _show_material(qapp, window)
     _pump(qapp)
@@ -39,8 +39,6 @@ def test_the_row_says_what_the_widgets_line_says(qapp, window) -> None:
     assert _row(root).property("visible") is True
     # The seeded essay is overdue by then, besides the lab report left from last week.
     assert _qml(root, "leftOverWords").property("text") == "1 overdue · 1 left from last week"
-    window._sync_left_chip()
-    assert window.left_chip_text.text() == "1 overdue · 1 left from last week"
     assert _qml(root, "leftOverPlan").property("accessName") == "Plan into this week"
     assert _qml(root, "leftOverDone").property("accessName") == "Mark as finished"
 

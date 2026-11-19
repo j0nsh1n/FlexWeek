@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import contextlib
 
-import pytest
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
@@ -15,8 +14,6 @@ from desktop.tests.e2e.account_sessions import HASHING_WAIT, soccer, table_text
 from desktop.tests.logic_support import past_recovery, past_setup, sign_in, sign_up
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import PASSWORD, free, qapp, server, signed_out  # noqa: F401
-
-pytestmark = pytest.mark.real_surface
 
 
 def test_a_saved_fixed_time_survives_signing_out_and_in(

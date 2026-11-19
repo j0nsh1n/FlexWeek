@@ -39,6 +39,6 @@
   "name": "the open week read from the reply, not what the student has now",
   "old": "        if iso in open_days:\n",
   "new": "        if False:\n",
-  "test": "desktop/tests/month/test_month_chips.py::test_a_date_lists_what_is_due_then_its_blocks_at_their_times"
+  "test": "desktop/tests/month/test_month_dates_and_chips.py::test_the_open_week_is_read_from_what_the_student_has_now_not_from_the_reply"
  }
 ]

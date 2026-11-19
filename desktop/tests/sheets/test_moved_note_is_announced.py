@@ -14,7 +14,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.widgets import BlockDialog, HomeworkDialog  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
@@ -25,11 +25,6 @@ from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: E402
     settle,
     sheets,
     shell,
-)
-from desktop.tests.sheets.test_fixed_time_discard_on_escape import (  # noqa: E402
-    Script,
-    only_look,
-    press_escape,
 )
 from desktop.tests.sheets.test_material_escape_keeps_the_typing import (  # noqa: E402,F401
     focused,
@@ -140,35 +135,3 @@ def test_widgets_note_is_announced_when_it_appears_in_an_open_sheet(
         dialog.reject()
 
 
-@pytest.mark.parametrize("kind", ["block", "homework"])
-def test_widgets_sheet_opened_with_its_note_does_not_announce_it(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str
-) -> None:
-    said = _record(monkeypatch, "desktop.native.widgets.announce")
-    seen: dict = {}
-
-    def pick(dialog: QDialog) -> int:
-        dialog.title.setText("Piano lesson")
-        if isinstance(dialog, BlockDialog):
-            for index, check in enumerate(dialog.days):
-                check.setChecked(index == 0)
-        else:
-            dialog.when.setCurrentIndex(dialog.when.findData("fixed"))
-            dialog.when_day.buttons[0].setChecked(True)
-        press_escape(dialog)
-        return int(dialog.result())
-
-    def inspect(dialog: QDialog) -> int:
-        seen["said"] = list(said)
-        seen["note"] = dialog.moved_note.text()
-        return only_look(dialog)
-
-    Script(kind, monkeypatch, pick, inspect)
-    add = window._add_fixed if kind == "block" else window._add_homework
-    add()
-    pump(qapp)
-    _start_on(qapp, window.session, "wednesday", "2026-11-04")
-    add()
-    pump(qapp)
-    assert seen["note"] == FIRST
-    assert seen["said"] == []

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import html
-from collections.abc import Callable, Collection
 from copy import deepcopy
 from datetime import date, datetime, time, timedelta
 from functools import partial
@@ -14,7 +13,6 @@ from uuid import uuid4
 from pydantic import ValidationError
 from PySide6.QtCore import (
     Property,
-    QAbstractAnimation,
     QDate,
     QElapsedTimer,
     QEvent,
@@ -30,23 +28,17 @@ from PySide6.QtCore import (
     Qt,
     QTime,
     QTimer,
-    QVariantAnimation,
     Signal,
 )
 from PySide6.QtGui import (
-    QAction,
     QColor,
-    QCursor,
-    QFontMetrics,
     QHideEvent,
     QIcon,
     QKeyEvent,
     QKeySequence,
     QMouseEvent,
-    QMoveEvent,
     QPainter,
     QPainterPath,
-    QPaintEvent,
     QPalette,
     QPen,
     QPixmap,
@@ -68,9 +60,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QFrame,
-    QGraphicsOpacityEffect,
     QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLayout,
@@ -78,7 +68,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QMenu,
     QPlainTextEdit,
     QProxyStyle,
     QPushButton,
@@ -86,7 +75,6 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QScrollBar,
     QSizePolicy,
-    QSpacerItem,
     QSpinBox,
     QStackedWidget,
     QStyle,
@@ -99,14 +87,12 @@ from PySide6.QtWidgets import (
     QToolButton,
     QVBoxLayout,
     QWidget,
-    QWidgetAction,
 )
 from shiboken6 import isValid
 
 from backend import clock as wall_clock
 from backend.assignments import unplanned_minutes
 from backend.availability import spread_sessions
-from backend.explain import REASON_COPY
 from backend.models import ESTIMATE_MAX_MIN, Assignment, TimeBlock, WeekRequest, due_is_timed, parse_due
 from backend.slots import (
     DAY_END_MIN,
@@ -155,25 +141,18 @@ from desktop.native.look import (
     FOCUS_GAP_PX,
     FOCUS_RING_PX,
     RING_BUTTONS,
-    count_pill,
     readable_edge,
     resolved_palette,
 )
-from desktop.native.menus import Menu
 from desktop.native.motion import (
     EASE_MS,
     OUT,
-    SEGMENT_MS,
     Clock,
     app_level,
     appear,
-    between,
     duration,
     frame_interval_ms,
-    moves,
     screen_rate,
-    settle,
-    vanish,
 )
 from desktop.native.reuse import (
     AVAILABILITY_LIMIT,
@@ -191,7 +170,6 @@ from desktop.native.sheet_rules import (
     CUTOFFS,
     DUE_BY_HINT,
     DUE_PASSED,
-    ESTIMATE_ERROR,
     ESTIMATE_LONG,
     ESTIMATE_SHORT,
     LATE_WAIT,
@@ -218,7 +196,6 @@ from desktop.native.tokens import (
     SPACING,
     WEIGHT_REGULAR,
     WEIGHT_STRONG,
-    Shadow,
     fit_lightness,
     type_pt,
 )
@@ -251,12 +228,6 @@ DUE_DATE_FORMAT = "ddd d MMM yyyy"
 DATE_FORMAT = "ddd d MMM yyyy"
 DIALOG_MAX_HEIGHT = 700
 TYPE_HINT = "Tests are planned first, then quizzes, then everyday homework, then reading."
-PLAN_REVIEW_MAX = 132
-# A day with more homework than this is called overfull in the plan's list. The planner still places
-# earliest first (#41); the note only tells the student.
-OVERFULL_DAY_MIN = 3 * 60
-# How many rows of Unfinished homework show before the list scrolls: the half row says there is more.
-UNFINISHED_ROWS = 3.5
 SCHOOL_HOURS_NOTE = "The days and times you're at school, so nothing is planned then."
 ROUTINE_LIST_HEIGHT = 96
 REPLAN_TIP = (
@@ -493,174 +464,10 @@ def _choice_tab_stops(buttons: list[QAbstractButton], index: int) -> None:
         button.setAccessibleDescription(f"{at + 1} of {len(buttons)}")
 
 
-class SegmentTrack(QGroupBox):
-    """A segmented control's track, a pill, with the chosen segment raised on it as a pill of its own
-    and lifted with the small shadow. Painted, since a stylesheet's corner cannot follow a height
-    that the text size sets, and so the chosen pill can slide to the segment chosen next (decision
-    32 of 0.17), or cross-fade to it where things may not travel. The stylesheet gives the colours:
-    `alternate-background-color` is the track, `selection-background-color` the chosen segment and
-    `color` an outline, drawn when it differs from the track; `qproperty-shade` is the shadow's
-    opacity out of 255, or 0 for none."""
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        # QGroupBox is what Qt exposes as one grouping to a screen reader. Flat and untitled, it
-        # draws nothing of its own; paintEvent draws the track.
-        self.setTitle("")
-        self.setFlat(True)
-        self.setAccessibleName("Planner view")
-        self._buttons: list[Segment] = []
-        self._group = QButtonGroup(self)
-        self._group.setExclusive(True)
-        self._shade = 0
-        self._ring = QColor("transparent")
-        # Where the chosen pill was last drawn, and where it leaves from for the segment just chosen.
-        self._drawn: QRectF | None = None
-        self._from = QRectF()
-        self._slide = Clock(self)
-
-    def sizeHint(self) -> QSize:  # noqa: N802
-        return self.minimumSizeHint()
-
-    def minimumSizeHint(self) -> QSize:  # noqa: N802
-        # QGroupBox reserves a title band. This track has no title, so the row would grow by that
-        # band and push Month off a 1024x640 window.
-        if not self._buttons:
-            return QSize(0, 0)
-        gaps = 2 * (len(self._buttons) - 1)
-        width = sum(button.sizeHint().width() for button in self._buttons) + gaps + 6
-        height = max(button.sizeHint().height() for button in self._buttons)
-        return QSize(width, height)
-
-    def _get_shade(self) -> int:
-        return self._shade
-
-    def _set_shade(self, value: int) -> None:
-        self._shade = value
-        self.update()
-
-    shade = Property(int, _get_shade, _set_shade)
-
-    def _get_ring(self) -> QColor:
-        return self._ring
-
-    def _set_ring(self, value: QColor) -> None:
-        self._ring = QColor(value)
-        self.update()
-
-    ring = Property(QColor, _get_ring, _set_ring)
-
-    def add(self, button: QAbstractButton) -> None:
-        self.layout().addWidget(button)
-        self._buttons.append(button)
-        self._group.addButton(button)
-        button.installEventFilter(self)
-        button.toggled.connect(self._chosen)
-        chosen = next((index for index, item in enumerate(self._buttons) if item.isChecked()), 0)
-        _choice_tab_stops(self._buttons, chosen)
-
-    def _chosen(self, on: bool) -> None:
-        # The chosen segment's words are heavier and a pixel wider, set by the stylesheet, which does not
-        # tell the layout: every segment and the track ask again, or the old choice keeps the new one's pixel.
-        for button in self._buttons:
-            button.updateGeometry()
-        self.layout().invalidate()
-        self.updateGeometry()
-        if on:
-            selected = self.sender()
-            _choice_tab_stops(self._buttons, self._buttons.index(selected))
-        length = duration(SEGMENT_MS)
-        if on and self._drawn is not None and self.isVisible() and length:
-            self._from = QRectF(self._drawn)
-            self._slide.stop()
-            self._slide.start(length, lambda _at: self.update())
-        self.update()
-
-    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
-        if watched not in self._buttons or event.type() != QEvent.Type.KeyPress:
-            return super().eventFilter(watched, event)
-        current = self._buttons.index(watched)
-        target = _choice_key_target(event.key(), current, len(self._buttons))
-        if target is None:
-            return super().eventFilter(watched, event)
-        button = self._buttons[target]
-        button.setProperty("keyfocus", True)
-        button.style().unpolish(button)
-        button.style().polish(button)
-        button.click()
-        button.setFocus(Qt.FocusReason.OtherFocusReason)
-        return True
-
-    def _pills(self, target: QRectF) -> list[tuple[QRectF, float]]:
-        """The chosen pill as drawn now, with its opacity: sliding from where it was, or where things
-        may not travel, fading from there to here."""
-        if self._slide.state() == QAbstractAnimation.State.Stopped:
-            return [(target, 1.0)]
-        share = OUT.valueForProgress(self._slide.currentTime() / max(self._slide.duration(), 1))
-        start = self._from
-        if not moves():
-            return [(start, 1 - share), (target, share)]
-        return [(between(start, target, share), 1.0)]
-
-    def paintEvent(self, event: object) -> None:  # noqa: N802
-        colours = self.palette()
-        track = colours.color(QPalette.ColorRole.AlternateBase)
-        outline = colours.color(QPalette.ColorRole.WindowText)
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        box = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        painter.setPen(QPen(outline, 1) if outline != track else Qt.PenStyle.NoPen)
-        painter.setBrush(track)
-        painter.drawRoundedRect(box, box.height() / 2, box.height() / 2)
-        chosen = next(
-            (b for b in self.findChildren(QAbstractButton) if b.isChecked() and b.isVisible()), None
-        )
-        self._drawn = None
-        if chosen is not None:
-            painter.setPen(Qt.PenStyle.NoPen)
-            shade = self._shade
-            for pill, opacity in self._pills(QRectF(chosen.geometry())):
-                self._drawn = pill
-                radius = pill.height() / 2
-                painter.setOpacity(opacity)
-                painter.setPen(Qt.PenStyle.NoPen)
-                # The small shadow (decision 6), 0 1 3: three widening rings, each a third of its opacity.
-                for spread in (1.5, 1.0, 0.5) if shade else ():
-                    painter.setBrush(QColor(0, 0, 0, round(shade / 3)))
-                    painter.drawRoundedRect(
-                        pill.adjusted(-spread, 1 - spread, spread, 1 + spread), radius, radius
-                    )
-                painter.setPen(QPen(self._ring, 1) if self._ring.alpha() else Qt.PenStyle.NoPen)
-                painter.setBrush(colours.color(QPalette.ColorRole.Highlight))
-                painter.drawRoundedRect(pill, radius, radius)
-        painter.end()
 
 
-# Border 2px each side, plus 8px of horizontal padding each side (the comfortable view rule).
-_VIEW_CHROME = 20
 
 
-class Segment(QRadioButton):
-    """One choice on a SegmentTrack. Width is the words at the weight it is wearing, plus the
-    same padding as the others."""
-
-    def __init__(self, text: str, parent: QWidget | None = None) -> None:
-        super().__init__(text, parent)
-        # Minimum would let the row hand out spare pixels, and the gaps would stop matching.
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-
-    def sizeHint(self) -> QSize:  # noqa: N802
-        hint = super().sizeHint()
-        words = self.text()
-        worn = QFontMetrics(
-            weighted(self.font(), WEIGHT_STRONG if self.isChecked() else WEIGHT_REGULAR)
-        ).horizontalAdvance(words)
-        # Border 2px each side plus the view rule's horizontal padding. Taken from the style's
-        # own hint it flickers by a pixel between labels, and the gaps stop matching.
-        return QSize(worn + _VIEW_CHROME, hint.height())
-
-    def minimumSizeHint(self) -> QSize:  # noqa: N802
-        return self.sizeHint()
 
 
 # How far a dialog's content sits in from its edges. Qt's styles give about 11 px.
@@ -702,17 +509,6 @@ def use_app_style(app: QApplication) -> None:
         app.setStyle(AppStyle())
 
 
-def _validation_text(error: Exception) -> str:
-    loc: tuple[object, ...] = ()
-    message = str(error)
-    if isinstance(error, ValidationError) and error.errors():
-        first = error.errors()[0]
-        loc = tuple(first.get("loc") or ())
-        message = str(first.get("msg") or error)
-    names = {str(part) for part in loc}
-    if names & {"estimate_min", "duration_min"} or "multiple of 15" in message:
-        return ESTIMATE_ERROR
-    return message
 
 
 def fit_scroll_dialog(dialog: QDialog, *, min_height: int = DIALOG_USABLE_HEIGHT) -> None:
@@ -731,20 +527,6 @@ def fit_scroll_dialog(dialog: QDialog, *, min_height: int = DIALOG_USABLE_HEIGHT
 TOAST_MS = 6000
 # A toast with a button stays long enough to reach. Twice the plain 6s is 12s, past the 10s floor.
 ACTION_TOAST_MS = TOAST_MS * 2
-# Leaving the toast starts its clock again with at least this long still to go.
-TOAST_RESUME_MS = 4000
-# The card fades this long when the same notice is kept. Off skips it; Reduce still fades.
-TOAST_FLASH_MS = 150
-TOAST_MARGIN = 24
-TOAST_MIN_WIDTH = 280
-# Wide enough for a short notice's words on one line beside Undo's widest countdown.
-TOAST_MAX_WIDTH = 440
-# Room round the toast's card for its shadow.
-TOAST_SHADOW = 4
-# Between the toast's bottom edge and the foot of the hours, and between its words and its button.
-TOAST_FOOT = 16
-TOAST_GAP = 12
-TOAST_MIN_HEIGHT = 44
 
 
 class FittedLabel(QLabel):
@@ -868,792 +650,16 @@ class StepCrumb(QPushButton):
         self.setToolTip(tooltip)
 
 
-class PlanButton(FittedButton):
-    """Plan my homework: the window shrinks More to its icon before this shortens. The window picks
-    its words (`NativeWindow._fit_plan_and_more`), so it asks for the room the words shown take."""
 
-    def __init__(self, text: str, short: str, parent: QWidget | None = None) -> None:
-        super().__init__(text, short, parent)
-        self._count = 0
-        self._pill: tuple[str, str] | None = None
 
-    def set_texts(self, text: str, short: str) -> None:
-        super().set_texts(text, short)
-        self._name_count()
 
-    def set_count(self, count: int) -> None:
-        """How much homework still needs a time, as a pill beside Plan."""
-        if count == self._count:
-            self._name_count()
-            return
-        self._count = count
-        self._name_count()
-        self.update()
 
-    def _name_count(self) -> None:
-        verb = "needs" if self._count == 1 else "need"
-        self.setAccessibleName(
-            f"{self._full}, {self._count} homework still {verb} time" if self._count else self._full
-        )
 
-    def set_palette(self, palette: dict) -> None:
-        self._pill = count_pill(palette)
-        self.update()
 
-    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
-        super().paintEvent(event)
-        if not self._count or self._pill is None:
-            return
-        fill, ink = self._pill
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setFont(weighted(caption(self.font()), WEIGHT_STRONG))
-        words = str(self._count) if self._count < 100 else "99+"
-        height = painter.fontMetrics().height() + 2
-        width = max(height, painter.fontMetrics().horizontalAdvance(words) + 8)
-        pill = QRectF(self.width() - width - 1, 1, width, height)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(fill))
-        painter.drawRoundedRect(pill, height / 2, height / 2)
-        painter.setPen(QColor(ink))
-        painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, words)
-        painter.end()
 
-    def sizeHint(self) -> QSize:  # noqa: N802
-        return QSize(self._wide(self.text()), QPushButton.sizeHint(self).height())
 
-    def minimumSizeHint(self) -> QSize:  # noqa: N802
-        # Shown as "Plan", shorter than its short form, it asks no more: the bar decides whether it
-        # has one row from its parts' smallest.
-        shown = self.text()
-        if shown and self._wide(shown) < self._wide(self._short):
-            return QSize(self._wide(shown), super().minimumSizeHint().height())
-        return super().minimumSizeHint()
 
-    def _fit(self) -> None:
-        # NativeWindow._fit_plan_and_more sets both labels; a resize mid-layout must not reset them.
-        return
 
-    def changeEvent(self, event: QEvent) -> None:  # noqa: N802
-        super().changeEvent(event)
-        _refit_bar(self, event)
-
-
-def _refit_bar(button: QPushButton, event: QEvent) -> None:
-    """Large text reaches Plan and More after the window has fitted the bar. Fitted again only on
-    the next resize, the bar's buttons moved under the pointer a moment after the change."""
-    if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange):
-        host = button.window()
-        # The window's own fit restyles More as it tries each step; refitting for that restyled it
-        # again on the next turn, for ever, whenever the bar was tight (a hung test at 95% CPU).
-        if getattr(host, "_fitting_plan_row", False):
-            return
-        if hasattr(host, "_fit_plan_and_more"):
-            host._fit_plan_and_more()
-            host._schedule_bar_refit()
-
-
-class MoreButton(FittedButton):
-    """More in the top bar: its words, then its icon alone when the row is tighter still."""
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__("More", "", parent)
-        self.setIconSize(QSize(20, 20))
-        icons.tint(self, "ellipsis")
-        self._count = 0
-        self._pill: tuple[str, str] | None = None
-
-    def sizeHint(self) -> QSize:  # noqa: N802
-        # As Plan's: the window picks the words, so this asks for the room of those shown.
-        return QSize(self._wide(self.text()), QPushButton.sizeHint(self).height())
-
-    def set_count(self, count: int) -> None:
-        """How much homework still needs a time, as a pill over the button's corner. It is painted, not
-        part of the button's words, so a count coming or going never changes the size the top bar sees."""
-        if count == self._count:
-            return
-        self._count = count
-        verb = "needs" if count == 1 else "need"
-        self.setAccessibleName(f"{self._full}, {count} homework still {verb} time" if count else self._full)
-        self.update()
-
-    def set_palette(self, palette: dict) -> None:
-        self._pill = count_pill(palette)
-        self.update()
-
-    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
-        super().paintEvent(event)
-        if not self._count or self._pill is None:
-            return
-        fill, ink = self._pill
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setFont(weighted(caption(self.font()), WEIGHT_STRONG))
-        words = str(self._count) if self._count < 100 else "99+"
-        height = painter.fontMetrics().height() + 2
-        width = max(height, painter.fontMetrics().horizontalAdvance(words) + 8)
-        pill = QRectF(self.width() - width - 1, 1, width, height)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(fill))
-        painter.drawRoundedRect(pill, height / 2, height / 2)
-        painter.setPen(QColor(ink))
-        painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, words)
-        painter.end()
-
-    def _fit(self) -> None:
-        # NativeWindow._fit_plan_and_more sets both labels; a resize mid-layout must not reset them.
-        return
-
-    def changeEvent(self, event: QEvent) -> None:  # noqa: N802
-        super().changeEvent(event)
-        _refit_bar(self, event)
-
-
-class EndsLayout(QLayout):
-    """Two groups on one row, the first at its left and the second at its right, each as wide as it
-    asks while there is room. Short of room, the first gives way first, down to its smallest, then
-    the second; with no room for both at their smallest, the second goes under the first, still at
-    the right. So the top bar is never squeezed until its words are cut."""
-
-    def __init__(self, parent: QWidget | None = None, gap: int = 6, between: int | None = None) -> None:
-        super().__init__(parent)
-        self._items: list[QLayoutItem] = []
-        # `gap` between the rows once the second group goes under; `between` the groups side by side.
-        self._gap = gap
-        self.between = gap if between is None else between
-
-    def add_group(self, group: QLayout) -> None:
-        # A layout, not a widget holding one: a change inside it reaches the window's layout at once.
-        self.addChildLayout(group)
-        self._items.append(group)
-
-    def addItem(self, item: QLayoutItem) -> None:  # noqa: N802 - Qt virtual
-        self._items.append(item)
-
-    def count(self) -> int:
-        return len(self._items)
-
-    def itemAt(self, index: int) -> QLayoutItem | None:  # noqa: N802 - Qt virtual
-        return self._items[index] if 0 <= index < len(self._items) else None
-
-    def takeAt(self, index: int) -> QLayoutItem | None:  # noqa: N802 - Qt virtual
-        return self._items.pop(index) if 0 <= index < len(self._items) else None
-
-    def expandingDirections(self) -> Qt.Orientation:  # noqa: N802 - Qt virtual
-        return Qt.Orientation.Horizontal
-
-    def hasHeightForWidth(self) -> bool:  # noqa: N802 - Qt virtual
-        return True
-
-    def heightForWidth(self, width: int) -> int:  # noqa: N802 - Qt virtual
-        return self._arrange(QRect(0, 0, width, 0), place=False)
-
-    def setGeometry(self, rect: QRect) -> None:  # noqa: N802 - Qt virtual
-        super().setGeometry(rect)
-        self._arrange(rect, place=True)
-
-    def sizeHint(self) -> QSize:  # noqa: N802 - Qt virtual
-        hints = [item.sizeHint() for item in self._items]
-        return self._framed(
-            sum(hint.width() for hint in hints) + self.between * (len(hints) - 1),
-            max((hint.height() for hint in hints), default=0),
-        )
-
-    def minimumSize(self) -> QSize:  # noqa: N802 - Qt virtual
-        smallest = [item.minimumSize() for item in self._items]
-        return self._framed(
-            max((size.width() for size in smallest), default=0),
-            max((size.height() for size in smallest), default=0),
-        )
-
-    def _framed(self, width: int, height: int) -> QSize:
-        margins = self.contentsMargins()
-        return QSize(width + margins.left() + margins.right(), height + margins.top() + margins.bottom())
-
-    def _arrange(self, rect: QRect, place: bool) -> int:
-        margins = self.contentsMargins()
-        area = rect.adjusted(margins.left(), margins.top(), -margins.right(), -margins.bottom())
-        shown = [item for item in self._items if not item.isEmpty()]
-        if len(shown) != 2:
-            tall = max((item.sizeHint().height() for item in shown), default=0)
-            for item in shown if place else ():
-                item.setGeometry(QRect(area.x(), area.y(), area.width(), tall))
-            return tall + margins.top() + margins.bottom()
-        first, second = shown
-        least = first.minimumSize().width()
-        if least + self.between + second.minimumSize().width() <= area.width():
-            right = min(second.sizeHint().width(), area.width() - self.between - least)
-            left = min(first.sizeHint().width(), area.width() - self.between - right)
-            tall = max(first.sizeHint().height(), second.sizeHint().height())
-            if place:
-                first.setGeometry(QRect(area.x(), area.y(), left, tall))
-                second.setGeometry(QRect(area.x() + area.width() - right, area.y(), right, tall))
-            return tall + margins.top() + margins.bottom()
-        top, below = first.sizeHint().height(), second.sizeHint().height()
-        if place:
-            first.setGeometry(QRect(area.x(), area.y(), min(first.sizeHint().width(), area.width()), top))
-            wide = min(second.sizeHint().width(), area.width())
-            second.setGeometry(QRect(area.x() + area.width() - wide, area.y() + top + self._gap, wide, below))
-        return top + self._gap + below + margins.top() + margins.bottom()
-
-
-class ToastProgress(QWidget):
-    """A thin line along the bottom of a toast, as long as the time the toast has left."""
-
-    def __init__(self, parent: QWidget) -> None:
-        super().__init__(parent)
-        self.setObjectName("toastProgress")
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self.setFixedHeight(2)
-        self._colour = QColor("#a1bbe4")
-        self._colour.setAlphaF(0.6)
-
-    def set_colour(self, hex_colour: str) -> None:
-        colour = QColor(hex_colour)
-        colour.setAlphaF(0.6)
-        self._colour = colour
-        self.update()
-
-    def colour(self) -> QColor:
-        return QColor(self._colour)
-
-    def paintEvent(self, _event: object) -> None:  # noqa: N802
-        painter = QPainter(self)
-        painter.fillRect(self.rect(), self._colour)
-        painter.end()
-
-
-class Toast(QWidget):
-    """One notice at a time, bottom right of the page it was said on, with optional actions.
-
-    Dark with light words, the 16 corners of a sheet and the small shadow (decision 20 of 0.17). The
-    toast itself is the part that moves and fades; the painted card inside it carries the shadow, as a
-    widget holds one effect. The toast and its words let the pointer through to what is under them.
-    The buttons are laid over the card as the window's own children, since Qt passes a widget's
-    clicks on only with its children's. `over` is the page area it sits in; while that is hidden,
-    the window.
-    """
-
-    def __init__(self, parent: QWidget, over: QWidget) -> None:
-        super().__init__(parent)
-        self._over = over
-        self.setObjectName("toastHost")
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        around = QHBoxLayout(self)
-        around.setContentsMargins(TOAST_SHADOW, TOAST_SHADOW, TOAST_SHADOW, TOAST_SHADOW)
-        self.card = QFrame()
-        self.card.setObjectName("toast")
-        self.card.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self.card.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.card.setMinimumHeight(TOAST_MIN_HEIGHT)
-        around.addWidget(self.card)
-        row = QHBoxLayout(self.card)
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(TOAST_GAP)
-        self.label = QLabel()
-        self.label.setObjectName("toastText")
-        self.label.setWordWrap(True)
-        # Undo's key sits under the words, so it takes no width from them.
-        self._words = QVBoxLayout()
-        self._words.setContentsMargins(0, 0, 0, 0)
-        self._words.setSpacing(0)
-        self._words.addWidget(self.label)
-        self.shortcut_hint = QLabel("Ctrl+Z", self.card)
-        self.shortcut_hint.setObjectName("toastShortcut")
-        self.shortcut_hint.hide()
-        self._words.addWidget(self.shortcut_hint)
-        row.addLayout(self._words, 1)
-        # Room for the button, which is not in this layout.
-        self._slot = QSpacerItem(0, 0, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        row.addItem(self._slot)
-        self.button = QPushButton(parent)
-        self.button.setObjectName("toastButton")
-        self.button.hide()
-        self.button.clicked.connect(self._pressed)
-        self.secondary_button = QPushButton(parent)
-        self.secondary_button.setObjectName("toastSecondaryButton")
-        self.secondary_button.hide()
-        self.secondary_button.clicked.connect(self._secondary_pressed)
-        self.close_button = QPushButton("×", parent)
-        self.close_button.setObjectName("toastCloseButton")
-        self.close_button.setAccessibleName("Close notice")
-        self.close_button.hide()
-        self.close_button.clicked.connect(self._close_pressed)
-        self._callback: Callable[[], None] | None = None
-        self._secondary_callback: Callable[[], None] | None = None
-        self._close_callback: Callable[[], None] | None = None
-        self._dismiss_callback: Callable[[], None] | None = None
-        self._card = False
-        self._action_colour = "#a1bbe4"
-        self._timer = QTimer(self)
-        self._timer.setSingleShot(True)
-        self._timer.setInterval(TOAST_MS)
-        self._timer.timeout.connect(self._go)
-        # How long this notice was given, and how much was left when the pointer or keyboard held it.
-        self._limit = TOAST_MS
-        self._held_ms = TOAST_MS
-        self._paused = False
-        self._pointer = False
-        self._keys = False
-        self._window_paused = False
-        self._progress = ToastProgress(self.card)
-        self._progress.hide()
-        self._tick = QTimer(self)
-        # Often enough for the line to shrink smoothly; the seconds on Undo change only when they do.
-        self._tick.setInterval(50)
-        self._tick.timeout.connect(self.sync_progress)
-        self._pointer_tick = QTimer(self)
-        self._pointer_tick.setInterval(100)
-        self._pointer_tick.timeout.connect(self._poll_state)
-        # The card lets the pointer through, so the window's events say whether it is over the card.
-        self.button.installEventFilter(self)
-        self.secondary_button.installEventFilter(self)
-        self.close_button.installEventFilter(self)
-        host = self.parentWidget()
-        if host is not None:
-            host.installEventFilter(self)
-        app = QApplication.instance()
-        if app is not None:
-            app.applicationStateChanged.connect(self._poll_state)
-        # The window's Animations level. A notice rises into place and fades when it goes.
-        self.motion = "normal"
-        # When set (the rig's held clock), Undo seconds and hide follow this instead of a wall timer.
-        self.clock_ms: Callable[[], int] | None = None
-        self._clock_start = 0
-        self.hide()
-
-    def set_look(self, action_colour: str, shadow: Shadow | None, dark: bool = False) -> None:
-        """The colour of the toast's button, for its icon, and the shadow, or none in a look without."""
-        self._action_colour = action_colour
-        if shadow is None:
-            self.card.setGraphicsEffect(None)
-        else:
-            lift(self.card, shadow, dark)
-        self._dress_button()
-
-    def text(self) -> str:
-        return self.label.text()
-
-    def show_message(
-        self,
-        text: str,
-        button: str = "",
-        callback: Callable[[], None] | None = None,
-        *,
-        secondary_button: str = "",
-        secondary_callback: Callable[[], None] | None = None,
-        close_callback: Callable[[], None] | None = None,
-        dismiss_callback: Callable[[], None] | None = None,
-        filled: bool = False,
-        card: bool = False,
-    ) -> None:
-        self.label.setText(text)
-        self.setAccessibleName(text)
-        self.setAccessibleDescription(text)
-        self.button.setText(
-            f"Undo · {(ACTION_TOAST_MS + 999) // 1000} s" if button == "Undo" else button
-        )
-        self._dress_button()
-        self._fit_button(button == "Undo")
-        self._callback = callback if button else None
-        self.secondary_button.setText(secondary_button)
-        self._secondary_callback = secondary_callback if secondary_button else None
-        self._close_callback = close_callback
-        self._dismiss_callback = dismiss_callback
-        self.button.setProperty("filled", filled)
-        # The notice as a card of the look rather than the dark toast (the 1.0.0 look notice).
-        # The action and close sit over the card as the window's children, so they take the
-        # card state as a property; descendant selectors never reach them.
-        self._card = card
-        for piece in (self.card, self.label, self.button, self.secondary_button, self.close_button):
-            piece.setProperty("card", card)
-            piece.style().unpolish(piece)
-            piece.style().polish(piece)
-            piece.update()
-        self.secondary_button.setAccessibleName(secondary_button)
-        self.button.setAccessibleName("Undo" if button == "Undo" else button)
-        sizes = [
-            self._button_size() if button else QSize(0, 0),
-            self.secondary_button.sizeHint() if secondary_button else QSize(0, 0),
-            self.close_button.sizeHint() if close_callback is not None else QSize(0, 0),
-        ]
-        visible_sizes = [size for size in sizes if size.width()]
-        gap = TOAST_GAP if len(visible_sizes) > 1 else 0
-        self._slot.changeSize(
-            sum(size.width() for size in visible_sizes) + gap * (len(visible_sizes) - 1),
-            max((size.height() for size in visible_sizes), default=0),
-            QSizePolicy.Policy.Fixed,
-            QSizePolicy.Policy.Fixed,
-        )
-        self.card.layout().invalidate()
-        # The last notice's rise ends where it was going, and its fade-out ends it, so this one
-        # comes in on its own.
-        settle(self)
-        settle(self.button)
-        # The held clock must be armed before show(): reposition resizes, and that would otherwise
-        # see clock_ms() against a zero start and hide the toast at once. The wall timer, pause and
-        # keys stay after show, as they did, so a Plan Undo is not replaced mid-rise.
-        if self.clock_ms is not None:
-            self._clock_start = self.clock_ms()
-            self._timer.stop()
-        # Shown before reposition measures the card, so the hint has room beside the words.
-        self.shortcut_hint.setVisible(button == "Undo")
-        was_shown = self.isVisible()
-        self.show()
-        self.reposition()
-        self.raise_()
-        self.button.setVisible(bool(button))
-        self.secondary_button.setVisible(bool(secondary_button))
-        self.close_button.setVisible(close_callback is not None)
-        self._place_button()
-        self.button.raise_()
-        self.secondary_button.raise_()
-        self.close_button.raise_()
-        # Something laid over the whole window, such as Ctrl+K, stays over a notice said under it:
-        # raised above it, the notice stayed bright over the dimmed window.
-        host = self.parentWidget()
-        if host is not None:
-            direct = Qt.FindChildOption.FindDirectChildrenOnly
-            for cover in host.findChildren(QWidget, options=direct):
-                if cover.property("covers") and cover.isVisible():
-                    cover.raise_()
-        if not was_shown:
-            # The button is the window's own child, so it rises beside the card rather than with it.
-            appear(self, self.motion, rise=True)
-            appear(self.button, self.motion, rise=True)
-            appear(self.secondary_button, self.motion, rise=True)
-            appear(self.close_button, self.motion, rise=True)
-        announce(self, text)
-        if button or secondary_button or close_callback is not None:
-            self._set_tab_order()
-        # One with something to press stays long enough to reach for it.
-        has_action = bool(button or secondary_button or close_callback is not None)
-        self._limit = ACTION_TOAST_MS if has_action else TOAST_MS
-        self._paused = False
-        self._keys = self.button.hasFocus()
-        self._pointer = False
-        if self.clock_ms is not None:
-            self._tick.start()
-        else:
-            self._timer.start(self._limit)
-        self._progress.set_colour(self._action_colour)
-        self.sync_progress()
-        self._pointer = self._cursor_over()
-        self._pointer_tick.start() if has_action else self._pointer_tick.stop()
-        self._sync_pause()
-
-    def _dress_button(self) -> None:
-        # Undo is the one button with a picture: the arrow back, in the button's own colour.
-        undo = self.button.text().startswith("Undo")
-        self.button.setIcon(icons.icon("undo-2", self._action_colour) if undo else QIcon())
-        self.button.setIconSize(QSize(14, 14))
-
-    def reposition(self) -> None:
-        host = self.parentWidget()
-        if host is None:
-            return
-        over = self._over
-        area = QRect(over.mapTo(host, QPoint(0, 0)), over.size()) if over.isVisible() else host.rect()
-        # A wrapped label asks for a narrow width, which broke short notices after their
-        # second-last word. Measured unwrapped, a notice keeps one line until the room runs out.
-        # The words sit in a layout of their own, which keeps its cached size until told otherwise.
-        self.label.setWordWrap(False)
-        self._words.invalidate()
-        natural = self.sizeHint().width()
-        self.label.setWordWrap(True)
-        self._words.invalidate()
-        room = max(120, min(TOAST_MAX_WIDTH, area.width() - 2 * TOAST_FOOT) + 2 * TOAST_SHADOW)
-        width = min(max(natural, TOAST_MIN_WIDTH), room)
-        # Wrapping was switched back on a moment ago; asked before this, the layouts still gave the
-        # height of one unwrapped line and the second line was cut.
-        self.card.layout().invalidate()
-        self.layout().invalidate()
-        height = max(self.heightForWidth(width), self.minimumSizeHint().height())
-        # Bottom right of the page, 16 pixels in from its corner, and never past the window's foot.
-        # A design with a bar of its own along the foot (Retro's taskbar) is kept clear of.
-        page = over.currentWidget() if isinstance(over, QStackedWidget) else over
-        inset = page.bottom_inset() if hasattr(page, "bottom_inset") else 0
-        right = area.left() + area.width() - TOAST_FOOT + TOAST_SHADOW
-        bottom = min(area.top() + area.height(), host.height()) - inset - TOAST_FOOT + TOAST_SHADOW
-        self.setGeometry(max(0, right - width), max(0, bottom - height), width, height)
-
-    def moveEvent(self, event: QMoveEvent) -> None:  # noqa: N802
-        super().moveEvent(event)
-        self._place_button()
-
-    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
-        super().resizeEvent(event)
-        self._place_button()
-        self.sync_progress()
-
-    def hideEvent(self, event: QHideEvent) -> None:  # noqa: N802
-        super().hideEvent(event)
-        # Not when the window is: this notice comes back with it.
-        if self.isHidden():
-            self._timer.stop()
-            self._tick.stop()
-            self._pointer_tick.stop()
-            self._paused = False
-            self.button.hide()
-            self.secondary_button.hide()
-            self.close_button.hide()
-            self._progress.hide()
-
-    def _fit_button(self, counts: bool) -> None:
-        """Undo's seconds tick down, so it keeps the width of its widest count and the words beside
-        it never lose room as the number changes."""
-        if not counts:
-            self.button.setMinimumWidth(0)
-            return
-        shown = self.button.text()
-        digits = len(str((ACTION_TOAST_MS + 999) // 1000))
-        self.button.setMinimumWidth(0)
-        self.button.setText("Undo · " + "8" * digits + " s")
-        width = self.button.sizeHint().width()
-        self.button.setText(shown)
-        self.button.setMinimumWidth(width)
-
-    def _button_size(self) -> QSize:
-        hint = self.button.sizeHint()
-        return QSize(max(hint.width(), self.button.minimumWidth()), hint.height())
-
-    def _place_button(self) -> None:
-        inside = self.card.contentsRect().translated(self.card.pos())
-        right = self.x() + inside.right() + 1
-        center_y = self.y() + inside.top() + inside.height() // 2
-        for button in (self.close_button, self.secondary_button, self.button):
-            if button.isHidden():
-                continue
-            size = self._button_size() if button is self.button else button.sizeHint()
-            button.setGeometry(
-                right - size.width(),
-                center_y - size.height() // 2,
-                size.width(),
-                size.height(),
-            )
-            right -= size.width() + TOAST_GAP
-
-    def bump(self) -> None:
-        """The same notice again: its time starts over, and the card fades once when animations are on."""
-        # The rise from when it first appeared is still on this widget. Replacing it mid-fade deletes
-        # the effect the clock is still painting.
-        settle(self)
-        self._limit = ACTION_TOAST_MS if self.button.text() else TOAST_MS
-        self._paused = False
-        self._keys = self.button.hasFocus()
-        self._pointer = self._cursor_over()
-        if self._pointer or self._keys:
-            self._held_ms = self._limit
-            self._paused = True
-            self._timer.stop()
-            self._tick.stop()
-        elif self.clock_ms is not None:
-            self._clock_start = self.clock_ms()
-            self._timer.stop()
-            self.sync_progress()
-        else:
-            self._timer.start(self._limit)
-            self.sync_progress()
-        self._flash()
-
-    def sync_progress(self) -> None:
-        """The line matches the time left. It is hidden when animations are off or reduced, and it
-        stays put while the toast is paused."""
-        if self.clock_ms is not None and self.isVisible() and not self._paused and self._left_ms() <= 0:
-            self._go()
-            return
-        show = self.isVisible() and self.motion not in ("off", "reduce") and self._limit > 0
-        self._progress.setVisible(show)
-        self._sync_button_text()
-        if not show:
-            if self.button.isVisible() and not self._paused:
-                self._tick.start()
-            else:
-                self._tick.stop()
-            return
-        width = self.card.width()
-        span = round(width * self._fraction())
-        self._progress.setGeometry(0, max(0, self.card.height() - 2), max(span, 0), 2)
-        self._progress.raise_()
-        if self._paused:
-            self._tick.stop()
-        elif not self._tick.isActive():
-            self._tick.start()
-
-    def _fraction(self) -> float:
-        if self._limit <= 0:
-            return 0.0
-        return max(0.0, min(1.0, self._left_ms() / self._limit))
-
-    def _left_ms(self) -> int:
-        if self._paused:
-            return self._held_ms
-        if self.clock_ms is not None:
-            return max(0, self._limit - (self.clock_ms() - self._clock_start))
-        left = self._timer.remainingTime()
-        return left if left >= 0 else 0
-
-    def _sync_pause(self) -> None:
-        self._window_paused = self._window_unavailable()
-        hold = self._pointer or self._keys or self._window_paused
-        if hold and not self._paused:
-            if self.clock_ms is not None:
-                self._held_ms = self._left_ms()
-            else:
-                left = self._timer.remainingTime()
-                self._held_ms = left if left >= 0 else self._limit
-            self._timer.stop()
-            self._tick.stop()
-            self._paused = True
-            return
-        if not hold and self._paused:
-            self._paused = False
-            if self.clock_ms is not None:
-                self._clock_start = self.clock_ms() - (self._limit - self._held_ms)
-                self._tick.start()
-            else:
-                self._timer.start(max(self._held_ms, TOAST_RESUME_MS))
-            self.sync_progress()
-
-    def _cursor_over(self) -> bool:
-        if not self.isVisible():
-            return False
-        return self._over_point(QCursor.pos())
-
-    def _window_unavailable(self) -> bool:
-        host = self.parentWidget()
-        return host is None or not host.isVisible() or host.isMinimized() or not host.isActiveWindow()
-
-    def _poll_state(self) -> None:
-        if self.isHidden() or all(
-            button.isHidden() for button in (self.button, self.secondary_button, self.close_button)
-        ):
-            return
-        pointer = self._cursor_over() if self.isVisible() else False
-        if pointer != self._pointer:
-            self._pointer = pointer
-        self._sync_pause()
-
-    def _sync_button_text(self) -> None:
-        if not self.button.isVisible() or not self.button.text().startswith("Undo"):
-            return
-        seconds = max(0, (self._left_ms() + 999) // 1000)
-        said = f"Undo · {seconds} s"
-        if self.button.text() != said:
-            self.button.setText(said)
-        self.button.setAccessibleName("Undo")
-
-    def _set_tab_order(self) -> None:
-        # Only the order is set, never read back: the chain's next widget from the hours is the window
-        # itself, and asking for it (nextInFocusChain) made PySide drop the window's menu actions. A
-        # hidden button is skipped by Tab, so it can stay where it was put.
-        host = self.parentWidget()
-        surfaces = host._week_surfaces() if host is not None and hasattr(host, "_week_surfaces") else []
-        canvas = next((surface for surface in surfaces if surface.isVisible()), None)
-        if canvas is None:
-            return
-        QWidget.setTabOrder(canvas, self.button)
-        QWidget.setTabOrder(self.button, self.secondary_button)
-        QWidget.setTabOrder(self.secondary_button, self.close_button)
-
-    def _over_point(self, pos: QPoint) -> bool:
-        on_card = self.card.rect().contains(self.card.mapFromGlobal(pos))
-        on_button = any(
-            button.isVisible() and button.rect().contains(button.mapFromGlobal(pos))
-            for button in (self.button, self.secondary_button, self.close_button)
-        )
-        return on_card or on_button
-
-    def _global_point(self, event: QEvent) -> QPoint | None:
-        point = getattr(event, "globalPosition", None)
-        if not callable(point):
-            return None
-        return point().toPoint()
-
-    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
-        kind = event.type()
-        buttons = (self.button, self.secondary_button, self.close_button)
-        if (
-            kind == QEvent.Type.KeyPress
-            and event.key() == Qt.Key.Key_Escape
-            and self._card
-            and self.isVisible()
-            and (watched in buttons or watched is self.parentWidget())
-        ):
-            # Esc is the close x: from a notice button, or from the window while the card is up.
-            self._close_pressed()
-            return True
-        if watched in buttons and kind == QEvent.Type.FocusIn:
-            self._keys = True
-            self._sync_pause()
-        elif watched in buttons and kind == QEvent.Type.FocusOut:
-            self._keys = False
-            self._sync_pause()
-        elif watched in buttons and kind == QEvent.Type.Enter:
-            self._pointer = True
-            self._sync_pause()
-        elif watched in buttons and kind == QEvent.Type.Leave:
-            point = self._global_point(event)
-            self._pointer = self._over_point(point) if point is not None else False
-            self._sync_pause()
-        elif watched is self.parentWidget() and kind in (
-            QEvent.Type.Show,
-            QEvent.Type.Hide,
-            QEvent.Type.WindowStateChange,
-            QEvent.Type.WindowActivate,
-            QEvent.Type.WindowDeactivate,
-            QEvent.Type.ActivationChange,
-        ):
-            self._poll_state()
-        return False
-
-    def _flash(self) -> None:
-        ms = duration(TOAST_FLASH_MS, self.motion)
-        if ms <= 0:
-            return
-        effect = QGraphicsOpacityEffect(self)
-        effect.setOpacity(1.0)
-        self.setGraphicsEffect(effect)
-        anim = QVariantAnimation(self)
-        anim.setDuration(ms)
-        anim.setStartValue(1.0)
-        anim.setKeyValueAt(0.4, 0.55)
-        anim.setEndValue(1.0)
-        anim.valueChanged.connect(effect.setOpacity)
-
-        def done() -> None:
-            if self.graphicsEffect() is effect:
-                self.setGraphicsEffect(None)
-
-        anim.finished.connect(done)
-        anim.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
-
-    def _pressed(self) -> None:
-        callback = self._callback
-        self.hide()
-        if callback is not None:
-            callback()
-
-    def _secondary_pressed(self) -> None:
-        callback = self._secondary_callback
-        self.hide()
-        if callback is not None:
-            callback()
-
-    def _close_pressed(self) -> None:
-        callback = self._close_callback
-        self.hide()
-        if callback is not None:
-            callback()
-
-    def _go(self) -> None:
-        vanish(self, self.motion)
-        vanish(self.button, self.motion)
-        vanish(self.secondary_button, self.motion)
-        vanish(self.close_button, self.motion)
-        callback, self._dismiss_callback = self._dismiss_callback, None
-        if callback is not None:
-            callback()
 
 
 class FlowLayout(QLayout):
@@ -1726,49 +732,6 @@ class FlowLayout(QLayout):
         return y + row_height - rect.y() + margins.bottom()
 
 
-class AddMenu(Menu):
-    """Everything that adds something to the week, in one menu.
-
-    This was a strip of eight chips above the calendar, which armed a type for dragging, plus two Add
-    buttons beside it. Ten controls, always on screen, for something a student does a few times a
-    week. The types live here now, with their colours, and the button that opens this menu says which
-    one a drag will make.
-    """
-
-    category_chosen = Signal(str)
-    homework_requested = Signal()
-    fixed_requested = Signal()
-    school_requested = Signal()
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setObjectName("addMenu")
-        for name, words, icon, asked in (
-            ("addMenuHomework", "Add homework…", "book-open", self.homework_requested),
-            ("addMenuFixed", "Add fixed time…", "clock", self.fixed_requested),
-            ("addMenuSchool", "School hours…", "school", self.school_requested),
-        ):
-            self.add(words, icon, name=name).triggered.connect(asked.emit)
-        self.addSeparator()
-        add_heading(self, "Then drag on the calendar")
-        self._actions: dict[str, QAction] = {}
-        for key, info in CATEGORIES.items():
-            action = self.addAction(info["label"])
-            action.setObjectName(f"addMenu-{key}")
-            action.setCheckable(True)
-            action.triggered.connect(lambda _checked=False, value=key: self.category_chosen.emit(value))
-            self._actions[key] = action
-
-    def set_armed(self, category: str | None) -> None:
-        for key, action in self._actions.items():
-            action.setChecked(key == category)
-
-    def set_palette(self, palette: dict, accent_chips: bool) -> None:
-        """A colour beside each type, so the menu says what a block of it will look like. "Colour
-        chips with my accent" paints them all in the accent, as it did the chips."""
-        for key, action in self._actions.items():
-            face = palette["accent"] if accent_chips else CATEGORIES[key]["mark"]
-            action.setIcon(QIcon(swatch(face)))
 
 
 def swatch(colour: str, size: int = SWATCH_PX) -> QPixmap:
@@ -2029,34 +992,8 @@ class CardGrid(QWidget):
         self._place(event.size().width())
 
 
-def plain_card() -> tuple[QFrame, QVBoxLayout]:
-    """A dialog's body as one card on its page, with no heading of its own: the window names it."""
-    card = QFrame()
-    card.setObjectName("dialogCard")
-    box = QVBoxLayout(card)
-    box.setContentsMargins(16, 16, 16, 16)
-    box.setSpacing(8)
-    return card, box
 
 
-def info_card(title: str, note: str) -> tuple[QFrame, QVBoxLayout]:
-    """A card in a dialog: what it is for, as a heading and a sentence, then its controls."""
-    card = QFrame()
-    card.setObjectName("dialogCard")
-    box = QVBoxLayout(card)
-    # 12 above and below, a step under the sides: Account's three cards at the 13-point body stood 778
-    # pixels tall, more than a 1366 by 768 laptop has.
-    box.setContentsMargins(SPACING[3], SPACING[2], SPACING[3], SPACING[2])
-    box.setSpacing(SPACING[1])
-    heading = QLabel(title)
-    heading.setObjectName("cardTitle")
-    # One line, not wrapped: a dialog's height is fixed before its words wrap, so a sentence that
-    # took two lines squeezed the card and drew its list over its button.
-    words = QLabel(note)
-    words.setObjectName("cardNote")
-    box.addWidget(heading)
-    box.addWidget(words)
-    return card, box
 
 
 def sheet_note(words: str) -> QLabel:
@@ -2545,16 +1482,6 @@ class Swatches(Choices):
             button.setChecked(at == index)
 
 
-def add_heading(menu: QMenu, text: str) -> QWidgetAction:
-    """A heading row. Fusion draws `QMenu.addSection` as a bare separator, so the More menu's Adding
-    and Planning were never shown in any design."""
-    label = QLabel(text)
-    label.setObjectName("menuHeading")
-    action = QWidgetAction(menu)
-    action.setDefaultWidget(label)
-    action.setEnabled(False)
-    menu.addAction(action)
-    return action
 
 
 def _line(name: str, text: str = "", limit: int = 80) -> QLineEdit:
@@ -2751,16 +1678,6 @@ class Form(QFormLayout):
         return row
 
 
-def even_labels(root: QWidget) -> None:
-    """One label column for every form under `root`, as wide as its longest label. Each card's form
-    sized its own, so its fields began at a different x from the next card's (Grok Bot's 0.17.0
-    audit, T33: Updates against Account and Setup)."""
-    labels = root.findChildren(FieldLabel)
-    for label in labels:
-        label.setMinimumWidth(0)
-    widest = max((label.sizeHint().width() for label in labels), default=0)
-    for label in labels:
-        label.setMinimumWidth(widest)
 
 
 def field_kind(widget: QWidget) -> str | None:
@@ -5568,8 +4485,6 @@ def fill_cutoff(box: QComboBox, current: str | None) -> None:
     box.setCurrentIndex(max(0, box.findData(current)))
 
 
-def _grid_starts() -> list[str]:
-    return [minutes_to_hhmm(minute) for minute in range(DAY_START_MIN, DAY_END_MIN, SLOT_MIN)]
 
 
 def beside_words(clash: str) -> str:
@@ -5745,552 +4660,12 @@ def _deadline_passed(due: object, now: datetime) -> bool:
     return datetime.combine(day, datetime.min.time()) + timedelta(minutes=minute) <= now
 
 
-class UnfinishedPanel(QWidget):
-    plan_requested = Signal(str)
-    focus_requested = Signal(str)
-    delete_requested = Signal(str)
-    collapsed = Signal()
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setObjectName("unfinishedReview")
-        layout = QVBoxLayout(self)
-        # Month at 1024x640 with this card open and the 28 px status strip above it needs the card's
-        # height trimmed (#28): 3 px above the heading and below Hide, and no padding above or below a row.
-        layout.setContentsMargins(11, 3, 11, 3)
-        heading = QLabel("Overdue and left from last week")
-        heading.setObjectName("unfinishedHeading")
-        layout.addWidget(heading)
-        self.list = QListWidget()
-        self.list.setObjectName("unfinishedList")
-        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        layout.addWidget(self.list)
-        row = QHBoxLayout()
-        dismiss = QPushButton("Hide")
-        dismiss.setObjectName("unfinishedDismiss")
-        dismiss.setProperty("outlined", True)
-        dismiss.clicked.connect(self._collapse)
-        row.addWidget(dismiss)
-        row.addStretch(1)
-        layout.addLayout(row)
-        self.hide()
-
-    def _collapse(self) -> None:
-        self.collapsed.emit()
-        self.hide()
-
-    def set_items(
-        self, items: list[dict], now: datetime | None = None, left: Collection[str] = ()
-    ) -> None:
-        """Late homework, and the homework in `left`: its time was in an earlier week and never
-        ticked done, so it shows whether or not it is due yet."""
-        late = {item["id"] for item in overdue_unfinished(items, now)}
-        items = [item for item in items if item["id"] in late or item["id"] in left]
-        # clear() keeps the old row widgets as hidden children, so a lookup by object name
-        # found the discarded Start focus button instead of the one on screen.
-        for index in range(self.list.count()):
-            row = self.list.itemWidget(self.list.item(index))
-            if row is None:
-                continue
-            for child in row.findChildren(QWidget):
-                child.setObjectName("")
-            row.hide()
-            self.list.removeItemWidget(self.list.item(index))
-            row.setParent(None)
-            row.deleteLater()
-        self.list.clear()
-        for item in items:
-            row = QWidget()
-            column = QVBoxLayout(row)
-            sides = column.contentsMargins()
-            column.setContentsMargins(sides.left(), 0, sides.right(), 0)
-            column.setSpacing(0)
-            line = QHBoxLayout()
-            line.setContentsMargins(0, 0, 0, 0)
-            text = QLabel(f"{item['title']} · {length_label(int(item['remaining_min']))} left")
-            text.setObjectName("unfinishedRow")
-            state = item.get("left_over_state")
-            due = item.get("due")
-            due_words = ""
-            if isinstance(due, str) and due:
-                try:
-                    due_day = date.fromisoformat(due[:10])
-                    due_words = f" · due {due_day.strftime('%a')} {due_day.day} {due_day.strftime('%b')}"
-                except ValueError:
-                    pass
-            length = length_label(int(item["remaining_min"]))
-            label_text = f"{item['title']} · {length} left"
-            if state == "overdue" or item["id"] in late:
-                state_words = "Overdue"
-            elif state == "left_from_last_week":
-                state_words = "Left from last week"
-            else:
-                state_words = ""
-            row_words = f"{label_text}{due_words} · {state_words}" if state_words else label_text
-            row.setAccessibleName(row_words)
-            text.setText(row_words)
-            line.addWidget(text, 1)
-            if state in {"overdue", "left_from_last_week"}:
-                focus = QPushButton("Start focus")
-                focus.setObjectName(f"focusUnfinished-{item['id']}")
-                focus.setAccessibleName(f"Start focus on {item['title']}")
-                focus.setProperty("outlined", True)
-                focus.clicked.connect(
-                    lambda _checked=False, item_id=item["id"]: self.focus_requested.emit(item_id)
-                )
-                line.addWidget(focus)
-            if item.get("plannable", True):
-                button = QPushButton("Find a time")
-                button.setObjectName(f"planUnfinished-{item['id']}")
-                # The row's answer, drawn as a tint beside the outlined Delete, each with room round
-                # its words.
-                button.setProperty("tonal", True)
-                button.setProperty("roomy", True)
-                button.clicked.connect(
-                    lambda _checked=False, item_id=item["id"]: self.plan_requested.emit(item_id)
-                )
-                line.addWidget(button)
-            delete = QPushButton("Delete")
-            delete.setObjectName(f"deleteUnfinished-{item['id']}")
-            delete.setProperty("outlined", True)
-            delete.setProperty("roomy", True)
-            delete.setToolTip("Delete this homework and its times in every week. You can undo this.")
-            delete.clicked.connect(
-                lambda _checked=False, item_id=item["id"]: self.delete_requested.emit(item_id)
-            )
-            line.addWidget(delete)
-            # Where the words and the buttons do not fit one line (1024x640 at Large text), the
-            # buttons move under the words. Hidden while empty, it adds no height.
-            below = QWidget()
-            below.setObjectName("unfinishedRowBelow")
-            below_row = QHBoxLayout(below)
-            below_row.setContentsMargins(0, 0, 0, 0)
-            below_row.setSpacing(line.spacing())
-            below_row.addStretch(1)
-            below.hide()
-            column.addLayout(line)
-            column.addWidget(below)
-            wrapper = QListWidgetItem()
-            self.list.addItem(wrapper)
-            self.list.setItemWidget(wrapper, row)
-        self._fit_rows()
-        self.setVisible(bool(items))
-
-    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
-        super().resizeEvent(event)
-        self._fit_rows()
-
-    def _row_buttons(self, row: QWidget) -> list[QPushButton]:
-        rank = {"focusUnfinished": 0, "planUnfinished": 1, "deleteUnfinished": 2}
-        found = [
-            button
-            for button in row.findChildren(QPushButton)
-            if button.objectName().split("-")[0] in rank
-        ]
-        return sorted(found, key=lambda button: rank[button.objectName().split("-")[0]])
-
-    def _fit_row(self, row: QWidget, width: int) -> None:
-        """Both the words and every button whole on one line when the row is wide enough; otherwise
-        the buttons move under the words. A button is never squeezed to fit its line."""
-        text = row.findChild(QLabel, "unfinishedRow")
-        below = row.findChild(QWidget, "unfinishedRowBelow")
-        buttons = self._row_buttons(row)
-        if text is None or below is None or not buttons or width <= 0:
-            return
-        line = row.layout().itemAt(0).layout()
-        below_row = below.layout()
-        margins = row.layout().contentsMargins()
-        gap = line.spacing()
-        words = QFontMetrics(text.font()).horizontalAdvance(text.text())
-        needed = margins.left() + margins.right() + words
-        needed += sum(button.sizeHint().width() for button in buttons)
-        needed += gap * len(buttons)
-        wrapped = width < needed
-        if wrapped == below.isVisible():
-            return
-        source = line if wrapped else below_row
-        for button in buttons:
-            source.removeWidget(button)
-        if wrapped:
-            for button in buttons:
-                below_row.insertWidget(below_row.count() - 1, button)
-        else:
-            for button in buttons:
-                line.addWidget(button)
-        below.setVisible(wrapped)
-        text.setWordWrap(wrapped)
-        row.layout().setSpacing(4 if wrapped else 0)
-
-    def _row_height(self, row: QWidget) -> int:
-        text = row.findChild(QLabel, "unfinishedRow")
-        below = row.findChild(QWidget, "unfinishedRowBelow")
-        buttons = self._row_buttons(row)
-        button_h = max((button.sizeHint().height() for button in buttons), default=0)
-        text_h = 0 if text is None else max(text.sizeHint().height(), text.fontMetrics().height())
-        margins = row.layout().contentsMargins()
-        height = margins.top() + margins.bottom()
-        if below is not None and below.isVisible():
-            return height + text_h + row.layout().spacing() + button_h
-        return height + max(text_h, button_h)
-
-    def _fit_rows(self) -> None:
-        """Each row as tall as its buttons are once the look has styled them, and the list as tall as
-        its rows up to about three and a half, so a fourth shows it scrolls (#79). The rows were measured
-        before the look reached their buttons, so every button was cut top and bottom."""
-        width = self.list.viewport().width()
-        if width <= 0:
-            pad = self.layout().contentsMargins()
-            width = max(self.width() - pad.left() - pad.right() - 2 * self.list.frameWidth(), 0)
-        rows = []
-        for index in range(self.list.count()):
-            wrapper = self.list.item(index)
-            row = self.list.itemWidget(wrapper)
-            for part in (row, *row.findChildren(QWidget)):
-                part.ensurePolished()
-            for button in self._row_buttons(row):
-                button.setMinimumSize(button.sizeHint())
-            self._fit_row(row, width)
-            if width > 0:
-                row.setMaximumWidth(width)
-            row.layout().activate()
-            height = self._row_height(row)
-            wrapper.setSizeHint(QSize(max(width, 1), height))
-            rows.append(height)
-        if rows:
-            # As tall as its rows, as the plan review is: one row in a box eight rows deep read as empty.
-            room = round(UNFINISHED_ROWS * max(rows))
-            edge = 2 * self.list.frameWidth() + 4
-            self.list.setMinimumHeight(max(rows) + edge)
-            self.list.setMaximumHeight(min(sum(rows), room) + edge)
-
-    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
-        super().showEvent(event)
-        self._fit_rows()
-
-    def changeEvent(self, event: QEvent) -> None:  # noqa: N802
-        super().changeEvent(event)
-        if event.type() == QEvent.Type.StyleChange:
-            self._fit_rows()
 
 
-class AlertStrip(QWidget):
-    """Alerts that stay put until the student deals with them.
-
-    A tray message is gone in eight seconds, and on a machine that suppresses notifications it is
-    never seen at all. "Leave reminders on screen" promises the opposite, so when it is on the alert is
-    also shown here, in the window, where nothing outside the app can take it away.
-    """
-
-    # The student has dealt with every alert it held.
-    handled = Signal()
-    # What the strip says changed; Material draws its own strip from the same list.
-    changed = Signal()
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setObjectName("alertStrip")
-        self._notices: list[dict] = []
-        layout = QHBoxLayout(self)
-        self.text = QLabel()
-        self.text.setObjectName("alertStripText")
-        self.text.setWordWrap(True)
-        layout.addWidget(self.text, 1)
-        self.dismiss = QPushButton("Got it")
-        self.dismiss.setObjectName("alertStripDismiss")
-        self.dismiss.clicked.connect(self._drop)
-        layout.addWidget(self.dismiss)
-        self.setVisible(False)
-
-    def add(self, notices: list[dict]) -> None:
-        self._notices.extend(notices)
-        self._render()
-
-    def clear(self) -> None:
-        self._notices.clear()
-        self._render()
-
-    def pending(self) -> int:
-        return len(self._notices)
-
-    def _drop(self) -> None:
-        """One at a time, so a second alert that arrived while the first sat there is still seen."""
-        if self._notices:
-            self._notices.pop(0)
-        self._render()
-        if not self._notices:
-            self.handled.emit()
-
-    def _render(self) -> None:
-        self.setVisible(bool(self._notices))
-        if not self._notices:
-            self.text.clear()
-            self.changed.emit()
-            return
-        notice = self._notices[0]
-        body = notice.get("body") or ""
-        more = f"  (+{len(self._notices) - 1} more)" if len(self._notices) > 1 else ""
-        self.text.setText(f"{notice.get('title') or 'FlexWeek'}{' — ' + body if body else ''}{more}")
-        self.changed.emit()
 
 
-def overfull_days(trace: dict) -> list[tuple[int, int]]:
-    """Each day, in week order, whose planned homework adds up to more than OVERFULL_DAY_MIN, with its
-    minutes. School and other fixed blocks are not homework, and finished sessions are not planned."""
-    minutes = [0] * 7
-    for block in trace.get("placed") or []:
-        days = block.get("days") or []
-        if block.get("assignment_id") and block.get("start") and not block.get("completed") and days:
-            minutes[days[0]] += int(block.get("duration_min") or 0)
-    return [(day, total) for day, total in enumerate(minutes) if total > OVERFULL_DAY_MIN]
 
 
-class PlanReview(QFrame):
-    """What the plan just did, in the solver's own words, as one slim bar (decision 18 of 0.17):
-    "Placed 2 · 1 without a time · Details", Got it filled and Replan as text. Details opens the
-    solver's sentences, and they are open already when something has no time.
-
-    The client used to take one explanation out of however many the solver gave and drop it in the
-    status line, and never mentioned a move at all outside Running late. Explaining what could not
-    be placed, and what had to move, is the thing FlexWeek is for.
-    """
-
-    dismissed = Signal()
-    replan_requested = Signal()
-    allow_split_requested = Signal(str)
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setObjectName("planReview")
-        self._assignments: dict[str, dict] = {}
-        self._split_rows: dict[str, str] = {}
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
-        row = QHBoxLayout()
-        self._result_row = row
-        row.setSpacing(8)
-        self.heading = QLabel()
-        self.heading.setObjectName("planReviewHeading")
-        row.addWidget(self.heading)
-        self.details = QPushButton("Details")
-        self.details.setObjectName("planReviewDetails")
-        self.details.setCheckable(True)
-        self.details.setToolTip("Show what the plan did, and why.")
-        self.details.toggled.connect(self._show_details)
-        row.addWidget(self.details)
-        row.addStretch(1)
-        self.replan = QPushButton("Replan all my homework")
-        self.replan.setObjectName("planReviewReplan")
-        self.replan.setToolTip(REPLAN_TIP)
-        self.replan.clicked.connect(self.replan_requested.emit)
-        self.dismiss_button = QPushButton("Got it")
-        self.dismiss_button.setObjectName("planReviewDismiss")
-        self.dismiss_button.setProperty("tonal", True)
-        self.dismiss_button.setToolTip("Hide this list.")
-        self.dismiss_button.clicked.connect(self._dismiss)
-        row.addWidget(self.replan)
-        row.addWidget(self.dismiss_button)
-        layout.addLayout(row)
-        # Where the heading and the buttons do not fit one line (1024x640 at Large text), the buttons move
-        # to a line of their own under it. Hidden while empty, it adds no height and no spacing.
-        self._actions = QWidget()
-        self._action_row = QHBoxLayout(self._actions)
-        self._action_row.setContentsMargins(0, 0, 0, 0)
-        self._action_row.setSpacing(row.spacing())
-        layout.addWidget(self._actions)
-        self._actions.hide()
-        self._actions_below = False
-        self.list = QListWidget()
-        self.list.setObjectName("planReviewList")
-        self.list.setWordWrap(True)
-        layout.addWidget(self.list)
-        self.list.hide()
-        self.hide()
-
-    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
-        super().resizeEvent(event)
-        self._fit_result_actions()
-
-    def _fit_result_actions(self) -> None:
-        buttons = (self.details, self.replan, self.dismiss_button)
-        # The heading's one-line width, not its size hint: wrapped, its hint narrows and the row would flip.
-        heading = self.heading.fontMetrics().horizontalAdvance(self.heading.text())
-        heading += self.heading.contentsMargins().left() + self.heading.contentsMargins().right()
-        needed = heading + sum(button.sizeHint().width() for button in buttons)
-        needed += self._result_row.spacing() * len(buttons)
-        below = needed > self.width()
-        if below == self._actions_below:
-            return
-        self._actions_below = below
-        source = self._result_row if below else self._action_row
-        target = self._action_row if below else self._result_row
-        for button in buttons:
-            source.removeWidget(button)
-        while self._action_row.count():
-            self._action_row.takeAt(0)
-        # The same order either way: Details on the left, Replan and Got it on the right.
-        if below:
-            target.addWidget(self.details)
-            target.addStretch(1)
-            target.addWidget(self.replan)
-            target.addWidget(self.dismiss_button)
-        else:
-            target.insertWidget(1, self.details)
-            target.addWidget(self.replan)
-            target.addWidget(self.dismiss_button)
-        # Alone on its line, a long heading wraps rather than holding the strip wider than the window.
-        self.heading.setWordWrap(below)
-        self._actions.setVisible(below)
-        self.updateGeometry()
-
-    def _show_details(self, shown: bool) -> None:
-        self.list.setVisible(shown)
-        self.details.setText("Hide details" if shown else "Details")
-        self._fit_result_actions()
-
-    def _dismiss(self) -> None:
-        self.hide()
-        self.dismissed.emit()
-
-    def rows_for(self, trace: dict, titles: dict[str, str], week_start: str) -> list[str]:
-        """Every unplaced task, every move, and every deadline the solver called tight."""
-        said: list[str] = []
-        for block in trace.get("unplaced") or []:
-            name = titles.get(block["id"], block.get("title") or "Homework")
-            assignment = next(
-                (item for item in self._assignments.values() if item.get("id") == block.get("assignment_id")),
-                None,
-            )
-            if assignment is not None and assignment.get("spread", "one") == "one":
-                due = due_label(assignment["due"], week_start)
-                said.append(f"{name} doesn't fit in one go before {due}. Allow splitting?")
-                self._split_rows[said[-1]] = assignment["id"]
-                continue
-            why = next(
-                (
-                    item.get("message")
-                    for item in trace.get("explanations") or []
-                    if item.get("block_id") == block["id"] and item.get("message")
-                ),
-                "There was no room for it before it's due. Shorten it, split it, or choose a time yourself.",
-            )
-            said.append(f"{name} has no time yet. {why}")
-        stranded = {block["id"] for block in trace.get("unplaced") or []}
-        for move in trace.get("moves") or []:
-            # A "move" with no time at either end is the solver recording that something stayed
-            # unplaced. Said out loud it read "moved from no time to no time", under a line that
-            # had already explained the same block.
-            if move["block_id"] in stranded or not move.get("to_start") or not move.get("from_start"):
-                continue
-            name = titles.get(move["block_id"], "Homework")
-            been = _when(move.get("from_day"), move.get("from_start"), week_start)
-            now = _when(move.get("to_day"), move.get("to_start"), week_start)
-            # Running late files its moves under the missed-day code with a sentence of its own, so
-            # the code alone told a student who ran late that they had missed a day.
-            why = next(
-                (
-                    item["message"]
-                    for item in trace.get("explanations") or []
-                    if item.get("block_id") == move["block_id"]
-                    and item.get("reason") == move.get("reason")
-                    and item.get("message")
-                ),
-                REASON_COPY.get(move.get("reason") or "", ""),
-            )
-            said.append(f"{name} moved from {been} to {now}." + (f" {why}" if why else ""))
-        for item in trace.get("explanations") or []:
-            if item.get("slack_status") in {"tight", "danger"} and item.get("message"):
-                said.append(f"{titles.get(item['block_id'], 'Homework')}: {item['message']}")
-        for item in trace.get("notices") or []:
-            if item.get("kind") == "spread_same_day" and item.get("message"):
-                said.append(item["message"])
-        for day, total in overfull_days(trace):
-            said.append(f"{day_full_names(week_start)[day]} has {length_label(total)} of homework.")
-        shares = trace.get("shares") or []
-        if shares and not any(share["this_week_min"] for share in shares):
-            names = [share["title"] for share in shares]
-            if len(names) == 1:
-                due = f"{names[0]} is due next week; plan it there."
-            elif len(names) == 2:
-                due = f"{names[0]} and {names[1]} are due next week; plan them there."
-            else:
-                due = f"{', '.join(names[:-1])} and {names[-1]} are due next week; plan them there."
-            said.append("No homework time left this week. " + due)
-        for share in shares:
-            if not share["this_week_min"]:
-                continue
-            due = share.get("due")
-            assignments = getattr(self, "_assignments", None) or {}
-            if not due:
-                aid = share.get("assignment_id")
-                found = assignments.get(aid) if aid else None
-                if found is None:
-                    found = next(
-                        (item for item in assignments.values() if item.get("title") == share["title"]),
-                        None,
-                    )
-                due = (found or {}).get("due")
-            due_bit = f" (due {due_label(due, week_start)})" if due else ""
-            said.append(
-                f"{share['title']}{due_bit}: {length_label(share['this_week_min'])} planned this week. "
-                f"FlexWeek saves the other {length_label(share['left_min'])} for next week so this week "
-                f"isn't overloaded. Press Plan next week to place it."
-            )
-        return said
-
-    def set_trace(
-        self,
-        trace: dict | None,
-        titles: dict[str, str],
-        week_start: str,
-        counts: tuple[int, int],
-        assignments: dict | None = None,
-        remainders: list[tuple[str, int]] | None = None,
-    ) -> None:
-        """`counts` are the plan's own, homework it gave a time and homework it could not, the
-        numbers the toast says. The trace's placed list holds every block with a time, School
-        included, so counted here it said 2 placed where the toast said 0."""
-        self.week_start = week_start
-        self._assignments = assignments or {}
-        self._split_rows: dict[str, str] = {}
-        self.list.clear()
-        said = self.rows_for(trace or {}, titles, week_start) if trace else []
-        if not said:
-            self.hide()
-            return
-        placed, waiting = counts
-        from desktop.native.controller import plan_sentence
-
-        self.heading.setText(plan_sentence(placed, waiting, remainders or ()))
-        self._fit_result_actions()
-        for line in said:
-            row = QListWidgetItem(line)
-            self.list.addItem(row)
-            assignment_id = self._split_rows.get(line)
-            if assignment_id is not None:
-                content = QWidget(self.list)
-                row_layout = QHBoxLayout(content)
-                row_layout.setContentsMargins(4, 0, 4, 0)
-                message = QLabel(line, content)
-                message.setWordWrap(True)
-                row_layout.addWidget(message, 1)
-                button = QPushButton("Allow splitting")
-                button.setObjectName("planReviewAllowSplitting")
-                button.setAccessibleName(line)
-                button.clicked.connect(
-                    lambda _=False, key=assignment_id: self.allow_split_requested.emit(key)
-                )
-                row_layout.addWidget(button)
-                self.list.setItemWidget(row, content)
-                row.setSizeHint(content.sizeHint())
-        # As tall as it needs and no taller. One line in a box four lines deep reads as an error.
-        row = self.list.sizeHintForRow(0) if self.list.count() else 0
-        self.list.setFixedHeight(min(row * len(said) + 2 * self.list.frameWidth() + 4, PLAN_REVIEW_MAX))
-        # Open when something needs reading: homework with no time, or a day that is too full.
-        open_list = bool(waiting) or bool(remainders) or bool(overfull_days(trace or {}))
-        self.details.setChecked(open_list)
-        self._show_details(open_list)
-        self.show()
 
 
 NO_TIME_LEFT = (
@@ -6317,11 +4692,6 @@ def _past_words() -> str:
     return "That time has passed."
 
 
-def _when(day: object, start: object, week_start: str = "") -> str:
-    if not isinstance(day, int) or not start:
-        return "no time"
-    names = day_names(week_start) if week_start else DAYS
-    return f"{names[day]} {hhmm_text(str(start))}"
 
 
 class ChooseTimeDialog(Dialog):

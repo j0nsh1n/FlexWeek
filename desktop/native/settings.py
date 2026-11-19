@@ -5,11 +5,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QMargins, QObject, Qt, QUrl, Signal
+from PySide6.QtCore import QEvent, QObject, Qt, QUrl
 from PySide6.QtGui import (
     QColor,
     QDesktopServices,
-    QFontMetrics,
     QGuiApplication,
     QKeyEvent,
     QKeySequence,
@@ -21,8 +20,6 @@ from PySide6.QtGui import (
     QShortcut,
 )
 from PySide6.QtWidgets import (
-    QBoxLayout,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -41,9 +38,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from desktop.native.focus import FOCUS_PHASE_LABEL, format_countdown, more_time_choices, remaining_ms
-from desktop.native.fonts import time_font
-from desktop.native.hours.rail import RAIL_PX
 from desktop.native.remind import ALARM_SNOOZE_MIN
 from desktop.native.settings_copy import (
     ABOUT_HERE,
@@ -68,7 +62,7 @@ from desktop.native.settings_copy import (
 from desktop.native.spotify import open_in_app
 from desktop.native.tokens import SPACING
 from desktop.native.version import VERSION
-from desktop.native.weekmodel import hhmm_text, length_label
+from desktop.native.weekmodel import hhmm_text
 from desktop.native.widgets import (
     ROUTINE_LIST_HEIGHT,
     SHEET_FORM,
@@ -90,14 +84,11 @@ ALARM_MIN_WIDTH = 380
 ALARM_PAD = 20
 ALARM_GAP = 12
 ALARM_BUTTON_HEIGHT = 44
-CARD_PAD = 16
 SECTION_GAP = 14
 LOGO = Path(__file__).resolve().parents[1] / "assets" / "logo.png"
 ABOUT_LOGO_PX = 56
 # How far the words fade out at a scroll edge with more past it.
 FADE_PX = 24
-FOCUS_RUNNING_NOTE = "Work on this until the timer ends. Pause if something interrupts you."
-FOCUS_ENDED_NOTE = "Time is up. Mark it finished, take a break, or give it more time."
 
 
 def _page_button(words: str, name: str) -> QPushButton:
@@ -118,173 +109,6 @@ def _heading(words: str) -> QLabel:
     return made
 
 
-class FocusPanel(QWidget):
-    quick_requested = Signal()
-    screen_requested = Signal()
-    finished_requested = Signal()
-    break_requested = Signal()
-    more_requested = Signal(int)
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setObjectName("focusPanel")
-        layout = QVBoxLayout(self)
-        self.now_next = QLabel()
-        self.now_next.setObjectName("nowNext")
-        self.now_next.setWordWrap(True)
-        self.now_next.setFont(time_font(self.now_next.font()))
-        layout.addWidget(self.now_next)
-        # A running timer is a card: what it is for, one sentence on what to do, and its buttons, of
-        # which only the next step is filled. Three filled buttons in a row read as three equal asks.
-        self.card = QFrame()
-        self.card.setObjectName("dialogCard")
-        card_box = QVBoxLayout(self.card)
-        card_box.setContentsMargins(16, 12, 16, 12)
-        card_box.setSpacing(6)
-        layout.addWidget(self.card)
-        # One status line, not four stacked labels. Over a design of its own the timer used to
-        # arrive as loose text: the homework, then "Focus session", then "30:00", each on its own row.
-        status = QHBoxLayout()
-        self.task = QLabel()
-        self.task.setObjectName("focusTask")
-        self.phase = QLabel()
-        self.phase.setObjectName("focusPhase")
-        self.time = QLabel()
-        self.time.setObjectName("focusTime")
-        self.time.setFont(time_font(self.time.font()))
-        for widget in (self.task, self.phase, self.time):
-            status.addWidget(widget)
-        status.addStretch(1)
-        card_box.addLayout(status)
-        # Pause, Skip and Finish are on the focus screen, where the timer is large; here the running
-        # timer is one line and a way to that screen.
-        self.screen = QPushButton("Focus screen")
-        self.screen.setObjectName("focusScreenOpen")
-        # Outlined: filled, and full width in the rail, it was louder than Add (Grok Bot's 0.17.0
-        # audit, X8).
-        self.screen.setProperty("outline", True)
-        self.screen.setToolTip("Show the timer on its own, large. F")
-        self.screen.clicked.connect(self.screen_requested.emit)
-        status.insertWidget(status.count() - 1, self.screen)
-        self.note = QLabel()
-        self.note.setObjectName("cardNote")
-        self.note.setWordWrap(True)
-        card_box.addWidget(self.note)
-        controls = QHBoxLayout()
-        self.quick = QPushButton("Quick focus")
-        self.quick.setObjectName("focusQuick")
-        self.quick.clicked.connect(self.quick_requested.emit)
-        self.quick.setProperty("quiet", True)
-        controls.addWidget(self.quick)
-        # Without this the button takes the window's width over a layout of its own. It keeps its
-        # natural width and the row fills with space instead.
-        controls.addStretch(1)
-        card_box.addLayout(controls)
-        choices = QHBoxLayout()
-        self.finished = QPushButton("Finished")
-        self.finished.setObjectName("focusFinished")
-        self.finished.clicked.connect(self.finished_requested.emit)
-        self.take_break = QPushButton("Take a break")
-        self.take_break.setObjectName("focusBreak")
-        self.take_break.clicked.connect(self.break_requested.emit)
-        self.more_min = QComboBox()
-        self.more_min.setObjectName("focusMoreMin")
-        self.more = QPushButton("Need more time")
-        self.more.setObjectName("focusMoreAdd")
-        self.more.clicked.connect(self._emit_more)
-        self.take_break.setProperty("quiet", True)
-        self.more.setProperty("quiet", True)
-        for widget in (self.finished, self.take_break, self.more_min, self.more):
-            choices.addWidget(widget)
-        choices.addStretch(1)
-        card_box.addLayout(choices)
-        self._rows = (status, choices)
-        self._margins = layout.contentsMargins()
-        self._compact = False
-        self._ended_widgets = (self.finished, self.take_break, self.more_min, self.more)
-        # Nothing to show until a timer runs, and blank rows cost the calendar height. The homework to
-        # start one on is in Week's side.
-        for widget in (self.card, self.task, self.phase, self.time, self.screen):
-            widget.setVisible(False)
-
-    def _emit_more(self) -> None:
-        self.more_requested.emit(int(self.more_min.currentData() or 0))
-
-    def set_compact(self, compact: bool) -> None:
-        """Stacked, for the top of Today's app's rail: its parts one under another, not in a row
-        wider than the rail."""
-        direction = QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight
-        for row in self._rows:
-            if row.direction() != direction:
-                row.setDirection(direction)
-        self.layout().setContentsMargins(QMargins() if compact else self._margins)
-        self._compact = compact
-        self.setMaximumWidth(RAIL_PX if compact else 16777215)
-
-    def _compact_task_line(self, name: str, left: str) -> str:
-        """Keep the time left whole; elide the homework name so the line fits the rail."""
-        if not name:
-            return f"{left} left"
-        suffix = f" · {left} left"
-        full = f"{name}{suffix}"
-        metrics = QFontMetrics(self.task.font())
-        room = RAIL_PX - 2 * CARD_PAD
-        if metrics.horizontalAdvance(full) <= room:
-            return full
-        name_room = max(0, room - metrics.horizontalAdvance(suffix))
-        shown = metrics.elidedText(name, Qt.TextElideMode.ElideRight, name_room)
-        return f"{shown}{suffix}" if shown else f"{left} left"
-
-    def show_now_next(self, text: str) -> None:
-        self.now_next.setText(text)
-        self.now_next.setVisible(bool(text))
-
-    def set_state(self, session) -> None:
-        self.show_now_next(session.now_next_text())
-        state = session.focus
-        ended = state is not None and state.get("phase") == "ended"
-        self.task.setText("" if state is None else state.get("title") or "")
-        self.phase.setText("" if state is None else FOCUS_PHASE_LABEL.get(state.get("phase"), ""))
-        if state is None:
-            self.time.setText("")
-        else:
-            self.time.setText(format_countdown(remaining_ms(state, session.now_ms())))
-        # Once the timer ends, the next step is Finished or a break, not the large timer.
-        self.screen.setVisible(state is not None and not ended)
-        assignment = None if state is None else session.assignments.get(state.get("assignmentId"))
-        choices = more_time_choices(int((assignment or {}).get("estimate_min") or 0)) if ended else []
-        self.more_min.clear()
-        for minutes in choices:
-            self.more_min.addItem(length_label(minutes), minutes)
-        for widget in self._ended_widgets:
-            widget.setVisible(ended)
-        self.card.setVisible(state is not None)
-        self.note.setText(FOCUS_ENDED_NOTE if ended else FOCUS_RUNNING_NOTE)
-        # A running timer is one line: its name, time and way to the focus screen. Now and Next, Quick
-        # focus and the sentence on what to do made three strips over the week (Grok Bot's 0.17.0
-        # audit, X3); the sentence is the time's tooltip, and what to do next is said once it ends.
-        running = state is not None and not ended
-        self.note.setVisible(ended)
-        self.time.setToolTip(FOCUS_RUNNING_NOTE if running else "")
-        self.quick.setVisible(not running)
-        if running:
-            self.now_next.setVisible(False)
-        self.more.setEnabled(bool(choices))
-        if running and self._compact:
-            left = format_countdown(remaining_ms(state, session.now_ms()))
-            name = state.get("title") or ""
-            self.task.setText(self._compact_task_line(name, left))
-            self.task.setToolTip(name)
-            # The line may be shortened to fit; a screen reader hears the whole name and the time left.
-            self.task.setAccessibleName(f"{name} · {left} left" if name else f"{left} left")
-            self.task.setVisible(True)
-            self.phase.setVisible(False)
-            self.time.setVisible(False)
-        else:
-            self.task.setToolTip("")
-            self.task.setAccessibleName("")
-            for label in (self.task, self.phase, self.time):
-                label.setVisible(bool(label.text()))
 
 
 class RestoreDialog(Dialog):

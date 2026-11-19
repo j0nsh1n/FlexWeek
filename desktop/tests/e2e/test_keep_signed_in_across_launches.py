@@ -23,8 +23,6 @@ from desktop.tests.waiting import wait_until
 PASSWORD = "a-long-test-password"
 TOKEN_LIKE = "A" * 43
 
-pytestmark = pytest.mark.real_surface
-
 
 @pytest.fixture(scope="module")
 def qapp() -> Iterator[QApplication]:
@@ -120,7 +118,6 @@ def test_a_kept_session_opens_the_week_at_the_next_launch(qapp: QApplication, la
     wait_until(qapp, lambda: page(later) == "materialPage" and not later.session.busy)
     assert later.session.account is not None
     assert later.session.account["username"] == "kept_student"
-    assert later.account_name.text() == "kept_student"
 
 
 def test_nothing_is_kept_when_the_box_is_cleared(qapp: QApplication, launches: Launches) -> None:

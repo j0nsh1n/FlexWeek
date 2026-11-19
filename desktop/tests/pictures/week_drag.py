@@ -2,22 +2,9 @@
 
 from __future__ import annotations
 
-import contextlib
-from collections.abc import Iterator
-
-from PySide6.QtCore import QPoint
-from PySide6.QtWidgets import QAbstractButton, QApplication, QWidget
-
-from backend.tests.fake_clock import CLOCK
-from desktop.native.look import resolved_palette
-from desktop.native.menus import Menu, menu_colours
-from desktop.native.motion import settle
-from desktop.native.widgets import BlockDialog, HomeworkDialog, SheetShade
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.waiting import wait_until
-from desktop.tests.week.support_drag import press_drag
-from desktop.tests.window_support import still
 
 SCHOOL = {
     "id": "school",
@@ -35,150 +22,19 @@ def _saved(window: NativeWindow) -> None:
     wait_until(None, lambda: not session.busy and not session.dirty)
 
 
-def _week_with_school(window: NativeWindow, width: int | None = None) -> None:
-    """The classic Week with School on weekdays, the clock at Thursday 10:00. The window keeps the size
-    the renderer opened it at, so a picture is the size its variant says; only a screen that needs a
-    narrower window asks for a width."""
-    if width is not None:
-        window.resize(width, window.height())
-    window._layout = {"main": "classic", "day": "one", "options": {}}
-    session = window.session
-    session.add_block(dict(SCHOOL))
-    session.save()
-    _saved(window)
-    CLOCK.set(CLOCK.now().replace(hour=10, minute=0))
-    window.findChild(QAbstractButton, "viewWeek").click()
-    _saved(window)
-    QApplication.processEvents()
 
 
-def _notice(text: str, button: str, width: int | None = None) -> object:
-    def prepare(window: NativeWindow) -> None:
-        _week_with_school(window, width)
-        window._set_notice(text, button, (lambda: None) if button else None)
-        QApplication.processEvents()
-        still(window.toast, window.toast.button)
-
-    return prepare
 
 
-def _delete_row(window: NativeWindow) -> QWidget:
-    pack, dark, accent = window._look_inputs()
-    palette = resolved_palette(pack, dark, window._look, accent)
-    menu = Menu(window)
-    menu.set_colours(menu_colours(palette, lifted=False))
-    menu.add("Open", "pencil")
-    menu.addSeparator()
-    menu.add("Delete", "trash", danger=True)
-    menu.popup(window.mapToGlobal(QPoint(100, 100)))
-    QApplication.processEvents()
-    return menu
 
 
-@contextlib.contextmanager
-def _sheets_stay_open(kind: type) -> Iterator[list]:
-    """While active, a sheet of `kind` shows and stays open instead of running its own loop."""
-    opened: list = []
-    real = kind.exec
-
-    def show_only(dialog: object) -> int:
-        dialog.show()
-        opened.append(dialog)
-        return 0
-
-    kind.exec = show_only
-    try:
-        yield opened
-    finally:
-        kind.exec = real
 
 
-def _dimmed(window: NativeWindow) -> None:
-    for child in window.children():
-        if isinstance(child, SheetShade):
-            settle(child)
-    still(window)
 
 
-def _add_sheet(window: NativeWindow) -> None:
-    _week_with_school(window)
-    with _sheets_stay_open(HomeworkDialog):
-        window._add_homework()
-    _dimmed(window)
 
 
-def _drag_sheet(window: NativeWindow) -> None:
-    _week_with_school(window)
-    hours = window.week_table.hours
-    hours.reveal(3, 15 * 60, 18 * 60)
-    QApplication.processEvents()
-    with _sheets_stay_open(BlockDialog) as opened:
-        press_drag(hours, 3, 16 * 60, 17 * 60)
-        wait_until(None, lambda: bool(opened))
-    _dimmed(window)
 
 
 SCREENS: list[Screen] = [
-    Screen(
-        id="week.notice-with-undo",
-        area="week",
-        prepare=_notice("Moved School to Thu 8:00 AM.", "Undo"),
-        checks=(
-            "Material's notice sits centred at the foot of the page, 24 px up, wholly inside the window "
-            "(also in the Large text window); its words stay on one line, its Undo button reads 'Undo 10' "
-            "with Ctrl+Z beside it inside the bar; with Animations Off there is no countdown line; the "
-            "hours under it are not pushed or resized"
-        ),
-        sources=("desktop/native/widgets.py", "desktop/native/window.py"),
-        main=True,
-    ),
-    Screen(
-        id="week.notice-of-two-lines",
-        area="week",
-        prepare=_notice("Planned 1 homework block. 1 still needs a time.", "Undo", 1024),
-        checks=(
-            "a notice whose words wrap onto two lines grows its pill to fit them: no line is cut at the "
-            "top or bottom, the pill is at least 44 px tall, with 10 px above and below the words and "
-            "16 px at the sides, and the Undo button stays inside the pill"
-        ),
-        sources=("desktop/native/widgets.py",),
-    ),
-    Screen(
-        id="week.notice-without-button",
-        area="week",
-        prepare=_notice("Moved it.", ""),
-        checks="a short notice with no button is still a pill at least 44 px tall",
-        sources=("desktop/native/widgets.py",),
-    ),
-    Screen(
-        id="week.block-menu-delete-row",
-        area="week",
-        prepare=_delete_row,
-        checks=(
-            "in a block's menu the Delete row is drawn in the error red and not in the text colour, "
-            "and the other row (Open) is drawn in the text colour and not in red; a line sets the "
-            "delete apart"
-        ),
-        sources=("desktop/native/menus.py",),
-    ),
-    Screen(
-        id="week.sheet-dim-over-the-week-add-homework",
-        area="week",
-        prepare=_add_sheet,
-        checks=(
-            "with the Add homework sheet open the week stays visible under the dim: a point on School "
-            "is its colour darkened by 40 percent, not blank or a wrong colour"
-        ),
-        sources=("desktop/native/widgets.py",),
-    ),
-    Screen(
-        id="week.sheet-dim-over-the-week-drag-created-block",
-        area="week",
-        prepare=_drag_sheet,
-        checks=(
-            "with the sheet a drag across free time opened, the week stays visible under the dim: a "
-            "point on School is its colour darkened by 40 percent, not blank or a wrong colour"
-        ),
-        sources=("desktop/native/widgets.py", "desktop/native/hours"),
-    ),
 ]

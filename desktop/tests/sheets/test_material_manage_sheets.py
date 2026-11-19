@@ -15,7 +15,7 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QFileDialog
+from PySide6.QtWidgets import QApplication, QFileDialog
 
 from desktop.native.account_copy import READ_WEEK_FAILED, REPLACE_WEEK_QUESTION
 from desktop.native.files import EXPORT_FORMAT
@@ -110,8 +110,9 @@ def _said(shell: NativeWindow, words: str, qapp: QApplication) -> None:
 
 
 def _no_widgets_dialogs(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in ("AccountDialog", "RestoreDialog", "TransferPreviewDialog"):
+    for name in ("AccountDialog", "TransferPreviewDialog"):
         monkeypatch.setattr(f"desktop.native.window.{name}", _refuse(name))
+    monkeypatch.setattr("desktop.native.settings.RestoreDialog", _refuse("RestoreDialog"))
     monkeypatch.setattr("desktop.native.window.confirm", _refuse("question"))
     monkeypatch.setattr("desktop.native.window.ConfirmSheet", _refuse("confirm sheet"))
 
@@ -150,7 +151,7 @@ def test_more_has_account_and_copies_of_this_week_and_nothing_opens_a_widgets_di
     pump(qapp, 40)
     assert _kind(sheets) == "account"
     sheets.forceClose()
-    shell._open_restore()
+    sheets.openRestore()
     pump(qapp, 40)
     assert _kind(sheets) == "restore"
 
@@ -163,20 +164,6 @@ def test_settings_this_computer_manage_account_opens_the_sheet(
     panel.openAccount()
     pump(qapp, 40)
     assert _kind(sheets) == "account"
-
-
-def test_the_widgets_dialogs_still_open_when_material_is_not_shown(
-    qapp: QApplication, shell: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The Widgets styles are untouched: with no Material page on screen the same entry points open the
-    Widgets dialogs."""
-    opened: list[str] = []
-    monkeypatch.setattr(
-        QDialog, "exec", lambda self: opened.append(self.objectName()) or QDialog.DialogCode.Rejected
-    )
-    shell._open_account()
-    shell._open_restore()
-    assert opened == ["accountDialog", "restoreDialog"]
 
 
 def test_the_account_sheet_has_the_widgets_words_and_hides_the_passwords(

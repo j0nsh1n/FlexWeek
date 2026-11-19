@@ -1,26 +1,5 @@
 [
  {
-  "file": "desktop/native/hours/canvas.py",
-  "name": "a block leaves out its length though it has room",
-  "old": "        lambda cut, most=title_lines: stack(most, tuple(part for part in (times, length) if part), cut),\n",
-  "new": "",
-  "test": "desktop/tests/week/test_block_words_on_the_week.py::test_a_block_says_the_most_it_can_without_cutting_a_word_or_ending_a_line_in_a_dot"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "dark looks' rules in the plain hairline",
-  "old": "table.setdefault(\"rule\", table[\"hairline_strong\" if axis == \"dark\" else \"hairline\"])",
-  "new": "table.setdefault(\"rule\", table[\"hairline\"])",
-  "test": "desktop/tests/week/test_the_hours_grid.py::test_each_look_names_its_hour_rule"
- },
- {
-  "file": "desktop/native/hours/canvas.py",
-  "name": "the now line without its time",
-  "old": "        painter.setFont(font)\n        painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, words)\n",
-  "new": "        painter.setFont(font)\n",
-  "test": "desktop/tests/week/test_the_hours_grid.py::test_the_now_line_carries_the_time_on_a_pill_once"
- },
- {
   "file": "desktop/native/widgets.py",
   "name": "time boxes in proportional figures",
   "old": "        if isinstance(target, QTimeEdit):\n",
@@ -56,13 +35,6 @@
   "test": "desktop/tests/settings/test_look_readability.py::test_a_filled_block_on_a_dark_look_is_its_colour_sunk_into_the_panel_with_light_ink"
  },
  {
-  "file": "desktop/native/hours/classic.py",
-  "name": "today's name not marked",
-  "old": "                week.day_name(day), str(week.date_of(day).day), homework_minutes(week, day), day == today,\n",
-  "new": "                week.day_name(day), str(week.date_of(day).day), homework_minutes(week, day), False,\n",
-  "test": "desktop/tests/settings/test_look_blocks.py::test_todays_name_above_the_week_is_marked_and_no_other"
- },
- {
   "file": "desktop/native/look.py",
   "name": "the system's sans before Inter",
   "old": "    \"sans\": \"Inter, Noto Sans, DejaVu Sans, sans-serif\",",
@@ -82,20 +54,6 @@
   "old": "    --include-data-dir=\"$ROOT/desktop/assets=desktop/assets\" \\\n",
   "new": "",
   "test": "desktop/tests/updater/test_packaged_app_contents.py::test_both_builds_ship_the_icon_and_the_fonts_where_the_app_looks_for_them"
- },
- {
-  "file": "desktop/native/hours/canvas.py",
-  "name": "Day washed as well as Week",
-  "old": "self.painter.track(painter, track, week and track.day == self.today)",
-  "new": "self.painter.track(painter, track, track.day == self.today)",
-  "test": "desktop/tests/week/test_the_hours_grid.py::test_today_is_washed_on_a_week_and_not_at_all_on_a_day"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "High contrast's rules at full white",
-  "old": "        rule=\"#666666\",\n",
-  "new": "",
-  "test": "desktop/tests/week/test_the_hours_grid.py::test_each_look_names_its_hour_rule"
  },
  {
   "file": "desktop/native/look.py",
@@ -152,12 +110,5 @@
   "old": "        f\"QLabel#weekTitle {{ font-size: {pt['title']}; font-weight: {WEIGHT_STRONG}; \"\n        f\"color: {palette['text']}; }}\"\n",
   "new": "        f\"QLabel#weekTitle {{ font-size: {pt['title']}; font-weight: {WEIGHT_STRONG}; \"\n        f\"color: {palette['text']}; }}\"\n        f'border-bottom: 2px solid {palette[\"accent\"]}; border-radius: 0; }}'\n",
   "test": "desktop/tests/settings/test_design_tokens.py::test_every_stylesheet_is_whole_rules_that_qt_can_parse"
- },
- {
-  "file": "desktop/native/hours/canvas.py",
-  "name": "one line kept a pixel clear of a block's top again",
-  "old": "        tight = QRectF(room.left(), max(rect.top(), visible.top(), room.top() - TEXT_TOP), room.width(), 0)\n",
-  "new": "        tight = QRectF(room.left(), max(rect.top() + 1, visible.top() + 1, room.top() - TEXT_TOP + 1), room.width(), 0)\n",
-  "test": "desktop/tests/week/test_block_words_on_the_week.py::test_a_half_hour_in_high_contrast_says_its_name_on_the_week"
  }
 ]

@@ -591,9 +591,7 @@ def test_dragging_a_card_onto_the_grid_gives_it_the_time_under_the_pointer(qapp,
     _pump(qapp)
     assert _qml(root, "homeworkCount").property("text") == "0"
     assert _block_named(root, "Math worksheet") is not None
-    # The active Material snackbar is the only presenter; the Widgets toast stays hidden.
     assert "Math worksheet" in _snack(window)
-    assert window.toast.isHidden()
     assert str(_qml(root, "materialSnackbar").property("actionText")).startswith("Undo ")
 
 
@@ -637,6 +635,8 @@ def test_blocks_that_just_landed_are_marked_fresh_once(qapp, window, monkeypatch
     # The mark lasts one second on the real clock, and a slow runner can take longer than that between
     # the block landing and the rows being read. This test is about which blocks are marked, not how long.
     monkeypatch.setattr(bridge_week, "FRESH_S", 3600.0)
+    # A bridge built after the seed, as a sign-in builds it: the seed's own blocks are not new to it.
+    window._drop_partial_material()
     root = _reset(window, qapp)
     due = (_week_monday(window) + timedelta(days=6)).isoformat()
     _homework(window, "sheet", "Math worksheet", 30, due)

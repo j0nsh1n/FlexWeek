@@ -9,7 +9,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QCheckBox, QDialog, QLabel
+from PySide6.QtWidgets import QApplication, QCheckBox, QLabel
 
 from desktop.native.widgets import PreviewDialog
 from desktop.native.window import NativeWindow
@@ -70,28 +70,6 @@ def test_a_preview_with_nothing_selected_cannot_be_saved(qapp: QApplication, win
         assert window.session.message == "Select at least one item before saving."
     finally:
         dialog.deleteLater()
-
-
-def test_duplicate_saves_its_copy_on_top_of_the_original(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    seen: list[tuple[str, bool, bool]] = []
-
-    def accept(dialog: PreviewDialog) -> int:
-        seen.append(
-            (
-                dialog.findChild(QLabel, "previewDetail0").text(),
-                dialog.findChild(QCheckBox, "previewInclude0").isChecked(),
-                dialog.confirm.isEnabled(),
-            )
-        )
-        return QDialog.DialogCode.Accepted
-
-    monkeypatch.setattr(PreviewDialog, "exec", accept)
-    window._duplicate_selected()
-    wait_until(qapp, lambda: not window.session.busy and len(window.session.blocks) == 2)
-    assert seen == [(WARNING, True, True)]
-    assert [(block["days"], block["start"]) for block in window.session.blocks] == [([0], "16:00")] * 2
 
 
 def test_a_copied_day_pastes_onto_the_same_day_and_both_stay(

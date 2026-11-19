@@ -12,11 +12,9 @@ from PySide6.QtWidgets import QApplication, QDialog, QToolButton, QVBoxLayout, Q
 
 from desktop.native.fields import DateField
 from desktop.native.motion import settle
-from desktop.native.widgets import UnfinishedPanel
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.sheets.support_buttons import RESTORE_POINT, makers
 from desktop.tests.sheets.support_date_picker import opened, picked_near_today
-from desktop.tests.sheets.support_overdue_card import DESIGNS, LONG_WORDS, show_overdue_card
 
 
 def _pump() -> None:
@@ -69,12 +67,6 @@ def _restore(window: QWidget) -> QWidget:
     return dialog
 
 
-def _unfinished(window: QWidget) -> QWidget:
-    panel = UnfinishedPanel(window)
-    panel.show()
-    _pump()
-    _still(panel)
-    return panel
 
 
 def _month(window: QWidget) -> QWidget:
@@ -102,25 +94,8 @@ def _year_box(window: QWidget) -> QWidget:
     return month.window()
 
 
-def _overdue(main: str, long_words: bool) -> Callable[[QWidget], QWidget]:
-    def prepare(window: QWidget) -> QWidget:
-        show_overdue_card(window, main)
-        if long_words:
-            window.left_chip_text.setText(LONG_WORDS)
-            window._fit_left_chip()
-        for _ in range(20):
-            QApplication.processEvents()
-        return window.left_chip
-
-    return prepare
 
 
-OVERDUE_SOURCES = ("desktop/native/window.py",)
-OVERDUE_WHOLE = (
-    "At 1024 x 640 with Large text and the long words '1 overdue · 3 left from last week', the Plan and "
-    "Done buttons each show their whole label (neither is squeezed below its natural width, neither is "
-    "cut off) and both sit inside the overdue card."
-)
 
 SCREENS: list[Screen] = [
     *(
@@ -138,16 +113,6 @@ SCREENS: list[Screen] = [
             "stays plain. Restore is the only button filled in the accent."
         ),
         sources=("desktop/native/settings.py", "desktop/native/look.py"),
-    ),
-    Screen(
-        id="sheets.unfinished_panel_dismiss_outlined",
-        area="sheets",
-        prepare=_unfinished,
-        checks=(
-            "The Unfinished panel's dismiss button is outlined: a 1 px edge in the outline colour along "
-            "its top, and its centre is not the outline colour."
-        ),
-        sources=("desktop/native/widgets.py", "desktop/native/look.py"),
     ),
     Screen(
         id="sheets.date_picker_month",
@@ -173,32 +138,5 @@ SCREENS: list[Screen] = [
             "font weight, with no arrows over its digits, and the four digits of the year are not cut off."
         ),
         sources=("desktop/native/fields.py", "desktop/native/look.py"),
-    ),
-    *(
-        Screen(
-            id=f"sheets.overdue_card_{design}",
-            area="sheets",
-            prepare=_overdue(design, True),
-            checks=OVERDUE_WHOLE
-            + (
-                " The card is narrow here, so the buttons are on a row under the words, lined up under them."
-                if design == "classic"
-                else ""
-            ),
-            sources=OVERDUE_SOURCES,
-            main=True,
-        )
-        for design in DESIGNS
-    ),
-    Screen(
-        id="sheets.overdue_card_short_words",
-        area="sheets",
-        prepare=_overdue("classic", False),
-        checks=(
-            "With room for the words and both buttons whole, nothing moves: both buttons share the "
-            "words' line and the row under the words is not showing."
-        ),
-        sources=OVERDUE_SOURCES,
-        main=True,
     ),
 ]

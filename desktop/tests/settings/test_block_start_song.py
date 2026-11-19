@@ -32,8 +32,6 @@ from desktop.tests.settings.support_reminders import (
 )
 from desktop.tests.window_support import qapp  # noqa: F401
 
-pytestmark = pytest.mark.real_surface
-
 
 @pytest.fixture()
 def spotify_app(monkeypatch: pytest.MonkeyPatch) -> SpotifyApp:

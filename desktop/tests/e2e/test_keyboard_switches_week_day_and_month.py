@@ -5,7 +5,6 @@ and W were the Widgets keys; Material's letter keys are P, Z and F.)"""
 
 from __future__ import annotations
 
-import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
@@ -15,8 +14,6 @@ from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material import _show_material
 from desktop.tests.window_support import qapp  # noqa: F401
-
-pytestmark = pytest.mark.real_surface
 
 
 def test_keyboard_switches_week_day_and_month(qapp: QApplication, window: NativeWindow) -> None:

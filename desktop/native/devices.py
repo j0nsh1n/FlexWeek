@@ -15,11 +15,7 @@ from typing import Any
 
 from flexweek_engine import SyncError, SyncService  # type: ignore[import-untyped]
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QPainter, QPalette
-from PySide6.QtWidgets import QWidget
 from shiboken6 import isValid
-
-from desktop.native.settings_copy import DOT_WORDS
 
 SYNC_SCAN_MS = 1000
 # The whole of one "Sync now" call. flexweek-sync's own default is 45 s.
@@ -200,35 +196,6 @@ def sync_linked_phones(
     run_off_ui(owner, lambda: service.sync_all(SYNC_DEADLINE_MS), done)
 
 
-class SyncDot(QWidget):
-    """A small filled dot in the status strip. Its colour says the state; its words are the tooltip
-    and the accessible name."""
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setObjectName("syncDot")
-        self.setFixedSize(10, 10)
-        self.setAccessibleName("Sync status")
-        self._state = "off"
-        self.hide()
-
-    def show_state(self, state: str) -> None:
-        if state == "off":
-            self.hide()
-            return
-        self._state = state
-        self.setToolTip(DOT_WORDS[state])
-        self.setAccessibleDescription(DOT_WORDS[state])
-        self.show()
-        self.update()
-
-    def paintEvent(self, _event: object) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(dot_colour(self._state, self.palette()))
-        painter.drawEllipse(self.rect())
-        painter.end()
 
 
 # The error colour of the look in force, set by the window each time it dresses itself.
@@ -240,14 +207,3 @@ def set_error_colour(colour: str | None) -> None:
     _error_colour = colour
 
 
-def dot_colour(state: str, palette: QPalette) -> QColor:
-    """The dot's fill. A problem uses the look's error colour, so it reads in every look."""
-    if state == "problem":
-        if _error_colour is not None:
-            return QColor(_error_colour)
-        return palette.color(QPalette.ColorRole.Text)
-    if state == "idle":
-        return palette.color(QPalette.ColorRole.Mid)
-    if state == "syncing":
-        return palette.color(QPalette.ColorRole.Highlight)
-    return palette.color(QPalette.ColorRole.Text)

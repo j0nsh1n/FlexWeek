@@ -175,14 +175,3 @@ def test_0k_a_week_list_names_each_block_with_its_day_and_times(qapp, window) ->
     assert school and any("Mon" in r and start in r and end in r for r in school), rows[:10]
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_0K)
-def test_0k_the_grid_is_named_week_view_hours(qapp, window) -> None:
-    from desktop.native.hours.canvas import HoursCanvas
-
-    # 0.19.0 shows an empty-week page instead of the grid on a week with nothing in it; give it a block.
-    window.session.add_block({"id": "school", "title": "School", "kind": "locked", "category": "class",
-                              "start": "08:30", "duration_min": 405, "days": [0, 1, 2, 3, 4]})
-    window.session.save()
-    settled(qapp, window)
-    canvases = [c for c in window.findChildren(HoursCanvas) if c.isVisible()]
-    assert canvases and all(c.accessibleName() == "Week view, hours" for c in canvases)

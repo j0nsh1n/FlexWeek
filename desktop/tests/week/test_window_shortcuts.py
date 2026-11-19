@@ -10,12 +10,10 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QStandardPaths, Qt
-from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog
+from PySide6.QtWidgets import QAbstractButton, QApplication
 
 from desktop.native.calendar import sunday_due
-from desktop.native.settings import HELP_KEYS, HelpDialog
-from desktop.native.widgets import HomeworkDialog
+from desktop.native.settings import HELP_KEYS
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.waiting import wait_until
@@ -58,28 +56,8 @@ def week(qapp: QApplication, window: NativeWindow) -> NativeWindow:
     return window
 
 
-def test_f1_opens_help_from_the_week(week: NativeWindow, monkeypatch: pytest.MonkeyPatch) -> None:
-    opened: list[str] = []
-
-    def show_help(dialog: HelpDialog) -> int:
-        opened.append(dialog.windowTitle())
-        return QDialog.DialogCode.Accepted
-
-    monkeypatch.setattr(HelpDialog, "exec", show_help)
-    QTest.keyClick(week.week_table.hours, Qt.Key.Key_F1)
-    assert opened == ["Help"]
 
 
-def test_ctrl_n_opens_add_homework_from_the_week(week: NativeWindow, monkeypatch: pytest.MonkeyPatch) -> None:
-    opened: list[str] = []
-
-    def look(dialog: HomeworkDialog) -> int:
-        opened.append(dialog.title.text())
-        return QDialog.DialogCode.Rejected
-
-    monkeypatch.setattr(HomeworkDialog, "exec", look)
-    QTest.keyClick(week.week_table.hours, Qt.Key.Key_N, CTRL)
-    assert opened == [""]
 
 
 def test_help_lists_f1_and_ctrl_n() -> None:

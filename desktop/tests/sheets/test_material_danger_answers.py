@@ -24,8 +24,6 @@ from desktop.tests.sheets.support_prompt_walk import (
 from desktop.tests.sheets.test_prompts_stay_in_their_card import poses
 from desktop.tests.window_support import qapp  # noqa: F401
 
-pytestmark = pytest.mark.real_surface
-
 # The prompt and the answer button on it that is the destructive one.
 DANGEROUS = {
     "discard": "discard",

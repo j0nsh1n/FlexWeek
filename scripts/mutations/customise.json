@@ -119,20 +119,6 @@
   "test": "cargo:flexweek-engine:desk_custom_look:test_an_import_says_plainly_what_was_wrong"
  },
  {
-  "file": "desktop/native/hours/canvas.py",
-  "name": "today washed though the look turned it off",
-  "old": "        if today and self.measures[\"today_highlight\"]:\n",
-  "new": "        if today:\n",
-  "test": "desktop/tests/week/test_the_hours_grid.py::test_a_custom_look_can_turn_todays_wash_off"
- },
- {
-  "file": "desktop/native/hours/canvas.py",
-  "name": "a block's times shown though the look hides them",
-  "old": "    times = drawn.times if shown[0] else \"\"\n",
-  "new": "        times = drawn.times\n",
-  "test": "desktop/tests/week/test_block_words_on_the_week.py::test_a_custom_look_can_leave_out_a_blocks_times_or_its_length"
- },
- {
   "file": "desktop/native/window.py",
   "name": "the saved looks not written to the look file",
   "old": "                \"saved_looks\": self._saved_looks,\n",

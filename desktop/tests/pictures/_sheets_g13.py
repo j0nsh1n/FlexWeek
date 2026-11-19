@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QPushButton,
     QScrollArea,
-    QWidget,
 )
 
 from desktop.native.settings import AboutDialog, AccountDialog, HelpDialog
@@ -24,12 +23,10 @@ from desktop.native.widgets import (
     ConfirmSheet,
     HomeworkDialog,
     LateDialog,
-    PlanReview,
     PreviewDialog,
     RoutineDialog,
     SchoolHoursDialog,
     SpreadDialog,
-    UnfinishedPanel,
     confirm_sheet,
 )
 from desktop.native.window import NativeWindow
@@ -229,56 +226,10 @@ def _unfinished_items(count: int) -> list[dict]:
     ]
 
 
-def _unfinished(count: int) -> Callable[[NativeWindow], QWidget]:
-    def prepare(window: NativeWindow) -> QWidget:
-        holder = QWidget(window)
-        holder.setGeometry(window.rect())
-        holder.show()
-        holder.raise_()
-        panel = UnfinishedPanel(holder)
-        panel.move(20, 20)
-        panel.resize(900, 600)
-        panel.set_items(_unfinished_items(count))
-        _settle()
-        return holder
-
-    return prepare
 
 
-def _unfinished_styled_late(window: NativeWindow) -> QWidget:
-    """Filled first and dressed after, as when a look is chosen while the panel is open."""
-    holder = QWidget()
-    holder.resize(940, 640)
-    holder.show()
-    panel = UnfinishedPanel(holder)
-    panel.resize(900, 600)
-    panel.set_items(_unfinished_items(1))
-    _settle()
-    holder.setStyleSheet(window.styleSheet())
-    _settle()
-    window._picture_holder = holder
-    return holder
 
 
-def _plan_review(window: NativeWindow) -> QWidget:
-    panel = PlanReview(window)
-    panel.set_trace(
-        {
-            "placed": [{"id": "essay"}],
-            "unplaced": [{"id": "poster", "title": "Poster"}],
-            "moves": [],
-            "explanations": [],
-        },
-        {"essay": "Essay", "poster": "Poster"},
-        WEEK,
-        (2, 1),
-    )
-    panel.resize(panel.sizeHint().expandedTo(panel.minimumSizeHint()))
-    panel.move(40, 100)
-    panel.show()
-    panel.raise_()
-    _settle()
-    return panel
 
 
 # Pages of other areas -------------------------------------------------------------------------------------
@@ -576,51 +527,6 @@ SCREENS: list[Screen] = [
             "A visible disabled main button (a Continue in a plain dialog), in light and dark: its "
             "ground is the text colour mixed 12 % into the panel colour, a pale tint rather than a grey "
             "slab, and its words read at least 7 to 1 on that ground."
-        ),
-        sources=SOURCES,
-    ),
-    Screen(
-        id="sheets.unfinished_panel",
-        area="sheets",
-        prepare=_unfinished(2),
-        checks=(
-            "The Unfinished panel with two rows, at Normal and Large text: each row's Plan here (tonal) "
-            "and Delete (outlined) buttons are whole, at least 36 px tall (40 at Large) with 8 px "
-            "above and below their words, at least their words plus 20 px each side wide, and inside "
-            "their row. The list is shorter than three rows and has no scroll bar."
-        ),
-        sources=SOURCES,
-    ),
-    Screen(
-        id="sheets.unfinished_panel_many",
-        area="sheets",
-        prepare=_unfinished(8),
-        checks=(
-            "The Unfinished panel with eight rows: the list shows about three and a half rows (within "
-            "1 px of 3.5 row heights inside its frame) so the fourth row shows it scrolls, and a "
-            "scroll bar shows. At Normal and Large text."
-        ),
-        sources=SOURCES,
-    ),
-    Screen(
-        id="sheets.unfinished_panel_styled_late",
-        area="sheets",
-        prepare=_unfinished_styled_late,
-        checks=(
-            "The Unfinished panel filled first and dressed in the look after (a look chosen while it is "
-            "open): its button is still at least 36 px tall and its size hint tall, and inside its row, "
-            "not cut."
-        ),
-        sources=SOURCES,
-    ),
-    Screen(
-        id="sheets.plan_review_got_it",
-        area="sheets",
-        prepare=_plan_review,
-        checks=(
-            "The plan's review panel after a plan: the heading is the toast's sentence 'Placed 2 homework "
-            "blocks. 1 with no time yet.' and Got it is the tonal button, not filled in the accent (the "
-            "only accent-filled button on the panel is not Got it)."
         ),
         sources=SOURCES,
     ),

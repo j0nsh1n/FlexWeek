@@ -160,11 +160,15 @@ def idle(window: NativeWindow) -> bool:
 def hold_month_requests(window: NativeWindow) -> list[tuple[Any, ...]]:
     """Month requests the window makes from here on are kept in the returned list, unanswered, as
     (method, path, payload, ok, err); the test answers or fails them. The session's month cache is
-    emptied first, as on a first visit, so the preview has to ask."""
+    emptied first, as on a first visit, so the preview has to ask. The preview may already hold the month
+    the session prefetched when it signed in; the generation bump and week_changed are what a save or a new
+    week start does to make it forget that, so it asks the held client when Settings opens it."""
     held: list[tuple[Any, ...]] = []
     client = window.session.client
     original = client.request
     window.session._month_cache.clear()
+    window.session._month_gen += 1
+    window.session.week_changed.emit()
 
     def request(method: str, path: str, payload: Any, ok: Any, err: Any) -> Any:
         if path.startswith("/api/month"):

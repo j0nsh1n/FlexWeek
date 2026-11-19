@@ -24,8 +24,6 @@ from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material import _bridge, _click, _pump, _qml, _snack
 from desktop.tests.window_support import qapp, settled  # noqa: F401
 
-pytestmark = pytest.mark.real_surface
-
 # An Undo notice stays at least this long.
 ACTION_MS = 10_000
 

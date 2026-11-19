@@ -18,7 +18,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.material.sheet_block import BlockDraft  # noqa: E402
 from desktop.native.material.sheet_homework import HomeworkDraft  # noqa: E402
@@ -32,11 +32,6 @@ from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: E402
     settle,
     sheets,
     shell,
-)
-from desktop.tests.sheets.test_fixed_time_discard_on_escape import (  # noqa: E402
-    Script,
-    only_look,
-    press_escape,
 )
 from desktop.tests.sheets.test_material_escape_keeps_the_typing import (  # noqa: E402,F401
     _qml_name,
@@ -85,104 +80,12 @@ def test_material_choice_survives_a_week_start_switch(qapp, shell, kind: str, ch
         assert note == CROSSING
 
 
-def test_widgets_block_day_changed_and_returned_keeps_its_weekday(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    seen: dict = {}
-
-    def fill(dialog: QDialog) -> int:
-        dialog.title.setText("Piano lesson")
-        for day in (1, 0, 1, 0):
-            dialog.day_picker.buttons[day].click()
-        assert dialog.day_picker.days() == [0]
-        press_escape(dialog)
-        return int(dialog.result())
-
-    def inspect(dialog: QDialog) -> int:
-        seen["days"] = dialog.day_picker.days()
-        seen["note"] = dialog.moved_note.text()
-        return only_look(dialog)
-
-    Script("block", monkeypatch, fill, inspect)
-    _go(qapp, window.session, "2026-11-30")
-    window._add_fixed()
-    _wednesday(qapp, window.session)
-    window._add_fixed()
-    assert seen == {"days": [5], "note": CROSSING}
 
 
-def test_widgets_block_ticks_never_touched_are_still_picked_again(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    seen: dict = {}
-
-    def fill(dialog: QDialog) -> int:
-        dialog.title.setText("Piano lesson")
-        press_escape(dialog)
-        return int(dialog.result())
-
-    def inspect(dialog: QDialog) -> int:
-        seen["days"] = dialog.day_picker.days()
-        seen["note"] = dialog.moved_note.text()
-        return only_look(dialog)
-
-    Script("block", monkeypatch, fill, inspect)
-    _go(qapp, window.session, "2026-11-30")
-    window._add_fixed()
-    _wednesday(qapp, window.session)
-    window._add_fixed()
-    assert seen == {"days": [0], "note": ""}
 
 
-def test_widgets_grid_drawn_day_is_kept_turned_and_marked(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    seen: dict = {}
-
-    def fill(dialog: QDialog) -> int:
-        assert dialog.day_picker.days() == [0]
-        dialog.title.setText("Piano lesson")
-        press_escape(dialog)
-        return int(dialog.result())
-
-    def inspect(dialog: QDialog) -> int:
-        seen["days"] = dialog.day_picker.days()
-        seen["note"] = dialog.moved_note.text()
-        seen["moved"] = bool(dialog.day_picker.buttons[5].property("moved"))
-        return only_look(dialog)
-
-    Script("block", monkeypatch, fill, inspect)
-    _go(qapp, window.session, "2026-11-30")
-    window._create_range(0, 16 * 60, 17 * 60)
-    _wednesday(qapp, window.session)
-    window._add_fixed()
-    assert seen == {"days": [5], "note": CROSSING, "moved": True}
 
 
-def test_widgets_homework_pin_changed_and_returned_keeps_its_weekday(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    seen: dict = {}
-
-    def fill(dialog: QDialog) -> int:
-        dialog.title.setText("Piano lesson")
-        dialog.when.setCurrentIndex(dialog.when.findData("fixed"))
-        for day in (1, 0):
-            dialog.when_day.buttons[day].click()
-        press_escape(dialog)
-        return int(dialog.result())
-
-    def inspect(dialog: QDialog) -> int:
-        seen["days"] = dialog.when_day.days()
-        seen["note"] = dialog.moved_note.text()
-        return only_look(dialog)
-
-    Script("homework", monkeypatch, fill, inspect)
-    _go(qapp, window.session, "2026-11-30")
-    window._add_homework()
-    _wednesday(qapp, window.session)
-    window._add_homework()
-    assert seen == {"days": [5], "note": CROSSING}
 
 
 def test_month_names_are_english_under_another_language() -> None:
@@ -281,45 +184,3 @@ def test_widgets_the_same_note_is_said_once(
         dialog.reject()
 
 
-@pytest.mark.parametrize("choice", ["untouched", "returned", "drawn"])
-def test_widgets_block_choice_survives_an_extra_esc_and_reopen(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, choice: str
-) -> None:
-    """Esc, reopen in the same week, Esc again, then the switch: a chosen Monday is still the student's
-    choice, though the reopened sheet already showed Monday before the kept days were put back."""
-    seen: dict = {}
-
-    def fill(dialog: QDialog) -> int:
-        dialog.title.setText("Piano lesson")
-        if choice == "returned":
-            for day in (1, 0, 1, 0):
-                dialog.day_picker.buttons[day].click()
-        press_escape(dialog)
-        return int(dialog.result())
-
-    def keep_again(dialog: QDialog) -> int:
-        assert dialog.day_picker.days() == [0]
-        press_escape(dialog)
-        return int(dialog.result())
-
-    def inspect(dialog: QDialog) -> int:
-        seen["days"] = dialog.day_picker.days()
-        seen["note"] = dialog.moved_note.text()
-        seen["marked"] = [
-            day for day, button in enumerate(dialog.day_picker.buttons) if button.property("moved")
-        ]
-        return only_look(dialog)
-
-    Script("block", monkeypatch, fill, keep_again, inspect)
-    _go(qapp, window.session, "2026-11-30")
-    if choice == "drawn":
-        window._create_range(0, 16 * 60, 17 * 60)
-    else:
-        window._add_fixed()
-    window._add_fixed()
-    _wednesday(qapp, window.session)
-    window._add_fixed()
-    if choice == "untouched":
-        assert seen == {"days": [0], "note": "", "marked": []}
-    else:
-        assert seen == {"days": [5], "note": CROSSING, "marked": [5]}

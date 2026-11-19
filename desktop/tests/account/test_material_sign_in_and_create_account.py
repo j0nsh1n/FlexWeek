@@ -37,16 +37,6 @@ from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import PASSWORD, qapp  # noqa: F401
 
 
-def test_sign_in_is_materials_even_on_the_widgets_start(
-    qapp: QApplication, light_launches: LightLaunches
-) -> None:
-    """The tests' Widgets start still opens the Widgets week after sign-in; sign-in itself is Material's."""
-    window = light_launches.launch()
-    assert window._surface == "widgets"
-    assert page(window) == "materialPage"
-    assert account(window).phase == "sign-in"
-
-
 def test_material_surface_opens_on_the_material_sign_in(
     qapp: QApplication, material_launches: LightLaunches
 ) -> None:

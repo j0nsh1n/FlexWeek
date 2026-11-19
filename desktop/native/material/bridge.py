@@ -494,14 +494,14 @@ class MaterialBridge(QObject):
     def alertText(self) -> str:
         """A reminder the student asked to keep on screen until they deal with it, from the window's strip."""
         strip = getattr(self._window, "alert_strip", None)
-        return strip.text.text() if strip is not None and strip.pending() else ""
+        return strip.text() if strip is not None and strip.pending() else ""
 
     @Slot()
     def dismissAlert(self) -> None:
         """Got it: the strip's own button, so one reminder goes at a time and its snackbar line with it."""
         strip = getattr(self._window, "alert_strip", None)
         if strip is not None:
-            strip.dismiss.click()
+            strip.drop()
 
     @Property(str, notify=changed)
     def title(self) -> str:

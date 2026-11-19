@@ -34,51 +34,10 @@ def menu(window: NativeWindow) -> object:
     return pictures.open_menu(window)
 
 
-def next_card_in_terminal(window: NativeWindow) -> object:
-    from PySide6.QtWidgets import QVBoxLayout
-
-    from desktop.native.hours.rail import RAIL_PX, NextCard
-    from desktop.native.weekmodel import build_week
-
-    pictures.wear(window, "Terminal")
-    host = QWidget(window)
-    card = NextCard(host)
-    QVBoxLayout(host).addWidget(card)
-    host.setGeometry(20, 20, RAIL_PX, 300)
-    school = {
-        "id": "school",
-        "title": "School",
-        "kind": "locked",
-        "category": "class",
-        "start": "08:00",
-        "duration_min": 405,
-        "days": [1],
-    }
-    card.show_next(build_week("2026-09-28", [school], [], None), 1, 620)
-    host.raise_()
-    host.show()
-    still(host)
-    return host
 
 
-def unfinished_panel(window: NativeWindow) -> object:
-    from desktop.native.widgets import UnfinishedPanel
-
-    panel = UnfinishedPanel(window)
-    panel.setGeometry(20, 20, 320, 400)
-    panel.raise_()
-    panel.show()
-    still(panel)
-    return panel
 
 
-def week_list_drawer(window: NativeWindow) -> object:
-    window.resize(1280, 800)
-    window.show()
-    window._toggle_week_access_list()
-    pictures.pump(lambda: window.week_list_panel.isVisible())
-    still(window)
-    return window
 
 
 def material_tokens(window: NativeWindow) -> object:
@@ -170,39 +129,6 @@ SCREENS: list[Screen] = [
         ),
         sources=("desktop/native/menus.py", "desktop/native/look.py"),
         main=True,
-        styles=("widgets",),
-    ),
-    Screen(
-        id="settings.next_card_terminal",
-        area="settings",
-        prepare=next_card_in_terminal,
-        checks=(
-            "In Terminal the rail's Next card shows its whole time sentence ending '4 h 25 min left': the "
-            "sentence wraps and its label is as tall as the wrapped text needs, nothing cut off."
-        ),
-        sources=("desktop/native/hours/rail.py", "desktop/native/look.py"),
-        styles=("widgets",),
-    ),
-    Screen(
-        id="settings.audit_unfinished_panel",
-        area="settings",
-        prepare=unfinished_panel,
-        checks=(
-            "The unfinished-homework panel at 320 by 400: its heading is at the top, the list in the middle "
-            "and the dismiss button at the bottom, below the list."
-        ),
-        sources=("desktop/native/widgets.py",),
-        styles=("widgets",),
-    ),
-    Screen(
-        id="settings.audit_week_list_drawer",
-        area="settings",
-        prepare=week_list_drawer,
-        checks=(
-            "Week as a list at 1280 by 800: the panel is a floating overlay exactly 360 px wide and the "
-            "planner underneath keeps the width it had without the panel; the drawer does not crush it."
-        ),
-        sources=("desktop/native/window.py",),
         styles=("widgets",),
     ),
     Screen(

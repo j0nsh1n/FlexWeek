@@ -17,11 +17,9 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QEvent, Qt, QTime
 from PySide6.QtGui import QFocusEvent, QKeyEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel
+from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox
 
-from backend.models import parse_due
 from backend.tests.fake_clock import CLOCK
-from desktop.native.weekmodel import set_clock_24h
 from desktop.native.widgets import BlockDialog, ConfirmSheet, HomeworkDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
@@ -399,252 +397,34 @@ def quiet_commit(window: NativeWindow, monkeypatch: pytest.MonkeyPatch) -> Nativ
     return window
 
 
-@pytest.mark.parametrize("kind", KINDS)
-def test_the_next_plain_add_opens_with_what_esc_kept(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str
-) -> None:
-    script = Script(kind, monkeypatch, type_then_escape, only_look)
-    add = getattr(quiet_commit, PLAIN_ADD[kind])
-    add()
-    pump(qapp)
-    add()
-    assert script.titles == ["", "Piano lesson"]
-    assert script.sheets[1] is not script.sheets[0], "a new sheet, filled in; not the closed one again"
 
 
-@pytest.mark.parametrize("kind", KINDS)
-def test_esc_leaves_no_sheet_behind_in_the_window(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str
-) -> None:
-    """Only plain values are kept between Esc and the next Add; the closed sheet is freed."""
-    script = Script(kind, monkeypatch, type_then_escape)
-    getattr(quiet_commit, PLAIN_ADD[kind])()
-    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-    pump(qapp)
-    from shiboken6 import isValid
-
-    assert not isValid(script.sheets[0])
-    for kept in quiet_commit._kept_adds.values():
-        assert not any(isinstance(part, QDialog) for part in kept)
 
 
-@pytest.mark.parametrize("kind", KINDS)
-def test_the_kept_typing_is_used_once(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str
-) -> None:
-    script = Script(kind, monkeypatch, type_then_escape, only_look, only_look)
-    add = getattr(quiet_commit, PLAIN_ADD[kind])
-    for _ in range(3):
-        add()
-        pump(qapp)
-    assert script.titles == ["", "Piano lesson", ""]
 
 
-@pytest.mark.parametrize("kind, other", [("homework", "block"), ("block", "homework")])
-def test_the_other_kinds_add_opens_empty(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str, other: str
-) -> None:
-    script = Script(kind, monkeypatch, type_then_escape)
-    other_script = Script(other, monkeypatch, only_look)
-    getattr(quiet_commit, PLAIN_ADD[kind])()
-    pump(qapp)
-    getattr(quiet_commit, PLAIN_ADD[other])()
-    assert script.titles == [""]
-    assert other_script.titles == [""]
 
 
-@pytest.mark.parametrize("kind", KINDS)
-def test_an_untouched_sheet_closed_with_esc_keeps_nothing(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str
-) -> None:
-    def esc_only(dialog: QDialog) -> int:
-        press_escape(dialog)
-        return int(dialog.result())
-
-    script = Script(kind, monkeypatch, esc_only, only_look)
-    add = getattr(quiet_commit, PLAIN_ADD[kind])
-    add()
-    pump(qapp)
-    add()
-    assert script.titles == ["", ""]
-    assert quiet_commit._kept_adds == {}
 
 
-@pytest.mark.parametrize("kind", KINDS)
-def test_an_add_that_brings_its_own_values_ignores_the_kept_typing_and_leaves_it(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str
-) -> None:
-    script = Script(kind, monkeypatch, type_then_escape, only_look, only_look)
-    getattr(quiet_commit, PLAIN_ADD[kind])()
-    pump(qapp)
-    ADD_WITH_VALUES[kind](quiet_commit)
-    pump(qapp)
-    getattr(quiet_commit, PLAIN_ADD[kind])()
-    assert script.titles == ["", "", "Piano lesson"]
 
 
-@pytest.mark.parametrize("kind", KINDS)
-def test_esc_with_typing_in_an_add_that_brings_its_own_values_replaces_the_kept_typing(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str
-) -> None:
-    def type_other_then_escape(dialog: QDialog) -> int:
-        dialog.title.setText("Chemistry")
-        press_escape(dialog)
-        return int(dialog.result())
-
-    script = Script(kind, monkeypatch, type_then_escape, type_other_then_escape, only_look)
-    getattr(quiet_commit, PLAIN_ADD[kind])()
-    pump(qapp)
-    ADD_WITH_VALUES[kind](quiet_commit)
-    pump(qapp)
-    getattr(quiet_commit, PLAIN_ADD[kind])()
-    assert script.titles == ["", "", "Chemistry"]
 
 
-@pytest.mark.parametrize("kind", KINDS)
-def test_a_save_clears_the_kept_typing(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str
-) -> None:
-    script = Script(kind, monkeypatch, type_then_escape, save, only_look)
-    add = getattr(quiet_commit, PLAIN_ADD[kind])
-    for _ in range(3):
-        add()
-        pump(qapp)
-    assert script.titles == ["", "Piano lesson", ""]
 
 
-@pytest.mark.parametrize("kind", KINDS)
-def test_cancel_and_discard_clear_the_kept_typing(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str
-) -> None:
-    script = Script(kind, monkeypatch, type_then_escape, cancel_and_discard(monkeypatch), only_look)
-    add = getattr(quiet_commit, PLAIN_ADD[kind])
-    for _ in range(3):
-        add()
-        pump(qapp)
-    assert script.titles == ["", "Piano lesson", ""]
 
 
-@pytest.mark.parametrize("kind", KINDS)
-def test_a_reopened_sheet_closed_with_esc_keeps_the_typing_again(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str
-) -> None:
-    def escape_untouched(dialog: QDialog) -> int:
-        press_escape(dialog)
-        return int(dialog.result())
-
-    script = Script(kind, monkeypatch, type_then_escape, escape_untouched, only_look, only_look)
-    add = getattr(quiet_commit, PLAIN_ADD[kind])
-    for _ in range(3):
-        add()
-        pump(qapp)
-    assert script.titles == ["", "Piano lesson", "Piano lesson"]
 
 
-@pytest.mark.parametrize("account", [None, {"id": "someone-else", "username": "other"}])
-@pytest.mark.parametrize("kind", KINDS)
-def test_signing_out_or_switching_account_clears_the_kept_typing(
-    qapp: QApplication,
-    quiet_commit: NativeWindow,
-    monkeypatch: pytest.MonkeyPatch,
-    kind: str,
-    account: dict | None,
-) -> None:
-    script = Script(kind, monkeypatch, type_then_escape, only_look)
-    getattr(quiet_commit, PLAIN_ADD[kind])()
-    pump(qapp)
-    quiet_commit.session.account_changed.emit(account)
-    pump(qapp)
-    getattr(quiet_commit, PLAIN_ADD[kind])()
-    assert script.titles == ["", ""]
 
 
-@pytest.mark.parametrize("kind", KINDS)
-def test_the_same_account_signalled_again_keeps_the_typing(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str
-) -> None:
-    script = Script(kind, monkeypatch, type_then_escape, only_look)
-    getattr(quiet_commit, PLAIN_ADD[kind])()
-    pump(qapp)
-    quiet_commit.session.account_changed.emit(quiet_commit.session.account)
-    pump(qapp)
-    getattr(quiet_commit, PLAIN_ADD[kind])()
-    assert script.titles == ["", "Piano lesson"]
 
 
-def test_homework_drawn_on_a_day_and_kept_by_esc_is_saved_on_that_day_from_the_next_add(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A drag across free time on Wednesday opens Add homework for that day. Esc keeps the typing; saving it
-    from the next plain Add must still put the homework on Wednesday, not leave it without a day."""
-    saved: list = []
-
-    def record(body: dict, **how) -> None:
-        saved.append((body["title"], how.get("days"), body["due"], body["estimate_min"]))
-
-    def type_then_save(sheet: QDialog) -> int:
-        sheet.title.setText("Piano lesson")
-        return save(sheet)
-
-    monkeypatch.setattr(quiet_commit.session, "add_homework", record)
-    monkeypatch.setattr(quiet_commit.session, "armed_category", "assignments")
-    script = Script("homework", monkeypatch, type_then_save, type_then_escape, save)
-    quiet_commit._create_range(2, 16 * 60, 18 * 60)
-    pump(qapp)
-    quiet_commit._create_range(2, 16 * 60, 18 * 60)
-    pump(qapp)
-    quiet_commit._add_homework()
-    assert script.titles == ["", "", "Piano lesson"]
-    # The drag gave the day, the length (two hours) and the due (the end of the week) together. Kept
-    # with only the day, the homework was saved on Wednesday with tomorrow's due and one hour. Saved
-    # after Esc it must be what saving the drawn sheet straight away gives.
-    straight_away, after_esc = saved
-    assert (straight_away[1], straight_away[3]) == ([2], 120)
-    due_day, due_minute = parse_due(straight_away[2])
-    assert (due_day.weekday(), due_minute) == (6, 24 * 60), "due at the end of the Sunday that ends the week"
-    # "2026-11-08" and "2026-11-08T23:59" are the same due: the end of that day.
-    assert (after_esc[0], after_esc[1], parse_due(after_esc[2]), after_esc[3]) == (
-        straight_away[0],
-        straight_away[1],
-        parse_due(straight_away[2]),
-        straight_away[3],
-    )
 
 
-def test_the_day_a_drag_gave_stays_through_a_second_esc(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    saved: list = []
-    monkeypatch.setattr(
-        quiet_commit.session,
-        "add_homework",
-        lambda body, **how: saved.append((body["title"], how.get("days"))),
-    )
-    monkeypatch.setattr(quiet_commit.session, "armed_category", "assignments")
-
-    def escape_again(dialog: QDialog) -> int:
-        press_escape(dialog)
-        return int(dialog.result())
-
-    Script("homework", monkeypatch, type_then_escape, escape_again, save)
-    quiet_commit._create_range(2, 16 * 60, 17 * 60)
-    pump(qapp)
-    quiet_commit._add_homework()
-    pump(qapp)
-    quiet_commit._add_homework()
-    assert saved == [("Piano lesson", [2])]
 
 
-@pytest.mark.parametrize("kind", KINDS)
-def test_nothing_treats_a_kept_draft_as_an_open_sheet(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str
-) -> None:
-    """The plain look's keys wait while a sheet is open (`activeModalWidget`); a kept draft is not one."""
-    Script(kind, monkeypatch, type_then_escape)
-    getattr(quiet_commit, PLAIN_ADD[kind])()
-    pump(qapp)
-    assert QApplication.activeModalWidget() is None
-    assert not [item for item in quiet_commit.findChildren(DIALOGS[kind]) if item.isVisible()]
 
 
 # What the next sheet works out for itself -----------------------------------------------
@@ -667,38 +447,6 @@ def pin_state(sheet: HomeworkDialog) -> list:
     ]
 
 
-@pytest.mark.parametrize("switched_to_pin", [False, True])
-def test_a_title_kept_at_3_pm_and_a_pin_time_never_touched_gets_the_7_pm_pin_time(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, switched_to_pin: bool
-) -> None:
-    """At 3 PM a new sheet offers 4 PM (the day's earliest start). The student typed a title (and maybe
-    chose to pin, taking the time as offered). At 7 PM the next Add shows the title and the time a new sheet
-    offers at 7 PM, 7:15 PM; the 4 PM it picked at 3 PM was never theirs."""
-    window = quiet_commit
-    seen: list = []
-
-    def keep(sheet: HomeworkDialog) -> int:
-        sheet.title.setText("Piano practice")
-        if switched_to_pin:
-            sheet.when.setCurrentIndex(sheet.when.findData("fixed"))
-        press_escape(sheet)
-        return int(sheet.result())
-
-    def look(sheet: HomeworkDialog) -> int:
-        seen.append((sheet.title.text(), *pin_state(sheet)))
-        return only_look(sheet)
-
-    Script("homework", monkeypatch, keep, look)
-    CLOCK.set(at(15))
-    window._add_homework()
-    pump(qapp)
-    CLOCK.set(at(19))
-    window._add_homework()
-    when, day, minutes, _over, _from = seen[0][1:]
-    assert seen[0][0] == "Piano practice"
-    assert when == ("fixed" if switched_to_pin else "plan")
-    assert minutes == 19 * 60 + 15
-    assert [when, day, minutes] == pin_state_for_new_sheet_at(window, at(19), pinned=switched_to_pin)[:3]
 
 
 def pin_state_for_new_sheet_at(window: NativeWindow, moment: datetime, *, pinned: bool) -> list:
@@ -712,134 +460,14 @@ def pin_state_for_new_sheet_at(window: NativeWindow, moment: datetime, *, pinned
         free(sheet)
 
 
-def test_a_pin_chosen_at_3_pm_comes_back_at_7_pm_and_says_it_is_over_as_a_new_sheet_would(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    window = quiet_commit
-    today = at(15).weekday()
-    seen: list = []
-
-    def pin_4_pm_today(sheet: HomeworkDialog) -> None:
-        sheet.when.setCurrentIndex(sheet.when.findData("fixed"))
-        sheet.when_day.set_days([today])
-        sheet._pick_day()
-        sheet.when_time.setTime(QTime(16, 0))
-
-    def keep(sheet: HomeworkDialog) -> int:
-        sheet.title.setText("Piano practice")
-        pin_4_pm_today(sheet)
-        press_escape(sheet)
-        return int(sheet.result())
-
-    def look(sheet: HomeworkDialog) -> int:
-        seen.append((sheet.title.text(), pin_state(sheet)))
-        return only_look(sheet)
-
-    Script("homework", monkeypatch, keep, look)
-    CLOCK.set(at(15))
-    window._add_homework()
-    pump(qapp)
-    CLOCK.set(at(19))
-    window._add_homework()
-    # What a new sheet says at 7 PM when 4 PM today is picked on it.
-    CLOCK.set(at(19))
-    reference = HomeworkDialog(window, today=window._today(), category="assignments")
-    try:
-        pin_4_pm_today(reference)
-        expected = pin_state(reference)
-    finally:
-        free(reference)
-    title, state = seen[0]
-    assert title == "Piano practice"
-    assert state == expected
-    assert state[0] == "fixed" and state[2] == 16 * 60, "the 4 PM the student chose"
-    assert state[3], "4 PM today is over at 7 PM, and the sheet says so"
-    assert "7:00 PM" in state[4] or "19:00" in state[4], state[4]
 
 
-@pytest.mark.parametrize("kind", KINDS)
-def test_typing_kept_before_midnight_comes_back_on_the_new_days_sheet(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str
-) -> None:
-    window = quiet_commit
-    seen: list = []
-
-    def look(sheet: QDialog) -> int:
-        seen.append(sheet)
-        return only_look(sheet)
-
-    Script(kind, monkeypatch, type_then_escape, look)
-    CLOCK.set(datetime(2026, 11, 5, 23, 50))
-    getattr(window, PLAIN_ADD[kind])()
-    pump(qapp)
-    CLOCK.set(datetime(2026, 11, 6, 0, 10))
-    getattr(window, PLAIN_ADD[kind])()
-    sheet = seen[0]
-    assert sheet.title.text() == "Piano lesson"
-    if kind == "homework":
-        # Tomorrow of the new day, not of the day it was typed on; and the pin starts from the new day.
-        assert sheet.due.value() == "2026-11-07"
-        assert sheet._day == 4, "Friday 6 November"
-        assert sheet.when_time.minutes() == 16 * 60
-    else:
-        assert [index for index, check in enumerate(sheet.days) if check.isChecked()] == [4]
-        assert sheet.start.minutes() == 0 * 60 + 15, "the next quarter hour of the new day"
 
 
-@pytest.mark.parametrize("kind", KINDS)
-def test_typing_kept_before_a_12_or_24_hour_switch_comes_back_with_times_written_the_new_way(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str
-) -> None:
-    window = quiet_commit
-    seen: list = []
-
-    def look(sheet: QDialog) -> int:
-        field = sheet.when_time if kind == "homework" else sheet.start
-        seen.append((sheet.title.text(), field.text()))
-        return only_look(sheet)
-
-    Script(kind, monkeypatch, type_then_escape, look)
-    CLOCK.set(at(15))
-    set_clock_24h(True)
-    getattr(window, PLAIN_ADD[kind])()
-    pump(qapp)
-    set_clock_24h(False)
-    getattr(window, PLAIN_ADD[kind])()
-    title, text = seen[0]
-    assert title == "Piano lesson"
-    assert text.upper().endswith(("AM", "PM")), text
 
 
-@pytest.mark.parametrize("kind, picked", [("homework", "assignments"), ("block", "extra")])
-def test_the_add_button_with_a_type_picked_opens_with_what_esc_kept(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str, picked: str
-) -> None:
-    """A type picked in the Add menu stays picked, and the Add button and C then add that type. They are
-    still the plain Add: with a type picked they opened empty while Ctrl+N brought the typing back, and
-    typing in that empty sheet then replaced what had been kept."""
-    quiet_commit.session.arm_category(picked)
-    script = Script(kind, monkeypatch, type_then_escape, only_look)
-    quiet_commit._add_now()
-    pump(qapp)
-    quiet_commit._add_now()
-    # A fixed time of a picked type opens on that type's own title ("Activity"), homework on none.
-    assert script.titles[0] != "Piano lesson"
-    assert script.titles[1] == "Piano lesson"
 
 
-@pytest.mark.parametrize("kind, picked", [("homework", "study"), ("block", "exercise")])
-def test_picking_a_type_in_the_add_menu_opens_empty_and_leaves_what_esc_kept(
-    qapp: QApplication, quiet_commit: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str, picked: str
-) -> None:
-    script = Script(kind, monkeypatch, type_then_escape, only_look, only_look)
-    getattr(quiet_commit, PLAIN_ADD[kind])()
-    pump(qapp)
-    quiet_commit._add_from_chip(picked)
-    pump(qapp)
-    quiet_commit._add_now()
-    assert len(script.titles) == 3
-    assert script.titles[1] != "Piano lesson", "the menu pick brought its own type and opened without it"
-    assert script.titles[2] == "Piano lesson"
 
 
 def test_a_fixed_time_reopened_with_its_kept_start_says_its_length_not_that_the_end_moved(
@@ -889,49 +517,8 @@ def _pick_friday_then_escape(dialog: QDialog) -> int:
     return int(dialog.result())
 
 
-@pytest.mark.parametrize("kind", KINDS)
-def test_a_day_kept_by_esc_keeps_its_weekday_when_the_week_start_changes(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, kind: str
-) -> None:
-    """The clock is Thursday 5 November 2026. Friday 6 is day 4 of the week from Monday 2 and day 2 of the
-    week from Wednesday 4, so the kept Friday is still Friday after Wednesday is picked."""
-    from desktop.native import fields
-    from desktop.tests.waiting import wait_until
-
-    seen: list = []
-    Script(kind, monkeypatch, _pick_friday_then_escape, _look(seen))
-    add = getattr(window, PLAIN_ADD[kind])
-    add()
-    pump(qapp)
-    assert window._kept_adds, "Esc kept the typing"
-    fields.save_week_starts_on("wednesday")
-    wait_until(qapp, lambda: window.session.week_start == "2026-11-04" and not window.session.busy)
-    add()
-    pump(qapp)
-    assert seen == [([2], ["Fri"])]
 
 
-def test_homework_drawn_on_a_day_and_kept_by_esc_is_added_on_that_weekday_after_the_week_start_changes(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Drawn on Friday 6 November (day 4 of the week from Monday 2), kept by Esc, and added after Wednesday
-    is picked: its time is on Friday 6, day 2 of the week from Wednesday 4."""
-    from desktop.native import fields
-    from desktop.tests.waiting import wait_until
-
-    added: list = []
-    monkeypatch.setattr(window.session, "add_homework", lambda body, **kwargs: added.append(kwargs))
-    for name in ("save", "plan_after_save"):
-        monkeypatch.setattr(window.session, name, lambda *args, **kwargs: None)
-    Script("homework", monkeypatch, type_then_escape, save)
-    window.session.arm_category("assignments")
-    window._create_range(4, 16 * 60, 17 * 60)
-    pump(qapp)
-    fields.save_week_starts_on("wednesday")
-    wait_until(qapp, lambda: window.session.week_start == "2026-11-04" and not window.session.busy)
-    window._add_homework()
-    pump(qapp)
-    assert added == [{"days": [2]}]
 
 
 def _pick_monday_then_escape(dialog: QDialog) -> int:
@@ -952,70 +539,5 @@ def _moved_pill(picker, day: int) -> tuple[bool, bool, str]:
     return button.isChecked(), bool(button.property("moved")), button.accessibleName()
 
 
-def test_a_kept_block_reopened_in_the_new_week_marks_the_moved_day(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Monday 2 is ticked in the week from Monday 2 November. From Wednesday the week is Wed 4 to
-    Tue 10, so the kept Monday is Monday 9: ringed, named, and announced until the row is touched."""
-    from desktop.native import fields
-    from desktop.tests.waiting import wait_until
-
-    seen: dict = {}
-
-    def inspect(dialog: QDialog) -> int:
-        picker = dialog.day_picker
-        seen["pill"] = _moved_pill(picker, 5)
-        seen["note"] = dialog.findChild(QLabel, "blockMovedNote").text()
-        dialog._add_primary()
-        qapp.processEvents()
-        seen["shown"] = dialog.findChild(QLabel, "blockMovedNote").isVisible()
-        picker.buttons[5].click()
-        seen["cleared"] = _moved_pill(picker, 5)
-        seen["note_after"] = dialog.findChild(QLabel, "blockMovedNote").text()
-        seen["hidden_after"] = not dialog.findChild(QLabel, "blockMovedNote").isVisible()
-        return only_look(dialog)
-
-    Script("block", monkeypatch, _pick_monday_then_escape, inspect)
-    window._add_fixed()
-    pump(qapp)
-    fields.save_week_starts_on("wednesday")
-    wait_until(qapp, lambda: window.session.week_start == "2026-11-04" and not window.session.busy)
-    window._add_fixed()
-    pump(qapp)
-    assert seen["pill"] == (True, True, "Monday 9, moved from Monday 2")
-    assert seen["note"] == "Monday 2 isn't in this week any more, so it moved to Monday 9."
-    assert seen["shown"]
-    assert seen["cleared"] == (False, False, "Monday")
-    assert seen["note_after"] == ""
-    assert seen["hidden_after"]
 
 
-def test_a_kept_homework_reopened_in_the_new_week_marks_the_moved_pin(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The pinned Monday 2 becomes Monday 9: the pin pill carries the ring and the note names the
-    move until the student picks another day."""
-    from desktop.native import fields
-    from desktop.tests.waiting import wait_until
-
-    seen: dict = {}
-
-    def inspect(dialog: QDialog) -> int:
-        seen["pill"] = _moved_pill(dialog.when_day, 5)
-        seen["note"] = dialog.findChild(QLabel, "homeworkMovedNote").text()
-        dialog.when_day.buttons[3].click()
-        seen["cleared"] = _moved_pill(dialog.when_day, 3)
-        seen["note_after"] = dialog.findChild(QLabel, "homeworkMovedNote").text()
-        return only_look(dialog)
-
-    Script("homework", monkeypatch, _pick_monday_then_escape, inspect)
-    window._add_homework()
-    pump(qapp)
-    fields.save_week_starts_on("wednesday")
-    wait_until(qapp, lambda: window.session.week_start == "2026-11-04" and not window.session.busy)
-    window._add_homework()
-    pump(qapp)
-    assert seen["pill"] == (True, True, "Monday 9, moved from Monday 2")
-    assert seen["note"] == "Monday 2 isn't in this week any more, so it moved to Monday 9."
-    assert seen["cleared"] == (True, False, "Saturday")
-    assert seen["note_after"] == ""

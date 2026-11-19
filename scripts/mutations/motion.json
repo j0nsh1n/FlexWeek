@@ -28,20 +28,6 @@
     "test": "desktop/tests/settings/test_page_change_motion.py::test_a_switch_never_shows_an_empty_page"
   },
   {
-    "name": "Day, Week and Month do not slide",
-    "file": "desktop/native/window.py",
-    "old": "            direction = (step > 0) - (step < 0)",
-    "new": "            direction = 0",
-    "test": "desktop/tests/day/test_view_changes_fade_and_slide.py::test_a_new_view_is_live_at_once_while_the_old_one_fades"
-  },
-  {
-    "name": "the week behind Settings is not dimmed",
-    "file": "desktop/native/motion.py",
-    "old": "        dim.share = 1 - share if back else share",
-    "new": "        dim.share = 0.0",
-    "test": "desktop/tests/settings/test_settings_slide_motion.py::test_settings_slides_in_from_the_right_over_the_page_dimmed"
-  },
-  {
     "name": "a dialog's content fades without rising",
     "file": "desktop/native/widgets.py",
     "old": "                appear(part, level, rise=True)",
@@ -56,67 +42,11 @@
     "test": "desktop/tests/settings/test_notice_and_sheet_motion.py::test_a_sheet_fades_its_card_and_shadow_as_one_and_keeps_the_shadow"
   },
   {
-    "name": "the segmented selection jumps",
-    "file": "desktop/native/widgets.py",
-    "old": "        if on and self._drawn is not None and self.isVisible() and length:",
-    "new": "        if False:",
-    "test": "desktop/tests/settings/test_segmented_selection_motion.py::test_the_chosen_pill_slides_over_the_segments_between_to_the_one_chosen"
-  },
-  {
     "name": "the server turns Reduce away",
     "file": "backend/app.py",
     "old": "    motion: Literal[\"off\", \"normal\", \"extra\", \"reduce\"] | None = Field(",
     "new": "    motion: Literal[\"off\", \"normal\", \"extra\"] | None = Field(",
     "test": "backend/tests/test_appearance_preferences.py::test_reduce_motion_is_kept_and_an_unknown_level_is_rejected"
-  },
-  {
-    "name": "scrolling to what a plan placed cuts its slide short",
-    "file": "desktop/native/hours/canvas.py",
-    "old": "        if rects != self._last_rects:\n",
-    "new": "        if True:\n",
-    "test": "desktop/tests/settings/test_hours_motion.py::test_laying_the_hours_out_again_where_nothing_moved_keeps_the_slide"
-  },
-  {
-    "name": "a moved block slides under Reduce",
-    "file": "desktop/native/hours/canvas.py",
-    "old": "                if travels:\n",
-    "new": "                if True:\n",
-    "test": "desktop/tests/settings/test_hours_motion.py::test_under_reduce_a_moved_block_fades_in_where_it_went_rather_than_sliding"
-  },
-  {
-    "name": "the title fades with the page again",
-    "file": "desktop/native/window.py",
-    "old": "        self.week_title.set_full_text(\n            planner_title(self.session, view),\n",
-    "new": "        from PySide6.QtWidgets import QGraphicsOpacityEffect\n\n        self.week_title.setGraphicsEffect(QGraphicsOpacityEffect(self.week_title))\n        self.week_title.set_full_text(\n            planner_title(self.session, view),\n",
-    "test": "desktop/tests/day/test_view_changes_fade_and_slide.py::test_a_new_view_is_live_at_once_while_the_old_one_fades"
-  },
-  {
-    "name": "the top bar greys the moment it is busy",
-    "file": "desktop/native/window.py",
-    "old": "            self._busy_look.start()\n",
-    "new": "            self._grey_while_busy()\n",
-    "test": "desktop/tests/week/test_week_page_chrome.py::test_a_short_busy_spell_takes_no_clicks_but_does_not_grey_the_top_bar"
-  },
-  {
-    "name": "a busy top bar takes clicks before it greys",
-    "file": "desktop/native/window.py",
-    "old": "        return event.type() in self.SWALLOWED and self._busy()\n",
-    "new": "        return False\n",
-    "test": "desktop/tests/week/test_week_page_chrome.py::test_a_short_busy_spell_takes_no_clicks_but_does_not_grey_the_top_bar"
-  },
-  {
-    "name": "after a plan the hours scroll to homework already in sight",
-    "file": "desktop/native/hours/zoom.py",
-    "old": "            if top + min(above, shown / 4) <= minute <= top + shown - 60:\n                return\n",
-    "new": "            if top + min(above, shown / 4) <= minute <= top + shown - 60:\n                pass\n",
-    "test": "desktop/tests/week/test_lanes_keep_their_time.py::test_after_a_plan_the_hours_ease_to_homework_off_screen_and_stay_for_homework_on_it"
-  },
-  {
-    "name": "after a plan the hours jump instead of easing",
-    "file": "desktop/native/hours/zoom.py",
-    "old": "        if end == start or length == 0 or not moves(level):\n            return\n",
-    "new": "        if True:\n            return\n",
-    "test": "desktop/tests/week/test_lanes_keep_their_time.py::test_after_a_plan_the_hours_ease_to_homework_off_screen_and_stay_for_homework_on_it"
   },
   {
     "name": "a plan's words are toasted before its Undo again",

@@ -46,24 +46,6 @@ def choose(made: NativeWindow, **preferences: object) -> None:
     made.session.preferences = {**(made.session.preferences or {}), **preferences}
 
 
-def test_open_spotify_uses_the_settings_link_not_the_block(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    asked: list[str] = []
-    monkeypatch.setattr("desktop.native.window.open_in_app", lambda url: asked.append(url) or True)
-    practice(qapp, window, spotify_url=TRACK)
-    window.session.select_block("practice", 3)
-    choose(window, default_spotify_url=None)
-    window._sync_more_menu()
-    assert window._spotify_action is not None
-    assert window._spotify_action.isVisible() is False
-    window._open_spotify()
-    assert window.session.message == "Add a Spotify link in Settings, under Alerts."
-    choose(window, default_spotify_url=TRACK)
-    window._sync_more_menu()
-    assert window._spotify_action.isVisible() is True
-    window._open_spotify()
-    assert asked == [TRACK]
 
 
 def test_focus_off_does_not_open_spotify(

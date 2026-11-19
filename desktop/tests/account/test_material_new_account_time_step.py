@@ -52,7 +52,6 @@ def test_a_new_account_that_skips_setup_in_material_ends_on_15_minutes(
     through_recovery(qapp, window)
     skip_setup(qapp, window)
     assert window.session.preferences.get("drag_step_min", 15) == 15
-    assert window.hand.step == 15
 
 
 def test_a_5_picked_in_materials_setup_is_stored_and_settings_show_it(
@@ -72,6 +71,5 @@ def test_a_5_picked_in_materials_setup_is_stored_and_settings_show_it(
     settle(qapp, window)
     # 15 is the default and is left out of the stored preferences, so a 5 is present only if it was kept.
     assert window.session.preferences["drag_step_min"] == 5
-    assert window.hand.step == 5
     root = _open_settings(qapp, window, "planning")
     wait_until(qapp, lambda: _named(root, "dragStep")[0].property("current") == "5")
