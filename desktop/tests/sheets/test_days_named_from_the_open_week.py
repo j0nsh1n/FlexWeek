@@ -98,15 +98,6 @@ def test_the_homework_when_days_and_choose_a_time_start_on_the_weeks_first_day(
         free(choose)
 
 
-def test_a_day_deleted_from_the_week_is_said_by_its_own_name(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    _wednesday_week(qapp, window)
-    window._delete_block(dict(CLUB), "occurrence", 5, every_week=False)
-    settled(qapp, window)
-    assert window.toast.text() == "Deleted Club on Monday from this week."
-
-
 def test_a_new_school_block_is_on_monday_to_friday_of_the_week(
     qapp: QApplication, window: NativeWindow
 ) -> None:

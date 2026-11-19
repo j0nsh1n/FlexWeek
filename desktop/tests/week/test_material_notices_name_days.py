@@ -59,3 +59,20 @@ def test_the_added_and_the_placed_notice_name_the_day_from_its_date(
         f"Added Club on {named} 3:00 PM.",
         f"Placed Math worksheet on {named} 6:00 PM.",
     ]
+
+
+def test_a_day_deleted_from_a_wednesday_week_is_said_by_its_own_name(qapp, window) -> None:
+    """Club on Wednesday and Monday: day 5 of a week from Wednesday is Monday 9 November."""
+    session = window.session
+    fields.save_week_starts_on("wednesday")
+    wait_until(qapp, lambda: session.week_start == "2026-11-04" and not session.busy)
+    club = {"id": "club", "title": "Club", "kind": "locked", "start": "16:00", "duration_min": 60}
+    session.add_block({**club, "days": [0, 5]})
+    session.save()
+    settled(qapp, window)
+    _show_material(qapp, window)
+    sheets = _bridge(window).sheets
+    sheets.askDeleteBlock("club", 5)
+    sheets.answer("delete")
+    settled(qapp, window)
+    assert sheets.notice == "Deleted Club on Monday from this week."
