@@ -100,15 +100,6 @@ def left_in_week_one(qapp: QApplication | None, window: NativeWindow) -> tuple[s
     return week1, week2
 
 
-def open_unfinished(window: NativeWindow) -> None:
-    """Classic week with the Unfinished list open, at the window's own size and text size."""
-    window._layout = sanitize_layout({"main": "classic", "day": "one", "options": {}})
-    window._apply_appearance()
-    window._on_week()
-    window.show()
-    window._show_unfinished()
-    for _ in range(EVENT_PASSES):
-        QApplication.processEvents()
 
 
 
@@ -159,16 +150,3 @@ def agenda_week(window: NativeWindow) -> None:
     window._on_week()
     for _ in range(5):
         QApplication.processEvents()
-
-
-def week_list_action(window: NativeWindow):
-    """More's row for Week as a list."""
-    window._sync_more_menu()
-    for action, button in window._more_pairs:
-        if button.objectName() == "weekListRow":
-            return action
-    raise AssertionError("More has no Week as a list")
-
-
-
-
