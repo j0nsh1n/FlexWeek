@@ -5983,6 +5983,8 @@ class AlertStrip(QWidget):
 
     # The student has dealt with every alert it held.
     handled = Signal()
+    # What the strip says changed; Material draws its own strip from the same list.
+    changed = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -6022,11 +6024,13 @@ class AlertStrip(QWidget):
         self.setVisible(bool(self._notices))
         if not self._notices:
             self.text.clear()
+            self.changed.emit()
             return
         notice = self._notices[0]
         body = notice.get("body") or ""
         more = f"  (+{len(self._notices) - 1} more)" if len(self._notices) > 1 else ""
         self.text.setText(f"{notice.get('title') or 'FlexWeek'}{' — ' + body if body else ''}{more}")
+        self.changed.emit()
 
 
 def overfull_days(trace: dict) -> list[tuple[int, int]]:

@@ -149,6 +149,9 @@ class MaterialBridge(QObject):
         self._sheets = SheetsBridge(window, self)
         self._ring = RingBridge(self)
         self._following = False
+        strip = getattr(window, "alert_strip", None)
+        if strip is not None:
+            strip.changed.connect(self.changed)
         week_start_notice().changed.connect(self._on_week_start)
         # Save finishes on this signal. The day lists and the Undo button read it then,
         # rather than waiting for the 20s clock tick.
@@ -466,6 +469,19 @@ class MaterialBridge(QObject):
     @Property(str, notify=changed)
     def snackAction(self) -> str:
         return self._snack_action
+
+    @Property(str, notify=changed)
+    def alertText(self) -> str:
+        """A reminder the student asked to keep on screen until they deal with it, from the window's strip."""
+        strip = getattr(self._window, "alert_strip", None)
+        return strip.text.text() if strip is not None and strip.pending() else ""
+
+    @Slot()
+    def dismissAlert(self) -> None:
+        """Got it: the strip's own button, so one reminder goes at a time and its snackbar line with it."""
+        strip = getattr(self._window, "alert_strip", None)
+        if strip is not None:
+            strip.dismiss.click()
 
     @Property(str, notify=changed)
     def title(self) -> str:

@@ -31,7 +31,7 @@ from desktop.tests.settings.support_reminders import (
     tick,
     with_stand_ins,
 )
-from desktop.tests.week.support_material import _snack
+from desktop.tests.week.support_material import _click, _qml, _snack
 from desktop.tests.window_support import free, qapp, settled  # noqa: F401
 
 pytestmark = pytest.mark.real_surface
@@ -249,3 +249,10 @@ def test_a_reminder_left_on_screen_says_so_in_the_window(
     add_practice(qapp, window)
     tick(qapp, window, 35)
     assert _snack(window) == REMINDER
+    strip = _qml(window._material_page.root, "materialAlertStrip")
+    assert strip.property("visible") is True
+    assert str(_qml(strip, "alertStripText").property("text")) == REMINDER
+    _click(window, _qml(strip, "alertStripDismiss"))
+    settled(qapp, window)
+    assert strip.property("visible") is False
+    assert _snack(window) == "", "Got it takes the reminder off the snackbar too"

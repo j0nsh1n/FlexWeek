@@ -724,6 +724,57 @@ Item {
                 onScreenShownChanged: open = false
             }
 
+            Rectangle {
+                id: alertStrip
+                objectName: "materialAlertStrip"
+                visible: bridge.alertText !== ""
+                z: 3
+                anchors.top: topBar.bottom
+                anchors.topMargin: 8
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.min(parent.width - 32, 560)
+                height: stripRow.implicitHeight + 24
+                radius: 12
+                color: stripPalette.secondaryContainer
+                border.width: 1
+                border.color: stripPalette.outlineVariant
+                M3Palette { id: stripPalette; theme: root.theme }
+                Row {
+                    id: stripRow
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.margins: 16
+                    spacing: 12
+                    Text {
+                        id: stripText
+                        objectName: "alertStripText"
+                        width: parent.width - gotIt.width - parent.spacing
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: bridge.alertText
+                        color: stripPalette.inkSecondaryContainer
+                        font.family: M3Font.family
+                        font.pixelSize: M3Font.px(14)
+                        wrapMode: Text.WordWrap
+                        Accessible.role: Accessible.StaticText
+                        Accessible.name: text
+                    }
+                    Button {
+                        id: gotIt
+                        objectName: "alertStripDismiss"
+                        anchors.verticalCenter: parent.verticalCenter
+                        theme: root.theme
+                        density: root.density
+                        reduceMotion: root.reduceMotion
+                        highContrast: root.highContrast
+                        kind: "filled"
+                        text: "Got it"
+                        accessName: "Got it"
+                        onClicked: bridge.dismissAlert()
+                    }
+                }
+            }
+
             Snackbar {
                 id: materialSnackbar
                 objectName: "materialSnackbar"
