@@ -16,7 +16,6 @@ from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import CLOCK, START_MONDAY
 from desktop.native.calendar import date_for_day, sunday_due
-from desktop.native.widgets import HomeworkDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import LightWindows
 from desktop.tests.waiting import wait_until
@@ -84,24 +83,6 @@ def thursday_iso(window: NativeWindow) -> str:
 
 def stored_blocks(window: NativeWindow) -> list[dict]:
     return sorted(window.session.blocks, key=lambda block: block["id"])
-
-
-def opened_with(
-    monkeypatch: pytest.MonkeyPatch, act: Callable[[HomeworkDialog], int]
-) -> list[HomeworkDialog]:
-    """Every homework editor the window opens is handed to `act` instead of waiting for a student."""
-    seen: list[HomeworkDialog] = []
-
-    def run(dialog: HomeworkDialog) -> int:
-        seen.append(dialog)
-        return act(dialog)
-
-    monkeypatch.setattr(HomeworkDialog, "exec", run)
-    return seen
-
-
-
-
 
 
 def held_solves(window: NativeWindow) -> tuple[list[dict], list[Callable[[], None]]]:

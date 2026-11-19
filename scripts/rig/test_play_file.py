@@ -11,12 +11,9 @@ import pytest
 
 from scripts.rig import drive, play
 
-DESIGNS = ("classic", "bento", "one")
-LOOKS = ("terminal", "dark-frost")
-
 
 def _parse(raw: object, name: str = "p") -> play.Play:
-    return play.parse_play(raw, name, DESIGNS, LOOKS)
+    return play.parse_play(raw, name)
 
 
 def test_see_names_what_should_be_on_screen():
@@ -37,10 +34,9 @@ def test_a_full_play_reads_as_written():
                 "clock": "2026-10-15T17:00",
                 "seed": "setup-done",
                 "size": [1000, 700],
-                "design": "bento",
                 "clock_24h": True,
                 "text": "large",
-                "look": "terminal",
+                "mode": "dark",
             },
             "steps": [
                 {"click": "addArrow"},
@@ -64,10 +60,9 @@ def test_a_full_play_reads_as_written():
         clock=datetime(2026, 10, 15, 17, 0),
         seed="setup-done",
         size=(1000, 700),
-        design="bento",
         clock_24h=True,
         text="large",
-        look="terminal",
+        mode="dark",
     )
     assert [step.action for step in got.steps] == [
         "click",
@@ -99,7 +94,7 @@ def test_material_new_seed_starts_unsigned_on_the_saved_surface():
 def test_a_play_with_no_setup_gets_the_rigs_own_defaults():
     got = _parse({"steps": []})
     assert got.setup == play.Setup()
-    assert (got.setup.seed, got.setup.design, got.setup.size) == ("rig", "classic", (1280, 800))
+    assert (got.setup.seed, got.setup.mode, got.setup.size) == ("rig", "light", (1280, 800))
     assert got.setup.clock is None
     assert got.steps == ()
 
@@ -144,16 +139,16 @@ def test_a_bad_step_is_named_with_its_number(step, says):
         ({"clock": "tomorrow"}, "setup clock"),
         ({"clock": 5}, "setup clock"),
         ({"seed": "full"}, "rig, empty, setup-done, material-new"),
-        ({"design": "mission"}, "classic, bento, one"),
+        ({"design": "classic"}, "setup design: is not a setup key"),
+        ({"look": "light-frost"}, "setup look: is not a setup key"),
         ({"text": "huge"}, "normal, large"),
-        ({"look": "default"}, "terminal, dark-frost"),
         ({"clock_24h": "yes"}, "true or false"),
         ({"mode": "sepia"}, "light, dark"),
         ({"motion": "reduce"}, "Valid: on, off"),
         ({"record": "yes"}, "true or false"),
         ({"size": [1280]}, "[width, height]"),
         ({"size": [100, 100]}, "between 640x480 and 3840x2160"),
-        ({"zoom": 2}, "Setup keys: clock, seed, size, design, clock_24h, text, look, mode"),
+        ({"zoom": 2}, "Setup keys: clock, seed, size, clock_24h, text, mode, motion, record, live"),
     ],
 )
 def test_a_bad_setup_value_is_named(setup, says):
@@ -188,14 +183,14 @@ def test_a_play_that_is_not_the_right_shape_is_refused(raw):
 
 def test_load_names_unreadable_and_broken_files(tmp_path):
     with pytest.raises(play.PlayError, match="Cannot read"):
-        play.load_play(tmp_path / "missing.json", DESIGNS, LOOKS)
+        play.load_play(tmp_path / "missing.json")
     broken = tmp_path / "broken.json"
     broken.write_text("{not json")
     with pytest.raises(play.PlayError, match="is not valid JSON"):
-        play.load_play(broken, DESIGNS, LOOKS)
+        play.load_play(broken)
     good = tmp_path / "walk.json"
     good.write_text(json.dumps({"steps": [{"shot": "start"}]}))
-    assert play.load_play(good, DESIGNS, LOOKS).name == "walk"
+    assert play.load_play(good).name == "walk"
 
 
 @pytest.mark.parametrize(
@@ -219,26 +214,8 @@ def test_a_play_without_an_out_folder_writes_under_the_scratch_plays_folder(monk
     assert folder == tmp_path / ".flexweek-ui-harness" / "scratch" / "plays" / "20261011-090507-my-play-1"
 
 
-def test_the_names_a_play_may_use_for_looks_are_the_apps_own():
-    names = drive.play_looks()
-    assert "terminal" in names
-    assert "dark-frost" in names
-    assert "default" not in names
-
-
 def _args(**changes) -> argparse.Namespace:
-    base = {"play": None, "design": None, "tab": None, "scenario": None, "option": [], "list": False}
-    return argparse.Namespace(**{**base, **changes})
-
-
-@pytest.mark.parametrize("flag", ["design", "tab", "scenario", "option", "list"])
-def test_a_play_does_not_mix_with_the_scenario_flags(flag, tmp_path):
-    path = tmp_path / "p.json"
-    path.write_text(json.dumps({"steps": []}))
-    value = ["a=b"] if flag == "option" else (True if flag == "list" else "x")
-    with pytest.raises(SystemExit) as refused:
-        drive.check_play(_args(play=str(path), **{flag: value}))
-    assert "do not mix" in str(refused.value)
+    return argparse.Namespace(**{"play": None, **changes})
 
 
 def test_a_bad_play_stops_before_any_session_starts_and_names_the_file(tmp_path):
@@ -315,30 +292,6 @@ def test_empty_seed_honours_large_text(tmp_path):
         window._apply_appearance()
         app.processEvents()
         assert effective_look(window._worn_look())["text"] == "large"
-    finally:
-        window.hide()
-        free(window)
-        server.stop()
-
-
-def test_the_look_setup_key_wears_the_preset(tmp_path):
-    from desktop.tests.logic_support import past_setup
-    from desktop.tests.window_support import free
-
-    app, server, window = _window_on_setup(tmp_path)
-    try:
-        play.apply_play_look(
-            window, window.session, play.Setup(seed="empty", look="high-contrast", text="large")
-        )
-        window._apply_appearance()
-        app.processEvents()
-        assert window._worn_look()["preset"] == "high-contrast"
-        past_setup(app, window)
-        play.apply_play_look(window, window.session, play.Setup(look="terminal"))
-        window._apply_appearance()
-        app.processEvents()
-        assert window._look["preset"] == "terminal"
-        assert window._worn_look()["preset"] == "terminal"
     finally:
         window.hide()
         free(window)

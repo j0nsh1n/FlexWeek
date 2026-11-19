@@ -16,7 +16,6 @@ from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import CLOCK
 from desktop.native.material.sheet_homework import HomeworkDraft
-from desktop.native.widgets import HomeworkDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.waiting import wait_until
@@ -35,8 +34,8 @@ def reset_clock():
 def test_spread_offers_only_the_time_not_yet_done(
     qapp: QApplication, window: NativeWindow, ticked: bool
 ) -> None:
-    # 120 min with one hour ticked done: both looks' sheets and the server's preview spread the other hour.
-    # Left unticked, that hour's session has passed: the sheets offer all 120 (Spread over days replaces
+    # 120 min with one hour ticked done: the sheet and the server's preview spread the other hour.
+    # Left unticked, that hour's session has passed: the sheet offers all 120 (Spread over days replaces
     # every open time), and the preview, which counts what the stored sessions hold, the other 60.
     session = window.session
     week = session.week_start
@@ -52,19 +51,13 @@ def test_spread_offers_only_the_time_not_yet_done(
     body = deepcopy(session.assignments["lab"])
     draft = HomeworkDraft(session, deepcopy(body))
     material = sum(item["duration_min"] for item in draft._spread_figures()[2])
-    dialog = HomeworkDialog(window, deepcopy(body))
-    try:
-        widgets = sum(item["duration_min"] for item in dialog._spread_figures()[2])
-    finally:
-        dialog.reject()
-        dialog.deleteLater()
     session.preview_spread("lab", 60, week)
     wait_until(qapp, lambda: not session.busy)
     settled(qapp, window)
     preview = session.spread_preview
     previewed = sum(row["block"]["duration_min"] for row in preview["rows"]) if preview else 0
     sheets = 60 if ticked else 120
-    assert (material, widgets, previewed) == (sheets, sheets, 60)
+    assert (material, previewed) == (sheets, 60)
 
 
 @pytest.mark.parametrize("ticked", [False, True])

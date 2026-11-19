@@ -42,24 +42,6 @@ def window(qapp: QApplication, open_light) -> Iterator[NativeWindow]:
         made.session.reset_focus()
 
 
-@pytest.fixture()
-def keep_on_replace(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A replace question that gets asked is answered Keep instead of waiting on a modal sheet, so a
-    wrongly asked question fails the test (through `asked`) instead of hanging it."""
-    import desktop.native.window as window_module
-
-    class Keep:
-        answer = "keep"
-
-        def __init__(self, *_args: object, **_kw: object) -> None:
-            pass
-
-        def exec(self) -> int:
-            return 0
-
-    monkeypatch.setattr(window_module, "ConfirmSheet", Keep)
-
-
 def _card(root: QObject, scope: str) -> tuple[str, str, str]:
     """The Now card as the student reads it: title, line, button."""
     return tuple(  # type: ignore[return-value]
@@ -125,7 +107,7 @@ def _assert_focus_on_a_visible_page_item(scene: object) -> None:
 
 
 def test_while_a_focus_timer_runs_the_now_card_names_it_and_goes_back_to_it(
-    qapp: QApplication, window: NativeWindow, keep_on_replace: None
+    qapp: QApplication, window: NativeWindow
 ) -> None:
     session = window.session
     root = show_material(qapp, window)
@@ -206,7 +188,7 @@ def test_mark_finished_on_the_now_card_marks_the_homework_done_and_clears_the_ti
 
 
 def test_a_finished_session_on_already_finished_homework_offers_only_ok(
-    qapp: QApplication, window: NativeWindow, keep_on_replace: None
+    qapp: QApplication, window: NativeWindow
 ) -> None:
     """Finish-automatically can mark the homework done as the last session ends: nothing is left to
     mark or to start again, so the card says Finished with one OK that clears the timer."""
@@ -294,7 +276,7 @@ def test_mark_finished_on_the_days_last_homework_hides_the_card_and_focus_moves_
 
 
 def test_ok_on_a_finished_session_hides_the_card_and_focus_moves_to_something_visible(
-    qapp: QApplication, window: NativeWindow, keep_on_replace: None
+    qapp: QApplication, window: NativeWindow
 ) -> None:
     """OK clears the timer; with nothing else today the card hides, so focus must leave its button."""
     session = window.session
@@ -325,7 +307,7 @@ def test_ok_on_a_finished_session_hides_the_card_and_focus_moves_to_something_vi
 
 
 def test_start_again_on_the_now_card_starts_a_new_timer_on_the_same_homework_without_asking(
-    qapp: QApplication, window: NativeWindow, keep_on_replace: None
+    qapp: QApplication, window: NativeWindow
 ) -> None:
     session = window.session
     root = show_material(qapp, window)
@@ -348,7 +330,7 @@ def test_start_again_on_the_now_card_starts_a_new_timer_on_the_same_homework_wit
 
 
 def test_a_finished_quick_focus_is_named_quick_focus_and_has_no_mark_finished(
-    qapp: QApplication, window: NativeWindow, keep_on_replace: None
+    qapp: QApplication, window: NativeWindow
 ) -> None:
     root = show_material(qapp, window)
     bridge = root_bridge(root)

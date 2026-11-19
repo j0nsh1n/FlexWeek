@@ -20,6 +20,7 @@ from PySide6.QtCore import QObject  # noqa: E402
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget  # noqa: E402
 
 from desktop.native import cpu_drawing
+from desktop.native import window as window_module  # noqa: E402
 from desktop.native.version import VERSION  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_window import (  # noqa: E402, F401
@@ -27,6 +28,7 @@ from desktop.tests.day.support_material_window import (  # noqa: E402, F401
     qapp,
 )
 from desktop.tests.material_support import pump  # noqa: E402
+from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.window_support import look_file  # noqa: E402
 
 
@@ -320,3 +322,64 @@ def test_no_failure_path_shows_the_widgets_week(
         pump(qapp)
         _week_page_never_shown(window)
         page.break_load = False
+
+
+def test_an_update_found_on_the_draw_error_page_is_offered_and_installed_there(
+    qapp: QApplication,
+    material_window: NativeWindow,
+    launches: list[bool],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Material cannot be drawn at all, so there is no update sheet; an update may be the fix, so the error
+    page offers it (Jonathan, 2026-11-19) with the same download and install as the sheet."""
+    _on_cpu(monkeypatch)
+    window = material_window
+    window._surface = "material"
+    window._material_gave_up = False
+    window._cpu_drawing_version = VERSION
+    page = window._ensure_material()
+    assert page is not None
+    page.break_load = True
+    window._on_week()
+    pump(qapp)
+    shown = window._stack.currentWidget()
+    assert shown.objectName() == "drawErrorPage"
+    line = shown.findChild(QLabel, "drawErrorUpdateLine")
+    install = shown.findChild(QPushButton, "drawErrorInstall")
+    assert not line.isVisibleTo(shown) and not install.isVisibleTo(shown), "no update was found yet"
+
+    asked: list[dict] = []
+    monkeypatch.setattr(window._updater, "download", asked.append)
+    monkeypatch.setattr(window, "_save_look", lambda: None)
+    window._updates = {}
+    update = {"version": "9.9.9", "notes": ""}
+    window._on_update_found(update)
+    pump(qapp)
+    assert line.isVisibleTo(shown) and line.text() == "FlexWeek 9.9.9 is ready"
+    assert install.isVisibleTo(shown) and install.text() == "Update now"
+
+    install.click()
+    pump(qapp)
+    assert asked == [update]
+    assert line.text() == "Downloading…"
+    assert not install.isEnabled()
+    window._on_update_progress(50, 200)
+    assert line.text() == "Downloading… 25%"
+    window._on_update_problem("Could not download the update.")
+    assert line.text() == "Could not download the update."
+    assert install.isEnabled(), "after a problem the student can try again"
+
+    install.click()
+    quits: list[bool] = []
+    monkeypatch.setattr(window, "quit_app", lambda: quits.append(True))
+    monkeypatch.setattr(window_module, "apply_update", lambda _path: "The update could not be put in place.")
+    window._on_update_ready("/downloaded/flexweek")
+    assert line.text() == "The update could not be put in place. Open the release page to update by hand."
+    assert install.isEnabled() and quits == []
+
+    install.click()
+    monkeypatch.setattr(window_module, "apply_update", lambda _path: None)
+    window._on_update_ready("/downloaded/flexweek")
+    assert line.text() == "Update installed. FlexWeek will close so the new version can start."
+    wait_until(qapp, lambda: quits == [True], 5)
+    assert shown.findChild(QLabel, "drawErrorLine").text() == cpu_drawing.DRAW_ERROR

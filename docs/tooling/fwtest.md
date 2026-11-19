@@ -85,9 +85,10 @@ fwtest clean
   or that bus when it is the one `fwtest rig` was started with. A display the session itself
   allocated is allowed, including `:0`. `FLEXWEEK_RIG_KEEP` is removed
   before the driver starts, and the run always stops the session afterwards by the PIDs recorded in
-  its state file. `fwtest rig --list` does not start a session.
-- `rig --play PLAY.json` runs the steps in a file instead of the fixed scenarios. See
-  [Playing the app](#playing-the-app).
+  its state file.
+- `rig --play PLAY.json [--out DIR]` is the only way to run the rig: it plays the steps in a file on
+  Material 3, the only interface. There are no designs, tabs or fixed scenarios, and the driver refuses
+  `--design`, `--tab`, `--scenario`, `--option` and `--list`. See [Playing the app](#playing-the-app).
 - `run` runs any command as a job, with the guarantees above. It exists for the picture tours and
   the one-off scripts that currently go through `run-alone.sh`. When the command is a pytest run
   (`... -m pytest ...`, or a program named `pytest`), `run` adds `--junitxml` to a temporary file
@@ -217,7 +218,7 @@ the log cannot name the tests that shared its worker.
 | `verify-engine` | fwtest's and the engine's `cargo fmt --check`, `clippy -D warnings`, `cargo test` | 1 |
 | `verify-python` | `fwtest gate --backend-only`: lint, types, mutation patterns, backend tests, diff checks | 1 |
 | `desktop` | every test file under `desktop/tests` and `scripts/rig`, offscreen, through `fwtest run` | 4 |
-| `rig` | the real-pointer rig, Day and Week, under Xvfb | 2 |
+| `rig` | the real-pointer rig playing Material, Day (`material-day-light.json`) and Week (`material-light.json`), under Xvfb; a step that is NOT DONE fails the job | 2 |
 | `mutate` | the mutation cases under `engine/` (pull requests and by hand) | 4 |
 | `mutate-python` | every other mutation case (pull requests and by hand) | 6 |
 | `pictures` | the touched screens, before and after (see the pictures section) | |
@@ -234,8 +235,8 @@ desktop and mutation shards running side by side; the engine mutation shards are
 `fwtest rig --play PLAY.json [--out DIR]` lets an agent use FlexWeek the way a student does. The rig starts
 the app on its hidden desktop (never the developer's display or bus), signs in a throwaway account against
 a local server, holds the clock, and then does what the file says with the real pointer and keyboard
-(xdotool, as the scenarios do). It records what the screen showed after each step. `--play` does not
-combine with `--design`, `--tab`, `--scenario`, `--option` or `--list`. The sound is off.
+(xdotool). The app starts on Material 3, the only interface, so a play never has to choose it. It records
+what the screen showed after each step. The sound is off.
 
 A play file is JSON, with `setup` (all of it optional) and `steps`:
 
@@ -245,10 +246,9 @@ A play file is JSON, with `setup` (all of it optional) and `steps`:
     "clock": "2026-10-15T17:00",
     "seed": "rig",
     "size": [1280, 800],
-    "design": "classic",
     "clock_24h": false,
     "text": "normal",
-    "look": "terminal"
+    "mode": "light"
   },
   "steps": [
     {"click": "objectName"},
@@ -264,7 +264,7 @@ A play file is JSON, with `setup` (all of it optional) and `steps`:
     {"shot": "label"},
     {"tree": "label"},
     {"say": "a note for the log"},
-    {"see": "School"}
+    {"see": "Soccer"}
   ]
 }
 ```
@@ -273,14 +273,12 @@ Setup:
 
 | Key | Meaning | Default |
 |---|---|---|
-| `clock` | Local time the clock is held at, `YYYY-MM-DDTHH:MM`. The week shown is that date's week. | Thursday 15:40 of the current week, as the scenarios use |
-| `seed` | `rig`: the scenarios' week (School, Soccer, three homework items). `setup-done`: a new account that skipped Setup, so an empty week with the defaults. `empty`: a new account on the first Setup page. `material-new`: Material is the saved surface and nobody is signed in, so the play starts on the Material sign-in card. | `rig` |
+| `clock` | Local time the clock is held at, `YYYY-MM-DDTHH:MM`. The week shown is that date's week. | Thursday 15:40 of the current week |
+| `seed` | `rig`: the rig's week (School, Soccer, three homework items). `setup-done`: a new account that skipped Setup, so an empty week with the defaults. `empty`: a new account on the first Setup page. `material-new`: nobody is signed in, so the play starts on the Material sign-in card. Every seed starts on Material. | `rig` |
 | `size` | Window size in pixels, 640x480 up to 3840x2160 | `[1280, 800]` |
-| `design` | Any rig design (`classic`, `timeline`, `mission`, `bento`, `retro`, `clay`) or a My day screen (`one`, `dial`; shown on the My day tab) | `classic` |
 | `clock_24h` | The 24-hour clock. Ignored for `empty`, where Setup asks. | `false` |
 | `text` | `normal` or `large` text | `normal` |
-| `look` | A look preset (`high-contrast`, `paper`, `ink`, `terminal`, `poster`, `pastel`) or a theme pack (`system`, `light-frost`, `dark-frost`, `nocturne`, `slate`). Ignored for the pack when `seed` is `empty`. | the pack's own |
-| `mode` | `light` or `dark`. Used with `material-new` for Material's own light/dark. | `light` |
+| `mode` | `light` or `dark`: Material's own mode, written to the look file before the window opens. | `light` |
 | `motion` | `on` (the app's Normal animations) or `off` | the account's own |
 | `record` | Record the play as a clip: PNG frames and, with a GPU encoder, a video (see [clips](#clips)) | `false` |
 
@@ -315,25 +313,29 @@ number. Files are numbered by step (`04-after-tab.png`, `04-after-tab.json`); a 
 class name added to the shot's name. `DIR` is `~/.flexweek-ui-harness/scratch/plays/<time>-<play name>/`
 unless `--out` names it.
 
-Example: a new account that skipped Setup, Add fixed time, type a title, Tab, look at the result.
+A setup key that is not in the table (`design`, `look` and the others the Widgets interface used) is
+refused, with the keys that are valid.
+
+Example: the rig's week, mark History essay finished by its circle, see the notice, take it back with
+Ctrl+Z, look at the result. (`see "UNDO"` would also match the toolbar's Undo button, so a play looks for
+the notice itself, `materialSnackbar`.)
 
 ```json
 {
-  "setup": {"seed": "setup-done"},
+  "setup": {"seed": "rig", "mode": "light"},
   "steps": [
-    {"click": "addArrow"},
-    {"key": "Escape"},
-    {"key": "space"},
-    {"click": {"text": "Add fixed time"}},
-    {"type": "Band practice"},
-    {"key": "Tab"},
-    {"shot": "after-tab"}
+    {"click": "weekBlockFinish"},
+    {"see": "materialSnackbar"},
+    {"shot": "done"},
+    {"key": "ctrl+z"},
+    {"shot": "undone"}
   ]
 }
 ```
 
-The `Escape` then `space` after the click is deliberate. On a fresh window the first click on a menu
-button sometimes only focuses it (cause not found), so the keyboard opens the menu either way.
+The plays CI runs are `scripts/rig/plays/material-day-light.json` (the `rig (day)` job) and
+`scripts/rig/plays/material-light.json` (the `rig (week)` job, which also visits Day, Month, My day and
+Settings). The job fails when a step is NOT DONE.
 
 ## Pictures
 
@@ -521,14 +523,14 @@ the checks to the model, and prints the model's notes.
 
 ### clips
 
-`clips` records the flows that must behave the same in Widgets and Material 3, on the rig's hidden
-desktop: add homework, tick done and Undo, open and edit, drag a block, Plan my homework, Running
-late, start and finish Focus, switch Day / Week / Month, and change the look in Settings. Each flow
-is a play file per surface, `scripts/rig/flows/<flow>.widgets.json` and
-`scripts/rig/flows/<flow>.material.json`, in the format of [Playing the app](#playing-the-app). Each
-file is played twice, with animations on and off, each run one `fwtest rig --play` with the play's
-setup given `"motion"` and `"record": true`. `--flow NAME` records one flow. A whole run is 36 rig
-runs, so it is heavy: run it once, when the flows or what they cover changed.
+`clips` records the flows a student does in Material 3, on the rig's hidden desktop: add homework, tick
+done and Undo, open and edit, drag a block, Plan my homework, Running late, start and finish Focus,
+switch Day / Week / Month, and change the look in Settings. Each flow is a play file,
+`scripts/rig/flows/<flow>.material.json`, in the format of [Playing the app](#playing-the-app); it
+starts on Material like every play. Each file is played twice, with animations on and off, each run one
+`fwtest rig --play` with the play's setup given `"motion"` and `"record": true`. `--flow NAME` records
+one flow. A whole run is 18 rig runs, so it is heavy: run it once, when the flows or what they cover
+changed.
 
 A recorded run keeps PNG frames of the window, ten a second, with the pointer drawn as a red dot, in
 `<run>/frames/`. It also keeps `<run>/clip.mp4` when the computer can encode on the GPU (`ffmpeg` with

@@ -13,7 +13,7 @@ from PySide6.QtCore import QStandardPaths, Qt
 from PySide6.QtWidgets import QAbstractButton, QApplication
 
 from desktop.native.calendar import sunday_due
-from desktop.native.settings import HELP_KEYS
+from desktop.native.settings_copy import HELP_KEYS
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.waiting import wait_until

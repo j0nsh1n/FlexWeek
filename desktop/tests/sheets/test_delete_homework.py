@@ -1,5 +1,5 @@
-"""Deleting homework: with its times in every week, in one step that Undo brings back, from its
-editor, from Unfinished and from its right-click menu. Weeks are read back from the API."""
+"""Deleting homework: with its times in every week, in one step that Undo brings back. Weeks are
+read back from the API."""
 
 from __future__ import annotations
 
@@ -11,11 +11,9 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication
 
-from desktop.native import widgets
 from desktop.native.calendar import sunday_due
 from desktop.native.controller import NativeSession
 from desktop.native.reuse import copied_homework_block
-from desktop.native.widgets import HomeworkDialog
 from desktop.native.window import NativeWindow
 from desktop.tests import logic_support
 from desktop.tests.blocks_helper import put_block
@@ -149,25 +147,3 @@ def test_a_change_still_saving_is_finished_before_anything_is_deleted(
     assert session.dirty
     assert session.delete_homework("essay") is False
     assert session.message == "Saving your last change… Delete will work in a moment."
-
-
-def test_the_editor_offers_delete_only_for_homework_that_exists(
-    qapp: QApplication,  # noqa: F811
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    new = HomeworkDialog(None, today="2026-09-21")
-    assert not new.delete_button.isVisibleTo(new)
-    saved = {"id": "essay", "title": "History essay", "due": "2026-09-27", "estimate_min": 60, "revision": 3}
-    editing = HomeworkDialog(None, saved)
-    assert editing.delete_button.isVisibleTo(editing)
-    assert editing.delete_button.property("quiet") is None, "drawn as quiet red words by its own name"
-    asked: list[str] = []
-
-    def answer(_parent: object, title: str, words: str, _yes: str) -> bool:
-        asked.append(words)
-        return True
-
-    monkeypatch.setattr(widgets, "confirm", answer)
-    editing.delete_button.click()
-    assert editing.requested() == "delete"
-    assert asked and "History essay" in asked[0] and "undo" in asked[0]

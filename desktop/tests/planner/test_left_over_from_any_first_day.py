@@ -16,7 +16,6 @@ import pytest
 from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import FakeClock
-from desktop.native import window as window_module
 from desktop.native.controller import NativeSession
 from desktop.native.window import NativeWindow
 from desktop.tests.e2e.saved_weeks import read_week
@@ -59,20 +58,19 @@ def saved(qapp: QApplication, session: NativeSession) -> None:
     settled(qapp, session)
 
 
-def asked_before_planning(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """The questions Plan asks before planning, each answered Not now."""
+def asked_before_planning(monkeypatch: pytest.MonkeyPatch, window: NativeWindow) -> list[str]:
+    """The questions Plan asks before planning on Material's prompt, each left unanswered."""
     asked: list[str] = []
 
-    class Sheet:
-        answer = "not"
+    class Sheets:
+        def pose_question(self, question: dict, _handlers: dict) -> None:
+            asked.append(f"{question['title']}: {question['body']}")
 
-        def __init__(self, _parent, title, question, *_args, **_kwargs) -> None:  # type: ignore[no-untyped-def]
-            asked.append(f"{title}: {question}")
+    class Page:
+        class bridge:  # noqa: N801
+            sheets = Sheets()
 
-        def exec(self) -> int:
-            return 0
-
-    monkeypatch.setattr(window_module, "ConfirmSheet", Sheet)
+    monkeypatch.setattr(window, "_material_shown", lambda: Page)
     return asked
 
 
@@ -101,7 +99,7 @@ def test_homework_added_today_is_not_left_over_and_plan_gives_it_a_time(
 ) -> None:
     window, first = opened(qapp, open_light, clock, now, first_weekday)
     session = window.session
-    asked = asked_before_planning(monkeypatch)
+    asked = asked_before_planning(monkeypatch, window)
     today = now.date()
     session.add_homework(
         {

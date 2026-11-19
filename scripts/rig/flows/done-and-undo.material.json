@@ -1,7 +1,7 @@
 {
  "setup": {
   "seed": "rig",
-  "look": "light-frost",
+  "mode": "light",
   "size": [
    1280,
    800
@@ -10,42 +10,28 @@
  },
  "steps": [
   {
-   "click": "settingsGear"
-  },
-  {
-   "wait": 600
-  },
-  {
-   "click": "chooseMaterial"
-  },
-  {
-   "wait": 1000
-  },
-  {
    "see": "materialRail"
   },
   {
-   "click": "navDay"
+   "see": "History essay"
   },
   {
-   "see": "materialDay"
-  },
-  {
-   "click": "dayFinish"
+   "click": "weekBlockFinish"
   },
   {
    "wait": 400
   },
   {
-   "see": "UNDO"
+   "see": "materialSnackbar"
+  },
+  {
+   "see": "Finished History essay."
   },
   {
    "shot": "done"
   },
   {
-   "click": {
-    "text": "UNDO"
-   }
+   "key": "ctrl+z"
   },
   {
    "wait": 400

@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import contextlib
-import json
 import logging
 import os
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -15,7 +14,6 @@ from flexweek_engine import SyncService  # type: ignore[import-untyped]
 from PySide6.QtCore import (
     QEvent,
     QEventLoop,
-    QMetaObject,
     QObject,
     QStandardPaths,
     Qt,
@@ -35,7 +33,6 @@ from PySide6.QtGui import (
 from PySide6.QtNetwork import QLocalServer
 from PySide6.QtWidgets import (
     QApplication,
-    QDialog,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -54,42 +51,32 @@ from backend.slots import minutes_to_hhmm
 from desktop.native import autostart, cpu_drawing
 from desktop.native.account_copy import (
     ACCOUNT_SAVED,
-    DELETE_ACCOUNT_QUESTION,
-    READ_FAILED,
-    READ_WEEK_FAILED,
     RECOVERY_FILE,
     RECOVERY_KEEP,
-    REPLACE_WEEK_QUESTION,
     WRITE_FAILED,
 )
 from desktop.native.ambient import FocusAudio
 from desktop.native.calendar import (
-    block_family,
-    day_full_names,
-    is_setup_block,
     this_week_line,
 )
 from desktop.native.controller import ROUTINE_STATUS, NativeSession, left_sentence
 from desktop.native.custom_look import sanitize_saved
 from desktop.native.devices import SyncHost, live_phones, run_off_ui, set_error_colour
 from desktop.native.fields import announce, week_start_day, week_start_notice
-from desktop.native.files import EXPORT_FORMAT, parse_import_payload
 from desktop.native.fonts import load_fonts
-from desktop.native.hours.geometry import next_slot
 from desktop.native.hours.scale import sanitize_zoom
 from desktop.native.kept import KeptSession
 from desktop.native.kept_alerts import KeptAlerts
-from desktop.native.layout_choice import options_for, sanitize_layout, sanitize_surface
+from desktop.native.layout_choice import sanitize_layout, sanitize_surface
 from desktop.native.look import (
     design_look,
     effective_look,
     look_motion,
     pack_stylesheet,
-    resolved_palette,
     sanitize_look,
 )
 from desktop.native.material.sheet_preview import PreviewDraft
-from desktop.native.material.theme import kept_material, read_letter_keys, read_shortcuts
+from desktop.native.material.theme import kept_material
 from desktop.native.motion import (
     apply_ui_effects,
     switch_page,
@@ -97,17 +84,7 @@ from desktop.native.motion import (
 from desktop.native.motion_level import motion_level
 from desktop.native.outside import OutsideWatch, differs
 from desktop.native.remind import REMINDER_POLL_MS, clock_parts
-from desktop.native.reuse import (
-    week_label,
-)
-from desktop.native.settings import (
-    AboutDialog,
-    AccountDialog,
-    AlarmRingDialog,
-    HelpDialog,
-    TransferPreviewDialog,
-    UpdateDialog,
-)
+from desktop.native.settings import AlarmRingDialog
 from desktop.native.setup_steps import REMINDERS, SETUP_VERSION, STYLE, SetupState
 from desktop.native.sound import Bell
 from desktop.native.spotify import LISTENING, STARTING, SpotifyPlayer, open_in_app
@@ -123,15 +100,7 @@ from desktop.native.weekmodel import (
     set_clock_24h,
 )
 from desktop.native.widgets import (
-    REPLAN_TIP,
-    BlockDialog,
-    ConfirmSheet,
-    LateDialog,
-    PreviewDialog,
-    confirm,
     control_art,
-    drop_waiting_dim,
-    fit_buttons,
     keyboard_focus_rings,
     overdue_unfinished,
     steady_wheel,
@@ -148,49 +117,6 @@ OUTSIDE_CHECK_MS = 2000
 
 
 
-NOTHING_UNFINISHED = "None left"
-# Hover words for More and its submenu, by the object name of the button each action presses.
-MORE_TIPS = {
-    "addHomework": (
-        "Add an assignment with its due date and how long it will take. FlexWeek finds time for it."
-    ),
-    "schoolHours": "Set the days and times you're at school, so nothing is planned then.",
-    "addFixed": (
-        "Add something that happens at a set time, like practice or a lesson. Homework is planned around it."
-    ),
-    "runningLate": (
-        "Behind today? Say how late you are, and FlexWeek moves the rest of today's homework later."
-    ),
-    "unfinishedOpen": "Overdue and earlier-week homework that still needs time. Plan it into this week.",
-    "weekListRow": "Every block this week, day by day, in time order. Ctrl+Shift+L",
-    "routinesButton": "Save this week's fixed times as a routine, or add a saved routine to a week.",
-    "openSpotify": "Open the Spotify link from Settings in the Spotify app.",
-    "replanAll": REPLAN_TIP,
-    "undoButton": "Undo your last change. Ctrl+Z",
-    "redoButton": "Redo the change you just undid. Ctrl+Y",
-    "copyBlock": "Copy the selected block to paste into another day. Ctrl+C",
-    "pasteBlock": "Paste what you copied into the selected day, with a preview first. Ctrl+V",
-    "duplicateBlock": "Make a copy of the selected block, with a preview first. Ctrl+D",
-    "copyDay": "Copy every block on the selected day to paste into another day.",
-    "saveButton": "Save now. FlexWeek already saves after every change. Ctrl+S",
-    "restoreButton": (
-        "Save a copy of this week, or go back to an earlier one. FlexWeek keeps a restore point "
-        "before big changes."
-    ),
-    "reloadWeek": "Load this week again as it's saved. Use it if something looks out of date.",
-    "helpButton": "What each screen is for, and the keyboard shortcuts.",
-    "aboutButton": "The version, and where your plans are saved.",
-    "signOut": "Sign out on this computer. Your plans stay saved in your account.",
-}
-# Why an action is greyed, when the reason is not simply that FlexWeek is busy.
-GREYED_TIPS = {
-    "unfinishedOpen": NOTHING_UNFINISHED,
-    "weekListRow": "Open the week to use the week as a list.",
-    "undoButton": "Nothing to undo yet.",
-    "redoButton": "Nothing to redo.",
-    "pasteBlock": "Copy a block or a day first.",
-    "runningLate": "Open this week to use Running late.",
-}
 SIGN_OUT_QUESTION = "Your week is saved on {where}, under this account. Sign in again to see it."
 RECOVERY_CHOOSE = "Choose where to save"
 # The pages Material 3 answers for, as its own screens.
@@ -308,19 +234,17 @@ class NativeWindow(QMainWindow):
         # The app version that must draw Material on the CPU, or "" when the graphics card may be used.
         self._cpu_drawing_version = ""
         self._relaunching = False
-        # Number keys and Letter keys as the look file holds them, and the file's stamp when read.
-        self._key_stamp: tuple[int, int] | None = None
-        self._key_values = (True, False)
         self._updates = sanitize_updates(None)
         self._zoom: dict[str, int] = {}
         # The student's own looks, kept by name (custom_look.py); Settings will list them.
         self._saved_looks: list[dict] = []
         self._new_look_notice_seen: set[str] = set()
         self._new_look_notice_exempt: set[str] = set()
-        self._has_saved_design_look = False
         self._update_asked = False
-        self._update_dialog: UpdateDialog | None = None
         self._update_on_material = False
+        # An update found while Material is not on screen. The draw-error page offers it, since an update
+        # may be what fixes the drawing.
+        self._draw_error_update: dict | None = None
         self._updater = Updater(self)
         self._updater.found.connect(self._on_update_found)
         self._updater.none_found.connect(self._no_update)
@@ -334,14 +258,6 @@ class NativeWindow(QMainWindow):
         # to write lives on the session.
         self._setup_active = False
         self._setup_checked = False
-        self._block_spare: BlockDialog | None = None
-        self._block_spare_account: str | None = None
-        self._block_prepare_scheduled = False
-        # What a student typed into a new Add sheet that Esc closed, by kind, for the next plain Add of that
-        # kind: plain values only (never a sheet), the days a drag gave a homework, and the account it is for.
-        # Each with the open week its day numbers count from.
-        self._kept_adds: dict[str, tuple[dict, list[int] | None, str]] = {}
-        self._kept_adds_account: str | None = None
         self._leaving: QTimer | None = None
         self._saved_to_leave = False
         # What a drag changed, said with Undo once its save lands: the words for the save on its way,
@@ -382,9 +298,6 @@ class NativeWindow(QMainWindow):
         self.session.repeats_kept.connect(self._say_repeats_kept)
         self.session.plan_conflicts.connect(self._on_plan_conflicts)
         self.session.planned.connect(self._on_planned)
-        self._late_dialog: LateDialog | None = None
-        # The late start accepted but not stored yet, and the sentence its save will confirm.
-        self._late_waiting: tuple[str, str] | None = None
         self._quitting = False
         self._tray_icon: QSystemTrayIcon | None = None
         self._tray_hinted = False
@@ -668,12 +581,27 @@ class NativeWindow(QMainWindow):
             retry.clicked.connect(self._try_graphics_again)
             row.addWidget(quit_button)
             row.addWidget(retry)
+            update_line = QLabel()
+            update_line.setObjectName("drawErrorUpdateLine")
+            update_line.setWordWrap(True)
+            update_line.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            update_line.hide()
+            install = QPushButton("Update now")
+            install.setObjectName("drawErrorInstall")
+            install.clicked.connect(self._install_from_draw_error)
+            install.hide()
+            update_row = QHBoxLayout()
+            update_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            update_row.addWidget(install)
             box.addWidget(line)
             box.addWidget(version)
             box.addLayout(row)
+            box.addWidget(update_line)
+            box.addLayout(update_row)
             self._stack.addWidget(page)
         if self._stack.currentWidget() is not page:
             self._stack.setCurrentWidget(page)
+        self._offer_update_on_draw_error()
 
     def _try_graphics_again(self) -> None:
         """Forget that this version failed and start a new copy that uses the graphics card."""
@@ -810,10 +738,7 @@ class NativeWindow(QMainWindow):
         return set_clock_24h((self.session.preferences or {}).get("clock_24h", False) is True)
 
     def _on_account(self, account: object) -> None:
-        if account is None or str(account["id"]) != self._kept_adds_account:  # type: ignore[index]
-            self._kept_adds.clear()
         if account is None:
-            self._discard_block_spare()
             self._setup_active = False
             self._setup_checked = False
             self._setup_prefs = {}
@@ -823,8 +748,6 @@ class NativeWindow(QMainWindow):
             self._apply_appearance()
             self._show_page("authPage")
             return
-        if self._block_spare_account != str(account["id"]):
-            self._discard_block_spare()
         self._carry_look()
         self._apply_appearance()
 
@@ -1023,12 +946,7 @@ class NativeWindow(QMainWindow):
         # Setup stays where it is. Anything else shows the surface that owns the window.
         if not self._cover_holds():
             self._show_surface()
-        self._maybe_prepare_block_spare()
         self._announce_overdue()
-        if self._late_dialog is not None and self.session.late_preview:
-            titles = {block["id"]: block["title"] for block in self.session.blocks}
-            self._late_dialog.show_trace(self.session.late_preview["trace"], titles)
-        self._sync_running_late()
         self._apply_appearance()
         self._schedule_deadline_tick()
         if getattr(self, "_plan_focus_pending", False):
@@ -1103,139 +1021,6 @@ class NativeWindow(QMainWindow):
         if not busy and (self._setup_prefs or self._setup_work_windows is not None or self._setup_week):
             # A moment later, so a plan that finished just now saves its week before setup writes.
             QTimer.singleShot(0, self, self._flush_setup)
-
-    @contextlib.contextmanager
-    def _material_keys_held(self) -> Iterator[None]:
-        """While a dialog of this window is up over the Material page, Material's window-wide keys wait:
-        their Shortcuts stay live under it and took Esc and the number keys first. The keyboard goes back
-        to Material afterwards."""
-        current = self._stack.currentWidget()
-        page = self._material_page
-        root = page.root if page is not None and current is page else None
-        if root is None or not isValid(root):
-            yield
-            return
-        was_open = root.property("widgetsDialogOpen")
-        root.setProperty("widgetsDialogOpen", True)
-        try:
-            yield
-        finally:
-            if isValid(root):
-                root.setProperty("widgetsDialogOpen", was_open)
-                QMetaObject.invokeMethod(root, "focusDestination")
-
-    def _run_sheet(self, dialog: QDialog) -> bool:
-        """Open a sheet and wait for it. Once it is closed the keyboard is back on the week, not on the
-        button that opened it."""
-        # What the student pressed in the sheet says nothing about the week: the ring comes back only if
-        # the keyboard, not the pointer, took them to the sheet.
-        keyboard = self._last_input.keyboard
-        try:
-            with self._material_keys_held():
-                accepted = dialog.exec() == QDialog.DialogCode.Accepted
-        finally:
-            # A dim made for this sheet that it never took, because it could not open.
-            drop_waiting_dim(self)
-        self._last_input.keyboard = keyboard
-        return accepted
-
-    def _new_event_values(self) -> tuple[int, str]:
-        """A new event opens on the next quarter hour still ahead today, or with none left, the first one
-        tomorrow. The usual start stays for another week, which has no "now", and for tomorrow when that is
-        a day of the next week, which the open one cannot hold."""
-        today, minute = self._clock_in_week()
-        if today is None or minute is None:
-            return 0, "16:00"
-        ahead, slot = next_slot(minute)
-        if today + ahead > 6:
-            return 0, "16:00"
-        return today + ahead, minutes_to_hhmm(slot)
-
-    def _maybe_prepare_block_spare(self) -> None:
-        if (
-            self._block_spare is not None
-            or self._block_prepare_scheduled
-            or self.session.account is None
-            or self.session.preferences is None
-            or self._setup_active
-            or QApplication.activeModalWidget() is not None
-        ):
-            return
-        self._block_prepare_scheduled = True
-        QTimer.singleShot(0, self, self._prepare_block_spare)
-
-    def _prepare_block_spare(self) -> None:
-        self._block_prepare_scheduled = False
-        if (
-            self._block_spare is not None
-            or self.session.account is None
-            or self.session.preferences is None
-            or self._setup_active
-            or QApplication.activeModalWidget() is not None
-        ):
-            return
-        account_id = self._account_id()
-        try:
-            spare = BlockDialog(self)
-        except Exception:
-            return
-        if account_id != self._account_id():
-            spare.deleteLater()
-            return
-        self._block_spare = spare
-        self._block_spare_account = account_id
-
-    def _discard_block_spare(self) -> None:
-        spare, self._block_spare = self._block_spare, None
-        self._block_spare_account = None
-        if spare is not None and isValid(spare):
-            spare.deleteLater()
-
-    def _delete_block(
-        self, block: dict, scope: str, day: int | None, every_week: bool | None = None
-    ) -> None:
-        title = block.get("title") or "this fixed time"
-        whole = scope != "occurrence" or len(block.get("days") or []) <= 1
-        if every_week is None and whole and is_setup_block(block):
-            # School and Setup's activities are in every week, so taking one out asks which.
-            sheet = ConfirmSheet(
-                self,
-                f"Delete {title}?",
-                (
-                    "Delete it from this week only, or from this week and every week after? "
-                    "Earlier weeks keep it."
-                ),
-                (
-                    ("stay", "Cancel", "outlined"),
-                    ("week", "This week only", ""),
-                    ("every", "This week and later", "danger"),
-                ),
-                default="week",
-                note="This week and later can't be undone.",
-            )
-            sheet.exec()
-            if sheet.answer not in ("week", "every"):
-                return
-            every_week = sheet.answer == "every"
-        if every_week and is_setup_block(block):
-            family = block_family(block["id"])
-            after = [item for item in self.session.repeats if item["id"] != family]
-            if not self._apply_standing(after, f"deleting {title}"):
-                return
-            self.session.save()
-            self._set_notice(f"Deleted {title} from this week and every week after.", "", None)
-            return
-        self.session.delete_block(block["id"], scope=scope, day=day, every_week=bool(every_week))
-        self.session.save()
-        if every_week:
-            # Undo takes back this week only, so the toast offers none.
-            self._set_notice(f"Deleted {title} from this week and every week after.", "", None)
-            return
-        if scope == "occurrence" and day is not None:
-            words = f"Deleted {title} on {day_full_names(self.session.week_start)[day]} from this week."
-            self._set_notice(words, "Undo", self._undo_from_notice)
-            return
-        self._set_notice(f"Deleted {title} from this week.", "Undo", self._undo_from_notice)
 
     def confirm_standing(self, after: list) -> str | None:
         """The answer for a setup week change, asked before that page keeps anything.
@@ -1334,8 +1119,8 @@ class NativeWindow(QMainWindow):
         return choice
 
     def _pose_edited(self, line: str) -> str | None:
-        """The three answers, or None for Cancel. Material uses its answers sheet; Widgets a confirm
-        sheet. Except edited is the default."""
+        """The three answers, or None for Cancel. Asked on Material's answers sheet, Except edited the
+        default. Material not on screen means no answer, so nothing changes."""
         bridge = self._account_bridge()
         material = self._surface == "material" and not self._material_gave_up
         if material and bridge is not None and bridge.phase == "setup":
@@ -1343,21 +1128,6 @@ class NativeWindow(QMainWindow):
         page = getattr(self, "_material_page", None)
         if material and page is not None and self._material_owns():
             return self._pose_edited_on(line, page.bridge._sheets.pose_edited)
-        sheet = ConfirmSheet(
-            self,
-            "Edited weeks",
-            line,
-            (
-                ("stay", "Cancel", "outlined"),
-                ("from_today", "From today on", "outlined"),
-                ("replace", "All weeks", "outlined"),
-                ("keep", "Except edited", "filled"),
-            ),
-            default="keep",
-        )
-        sheet.exec()
-        if sheet.answer in ("keep", "replace", "from_today"):
-            return sheet.answer
         return None
 
     def _pose_edited_on(self, line: str, pose: Callable) -> str | None:
@@ -1418,14 +1188,6 @@ class NativeWindow(QMainWindow):
 
     def _today(self) -> str:
         return clock_parts(self.session.now_ms())["iso"]
-
-    def _clock_in_week(self) -> tuple[int | None, int | None]:
-        """Today's weekday and minute when the open week is this week, else nothing to mark."""
-        moment = datetime.fromtimestamp(self.session.now_ms() / 1000.0)
-        column = self.session.today_column(moment.date().isoformat())
-        if column is None:
-            return None, None
-        return column, moment.hour * 60 + moment.minute
 
     def _announce_overdue(self) -> None:
         """Keep count announcements on the active page's accessibility tree."""
@@ -1530,18 +1292,6 @@ class NativeWindow(QMainWindow):
         if ids:
             self.session.solve(only=ids)
 
-    def _delete_homework(self, assignment_id: str, ask: bool = True) -> None:
-        """Homework and its times in every week, gone in one step that Undo brings back."""
-        assignment = self.session.assignments.get(assignment_id)
-        if assignment is None:
-            return
-        title = assignment.get("title") or "this homework"
-        words = f"Delete {title}? Its times on the calendar go too, in every week. You can undo this."
-        if ask and not confirm(self, "Delete homework", words, "Delete"):
-            return
-        if self.session.delete_homework(assignment_id):
-            self._say_when_saved(f"Deleted {title}.")
-
     def _show_preview(
         self,
         title: str,
@@ -1587,17 +1337,6 @@ class NativeWindow(QMainWindow):
                     confirm,
                 )
             )
-            return
-        dialog = PreviewDialog(
-            self,
-            title,
-            summary,
-            rows,
-            existing if existing is not None else self.session.blocks,
-        )
-        if not self._run_sheet(dialog):
-            return
-        save(dialog.rows())
 
     def _paste_clipboard(self) -> None:
         self._paste_preview(self.session.paste_destination(), self.session.paste_proposals())
@@ -1689,26 +1428,6 @@ class NativeWindow(QMainWindow):
                 self.before_planning_question(", ".join(parts)),
                 {"plan": plan_them, "did": did_them, "not": not_now, "stay": not_now, "dismiss": not_now},
             )
-            return
-        sheet = ConfirmSheet(
-            self,
-            "Before planning",
-            ", ".join(parts),
-            (
-                ("plan", "Plan into this week", ""),
-                ("did", "Mark as finished", "outlined"),
-                ("not", "Not now", "quiet"),
-            ),
-            default="not",
-            close_button=False,
-        )
-        sheet.exec()
-        if sheet.answer == "plan":
-            plan_them()
-        elif sheet.answer == "did":
-            did_them()
-        else:
-            not_now()
 
     @staticmethod
     def before_planning_question(body: str) -> dict:
@@ -1782,18 +1501,6 @@ class NativeWindow(QMainWindow):
             ),
         )
 
-    def _late_other_week(self) -> bool:
-        now = datetime.fromtimestamp(self.session.now_ms() / 1000)
-        return self.session.today_column(now.date().isoformat()) is None
-
-    def _sync_running_late(self) -> None:
-        late = self.findChild(QPushButton, "runningLate")
-        if late is None:
-            return
-        other = self._late_other_week()
-        late.setEnabled(not self.session.busy and not other)
-        late.setToolTip(GREYED_TIPS["runningLate"] if other else MORE_TIPS["runningLate"])
-
     def _on_save_finished(self, stored: bool, said: str) -> None:
         if not stored:
             # The retry wait starts at a failure, whoever started the save: one started by a button
@@ -1810,17 +1517,6 @@ class NativeWindow(QMainWindow):
             if snack is not None and snack.snackAction == "UNDO":
                 snack.note("")
             self._notice_step = None
-        if self._late_waiting is None:
-            return
-        block_id, message = self._late_waiting
-        if not stored:
-            # "Not saved. …", which the toast has already said.
-            self._late_waiting = None
-        elif any(item["id"] == block_id for item in self.session.blocks):
-            # A save already in flight when Running late was accepted finishes without the late start;
-            # the wait is for the one that carries it.
-            self._late_waiting = None
-            self.session._say(message)
 
     def start_material_focus(self, block_id: str | None, day: object) -> None:
         """Day and My day's Start focus: the session's timer, then Material's Focus screen."""
@@ -1856,17 +1552,6 @@ class NativeWindow(QMainWindow):
         if page is not None:
             question = self.replace_focus_question(current, incoming)
             page.bridge.sheets.pose_question(question, {"replace": replace})
-            return
-        sheet = ConfirmSheet(
-            self,
-            "Replace timer",
-            f"Stop the timer for {current} and start {incoming} instead?",
-            (("keep", "Keep current timer", "quiet"), ("replace", "Replace timer", "danger")),
-            default="keep",
-        )
-        sheet.exec()
-        if sheet.answer == "replace":
-            replace()
 
     def _build_focus_audio(self) -> None:
         # Rain, lo-fi or white noise while the focus timer works; the timer's own phases drive it.
@@ -2034,25 +1719,19 @@ class NativeWindow(QMainWindow):
         if not self._update_asked and update["version"] == self._updates.get("skip"):
             return
         page = self._material_shown()
-        if page is not None:
-            self._update_on_material = True
-
-            def finished(skip: bool) -> None:
-                self._update_on_material = False
-                if skip:
-                    self._updates["skip"] = update["version"]
-                    self._save_look()
-
-            page.bridge.sheets.open_update(update, VERSION, lambda: self._updater.download(update), finished)
+        if page is None:
+            self._draw_error_update = update
+            self._offer_update_on_draw_error()
             return
-        dialog = UpdateDialog(self, update, VERSION)
-        self._update_dialog = dialog
-        dialog.install.clicked.connect(lambda: self._updater.download(update))
-        dialog.exec()
-        if dialog.skip_this:
-            self._updates["skip"] = update["version"]
-            self._save_look()
-        self._update_dialog = None
+        self._update_on_material = True
+
+        def finished(skip: bool) -> None:
+            self._update_on_material = False
+            if skip:
+                self._updates["skip"] = update["version"]
+                self._save_look()
+
+        page.bridge.sheets.open_update(update, VERSION, lambda: self._updater.download(update), finished)
 
     def _update_sheet(self):
         """Material's update sheet while it is the one showing the update, else None."""
@@ -2060,17 +1739,41 @@ class NativeWindow(QMainWindow):
         sheets = None if page is None else page.bridge.sheets
         return sheets if sheets is not None and sheets.update_open() else None
 
+    def _draw_error_update_row(self) -> tuple[QLabel, QPushButton] | None:
+        """The draw-error page's update line and Update now button while that page is up and offers one."""
+        page = self.findChild(QWidget, "drawErrorPage")
+        if page is None or self._draw_error_update is None or self._stack.currentWidget() is not page:
+            return None
+        return page.findChild(QLabel, "drawErrorUpdateLine"), page.findChild(QPushButton, "drawErrorInstall")
+
+    def _offer_update_on_draw_error(self) -> None:
+        if (row := self._draw_error_update_row()) is None or self._draw_error_update is None:
+            return
+        line, install = row
+        line.setText(f"FlexWeek {self._draw_error_update['version']} is ready")
+        line.show()
+        install.show()
+
+    def _install_from_draw_error(self) -> None:
+        if (row := self._draw_error_update_row()) is None or self._draw_error_update is None:
+            return
+        line, install = row
+        install.setEnabled(False)
+        line.setText("Downloading…")
+        self._updater.download(self._draw_error_update)
+
     def _on_update_progress(self, got: int, total: int) -> None:
-        if self._update_dialog is not None:
-            self._update_dialog.show_progress(got, total)
-        elif (sheet := self._update_sheet()) is not None:
+        if (sheet := self._update_sheet()) is not None:
             sheet.update_progress(got, total)
+        elif (row := self._draw_error_update_row()) is not None and total > 0:
+            row[0].setText(f"Downloading… {min(100, got * 100 // total)}%")
 
     def _on_update_problem(self, why: str) -> None:
-        if self._update_dialog is not None:
-            self._update_dialog.show_problem(why)
-        elif (sheet := self._update_sheet()) is not None:
+        if (sheet := self._update_sheet()) is not None:
             sheet.update_problem(why)
+        elif (row := self._draw_error_update_row()) is not None:
+            row[0].setText(why)
+            row[1].setEnabled(True)
         elif self._update_asked:
             self.session._say(why)
 
@@ -2080,16 +1783,18 @@ class NativeWindow(QMainWindow):
         under it have just been swapped."""
         problem = apply_update(path)
         if problem is not None:
-            if self._update_dialog is not None:
-                self._update_dialog.show_problem(problem + " Open the release page to update by hand.")
-            elif (sheet := self._update_sheet()) is not None:
+            if (sheet := self._update_sheet()) is not None:
                 sheet.update_problem(problem + " Open the release page to update by hand.")
+            elif (row := self._draw_error_update_row()) is not None:
+                row[0].setText(problem + " Open the release page to update by hand.")
+                row[1].setEnabled(True)
             return
-        if self._update_dialog is not None:
-            self._update_dialog.accept()
-        elif (sheet := self._update_sheet()) is not None:
+        if (sheet := self._update_sheet()) is not None:
             sheet.update_done()
-        self.session._say("Update installed. FlexWeek will close so the new version can start.")
+        installed = "Update installed. FlexWeek will close so the new version can start."
+        if (row := self._draw_error_update_row()) is not None:
+            row[0].setText(installed)
+        self.session._say(installed)
         QTimer.singleShot(UPDATE_QUIT_MS, self.quit_app)
 
     def _no_update(self) -> None:
@@ -2198,9 +1903,6 @@ class NativeWindow(QMainWindow):
         page = self._material_shown()
         if page is not None:
             page.bridge.sheets.ask_sign_out(question, self._sign_out_confirmed)
-            return
-        if confirm(self, "Sign out", question, "Sign out", danger=False):
-            self._sign_out_confirmed()
 
     def _sign_out_confirmed(self) -> None:
         # Same wait as closing: an unsent Settings change has to reach the server, or stay on screen.
@@ -2214,133 +1916,20 @@ class NativeWindow(QMainWindow):
             return None
         return page
 
-    def _key_switches(self) -> tuple[bool, bool]:
-        """Number keys and Letter keys: the two saved settings Material's Settings also writes
-        (`material.shortcuts` and `material.letters` in the look file), so a switch turned over in one look
-        is turned over in the other. Read again when the file changes."""
-        path = self._look_path()
-        try:
-            info = path.stat()
-        except OSError:
-            stamp = None
-        else:
-            stamp = (info.st_mtime_ns, info.st_size)
-        if stamp != self._key_stamp:
-            try:
-                stored = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                stored = None
-            self._key_values = (read_shortcuts(stored), read_letter_keys(stored))
-            self._key_stamp = stamp
-        return self._key_values
-
     def _open_help(self) -> None:
         page = self._material_shown()
-        if page is None:
-            HelpDialog(self, self._key_switches()).exec()
-            return
-        page.bridge.sheets.openHelp()
+        if page is not None:
+            page.bridge.sheets.openHelp()
 
     def _open_about(self) -> None:
         page = self._material_shown()
         if page is not None:
             page.bridge.sheets.openAbout()
-            return
-        AboutDialog(self, self.session.storage_info, str(self._look_path().parent)).exec()
 
     def _open_account(self) -> None:
         page = self._material_shown()
         if page is not None:
             page.bridge.sheets.openAccount()
-            return
-        qml_focus_item = None
-        if hasattr(self, "_material_page") and self._material_page is not None:
-            quick = getattr(self._material_page, "_quick", None)
-            if quick is not None and quick.quickWindow() is not None:
-                qml_focus_item = quick.quickWindow().activeFocusItem()
-        origin = QApplication.focusWidget()
-        dialog = AccountDialog(self, self.session.recovery_remaining, self.session.storage_info)
-        pack, dark, accent = self._look_inputs()
-        eye = resolved_palette(pack, dark, self._look, accent)["muted"]
-        for field in (dialog.current_password, dialog.new_password):
-            field.set_colour(eye)
-        try:
-            if dialog.exec() != QDialog.DialogCode.Accepted:
-                return
-            password = dialog.current_password.text()
-            if dialog.action == "password":
-                self.session.change_password(password, dialog.new_password.text())
-            elif dialog.action == "codes":
-                self.session.replace_recovery_codes(password)
-            elif dialog.action == "delete":
-                name = (self.session.account or {}).get("username") or "this account"
-                where = (
-                    "your FlexWeek server"
-                    if (self.session.storage_info or {}).get("mode") == "hosted"
-                    else "this computer"
-                )
-                question = DELETE_ACCOUNT_QUESTION.format(name=name, where=where)
-                if confirm(self, "Delete account", question, f"Delete {name}"):
-                    self.session.delete_account(password)
-            elif dialog.action == "export":
-                self.session.export_account(password, self._write_account_file)
-            elif dialog.action == "import":
-                path, _ = QFileDialog.getOpenFileName(self, "Import backup file", "", "JSON (*.json)")
-                if not path:
-                    return
-                try:
-                    snapshot = json.loads(Path(path).read_text())
-                except (OSError, UnicodeDecodeError, ValueError):
-                    self.session._say(READ_FAILED)
-                    return
-                if not isinstance(snapshot, dict):
-                    self.session._say(READ_FAILED)
-                    return
-                self.session.preview_account_import(snapshot, self._confirm_transfer)
-            elif dialog.action == "week":
-                self._write_json("flexweek-" + self.session.week_start + ".json", self.session.week_file())
-            elif dialog.action == "day":
-                destination = self.session.paste_destination()
-                if destination is None:
-                    self.session._say("Select a day first.")
-                    return
-                day = destination[0]
-                self._write_json("flexweek-day.json", self.session.day_file(day))
-            elif dialog.action == "import-week":
-                path, _ = QFileDialog.getOpenFileName(self, "Import week or day", "", "JSON (*.json)")
-                if not path:
-                    return
-                try:
-                    raw = Path(path).read_text()
-                except (OSError, UnicodeDecodeError):
-                    self.session._say(READ_WEEK_FAILED)
-                    return
-                parsed = parse_import_payload(raw)
-                if parsed.get("error"):
-                    self.session._say(parsed["error"])
-                    return
-                if parsed.get("format") == EXPORT_FORMAT and self.session.blocks:
-                    question = REPLACE_WEEK_QUESTION.format(
-                        week=week_label(self.session.week_start, self._today())
-                    )
-                    if not confirm(self, "Replace week", question, "Replace week"):
-                        return
-                    self.session.import_week_file(raw, replace=True)
-                else:
-                    self.session.import_week_file(raw)
-        finally:
-            if qml_focus_item is not None:
-                qml_focus_item.forceActiveFocus()
-            elif origin is not None:
-                origin.setFocus()
-
-    def _confirm_transfer(self) -> None:
-        preview = self.session.transfer_preview
-        if preview is None:
-            return
-        dialog = TransferPreviewDialog(self, preview)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.session.apply_account_import()
 
     def _write_account_file(self, snapshot: dict) -> None:
         name = "flexweek-account-" + snapshot.get("username", "account") + ".json"
@@ -2371,7 +1960,6 @@ class NativeWindow(QMainWindow):
 
         self._new_look_notice_seen = set()
         self._new_look_notice_exempt = set()
-        self._has_saved_design_look = False
         path = self._look_path()
         if not path.is_file():
             self._cpu_drawing_version = ""
@@ -2382,9 +1970,7 @@ class NativeWindow(QMainWindow):
         except OSError, ValueError:
             stored = None
         self._look = sanitize_look(stored)
-        raw_layout = stored.get("layout") if isinstance(stored, dict) else None
-        self._has_saved_design_look = self._layout_has_saved_look(raw_layout)
-        self._layout = sanitize_layout(raw_layout)
+        self._layout = sanitize_layout(stored.get("layout") if isinstance(stored, dict) else None)
         self._surface = sanitize_surface(stored)
         self._cpu_drawing_version = cpu_drawing.saved_version(stored)
         self._material_gave_up = False
@@ -2399,16 +1985,6 @@ class NativeWindow(QMainWindow):
         exempt = stored.get("new_look_notice_exempt") if isinstance(stored, dict) else None
         if isinstance(exempt, list):
             self._new_look_notice_exempt = {item for item in exempt if isinstance(item, str) and item}
-
-    @staticmethod
-    def _layout_has_saved_look(layout: object) -> bool:
-        if not isinstance(layout, dict):
-            return False
-        options = layout.get("options")
-        return isinstance(options, dict) and any(
-            isinstance(values, dict) and isinstance(values.get("look"), str) and bool(values["look"])
-            for values in options.values()
-        )
 
     def _save_look(self) -> None:
         import json
@@ -2435,7 +2011,6 @@ class NativeWindow(QMainWindow):
             if material is not None:
                 body["material"] = material
             path.write_text(json.dumps(body) + "\n")
-            self._has_saved_design_look = self._layout_has_saved_look(body["layout"])
         except OSError:
             self.session._say("Could not save the look for this device.")
 
@@ -2443,12 +2018,7 @@ class NativeWindow(QMainWindow):
         """Dress the app chrome and current design from the design's selected look."""
         pack, system_dark, accent = self._look_inputs()
         look = self._worn_look()
-        if not self._wears_carried_look():
-            token = options_for(self._layout, self._layout["main"])["look"]
-        else:
-            token = "your"
-        # Blocks and month cells are painted per item, which a stylesheet cannot reach.
-        palette, look = design_look(token, pack, system_dark, look, accent)
+        palette, look = design_look("your", pack, system_dark, look, accent)
         art = control_art(palette)
         sheet = pack_stylesheet(pack, system_dark, look, accent, palette, art)
         chips = bool((self.session.preferences or {}).get("accent_chips"))
@@ -2457,15 +2027,11 @@ class NativeWindow(QMainWindow):
         dressed = (sheet, repr(look), repr(palette), chips, self._motion)
         # Every change to the week comes through here. Restyling the whole window each time, when the
         # look had not changed, cost about 26 ms a change and repainted everything on screen.
-        if dressed != self._dressed:
-            self._discard_block_spare()
         set_error_colour(palette["error"])
         if dressed != self._dressed:
             self._dressed = dressed
             self.setStyleSheet(sheet)
             apply_ui_effects(self._motion)
-            self._maybe_prepare_block_spare()
-            fit_buttons(self)
 
     def _install_tray(self) -> None:
         tray = QSystemTrayIcon(self._icon, self)

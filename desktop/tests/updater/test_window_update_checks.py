@@ -79,4 +79,4 @@ def test_a_skipped_version_stays_quiet_until_asked(qapp: QApplication, window: N
     window._updates = {"check": True, "last_ms": 0, "skip": "9.9.9"}
     window._update_asked = False
     window._on_update_found({"version": "9.9.9", "asset": "x", "url": "u", "checksum_url": "c", "notes": ""})
-    assert window._update_dialog is None
+    assert window._update_on_material is False

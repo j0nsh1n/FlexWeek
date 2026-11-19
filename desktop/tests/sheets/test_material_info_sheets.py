@@ -38,13 +38,6 @@ NOTES = "## What changed\n- Material 3 is the one look.\n- Fewer pop-ups.\n\nMor
 UPDATE = {"version": "1.5.0", "notes": NOTES}
 
 
-def _refuse(name: str):
-    def refuse(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError(f"the Widgets {name} opened over Material")
-
-    return refuse
-
-
 def _sheets(window: NativeWindow):
     return window._material_page.bridge.sheets
 
@@ -90,7 +83,6 @@ def _click(quick, item: QObject) -> None:
 def test_help_opens_from_its_more_row_as_a_sheet_with_the_widgets_content(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("desktop.native.window.HelpDialog", _refuse("Help dialog"))
     root, quick = _material(qapp, window)
     _sheets(window).moreAction("helpButton")
     pump(qapp, 40)
@@ -113,7 +105,6 @@ def test_help_opens_from_its_more_row_as_a_sheet_with_the_widgets_content(
 def test_f1_opens_help_and_esc_closes_it_and_the_keyboard_goes_back(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("desktop.native.window.HelpDialog", _refuse("Help dialog"))
     root, quick = _material(qapp, window)
     fab = _one(root, "materialFab")
     fab.forceActiveFocus()
@@ -189,7 +180,6 @@ def test_help_follows_the_number_and_letter_switches(qapp: QApplication, window:
 def test_about_opens_from_its_more_row_with_the_version_and_where_the_week_is_saved(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("desktop.native.window.AboutDialog", _refuse("About dialog"))
     root, quick = _material(qapp, window)
     window.session.storage_info = {"mode": "local"}
     _sheets(window).moreAction("aboutButton")
@@ -254,7 +244,6 @@ class _Download:
 
 
 def _update_rig(window: NativeWindow, monkeypatch: pytest.MonkeyPatch) -> _Download:
-    monkeypatch.setattr("desktop.native.window.UpdateDialog", _refuse("Update dialog"))
     download = _Download()
     monkeypatch.setattr(window._updater, "download", download)
     window._updates = {}
@@ -395,8 +384,6 @@ def test_an_update_waits_for_an_open_sheet_so_typing_is_not_lost(
 
 
 def _sign_out_rig(window: NativeWindow, monkeypatch: pytest.MonkeyPatch) -> list[int]:
-    monkeypatch.setattr("desktop.native.window.confirm", _refuse("Sign out question"))
-    monkeypatch.setattr("desktop.native.window.ConfirmSheet", _refuse("Sign out question"))
     window.session.storage_info = {"mode": "local"}
     out: list[int] = []
     monkeypatch.setattr(window.session, "logout", lambda: out.append(1))

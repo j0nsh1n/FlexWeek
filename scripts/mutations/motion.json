@@ -28,20 +28,6 @@
     "test": "desktop/tests/settings/test_page_change_motion.py::test_a_switch_never_shows_an_empty_page"
   },
   {
-    "name": "a dialog's content fades without rising",
-    "file": "desktop/native/widgets.py",
-    "old": "                appear(part, level, rise=True)",
-    "new": "                appear(part, level)",
-    "test": "desktop/tests/settings/test_notice_and_sheet_motion.py::test_a_dialog_fades_and_rises_through_its_content_once"
-  },
-  {
-    "name": "a sheet's dimming appears at once",
-    "file": "desktop/native/widgets.py",
-    "old": "        self.dim_progress = 0.0\n        self.fading = True\n        self.update()\n",
-    "new": "        self.dim_progress = 1.0\n        self.fading = False\n        self.update()\n",
-    "test": "desktop/tests/settings/test_notice_and_sheet_motion.py::test_a_sheet_fades_its_card_and_shadow_as_one_and_keeps_the_shadow"
-  },
-  {
     "name": "the server turns Reduce away",
     "file": "backend/app.py",
     "old": "    motion: Literal[\"off\", \"normal\", \"extra\", \"reduce\"] | None = Field(",

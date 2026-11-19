@@ -27,16 +27,6 @@ def _material_cutoff(window: NativeWindow) -> object:
     return None
 
 
-def _availability_cutoff(window: NativeWindow) -> object:
-    from desktop.native.widgets import AvailabilityDialog
-
-    dialog = AvailabilityDialog(window, {})
-    dialog.show()
-    dialog.tabs.setCurrentIndex(dialog.tabs.findData("cutoff"))
-    _pump(5)
-    return dialog
-
-
 SCREENS: list[Screen] = [
     Screen(
         id="settings.material_planning_cutoff",
@@ -48,15 +38,5 @@ SCREENS: list[Screen] = [
             " a pixel past it), so no choice is cut off."
         ),
         sources=("desktop/native/material/",),
-    ),
-    Screen(
-        id="settings.availability_cutoff",
-        area="settings",
-        prepare=_availability_cutoff,
-        checks=(
-            "On the Study hours sheet's cut-off tab the label 'No homework after' sits above the cut-off"
-            " box and is shown once."
-        ),
-        sources=("desktop/native/widgets.py",),
     ),
 ]

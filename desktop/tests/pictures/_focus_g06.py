@@ -7,13 +7,11 @@ Each one is what an old pixel, position or style-property test read back."""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest import mock
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QAbstractButton, QApplication, QPushButton
+from PySide6.QtWidgets import QAbstractButton, QApplication
 
 from desktop.native.look import sanitize_look
-from desktop.native.settings import AccountDialog
 from desktop.tests.material_support import pump, show_material
 from desktop.tests.pictures.screen import Screen
 
@@ -81,19 +79,6 @@ SCREENS: list[Screen] = [
         styles=("material",),
     ),
 ]
-
-
-def _manage_account(window: NativeWindow) -> object:
-    # Shown instead of waiting for an answer, so it can be photographed; the keyboard is put on
-    # Delete account as Tab would.
-    with mock.patch.object(AccountDialog, "exec", lambda dialog: (dialog.show(), 0)[1]):
-        window._open_account()
-    dialog = window.findChild(AccountDialog)
-    if dialog is not None:
-        button = dialog.findChild(QPushButton, "deleteAccount")
-        if button is not None:
-            button.setFocus(Qt.FocusReason.TabFocusReason)
-    return dialog
 
 
 def _bar_ring(preset: str, name: str):
@@ -192,17 +177,5 @@ SCREENS += [
             "page's.",
         ),
         sources=BAR_SOURCES,
-    ),
-    Screen(
-        id="sheets.manage_account_keyboard_ring",
-        area="sheets",
-        prepare=_manage_account,
-        checks=(
-            "The Manage account sheet with the keyboard on Delete account. Delete account is a danger "
-            "button drawn outlined (a red outline, not a red fill) and wears the keyboard focus ring "
-            "of a danger outlined button; Close is an outlined button that wears the same kind of ring "
-            "when it has the keyboard. The sheet wears the window's design colours."
-        ),
-        sources=("desktop/native/settings.py", "desktop/native/look.py", "desktop/native/widgets.py"),
     ),
 ]

@@ -7,8 +7,8 @@ import pytest
 
 pytest.importorskip("PySide6")
 
+from desktop.native.sheet_rules import today_from_words
 from desktop.native.weekmodel import clock_text
-from desktop.native.widgets import today_from_words
 
 
 def test_the_hint_names_the_next_quarter_hour_from_now() -> None:

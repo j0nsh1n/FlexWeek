@@ -4,8 +4,7 @@
 
 The app starts as a student's would, on Material 3, and the steps in the play run on the hidden
 session's X display with xdotool. Without --out, results land in
-~/.flexweek-ui-harness/scratch/rig-runs/<checkout id>/ (FLEXWEEK_RIG_RUNS names another folder),
-and the newest 3 runs of the checkout are kept.
+~/.flexweek-ui-harness/scratch/plays/<time>-<play name>/.
 """
 
 from __future__ import annotations
@@ -13,8 +12,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -33,44 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from play import PlayError, default_play_folder, load_play, run_play  # noqa: E402
 
-DESIGNS = ("classic",)
-TABS = ("day", "week", "month")
 PASSWORD = "a-long-test-password"
-KEEP_RUNS = 3
-RUN_NAME = re.compile(r"\d{8}-\d{6}-\d+")
-
-
-def parse_options(design: str | None, pairs: list[str]) -> dict[str, str]:
-    """`--option key=value` pairs as the design's saved options, or a SystemExit naming what is valid."""
-    from desktop.native.layout_choice import LAYOUTS
-
-    if not pairs:
-        return {}
-    if design not in LAYOUTS:
-        raise SystemExit("--option sets a design's option, so it needs --design (a design with options).")
-    spec = LAYOUTS[design]
-    valid = {option.key: option.values for option in spec.options}
-    listing = "; ".join(f"{key}: {', '.join(values)}" for key, values in valid.items()) or "none"
-    chosen: dict[str, str] = {}
-    for pair in pairs:
-        key, separator, value = pair.partition("=")
-        if not separator:
-            raise SystemExit(f"--option {pair!r} is not key=value. {design} options: {listing}")
-        if key not in valid:
-            raise SystemExit(f"{design} has no option {key!r}. {design} options: {listing}")
-        if value not in valid[key]:
-            raise SystemExit(
-                f"{design} option {key!r} has no value {value!r}. Valid: {', '.join(valid[key])}"
-            )
-        chosen[key] = value
-    return chosen
-
-
-def play_looks() -> tuple[str, ...]:
-    """The names a play's "look" may take: a look preset or a theme pack."""
-    from desktop.native.look import LOOK_PRESETS, PACKS
-
-    return (*(name for name in LOOK_PRESETS if name != "default"), *PACKS)
 
 
 def kept_session_path() -> Path:
@@ -99,11 +59,12 @@ def clean_look_file() -> Path:
     return look_path
 
 
-def write_material_new_look(mode: str) -> Path:
-    """Material is the saved surface, and nobody is signed in.
+def write_material_look(mode: str) -> Path:
+    """The look file the window reads on start: Material, light or dark as the play asks.
 
-    An earlier rig run's kept token would 401 against this empty database and write
-    "Please sign in again" on the card, so that file is removed too.
+    Every run has a new server and an empty database, so an earlier run's kept token would 401 and
+    leave the card on "Please sign in again", where signing up never reaches the recovery codes.
+    The kept session is removed for every seed.
     """
     from PySide6.QtCore import QStandardPaths
 
@@ -115,29 +76,15 @@ def write_material_new_look(mode: str) -> Path:
     return look_path
 
 
+
 def check_play(args: argparse.Namespace) -> None:
     """Refuse a play that cannot run, with every mistake named, before a session is started for it."""
-    if not args.play:
-        return
-    if args.design or args.tab or args.scenario or args.option or args.list:
-        raise SystemExit(
-            "--play runs its own steps; --design, --tab, --scenario, --option and --list do not mix with it."
-        )
     path = Path(args.play).expanduser().resolve()
     try:
-        load_play(path, DESIGNS, play_looks())
+        load_play(path)
     except PlayError as wrong:
         raise SystemExit(f"{path}:\n{wrong}") from None
     args.play = str(path)
-
-
-def default_runs_folder(runs_key: str) -> Path:
-    # Runs live on disk, not in /tmp: on Jonathan's machine /tmp is RAM (tmpfs with zram swap) and a
-    # day of rig runs held 767 MB of it. FLEXWEEK_RIG_RUNS moves them, since that harness folder
-    # exists only there. The hidden session's own state is small and stays in /tmp.
-    root = os.environ.get("FLEXWEEK_RIG_RUNS")
-    base = Path(root) if root else Path.home() / ".flexweek-ui-harness" / "scratch" / "rig-runs"
-    return base / runs_key
 
 
 def caller_env(frozen: str, live: str) -> str:
@@ -161,12 +108,6 @@ def session_from_fwtest() -> tuple[str, str, str]:
     if own_bus and bus == own_bus:
         raise SystemExit("Refusing the caller's own D-Bus session bus.")
     return display, bus, runs_key
-
-
-def prune_runs(folder: Path) -> None:
-    runs = sorted(item for item in folder.iterdir() if item.is_dir() and RUN_NAME.fullmatch(item.name))
-    for old in runs[:-KEEP_RUNS]:
-        shutil.rmtree(old, ignore_errors=True)
 
 
 def seed_rig_week(app: object, session: object) -> None:
@@ -241,15 +182,9 @@ def child_main(args: argparse.Namespace) -> int:
     out = Path(args.out)
     server = LocalServer(Path(tempfile.mkdtemp()) / "rig.db")
     server.start()
-    play = load_play(Path(args.play), DESIGNS, play_looks()) if args.play else None
-    if play is None:
-        server.stop()
-        if not args.list:
-            print("Give a play to run: --play PLAY.json (see docs/tooling/fwtest.md).", file=sys.stderr)
-        return 0 if args.list else 2
+    play = load_play(Path(args.play))
     material_new = play.setup.seed == "material-new"
-    if material_new:
-        write_material_new_look(play.setup.mode)
+    write_material_look(play.setup.mode)
     window = NativeWindow(server.origin, kept=KeptSession(kept_session_path()))
     window.resize(1280, 820)
     window.move(0, 0)
@@ -265,45 +200,25 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--design", choices=DESIGNS)
-    parser.add_argument("--tab", choices=TABS)
-    parser.add_argument("--scenario")
-    parser.add_argument("--list", action="store_true")
     parser.add_argument("--out")
     parser.add_argument(
-        "--option",
-        action="append",
-        default=[],
-        metavar="KEY=VALUE",
-        help="set one of --design's saved options, e.g. hero=today; repeat for more",
-    )
-    parser.add_argument(
         "--play",
+        required=True,
         metavar="PLAY.json",
         help="run the steps in this file and record each (see docs/tooling/fwtest.md, Playing the app)",
     )
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
-    parse_options(args.design, args.option)
     check_play(args)
-    if args.list and not args.child:
-        args.out = tempfile.mkdtemp()
-        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    if args.child or args.list:
+    if args.child:
         return child_main(args)
-    display, bus, runs_key = session_from_fwtest()
-    return drive(args, display, bus, runs_key)
+    display, bus, _runs_key = session_from_fwtest()
+    return drive(args, display, bus)
 
 
-def drive(args: argparse.Namespace, display: str, bus: str, runs_key: str) -> int:
-    """Run the scenarios in a child on the hidden display, and return its exit code."""
-    runs = None if args.out or args.play else default_runs_folder(runs_key)
-    if args.out:
-        out = Path(args.out)
-    elif args.play:
-        out = default_play_folder(Path(args.play).stem, datetime.now())
-    else:
-        out = runs / f"{datetime.now():%Y%m%d-%H%M%S}-{os.getpid()}"
+def drive(args: argparse.Namespace, display: str, bus: str) -> int:
+    """Run the play in a child on the hidden display, and return its exit code."""
+    out = Path(args.out) if args.out else default_play_folder(Path(args.play).stem, datetime.now())
     out.mkdir(parents=True, exist_ok=True)
     env = {
         key: value
@@ -311,7 +226,7 @@ def drive(args: argparse.Namespace, display: str, bus: str, runs_key: str) -> in
         if key not in {"WAYLAND_DISPLAY", "QT_IM_MODULE", "XMODIFIERS"}
     }
     # XInput 2 off: on the hidden display Qt never hears xdotool's wheel through it, only through
-    # the core protocol, and the zoom scenarios turn the wheel. Presses and drags arrive either way.
+    # the core protocol, and plays that turn the wheel need it. Presses and drags arrive either way.
     env.update(
         DISPLAY=display,
         DBUS_SESSION_BUS_ADDRESS=bus,
@@ -320,19 +235,8 @@ def drive(args: argparse.Namespace, display: str, bus: str, runs_key: str) -> in
         XDG_DATA_HOME=str(out / "data"),
         PYTHONFAULTHANDLER="1",
     )
-    command = [sys.executable, __file__, "--child", "--out", str(out)]
-    for flag in ("design", "tab", "scenario"):
-        if getattr(args, flag):
-            command += [f"--{flag}", getattr(args, flag)]
-    for pair in args.option:
-        command += ["--option", pair]
-    if args.play:
-        command += ["--play", args.play]
-    try:
-        return subprocess.run(command, env=env, cwd=ROOT).returncode
-    finally:
-        if runs is not None:
-            prune_runs(runs)
+    command = [sys.executable, __file__, "--child", "--out", str(out), "--play", args.play]
+    return subprocess.run(command, env=env, cwd=ROOT).returncode
 
 
 if __name__ == "__main__":

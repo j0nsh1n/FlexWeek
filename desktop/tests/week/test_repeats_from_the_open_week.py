@@ -18,10 +18,9 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QTimer  # noqa: E402
-from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.setup_steps import WEEK  # noqa: E402
-from desktop.native.widgets import SchoolHoursDialog  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402,F401
 from desktop.tests.sheets.support_material_sheets import bridge, material_week, snack  # noqa: E402
@@ -59,19 +58,16 @@ def school_of(session) -> tuple[list[int], str, int, list[int]]:
 def school_hours(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, end_minutes: int
 ) -> dict:
-    """Run School hours the way the student does: it opens on what the window gives it, the end is
-    moved, and it is accepted. Returns what the form showed."""
-    seen: dict = {}
-
-    def run(dialog: SchoolHoursDialog) -> QDialog.DialogCode:
-        seen["days"] = dialog.days.days()
-        seen["span"] = dialog.times.span()
-        seen["line"] = dialog.this_week.text() if not dialog.this_week.isHidden() else None
-        dialog.times.end.set_minutes(end_minutes)
-        dialog.accept()
-        return QDialog.DialogCode.Accepted
-
-    school_hours_form(window, run)
+    """Change School's end from this week on, as Settings does. Returns what Setup's week page shows for
+    School before the change: the usual days and span, and the line naming this week's own changes."""
+    state = window._setup_state(first_run=False)
+    usual = next(item for item in state.blocks if item["id"] == "school")
+    seen = {
+        "days": list(usual["days"]),
+        "span": (usual["start"], usual["duration_min"]),
+        "line": state.this_week or None,
+    }
+    school_hours_form(window, end_minutes)
     wait_until(qapp, lambda: not window.session.busy and not window.session.dirty)
     settled(qapp, window)
     return seen

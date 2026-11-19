@@ -18,9 +18,6 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QTimer
-from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QPushButton
 
 from desktop.tests.grid_support import (  # noqa: F401
     qapp,
@@ -68,22 +65,22 @@ def test_1br_the_focus_timer_does_not_offer_the_past_overdue_session(qapp, windo
     assert session_id not in ids, offered
 
 
-def test_1br_plan_with_overdue_work_asks_first(qapp, window) -> None:
+def test_1br_plan_with_overdue_work_asks_first(qapp, window, monkeypatch) -> None:
     overdue_this_week(qapp, window)
-    asked: list[str] = []
+    asked: list[list[str]] = []
 
-    def look() -> None:
-        sheet = QApplication.activeModalWidget()
-        if sheet is not None:
-            asked.append([b.text() for b in sheet.findChildren(QPushButton)])
-            sheet.reject()
+    class Sheets:
+        def pose_question(self, question: dict, _handlers: dict) -> None:
+            asked.append([card["title"] for card in question["cards"]])
 
-    QTimer.singleShot(300, look)
+    class Page:
+        class bridge:  # noqa: N801
+            sheets = Sheets()
+
+    monkeypatch.setattr(window, "_material_shown", lambda: Page)
     window._plan_with_left_over()
-    for _ in range(12):
-        QTest.qWait(50)
     settled(qapp, window)
-    # T-W5 (1.0.0 wording audit) renamed the box's buttons from "Plan them" / "I did these".
+    # T-W5 (1.0.0 wording audit) renamed the choices from "Plan them" / "I did these".
     assert asked and asked[0] == ["Plan into this week", "Mark as finished", "Not now"], asked
 
 
