@@ -88,6 +88,8 @@ def board_for(
     on: date,
     now: datetime | None = None,
     missed: frozenset[str] = frozenset(),
+    unplaced: int = 0,
+    unplaced_words: tuple[str, str] | None = None,
 ) -> DayBoard:
     """Up next, Done, the Now card, and the ring for one day.
 
@@ -100,6 +102,9 @@ def board_for(
     `missed` is the ids the planner calls missed: those sessions stay under Up next.
     Slack uses `now` when the caller has the real clock; otherwise the viewed
     day's `minute`.
+    `unplaced` is how many homework items due today still have no time: they are things left, so the ring and
+    the left line count them. `unplaced_words` is the week model's (title, line) for them; the Now card says
+    it when nothing placed is on or ahead, so the day is never called free while homework waits for a time.
     """
     ordered = tuple(sorted(items, key=lambda item: (int(item.start), str(item.title))))
     # A session the planner calls missed is still to do, so it stays under Up next though its time went by.
@@ -115,16 +120,19 @@ def board_for(
     doing = _doing(ahead, minute, when, nudges)
     busy = None if doing is not None else _busy(ordered, minute, when, nudges)
     after = None if busy is None else _next_after(ordered, minute)
-    total = len(ordered)
-    count = len(up)
+    unplaced = unplaced if when == "today" else 0
+    total = len(ordered) + unplaced
+    count = len(up) + unplaced
+    nothing_ahead = doing is None and busy is None and gap is None
+    needs_time = unplaced > 0 and unplaced_words is not None and nothing_ahead
     moment = now if now is not None else datetime.combine(on, datetime.min.time()) + timedelta(minutes=minute)
     return DayBoard(
         left_line=_left_line(count, when == "today"),
         left_count=count,
-        show_now=doing is not None or busy is not None or gap is not None,
-        now_title=_busy_title(busy) if busy is not None else _now_title(doing, gap, minute),
+        show_now=doing is not None or busy is not None or gap is not None or needs_time,
+        now_title=_card_title(busy, doing, gap, minute, unplaced_words if needs_time else None),
         now_minutes=int(busy.end) - minute if busy is not None else _now_minutes(doing, gap, minute),
-        now_line=_next_line(after) if busy is not None else _now_line(doing, gap, minute),
+        now_line=_card_line(busy, after, doing, gap, minute, unplaced_words if needs_time else None),
         now_busy=busy is not None,
         ring_count=count,
         ring_caption="thing left" if count == 1 else "things left",
@@ -135,6 +143,31 @@ def board_for(
         focus_day=-1 if focus is None else int(focus.day),
         focus_title="" if focus is None else str(focus.title),
     )
+
+
+def _card_title(
+    busy: object | None,
+    doing: object | None,
+    gap: object | None,
+    minute: int,
+    waiting: tuple[str, str] | None,
+) -> str:
+    if waiting is not None:
+        return waiting[0]
+    return _busy_title(busy) if busy is not None else _now_title(doing, gap, minute)
+
+
+def _card_line(
+    busy: object | None,
+    after: object | None,
+    doing: object | None,
+    gap: object | None,
+    minute: int,
+    waiting: tuple[str, str] | None,
+) -> str:
+    if waiting is not None:
+        return waiting[1]
+    return _next_line(after) if busy is not None else _now_line(doing, gap, minute)
 
 
 def _settled(item: object) -> bool:

@@ -198,6 +198,7 @@ class DayBridge(QObject):
                     item, self._mode, dim=dim, gone=gone, fresh=False, missed=item.block_id in missed
                 )
             )
+        unplaced, words = _waiting_for_a_time(week_model, self._day_index, when)
         self._publish(
             board_for(
                 items,
@@ -209,6 +210,8 @@ class DayBridge(QObject):
                 on=viewed,
                 now=moment,
                 missed=missed,
+                unplaced=unplaced,
+                unplaced_words=words,
             ),
             overlapped(block_rows),
         )
@@ -502,6 +505,20 @@ class DayBridge(QObject):
     def timerCanFinish(self) -> bool:
         """Time is up on homework that is still open, which a quick focus never has."""
         return bool(self.timerEnded and self._timer[3])
+
+
+def _waiting_for_a_time(week: object, day_index: int, when: str) -> tuple[int, tuple[str, str] | None]:
+    """How many homework items due today have no time yet, and the week model's words for them (its name, then
+    what to do), as the Widgets My day said them. The words are None while something placed is still ahead."""
+    if when != "today" or week is None or day_index < 0:
+        return 0, None
+    waiting = week.due_today_unplaced(day_index)  # type: ignore[attr-defined]
+    if not waiting:
+        return 0, None
+    if week.leftover_kind(day_index) != "needs_time":  # type: ignore[attr-defined]
+        return len(waiting), None
+    _kicker, title, line = week.leftover_parts(day_index)  # type: ignore[attr-defined]
+    return len(waiting), (title, line)
 
 
 def _opening_minute(week: object, viewed: date, today: date, now: int | None, day_index: int) -> int:

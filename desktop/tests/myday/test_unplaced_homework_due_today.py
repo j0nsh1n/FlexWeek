@@ -71,11 +71,6 @@ def test_the_material_week_lists_it_and_does_not_say_everything_has_a_time(qapp,
     assert _qml(root, "homeworkCount").property("text") == "2"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="product gap: Material's My day card and ring read only placed blocks, so homework due tonight "
-    "with no time is not named there (the shared words name it; the Widgets screens read them)",
-)
 def test_material_my_day_names_it_in_the_card_and_never_says_the_day_is_free(qapp, window) -> None:
     _math_due_tonight(qapp, window)
     root = _show_material(qapp, window)
@@ -87,3 +82,8 @@ def test_material_my_day_names_it_in_the_card_and_never_says_the_day_is_free(qap
     assert "math worksheet" in said, said
     for phrase in FREE_TODAY:
         assert phrase not in said, f"{phrase!r} in {said!r}"
+    assert myday.property("showNow") is True
+    # The worksheet is the one thing left: the ring and the line count it though it has no time yet.
+    assert myday.property("ringCount") == 1
+    assert myday.property("ringCaption") == "thing left"
+    assert myday.property("leftLine") == "1 thing left today"
