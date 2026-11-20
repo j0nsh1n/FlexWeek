@@ -162,15 +162,25 @@ pub fn apply_repeats_to_shown_week(
     }
     let by_weekday: Vec<Value> = blocks.iter().map(|block| turned(block, by)).collect();
     // Until is cut by the shown week's own dates, so the days it hid are put back in that frame.
-    let (week, repeats) =
-        crate::repeats::apply_to_week_with(&by_weekday, repeats, intents, |copy, repeat| {
+    let (week, repeats) = crate::repeats::apply_to_week_with(
+        &by_weekday,
+        repeats,
+        intents,
+        |copy, repeat| {
             let shown = crate::standing::uncut_copy(
                 &turned(copy, -by),
                 Some(&turned(repeat, -by)),
                 week_start,
             )?;
             Ok(turned(&shown, by))
-        })?;
+        },
+        |copy| {
+            Ok(
+                crate::standing::cut_at_until(&turned(copy, -by), week_start)?
+                    .map(|shown| turned(&shown, by)),
+            )
+        },
+    )?;
     Ok((
         week.iter().map(|block| turned(block, -by)).collect(),
         repeats,

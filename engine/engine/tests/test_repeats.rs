@@ -609,6 +609,21 @@ fn moving_until_later_or_clearing_it_brings_back_the_days_it_hid_in_a_week_that_
             "Saturday is back on the week on screen"
         );
     }
+    // A change that keeps Until shows only the days Until leaves, though they were put back to compare:
+    // a new title on the Wednesday week still shows Thursday alone.
+    let renamed = with(ended.clone(), json!({"title": "Bass"}));
+    let intent = edit_intent("weekly-3f2a9c01", shown_start, Some(&ended), Some(&renamed)).unwrap();
+    let (week, _) = flexweek_engine::shown::apply_repeats_to_shown_week(
+        shown_start,
+        std::slice::from_ref(&on_screen),
+        std::slice::from_ref(&ended),
+        &[intent],
+    )
+    .unwrap();
+    assert_eq!(
+        (week[0]["title"].clone(), week[0]["days"].clone()),
+        (json!("Bass"), json!([1]))
+    );
     // A Monday week counts from its own Monday: the same change there.
     let monday_copy = with(ended.clone(), json!({"days": [3]}));
     let intent = edit_intent(
@@ -626,4 +641,21 @@ fn moving_until_later_or_clearing_it_brings_back_the_days_it_hid_in_a_week_that_
     )
     .unwrap();
     assert_eq!(week[0]["days"], json!([3, 5]));
+    // Reviewer's Monday case: a new title while Until still ends Friday 13 Nov shows Thursday only.
+    let monday_copy = with(ended.clone(), json!({"days": [3]}));
+    let intent = edit_intent(
+        "weekly-3f2a9c01",
+        OPEN_WEEK,
+        Some(&ended),
+        Some(&with(ended.clone(), json!({"title": "Bass"}))),
+    )
+    .unwrap();
+    let (week, _) = apply_to_week(
+        &[monday_copy],
+        std::slice::from_ref(&ended),
+        &[intent],
+        OPEN_WEEK,
+    )
+    .unwrap();
+    assert_eq!(week[0]["days"], json!([3]));
 }

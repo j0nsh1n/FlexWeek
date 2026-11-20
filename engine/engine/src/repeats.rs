@@ -671,18 +671,24 @@ pub fn apply_to_week(
     intents: &[Intent],
     week_start: &str,
 ) -> Result<(Vec<Value>, Vec<Value>), String> {
-    apply_to_week_with(blocks, repeats, intents, |copy, repeat| {
-        crate::standing::uncut_copy(copy, Some(repeat), week_start)
-    })
+    apply_to_week_with(
+        blocks,
+        repeats,
+        intents,
+        |copy, repeat| crate::standing::uncut_copy(copy, Some(repeat), week_start),
+        |copy| crate::standing::cut_at_until(copy, week_start),
+    )
 }
 
-/// `apply_to_week`, with `uncut` putting back the days a repeat's Until hid from a copy (for a week
-/// whose days do not count from a Monday).
+/// `apply_to_week`, with `uncut` putting back the days a repeat's Until hid from a copy for the compare,
+/// and `cut` cutting the changed copy at its Until again for the week as shown (None: no day left). Both
+/// count the week's own dates, which for a week on screen are not a Monday's.
 pub(crate) fn apply_to_week_with(
     blocks: &[Value],
     repeats: &[Value],
     intents: &[Intent],
     uncut: impl Fn(&Value, &Value) -> EngineResult<Value>,
+    cut: impl Fn(&Value) -> EngineResult<Option<Value>>,
 ) -> Result<(Vec<Value>, Vec<Value>), String> {
     let mut blocks = blocks.to_vec();
     let mut repeats = repeats.to_vec();
@@ -723,7 +729,12 @@ pub(crate) fn apply_to_week_with(
             .collect::<Result<_, _>>()?;
         let restated = restated_pieces(old.as_ref(), new.as_ref(), &pieces, &intent.id);
         for (at, copy) in held.into_iter().zip(restated).rev() {
-            match copy {
+            // The days put back for the compare are not shown while the new Until still hides them.
+            let shown = match copy {
+                Some(copy) => cut(&copy).map_err(|error| error.message)?,
+                None => None,
+            };
+            match shown {
                 Some(copy) => blocks[at] = copy,
                 None => {
                     blocks.remove(at);
