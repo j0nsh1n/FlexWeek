@@ -331,16 +331,18 @@ def qml_visible_rect(item: object, root: object, host_width: float, host_height:
 def qml_click_targets(widgets: object, kind: str, wanted: str) -> list:
     """Global points on visible QML items, so a play can click one by objectName or by its words."""
     from PySide6.QtCore import QPoint
+    from PySide6.QtQuick import QQuickView
     from PySide6.QtQuickWidgets import QQuickWidget
 
     found = []
     for widget in widgets:  # type: ignore[union-attr]
-        if not isinstance(widget, QQuickWidget) or not widget.isVisible():
+        if not isinstance(widget, QQuickWidget | QQuickView) or not widget.isVisible():
             continue
         root = widget.rootObject()
         if root is None:
             continue
-        host = widget.window()
+        # Material is its own Qt Quick window (step 11): it is the window a click lands in.
+        host = widget if isinstance(widget, QQuickView) else widget.window()
         for item in visual_items(root):
             if not item.isVisible():
                 continue
@@ -379,9 +381,9 @@ def qml_tree_entries(quick: object, window: object, depth: int) -> list[dict]:
         visible = qml_visible_rect(item, root, quick.width(), quick.height())  # type: ignore[attr-defined]
         if visible is None:
             continue
-        in_window = quick.mapTo(  # type: ignore[attr-defined]
-            window, QPoint(int(visible.x()), int(visible.y()))
-        )
+        corner = QPoint(int(visible.x()), int(visible.y()))
+        # A QQuickWidget sits inside the window; Material's own Qt Quick window is the window.
+        in_window = quick.mapTo(window, corner) if hasattr(quick, "mapTo") else corner  # type: ignore[attr-defined]
         text = item.property("text")
         rows.append(
             {
@@ -430,7 +432,7 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
 
     from backend import clock as wall_clock
     from desktop.tests.logic_support import card_phase, past_setup, wait_until
-    from desktop.tests.material_support import material_showing
+    from desktop.tests.material_support import material_showing, quick_of
 
     out.mkdir(parents=True, exist_ok=True)
     log_file = (out / "log.txt").open("w", buffering=1)
@@ -526,15 +528,22 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
     def is_shown(widget: QWidget) -> bool:
         return widget.isVisible() and widget.width() > 0 and widget.height() > 0
 
-    def tops() -> list[QWidget]:
+    def faces() -> list:
+        """What the student sees of the window: Material's own Qt Quick window, or the draw-error page."""
+        shown = []
+        view = quick_of(window)
+        if view is not None and view.isVisible():
+            shown.append(view)
+        shown.extend(
+            w for w in QApplication.topLevelWidgets() if w.objectName() == "drawErrorPage" and is_shown(w)
+        )
+        return shown
+
+    def tops() -> list:
         """The window, and the dialogs and menus open over it. Other parentless widgets (a design's view
         still being built) are not something a student sees."""
         asked = (QApplication.activeModalWidget(), QApplication.activePopupWidget())
-        over = [
-            w
-            for w in QApplication.topLevelWidgets()
-            if w is not window and is_shown(w) and (window.isAncestorOf(w) or w in asked)
-        ]
+        over = [w for w in QApplication.topLevelWidgets() if is_shown(w) and w in asked]
         return [window, *over]
 
     def describe(widget: object) -> str:
@@ -553,7 +562,7 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
     def focus_line() -> str:
         modal = QApplication.activeModalWidget()
         menu = QApplication.activePopupWidget()
-        focus = describe(QApplication.focusWidget())
+        focus = describe(QApplication.focusWidget() or QApplication.focusObject())
         return f"focus {focus}; dialog {describe(modal)}; menu {describe(menu)}"
 
     def pointer_line() -> str:
@@ -568,10 +577,12 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
         found: list[tuple[int, QPoint, str, QWidget]] = []
         everything: dict[QWidget, None] = {}
         for top in tops():
-            everything[top] = None
-            everything.update(dict.fromkeys(top.findChildren(QWidget)))
+            for shown in faces() if top is window else [top]:
+                everything[shown] = None
+                if isinstance(shown, QWidget):
+                    everything.update(dict.fromkeys(shown.findChildren(QWidget)))
         for widget in everything:
-            if not is_shown(widget):
+            if not isinstance(widget, QWidget) or not is_shown(widget):
                 continue
             if isinstance(widget, QMenu):
                 for action in widget.actions():
@@ -614,7 +625,10 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
             # A person cannot press what a dialog covers; a menu opened from the dialog is fine.
             popup = Qt.WindowType.Popup
             found = [
-                i for i in found if i[3] is modal or modal.isAncestorOf(i[3]) or i[3].windowType() == popup
+                i
+                for i in found
+                if i[3] is modal
+                or (isinstance(i[3], QWidget) and (modal.isAncestorOf(i[3]) or i[3].windowType() == popup))
             ]
             if not found:
                 raise CannotDo(f"{label} is behind the open dialog {describe(modal)}")
@@ -742,13 +756,31 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
     def save_tree(label: str, number: int) -> str:
         widgets: list[dict] = []
         for top in tops():
-            walk(top, 0, widgets)
+            for shown in faces() if top is window else [top]:
+                if isinstance(shown, QWidget):
+                    walk(shown, 0, widgets)
+                    continue
+                widgets.append(
+                    {
+                        "class": kind_of(shown),
+                        "objectName": shown.objectName(),
+                        "accessibleName": "",
+                        "accessibleDescription": "",
+                        "text": "",
+                        "geometry": [0, 0, shown.width(), shown.height()],
+                        "enabled": True,
+                        "hasFocus": shown.isActive(),
+                        "checked": None,
+                        "depth": 0,
+                    }
+                )
+                widgets.extend(qml_tree_entries(shown, window, 1))
         modal = QApplication.activeModalWidget()
         body = {
             "label": label,
             "clock": held["now"].isoformat(timespec="minutes"),
             "window_size": [window.width(), window.height()],
-            "focused": describe(QApplication.focusWidget()),
+            "focused": describe(QApplication.focusWidget() or QApplication.focusObject()),
             "active_modal": describe(modal),
             "widgets": widgets,
         }
