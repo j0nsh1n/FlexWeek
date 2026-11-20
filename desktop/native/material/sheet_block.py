@@ -310,6 +310,10 @@ class BlockDraft:
             if not self.days:
                 self.days_problem = BLOCK_PROBLEMS["days"]
                 return False
+            problem = self._until_problem(self._series_days_now())
+            if problem:
+                self.until_problem_text = problem
+                return False
         self.step += 1
         return False
 
@@ -560,7 +564,7 @@ class BlockDraft:
                 {
                     "id": "every",
                     "title": "This week and every week after",
-                    "line": f"Earlier weeks keep {name}. You can undo this, with anything changed after it.",
+                    "line": f"Earlier weeks keep {name}. Undo also takes back anything changed after it.",
                 }
             )
             return {

@@ -680,7 +680,8 @@ class SheetsBridge(QObject):
         if not self._window._apply_standing(after, f"changing {name}"):  # type: ignore[attr-defined]
             return
         if kind == "make":
-            session.delete_block(draft.original["id"], scope="series")
+            # The one-off is now the repeat: one Undo step, named for the change.
+            session.delete_block(draft.original["id"], scope="series", label=f"changing {name}")
         elif kind == "stop":
             alone = {key: value for key, value in made.items() if key != "until"}
             alone["id"] = draft.family[len("weekly-") :]
@@ -1112,6 +1113,9 @@ class SheetsBridge(QObject):
                 self._say(words)
                 self._restore_words = words
             elif self._block is not None:
+                # The sheet keeps what was typed and the store's sentence; a refused change is taken back, so
+                # the week shows what is saved and Save sends a corrected one.
+                self._session.drop_refused_save()
                 self._block.error = said
                 self._publish()
         if self._kind in ("homework", "block"):
@@ -1814,7 +1818,7 @@ class SheetsBridge(QObject):
         name = self._doubled_name or "This fixed time"
         self._ask = {
             "id": "doubled-weeks",
-            "title": f"{name} is already in later weeks",
+            "title": f"{name} is already in {'a later week' if len(weeks) == 1 else 'later weeks'}",
             "body": doubled_words(name, weeks, wall_clock.today()),
             "answers": [{"id": "ok", "label": "OK", "kind": "tonal"}],
         }

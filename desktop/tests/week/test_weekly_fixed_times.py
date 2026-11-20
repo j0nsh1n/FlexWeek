@@ -133,6 +133,21 @@ def test_turning_the_switch_on_for_a_one_off_makes_it_one_copy_here_and_every_we
         assert _starts(week) == [("17:00", [FRIDAY])]
 
 
+def test_undo_names_turning_the_switch_on_as_changing_it(qapp, week, sheets) -> None:
+    # Reviewer's nit: the one-off goes as part of the change, so the step is not "deleting Guitar".
+    week.session.add_block({"id": "guitar-1", "title": "Guitar", "kind": "locked", "category": "extra",
+                            "start": "17:00", "duration_min": 60, "days": [FRIDAY]})  # fmt: skip
+    week.session.save()
+    _settled(qapp, week)
+    _edit(sheets, "guitar-1", FRIDAY)
+    sheets.setFlag("repeat", True)
+    sheets.next()
+    _settled(qapp, week)
+    week.session.undo()
+    wait_until(qapp, lambda: str(week.session.message).startswith("Undid"))
+    assert week.session.message == "Undid changing Guitar."
+
+
 def _weekly_open(qapp, week, sheets, **fields):
     repeat = _add_weekly(qapp, week, sheets, **fields)
     _edit(sheets, repeat["id"])
@@ -274,7 +289,7 @@ def test_delete_this_week_only_keeps_later_weeks_and_this_week_and_later_takes_t
     repeat = _add_weekly(qapp, week, sheets)
     sheets.askDeleteBlock(repeat["id"], -1)
     assert [card["id"] for card in sheets.ask["cards"]] == ["week", "every"]
-    assert sheets.ask["cards"][1]["line"].endswith("You can undo this, with anything changed after it.")
+    assert sheets.ask["cards"][1]["line"].endswith("Undo also takes back anything changed after it.")
     sheets.answer("week")
     _settled(qapp, week)
     assert all(b.get("missed_days") == b["days"] for b in _guitar(week)), "gone from this week"
@@ -327,7 +342,7 @@ def test_a_weekly_time_that_doubles_a_hand_made_copy_names_the_week_and_removes_
     sheets.next()
     wait_until(qapp, lambda: sheets.ask.get("id") == "doubled-weeks")
     named_week = date.fromisoformat(week.opened_week) + timedelta(days=7)
-    assert sheets.ask["title"] == "Guitar is already in later weeks"
+    assert sheets.ask["title"] == "Guitar is already in a later week"
     assert sheets.ask["body"] == (
         f"Guitar also sits on its own in the week of {named_week.day} {named_week.strftime('%b')}, so it "
         "shows twice there. Delete the extra one in that week if you don't want both."
@@ -394,6 +409,20 @@ def test_finishing_setups_week_page_again_leaves_a_weekly_time_alone(qapp, week,
     assert _starts(week) == [("17:00", [FRIDAY])]
 
 
+def test_copying_last_weeks_fixed_times_leaves_out_a_weekly_time(qapp, week, sheets) -> None:
+    # Reviewer's case: the weekly time is already in this week, so a copy would show it twice.
+    _add_weekly(qapp, week, sheets)
+    week.session.add_block({"id": "gym", "title": "Gym", "kind": "locked", "start": "19:00",
+                            "duration_min": 60, "days": [FRIDAY]})  # fmt: skip
+    week.session.save()
+    _settled(qapp, week)
+    _go(qapp, week, 1)
+    got: list = []
+    week.session.copy_last_week_fixed_rows(got.append)
+    wait_until(qapp, lambda: bool(got))
+    assert [row["block"]["title"] for row in (got[0] or [])] == ["Gym"]
+
+
 def test_the_201st_repeat_is_refused_with_the_stores_sentence_and_the_sheet_stays(qapp, week, sheets) -> None:
     """A week holds at most 100 blocks, so 200 repeats cannot be written through the session: the store's
     refusal (its sentence, from engine repeats.rs REPEATS_FULL) is given to the save instead, and the sheet
@@ -420,6 +449,12 @@ def test_the_201st_repeat_is_refused_with_the_stores_sentence_and_the_sheet_stay
         sheets.next()
         wait_until(qapp, lambda: sentence in str(sheets.form.get("error")))
         assert sheets.kind == "block", "the sheet stays open"
+        _settled(qapp, week)
+        assert _guitar(week) == [], "the refused weekly time is taken back off the week"
+        assert week.session.pending_save is None, "nothing refused waits to be sent again"
     finally:
         client.request = real
-    sheets.forceClose()
+    # Room again (another one stopped elsewhere): Save on the same sheet goes through.
+    sheets.save()
+    _settled(qapp, week)
+    assert _starts(week) == [("17:00", [FRIDAY])]

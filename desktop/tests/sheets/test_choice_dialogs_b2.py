@@ -119,7 +119,7 @@ def test_enter_after_down_deletes_this_week_only_and_can_be_undone(qapp, window)
 
 def test_every_week_after_can_be_undone_with_what_came_after_it(qapp, window) -> None:
     sheets, prompt = raise_delete(qapp, window)
-    assert sheets.ask["cards"][2]["line"].endswith("You can undo this, with anything changed after it.")
+    assert sheets.ask["cards"][2]["line"].endswith("Undo also takes back anything changed after it.")
     keys(window, Qt.Key.Key_Down, Qt.Key.Key_Down, Qt.Key.Key_Return)
     assert sheets.ask == {}
     wait_until(qapp, lambda: sheets.noticeUndo)

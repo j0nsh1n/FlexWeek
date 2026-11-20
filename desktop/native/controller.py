@@ -479,6 +479,7 @@ class NativeSession(QObject):
         self._credits_waiting: list[tuple[dict, int, bool]] = []
         self._record_history = True
         self.fired_reminders: set[str] = set()
+        self.last_save_refused = False
         # Reminders kept on screen as cards; they follow the clock and any edit to today's blocks.
         self.reminder_cards = KeptReminders(
             self.todays_reminder_blocks, lambda: self._clock()["minute"], self.fired_reminders.discard, self
@@ -1754,7 +1755,7 @@ class NativeSession(QObject):
         blocks = [
             item
             for item in source.get("blocks") or []
-            if item.get("kind") == "locked" and item.get("start") and not is_setup_block(item)
+            if item.get("kind") == "locked" and item.get("start") and not is_standing_block(item)
         ]
         if not blocks:
             return None
@@ -2236,11 +2237,18 @@ class NativeSession(QObject):
         return True
 
     def delete_block(
-        self, block_id: str, *, scope: str = "series", day: int | None = None, every_week: bool = False
+        self,
+        block_id: str,
+        *,
+        scope: str = "series",
+        day: int | None = None,
+        every_week: bool = False,
+        label: str | None = None,
     ) -> None:
         """Delete a block. School or an activity from Setup stands in every week, so taking it out of
         this week alone keeps it here missed on every day, or the standing week would bring it back;
-        `every_week` takes it out of the standing week too."""
+        `every_week` takes it out of the standing week too. `label` names the Undo step when the delete
+        is part of a larger change."""
         block = next((item for item in self.blocks if item["id"] == block_id), None)
         if block is None:
             return
@@ -2265,7 +2273,7 @@ class NativeSession(QObject):
                 self.blocks = [*self.blocks, *missed]
         if self.selected_block_id == block_id:
             self.select_block(None, None)
-        self._touch("deleting " + block["title"])
+        self._touch(label or "deleting " + block["title"])
 
     def delete_selected(self) -> bool:
         if self.selected_block_id is None:
@@ -2427,6 +2435,7 @@ class NativeSession(QObject):
             return
         # This save's change joins the Undo step before it, as automatic planning does after an add.
         self._join_step = join
+        self.last_save_refused = False
         if status is not None:
             self._save_status = status
         if self.pending_save is None:
@@ -2735,6 +2744,9 @@ class NativeSession(QObject):
                 self._attempts.pop(self._move_attempt, None)
                 self._move_attempt = None
             self._save_status = None
+            # A save the server read and refused (not a lost connection or another window's change) will be
+            # refused again as it is: `drop_refused_save` lets a sheet take it back and try a corrected one.
+            self.last_save_refused = error.status not in (0, 409)
             if error.status == 0:
                 self._say(
                     "Not saved: FlexWeek can't be reached. Your changes are still here. Choose Retry save."
@@ -2761,6 +2773,18 @@ class NativeSession(QObject):
     def retry_save(self) -> None:
         if self.pending_save is not None and not self.conflict:
             self.save()
+
+    def drop_refused_save(self) -> None:
+        """A save the server refused (the repeat limit, say) is taken back: nothing of it is sent again, and
+        the open week is read again as it is saved."""
+        if not self.last_save_refused or self.pending_save is None:
+            return
+        self.pending_save = None
+        self.dirty = False
+        self.dirty_assignments.clear()
+        self._repeat_send = None
+        self._repeat_ack = None
+        self.load_week(self.week_start, discard=True)
 
     def solve(
         self,

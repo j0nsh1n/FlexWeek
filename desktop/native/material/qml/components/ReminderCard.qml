@@ -19,9 +19,10 @@ Rectangle {
     width: Math.min(maxWidth, 560)
     height: content.implicitHeight + 24
     radius: 12
-    color: palette.secondaryContainer
+    // A light card with a visible edge, so it stands apart from the week behind it.
+    color: palette.surfaceContainerHigh
     border.width: root.highContrast ? 2 : 1
-    border.color: root.highContrast ? palette.inkSurface : palette.outlineVariant
+    border.color: root.highContrast ? palette.inkSurface : palette.outline
     Accessible.role: Accessible.Pane
     Accessible.name: root.title + (root.body !== "" ? ", " + root.body : "")
 
@@ -39,7 +40,7 @@ Rectangle {
             objectName: "reminderCardTitle"
             width: parent.width
             text: root.title
-            color: palette.inkSecondaryContainer
+            color: palette.inkSurface
             font.family: M3Font.family
             font.pixelSize: M3Font.px(16)
             font.weight: Font.Medium
@@ -52,7 +53,7 @@ Rectangle {
             width: parent.width
             visible: root.body !== ""
             text: root.body
-            color: palette.inkSecondaryContainer
+            color: palette.inkMuted
             font.family: M3Font.family
             font.pixelSize: M3Font.px(14)
             wrapMode: Text.WordWrap
@@ -68,7 +69,7 @@ Rectangle {
                 density: root.density
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
-                kind: "tonal"
+                kind: "text"
                 text: "Snooze"
                 accessName: "Snooze"
                 onClicked: root.snoozed()

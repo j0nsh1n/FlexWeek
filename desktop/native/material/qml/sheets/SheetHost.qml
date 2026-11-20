@@ -140,7 +140,8 @@ Item {
     Loader {
         id: prompt
         anchors.fill: parent
-        z: 2
+        // Above the notice bar (z 3): a question dims and blocks everything behind it, Undo included.
+        z: 4
         active: root.asking
         sourceComponent: askDialog
     }

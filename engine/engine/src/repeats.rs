@@ -714,8 +714,11 @@ pub(crate) fn apply_to_week_with(
             .filter(|at| id_of(&blocks[*at]).map(family_id) == Some(intent.id.as_str()))
             .collect();
         if held.is_empty() {
-            if let (None, Some(new)) = (old.as_ref(), new.as_ref()) {
-                blocks.push(new.clone());
+            // A new repeat shows only the days its Until leaves in this week.
+            if let (None, Some(new)) = (old.as_ref(), new.as_ref())
+                && let Some(shown) = cut(new).map_err(|error| error.message)?
+            {
+                blocks.push(shown);
             }
             continue;
         }

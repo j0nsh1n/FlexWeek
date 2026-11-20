@@ -193,8 +193,10 @@ SheetFrame {
             // Lined up with the fields above and below: the label at their left edge, the switch at their right.
             Item {
                 width: parent.width
-                height: Math.max(48, repeatSwitch.height)
+                // As tall as the switch, like the "I missed it" row, so the sheet keeps its row spacing.
+                height: Math.max(repeatLabel.implicitHeight, repeatSwitch.height)
                 Text {
+                    id: repeatLabel
                     anchors.left: parent.left
                     anchors.right: repeatSwitch.left
                     anchors.rightMargin: 16
@@ -203,7 +205,6 @@ SheetFrame {
                     color: pal.inkSurface
                     font.family: M3Font.family
                     font.pixelSize: M3Font.px(16)
-                    font.weight: 500
                     elide: Text.ElideRight
                 }
                 Switch {

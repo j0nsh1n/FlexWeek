@@ -641,6 +641,10 @@ fn moving_until_later_or_clearing_it_brings_back_the_days_it_hid_in_a_week_that_
     )
     .unwrap();
     assert_eq!(week[0]["days"], json!([3, 5]));
+    // Reviewer's nit: a new weekly time added from a week its Until cuts shows only the days it leaves.
+    let made = edit_intent("weekly-3f2a9c01", OPEN_WEEK, None, Some(&ended)).unwrap();
+    let (week, _) = apply_to_week(&[], &[], &[made], OPEN_WEEK).unwrap();
+    assert_eq!(week[0]["days"], json!([3]));
     // Reviewer's Monday case: a new title while Until still ends Friday 13 Nov shows Thursday only.
     let monday_copy = with(ended.clone(), json!({"days": [3]}));
     let intent = edit_intent(

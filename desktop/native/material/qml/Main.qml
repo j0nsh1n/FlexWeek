@@ -794,17 +794,21 @@ Item {
                 }
             }
 
-            // Reminders kept on screen, newest on top, above the focus strip and the snackbar.
+            // Reminders kept on screen, newest on top, above the focus strip and the notices. On a computer
+            // they sit in the bottom right corner, so the days and hours they remind about stay in view.
             Column {
                 id: reminderCards
                 objectName: "materialReminderCards"
                 z: 3
                 visible: cardRepeater.count > 0
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: (root.phone ? 96 : 24)
-                    + (materialSnackbar.visible ? materialSnackbar.height + 12 : 48 + 12)
+                anchors.bottomMargin: (root.phone ? 96 : 16)
+                    + (materialSnackbar.visible ? materialSnackbar.height + 12 : 0)
+                    + (bridge.sheets && bridge.sheets.notice ? 64 + 12 : 0)
                     + (alertStrip.visible ? alertStrip.height + 12 : 0)
-                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.right: root.phone ? undefined : parent.right
+                anchors.rightMargin: 16
+                anchors.horizontalCenter: root.phone ? parent.horizontalCenter : undefined
                 spacing: 12
                 Repeater {
                     id: cardRepeater
@@ -812,7 +816,7 @@ Item {
                     ReminderCard {
                         required property var modelData
                         objectName: "reminderCard"
-                        maxWidth: reminderCards.parent.width - 32
+                        maxWidth: root.phone ? reminderCards.parent.width - 32 : 320
                         theme: root.theme
                         density: root.density
                         reduceMotion: root.reduceMotion
