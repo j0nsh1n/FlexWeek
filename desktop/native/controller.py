@@ -83,6 +83,7 @@ from desktop.native.focus import (
 from desktop.native.history import capture_step, join_step, mark_stale, push_step
 from desktop.native.hours.geometry import drag_step
 from desktop.native.kept import KeptSession
+from desktop.native.kept_alerts import KeptReminders
 from desktop.native.look import pack_axis, sanitize_look
 from desktop.native.pomodoro import inflate_for_solve, split_solved
 from desktop.native.remind import (
@@ -92,6 +93,7 @@ from desktop.native.remind import (
     due_songs,
     reminder_lead_min,
     snooze_until,
+    todays_starts,
 )
 from desktop.native.reuse import (
     MAX_WEEK_BLOCKS,
@@ -473,6 +475,11 @@ class NativeSession(QObject):
         self._credits_waiting: list[tuple[dict, int, bool]] = []
         self._record_history = True
         self.fired_reminders: set[str] = set()
+        # Reminders kept on screen as cards; they follow the clock and any edit to today's blocks.
+        self.reminder_cards = KeptReminders(
+            self.todays_reminder_blocks, lambda: self._clock()["minute"], self.fired_reminders.discard, self
+        )
+        self.week_changed.connect(self.reminder_cards.sync)
         self.fired_alarms: set[str] = set()
         self.snoozed_alarms: dict[str, int] = {}
         self.last_alarm_check: int | None = None
@@ -639,6 +646,7 @@ class NativeSession(QObject):
         self._reset_focus(persist=False)
         self._held_alerts.clear()
         self.fired_reminders.clear()
+        self.reminder_cards.clear()
         self.fired_alarms.clear()
         self.snoozed_alarms.clear()
         self.last_alarm_check = None
@@ -4615,6 +4623,14 @@ class NativeSession(QObject):
             return self._reminder_blocks, self._reminder_trace
         return None
 
+    def todays_reminder_blocks(self) -> dict[str, dict] | None:
+        """Today's blocks by reminder key, or None while today's week is not known here."""
+        clock = self._clock()
+        source = self._today_reminder_source(monday_of(clock["iso"]))
+        if source is None:
+            return None
+        return {key: block for block, _day, _start, key in todays_starts(source[0], source[1], clock["iso"])}
+
     def _due_block_alerts(
         self, blocks: list[dict], trace: dict | None, clock: dict, prefs: dict
     ) -> tuple[list[dict], list[dict]]:
@@ -4655,7 +4671,9 @@ class NativeSession(QObject):
         )
         for item in due:
             self.fired_reminders.add(item["key"])
-            notices.append({"title": item["title"], "body": item["body"], "kind": "reminder"})
+            notices.append(
+                {"title": item["title"], "body": item["body"], "kind": "reminder", "key": item["key"]}
+            )
         songs = due_songs(
             blocks=blocks,
             trace=trace,
@@ -4718,6 +4736,8 @@ class NativeSession(QObject):
         notices: list[dict] = []
         songs: list[dict] = []
         prefs = self.preferences or {}
+        # Before the due check: a card whose block starts now frees its key, so "starts now" comes this tick.
+        self.reminder_cards.sync()
         if prefs.get("reminders_enabled"):
             today_monday = monday_of(clock["iso"])
             source = self._today_reminder_source(today_monday)

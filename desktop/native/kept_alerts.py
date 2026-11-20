@@ -1,8 +1,124 @@
-"""Alerts that stay put until the student deals with them (no widget: Material draws the strip)."""
+"""Alerts that stay put until the student deals with them (no widget: Material draws them)."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import QObject, Signal
+
+from desktop.native.remind import reminder_snooze_until, reminder_start_min, reminder_stays
+
+
+class KeptReminders(QObject):
+    """A reminder kept on screen as a card with Snooze and Close, until its block starts.
+
+    The timing is the engine's (remind.py); this only holds the cards. `rows` is today's blocks by
+    reminder key, or None when they are not known (another week is open), and `minute` is the minute
+    of the local day. `release` is told which key's card went because its block started, so the
+    "starts now" notice can take over.
+    """
+
+    # What the cards show changed.
+    changed = Signal()
+    # A card appeared or came back from Snooze: the words a screen reader says.
+    shown = Signal(str)
+
+    def __init__(
+        self,
+        rows: Callable[[], dict[str, dict] | None],
+        minute: Callable[[], int],
+        release: Callable[[str], None],
+        parent: QObject | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._rows, self._minute, self._release = rows, minute, release
+        self._cards: list[dict] = []
+
+    def add(self, notice: dict) -> bool:
+        """Keep this reminder as a card. False when it cannot stay: no key, or its block has started."""
+        key = notice.get("key")
+        block = (self._rows() or {}).get(key) if isinstance(key, str) else None
+        if block is None or not reminder_stays(reminder_start_min(key), self._minute()):
+            return False
+        if any(card["key"] == key for card in self._cards):
+            return True
+        title = str(notice.get("title") or "FlexWeek")
+        self._cards.append(
+            {
+                "key": key,
+                "title": title,
+                "body": str(notice.get("body") or ""),
+                "name": str(block.get("title") or ""),
+                "until": None,
+            }
+        )
+        self._say(self._cards[-1])
+        self.changed.emit()
+        return True
+
+    def cards(self) -> list[dict]:
+        """The cards on screen, newest first; a snoozed one is not among them."""
+        return [
+            {"key": card["key"], "title": card["title"], "body": card["body"]}
+            for card in reversed(self._cards)
+            if card["until"] is None
+        ]
+
+    def snooze(self, key: str) -> None:
+        for card in self._cards:
+            if card["key"] == key and card["until"] is None:
+                card["until"] = reminder_snooze_until(self._minute(), reminder_start_min(key))
+                self.changed.emit()
+                return
+
+    def close(self, key: str) -> None:
+        kept = [card for card in self._cards if card["key"] != key]
+        if len(kept) != len(self._cards):
+            self._cards = kept
+            self.changed.emit()
+
+    def clear(self) -> None:
+        if self._cards:
+            self._cards.clear()
+            self.changed.emit()
+
+    def sync(self) -> None:
+        """Follow the clock and the week: a card whose block started, moved or went is dropped, a
+        snoozed one that is due comes back, and a renamed block's card shows the new name."""
+        rows = self._rows() if self._cards else None
+        if rows is None:
+            return
+        now = self._minute()
+        changed = False
+        kept: list[dict] = []
+        started: list[str] = []
+        for card in self._cards:
+            block = rows.get(card["key"])
+            if block is None:
+                changed = True
+                continue
+            if not reminder_stays(reminder_start_min(card["key"]), now):
+                started.append(card["key"])
+                changed = True
+                continue
+            name = str(block.get("title") or "")
+            if name != card["name"]:
+                card["title"] = name + card["title"][len(card["name"]) :]
+                card["name"] = name
+                changed = changed or card["until"] is None
+            if card["until"] is not None and now >= card["until"]:
+                card["until"] = None
+                changed = True
+                self._say(card)
+            kept.append(card)
+        self._cards = kept
+        for key in started:
+            self._release(key)
+        if changed:
+            self.changed.emit()
+
+    def _say(self, card: dict) -> None:
+        self.shown.emit(card["title"] + (" — " + card["body"] if card["body"] else ""))
 
 
 class KeptAlerts(QObject):

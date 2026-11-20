@@ -156,6 +156,10 @@ class MaterialBridge(QObject):
         strip = getattr(window, "alert_strip", None)
         if strip is not None:
             strip.changed.connect(self.changed)
+        cards = getattr(window.session, "reminder_cards", None)
+        if cards is not None:
+            cards.changed.connect(self.changed)
+            cards.shown.connect(lambda words: fields.announce(self._window, words))
         week_start_notice().changed.connect(self._on_week_start)
         # Save finishes on this signal. The day lists and the Undo button read it then,
         # rather than waiting for the 20s clock tick.
@@ -495,6 +499,21 @@ class MaterialBridge(QObject):
         """A reminder the student asked to keep on screen until they deal with it, from the window's strip."""
         strip = getattr(self._window, "alert_strip", None)
         return strip.text() if strip is not None and strip.pending() else ""
+
+    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
+    def reminderCards(self) -> list[dict[str, str]]:  # noqa: N802 - the name QML reads
+        """Reminders kept on screen, newest first, each with its title, body and key."""
+        cards = getattr(self._window.session, "reminder_cards", None)
+        return cards.cards() if cards is not None else []
+
+    @Slot(str)
+    def snoozeReminder(self, key: str) -> None:  # noqa: N802
+        """Snooze: the card hides and comes back later, never after its block starts."""
+        self._window.session.reminder_cards.snooze(key)
+
+    @Slot(str)
+    def closeReminder(self, key: str) -> None:  # noqa: N802
+        self._window.session.reminder_cards.close(key)
 
     @Slot()
     def dismissAlert(self) -> None:
