@@ -12,7 +12,7 @@ use chrono::{Datelike, NaiveDate};
 use serde_json::{Map, Value, json};
 
 use crate::desk::calendar::{DAY_FULL, SETUP_SCHOOL_ID};
-use crate::desk::grid::is_setup_block;
+use crate::desk::grid::{WEEKLY_PREFIX, is_standing_block};
 use crate::desk::pydate::from_iso;
 use crate::error::EngineResult;
 use crate::shown::family_id;
@@ -212,7 +212,7 @@ pub fn parse_intent(value: &Value) -> Result<Intent, String> {
         .and_then(Value::as_str)
         .filter(|id| !id.is_empty() && id.chars().count() <= 80)
         .ok_or_else(|| RULE.to_string())?;
-    if !is_setup_block(&json!({"id": id})).map_err(|err| err.message)? {
+    if !is_standing_block(&json!({"id": id})).map_err(|err| err.message)? {
         return Err(RULE.into());
     }
     if map.get("scope").and_then(Value::as_str) != Some("from") {
@@ -764,7 +764,7 @@ pub fn own_changes(copy: &Value, repeat: &Value, week: &[Value], h24: bool) -> V
                 && if piece {
                     days_of(block).contains(&day)
                 } else {
-                    !is_setup_block(block).unwrap_or(true)
+                    !is_standing_block(block).unwrap_or(true)
                         && title_of(block) == title_of(copy)
                         && days_of(block) == vec![day]
                 }
@@ -945,13 +945,16 @@ pub fn edited_weeks_line(weeks: &[String], titles: &[String]) -> EngineResult<Op
 /// and where the whole series is changed. None for a block that does not repeat. `school_hours` is
 /// whether the look offers School hours; otherwise every repeat is changed in Setup.
 pub fn one_day_note(block: &Value, day: i64, school_hours: bool) -> EngineResult<Option<String>> {
-    if !is_setup_block(block)? {
+    if !is_standing_block(block)? {
         return Ok(None);
     }
     let Some(name) = usize::try_from(day).ok().and_then(|day| DAY_FULL.get(day)) else {
         return Ok(None);
     };
-    let place = if school_hours && id_of(block).map(family_id) == Some(SETUP_SCHOOL_ID) {
+    let family = id_of(block).map(family_id);
+    let place = if family.is_some_and(|id| id.starts_with(WEEKLY_PREFIX)) {
+        "open it and choose This week and later"
+    } else if school_hours && family == Some(SETUP_SCHOOL_ID) {
         "open School hours"
     } else {
         "run setup again from Settings"

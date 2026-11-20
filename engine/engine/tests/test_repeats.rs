@@ -494,3 +494,40 @@ fn the_question_names_the_edited_weeks_by_their_dates() {
         )
     );
 }
+
+// --- weekly fixed times the student made (#118) ----------------------------------------------------
+
+#[test]
+fn a_weekly_fixed_time_is_a_repeat_and_any_other_hand_made_block_is_not() {
+    use flexweek_engine::desk::grid::{is_setup_block, is_standing_block};
+    let weekly = json!({"id": "weekly-3f2a9c01", "title": "Guitar"});
+    assert!(is_standing_block(&weekly).unwrap());
+    assert!(
+        !is_setup_block(&weekly).unwrap(),
+        "Setup still makes and stops only its own"
+    );
+    assert!(is_standing_block(&school()).unwrap() && is_standing_block(&soccer()).unwrap());
+    assert!(!is_standing_block(&gym()).unwrap());
+    let new = json!({"id": "weekly-3f2a9c01", "scope": "from", "from_date": OPEN_WEEK,
+                     "set": {"title": "Guitar", "start": "17:00", "duration_min": 60}, "add_days": [1]});
+    assert_eq!(
+        patched(None, &intent(new)).unwrap(),
+        Some(
+            json!({"id": "weekly-3f2a9c01", "kind": "locked", "title": "Guitar", "start": "17:00",
+                    "duration_min": 60, "days": [1]})
+        )
+    );
+}
+
+#[test]
+fn a_day_of_a_weekly_time_changed_by_hand_says_how_to_change_every_week() {
+    let guitar = json!({"id": "weekly-3f2a9c01", "title": "Guitar", "kind": "locked", "start": "17:00",
+                        "duration_min": 60, "days": [1, 3]});
+    assert_eq!(
+        one_day_note(&guitar, 3, true).unwrap().as_deref(),
+        Some(
+            "Only this Thursday changed. To change every week, open it and choose This week and later."
+        )
+    );
+    assert_eq!(one_day_note(&gym(), 2, true).unwrap(), None);
+}

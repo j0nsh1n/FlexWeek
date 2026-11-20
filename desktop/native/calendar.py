@@ -407,6 +407,11 @@ def is_setup_block(block: dict) -> bool:
     return bool(flexweek_engine.calendar_setup_block(json.dumps(block)))
 
 
+def is_standing_block(block: dict) -> bool:
+    """School, Setup's activities, or a fixed time the student made repeat every week."""
+    return bool(flexweek_engine.calendar_standing_block(json.dumps(block)))
+
+
 def block_family(block_id: str) -> str:
     """The block a piece split off at a week's seam belongs to: `school` for `school@20261111`."""
     return str(flexweek_engine.calendar_block_family(block_id))

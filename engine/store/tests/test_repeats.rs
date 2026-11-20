@@ -1306,3 +1306,89 @@ fn a_stop_names_a_later_weeks_own_edit_and_except_edited_keeps_it() {
     );
     assert_eq!(soccer_at(&conn, user_id, WEEK_AFTER), None);
 }
+
+// --- weekly fixed times the student made (#118) ----------------------------------------------------
+
+fn guitar() -> Value {
+    json!({"category": "extra", "days": [1], "duration_min": 60, "id": "weekly-3f2a9c01",
+           "kind": "locked", "start": "17:00", "title": "Guitar"})
+}
+
+#[test]
+fn a_weekly_time_made_from_the_open_week_shows_in_every_later_week_and_no_earlier_one() {
+    let (conn, user_id) = account("weekly_from_open_week", false);
+    set_up(&conn, user_id);
+    change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[("weekly-3f2a9c01", Some(guitar()))],
+    );
+    for week in [OPEN_WEEK, NEXT_WEEK, WEEK_AFTER, LAST_WEEK] {
+        let shows = shown(&conn, user_id, week);
+        let made = block(&shows, "weekly-3f2a9c01").unwrap_or_else(|| panic!("Guitar in {week}"));
+        assert_eq!(
+            (made["title"].clone(), made["days"].clone()),
+            (json!("Guitar"), json!([1])),
+            "{week}"
+        );
+    }
+    assert!(block(&shown(&conn, user_id, SETUP_WEEK), "weekly-3f2a9c01").is_none());
+}
+
+#[test]
+fn a_weekly_time_moved_this_week_and_later_keeps_earlier_weeks_and_a_later_weeks_own_change() {
+    let (conn, user_id) = account("weekly_moved_later", false);
+    set_up(&conn, user_id);
+    change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[("weekly-3f2a9c01", Some(guitar()))],
+    );
+    // The week of 23 November moves its own Guitar to 18:00.
+    let mut own = shown(&conn, user_id, WEEK_AFTER);
+    for item in &mut own {
+        if item["id"] == json!("weekly-3f2a9c01") {
+            item["start"] = json!("18:00");
+        }
+    }
+    save_week_as(&conn, user_id, WEEK_AFTER, own);
+    // From 16 November on, Guitar is on Thursday instead.
+    change_from_open_week(
+        &conn,
+        user_id,
+        NEXT_WEEK,
+        &[(
+            "weekly-3f2a9c01",
+            Some(with(guitar(), json!({"days": [3]}))),
+        )],
+    );
+    let days = |week: &str| {
+        block(&shown(&conn, user_id, week), "weekly-3f2a9c01").unwrap()["days"].clone()
+    };
+    assert_eq!(days(OPEN_WEEK), json!([1]));
+    assert_eq!(days(NEXT_WEEK), json!([3]));
+    assert_eq!(days(LAST_WEEK), json!([3]));
+    let kept = shown(&conn, user_id, WEEK_AFTER);
+    assert_eq!(
+        block(&kept, "weekly-3f2a9c01").unwrap()["start"],
+        json!("18:00")
+    );
+}
+
+#[test]
+fn a_weekly_time_stopped_this_week_and_later_leaves_earlier_weeks() {
+    let (conn, user_id) = account("weekly_stopped", false);
+    set_up(&conn, user_id);
+    change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[("weekly-3f2a9c01", Some(guitar()))],
+    );
+    change_from_open_week(&conn, user_id, WEEK_AFTER, &[("weekly-3f2a9c01", None)]);
+    assert!(block(&shown(&conn, user_id, NEXT_WEEK), "weekly-3f2a9c01").is_some());
+    assert!(block(&shown(&conn, user_id, WEEK_AFTER), "weekly-3f2a9c01").is_none());
+    assert!(block(&shown(&conn, user_id, LAST_WEEK), "weekly-3f2a9c01").is_none());
+}

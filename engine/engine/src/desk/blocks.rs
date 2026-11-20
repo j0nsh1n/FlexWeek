@@ -34,7 +34,7 @@ pub fn delete_block(
         });
     };
     let whole = truthy(block.get("assignment_id")) || scope != "occurrence";
-    let setup = grid::is_setup_block(block).map_err(|err| err.message)?;
+    let setup = grid::is_standing_block(block).map_err(|err| err.message)?;
     // School split at a week's seam is School on each side: the whole of it goes together.
     let family = crate::shown::family_id(block_id);
     let goes = |item: &Value| {
