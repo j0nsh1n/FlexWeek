@@ -261,8 +261,8 @@ class NativeSmoke:
             return
         if self._stage == "saved week":
             session = window.session
-            # A week that starts on another day than Monday spans two stored weeks, one revision each; the save
-            # bumps the one that holds the new blocks.
+            # A week that starts on another day than Monday spans two stored weeks, one revision each; the
+            # save bumps the one that holds the new blocks.
             revision = session.revision
             saved = max(revision) if isinstance(revision, list) else revision
             if session.busy or saved < 1:
