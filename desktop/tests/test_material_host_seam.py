@@ -20,6 +20,7 @@ HOST_USES = (
     "_stack.currentWidget",
     "quickWindow()",
     "quick.setFocus()",
+    ").setFocus()",
     "focusWidget() is quick",
 )
 # Uses that only make sense for the widget host, kept until the step named here replaces them.

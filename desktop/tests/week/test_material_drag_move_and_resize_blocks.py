@@ -76,7 +76,23 @@ def on_screen(
             any(str(label.property("text")) == title for label in named(blk, "title"))
             for blk in named(page, "weekBlock")
         ))
-    return block_on(page, title)
+    block = block_on(page, title)
+    in_view(qapp, block)
+    return block
+
+
+def in_view(qapp, block: QObject) -> None:
+    """Scroll the hours so the block shows with room around it for a drag. Where the hours open depends on the
+    clock and on earlier scrolling; a drag that starts below the window reaches nothing (CI, 2026-11-19)."""
+    flick = block.parentItem()
+    while flick is not None and flick.property("contentHeight") is None:
+        flick = flick.parentItem()
+    assert flick is not None, "the block is not in a scrolling list"
+    top = block.mapToItem(flick.property("contentItem"), QPointF(0, 0)).y()
+    room = 120
+    limit = max(0.0, float(flick.property("contentHeight")) - float(flick.height()))
+    flick.setProperty("contentY", min(max(0.0, top - room), limit))
+    pump(qapp, 4)
 
 
 def page_of(window: NativeWindow, screen: str) -> QObject:
