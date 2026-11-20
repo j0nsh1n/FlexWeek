@@ -10,7 +10,7 @@ A backend wrapper is one of three classes.
 
 `limits` and `slots` define no functions. They re-export engine names and constants, as `weeks` does besides `current_week_start` and the shown-week adapters below. `storage.SESSION_SECONDS` stays in Python because `backend/app.py` imports it for the cookie lifetime. Adding that many seconds to the clock reading happens in `open_session`.
 
-The desktop tables use the same three classes. Those modules live in `desktop/native/`. `look.py` is paint; only its four engine helpers are in the table. `test_wrappers_hold_no_engine_logic.py` reads every STAYS row and every row whose class is exactly LOGIC. A row marked `LOGIC, moved` is not exempt: the wrapper has to be clean.
+The desktop tables use the same three classes. Those modules live in `desktop/native/`. `look.py` and `custom_look.py` still sanitize stored look data and share look files, but the Widgets look editor is gone. Material's current controls live in `desktop/native/material/theme.py` and its QML Settings pages. `test_wrappers_hold_no_engine_logic.py` reads every STAYS row and every row whose class is exactly LOGIC. A row marked `LOGIC, moved` is not exempt: the wrapper has to be clean.
 
 ## Backend
 
@@ -168,13 +168,7 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 
 ## Desktop
 
-The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `version.py`. Dataclass and exception definitions STAY when a row says so. A class row does not cover its methods; those have their own rows.
-
-## Logic still in Python
-
-| Module | Function | Why it stays |
-|---|---|---|
-| custom_look | readability | The filter, labels and block checks moved to the engine; a loop still asks `look.py` for each category's `resolved_palette`, `category_paint` and `block_paint`, which are not in the engine yet. |
+The desktop wrapper modules, plus `look.py`, `custom_look.py` and `version.py`. Dataclass and exception definitions STAY when a row says so. A class row does not cover its methods; those have their own rows.
 
 ## calendar
 
@@ -221,6 +215,8 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | calendar | agenda_for | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | next_action_for | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | is_setup_block | ADAPTER | encodes, makes one engine call, decodes |
+| calendar | until_problem | ADAPTER | Encodes the weekly block, week start and today; one `blocks_until_problem` call returns the refusal or None. |
+| calendar | is_standing_block | ADAPTER | One `calendar_standing_block` call; School, Setup's activities and `weekly-` ids stand. |
 | calendar | block_family | ADAPTER | One engine call (`shown::family_id`). |
 | calendar | span_problem | ADAPTER | encodes, makes one engine call, decodes |
 | calendar | span_clash | ADAPTER | encodes, makes one engine call, decodes |
@@ -254,9 +250,6 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | custom_look | export_look | ADAPTER | one call, `look_export` |
 | custom_look | Imported | STAYS | dataclass |
 | custom_look | import_look | STAYS | reads the file's text with Python's own JSON reader (NaN, Infinity, huge integers and lone surrogates are Python-only) and passes the value on; its size guard keeps a file the engine refuses from being parsed |
-| custom_look | Problem | STAYS | dataclass |
-| custom_look | readability | LOGIC | engine does filter and labels; Python loop for palette and block paint (see Logic still in Python) |
-| custom_look | apply_fix | ADAPTER | one call, `look_apply_fix`; the engine reads the problem's own fields |
 
 ## files
 
@@ -339,6 +332,9 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 | remind | reminder_lead_min | ADAPTER | encodes, makes one engine call, decodes |
 | remind | start_alert_due | ADAPTER | encodes, makes one engine call, decodes |
 | remind | song_due | ADAPTER | encodes, makes one engine call, decodes |
+| remind | reminder_start_min | ADAPTER | One `remind_start_min` call reads the block start from the reminder key. |
+| remind | reminder_stays | ADAPTER | One `remind_stays` call says whether the kept card is still before the block's start. |
+| remind | reminder_snooze_until | ADAPTER | One `remind_snooze_reminder_until` call returns five minutes on, capped at the block's start. |
 | remind | reminder_key | ADAPTER | encodes, makes one engine call, decodes |
 | remind | alarm_key | ADAPTER | encodes, makes one engine call, decodes |
 | remind | clock_parts | ADAPTER | hands the engine `datetime.fromtimestamp` and `datetime` (the local zone is read through them); the seconds and milliseconds sums are `remind::seconds_of` and `millis_of` |
@@ -494,7 +490,6 @@ The eleven desktop wrapper modules, plus `look.py`'s four engine helpers and `ve
 - custom_look.LookNameError, exception definition
 - custom_look.Imported, dataclass
 - custom_look.import_look, Python JSON reader and file size guard before the engine
-- custom_look.Problem, dataclass
 - files._block_models, pydantic `TimeBlock` model exists only in Python
 - files._bodies, pydantic homework model exists only in Python
 - files._read_import, Python `json` reader for NaN and lone surrogates

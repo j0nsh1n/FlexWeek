@@ -101,8 +101,8 @@ fwtest clean
 - `flaky` summarises the flaky-test log: one entry per test, most often logged first, then the most
   recent, with the last date, commit, where it ran and the first line of how it failed. `--log`
   reads another file, for example a log downloaded from a CI run.
-- `pictures` draws the app's screens, compares two drawings, records the Widgets and Material flows as
-  clips, asks a reviewer and builds the review page. See [Pictures](#pictures).
+- `pictures` draws the Material app's screens, compares two drawings, records Material flows as clips,
+  asks a reviewer and builds the review page. See [Pictures](#pictures).
 - `clean` stops every process recorded by a job that is no longer running. It also stops a hidden
   session whenever a job record or a state file names it, including when the job record is already
   gone and only the state file under `/tmp/flexweek-rig/` remains. That is how you stop a stranded
@@ -221,7 +221,6 @@ the log cannot name the tests that shared its worker.
 | `rig` | the real-pointer rig playing Material, Day (`material-day-light.json`) and Week (`material-light.json`), under Xvfb; a step that is NOT DONE fails the job | 2 |
 | `mutate` | the mutation cases under `engine/` (pull requests and by hand) | 4 |
 | `mutate-python` | every other mutation case (pull requests and by hand) | 6 |
-| `pictures` | the touched screens, before and after (see the pictures section) | |
 
 The desktop shards deal the sorted test files out in turn. Each test-running job sets
 `FLEXWEEK_SILENT=1`, and the Python jobs upload their flaky log as an artifact (`flaky-*`, kept 30
@@ -414,19 +413,16 @@ are off, so nothing is caught halfway through a fade. Screens never reach Spotif
 
 The variants of one screen:
 
-| Set | Styles | Mode | Text | Size | High contrast |
+| Set | Interface | Mode | Text | Size | High contrast |
 |---|---|---|---|---|---|
-| every screen | each style | light and dark | Normal | 1280x800 | no |
-| `main` screens, also | each style | light | Large | 1024x640 | yes |
+| every screen | Material 3 | light and dark | Normal | 1280x800 | no |
+| `main` screens, also | Material 3 | light | Large | 1024x640 | yes |
 
-The styles are every Widgets design of the screen's role (the main views; the day screens for a My
-day screen), in the layouts registry's order, then Material 3. A screen's `styles` narrows them:
-design ids (`"classic"`), `"material"`, and `"widgets"` for every Widgets design of its role. An
-unknown style is reported as that screen's error. Light and dark are the `light-frost` and
-`dark-frost` packs on Widgets, and Material's own mode on Material 3.
+Material's own mode and High contrast preset draw these variants. An unknown
+mode or preset is reported as that screen's error.
 
 A picture is `<out>/<screen id>/<style>.<mode>.<text>.<width>x<height>[.hc].png`, for example
-`week.grid/classic.dark.normal.1280x800.png`.
+`week.grid/material.dark.normal.1280x800.png`.
 
 ### index.json
 
@@ -436,10 +432,10 @@ A picture is `<out>/<screen id>/<style>.<mode>.<text>.<width>x<height>[.hc].png`
  "problems": [{"module": "desktop/tests/pictures/screens_week.py", "error": "<traceback>"}],
  "pictures": [{
   "screen": "week.grid", "area": "week", "module": "desktop/tests/pictures/screens_week.py",
-  "main": true, "checks": "...", "sources": ["desktop/native/hours"],
-  "variant": "classic.light.normal.1280x800", "style": "classic", "mode": "light", "text": "normal",
+  "main": true, "checks": "...", "sources": ["desktop/native/material"],
+  "variant": "material.light.normal.1280x800", "style": "material", "mode": "light", "text": "normal",
   "size": [1280, 800], "high_contrast": false,
-  "picture": "week.grid/classic.light.normal.1280x800.png",
+  "picture": "week.grid/material.light.normal.1280x800.png",
   "measurements": {"labels": [], "focus": {}},
   "error": null
  }]

@@ -1,12 +1,18 @@
 # FlexWeek desktop
 
-## What FlexWeek is (current, 2026-09-19)
+## What FlexWeek is (current, 1.5.0)
 
-One Python application. PySide6 **Qt widgets** draw the window; the FastAPI
-backend runs in the same process on a loopback port and owns accounts, the week
-and the database. There is no Chromium, no `QWebEngineView`, and since
-2026-09-19 no browser client at all: `frontend/` was deleted and `backend/app.py`
-answers the API and 404s everything else.
+One Python application. **Material 3 in Qt Quick/QML** is the only student
+interface. `desktop/native/material/host.py` defines `MaterialPage`, a
+`QQuickView` owned by the QObject controller `NativeWindow` in
+`desktop/native/window.py`. The controller owns the session, sync, reminders,
+alarms, tray, updates, local look file and drawing-error page. `QQuickView`
+paces frames to the screen. On a 360 Hz screen, Material drew at 360.0 and
+349.1 frames a second in two five-second checks; the old `QQuickWidget` host
+drew at about 60. The FastAPI backend runs in the same process on a loopback
+port and owns accounts, the week and the database. There is no Chromium, no
+`QWebEngineView`, and since 2026-09-19 no browser client at all: `frontend/`
+was deleted and `backend/app.py` answers the API and 404s everything else.
 
 Run from a checkout: `python -m desktop.main` (`python -m desktop.native` is the
 same entry).
@@ -29,7 +35,16 @@ plugin the app starts, shows the alarm and makes no sound), plus
 plugins ship as a folder.
 
 Icons come from `desktop/assets/logo.png`. The SQLite database lives under the
-user data directory, never inside the read-only bundle.
+user data directory, never inside the read-only bundle. A frozen build also
+carries `desktop/native/material/tokens.json` and `desktop/native/material/qml/`
+next to the executable.
+
+If Material cannot draw with the graphics card, the shell saves unsaved edits
+and starts one new copy with `QT_QUICK_BACKEND=software`. The look file's
+`cpu_drawing_version` makes that app version use software drawing at start-up;
+a newer version tries the graphics card again. The new Material window says
+once that it is drawing without the graphics card. If that fails too, a plain
+page offers Quit and Try again.
 
 **What is still true below.** Section 6 (the Linux build), section 7 (the
 bundled server), section 9 and the sections after it (the Windows build and installers, releasing the Linux build,
@@ -37,7 +52,7 @@ reminders, and window/tray/quit behaviour). Read those.
 
 **What is superseded.** Sections 1 to 5 recommended a `QWebEngineView` window
 pointed at a hosted origin. That decision was reversed on 2026-09-17 in favour
-of native widgets, and the browser client it assumed was retired on 2026-09-19.
+of a native interface, and the browser client it assumed was retired on 2026-09-19.
 They are kept because they record why the choice was made and what the evidence
 was at the time. Do not build from them. The first section 8 ("Desktop completion
 checks") is a WebEngine-era record as well: the WebEngine wrapper's defects and
@@ -148,11 +163,11 @@ reopening the app restores the session until the seven-day cookie expiry.
 
 <!-- End of the superseded WebEngine recommendation. Sections 6 onward are current. -->
 
-## 6. Linux build (current as of 0.15)
+## 6. Linux build (current as of 1.5.0)
 
-First built on 2026-09-07 around Chromium; since 0.12 the window is native Qt
-widgets and no Chromium is compiled in. The WebEngine build this section used
-to describe, with its ~390 MB artifact and checklist, is in git history.
+First built on 2026-09-07 around Chromium; the current window is Material 3 in
+Qt Quick/QML and no Chromium is compiled in. The WebEngine build this section
+used to describe, with its ~390 MB artifact and checklist, is in git history.
 
 ```bash
 pip install -r requirements.txt -r requirements-desktop.txt
@@ -273,9 +288,10 @@ network.
 ## 8. Desktop completion checks — 2026-09-07
 
 The account flow is now exercised automatically by `desktop/tests/e2e/`
-(`test_the_app_starts_and_paints_its_first_screen.py`) against a real local API, using temporary
-databases and offscreen widgets. PySide6 is optional for the backend test
-environment; these tests skip explicitly when desktop dependencies are absent.
+(`test_the_app_starts_and_paints_its_first_screen.py`) against a real local API,
+using temporary databases and Material offscreen. PySide6 is optional for the
+backend test environment; these tests skip explicitly when desktop dependencies
+are absent.
 
 Two wrapper defects were reproduced and fixed: new-window links retained hidden
 pages after handoff, and requested downloads had no native handler. New windows
@@ -409,15 +425,15 @@ XDG_DATA_HOME=/tmp/check-profile /tmp/check/FlexWeek/FlexWeek
 ```
 
 Or `FlexWeek --smoke-test report.json`. It creates a throwaway account in a
-temporary data folder (removed afterwards, never the real profile), walks the
-first-week setup to "Add to my week and plan", and exits 0 only when the planned
-week is on screen: the window grab must show at least 200 colors on an 8 px
-grid. A dead or blank page is one flat color, which is how 0.9.0 failed for
-testers after that button. With `FLEXWEEK_DESKTOP_ORIGIN` set it stops at the
-Create account screen instead of making accounts on that server.
-`desktop/smoke_linux_containers.sh` runs it inside stock Ubuntu 24.04 and
-Debian 13 containers; the release workflow runs it on the Linux tarball, the raw
-Linux onedir and the Windows build.
+temporary data folder (removed afterwards, never the real profile), acknowledges
+its recovery codes, skips Material setup, adds a fixed time and homework through
+the real session, and exits 0 only when the Material week is on screen: the
+window grab must show at least 8 colors on an 8 px grid. A dead or blank page
+is one flat color, which is how 0.9.0 failed for testers after that button. With
+`FLEXWEEK_DESKTOP_ORIGIN` set it stops at the Create account screen instead of
+making accounts on that server. `desktop/smoke_linux_containers.sh` runs it
+inside stock Ubuntu 24.04 and Debian 13 containers; the release workflow runs it
+on the Linux tarball, the raw Linux onedir and the Windows build.
 
 **Housekeeping.** `build_linux.sh` preserves each previous build as
 `dist/FlexWeek.previous.<timestamp>` and never prunes them, so `dist/` grows by
@@ -428,10 +444,15 @@ about 250 MB per rebuild. Delete the ones you do not need.
 As of 0.15, reminders are on unless the student turns them off in
 Settings > Alerts, and accounts from before 0.15 had them turned on once. A
 reminder comes a set number of minutes before each block starts, and at once for
-a block saved inside that time. It shows in the tray, for a moment under the top
-bar, and on the status line. A block with its own Spotify link plays it when the
-block starts, stopped and snoozed as an alarm is. `desktop/native/remind.py`
-decides when; the window presents it.
+a block saved inside that time. It shows in the tray and in Material's snackbar.
+When no tray pop-ups can be shown, or "Leave reminders on screen" is on, it also
+stays as a Material card with Snooze and Close until the block starts. Snooze
+waits five minutes, or until the start when fewer than five minutes remain. At
+the start the card goes and "starts now" takes over.
+`desktop/native/kept_alerts.py` holds the cards and follows moved, deleted and
+renamed blocks. A block with its own Spotify link plays it when the block
+starts, stopped and snoozed as an alarm is. `desktop/native/remind.py` calls the
+engine's timing rules; the controller presents the alerts.
 
 ## Window, tray and quitting (2026-09-10)
 

@@ -18,8 +18,13 @@ All notable changes to FlexWeek are documented here. Format follows
 
 - Setup is three steps of multiple-choice cards, with your week drawn beside them as you pick: School hours, Study hours, and Look & alerts. Cards for the usual school days, when homework may be planned, how long before things start to remind you, the colour preset, light or dark, and row size. The detailed controls (sports and jobs, the clock, the week start, the evening cutoff, the drag step, hours for each day, the alarm sound and Spotify link) show only after you pick a card that means them, such as "Different times, sports, or a job…". The week only shows what you have picked.
 - Settings > Look > Advanced settings has a Simple, More and All switch: Simple is the preset, mode, corner shape, block style, row size and text size; More adds the layout and grid dials; All adds the colour codes and the readability check. Switching never changes a value, the choice is kept on this computer, and it starts on All after a setup where you opened the detailed controls.
+- A fixed time can repeat every week: "Repeats every week" on the Add and Edit fixed time sheet, with an optional Until date. Changing one asks "This week only" or "This week and every week after".
+- Saving a weekly fixed time from this week on, or deleting School or an activity this week and later, can now be undone; the notice says later changes are undone with it.
+- Reminders stay on screen as a card with Snooze and Close when your computer shows no pop-ups, or when "Leave reminders on screen" is on.
 
 ### Changed
+- An account can hold up to 200 repeating blocks (was School and eight activities).
+- The days hint on the fixed time sheet says "Pick every day it happens."
 - In My day's Up next and Done lists, free time shows a sofa instead of the clock that exercise and activities use.
 - Setup no longer asks for first homework or ends on a summary page; the last step has Open my week. Setup that was left on one of those pages resumes on Look & alerts.
 - The default school hours in setup are Mon-Fri 8:00 AM to 3:00 PM (they were 8:00 AM to 2:30 PM).
@@ -32,7 +37,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - The Focus page's single 25/5 switch is replaced by the timer choice; a saved 25/5 timer shows as Custom.
 - In Material, the notice at the bottom of the window says what Copy, Copy day, Undo, Redo, Reload this week, a refused action ("Select a block before copying it."), Plan with nothing to place, a commitment that lands over planned homework ("Find a new time"), a reminder, and School hours saved for every week each say. Its Undo button reads "Undo 8" with a thin line along the bottom that shrinks as the time runs out (no moving line with Animations Off or Reduce, and the number still counts), the notice is read out once to a screen reader, and its clock waits while the window is hidden, minimised or not in front, or while the pointer or keyboard is on it.
 - In Material, Plan's question about overdue or left-over homework is a Material question, Paste and Duplicate show their preview in a Material sheet (untick a row, change its day, start or minutes, then choose Paste or Duplicate; the line above says "Nothing changes until you choose Paste."), and Save on the recovery codes asks first, in a Material question, what the file is.
-- In Material, a reminder you asked to keep on screen shows once, in a strip with a Got it button, and Plan's button reads Suggest times when you place homework by hand.
+- In Material, Plan's button reads Suggest times when you place homework by hand.
 - In Material, replacing a running focus timer asks on a Material question (Keep current timer or Replace timer); in a question with choice cards, a choice that cannot be undone is marked in red when picked and only then is the confirm button red; a long notice wraps inside the window; and after Plan or an Undo the keyboard returns to the screen you are on.
 - In Material, the answers that delete something or cannot be taken back (Delete, This week and later, Replace week, Restore, Discard, Sign out) are drawn in the error colour in every question and sheet, in light and dark.
 
