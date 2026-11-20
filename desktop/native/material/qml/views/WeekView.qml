@@ -162,13 +162,6 @@ Item {
         }
     }
 
-    Shortcut {
-        sequence: "Escape"
-        context: Qt.ApplicationShortcut
-        enabled: root.dragRangeActive
-        onActivated: root.cancelDragRange()
-    }
-
     // Homework left over from before: the Widgets line above the week, with its two buttons.
     Rectangle {
         id: leftRow
