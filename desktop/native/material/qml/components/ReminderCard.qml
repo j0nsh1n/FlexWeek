@@ -17,7 +17,8 @@ Rectangle {
 
     property real maxWidth: 560
     width: Math.min(maxWidth, 560)
-    height: content.implicitHeight + 24
+    // 16 px inside on every side, as the content's margins are.
+    height: content.implicitHeight + 32
     radius: 12
     // A light card with a visible edge, so it stands apart from the week behind it.
     color: palette.surfaceContainerHigh
@@ -80,7 +81,8 @@ Rectangle {
                 density: root.density
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
-                kind: "filled"
+                // Tonal: several cards can be up at once, and a screen has at most one filled button.
+                kind: "tonal"
                 text: "Close"
                 accessName: "Close"
                 onClicked: root.closed()

@@ -686,7 +686,12 @@ class SheetsBridge(QObject):
             alone = {key: value for key, value in made.items() if key != "until"}
             alone["id"] = draft.family[len("weekly-") :]
             session.add_block(alone, scope="series")
-        self._saving_repeat = f"Changed {name} from this week on. {UNDO_ALSO}"
+        said = {
+            "add": f"{name} repeats every week from this week on.",
+            "make": f"{name} repeats every week from this week on.",
+            "stop": f"{name} stops repeating after this week.",
+        }.get(kind, f"Changed {name} from this week on.")
+        self._saving_repeat = f"{said} {UNDO_ALSO}"
         self._doubled_name = name
         session.save(snapshot_label=restore_point_label(f"Before changing {name}"))
 

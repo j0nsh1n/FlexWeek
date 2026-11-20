@@ -208,7 +208,7 @@ SCREENS: list[Screen] = [
             "over 'Guitar practice starts soon', each with Snooze and Close. They sit in the bottom right "
             "corner, 16 px from the window's right and bottom edges, and do not cover Thursday's 6:45 PM "
             "and 6:50 PM blocks. Each card stands apart from what is behind it (a visible edge); Snooze "
-            "and Close are both readable and Close is the filled one."
+            "(a text button) and Close (tonal) are both readable; no card button is filled."
         ),
         sources=CARD_SOURCES,
         styles=MATERIAL,

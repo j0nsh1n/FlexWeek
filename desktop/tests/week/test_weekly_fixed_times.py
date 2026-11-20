@@ -94,6 +94,9 @@ def test_a_weekly_time_with_until_shows_from_this_week_to_until_and_not_before_o
     until = _friday(week.session, 1)
     _add_weekly(qapp, week, sheets, until=until)
     assert _starts(week) == [("17:00", [FRIDAY])]
+    assert sheets.notice == (
+        "Guitar repeats every week from this week on. Undo also takes back anything changed after it."
+    )
     _go(qapp, week, 1)
     assert _starts(week) == [("17:00", [FRIDAY])], "the week of Until still has it"
     _go(qapp, week, 2)
@@ -277,6 +280,9 @@ def test_switch_off_keeps_this_week_as_a_one_off_and_ends_the_weeks_after(qapp, 
     sheets.next()
     assert sheets.ask == {}
     _settled(qapp, week)
+    assert sheets.notice == (
+        "Guitar stops repeating after this week. Undo also takes back anything changed after it."
+    )
     assert _starts(week) == [("17:00", [FRIDAY])]
     assert [b["id"] for b in _guitar(week)] == [repeat["id"].removeprefix("weekly-")]
     _go(qapp, week, 1)
