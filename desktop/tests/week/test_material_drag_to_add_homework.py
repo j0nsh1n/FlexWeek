@@ -665,10 +665,6 @@ def test_dragging_an_existing_block_or_card_does_not_open_add(
     assert placed["days"] == [saturday]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Step 11.2/11.3: Esc during a range drag is lost in Material's own window (under investigation)",
-)
 def test_escape_during_a_drag_cancels_it(qapp: QApplication, window: NativeWindow) -> None:
     root = _reset(window, qapp)
     hours_item, row, gutter, day_width, saturday = _grid_geometry(root, window)
