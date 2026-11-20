@@ -1629,10 +1629,14 @@ class NativeSession(QObject):
         week. Setup showed the repeats, so a block it leaves out stops and what this week changed
         itself stays this week's. Anything the student added another way stays where it is.
         `edited` is keep (later weeks keep their own edits), replace, or from_today."""
+        self.change_repeats(self.setup_repeats(blocks), "setting up your week", edited=edited)
+
+    def setup_repeats(self, blocks: list[dict]) -> list[dict]:
+        """The repeats after Setup: School and the activities as its page has them, and every weekly fixed
+        time the student made as it stands. Setup does not list those, so leaving them out would stop them."""
         made = [TimeBlock.model_validate(block).model_dump(mode="json") for block in blocks]
-        # Setup does not list a student's own weekly fixed times, so they stand as they are.
         weekly = [deepcopy(item) for item in self.repeats if str(item.get("id", "")).startswith("weekly-")]
-        self.change_repeats(made + weekly, "setting up your week", edited=edited)
+        return made + weekly
 
     def change_repeats(self, after: list[dict], label: str, edited: str = "keep") -> None:
         """The repeats become `after` from this week on: the open week changes now by the rule the

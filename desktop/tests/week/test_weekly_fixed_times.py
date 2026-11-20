@@ -378,6 +378,22 @@ def test_setup_run_again_leaves_a_weekly_time_alone(qapp, week, sheets) -> None:
     assert _starts(week) == [("17:00", [FRIDAY])]
 
 
+def test_finishing_setups_week_page_again_leaves_a_weekly_time_alone(qapp, week, sheets) -> None:
+    # Reviewer's case: the Setup page itself, not the session call, decides what stands after it.
+    from desktop.native.setup_steps import WEEK
+
+    _add_weekly(qapp, week, sheets)
+    week._open_setup(WEEK, first_run=False)
+    setup = week._material_page.bridge.account
+    setup.setupNext()
+    _settled(qapp, week)
+    stops = [item for item in (week.session._repeat_send or []) if str(item.get("id")).startswith("weekly-")]
+    assert stops == [], "nothing is sent for the weekly time"
+    assert _starts(week) == [("17:00", [FRIDAY])]
+    _go(qapp, week, 1)
+    assert _starts(week) == [("17:00", [FRIDAY])]
+
+
 def test_the_201st_repeat_is_refused_with_the_stores_sentence_and_the_sheet_stays(qapp, week, sheets) -> None:
     """A week holds at most 100 blocks, so 200 repeats cannot be written through the session: the store's
     refusal (its sentence, from engine repeats.rs REPEATS_FULL) is given to the save instead, and the sheet

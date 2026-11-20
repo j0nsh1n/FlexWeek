@@ -2,9 +2,9 @@
  {
   "file": "desktop/native/controller.py",
   "name": "Setup run again drops a weekly fixed time",
-  "old": "        self.change_repeats(made + weekly, \"setting up your week\", edited=edited)\n",
-  "new": "        self.change_repeats(made, \"setting up your week\", edited=edited)\n",
-  "test": "desktop/tests/week/test_weekly_fixed_times.py::test_setup_run_again_leaves_a_weekly_time_alone"
+  "old": "        return made + weekly\n",
+  "new": "        return made\n",
+  "test": "desktop/tests/week/test_weekly_fixed_times.py::test_finishing_setups_week_page_again_leaves_a_weekly_time_alone"
  },
  {
   "file": "desktop/native/material/sheet_block.py",
