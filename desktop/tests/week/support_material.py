@@ -24,7 +24,7 @@ from desktop.native.layout_choice import sanitize_layout
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import LightWindows
-from desktop.tests.material_support import faded_in
+from desktop.tests.material_support import faded_in, grab, material_showing, quick_of
 from desktop.tests.window_support import look_file, settled
 
 WIDTH = 1280
@@ -124,10 +124,9 @@ def _show_material(qapp: QApplication, window: NativeWindow) -> QObject:
     window.resize(1280, 800)
     window._on_week()
     _pump(qapp)
-    quick = window._material_page._quick
-    quick.grabFramebuffer()
+    grab(window)
     _pump(qapp)
-    assert window._stack.currentWidget().objectName() == "materialPage"
+    assert material_showing(window)
     root = window._material_page.root
     assert root is not None
     faded_in(qapp, root)
@@ -303,14 +302,14 @@ def _centre(root: QObject, item: QObject) -> QPoint:
 
 def _click(window: NativeWindow, item: QObject, dx: int = 0, dy: int = 0) -> None:
     """A real left click on a QML item through the Quick widget, as the pointer does it."""
-    quick = window._material_page._quick
+    quick = quick_of(window)
     point = _centre(window._material_page.root, item) + QPoint(dx, dy)
     QTest.mouseClick(quick, Qt.MouseButton.LeftButton, pos=point)
     _pump(QApplication.instance())
 
 
 def _drag(window: NativeWindow, item: QObject, to: QPoint) -> None:
-    quick = window._material_page._quick
+    quick = quick_of(window)
     start = _centre(window._material_page.root, item)
     app = QApplication.instance()
     QTest.mousePress(quick, Qt.MouseButton.LeftButton, pos=start)

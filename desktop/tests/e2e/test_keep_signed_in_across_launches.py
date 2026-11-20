@@ -18,6 +18,7 @@ from desktop.native.window import NativeWindow
 from desktop.server import LocalServer
 from desktop.tests.logic_support import past_recovery, past_setup, sign_up
 from desktop.tests.logic_support import sign_in as signed_in
+from desktop.tests.material_support import page_showing
 from desktop.tests.waiting import wait_until
 
 PASSWORD = "a-long-test-password"
@@ -32,7 +33,7 @@ def qapp() -> Iterator[QApplication]:
 
 
 def page(window: NativeWindow) -> str:
-    return window._stack.currentWidget().objectName()
+    return page_showing(window)
 
 
 class Launches:

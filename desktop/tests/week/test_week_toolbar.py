@@ -15,6 +15,7 @@ from desktop.tests.day.support_layouts_window import (  # noqa: E402
     qapp,  # noqa: F401
     window,  # noqa: F401
 )
+from desktop.tests.material_support import page_widget  # noqa: E402
 
 
 def test_no_button_appears_twice_on_the_week_page(qapp: QApplication, window: NativeWindow) -> None:
@@ -23,7 +24,7 @@ def test_no_button_appears_twice_on_the_week_page(qapp: QApplication, window: Na
     them across the whole page rather than inside one container."""
     window._on_week()
     qapp.processEvents()
-    page = window._stack.currentWidget()
+    page = page_widget(window)
     labels = [b.text() for b in page.findChildren(QPushButton) if b.isVisible() and b.text()]
     repeated = sorted({text for text in labels if labels.count(text) > 1})
     assert repeated == [], f"offered twice: {repeated}"

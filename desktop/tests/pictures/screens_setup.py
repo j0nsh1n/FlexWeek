@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QApplication
 from desktop.native import setup_steps
 from desktop.native.material import theme
 from desktop.native.window import NativeWindow
+from desktop.tests.material_support import material_showing
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.waiting import wait_until
 
@@ -31,7 +32,7 @@ def _setup_at(step: int, power: bool = False):
         window._run_setup_again()
         qapp = QApplication.instance()
         wait_until(
-            qapp, lambda: window._stack.currentWidget().objectName() == "materialPage", what="Material setup"
+            qapp, lambda: material_showing(window), what="Material setup"
         )
         bridge = window._account_bridge()
         if power:

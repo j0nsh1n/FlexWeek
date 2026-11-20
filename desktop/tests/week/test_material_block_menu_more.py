@@ -23,7 +23,7 @@ from desktop.native.material.bridge_sheets import SheetsBridge  # noqa: E402
 from desktop.native.material.sheet_preview import PreviewDraft  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402,F401
-from desktop.tests.material_support import named, pump, qml  # noqa: E402
+from desktop.tests.material_support import named, pump, qml, quick_of  # noqa: E402
 from desktop.tests.sheets.support_material_sheets import (  # noqa: E402
     block_named,
     bridge,
@@ -39,10 +39,6 @@ THURSDAY = 3
 FRIDAY = 4
 FIXED = ["Edit", "Duplicate", "Move to day...", "Copy", "Delete"]
 HOMEWORK = ["Edit", "Duplicate", "Move to day...", "Copy", "Mark finished", "Delete"]
-
-
-def quick_of(window: NativeWindow):
-    return window._material_page._quick
 
 
 def seed_club(qapp, window: NativeWindow) -> None:

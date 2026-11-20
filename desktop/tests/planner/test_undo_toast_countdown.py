@@ -19,6 +19,7 @@ from PySide6.QtWidgets import QApplication
 from backend.tests.fake_clock import CLOCK
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.material_support import quick_of
 from desktop.tests.planner.undo_support import MATERIAL_PLACED, planned_in_material
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material import _bridge, _pump, _qml, _snack
@@ -62,7 +63,7 @@ def test_the_undo_timer_pauses_while_the_pointer_is_over_its_button(
 ) -> None:
     root = _planned_and_let_go(qapp, window)
     bridge = _bridge(window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     snackbar = _qml(root, "materialSnackbar")
     QTest.mouseMove(quick, QPoint(5, 5))
     _pump(qapp)
@@ -80,7 +81,7 @@ def test_the_notice_counts_the_pointer_over_its_card_above_the_week(
     """The pointer on the notice's words, not on its button, over the week grid beneath it."""
     root = _planned_and_let_go(qapp, window)
     bridge = _bridge(window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     snackbar = _qml(root, "materialSnackbar")
     spot = snackbar.mapToScene(snackbar.boundingRect().center())
     QTest.mouseMove(quick, QPoint(int(spot.x()) - 60, int(spot.y())))

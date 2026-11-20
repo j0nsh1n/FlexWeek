@@ -12,6 +12,7 @@ from desktop.native.window import NativeWindow
 from desktop.server import LocalServer
 from desktop.tests.e2e.account_sessions import HASHING_WAIT, soccer, table_text
 from desktop.tests.logic_support import past_recovery, past_setup, sign_in, sign_up
+from desktop.tests.material_support import material_showing
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import PASSWORD, free, qapp, server, signed_out  # noqa: F401
 
@@ -33,7 +34,7 @@ def test_a_saved_fixed_time_survives_signing_out_and_in(
     second = NativeWindow(server.origin)
     try:
         sign_in(qapp, second, "alice", PASSWORD)
-        wait_until(qapp, lambda: second._stack.currentWidget().objectName() == "materialPage", HASHING_WAIT)
+        wait_until(qapp, lambda: material_showing(second), HASHING_WAIT)
         assert second.session.revision == 1
         assert "Soccer" in table_text(second)
     finally:

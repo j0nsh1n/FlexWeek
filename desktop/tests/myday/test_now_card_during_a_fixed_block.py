@@ -23,7 +23,7 @@ from backend.tests.fake_clock import CLOCK  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_day import pref, root_bridge, seed_thursday  # noqa: E402
 from desktop.tests.light_app import open_light  # noqa: E402, F401
-from desktop.tests.material_support import named, pump, qml, show_material  # noqa: E402
+from desktop.tests.material_support import named, pump, qml, quick_window_of, show_material  # noqa: E402
 from desktop.tests.sheets.support_material_settings import click_segment, open_settings, panel  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.window_support import qapp, settled  # noqa: E402, F401
@@ -78,7 +78,7 @@ def test_keyboard_focus_leaves_start_when_the_clock_moves_into_soccer(
     bridge.property(page).reload("light")
     pump(qapp)
     assert str(qml(root, scope + "NowTitle").property("text")) == "Soccer until 17:30"
-    held = window._material_page._quick.quickWindow().activeFocusItem()
+    held = quick_window_of(window).activeFocusItem()
     assert start.property("activeFocus") is False
     assert held is not None and held.property("visible") is True, "keyboard focus is on nothing shown"
 

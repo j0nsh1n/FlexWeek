@@ -11,6 +11,7 @@ from PySide6.QtCore import QObject, QPointF, QRectF
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
+from desktop.tests.material_support import grab as drawn
 from desktop.tests.material_support import named, pump, visuals
 from desktop.tests.sheets.support_material_pictures import seed_school_and_essay
 from desktop.tests.sheets.support_material_sheets import bridge, material_week
@@ -95,9 +96,8 @@ def buttons_outside_card(prompt: QObject) -> list[str]:
 
 
 def grab(window: NativeWindow, path: str) -> None:
-    quick = window._material_page._quick
     pump(QApplication.instance(), 30)
-    quick.grabFramebuffer().save(path)
+    drawn(window).save(path)
 
 
 def bridge_sheets(window: NativeWindow):

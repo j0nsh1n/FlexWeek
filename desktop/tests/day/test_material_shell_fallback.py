@@ -27,7 +27,7 @@ from desktop.tests.day.support_material_window import (  # noqa: E402, F401
     material_window,
     qapp,
 )
-from desktop.tests.material_support import pump  # noqa: E402
+from desktop.tests.material_support import material_showing, page_showing, page_widget, pump  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.window_support import look_file  # noqa: E402
 
@@ -84,7 +84,7 @@ def _saved() -> dict:
 
 
 def _week_page_never_shown(window: NativeWindow) -> None:
-    assert window._stack.currentWidget().objectName() != "weekPage"
+    assert page_showing(window) != "weekPage"
 
 
 def test_a_load_failure_on_the_graphics_card_saves_the_cpu_key_and_asks_for_a_cpu_copy(
@@ -233,7 +233,7 @@ def test_the_saved_key_does_not_stop_material_from_being_tried_and_is_kept_by_a_
     assert window._material_gave_up is False
     window._on_week()
     pump(qapp)
-    assert window._stack.currentWidget().objectName() == "materialPage"
+    assert material_showing(window)
     assert _saved()[cpu_drawing.LOOK_KEY] == VERSION
 
     # An older version's key is read, kept, and does not match this version at start-up.
@@ -255,7 +255,7 @@ def test_after_the_cpu_copy_starts_the_snackbar_says_so_once(
     window._material_gave_up = False
     window._on_week()
     pump(qapp)
-    assert window._stack.currentWidget().objectName() == "materialPage"
+    assert material_showing(window)
     assert window.session.message == cpu_drawing.NOTICE
     assert cpu_drawing.NOTICE_ENV not in os.environ
     window.session.message = ""
@@ -284,7 +284,7 @@ def test_a_failure_while_drawing_on_the_cpu_shows_the_error_page_and_try_again_c
     window._on_week()
     pump(qapp)
 
-    shown = window._stack.currentWidget()
+    shown = page_widget(window)
     assert shown.objectName() == "drawErrorPage"
     assert launches == []
     assert VERSION in shown.findChild(QLabel, "drawErrorVersion").text()
@@ -294,7 +294,7 @@ def test_a_failure_while_drawing_on_the_cpu_shows_the_error_page_and_try_again_c
     # Later refreshes keep the error page up, never the week.
     window._on_week()
     pump(qapp)
-    assert window._stack.currentWidget().objectName() == "drawErrorPage"
+    assert page_showing(window) == "drawErrorPage"
 
     shown.findChild(QPushButton, "drawErrorRetry").click()
     pump(qapp)
@@ -342,7 +342,7 @@ def test_an_update_found_on_the_draw_error_page_is_offered_and_installed_there(
     page.break_load = True
     window._on_week()
     pump(qapp)
-    shown = window._stack.currentWidget()
+    shown = page_widget(window)
     assert shown.objectName() == "drawErrorPage"
     line = shown.findChild(QLabel, "drawErrorUpdateLine")
     install = shown.findChild(QPushButton, "drawErrorInstall")

@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from PySide6.QtWidgets import QAbstractButton, QApplication
 
 from desktop.native.window import NativeWindow
+from desktop.tests.material_support import material_showing
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.waiting import wait_until
 
@@ -67,7 +68,7 @@ def _fill(window: NativeWindow) -> None:
 
 def _open_month(window: NativeWindow) -> None:
     session = window.session
-    if window._stack.currentWidget().objectName() == "materialPage":
+    if material_showing(window):
         window._material_page.bridge.showPage("month")
     else:
         window.findChild(QAbstractButton, "viewMonth").click()

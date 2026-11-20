@@ -24,6 +24,7 @@ from desktop.native.material.theme import advanced_default, hour_row_px  # noqa:
 from desktop.native.weekmodel import set_clock_24h  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests import light_app  # noqa: E402
+from desktop.tests.material_support import quick_of  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.week import support_zoom  # noqa: E402
 from desktop.tests.week.support_zoom import (  # noqa: E402
@@ -168,7 +169,7 @@ def test_ctrl_equal_zooms_the_week_and_ctrl_zero_resets_and_month_ignores_them(
 ) -> None:
     window = material
     week_on_screen(qapp, window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     quick.setFocus()
     pump(qapp)
     assert row_of(window) == 56
@@ -206,7 +207,7 @@ def test_ctrl_wheel_over_the_grid_zooms_about_the_pointer_and_plain_wheel_does_n
     view_y = 120.0
     before = (float(scroller.property("contentY")) + view_y) / row * 60
     at = scroller.mapToScene(QPointF(68.0 + 40.0, view_y))
-    quick = window._material_page._quick
+    quick = quick_of(window)
     wheel(quick, at, 1)
     pump(qapp)
     assert row_of(window) == 72
@@ -252,7 +253,7 @@ def zoom_keys_change_nothing(qapp: QApplication, window: NativeWindow, quick) ->
 def test_zoom_keys_wait_while_a_block_menu_is_open(qapp: QApplication, material: NativeWindow) -> None:
     window = material
     root = week_on_screen(qapp, window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     QTest.keyClick(quick, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
     pump(qapp)
     assert row_of(window) == 72
@@ -280,7 +281,7 @@ def test_zoom_keys_wait_while_a_homework_card_menu_is_open(
     due = (date.fromisoformat(window.session.week_start) + timedelta(days=6)).isoformat()
     add_homework(window, "lab", "Lab notes", 30, due)
     pump(qapp)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     QTest.keyClick(quick, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
     pump(qapp)
     assert row_of(window) == 72
@@ -324,7 +325,7 @@ def test_ctrl_equal_and_ctrl_minus_stop_at_the_new_closest_level_and_at_32(
 ) -> None:
     window = material
     week_on_screen(qapp, window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     quick.setFocus()
     pump(qapp)
     for _ in range(9):

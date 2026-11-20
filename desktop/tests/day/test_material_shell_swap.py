@@ -18,6 +18,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_window import material_window, qapp  # noqa: E402, F401
 from desktop.tests.material_support import (  # noqa: E402
+    material_showing,
     pump,
     show_material,
 )
@@ -36,7 +37,7 @@ def test_a_refresh_stays_on_material_and_does_not_take_the_plan_prompt(
     session.week_changed.emit()
     pump(qapp)
 
-    assert material_window._stack.currentWidget().objectName() == "materialPage"
+    assert material_showing(material_window)
     assert session.consume_plan_review() == trace
 
 

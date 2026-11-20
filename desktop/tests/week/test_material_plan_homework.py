@@ -21,6 +21,7 @@ from PySide6.QtWidgets import QApplication
 from backend.tests.fake_clock import CLOCK
 from desktop.native.material import bridge_week
 from desktop.native.material.bridge_week import SLACK_TAGS, WeekBridge
+from desktop.tests.material_support import quick_of, quick_window_of
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material import (
     NOW_DAY,
@@ -125,7 +126,7 @@ def _place_now(window, qapp, root, key: str, title: str) -> None:
 
 
 def _press(window, key: Qt.Key, modifiers: Qt.KeyboardModifier = Qt.KeyboardModifier.NoModifier) -> None:
-    QTest.keyClick(window._material_page._quick, key, modifiers)
+    QTest.keyClick(quick_of(window), key, modifiers)
     _pump(QApplication.instance())
 
 
@@ -207,7 +208,7 @@ def test_ctrl_z_in_a_text_field_leaves_the_schedule_alone(qapp, window) -> None:
     cancel = _qml(root, "homeworkCancel")
     cancel.forceActiveFocus()
     _pump(qapp)
-    held = window._material_page._quick.quickWindow().activeFocusItem()
+    held = quick_window_of(window).activeFocusItem()
     assert held is not None and held.objectName() != "fieldInput", held
     assert _bridge(window).sheets.kind == "homework"
     before = [dict(b) for b in window.session.blocks]
@@ -619,13 +620,13 @@ def test_a_card_can_be_given_a_time_from_the_keyboard(qapp, window) -> None:
     assert card.property("activeFocusOnTab") is True
     card.forceActiveFocus()
     _pump(qapp)
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_F10, Qt.KeyboardModifier.ShiftModifier)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_F10, Qt.KeyboardModifier.ShiftModifier)
     _pump(qapp)
     menu = _named(root, "cardMenu")[0]
     assert menu.property("open") is True
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Down)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Down)
     _pump(qapp)
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Return)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Return)
     wait_until(qapp, lambda: not window.session.busy and _qml(root, "homeworkCount").property("text") == "0")
     placed = next(block for block in window.session.blocks if block.get("assignment_id") == "sheet")
     assert placed.get("start")
@@ -659,7 +660,7 @@ def test_tabbing_through_homework_cards_keeps_the_focused_card_in_view(qapp, win
     cards = _named(root, "homeworkCard")
     assert len(cards) == 18
     scroller = _qml(root, "homeworkScroller")
-    quick = window._material_page._quick
+    quick = quick_of(window)
     cards[0].forceActiveFocus()
     _pump(qapp)
     for card in cards:

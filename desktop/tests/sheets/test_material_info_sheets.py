@@ -31,7 +31,7 @@ from desktop.native.settings_copy import (
 from desktop.native.version import VERSION
 from desktop.native.window import SIGN_OUT_QUESTION, NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import named, pump, show_material
+from desktop.tests.material_support import named, pump, quick_of, quick_window_of, show_material
 from desktop.tests.window_support import look_file, qapp  # noqa: F401
 
 NOTES = "## What changed\n- Material 3 is the one look.\n- Fewer pop-ups.\n\nMore detail below."
@@ -44,7 +44,7 @@ def _sheets(window: NativeWindow):
 
 def _material(qapp: QApplication, window: NativeWindow) -> tuple[QObject, object]:
     root = show_material(qapp, window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     window.activateWindow()
     quick.setFocus()
     pump(qapp)
@@ -114,7 +114,7 @@ def test_f1_opens_help_and_esc_closes_it_and_the_keyboard_goes_back(
     assert _focused(quick) == "helpClose", "the keyboard starts on Close"
     _press(quick, Qt.Key.Key_Escape)
     assert _sheets(window).property("kind") == ""
-    assert quick.quickWindow().activeFocusItem() is fab
+    assert quick_window_of(window).activeFocusItem() is fab
 
 
 def test_help_closes_from_its_close_button_and_scrolls_from_the_keyboard(
@@ -227,7 +227,7 @@ def test_about_closes_with_esc_and_the_keyboard_goes_back(qapp: QApplication, wi
     assert _focused(quick) == "aboutClose"
     _press(quick, Qt.Key.Key_Escape)
     assert _sheets(window).property("kind") == ""
-    assert quick.quickWindow().activeFocusItem() is fab
+    assert quick_window_of(window).activeFocusItem() is fab
 
 
 
@@ -466,7 +466,7 @@ def test_cancel_and_esc_keep_the_student_signed_in_and_the_keyboard_goes_back(
     _press(quick, Qt.Key.Key_Escape)
     assert dict(_sheets(window).property("ask")) == {}
     assert out == []
-    assert quick.quickWindow().activeFocusItem() is fab
+    assert quick_window_of(window).activeFocusItem() is fab
 
 
 

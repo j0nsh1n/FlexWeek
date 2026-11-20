@@ -19,7 +19,7 @@ from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
-from desktop.tests.material_support import named, pump, show_material, visuals  # noqa: E402
+from desktop.tests.material_support import named, pump, quick_of, show_material, visuals  # noqa: E402
 from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: E402,F401
     find_named,
     open_light,
@@ -52,7 +52,7 @@ def _click(quick: QObject, item: QObject, qapp: QApplication) -> None:
 
 
 def _click_segment(qapp: QApplication, shell: NativeWindow, seg: QObject, label: str) -> None:
-    quick = shell._material_page._quick
+    quick = quick_of(shell)
     for item in _texts(seg):
         if str(item.property("text")) == label:
             _click(quick, item, qapp)
@@ -138,7 +138,7 @@ def test_arrow_keys_still_move_the_choice_and_the_estimate(
     assert _ticked_labels(quick_btn) == ["15 min"]
 
     # Focus the Quick lengths row
-    quick = shell._material_page._quick
+    quick = quick_of(shell)
     quick_btn.forceActiveFocus()
     pump(qapp, 5)
     assert quick_btn.property("activeFocus") is True
@@ -212,7 +212,7 @@ def test_arrow_keys_step_on_while_a_settings_save_is_still_on_its_way(
     assert _ticked_labels(reminder) == ["Off"]
     reminder.forceActiveFocus()
     pump(qapp, 5)
-    quick = shell._material_page._quick
+    quick = quick_of(shell)
     QTest.keyClick(quick, Qt.Key.Key_Right)
     pump(qapp, 10)
     QTest.keyClick(quick, Qt.Key.Key_Right)

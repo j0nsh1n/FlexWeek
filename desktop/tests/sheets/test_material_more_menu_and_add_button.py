@@ -23,6 +23,8 @@ from desktop.tests.material_support import (  # noqa: E402
     named,
     pump,
     qml,
+    quick_of,
+    quick_window_of,
     show_material,
 )
 
@@ -69,7 +71,7 @@ def test_the_add_button_opens_homework_from_the_keyboard(
     assert fab.property("activeFocusOnTab") is True
     sheets = window._material_page.bridge.sheets
     window.activateWindow()
-    quick = window._material_page._quick
+    quick = quick_of(window)
     quick.setFocus()
     fab.forceActiveFocus()
     pump(qapp)
@@ -86,4 +88,4 @@ def test_the_add_button_opens_homework_from_the_keyboard(
     QTest.keyClick(quick, Qt.Key.Key_Escape)
     pump(qapp)
     assert sheets.kind == ""
-    assert quick.quickWindow().activeFocusItem() is fab
+    assert quick_window_of(window).activeFocusItem() is fab

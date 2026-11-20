@@ -18,7 +18,7 @@ from desktop.native.material import bridge_settings
 from desktop.native.version import VERSION
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import faded_in
+from desktop.tests.material_support import faded_in, grab, material_showing, quick_of
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import look_file, qapp  # noqa: F401
 
@@ -64,9 +64,9 @@ def show_material(qapp: QApplication, window: NativeWindow) -> QObject:
     window.resize(1280, 800)
     window._on_week()
     pump(qapp)
-    window._material_page._quick.grabFramebuffer()
+    grab(window)
     pump(qapp)
-    assert window._stack.currentWidget().objectName() == "materialPage"
+    assert material_showing(window)
     root = window._material_page.root
     assert root is not None
     faded_in(qapp, root)
@@ -101,7 +101,7 @@ def click(qapp: QApplication, window: NativeWindow, item: QObject) -> None:
     pump(qapp, 5)
     centre = item.mapToScene(QPointF(item.width() / 2, item.height() / 2))
     QTest.mouseClick(
-        window._material_page._quick,
+        quick_of(window),
         Qt.MouseButton.LeftButton,
         Qt.KeyboardModifier.NoModifier,
         QPoint(int(centre.x()), int(centre.y())),

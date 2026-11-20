@@ -16,6 +16,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QObject, QPointF, Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 
+from desktop.tests.material_support import quick_of, quick_window_of  # noqa: E402
 from desktop.tests.week.support_material import (  # noqa: E402
     _bridge,
     _named,
@@ -56,7 +57,7 @@ def _rows(root: QObject) -> list[tuple[str, str]]:
 
 
 def _focus(window) -> QObject | None:
-    return window._material_page._quick.quickWindow().activeFocusItem()
+    return quick_window_of(window).activeFocusItem()
 
 
 def test_the_week_list_names_each_block_with_its_day_and_times_in_reading_order(qapp, window) -> None:
@@ -82,7 +83,7 @@ def test_enter_on_a_row_opens_that_block(qapp, window) -> None:
     )
     essay.forceActiveFocus()
     _pump(qapp)
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Return)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Return)
     _pump(qapp, 40)
     sheets = _bridge(window).sheets
     assert sheets.kind != "weekList", "Enter left the list open"
@@ -98,12 +99,12 @@ def test_esc_closes_the_list_and_returns_the_keyboard_to_where_it_came_from(qapp
     origin.forceActiveFocus()
     _pump(qapp)
     assert _focus(window) is origin, "the test could not put the keyboard on its starting control"
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_L, CTRL_SHIFT)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_L, CTRL_SHIFT)
     _pump(qapp, 40)
     sheets = _bridge(window).sheets
     assert sheets.kind == "weekList"
     assert str(_focus(window).objectName()) == "weekListItem", "the list did not take the keyboard"
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Escape)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Escape)
     _pump(qapp, 40)
     assert sheets.kind == ""
     assert _focus(window) is origin, "Esc did not return the keyboard to where it came from"

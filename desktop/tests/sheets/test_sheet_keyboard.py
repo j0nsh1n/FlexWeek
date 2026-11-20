@@ -21,7 +21,15 @@ from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
-from desktop.tests.material_support import named, pump, qml, show_material, visuals  # noqa: E402
+from desktop.tests.material_support import (  # noqa: E402
+    named,
+    pump,
+    qml,
+    quick_of,
+    quick_window_of,
+    show_material,
+    visuals,
+)
 from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: E402,F401
     DISCARD,
     find_named,
@@ -39,7 +47,7 @@ def test_esc_closes_a_sheet_and_the_keyboard_goes_back_to_the_add_button(
     qapp: QApplication, shell: NativeWindow, sheets
 ) -> None:
     root = show_material(qapp, shell)
-    quick = shell._material_page._quick
+    quick = quick_of(shell)
     shell.activateWindow()
     quick.setFocus()
     fab = qml(root, "materialFab")
@@ -47,13 +55,13 @@ def test_esc_closes_a_sheet_and_the_keyboard_goes_back_to_the_add_button(
     pump(qapp)
     sheets.openHomework()
     pump(qapp, 60)
-    held = quick.quickWindow().activeFocusItem()
+    held = quick_window_of(shell).activeFocusItem()
     assert held is not None
     assert held.objectName() != "materialFab"
     QTest.keyClick(quick, Qt.Key.Key_Escape)
     pump(qapp)
     assert sheets.kind == ""
-    assert quick.quickWindow().activeFocusItem() is fab
+    assert quick_window_of(shell).activeFocusItem() is fab
 
 
 def test_the_discard_prompt_shows_in_qml_and_esc_keeps_editing(
@@ -62,7 +70,7 @@ def test_the_discard_prompt_shows_in_qml_and_esc_keeps_editing(
     """Cancel on typed work asks (Esc on an Add sheet closes it and keeps the typing, Jonathan 2026-11-10);
     Esc on that question goes back to editing."""
     root = show_material(qapp, shell)
-    quick = shell._material_page._quick
+    quick = quick_of(shell)
     shell.activateWindow()
     quick.setFocus()
     sheets.openHomework()
@@ -148,7 +156,7 @@ def _lineage(item: QObject | None) -> list[str]:
 
 
 def _focused(shell: NativeWindow) -> QObject | None:
-    return shell._material_page._quick.quickWindow().activeFocusItem()
+    return quick_window_of(shell).activeFocusItem()
 
 
 def _semantic(chain: list[str]) -> str:
@@ -162,7 +170,7 @@ def _semantic(chain: list[str]) -> str:
 
 
 def _press(qapp: QApplication, shell: NativeWindow, key: Qt.Key) -> list[str]:
-    QTest.keyClick(shell._material_page._quick, key)
+    QTest.keyClick(quick_of(shell), key)
     pump(qapp, 3)
     return _lineage(_focused(shell))
 
@@ -252,7 +260,7 @@ def test_homework_sheet_tab_cycles_enabled_controls_and_wraps_both_ways(
     assert bool(shell.session.assignments["essay"].get("completed")) is done
     assert shell._material_page.bridge.property("screen") == screen
 
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Escape)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Escape)
     pump(qapp, 8)
     assert sheets.kind == ""
     restored = _lineage(_focused(shell))
@@ -266,9 +274,9 @@ def test_homework_sheet_tab_cycles_enabled_controls_and_wraps_both_ways(
     due = find_named(root, "homeworkDue")
     due.forceActiveFocus()
     pump(qapp)
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Space)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Space)
     pump(qapp, 8)
-    scene = shell._material_page._quick.quickWindow().contentItem()
+    scene = quick_window_of(shell).contentItem()
     lists = [item for item in visuals(scene) if str(item.objectName()) == "pickerList"]
     assert lists, f"due picker did not open; focus={_lineage(_focused(shell))}"
     for index in range(4):
@@ -299,7 +307,7 @@ def test_fixed_time_sheet_tab_wraps_inside_and_skips_hidden_controls(
     assert "blockBack" not in forward
     backward = _cycle_names(qapp, shell, start, Qt.Key.Key_Backtab, SHEET_OWNERS)
     assert backward == list(reversed(forward)), f"Backtab {backward} was not the reverse of {forward}"
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Escape)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Escape)
     pump(qapp, 5)
     assert sheets.kind == ""
     assert _week_marks(shell) == marks
@@ -307,7 +315,7 @@ def test_fixed_time_sheet_tab_wraps_inside_and_skips_hidden_controls(
 
 def _open_from_more(qapp: QApplication, shell: NativeWindow, sheets, action: str) -> None:
     shell.activateWindow()
-    shell._material_page._quick.setFocus()
+    quick_of(shell).setFocus()
     qml(shell._material_page.root, "materialFab").forceActiveFocus()
     pump(qapp)
     sheets.openMore()
@@ -356,7 +364,7 @@ def _open_pinned_time_field(qapp: QApplication, shell: NativeWindow, sheets, day
     sheets.setNumber("whenDay", day)
     sheets.setText("whenTime", "19:00")
     pump(qapp)
-    root = shell._material_page._quick.rootObject()
+    root = quick_of(shell).rootObject()
     field = find_named(root, "homeworkWhenTime")
     field.forceActiveFocus()
     pump(qapp)
@@ -365,9 +373,9 @@ def _open_pinned_time_field(qapp: QApplication, shell: NativeWindow, sheets, day
 
 def test_pinned_time_list_opens_on_the_chosen_time(qapp: QApplication, shell: NativeWindow, sheets) -> None:
     _open_pinned_time_field(qapp, shell, sheets)
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Space)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Space)
     pump(qapp, 8)
-    scene = shell._material_page._quick.quickWindow().contentItem()
+    scene = quick_window_of(shell).contentItem()
     lists = [item for item in visuals(scene) if str(item.objectName()) == "pickerList"]
     assert lists, "the pinned time list did not open"
     picker = lists[0]
@@ -377,7 +385,7 @@ def test_pinned_time_list_opens_on_the_chosen_time(qapp: QApplication, shell: Na
     assert top <= seven_pm * 44 < top + picker.property("height"), (
         f"7:00 PM (row {seven_pm}) is off screen: the list starts at {top}"
     )
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Escape)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Escape)
     pump(qapp, 5)
     sheets.forceClose()
     pump(qapp, 5)
@@ -387,11 +395,11 @@ def test_pinned_time_moves_with_up_and_down_on_the_closed_field(
     qapp: QApplication, shell: NativeWindow, sheets
 ) -> None:
     _open_pinned_time_field(qapp, shell, sheets)
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Up)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Up)
     pump(qapp, 5)
     assert sheets.form["whenTime"] == "18:45"
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Down)
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Down)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Down)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Down)
     pump(qapp, 5)
     assert sheets.form["whenTime"] == "19:15"
     sheets.forceClose()
@@ -402,10 +410,10 @@ def test_up_on_todays_pinned_time_stops_at_the_earliest_time_allowed(
     qapp: QApplication, shell: NativeWindow, sheets
 ) -> None:
     _open_pinned_time_field(qapp, shell, sheets, day=3)
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Up)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Up)
     pump(qapp, 5)
     assert sheets.form["whenTime"] == "19:00", "the clock reads 19:00: nothing earlier is offered today"
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Down)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Down)
     pump(qapp, 5)
     assert sheets.form["whenTime"] == "19:15"
     sheets.forceClose()
@@ -416,12 +424,12 @@ def test_open_pinned_time_list_moves_with_down_and_picks_with_enter(
     qapp: QApplication, shell: NativeWindow, sheets
 ) -> None:
     _open_pinned_time_field(qapp, shell, sheets)
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Space)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Space)
     pump(qapp, 8)
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Down)
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Down)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Down)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Down)
     pump(qapp, 5)
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Return)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Return)
     pump(qapp, 8)
     assert sheets.form["whenTime"] == "19:30"
     sheets.forceClose()

@@ -15,7 +15,7 @@ from backend.tests.fake_clock import CLOCK
 from desktop.native.calendar import sunday_due
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.window import NativeWindow
-from desktop.tests.material_support import named, pump, qml, show_material
+from desktop.tests.material_support import named, pump, qml, quick_of, show_material
 from desktop.tests.window_support import look_file, settled
 
 NOW_DAY = 3
@@ -115,7 +115,7 @@ def centre(item: QObject) -> QPoint:
 
 def click(window: NativeWindow, item: QObject) -> None:
     """A real left click on a QML item through the Quick widget, as the pointer does it."""
-    quick = window._material_page._quick
+    quick = quick_of(window)
     QTest.mouseClick(quick, Qt.MouseButton.LeftButton, pos=centre(item))
     pump(QApplication.instance())
 

@@ -12,7 +12,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
-from desktop.tests.material_support import pump, show_material
+from desktop.tests.material_support import pump, quick_of, show_material
 
 
 def bridge(window: NativeWindow):
@@ -48,7 +48,7 @@ def click(qapp: QApplication, window: NativeWindow, item: QObject) -> None:
     flick_to(item)
     pump(qapp, 5)
     centre = item.mapToScene(QPointF(item.width() / 2, item.height() / 2))
-    quick = window._material_page._quick
+    quick = quick_of(window)
     QTest.mouseClick(
         quick,
         Qt.MouseButton.LeftButton,

@@ -18,7 +18,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import pump, qml, visuals
+from desktop.tests.material_support import pump, qml, quick_of, quick_window_of, visuals
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material_page import fresh_material
 
@@ -42,8 +42,8 @@ def test_every_week_tab_stop_has_a_visible_ring_and_is_on_screen(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root = fresh_material(qapp, window)
-    quick = window._material_page._quick
-    scene = quick.quickWindow()
+    quick = quick_of(window)
+    scene = quick_window_of(window)
     scroller = qml(root, "weekScroller")
     bridge = window._material_page.bridge
 

@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import named, pump, qml
+from desktop.tests.material_support import named, pump, qml, quick_of, quick_window_of
 from desktop.tests.sheets.support_settings_keys import open_settings, panel
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
@@ -65,13 +65,13 @@ def test_escape_closes_manage_account_and_returns_focus(
 ) -> None:
     """Manage account is a Material sheet over Settings."""
     root = open_settings(qapp, window, "computer")
-    quick = window._material_page._quick
+    quick = quick_of(window)
     account_rows = named(root, "row_account")
     assert account_rows, "row_account not found"
     account_row = account_rows[0]
     account_row.forceActiveFocus()
     pump(qapp)
-    assert quick.quickWindow().activeFocusItem() is account_row
+    assert quick_window_of(window).activeFocusItem() is account_row
 
     sheets = window._material_page.bridge.sheets
     window._open_account()
@@ -82,14 +82,14 @@ def test_escape_closes_manage_account_and_returns_focus(
     pump(qapp, 40)
     assert sheets.kind == ""
     # Focus returned to the QML opener
-    assert quick.quickWindow().activeFocusItem() is account_row
+    assert quick_window_of(window).activeFocusItem() is account_row
 
 
 def test_escape_closes_advanced_settings_and_returns_focus_to_its_row(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root = open_settings(qapp, window, "look")
-    quick = window._material_page._quick
+    quick = quick_of(window)
     advanced_rows = named(root, "openAdvanced")
     assert advanced_rows, "openAdvanced not found"
     advanced_row = advanced_rows[0]
@@ -109,4 +109,4 @@ def test_escape_closes_advanced_settings_and_returns_focus_to_its_row(
     pump(qapp)
 
     assert settings_panel._page == "sections"
-    assert quick.quickWindow().activeFocusItem() is advanced_row
+    assert quick_window_of(window).activeFocusItem() is advanced_row

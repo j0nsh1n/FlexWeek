@@ -23,7 +23,7 @@ from PySide6.QtTest import QTest  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402,F401
-from desktop.tests.material_support import named, pump, qml  # noqa: E402
+from desktop.tests.material_support import named, pump, qml, quick_of, quick_window_of  # noqa: E402
 from desktop.tests.sheets.support_material_sheets import bridge, material_week, week_monday  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.week.support_material import _pref  # noqa: E402
@@ -32,10 +32,6 @@ from desktop.tests.window_support import qapp, settled  # noqa: E402,F401
 THURSDAY = 3
 FRIDAY = 4
 ROW = 56
-
-
-def quick_of(window: NativeWindow):
-    return window._material_page._quick
 
 
 def seed_club(qapp, window: NativeWindow, start: str = "16:00") -> None:
@@ -128,7 +124,7 @@ def why_nothing_moved(window: NativeWindow, at: QPoint) -> str:
         chain.append(f"{type(item).__name__}:{item.objectName() or '-'}")
         local = item.mapFromScene(QPointF(at))
         item = item.childAt(local.x(), local.y())
-    focus = quick.quickWindow().activeFocusItem()
+    focus = quick_window_of(window).activeFocusItem()
     sheets = window._material_page.bridge.sheets
     return (
         f"drag changed nothing at {at.x()},{at.y()}: under the pointer {' > '.join(chain)}; "

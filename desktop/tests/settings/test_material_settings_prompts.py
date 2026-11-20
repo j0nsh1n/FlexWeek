@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.material_support import quick_of, quick_window_of
 from desktop.tests.settings.support_material_settings import (
     _bridge,
     _click,
@@ -36,7 +37,7 @@ def _lineage(item: QObject | None) -> list[str]:
 
 def _assert_shortcuts_blocked(qapp: QApplication, window: NativeWindow, root: QObject) -> None:
     bridge = _bridge(window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     # The letter keys start off; with them on, a prompt must still keep them.
     bridge._letter_keys = True
     bridge.changed.emit()
@@ -58,7 +59,7 @@ def _assert_shortcuts_blocked(qapp: QApplication, window: NativeWindow, root: QO
     for _ in range(8):
         QTest.keyClick(quick, Qt.Key.Key_Tab)
         _pump(qapp, 3)
-        chain = _lineage(quick.quickWindow().activeFocusItem())
+        chain = _lineage(quick_window_of(window).activeFocusItem())
         assert "navWeek" not in chain
         assert "materialFab" not in chain
         names = (
@@ -106,9 +107,9 @@ def _assert_prompt_owns_keys(
         cancel.forceActiveFocus()
         _pump(qapp)
         _assert_shortcuts_blocked(qapp, window, root)
-        QTest.keyClick(window._material_page._quick, Qt.Key.Key_Backtab)
+        QTest.keyClick(quick_of(window), Qt.Key.Key_Backtab)
         _pump(qapp, 3)
-        chain = _lineage(window._material_page._quick.quickWindow().activeFocusItem())
+        chain = _lineage(quick_window_of(window).activeFocusItem())
         assert any(
             name in chain
             for name in (
@@ -185,7 +186,7 @@ def test_settings_prompts_block_the_top_bar_pointer(
             field.forceActiveFocus()
             _pump(qapp)
             before = str(field.property("text") or "")
-            QTest.keyClick(window._material_page._quick, Qt.Key.Key_2)
+            QTest.keyClick(quick_of(window), Qt.Key.Key_2)
             _pump(qapp)
             assert str(field.property("text") or "") == before + "2"
             assert bridge.property("screen") == "settings"
@@ -224,7 +225,7 @@ def test_settings_prompts_block_the_top_bar_pointer(
     assert _week_marks(window) != marks_before
     root.forceActiveFocus()
     _pump(qapp)
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_2)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_2)
     _pump(qapp)
     assert bridge.property("screen") == "week"
 
@@ -235,7 +236,7 @@ def test_settings_prompts_block_shell_shortcuts_and_keep_tab(
     root = _open_settings(qapp, window)
     panel = _panel(window)
     bridge = _bridge(window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     panel.openAdvanced()
     _pump(qapp)
     panel.beginSave()
@@ -318,21 +319,21 @@ def test_settings_save_prompt_tab_advances_from_the_field_and_wraps(
 ) -> None:
     root = _open_settings(qapp, window)
     panel = _panel(window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     panel.openAdvanced()
     _pump(qapp)
     panel.beginSave()
     _pump(qapp)
     prompt = _named(root, "savePrompt")[0]
     assert prompt.property("open") is True
-    start_chain = _lineage(quick.quickWindow().activeFocusItem())
+    start_chain = _lineage(quick_window_of(window).activeFocusItem())
     start = _prompt_semantic(start_chain)
     assert start == "promptField", f"initial focus was {start}: {start_chain}"
     forward: list[str] = []
     for _ in range(8):
         QTest.keyClick(quick, Qt.Key.Key_Tab)
         _pump(qapp, 3)
-        chain = _lineage(quick.quickWindow().activeFocusItem())
+        chain = _lineage(quick_window_of(window).activeFocusItem())
         name = _prompt_semantic(chain)
         assert any(owner in chain for owner in PROMPT_OWNERS), f"Tab left the prompt: {chain}"
         assert "navWeek" not in chain and "materialFab" not in chain
@@ -351,7 +352,7 @@ def test_settings_save_prompt_tab_advances_from_the_field_and_wraps(
     for _ in range(8):
         QTest.keyClick(quick, Qt.Key.Key_Backtab)
         _pump(qapp, 3)
-        chain = _lineage(quick.quickWindow().activeFocusItem())
+        chain = _lineage(quick_window_of(window).activeFocusItem())
         name = _prompt_semantic(chain)
         assert any(owner in chain for owner in PROMPT_OWNERS), f"Backtab left the prompt: {chain}"
         if not backward:

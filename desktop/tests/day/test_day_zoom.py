@@ -35,7 +35,7 @@ from desktop.tests.day.support_material_day import (  # noqa: E402
     wheel,
 )
 from desktop.tests.light_app import open_light  # noqa: E402, F401
-from desktop.tests.material_support import pump, qml  # noqa: E402
+from desktop.tests.material_support import pump, qml, quick_of  # noqa: E402
 from desktop.tests.window_support import look_file, qapp, settled  # noqa: E402, F401
 
 
@@ -45,7 +45,7 @@ def window(qapp: QApplication, open_light) -> NativeWindow:
 
 
 def _ctrl(window: NativeWindow, key: Qt.Key) -> None:
-    quick = window._material_page._quick
+    quick = quick_of(window)
     QTest.keyClick(quick, key, Qt.KeyboardModifier.ControlModifier)
     pump(QApplication.instance())
 
@@ -55,7 +55,7 @@ def test_zoom_on_day_changes_the_day_hour_row_and_leaves_week_untouched(
 ) -> None:
     root = open_day_page(qapp, window)
     bridge = bridge_of(window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     quick.setFocus()
     pump(qapp)
     assert int(bridge.property("dayHourRow")) == 56
@@ -115,7 +115,7 @@ def test_an_evening_zoom_keeps_the_essay_and_no_blank_past_midnight(
     """Day opens with the evening near the top and room past midnight; zooming from there anchors a
     time in the day and never leaves midnight above the bottom while earlier time could show."""
     root = open_day_page(qapp, window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     quick.setFocus()
     pump(qapp)
     for expected, key in ((72, Qt.Key.Key_Equal), (96, Qt.Key.Key_Equal), (56, Qt.Key.Key_0)):
@@ -151,7 +151,7 @@ def test_a_clock_tick_does_not_move_day_scroll_or_a_zoom_anchor(
 
     view_y = float(scroller.property("height")) / 2
     minute = ((float(scroller.property("contentY")) + view_y) / row) * 60
-    quick = window._material_page._quick
+    quick = quick_of(window)
     quick.setFocus()
     pump(qapp)
     _ctrl(window, Qt.Key.Key_Equal)
@@ -170,7 +170,7 @@ def test_day_steps_through_the_two_closer_levels_and_stops_at_256(
 ) -> None:
     open_day_page(qapp, window)
     bridge = bridge_of(window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     quick.setFocus()
     pump(qapp)
     seen = [int(bridge.property("dayHourRow"))]

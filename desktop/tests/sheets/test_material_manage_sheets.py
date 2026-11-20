@@ -21,7 +21,7 @@ from desktop.native.account_copy import READ_WEEK_FAILED, REPLACE_WEEK_QUESTION
 from desktop.native.files import EXPORT_FORMAT
 from desktop.native.reuse import week_label
 from desktop.native.window import NativeWindow
-from desktop.tests.material_support import named, pump
+from desktop.tests.material_support import named, pump, quick_of, quick_window_of
 from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: F401
     open_light,
     qapp,
@@ -47,7 +47,7 @@ def _root(shell: NativeWindow) -> QObject:
 
 
 def _quick(shell: NativeWindow):
-    quick = shell._material_page._quick
+    quick = quick_of(shell)
     shell.activateWindow()
     quick.setFocus()
     return quick
@@ -551,16 +551,16 @@ def test_import_a_day_file_merges_without_asking_and_a_bad_file_says_so(
 def test_esc_closes_the_account_sheet_and_the_keyboard_goes_back(
     qapp: QApplication, shell: NativeWindow, sheets
 ) -> None:
-    quick = _quick(shell)
+    _quick(shell)
     fab = _one(shell, "materialFab")
     fab.forceActiveFocus()
     pump(qapp)
     sheets.openAccount()
     pump(qapp, 40)
-    assert str(quick.quickWindow().activeFocusItem().objectName()) == "currentPasswordInput"
+    assert str(quick_window_of(shell).activeFocusItem().objectName()) == "currentPasswordInput"
     _press(shell, Qt.Key.Key_Escape)
     assert _kind(sheets) == ""
-    assert quick.quickWindow().activeFocusItem() is fab
+    assert quick_window_of(shell).activeFocusItem() is fab
 
 
 # Restore points ----------------------------------------------------------------------------------------
@@ -723,16 +723,16 @@ def test_restore_goes_back_and_keeps_a_before_restore_copy_to_undo_it(
 def test_esc_closes_the_restore_sheet_and_the_keyboard_goes_back(
     qapp: QApplication, shell: NativeWindow, sheets
 ) -> None:
-    quick = _quick(shell)
+    _quick(shell)
     fab = _one(shell, "materialFab")
     fab.forceActiveFocus()
     pump(qapp)
     sheets.openRestore()
     pump(qapp, 40)
-    assert str(quick.quickWindow().activeFocusItem().objectName()) == "fieldInput"
+    assert str(quick_window_of(shell).activeFocusItem().objectName()) == "fieldInput"
     _press(shell, Qt.Key.Key_Escape)
     assert _kind(sheets) == ""
-    assert quick.quickWindow().activeFocusItem() is fab
+    assert quick_window_of(shell).activeFocusItem() is fab
 
 
 def test_material_calls_restore_points_copies_of_this_week_in_every_student_facing_string() -> None:

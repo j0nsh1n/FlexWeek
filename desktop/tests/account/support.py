@@ -24,6 +24,7 @@ from desktop.native.kept import KeptSession
 from desktop.native.window import NativeWindow
 from desktop.server import LocalServer
 from desktop.tests.light_app import ORIGIN, InProcessApi, _client_for, _close
+from desktop.tests.material_support import page_showing
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import PASSWORD, USERNAME, free, look_file, qapp, server  # noqa: F401
 
@@ -93,7 +94,7 @@ def material_launches(qapp: QApplication, tmp_path: Path) -> Iterator[LightLaunc
 
 
 def page(window: NativeWindow) -> str:
-    return window._stack.currentWidget().objectName()
+    return page_showing(window)
 
 
 @pytest.fixture()
