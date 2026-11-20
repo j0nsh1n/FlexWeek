@@ -612,6 +612,14 @@ pub fn edit_intent(
             intent.set.insert(field.into(), value.clone());
         }
     }
+    // Every form that edits a weekly time shows its Until, so one sent without it took the end date off.
+    // School and Setup's activities never carry one, so their forms change nothing here.
+    let had_until = repeat
+        .and_then(|repeat| repeat.get("until"))
+        .is_some_and(|until| until.as_str().is_some_and(|until| !until.is_empty()));
+    if had_until && edited.get("until").is_none_or(Value::is_null) {
+        intent.set.insert("until".into(), Value::Null);
+    }
     intent.add_days = after_days
         .iter()
         .copied()

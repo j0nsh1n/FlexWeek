@@ -558,4 +558,19 @@ fn a_change_sets_until_clears_it_with_an_empty_date_and_cannot_end_before_it_sta
         edit_intent("weekly-3f2a9c01", OPEN_WEEK, Some(&ended), Some(&ended)),
         None
     );
+    // The sheet shows Until, so a form sent without one took it off, and the repeat has no end again.
+    let cleared = edit_intent("weekly-3f2a9c01", OPEN_WEEK, Some(&ended), Some(&guitar)).unwrap();
+    assert!(
+        patched(Some(&ended), &cleared)
+            .unwrap()
+            .unwrap()
+            .get("until")
+            .is_none(),
+        "a form without Until clears it"
+    );
+    // School's form has no Until and School never has one: nothing changes.
+    assert_eq!(
+        edit_intent("school", OPEN_WEEK, Some(&school()), Some(&school())),
+        None
+    );
 }
