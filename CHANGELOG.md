@@ -5,6 +5,8 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-20
+
 ### Added
 - When FlexWeek cannot draw its window at all, the error page offers a new version when one is found ("FlexWeek 1.5.1 is ready" with Update now), with the same download and install as the update sheet.
 - Material Settings has every setting the other styles had. Alerts: the reminder sound and tone with a test play, a Spotify link, volume, the end chime, tray notices, letting reminders through Do not disturb, and muting alerts while a focus session runs. Focus: Short, Standard, Long or Custom timer lengths, with a slider for each length under Custom, splitting long homework into focus sessions, and marking homework finished when its session ends. Planning: Study hours and School hours, which you can change any time. Look: an accent colour on top of the preset ("Same as preset" by default) and a font choice (Sans, Serif or Mono).
