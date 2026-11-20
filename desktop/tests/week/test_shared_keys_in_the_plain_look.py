@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import page_showing
+from desktop.tests.material_support import focus_quick, page_showing, quick_of
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import look_file, qapp, turn_on_letter_keys  # noqa: F401
 
@@ -38,8 +38,8 @@ LETTERS = (
 def _press(
     window: NativeWindow, key: Qt.Key, modifiers: Qt.KeyboardModifier = Qt.KeyboardModifier.NoModifier
 ):
-    window.setFocus()
-    QTest.keyClick(window, key, modifiers)
+    focus_quick(window)
+    QTest.keyClick(quick_of(window), key, modifiers)
 
 
 def _page(window: NativeWindow) -> str:

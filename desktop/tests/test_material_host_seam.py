@@ -25,10 +25,6 @@ HOST_USES = (
 )
 # Uses that only make sense for the widget host, kept until the step named here replaces them.
 KNOWN = {
-    ROOT / "desktop" / "tests" / "account" / "test_material_first_run_setup.py": {
-        "quickWindow()",
-        "focusWidget() is quick",
-    },
     ROOT / "scripts" / "pictures" / "render.py": {"quickWindow()"},
 }
 

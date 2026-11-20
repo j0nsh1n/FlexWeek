@@ -17,7 +17,7 @@ from PySide6.QtTest import QTest
 
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import named, pump, qml, quick_of, visuals
+from desktop.tests.material_support import named, pump, qml, quick_of, type_text, visuals
 from desktop.tests.sheets.support_material_sheets import (
     add_homework,
     block_named,
@@ -183,7 +183,7 @@ def test_editing_the_title_from_a_block_saves_and_undo_reverts_it(qapp, window: 
     pump(qapp)
     title_input.selectAll()
     pump(qapp)
-    QTest.keyClicks(quick_of(window), "History essay, edited")
+    type_text(window, "History essay, edited")
     pump(qapp)
     assert sheets.form["title"] == "History essay, edited"
     next_btn = named(root, "homeworkNext")[0]

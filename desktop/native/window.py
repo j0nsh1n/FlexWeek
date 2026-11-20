@@ -12,8 +12,12 @@ from pathlib import Path
 
 from flexweek_engine import SyncService  # type: ignore[import-untyped]
 from PySide6.QtCore import (
+    QEvent,
     QEventLoop,
     QObject,
+    QPoint,
+    QRect,
+    QSize,
     QStandardPaths,
     Qt,
     QTimer,
@@ -21,11 +25,10 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QCloseEvent,
-    QContextMenuEvent,
     QDesktopServices,
     QIcon,
     QKeyEvent,
-    QResizeEvent,
+    QPixmap,
 )
 from PySide6.QtNetwork import QLocalServer
 from PySide6.QtWidgets import (
@@ -33,10 +36,8 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
-    QMainWindow,
     QMenu,
     QPushButton,
-    QStackedWidget,
     QSystemTrayIcon,
     QVBoxLayout,
     QWidget,
@@ -67,10 +68,7 @@ from desktop.native.layout_choice import sanitize_layout, sanitize_surface
 from desktop.native.look import effective_look, look_motion, sanitize_look
 from desktop.native.material.sheet_preview import PreviewDraft
 from desktop.native.material.theme import kept_material
-from desktop.native.motion import (
-    apply_ui_effects,
-    switch_page,
-)
+from desktop.native.motion import apply_ui_effects
 from desktop.native.motion_level import motion_level
 from desktop.native.outside import OutsideWatch, differs
 from desktop.native.remind import REMINDER_POLL_MS, clock_parts
@@ -131,12 +129,16 @@ NOTICE_LINES = 3
 
 
 
-class NativeWindow(QMainWindow):
+class NativeWindow(QObject):
+    """The controller. Material's own Qt Quick window (`_material_page`) is what the student sees; this
+    object owns it, answers for it (show, hide, close, size) and keeps what the app does around it.
+    The draw-error page is a separate small window until it gets its own page."""
+
     def __init__(
         self,
         origin: str,
         icon: QIcon | None = None,
-        parent: QWidget | None = None,
+        parent: QObject | None = None,
         kept: KeptSession | None = None,
         sync: SyncHost | None = None,
     ) -> None:
@@ -145,6 +147,19 @@ class NativeWindow(QMainWindow):
         if isinstance(application, QApplication):
             steady_wheel(application)
             use_app_style(application)
+            # Hiding Material's window to the tray must not end the app: this controller decides when it
+            # quits (quit_app, a real close), never Qt's "last window closed".
+            application.setQuitOnLastWindowClosed(False)
+        # Where the window is, until the Material window exists to hold it.
+        self._title = "FlexWeek"
+        self._size = QSize(*WINDOW_SIZE)
+        self._min_width = WINDOW_MIN_WIDTH
+        # show() has been asked for and hide() has not; the faces below follow it.
+        self._shown = False
+        # The plain draw-error window, made when Material cannot be drawn at all.
+        self._draw_error_window: QWidget | None = None
+        self._on_error_face = False
+        self._shut_down = False
         # main() has loaded them already; a window made anywhere else, as in the tests, is drawn alike.
         load_fonts()
         self.session = NativeSession(origin, self, kept)
@@ -153,7 +168,6 @@ class NativeWindow(QMainWindow):
         self.session.follow_first_weekday(week_start_day())
         week_start_notice().changed.connect(self._on_week_start)
         self._instance_server: QLocalServer | None = None
-        self.setWindowTitle("FlexWeek")
         # This computer's sync host, and the running service once it has started (None until then). The
         # generation is the one the week was last loaded at; a change in it means a linked phone's edits
         # arrived. The phone list is read off this thread, so it lags the service by up to a second.
@@ -174,16 +188,10 @@ class NativeWindow(QMainWindow):
         self._outside_timer.timeout.connect(self._outside_tick)
         if sync is not None:
             self.watch_database(sync.database)
-        if icon is not None:
-            self.setWindowIcon(icon)
-        self.resize(*WINDOW_SIZE)
-        self._stack = QStackedWidget(self)
         # The Animations level, set from the look in _apply_appearance.
         self._motion = "normal"
         # What the window was last dressed in, so a change that leaves the look alone skips restyling.
         self._dressed: tuple = ()
-        self._stack.setObjectName("nativeStack")
-        self.setCentralWidget(self._stack)
         self._layout = sanitize_layout(None)
         self._rail_month = True
         # Material 3 is the only style. The QML page is built the first time it is shown.
@@ -249,7 +257,6 @@ class NativeWindow(QMainWindow):
         self.session.recovery_codes.connect(self._show_recovery)
         self.session.week_changed.connect(self._on_week)
         self.session.status.connect(self._on_status)
-        self._relaying = False
         self.session.busy_changed.connect(self._on_busy)
         self.session.save_finished.connect(self._on_save_finished)
         self.session.hand_placed.connect(self._say_when_saved)
@@ -258,6 +265,7 @@ class NativeWindow(QMainWindow):
         self.session.planned.connect(self._on_planned)
         self._quitting = False
         self._tray_icon: QSystemTrayIcon | None = None
+        self._tray_menu: QMenu | None = None
         self._tray_hinted = False
         self._icon = icon or QIcon()
         self._alarm_dialog: AlarmRingDialog | None = None
@@ -302,9 +310,178 @@ class NativeWindow(QMainWindow):
         if QSystemTrayIcon.isSystemTrayAvailable() and not self._icon.isNull():
             self._install_tray()
         self._show_page("authPage")
-        self.setMinimumWidth(WINDOW_MIN_WIDTH)
         # After the window exists, so a kept session opens the week the ordinary way.
         QTimer.singleShot(0, self.session.resume)
+
+    # The window the student sees. Material's own Qt Quick window is the face, except while the draw-error
+    # page stands in for it; these pass what the app and the tests ask of a window to whichever is current.
+
+    def _face(self):
+        """Material's window, or the draw-error window while that one stands in for it; None before either."""
+        if self._on_error_face and self._draw_error_window is not None:
+            return self._draw_error_window
+        return self._material_page
+
+    def _faces(self) -> list:
+        return [face for face in (self._material_page, self._draw_error_window) if face is not None]
+
+    def _material_current(self):
+        """Material's window while it is the face, else None. The one question every caller asks."""
+        return None if self._on_error_face else self._material_page
+
+    def _sync_faces(self) -> None:
+        """Show the current face when the window is open, and nothing else."""
+        current = self._face()
+        for face in self._faces():
+            want = self._shown and face is current
+            if face.isVisible() != want:
+                face.setVisible(want)
+
+    def show(self) -> None:
+        self._shown = True
+        self._sync_faces()
+
+    def hide(self) -> None:
+        self._shown = False
+        self._sync_faces()
+
+    def showNormal(self) -> None:  # noqa: N802 - the name the widget window had
+        self._shown = True
+        self._sync_faces()
+        face = self._face()
+        if face is not None:
+            face.showNormal()
+
+    def showMinimized(self) -> None:  # noqa: N802
+        self._shown = True
+        face = self._face()
+        if face is not None:
+            face.showMinimized()
+
+    def raise_(self) -> None:
+        face = self._face()
+        if face is not None:
+            face.raise_()
+
+    def activateWindow(self) -> None:  # noqa: N802
+        face = self._face()
+        if isinstance(face, QWidget):
+            face.activateWindow()
+        elif face is not None:
+            face.requestActivate()
+
+    def isVisible(self) -> bool:  # noqa: N802
+        return any(face.isVisible() for face in self._faces())
+
+    def isActiveWindow(self) -> bool:  # noqa: N802
+        face = self._face()
+        if isinstance(face, QWidget):
+            return face.isActiveWindow()
+        return face is not None and face.isActive()
+
+    def isMinimized(self) -> bool:  # noqa: N802
+        face = self._face()
+        if isinstance(face, QWidget):
+            return face.isMinimized()
+        return face is not None and bool(face.windowStates() & Qt.WindowState.WindowMinimized)
+
+    def resize(self, width: int, height: int) -> None:
+        # A widget window never went below its smallest size; a Qt Quick window only hints it to the window
+        # manager, and not every platform keeps to the hint.
+        self._size = QSize(max(width, self._min_width), max(height, self.minimumHeight()))
+        for face in self._faces():
+            face.resize(self._size)
+
+    def size(self) -> QSize:
+        face = self._face()
+        return self._size if face is None else face.size()
+
+    def width(self) -> int:
+        return self.size().width()
+
+    def height(self) -> int:
+        return self.size().height()
+
+    def geometry(self) -> QRect:
+        face = self._face()
+        return QRect(0, 0, self._size.width(), self._size.height()) if face is None else face.geometry()
+
+    def move(self, x: int, y: int) -> None:
+        for face in self._faces():
+            if isinstance(face, QWidget):
+                face.move(x, y)
+            else:
+                face.setPosition(x, y)
+
+    def setMinimumWidth(self, width: int) -> None:  # noqa: N802
+        self._min_width = width
+        if self._material_page is not None:
+            self._material_page.setMinimumWidth(width)
+
+    def minimumWidth(self) -> int:  # noqa: N802
+        return self._min_width
+
+    def minimumHeight(self) -> int:  # noqa: N802
+        page = self._material_page
+        return 0 if page is None else page.minimumHeight()
+
+    def setMinimumHeight(self, height: int) -> None:  # noqa: N802
+        if self._material_page is not None:
+            self._material_page.setMinimumHeight(height)
+
+    def mapToGlobal(self, point: QPoint) -> QPoint:  # noqa: N802
+        face = self._face()
+        return point if face is None else face.mapToGlobal(point)
+
+    def mapFromGlobal(self, point: QPoint) -> QPoint:  # noqa: N802
+        face = self._face()
+        return point if face is None else face.mapFromGlobal(point)
+
+    def setMinimumSize(self, width: int, height: int) -> None:  # noqa: N802
+        self._min_width = width
+        if self._material_page is not None:
+            self._material_page.setMinimumSize(QSize(width, height))
+
+    def windowHandle(self):  # noqa: N802
+        """Material's window: what a key or a mouse event is sent to."""
+        return self._material_page
+
+    def windowTitle(self) -> str:  # noqa: N802
+        return self._title
+
+    def windowIcon(self) -> QIcon:  # noqa: N802
+        return self._icon
+
+    def grab(self) -> QPixmap:
+        face = self._face()
+        if isinstance(face, QWidget):
+            return face.grab()
+        return QPixmap() if face is None else QPixmap.fromImage(face.grabWindow())
+
+    def close(self) -> bool:
+        """What the window's close button does, from the code: hide to the tray, or save and quit."""
+        event = QCloseEvent()
+        self._on_close(event)
+        if event.isAccepted():
+            for face in self._faces():
+                face.hide()
+        return event.isAccepted()
+
+    def _dress_view(self, page) -> None:
+        """Title, icon, smallest width and the starting size, which Material's window holds."""
+        page.setTitle(self._title)
+        page.setIcon(self._icon)
+        page.setMinimumWidth(self._min_width)
+        page.resize(self._size)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt virtual
+        kind = event.type()
+        if kind == QEvent.Type.Close and watched in self._faces() and isinstance(event, QCloseEvent):
+            self._on_close(event)
+            return not event.isAccepted()
+        if kind == QEvent.Type.KeyPress and watched is self._material_page and isinstance(event, QKeyEvent):
+            return self._on_key(event)
+        return False
 
     def _autosave_tick(self) -> None:
         """Save the week without being asked.
@@ -358,11 +535,9 @@ class NativeWindow(QMainWindow):
         # Sign-in, recovery and setup are Material's screens.
         if self._material_account_page(name):
             return
-        for index in range(self._stack.count()):
-            page = self._stack.widget(index)
-            if page.objectName() == name:
-                switch_page(self._stack, page, self._motion)
-                return
+        if name == "materialPage" and self._material_page is not None:
+            self._on_error_face = False
+            self._sync_faces()
 
     def _account_bridge(self):
         """The Material sign-in and setup bridge, or None before Material has been built."""
@@ -397,7 +572,7 @@ class NativeWindow(QMainWindow):
                 loaded = page.load()
                 if loaded:
                     page.publish()
-                    page._quick.setFocus(Qt.FocusReason.OtherFocusReason)
+                    page.requestActivate()
             except Exception as error:
                 logging.getLogger("flexweek.material").warning("Material 3 could not load: %s", error)
                 loaded = False
@@ -442,24 +617,25 @@ class NativeWindow(QMainWindow):
             self._give_up_material(show_week=not quiet)
             return None
         page.failed.connect(self._on_material_failed)
+        page.installEventFilter(self)
+        self._dress_view(page)
         self._material_page = page
         # Material's focus rules (hold reminders, finish the block) ask whether Material is in use.
         self.session.material_owns = self._material_owns
-        self._stack.addWidget(page)
         return page
 
     def _drop_partial_material(self) -> None:
-        """A failed build must not leave a half-made page in the stack or as a child."""
+        """A failed build must not leave a half-made window or its bridges behind."""
         self._stop_material_ring()
         page = self._material_page
         self._material_page = None
         doomed: list[QObject] = []
         if page is not None:
+            page.hide()
             doomed.append(page)
-        doomed.extend(self.findChildren(QWidget, "materialPage"))
         doomed.extend(self.findChildren(QObject, "materialBridge"))
         seen: set[int] = set()
-        # The bridges are the window's own children, not the page's: cut their session signals
+        # The bridges are the controller's own children, not the window's: cut their session signals
         # before the deleteLater below, so a week change on this turn finds no listener.
         for bridge in self.findChildren(QObject, "materialBridge"):
             dispose = getattr(bridge, "dispose", None)
@@ -469,8 +645,6 @@ class NativeWindow(QMainWindow):
             if id(item) in seen:
                 continue
             seen.add(id(item))
-            if isinstance(item, QWidget) and self._stack.indexOf(item) >= 0:
-                self._stack.removeWidget(item)
             item.setParent(None)
             item.deleteLater()
 
@@ -516,10 +690,16 @@ class NativeWindow(QMainWindow):
 
     def _show_draw_error(self) -> None:
         """A plain page for a window that cannot be drawn at all: what happened, the version, two buttons."""
-        page = self.findChild(QWidget, "drawErrorPage")
+        page = self._draw_error_window
         if page is None:
+            # Its own top-level window: Material's window cannot hold a widget page.
             page = QWidget()
             page.setObjectName("drawErrorPage")
+            page.setWindowTitle(self._title)
+            page.setWindowIcon(self._icon)
+            page.resize(self._size)
+            page.installEventFilter(self)
+            self._draw_error_window = page
             box = QVBoxLayout(page)
             box.setAlignment(Qt.AlignmentFlag.AlignCenter)
             line = QLabel(cpu_drawing.DRAW_ERROR)
@@ -556,9 +736,8 @@ class NativeWindow(QMainWindow):
             box.addLayout(row)
             box.addWidget(update_line)
             box.addLayout(update_row)
-            self._stack.addWidget(page)
-        if self._stack.currentWidget() is not page:
-            self._stack.setCurrentWidget(page)
+        self._on_error_face = True
+        self._sync_faces()
         self._offer_update_on_draw_error()
 
     def _try_graphics_again(self) -> None:
@@ -606,10 +785,8 @@ class NativeWindow(QMainWindow):
 
     def _tick_material_clock(self) -> None:
         """Move Material's clock and now line. A tick must not redraw the Widgets week or take a prompt."""
-        page = self._material_page
+        page = self._material_current()
         if page is None or not page._ready or not self._material_owns():
-            return
-        if self._stack.currentWidget() is not page:
             return
         page.bridge.refresh()
 
@@ -707,9 +884,6 @@ class NativeWindow(QMainWindow):
     def _finish_recovery(self) -> None:
         self._allow_week_page = True
         self.session.finish_recovery()
-
-    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
-        super().resizeEvent(event)
 
     def _maybe_open_setup(self) -> None:
         """Setup opens once a sign-in, for an account that has neither finished nor skipped it.
@@ -870,7 +1044,7 @@ class NativeWindow(QMainWindow):
         """The file dialog, opened on Documents (#50); a test answers it with a path."""
         documents = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)
         start = str(Path(documents or Path.home()) / RECOVERY_FILE)
-        path, _ = QFileDialog.getSaveFileName(self, "Save recovery codes", start, "Text (*.txt)")
+        path, _ = QFileDialog.getSaveFileName(None, "Save recovery codes", start, "Text (*.txt)")
         return path
 
     def _on_week_start(self, _value: str) -> None:
@@ -922,8 +1096,8 @@ class NativeWindow(QMainWindow):
 
     def _snack_bridge(self):
         """Material's bridge while Material is what the student sees; its snackbar takes the notices."""
-        page = self._material_page
-        if page is None or not self._material_owns() or self._stack.currentWidget() is not page:
+        page = self._material_current()
+        if page is None or not self._material_owns():
             return None
         return page.bridge
 
@@ -949,12 +1123,19 @@ class NativeWindow(QMainWindow):
         button = getattr(self, "_undo_button", "")
         if shown is None or not button or time.monotonic() - shown > 1:
             return False
-        focus = QApplication.focusWidget()
-        if focus is None or focus.objectName() != button:
+        if self._focus_name() != button:
             return False
         if message == self._reminder_said:
             return False
         return not any(part in message for part in ("Try again", "Wait a moment", "could not", "Couldn't"))
+
+    def _focus_name(self) -> str:
+        """The name of what holds the keyboard: Material's window, or the widget with focus, else empty."""
+        page = self._material_page
+        if page is not None and QApplication.focusWindow() is page:
+            return str(page.objectName())
+        focus = QApplication.focusWidget()
+        return str(focus.objectName()) if focus is not None else ""
 
     def _reminder_handled(self) -> None:
         """Got it on a reminder left on screen: the snackbar saying the same goes too."""
@@ -1164,8 +1345,7 @@ class NativeWindow(QMainWindow):
                 self._material_page.bridge.note(text, action=button, on_action=callback if button else None)
         if button == "Undo":
             self._undo_at = time.monotonic()
-            focus = QApplication.focusWidget()
-            self._undo_button = focus.objectName() if focus is not None else ""
+            self._undo_button = self._focus_name()
 
     def _undo_from_notice(self) -> None:
         self._notice_step = None
@@ -1516,7 +1696,7 @@ class NativeWindow(QMainWindow):
     def _open_focus_screen(self) -> None:
         if self.session.account is None or not self._material_owns():
             return
-        if self._stack.currentWidget() is not self._material_page and not self._show_surface():
+        if self._material_current() is None and not self._show_surface():
             return
         material = self._material_focus()
         if material is not None:
@@ -1577,7 +1757,7 @@ class NativeWindow(QMainWindow):
         url = self.session.spotify_url(alarm.get("spotify_url"))
         if self._ring_on_material(alarm, url):
             return
-        dialog = AlarmRingDialog(self, alarm, url)
+        dialog = AlarmRingDialog(None, alarm, url)
         self._alarm_dialog = dialog
         self._ring(alarm, url)
         try:
@@ -1593,8 +1773,8 @@ class NativeWindow(QMainWindow):
 
     def _ring_on_material(self, alarm: dict, url: str) -> bool:
         """Ring on Material's screen when Material is what the window shows. False leaves it to the dialog."""
-        page = self._material_page
-        if page is None or not self._material_owns() or self._stack.currentWidget() is not page:
+        page = self._material_current()
+        if page is None or not self._material_owns():
             return False
         self._alarm_on_material = True
         self._ring(alarm, url)
@@ -1690,8 +1870,8 @@ class NativeWindow(QMainWindow):
 
     def _draw_error_update_row(self) -> tuple[QLabel, QPushButton] | None:
         """The draw-error page's update line and Update now button while that page is up and offers one."""
-        page = self.findChild(QWidget, "drawErrorPage")
-        if page is None or self._draw_error_update is None or self._stack.currentWidget() is not page:
+        page = self._draw_error_window
+        if page is None or self._draw_error_update is None or not self._on_error_face:
             return None
         return page.findChild(QLabel, "drawErrorUpdateLine"), page.findChild(QPushButton, "drawErrorInstall")
 
@@ -1860,8 +2040,8 @@ class NativeWindow(QMainWindow):
 
     def _material_shown(self):
         """The Material page while it is the page on screen and built, else None."""
-        page = self._material_page
-        if page is None or page.root is None or self._stack.currentWidget() is not page:
+        page = self._material_current()
+        if page is None or page.root is None:
             return None
         return page
 
@@ -1890,7 +2070,7 @@ class NativeWindow(QMainWindow):
         """Writes the file the student picks and returns its path, or "" when nothing was written."""
         import json
 
-        path, _ = QFileDialog.getSaveFileName(self, "Save FlexWeek file", name, "JSON (*.json)")
+        path, _ = QFileDialog.getSaveFileName(None, "Save FlexWeek file", name, "JSON (*.json)")
         if not path:
             return ""
         try:
@@ -1975,7 +2155,9 @@ class NativeWindow(QMainWindow):
 
     def _install_tray(self) -> None:
         tray = QSystemTrayIcon(self._icon, self)
-        menu = QMenu(self)
+        # A widget menu cannot have this controller as its parent, so the controller holds it.
+        menu = QMenu()
+        self._tray_menu = menu
         show = menu.addAction("Show FlexWeek")
         show.triggered.connect(self.restore_window)
         quit_action = menu.addAction("Quit")
@@ -2068,27 +2250,9 @@ class NativeWindow(QMainWindow):
         timer.start()
         return False
 
-    def contextMenuEvent(self, event: QContextMenuEvent) -> None:  # noqa: N802
-        """Qt gives a right-click's context menu to the widget under the pointer only when the pointer
-        did not move between the press and the release. A hand or a touchpad nearly always moves a few
-        pixels, and the menu then came to the window instead, so a block's or free time's menu opened about
-        one time in ten. It goes on to the widget the pointer is over."""
-        target = QApplication.widgetAt(event.globalPos())
-        by_mouse = event.reason() == QContextMenuEvent.Reason.Mouse
-        if not by_mouse or target is None or target is self or self._relaying:
-            super().contextMenuEvent(event)
-            return
-        self._relaying = True
-        try:
-            relayed = QContextMenuEvent(
-                QContextMenuEvent.Reason.Mouse, target.mapFromGlobal(event.globalPos()), event.globalPos()
-            )
-            QApplication.sendEvent(target, relayed)
-        finally:
-            self._relaying = False
-        event.setAccepted(relayed.isAccepted())
-
-    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+    def _on_close(self, event: QCloseEvent) -> None:
+        """The close button, from the window's own event or from `close()`: with the tray up and the
+        setting on the window only hides; otherwise what is unsaved is saved first, and then the app quits."""
         tray = self._tray_icon
         prefs = self.session.preferences or {}
         stay = prefs.get("tray_notifications", True) is not False
@@ -2107,25 +2271,31 @@ class NativeWindow(QMainWindow):
         if not self._saved_to_leave and not self._save_before_leaving(self.close):
             event.ignore()
             return
+        self._shutdown()
+        event.accept()
+
+    def _shutdown(self) -> None:
+        """Leave for good, once however many closes arrive: the ring stops, the bridges let go, then quit."""
+        if self._shut_down:
+            return
+        self._shut_down = True
         self._stop_material_ring()
         for bridge in self.findChildren(QObject, "materialBridge"):
             dispose = getattr(bridge, "dispose", None)
             if callable(dispose):
                 dispose()
-        super().closeEvent(event)
+        self._quit_now()
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:
+    def _on_key(self, event: QKeyEvent) -> bool:
+        """Ctrl+S (Cmd+S) saves; True when this took the key. The QML shell has its own Undo, Redo, More."""
         if self.session.account is None or QApplication.activeModalWidget() is not None:
-            super().keyPressEvent(event)
-            return
-        current = self._stack.currentWidget()
-        if current is not None and current.objectName() == "materialPage":
-            mods = event.modifiers()
-            if event.key() == Qt.Key.Key_S and mods & (
-                Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier
-            ):
-                self._told(self.session.save)
-                event.accept()
-                return
-        # The QML shell has its own Undo, Redo and More.
-        super().keyPressEvent(event)
+            return False
+        if self._material_current() is None:
+            return False
+        if event.key() == Qt.Key.Key_S and event.modifiers() & (
+            Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier
+        ):
+            self._told(self.session.save)
+            event.accept()
+            return True
+        return False

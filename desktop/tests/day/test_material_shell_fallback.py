@@ -17,7 +17,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QObject  # noqa: E402
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QWidget  # noqa: E402
+from PySide6.QtWidgets import QApplication, QLabel, QPushButton  # noqa: E402
 
 from desktop.native import cpu_drawing
 from desktop.native import window as window_module  # noqa: E402
@@ -34,21 +34,12 @@ from desktop.tests.window_support import look_file  # noqa: E402
 
 def _drop_material(window: NativeWindow, qapp: QApplication) -> None:
     """Remove the Material page, including one whose constructor died before it was stored."""
-    doomed: list[QWidget] = []
     page = window._material_page
     window._material_page = None
     if page is not None:
-        doomed.append(page)
-    doomed.extend(window.findChildren(QWidget, "materialPage"))
-    seen: set[int] = set()
-    for item in doomed:
-        if id(item) in seen:
-            continue
-        seen.add(id(item))
-        if window._stack.indexOf(item) >= 0:
-            window._stack.removeWidget(item)
-        item.setParent(None)
-        item.deleteLater()
+        page.hide()
+        page.setParent(None)
+        page.deleteLater()
     for bridge in window.findChildren(QObject, "materialBridge"):
         dispose = getattr(bridge, "dispose", None)
         if callable(dispose):
@@ -157,7 +148,7 @@ def test_a_missing_or_broken_token_file_asks_for_a_cpu_copy_and_leaves_no_materi
         window._on_week()
         pump(qapp)
         assert launches == [True]
-        assert window.findChild(QWidget, "materialPage") is None
+        assert window._material_page is None
         # The week page was already the window's page before Material was tried. It is the stand-in
         # until the CPU copy starts, not a switch to the Widgets week, which the on-CPU test covers.
     finally:

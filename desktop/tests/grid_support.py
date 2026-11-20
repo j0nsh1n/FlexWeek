@@ -66,7 +66,7 @@ def _week_with_an_early_block(qapp: QApplication, signed_in: NativeWindow) -> It
     signed_in.session.set_view("week")
     settled(qapp, signed_in)
     signed_in.show()
-    assert QTest.qWaitForWindowExposed(signed_in)
+    assert QTest.qWaitForWindowExposed(signed_in.windowHandle())
     signed_in.activateWindow()
     wait_until(qapp, signed_in.isActiveWindow)
     hold_clock(signed_in, WEDNESDAY, 14 * 60 + 7)

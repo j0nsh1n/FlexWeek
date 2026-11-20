@@ -56,9 +56,13 @@ def still(*roots: QWidget) -> None:
             settle(widget)
 
 
-def free(widget: QWidget) -> None:
+def free(widget: QWidget | NativeWindow) -> None:
     """Delete a widget now. Left to the garbage collector, a widget a failed test still held went in
-    the middle of a later test's event loop, and Qt crashed."""
+    the middle of a later test's event loop, and Qt crashed. The app window is a controller that owns its
+    own windows (Material's Qt Quick window, the draw-error page), so they are deleted with it."""
+    for face in widget._faces() if isinstance(widget, NativeWindow) else ():
+        face.hide()
+        face.deleteLater()
     widget.deleteLater()
     QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     QApplication.processEvents()
