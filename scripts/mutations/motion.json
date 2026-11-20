@@ -7,25 +7,11 @@
     "test": "desktop/tests/settings/test_animation_levels.py::test_normal_runs_the_plans_numbers_and_the_other_levels_scale_them"
   },
   {
-    "name": "a page waits for the old one to go again, through blank frames",
+    "name": "the level never reaches Qt's menu and tooltip fades",
     "file": "desktop/native/motion.py",
-    "old": "        appear(widget, level, shift=direction * SLIDE_PX, delay_ms=PAGE_IN_AFTER_MS, ms=PAGE_IN_MS)",
-    "new": "        appear(widget, level, shift=direction * SLIDE_PX, delay_ms=PAGE_OUT_MS, ms=PAGE_IN_MS)",
-    "test": "desktop/tests/settings/test_page_change_motion.py::test_a_switch_never_shows_an_empty_page"
-  },
-  {
-    "name": "a page cross-fades over the old one from the first frame",
-    "file": "desktop/native/motion.py",
-    "old": "        appear(widget, level, shift=direction * SLIDE_PX, delay_ms=PAGE_IN_AFTER_MS, ms=PAGE_IN_MS)",
-    "new": "        appear(widget, level, shift=direction * SLIDE_PX, delay_ms=0, ms=PAGE_IN_MS)",
-    "test": "desktop/tests/settings/test_page_change_motion.py::test_a_switch_never_shows_an_empty_page"
-  },
-  {
-    "name": "the old page fades fast first and leaves the window near empty",
-    "file": "desktop/native/motion.py",
-    "old": "    fade_away(picture, level, ms=PAGE_OUT_MS, drift=-direction * SLIDE_PX, steady=True)",
-    "new": "    fade_away(picture, level, ms=PAGE_OUT_MS, drift=-direction * SLIDE_PX)",
-    "test": "desktop/tests/settings/test_page_change_motion.py::test_a_switch_never_shows_an_empty_page"
+    "old": "        QApplication.setEffectEnabled(effect, on)",
+    "new": "        QApplication.setEffectEnabled(effect, True)",
+    "test": "desktop/tests/settings/test_animation_levels.py::test_the_level_sets_the_menu_and_tooltip_effects_and_the_apps_own_level"
   },
   {
     "name": "the server turns Reduce away",

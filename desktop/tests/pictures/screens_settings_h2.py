@@ -6,12 +6,10 @@ from __future__ import annotations
 
 from desktop.native.window import NativeWindow
 from desktop.tests.pictures.screen import Screen
-from desktop.tests.window_support import still
 
 
 def material_tokens(window: NativeWindow) -> object:
     window.show()
-    still(window)
     return None
 
 

@@ -28,7 +28,7 @@ from desktop.native.window import NativeWindow
 from desktop.tests.logic_support import past_recovery, past_setup, sign_up
 from desktop.tests.material_support import page_showing
 from desktop.tests.waiting import wait_until
-from desktop.tests.window_support import PASSWORD, USERNAME, free, look_file, still
+from desktop.tests.window_support import PASSWORD, USERNAME, free, look_file
 
 # Never listened on: the backend checks requests' Origin and Host against it.
 ORIGIN = "http://127.0.0.1:8941"
@@ -227,7 +227,6 @@ def open_light_window(
     # before the preferences that say it was finished), and no session was kept on this computer.
     session.new_account = True
     session.kept = None
-    still(window)
     return window, api
 
 

@@ -8,7 +8,6 @@ from PySide6.QtWidgets import QApplication, QDialog
 
 from desktop.native.window import NativeWindow
 from desktop.tests.material_support import pump, show_material
-from desktop.tests.window_support import still
 
 
 def bridge(window: NativeWindow):
@@ -32,6 +31,4 @@ def shown(qapp: QApplication, dialog: QDialog) -> QDialog:
     dialog.show()
     for _ in range(4):
         qapp.processEvents()
-    parent = dialog.parentWidget()
-    still(dialog, *([parent.window()] if parent is not None else []))
     return dialog

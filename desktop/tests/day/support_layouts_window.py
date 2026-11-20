@@ -21,17 +21,15 @@ from PySide6.QtWidgets import (  # noqa: E402
     QAbstractButton,
     QApplication,
     QDialog,
-    QLabel,
     QPushButton,
     QWidget,
 )
 
 from desktop.native.calendar import sunday_due  # noqa: E402
-from desktop.native.motion import FADE_NAME  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import LightWindows  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
-from desktop.tests.window_support import PASSWORD, look_file, settled, still  # noqa: E402, F401
+from desktop.tests.window_support import PASSWORD, look_file, settled  # noqa: E402
 
 SPOTIFY_TRACK = "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"
 
@@ -99,19 +97,6 @@ def window(
 
 def click(window: NativeWindow, name: str) -> None:
     window.findChild(QAbstractButton, name).click()
-
-
-
-
-
-
-def fades(host: QWidget) -> list[QLabel]:
-    """The pictures of old pages still fading out. A finished fade deletes its picture later; the wait helper
-    does not run deferred deletes as QTest.qWait did, so they are run here."""
-    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-    return [label for label in host.findChildren(QLabel, FADE_NAME) if label.isVisible()]
-
-
 
 
 
@@ -270,7 +255,6 @@ __all__ = [
     "RingRecorder",
     "add_school_week",
     "click",
-    "fades",
     "go_length",
     "go_when",
     "look_file",
@@ -281,7 +265,6 @@ __all__ = [
     "qapp",
     "school_week",
     "settled",
-    "still",
     "thursday_at",
     "wait_until",
     "window",

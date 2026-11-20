@@ -63,11 +63,3 @@ def distance(px: int, level: str | None = None) -> int:
 def moves(level: str | None = None) -> bool:
     """Whether things travel at `level`, or at the app's, rather than only fading or not moving."""
     return LEVELS[level or _app_level].reach > 0
-
-
-def frame_interval_ms(rate: float) -> int:
-    """How many milliseconds between frames at `rate` Hz. An unknown rate, or one too low to be a
-    screen, is 60. The interval is never 0, which would run the next frame inside the same turn."""
-    if rate <= 1:
-        return round(1000 / 60)
-    return max(1, round(1000 / rate))

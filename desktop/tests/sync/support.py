@@ -16,7 +16,7 @@ from desktop.native.devices import SyncHost
 from desktop.native.window import NativeWindow
 from desktop.tests import light_app
 from desktop.tests.waiting import wait_until
-from desktop.tests.window_support import qapp, still  # noqa: F401
+from desktop.tests.window_support import qapp  # noqa: F401
 
 # The light app's fixture, passed on so a module that loads this one has it.
 open_light = light_app.open_light
