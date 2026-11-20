@@ -1,15 +1,141 @@
 # Material 3
 
-Material 3 is a whole-window surface beside the Qt Widgets styles. The student chooses it the same way as a style, from Settings, and can swap back without restarting. Today's app stays the default. The saved choice is the top-level `surface` key in the look file: `widgets` or `material`. A file with no `surface`, or a value this build does not know, opens on the Widgets styles. `layout` is unchanged.
+Material 3 is the desktop app's only student interface. It is Qt Quick/QML hosted
+from Python; there is no style switch, design picker, look editor or Ctrl+K
+command bar. Sign-in, recovery codes, setup, the planner screens, Settings,
+Focus, alarms and the app's sheets all use Material.
 
-The shell is `desktop/native/material/qml/Main.qml`. It is the rail (or the bottom bar under 768px wide), the top bar, a snackbar host, and one file per screen in `qml/views/`: Week, Day, Month, My day, and Settings. The week is the screen that opens. Its homework list is a drawer on the right, 320px wide; on a phone that drawer sits under the grid instead of beside it. Day, Month, My day, and Settings are in place so each later lane owns one file. Settings in this slice is the way back to the Widgets styles. Focus is a full-window overlay (`qml/focus/FocusScreen.qml`) on the same session timer the Widgets strip uses. F opens it ready; Day's Start focus starts that block.
+## Shell and screens
 
-The shell reads the week only through `MaterialBridge`, and the bridge only through `NativeSession`. Week rows live on `WeekBridge`. Day, Month, My day, and Settings each have their own bridge module. While Material is the surface on screen, a refresh does not put the Widgets week back, and the Widgets prompts for unfinished work and the plan review are not consumed.
+`desktop/native/material/host.py` defines `MaterialPage`, a `QQuickView` that
+loads `desktop/native/material/qml/Main.qml`. The QObject controller
+`NativeWindow` in `desktop/native/window.py` owns the view. `QQuickView` paces
+frames to the screen; two five-second checks on a 360 Hz screen measured 360.0
+and 349.1 frames a second. The shell has a navigation rail, or a bottom bar
+under 768 px, a top bar and a snackbar. `qml/views/` contains Week, Day, Month,
+My day and Settings. Week's homework list is a drawer on the right, or below
+the grid at phone width. Focus is a full-window overlay in
+`qml/focus/FocusScreen.qml`.
 
-QML receives one `theme` object: every Material role, the `inkSurface` aliases (a QML name starting with `on` is a signal handler), and `density`, `reduceMotion`, and `highContrast`. The default is Slate (the B3a3 colours), follow the worn light or dark, standard contrast, and comfortable density. Every preset uses the same neutral page, card, edge and text colours; only its accent differs. A saved `material` object in the look file can set those four. An unknown value falls back to the default. Inter is registered at load from `desktop/assets/fonts`. Keys 1–5 switch screens when focus is not in a text field, on their own switch (`material.shortcuts`, on by default). The letters are on a second switch (`material.letters`, off by default): T (today in Week, Day or Month; from My day or Settings it opens Day), D, W and M (Day, Week, Month), J and K (the next and previous week, day or month), C (Add homework), P (plan), Z (undo) and F (Focus). A letter is the bare key; with Shift, Ctrl, Alt or Meta it is not one. The plain look reads and writes the same two saved settings, so a switch turned over in one look is turned over in the other. Ctrl+Z undoes, Ctrl+Shift+Z or Ctrl+Y redoes, the Ctrl zoom keys zoom, and Ctrl+Shift+F opens Quick focus, whatever either switch says. Quick focus names the homework that is on now or next today (the engine's `quick_focus_homework`), with a Just a timer choice beside Start. Esc focuses the destination for the screen that is open. Place now on a homework card (its menu, or Enter on the card) calls `WeekBridge.planOne`, which asks the session to solve that one block with `earliest_first`: the solver's `prefer_earliest` for that block only, so it takes the first gap from now that fits its whole length inside Study hours; the snackbar line comes from `session.placed_where`.
+Week opens when `preferred_view` is omitted. Settings > Planning > Open on can
+instead choose Day, Month or My day; the choice applies once per sign-in. The
+Add button offers Add homework and Add fixed time. More contains the planning
+and account actions, including Copy day, Copy last week's fixed times, Copies of
+this week, Reload this week and, when a link is saved, Open Spotify link.
 
-If Material cannot be built or shown, FlexWeek shows the Widgets week and this message: "Material 3 could not open, so FlexWeek is showing the other styles. Your week is unchanged." The saved choice stays Material. This version does not try Material again at start-up until the app version changes or the student chooses Material again.
+Ctrl+N adds homework and F1 opens Help. Ctrl+Shift+L opens Week as a list.
+Ctrl+C, Ctrl+D and Delete copy, duplicate and delete the block with keyboard
+focus; Delete asks first. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redoes.
+Number keys 1–5 have their own switch, on by default. The letter keys have a
+second switch, off by default: T, D, W, M, J, K, C, P, Z and F. These shortcuts
+do not act while typing or while a sheet, Focus, an account screen or another
+modal layer has the keyboard.
 
-A frozen build includes `desktop/native/material/tokens.json` and `desktop/native/material/qml/` next to the executable, which is where `theme.py` looks when the files are not beside the source. `desktop/check_bundle.py` reports a bundle that is missing either file. CI still has to prove the packed app also contains Qt Quick Controls' Material module and opens Material without falling back. That Nuitka build is not run on a working machine.
+## Bridges and session
 
-The rig clicks a QML item by its `objectName` or its words. It walks the item's visual children, because a repeater row is not a `QObject` child and `Repeater.itemAt` returns nothing through PySide. The five destinations are on the rail at a desktop width. Under 768px the same names sit on the bottom bar, and Month moves to the top bar. Signing out, from Material's More or from the Widgets button, waits for an unsent Settings change and stays open if that save does not land.
+QML reads and changes the week through `MaterialBridge` and its screen bridges;
+the bridges use `NativeSession`. QML does not touch HTTP, SQL or the engine.
+`bridge.py` holds navigation, appearance and shared actions. Week, Day, Month,
+My day, Settings, account/setup, sheets, alarms and focus have their own bridge
+modules. `SheetHost.qml` chooses the Material sheet for editing, routines,
+alarms, Help, About, Update, Manage account and Copies of this week. The ring
+screen sits above sheets and Focus.
+
+The shell keeps the session's save, undo, planning, focus, reminder and alarm
+rules. It does not maintain a second planner or timer.
+
+## Look and settings
+
+`theme.py` builds the `theme` object from `tokens.json`: Material colour roles,
+ink aliases, category colours, density and contrast. The presets are Slate,
+Blue, Sea, Forest, Gold, Rose, Plum, High contrast, Paper, Ink and Terminal.
+Slate is the default. High contrast, Paper, Ink and Terminal keep their own one
+mode; the other presets follow System, Light or Dark. An account accent can sit
+on top of a preset, except High contrast's fixed yellow. Font is Sans (Inter),
+Serif (Newsreader headings over Inter) or Mono (JetBrains Mono).
+
+The look file's `material` object holds `preset`, `mode`, `contrast`, `density`,
+`shortcuts`, `letters`, `advanced`, optional `font`, optional `saved` looks and
+optional `lookTier`. Settings > Look > Advanced settings has Simple, More and
+All. Simple holds the preset, mode, corner shape, block style, row size and text
+size. More adds the layout and grid dials. All adds the colour codes and
+readability check. Changing tier never changes a value; `lookTier` is kept on
+this computer and starts on All after a setup that used the detailed controls.
+
+Settings has Look, Planning, Focus, Alerts and This computer. Planning includes
+Open on, planning style, study and school hours, planner rules and drag step.
+Focus includes Short, Standard, Long and Custom timer lengths. Alerts includes
+reminders, sounds, alarms and tray behaviour. This computer includes account,
+setup, updates, keyboard switches, phone pairing and sync.
+
+Animations are Off, Reduce, Normal or More. Reduce keeps short fades without
+travel. More takes 2.5 times Normal's durations and travels four thirds of
+Normal's distances. Advanced Motion speed multiplies durations by 1.5 for
+Slower or 0.6 for Faster; its Off choice stops animation. Material's Qt Quick
+window paces these animations. `desktop/native/motion.py` only handles Qt menu
+and tooltip effects for the remaining widget dialogs.
+
+## Weekly fixed times and reminders
+
+Add and Edit fixed time offer "Repeats every week" and an optional Until date,
+except for Setup's own blocks and sheets opened for one day. A weekly fixed
+time has a `weekly-<id>` standing row beside School and Setup's activities.
+Weeks show it through its inclusive Until date without cutting the stored copy.
+An account holds at most 200 standing blocks at once. Setup leaves weekly fixed
+times unchanged, and Copy last week's fixed times leaves them out.
+
+Editing a weekly fixed time asks "This week only" or "This week and every week
+after", except when only the repeat switch or Until changed. A change from this
+week on uses the standing row, not the open week's copy. Saving a weekly fixed
+time from this week on, or deleting a standing block this week and later, saves
+a restore point first. The notice's Undo restores that point and also takes
+back later changes. If a new repeat doubles a fixed time already made by hand
+in a later week, FlexWeek names that week and removes nothing.
+
+When no tray pop-ups can be shown, or "Leave reminders on screen" is on,
+`KeptReminders` in `desktop/native/kept_alerts.py` holds a reminder as a card
+with Snooze and Close. It stays until the block starts. Snooze waits five
+minutes, or until the start when fewer than five minutes remain. At the start
+the card goes and "starts now" takes over. Moving or deleting the block removes
+its card; renaming the block renames it. The timing functions are in
+`engine/engine/src/desk/remind.rs`.
+
+## Account and setup
+
+`qml/account/AccountFlow.qml` covers the shell until sign-in, recovery and setup
+are complete. Sign in, Create account and Reset password share one card, with
+Keep me signed in on this computer. New accounts acknowledge eight one-time
+recovery codes before setup.
+
+Setup is three steps of multiple-choice cards: School hours, Study hours, and
+Look & alerts. A live week preview contains only what the student entered. The
+usual school days, planning style, study hours, reminder lead, preset, mode and
+row size have cards. Detailed controls appear after a card that needs them, such
+as Different times, sports, or a job…, Custom…, or Choose an alarm sound or
+Spotify link…. The default school card is Monday to Friday, 08:00–15:00. The
+last button is Open my week; setup has no first-homework or summary page.
+
+## Drawing failure
+
+A load, build, publish or scene-graph failure on the graphics card saves
+`cpu_drawing_version` in the look file and starts one new copy with
+`QT_QUICK_BACKEND=software` and `FLEXWEEK_CPU_NOTICE=1`. Unsaved edits are saved
+before the old copy quits. The new copy says once, in Material's snackbar, that
+it is drawing without the graphics card. That app version keeps using software
+drawing at start-up; a newer version tries the graphics card again.
+
+If software drawing fails too, the shell shows a plain page with the problem,
+app version, Quit and Try again. Try again clears the saved version and starts
+normally. No other interface is used as a fallback.
+
+## Packaging and rig
+
+A frozen build includes `desktop/native/material/tokens.json` and
+`desktop/native/material/qml/` next to the executable. `theme.py` also checks
+those paths when the files are not beside the source. `desktop/check_bundle.py`
+reports missing Material files.
+
+The rig finds a QML item by `objectName` or its visible words and walks visual
+children, because a repeater row is not necessarily a `QObject` child. The five
+screens are on the rail at desktop width and the bottom bar at phone width.
+Signing out waits for unsaved changes and stays open if that save does not land.

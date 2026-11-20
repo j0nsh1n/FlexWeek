@@ -1,12 +1,12 @@
 # The FlexWeek engine in Rust
 
 FlexWeek's planning logic and its storage move into one Rust library, the engine. The desktop app
-keeps its PySide6 interface and its FastAPI server, and calls the engine through a Python module.
-A phone app, when there is one, calls the same engine, so the week is planned and stored the same
-way on both.
+keeps its Material 3 Qt Quick/QML interface, Python bridges and FastAPI server, and calls the engine
+through a Python module. The Android app calls the same engine, so the week is planned and stored
+the same way on both.
 
 Jonathan approved this on 2026-09-29, as one part of a larger decision: the tooling (fwtest) and the
-engine move to Rust now, and the interface stays in Python until the phone app is decided. The
+engine move to Rust now, and the interface stays in Python and QML. The
 reason is not speed. Measured on 2026-09-28, the planner takes 2 to 55 ms for real weeks, against a
 150 ms budget. The reasons are one core for two apps, checks at compile time, and no garbage
 collector freeing objects on the server's thread.
@@ -23,12 +23,12 @@ This file is the contract. The engine is built and reviewed against it.
 | `restore.py`, `transfer.py`, `limits.py`, `recovery.py` | 162 | `engine::restore`, `engine::recovery` | E2 |
 | `backend/solver.py` | 486 | `engine::solver` | E3 |
 | `backend/storage.py` | 320 | `store` (SQLite) | E4 |
-| `desktop/native/`: `weekmodel`, `calendar`, `focus`, `pomodoro`, `remind`, `reuse`, `history`, `files`, `tokens` (its colour maths), `custom_look` (its checks), `update` | about 3,150 | `engine::week`, `engine::desk` | E5 |
+| `desktop/native/`: `weekmodel`, `calendar`, `focus`, `pomodoro`, `remind`, `reuse`, `history`, `files`, `tokens` (its colour maths), `update` | about 3,150 | `engine::week`, `engine::desk` | E5 |
 
-What stays in Python: `backend/app.py` (the FastAPI routes), the pydantic model classes in
+What stays in Python and QML: `backend/app.py` (the FastAPI routes), the pydantic model classes in
 `backend/models.py` as the checking layer at the HTTP edge and for `desktop/` (the engine's structs
 are the data behind them, converted with `model_dump()` and `model_validate()` at the boundary),
-everything in `desktop/` that imports Qt (only its import lines change), the API tests, and the
+the Material QML screens and every desktop Python module that imports Qt, the API tests, and the
 interface's tests. The HTTP API does not change.
 
 ## Guarantees
@@ -131,8 +131,10 @@ the new differential tests green, and the Rust checks passing.
   `history`, `files`, the colour maths in `tokens`, the checks in `custom_look`, and `update`. Same
   rules as E1 to E4. The week model and colour maths are called while the hours paint, so frame time
   is measured before and after (the 2026-09-28 figures were 1 to 9.5 ms) and must stay under 16 ms.
-  Staying in Python: `look.py` (it writes Qt stylesheets), `layouts/registry.py`, `autostart.py`,
-  `kept.py`, `tones.py`, and every module that imports Qt.
+  Staying in Python and QML: `material/host.py`, `material/theme.py`, `material/dynamic_color.py`,
+  `autostart.py`, `kept.py`, `tones.py`, and every module that imports Qt. `look.py` and
+  `custom_look.py` remain adapters for stored look data; the Widgets look editor and design registry
+  are gone.
 - **E6, adapters only.** Data crosses the boundary as JSON text (see Shape), so the Python modules
   cannot simply be deleted: something has to encode the arguments and decode the answer. E6 makes
   each of them that and nothing more. A function in a moved module encodes, calls one engine
@@ -142,10 +144,9 @@ the new differential tests green, and the Rust checks passing.
   grows logic again. The pydantic classes stay in `backend/models.py`. Decided by Claude on
   2026-10-02 under Jonathan's overnight grant; to go back to the first wording, say "delete the
   wrappers".
-- **E7, the map of logic left in the interface.** `docs/engine/interface-logic.md` lists the
-  decisions made inside Qt code (`window.py`, `hours/canvas.py`, `hours/zoom.py`, the layouts, the
-  sheets): what is decided, where (file and function), and which tests cover it. Nothing moves; it is
-  the starting point for the full rewrite. It can be written alongside any slice.
+- **E7, the map of logic left in the interface.** `docs/engine/interface-logic.md` maps the
+  decision points in the small Python shell, `NativeSession`, Material bridges and QML, with their
+  test areas. It replaces the old Widgets inventory after those modules are removed.
 
 ## Tests and tooling
 
@@ -157,23 +158,23 @@ tests runs in the engine, so at no point are the code and its check rewritten to
 
 - **T1, the engine's tests.** The backend tests of logic and storage (not of HTTP routes),
   and the desktop tests that test E5's modules without Qt, become Rust tests in `engine/`, case for
-  case; desktop tests that drive widgets stay Python. Each keeps the Python test's expected values;
-  none is re-derived from what the Rust code returns. A Python test is deleted only when its Rust version
-  passes and catches the same faults: the mutation cases for moved code (backend and E5's modules)
-  are pointed at the Rust source and run by `fwtest mutate`, which rebuilds the module for each
-  one (no new tool; `cargo mutants` was the first idea), and every case the Python tests caught must
-  still be caught. The differential tests are deleted last, since by then there is one
-  implementation.
+  case; desktop tests that drive QML and the Python shell stay Python. Each keeps the Python test's
+  expected values; none is re-derived from what the Rust code returns. A Python test is deleted only
+  when its Rust version passes and catches the same faults: the mutation cases for moved code
+  (backend and E5's modules) are pointed at the Rust source and run by `fwtest mutate`, which
+  rebuilds the module for each one (no new tool; `cargo mutants` was the first idea), and every case
+  the Python tests caught must still be caught. The differential tests are deleted last, since by
+  then there is one implementation.
 - **T2, the API tests, stay Python.** They test `backend/app.py`'s routes, which stay Python, and
   move with the server in the full rewrite.
 - **T3, the rig.** `hidden_session.py` moved into `fwtest` in Rust (PRs 37 and 38): the hidden KWin,
   its private D-Bus, and stopping everything it started. `scripts/rig/drive.py` stays Python until
   the full rewrite, because it drives the PySide6 app from inside its process (Jonathan, 2026-10-01).
-  Each design's rig gives the same pass count before and after the move.
+  Material's Day and Week rigs replace the design-specific runs.
 - **T4, the interface's tests, tidied in Python, last.** It starts only once T1 to T3 are verified:
   the ported tests pass, catch every fault their Python versions caught, and the rig's counts match.
-  Then shared helpers are merged, overlapping and slow tests cut, and the known flaky tests fixed
-  (Sign in's pointer-hover case in `test_sign_in_card.py`). The interface's mutation specs stay.
+  Then shared helpers are merged, overlapping and slow tests cut, and the known flaky tests fixed.
+  The interface's mutation specs stay.
 
 ## Planner settings
 
@@ -202,8 +203,9 @@ Python encodes the row, calls the engine, and decodes the trace. It does not dec
 ## Repeating blocks
 
 Added 2026-11-12 (step 1 of the repeats rebuild, `scratch/repeats-design/REPEATS-DESIGN.md` option C).
-School and Setup's activities are repeats. A client never sends a repeat's body: it sends what the
-student meant, as changes (`flexweek_engine::repeats::Intent`):
+School, Setup's activities and the student's weekly fixed times are repeats. A client never sends a
+repeat's body: it sends what the student meant, as changes
+(`flexweek_engine::repeats::Intent`):
 
 ```text
 {"id": "school", "scope": "from", "from_date": "2026-11-09",
@@ -212,21 +214,23 @@ student meant, as changes (`flexweek_engine::repeats::Intent`):
 ```
 
 A new repeat is a change on nothing: `set` holds title, start and length, `add_days` its days. Storage
-is unchanged (one standing row per repeat and Monday, a copy of each repeat in every saved week), so a
-change holds from its date's Monday.
+holds one standing row per repeat and Monday, and a copy of each repeat in every saved week, so a
+change holds from its date's Monday. A weekly fixed time uses a `weekly-<id>` id and may carry an
+inclusive `until` date in its body.
 
 | Rule | Where |
 |---|---|
 | Patch a repeat; three-way merge of a later version or a week's copy (what it shared with the old repeat follows the new one, what it changed itself stays); words for a week's own changes, the notice, and the one-day note | `engine/engine/src/repeats.rs` |
+| Weekly fixed times: standing blocks are Setup ids or `weekly-` ids | `flexweek_engine::desk::grid::is_standing_block` |
+| Until: cut a block at its date when the week is read; restore the hidden days before comparing a week's copy; apply the same cut to shown-week changes | `standing::cut_at_until`, `standing::uncut_copy`, `standing::shown_with_standing`, `repeats::apply_to_week`, `shown::apply_repeats_to_shown_week` |
+| Limit: at most 200 standing blocks at once; a repeat that starts standing counts every repeat it would stand beside, and imports count the most standing in any one week | `repeats::MAX_REPEATS`, `flexweek_store::apply_repeat_intents`, `standing::most_standing_at_once` |
 | Apply changes: standing rows from that Monday (a later stop stays a stop), every saved week from that Monday on, the later weeks that kept their own change, and the notice in the account's 12- or 24-hour clock | `flexweek_store::apply_repeat_intents` (`engine/store/src/repeats.rs`) |
-| Save handlers | `changes::apply` (assistant) and `post_changes` (`backend/app.py`) both call that one function after saving the batch's weeks; the answer carries `repeats: {changed_weeks, kept, notice}`. `engine/store/tests/fixtures/repeat_cases.json` runs through both. |
+| Save handlers | `changes::apply` (assistant) and `post_changes` (`backend/app.py`) both call that one function after saving the batch's weeks. The answer carries `repeats: {changed_weeks, kept, notice}`, plus `repeats.doubled_weeks` when a new weekly time doubles hand-made copies. A requested pre-change restore point is returned as `restore_point`. `engine/store/tests/fixtures/repeat_cases.json` runs through both. |
 | Reads | `GET /api/week` and each week in the changes answer carry `repeats`, the bodies standing that week, when any stand |
-| Desktop | The session edits `repeats` and sends the differences (`repeats::intents_between`); the open week changes at once by `repeats::apply_to_week`, so its Undo step holds the change and the store's pass leaves it as sent |
-
-Step 2 keeps these writes and replaces the storage with repeat versions and per-date exceptions.
+| Desktop | The session edits `repeats` and sends the differences (`repeats::intents_between`); the open week changes at once by `repeats::apply_to_week`. Saving a weekly fixed time from this week on, or deleting a standing block this week and later, saves a restore point first, and the Material notice's Undo puts that point back. Copy last week's fixed times and Setup leave weekly fixed times alone. |
+| Kept reminders | `desk::remind::{reminder_start_min, reminder_stays, reminder_snooze_until}` keep a reminder card until its block starts. Snooze waits five minutes, or until the start when fewer than five minutes remain. At the start the card goes and "starts now" takes over. |
 
 ## Not in scope
 
-The interface and its tests stay in Python (tidied in T4). The full move to a Rust interface waits for
-the phone app. The engine does not add features: anything new goes in after E6, once there is one
-implementation to change.
+The interface stays in Python and QML, with its Python tests tidied in T4. The engine does not add
+features: anything new goes in after E6, once there is one implementation to change.

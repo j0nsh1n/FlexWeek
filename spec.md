@@ -102,10 +102,19 @@ Contract for the finished app:
 - Account-owned weekly routines contain fixed commitments only. Applying one
   to a Monday-keyed destination week previews every occurrence and lets the
   student omit or adjust one-week exceptions without changing the routine.
-- School and Setup's activities make the account's standing week: one row per
-  block, keyed by its Setup id and the week it stands from, so every week shows
-  them. A saved week holds its own copy, and what that week changed itself (a
-  skipped, deleted or moved day, a one-week name or time) is that week's own.
+- School, Setup's activities and the student's weekly fixed times make the
+  account's standing week: one row per block, keyed by its id (Setup's ids, or
+  `weekly-<id>` for a fixed time made to repeat with "Repeats every week") and
+  the week it stands from, so every week shows them. A weekly fixed time may end
+  on an Until date, its last day inclusive. Weeks are cut at that date when they
+  are read; nothing is stored cut. An account holds at most 200 standing blocks
+  at once. The store refuses one more with "FlexWeek keeps at most 200 weekly
+  blocks (School, activities and weekly fixed times) in one account. Stop one
+  before adding another." A new weekly fixed time that later saved weeks already
+  hold by hand is added beside them, and FlexWeek names those weeks. It shows
+  twice there; nothing is removed. Setup's re-run leaves weekly fixed times as
+  they are. A saved week holds its own copy, and what that week changed itself
+  (a skipped, deleted or moved day, a one-week name or time) is that week's own.
   A change to them is sent as what it changes, from a date (`repeats` in
   `/api/changes`), never as a copy of a week. Deleting School or an
   activity asks once, naming the days: "This day only" (when opened from one
@@ -124,11 +133,22 @@ Contract for the finished app:
   then on replaces every week's own edit. Cancel saves nothing, and on Setup's
   week page it stays there with the times, the day cutoff and the week start
   still as they were typed. With no such later week it asks nothing. An
-  ended activity stays ended when it is changed from an earlier week. This
-  week and later can't be undone with Undo; only the open
-  week's part has Undo (an assistant's change of this kind is undone with the
-  restore point it saved first). Restore points and account exports carry the standing
-  rows.
+  ended activity stays ended when it is changed from an earlier week. Deleting
+  School or an activity this week and later, and saving a weekly fixed time
+  from this week on, makes a restore point just before the save. The notice's
+  Undo puts that point back and says that anything changed after it goes too
+  ("Undo also takes back anything changed after it."). Restore points and
+  account exports carry the standing rows.
+- The Add and Edit fixed time sheet has "Repeats every week", except on Setup's
+  own blocks and on a sheet opened for one day. With it on, Until offers a date
+  or "No end". Turning it on for an existing fixed time makes that block the
+  repeat from this week on. Turning it off ends the repeat after this week and
+  keeps this week's as a one-off. Saving another change to a weekly fixed time
+  asks "This week only" or "This week and every week after", except when only
+  the switch or Until changed (this week and later) or the sheet was opened for
+  one day (this week only). A change from this week on is built from the repeat,
+  never from a week's copy. Copy last week's fixed times leaves weekly fixed
+  times out, as it does Setup's.
 - A later week reviews unfinished homework using the original assignment ID,
   exact deadline and progress. Repeated planning and request retries cannot
   duplicate or over-plan it. Homework left unfinished in an earlier week, and
@@ -196,16 +216,15 @@ Contract for the finished app:
 - Day and Week show the whole day, 00:00 to 24:00. Hours scroll, and the
   student can zoom: Ctrl and the wheel, Ctrl with =, - and 0, or two buttons
   beside the hours. Each surface's level is remembered per device in the look
-  file. Every design draws its own Day and Week on one shared gesture engine
-  (the 0.15 architecture, `docs/0.15/architecture.md` in git history): a block moves with the pointer in the
+  file. Material's shared hours pane moves a block with the pointer in the
   student's step, 5 minutes or 15 (the `drag_step_min` preference, 15 unless
   chosen otherwise in setup or Settings > Planning), with its times beside it
   while held; a typed time keeps any minute; an end drags to resize;
-  empty time drags to create; overlaps are allowed and each is named: Material
-  draws them overlapped with an offset, each at its own time, the covered
-  item's name above, below or beside the one on top, and the classic styles side by
-  side; a block moved by hand is pinned; a refusal leaves the block where it
-  was and says why before it is let go.
+  empty time opens Add for that range; overlaps are allowed and each is named:
+  the later block lies over the earlier with an offset, each at its own time,
+  and the covered item's name shows above, below or beside the one on top. A
+  block moved by hand is pinned; a refusal leaves the block where it was and
+  says why before it is let go.
 - Day view lists one date: homework due soon, that day's work sessions and fixed
   commitments, one next action, and a workload summary that separates scheduled
   time (work that has a time), recorded focus time and time still free before
@@ -294,53 +313,36 @@ Contract for the finished app:
   `POST /api/solve` loads them for the signed-in account, so the client never
   re-sends occupancy.
 - Comfort preferences persist per account: `alert_volume` (0-100), `end_chime`,
-  `tray_notifications`, `start_at_login`, `preferred_view` (`week` or `day`),
-  `sidebar_collapsed` and `sidebar_width_px` (200-640). One `alarm_tone`
-  (`chime`, `soft`, `bright`, `low`, `glass`, or `spotify`, which plays
-  `default_spotify_url` in the student's own Spotify app, for alarms only)
-  rings reminders, the end of a focus session and new alarms. An alarm is never
-  silent: until Spotify is heard playing, the tone rings. `setup` records where first-run setup stands: its
-  `step`, and `finished_at` once it is finished or skipped. Defaults stay omitted
-  from stored JSON so older clients keep working, and timer rounding to the
-  15-minute grid is previewed and explained rather than silent. Details live in
-  `docs/stage5-contract.md`.
+  `tray_notifications`, `start_at_login`, `preferred_view` (`week`, `day`,
+  `month` or `myday`), `sidebar_collapsed` and `sidebar_width_px` (200-640).
+  One `alarm_tone` (`chime`, `soft`, `bright`, `low`, `glass`, or `spotify`,
+  which plays `default_spotify_url` in the student's own Spotify app, for alarms
+  only) rings reminders, the end of a focus session and new alarms. An alarm is
+  never silent: until Spotify is heard playing, the tone rings. `setup` records
+  where first-run setup stands: its `step`, and `finished_at` once it is
+  finished or skipped. Defaults stay omitted from stored JSON so older clients
+  keep working, and timer rounding to the 15-minute grid is previewed and
+  explained rather than silent. Details live in `docs/stage5-contract.md`.
 - Appearance preferences persist per account beside `theme`: `theme_pack`
   (`system`, `light-frost`, `dark-frost`, `nocturne`, `slate`), `accent`
   (`default`, `sky`, `gold`, `sea`, `sand`), `accent_chips`, and `motion`
-  (`off`, `normal`, `extra`, `reduce`; `extra` is shown as More). Omitted pack
-  leaves `theme` as today's light/dark/system choice. A set pack must be stored
-  with `theme` on the matching axis (`slate` for `light-frost` and `slate`,
-  `nocturne` for `dark-frost` and `nocturne`). Omitted `motion` means the
-  account has never stored a level, and the app runs at the look's own: Reduce
-  for Paper, a custom look's own level, and Normal for every other look. An
-  explicit `"normal"` stays on the wire so a second device cannot treat it as
-  unset. Details live in `docs/stage8-appearance-contract.md`, which predates
-  `reduce`.
+  (`off`, `normal`, `extra`, `reduce`; `extra` is shown as More). Material's
+  preset and mode are kept on this computer instead of reading `theme` or
+  `theme_pack`; those fields and their pack-axis validation remain on the API
+  for existing clients. Omitted `motion` means the account has never stored a
+  level and Material runs at Normal. An explicit `"normal"` stays on the wire
+  so a second device cannot treat it as unset. Details live in
+  `docs/stage8-appearance-contract.md`.
 - The rest of the look is kept on each computer, in the look file
   (`flexweek-look.json` in the app's data folder), and never sent to the
-  account: a preset (`high-contrast`, `paper`, `ink`, `terminal`, `poster`,
-  `pastel`) or none, the knobs moved by hand, a look of the student's own, the
-  saved looks, and the designs with their options. The knobs are `surface`
-  (`flat`, `layered`), `corners` (`soft`, `sharp`, `rounded`), `depth`
-  (`none`, `soft`, `bold`), `font` (`sans`, `serif`, `mono`), `blocks`
-  (`edge`, `filled`, `outline`), `density` (`comfortable`, `compact`) and
-  `text` (`small`, `normal`, `large`). 0.16's names (`frost`, `round`, `pill`,
-  `flat` for depth, `hard`, `outlined`) load as today's.
-- A custom look (`custom`) is a `base`, one of `light`, `dark`, `system`,
-  `high-contrast`, `slate`, `nocturne`, `paper`, `ink`, `terminal`, `poster`
-  or `pastel`, and what was changed on it: `accent` (a swatch or a `#rrggbb`
-  colour), `colours` (`page`, `card`, `text`, `line`, `muted`), `categories`
-  (each a `hue` on the category family or an exact `colour`), `corners` (0 to
-  16 pixels), `spacing`, `shadows`, `body_font` and `heading_font` (`sans`,
-  `serif`, `mono`), `text_scale` (0.9 to 1.3), `blocks`, `edge_width` (2 to 6
-  pixels), `show_times`, `show_lengths`, `hour_lines` (`none`, `faint`,
-  `clear`), `today_highlight`, `now_line` (`accent`, `text`) and `motion`.
-  While one is worn it sets the accent and every knob. `saved_looks` holds
-  custom looks by `name`: at most 40 letters, unique without regard to case,
-  and never the name of a built-in look. A look is shared as a JSON file of
-  kind `"FlexWeek look"`, version 1, at most 64 KiB; a setting the file does
-  not know is left out and named, and a file from a newer FlexWeek is refused.
-  `desktop/native/custom_look.py` and `look.py` are the reference.
+  account. Its `material` object holds the preset (Slate, Blue, Sea, Forest,
+  Gold, Rose, Plum, High contrast, Paper, Ink or Terminal), `mode` (`system`,
+  `light`, `dark`), `contrast` (`std`, `high`), `density` (`comfortable`,
+  `compact`), the advanced controls, the number and letter key switches, and
+  optional `font` (`sans`, `serif`, `mono`), saved Material looks and `lookTier`
+  (`simple`, `more`, `all`). A Material look file has kind
+  `"FlexWeek material look"`, version 1. `desktop/native/material/theme.py` is
+  the reference.
 - Month view shows one calendar month of deadlines, projects, overdue homework
   and study time, planned and completed, and any date opens Day view. A session
   pins to a date only when that date is certain: the day it was completed, or
@@ -355,102 +357,86 @@ Contract for the finished app:
   first. Details live in `docs/stage7-contract.md`.
 
 ## User Experience
-Native desktop app, one window, designed at 1280px and usable down to 800px.
-Under 1150px the layouts switch to a narrow arrangement: Today's app's rail
-folds into one line above the hours, and blocks show their names without their
-times. PySide6 Qt widgets over a
-FastAPI backend started in-process on a loopback port. **No HTML, CSS or
-JavaScript, no npm, no build step, no framework.** There is no browser client:
-the web app was retired in September 2026 and `frontend/` deleted.
+Native desktop app, one Material 3 window, designed at 1280px and usable down
+to 800px. Under 768px the navigation rail becomes a bottom bar. The interface is
+Qt Quick/QML hosted from Python over a FastAPI backend started in-process on a
+loopback port. There is no HTML, CSS, npm or web build step. There is no browser
+client: the web app was retired in September 2026 and `frontend/` deleted.
 
-First paint with no session is Sign in, with creating an account offered as a
-line of small print that switches the same card over. Its heading is "Sign in"
-on the first launch and every later one; the wordmark and the card's top stay
-put when the card switches, and the page wears this computer's own look (the
-System pack, light or dark with the computer), not the last account's. The card
-offers "Keep me
-signed in on this computer", on by default. A kept session opens the week at
-the next launch until the server ends it (30 days after its last use) or the
-student logs out.
+First paint with no session is Material's Sign in card, with Create account
+offered as a text button that switches the same card over. Its heading is "Sign
+in" on the first launch and every later one. The page follows this computer's
+light or dark setting and keeps this computer's Material contrast, not the last
+account's preset. The card offers "Keep me signed in on this computer", on by
+default. A kept session opens the week at the next launch until the server ends
+it (30 days after its last use) or the student logs out.
 A new account must acknowledge its eight recovery codes, shown in Inter with
-figures of one width, with Copy and Save…, then goes to first-run setup, one page at a time: a
-starting style or its own look (the standard styles first, the rest under
-"Experimental styles"), the week (school
-days and hours, activities on their own days, and No homework after), how
-homework gets a time, reminders and the alarm sound, up to three first
-homework, and a summary. Every page can be skipped and is kept when the
-student leaves it, so a quit resumes on the same page. Finishing or skipping is
-stored in `setup`, and setup never returns unless the student picks Run setup
-again in Settings. School hours stays for later under Add, in a dialog of its
-own that asks the days and the times, as setup does; no day ticked takes School
-off the calendar. School hours, and setup run again, show the usual week, not
-the open week's copy, with a line naming what the open week does differently
-("This week: no School on Wednesday."), and change it from this week on.
+figures of one width, with Copy and Save…, then goes to first-run setup: School
+hours, Study hours, and Look & alerts. Each step has multiple-choice cards and a
+live week preview containing only what the student picked. Cards cover the usual
+school days, planning style, study hours, reminder lead, colour preset, light or
+dark, and row size. Detailed controls appear only after a card that means them,
+such as "Different times, sports, or a job…" or "Custom…". The default school
+card is Monday to Friday, 08:00–15:00. The last button is Open my week; there
+is no first-homework or summary page. Every step can be skipped and is kept when
+the student leaves it, so a quit resumes on the same page. Finishing or skipping
+is stored in `setup`, and setup never returns unless the student picks Run setup
+again in Settings. School hours stays for later in Settings > Planning; no day
+ticked takes School off the calendar. School hours, and setup run again, show
+the usual week, not the open week's copy, with a line naming what the open week
+does differently ("This week: no School on Wednesday."), and change it from
+this week on.
 
-The top bar is the week's arrows, Today and the title on the left; on the right, Day,
-Week, Month and My day as one segmented control, then Add, the one filled
-button (a click adds homework; its arrow offers a fixed time, School hours and
-the type the next drag makes), Plan my homework (the one tinted button: the
-accent at 14 % behind accent words, as is its "Plan here" twin in rows), More
-and the gear. Secondary actions are outlined, and a button that only
-dismisses (Close) is plain text. Ctrl+K opens
-a command bar that adds, goes to any view or opens any homework by typing a few
-letters of it. Today's app has a rail left of Day and Week: a small month that
-folds away, what is next, Not placed yet, and the homework a focus timer can
-start on. Day lists the day beside its hours. Everything FlexWeek
-says after an action (a move, a plan, a deletion, a reminder) is one toast at
-the bottom right of the page, with Undo when the step can be undone. It goes after a few seconds (at least 10
-when it offers Undo, held while the pointer or the keyboard is on it, with a
-thin line showing the time left), on a change of week, or when its Undo is
-used; a switch of view or design keeps it, and in the classic styles Plan
-finding nothing new leaves an Undo toast up. In Material a message about a
-change that changed nothing (Plan my homework finding nothing new, Place now
-finding the same time) offers no Undo. Add is the only filled top-bar action; Plan uses accent text.
-Material's Week drawer also offers Place now on a homework card (its menu, or Enter on
-the card): that homework goes at the earliest free time from now that fits all of
-it, inside Study hours and around fixed time and the usual gaps, on the next day
-with room when today has none. The message names the day and time ("Placed Math
-worksheet on Thu 5:45 PM."), or says there is no free time this week. In Material
-Ctrl+Z undoes the last change and Ctrl+Shift+Z or Ctrl+Y redoes it, with the
-number keys (1 to 5, on by default) and the letter keys (T, D, W, M, J, K, C, P,
-Z and F, off by default) switched on or off, but not while a field has the keyboard,
-a sheet, Focus, Help, the Go to date month or a Week or Day block menu is open, or a
-block is held by the mouse. Ctrl+Shift+F starts Quick focus whatever those
-switches say, and waits in the same cases. The plain look uses the same keys and the same two switches.
-The rail uses type and spacing to separate its sections. Next and overdue are
-not repeated in a status row above the calendar; overdue homework stays available
-through Unfinished. More > Week as a list and Ctrl+Shift+L open a list of the
-week's blocks for screen readers and the keyboard in a panel over the grid.
-Esc closes it and returns the keyboard to where it was. Opening or closing it
-never moves the grid. Month opens
-with the student's week as its first row. A new account with no homework sees
-"Nothing here yet." and one "Add your first homework" button in place of empty
-hours. A focus timer has a screen of its own (Start focus, Quick focus, Ctrl+Shift+F or F):
-the countdown in a ring, the homework, Pause, Skip and Finish; Esc goes back and
-the timer keeps running.
+Material's rail opens Day, Week, Month, My day and Settings; under 768px it is
+a bottom bar. The top bar has the week's arrows, Today and title, Undo, Redo,
+More and Settings. Add offers Add homework and Add fixed time. Week's homework
+drawer holds work that still needs a time and Plan my homework. More holds the
+planning and account actions, including Copy day, Copy last week's fixed times,
+Copies of this week and Reload this week. Help, About, Update, Manage account,
+Copies of this week, confirmations and the alarm ring are Material sheets or
+screens. There is no Ctrl+K command bar.
+Everything FlexWeek says after an action is one snackbar, with Undo when the
+step can be undone and Retry save when a save failed. It stays at least 10
+seconds when it offers Undo, and waits while the pointer or keyboard is on it.
+A message about a change that changed nothing (Plan my homework finding nothing
+new, Place now finding the same time) offers no Undo.
+Material's Week drawer also offers Place now on a homework card (its menu, or
+Enter on the card): that homework goes at the earliest free time from now that
+fits all of it, inside Study hours and around fixed time and the usual gaps, on
+the next day with room when today has none. The message names the day and time
+("Placed Math worksheet on Thu 5:45 PM."), or says there is no free time this
+week. Ctrl+N starts a new homework and F1 opens Help. Ctrl+C, Ctrl+D and Delete
+copy, duplicate and delete the block with keyboard focus; Delete asks first and
+can be undone. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redoes. Number keys
+(1 to 5, on by default) and letter keys (T, D, W, M, J, K, C, P, Z and F, off
+by default) have separate switches. They do not act while a field has the
+keyboard, a sheet, Focus, Help, the Go to date month or a Week or Day block
+menu is open, or a block is held by the mouse. Ctrl+Shift+F starts Quick focus
+and Ctrl+Shift+L opens Week as a list whatever those switches say, with the same
+modal guards. Esc closes the list and returns the keyboard to where it was.
+Month opens with the student's week as its first row. A new account with no
+homework sees "Nothing here yet." and one "Add your first homework" button in
+place of empty hours. A focus timer has a screen of its own (Start focus, Quick
+focus, Ctrl+Shift+F or F): the countdown in a ring, the homework, Pause, Skip
+and Finish; Esc goes back and the timer keeps running.
 
-The week calendar is a painted timeline, as in Daily Scheduler: dragging a
-block moves it with the pointer in the student's 5- or 15-minute step and
-across days, its top or bottom edge resizes it, and dragging or clicking empty
-time opens an Add dialog for that range. A click on a block opens it; a
-right-click offers Open, Duplicate, Finished (homework) and Delete, and on
-homework Delete homework. Homework is deleted from its editor, from its row
-under Unfinished or from that menu, after a question: the server removes it and
-its sessions from every week (`DELETE` in `/api/changes`) and says which it
-removed, so one Undo writes the homework and each of those sessions back. Hours have
-no half-hour rules; the now line and its time are in the accent, today's date
-is an accent chip, and Week washes today's column with 3 % of the text colour.
-After a plan, blocks slide to their new places. Blocks may overlap, each marked: the
-classic styles set them side by side; Material lays the later one over the earlier with
-an offset, the covered one's name above, below or beside it. A drop
-is refused only outside the day's hours or when homework would end after it is
-due. Dragging one day of a repeating block moves that day only, and its notice
-says so and where every week is changed ("Only this Wednesday changed. To
-change every week, open School hours."). Dragging works
-in every design: a block can be picked up wherever a design shows it, and every
-design's Day and Week are its own hours, which take the drop at the time under
-the pointer. Everywhere the drop says the
-day, the time and any block it would sit beside, in the same words.
+The week calendar is a painted timeline: dragging a block moves it with the
+pointer in the student's 5- or 15-minute step and across days, its top or bottom
+edge resizes it, and dragging or clicking empty time opens Add for that range.
+A click on a block opens it; a right-click offers its Material menu. Homework is
+deleted from its editor, from its row under Unfinished or from that menu, after
+a question: the server removes it and its sessions from every week (`DELETE` in
+`/api/changes`) and says which it removed, so one Undo writes the homework and
+each of those sessions back. Hours have no half-hour rules; the now line and its
+time are in the accent, today's date is an accent chip, and Week washes today's
+column with 3 % of the text colour. After a plan, blocks slide to their new
+places unless Animations is Off or Reduce. Blocks may overlap, each marked: Material lays
+the later one over the earlier with an offset, the covered one's name above,
+below or beside it. A drop is refused only outside the day's hours or when
+homework would end after it is due. Dragging one day of a repeating block moves
+that day only, and its notice says so and where every week is changed ("Only
+this Wednesday changed. To change every week, open School hours."). The drop
+says the day, the time and any block it would sit beside, in the same words.
 
 Downloads from GitHub Releases:
 
@@ -565,133 +551,92 @@ full English weekday plus HH:MM, or HH:MM. An account holds at most 1000
 assignments. API write bodies are capped at 256 KiB.
 
 Preferences store `theme` as `system`, `slate` or `nocturne` for the light/dark
-axis. Every screen is drawn in one system (`desktop/native/tokens.py`): one
-accent, FlexWeek's blue (`#3d6fc4` on light looks, `#7fa8ff` on dark ones),
-which Sky, Gold, Sea or Sand replace and which marks controls only, never a
-large area; neutral pages and cards; one type scale (caption 11, body 13,
-heading 15, title 20 and display 28 points at Normal text, which Small and
-Large scale); weights 400 and 600, and 700 for display numbers; spacing in
-steps from 4 to 32 pixels; corners of 6 on controls, 10 on cards and 16 on
-sheets; two shadows; Lucide's icons; and red only for a problem. The ten looks
-are Light, Dark, High contrast, Slate, Nocturne, Paper, Ink, Terminal, Poster
-and Pastel, and System follows the device between Light and Dark. High
-contrast keeps its yellow accent (`#ffd400`) whatever swatch is picked, with
-text at 7 to 1 or more. Settings offers Look as Light, Dark and System, with
-the other looks under More looks and the student's saved looks after them
-under Your looks. Today's app is the default main view and Day dial the
-default day screen, with Timeline the one standard alternative; Mission
-control, Bento, Retro desktop, Clay deck and One thing are experimental. Every
-saved choice still loads. The app ships Inter, Newsreader and JetBrains Mono
-(Regular, Medium, SemiBold, Bold each), with figures of one width in times:
-the Font knob is Sans (Inter), Serif (Newsreader headings over Inter) or Mono
-(JetBrains Mono). Retro desktop also ships Pixelify Sans and VT323. Cards pad
-16 pixels, 8 at Compact, and dialogs 24. The categories are one family worked
-out in OKLCH, every fill at one lightness and every mark at another, so no
-category outweighs the rest. Homework's mark is darker, so it stays apart from
-Exercise for a student who cannot tell red from green, and homework carries a
-book. On a dark look a block is its category sunk into the card, written in
-the look's text colour. `clock_24h` chooses 16:00 or 4:00 PM for every time
-written on screen; times are still sent and saved as HH:MM. Setup's week page
-asks for it, with 12-hour chosen; a new account is 12-hour (`clock_24h` false),
-and accounts from before 0.18.5 that never chose were stamped 24-hour once.
-Text size is the student's own setting, kept in every look: a look may suggest
-Large (High contrast does, with a Use button) but never changes it.
+axis of existing clients. Material draws every screen from
+`desktop/native/material/theme.py` and `tokens.json`. Its default Slate accent
+is FlexWeek's blue (`#3d6fc4` on light, `#7fa8ff` on dark), which Sky, Gold,
+Sea or Sand can replace. The presets are Slate, Blue, Sea, Forest, Gold, Rose,
+Plum, High contrast, Paper, Ink and Terminal. High contrast is dark, keeps its
+yellow accent (`#ffd400`) whatever swatch is picked, and has text at 7 to 1 or
+more. Paper is light; Ink and Terminal are dark. Those four one-mode presets do
+not follow the Mode choice. The other presets follow System, Light or Dark.
+The app ships Inter, Newsreader and JetBrains Mono. Font is Sans (Inter), Serif
+(Newsreader headings over Inter) or Mono (JetBrains Mono); Paper and Ink start
+with Serif, and Terminal with Mono and sharp corners, until the student chooses.
+The categories are one family worked out in OKLCH, every fill at one lightness
+and every mark at another, so no category outweighs the rest. Homework's mark is
+darker, so it stays apart from Exercise for a student who cannot tell red from
+green, and homework carries a book. On a dark look a block is its category sunk
+into the card, written in the look's text colour. `clock_24h` chooses 16:00 or
+4:00 PM for every time written on screen; times are still sent and saved as
+HH:MM. Setup's detailed controls offer it, with 12-hour chosen; a new account is
+12-hour (`clock_24h` false), and accounts from before 0.18.5 that never chose
+were stamped 24-hour once. Text size is the student's own setting on this
+computer; a preset never changes it.
 Dates have one short form ("Thu 1 Oct") and one long form ("Thursday 1
 October"), both made by the engine; the year shows only outside the current
 year, a week across New Year puts it on its end date ("28 Dec – 3 Jan 2027"),
 and a month title always has it. Week-grid column heads and weekday-only labels
 keep their own form.
-Settings is a page of the window, not a dialog: its sections on the left and
-cards on the right, a switch for each on or off, side-by-side segments for two
-or three choices, and pictures for the main view and day screen. Every dialog
-has at most one filled button. `system` is the
-default pack: the app follows the device's light or dark setting, uses Light
-when the device reports none, and switches when that setting changes. Choosing
-Slate, Nocturne or a frost pack keeps that look until the student chooses
-again. Signed-out screens follow the device setting; signing out does not
-change an account's saved choice. Preferences
-also store reminder enable/lead/sound, `reminder_dnd_override`, pomodoro
-lengths, `auto_split_pomodoro`, `default_spotify_url`, and a list of alarms.
-Reminders are on unless the student turns them off; an account from before 0.15
-had them turned on once (`prefs_version` 1), and a later choice stands. A block
-reminds from the moment its lead begins until it starts, once, so a block saved
-inside its lead reminds at once. A block with its own Spotify link plays it at
-its start, as an alarm plays its song, with the same Dismiss and Snooze. On desktop, `reminder_dnd_override`
-tags the Notification `flexweek-stay` so the tray presenter skips the 10-second
-auto-close. Unchecked alerts still close at 10 seconds. Qt has no
-`requireInteraction`.
+Settings is a Material page with Look, Planning, Focus, Alerts and This
+computer. Sheets have at most one filled button. Signed-out screens follow the
+device's light or dark setting and keep this computer's Material contrast;
+signing out does not change an account's saved choice. Preferences also store
+reminder enable/lead/sound, `reminder_dnd_override`, pomodoro lengths,
+`auto_split_pomodoro`, `default_spotify_url`, and a list of alarms. Reminders
+are on unless the student turns them off; an account from before 0.15 had them
+turned on once (`prefs_version` 1), and a later choice stands. A block reminds
+from the moment its lead begins until it starts, once, so a block saved inside
+its lead reminds at once. When the computer shows no pop-ups (no tray, or a
+tray that cannot show messages) or "Leave reminders on screen" is on, a
+reminder stays on screen as a card with Snooze and Close until its block
+starts. Snooze waits five minutes, or until the start when fewer than five
+minutes remain. At the start the card goes and "starts now" takes over. A moved or deleted block takes its card with it, and a renamed block
+renames the card. The engine holds this timing (`desk/remind.rs`). Other kept
+notices, such as focus notices, keep the strip with Got it. A block with its
+own Spotify link plays it at its start, as an alarm plays its song, with the
+same Dismiss and Snooze. On desktop, `reminder_dnd_override` is the preference
+behind "Leave reminders on screen".
 
-Each design draws its own Day and Week. The top bar, the window's frame,
-dialogs and Today's app always wear the student's look and accent. Every design
-but Today's app has Colours, with Match my look first and the default; a
-colourway of the design's own paints only the design's page. One thing's
-Poster, Day dial's Night and Clay deck's Clay wear the student's accent, fitted
-to read at 4.5 to 1 on their page; the other colourways name their own. The
-options are the ones `desktop/native/layouts/registry.py` declares, and a show
-or hide option starts at Show:
+Settings > Look > Advanced settings has a Simple, More and All switch. Simple
+holds the preset, mode, corner shape, block style, row size and text size. More
+adds the layout and grid dials; All adds the colour codes and readability check.
+Changing tier never changes a value, and the choice is kept as
+`material.lookTier` on this computer. It starts on Simple, or All after a setup
+that used the detailed controls when no tier was chosen yet. Every tier edits
+the same draft: Done applies it and Back drops it. Named Material looks can be
+saved, applied and deleted, and the Advanced page exports and imports them as
+JSON.
 
-| Design | Role | What it shows | Options |
-|---|---|---|---|
-| Today's app | main view, default | The week grid with the rail | None; its colours are the look |
-| Timeline | main view | The week as a paper planner opened flat, and a day as its page of hours beside its notes | Colours (Ruled paper, Night), Spacing (Comfortable, Compact), Finished and past items |
-| Mission control | main view, experimental | Four figures across the top, the days as lanes of hours, and deadlines by time left | Colours (Flight deck, Cyan, Amber, Green), Figures across the top |
-| Bento | main view, experimental | A big tile of the week's hours, or of today's with the other days as small tiles, and homework around it | Colours (Indigo, Sunset, Mono, Midnight), Hero (Week, Today), Tile corners (Soft, Square) |
-| Retro desktop | main view, experimental | Windows 98: Week.exe, deadlines.txt in Notepad, Up next and a taskbar | Colours (Teal, Plum and Slate desktop), Windows open at start (All three, Main window only) |
-| Clay deck | main view, experimental | One day at a time on a large card, the days either side dimmed and still | Colours (Clay, Mint, Sunset, Dusk), Days either side |
-| Day dial | day screen, default | The day as a 24-hour ring, read out hour by hour beside it | Colours (Night, Daylight), Hour by hour list, Small dials for the week |
-| One thing | day screen, experimental | What is on or next, counted down on a ring, and what comes after | Colours (Poster, Paper and ink), Lead with (What is on now, What is next), Buttons, Day bar |
-
-A saved option this build does not have, such as 0.16's Week strip, Hours
-shown, deadline radar, Supporting tiles or Week cards, is dropped when read,
-and the rest of the design's settings are kept.
-
-Customise… under Look opens the look editor over Settings. Its header has Back,
-a Start from button named for the look in hand, the look's name, Duplicate and
-Delete for a saved look, and whether the look is saved. Start from opens a sheet
-with a picture card for each built-in look and then the student's own; the arrow
-keys move between cards, Enter or Space chooses, and Esc keeps the look as it was. On the left are folding cards (Readability, Colours,
-Categories, Shape, Type, Blocks, Grid and Motion), each with its own Reset; on
-the right is the window's own week page as the look dresses it, fitted or at
-its real size; the foot has Reset all, Export, Import, Save as new and Done.
-The window wears every change at once. Readability lists each pair of colours
-under 4.5 to 1 with a Fix that moves the chosen colour's OKLCH lightness the
-least it takes. Back or Esc with changes not saved asks Save, Keep without
-saving or Discard changes. While a custom look is worn, Settings shows the
-accent and Fine-tune knobs it sets, does not let them change, and says to open
-Customise….
-
-Motion (`desktop/native/motion.py`) never makes the student wait: the new page
-is live at once while a picture of the old one fades over it. Animations move
-still pictures of what fades or slides, not the live widgets, on a timer that
-follows the screen's refresh rate (60 Hz when the rate cannot be read); a
-widget is drawn live while its height changes, or from the first key or click
-in it during a fade. A page change fades through, the old page out in 120 ms
-and the new one in over 160 ms, starting 30 ms after it; Day, Week and Month
-also slide 24 pixels toward the segment chosen, and the arrows drift the old
-page 16 pixels the way the student went. A change of view, My day or design
-changes the top bar and the page in one frame. Settings slides in from the
-right over the week, dimmed 20 %, in 200 ms; in Retro desktop, Month slides in
-and out over the dimmed desk the same way. Notices, sheets, dialogs and Ctrl+K
-fade in and rise 8 pixels, and the top bar's selection slides to the view
-chosen in 160 ms. A new or edited block's or homework's sheet starts its dim at
-the click and is built behind it. Clay deck's change of day moves each card as
-two still pictures, at its start and end size, crossfading between them. Animations has four levels: Normal; More (`extra`), 1.45
-times as long and a third further; Reduce, the same fades with nothing
-travelling (no slide, rise, drift, zoom, lift or sliding blocks); and Off,
-where nothing animates. Each design's own motion asks the same module, and
-nothing loops.
+Material's Animations choice has four levels. Off runs no animation. Reduce
+keeps short fades and moves nothing. Normal uses the ordinary durations and
+distances. More (`extra`) takes 2.5 times Normal's durations and travels four
+thirds of Normal's distances. Advanced settings also lists a local Speed
+choice: Slower multiplies durations by 1.5, Faster by 0.6, and Off stops
+animation. `desktop/native/motion.py` only applies Qt's menu and tooltip
+effects; Material's Qt Quick window paces its own animations. Nothing loops.
 
 ## Architecture
 - Language/runtime: **Python 3.14**. PINNED. Verified against the local
   interpreter (3.14.7) and `.github/workflows/verify.yml` (`python-version: '3.14'`).
   Never downgrade.
-- Current languages: Python, Rust, and SQL for account storage. The client is
-  PySide6 Qt widgets; see DESKTOP.md.
-- Material 3 is a whole window beside the Widgets styles, not a seventh design
-  card. In the Widgets Settings its button is labelled "Material 3" (spoken and
-  shown in its tooltip as "Back to Material"), and More has a "Back to
-  Material" row on its own line. Material's own Settings has "Widgets styles" to
-  go the other way. Switching keeps the week and homework.
+- Current languages: Python, Rust, QML and SQL for account storage. The client
+  is Material 3 in Qt Quick/QML hosted from Python; see DESKTOP.md.
+- Material 3 is the only student interface. `desktop/native/material/host.py`
+  defines `MaterialPage`, a `QQuickView` owned by the QObject controller
+  `NativeWindow` in `desktop/native/window.py`. The controller owns the session,
+  sync, reminders, alarms, tray, updates, local look file and drawing-error
+  page. `QQuickView` paces frames to the screen; two five-second checks on a
+  360 Hz screen measured 360.0 and 349.1 frames a second. The old
+  `QQuickWidget` page, its 60 Hz Widgets clock and the page fades are gone.
+  `desktop/native/motion.py` now only applies Qt's menu and tooltip effects.
+  There is no Widgets/Material switch.
+- If Material cannot be drawn with the graphics card, FlexWeek saves unsaved
+  edits and starts one new copy with `QT_QUICK_BACKEND=software`. The look file
+  keeps `cpu_drawing_version`: that app version starts on the CPU, and a newer
+  version tries the graphics card again. The first Material screen after the
+  relaunch says once that FlexWeek is drawing without the graphics card. If
+  software drawing fails too, a plain page shows the problem, app version, Quit
+  and Try again; Try again clears the saved version and starts normally.
 - The engine (`engine/`, contract in `docs/engine/contract.md`) is Rust: the
   backend's logic and storage and the desktop's Qt-free logic. It is built
   into the Python module `flexweek_engine` by maturin (pinned in
@@ -750,16 +695,12 @@ nothing loops.
     the store's connection.
   - `backend/data/demo_*.json`. Test-only anonymized seed weeks.
   - `backend/tests/`. Pytest suite; the source of truth for solver behavior.
-  - `desktop/native/`. The client: `window.py` (chrome, pages and dialogs),
-    `controller.py` (session, saves, solve, focus and alarms), `widgets.py`
-    (week grid, day agenda, month and editors), `layouts/` (the eight designs
-    and the registry they are built from), `tokens.py` (the system's measures
-    and colour maths), `look.py` (packs, presets, knobs and palettes),
-    `custom_look.py` and `look_editor.py` (a look of the student's own),
-    `motion.py` (every fade and slide), `weekmodel.py`, `pomodoro.py`,
-    `tones.py` and `sound.py`. The
-    client owns interaction and explanation display and **never reimplements
-    placement**.
+  - `desktop/native/`. The client: `window.py` (the small application shell),
+    `controller.py` (session, saves, solve, focus and alarms), `material/`
+    (the QML host, Python bridges, theme and `qml/` screens, settings and
+    sheets), `tokens.py` (colour maths), `weekmodel.py`, `pomodoro.py`,
+    `tones.py` and `sound.py`. The client owns interaction and explanation
+    display and **never reimplements placement**.
   - `desktop/`. PySide6 window, bundled uvicorn, packaging scripts and assets.
 - Time model: local `HH:MM` strings and Mon–Sun day indices, plus naive local
   `YYYY-MM-DDTHH:MM` assignment deadlines, assumed America/Los_Angeles. No
@@ -781,18 +722,18 @@ nothing loops.
   `flexweek-mcp` and call it; FlexWeek never calls the assistant.
 - Android: the phone app, package `com.flexweek.app`, minimum Android 8.0
   (minSdk 26), target and compile SDK 36, for arm64-v8a and x86_64. Release
-  builds show today's agenda, reminders, pairing and settings; adding homework,
-  Plan, Running late and the week are in debug builds only
-  (`BuildConfig.V2_ENABLED`). The APK is built and signed on the maintainer's
-  machine with a keystore kept outside the repo; CI does not build it. From
-  1.1 the app updates itself from GitHub Releases: it checks the download's
-  `.sha256`, its package name, version and signing key, then hands it to
-  Android's installer.
+  builds include today's agenda, reminders, pairing and settings, plus adding
+  homework, Plan, Running late and the week. The APK is built and signed on the
+  maintainer's machine with a keystore kept outside the repo; CI does not build
+  it. From 1.1 the app updates itself from GitHub Releases: it checks the
+  download's `.sha256`, its package name, version and signing key, then hands it
+  to Android's installer.
 - Deployment: the desktop client is the product; there is no web client. The
-  Windows and Linux builds are PySide6 Qt widgets that run the FastAPI backend
-  in-process on a loopback port, so they need no separate server and no Python
-  install; the database sits in the user data directory. `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) points that window
-  at a hosted deployment instead, and an invalid value is an error rather than a
+  Windows and Linux builds are Qt Quick/QML hosted from Python and run the
+  FastAPI backend in-process on a loopback port, so they need no separate server
+  and no Python install; the database sits in the user data directory.
+  `FLEXWEEK_DESKTOP_ORIGIN` (or `FLEXWEEK_ORIGIN`) points that window at a
+  hosted deployment instead, and an invalid value is an error rather than a
   silent fall back to local. The Windows installers and the Linux download are
   built on GitHub Actions (`.github/workflows/release-windows.yml`), which
   installs, opens and uninstalls each Windows installer; a run started by hand
@@ -801,8 +742,8 @@ nothing loops.
   persistent SQLite storage.
 - GitHub Actions: `.github/workflows/verify.yml` is the source gate (mypy, not
   pyright). Its jobs are `engine`, `verify-engine`, `verify-python`, `desktop`,
-  `rig`, `mutate` and `mutate-python`. `rig` runs once for Day and once for Week
-  on Today's app with a real pointer on a hidden display (Xvfb, Openbox,
+  `rig`, `mutate` and `mutate-python`. `rig` runs once for Material Day and once
+  for Material Week with a real pointer on a hidden display (Xvfb, Openbox,
   xdotool) and uploads the frames and results; CI has no ffmpeg, so there is no
   video. `.github/workflows/codeql.yml` runs CodeQL on Python.
   `.github/workflows/dev-build.yml` publishes the developer build.
@@ -1128,10 +1069,10 @@ Decided by Jonathan on 2026-10-20. These add to the Releases rules in AGENTS.md.
       with its time; dragging it past its due date is refused in words.
 - [ ] A new account skips or finishes setup, and setup does not come back;
       quitting mid-way resumes on the same page.
-- [ ] In every design, a student drags homework and blocks to a time on any
-      day, a drop on another block's time is allowed and both show (overlapped
-      with an offset in Material, side by side in the classic styles), and
-      the design refuses what the week calendar refuses, in the same words.
+- [ ] In Material, a student drags homework and blocks to a time on any day, a
+      drop on another block's time is allowed and both show overlapped with an
+      offset, and the drop refuses what the week calendar refuses, in the same
+      words.
 - [ ] Download names are `FlexWeek-Windows-x64-Setup.exe` (with
       `FlexWeek-Windows-x64.msi` for schools) and
       `FlexWeek-Linux-x86_64.tar.gz`.

@@ -1,8 +1,8 @@
 # Contract: Stage 5 — make reminders and settings comfortable
 
-Status: approved 2026-09-15 by the owner. Claude owns the browser/desktop frontend. Grok owns
-persistence, authenticated API work, and the desktop autostart helper.
-Both clients continue to use the same HTML, CSS and JavaScript frontend.
+Status: approved 2026-09-15 by the owner. The current desktop client is
+Material 3 in Qt Quick/QML; the browser client described by the original
+contract is retired.
 
 This contract is based on `feat/stage4-adaptive-plans` at `6ae893c`.
 
@@ -10,14 +10,13 @@ This contract is based on `feat/stage4-adaptive-plans` at `6ae893c`.
 
 A student can group settings, pick a timer preset without learning the
 15-minute grid, preview an alert at a chosen volume, keep a quiet end-of-block
-chime optional, see why web and desktop reminders differ, and return to a
-remembered layout. Disabled sounds stay silent. The same block start fires at
-most one reminder.
+chime optional, see the reminder limits, and return to a remembered layout.
+Disabled sounds stay silent. The same block start fires at most one reminder.
 
 ## Owner decisions (proposed defaults)
 
-1. Settings sections are **Appearance**, **Focus**, **Notifications** and
-   **Account**. Grouping is frontend. The preferences JSON stays flat.
+1. Material Settings sections are **Look**, **Planning**, **Focus**, **Alerts**
+   and **This computer**. Grouping is frontend. The preferences JSON stays flat.
 2. Timer **presets** are Short (15/15/30), Standard (30/15/30) and Long
    (45/15/30), all 15-aligned, with long break every 4. Custom values still
    save. The countdown timer may use lengths that are not on the grid.
@@ -29,17 +28,23 @@ most one reminder.
 5. **End chime** defaults off. Start reminders stay the default alert.
 6. **Test reminder** and **Preview alert** play locally. They do not write and
    they do not use the start-reminder idempotency key.
-7. Web reminders need an open tab. The desktop app can alert from the tray
-   after the window is closed. Spotify is a link; FlexWeek plays a built-in
-   sound if the track does not play. `GET /api/reminder-limits` returns that
-   copy so the two clients do not drift.
+7. The desktop app can alert from the tray after the window is closed. When
+   the computer shows no pop-ups, or "Leave reminders on screen" is on, a
+   reminder also stays in Material as a card with Snooze and Close until its
+   block starts. Snooze waits five minutes, or until the start when fewer than
+   five minutes remain. At the start the card goes and "starts now" takes over.
+   Spotify is a link; FlexWeek plays a built-in
+   sound if the track does not play. `GET /api/reminder-limits` returns the
+   original limit copy, including the retired web client's limits, so existing
+   clients keep working.
 8. **Start at login** is stored on the account. The desktop shell applies it
    on supported Windows and Linux. Unsupported platforms keep the checkbox off
    and say so. The flag does not start a hosted browser session.
-9. **preferred_view** (`week` or `day`), **sidebar_collapsed** and
-   **sidebar_width_px** persist on the account. Empty/default values are
-   omitted, so existing clients keep working. When `preferred_view` is omitted,
-   the Stage 2 breakpoint still chooses Day at 800px and Week when wider.
+9. **preferred_view** (`week`, `day`, `month` or `myday`),
+   **sidebar_collapsed** and **sidebar_width_px** persist on the account.
+   Empty/default values are omitted, so existing clients keep working. Material
+   opens on Week when `preferred_view` is omitted; Open on applies once per
+   sign-in.
 10. Restore points still omit preferences (Stage 3). Comfort fields follow
     that rule.
 
@@ -52,7 +57,7 @@ GET/PUT `/api/preferences` (defaults omitted when they match the values below):
 - `tray_notifications`: bool, default true. Desktop tray balloons follow this.
   In-app toasts still follow `reminder_sound` / `reminders_enabled`.
 - `start_at_login`: bool, default false.
-- `preferred_view`: `week` or `day`, or omitted.
+- `preferred_view`: `week`, `day`, `month` or `myday`, or omitted.
 - `sidebar_collapsed`: bool, default false.
 - `sidebar_width_px`: 200–640, or omitted.
 
