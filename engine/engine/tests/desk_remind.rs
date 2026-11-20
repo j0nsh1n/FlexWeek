@@ -520,3 +520,35 @@ fn test_the_reminder_lead_default_is_five_minutes() {
         5
     );
 }
+
+// A reminder that stays on screen: it lasts until its block starts, and a snooze is the alarm's five
+// minutes but never past that start. Everything is in minutes of the local day, as the poll reads them.
+#[test]
+fn a_reminders_start_comes_from_its_key() {
+    let key = remind::reminder_key("2026-11-09", "maths", 2, "16:00");
+    assert_eq!(remind::reminder_start_min(&key).expect("start"), 16 * 60);
+    assert!(remind::reminder_start_min("not a key").is_err());
+}
+
+#[test]
+fn a_reminder_stays_until_the_minute_its_block_starts() {
+    let start = 16 * 60;
+    assert!(remind::reminder_stays(start, 15 * 60 + 55));
+    assert!(remind::reminder_stays(start, 15 * 60 + 59));
+    assert!(!remind::reminder_stays(start, 16 * 60));
+    assert!(!remind::reminder_stays(start, 16 * 60 + 1));
+}
+
+#[test]
+fn a_snooze_is_five_minutes_and_never_past_the_start() {
+    let start = 16 * 60;
+    // Snooze at 15:56 would end at 16:01: it comes back at the start instead.
+    assert_eq!(remind::reminder_snooze_until(15 * 60 + 56, start), start);
+    // With a 15-minute lead, Snooze at 15:46 comes back at 15:51.
+    assert_eq!(
+        remind::reminder_snooze_until(15 * 60 + 46, start),
+        15 * 60 + 51
+    );
+    // Exactly five minutes before the start comes back at the start.
+    assert_eq!(remind::reminder_snooze_until(15 * 60 + 55, start), start);
+}

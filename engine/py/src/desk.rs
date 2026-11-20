@@ -582,6 +582,21 @@ fn remind_key(week_start: &str, block_id: &str, day: i64, start: &str) -> PyResu
 }
 
 #[pyfunction]
+fn remind_start_min(key: &str) -> PyResult<i64> {
+    guard(|| remind::reminder_start_min(key).map_err(raise))
+}
+
+#[pyfunction]
+fn remind_stays(start_min: i64, now_min: i64) -> PyResult<bool> {
+    guard(|| Ok(remind::reminder_stays(start_min, now_min)))
+}
+
+#[pyfunction]
+fn remind_snooze_reminder_until(now_min: i64, start_min: i64) -> PyResult<i64> {
+    guard(|| Ok(remind::reminder_snooze_until(now_min, start_min)))
+}
+
+#[pyfunction]
 fn remind_alarm_key(iso_date: &str, alarm: &str) -> PyResult<String> {
     let alarm = parse(alarm)?;
     guard(|| remind::alarm_key(iso_date, &alarm).map_err(raise))
@@ -955,6 +970,9 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         remind_start_alert_due,
         remind_song_due,
         remind_key,
+        remind_start_min,
+        remind_stays,
+        remind_snooze_reminder_until,
         remind_alarm_key,
         remind_clock_parts,
         remind_todays_starts,
