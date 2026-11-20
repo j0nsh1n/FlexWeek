@@ -99,17 +99,6 @@ def test_december_shows_homework_due_before_its_monday_rows(
     )
 
 
-def test_the_open_widgets_month_redraws_from_the_new_first_day(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    window.session.set_view("month")
-    wait_until(qapp, lambda: bool(window.month_grid.canvas.cells), what="the month to load")
-    assert window.month_grid.canvas.cells[0].iso == "2026-10-26"
-    fields.save_week_starts_on("wednesday")
-    wait_until(
-        qapp, lambda: window.month_grid.canvas.cells[0].iso == "2026-10-28", what="the rows to follow"
-    )
-    assert window.month_grid.scroll.names.names()[0] == "Wed"
 
 
 def test_material_days_small_month_follows_a_new_first_day_at_once(

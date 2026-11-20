@@ -23,7 +23,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402,F401
-from desktop.tests.material_support import pump, qml  # noqa: E402
+from desktop.tests.material_support import pump, qml, quick_of  # noqa: E402
 from desktop.tests.sheets.support_material_sheets import (  # noqa: E402
     block_named,
     bridge,
@@ -62,7 +62,7 @@ def scene_point(scroller: QObject, x: float, y: float) -> QPoint:
 
 
 def mouse_drag(window: NativeWindow, start: QPoint, dy: int) -> None:
-    quick = window._material_page._quick
+    quick = quick_of(window)
     app = QApplication.instance()
     QTest.mouseMove(quick, start)
     pump(app, 4)
@@ -99,7 +99,7 @@ def test_a_mouse_drag_that_starts_on_a_block_does_not_scroll(qapp, window: Nativ
     block = block_named(root, "School")
     inside = block.mapToScene(QPointF(block.width() / 2, 120))
     start = QPoint(int(inside.x()), int(inside.y()))
-    quick = window._material_page._quick
+    quick = quick_of(window)
     app = QApplication.instance()
     QTest.mouseMove(quick, start)
     pump(app, 4)
@@ -133,7 +133,7 @@ def test_dragging_across_free_time_still_offers_to_add_there_and_does_not_scroll
 def test_the_wheel_still_scrolls(qapp, window: NativeWindow, screen: str) -> None:
     _root, scroller = screen_scroller(qapp, window, screen)
     at = scroller.mapToScene(QPointF(scroller.width() / 2, 200))
-    wheel(window._material_page._quick, at, -1, ctrl=False)
+    wheel(quick_of(window), at, -1, ctrl=False)
     # The wheel eases the grid to its place over a few frames.
     wait_until(qapp, lambda: float(scroller.property("contentY")) != 300.0, what="the wheel to scroll")
 

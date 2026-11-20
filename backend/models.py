@@ -172,8 +172,17 @@ class TimeBlock(BaseModel):
     assignment_id: str | None = Field(
         default=None, min_length=1, max_length=80, exclude_if=lambda value: value is None
     )
+    # A weekly fixed time's last day, YYYY-MM-DD. Weeks are cut at it when read; nothing is stored cut.
+    until: str | None = Field(default=None, max_length=10, exclude_if=lambda value: value is None)
 
     _spotify_url = field_validator("spotify_url")(valid_spotify_url)
+
+    @field_validator("until")
+    @classmethod
+    def until_is_a_date(cls, value: str | None) -> str | None:
+        if value is not None and not is_calendar_date(value):
+            raise ValueError("until must be a date written YYYY-MM-DD")
+        return value
 
     @field_validator("days")
     @classmethod

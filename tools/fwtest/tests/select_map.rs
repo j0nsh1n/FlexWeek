@@ -404,7 +404,7 @@ fn shared_plumbing_and_test_foundations_select_every_area() {
 #[test]
 fn an_area_file_selects_its_area_and_the_unmoved_desktop_files() {
     let map = committed();
-    let focus = map.select(&paths(&["desktop/native/focus_screen.py"]));
+    let focus = map.select(&paths(&["desktop/native/material/bridge_focus.py"]));
     assert!(!focus.everything);
     assert_eq!(focus.areas, ["focus", "unmoved"]);
     assert_eq!(focus.pictures, ["focus"]);

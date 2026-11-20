@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.tests.logic_support import fail_once
@@ -18,24 +18,6 @@ PLAN_UNREACHABLE = "Can't reach FlexWeek, so nothing was planned. Try again."
 SAVE_UNREACHABLE = "Not saved: FlexWeek can't be reached. Your changes are still here. Choose Retry save."
 
 
-def test_twelve_fast_clicks_on_plan_make_one_plan(
-    qapp: QApplication,  # noqa: F811
-    window: NativeWindow,  # noqa: F811
-) -> None:
-    sent, waiting = held_solves(window)
-    plan = window.findChild(QPushButton, "solveButton")
-    said: list[str] = []
-    window.session.status.connect(said.append)
-    for _ in range(12):
-        plan.click()
-        qapp.processEvents()
-    assert not plan.isEnabled(), "disabled from the first click, not after the busy look's delay"
-    assert len(sent) == 1
-    assert said.count("Planning…") == 1
-    waiting[0]()
-    settled(qapp, window)
-    assert plan.isEnabled(), "back once the result is in"
-    assert len(sent) == 1
 
 
 def test_plan_asked_for_in_other_ways_while_one_is_running_is_ignored(

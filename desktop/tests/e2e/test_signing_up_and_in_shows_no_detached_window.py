@@ -10,10 +10,10 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
-from desktop.tests.logic_support import past_setup
+from desktop.tests.logic_support import card_phase, past_recovery, past_setup, sign_in, sign_up
 from desktop.tests.rig.support_top_level_guard import TopLevelShowGuard, prove_the_guard_sees_a_window
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import (
@@ -34,20 +34,14 @@ def test_signing_up_out_and_in_never_shows_a_detached_child_as_a_window(
     qapp.installEventFilter(guard)
     try:
         prove_the_guard_sees_a_window(qapp, guard)
-        window.username.setText(USERNAME)
-        window.password.setText(PASSWORD)
-        window.findChild(QPushButton, "createAccount").click()
-        wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "recoveryPage")
-        window.recovery_ack.setChecked(True)
-        window.recovery_continue.click()
+        sign_up(qapp, window, USERNAME, PASSWORD)
+        past_recovery(qapp, window)
         past_setup(qapp, window)
         settled(qapp, window)
 
         window.session.logout()
-        wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "authPage")
-        window.username.setText(USERNAME)
-        window.password.setText(PASSWORD)
-        window.findChild(QPushButton, "signIn").click()
+        wait_until(qapp, lambda: card_phase(window) == "sign-in")
+        sign_in(qapp, window, USERNAME, PASSWORD)
         wait_until(qapp, lambda: window.session.account is not None)
         settled(qapp, window)
 

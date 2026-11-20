@@ -14,7 +14,7 @@ from datetime import datetime
 
 from PySide6.QtWidgets import QApplication
 
-from backend.tests.fake_clock import CLOCK, FakeClock
+from backend.tests.fake_clock import FakeClock
 from desktop.native.controller import NativeSession
 from desktop.native.weekmodel import homework_time_sentence
 from desktop.native.window import NativeWindow
@@ -496,13 +496,9 @@ def test_a_week_that_is_over_says_its_missed_time_as_missed(
     from next week, so the status line and the plain look's list say the hour was missed instead."""
     window = open_light()
     session, _ = _essay_planned_on_tuesday(qapp, lambda: window, due="2026-11-13T23:59")
-    window._fill_classic()
     assert _sentence(session) == "1 h still needs a time"
-    assert window.rail.none_waiting.text() == "History essay · 1 h left"
     clock.set(datetime(2026, 11, 9, 10, 0))
-    window._fill_classic()
     assert _sentence(session) == "1 h missed"
-    assert window.rail.none_waiting.text() == "History essay · 1 h missed"
 
 
 def test_a_week_that_is_over_says_a_pinned_session_that_passed_as_pinned_in_the_past(
@@ -513,13 +509,9 @@ def test_a_week_that_is_over_says_a_pinned_session_that_passed_as_pinned_in_the_
     missed. Its minutes still count as needed."""
     window = open_light()
     session, _ = _essay_planned_on_tuesday(qapp, lambda: window, due="2026-11-13T23:59", pinned=True)
-    window._fill_classic()
-    assert window.rail.none_waiting.text() == "History essay · 1 h left"
     clock.set(datetime(2026, 11, 9, 10, 0))
-    window._fill_classic()
     assert [item["minutes"] for item in session.homework_time_needed()] == [60]
     assert _sentence(session) == "1 h pinned, in the past"
-    assert window.rail.none_waiting.text() == "History essay · 1 h pinned, in the past"
 
 
 def test_minutes_no_session_holds_are_read_with_the_missed_session_counted_as_time_still_needed(
@@ -588,24 +580,3 @@ def test_plan_places_a_missed_session_together_with_new_homework(
     assert session.plan_counts == (2, 0)
     assert session.plan_open == 0
     assert session.message == "Placed 2 homework blocks."
-
-
-def test_the_plan_badge_counts_a_session_that_passes_while_the_window_is_open(
-    qapp: QApplication, open_light: Callable[..., NativeWindow]
-) -> None:
-    """The essay is planned for Thursday 20:00 to 21:00 and the clock reads 19:00: everything has a time and
-    Plan carries no count. At 21:30 the session has passed unfinished, the clock's own refill runs and the
-    rail needs 60 min; Plan must then say one homework still needs time, with no other click."""
-    window = open_light()
-    session, _ = _essay_planned_on_tuesday(qapp, lambda: window, start="20:00", days=[3])
-    window._sync_chrome()
-    qapp.processEvents()
-    assert session.homework_time_needed() == []
-    assert window.solve_button.accessibleName() == "Plan my homework"
-
-    CLOCK.move(hours=2, minutes=30)
-    window._refresh_layout()
-    qapp.processEvents()
-
-    assert [item["minutes"] for item in session.homework_time_needed()] == [60]
-    assert window.solve_button.accessibleName() == "Plan my homework, 1 homework still needs time"

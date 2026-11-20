@@ -5,9 +5,8 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from typing import Any
 
-from PySide6.QtCore import QEventLoop, QTimer, SignalInstance
+from PySide6.QtCore import QEventLoop, QTimer
 from PySide6.QtGui import QWindow
 from PySide6.QtWidgets import QApplication, QWidget
 
@@ -49,24 +48,6 @@ def wait_until(
         raise AssertionError(f"still false after {timeout:g} s" + (f": {said}" if said else ""))
 
 
-def expect(
-    signal: SignalInstance, action: Callable[[], object], timeout: float = TIMEOUT_S
-) -> tuple[Any, ...]:
-    """Do `action` and wait for the `signal` it causes, even one emitted before `action` returns;
-    returns what the signal carried."""
-    carried: list[tuple[Any, ...]] = []
-
-    def caught(*values: Any) -> None:
-        carried.append(values)
-
-    signal.connect(caught)
-    try:
-        action()
-        if not _run_until(lambda: bool(carried), timeout):
-            raise AssertionError(f"no signal after {timeout:g} s")
-    finally:
-        signal.disconnect(caught)
-    return carried[0]
 
 
 def exposed(shown: QWidget | QWindow) -> Callable[[], bool]:

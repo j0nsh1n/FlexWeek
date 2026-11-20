@@ -44,6 +44,8 @@ Item {
         if (!enabled || choices.length === 0)
             return
         var next = (index + choices.length) % choices.length
+        if (choices[next].enabled === false)
+            return
         selected(choices[next].value)
     }
 
@@ -66,6 +68,9 @@ Item {
                 delegate: Item {
                     id: segment
                     readonly property bool on: modelData.value === root.current
+                    // A choice that cannot be picked now (a preset that has one mode) is dimmed and ignored.
+                    readonly property bool allowed: modelData.enabled !== false
+                    opacity: allowed ? 1 : 0.38
                     width: 12 + (on ? 24 : 0) + caption.implicitWidth + 12
                     height: 40
                     Rectangle {
@@ -94,7 +99,7 @@ Item {
                         }
                     }
                     TapHandler {
-                        enabled: root.enabled
+                        enabled: root.enabled && segment.allowed
                         onTapped: root.choose(index)
                     }
                 }

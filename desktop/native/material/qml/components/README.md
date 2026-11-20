@@ -13,7 +13,7 @@ Values are `#rrggbb` strings. Disabled controls mix `onSurface` at 12% for the f
 ## Other inputs
 
 - `density`: `"comfortable"` (default) or `"compact"`. Compact changes settings-row vertical padding from 16 to 10. Nothing else shrinks.
-- `reduceMotion`: when true, colour and position animations run at duration 0. The easing otherwise is the emphasized curve `cubic-bezier(.2, 0, 0, 1)` (200 ms colour, 300 ms the switch thumb).
+- `reduceMotion`: a control's own "no movement" flag. The app's Animations level and Motion speed reach every animation through the `Motion` singleton (`pace` stretches durations, `reach` distances; the shell binds both from the bridge): colour and opacity fades ask `Motion.fade(ms, reduceMotion)`, position, size and scale ask `Motion.travel(ms, reduceMotion)`. Off has no animation, Reduce keeps the fades and moves nothing, More is slower and travels further. The easing is the emphasized curve `cubic-bezier(.2, 0, 0, 1)` (200 ms colour, 300 ms the switch thumb at Normal).
 - `highContrast`: when true, strokes are 1.5 px and settings dividers use `outline`. The theme object has no contrast flag. Pair this with a high-contrast scheme such as Blue light high.
 
 ## What the shell registers

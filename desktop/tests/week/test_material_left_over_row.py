@@ -7,6 +7,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 
+from desktop.tests.material_support import quick_of
 from desktop.tests.planner.support import left_in_week_one, overdue_this_week
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material import (
@@ -31,7 +32,7 @@ def test_the_row_is_hidden_when_nothing_is_left_over(qapp, window) -> None:
     assert _qml(root, "leftOverPlan").property("visible") is False
 
 
-def test_the_row_says_what_the_widgets_line_says(qapp, window) -> None:
+def test_the_row_says_what_the_line_says(qapp, window) -> None:
     left_in_week_one(qapp, window)
     root = _show_material(qapp, window)
     _pump(qapp)
@@ -39,8 +40,6 @@ def test_the_row_says_what_the_widgets_line_says(qapp, window) -> None:
     assert _row(root).property("visible") is True
     # The seeded essay is overdue by then, besides the lab report left from last week.
     assert _qml(root, "leftOverWords").property("text") == "1 overdue · 1 left from last week"
-    window._sync_left_chip()
-    assert window.left_chip_text.text() == "1 overdue · 1 left from last week"
     assert _qml(root, "leftOverPlan").property("accessName") == "Plan into this week"
     assert _qml(root, "leftOverDone").property("accessName") == "Mark as finished"
 
@@ -51,6 +50,18 @@ def test_the_row_counts_overdue_homework(qapp, window) -> None:
     _pump(qapp)
 
     assert _qml(root, "leftOverWords").property("text") == "1 overdue"
+
+
+def test_a_homework_left_overdue_shows_the_row_with_its_two_buttons_on(qapp, window) -> None:
+    overdue_this_week(qapp, window)
+    root = _show_material(qapp, window)
+    _pump(qapp)
+
+    assert _row(root).property("visible") is True, "the overdue row is not showing"
+    for name in ("leftOverPlan", "leftOverDone"):
+        button = _qml(root, name)
+        assert button.property("visible") is True and button.property("enabled") is True, name
+        assert str(button.property("text") or button.property("accessName")), name
 
 
 def test_plan_into_this_week_places_the_left_over_session(qapp, window) -> None:
@@ -93,11 +104,11 @@ def test_the_two_buttons_are_reached_by_tab_and_pressed_by_the_keyboard(qapp, wi
 
     plan.forceActiveFocus()
     _pump(qapp)
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Tab)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Tab)
     _pump(qapp)
     assert done.property("activeFocus") is True
 
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Return)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Return)
     wait_until(
         qapp,
         lambda: not window.session.busy and bool(window.session.assignments["lab"].get("completed")),

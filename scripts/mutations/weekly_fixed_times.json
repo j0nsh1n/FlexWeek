@@ -1,0 +1,23 @@
+[
+ {
+  "file": "desktop/native/controller.py",
+  "name": "Setup run again drops a weekly fixed time",
+  "old": "        return made + weekly\n",
+  "new": "        return made\n",
+  "test": "desktop/tests/week/test_weekly_fixed_times.py::test_finishing_setups_week_page_again_leaves_a_weekly_time_alone"
+ },
+ {
+  "file": "desktop/native/material/sheet_block.py",
+  "name": "an edit builds the repeat from this week's copy",
+  "old": "            body = deepcopy(base)\n",
+  "new": "            body = deepcopy(made)\n            body[\"days\"] = self._week_to_monday(self.days)\n",
+  "test": "desktop/tests/week/test_weekly_fixed_times.py::test_a_later_change_is_built_from_the_repeat_not_from_this_weeks_own_copy"
+ },
+ {
+  "file": "desktop/native/material/sheet_block.py",
+  "name": "only Until changed asks the question anyway",
+  "old": "        if changed <= {\"weekly\", \"until\"}:\n",
+  "new": "        if False:\n",
+  "test": "desktop/tests/week/test_weekly_fixed_times.py::test_only_until_changed_asks_nothing_and_cuts_the_weeks_after_it"
+ }
+]

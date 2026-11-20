@@ -21,7 +21,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_window import material_window, qapp  # noqa: E402, F401
-from desktop.tests.material_support import named, pump  # noqa: E402
+from desktop.tests.material_support import named, pump, quick_of, quick_window_of  # noqa: E402
 from desktop.tests.sheets.support_material_settings import (  # noqa: E402
     click,
     click_segment,
@@ -133,12 +133,12 @@ def test_preview_keyboard_and_action_isolation(qapp: QApplication, material_wind
         "Pointer click on preview dayNext mutated live planner state"
     )
 
-    quick = window._material_page._quick
+    quick = quick_of(window)
     trail: list[str] = []
     for _ in range(120):
         QTest.keyClick(quick, Qt.Key.Key_Tab)
         qapp.processEvents()
-        focused = quick.quickWindow().activeFocusItem()
+        focused = quick_window_of(window).activeFocusItem()
         trail.append(focused.objectName() if focused else "<none>")
         assert focused is not day_next and focused is not day_prev, (
             f"Tab reached a preview day arrow, which must not be a Tab stop. Focus trail: {trail}"
@@ -204,7 +204,7 @@ def test_week_preview_completion_is_inert_and_has_no_qml_error(
     previous_handler = qInstallMessageHandler(lambda _kind, _context, text: messages.append(text))
     try:
         item.forceActiveFocus()
-        QTest.keyClick(window._material_page._quick, Qt.Key.Key_Return)
+        QTest.keyClick(quick_of(window), Qt.Key.Key_Return)
         pump(qapp)
         interface = QAccessible.queryAccessibleInterface(item)
         assert interface is not None
@@ -215,7 +215,7 @@ def test_week_preview_completion_is_inert_and_has_no_qml_error(
         finishes = named(item, "weekBlockFinish")
         if finishes:
             finishes[0].forceActiveFocus()
-            QTest.keyClick(window._material_page._quick, Qt.Key.Key_Return)
+            QTest.keyClick(quick_of(window), Qt.Key.Key_Return)
             pump(qapp)
     finally:
         qInstallMessageHandler(previous_handler)

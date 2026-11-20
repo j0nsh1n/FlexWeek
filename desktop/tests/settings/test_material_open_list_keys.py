@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QApplication
 from desktop.native import fields
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import pump, visuals
+from desktop.tests.material_support import pump, quick_of, quick_window_of, visuals
 from desktop.tests.settings.support_material_settings import _named, _open_settings
 from desktop.tests.window_support import qapp  # noqa: F401
 
@@ -22,12 +22,12 @@ from desktop.tests.window_support import qapp  # noqa: F401
 
 
 def _key(window: NativeWindow, qapp: QApplication, key: Qt.Key) -> None:
-    QTest.keyClick(window._material_page._quick, key)
+    QTest.keyClick(quick_of(window), key)
     pump(qapp, 6)
 
 
 def _open_lists(window: NativeWindow) -> list:
-    scene = window._material_page._quick.quickWindow().contentItem()
+    scene = quick_window_of(window).contentItem()
     return [item for item in visuals(scene) if str(item.objectName()) == "pickerList"]
 
 

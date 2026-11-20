@@ -1,6 +1,6 @@
 # ruff: noqa: F811
-"""Homework due tonight that has no time yet is named on every main view and day screen, and none of them
-says the day is free."""
+"""Homework due tonight that has no time yet is named on the Material week and on My day, and neither says
+the day is free."""
 
 from __future__ import annotations
 
@@ -8,18 +8,18 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
 from backend.tests.fake_clock import CLOCK  # noqa: E402
-from desktop.native.window import NativeWindow  # noqa: E402
-from desktop.tests.day.support_layouts_window import (  # noqa: E402
-    qapp,  # noqa: F401
-    settled,
-    thursday_at,
-    visible_copy,
-    wait_until,
-    window,  # noqa: F401
+from desktop.native.weekmodel import build_week  # noqa: E402
+from desktop.tests.day.support_layouts_window import thursday_at  # noqa: E402
+from desktop.tests.material_support import pump  # noqa: E402
+from desktop.tests.waiting import wait_until  # noqa: E402
+from desktop.tests.week.support_material import (  # noqa: E402
+    _qml,
+    _repeater_texts,
+    _show_material,
+    material_window,  # noqa: F401
 )
+from desktop.tests.window_support import qapp, settled  # noqa: E402,F401
 
 FREE_TODAY = (
     "done for today",
@@ -30,59 +30,60 @@ FREE_TODAY = (
     "0 min left today",
     "nothing on this day",
     "no homework tonight",
-)
-
-SCREENS = (
-    ("classic", "week"),
-    ("timeline", "week"),
-    ("mission", "week"),
-    ("bento", "week"),
-    ("retro", "week"),
-    ("clay", "week"),
-    ("one", "day"),
-    ("dial", "day"),
+    "everything has a time",
 )
 
 
-@pytest.mark.parametrize(("layout_id", "surface"), SCREENS)
-def test_unplaced_homework_due_today_is_named_on_every_screen(
-    qapp: QApplication, window: NativeWindow, layout_id: str, surface: str
-) -> None:
-    """Math worksheet due tonight with no time. No screen may say the day is free, and each names it."""
+def _math_due_tonight(qapp, window) -> None:
+    """Math worksheet due tonight with no time; the essay's placed time is gone."""
     session = window.session
     CLOCK.set(thursday_at(window, 16))
     session.blocks = [item for item in session.blocks if item.get("assignment_id") != "essay"]
     session._touch("clearing the placed essay")
     due = f"{thursday_at(window, 0).date().isoformat()}T21:00"
     session.add_homework(
-        {
-            "id": "math",
-            "title": "Math worksheet",
-            "due": due,
-            "estimate_min": 45,
-            "revision": 0,
-        }
+        {"id": "math", "title": "Math worksheet", "due": due, "estimate_min": 45, "revision": 0}
     )
     session.save()
     settled(qapp, window)
-    if surface == "day":
-        window._layout = {"main": "classic", "day": layout_id, "options": {}}
-        window._day_mode = True
-    else:
-        window._layout = {"main": layout_id, "day": "one", "options": {}}
-        window._day_mode = False
-        session.set_view("week")
-    window._on_week()
-    if layout_id == "dial":
-        wait_until(qapp, lambda: "not placed yet" in visible_copy(window).lower(), what="the dial's strip")
-    else:
-        wait_until(qapp, lambda: "math worksheet" in visible_copy(window).lower(), what="the homework named")
-    said = visible_copy(window).lower()
-    if layout_id == "dial":
-        # The demo's not-placed strip on the day dial gives the count only; the names are not listed.
-        assert "1 homework not placed yet" in said, said
-        assert "math worksheet" not in said, said
-    else:
-        assert "math worksheet" in said, said
+
+
+def test_the_shared_empty_day_words_name_the_homework_and_never_say_the_day_is_free(qapp, window) -> None:
+    _math_due_tonight(qapp, window)
+    session = window.session
+    model = build_week(session.week_start, session.blocks, session.assignments, session.trace)
+    today = session.today_column(thursday_at(window, 0).date().isoformat())
+    assert [item.title for item in model.due_today_unplaced(today)] == ["Math worksheet"]
+    kicker, title, line = model.leftover_parts(today)
+    said = f"{kicker} {title} {line}".lower()
+    assert title == "Math worksheet", said
     for phrase in FREE_TODAY:
-        assert phrase not in said, f"{layout_id} still says {phrase!r} in:\n{said}"
+        assert phrase not in said, f"{phrase!r} in {said!r}"
+
+
+def test_the_material_week_lists_it_and_does_not_say_everything_has_a_time(qapp, window) -> None:
+    _math_due_tonight(qapp, window)
+    root = _show_material(qapp, window)
+    window._material_page.publish()
+    wait_until(qapp, lambda: "Math worksheet" in _repeater_texts(root, "homeworkRows", "homeworkTitle"))
+    assert _qml(root, "homeworkEmpty").property("visible") is False
+    # The essay lost its time in the setup, so it waits too.
+    assert _qml(root, "homeworkCount").property("text") == "2"
+
+
+def test_material_my_day_names_it_in_the_card_and_never_says_the_day_is_free(qapp, window) -> None:
+    _math_due_tonight(qapp, window)
+    root = _show_material(qapp, window)
+    myday = root.property("bridge").property("myday")
+    pump(qapp, 10)
+    said = " ".join(
+        str(myday.property(name)) for name in ("nowTitle", "nowLine", "ringCaption")
+    ).lower()
+    assert "math worksheet" in said, said
+    for phrase in FREE_TODAY:
+        assert phrase not in said, f"{phrase!r} in {said!r}"
+    assert myday.property("showNow") is True
+    # The worksheet is the one thing left: the ring and the line count it though it has no time yet.
+    assert myday.property("ringCount") == 1
+    assert myday.property("ringCaption") == "thing left"
+    assert myday.property("leftLine") == "1 thing left today"

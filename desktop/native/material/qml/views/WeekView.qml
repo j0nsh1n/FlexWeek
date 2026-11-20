@@ -46,6 +46,14 @@ Item {
     property point heldAt: Qt.point(0, 0)
     property bool holding: false
 
+    // The keyboard goes back to the grid, or to the block `blockId` when it has one.
+    function keptBlockId() {
+        return hoursPane.keptBlockId
+    }
+    function focusWeek(blockId) {
+        hoursPane.focusWeek(blockId || "")
+    }
+
     function slotAt(scene) {
         var inScroller = scroller.mapFromItem(null, scene.x, scene.y)
         if (inScroller.x < 0 || inScroller.y < 0 || inScroller.x > scroller.width || inScroller.y > scroller.height)
@@ -152,13 +160,6 @@ Item {
             root.cancelDragRange()
             event.accepted = true
         }
-    }
-
-    Shortcut {
-        sequence: "Escape"
-        context: Qt.ApplicationShortcut
-        enabled: root.dragRangeActive
-        onActivated: root.cancelDragRange()
     }
 
     // Homework left over from before: the Widgets line above the week, with its two buttons.

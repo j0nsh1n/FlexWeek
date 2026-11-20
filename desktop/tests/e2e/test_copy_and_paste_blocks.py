@@ -9,12 +9,12 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import QApplication, QCheckBox, QLabel
+from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import FakeClock
 from desktop.native.calendar import sunday_due
+from desktop.native.material.sheet_preview import beside_words
 from desktop.native.reuse import row_conflict
-from desktop.native.widgets import PreviewDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import open_light, window  # noqa: F401
 from desktop.tests.planner.planning_week import session_in_the_planned_week, soccer
@@ -143,21 +143,7 @@ def test_the_paste_preview_keeps_a_block_that_lands_on_another_checked_and_says_
     session.copy_selected()
     rows = session.paste_proposals(0, "16:00")
     assert rows is not None
-    dialog = PreviewDialog(
-        window,
-        "Preview paste",
-        "Nothing changes until you save this preview.",
-        rows,
-        session.blocks,
-    )
-    try:
-        dialog.show()
-        wait_until(qapp, dialog.isVisible)
-        box = dialog.findChild(QCheckBox, "previewInclude0")
-        assert box is not None
-        assert box.isChecked() is True
-        assert dialog.confirm.isEnabled()
-        assert "Soccer is at that time too" in dialog.findChild(QLabel, "previewDetail0").text()
-    finally:
-        dialog.close()
-        free(dialog)
+    assert rows[0]["checked"] is True
+    assert row_conflict(rows[0], rows, session.blocks) == "Soccer"
+    said = "Soccer is at that time too. Both will show, one slightly over the other."
+    assert beside_words(row_conflict(rows[0], rows, session.blocks)) == said

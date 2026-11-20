@@ -12,12 +12,9 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QWidget
 
-from desktop.native.hours.classic import ClassicWeek
-from desktop.native.hours.hand import Hand, Verdict
 from desktop.native.weekmodel import build_week, homework_time_sentence
-from desktop.tests.week.support_weekview import BLOCKS, HOMEWORK, TRACE, WEEK, block
+from desktop.tests.week.support_weekview import block
 from desktop.tests.window_support import qapp  # noqa: F401
 
 
@@ -53,24 +50,3 @@ def test_the_built_week_upgrades_plenty_when_due_within_24_hours() -> None:
     found = next(item for item in model.occurrences if item.block_id == "essay-1")
     assert found.slack_words(now) == "Tight"
     assert found.slack_words(None) == "Plenty of time"
-
-
-def test_the_model_places_every_block_where_the_week_calendar_draws_it(
-    qapp: QApplication,
-) -> None:
-    host = QWidget()
-    calendar = ClassicWeek(Hand(lambda block_id, from_day, span: Verdict(False, ""), host), host)
-    week = build_week(WEEK, BLOCKS, HOMEWORK, TRACE)
-    calendar.set_week(week, None, None)
-    calendar.resize(980, 640)
-    calendar.hours.relayout()
-    hours = calendar.hours
-    drawn = {
-        (item.block_id, item.span.day, item.span.start)
-        for track in hours.tracks
-        for item, _rect in hours.drawn(track)
-    }
-    modelled = {(item.block_id, item.day, item.start) for item in week.occurrences}
-    assert modelled == drawn
-    assert len(drawn) == 15
-    host.deleteLater()

@@ -17,6 +17,7 @@ from PySide6.QtGui import QAccessible, QFontMetricsF
 from PySide6.QtTest import QTest
 
 from desktop.native.weekmodel import clock_label
+from desktop.tests.material_support import quick_of
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material import (
     NOW_DAY,
@@ -72,6 +73,10 @@ def test_a_default_one_hour_homework_in_week_has_its_done_circle_in_its_corner_o
     homework on a click and takes Tab."""
     root = _reset(window, qapp)
     essay = _block_named(root, "History essay")
+    # A block that has just got its time lands over half a second, growing from 90 %: measured during
+    # that, the 20 px circle is 18.1 px. On the shipped start the week is built before the essay is
+    # planned, so it lands; the student sees the full 20 px a moment later, which is what this waits for.
+    wait_until(qapp, lambda: float(essay.property("scale")) >= 1.0, what="the block to finish landing")
     work = next(b for b in window.session.blocks if b.get("assignment_id") == "essay")
     assert work["duration_min"] == 60
     finish = _named(essay, "weekBlockFinish")[0]
@@ -85,7 +90,7 @@ def test_a_default_one_hour_homework_in_week_has_its_done_circle_in_its_corner_o
         if detail.property("visible"):
             assert not circle.intersects(_rect(detail))
 
-    quick = window._material_page._quick
+    quick = quick_of(window)
     essay.forceActiveFocus()
     _pump(qapp)
     QTest.keyClick(quick, Qt.Key.Key_Tab)
@@ -114,7 +119,7 @@ def test_in_week_a_fixed_block_opens_on_click_and_enter_and_is_a_tab_stop(qapp, 
     # they do in Day.
     root = _reset(window, qapp)
     sheets = window._material_page.bridge.sheets
-    quick = window._material_page._quick
+    quick = quick_of(window)
     row = int(_bridge(window).property("hourRow"))
     _qml(root, "weekScroller").setProperty("contentY", float(8 * row))
     _pump(qapp, 4)
@@ -287,7 +292,7 @@ def test_a_homework_block_that_shares_no_time_moves_or_hides_its_circle_rather_t
     short_finish = _named(short, "weekBlockFinish")[0]
     assert short_finish.property("visible") is False
     assert short_finish.property("activeFocusOnTab") is False
-    quick = window._material_page._quick
+    quick = quick_of(window)
     menu = _named(root, "blockMenu")[0]
     short.forceActiveFocus()
     _pump(qapp)

@@ -3,13 +3,17 @@ and the app reacts."""
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from backend import clock as wall_clock
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.material_support import quick_of
 from desktop.tests.settings.support_material_settings import (
     _bridge,
     _click,
@@ -28,7 +32,7 @@ from desktop.tests.window_support import qapp  # noqa: F401
 # ruff: noqa: F811
 
 
-def test_the_focus_section_writes_audio_the_link_and_pomodoro(
+def test_the_focus_section_writes_audio_and_the_link(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root = _open_settings(qapp, window, "focus")
@@ -47,11 +51,6 @@ def test_the_focus_section_writes_audio_the_link_and_pomodoro(
     wait_until(qapp, lambda: _prefs(window).get("default_spotify_url") == link)
     assert _panel(window).property("state")["spotifyError"] == ""
 
-    _click(qapp, window, _named(root, "pomodoro")[0])
-    wait_until(qapp, lambda: _prefs(window).get("timer_work_min") == 25)
-    assert _prefs(window).get("timer_break_min") == 5
-    _click(qapp, window, _named(root, "pomodoro")[0])
-    wait_until(qapp, lambda: _prefs(window).get("timer_work_min") == 30)
 
 
 def test_the_alerts_section_writes_the_reminder_lead(qapp: QApplication, window: NativeWindow) -> None:
@@ -97,24 +96,20 @@ def test_a_custom_saved_reminder_lead_stays_visible_and_is_not_rewritten_on_open
     assert _prefs(window).get("reminders_enabled") is True
 
 
-def test_this_computer_login_motion_and_shortcuts(
+def test_this_computer_login_and_shortcuts(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     applied: list[bool] = []
     monkeypatch.setattr(window, "_apply_start_at_login", applied.append)
     root = _open_settings(qapp, window, "computer")
     bridge = _bridge(window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     _click(qapp, window, _named(root, "startAtLogin")[0])
     wait_until(qapp, lambda: _prefs(window).get("start_at_login") is True)
     assert applied == [True]
 
     assert bridge.property("reduceMotion") is False
-    _click(qapp, window, _named(root, "reduceMotion")[0])
-    wait_until(qapp, lambda: _prefs(window).get("motion") == "reduce")
-    wait_until(qapp, lambda: bridge.property("reduceMotion") is True)
-    _click(qapp, window, _named(root, "reduceMotion")[0])
-    wait_until(qapp, lambda: _prefs(window).get("motion") == "normal")
+    assert _named(root, "reduceMotion") == [], "the switch is now Animations, in Look"
 
     assert bridge.property("shortcuts") is True
     _click(qapp, window, _named(root, "shortcuts")[0])
@@ -182,3 +177,45 @@ def test_this_computer_account_setup_updates_and_pairing_are_wired(
     _click(qapp, window, _named(root, "row_pair")[0])
     wait_until(qapp, lambda: _panel(window).property("state")["pairCode"] == "ABCD-1234")
     assert "ABCD-1234" in str(_named(root, "row_pair")[0].property("subtitle"))
+
+
+def test_an_open_pairing_code_says_how_long_it_lasts_that_it_works_once_its_tries_and_its_problems(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Widgets pairing sheet said these; Material's Pair a phone row only showed the code."""
+    status: dict = {}
+    monkeypatch.setattr(
+        window.session, "begin_pairing", lambda done: done({"display_code": "1234 5678"}, None) or True
+    )
+    monkeypatch.setattr(window.session, "pairing_status", lambda: dict(status))
+    root = _open_settings(qapp, window, "computer")
+    row = _named(root, "row_pair")[0]
+
+    def subtitle() -> str:
+        _pump(qapp, 5)
+        return str(row.property("subtitle"))
+
+    status.update(state="waiting", expires_at_ms=wall_clock.now_ms() + 300_500, tries_left=3)
+    _click(qapp, window, row)
+    wait_until(qapp, lambda: "1234 5678" in subtitle())
+    words = subtitle()
+    assert re.search(r"Code works for (5:00|4:59)\. 3 tries left\. It works once\.", words), words
+    status.update(tries_left=1)
+    _panel(window)._pair_tick()
+    assert "1 try left." in subtitle()
+
+    for state, problem in (
+        ("expired", "That code has expired. Start a new one."),
+        ("too_many_tries", "Too many wrong tries. Start a new code."),
+        ("idle", "That code is no longer open. Start a new one."),
+    ):
+        status.clear()
+        status.update(state="waiting", expires_at_ms=wall_clock.now_ms() + 60_000, tries_left=3)
+        _click(qapp, window, row)
+        wait_until(qapp, lambda: "1234 5678" in subtitle())
+        status.clear()
+        status.update(state=state)
+        _panel(window)._pair_tick()
+        assert _panel(window).property("state")["pairError"] == problem, state
+        assert subtitle() == "Show a code to link a phone.", state
+        assert problem in str(_named(root, "row_pairError")[0].property("subtitle")), state

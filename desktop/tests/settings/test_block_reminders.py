@@ -31,6 +31,7 @@ from desktop.tests.settings.support_reminders import (
     tick,
     with_stand_ins,
 )
+from desktop.tests.week.support_material import _click, _named, _qml, _snack
 from desktop.tests.window_support import free, qapp, settled  # noqa: F401
 
 # The preferences table as 0.14 left it, for an account made before reminders were on by default.
@@ -146,7 +147,7 @@ def test_a_block_saved_inside_its_lead_reminds_at_once_and_only_once(
 def test_a_block_saved_before_its_lead_reminds_when_the_lead_begins(
     qapp: QApplication, new_window: NativeWindow
 ) -> None:
-    """Without a tray to carry it, the window alone says it."""
+    """Without a tray to carry it, the window alone says it: as a card that stays until the block starts."""
     window = new_window
     window._tray_icon = None
     at(18, 20)
@@ -156,10 +157,15 @@ def test_a_block_saved_before_its_lead_reminds_when_the_lead_begins(
         tick(qapp, window, minute)
         assert window._bell.once_rung == [], f"reminded at 18:{minute}"
     tick(qapp, window, 35)
-    assert window.toast.isVisible() and window.toast.text() == REMINDER
+    (card,) = _named(window._material_page.root, "reminderCard")
+    assert card.property("visible") is True
+    assert str(_qml(card, "reminderCardTitle").property("text")) == "Guitar practice starts soon"
+    assert _snack(window) == ""
     for minute in range(36, 50):
         tick(qapp, window, minute)
-    assert window._bell.once_rung == ["chime"]
+    # One chime for the card at 18:35, one for "starts now" when the card goes at 18:45; none after.
+    assert window._bell.once_rung == ["chime", "chime"]
+    assert _snack(window) == "Guitar practice starts now — 6:45 PM · Thu"
 
 
 def test_a_new_account_reminds_without_being_asked(qapp: QApplication, new_window: NativeWindow) -> None:
@@ -203,7 +209,13 @@ def test_reminders_turned_off_after_the_update_stay_off(
     assert window._bell.once_rung == []
 
 
-def test_the_toast_keeps_a_reminder_until_something_more_important(
+ON_THE_SCREEN = (
+    "product gap: a reminder reaches the tray and the Widgets toast, which Material's screen never shows; "
+    "Material's snackbar says nothing, so a student looking at the window sees no reminder"
+)
+
+
+def test_the_snackbar_keeps_a_reminder_until_something_more_important(
     qapp: QApplication, new_window: NativeWindow
 ) -> None:
     """"Saved preferences." wrote over the reminder. A save's confirmation is less than a reminder, so
@@ -213,32 +225,55 @@ def test_the_toast_keeps_a_reminder_until_something_more_important(
     choose(qapp, window, reminder_lead_min=10)
     add_practice(qapp, window)
     tick(qapp, window, 35)
-    assert window.toast.text() == REMINDER
+    assert _snack(window) == REMINDER
     window.session.save_preferences({"alert_volume": 70})
     settled(qapp, window)
     assert window.session.message == "Saved preferences."
-    assert window.toast.text() == REMINDER
+    assert _snack(window) == REMINDER
     window.session.add_block(
         {"id": "dinner", "title": "Dinner", "kind": "locked", "category": "meals", "start": "19:30",
          "duration_min": 30, "days": [3]}
     )
     window.session.save()
     settled(qapp, window)
-    assert window.toast.text() == REMINDER
+    assert _snack(window) == REMINDER
     window.session.select_block(None, None)
     window.session.copy_selected()
-    assert window.toast.text() == "Select a block before copying it."
+    assert _snack(window) == "Select a block before copying it."
 
 
-def test_got_it_on_a_reminder_left_on_screen_takes_its_toast_away_too(
+def test_a_reminder_left_on_screen_says_so_in_the_window(
     qapp: QApplication, new_window: NativeWindow
 ) -> None:
+    """With "keep reminders on screen" on, the reminder sits in the window as a card until the student
+    deals with it (the card's own tests: test_reminder_cards.py)."""
     window = new_window
     at(18, 30)
     choose(qapp, window, reminder_lead_min=10, reminder_dnd_override=True)
     add_practice(qapp, window)
     tick(qapp, window, 35)
-    assert window.alert_strip.isVisible() and window.toast.text() == REMINDER
-    window.alert_strip.dismiss.click()
-    assert not window.alert_strip.isVisible()
-    assert not window.toast.isVisible()
+    column = _qml(window._material_page.root, "materialReminderCards")
+    (card,) = _named(window._material_page.root, "reminderCard")
+    assert column.property("visible") is True
+    assert str(_qml(card, "reminderCardTitle").property("text")) == "Guitar practice starts soon"
+    assert _snack(window) == "", "a reminder kept on screen is said once, by its card"
+    _click(window, _qml(card, "reminderCardClose"))
+    settled(qapp, window)
+    assert column.property("visible") is False
+    assert _snack(window) == ""
+    strip = _qml(window._material_page.root, "materialAlertStrip")
+    assert strip.property("visible") is False, "reminders no longer use the Got it strip"
+
+
+def test_a_focus_notice_kept_on_screen_still_uses_the_got_it_strip(
+    qapp: QApplication, new_window: NativeWindow
+) -> None:
+    window = new_window
+    choose(qapp, window, reminder_dnd_override=True)
+    window._present_alerts([{"title": "Break", "body": "Essay", "kind": "focus", "tone": "soft"}])
+    strip = _qml(window._material_page.root, "materialAlertStrip")
+    assert strip.property("visible") is True
+    assert str(_qml(strip, "alertStripText").property("text")) == "Break — Essay"
+    _click(window, _qml(strip, "alertStripDismiss"))
+    settled(qapp, window)
+    assert strip.property("visible") is False

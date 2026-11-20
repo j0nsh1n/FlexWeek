@@ -882,4 +882,52 @@ mod tests {
             "the Android copy differs from the engine fixture"
         );
     }
+
+    /// The phone reads a weekly fixed time (#118) the way the desktop writes it: a `weekly-` standing row
+    /// with an Until date shows in every week up to that date and not after, cut by date inside a week.
+    #[test]
+    fn today_shows_a_weekly_fixed_time_up_to_its_until_date() {
+        let titles = |week: &FlexWeek, date: &str| -> Vec<String> {
+            let out: Value =
+                serde_json::from_str(&week.today(date.into(), 8 * 60).unwrap()).unwrap();
+            out["rows"]
+                .as_array()
+                .map(|rows| {
+                    rows.iter()
+                        .map(|row| row["title"].as_str().unwrap_or_default().to_string())
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let standing = |until: &str| {
+            json!([{"id": "weekly-guitar", "from_week": "2026-10-05", "position": 0,
+                    "body": {"id": "weekly-guitar", "title": "Guitar", "kind": "locked", "days": [3],
+                             "start": "17:00", "duration_min": 60, "until": until}}])
+            .to_string()
+        };
+        let (week, _path) = open_test("weekly-until");
+        {
+            let db = week.db.lock().unwrap();
+            flexweek_store::replace_standing(&db, week.user_id.unwrap(), &standing("2026-10-15"))
+                .unwrap();
+        }
+        // Thursdays 8, 15 and 22 Oct: the 15th is the Until day itself, so it still shows.
+        assert_eq!(titles(&week, "2026-10-08"), vec!["Guitar"]);
+        assert_eq!(titles(&week, "2026-10-15"), vec!["Guitar"]);
+        assert!(
+            titles(&week, "2026-10-22").is_empty(),
+            "the week after Until has no Guitar"
+        );
+        {
+            let db = week.db.lock().unwrap();
+            flexweek_store::replace_standing(&db, week.user_id.unwrap(), &standing("2026-10-14"))
+                .unwrap();
+        }
+        // Until on the Wednesday cuts that week's Thursday.
+        assert!(
+            titles(&week, "2026-10-15").is_empty(),
+            "Until Wednesday 14 Oct leaves no Thursday"
+        );
+        assert_eq!(titles(&week, "2026-10-08"), vec!["Guitar"]);
+    }
 }

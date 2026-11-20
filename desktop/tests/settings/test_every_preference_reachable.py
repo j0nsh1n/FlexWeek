@@ -18,12 +18,6 @@ WEB_ONLY = {
     "sidebar_collapsed": "the sidebar is a web layout; the desktop app has no sidebar",
     "sidebar_width_px": "as above",
 }
-# Set in their own dialog rather than in Settings.
-ELSEWHERE = {
-    "protected": "Availability",
-    "day_cutoff": "Availability",
-    "setup": "first-run setup writes it; Settings offers Run setup again",
-}
 # Written for you, not chosen. save_preferences derives the light or dark axis from the pack.
 DERIVED = {"theme": "follows theme_pack, set in NativeSession.save_preferences"}
 
@@ -38,19 +32,6 @@ def test_every_preference_is_reachable_from_the_desktop_app() -> None:
         field for field in Preferences.model_fields if field not in source and field not in WEB_ONLY
     ]
     assert unreachable == [], f"the desktop app cannot set: {unreachable}"
-
-
-def test_the_settings_dialog_saves_what_it_shows() -> None:
-    """A control the dialog builds but never writes back is worse than no control at all."""
-    settings = (ROOT / "desktop" / "native" / "settings.py").read_text()
-    body = settings[settings.index("def updates(") :]
-    saved = {field for field in Preferences.model_fields if f'"{field}"' in body}
-    shown = {
-        field
-        for field in Preferences.model_fields
-        if field not in WEB_ONLY and field not in ELSEWHERE and field not in DERIVED and field in settings
-    }
-    assert shown - saved == set(), f"shown in Settings but never saved: {sorted(shown - saved)}"
 
 
 def test_a_derived_preference_really_is_derived() -> None:

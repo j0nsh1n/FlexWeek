@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QApplication
 from backend.tests.fake_clock import CLOCK
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.window import NativeWindow
-from desktop.tests.material_support import named, pump, show_material
+from desktop.tests.material_support import focus_quick, named, pump, quick_of, show_material
 from desktop.tests.window_support import settled
 
 NOW_DAY = 3  # Thursday of the account's week; the clock reads 19:00 on it
@@ -34,12 +34,12 @@ def centre(item: QObject) -> QPoint:
 def click(window: NativeWindow, item: QObject, dx: int = 0, dy: int = 0) -> None:
     """A real left click on a QML item through the Quick widget, as the pointer does it."""
     point = centre(item) + QPoint(dx, dy)
-    QTest.mouseClick(window._material_page._quick, Qt.MouseButton.LeftButton, pos=point)
+    QTest.mouseClick(quick_of(window), Qt.MouseButton.LeftButton, pos=point)
     pump(QApplication.instance())
 
 
 def drag(window: NativeWindow, item: QObject, to: QPoint) -> None:
-    quick = window._material_page._quick
+    quick = quick_of(window)
     start = centre(item)
     app = QApplication.instance()
     QTest.mousePress(quick, Qt.MouseButton.LeftButton, pos=start)
@@ -59,9 +59,9 @@ def drag(window: NativeWindow, item: QObject, to: QPoint) -> None:
 def open_typed_homework(qapp: QApplication, window: NativeWindow):
     """Material on screen with Add homework open and a title typed. Returns (root, quick widget, sheets)."""
     root = show_material(qapp, window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     window.activateWindow()
-    quick.setFocus()
+    focus_quick(window)
     sheets = window._material_page.bridge.sheets
     sheets.openHomework()
     sheets.setText("title", "History essay")

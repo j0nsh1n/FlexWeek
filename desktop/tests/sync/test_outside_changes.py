@@ -256,7 +256,7 @@ def test_an_open_sheet_holds_the_reload_until_it_closes(
     database = _database(window, tmp_path)
     reloads = _count_reloads(window, monkeypatch)
     ticks = _ticks(window)
-    sheet = QDialog(window)
+    sheet = QDialog()
     sheet.setModal(True)
     sheet.show()
     wait_until(qapp, lambda: QApplication.activeModalWidget() is sheet, what="the sheet open")

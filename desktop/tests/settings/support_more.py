@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import CLOCK
 from desktop.native.window import NativeWindow
 from desktop.tests.blocks_helper import put_block
-from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import settled
 
 WEDNESDAY, FRIDAY, SATURDAY = 2, 4, 5
@@ -34,39 +33,8 @@ def more_row(window: NativeWindow) -> tuple[bool, str]:
     raise AssertionError("More has no Unfinished row")
 
 
-def panel_rows(window: NativeWindow) -> list[str]:
-    panel = window.unfinished_panel
-    return [
-        label.text()
-        for label in panel.findChildren(QLabel)
-        if label.objectName() == "unfinishedRow" and label.isVisibleTo(window)
-    ]
 
 
-def left_over_week_two(qapp: QApplication, window: NativeWindow) -> None:
-    """An essay due three days ago with its time deleted, seen from the week after: homework from an
-    earlier week. Then work due that week, and work due the week after, neither placed."""
-    session = window.session
-    week = date.fromisoformat(session.week_start)
-    session.add_block({"id": "school", "title": "School", "kind": "locked", "start": "08:00",
-                       "duration_min": 390, "days": [0, 1, 2, 3, 4]})
-    overdue = (CLOCK.today() - timedelta(days=3)).isoformat()
-    add(window, "essay", "History essay", 120, overdue + "T12:00")
-    session.save()
-    settled(qapp, window)
-    planned = next(block for block in session.blocks if block.get("assignment_id") == "essay")
-    session.delete_block(planned["id"])
-    session.save()
-    settled(qapp, window)
-    later = (week + timedelta(days=7)).isoformat()
-    session.load_week(later)
-    wait_until(qapp, lambda: session.week_start == later and not session.busy)
-    add(window, "math", "Math worksheet", 60, due_in(window, 4))
-    add(window, "lab", "Chem lab", 90, due_in(window, 10))
-    session.save()
-    settled(qapp, window)
-    window._on_week()
-    qapp.processEvents()
 
 
 def overdue_this_week(qapp: QApplication, window: NativeWindow) -> str:

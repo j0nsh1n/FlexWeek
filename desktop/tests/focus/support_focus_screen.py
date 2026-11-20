@@ -8,7 +8,6 @@ import contextlib
 import itertools
 from collections.abc import Iterator
 from copy import deepcopy
-from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -16,12 +15,9 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt
-from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QAbstractButton, QApplication, QDialog, QPushButton
+from PySide6.QtWidgets import QApplication
 
-from backend.tests.fake_clock import CLOCK
 from desktop.native.calendar import sunday_due
-from desktop.native.widgets import ConfirmSheet
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import LightWindows
 from desktop.tests.waiting import wait_until
@@ -44,37 +40,6 @@ def settled(qapp: QApplication, window: NativeWindow) -> None:
     )
 
 
-@pytest.fixture()
-def focus_window(
-    qapp: QApplication, tmp_path_factory: pytest.TempPathFactory, tmp_path: Path
-) -> Iterator[NativeWindow]:
-    """Today's app's Week with the History essay on Thursday 19:00 and the clock held at Thursday
-    19:10, so the essay is on now."""
-    windows = LightWindows(qapp, tmp_path_factory.getbasetemp(), tmp_path)
-    try:
-        made = windows.open((1280, 860))
-        session = made.session
-        CLOCK.set(datetime.fromisoformat(session.week_start) + timedelta(days=3, hours=19, minutes=10))
-        session.add_homework(
-            {
-                "id": "essay",
-                "title": "History essay",
-                "due": sunday_due(session.week_start),
-                "estimate_min": 60,
-                "revision": 0,
-            }
-        )
-        session.save()
-        settled(qapp, made)
-        essay = next(block for block in session.blocks if block.get("assignment_id") == "essay")
-        session.add_block({**essay, "start": "19:00", "days": [3], "pinned": True})
-        session.save()
-        settled(qapp, made)
-        made.findChild(QAbstractButton, "viewWeek").click()
-        settled(qapp, made)
-        yield made
-    finally:
-        windows.close()
 
 
 @pytest.fixture()
@@ -108,41 +73,6 @@ def rules(window: NativeWindow, owned: bool = True, **prefs: object) -> Iterator
         session.reset_focus()
         session.preferences = before
         session.material_owns = before_owner
-
-
-def on_screen(window: NativeWindow) -> str:
-    return window._stack.currentWidget().objectName()
-
-
-def visible_buttons(widget) -> list[str]:
-    return [button.text() for button in widget.findChildren(QPushButton) if button.isVisible()]
-
-
-def quick_focus(window: NativeWindow) -> None:
-    """More > Quick focus, then Just a timer: Quick focus opens the screen ready, as F does (decision 19).
-    The essay is on now in these windows, so the screen offers it and the timer is the second choice."""
-    window.findChild(QPushButton, "quickFocusAction").click()
-    assert window.session.focus is None, "Quick focus waits for Start"
-    assert on_screen(window) == "focusPage"
-    assert visible_buttons(window.focus_screen) == ["Back", "Start", "Just a timer"]
-    assert window.focus_screen.ring._waiting, "set but not started"
-    QTest.mouseClick(window.focus_screen.just_timer, LEFT)
-    assert window.session.focus is not None
-    assert not window.focus_screen.ring._waiting
-
-
-def end_sheet_answer(monkeypatch: pytest.MonkeyPatch, window: NativeWindow, key: str) -> list[ConfirmSheet]:
-    """Press Finish and answer the sheet it opens with `key`; the sheets seen are returned."""
-    seen: list[ConfirmSheet] = []
-
-    def run(sheet: ConfirmSheet) -> int:
-        seen.append(sheet)
-        sheet.buttons[key].click()
-        return QDialog.DialogCode.Accepted
-
-    monkeypatch.setattr(ConfirmSheet, "exec", run)
-    QTest.mouseClick(window.focus_screen.stop, LEFT)
-    return seen
 
 
 SLOT = itertools.count()

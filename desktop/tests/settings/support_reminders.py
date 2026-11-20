@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 from backend.tests.fake_clock import CLOCK, START
 from desktop.native.window import NativeWindow
 from desktop.server import LocalServer
-from desktop.tests.logic_support import past_setup
+from desktop.tests.logic_support import past_recovery, past_setup, sign_in, sign_up
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import settled
 
@@ -118,19 +118,13 @@ def launch(
     opened.append(window)
     window.resize(1280, 860)
     window.show()
-    window.username.setText(name)
-    window.password.setText(PASSWORD)
     if create:
-        window.findChild(QPushButton, "createAccount").click()
-        wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "recoveryPage")
-        window.recovery_ack.setChecked(True)
-        window.recovery_continue.click()
+        sign_up(qapp, window, name, PASSWORD)
+        past_recovery(qapp, window)
         past_setup(qapp, window)
     else:
-        if window.sign_in_button.isHidden():
-            window.findChild(QPushButton, "authSwitch").click()
-        window.keep_signed_in.setChecked(False)
-        window.sign_in_button.click()
+        window._account_bridge().setKeepSignedIn(False)
+        sign_in(qapp, window, name, PASSWORD)
         wait_until(qapp, lambda: window.session.preferences is not None and not window.session.busy)
     return with_stand_ins(window)
 
@@ -173,17 +167,41 @@ def tick(qapp: QApplication, window: NativeWindow, minute: int) -> None:
     wait_until(qapp, lambda: not window.session.busy)
 
 
+def _notice_on_screen(window: NativeWindow) -> str:
+    """The reminder line the student reads in the window: Material's snackbar, or the Widgets toast."""
+    snack = window._snack_bridge()
+    if snack is not None:
+        return str(snack.snackText)
+    return window.toast.text() if window.toast.isVisible() else ""
+
+
 def seen(window: NativeWindow) -> dict:
     return {
         "tray": list(window._tray_icon.shown),
-        "toast": window.toast.text() if window.toast.isVisible() else "",
+        "toast": _notice_on_screen(window),
     }
 
 
 def answer_alarm(window: NativeWindow, button: str, heard: list) -> None:
-    """Press a button on the alarm when it rings, noting what it said. The alarm's dialog is modal, so
-    this runs inside its event loop once the dialog is up."""
+    """Press a button on the alarm when it rings, noting what it said: Material's ring screen, or the
+    Widgets dialog, which is modal, so this runs inside its event loop once the dialog is up."""
     tries = [0]
+
+    def act_on_material() -> None:
+        tries[0] += 1
+        with contextlib.suppress(RuntimeError):
+            ring = window._material_page.bridge.property("ring")
+            if not ring.property("open"):
+                if tries[0] < 1000:
+                    QTimer.singleShot(0, act_on_material)
+                return
+            form = dict(ring.property("form"))
+            heard.append([form["title"], form["detail"]])
+            (ring.snooze if button == "alarmSnooze" else ring.dismiss)()
+
+    if window._material_owns() and window._material_page is not None:
+        QTimer.singleShot(0, act_on_material)
+        return
 
     def act() -> None:
         tries[0] += 1

@@ -23,7 +23,7 @@ from desktop.native.client import ApiError  # noqa: E402
 from desktop.native.fields import save_week_starts_on  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402, F401
-from desktop.tests.material_support import named, pump, show_material  # noqa: E402
+from desktop.tests.material_support import named, pump, quick_of, quick_window_of, show_material  # noqa: E402
 from desktop.tests.month.support_material_month import (  # noqa: E402
     bridge,
     hold_month_requests,
@@ -156,9 +156,7 @@ def test_a_failed_preview_asks_again_by_itself_after_a_save(qapp: QApplication, 
     session.save()
     wait_until(qapp, lambda: idle(window))
 
-    wait_until(
-        qapp, lambda: len(preview_calls(held)) > asked, what="the preview asking again after the save"
-    )
+    wait_until(qapp, lambda: len(preview_calls(held)) > asked, what="the preview asking again after the save")
     assert preview.loading
     preview_calls(held)[-1][3](snap("2026-11", "Math HW"))
     wait_until(qapp, lambda: not preview.loading)
@@ -193,7 +191,7 @@ def test_retry_works_by_click_through_the_shield(qapp: QApplication, window: Nat
     # Click directly on Retry through the shield.
     centre = retry_button.mapToScene(QPointF(retry_button.width() / 2, retry_button.height() / 2))
     QTest.mouseClick(
-        window._material_page._quick,
+        quick_of(window),
         Qt.MouseButton.LeftButton,
         Qt.KeyboardModifier.NoModifier,
         QPoint(int(centre.x()), int(centre.y())),
@@ -210,21 +208,21 @@ def test_retry_works_by_tab_and_space(qapp: QApplication, window: NativeWindow) 
     accessible_name = retry_button.property("Accessible.name") or retry_button.property("accessName")
     assert accessible_name == "Retry loading the month preview"
 
-    quick = window._material_page._quick
     preview_view = named(root, "previewView")[0]
     preview_view.forceActiveFocus()
     wait_until(qapp, lambda: preview_view.property("activeFocus") is True)
 
     # Reach Retry by Tab presses, without forcing focus onto it.
     for _ in range(10):
-        if quick.quickWindow().activeFocusItem() is retry_button:
+        if quick_window_of(window).activeFocusItem() is retry_button:
             break
-        QTest.keyClick(quick, Qt.Key.Key_Tab)
+        QTest.keyClick(quick_of(window), Qt.Key.Key_Tab)
         pump(qapp)
-    assert quick.quickWindow().activeFocusItem() is retry_button, "Retry button could not be reached via Tab"
+    focused = quick_window_of(window).activeFocusItem()
+    assert focused is retry_button, "Retry button could not be reached via Tab"
 
     asked = len(preview_calls(held))
-    QTest.keyClick(quick, Qt.Key.Key_Space)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Space)
     wait_until(qapp, lambda: len(preview_calls(held)) > asked, what="Space on Retry asking again")
     assert preview.loading
 
@@ -274,7 +272,6 @@ def test_tab_passes_the_preview_in_three_stops_or_fewer(qapp: QApplication, wind
     bridge(window).showPage("settings")
     settings = panel(window)
     settings.openAdvanced()
-    quick = window._material_page._quick
     stage = named(root, "previewStage")[0]
 
     def is_descendant(item: Any, ancestor: Any) -> bool:
@@ -291,9 +288,9 @@ def test_tab_passes_the_preview_in_three_stops_or_fewer(qapp: QApplication, wind
         pump(qapp)
         seen_items: list[Any] = [preview_view]
         for _ in range(25):
-            QTest.keyClick(quick, Qt.Key.Key_Tab)
+            QTest.keyClick(quick_of(window), Qt.Key.Key_Tab)
             pump(qapp)
-            focused = quick.quickWindow().activeFocusItem()
+            focused = quick_window_of(window).activeFocusItem()
             if focused is not None and is_descendant(focused, stage) and focused not in seen_items:
                 seen_items.append(focused)
         return [item.objectName() for item in seen_items]

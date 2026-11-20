@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import components 1.0
+import "../sheets"
 
 // The recovery codes a new account gets once. Continue stays off until the student says they saved them.
 FocusScope {
@@ -182,5 +183,21 @@ FocusScope {
                 }
             }
         }
+    }
+
+    // Save asks what the file is before the system's file dialog opens.
+    PromptDialog {
+        objectName: "recoveryPrompt"
+        anchors.fill: parent
+        z: 40
+        visible: bridge && bridge.ask && bridge.ask.id !== undefined
+        enabled: visible
+        sheets: root.bridge
+        theme: root.theme
+        density: root.density
+        reduceMotion: root.reduceMotion
+        highContrast: root.highContrast
+        phone: root.phone
+        onVisibleChanged: if (visible) Qt.callLater(focusFirst)
     }
 }

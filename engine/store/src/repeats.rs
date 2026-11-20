@@ -3,14 +3,17 @@
 //! Both save handlers (`changes::apply` and the backend's `post_changes`) come here, so a change is
 //! applied one way whoever sends it.
 
+use flexweek_engine::desk::grid::WEEKLY_PREFIX;
 use flexweek_engine::repeats::{
     Edited, Intent, Kept, change_shown_start, edited_weeks_line, kept_notice, own_changes, patched,
     pieces_after_replace, restated_pieces, restated_version, stands_from,
 };
+use flexweek_engine::repeats::{MAX_REPEATS, REPEATS_FULL};
 use flexweek_engine::shown::{
     compose_shown_week, family_id, replaced_repeat_on_shown_week, shown_parts, split_shown_week,
 };
 use flexweek_engine::snapshot::canonical;
+use flexweek_engine::standing::{twin_in_week, uncut_copy};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 
@@ -23,15 +26,23 @@ pub struct RepeatsOutcome {
     pub changed_weeks: Vec<String>,
     pub kept: Vec<Kept>,
     pub notice: Option<String>,
+    /// Later saved weeks that already held a hand-made copy of a new weekly time, which they now show
+    /// twice; nothing is removed (Jonathan, 2026-11-20). Oldest first.
+    pub doubled_weeks: Vec<String>,
 }
 
 impl RepeatsOutcome {
     pub fn to_value(&self) -> Value {
-        json!({
+        let mut out = json!({
             "changed_weeks": self.changed_weeks,
             "kept": self.kept.iter().map(Kept::to_value).collect::<Vec<_>>(),
             "notice": self.notice,
-        })
+        });
+        // Only when a week shows a new weekly time twice, so every other answer keeps its shape.
+        if !self.doubled_weeks.is_empty() {
+            out["doubled_weeks"] = json!(self.doubled_weeks);
+        }
+        out
     }
 }
 
@@ -68,6 +79,27 @@ fn parse(text: &str) -> StoreResult<Value> {
 
 /// One repeat's rows, oldest first: the Monday each holds from and its body (None for a stop).
 type Versions = Vec<(String, Option<Value>)>;
+
+/// How many repeats other than `id` stand in the week of `week` or start standing in a later week: a
+/// repeat starting here would stand beside all of them at some point, so this is what the limit counts.
+fn others_standing_from(
+    conn: &Connection,
+    user_id: i64,
+    week: &str,
+    id: &str,
+) -> StoreResult<usize> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(DISTINCT s.id) FROM standing_blocks s
+        WHERE s.user_id = ?1 AND s.id != ?3 AND s.body IS NOT NULL
+            AND (s.from_week > ?2 OR s.from_week = (
+                SELECT MAX(t.from_week) FROM standing_blocks t
+                WHERE t.user_id = s.user_id AND t.id = s.id AND t.from_week <= ?2
+            ))",
+        params![user_id, week, id],
+        |row| row.get(0),
+    )?;
+    Ok(usize::try_from(count).unwrap_or(usize::MAX))
+}
 
 fn versions(conn: &Connection, user_id: i64, id: &str) -> StoreResult<(Versions, Option<i64>)> {
     let mut stmt = conn.prepare(
@@ -144,6 +176,32 @@ fn clock_24h(conn: &Connection, user_id: i64) -> StoreResult<bool> {
         .ok()
         .and_then(|comfort| comfort.get("clock_24h").and_then(Value::as_bool))
         .unwrap_or(false))
+}
+
+/// The saved weeks after `week` that hold a hand-made copy of the new weekly time `made`.
+fn doubled_weeks(
+    conn: &Connection,
+    user_id: i64,
+    week: &str,
+    made: &Value,
+) -> StoreResult<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT week_start, blocks FROM weeks WHERE user_id = ?1 AND week_start > ?2 ORDER BY week_start",
+    )?;
+    let later = stmt
+        .query_map(params![user_id, week], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut doubled = Vec::new();
+    for (week_start, text) in later {
+        if let Value::Array(stored) = parse(&text)?
+            && twin_in_week(made, &week_start, &stored)?
+        {
+            doubled.push(week_start);
+        }
+    }
+    Ok(doubled)
 }
 
 /// Where a new repeat goes in Setup's order: after those standing in its week.
@@ -322,6 +380,24 @@ fn enact(
         if new_here == base {
             continue;
         }
+        // A repeat that starts standing here (new, or started again after a stop) counts against the
+        // limit, and a new weekly time that a later week already holds by hand is named for that week.
+        if base.is_none()
+            && new_here.is_some()
+            && others_standing_from(conn, user_id, &week, &intent.id)? >= MAX_REPEATS
+        {
+            return Err(RepeatsFailure::Refused(REPEATS_FULL.into()));
+        }
+        if old.is_empty()
+            && intent.id.starts_with(WEEKLY_PREFIX)
+            && let Some(made) = &new_here
+        {
+            for week_start in doubled_weeks(conn, user_id, &week, made)? {
+                if !outcome.doubled_weeks.contains(&week_start) {
+                    outcome.doubled_weeks.push(week_start);
+                }
+            }
+        }
         let title = new_here
             .as_ref()
             .or(base.as_ref())
@@ -481,7 +557,10 @@ fn enact(
             }
             let mut updated = stored.clone();
             if was != now || intent.edited != Edited::Keep {
-                let copies: Vec<Value> = pieces.iter().map(|at| stored[*at].clone()).collect();
+                let copies: Vec<Value> = pieces
+                    .iter()
+                    .map(|at| uncut_copy(&stored[*at], was, &week_start))
+                    .collect::<Result<_, _>>()?;
                 let restated = if intent.edited == Edited::Keep {
                     restated_pieces(was, now, &copies, &intent.id)
                 } else {

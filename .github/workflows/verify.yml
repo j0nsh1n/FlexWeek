@@ -306,19 +306,15 @@ jobs:
           chmod +x dist/fwtest/fwtest
           echo "$PWD/dist/fwtest" >> "$GITHUB_PATH"
           python -m pip install dist/engine/*.whl
-      - name: Run classic ${{ matrix.tab }} with a real pointer
+      - name: Play Material ${{ matrix.tab }} with a real pointer
+        # The rig exits non-zero when any step of the play is NOT DONE or the app raises a Python error.
         run: |
-          fwtest rig --server xvfb --design classic --tab ${{ matrix.tab }} --out rig-artifacts/${{ matrix.tab }}
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          tab = os.environ["TAB"]
-          results = json.loads((Path("rig-artifacts") / tab / "results.json").read_text())
-          if not results:
-              raise SystemExit(f"Classic {tab} rig selected no scenarios")
-          PY
+          case "$TAB" in
+            day) play=scripts/rig/plays/material-day-light.json ;;
+            week) play=scripts/rig/plays/material-light.json ;;
+            *) echo "No play for $TAB"; exit 2 ;;
+          esac
+          fwtest rig --server xvfb --play "$play" --out "rig-artifacts/$TAB"
         env:
           TAB: ${{ matrix.tab }}
           FLEXWEEK_SILENT: "1"
@@ -329,7 +325,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: classic-rig-${{ matrix.tab }}
+          name: material-rig-${{ matrix.tab }}
           path: rig-artifacts/${{ matrix.tab }}/
           if-no-files-found: warn
           retention-days: 7

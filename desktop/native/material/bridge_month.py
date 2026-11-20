@@ -15,7 +15,7 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from desktop.native.calendar import month_for_view, weekday_order
 from desktop.native.fields import week_start_day, week_start_notice
-from desktop.native.hours.month import HOMEWORK, LOAD_CAP, LOAD_WORDS, MonthCell, month_cells
+from desktop.native.hours.month_cells import HOMEWORK, LOAD_CAP, LOAD_WORDS, MonthCell, month_cells
 from desktop.native.material.bridge_rows import Labels, Rows
 from desktop.native.material.theme import event_category
 from desktop.native.weekmodel import clock_label, length_label, set_clock_24h

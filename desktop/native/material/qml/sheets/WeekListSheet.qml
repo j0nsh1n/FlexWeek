@@ -23,7 +23,7 @@ SheetFrame {
                 objectName: modelData.type === "heading" ? "weekListDay" : "weekListNone"
                 width: parent.width
                 topPadding: modelData.type === "heading" ? 4 : 0
-                leftPadding: modelData.type === "heading" ? 0 : 4
+                leftPadding: 0
                 text: modelData.type === "item" ? "" : modelData.text
                 color: pal.inkMuted
                 font.family: M3Font.family

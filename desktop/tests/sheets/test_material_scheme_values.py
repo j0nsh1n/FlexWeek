@@ -78,7 +78,8 @@ THEME_KEYS = (
 
 def test_seven_presets_each_have_light_dark_standard_and_high_contrast() -> None:
     loaded = json.loads(tokens_path().read_text(encoding="utf-8"))
-    assert len(loaded) == 28
+    # 7 presets x light/dark x standard/high, and the four old looks (one mode each) x standard/high.
+    assert len(loaded) == 28 + 4 * 2
     for preset in PRESET_NAMES:
         for mode in ("light", "dark"):
             for contrast_name in ("std", "high"):

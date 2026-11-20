@@ -3,12 +3,13 @@
 //! `sport`, `activity-N`), the same in every week and on every device, so a week that holds a block
 //! with that id holds its own version of it for that week.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::EngineResult;
 use crate::desk::grid::is_setup_block;
+use crate::desk::pydate::from_iso;
 use crate::repeats::days_of;
 use crate::shown::family_id;
 
@@ -37,6 +38,124 @@ pub fn with_standing(stored: &[Value], standing: &[Value]) -> Vec<Value> {
             .cloned(),
     );
     week
+}
+
+/// A block as the week starting `week_start` (a Monday) shows it under its Until date (#118): only the
+/// days up to that date, with its missed days among them. None when no day is left. A block with no
+/// `until` is shown as it is. Nothing is stored cut: a week's copy keeps every day, and moving Until
+/// later shows them again.
+pub fn cut_at_until(block: &Value, week_start: &str) -> EngineResult<Option<Value>> {
+    let Some(until) = block
+        .get("until")
+        .and_then(Value::as_str)
+        .filter(|text| !text.is_empty())
+    else {
+        return Ok(Some(block.clone()));
+    };
+    let last = (from_iso(until)? - from_iso(week_start)?).num_days();
+    let days: Vec<i64> = days_of(block)
+        .into_iter()
+        .filter(|day| *day <= last)
+        .collect();
+    if days.is_empty() {
+        return Ok(None);
+    }
+    let mut out = block.clone();
+    out["days"] = json!(days);
+    if let Some(fields) = out.as_object_mut() {
+        let missed: Vec<i64> = fields
+            .get("missed_days")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_i64)
+                    .filter(|day| *day <= last)
+                    .collect()
+            })
+            .unwrap_or_default();
+        if missed.is_empty() {
+            fields.shift_remove("missed_days");
+        } else {
+            fields.insert("missed_days".into(), json!(missed));
+        }
+    }
+    Ok(Some(out))
+}
+
+/// A week's copy of a repeat with the days the repeat's Until (`repeat`, as it stood for that week) cut
+/// away put back. A copy saved while cut holds only the days the week showed; the student never saw the
+/// others, so they are not days the week took out, and a change to the repeat (Until moved later) must
+/// not read them as such.
+pub fn uncut_copy(copy: &Value, repeat: Option<&Value>, week_start: &str) -> EngineResult<Value> {
+    let Some(repeat) = repeat else {
+        return Ok(copy.clone());
+    };
+    let shown = cut_at_until(repeat, week_start)?
+        .map(|block| days_of(&block))
+        .unwrap_or_default();
+    let mut days = days_of(copy);
+    let before = days.len();
+    for day in days_of(repeat) {
+        if !shown.contains(&day) && !days.contains(&day) {
+            days.push(day);
+        }
+    }
+    if days.len() == before {
+        return Ok(copy.clone());
+    }
+    days.sort_unstable();
+    let mut out = copy.clone();
+    out["days"] = json!(days);
+    Ok(out)
+}
+
+/// Whether a week's own blocks (`stored`, of the week starting `week_start`) already hold a hand-made copy
+/// of the weekly time `repeat` makes: a locked block that is not a repeat, with the same name, start and
+/// length on a day the repeat (cut at its Until) also has. The week would then show it twice.
+pub fn twin_in_week(repeat: &Value, week_start: &str, stored: &[Value]) -> EngineResult<bool> {
+    let Some(repeat) = cut_at_until(repeat, week_start)? else {
+        return Ok(false);
+    };
+    let text = |block: &Value, key: &str| {
+        block
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .to_lowercase()
+    };
+    let days = days_of(&repeat);
+    for copy in stored {
+        if copy.get("kind").and_then(Value::as_str) != Some("locked")
+            || crate::desk::grid::is_standing_block(copy)?
+            || text(copy, "start").is_empty()
+            || text(copy, "start") != text(&repeat, "start")
+            || copy.get("duration_min") != repeat.get("duration_min")
+            || text(copy, "title") != text(&repeat, "title")
+        {
+            continue;
+        }
+        if days_of(copy).iter().any(|day| days.contains(day)) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// `with_standing` for the week starting `week_start`, each block cut at its Until date.
+pub fn shown_with_standing(
+    stored: &[Value],
+    standing: &[Value],
+    week_start: &str,
+) -> EngineResult<Vec<Value>> {
+    let mut week = Vec::new();
+    for block in with_standing(stored, standing) {
+        if let Some(shown) = cut_at_until(&block, week_start)? {
+            week.push(shown);
+        }
+    }
+    Ok(week)
 }
 
 /// An account from before the standing week: its Setup blocks are those of the newest saved week that
@@ -95,4 +214,40 @@ pub fn derive_standing(
         }
     }
     Ok(newest)
+}
+
+/// The most repeats a list of standing rows (`id`, `from_week`, `body`; a null body stops) holds in any
+/// one week: for each week a row starts, the ids whose latest row from that week or earlier has a body.
+/// An import whose rows hold more than `repeats::MAX_REPEATS` at once is refused.
+pub fn most_standing_at_once(rows: &[Value]) -> usize {
+    let text = |row: &Value, key: &str| {
+        row.get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
+    let mut weeks: Vec<String> = rows.iter().map(|row| text(row, "from_week")).collect();
+    weeks.sort_unstable();
+    weeks.dedup();
+    weeks
+        .iter()
+        .map(|week| {
+            let mut latest: HashMap<String, (String, bool)> = HashMap::new();
+            for row in rows {
+                let from = text(row, "from_week");
+                if &from > week {
+                    continue;
+                }
+                let live = !row.get("body").is_none_or(Value::is_null);
+                let entry = latest
+                    .entry(text(row, "id"))
+                    .or_insert((from.clone(), live));
+                if from >= entry.0 {
+                    *entry = (from, live);
+                }
+            }
+            latest.values().filter(|(_, live)| *live).count()
+        })
+        .max()
+        .unwrap_or(0)
 }

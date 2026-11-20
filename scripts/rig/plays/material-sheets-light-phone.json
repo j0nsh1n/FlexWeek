@@ -1,7 +1,7 @@
 {
   "setup": {
     "seed": "rig",
-    "look": "light-frost",
+    "mode": "light",
     "size": [
       700,
       900
@@ -9,18 +9,6 @@
     "clock_24h": false
   },
   "steps": [
-    {
-      "click": "settingsGear"
-    },
-    {
-      "wait": 600
-    },
-    {
-      "click": "chooseMaterial"
-    },
-    {
-      "wait": 1000
-    },
     {
       "see": "materialBar"
     },

@@ -7,14 +7,11 @@ stored weeks of Monday 2 and Monday 9 November; from Sunday it runs Sunday 1 to 
 
 from __future__ import annotations
 
-import pytest
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication
 
-from desktop.native import widgets
 from desktop.native.calendar import SETUP_SCHOOL_ID
 from desktop.native.client import ApiError
 from desktop.native.controller import NativeSession
-from desktop.native.widgets import BlockDialog
 from desktop.server import LocalServer
 from desktop.tests.e2e.account_sessions import HASHING_WAIT, HELD, server  # noqa: F401
 from desktop.tests.e2e.saved_weeks import read_week
@@ -286,27 +283,8 @@ def school_rows(blocks: list[dict]) -> list[tuple[str, list[int]]]:
     return sorted((block["start"], block["days"]) for block in blocks if block["title"] == "School")
 
 
-def delete_choices(host: QWidget, monkeypatch: pytest.MonkeyPatch, block: dict) -> list[str]:
-    """The answers the delete question offers for a block, left unanswered."""
-    offered: list[str] = []
-
-    class Asked:
-        answer = "stay"
-
-        def __init__(self, _parent, _title, _question, answers, **_kwargs) -> None:  # type: ignore[no-untyped-def]
-            offered.extend(label for _key, label, _style in answers)
-
-        def exec(self) -> int:
-            return 0
-
-    monkeypatch.setattr(widgets, "ConfirmSheet", Asked)
-    monkeypatch.setattr(widgets, "confirm", lambda *_args: offered.append("Delete") and False)
-    BlockDialog(host, block)._delete()
-    return offered
-
-
 def test_school_changed_twice_from_a_wednesday_week_on_and_then_from_monday_stays_school(
-    qapp: QApplication, server: LocalServer, host: QWidget, monkeypatch: pytest.MonkeyPatch
+    qapp: QApplication, server: LocalServer
 ) -> None:
     session = signed_in_from(qapp, server.origin, "schooltwice", WEDNESDAY)
     school = {"id": SETUP_SCHOOL_ID, "title": "School", "kind": "locked", "category": "class",
@@ -340,9 +318,6 @@ def test_school_changed_twice_from_a_wednesday_week_on_and_then_from_monday_stay
     settled(qapp, session)
     assert school_rows(read_week(qapp, session, "2026-11-09")["blocks"]) == [("07:45", [0, 1, 2, 3, 4])]
     assert school_rows(session.blocks) == [("07:45", [5, 6]), ("09:00", [0, 1, 2])]
-    # Each School row on screen is School: deleting it asks this week only or this week and later.
-    for row in session.blocks:
-        assert delete_choices(host, monkeypatch, row) == ["Cancel", "This week only", "This week and later"]
     # This week and later, from either row, takes School off the whole week on screen and every week after.
     piece = next(row for row in session.blocks if row["id"] != SETUP_SCHOOL_ID)
     session.delete_block(piece["id"], every_week=True)

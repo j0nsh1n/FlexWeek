@@ -16,7 +16,7 @@ from PySide6.QtCore import QObject, QPoint, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
-from desktop.tests.material_support import named
+from desktop.tests.material_support import named, quick_of
 from desktop.tests.sheets.support_material_sheets import block_named, centre
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material import (
@@ -36,7 +36,7 @@ CTRL = Qt.KeyboardModifier.ControlModifier
 
 
 def _press(window, key: Qt.Key, modifiers: Qt.KeyboardModifier = Qt.KeyboardModifier.NoModifier) -> None:
-    QTest.keyClick(window._material_page._quick, key, modifiers)
+    QTest.keyClick(quick_of(window), key, modifiers)
     _pump(QApplication.instance())
 
 
@@ -419,7 +419,7 @@ def test_the_window_keys_wait_while_a_block_is_held_by_the_mouse(qapp, window, n
     """D switched to Day with the block still held, and letting go still saved the move on a screen the
     student had left. Held and moved 48 px down at 56 px an hour, Club lands 45 minutes later."""
     root, block = _club_on_thursday(window, qapp)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     start = centre(block)
     QTest.mousePress(quick, Qt.MouseButton.LeftButton, pos=start)
     _pump(qapp)

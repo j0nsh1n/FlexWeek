@@ -1,7 +1,9 @@
 //! The standing week (fix-specs item 1): School and activities from Setup stand in every week from
 //! Setup's week on; a week's own version of a standing block wins for that week.
 
-use flexweek_engine::standing::{derive_standing, standing_body, with_standing};
+use flexweek_engine::standing::{
+    derive_standing, most_standing_at_once, standing_body, with_standing,
+};
 use serde_json::{Value, json};
 
 fn school() -> Value {
@@ -67,4 +69,23 @@ fn the_first_week_cards_sport_counts_as_standing() {
                        "duration_min": 60, "days": [0]});
     let weeks = vec![("2026-10-05".to_string(), vec![sport.clone()])];
     assert_eq!(derive_standing(&weeks).unwrap().unwrap().1, vec![sport]);
+}
+
+#[test]
+fn the_most_repeats_standing_at_once_counts_each_week_a_row_starts_and_skips_stopped_ones() {
+    let body = json!({"title": "x"});
+    let row = |id: &str, from: &str, body: Value| json!({"id": id, "from_week": from, "position": 0, "body": body});
+    assert_eq!(most_standing_at_once(&[]), 0);
+    // a and b from 2 Nov; a stops 9 Nov; c starts 16 Nov: two at once at most.
+    let rows = [
+        row("a", "2026-11-02", body.clone()),
+        row("b", "2026-11-02", body.clone()),
+        row("a", "2026-11-09", Value::Null),
+        row("c", "2026-11-16", body.clone()),
+    ];
+    assert_eq!(most_standing_at_once(&rows), 2);
+    // a starts again 16 Nov: three that week.
+    let mut more = rows.to_vec();
+    more.push(row("a", "2026-11-16", body));
+    assert_eq!(most_standing_at_once(&more), 3);
 }

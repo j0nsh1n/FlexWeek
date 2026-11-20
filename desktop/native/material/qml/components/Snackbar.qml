@@ -9,6 +9,10 @@ Item {
     property string message: "Placed 2 of 2"
     property string actionText: "UNDO"
     property string accessName: ""
+    // What a screen reader says for the button; the seconds on Undo are not read as they change.
+    property string accessActionText: actionText
+    // The line along the bottom, 0 to 1. Hidden when animations are reduced or off.
+    property real fraction: 1
     signal actionClicked()
     signal pauseRequested()
     signal resumeRequested()
@@ -27,19 +31,29 @@ Item {
             root.resumeRequested()
     }
 
+    // The notice held the keyboard and has gone: the shell says where the keyboard goes next.
+    signal focusReleased()
+
     onVisibleChanged: {
-        if (!visible && activeFocus && parent)
+        if (!visible && activeFocus && parent) {
             parent.forceActiveFocus()
+            root.focusReleased()
+        }
     }
 
     onActionTextChanged: {
-        if (actionText === "" && activeFocus && parent)
+        if (actionText === "" && activeFocus && parent) {
             parent.forceActiveFocus()
+            root.focusReleased()
+        }
     }
 
-    implicitHeight: 48
-    height: 48
-    implicitWidth: Math.max(240, messageText.implicitWidth + action.width + 48)
+    // The widest the bar may be (the page sets it); a longer notice wraps and the bar grows with it.
+    property real maxWidth: 10000
+    readonly property real _room: action.visible ? action.width + 16 : 0
+    implicitHeight: Math.max(48, messageText.height + 28)
+    height: implicitHeight
+    implicitWidth: Math.max(240, Math.min(maxWidth, messageText.implicitWidth + _room + 32))
     width: implicitWidth
 
     M3Palette { id: palette; theme: root.theme }
@@ -53,11 +67,25 @@ Item {
         // Takes the presses on the bar so a click on it never reaches the Week grid underneath.
         TapHandler { gesturePolicy: TapHandler.WithinBounds }
     }
+    Rectangle {
+        id: timeLine
+        objectName: "timeLine"
+        visible: !root.reduceMotion && root.actionText !== ""
+        anchors.left: shape.left
+        anchors.leftMargin: 4
+        anchors.bottom: shape.bottom
+        height: 2
+        // Inside the bar's rounded corners, shrinking towards the left.
+        width: (shape.width - 8) * Math.max(0, Math.min(1, root.fraction))
+        color: palette.inversePrimary
+    }
     Text {
         id: messageText
         anchors.left: parent.left
         anchors.leftMargin: 16
         anchors.verticalCenter: parent.verticalCenter
+        width: Math.min(implicitWidth, root.width - 32 - root._room)
+        wrapMode: Text.Wrap
         text: root.message
         color: palette.inverseOnSurface
         font.family: M3Font.family
@@ -87,10 +115,9 @@ Item {
             Text {
                 id: shortcutHintItem
                 objectName: "shortcutHint"
-                visible: root.actionText === "UNDO" || root.actionText.indexOf("Undo") !== -1
+                visible: root.accessActionText === "UNDO" || root.accessActionText.indexOf("Undo") !== -1
                 text: "Ctrl+Z"
                 color: palette.inversePrimary
-                opacity: 0.85
                 font.family: M3Font.family
                 font.pixelSize: M3Font.px(11)
                 font.weight: 500
@@ -119,7 +146,7 @@ Item {
     property bool keyDown: false
     activeFocusOnTab: actionText !== ""
     Accessible.role: actionText !== "" ? Accessible.Button : Accessible.StaticText
-    Accessible.name: (accessName !== "" ? accessName : message) + (actionText !== "" ? ", " + actionText : "") + (shortcutHintItem.visible ? " (Ctrl+Z)" : "")
+    Accessible.name: (accessName !== "" ? accessName : message) + (actionText !== "" ? ", " + accessActionText : "") + (shortcutHintItem.visible ? " (Ctrl+Z)" : "")
     Accessible.onPressAction: if (actionText !== "") root.actionClicked()
     Keys.enabled: actionText !== ""
     Keys.onPressed: (event) => {

@@ -1,6 +1,6 @@
 # ruff: noqa: F811
-"""Report a problem in Settings: both designs open the maintainer's form with this version and computer
-filled in, and show nothing while no form link is set."""
+"""Report a problem in Settings > Computer opens the maintainer's form with this version and computer
+filled in, and shows nothing while no form link is set."""
 
 from __future__ import annotations
 
@@ -8,10 +8,9 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QPushButton  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native import feedback  # noqa: E402
-from desktop.native.settings import SettingsPage  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402, F401
 from desktop.tests.updater.test_get_developer_builds_switch import (  # noqa: E402
@@ -52,30 +51,13 @@ def test_the_form_link_gets_this_version_and_computer() -> None:
     assert feedback.form_url(LINK, "1.4.1", "Linux 6.8 (x86_64)") == FILLED
 
 
-def test_no_form_link_shows_no_button_in_either_design(
+def test_no_form_link_shows_no_button(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(feedback, "FORM_LINK", "")
-    page = SettingsPage(
-        window, window.session.preferences or {}, window._look, window.session.reminder_limits
-    )
-    assert page.findChild(QPushButton, "prefsReportProblem") is None
     root = open_computer_section(qapp, window)
     assert panel(window).state["feedbackAvailable"] is False
     assert bool(named(root, "reportProblemRow")[0].property("visible")) is False
-
-
-def test_widgets_settings_opens_the_filled_form(
-    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, opened: Opened
-) -> None:
-    monkeypatch.setattr(feedback, "FORM_LINK", LINK)
-    monkeypatch.setattr(feedback, "VERSION", "1.4.1")
-    monkeypatch.setattr(feedback, "device_text", lambda: "Linux 6.8 (x86_64)")
-    page = SettingsPage(
-        window, window.session.preferences or {}, window._look, window.session.reminder_limits
-    )
-    page.findChild(QPushButton, "prefsReportProblem").click()
-    assert opened.urls == [FILLED]
 
 
 def test_material_settings_opens_the_filled_form(

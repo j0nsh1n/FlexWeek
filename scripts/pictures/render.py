@@ -332,7 +332,7 @@ def visual_items(root) -> list:
 
 
 def qml_rect(item, root, quick):
-    """The part of `item` its clipping parents and the QQuickWidget leave showing, in `quick`'s
+    """The part of `item` its clipping parents and Material's window leave showing, in `quick`'s
     pixels, or None."""
     from PySide6.QtCore import QPointF, QRectF
 
@@ -350,39 +350,37 @@ def qml_rect(item, root, quick):
 
 def qml_labels(widget, pixels: Pixels) -> list[dict]:
     """Every visible QML Text with words (Material 3), in the picture's pixels."""
-    from PySide6.QtCore import QPoint
-    from PySide6.QtQuickWidgets import QQuickWidget
-
     rows = []
-    for quick in widget.findChildren(QQuickWidget):
-        root = quick.rootObject() if quick.isVisible() else None
-        if root is None:
+    # Material is its own Qt Quick window under the window controller; it fills the picture, so an
+    # item's place in the window is its place in the picture. A widget dialog has none.
+    quick = getattr(widget, "_material_page", None)
+    root = quick.rootObject() if quick is not None and quick.isVisible() else None
+    if root is None:
+        return rows
+    for item in visual_items(root):
+        if not item.isVisible() or item.opacity() <= 0 or not item.inherits("QQuickText"):
             continue
-        for item in visual_items(root):
-            if not item.isVisible() or item.opacity() <= 0 or not item.inherits("QQuickText"):
-                continue
-            words = plain_words(str(item.property("text") or ""))
-            shown = qml_rect(item, root, quick) if words else None
-            if shown is None:
-                continue
-            corner = quick.mapTo(widget, QPoint(int(shown.x()), int(shown.y())))
-            rect = (corner.x(), corner.y(), int(shown.width()), int(shown.height()))
-            truncated = item.property("truncated")
-            content = item.property("contentWidth")
-            too_wide = (
-                bool(truncated)
-                if truncated is not None
-                else (content is not None and float(content) > item.width() + 0.5)
-            )
-            row = {
-                "name": str(item.objectName() or ""),
-                "kind": "Text",
-                "text": words[:120],
-                "rect": list(rect),
-                "too_wide": too_wide,
-            }
-            row.update(text_reading(pixels, rect) or {})
-            rows.append(row)
+        words = plain_words(str(item.property("text") or ""))
+        shown = qml_rect(item, root, quick) if words else None
+        if shown is None:
+            continue
+        rect = (int(shown.x()), int(shown.y()), int(shown.width()), int(shown.height()))
+        truncated = item.property("truncated")
+        content = item.property("contentWidth")
+        too_wide = (
+            bool(truncated)
+            if truncated is not None
+            else (content is not None and float(content) > item.width() + 0.5)
+        )
+        row = {
+            "name": str(item.objectName() or ""),
+            "kind": "Text",
+            "text": words[:120],
+            "rect": list(rect),
+            "too_wide": too_wide,
+        }
+        row.update(text_reading(pixels, rect) or {})
+        rows.append(row)
     return rows
 
 
@@ -408,33 +406,46 @@ def focus_ring(qapp, widget, before: Pixels) -> dict:
     """Whether the focused widget draws differently with focus than without: its focus ring, or none.
     Focus is taken away for one more picture and given back with the keyboard's reason."""
     from PySide6.QtCore import QPoint, QRect, Qt
-    from PySide6.QtQuickWidgets import QQuickWidget
+    from PySide6.QtGui import QGuiApplication
     from PySide6.QtWidgets import QApplication
 
-    focused = QApplication.focusWidget()
-    if focused is None or not (focused is widget or widget.isAncestorOf(focused)):
-        return {"focused": None, "ring": None}
-    item = focused.quickWindow().activeFocusItem() if isinstance(focused, QQuickWidget) else None
-    if item is not None and item is not focused.rootObject():
-        root = focused.rootObject()
-        shown = qml_rect(item, root, focused)
+    from desktop.tests.material_support import grab, quick_window_of
+
+    if getattr(widget, "_material_page", None) is not None:
+        # Material's own window: the Qt Quick item with the keyboard, in the picture's pixels (the window
+        # is the picture).
+        own = quick_window_of(widget)
+        item = own.activeFocusItem() if QGuiApplication.focusWindow() is own else None
+        root = own.rootObject()
+        shown = qml_rect(item, root, own) if item is not None and item is not root else None
         if shown is None:
-            return {"focused": f"qml {item.objectName() or 'item'}", "ring": None}
-        corner = focused.mapTo(widget, QPoint(int(shown.x()), int(shown.y())))
-        area = QRect(corner.x(), corner.y(), int(shown.width()), int(shown.height()))
+            return {"focused": None, "ring": None}
+        area = QRect(int(shown.x()), int(shown.y()), int(shown.width()), int(shown.height()))
         name = f"qml {item.objectName() or item.metaObject().className()}"
         item.setFocus(False)
         qapp.processEvents()
-        after = Pixels(widget.grab().toImage())
+        after = Pixels(grab(widget))
         item.forceActiveFocus(Qt.FocusReason.TabFocusReason)
-    else:
-        corner = focused.mapTo(widget, QPoint(0, 0)) if focused is not widget else QPoint(0, 0)
-        area = QRect(corner, focused.size())
-        name = f"{type(focused).__name__}#{focused.objectName()}"
-        focused.clearFocus()
         qapp.processEvents()
-        after = Pixels(widget.grab().toImage())
-        focused.setFocus(Qt.FocusReason.TabFocusReason)
+        area = area.adjusted(-4, -4, 4, 4).intersected(QRect(0, 0, own.width(), own.height()))
+        changed = differing(before, after, (area.x(), area.y(), area.width(), area.height()))
+        return {
+            "focused": name,
+            "rect": [area.x(), area.y(), area.width(), area.height()],
+            "ring": changed > 0,
+            "changed_pixels": changed,
+        }
+    # A widget dialog: the widget with the keyboard.
+    focused = QApplication.focusWidget()
+    if focused is None or not (focused is widget or widget.isAncestorOf(focused)):
+        return {"focused": None, "ring": None}
+    corner = focused.mapTo(widget, QPoint(0, 0)) if focused is not widget else QPoint(0, 0)
+    area = QRect(corner, focused.size())
+    name = f"{type(focused).__name__}#{focused.objectName()}"
+    focused.clearFocus()
+    qapp.processEvents()
+    after = Pixels(widget.grab().toImage())
+    focused.setFocus(Qt.FocusReason.TabFocusReason)
     qapp.processEvents()
     # A ring is drawn just outside a control as often as inside it.
     area = area.adjusted(-4, -4, 4, 4).intersected(QRect(QPoint(0, 0), widget.size()))
@@ -485,7 +496,6 @@ def draw(qapp, made, folder: Path, screen, variant: Variant, picture: Path, setu
 
     from desktop.tests.light_app import Account, _close, open_light_window
     from desktop.tests.waiting import wait_until
-    from desktop.tests.window_support import still
 
     body = look_body(made.look, variant, setup["designs"], setup["defaults"], setup["scales"])
     account = Account(made.database, json.dumps(body).encode(), made.user_id)
@@ -509,8 +519,12 @@ def draw(qapp, made, folder: Path, screen, variant: Variant, picture: Path, setu
         wait_until(qapp, quiet, what="the variant's preferences saving")
         window._apply_appearance()
         target = screen.prepare(window)
+        # show_material() puts a test window at 1280x800; a smaller variant (Large text at 1024x640) is
+        # drawn at its own size, as its file name says. A screen that chose another size keeps it.
+        if (window.width(), window.height()) == (1280, 800) and (width, height) != (1280, 800):
+            window.resize(width, height)
+            qapp.processEvents()
         wait_until(qapp, quiet, what="the screen's own requests")
-        still(window)
         qapp.processEvents()
         shot = target if isinstance(target, QWidget) else window
         image = shot.grab().toImage()
@@ -539,7 +553,7 @@ def render(root: Path, out: Path, chosen: list[str] | None, which: str) -> int:
     qapp = QApplication.instance() or QApplication(["flexweek-pictures"])
     nothing_leaves(qapp)
 
-    from desktop.native.layouts.registry import DAY_DEFAULT, LAYOUTS, MAIN_DEFAULT
+    from desktop.native.layout_choice import DAY_DEFAULT, LAYOUTS, MAIN_DEFAULT
     from desktop.native.tokens import TEXT_SCALE
     from desktop.tests.light_app import account
 

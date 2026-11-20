@@ -21,6 +21,7 @@ from PySide6.QtWidgets import QApplication
 from backend.tests.fake_clock import CLOCK
 from desktop.native.material import bridge_week
 from desktop.native.material.bridge_week import SLACK_TAGS, WeekBridge
+from desktop.tests.material_support import quick_of, quick_window_of
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material import (
     NOW_DAY,
@@ -87,7 +88,8 @@ def test_plan_places_the_queue_and_undo_puts_it_back(qapp, window) -> None:
     )
     assert _qml(root, "planHomework").property("enabled") is True
     assert _qml(root, "homeworkEmpty").property("visible") is False
-    assert _snack(window) == ""
+    assert _snack(window).startswith("Undid"), "Undo says what it did, with no Undo of its own"
+    assert str(_bridge(window).property("snackAction")) == ""
     after = [block for block in window.session.blocks if block["id"] in waiting_before]
     assert all(not block.get("start") for block in after)
     texts = _repeater_texts(root, "homeworkRows", "homeworkTitle")
@@ -124,7 +126,7 @@ def _place_now(window, qapp, root, key: str, title: str) -> None:
 
 
 def _press(window, key: Qt.Key, modifiers: Qt.KeyboardModifier = Qt.KeyboardModifier.NoModifier) -> None:
-    QTest.keyClick(window._material_page._quick, key, modifiers)
+    QTest.keyClick(quick_of(window), key, modifiers)
     _pump(QApplication.instance())
 
 
@@ -138,7 +140,8 @@ def test_ctrl_z_undoes_place_now_like_the_snackbar_undo(qapp, window) -> None:
     _place_now(window, qapp, root, "sheet", "Math worksheet")
     _press(window, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
     _waiting_again(window, qapp, root, "sheet")
-    assert _snack(window) == ""
+    assert _snack(window).startswith("Undid"), "Undo says what it did, with no Undo of its own"
+    assert str(_bridge(window).property("snackAction")) == ""
     assert window.session.can_redo()
 
 
@@ -205,7 +208,7 @@ def test_ctrl_z_in_a_text_field_leaves_the_schedule_alone(qapp, window) -> None:
     cancel = _qml(root, "homeworkCancel")
     cancel.forceActiveFocus()
     _pump(qapp)
-    held = window._material_page._quick.quickWindow().activeFocusItem()
+    held = quick_window_of(window).activeFocusItem()
     assert held is not None and held.objectName() != "fieldInput", held
     assert _bridge(window).sheets.kind == "homework"
     before = [dict(b) for b in window.session.blocks]
@@ -216,6 +219,27 @@ def test_ctrl_z_in_a_text_field_leaves_the_schedule_alone(qapp, window) -> None:
         assert [dict(b) for b in window.session.blocks] == before, key
         assert window.session.can_undo() and not window.session.can_redo(), key
     _bridge(window).sheets.forceClose()
+
+def test_ctrl_z_with_typed_words_in_a_text_field_takes_the_typing_back_and_leaves_the_schedule_alone(
+    qapp, window
+) -> None:
+    root = _reset(window, qapp)
+    _place_now(window, qapp, root, "sheet", "Math worksheet")
+    _bridge(window).addHomework()
+    wait_until(qapp, lambda: _bridge(window).sheets.kind == "homework")
+    _pump(qapp)
+    title = _qml(root, "homeworkTitle")
+    title.forceActiveFocus()
+    _pump(qapp)
+    for letter in (Qt.Key.Key_A, Qt.Key.Key_B):
+        _press(window, letter)
+    assert str(title.property("text")) == "ab"
+    _press(window, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+    _pump(qapp, 6)
+    assert str(title.property("text")) == "", "the field's own undo took the typing back"
+    assert window.session.can_undo() and not window.session.can_redo(), "the week was left alone"
+    assert next(b for b in window.session.blocks if b.get("assignment_id") == "sheet").get("start")
+
 
 
 def test_place_now_that_changes_nothing_does_not_offer_undo(qapp, window) -> None:
@@ -340,7 +364,8 @@ def test_ctrl_z_takes_back_a_place_now_in_one_step(qapp, window) -> None:
     assert _homework_block(window, "sheet")["start"] == "20:00"
     _press(window, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
     _waiting_again(window, qapp, root, "sheet")
-    assert _snack(window) == ""
+    assert _snack(window).startswith("Undid"), "Undo says what it did, with no Undo of its own"
+    assert str(_bridge(window).property("snackAction")) == ""
     # The one step was the placement: the essay is where it was.
     assert _homework_block(window, "essay")["start"] == "18:45"
 
@@ -567,10 +592,8 @@ def test_dragging_a_card_onto_the_grid_gives_it_the_time_under_the_pointer(qapp,
     _pump(qapp)
     assert _qml(root, "homeworkCount").property("text") == "0"
     assert _block_named(root, "Math worksheet") is not None
-    # The active Material snackbar is the only presenter; the Widgets toast stays hidden.
     assert "Math worksheet" in _snack(window)
-    assert window.toast.isHidden()
-    assert _qml(root, "materialSnackbar").property("actionText") == "UNDO"
+    assert str(_qml(root, "materialSnackbar").property("actionText")).startswith("Undo ")
 
 
 def test_a_drop_off_the_grid_changes_nothing(qapp, window) -> None:
@@ -597,13 +620,13 @@ def test_a_card_can_be_given_a_time_from_the_keyboard(qapp, window) -> None:
     assert card.property("activeFocusOnTab") is True
     card.forceActiveFocus()
     _pump(qapp)
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_F10, Qt.KeyboardModifier.ShiftModifier)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_F10, Qt.KeyboardModifier.ShiftModifier)
     _pump(qapp)
     menu = _named(root, "cardMenu")[0]
     assert menu.property("open") is True
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Down)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Down)
     _pump(qapp)
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Return)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Return)
     wait_until(qapp, lambda: not window.session.busy and _qml(root, "homeworkCount").property("text") == "0")
     placed = next(block for block in window.session.blocks if block.get("assignment_id") == "sheet")
     assert placed.get("start")
@@ -613,6 +636,8 @@ def test_blocks_that_just_landed_are_marked_fresh_once(qapp, window, monkeypatch
     # The mark lasts one second on the real clock, and a slow runner can take longer than that between
     # the block landing and the rows being read. This test is about which blocks are marked, not how long.
     monkeypatch.setattr(bridge_week, "FRESH_S", 3600.0)
+    # A bridge built after the seed, as a sign-in builds it: the seed's own blocks are not new to it.
+    window._drop_partial_material()
     root = _reset(window, qapp)
     due = (_week_monday(window) + timedelta(days=6)).isoformat()
     _homework(window, "sheet", "Math worksheet", 30, due)
@@ -635,7 +660,7 @@ def test_tabbing_through_homework_cards_keeps_the_focused_card_in_view(qapp, win
     cards = _named(root, "homeworkCard")
     assert len(cards) == 18
     scroller = _qml(root, "homeworkScroller")
-    quick = window._material_page._quick
+    quick = quick_of(window)
     cards[0].forceActiveFocus()
     _pump(qapp)
     for card in cards:

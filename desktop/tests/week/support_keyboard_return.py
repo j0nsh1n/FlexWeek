@@ -43,8 +43,3 @@ def plan(qapp: QApplication, window: NativeWindow, with_keys: bool) -> None:
         QTest.mouseClick(solve, Qt.MouseButton.LeftButton)
     wait_until(qapp, lambda: window.toast.isVisible() and window.toast.button.isVisible())
     settled(qapp, window)
-
-
-def stray(window: NativeWindow) -> bool:
-    """Whether the keyboard sits on a button that turns the page."""
-    return window.focusWidget() in (window.prev_nav, window.next_nav)

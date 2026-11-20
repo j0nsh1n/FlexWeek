@@ -1,6 +1,6 @@
 """Plan places homework: it never puts anything before now, it leaves homework whose time has passed
-where it is, it says so when the week is over, and the rail and the plan bar count the same homework
-without a time."""
+where it is, it says so when the week is over, and the drawer counts the homework without a time. Run on the
+Material week."""
 
 from __future__ import annotations
 
@@ -10,24 +10,23 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QDate
-from PySide6.QtWidgets import QApplication, QDialog, QPushButton
+from PySide6.QtWidgets import QApplication
 
 from desktop.native.calendar import date_for_day, sunday_due
 from desktop.native.controller import plan_sentence
-from desktop.native.widgets import HomeworkDialog
 from desktop.native.window import NativeWindow
+from desktop.tests.material_support import pump, qml
 from desktop.tests.sheets.support_plan import (
     PAST_WEEK,
     TOO_LATE,
-    opened_with,
-    press_solve,
     session_of,
     settled,
     thursday_iso,
     window,  # noqa: F401
 )
 from desktop.tests.waiting import wait_until
+from desktop.tests.week.support_material import _bridge, _snack
+from desktop.tests.week.support_material_page import fresh_material
 from desktop.tests.window_support import qapp  # noqa: F401
 
 
@@ -91,7 +90,8 @@ def test_replan_all_moves_homework_whose_time_has_passed(
     session.save()
     settled(qapp, window)
     assert not session_of(window, "math").get("pinned")
-    window.findChild(QPushButton, "replanAll").click()
+    fresh_material(qapp, window)
+    _bridge(window).sheets.moreAction("replanAll")
     settled(qapp, window)
     math = session_of(window, "math")
     assert math.get("start"), "there is room before the deadline"
@@ -101,19 +101,17 @@ def test_replan_all_moves_homework_whose_time_has_passed(
 def test_plan_it_as_i_add_it_starts_no_earlier_than_now(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     window.session.preferences = {**(window.session.preferences or {}), "planning_style": "auto"}
-
-    def fill(dialog: HomeworkDialog) -> int:
-        dialog.title.setText("Spanish vocab")
-        dialog.due.date.setDate(QDate.fromString(sunday_due(window.session.week_start)[:10], "yyyy-MM-dd"))
-        dialog.energy.setCurrentIndex(dialog.energy.findData("high"))
-        dialog.accept()
-        return QDialog.DialogCode.Accepted
-
-    opened_with(monkeypatch, fill)
-    window._add_homework()
+    fresh_material(qapp, window)
+    sheets = _bridge(window).sheets
+    sheets.openHomework()
+    sheets.setText("title", "Spanish vocab")
+    pump(qapp, 20)
+    sheets.save()
+    wait_until(
+        qapp, lambda: any(item["title"] == "Spanish vocab" for item in window.session.assignments.values())
+    )
     settled(qapp, window)
     added = next(item for item in window.session.assignments.values() if item["title"] == "Spanish vocab")
     placed = session_of(window, added["id"])
@@ -124,7 +122,10 @@ def test_plan_it_as_i_add_it_starts_no_earlier_than_now(
 def test_plan_on_a_week_that_is_over_places_nothing_and_says_so(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Plan asks about left-over homework first, in a Widgets sheet nothing answers here; none is left over.
+    monkeypatch.setattr(window, "_unfinished_items", lambda: [])
     session = window.session
     last = (date.fromisoformat(session.week_start) - timedelta(days=7)).isoformat()
     session.load_week(last)
@@ -134,10 +135,11 @@ def test_plan_on_a_week_that_is_over_places_nothing_and_says_so(
     )
     session.save()
     settled(qapp, window)
-    press_solve(window)
+    fresh_material(qapp, window)
+    _bridge(window).week.plan()
+    wait_until(qapp, lambda: _snack(window) == PAST_WEEK, what=lambda: repr(_snack(window)))
     settled(qapp, window)
     assert not session_of(window, "late").get("start")
-    assert window.toast.text() == PAST_WEEK
 
 
 def test_plan_on_a_week_that_is_over_does_not_ask_the_solver(
@@ -162,13 +164,13 @@ def test_plan_on_a_week_that_is_over_does_not_ask_the_solver(
     assert said == [PAST_WEEK]
 
 
-def test_the_rail_and_the_plan_panel_count_the_same_homework_without_a_time(
+def test_the_drawer_and_the_notice_count_the_same_homework_without_a_time(
     qapp: QApplication,  # noqa: F811
     window: NativeWindow,  # noqa: F811
 ) -> None:
-    """The rail said "Everything has a time." beside a plan panel saying "1 without a time". Plan with one
-    project too long for what is left today: both say one, and the rail's "Everything has a time." is
-    hidden."""
+    """The drawer said "Everything has a time." beside a notice saying "1 with no time yet". Plan with one
+    project too long for what is left today: the notice counts it and so does the drawer, whose "Everything
+    has a time." is hidden."""
     session = window.session
     session.add_homework(
         {
@@ -181,9 +183,11 @@ def test_the_rail_and_the_plan_panel_count_the_same_homework_without_a_time(
     )
     session.save()
     settled(qapp, window)
-    press_solve(window)
+    root = fresh_material(qapp, window)
+    _bridge(window).week.plan()
+    wait_until(qapp, lambda: _snack(window).startswith("Placed") and not session.busy)
     settled(qapp, window)
-    assert window.plan_review.heading.text() == plan_sentence(1, 1)
-    assert window.rail.waiting_count.text() == "1"
-    assert len(window.rail.chips()) == 1
-    assert not window.rail.none_waiting.isVisible()
+    pump(qapp)
+    assert _snack(window) == "Placed 1 of 2"
+    assert qml(root, "homeworkCount").property("text") == "1"
+    assert qml(root, "homeworkEmpty").property("visible") is False

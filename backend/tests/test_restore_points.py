@@ -174,6 +174,8 @@ def test_a_save_with_a_snapshot_label_makes_a_point_then_writes(alice: TestClien
     points = alice.get("/api/restore-points").json()["restore_points"]
     assert points[0]["label"] == "Before clear week"
     assert points[0]["weeks"] == 1
+    # The answer names the point it made, so the save's Undo can put it back.
+    assert cleared.json()["restore_point"]["id"] == points[0]["id"]
     retry = alice.post(
         "/api/changes",
         json={

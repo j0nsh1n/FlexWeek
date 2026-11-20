@@ -8,38 +8,60 @@ SectionPage {
     readonly property var panel: Ui.settings
 
     Group {
-        SettingsRow {
-            objectName: "row_style"
-            title: "Style"
-            subtitle: "Material 3 · switch to the other styles"
-            Button {
-                objectName: "useWidgets"
-                theme: Ui.theme
-                density: Ui.density
-                reduceMotion: Ui.reduceMotion
-                highContrast: Ui.highContrast
-                kind: "text"
-                text: "Widgets styles"
-                accessName: "Widgets styles"
-                onClicked: Ui.bridge.useWidgets()
-            }
-        }
-    }
-    Group {
+        GroupHeader { title: "Colours" }
         PresetRow {
             subtitle: "Colours for the whole app."
             swatches: page.st.swatches || []
             current: page.st.preset || ""
             onChosen: (name) => page.panel.setPreset(name)
         }
+        ChoiceRow {
+            key: "accent"
+            title: "Accent colour"
+            subtitle: page.st.accentLocked
+                ? "High contrast keeps its yellow."
+                : "On top of the preset."
+            choices: page.st.accentChoices || []
+            current: page.st.accent || "default"
+            onChosen: (value) => page.panel.setAccent(value)
+        }
+        ToggleRow {
+            key: "accentChips"
+            title: "Use the accent on category chips"
+            subtitle: "Every category wears the accent instead of its own colour."
+            isOn: !!page.st.accentChips
+            onFlipped: (value) => page.panel.setAccentChips(value)
+        }
     }
     Group {
+        visible: !!page.st.showMotion
+        GroupHeader { title: "Animations" }
+        ChoiceRow {
+            key: "animations"
+            title: "Animations"
+            subtitle: "How much moves when screens change. Reduce keeps only what you need to follow, Off stops it all."
+            choices: page.st.animationChoices || []
+            current: page.st.animations || "normal"
+            onChosen: (value) => page.panel.setAnimations(value)
+        }
+    }
+    Group {
+        GroupHeader { title: "Light and dark" }
         ChoiceRow {
             key: "mode"
             title: "Mode"
-            subtitle: "Follow this device, or choose."
-            choices: [{ label: "Auto", value: "system" }, { label: "Light", value: "light" }, { label: "Dark", value: "dark" }]
-            current: page.st.mode || ""
+            subtitle: page.st.oneMode === "dark"
+                ? "This preset is a dark look, so it stays dark."
+                : (page.st.oneMode === "light"
+                    ? "This preset is a light look, so it stays light."
+                    : "Follow this device, or choose.")
+            // A one-mode preset shows the mode it is drawn in and leaves the other two off.
+            choices: [
+                { label: "Auto", value: "system", enabled: !page.st.oneMode },
+                { label: "Light", value: "light", enabled: !page.st.oneMode || page.st.oneMode === "light" },
+                { label: "Dark", value: "dark", enabled: !page.st.oneMode || page.st.oneMode === "dark" }
+            ]
+            current: page.st.oneMode ? page.st.oneMode : (page.st.mode || "")
             onChosen: (value) => page.panel.setMode(value)
         }
         ChoiceRow {
@@ -58,6 +80,17 @@ SectionPage {
             current: page.st.density || ""
             onChosen: (value) => page.panel.setDensity(value)
         }
+    }
+    Group {
+        GroupHeader { title: "Text" }
+        ChoiceRow {
+            key: "font"
+            title: "Font"
+            subtitle: "Sans is Inter. Serif is Newsreader headings over Inter. Mono is JetBrains Mono."
+            choices: page.st.fontChoices || []
+            current: page.st.font || "sans"
+            onChosen: (value) => page.panel.setFont(value)
+        }
         ChoiceRow {
             key: "textSize"
             title: "Text size"
@@ -74,6 +107,7 @@ SectionPage {
     }
     Group {
         visible: !!page.st.showWeekendsRow || !!page.st.showClock
+        GroupHeader { title: "Calendar" }
         ToggleRow {
             key: "showWeekends"
             visible: !!page.st.showWeekendsRow
@@ -147,6 +181,7 @@ SectionPage {
     }
 
     Group {
+        GroupHeader { title: "More" }
         LinkRow {
             id: openAdvanced
             key: "advanced"

@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.material_support import quick_window_of
 from desktop.tests.settings.support_material_settings import _open_settings, _qml
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
@@ -23,7 +24,7 @@ def test_the_look_page_scrolls_with_the_wheel_below_the_first_screen(
     page = _qml(root, "lookSection")
     assert float(page.property("contentHeight")) > float(page.height()) + 1, "Look is taller than the window"
     assert float(page.property("contentY")) == 0.0
-    win = window._material_page._quick.quickWindow()
+    win = quick_window_of(window)
     at = page.mapToScene(QPointF(page.width() / 2, page.height() / 2))
     event = QWheelEvent(
         at,

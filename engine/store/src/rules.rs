@@ -705,6 +705,20 @@ mod tests {
     }
 
     #[test]
+    fn a_stored_open_on_screen_is_kept_as_it_is() {
+        let open_on = |comfort: &str| {
+            preferences_fields(&row("", comfort)).unwrap()["preferred_view"].clone()
+        };
+        assert_eq!(open_on("{}"), Value::Null);
+        for view in ["week", "day", "month", "myday"] {
+            assert_eq!(
+                open_on(&format!(r#"{{"preferred_view": "{view}"}}"#)),
+                json!(view)
+            );
+        }
+    }
+
+    #[test]
     fn a_missing_time_step_reads_fifteen_and_a_stored_five_or_fifteen_is_kept() {
         let step =
             |comfort: &str| preferences_fields(&row("", comfort)).unwrap()["drag_step_min"].clone();

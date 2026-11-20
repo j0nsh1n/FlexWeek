@@ -11,11 +11,16 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from pydantic import ValidationError
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
+from backend import clock as wall_clock
 from backend.app import Preferences
-from backend.models import valid_spotify_url
+from backend.comfort import TIMER_PRESETS, snap_minutes
+from backend.models import TimeBlock, WeekRequest, valid_spotify_url
+from backend.slots import hhmm_to_minutes, minutes_to_hhmm
 from desktop.native import feedback
+from desktop.native.calendar import DAY_FULL, DAYS, SETUP_SCHOOL_ID, this_week_line
 from desktop.native.fields import (
     WEEK_STARTS,
     save_week_starts_on,
@@ -24,17 +29,26 @@ from desktop.native.fields import (
     week_starts_on,
 )
 from desktop.native.hours.geometry import DRAG_STEPS, drag_step
+from desktop.native.material.bridge_alarms import MAX_ALARMS, alarm_rows
+from desktop.native.material.bridge_hours import SchoolHours, StudyHours
 from desktop.native.material.bridge_month import _ROLES, read_cells
 from desktop.native.material.bridge_rows import Labels, Rows
 from desktop.native.material.theme import (
+    ACCENT_LABELS,
+    ACCENT_LOCKED,
+    ACCENTS,
     BLOCK_STYLES,
     CATEGORY_KEYS,
     CORNER_RANGE,
     DEFAULT_CONTRAST,
     DEFAULT_PRESET,
+    FONT_LABELS,
+    FONTS,
     HOUR_LINES,
     HOUR_RANGE,
+    LOOK_TIERS,
     MOTION_SPEEDS,
+    ONE_MODE,
     PAD_RANGE,
     PRESETS,
     SAVED_MODES,
@@ -42,32 +56,79 @@ from desktop.native.material.theme import (
     SHADOW_RANGE,
     _float_in,
     _hex,
+    accented,
     advanced_default,
     advanced_overrides,
     dress_theme,
     export_document,
     hour_row_px,
     import_document,
+    kept_material,
+    mode_of,
     pack_material,
+    read_accent,
     read_advanced,
+    read_font,
     read_letter_keys,
+    read_look_tier,
     read_material_choice,
     read_saved_material,
     read_shortcuts,
     reading_problems,
     resolved_mode,
     scheme,
+    shown_font,
     store_material,
     theme_object,
 )
+from desktop.native.remind import reminder_lead_min
+from desktop.native.reuse import AVAILABILITY_LIMIT, PROTECTED_KINDS
+from desktop.native.settings_copy import (
+    ALARM_NOTE,
+    ALARM_TONE_LABELS,
+    BLOCK_SONG_NOTE,
+    DND_NOTE,
+    DOT_WORDS,
+    FOCUS_AUDIO_NOTE,
+    NO_PROTECTED,
+    NO_SCHOOL_DAYS,
+    NO_SOUND,
+    NO_STUDY_HOURS,
+    PAIR_CLOSED,
+    PAIR_ONCE,
+    PLANNING_STYLES,
+    PROTECTED_WORDS,
+    RELAY_SENTENCE,
+    SCHOOL_HOURS_NOTE,
+    SPLIT_ROUNDED,
+    SPOTIFY_LINK_HINT,
+    SPOTIFY_TONE_REST,
+    STUDY_HOURS_LINE,
+    TRAY_NOTE,
+    UNREACHABLE_WORDS,
+    clock_warning_words,
+    countdown_words,
+    pair_problem,
+    seen_words,
+    sync_state,
+    tries_words,
+)
+from desktop.native.sound import Bell
+from desktop.native.spotify import SpotifyPlayer
+from desktop.native.tones import FALLBACK, SOUNDS
 from desktop.native.update import install_kind, offers_developer_builds
 from desktop.native.version import CHANNEL, VERSION
 from desktop.native.weekmodel import hhmm_text
+from desktop.native.work_windows import PRESETS as WORK_PRESETS
 
 _FIELDS = frozenset(Preferences.model_fields)
 SECTIONS = ("look", "planning", "focus", "alerts", "computer")
 CUTOFFS = ("20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00")
 REMINDERS = ("off", "5", "10", "15")
+# Minutes before a block that a reminder may fire: the Widgets spinner's range, one minute a step.
+LEAD_MAX = 120
+# How often an open pairing code's countdown and tries are read again.
+PAIR_TICK_MS = 1000
 REMINDER_CHIPS = (
     {"label": "Off", "value": "off"},
     {"label": "5m", "value": "5"},
@@ -82,6 +143,38 @@ AUDIO = (
     ("Spotify", "spotify"),
 )
 AUDIO_VALUES = {value for _label, value in AUDIO}
+TONES = tuple(
+    {"label": ALARM_TONE_LABELS.get(name, name.title()), "value": name} for name in SOUNDS
+)
+# (key, saved field, smallest, largest) of the focus timer's lengths, in minutes. The ranges are the
+# backend's (Preferences).
+TIMER_LENGTHS = {
+    "work": ("timer_work_min", 1, 180),
+    "break": ("timer_break_min", 1, 60),
+    "long": ("timer_long_break_min", 1, 120),
+    "every": ("timer_long_break_every", 2, 12),
+}
+TIMER_CHOICES = (
+    *({"label": item["label"], "value": item["id"]} for item in TIMER_PRESETS),
+    {"label": "Custom", "value": "custom"},
+)
+SAVE_REFUSED = "Could not save that."
+# Open on: the four screens FlexWeek can start on. Nothing saved opens on the week.
+OPEN_ON = (
+    {"label": "Week", "value": "week"},
+    {"label": "Day", "value": "day"},
+    {"label": "Month", "value": "month"},
+    {"label": "My day", "value": "myday"},
+)
+OPEN_ON_VALUES = {item["value"] for item in OPEN_ON}
+ANIMATIONS = (
+    {"label": "Off", "value": "off"},
+    {"label": "Reduce", "value": "reduce"},
+    {"label": "Normal", "value": "normal"},
+    {"label": "More", "value": "extra"},
+)
+ANIMATION_VALUES = {item["value"] for item in ANIMATIONS}
+PLANNING_VALUES = {value for value, _label, _note in PLANNING_STYLES}
 # The planner lane names these. The first one that exists on Preferences is the one we write.
 _WEEKEND_FREE = next(
     (
@@ -101,6 +194,20 @@ _URGENT = next((name for name in ("urgent_first", "prioritize_urgent") if name i
 # auto_split_pomodoro is the focus-timer split, not this planner row.
 _SPLIT = "split_long_tasks" if "split_long_tasks" in _FIELDS else None
 _SHOW_WEEKENDS = "show_weekends" if "show_weekends" in _FIELDS else None
+TEXT_SIZES = {"small": 0.9, "normal": 1.0, "large": 1.3, "larger": 1.6}
+# Sharp and pill are the two ends of the corner dial; rounded leaves it on the preset's own radius.
+CORNER_SHAPES: dict[str, int | None] = {"sharp": 0, "rounded": None, "pill": CORNER_RANGE[1]}
+DENSITY_CHOICES = ("comfortable", "compact")
+
+
+def _corner_shape(corner: int | None) -> str:
+    """The shape card a corner radius matches, or empty when a slider put it between."""
+    for name, value in CORNER_SHAPES.items():
+        if corner == value:
+            return name
+    return ""
+
+
 _GROUPS = {
     "shape": ("corner",),
     "density": ("hour", "padding", "rail"),
@@ -131,6 +238,36 @@ def _reminder_state(prefs: dict[str, Any]) -> tuple[str, list[dict[str, str]]]:
         chips.append({"label": f"{lead}m", "value": str(lead)})
         return str(lead), chips
     return "", chips
+
+
+def _timer_state(prefs: dict[str, Any], custom_open: bool) -> dict[str, Any]:
+    """The focus timer as the page shows it: which of Short, Standard and Long the saved lengths are, or
+    Custom, and each length with the slider's smallest value and step (15 while splitting)."""
+    defaults = {"work": 30, "break": 15, "long": 30, "every": 4}
+    values = {key: int(prefs.get(field) or defaults[key]) for key, (field, _lo, _hi) in TIMER_LENGTHS.items()}
+    chosen = "custom"
+    for item in TIMER_PRESETS:
+        if (
+            item["timer_work_min"] == values["work"]
+            and item["timer_break_min"] == values["break"]
+            and item["timer_long_break_min"] == values["long"]
+            and item["timer_long_break_every"] == values["every"]
+        ):
+            chosen = str(item["id"])
+            break
+    if custom_open:
+        chosen = "custom"
+    split = prefs.get("auto_split_pomodoro") is True
+    return {
+        "timerPreset": chosen,
+        "timerChoices": list(TIMER_CHOICES),
+        "timerWork": values["work"],
+        "timerBreak": values["break"],
+        "timerLong": values["long"],
+        "timerEvery": values["every"],
+        "timerStep": 15 if split else 1,
+        "timerFrom": 15 if split else 1,
+    }
 
 
 class PassiveWeekBridge(QObject):
@@ -786,7 +923,15 @@ class SettingsBridge(QObject):
         self._draft = copy.deepcopy(self._advanced)
         self._shortcuts = True
         self._letter_keys = False
+        self._font = ""
+        self._tier = ""
         self._saved: list[dict[str, Any]] = []
+        self._study = StudyHours()
+        self._school = SchoolHours()
+        self._timer_custom = False
+        self._timer_note = ""
+        self._bell = Bell(self)
+        self._spotify_player = SpotifyPlayer(self)
         self._dirty = False
         self._prompt = ""
         self._notice = ""
@@ -795,6 +940,16 @@ class SettingsBridge(QObject):
         self._save_error = ""
         self._pair_code = ""
         self._pair_error = ""
+        # While a code is open: how long it lasts and the tries left, read once a second as the old
+        # pairing sheet did.
+        self._pair_status = ""
+        self._pair_watch = QTimer(self)
+        self._pair_watch.setInterval(PAIR_TICK_MS)
+        self._pair_watch.timeout.connect(self._pair_tick)
+        self._sync_busy = False
+        self._clock_warning = ""
+        self._sync_problem = ""
+        self._remove_ask: dict[str, str] = {}
         self._export_text = ""
         self._ask_preset = False
         self._pending_preset = ""
@@ -811,7 +966,21 @@ class SettingsBridge(QObject):
         if signal is not None:
             signal.connect(self._on_session)
         week_start_notice().changed.connect(self._on_week_start)
+        # The phone list and the sync dot change on the window's own clock, so This computer is read again
+        # every few seconds while it is the page on view.
+        self._phones_seen: tuple = ()
+        self._watch = QTimer(self)
+        self._watch.setInterval(2000)
+        self._watch.timeout.connect(self._watch_phones)
+        self._watch.start()
         self._load_applied(keep_draft=False)
+
+    def _watch_phones(self) -> None:
+        if self._section != "computer" or self._bridge.screen != "settings":  # type: ignore[attr-defined]
+            return
+        seen = (self._phone_rows(), self._sync_words())
+        if seen != self._phones_seen:
+            self._publish()
 
     def note_applied(self) -> None:
         """The shell re-read the look file. Keep a draft the student is still editing."""
@@ -823,6 +992,8 @@ class SettingsBridge(QObject):
         self._advanced = read_advanced(stored)
         self._shortcuts = read_shortcuts(stored)
         self._letter_keys = read_letter_keys(stored)
+        self._font = read_font(stored)
+        self._tier = read_look_tier(stored)
         self._saved = read_saved_material(stored)
         if not keep_draft:
             self._draft_choice = dict(self._choice)
@@ -843,9 +1014,12 @@ class SettingsBridge(QObject):
         return mode == "dark"
 
     def _colours(self, choice: dict[str, str]) -> dict[str, str]:
-        mode = resolved_mode(choice["mode"], self._worn_dark())
+        mode = mode_of(choice, self._worn_dark())
         try:
-            return scheme(choice["preset"], mode, choice["contrast"])
+            colours = scheme(choice["preset"], mode, choice["contrast"])
+            return accented(
+                colours, read_accent(_prefs_of(self._window)), choice["preset"], mode, choice["contrast"]
+            )
         except KeyError, ValueError, OSError:
             try:
                 return scheme(DEFAULT_PRESET, "light", DEFAULT_CONTRAST)
@@ -868,8 +1042,9 @@ class SettingsBridge(QObject):
         if not colours:
             return dict(self._draft_theme or {})
         reduced = advanced.get("motion") == "Off" or bool(self._bridge.reduceMotion)  # type: ignore[attr-defined]
-        base = theme_object(colours, choice["density"], reduced, choice["contrast"] == "high")
-        return dress_theme(base, advanced)
+        chips = _prefs_of(self._window).get("accent_chips") is True
+        base = theme_object(colours, choice["density"], reduced, choice["contrast"] == "high", chips)
+        return dress_theme(base, advanced, choice["preset"], self._font)
 
     def _build(self) -> dict[str, Any]:
         prefs = {**_prefs_of(self._window), **self._unsaved}
@@ -892,12 +1067,21 @@ class SettingsBridge(QObject):
                 }
             )
         reminder, reminder_choices = _reminder_state(prefs)
-        work = int(prefs.get("timer_work_min") or 30)
-        rest = int(prefs.get("timer_break_min") or 15)
+        if not self._study.dirty:
+            self._study.load(prefs)
+        if not self._school.dirty:
+            self._school.load(self._school_block())
+        timer = _timer_state(prefs, self._timer_custom)
+        accent = read_accent(prefs)
+        preset = self._choice["preset"]
         audio = prefs.get("focus_audio") or "off"
         cutoff = prefs.get("day_cutoff") or ""
         motion = prefs.get("motion")
+        open_on = prefs.get("preferred_view")
         phones = self._phone_names()
+        phone_rows = self._phone_rows()
+        sync_words = self._sync_words()
+        self._phones_seen = (phone_rows, sync_words)
         problems = self._problem_rows()
         return {
             "section": self._section,
@@ -917,7 +1101,58 @@ class SettingsBridge(QObject):
             "spotifyError": self._spotify_error,
             "reminder": reminder,
             "reminderChoices": reminder_choices,
-            "pomodoro": work == 25 and rest == 5,
+            "reminderLead": reminder_lead_min(prefs),
+            "reminderLeadMax": LEAD_MAX,
+            **timer,
+            "timerNote": self._timer_note,
+            "autoSplit": prefs.get("auto_split_pomodoro") is True,
+            "autoComplete": prefs.get("focus_auto_complete") is True,
+            "autoMute": prefs.get("focus_auto_mute", True) is not False,
+            "reminderSound": prefs.get("reminder_sound", True) is not False,
+            "tone": prefs.get("alarm_tone") or FALLBACK,
+            "alarms": alarm_rows(list(prefs.get("alarms") or [])),
+            "alarmsFull": len(prefs.get("alarms") or []) >= MAX_ALARMS,
+            "alarmNote": ALARM_NOTE,
+            "toneChoices": list(TONES),
+            "toneNote": prefs.get("alarm_tone") == "spotify",
+            "dnd": prefs.get("reminder_dnd_override") is True,
+            "volume": int(prefs.get("alert_volume", 80)),
+            "endChime": prefs.get("end_chime") is True,
+            "tray": prefs.get("tray_notifications", True) is not False,
+            "accent": accent,
+            "accentChoices": [{"label": ACCENT_LABELS[name], "value": name} for name in ACCENTS],
+            "accentLocked": preset in ACCENT_LOCKED,
+            "accentChips": prefs.get("accent_chips") is True,
+            "font": shown_font(preset, self._font),
+            "fontChoices": [{"label": FONT_LABELS[name], "value": name} for name in FONTS],
+            "oneMode": ONE_MODE.get(preset, ""),
+            "workWindows": self._study.window_rows(),
+            "workPresets": [{"name": name} for name, *_rest in WORK_PRESETS],
+            "protectedWindows": self._study.protected_view(),
+            "studyDirty": self._study.dirty,
+            "studyError": self._study.error,
+            "schoolDays": list(self._school.days),
+            "schoolStart": hhmm_text(self._school.start),
+            "schoolEnd": hhmm_text(self._school.end),
+            "schoolDirty": self._school.dirty,
+            "schoolError": self._school.error,
+            "schoolExists": self._school.exists,
+            "thisWeek": self._this_week(),
+            "dayNames": [{"day": day, "short": DAYS[day], "full": DAY_FULL[day]} for day in range(7)],
+            "protectedKinds": [{"label": PROTECTED_WORDS[kind], "value": kind} for kind in PROTECTED_KINDS],
+            "dndNote": DND_NOTE,
+            "trayNote": TRAY_NOTE,
+            "blockSongNote": BLOCK_SONG_NOTE,
+            "reminderLimits": self._reminder_limits(),
+            "focusAudioNote": FOCUS_AUDIO_NOTE,
+            "spotifyHint": SPOTIFY_LINK_HINT,
+            "spotifyRest": SPOTIFY_TONE_REST,
+            "studyNote": STUDY_HOURS_LINE,
+            "schoolNote": SCHOOL_HOURS_NOTE,
+            "noStudyHours": NO_STUDY_HOURS,
+            "noProtected": NO_PROTECTED,
+            "noSchoolDays": NO_SCHOOL_DAYS,
+            "limit": AVAILABILITY_LIMIT,
             "split": bool(prefs.get(_SPLIT)) if _SPLIT else False,
             "cutoff": cutoff,
             "cutoffChoices": [
@@ -935,6 +1170,16 @@ class SettingsBridge(QObject):
             "showWeekends": bool(prefs.get(_SHOW_WEEKENDS, True)) if _SHOW_WEEKENDS else True,
             "startAtLogin": prefs.get("start_at_login") is True,
             "reduceMotion": motion in ("reduce", "off"),
+            "animations": motion if motion in ANIMATION_VALUES else "normal",
+            "animationChoices": list(ANIMATIONS),
+            "openOn": open_on if open_on in OPEN_ON_VALUES else "week",
+            "openOnChoices": list(OPEN_ON),
+            "showOpenOn": "preferred_view" in _FIELDS,
+            "planningStyle": prefs.get("planning_style") or "suggest",
+            "planningStyleChoices": [
+                {"value": value, "label": label, "note": note} for value, label, note in PLANNING_STYLES
+            ],
+            "showPlanningStyle": "planning_style" in _FIELDS,
             "shortcuts": self._shortcuts,
             "letters": self._letter_keys,
             "developerBuilds": self._window._updates.get("developer_builds") is True,
@@ -944,8 +1189,18 @@ class SettingsBridge(QObject):
                 f"FlexWeek {VERSION} (developer build)" if CHANNEL == "dev" else f"FlexWeek {VERSION}"
             ),
             "pairCode": self._pair_code,
+            "pairStatus": self._pair_status,
             "pairError": self._pair_error,
             "phones": phones,
+            "phoneRows": phone_rows,
+            "syncWords": sync_words,
+            "syncBusy": self._sync_busy,
+            "canSync": self._sync_service() is not None and bool(phone_rows),
+            "clockWarning": self._clock_warning,
+            "syncProblem": self._sync_problem,
+            "relayNote": RELAY_SENTENCE,
+            "askRemove": bool(self._remove_ask),
+            "removeName": self._remove_ask.get("name", ""),
             "showClock": "clock_24h" in _FIELDS,
             "showAudio": "focus_audio" in _FIELDS,
             "showSpotify": "default_spotify_url" in _FIELDS,
@@ -965,6 +1220,9 @@ class SettingsBridge(QObject):
             "padding": 6 if draft["padding"] is None else draft["padding"],
             "shadow": 0 if draft["shadow"] is None else draft["shadow"],
             "scale": draft["scale"],
+            "tier": self._tier or "simple",
+            "draftOneMode": ONE_MODE.get(choice["preset"], ""),
+            "cornerShape": _corner_shape(draft["corner"]),
             "textSize": (
                 "larger"
                 if (draft.get("scale") or self._advanced.get("scale") or 1.0) >= 1.5
@@ -1004,8 +1262,14 @@ class SettingsBridge(QObject):
             "dirty": self._dirty,
         }
 
+    def _reminder_limits(self) -> str:
+        """The server's two reminder-limit sentences, as the Widgets Alerts page showed them."""
+        found = getattr(getattr(self._window, "session", None), "reminder_limits", None)
+        limits = found if isinstance(found, dict) else {}
+        return " ".join(str(limits.get(key, "")) for key in ("spotify", "duplicate")).strip()
+
     def _problem_rows(self) -> list[dict[str, Any]]:
-        mode = resolved_mode(self._draft_choice["mode"], self._worn_dark())
+        mode = mode_of(self._draft_choice, self._worn_dark())
         return [
             {"words": item["words"], "role": item["role"], "ratio": item["ratio"]}
             for item in reading_problems(mode, self._draft)
@@ -1024,6 +1288,87 @@ class SettingsBridge(QObject):
             if isinstance(row, dict):
                 names.append(str(row.get("name") or "Phone"))
         return names
+
+    def _sync_service(self) -> Any:
+        host = getattr(self._window, "_sync_host", None)
+        return getattr(host, "service", None)
+
+    def _phone_rows(self) -> list[dict[str, str]]:
+        """Each linked phone with when it last synced, as the Widgets Devices card said it."""
+        found = getattr(self._window, "_linked_phones", None)
+        if not callable(found):
+            return []
+        try:
+            rows = found() or []
+        except Exception:
+            return []
+        now_ms = int(self._window.session.now_ms())
+        shown: list[dict[str, str]] = []
+        for row in rows:
+            if isinstance(row, dict):
+                shown.append(
+                    {
+                        "id": str(row.get("device_id") or ""),
+                        "name": str(row.get("name") or "Phone"),
+                        "seen": seen_words(row.get("last_seen"), now_ms),
+                    }
+                )
+        return shown
+
+    def _sync_words(self) -> str:
+        """The status the Widgets dot's tooltip gave: waiting, syncing, synced or could not reach."""
+        service = getattr(self._window, "_sync", None)
+        if service is None:
+            return ""
+        try:
+            return DOT_WORDS[sync_state(service.status(), bool(self._phone_rows()))]
+        except Exception:
+            return ""
+
+    @Slot()
+    def syncNow(self) -> None:
+        if self._sync_service() is None or self._sync_busy:
+            return
+        self._sync_busy = True
+        self._publish()
+        self._window.session.sync_linked_phones(self._synced)
+
+    def _synced(self, rows: list | None, problem: Exception | None) -> None:
+        self._sync_busy = False
+        if problem is not None:
+            self._sync_problem = f"Sync failed: {problem}"
+            self._clock_warning = ""
+            self._publish()
+            return
+        skewed = sum(
+            row[1].get("clock_skewed", 0) for row in rows or [] if row[1] is not None and row[2] is None
+        )
+        self._clock_warning = clock_warning_words(skewed)
+        self._sync_problem = UNREACHABLE_WORDS if any(row[2] is not None for row in rows or []) else ""
+        self._publish()
+
+    @Slot(str)
+    def askRemovePhone(self, device_id: str) -> None:
+        row = next((item for item in self._phone_rows() if item["id"] == device_id), None)
+        if row is None:
+            return
+        self._remove_ask = {"id": device_id, "name": row["name"]}
+        self._publish()
+
+    @Slot(str)
+    def answerRemovePhone(self, choice: str) -> None:
+        ask, self._remove_ask = self._remove_ask, {}
+        if choice != "remove" or not ask:
+            self._publish()
+            return
+
+        def gone(_answer: Any, problem: Exception | None) -> None:
+            self._sync_problem = f"Could not remove {ask['name']}: {problem}" if problem is not None else ""
+            self._window._sync_tick()  # type: ignore[attr-defined]
+            self._publish()
+
+        self._window.session.unlink_phone(ask["id"], gone)
+        self._publish()
 
     def _write(self, updates: dict[str, Any], *, login: bool | None = None) -> None:
         session = self._window.session
@@ -1054,7 +1399,13 @@ class SettingsBridge(QObject):
     def _commit(self) -> None:
         path = self._window._look_path()
         material = pack_material(
-            self._choice, self._advanced, self._shortcuts, self._letter_keys, self._saved
+            self._choice,
+            self._advanced,
+            self._shortcuts,
+            self._letter_keys,
+            self._saved,
+            self._font,
+            self._tier,
         )
         store_material(path, material)
         self._bridge._shortcuts = self._shortcuts  # type: ignore[attr-defined]
@@ -1078,7 +1429,7 @@ class SettingsBridge(QObject):
 
     @Property(bool, notify=changed)
     def promptOpen(self) -> bool:
-        return bool(self._prompt) or self._ask_preset
+        return bool(self._prompt) or self._ask_preset or bool(self._remove_ask)
 
     @Property("QVariantMap", notify=changed)  # type: ignore[arg-type]
     def draftTheme(self) -> dict[str, Any]:
@@ -1175,13 +1526,7 @@ class SettingsBridge(QObject):
 
     @Slot(str)
     def setTextSize(self, size: str) -> None:
-        scales = {
-            "small": 0.9,
-            "normal": 1.0,
-            "large": 1.3,
-            "larger": 1.6,
-        }
-        val = scales.get(size)
+        val = TEXT_SIZES.get(size)
         if val is None:
             try:
                 val = float(size)
@@ -1193,6 +1538,77 @@ class SettingsBridge(QObject):
         self._advanced["scale"] = number
         self._draft["scale"] = number
         self._commit()
+
+    # The Advanced page's Simple tier edits the same draft as its other tiers, so Done applies the lot and
+    # Back drops it. Its preset, mode and row size are the draft's own choice.
+    @Slot(str)
+    def setDraftPreset(self, name: str) -> None:
+        if name in PRESETS:
+            self._draft_choice["preset"] = name
+            self._mark_draft()
+
+    @Slot(str)
+    def setDraftMode(self, mode: str) -> None:
+        if mode in SAVED_MODES:
+            self._draft_choice["mode"] = mode
+            self._mark_draft()
+
+    @Slot(str)
+    def setDraftDensity(self, density: str) -> None:
+        if density in ("comfortable", "compact"):
+            self._draft_choice["density"] = density
+            self._mark_draft()
+
+    @Slot(str)
+    def setDraftTextSize(self, size: str) -> None:
+        number = _float_in(TEXT_SIZES.get(size), SCALE_RANGE)
+        if number is not None:
+            self._draft["scale"] = number
+            self._mark_draft()
+
+    @Slot(str)
+    def setCornerShape(self, shape: str) -> None:
+        if shape in CORNER_SHAPES:
+            self._draft["corner"] = CORNER_SHAPES[shape]
+            self._mark_draft()
+
+    @Slot(str)
+    def setLookTier(self, tier: str) -> None:
+        """Simple, More or All. It only changes which controls show: no value moves. It is kept on this
+        computer in the look file."""
+        if tier not in LOOK_TIERS or tier == self._tier:
+            return
+        self._tier = tier
+        self._store_tier()
+        self._publish()
+
+    def seed_look_tier(self, tier: str) -> None:
+        """Setup read as power: the Advanced page starts on `tier`, unless a tier was already chosen."""
+        if tier in LOOK_TIERS and not self._tier:
+            self._tier = tier
+            self._store_tier()
+            self._publish()
+
+    def _store_tier(self) -> None:
+        path = self._window._look_path()
+        kept = kept_material(path)
+        if kept is None:
+            self._commit()
+            return
+        store_material(path, {**kept, "lookTier": self._tier})
+
+    def apply_setup_look(self, **parts: str) -> None:
+        """Setup's look cards: applied and kept now, as the Look section does, with no question asked."""
+        preset = parts.get("preset")
+        if preset in PRESETS and preset != self._choice["preset"]:
+            self._apply_preset(preset, keep=True)
+        rest = {
+            key: value
+            for key, value in parts.items()
+            if (key == "mode" and value in SAVED_MODES) or (key == "density" and value in DENSITY_CHOICES)
+        }
+        if rest:
+            self._set_choice(**rest)
 
     @Slot(bool)
     def setClock(self, on: bool) -> None:
@@ -1227,17 +1643,343 @@ class SettingsBridge(QObject):
             return
         self._write({"reminders_enabled": True, "reminder_lead_min": int(value)})
 
-    @Slot(bool)
-    def setPomodoro(self, on: bool) -> None:
+    @Slot(int)
+    def setReminderLead(self, minutes: int) -> None:
+        if isinstance(minutes, bool) or not 0 <= minutes <= LEAD_MAX:
+            self._notice = SAVE_REFUSED
+            self._publish()
+            return
+        self._write({"reminder_lead_min": int(minutes)})
+
+    def _round_to_grid(self, updates: dict[str, Any], prefs: dict[str, Any]) -> bool:
+        """Splitting needs 15-minute lengths (the backend refuses others). Puts the rounded ones in
+        `updates` and says whether any moved."""
+        moved = False
+        for key in ("work", "break", "long"):
+            field, _lo, high = TIMER_LENGTHS[key]
+            have = int(updates.get(field) or prefs.get(field) or {"work": 30, "break": 15, "long": 30}[key])
+            snapped = snap_minutes(have, 1, high)
+            if snapped != have:
+                updates[field] = snapped
+                moved = True
+        return moved
+
+    @Slot(str)
+    def setTimerPreset(self, value: str) -> None:
         if "timer_work_min" not in _FIELDS:
             return
-        if on:
-            updates: dict[str, Any] = {"timer_work_min": 25, "timer_break_min": 5}
-            if _prefs_of(self._window).get("auto_split_pomodoro"):
-                updates["auto_split_pomodoro"] = False
-            self._write(updates)
+        if value == "custom":
+            self._timer_custom = True
+            self._publish()
             return
-        self._write({"timer_work_min": 30, "timer_break_min": 15})
+        item = next((row for row in TIMER_PRESETS if row["id"] == value), None)
+        if item is None:
+            return
+        self._timer_custom = False
+        self._timer_note = ""
+        self._write(
+            {
+                "timer_work_min": item["timer_work_min"],
+                "timer_break_min": item["timer_break_min"],
+                "timer_long_break_min": item["timer_long_break_min"],
+                "timer_long_break_every": item["timer_long_break_every"],
+            }
+        )
+
+    @Slot(str, int)
+    def setTimerLength(self, key: str, value: int) -> None:
+        """One length of the Custom timer. A value outside the backend's range, or off the 15-minute
+        grid while splitting is on, is refused and what was saved stays."""
+        if key not in TIMER_LENGTHS or "timer_work_min" not in _FIELDS:
+            return
+        field, low, high = TIMER_LENGTHS[key]
+        split = _prefs_of(self._window).get("auto_split_pomodoro") is True
+        if isinstance(value, bool) or not low <= value <= high or (split and key != "every" and value % 15):
+            self._notice = SAVE_REFUSED
+            self._publish()
+            return
+        self._timer_custom = True
+        self._timer_note = ""
+        self._write({field: int(value)})
+
+    @Slot(bool)
+    def setAutoSplit(self, on: bool) -> None:
+        if "auto_split_pomodoro" not in _FIELDS:
+            return
+        updates: dict[str, Any] = {"auto_split_pomodoro": bool(on)}
+        self._timer_note = ""
+        if on and self._round_to_grid(updates, _prefs_of(self._window)):
+            self._timer_note = SPLIT_ROUNDED.format(step=15)
+        self._write(updates)
+
+    @Slot(bool)
+    def setAutoComplete(self, on: bool) -> None:
+        if "focus_auto_complete" in _FIELDS:
+            self._write({"focus_auto_complete": bool(on)})
+
+    @Slot(bool)
+    def setAutoMute(self, on: bool) -> None:
+        if "focus_auto_mute" in _FIELDS:
+            self._write({"focus_auto_mute": bool(on)})
+
+    @Slot(bool)
+    def setReminderSound(self, on: bool) -> None:
+        if "reminder_sound" in _FIELDS:
+            self._write({"reminder_sound": bool(on)})
+
+    @Slot(str)
+    def setTone(self, value: str) -> None:
+        if value in SOUNDS and "alarm_tone" in _FIELDS:
+            self._write({"alarm_tone": value})
+
+    @Slot(str)
+    def openAlarm(self, alarm_id: str) -> None:
+        """Add (an empty id) or edit an alarm. The sheet is the shared one over every screen."""
+        self._bridge.sheets.openAlarm(alarm_id)  # type: ignore[attr-defined]
+
+    @Slot()
+    def playTone(self) -> None:
+        """Test play: the chosen tone at the saved volume. Spotify plays its link, and the built-in
+        chime when no link plays. Silent under FLEXWEEK_SILENT, as every Bell is."""
+        prefs = _prefs_of(self._window)
+        tone = str(prefs.get("alarm_tone") or FALLBACK)
+        if tone == "spotify":
+            link = prefs.get("default_spotify_url")
+            if link and self._spotify_player.play(str(link)):
+                return
+            tone = FALLBACK
+        if not self._bell.once(tone, int(prefs.get("alert_volume", 80))):
+            self._notice = NO_SOUND
+            self._publish()
+
+    @Slot(bool)
+    def setDnd(self, on: bool) -> None:
+        if "reminder_dnd_override" in _FIELDS:
+            self._write({"reminder_dnd_override": bool(on)})
+
+    @Slot(int)
+    def setVolume(self, value: int) -> None:
+        if "alert_volume" not in _FIELDS:
+            return
+        if isinstance(value, bool) or not 0 <= value <= 100:
+            self._notice = SAVE_REFUSED
+            self._publish()
+            return
+        self._write({"alert_volume": int(value)})
+
+    @Slot(bool)
+    def setEndChime(self, on: bool) -> None:
+        if "end_chime" in _FIELDS:
+            self._write({"end_chime": bool(on)})
+
+    @Slot(bool)
+    def setTray(self, on: bool) -> None:
+        if "tray_notifications" in _FIELDS:
+            self._write({"tray_notifications": bool(on)})
+
+    @Slot(str)
+    def setAccent(self, name: str) -> None:
+        if name in ACCENTS and "accent" in _FIELDS:
+            self._write({"accent": name})
+
+    @Slot(bool)
+    def setAccentChips(self, on: bool) -> None:
+        if "accent_chips" in _FIELDS:
+            self._write({"accent_chips": bool(on)})
+
+    @Slot(str)
+    def setFont(self, name: str) -> None:
+        if name in FONTS:
+            self._font = name
+            self._notice = ""
+            self._commit()
+
+    # Study hours and School hours. Each is a draft until its Save, as the Widgets dialogs are.
+    def _school_block(self) -> dict[str, Any] | None:
+        repeats = getattr(getattr(self._window, "session", None), "repeats", None) or []
+        return next((item for item in repeats if item.get("id") == SETUP_SCHOOL_ID), None)
+
+    def _this_week(self) -> str:
+        """'This week: no School on Wednesday.' for the usual School, or ''."""
+        school = self._school_block()
+        session = getattr(self._window, "session", None)
+        if school is None or session is None:
+            return ""
+        clock_24h = (_prefs_of(self._window)).get("clock_24h") is True
+        try:
+            return this_week_line(session.blocks, [school], clock_24h, session.week_start) or ""
+        except (KeyError, TypeError, ValueError):
+            return ""
+
+    def _redraw_study(self) -> None:
+        self._publish()
+
+    @Slot(str)
+    def addWorkPreset(self, name: str) -> None:
+        for label, days, start, end in WORK_PRESETS:
+            if label == name:
+                self._study.add_window({"days": list(days), "start": start, "end": end})
+                self._redraw_study()
+                return
+
+    @Slot()
+    def addWorkCustom(self) -> None:
+        self._study.add_window()
+        self._redraw_study()
+
+    @Slot(int)
+    def removeWorkWindow(self, index: int) -> None:
+        self._study.remove(self._study.windows, index)
+        self._redraw_study()
+
+    @Slot(int, int)
+    def toggleWorkDay(self, index: int, day: int) -> None:
+        self._study.toggle_day(self._study.windows, index, day)
+        self._redraw_study()
+
+    @Slot(int, str)
+    def setWorkStart(self, index: int, text: str) -> None:
+        self._study.set_time(self._study.windows, index, "start", text)
+        self._redraw_study()
+
+    @Slot(int, str)
+    def setWorkEnd(self, index: int, text: str) -> None:
+        self._study.set_time(self._study.windows, index, "end", text)
+        self._redraw_study()
+
+    @Slot(int, str)
+    def setWorkSubject(self, index: int, text: str) -> None:
+        self._study.set_text(self._study.windows, index, "subject", text)
+        self._redraw_study()
+
+    @Slot()
+    def addProtected(self) -> None:
+        self._study.add_protected()
+        self._redraw_study()
+
+    @Slot(int)
+    def removeProtected(self, index: int) -> None:
+        self._study.remove(self._study.protected_rows, index)
+        self._redraw_study()
+
+    @Slot(int, int)
+    def toggleProtectedDay(self, index: int, day: int) -> None:
+        self._study.toggle_day(self._study.protected_rows, index, day)
+        self._redraw_study()
+
+    @Slot(int, str)
+    def setProtectedStart(self, index: int, text: str) -> None:
+        self._study.set_time(self._study.protected_rows, index, "start", text)
+        self._redraw_study()
+
+    @Slot(int, str)
+    def setProtectedEnd(self, index: int, text: str) -> None:
+        self._study.set_time(self._study.protected_rows, index, "end", text)
+        self._redraw_study()
+
+    @Slot(int, str)
+    def setProtectedTitle(self, index: int, text: str) -> None:
+        self._study.set_text(self._study.protected_rows, index, "title", text)
+        self._redraw_study()
+
+    @Slot(int, str)
+    def setProtectedKind(self, index: int, kind: str) -> None:
+        self._study.set_kind(index, kind)
+        self._redraw_study()
+
+    @Slot()
+    def saveStudyHours(self) -> None:
+        problem = self._study.problem()
+        if problem:
+            self._study.error = problem
+            self._publish()
+            return
+        session = self._window.session
+        cutoff = _prefs_of(self._window).get("day_cutoff") or None
+        if session.save_availability(
+            self._study.saved_protected(), cutoff, self._study.saved_windows()
+        ):
+            self._study.dirty = False
+            self._study.error = ""
+        self._publish()
+
+    @Slot()
+    def discardStudyHours(self) -> None:
+        self._study.load(_prefs_of(self._window))
+        self._publish()
+
+    @Slot(int)
+    def toggleSchoolDay(self, day: int) -> None:
+        self._school.toggle_day(day)
+        self._publish()
+
+    @Slot(str)
+    def setSchoolStart(self, text: str) -> None:
+        self._school.set_time("start", text)
+        self._publish()
+
+    @Slot(str)
+    def setSchoolEnd(self, text: str) -> None:
+        self._school.set_time("end", text)
+        self._publish()
+
+    @Slot()
+    def discardSchoolHours(self) -> None:
+        self._school.load(self._school_block())
+        self._publish()
+
+    @Slot()
+    def saveSchoolHours(self) -> None:
+        """School's days and times every week, saved from this week on as the Widgets dialog saves
+        them. No day ticked takes School off the calendar."""
+        school = self._school
+        problem = school.problem()
+        if problem:
+            school.error = problem
+            self._publish()
+            return
+        window = self._window
+        repeats = window.session.repeats
+        usual = self._school_block()
+        if not school.days:
+            if usual is not None:
+                after = [item for item in repeats if item.get("id") != SETUP_SCHOOL_ID]
+                if window._apply_standing(after, "deleting School"):
+                    window.session.save()
+                    window._set_notice("Deleted School from this week and every week after.", "", None)
+                else:
+                    return
+            school.dirty = False
+            self._publish()
+            return
+        made = copy.deepcopy(usual) if usual is not None else {
+            "id": SETUP_SCHOOL_ID,
+            "kind": "locked",
+            "title": "School",
+            "category": "class",
+        }
+        made.update(days=sorted(school.days), start=school.start, duration_min=school.minutes())
+        try:
+            WeekRequest(blocks=[TimeBlock.model_validate(made)])
+        except ValidationError as error:
+            from desktop.native.sheet_rules import _block_problem
+
+            school.error = _block_problem(error)
+            self._publish()
+            return
+        after = [made if item.get("id") == SETUP_SCHOOL_ID else item for item in repeats]
+        if usual is None:
+            after = [made, *repeats]
+        start = hhmm_text(made["start"])
+        end_minutes = hhmm_to_minutes(made["start"]) + made["duration_min"]
+        end = hhmm_text(minutes_to_hhmm(end_minutes) if end_minutes < 1440 else "24:00")
+        school.dirty = False
+        window._save_standing(
+            after,
+            "editing School hours",
+            lambda: window._set_notice(f"School now {start}–{end} every week", "", None),
+        )
+        self._publish()
 
     @Slot(bool)
     def setSplit(self, on: bool) -> None:
@@ -1293,10 +2035,20 @@ class SettingsBridge(QObject):
         if "start_at_login" in _FIELDS:
             self._write({"start_at_login": bool(on)}, login=bool(on))
 
-    @Slot(bool)
-    def setReduceMotion(self, on: bool) -> None:
-        if "motion" in _FIELDS:
-            self._write({"motion": "reduce" if on else "normal"})
+    @Slot(str)
+    def setAnimations(self, value: str) -> None:
+        if value in ANIMATION_VALUES and "motion" in _FIELDS:
+            self._write({"motion": value})
+
+    @Slot(str)
+    def setOpenOn(self, value: str) -> None:
+        if value in OPEN_ON_VALUES and "preferred_view" in _FIELDS:
+            self._write({"preferred_view": value})
+
+    @Slot(str)
+    def setPlanningStyle(self, value: str) -> None:
+        if value in PLANNING_VALUES and "planning_style" in _FIELDS:
+            self._write({"planning_style": value})
 
     @Slot(bool)
     def setShortcuts(self, on: bool) -> None:
@@ -1563,7 +2315,7 @@ class SettingsBridge(QObject):
 
     @Slot(str)
     def fixRole(self, role: str) -> None:
-        mode = resolved_mode(self._draft_choice["mode"], self._worn_dark())
+        mode = mode_of(self._draft_choice, self._worn_dark())
         for item in reading_problems(mode, self._draft):
             if item["role"] != role:
                 continue
@@ -1576,7 +2328,7 @@ class SettingsBridge(QObject):
 
     @Slot()
     def fixAll(self) -> None:
-        mode = resolved_mode(self._draft_choice["mode"], self._worn_dark())
+        mode = mode_of(self._draft_choice, self._worn_dark())
         for item in reading_problems(mode, self._draft):
             role = item["role"]
             if role == "now":
@@ -1597,6 +2349,9 @@ class SettingsBridge(QObject):
                 else:
                     self._pair_code = str(offer.get("display_code") or "")
                     self._pair_error = ""
+                    self._pair_watch.start()
+                    self._pair_tick()
+                    return
                 self._publish()
 
             # Owned by this bridge: a bridge dropped before the turn ends takes the timer with it.
@@ -1606,6 +2361,23 @@ class SettingsBridge(QObject):
             self._pair_code = ""
             self._pair_error = "Pairing needs an account on this computer."
             self._publish()
+
+    def _pair_tick(self) -> None:
+        """The open code's words: its countdown and tries while it waits, else why it closed."""
+        status = self._window.session.pairing_status()
+        state = status.get("state") if isinstance(status, dict) else None
+        if state == "waiting":
+            left = (int(status["expires_at_ms"]) - wall_clock.now_ms()) // 1000
+            tries = tries_words(int(status["tries_left"]))
+            self._pair_status = f"{countdown_words(left)}. {tries}. {PAIR_ONCE}"
+        else:
+            self._pair_watch.stop()
+            self._pair_status = ""
+            if state is not None:
+                self._pair_code = ""
+                if state != "paired":
+                    self._pair_error = pair_problem(state) or PAIR_CLOSED
+        self._publish()
 
     @Slot()
     def openAccount(self) -> None:

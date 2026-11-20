@@ -69,20 +69,20 @@ fn a_change_from_this_week_on_reaches_every_piece_of_school() {
     let renamed = parse_intent(&json!({"id": "school", "scope": "from",
                                        "from_date": "2026-11-09", "set": {"title": "Classes"}}))
     .unwrap();
-    let (blocks, _) = apply_to_week(&week(), &[school()], &[renamed]).unwrap();
+    let (blocks, _) = apply_to_week(&week(), &[school()], &[renamed], "2026-11-09").unwrap();
     assert_eq!(by_id(&blocks, "school")["title"], "Classes");
     assert_eq!(by_id(&blocks, "school@20261111")["title"], "Classes");
     // A new start reaches the days that kept School's time; the piece keeps the time it was given.
     let earlier = parse_intent(&json!({"id": "school", "scope": "from",
                                        "from_date": "2026-11-09", "set": {"start": "08:00"}}))
     .unwrap();
-    let (blocks, _) = apply_to_week(&week(), &[school()], &[earlier]).unwrap();
+    let (blocks, _) = apply_to_week(&week(), &[school()], &[earlier], "2026-11-09").unwrap();
     assert_eq!(by_id(&blocks, "school")["start"], "08:00");
     assert_eq!(by_id(&blocks, "school@20261111")["start"], "10:00");
     let stop = parse_intent(&json!({"id": "school", "scope": "from",
                                     "from_date": "2026-11-09", "stop": true}))
     .unwrap();
-    let (blocks, repeats) = apply_to_week(&week(), &[school()], &[stop]).unwrap();
+    let (blocks, repeats) = apply_to_week(&week(), &[school()], &[stop], "2026-11-09").unwrap();
     assert!(blocks.is_empty(), "{blocks:?}");
     assert!(repeats.is_empty());
 }
@@ -202,7 +202,7 @@ fn a_day_added_to_school_in_two_pieces_is_school_once_that_day() {
     let saturday = parse_intent(&json!({"id": "school", "scope": "from",
                                         "from_date": "2026-11-09", "add_days": [5]}))
     .unwrap();
-    let (blocks, _) = apply_to_week(&week(), &[school()], &[saturday]).unwrap();
+    let (blocks, _) = apply_to_week(&week(), &[school()], &[saturday], "2026-11-09").unwrap();
     assert_eq!(school_days(&blocks), vec![0, 1, 2, 3, 4, 5], "{blocks:?}");
     assert_eq!(by_id(&blocks, "school")["days"], json!([0, 1, 5]));
     assert_eq!(by_id(&blocks, "school@20261111")["days"], json!([2, 3, 4]));
@@ -213,6 +213,7 @@ fn a_day_added_to_school_in_two_pieces_is_school_once_that_day() {
         &[parse_intent(&json!({"id": "school", "scope": "from",
                                "from_date": "2026-11-09", "add_days": [5]}))
         .unwrap()],
+        "2026-11-09",
     )
     .unwrap();
     assert_eq!(school_days(&blocks), vec![2, 3, 4, 5], "{blocks:?}");
@@ -230,7 +231,8 @@ fn a_day_added_to_school_takes_the_repeats_time_when_schools_own_piece_was_chang
     let saturday = parse_intent(&json!({"id": "school", "scope": "from",
                                         "from_date": "2026-11-09", "add_days": [5]}))
     .unwrap();
-    let (blocks, _) = apply_to_week(&[changed, follows], &[school()], &[saturday]).unwrap();
+    let (blocks, _) =
+        apply_to_week(&[changed, follows], &[school()], &[saturday], "2026-11-09").unwrap();
     assert_eq!(school_days(&blocks), vec![0, 1, 2, 3, 4, 5], "{blocks:?}");
     let own = by_id(&blocks, "school");
     assert_eq!(
@@ -251,6 +253,7 @@ fn a_day_added_to_school_takes_the_repeats_time_when_schools_own_piece_was_chang
         &[parse_intent(&json!({"id": "school", "scope": "from",
                                "from_date": "2026-11-09", "add_days": [5]}))
         .unwrap()],
+        "2026-11-09",
     )
     .unwrap();
     assert_eq!(by_id(&blocks, "school")["days"], json!([0, 1, 5]));
@@ -273,7 +276,13 @@ fn a_day_added_to_school_never_goes_to_a_piece_missed_on_every_day() {
     let weekend = parse_intent(&json!({"id": "school", "scope": "from",
                                        "from_date": "2026-11-09", "add_days": [5, 6]}))
     .unwrap();
-    let (blocks, _) = apply_to_week(&[missed, changed, friday], &[school()], &[weekend]).unwrap();
+    let (blocks, _) = apply_to_week(
+        &[missed, changed, friday],
+        &[school()],
+        &[weekend],
+        "2026-11-09",
+    )
+    .unwrap();
     assert_eq!(
         by_id(&blocks, "school@20261111")["days"],
         json!([2]),
@@ -305,7 +314,8 @@ fn a_day_added_to_school_that_a_piece_already_holds_is_not_added_twice() {
     let saturday = parse_intent(&json!({"id": "school", "scope": "from",
                                         "from_date": "2026-11-09", "add_days": [5]}))
     .unwrap();
-    let (blocks, _) = apply_to_week(&[own, follows], &[school()], &[saturday]).unwrap();
+    let (blocks, _) =
+        apply_to_week(&[own, follows], &[school()], &[saturday], "2026-11-09").unwrap();
     let saturdays: Vec<&Value> = blocks
         .iter()
         .filter(|block| block["days"].as_array().unwrap().contains(&json!(5)))

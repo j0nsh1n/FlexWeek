@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from PySide6.QtCore import QByteArray, QObject, QTimer, QUrl
 from PySide6.QtNetwork import QNetworkCookie, QNetworkReply
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication
 from shiboken6 import isValid
 from starlette.testclient import TestClient
 
@@ -25,9 +25,10 @@ from desktop.native import controller as controller_module
 from desktop.native.client import NativeClient
 from desktop.native.kept import KeptSession
 from desktop.native.window import NativeWindow
-from desktop.tests.logic_support import past_setup
+from desktop.tests.logic_support import past_recovery, past_setup, sign_up
+from desktop.tests.material_support import page_showing
 from desktop.tests.waiting import wait_until
-from desktop.tests.window_support import PASSWORD, USERNAME, free, look_file, still
+from desktop.tests.window_support import PASSWORD, USERNAME, free, look_file
 
 # Never listened on: the backend checks requests' Origin and Host against it.
 ORIGIN = "http://127.0.0.1:8941"
@@ -166,12 +167,8 @@ def account(qapp: QApplication, root: Path) -> Account:
         window = NativeWindow(ORIGIN)
     window.show()
     try:
-        window.username.setText(USERNAME)
-        window.password.setText(PASSWORD)
-        window.findChild(QPushButton, "createAccount").click()
-        wait_until(qapp, lambda: window._stack.currentWidget().objectName() == "recoveryPage")
-        window.recovery_ack.setChecked(True)
-        window.recovery_continue.click()
+        sign_up(qapp, window, USERNAME, PASSWORD)
+        past_recovery(qapp, window)
         past_setup(qapp, window)
         assert window.session.account is not None, "signing up left no account"
         user_id = int(window.session.account["id"])
@@ -214,7 +211,7 @@ def open_light_window(
         wait_until(
             qapp,
             lambda: (
-                opened._stack.currentWidget().objectName() in {"weekPage", "materialPage"}
+                page_showing(opened) in {"weekPage", "materialPage"}
                 and session.preferences is not None
                 and not session.busy
                 and not getattr(session.client, "pending", 0)
@@ -230,7 +227,6 @@ def open_light_window(
     # before the preferences that say it was finished), and no session was kept on this computer.
     session.new_account = True
     session.kept = None
-    still(window)
     return window, api
 
 

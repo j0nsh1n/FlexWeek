@@ -2,9 +2,9 @@
 No Qt.
 
 A custom look is one of the ten looks as a starting point and what was changed on it (look.py's
-`sanitize_custom` says what may be changed, and `resolved_palette` and `pack_stylesheet` draw it as they
-draw the built-in looks). It is worn as the device look's "custom" entry, and kept by name in the look
-file's "saved_looks" (plan, "Customise"). Settings builds its screen on these functions.
+`sanitize_custom` says what may be changed). It is worn as the device look's "custom" entry, and kept
+by name in the look file's "saved_looks" (plan, "Customise"). The window reads the saved looks from
+the look file and writes them back through `sanitize_saved`.
 """
 
 from __future__ import annotations
@@ -14,12 +14,6 @@ from dataclasses import dataclass
 
 import flexweek_engine  # type: ignore[import-untyped]
 
-from desktop.native.calendar import CATEGORIES
-from desktop.native.look import (
-    block_paint,
-    category_paint,
-    resolved_palette,
-)
 from desktop.native.wire import plain, restore, restored
 
 # Shown when a student has not named the look yet.
@@ -156,48 +150,3 @@ def import_look(text: str | bytes) -> Imported:
         None if look is None else restored(look),
         tuple(restore(problem) for problem in problems),
     )
-
-
-@dataclass(frozen=True)
-class Problem:
-    """A pair of colours that reads under 4.5 to 1, and the fix: `field` set to `fixed`, the colour the
-    student chose with its OKLCH lightness moved the least it takes for the pair to pass."""
-
-    words: str
-    ink: str
-    ground: str
-    ratio: float
-    field: tuple[str, ...]
-    fixed: str
-    plural: bool = False
-
-
-def readability(custom: dict, system_dark: bool = False) -> list[Problem]:
-    """Every pair that reads under 4.5 to 1, named as the Customise mock-up names them."""
-    look = {"preset": "default", "knobs": {}, "custom": custom}
-    palette = resolved_palette("system", system_dark, look)
-    painted = []
-    for key, info in CATEGORIES.items():
-        fill, mark = category_paint(key, palette)
-        drawn = block_paint(look, palette, fill, info["kind"], mark)
-        painted.append({"key": key, "fill": fill, "drawn_fill": drawn["fill"], "ink": drawn["ink"]})
-    found = json.loads(
-        flexweek_engine.look_readability(json.dumps(custom), json.dumps(palette), json.dumps(painted))
-    )
-    return [
-        Problem(
-            item["words"],
-            item["ink"],
-            item["ground"],
-            item["ratio"],
-            tuple(item["field"]),
-            item["fixed"],
-            bool(item.get("plural", False)),
-        )
-        for item in found
-    ]
-
-
-def apply_fix(custom: dict, problem: Problem) -> dict:
-    """`custom` with the problem's colour moved. A category given as a hue becomes the exact colour."""
-    return json.loads(flexweek_engine.look_apply_fix(json.dumps(custom), problem))

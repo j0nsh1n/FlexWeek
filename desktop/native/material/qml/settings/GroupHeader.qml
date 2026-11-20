@@ -28,7 +28,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         text: root.title
         color: palette.primary
-        font.family: M3Font.family
+        font.family: M3Font.heading
         font.pixelSize: M3Font.px(16)
         font.weight: 500
     }

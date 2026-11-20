@@ -30,14 +30,6 @@ SectionPage {
             isOn: !!page.st.letters
             onFlipped: (value) => page.panel.setLetterKeys(value)
         }
-        ToggleRow {
-            key: "reduceMotion"
-            visible: !!page.st.showMotion
-            title: "Reduce motion"
-            subtitle: "Stops transitions and animations."
-            isOn: !!page.st.reduceMotion
-            onFlipped: (value) => page.panel.setReduceMotion(value)
-        }
     }
     Group {
         LinkRow {
@@ -80,21 +72,53 @@ SectionPage {
         LinkRow {
             key: "pair"
             title: "Pair a phone"
-            subtitle: page.st.pairCode ? "Enter this code on the phone: " + page.st.pairCode : "Show a code to link a phone."
+            subtitle: page.st.pairCode
+                ? "Enter this code on the phone: " + page.st.pairCode + (page.st.pairStatus ? ". " + page.st.pairStatus : "")
+                : "Show a code to link a phone."
             trailing: ""
             onClicked: page.panel.pair()
         }
-        SettingsRow {
-            visible: (page.st.phones || []).length > 0
-            title: "Linked phones"
-            subtitle: (page.st.phones || []).join(", ")
-            objectName: "row_phones"
+        Repeater {
+            model: page.st.phoneRows || []
+            delegate: ActionRow {
+                required property var modelData
+                key: "phone_" + modelData.id
+                title: modelData.name
+                subtitle: modelData.seen
+                buttonText: "Remove"
+                onActivated: page.panel.askRemovePhone(modelData.id)
+            }
+        }
+        ActionRow {
+            key: "syncNow"
+            visible: !!page.st.canSync
+            title: "Sync now"
+            subtitle: page.st.syncWords || "Send and fetch changes with your linked phones."
+            buttonText: page.st.syncBusy ? "Syncing..." : "Sync now"
+            buttonEnabled: !page.st.syncBusy
+            onActivated: page.panel.syncNow()
+        }
+        NoteRow {
+            key: "clockWarning"
+            visible: !!page.st.clockWarning
+            problem: true
+            text: page.st.clockWarning || ""
+        }
+        NoteRow {
+            key: "syncProblem"
+            visible: !!page.st.syncProblem
+            problem: true
+            text: page.st.syncProblem || ""
         }
         SettingsRow {
             visible: !!page.st.pairError
             title: "Pairing"
             subtitle: page.st.pairError || ""
             objectName: "row_pairError"
+        }
+        NoteRow {
+            key: "relayNote"
+            text: page.st.relayNote || ""
         }
     }
 }

@@ -1,11 +1,8 @@
 # ruff: noqa: F811
-"""The packaged smoke test also opens Material 3, and fails when the Widgets fallback is what shows.
+"""The packaged smoke test requires the Material 3 window, and fails when the draw-error page is what shows.
 
-The smoke test also leaves the computer's saved style as it found it: the next smoke run on the same
-data folder must not open straight into Material.
-
-A release that installs but gives a Material 3 student the "could not open" fallback has to fail its
-smoke test. The report keeps its `ok` and `stage` fields; `material_ok` says which half failed."""
+A release that installs but gives a student the "could not open" page has to fail its smoke test. The
+report keeps its `ok` and `stage` fields; `material_ok` says which half failed."""
 
 from __future__ import annotations
 
@@ -22,9 +19,9 @@ from desktop import main as app_main
 from desktop.main import PAINTED_MIN_COLORS, SMOKE_PASSED, NativeSmoke, material_state
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import faded_in
+from desktop.tests.material_support import faded_in, grab
 from desktop.tests.waiting import wait_until
-from desktop.tests.window_support import look_file, qapp  # noqa: F401
+from desktop.tests.window_support import qapp  # noqa: F401
 
 
 def pump(qapp: QApplication, count: int = 30) -> None:
@@ -37,7 +34,6 @@ def last_stage_of_the_smoke(
     window: NativeWindow,
     report: Path,
     monkeypatch: pytest.MonkeyPatch,
-    before: str = "widgets",
 ) -> dict[str, object]:
     """Run the smoke test's own Material stage on the signed-in window and read its report."""
     monkeypatch.setattr(window, "quit_app", lambda: None)
@@ -45,13 +41,11 @@ def last_stage_of_the_smoke(
     window.resize(1280, 800)
     window.show()
     pump(qapp)
-    window._surface = before
     window._on_week()
     pump(qapp)
     smoke = NativeSmoke(window, report, True)
     smoke._poll.stop()
     smoke._facts_colors = 0
-    window._back_to_material()
     smoke._stage = "material window"
     for _ in range(200):
         smoke._check()
@@ -72,12 +66,11 @@ def test_the_smoke_passes_when_the_material_window_is_showing(
     assert int(facts["material_painted_colors"]) >= PAINTED_MIN_COLORS  # type: ignore[call-overload]
 
 
-def test_the_smoke_fails_when_material_fell_back_to_widgets(
+def test_the_smoke_fails_when_material_gave_up(
     qapp: QApplication, window: NativeWindow, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    page = window._ensure_material()
-    assert page is not None
-    page.break_load = True
+    monkeypatch.setattr(window, "_quit_now", lambda: None)
+    window._give_up_material()
     facts = last_stage_of_the_smoke(qapp, window, tmp_path / "smoke.json", monkeypatch)
     assert facts["ok"] is False
     assert facts["stage"] != SMOKE_PASSED
@@ -85,17 +78,16 @@ def test_the_smoke_fails_when_material_fell_back_to_widgets(
     assert facts["material_ok"] is False
 
 
-def test_material_state_tells_the_window_from_the_fallback(qapp: QApplication, window: NativeWindow) -> None:
+def test_material_state_tells_the_window_from_the_draw_error(
+    qapp: QApplication, window: NativeWindow
+) -> None:
     window.resize(1280, 800)
     window.show()
-    window._surface = "material"
-    window._material_gave_up = False
-    window._material_failed = ""
     window._on_week()
     pump(qapp)
     page = window._material_page
     assert page is not None and page.root is not None
-    page._quick.grabFramebuffer()
+    grab(window)
     pump(qapp)
     faded_in(qapp, page.root)
     state, colors = material_state(window)
@@ -105,34 +97,35 @@ def test_material_state_tells_the_window_from_the_fallback(qapp: QApplication, w
     assert material_state(window) == ("fallback", 0)
 
 
-def saved_surface() -> object:
-    return json.loads(look_file().read_text()).get("surface")
-
-
-@pytest.mark.parametrize("break_load", [False, True])
-def test_the_smoke_puts_the_widgets_style_back_before_it_quits(
-    qapp: QApplication,
-    window: NativeWindow,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    break_load: bool,
+def test_material_state_waits_while_what_it_drew_is_nearly_one_colour(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    window._save_look()
-    assert saved_surface() == "widgets"
-    if break_load:
-        page = window._ensure_material()
-        assert page is not None
-        page.break_load = True
-    last_stage_of_the_smoke(qapp, window, tmp_path / "smoke.json", monkeypatch)
-    assert saved_surface() == "widgets"
-    assert window._surface == "widgets"
-    assert window._stack.currentWidget().objectName() == "weekPage"
+    window.resize(1280, 800)
+    window.show()
+    window._on_week()
+    pump(qapp)
+    page = window._material_page
+    assert page is not None and page.root is not None
+    grab(window)
+    pump(qapp)
+    faded_in(qapp, page.root)
+    monkeypatch.setattr(app_main, "painted_colors", lambda _image: PAINTED_MIN_COLORS - 1)
+    assert material_state(window) == ("waiting", PAINTED_MIN_COLORS - 1)
+    monkeypatch.setattr(app_main, "painted_colors", lambda _image: PAINTED_MIN_COLORS)
+    assert material_state(window) == ("shown", PAINTED_MIN_COLORS)
 
 
-def test_the_smoke_leaves_a_material_computer_on_material(
-    qapp: QApplication, window: NativeWindow, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    facts = last_stage_of_the_smoke(qapp, window, tmp_path / "smoke.json", monkeypatch, before="material")
-    assert facts["ok"] is True
-    assert saved_surface() == "material"
-    assert window._surface == "material"
+def test_material_state_waits_while_the_window_is_hidden(qapp: QApplication, window: NativeWindow) -> None:
+    window.resize(1280, 800)
+    window.show()
+    window._on_week()
+    pump(qapp)
+    page = window._material_page
+    assert page is not None and page.root is not None
+    grab(window)
+    pump(qapp)
+    faded_in(qapp, page.root)
+    assert material_state(window)[0] == "shown"
+    window.hide()
+    pump(qapp)
+    assert material_state(window) == ("waiting", 0)

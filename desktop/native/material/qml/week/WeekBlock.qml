@@ -40,6 +40,10 @@ Item {
     signal toggled()
     signal opened()
     signal menuAsked(real x, real y)
+    // Ctrl+C, Ctrl+D and Delete on the block that has the keyboard focus: its menu's Copy, Duplicate and Delete.
+    signal copyAsked()
+    signal duplicateAsked()
+    signal deleteAsked()
     signal focused()
 
     M3Palette { id: m3; theme: cell.theme }
@@ -271,7 +275,17 @@ Item {
     Keys.onPressed: (event) => {
         if (!cell.canOpen)
             return
-        if (cell.dayOpen && cell.homework && event.key === Qt.Key_Space) {
+        var ctrl = (event.modifiers & Qt.ControlModifier) && !(event.modifiers & (Qt.ShiftModifier | Qt.AltModifier))
+        if (ctrl && event.key === Qt.Key_C) {
+            cell.copyAsked()
+            event.accepted = true
+        } else if (ctrl && event.key === Qt.Key_D) {
+            cell.duplicateAsked()
+            event.accepted = true
+        } else if (event.key === Qt.Key_Delete && !event.modifiers) {
+            cell.deleteAsked()
+            event.accepted = true
+        } else if (cell.dayOpen && cell.homework && event.key === Qt.Key_Space) {
             cell.toggled()
             event.accepted = true
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter
@@ -287,16 +301,16 @@ Item {
     // A block that just got a time lands with the emphasized curve.
     Component.onCompleted: {
         updateStrikeout()
-        if (fresh && !reduceMotion) land.start()
+        if (fresh && Motion.pace > 0) land.start()
     }
     ParallelAnimation {
         id: land
         NumberAnimation {
-            target: cell; property: "scale"; from: 0.9; to: 1; duration: 500
+            target: cell; property: "scale"; from: 1 - 0.1 * Motion.reach; to: 1; duration: Motion.travel(500, cell.reduceMotion)
             easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1]
         }
         NumberAnimation {
-            target: cell; property: "opacity"; from: 0; to: 1; duration: 500
+            target: cell; property: "opacity"; from: 0; to: 1; duration: Motion.fade(500, cell.reduceMotion)
             easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1]
         }
     }

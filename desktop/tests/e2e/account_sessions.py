@@ -15,6 +15,7 @@ from desktop.native.window import NativeWindow
 from desktop.server import LocalServer
 from desktop.tests.logic_support import fixed
 from desktop.tests.waiting import wait_until
+from desktop.tests.week.support_material import _named, _show_material
 from desktop.tests.window_support import PASSWORD, qapp  # noqa: F401
 
 # Creating an account, signing in and recovering hash the password with scrypt (deliberately slow) on
@@ -57,13 +58,8 @@ def soccer() -> dict:
 
 
 def table_text(window: NativeWindow) -> str:
-    """What the week says: each block's name and the line under it."""
-    hours = window.week_table.hours
-    if not hours.tracks:
-        hours.resize(980, 640)
-        hours.relayout()
-    lines = []
-    for track in hours.tracks:
-        for drawn, _rect in hours.drawn(track):
-            lines.append(f"{drawn.title}\n{drawn.detail}")
-    return "\n".join(lines)
+    """What the week says: each block's name, as Material draws it."""
+    root = _show_material(QApplication.instance(), window)
+    blocks = _named(root, "weekBlock")
+    titles = [str(label.property("text")) for block in blocks for label in _named(block, "title")]
+    return "\n".join(titles)

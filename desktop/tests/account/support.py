@@ -1,9 +1,8 @@
-"""What the account tests share: sign-in helpers for the Widgets cards, the Material card helpers, and
-launches of the app on a database of their own with no server (the light app's in-process backend).
+"""What the account tests share: the Material card helpers, and launches of the app on a database of
+their own with no server (the light app's in-process backend).
 
-`Launches`, `launches`, `kept`, `launched`, `on_recovery_page` and `page` keep their old shape (a real
-local server) for the tests of other areas that still import them; the account tests use
-`LightLaunches`."""
+`Launches`, `launches`, `kept`, `launched` and `page` keep their old shape (a real local server) for the
+tests of other areas that still import them; the account tests use `LightLaunches`."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 
@@ -19,12 +18,13 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QObject
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication
 
 from desktop.native.kept import KeptSession
 from desktop.native.window import NativeWindow
 from desktop.server import LocalServer
 from desktop.tests.light_app import ORIGIN, InProcessApi, _client_for, _close
+from desktop.tests.material_support import page_showing
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import PASSWORD, USERNAME, free, look_file, qapp, server  # noqa: F401
 
@@ -94,7 +94,7 @@ def material_launches(qapp: QApplication, tmp_path: Path) -> Iterator[LightLaunc
 
 
 def page(window: NativeWindow) -> str:
-    return window._stack.currentWidget().objectName()
+    return page_showing(window)
 
 
 @pytest.fixture()
@@ -115,13 +115,6 @@ def launched(server: LocalServer, kept: KeptSession) -> Iterator[NativeWindow]:
         free(window)
 
 
-def on_recovery_page(qapp: QApplication, window: NativeWindow, username: str = USERNAME) -> None:
-    """From the sign-in card: choose Create account, make `username`, wait for the recovery codes."""
-    window.findChild(QPushButton, "authSwitch").click()
-    window.username.setText(username)
-    window.password.setText(PASSWORD)
-    window.findChild(QPushButton, "createAccount").click()
-    wait_until(qapp, lambda: page(window) == "recoveryPage")
 
 
 # The Material sign-in, recovery and setup card, driven through its bridge.
