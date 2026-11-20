@@ -5,6 +5,10 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- Settings > Computer has Report a problem. It opens a short form in your browser with your FlexWeek version and computer already filled in.
+- The phone's Settings has Report a problem. It opens an online form with your app version and phone model filled in.
+
 ## [1.5.0] - 2026-11-20
 
 ### Added
@@ -23,7 +27,6 @@ All notable changes to FlexWeek are documented here. Format follows
 - A fixed time can repeat every week: "Repeats every week" on the Add and Edit fixed time sheet, with an optional Until date. Changing one asks "This week only" or "This week and every week after".
 - Saving a weekly fixed time from this week on, or deleting School or an activity this week and later, can now be undone; the notice says later changes are undone with it.
 - Reminders stay on screen as a card with Snooze and Close when your computer shows no pop-ups, or when "Leave reminders on screen" is on.
-- Settings > Computer has Report a problem. It opens a short form in your browser with your FlexWeek version and computer already filled in.
 
 ### Changed
 - An account can hold up to 200 repeating blocks (was School and eight activities).
@@ -43,7 +46,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - In Material, Plan's button reads Suggest times when you place homework by hand.
 - In Material, replacing a running focus timer asks on a Material question (Keep current timer or Replace timer); in a question with choice cards, a choice that cannot be undone is marked in red when picked and only then is the confirm button red; a long notice wraps inside the window; and after Plan or an Undo the keyboard returns to the screen you are on.
 - In Material, the answers that delete something or cannot be taken back (Delete, This week and later, Replace week, Restore, Discard, Sign out) are drawn in the error colour in every question and sheet, in light and dark.
-- The phone app has a new look matching the computer's Material style: the same Blue colours in light and dark, real icons, and an agenda-style Today with an Up next card, a single Add homework form, a Week list with each session's time and arrows for other weeks, and Settings grouped as This phone, Your computer and Help. Report a problem in Settings opens an online form with your app version and phone model filled in.
+- The phone app has a new look matching the computer's Material style: the same Blue colours in light and dark, real icons, and an agenda-style Today with an Up next card, a single Add homework form, a Week list with each session's time and arrows for other weeks, and Settings grouped as This phone, Your computer and Help.
 
 ### Fixed
 - Ctrl+scroll zooms the Week and Day hours again on KDE Plasma's Wayland, where the mouse is reported as a touchpad.
