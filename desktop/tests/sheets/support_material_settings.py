@@ -12,7 +12,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
-from desktop.tests.material_support import pump, quick_of, show_material
+from desktop.tests.material_support import focus_quick, pump, quick_of, show_material
 
 
 def bridge(window: NativeWindow):
@@ -70,9 +70,7 @@ def open_settings(qapp: QApplication, window: NativeWindow, section: str = "look
     window.activateWindow()
     window.raise_()
     root = show_material(qapp, window)
-    quick = getattr(getattr(window, "_material_page", None), "_quick", None)
-    if quick is not None:
-        quick.setFocus()
+    focus_quick(window)
     bridge(window).showPage("settings")
     panel(window).closeAdvanced()
     panel(window).setSection(section)

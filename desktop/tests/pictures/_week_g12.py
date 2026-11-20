@@ -10,7 +10,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
-from desktop.tests.material_support import pump, qml, quick_of
+from desktop.tests.material_support import focus_quick, pump, qml, quick_of
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.sheets.support_material_pictures import (
     add_block,
@@ -68,7 +68,7 @@ def _add_button_focused_by_key(window: NativeWindow) -> None:
     seed_school_and_essay(window)
     quick = quick_of(window)
     window.activateWindow()
-    quick.setFocus()
+    focus_quick(window)
     qml(root, "materialFab").forceActiveFocus(Qt.FocusReason.TabFocusReason)
     QTest.keyClick(quick, Qt.Key.Key_Shift)
     pump(QApplication.instance(), 30)

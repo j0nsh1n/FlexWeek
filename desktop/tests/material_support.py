@@ -33,6 +33,16 @@ def quick_window_of(window: NativeWindow) -> QQuickWindow:
     return window._material_page._quick.quickWindow()
 
 
+def focus_quick(window: NativeWindow) -> None:
+    """Seam for step 11: give Material the keyboard."""
+    quick_of(window).setFocus()
+
+
+def host_has_focus(window: NativeWindow) -> bool:
+    """Seam for step 11: whether Material's host has the keyboard."""
+    return QApplication.focusWidget() is quick_of(window)
+
+
 def grab(window: NativeWindow) -> QImage:
     """Seam for step 11: an image of what Material drew."""
     return window._material_page._quick.grabFramebuffer()

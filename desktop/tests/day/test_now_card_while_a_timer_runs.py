@@ -28,7 +28,14 @@ from desktop.native.calendar import sunday_due  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_day import click, root_bridge, seed_thursday  # noqa: E402
 from desktop.tests.light_app import open_light  # noqa: E402, F401
-from desktop.tests.material_support import pump, qml, quick_of, quick_window_of, show_material  # noqa: E402
+from desktop.tests.material_support import (  # noqa: E402
+    host_has_focus,
+    pump,
+    qml,
+    quick_of,
+    quick_window_of,
+    show_material,
+)
 from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.window_support import qapp, settled  # noqa: E402, F401
 
@@ -426,7 +433,7 @@ def test_when_the_now_card_goes_away_holding_focus_focus_goes_to_the_page_headin
     pump(qapp)
     scene = quick_window_of(window)
     _finish_the_last_homework_as_the_reviewer_did(qapp, window, root, scope, keyboard=keyboard)
-    assert QApplication.focusWidget() is quick_of(window)
+    assert host_has_focus(window)
     held = scene.activeFocusItem()
     assert held is not None, "keyboard focus is nowhere"
     chain = []

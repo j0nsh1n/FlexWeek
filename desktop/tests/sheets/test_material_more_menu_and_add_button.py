@@ -20,6 +20,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_window import material_window, qapp  # noqa: E402, F401
 from desktop.tests.material_support import (  # noqa: E402
+    focus_quick,
     named,
     pump,
     qml,
@@ -72,7 +73,7 @@ def test_the_add_button_opens_homework_from_the_keyboard(
     sheets = window._material_page.bridge.sheets
     window.activateWindow()
     quick = quick_of(window)
-    quick.setFocus()
+    focus_quick(window)
     fab.forceActiveFocus()
     pump(qapp)
 

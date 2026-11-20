@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402,F401
-from desktop.tests.material_support import pump  # noqa: E402
+from desktop.tests.material_support import host_has_focus, pump  # noqa: E402
 from desktop.tests.sheets.support_material_sheets import bridge  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.week.test_material_block_menu_more import (  # noqa: E402
@@ -84,7 +84,7 @@ def test_the_keyboard_goes_back_to_the_material_window_when_the_preview_closes(
     _press(window, Qt.Key.Key_Escape)
     wait_until(qapp, lambda: bridge(window).sheets.kind == "", what="Esc to close the preview")
     quick = quick_of(window)
-    wait_until(qapp, lambda: QApplication.focusWidget() is quick, what="the keyboard to come back")
+    wait_until(qapp, lambda: host_has_focus(window), what="the keyboard to come back")
     pump(qapp, 20)
     # Material's own keys work again.
     QTest.keyClick(quick, Qt.Key.Key_3)

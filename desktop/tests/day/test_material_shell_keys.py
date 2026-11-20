@@ -19,7 +19,14 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_window import material_window, qapp  # noqa: E402, F401
-from desktop.tests.material_support import named, pump, qml, quick_of, show_material  # noqa: E402
+from desktop.tests.material_support import (  # noqa: E402
+    focus_quick,
+    named,
+    pump,
+    qml,
+    quick_of,
+    show_material,
+)
 from desktop.tests.waiting import wait_until  # noqa: E402
 
 
@@ -84,7 +91,7 @@ def test_ctrl_s_saves_when_the_material_shell_is_focused(
     monkeypatch.setattr(material_window.session, "save", lambda: heard.append(True))
     material_window.session.dirty = True
     quick = quick_of(material_window)
-    quick.setFocus()
+    focus_quick(material_window)
     pump(qapp)
 
     QTest.keyClick(quick, Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)

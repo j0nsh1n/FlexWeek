@@ -22,6 +22,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.material_support import (  # noqa: E402
+    focus_quick,
     named,
     pump,
     qml,
@@ -49,7 +50,7 @@ def test_esc_closes_a_sheet_and_the_keyboard_goes_back_to_the_add_button(
     root = show_material(qapp, shell)
     quick = quick_of(shell)
     shell.activateWindow()
-    quick.setFocus()
+    focus_quick(shell)
     fab = qml(root, "materialFab")
     fab.forceActiveFocus()
     pump(qapp)
@@ -72,7 +73,7 @@ def test_the_discard_prompt_shows_in_qml_and_esc_keeps_editing(
     root = show_material(qapp, shell)
     quick = quick_of(shell)
     shell.activateWindow()
-    quick.setFocus()
+    focus_quick(shell)
     sheets.openHomework()
     type_homework(sheets, "Typed")
     pump(qapp, 60)
@@ -315,7 +316,7 @@ def test_fixed_time_sheet_tab_wraps_inside_and_skips_hidden_controls(
 
 def _open_from_more(qapp: QApplication, shell: NativeWindow, sheets, action: str) -> None:
     shell.activateWindow()
-    quick_of(shell).setFocus()
+    focus_quick(shell)
     qml(shell._material_page.root, "materialFab").forceActiveFocus()
     pump(qapp)
     sheets.openMore()

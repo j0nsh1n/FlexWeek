@@ -16,7 +16,7 @@ from PySide6.QtCore import QPoint, Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from desktop.tests.material_support import named, pump, quick_of  # noqa: E402
+from desktop.tests.material_support import focus_quick, named, pump, quick_of  # noqa: E402
 from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: E402,F401
     open_light,
     qapp,
@@ -53,7 +53,7 @@ def press_escape(shell) -> None:
 @pytest.fixture()
 def focused(shell, sheets):
     shell.activateWindow()
-    quick_of(shell).setFocus()
+    focus_quick(shell)
     pump(QApplication.instance(), 20)
     return sheets
 

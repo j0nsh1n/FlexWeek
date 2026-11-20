@@ -24,7 +24,7 @@ from desktop.native.material.theme import advanced_default, hour_row_px  # noqa:
 from desktop.native.weekmodel import set_clock_24h  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests import light_app  # noqa: E402
-from desktop.tests.material_support import quick_of  # noqa: E402
+from desktop.tests.material_support import focus_quick, quick_of  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.week import support_zoom  # noqa: E402
 from desktop.tests.week.support_zoom import (  # noqa: E402
@@ -170,7 +170,7 @@ def test_ctrl_equal_zooms_the_week_and_ctrl_zero_resets_and_month_ignores_them(
     window = material
     week_on_screen(qapp, window)
     quick = quick_of(window)
-    quick.setFocus()
+    focus_quick(window)
     pump(qapp)
     assert row_of(window) == 56
     QTest.keyClick(quick, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
@@ -326,7 +326,7 @@ def test_ctrl_equal_and_ctrl_minus_stop_at_the_new_closest_level_and_at_32(
     window = material
     week_on_screen(qapp, window)
     quick = quick_of(window)
-    quick.setFocus()
+    focus_quick(window)
     pump(qapp)
     for _ in range(9):
         QTest.keyClick(quick, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)

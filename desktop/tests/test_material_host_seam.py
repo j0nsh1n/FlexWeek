@@ -11,7 +11,25 @@ ALLOWED = {
     ROOT / "desktop" / "tests" / "material_support.py",
     Path(__file__).resolve(),
 }
-HOST_USES = ("_material_page._quick", "grabFramebuffer", "_stack.currentWidget")
+HOST_USES = (
+    "_material_page._quick",
+    "._quick",
+    '"_quick"',
+    "'_quick'",
+    "grabFramebuffer",
+    "_stack.currentWidget",
+    "quickWindow()",
+    "quick.setFocus()",
+    "focusWidget() is quick",
+)
+# Uses that only make sense for the widget host, kept until the step named here replaces them.
+KNOWN = {
+    ROOT / "desktop" / "tests" / "account" / "test_material_first_run_setup.py": {
+        "quickWindow()",
+        "focusWidget() is quick",
+    },
+    ROOT / "scripts" / "pictures" / "render.py": {"quickWindow()"},
+}
 
 
 def test_only_the_helpers_name_the_material_host() -> None:
@@ -21,6 +39,6 @@ def test_only_the_helpers_name_the_material_host() -> None:
         f"{path.relative_to(ROOT)}: {use}"
         for path in sorted(files)
         for use in HOST_USES
-        if use in path.read_text(encoding="utf-8")
+        if use in path.read_text(encoding="utf-8") and use not in KNOWN.get(path, set())
     ]
     assert found == [], "reach the host through the helpers in desktop/tests/material_support.py"

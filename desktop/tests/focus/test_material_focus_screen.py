@@ -23,6 +23,7 @@ from desktop.tests.focus.support_focus_screen import (  # noqa: F401
     start,
 )
 from desktop.tests.material_support import (
+    host_has_focus,
     material_showing,
     pump,
     qml,
@@ -303,7 +304,7 @@ def test_escape_closes_the_replace_timer_question_and_changes_nothing(
     assert not focus.open
     assert bridge.screen == "myday"
     assert text_of(root, "myDayStartFocus") == "Back to Physics"
-    assert QApplication.focusWidget() is quick_of(window), "focus went back to the page"
+    assert host_has_focus(window), "focus went back to the page"
 
 
 def test_after_escape_closes_the_replace_timer_question_focus_is_back_on_the_button_that_opened_it(

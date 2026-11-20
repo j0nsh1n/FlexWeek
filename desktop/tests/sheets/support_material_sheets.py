@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QApplication
 from backend.tests.fake_clock import CLOCK
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.window import NativeWindow
-from desktop.tests.material_support import named, pump, quick_of, show_material
+from desktop.tests.material_support import focus_quick, named, pump, quick_of, show_material
 from desktop.tests.window_support import settled
 
 NOW_DAY = 3  # Thursday of the account's week; the clock reads 19:00 on it
@@ -61,7 +61,7 @@ def open_typed_homework(qapp: QApplication, window: NativeWindow):
     root = show_material(qapp, window)
     quick = quick_of(window)
     window.activateWindow()
-    quick.setFocus()
+    focus_quick(window)
     sheets = window._material_page.bridge.sheets
     sheets.openHomework()
     sheets.setText("title", "History essay")

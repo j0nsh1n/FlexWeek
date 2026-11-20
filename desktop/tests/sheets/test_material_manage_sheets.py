@@ -21,7 +21,7 @@ from desktop.native.account_copy import READ_WEEK_FAILED, REPLACE_WEEK_QUESTION
 from desktop.native.files import EXPORT_FORMAT
 from desktop.native.reuse import week_label
 from desktop.native.window import NativeWindow
-from desktop.tests.material_support import named, pump, quick_of, quick_window_of
+from desktop.tests.material_support import focus_quick, named, pump, quick_of, quick_window_of
 from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: F401
     open_light,
     qapp,
@@ -49,7 +49,7 @@ def _root(shell: NativeWindow) -> QObject:
 def _quick(shell: NativeWindow):
     quick = quick_of(shell)
     shell.activateWindow()
-    quick.setFocus()
+    focus_quick(shell)
     return quick
 
 
