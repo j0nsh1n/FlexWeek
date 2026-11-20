@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.flexweek.app.core.FakeFlexWeekCore
 import com.flexweek.app.core.FlexWeekCore
+import com.flexweek.app.core.SyncWords
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -80,13 +81,7 @@ class PairViewModel(
                     uiState.value = uiState.value.copy(joining = false, paired = true, code = "")
                     onPaired()
                 } else {
-                    val problem = when (result.optString("kind")) {
-                        "timeout", "unreachable" -> "Check the code and that FlexWeek is open on both devices."
-                        "already_linked" -> "This phone is already linked to another FlexWeek account."
-                        "code_expired" -> "That code has expired. Start a new one on your computer."
-                        "too_many_tries" -> "Too many wrong tries. Start a new code on your computer."
-                        else -> "That code didn't match. Codes last 5 minutes; ask your computer for a new one."
-                    }
+                    val problem = SyncWords.pairProblem(result.optString("kind"))
                     uiState.value = uiState.value.copy(joining = false, problem = problem)
                 }
             } finally {

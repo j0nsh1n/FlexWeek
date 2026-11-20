@@ -39,6 +39,12 @@ object SyncScheduler {
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .build()
         WorkManager.getInstance(context.applicationContext)
-            .enqueueUniqueWork(ONE_SHOT, ExistingWorkPolicy.REPLACE, request)
+            .enqueueUniqueWork(ONE_SHOT, EDIT_SYNC_POLICY, request)
     }
+
+    /**
+     * A local edit must not stop a sync that is already running: REPLACE cancelled it, and the cancel also set
+     * the shared "cancelled" error the status line reads. The edit is picked up by the next sync.
+     */
+    internal val EDIT_SYNC_POLICY = ExistingWorkPolicy.KEEP
 }

@@ -143,5 +143,6 @@ class RemindersViewModelTest {
 }
 
 private class FakeReminderPrefs : ReminderPrefs {
-    override var permissionBannerDismissed: Boolean = false
+    override var permissionBannerDismissedAt: Long = 0L
+    override var notificationAsked: Boolean = false
 }

@@ -320,7 +320,7 @@ everything = true
 [[rule]]
 paths = [
   "desktop/native/custom_look.py",
-  "desktop/native/autostart.py", "desktop/native/remind.py",
+  "desktop/native/autostart.py", "desktop/native/remind.py", "desktop/native/feedback.py",
   "desktop/native/material/bridge_settings.py", "desktop/native/material/dynamic_color.py",
   "desktop/native/material/qml/settings/",
 ]

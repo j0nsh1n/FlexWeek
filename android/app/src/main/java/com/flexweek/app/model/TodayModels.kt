@@ -147,12 +147,12 @@ object TodayJson {
         return TodayUiState(
             title = root.getString("day_title"),
             daySubtitle =
-                if (root.getInt("selected_day") != root.getInt("today_index")) {
+                if (!selectedIsToday(root)) {
                     root.getString("day_subtitle")
                 } else {
                     null
                 },
-            showTodayJump = root.getInt("selected_day") != root.getInt("today_index"),
+            showTodayJump = !selectedIsToday(root),
             days = days,
             rows = rows,
             noTime = noTime,
@@ -164,4 +164,8 @@ object TodayJson {
                 ),
         )
     }
+
+    private fun selectedIsToday(root: JSONObject): Boolean =
+        if (root.has("selected_is_today")) root.getBoolean("selected_is_today")
+        else root.getInt("selected_day") == root.getInt("today_index")
 }

@@ -9,12 +9,17 @@ import java.util.Locale
 data class HomeworkDraft(
     val title: String = "",
     val due: String = "",
-    val whenMode: String = "pick",
-    val estimateMin: Int = 60,
+    // 0 until the student picks a length; Save stays off until then.
+    val estimateMin: Int = 0,
+    // "Other" is chosen: the length comes from the minutes field instead of a chip.
+    val otherLength: Boolean = false,
     val sessions: String = "one",
-    val step: Int = 0,
-    val tried: Boolean = false,
-)
+) {
+    /** Save needs a title, a due day and a length. */
+    val canSave: Boolean get() = title.trim().isNotEmpty() && due.isNotBlank() && validLength
+    /** The engine takes 15-minute steps only, up to a day. */
+    val validLength: Boolean get() = estimateMin in 15..1440 && estimateMin % 15 == 0
+}
 
 data class PlanRecordLine(
     val title: String,
@@ -36,7 +41,8 @@ data class RunningLateMove(
     val durationMin: Int,
 )
 
-data class RunningLateCurrent(val title: String, val end: String)
+/** [endDay] is the weekday (0 = Monday) the session now ends on, only when it left today. */
+data class RunningLateCurrent(val title: String, val end: String, val endDay: Int? = null)
 
 data class RunningLatePreview(
     val previewId: String,
@@ -65,17 +71,27 @@ data class WeekUiState(
     val days: List<WeekDayShape>,
 )
 
+/** One line of a day in the Week list. `start` is minutes after midnight, or null for a "due" line with no time. */
+data class WeekSession(val start: Int?, val minutes: Int, val title: String, val category: String, val done: Boolean)
+
 data class WeekDayWords(
     val dayIndex: Int,
     val date: Int,
     val names: List<String>,
+    val sessions: List<WeekSession>,
+    val fullDate: LocalDate,
     val minutes: Int,
     val heavy: Boolean,
     val unplaced: List<String>,
     val lastClassEnd: Int?,
 )
 
-data class WeekRowsState(val title: String, val homeworkTotal: String, val days: List<WeekDayWords>)
+data class WeekRowsState(
+    val title: String,
+    val homeworkTotal: String,
+    val days: List<WeekDayWords>,
+    val weekStart: LocalDate? = null,
+)
 
 object WeekRows {
     private const val HEAVY_THRESHOLD_MINUTES = 180
@@ -92,6 +108,21 @@ object WeekRowWords {
         minutes > 0 -> duration(minutes) + if (heavy) " · heavy" else ""
         lastClassEnd != null -> "free after ${clock(lastClassEnd)}"
         else -> "free"
+    }
+
+    /** "3 h of homework planned · 1 h done": time still planned, then finished time apart from it. */
+    fun summary(planned: Int, done: Int): String = when {
+        planned == 0 && done == 0 -> "No homework planned"
+        done == 0 -> "${duration(planned)} of homework planned"
+        planned == 0 -> "All homework done · ${duration(done)}"
+        else -> "${duration(planned)} of homework planned · ${duration(done)} done"
+    }
+
+    /** What a day's heading says on its right: the homework time, or when school lets out on a day with none. */
+    fun dayTotal(minutes: Int, heavy: Boolean, lastClassEnd: Int?): String = when {
+        minutes > 0 -> duration(minutes) + if (heavy) " · heavy" else ""
+        lastClassEnd != null -> "free after ${clock(lastClassEnd)}"
+        else -> ""
     }
 
     fun duration(minutes: Int): String {
@@ -138,27 +169,32 @@ object V2Json {
                 add(WeekDayWords(
                     dayIndex = row.getInt("day"),
                     date = LocalDate.parse(row.getString("date")).dayOfMonth,
+                    fullDate = LocalDate.parse(row.getString("date")),
+                    sessions = (row.optJSONArray("sessions") ?: JSONArray()).let { list ->
+                        (0 until list.length()).map { j ->
+                            val item = list.getJSONObject(j)
+                            WeekSession(
+                                start = if (item.isNull("start")) null else item.getInt("start"),
+                                minutes = item.getInt("minutes"),
+                                title = item.getString("title"),
+                                category = item.getString("category"),
+                                done = item.optBoolean("done", false),
+                            )
+                        }
+                    },
                     names = row.getJSONArray("names").let { list -> (0 until list.length()).map(list::getString) },
                     minutes = row.getInt("minutes"),
-                    heavy = WeekRows.isHeavy(row.getInt("minutes")),
+                    // The engine's own answer: it counts only time still planned, and a second rule here drifted from it.
+                    heavy = if (row.has("heavy")) row.getBoolean("heavy") else WeekRows.isHeavy(row.getInt("minutes")),
                     unplaced = row.getJSONArray("unplaced").let { list -> (0 until list.length()).map(list::getString) },
                     lastClassEnd = if (row.isNull("last_class_end")) null else row.getInt("last_class_end"),
                 ))
             }
         }
-        val total = days.sumOf { it.minutes }
-        val hours = total / 60
-        val rest = total % 60
-        val length = when {
-            hours == 0 -> "$rest min"
-            rest == 0 -> "$hours h"
-            else -> "$hours h $rest min"
-        }
-        return WeekRowsState(
-            WeekTitle.format(LocalDate.parse(root.getString("week_start"))),
-            "$length of homework",
-            days,
-        )
+        val planned = days.sumOf { it.minutes }
+        val done = days.sumOf { day -> day.sessions.filter { it.done && it.start != null }.sumOf { it.minutes } }
+        val start = LocalDate.parse(root.getString("week_start"))
+        return WeekRowsState(WeekTitle.format(start), WeekRowWords.summary(planned, done), days, start)
     }
 
     fun parsePlanRecord(json: String): PlanRecordState {
@@ -204,7 +240,7 @@ object V2Json {
             previewId = root.getString("preview_id"),
             minutes = root.getInt("minutes"),
             moves = moves,
-            current = root.getJSONObject("current").let { RunningLateCurrent(it.getString("title"), it.getString("end")) },
+            current = root.getJSONObject("current").let { RunningLateCurrent(it.getString("title"), it.getString("end"), if (it.isNull("end_day")) null else it.optInt("end_day", -1).takeIf { day -> day in 0..6 }) },
             stays = root.getJSONArray("stays").let { values -> buildList { for (i in 0 until values.length()) add(values.getJSONObject(i).getString("title")) } },
             warning = if (root.isNull("warning")) null else root.optString("warning").takeIf { it.isNotBlank() },
         )
@@ -251,6 +287,16 @@ object V2Json {
             .toString()
 }
 
+/** What the form says about the time: Save leaves the homework in "No time yet" until Plan gives it one. */
+object AddHomeworkWords {
+    const val TIME_NOTE = "Save puts it in No time yet. Plan gives it a time."
+    const val NEEDS_TITLE = "Give the homework a title."
+    const val NEEDS_STEPS = "Use 15-minute steps, for example 45 or 75."
+    val LENGTHS: List<Pair<String, Int>> =
+        listOf("15 min" to 15, "30 min" to 30, "45 min" to 45, "1 h" to 60, "1 h 30" to 90, "2 h" to 120)
+    const val OTHER = "Other"
+}
+
 data class DueChip(val label: String, val date: LocalDate)
 
 object DueChips {
@@ -262,8 +308,7 @@ object DueChips {
         val friday = today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.FRIDAY))
         val monday = today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.MONDAY))
         // On a Thursday tomorrow is the next Friday, on a Sunday the next Monday: one chip per day.
-        return listOf(tomorrow, friday, monday).distinct().map { DueChip(label(it, today), it) } +
-            DueChip("Pick a day", monday)
+        return listOf(tomorrow, friday, monday).distinct().map { DueChip(label(it, today), it) }
     }
 }
 
@@ -273,4 +318,42 @@ object DueDate {
     /** The day's end, or null for a day already gone (a sheet left open past midnight). */
     fun toDueText(choice: LocalDate, today: LocalDate): String? =
         if (choice.isBefore(today)) null else "${choice}T23:59"
+}
+
+/** The Week list: each day with something in it is a heading and its sessions; free days run into one line. */
+sealed class WeekEntry {
+    data class Day(val label: String, val total: String, val dayIndex: Int, val sessions: List<WeekSession>) : WeekEntry()
+    data class Free(val label: String) : WeekEntry()
+}
+
+object WeekList {
+    private val LABELS = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+    private fun short(day: WeekDayWords) = "${LABELS[day.dayIndex]} ${day.date}"
+
+    fun build(days: List<WeekDayWords>, today: LocalDate): List<WeekEntry> {
+        val entries = mutableListOf<WeekEntry>()
+        var free = mutableListOf<WeekDayWords>()
+        fun flush() {
+            if (free.isEmpty()) return
+            val label = when (free.size) {
+                1 -> short(free[0])
+                2 -> "${short(free[0])} · ${short(free[1])}"
+                else -> "${short(free.first())} – ${short(free.last())}"
+            }
+            entries += WeekEntry.Free(label)
+            free = mutableListOf()
+        }
+        for (day in days) {
+            if (day.sessions.isEmpty()) {
+                free += day
+                continue
+            }
+            flush()
+            val label = short(day) + if (day.fullDate == today) " · today" else ""
+            entries += WeekEntry.Day(label, WeekRowWords.dayTotal(day.minutes, day.heavy, day.lastClassEnd), day.dayIndex, day.sessions)
+        }
+        flush()
+        return entries
+    }
 }

@@ -19,6 +19,7 @@ from backend.app import Preferences
 from backend.comfort import TIMER_PRESETS, snap_minutes
 from backend.models import TimeBlock, WeekRequest, valid_spotify_url
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm
+from desktop.native import feedback
 from desktop.native.calendar import DAY_FULL, DAYS, SETUP_SCHOOL_ID, this_week_line
 from desktop.native.fields import (
     WEEK_STARTS,
@@ -1183,6 +1184,7 @@ class SettingsBridge(QObject):
             "letters": self._letter_keys,
             "developerBuilds": self._window._updates.get("developer_builds") is True,
             "developerBuildsOffered": offers_developer_builds(install_kind()),
+            "feedbackAvailable": feedback.available(),
             "version": (
                 f"FlexWeek {VERSION} (developer build)" if CHANNEL == "dev" else f"FlexWeek {VERSION}"
             ),
@@ -2394,3 +2396,7 @@ class SettingsBridge(QObject):
     @Slot()
     def checkUpdates(self) -> None:
         self._window._check_updates(asked=True)
+
+    @Slot()
+    def reportProblem(self) -> None:
+        feedback.open_form()

@@ -58,6 +58,11 @@ class FlexWeekApp : Application() {
         }
     }
 
+    /** Keeps the start-up answer in step with a pairing or an Unpair made while the app runs. */
+    fun setPaired(paired: Boolean) {
+        _startup.value = _startup.value.copy(paired = paired)
+    }
+
     fun afterLocalEdit() {
         ReminderScheduler.refreshAsync(this)
         SyncScheduler.requestExpeditedSync(this)

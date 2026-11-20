@@ -21,6 +21,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private const val MARKED_DONE = "Session marked done"
+
 class TodayViewModel(
     private val core: FlexWeekCore,
     private val workerDispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -74,16 +76,28 @@ class TodayViewModel(
         if (core !is FakeFlexWeekCore) {
             viewModelScope.launch {
                 val result = withContext(workerDispatcher) {
-                    val current = TodayJson.parse(core.today(core.selectedDate(), nowMinute))
-                    val row = current.rows.filterIsInstance<com.flexweek.app.model.AgendaRow.Item>().find { it.id == id }
-                    val newDone = row?.done != true
-                    core.setHomeworkDone(id, newDone, newOpId())
-                    newDone to readToday()
+                    try {
+                        val current = TodayJson.parse(core.today(core.selectedDate(), nowMinute))
+                        val row = current.rows.filterIsInstance<com.flexweek.app.model.AgendaRow.Item>().find { it.id == id }
+                        val newDone = row?.done != true
+                        core.setHomeworkDone(id, newDone, newOpId())
+                        newDone to readToday()
+                    } catch (error: Exception) {
+                        if (error is kotlinx.coroutines.CancellationException) throw error
+                        // The session may have moved or gone on the computer after this screen was drawn.
+                        refusalText(error)
+                    }
                 }
-                val (newDone, parsed) = result
+                if (result is String) {
+                    pendingUndo = null
+                    refresh(snackbar = SnackbarState(result, null))
+                    return@launch
+                }
+                @Suppress("UNCHECKED_CAST")
+                val (newDone, parsed) = result as Pair<Boolean, TodayUiState>
                 pendingUndo = if (newDone) id to true else null
                 uiState = parsed.copy(
-                    snackbar = if (newDone) SnackbarState("Marked finished", id) else null,
+                    snackbar = if (newDone) SnackbarState(MARKED_DONE, id) else null,
                 )
             }
             return
@@ -98,7 +112,7 @@ class TodayViewModel(
         refresh(
             snackbar =
                 if (newDone) {
-                    SnackbarState("Marked finished", id)
+                    SnackbarState(MARKED_DONE, id)
                 } else {
                     null
                 },
@@ -110,11 +124,17 @@ class TodayViewModel(
         if (core !is FakeFlexWeekCore) {
             viewModelScope.launch {
                 val parsed = withContext(workerDispatcher) {
-                    core.setHomeworkDone(pending.first, !pending.second, newOpId())
-                    readToday()
+                    try {
+                        core.setHomeworkDone(pending.first, !pending.second, newOpId())
+                        readToday()
+                    } catch (error: Exception) {
+                        if (error is kotlinx.coroutines.CancellationException) throw error
+                        refusalText(error)
+                    }
                 }
                 pendingUndo = null
-                uiState = parsed.copy(snackbar = null)
+                if (parsed is String) refresh(snackbar = SnackbarState(parsed, null))
+                else uiState = (parsed as TodayUiState).copy(snackbar = null)
             }
             return
         }
@@ -151,7 +171,9 @@ class TodayViewModel(
 
     private fun applyStart(raw: String, saved: String, assignmentId: String) {
         val answer = JSONObject(raw)
-        if (answer.optString("kind") == "needs_replace") {
+        if (!answer.optBoolean("ok", true)) {
+            showMessage(answer.optString("error").ifBlank { "Could not start focus." })
+        } else if (answer.optString("kind") == "needs_replace") {
             replaceAssignmentId = assignmentId
             replacePrompt = answer.getString("current") to answer.getString("incoming")
         } else focusState = FocusJson.parseState(saved)
@@ -217,17 +239,27 @@ fun skipFocus() = advanceFocus(completed = false)
             focusState = null
             finishPrompt = false
         } else viewModelScope.launch {
-            withContext(workerDispatcher) { core.focusFinish() }
+            val answer = withContext(workerDispatcher) { core.focusFinish() }
             focusState = null
             finishPrompt = false
+            // The timer is over either way; a refused early credit only says why the minutes were not added.
+            runCatching { JSONObject(answer) }.getOrNull()?.takeIf { !it.optBoolean("ok", true) }?.let {
+                refresh(snackbar = SnackbarState(it.optString("error", "The minutes could not be added."), null))
+            }
         }
     }
+
+    private fun refusalText(error: Exception): String =
+        (error as? com.flexweek.app.bindings.FfiException)?.let(com.flexweek.app.core.RustPhoneJson::ffiText)
+            ?: error.message ?: "That could not be saved. Nothing was changed."
 
     private fun refresh(snackbar: SnackbarState? = uiState.snackbar) {
         if (core !is FakeFlexWeekCore) {
             viewModelScope.launch {
-                val parsed = withContext(workerDispatcher) { readToday() }
+                // The timer is read with the day: the notification's Pause and Finish change it while the card is open.
+                val (parsed, saved) = withContext(workerDispatcher) { readToday() to core.focusState() }
                 uiState = parsed.copy(snackbar = snackbar)
+                focusState = FocusJson.parseState(saved)
             }
             return
         }

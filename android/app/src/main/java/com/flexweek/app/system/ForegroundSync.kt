@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 internal suspend fun syncWhileForeground(
     core: FlexWeekCore,
@@ -16,10 +17,12 @@ internal suspend fun syncWhileForeground(
     onRefresh: () -> Unit,
 ) {
     lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+        var pauseMs = SyncBackoff.BASE_MS
         while (isActive) {
-            withContext(workerDispatcher) { core.syncOnce(10_000) }
+            val answer = withContext(workerDispatcher) { core.syncOnce(10_000) }
             onRefresh()
-            delay(5_000)
+            pauseMs = SyncBackoff.next(pauseMs, runCatching { JSONObject(answer).optBoolean("ok", true) }.getOrDefault(true))
+            delay(pauseMs)
         }
     }
 }

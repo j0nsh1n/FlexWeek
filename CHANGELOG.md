@@ -18,6 +18,7 @@ All notable changes to FlexWeek are documented here. Format follows
 
 - Setup is three steps of multiple-choice cards, with your week drawn beside them as you pick: School hours, Study hours, and Look & alerts. Cards for the usual school days, when homework may be planned, how long before things start to remind you, the colour preset, light or dark, and row size. The detailed controls (sports and jobs, the clock, the week start, the evening cutoff, the drag step, hours for each day, the alarm sound and Spotify link) show only after you pick a card that means them, such as "Different times, sports, or a job…". The week only shows what you have picked.
 - Settings > Look > Advanced settings has a Simple, More and All switch: Simple is the preset, mode, corner shape, block style, row size and text size; More adds the layout and grid dials; All adds the colour codes and the readability check. Switching never changes a value, the choice is kept on this computer, and it starts on All after a setup where you opened the detailed controls.
+- Settings > Computer has Report a problem. It opens a short form in your browser with your FlexWeek version and computer already filled in.
 
 ### Changed
 - In My day's Up next and Done lists, free time shows a sofa instead of the clock that exercise and activities use.
@@ -35,6 +36,7 @@ All notable changes to FlexWeek are documented here. Format follows
 - In Material, a reminder you asked to keep on screen shows once, in a strip with a Got it button, and Plan's button reads Suggest times when you place homework by hand.
 - In Material, replacing a running focus timer asks on a Material question (Keep current timer or Replace timer); in a question with choice cards, a choice that cannot be undone is marked in red when picked and only then is the confirm button red; a long notice wraps inside the window; and after Plan or an Undo the keyboard returns to the screen you are on.
 - In Material, the answers that delete something or cannot be taken back (Delete, This week and later, Replace week, Restore, Discard, Sign out) are drawn in the error colour in every question and sheet, in light and dark.
+- The phone app has a new look matching the computer's Material style: the same Blue colours in light and dark, real icons, and an agenda-style Today with an Up next card, a single Add homework form, a Week list with each session's time and arrows for other weeks, and Settings grouped as This phone, Your computer and Help. Report a problem in Settings opens an online form with your app version and phone model filled in.
 
 ### Fixed
 - Ctrl+scroll zooms the Week and Day hours again on KDE Plasma's Wayland, where the mouse is reported as a touchpad.
@@ -55,6 +57,28 @@ All notable changes to FlexWeek are documented here. Format follows
 - Animations and Motion speed now change what moves: Off has no animation, Reduce keeps short fades and moves nothing, More is slower and travels further than Normal, and Look > Advanced > Motion speed (Slower, Normal, Faster) stretches or shortens every duration. Before, More moved like Normal and Off like Reduce, and the speed was saved but did nothing.
 - A dialog's buttons no longer run out of the dialog when they do not fit side by side (for example deleting one day of School at Large text); they stack one per line.
 - Copies of this week shows how many weeks each copy holds, instead of "0 weeks", and says "1 week" for one.
+- On the phone, ticking a session marks that session done for that day only; the homework's other sessions stay planned. The widget tick does the same.
+- On the phone, a session that ends at midnight no longer crashes Today, the widget or Running late, and shows as 12 AM.
+- On the phone, ending a focus session early now counts the whole minutes you worked toward the homework, the same as the dialog says and the computer does.
+- On the phone, a focus timer saved for a homework that was deleted is cleared when the app opens, instead of stopping it from opening at every launch.
+- On the phone, Plan, Accept, Running late's Move it, Start focus and Sync now now say why when they cannot act (nothing to place, the week changed on another device, the homework is gone, the sync failed), instead of an empty "Placed 0 of 0" sheet or nothing at all.
+- On the phone, the Running late sheet names the homework you are late for (not "Running late is running late"), says when that homework now ends, and shows each moved session as from and to ("4 PM → 4:30 PM").
+- On the phone, Add homework no longer says "FlexWeek picks the time"; it says Save puts the homework in No time yet and Plan gives it a time.
+- On the phone, Settings no longer says "No computer linked" at the top while the Your computer card shows a paired computer. Both read from one answer, and a computer that is off says "Your computer isn't reachable" with the last sync time. "Reachable" replaces "on the same Wi-Fi", which the phone cannot know.
+- On the phone, a failed sync or pairing says what went wrong: the computer is off or not reachable, it needs an update, or another problem. "That code didn't match" now appears only for a wrong code.
+- On the phone, the Week tab refreshes after every sync and rolls over to the new week on Monday, instead of keeping the old week until the app is restarted.
+- On the phone, Today follows the real date when a new day starts, instead of staying on the day you last tapped, and the jump back to Today shows when you are on the same weekday of another week.
+- On the phone, the notification banner asks Android whether notifications are allowed (it goes when they are, and comes back a few days after "Not now" if they are still off), Allow sends you to Android's own switch once Android will not ask again, and the On-time reminders switch reads on only when Android allows exact alarms and re-plans reminders when you allow them.
+- On the phone, Plan, each Running late slider step, saving a homework and the Week tab no longer make the screen wait on the planner or a sync; they run in the background and show their result when ready.
+- On the phone, Add homework on a Thursday or a Sunday no longer shows a second "Pick a day" chip that set the due date to Monday.
+- On the phone, Back closes an open sheet, then goes to Today, and only then leaves the app. Rotating the phone keeps the tab, an open sheet and a half-typed Add homework, and after Unpair a rotation no longer brings the main screens back.
+- On the phone, pausing or finishing the focus timer from the notification now shows on the open Today card, and a paused timer is never counted as a full session.
+- On the phone, a sync after an edit no longer cancels a sync that is already running, background syncs get the same 45 seconds as the computer's, a computer that is off is asked less and less often while the app is open, and the sync after an edit can start on Android 11 and older.
+- On the phone, the Week tab's "X h of homework" total and the "heavy" tag count only the time still planned, not sessions you already finished, the same way the computer's planned line keeps planned and done apart.
+- On the phone, a failed update check (for example offline) no longer counts as today's check, so the next daily check is not blocked for 24 hours (it waits an hour before trying again), and the updater no longer keeps the old screen after you rotate the phone.
+- On the phone, Settings no longer shows a Sound row that had no control, and the sample reminder shows what a real reminder says (the homework's name, then its start and length).
+- A change made on the phone while it cannot reach your computer keeps the time you made it. Before, it took the time of the next sync, so an older phone edit could undo a newer change on the computer (an old due date came back) or bring back homework you had deleted there.
+- A change from your computer that the phone could not use (an older phone app, or a phone clock far off) is no longer lost. Each sync, on the phone and on your computer, tries it again, so it arrives after the update, and the phone's sync line says how many changes are waiting and what to do. Changes that no update or clock fix can help are not counted there.
 
 ### Removed
 - The Widgets styles and their designs (Today's app, Timeline, Mission control, Bento, Retro desktop, Clay deck, Day dial, One thing) can no longer be chosen, and the switch between them and Material 3 is gone.

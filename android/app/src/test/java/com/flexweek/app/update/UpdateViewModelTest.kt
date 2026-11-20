@@ -85,13 +85,35 @@ class UpdateViewModelTest {
         assertTrue(prefs.checkDaily)
     }
 
-    @Test fun everyCheckRecordsItsTimeEvenWhenItFails() = main {
+    @Test fun aFailedCheckDoesNotUseUpTheDay() = main {
+        // One check made offline used to block the next daily check for 24 hours.
         val prefs = FakePrefs()
         viewModel(FakeSource(), FakeInstaller(), prefs).start()
-        assertEquals(NOW, prefs.lastChecked)
+        assertNull(prefs.lastChecked)
         val manualPrefs = FakePrefs()
         viewModel(FakeSource(), FakeInstaller(), manualPrefs).checkNow()
-        assertEquals(NOW, manualPrefs.lastChecked)
+        assertNull(manualPrefs.lastChecked)
+    }
+
+    @Test fun aFailedCheckWaitsAnHourBeforeTheNextAutomaticOne() = main {
+        val prefs = FakePrefs()
+        val source = FakeSource()
+        var clock = NOW
+        fun vm() = UpdateViewModel("1.0.0", source, FakeInstaller(), prefs, files.root, { clock }, false, dispatcher, FakeRules())
+        vm().start()
+        assertEquals(1, source.latestCalls)
+        clock = NOW + 30 * 60 * 1000
+        vm().start()
+        assertEquals("30 minutes after a failure is too soon", 1, source.latestCalls)
+        clock = NOW + 61 * 60 * 1000
+        vm().start()
+        assertEquals("after the hour it tries again", 2, source.latestCalls)
+    }
+
+    @Test fun aCheckThatGotAnAnswerRecordsItsTime() = main {
+        val prefs = FakePrefs()
+        viewModel(FakeSource().also { it.release = "available" }, FakeInstaller(), prefs).start()
+        assertEquals(NOW, prefs.lastChecked)
     }
 
     @Test fun dailyCheckWithoutNetworkStaysSilent() = main {
@@ -508,7 +530,7 @@ class UpdateViewModelTest {
         override fun install(file: File): Boolean { installCalls++; installedFiles += file; return startInstall }
     }
 
-    private class FakePrefs : UpdatePrefs { override var checkDaily = true; override var lastChecked: Long? = null }
+    private class FakePrefs : UpdatePrefs { override var checkDaily = true; override var lastChecked: Long? = null; override var lastFailedAttempt: Long? = null }
 
     // The real rules are Rust. This fake only returns what the test says and records what it was asked.
     private class FakeRules : UpdateRules {

@@ -375,7 +375,7 @@ impl PairHandler {
             let mut conn = open_db(&path)?;
             let now = clock();
             let uuid = account_uuid(&conn, user_id)?;
-            let first = scan_and_export(&mut conn, user_id, now, 0, &requester, 1)?;
+            let (first, _) = scan_and_export(&mut conn, user_id, now, 0, &requester, 1)?;
             let username: String = conn
                 .query_row(
                     "SELECT username FROM users WHERE id = ?1",

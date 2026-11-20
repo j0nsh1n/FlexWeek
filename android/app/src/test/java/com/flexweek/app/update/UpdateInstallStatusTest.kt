@@ -27,3 +27,17 @@ class UpdateInstallStatusTest {
         )) assertEquals("status $status", InstallStep.Finished(false), UpdateInstallStatus.step(status))
     }
 }
+
+class UpdateInstallerContextTest {
+    // The installer cannot be built on the JVM (it needs a Context); the line that decides what it keeps is checked
+    // in the source: an Activity kept by a ViewModel survives rotation as a leak.
+    @Test fun theInstallerKeepsTheApplicationContextNotAnActivity() {
+        val source = java.io.File("src/main/java/com/flexweek/app/update/UpdateRuntime.kt").readText()
+        org.junit.Assert.assertTrue(
+            "PackageUpdateInstaller must keep context.applicationContext",
+            "class PackageUpdateInstaller(context: Context)" in source && "= context.applicationContext" in source,
+        )
+        val activity = java.io.File("src/main/java/com/flexweek/app/MainActivity.kt").readText()
+        org.junit.Assert.assertFalse("MainActivity must not hand its Activity to the installer", "PackageUpdateInstaller(activity)" in activity)
+    }
+}

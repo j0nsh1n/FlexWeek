@@ -35,7 +35,7 @@ pub(crate) fn week_rows(week: &FlexWeek, week_start: &str) -> Result<String, Ffi
     let occurrences = model["occurrences"].as_array().cloned().unwrap_or_default();
     let mut days = Vec::new();
     for day in 0..DAYS_IN_WEEK {
-        let mut planned: Vec<(i64, String, i64)> = occurrences
+        let mut planned: Vec<(i64, String, i64, bool)> = occurrences
             .iter()
             .filter(|item| item["day"].as_i64() == Some(day) && is_homework(item))
             .filter_map(|item| {
@@ -43,14 +43,31 @@ pub(crate) fn week_rows(week: &FlexWeek, week_start: &str) -> Result<String, Ffi
                     item["start"].as_i64()?,
                     item["title"].as_str()?.to_string(),
                     item["end"].as_i64()? - item["start"].as_i64()?,
+                    item["done"].as_bool().unwrap_or(false),
                 ))
             })
             .collect();
-        planned.sort_by_key(|(minute, _, _)| *minute);
-        let minutes: i64 = planned.iter().map(|(_, _, length)| *length).sum();
+        planned.sort_by_key(|(minute, _, _, _)| *minute);
+        // Time still planned: a finished session is named but is not counted, as the computer's planned line
+        // keeps planned and done apart (the engine marks each occurrence's `done`).
+        let minutes: i64 = planned
+            .iter()
+            .filter(|(_, _, _, done)| !done)
+            .map(|(_, _, length, _)| *length)
+            .sum();
+        // The same sessions with their length and category, for the phone's Week list; `names` stays as it was.
+        let mut sessions: Vec<(Option<i64>, Value)> = planned
+            .iter()
+            .map(|(at, title, length, done)| {
+                (
+                    Some(*at),
+                    json!({"start":at,"minutes":length,"title":title,"category":"homework","done":done}),
+                )
+            })
+            .collect();
         let mut named: Vec<(i64, String)> = planned
             .iter()
-            .map(|(at, title, _)| (*at, title.clone()))
+            .map(|(at, title, _, _)| (*at, title.clone()))
             .collect();
         for item in occurrences
             .iter()
@@ -61,6 +78,12 @@ pub(crate) fn week_rows(week: &FlexWeek, week_start: &str) -> Result<String, Ffi
             }
             if let (Some(at), Some(title)) = (item["start"].as_i64(), item["title"].as_str()) {
                 named.push((at, title.to_string()));
+                let length = item["end"].as_i64().unwrap_or(at) - at;
+                let category = item["category"].as_str().unwrap_or("");
+                sessions.push((
+                    Some(at),
+                    json!({"start":at,"minutes":length,"title":title,"category":category,"done":false}),
+                ));
             }
         }
         named.sort_by_key(|(at, _)| *at);
@@ -88,9 +111,11 @@ pub(crate) fn week_rows(week: &FlexWeek, week_start: &str) -> Result<String, Ffi
                 item["day"].as_i64() == Some(day) && item["assignment_id"].as_str() == Some(id)
             });
             if due_today && !planned_today && !assignment["completed"].as_bool().unwrap_or(false) {
-                names.push(format!(
-                    "{} due",
-                    assignment["title"].as_str().unwrap_or("Untitled")
+                let title = assignment["title"].as_str().unwrap_or("Untitled");
+                names.push(format!("{title} due"));
+                sessions.push((
+                    None,
+                    json!({"start":null,"minutes":0,"title":format!("{title} due"),"category":"homework","done":false}),
                 ));
             }
         }
@@ -108,7 +133,10 @@ pub(crate) fn week_rows(week: &FlexWeek, week_start: &str) -> Result<String, Ffi
             })
             .filter_map(|item| item["end"].as_i64())
             .max();
-        days.push(json!({"day":day,"date":(start + chrono::Days::new(day as u64)).to_string(),"names":names,"minutes":minutes,"heavy":is_heavy(minutes),"unplaced":unplaced,"last_class_end":last_class_end}));
+        // Timed sessions in start order, then the "due" lines with no time.
+        sessions.sort_by_key(|(at, _)| at.unwrap_or(i64::MAX));
+        let sessions: Vec<Value> = sessions.into_iter().map(|(_, value)| value).collect();
+        days.push(json!({"day":day,"date":(start + chrono::Days::new(day as u64)).to_string(),"names":names,"sessions":sessions,"minutes":minutes,"heavy":is_heavy(minutes),"unplaced":unplaced,"last_class_end":last_class_end}));
     }
     Ok(json!({"week_start": week_start, "days": days}).to_string())
 }
@@ -225,6 +253,46 @@ mod tests {
     }
 
     #[test]
+    fn week_rows_lists_each_session_with_start_length_and_a_due_line_without_a_time() {
+        let output = rows(&fixture_week("week-rows-sessions"));
+        assert_eq!(
+            output["days"][0]["sessions"],
+            json!([
+                {"start":900,"minutes":60,"title":"History essay","category":"homework","done":false},
+                {"start":960,"minutes":30,"title":"Bio reading","category":"homework","done":false}
+            ]),
+            "Monday lists its two sessions in start order with their lengths"
+        );
+        assert_eq!(
+            output["days"][1]["sessions"],
+            json!([{"start":1020,"minutes":60,"title":"Soccer","category":"sport","done":false}]),
+            "a fixed activity is listed with its own category"
+        );
+        assert_eq!(
+            output["days"][6]["sessions"],
+            json!([{"start":null,"minutes":0,"title":"English log due","category":"homework","done":false}]),
+            "a due day with no session is a line with no time"
+        );
+        assert_eq!(
+            output["days"][4]["sessions"],
+            json!([]),
+            "class blocks are not listed"
+        );
+    }
+
+    #[test]
+    fn week_rows_of_a_week_with_nothing_saved_is_seven_empty_days() {
+        // The phone's Week arrows ask for next and earlier Mondays that may have no saved week at all.
+        let (week, _) = open_test("week-rows-empty-week");
+        let output: Value =
+            serde_json::from_str(&week.week_rows("2026-12-07".to_string()).unwrap()).unwrap();
+        let days = output["days"].as_array().unwrap();
+        assert_eq!(days.len(), DAYS_IN_WEEK);
+        assert!(days.iter().all(|day| day["sessions"] == json!([])));
+        assert_eq!(output["week_start"], json!("2026-12-07"));
+    }
+
+    #[test]
     fn week_rows_heavy_is_more_than_three_hours() {
         assert!(
             !week_rows::is_heavy(HEAVY_MINUTES),
@@ -233,6 +301,36 @@ mod tests {
         assert!(
             week_rows::is_heavy(HEAVY_SAMPLE_MINUTES),
             "195 minutes is heavy"
+        );
+    }
+
+    #[test]
+    fn week_rows_counts_only_time_still_planned_not_finished_sessions() {
+        let (week, _) = open_test("week-rows-done");
+        save_week(
+            &week,
+            MONDAY,
+            &json!([
+                {"id":"a","title":"Essay","kind":"flexible","days":[0],"start":"09:00","duration_min":120,"category":"assignments","work":true,"completed":true},
+                {"id":"b","title":"Reading","kind":"flexible","days":[0],"start":"12:00","duration_min":120,"category":"assignments","work":true,"completed":true},
+                {"id":"c","title":"Lab","kind":"flexible","days":[0],"start":"15:00","duration_min":60,"category":"assignments","work":true}
+            ]),
+        );
+        let output = rows(&week);
+        assert_eq!(
+            output["days"][0]["minutes"],
+            json!(60),
+            "two finished 2 h sessions are not planned time any more"
+        );
+        assert_eq!(
+            output["days"][0]["heavy"],
+            json!(false),
+            "a day with 1 h left is not heavy because 4 h are done"
+        );
+        assert_eq!(
+            output["days"][0]["names"],
+            json!(["Essay", "Reading", "Lab"]),
+            "finished sessions are still named"
         );
     }
 
