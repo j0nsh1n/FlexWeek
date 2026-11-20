@@ -987,11 +987,13 @@ Item {
     Shortcut {
         sequence: "Escape"
         context: Qt.WindowShortcut
-        // An open Week or Day menu takes its own Escape, so it can close and give the focus back.
+        // An open Week or Day menu and Month's date bar take their own Escape, so they can close and give the
+        // focus back.
         enabled: !accountLayer.active && !focusOverlay.ending && !sheetHost.active && !settingsPromptOpen && !ringOpen
                  && !widgetsDialogOpen && !datePicker.open && !addMenu.open
                  && !(bridge.screen === "week" && (weekView.menuOpen || weekView.handing))
                  && !(bridge.screen === "day" && (dayView.menuOpen || dayView.handing))
+                 && !(bridge.screen === "month" && bridge.month && bridge.month.barOpen)
         onActivated: {
             if (bridge && bridge.settingsBridge && bridge.settingsBridge.page === "advanced")
                 bridge.settingsBridge.closeAdvanced()

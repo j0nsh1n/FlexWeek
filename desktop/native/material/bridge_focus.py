@@ -171,9 +171,8 @@ class FocusBridge(QObject):
         """Open the screen on whatever the timer is doing, ready or running."""
         if self._session().account is None:
             return
-        page = getattr(self._window, "_material_page", None)
-        quick = getattr(page, "_quick", None) if page is not None else None
-        scene = quick.quickWindow() if quick is not None else None
+        # Material's window is itself the QQuickWindow whose keyboard focus is read.
+        scene = getattr(self._window, "_material_page", None)
         if scene is not None:
             active = scene.activeFocusItem()
             if active is not None and getattr(active, "objectName", lambda: "")() != "materialFocus":

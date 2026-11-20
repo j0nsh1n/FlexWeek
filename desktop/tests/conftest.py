@@ -108,29 +108,61 @@ def the_pointer_finds_windows_past_the_screens_edge(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.fixture(autouse=True)
-def no_window_is_left_showing() -> Iterator[None]:
+def no_window_is_left_showing(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Hidden windows still hold their widget trees, pictures and timers through signal connections.
-    Delete Python-owned windows made by the test; keep module fixtures and Qt's internal windows."""
+    Delete Python-owned windows made by the test; keep module fixtures and Qt's internal windows.
+    The app window is a controller that owns Material's own Qt Quick window, so it is no top-level widget:
+    the controllers made by the test are closed and deleted too, then the Qt Quick windows."""
     if importlib.util.find_spec("PySide6") is None:
         yield
         return
     from PySide6.QtCore import QEvent
+    from PySide6.QtGui import QGuiApplication
     from PySide6.QtWidgets import QApplication
     from shiboken6 import getCppPointer, isValid, ownedByPython
 
+    from desktop.native.window import NativeWindow
+
+    made: list[NativeWindow] = []
+    original = NativeWindow.__init__
+
+    def remembering(self: NativeWindow, *args: object, **kwargs: object) -> None:
+        made.append(self)
+        original(self, *args, **kwargs)
+
+    monkeypatch.setattr(NativeWindow, "__init__", remembering)
     before = (
         {getCppPointer(window)[0] for window in QApplication.topLevelWidgets()}
+        if QApplication.instance() is not None else set()
+    )
+    before_windows = (
+        {getCppPointer(window)[0] for window in QGuiApplication.topLevelWindows()}
         if QApplication.instance() is not None else set()
     )
     yield
     if QApplication.instance() is None:
         return
+    for controller in made:
+        if isValid(controller):
+            controller.hide()
+            if ownedByPython(controller):
+                controller.close()
     for window in QApplication.topLevelWidgets():
         if isValid(window) and getCppPointer(window)[0] not in before:
             window.hide()
             if ownedByPython(window):
                 window.close()
                 window.deleteLater()
+    for window in QGuiApplication.topLevelWindows():
+        if isValid(window) and getCppPointer(window)[0] not in before_windows:
+            window.hide()
+            if ownedByPython(window):
+                window.close()
+                window.deleteLater()
+    for controller in made:
+        if isValid(controller) and ownedByPython(controller):
+            controller.deleteLater()
+    made.clear()
     QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     QApplication.processEvents()
 

@@ -22,7 +22,8 @@ def _gallery(window: object, *, scheme: str = "light", outlined: bool = False) -
     from desktop.tests.material_support import pump
 
     qml_folder = Path(__file__).resolve().parents[2] / "native" / "material" / "qml"
-    widget = QQuickWidget(window)
+    # The app window is a controller and no widget now, so the gallery is a window of its own.
+    widget = QQuickWidget()
     widget.engine().addImportPath(str(qml_folder))
     widget.setResizeMode(QQuickWidget.ResizeMode.SizeRootObjectToView)
     widget.setSource(QUrl.fromLocalFile(str(qml_folder / "components" / "Gallery.qml")))

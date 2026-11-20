@@ -17,7 +17,6 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeyEvent
-from PySide6.QtQuickWidgets import QQuickWidget
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.setup_steps import HOMEWORK, REMINDERS, WEEK
@@ -36,6 +35,7 @@ from desktop.tests.account.support import (
     skip_setup,
     through_recovery,
 )
+from desktop.tests.material_support import host_has_focus, quick_of, quick_window_of
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import look_file, qapp  # noqa: F401
 
@@ -252,12 +252,12 @@ def test_setup_focus_and_tab_ownership_stays_on_visible_material_controls(
     # Widgets setup must NOT be opened underneath Material setup
 
     # Window focus ownership: Material quick surface owns keyboard focus; Widgets setup is not opened
-    quick = window.findChild(QQuickWidget, "materialQuick")
+    quick = quick_of(window)
     assert quick is not None
-    assert window.focusWidget() is quick
+    assert host_has_focus(window)
 
     # Active focus item in Quick scene belongs to Material setup
-    qw = quick.quickWindow()
+    qw = quick_window_of(window)
     assert qw is not None
     assert qw.activeFocusItem() is not None
 
@@ -268,7 +268,7 @@ def test_setup_focus_and_tab_ownership_stays_on_visible_material_controls(
         qapp.sendEvent(quick, ev)
         item = qw.activeFocusItem()
         assert item is not None
-        assert window.focusWidget() is quick
+        assert host_has_focus(window)
         tabbed_names.append(item.property("objectName") or "")
 
     # Visible step rail, choice cards, and footer buttons are in the tab sequence
@@ -281,7 +281,7 @@ def test_setup_focus_and_tab_ownership_stays_on_visible_material_controls(
         qapp.sendEvent(quick, ev)
         item = qw.activeFocusItem()
         assert item is not None
-        assert window.focusWidget() is quick
+        assert host_has_focus(window)
 
 
 def test_setup_keeps_a_saved_cutoff_that_is_not_on_the_list(

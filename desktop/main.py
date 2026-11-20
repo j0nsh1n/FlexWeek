@@ -150,10 +150,10 @@ def material_state(window: NativeWindow) -> tuple[str, int]:
     """
     if window._material_gave_up:
         return "fallback", 0
-    page = window._material_page
-    if page is None or not page._ready or window._stack.currentWidget() is not page:
+    page = window._material_current()
+    if page is None or not page._ready:
         return "waiting", 0
-    colors = painted_colors(page._quick.grabFramebuffer())
+    colors = painted_colors(page.grabWindow())
     return ("shown" if colors >= PAINTED_MIN_COLORS else "waiting"), colors
 
 
@@ -192,7 +192,8 @@ class NativeSmoke:
         window = self._window
         if not window.isVisible():
             return
-        page = window._stack.currentWidget().objectName() if window._stack.currentWidget() else ""
+        face = window._face()
+        page = face.objectName() if face is not None else ""
         bridge = window._account_bridge()
         phase = bridge.phase if bridge is not None else ""
         if not self._walk:

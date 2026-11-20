@@ -695,7 +695,7 @@ def test_escape_during_a_drag_cancels_it(qapp: QApplication, window: NativeWindo
         ghost = _named(root, "rangeGhost")[0]
         assert ghost.property("visible") is True
 
-        QTest.keyClick(window, Qt.Key.Key_Escape)
+        QTest.keyClick(quick_of(window), Qt.Key.Key_Escape)
         _pump(app, 2)
 
         assert week.property("dragRangeActive") is False

@@ -176,7 +176,7 @@ class AccountActions:
         self._session.export_account(password, self._window._write_account_file)
 
     def import_account(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self._window, "Import backup file", "", "JSON (*.json)")
+        path, _ = QFileDialog.getOpenFileName(None, "Import backup file", "", "JSON (*.json)")
         if not path:
             return
         try:
@@ -206,7 +206,7 @@ class AccountActions:
         self._window._write_json("flexweek-day.json", self._session.day_file(destination[0]))
 
     def import_file(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self._window, "Import week or day", "", "JSON (*.json)")
+        path, _ = QFileDialog.getOpenFileName(None, "Import week or day", "", "JSON (*.json)")
         if not path:
             return
         try:

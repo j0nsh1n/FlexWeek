@@ -18,7 +18,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QStandardPaths  # noqa: E402
+from PySide6.QtCore import QStandardPaths, Qt  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.calendar import sunday_due  # noqa: E402
@@ -123,6 +124,26 @@ def test_picking_a_date_opens_a_bar_that_closes_and_opens_the_day(
     assert window.session.planner_view == "day"
     assert window.session.selected_day == today
     assert qml(root, "materialDay").property("visible") is True
+
+
+def test_esc_with_the_keyboard_on_a_date_closes_its_bar_and_stays_on_the_month(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """In Material's own window the shell's Esc shortcut can match; an open date bar takes Esc first (Grok's
+    review of step 11, 2026-11-20)."""
+    root, month = open_month(qapp, window)
+    quick = quick_of(window)
+    today = window.session.today_iso()
+    month.closeDate()
+    pump(qapp)
+    target = cell(root, today)
+    click(quick, target, float(target.property("width")) / 2, float(target.property("height")) / 2)
+    wait_until(qapp, lambda: month.property("barOpen") is True)
+    target.forceActiveFocus()
+    pump(qapp)
+    QTest.keyClick(quick, Qt.Key.Key_Escape)
+    wait_until(qapp, lambda: month.property("barOpen") is False, what="Esc to close the date bar")
+    assert window._material_page.bridge.property("screen") == "month"
 
 
 def test_previous_and_next_move_the_month(qapp: QApplication, window: NativeWindow) -> None:

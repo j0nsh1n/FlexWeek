@@ -354,7 +354,10 @@ def qml_labels(widget, pixels: Pixels) -> list[dict]:
     from PySide6.QtQuickWidgets import QQuickWidget
 
     rows = []
-    for quick in widget.findChildren(QQuickWidget):
+    # Material is its own Qt Quick window under the window controller; it fills the picture.
+    own = getattr(widget, "_material_page", None)
+    quicks = [own] if own is not None else widget.findChildren(QQuickWidget)
+    for quick in quicks:
         root = quick.rootObject() if quick.isVisible() else None
         if root is None:
             continue
@@ -365,7 +368,11 @@ def qml_labels(widget, pixels: Pixels) -> list[dict]:
             shown = qml_rect(item, root, quick) if words else None
             if shown is None:
                 continue
-            corner = quick.mapTo(widget, QPoint(int(shown.x()), int(shown.y())))
+            corner = (
+                QPoint(int(shown.x()), int(shown.y()))
+                if quick is own
+                else quick.mapTo(widget, QPoint(int(shown.x()), int(shown.y())))
+            )
             rect = (corner.x(), corner.y(), int(shown.width()), int(shown.height()))
             truncated = item.property("truncated")
             content = item.property("contentWidth")
@@ -408,9 +415,34 @@ def focus_ring(qapp, widget, before: Pixels) -> dict:
     """Whether the focused widget draws differently with focus than without: its focus ring, or none.
     Focus is taken away for one more picture and given back with the keyboard's reason."""
     from PySide6.QtCore import QPoint, QRect, Qt
+    from PySide6.QtGui import QGuiApplication
     from PySide6.QtQuickWidgets import QQuickWidget
     from PySide6.QtWidgets import QApplication
 
+    own = getattr(widget, "_material_page", None)
+    if own is not None:
+        # Material's own window: the Qt Quick item with the keyboard, in the picture's pixels (the window
+        # is the picture). Step 11.8 finishes the picture tools for it.
+        item = own.activeFocusItem() if QGuiApplication.focusWindow() is own else None
+        root = own.rootObject()
+        shown = qml_rect(item, root, own) if item is not None and item is not root else None
+        if shown is None:
+            return {"focused": None, "ring": None}
+        area = QRect(int(shown.x()), int(shown.y()), int(shown.width()), int(shown.height()))
+        name = f"qml {item.objectName() or item.metaObject().className()}"
+        item.setFocus(False)
+        qapp.processEvents()
+        after = Pixels(widget.grab().toImage())
+        item.forceActiveFocus(Qt.FocusReason.TabFocusReason)
+        qapp.processEvents()
+        area = area.adjusted(-4, -4, 4, 4).intersected(QRect(0, 0, own.width(), own.height()))
+        changed = differing(before, after, (area.x(), area.y(), area.width(), area.height()))
+        return {
+            "focused": name,
+            "rect": [area.x(), area.y(), area.width(), area.height()],
+            "ring": changed > 0,
+            "changed_pixels": changed,
+        }
     focused = QApplication.focusWidget()
     if focused is None or not (focused is widget or widget.isAncestorOf(focused)):
         return {"focused": None, "ring": None}

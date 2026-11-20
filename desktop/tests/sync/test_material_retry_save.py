@@ -13,7 +13,7 @@ from desktop.native.calendar import sunday_due
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
 from desktop.tests.logic_support import fail_once
-from desktop.tests.material_support import pump, qml, show_material
+from desktop.tests.material_support import pump, qml, quick_of, show_material
 from desktop.tests.sheets.support_material_sheets import click
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
@@ -84,7 +84,7 @@ def test_the_snackbar_retry_sends_the_waiting_changes(
 
 def test_ctrl_s_still_sends_the_waiting_changes(qapp: QApplication, window: NativeWindow) -> None:
     _failed_save(qapp, window)
-    QTest.keyClick(window, Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)
     wait_until(qapp, lambda: window.session.pending_save is None and not window.session.busy)
 
 

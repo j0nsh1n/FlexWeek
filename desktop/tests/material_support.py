@@ -6,6 +6,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QObject
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
@@ -13,9 +15,7 @@ from desktop.tests.waiting import wait_until
 
 if TYPE_CHECKING:
     from PySide6.QtGui import QImage
-    from PySide6.QtQuick import QQuickWindow
-    from PySide6.QtQuickWidgets import QQuickWidget
-    from PySide6.QtWidgets import QWidget
+    from PySide6.QtQuick import QQuickView, QQuickWindow
 
 
 def pump(qapp: QApplication, count: int = 30) -> None:
@@ -23,39 +23,48 @@ def pump(qapp: QApplication, count: int = 30) -> None:
         qapp.processEvents()
 
 
-def quick_of(window: NativeWindow) -> QQuickWidget:
-    """Seam for step 11: the object tests send mouse and key events to; the only place that names the host."""
-    return window._material_page._quick
+def quick_of(window: NativeWindow) -> QQuickView:
+    """The object tests send mouse and key events to; the only place that names the host. Material is its
+    own Qt Quick window, so this is the window itself."""
+    return window._material_page
 
 
 def quick_window_of(window: NativeWindow) -> QQuickWindow:
-    """Seam for step 11: the QQuickWindow Material draws in (focus reads go through it)."""
-    return window._material_page._quick.quickWindow()
+    """The QQuickWindow Material draws in (focus reads go through it): the same object as `quick_of`."""
+    return window._material_page
 
 
 def focus_quick(window: NativeWindow) -> None:
-    """Seam for step 11: give Material the keyboard."""
-    quick_of(window).setFocus()
+    """Give Material the keyboard."""
+    quick_of(window).requestActivate()
 
 
 def host_has_focus(window: NativeWindow) -> bool:
-    """Seam for step 11: whether Material's host has the keyboard."""
-    return QApplication.focusWidget() is quick_of(window)
+    """Whether Material's window has the keyboard."""
+    return QGuiApplication.focusWindow() is quick_of(window)
+
+
+def type_text(window: NativeWindow, text: str) -> None:
+    """Type `text` into whatever Material has focused, one key at a time (QTest has no keyClicks for a
+    Qt Quick window)."""
+    for character in text:
+        QTest.keyClick(quick_of(window), character)
 
 
 def grab(window: NativeWindow) -> QImage:
-    """Seam for step 11: an image of what Material drew."""
-    return window._material_page._quick.grabFramebuffer()
+    """An image of what Material drew."""
+    return window._material_page.grabWindow()
 
 
-def page_widget(window: NativeWindow) -> QWidget:
-    """Seam for step 11: the page widget on screen, for tests that look inside a page's children."""
-    return window._stack.currentWidget()
+def page_widget(window: NativeWindow) -> QObject | None:
+    """The window on screen (Material's, or the draw-error page), for tests that look inside its children."""
+    return window._face()
 
 
 def page_showing(window: NativeWindow) -> str:
-    """Seam for step 11: the objectName of the page on screen."""
-    return page_widget(window).objectName()
+    """The objectName of the window on screen."""
+    face = page_widget(window)
+    return "" if face is None else str(face.objectName())
 
 
 def material_showing(window: NativeWindow) -> bool:
