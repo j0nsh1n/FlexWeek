@@ -23,10 +23,6 @@ HOST_USES = (
     ").setFocus()",
     "focusWidget() is quick",
 )
-# Uses that only make sense for the widget host, kept until the step named here replaces them.
-KNOWN = {
-    ROOT / "scripts" / "pictures" / "render.py": {"quickWindow()"},
-}
 
 
 def test_only_the_helpers_name_the_material_host() -> None:
@@ -36,6 +32,6 @@ def test_only_the_helpers_name_the_material_host() -> None:
         f"{path.relative_to(ROOT)}: {use}"
         for path in sorted(files)
         for use in HOST_USES
-        if use in path.read_text(encoding="utf-8") and use not in KNOWN.get(path, set())
+        if use in path.read_text(encoding="utf-8")
     ]
     assert found == [], "reach the host through the helpers in desktop/tests/material_support.py"

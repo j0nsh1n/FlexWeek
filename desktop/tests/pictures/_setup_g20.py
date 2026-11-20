@@ -9,7 +9,6 @@ from desktop.native.window import NativeWindow
 from desktop.tests.material_support import material_showing
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.waiting import wait_until
-from desktop.tests.window_support import still
 
 
 def _first_page(window: NativeWindow) -> object:
@@ -22,7 +21,6 @@ def _first_page(window: NativeWindow) -> object:
     )
     for _ in range(40):
         qapp.processEvents()
-    still(window)
     return None
 
 

@@ -15,7 +15,6 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QEvent, QStandardPaths
 from PySide6.QtWidgets import QApplication, QWidget
 
-from desktop.native.motion import settle
 from desktop.native.window import NativeWindow
 from desktop.server import LocalServer
 from desktop.tests.logic_support import past_recovery, past_setup, sign_up
@@ -46,14 +45,6 @@ def qapp() -> Iterator[QApplication]:
 
 def settled(qapp: QApplication, window: NativeWindow) -> None:
     wait_until(qapp, lambda: not window.session.busy and not window.session.dirty)
-
-
-def still(*roots: QWidget) -> None:
-    """End every fade and slide on `roots` and what they hold where it would have ended, so a picture
-    of them is of the screen as it stays: a dialog's content fades and rises as it opens."""
-    for root in roots:
-        for widget in (root, *root.findChildren(QWidget)):
-            settle(widget)
 
 
 def free(widget: QWidget | NativeWindow) -> None:
@@ -107,10 +98,8 @@ def signed_out(qapp: QApplication, server: LocalServer) -> Iterator[NativeWindow
 
 @pytest.fixture()
 def window(qapp: QApplication, signed_out: NativeWindow) -> NativeWindow:
-    """Signed in on the week page, setup skipped, preferences loaded. The week page has finished
-    fading in: a test that read the top bar's pixels straight away read them through the fade."""
+    """Signed in on the week page, setup skipped, preferences loaded."""
     sign_up(qapp, signed_out, USERNAME, PASSWORD)
     past_recovery(qapp, signed_out)
     past_setup(qapp, signed_out)
-    still(signed_out)
     return signed_out

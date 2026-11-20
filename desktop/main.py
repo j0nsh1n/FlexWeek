@@ -144,14 +144,16 @@ def painted_colors(image: QImage, step: int = 8) -> int:
 
 
 def material_state(window: NativeWindow) -> tuple[str, int]:
-    """Whether the Material window, not the Widgets fallback, is the one on screen.
+    """Whether Material's Qt Quick window, not the draw-error page, is the one on screen.
 
-    "fallback" means this build gave up on Material; "waiting" means it is not drawn yet.
+    "fallback" means this build gave up on Material; "waiting" means the window is not visible, not built
+    or not drawn yet. "shown" needs the window visible, its shell built, and what `grabWindow` drew to
+    hold PAINTED_MIN_COLORS colours.
     """
     if window._material_gave_up:
         return "fallback", 0
     page = window._material_current()
-    if page is None or not page._ready:
+    if page is None or not page._ready or page.root is None or not page.isVisible():
         return "waiting", 0
     colors = painted_colors(page.grabWindow())
     return ("shown" if colors >= PAINTED_MIN_COLORS else "waiting"), colors
@@ -259,7 +261,11 @@ class NativeSmoke:
             return
         if self._stage == "saved week":
             session = window.session
-            if session.busy or session.revision < 1:
+            # A week that starts on another day than Monday spans two stored weeks, one revision each; the save
+            # bumps the one that holds the new blocks.
+            revision = session.revision
+            saved = max(revision) if isinstance(revision, list) else revision
+            if session.busy or saved < 1:
                 return
             if not any(block.get("id") == "soccer" for block in session.blocks):
                 self._finish(False, "window blank after setup Solve")

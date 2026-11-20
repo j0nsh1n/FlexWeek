@@ -95,3 +95,37 @@ def test_material_state_tells_the_window_from_the_draw_error(
     assert colors >= PAINTED_MIN_COLORS
     window._give_up_material()
     assert material_state(window) == ("fallback", 0)
+
+
+def test_material_state_waits_while_what_it_drew_is_nearly_one_colour(
+    qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window.resize(1280, 800)
+    window.show()
+    window._on_week()
+    pump(qapp)
+    page = window._material_page
+    assert page is not None and page.root is not None
+    grab(window)
+    pump(qapp)
+    faded_in(qapp, page.root)
+    monkeypatch.setattr(app_main, "painted_colors", lambda _image: PAINTED_MIN_COLORS - 1)
+    assert material_state(window) == ("waiting", PAINTED_MIN_COLORS - 1)
+    monkeypatch.setattr(app_main, "painted_colors", lambda _image: PAINTED_MIN_COLORS)
+    assert material_state(window) == ("shown", PAINTED_MIN_COLORS)
+
+
+def test_material_state_waits_while_the_window_is_hidden(qapp: QApplication, window: NativeWindow) -> None:
+    window.resize(1280, 800)
+    window.show()
+    window._on_week()
+    pump(qapp)
+    page = window._material_page
+    assert page is not None and page.root is not None
+    grab(window)
+    pump(qapp)
+    faded_in(qapp, page.root)
+    assert material_state(window)[0] == "shown"
+    window.hide()
+    pump(qapp)
+    assert material_state(window) == ("waiting", 0)

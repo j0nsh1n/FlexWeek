@@ -31,7 +31,6 @@ from PySide6.QtWidgets import (  # noqa: E402
 )
 
 from backend.tests.fake_clock import CLOCK  # noqa: E402
-from desktop.native import motion  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import LightWindows  # noqa: E402
 from desktop.tests.material_support import faded_in, grab, material_showing, quick_of  # noqa: E402
@@ -62,32 +61,6 @@ HOSTS: list = []
 def qapp() -> Iterator[QApplication]:
     QStandardPaths.setTestModeEnabled(True)
     yield QApplication.instance() or QApplication(["flexweek-zoom-test"])
-
-
-class ManualTime:
-    """The time motion.Clock reads (its own, not the app clock). It stands still until `advance` moves
-    it, so an animation is at an exact place on its easing however busy the machine is."""
-
-    def __init__(self) -> None:
-        self.now = 1_000
-
-    def __call__(self) -> int:
-        return self.now
-
-    def advance(self, ms: int) -> None:
-        """Move the time `ms` on, and give every clock that is running the frame it would have had."""
-        self.now += ms
-        for clock in list(motion._RUNNING):
-            # A paused clock has stopped its timer, so no frame comes for it.
-            if clock._timer.isActive():
-                clock._tick()
-
-
-@pytest.fixture()
-def manual_time(monkeypatch: pytest.MonkeyPatch) -> ManualTime:
-    manual = ManualTime()
-    monkeypatch.setattr(motion, "now_ms", manual)
-    return manual
 
 
 def settle(qapp: QApplication) -> None:
