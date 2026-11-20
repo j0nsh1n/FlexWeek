@@ -188,6 +188,22 @@ def test_a_later_change_is_built_from_the_repeat_not_from_this_weeks_own_copy(qa
     )
 
 
+def test_ticking_a_day_keeps_the_days_until_hid_from_this_week(qapp, week, sheets) -> None:
+    # Guitar on Thursday and Friday ends Thursday 5 Nov, so this week shows Thursday only. Ticking Wednesday
+    # and moving Until a week on must not drop Friday, which this week never showed (the old #118 failure).
+    thursday = date_for_day(week.session.week_start, 3)
+    repeat = _add_weekly(qapp, week, sheets, days=(3, FRIDAY), until=thursday)
+    assert _starts(week) == [("17:00", [3])]
+    _edit(sheets, repeat["id"])
+    sheets.toggleDay(2)
+    sheets.setText("until", _friday(week.session, 1))
+    sheets.next()
+    sheets.answer("later")
+    _settled(qapp, week)
+    _go(qapp, week, 1)
+    assert _starts(week) == [("17:00", [2, 3, FRIDAY])]
+
+
 def test_a_change_to_one_day_asks_nothing_and_leaves_the_other_days_and_weeks(qapp, week, sheets) -> None:
     repeat = _add_weekly(qapp, week, sheets, days=(FRIDAY, 5))
     _edit(sheets, repeat["id"], FRIDAY)

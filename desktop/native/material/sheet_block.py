@@ -468,7 +468,11 @@ class BlockDraft:
             if "title" in changed:
                 body["title"] = made["title"]
             if "days" in changed:
-                body["days"] = self._week_to_monday(self.days)
+                # Only the days the student ticked or unticked change: the week's copy may lack days its
+                # Until (or this week's own edit) hid, and those stay as the repeat has them.
+                opened = set(self._week_to_monday(list(self._opened_as[1])))
+                now = set(self._week_to_monday(self.days))
+                body["days"] = sorted((set(body.get("days") or []) - (opened - now)) | (now - opened))
             if "start" in changed or "end" in changed:
                 body["start"] = made["start"]
                 body["duration_min"] = made["duration_min"]
