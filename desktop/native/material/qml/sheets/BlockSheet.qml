@@ -184,6 +184,68 @@ SheetFrame {
             FieldNote { objectName: "blockDaysProblem"; theme: root.theme; problem: true; text: root.f.daysProblem ? root.f.daysProblem : "" }
             FieldNote { theme: root.theme; text: root.f.seriesNote ? root.f.seriesNote : "" }
         }
+        // A weekly fixed time: the switch, and its Until. Setup's own blocks never show it.
+        Column {
+            objectName: "blockRepeatGroup"
+            visible: !!root.f.showRepeat
+            width: parent.width
+            spacing: 4
+            SettingsRow {
+                width: parent.width
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                title: "Repeats every week"
+                accessName: "Repeats every week"
+                Switch {
+                    objectName: "blockRepeat"
+                    theme: root.theme
+                    density: root.density
+                    reduceMotion: root.reduceMotion
+                    highContrast: root.highContrast
+                    accessName: "Repeats every week"
+                    checked: !!root.f.repeat
+                    onToggled: (on) => root.sheets.setFlag("repeat", on)
+                }
+            }
+            Row {
+                objectName: "blockUntilRow"
+                visible: !!root.f.repeat
+                spacing: 12
+                Text {
+                    text: "Until"
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: pal.inkMuted
+                    font.family: M3Font.family
+                    font.pixelSize: M3Font.px(12)
+                }
+                Button {
+                    objectName: "blockUntil"
+                    theme: root.theme
+                    density: root.density
+                    reduceMotion: root.reduceMotion
+                    highContrast: root.highContrast
+                    kind: "tonal"
+                    text: root.f.untilLabel ? root.f.untilLabel : "No end"
+                    accessName: "Until, " + text
+                    onClicked: untilPicker.show(root.f.until ? root.f.until : root.f.todayIso, root.f.todayIso)
+                }
+                Button {
+                    objectName: "blockUntilClear"
+                    visible: !!root.f.until
+                    theme: root.theme
+                    density: root.density
+                    reduceMotion: root.reduceMotion
+                    highContrast: root.highContrast
+                    kind: "text"
+                    text: "No end"
+                    accessName: "No end"
+                    onClicked: root.sheets.setText("until", "")
+                }
+            }
+            FieldNote { objectName: "blockUntilProblem"; theme: root.theme; problem: true; text: root.f.untilProblem ? root.f.untilProblem : "" }
+        }
         Row {
             width: parent.width
             spacing: 12
@@ -270,6 +332,20 @@ SheetFrame {
         }
     }
     FieldNote { objectName: "blockError"; theme: root.theme; problem: true; text: root.f.error ? root.f.error : "" }
+
+    // The month the Until is picked from; it sits over the sheet.
+    DatePicker {
+        id: untilPicker
+        objectName: "blockUntilPicker"
+        parent: root
+        anchors.fill: parent
+        z: 10
+        theme: root.theme
+        density: root.density
+        reduceMotion: root.reduceMotion
+        highContrast: root.highContrast
+        onPicked: (iso) => root.sheets.setText("until", iso)
+    }
 
     leading: [
         Button {
