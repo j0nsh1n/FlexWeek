@@ -1,15 +1,13 @@
 # context.md — FlexWeek
 
-## Current State (2026-11-17)
-- Branch `feat/material-only` (1.5.0, from main 69467feb): the desktop offers only Material 3 and Material gets its
-  own Qt Quick window. Plan: `~/.flexweek-ui-harness/scratch/material-only/plan.md` (Jonathan approved 2026-11-17;
-  Hack Club certificate first, done: README #139 merged, gallery PR hackclub/capitol#82 open). Step 0 measured: Material
-  hosted in a QQuickWidget animates and draws 62.5 times a second on a 360 Hz screen, a QQuickView 359.7; off screen
-  (every test and picture) Qt Quick already draws with the Software backend. Done time is the larger of focus
-  minutes and minutes ticked done (`plan::done_time`), taken off in every count.
-- PR #137 (`fix/phone-1.4.0`, draft): the phone's 20 fixes, phone edits stamped when made, set-aside sync records
-  retried, the layout B restyle and Report a problem (phone and desktop, hidden until the form link is set). Review 1
-  FIX-PASS; its fixes are not done yet. Not in 1.4.0.
+## Current State (2026-11-20)
+- 1.5.0 is being cut from PR #141 (version 1.5.0, phone versionCode 7, the 1.5.0 docs and release notes). Main has
+  #140 (`feat/material-only`, merged 2026-11-20): the desktop offers only Material 3, in its own Qt Quick window
+  (measured 360 frames a second on a 360 Hz screen), with the CPU fallback, the kept features rebuilt in Material and
+  #118 (weekly fixed times with Until, at most 200 standing blocks, Undo through a restore point, reminder cards). Main
+  also has #137 (`fix/phone-1.4.0`, merged 2026-11-20): the phone fixes, layout B restyle, phone edits stamped when
+  made, set-aside sync records retried, and Report a problem (Settings > Computer on the desktop). Done time is the
+  larger of focus minutes and minutes ticked done (`plan::done_time`), taken off in every count.
 - Latest release: v1.4.0, published 2026-11-17 from main 2dd91027 (PR #138), all ten files with checked checksums;
   the Android 1.4.0 app was built here from main without PR #137, signed with the same key as 1.3.0. The previous
   release is v1.3.0 (2026-11-10).
@@ -106,6 +104,12 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
+- 2026-11-20, branch `feat/material-only` (PR #141): #140 and #137 merged; #141 carries the docs commit (612ec9f1),
+  the version bump and the release notes. Next: merge #141, tag v1.5.0, "Release packages" with the tag (Windows and
+  Linux on GitHub), the Android APK built and signed here (same key, cert 3455c674...), all checksums checked, then
+  Jonathan tries the build before it is published as latest. Older phones (1.4.0) show weekly fixed times past their
+  Until date and drop `until` when they save such a week (in the release notes). Run logs:
+  `~/.flexweek-ui-harness/scratch/material-only/r118/afk-run-2026-11-20.md`, `scratch/release-1.5.0/`.
 - 2026-11-18 AFK run, branch `feat/material-only` (head 79a80b10, local only): steps 1-7 of the Material-only plan,
   step 8 in part (command bar and Widgets focus screen deleted), Material Settings parity with the High contrast,
   Paper, Ink and Terminal presets, alarms and a ring screen, keys and week tools, Help/About/Update/Account/Copies of

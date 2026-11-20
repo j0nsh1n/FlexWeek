@@ -4,13 +4,13 @@ Phases, their complete-when conditions and status. Finished phases are removed; 
 history and in `CHANGELOG.md` (pruned 2026-11-06: Phase 8, 1.1.1, the 0.18.x series, 0.18.5 and the 1.0.0 running
 list, all shipped).
 
-## Where things stand (2026-11-17)
+## Where things stand (2026-11-20)
 - v1.4.0 is the latest release (2026-11-17, PR #138): the week can start on any day, Plan and Replan move a session
   whose time passed unfinished, School and activity changes across weeks, Material drag, menus and the Dragging step,
   the assistant helper's live clock and Spread over days. Its Android app was built from main, without PR #137.
 - Hack Club certificate: README (#139) merged and the gallery PR (hackclub/capitol#82) open; Jonathan submits the
   certificate form.
-- 1.5.0 started on `feat/material-only` (plan: `~/.flexweek-ui-harness/scratch/material-only/plan.md`).
+- 1.5.0: #140 (Material only, #118) and #137 (phone) merged 2026-11-20; the release is cut from PR #141.
 
 ### Release 1.3.0
 - Status: [x] released 2026-11-10 (main d61235ee, PR #111).
@@ -37,7 +37,9 @@ list, all shipped).
   reminders that stay with Snooze, rebuilt on main; the multi-answer dialogs as picked cards (B2) with stacking.
 - Complete when: v1.5.0 is the latest release with all files and checked checksums, no Widgets interface is left, each
   kept feature above works in Material, and Material draws at the screen's rate on a high-refresh screen.
-- Status: [ ] started 2026-11-17.
+- Done: Material only (#140), the own window (360 fps measured on a 360 Hz screen), #118, PR #137 merged;
+  version 1.5.0 (app, changelog, phone: versionCode 7).
+- Status: [ ] release in progress (PR #141), 2026-11-20.
 
 ## After FIX-SPEC 1.3 (planned 2026-11-06)
 FIX-SPEC 1.3 and the J lanes (J21 Week zoom, J22 Day hours, J23 Month study fill, J25 Look preview side by side)
