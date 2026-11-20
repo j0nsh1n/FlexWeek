@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import FakeClock
 from desktop.native.controller import NativeSession
@@ -20,7 +20,8 @@ from desktop.tests.e2e.account_sessions import (  # noqa: F401
     soccer,
     table_text,
 )
-from desktop.tests.logic_support import past_setup
+from desktop.tests.logic_support import past_recovery, past_setup, sign_in, sign_up
+from desktop.tests.material_support import material_showing
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
 
@@ -90,17 +91,13 @@ def test_an_accepted_plan_is_on_the_grid_after_closing_and_signing_in(
     first = NativeWindow(server.origin)
     HELD.append(first)
     first.show()
-    first.username.setText("alice")
-    first.password.setText(PASSWORD)
-    first.findChild(QPushButton, "createAccount").click()
-    wait_until(qapp, lambda: first._stack.currentWidget().objectName() == "recoveryPage")
-    first.recovery_ack.setChecked(True)
-    first.recovery_continue.click()
+    sign_up(qapp, first, "alice", PASSWORD)
+    past_recovery(qapp, first)
     past_setup(qapp, first)
     two_assignments(first.session)
     first.session.save()
     wait_until(qapp, lambda: not first.session.busy and not first.session.dirty)
-    first.findChild(QPushButton, "solveButton").click()
+    first._plan_with_left_over()
     wait_until(
         qapp, lambda: first.session.trace is not None and not first.session.busy and not first.session.dirty
     )
@@ -117,13 +114,11 @@ def test_an_accepted_plan_is_on_the_grid_after_closing_and_signing_in(
     second = NativeWindow(server.origin)
     HELD.append(second)
     second.show()
-    second.username.setText("alice")
-    second.password.setText(PASSWORD)
-    second.findChild(QPushButton, "signIn").click()
+    sign_in(qapp, second, "alice", PASSWORD)
     wait_until(
         qapp,
         lambda: (
-            second._stack.currentWidget().objectName() == "weekPage"
+            material_showing(second)
             and not second.session.busy
             and len(second.session.assignments) >= 2
         ),

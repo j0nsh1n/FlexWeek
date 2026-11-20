@@ -17,6 +17,8 @@ Item {
     // [{label, value}]
     property var choices: []
     property string current: ""
+    // The list's width. A long choice needs more than the usual 200.
+    property int fieldWidth: 200
     signal chosen(string value)
     objectName: "row_" + key
 
@@ -69,8 +71,8 @@ Item {
         objectName: root.key
         x: root.stacked ? 16 : root.width - width - 16
         y: root.stacked ? root.padV + root.textHeight + 8 : (root.height - height) / 2
-        width: root.stacked ? Math.min(200, Math.max(0, root.width - 32)) : 200
-        implicitWidth: 200
+        width: root.stacked ? Math.min(root.fieldWidth, Math.max(0, root.width - 32)) : root.fieldWidth
+        implicitWidth: root.fieldWidth
         theme: root.theme
         density: root.density
         reduceMotion: root.reduceMotion

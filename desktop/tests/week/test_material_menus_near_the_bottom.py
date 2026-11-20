@@ -18,7 +18,7 @@ from PySide6.QtTest import QTest  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402,F401
-from desktop.tests.material_support import named, pump, qml  # noqa: E402
+from desktop.tests.material_support import named, pump, qml, quick_of  # noqa: E402
 from desktop.tests.sheets.support_material_sheets import block_named, material_week  # noqa: E402
 from desktop.tests.window_support import qapp, settled  # noqa: E402,F401
 
@@ -34,7 +34,7 @@ def scroll_to_the_end(qapp, root: QObject) -> None:
 
 
 def lies_inside_the_window(window: NativeWindow, menu: QObject) -> None:
-    quick = window._material_page._quick
+    quick = quick_of(window)
     top = menu.mapToScene(QPointF(0, 0)).y()
     assert top >= 0
     assert top + float(menu.property("height")) <= quick.height()
@@ -60,7 +60,7 @@ def test_the_first_block_menu_opened_near_the_bottom_is_inside_the_window(qapp, 
     block = block_named(root, "Late club")
     low = block.mapToScene(QPointF(block.width() / 2, block.height() * 0.9))
     QTest.mouseClick(
-        window._material_page._quick, Qt.MouseButton.RightButton, pos=QPoint(int(low.x()), int(low.y()))
+        quick_of(window), Qt.MouseButton.RightButton, pos=QPoint(int(low.x()), int(low.y()))
     )
     pump(qapp)
     menu = named(root, "blockMenu")[0]
@@ -77,7 +77,7 @@ def test_the_first_free_time_menu_opened_near_the_bottom_is_inside_the_window(
     # The last quarter hour of Saturday, a day with nothing on it.
     spot = scroller.mapToScene(QPointF(scroller.width() * 0.85, scroller.height() - 4))
     QTest.mouseClick(
-        window._material_page._quick, Qt.MouseButton.LeftButton, pos=QPoint(int(spot.x()), int(spot.y()))
+        quick_of(window), Qt.MouseButton.LeftButton, pos=QPoint(int(spot.x()), int(spot.y()))
     )
     pump(qapp)
     menu = named(root, "blockMenu")[0]
@@ -108,7 +108,7 @@ def test_the_free_time_menu_with_paste_here_opened_by_right_click_near_the_botto
     scroller = qml(root, "weekScroller")
     spot = scroller.mapToScene(QPointF(scroller.width() * 0.85, scroller.height() - 4))
     QTest.mouseClick(
-        window._material_page._quick, Qt.MouseButton.RightButton, pos=QPoint(int(spot.x()), int(spot.y()))
+        quick_of(window), Qt.MouseButton.RightButton, pos=QPoint(int(spot.x()), int(spot.y()))
     )
     pump(qapp)
     menu = named(root, "blockMenu")[0]

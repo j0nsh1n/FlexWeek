@@ -12,15 +12,18 @@ from __future__ import annotations
 
 import contextlib
 import json
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, cast
 
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
+from desktop.native import fields
 from desktop.native.fields import week_start_day, week_start_notice
-from desktop.native.hours.zoom import Scale
+from desktop.native.hours.scale import Scale
 from desktop.native.material.bridge_account import AccountBridge
+from desktop.native.material.bridge_alarms import RingBridge
 from desktop.native.material.bridge_day import DayBridge
 from desktop.native.material.bridge_focus import FocusBridge
 from desktop.native.material.bridge_month import MonthBridge
@@ -32,24 +35,32 @@ from desktop.native.material.theme import (
     DEFAULT_CONTRAST,
     DEFAULT_DENSITY,
     DEFAULT_PRESET,
+    MOTION_SPEED_PACE,
+    accented,
     advanced_default,
     dress_theme,
     hour_row_px,
+    mode_of,
+    read_accent,
     read_advanced,
+    read_font,
     read_letter_keys,
     read_material_choice,
     read_shortcuts,
-    resolved_mode,
     scheme,
     stroke_for,
     theme_object,
 )
+from desktop.native.motion_level import LEVELS, moves
 from desktop.native.reuse import planner_title
 from desktop.native.weekmodel import clock_label
 
 # Keys 1–5, and the StackLayout order. Week is the screen a new shell opens on.
 SCREENS = ("day", "week", "month", "myday", "settings")
+OPEN_ON = ("week", "day", "month", "myday")
 SNACK_MS = 10000
+# How often the seconds on Undo and the shrinking line are read, and the window's presence checked.
+SNACK_TICK_MS = 100
 WEEK_ZOOM = Scale("material.week", (32, 44, 56, 72, 96, 128, 192, 256), 56)
 DAY_ZOOM = Scale("material.day", (32, 44, 56, 72, 96, 128, 192, 256), 56)
 
@@ -64,6 +75,12 @@ class _Session(Protocol):
     def can_undo(self) -> bool: ...
 
     def can_redo(self) -> bool: ...
+
+    pending_save: dict | None
+    conflict: bool
+    busy: bool
+
+    def retry_save(self) -> None: ...
 
     def undo(self) -> None: ...
 
@@ -82,8 +99,8 @@ class MaterialBridge(QObject):
 
     changed = Signal()
     blocksChanged = Signal()
+    snackClockChanged = Signal()
     homeworkChanged = Signal()
-    widgetsRequested = Signal()
 
     def __init__(self, window: QObject) -> None:
         super().__init__(window)
@@ -92,24 +109,36 @@ class MaterialBridge(QObject):
         self._week_follow = None
         self._window = cast(_Window, window)
         self._screen = "week"
+        self._opened_for: str | None = None
         self._snack = ""
         self._snack_action = "UNDO"
         self._snack_target = ""
         self._snack_paused = False
         self._snack_held = False
         self._snack_remaining_ms = SNACK_MS
+        self._snack_callback: Callable[[], None] | None = None
+        # The notice's clock follows the session's clock, so the seconds on Undo and the shrinking line
+        # agree with it; the wall timer below still ends the notice.
+        self._snack_deadline = 0
+        self._snack_away = False
         self._snack_timer = QTimer(self)
         self._snack_timer.setSingleShot(True)
         self._snack_timer.setInterval(SNACK_MS)
         self._snack_timer.timeout.connect(self._on_snack_timeout)
+        self._snack_tick = QTimer(self)
+        self._snack_tick.setInterval(SNACK_TICK_MS)
+        self._snack_tick.timeout.connect(self._on_snack_tick)
         self._preset = DEFAULT_PRESET
         self._mode = "light"
         self._contrast = DEFAULT_CONTRAST
         self._density = DEFAULT_DENSITY
         self._reduce_motion = False
+        self._motion_pace = 1.0
+        self._motion_reach = 1.0
         self._advanced = advanced_default()
         self._shortcuts = True
         self._letter_keys = False
+        self._font = ""
         self._colours = scheme(DEFAULT_PRESET, "light", DEFAULT_CONTRAST)
         self._theme = theme_object(self._colours, self._density, False, False)
         self._week = WeekBridge(window, self)
@@ -119,9 +148,18 @@ class MaterialBridge(QObject):
         self._settings_bridge = SettingsBridge(self)
         self._account = AccountBridge(window)
         self._account.setParent(self)
+        self._account.use_settings(self._settings_bridge)
         self._focus = FocusBridge(window, self)
         self._sheets = SheetsBridge(window, self)
+        self._ring = RingBridge(self)
         self._following = False
+        strip = getattr(window, "alert_strip", None)
+        if strip is not None:
+            strip.changed.connect(self.changed)
+        cards = getattr(window.session, "reminder_cards", None)
+        if cards is not None:
+            cards.changed.connect(self.changed)
+            cards.shown.connect(lambda words: fields.announce(self._window, words))
         week_start_notice().changed.connect(self._on_week_start)
         # Save finishes on this signal. The day lists and the Undo button read it then,
         # rather than waiting for the 20s clock tick.
@@ -129,21 +167,23 @@ class MaterialBridge(QObject):
         if changed is not None and hasattr(changed, "connect"):
             changed.connect(self._follow_week)
             self._week_follow = changed
+        finished = getattr(self._window.session, "save_finished", None)
+        self._save_follow = None
+        if finished is not None and hasattr(finished, "connect"):
+            finished.connect(self._on_save_finished)
+            self._save_follow = finished
 
     def set_appearance(self, mode: str, _worn_contrast: str) -> None:
-        """Apply the saved Material look. `mode` is the worn light or dark axis.
-
-        Follow system uses that axis. An explicit saved light or dark wins. The worn
-        contrast is not Material's contrast: this shell stays standard unless its own
-        saved contrast says high.
-        """
+        """Apply the saved Material look. `mode` is the light or dark the device or Material's own
+        choice gives (appearance_of). Material's contrast is its own saved one."""
         stored = self._stored_look()
         choice = read_material_choice(stored)
         self._advanced = read_advanced(stored)
         self._shortcuts = read_shortcuts(stored)
         self._letter_keys = read_letter_keys(stored)
         worn_dark = mode == "dark"
-        resolved = resolved_mode(choice["mode"], worn_dark)
+        resolved = mode_of(choice, worn_dark)
+        self._font = read_font(stored)
         try:
             colours = scheme(choice["preset"], resolved, choice["contrast"])
         except KeyError:
@@ -159,8 +199,25 @@ class MaterialBridge(QObject):
         self._publish_theme()
         self._settings_bridge.note_applied()
 
+    def _open_on_saved_screen(self) -> None:
+        """Open on the screen "Open on" names, once per sign-in. A later change in Settings waits for the
+        next sign-in, so it never moves a student who is already somewhere."""
+        session = self._window.session
+        account = session.account
+        if account is None:
+            self._opened_for = None
+            return
+        prefs = session.preferences
+        if prefs is None or self._opened_for == str(account["id"]):
+            return
+        self._opened_for = str(account["id"])
+        wanted = prefs.get("preferred_view")
+        if wanted in OPEN_ON:
+            self.open_page(wanted)
+
     def refresh(self) -> None:
         """Read the session again. Does not consume a Widgets prompt."""
+        self._open_on_saved_screen()
         self._publish_theme()
         self._week.reload(self._mode)
         self._day.reload(self._mode)
@@ -189,19 +246,54 @@ class MaterialBridge(QObject):
         if changed is not None:
             with contextlib.suppress(RuntimeError, TypeError):
                 changed.disconnect(self._follow_week)
+        finished = getattr(self, "_save_follow", None)
+        self._save_follow = None
+        if finished is not None:
+            with contextlib.suppress(RuntimeError, TypeError):
+                finished.disconnect(self._on_save_finished)
+
+    def _on_save_finished(self, ok: bool, message: str) -> None:
+        """A save that failed says so in the snackbar with a Retry button, and the top bar keeps a
+        Retry save button for as long as the changes wait. A save that worked takes the Retry away."""
+        if not ok:
+            if self._window.session.pending_save is not None:
+                self.note(message, action="RETRY")
+            return
+        if self._snack_action == "RETRY":
+            self._clear_snack(self._snack)
+        self.changed.emit()
 
     def _publish_theme(self) -> None:
-        self._reduce_motion = self._motion_reduced() or self._advanced.get("motion") == "Off"
+        level = self._motion_level()
+        self._reduce_motion = not moves(level)
+        self._motion_pace = LEVELS[level].pace * MOTION_SPEED_PACE.get(self._advanced.get("motion"), 1.0)
+        self._motion_reach = LEVELS[level].reach
+        prefs = self._window.session.preferences or {}
+        accent = read_accent(prefs)
+        colours = accented(self._colours, accent, self._preset, self._mode, self._contrast)
         self._theme = dress_theme(
-            theme_object(self._colours, self._density, self._reduce_motion, self._contrast == "high"),
+            theme_object(
+                colours,
+                self._density,
+                self._reduce_motion,
+                self._contrast == "high",
+                prefs.get("accent_chips") is True,
+            ),
             self._advanced,
+            self._preset,
+            self._font,
         )
 
-    def _motion_reduced(self) -> bool:
-        prefs = self._window.session.preferences or {}
-        chosen = prefs.get("motion")
+    def _motion_level(self) -> str:
+        """The Animations level in force: the student's choice, else the window's (the look's own). The
+        advanced page's Motion speed Off is the Off level."""
+        if self._advanced.get("motion") == "Off":
+            return "off"
+        chosen = (self._window.session.preferences or {}).get("motion")
+        if chosen in LEVELS:
+            return str(chosen)
         level = getattr(self._window, "_motion", "normal")
-        return chosen in ("reduce", "off") or level in ("reduce", "off")
+        return str(level) if level in LEVELS else "normal"
 
     def _stored_look(self) -> object:
         try:
@@ -378,6 +470,14 @@ class MaterialBridge(QObject):
     def reduceMotion(self) -> bool:
         return self._reduce_motion
 
+    @Property(float, notify=changed)
+    def motionPace(self) -> float:
+        return self._motion_pace
+
+    @Property(float, notify=changed)
+    def motionReach(self) -> float:
+        return self._motion_reach
+
     @Property(bool, notify=changed)
     def highContrast(self) -> bool:
         return self._contrast == "high"
@@ -393,6 +493,34 @@ class MaterialBridge(QObject):
     @Property(str, notify=changed)
     def snackAction(self) -> str:
         return self._snack_action
+
+    @Property(str, notify=changed)
+    def alertText(self) -> str:
+        """A reminder the student asked to keep on screen until they deal with it, from the window's strip."""
+        strip = getattr(self._window, "alert_strip", None)
+        return strip.text() if strip is not None and strip.pending() else ""
+
+    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
+    def reminderCards(self) -> list[dict[str, str]]:  # noqa: N802 - the name QML reads
+        """Reminders kept on screen, newest first, each with its title, body and key."""
+        cards = getattr(self._window.session, "reminder_cards", None)
+        return cards.cards() if cards is not None else []
+
+    @Slot(str)
+    def snoozeReminder(self, key: str) -> None:  # noqa: N802
+        """Snooze: the card hides and comes back later, never after its block starts."""
+        self._window.session.reminder_cards.snooze(key)
+
+    @Slot(str)
+    def closeReminder(self, key: str) -> None:  # noqa: N802
+        self._window.session.reminder_cards.close(key)
+
+    @Slot()
+    def dismissAlert(self) -> None:
+        """Got it: the strip's own button, so one reminder goes at a time and its snackbar line with it."""
+        strip = getattr(self._window, "alert_strip", None)
+        if strip is not None:
+            strip.drop()
 
     @Property(str, notify=changed)
     def title(self) -> str:
@@ -411,6 +539,35 @@ class MaterialBridge(QObject):
         session = self._window.session
         moment = datetime.fromtimestamp(session.now_ms() / 1000)
         return clock_label(moment.hour * 60 + moment.minute)
+
+    @Property(bool, notify=changed)
+    def retryShown(self) -> bool:
+        """Changes are waiting after a failed save and Retry save can send them."""
+        session = self._window.session
+        return session.pending_save is not None and not session.conflict
+
+    @Property(bool, notify=changed)
+    def retryEnabled(self) -> bool:
+        return self.retryShown and not self._window.session.busy
+
+    @Slot()
+    def retrySave(self) -> None:
+        """Retry save: the same call as the Widgets button. Ctrl+S flushes the same waiting changes."""
+        if self._snack_action == "RETRY":
+            self._clear_snack(self._snack)
+        self._window.session.retry_save()
+        self.changed.emit()
+
+    @Slot()
+    def snackActed(self) -> None:
+        if self._snack_action == "RETRY":
+            self.retrySave()
+        elif self._snack_callback is not None:
+            act = self._snack_callback
+            self._clear_snack(self._snack)
+            act()
+        else:
+            self.undo()
 
     @Property(bool, notify=changed)
     def canUndo(self) -> bool:
@@ -447,6 +604,10 @@ class MaterialBridge(QObject):
     @Property(QObject, constant=True)
     def sheets(self) -> QObject:
         return self._sheets
+
+    @Property(QObject, constant=True)
+    def ring(self) -> QObject:
+        return self._ring
 
     @Property(QObject, constant=True)
     def settingsBridge(self) -> QObject:
@@ -500,23 +661,108 @@ class MaterialBridge(QObject):
     def nowMinute(self) -> int:
         return self._week.nowMinute
 
-    def note(self, text: str, *, action: str = "UNDO") -> None:
-        """One snackbar line. Day uses it after a homework check."""
+    def note(
+        self, text: str, *, action: str = "UNDO", on_action: Callable[[], None] | None = None
+    ) -> None:
+        """One snackbar line. `on_action` is what its button does; Undo and Retry need none."""
+        said_before = self._snack
         self._snack = text
         self._snack_action = action
+        self._snack_callback = on_action
         self._snack_target = text
         self._snack_remaining_ms = SNACK_MS
+        self._snack_away = self._window_away()
         if not text:
             self._snack_timer.stop()
+            self._snack_tick.stop()
             self._snack_paused = False
         else:
-            if self._snack_held:
+            if self._snack_held or self._snack_away:
                 self._snack_paused = True
                 self._snack_timer.stop()
             else:
                 self._snack_paused = False
+                self._snack_deadline = self._now() + SNACK_MS
                 self._snack_timer.start(SNACK_MS)
+            self._snack_tick.start()
+            if text != said_before:
+                # Said once, politely, when it appears; a screen reader does not repeat it as the
+                # seconds on Undo count down.
+                fields.announce(self._window, text)
         self.changed.emit()
+        self.snackClockChanged.emit()
+
+    def bump_snack(self) -> None:
+        """The same notice said again: its time starts over, nothing is announced."""
+        if not self._snack:
+            return
+        self._snack_remaining_ms = SNACK_MS
+        if self._snack_paused:
+            self.snackClockChanged.emit()
+            return
+        self._snack_deadline = self._now() + SNACK_MS
+        self._snack_timer.start(SNACK_MS)
+        self.snackClockChanged.emit()
+
+    def _now(self) -> int:
+        return int(self._window.session.now_ms())
+
+    def _window_away(self) -> bool:
+        """The window is hidden, minimised or not the one in front: the notice waits for the student."""
+        window = self._window
+        return (
+            not window.isVisible()  # type: ignore[attr-defined]
+            or window.isMinimized()  # type: ignore[attr-defined]
+            or not window.isActiveWindow()  # type: ignore[attr-defined]
+        )
+
+    def _snack_left_ms(self) -> int:
+        if not self._snack:
+            return 0
+        if self._snack_paused:
+            return max(0, self._snack_remaining_ms)
+        left = min(SNACK_MS, self._snack_deadline - self._now())
+        if self._snack_timer.isActive():
+            # The wall timer can be shorter than the session's clock says (a notice resumed late).
+            left = min(left, self._snack_timer.remainingTime())
+        return max(0, left)
+
+    def _on_snack_tick(self) -> None:
+        if not self._snack:
+            self._snack_tick.stop()
+            return
+        away = self._window_away()
+        if away != self._snack_away:
+            self._snack_away = away
+            self._apply_snack_hold()
+        elif not self._snack_paused and self._snack_left_ms() <= 0:
+            self._clear_snack(self._snack_target)
+            return
+        self.snackClockChanged.emit()
+
+    def _apply_snack_hold(self) -> None:
+        """The clock waits while the pointer or keyboard is on the notice or the window is away, and
+        starts again, with at least a second left, when none of them is."""
+        hold = self._snack_held or self._snack_away
+        if hold and not self._snack_paused:
+            self._snack_remaining_ms = self._snack_left_ms()
+            self._snack_timer.stop()
+            self._snack_paused = True
+        elif not hold and self._snack_paused and self._snack:
+            self._snack_paused = False
+            self._snack_remaining_ms = max(1000, self._snack_remaining_ms)
+            self._snack_deadline = self._now() + self._snack_remaining_ms
+            self._snack_timer.start(self._snack_remaining_ms)
+
+    @Property(int, notify=snackClockChanged)
+    def snackSeconds(self) -> int:
+        """Whole seconds left, as the Undo button shows them."""
+        return (self._snack_left_ms() + 999) // 1000
+
+    @Property(float, notify=snackClockChanged)
+    def snackFraction(self) -> float:
+        """How much of the notice's time is left, for the line along its bottom."""
+        return self._snack_left_ms() / SNACK_MS
 
     def _on_snack_timeout(self) -> None:
         self._clear_snack(self._snack_target)
@@ -525,34 +771,28 @@ class MaterialBridge(QObject):
         # A newer line, or Undo, has already replaced this one.
         if self._snack == text:
             self._snack = ""
+            self._snack_callback = None
             self._snack_timer.stop()
+            self._snack_tick.stop()
             self._snack_paused = False
             self._snack_held = False
             self.changed.emit()
+            self.snackClockChanged.emit()
 
     @Slot()
     def pauseSnack(self) -> None:
         self._snack_held = True
-        self._snack_paused = True
-        if self._snack_timer.isActive():
-            self._snack_remaining_ms = max(0, self._snack_timer.remainingTime())
-            self._snack_timer.stop()
+        self._apply_snack_hold()
 
     @Slot()
     def resumeSnack(self) -> None:
         self._snack_held = False
-        if self._snack_paused:
-            self._snack_paused = False
-            if self._snack:
-                self._snack_timer.start(max(1000, self._snack_remaining_ms))
+        self._apply_snack_hold()
 
     @Slot()
     def undo(self) -> None:
         if self._snack:
-            self._snack = ""
-            self._snack_timer.stop()
-            self._snack_paused = False
-            self._snack_held = False
+            self._clear_snack(self._snack)
         self._window.session.undo()
         self.refresh()
 
@@ -578,12 +818,21 @@ class MaterialBridge(QObject):
         self._sheets.openMore()
 
     @Slot()
-    def addHomework(self) -> None:
-        self._sheets.openHomework()
+    def openHelp(self) -> None:
+        self._window._open_help()  # type: ignore[attr-defined]
 
     @Slot()
-    def useWidgets(self) -> None:
-        self.widgetsRequested.emit()
+    def addFixedTime(self) -> None:
+        self._sheets.openBlock()
+
+    @Slot()
+    def openWeekList(self) -> None:
+        """Ctrl+Shift+L: the same sheet as More's Week as a list."""
+        self._sheets.openWeekList()
+
+    @Slot()
+    def addHomework(self) -> None:
+        self._sheets.openHomework()
 
     @Slot()
     def showWeek(self) -> None:

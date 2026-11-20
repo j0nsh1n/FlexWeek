@@ -13,9 +13,50 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from desktop.native.tokens import contrast, fit_lightness, mix
+import flexweek_engine  # type: ignore[import-untyped]
 
-PRESETS = ("Slate", "Blue", "Sea", "Forest", "Gold", "Rose", "Plum")
+from desktop.native.tokens import contrast, fit_lightness, luminance, mix
+
+PRESETS = (
+    "Slate",
+    "Blue",
+    "Sea",
+    "Forest",
+    "Gold",
+    "Rose",
+    "Plum",
+    "High contrast",
+    "Paper",
+    "Ink",
+    "Terminal",
+)
+# The four old looks (look.py's PALETTES) carry their own surfaces and one mode each, so a student's
+# Light or Dark choice cannot turn them into something they are not. Their schemes are whole in
+# tokens.json; the B3A3 surfaces below belong to the other presets.
+ONE_MODE = {"High contrast": "dark", "Paper": "light", "Ink": "dark", "Terminal": "dark"}
+# A look's own font and corner, used only until the student chooses their own (read_font, the
+# advanced Corners dial). Paper and Ink keep the default soft corners.
+PRESET_LOOK = {
+    "High contrast": {"font": "sans", "corner": 0},
+    "Paper": {"font": "serif", "corner": None},
+    "Ink": {"font": "serif", "corner": None},
+    "Terminal": {"font": "mono", "corner": 0},
+}
+FONTS = ("sans", "serif", "mono")
+FONT_LABELS = {"sans": "Sans", "serif": "Serif", "mono": "Mono"}
+# The bundled faces: the body face, and the headings' face (Serif is Newsreader headings over Inter).
+FONT_FAMILIES = {
+    "sans": ("Inter", "Inter"),
+    "serif": ("Inter", "Newsreader"),
+    "mono": ("JetBrains Mono", "JetBrains Mono"),
+}
+# Accent colours on top of a preset, the Widgets accents' light-axis colours (look.ACCENT_COLORS).
+# "default" is Same as preset: the preset's own colours stay.
+ACCENTS = ("default", "sky", "gold", "sea", "sand")
+ACCENT_LABELS = {"default": "Same as preset", "sky": "Sky", "gold": "Gold", "sea": "Sea", "sand": "Sand"}
+ACCENT_SEEDS = {"sky": "#0369a1", "gold": "#a16207", "sea": "#0f766e", "sand": "#805441"}
+# High contrast's yellow is part of its contrast, so no accent replaces it.
+ACCENT_LOCKED = ("High contrast",)
 MODES = ("light", "dark")
 CONTRASTS = ("std", "high")
 HIGH_CONTRAST_STROKE = 1.5
@@ -113,7 +154,10 @@ def scheme(preset: str, mode: str, contrast_name: str) -> dict[str, str]:
     """One scheme. An unknown preset, mode or contrast is a KeyError, not a quiet fallback."""
     if preset not in PRESETS or mode not in MODES or contrast_name not in CONTRASTS:
         raise KeyError(scheme_key(preset, mode, contrast_name))
+    mode = ONE_MODE.get(preset, mode)
     found = dict(_schemes()[scheme_key(preset, mode, contrast_name)])
+    if preset in ONE_MODE:
+        return found
     for role in (
         "surface",
         "surfaceContainerLowest",
@@ -296,8 +340,53 @@ def resolved_mode(mode: str, worn_dark: bool) -> str:
     return "dark" if worn_dark else "light"
 
 
+def mode_of(choice: dict[str, str], worn_dark: bool) -> str:
+    """The light or dark a choice shows: its preset's own when it has only one, else Mode's."""
+    return ONE_MODE.get(choice["preset"]) or resolved_mode(choice["mode"], worn_dark)
+
+
+def read_font(stored: object) -> str:
+    """The student's own font from the look file's `material` object; "" means the preset's own."""
+    material = stored.get("material") if isinstance(stored, dict) else None
+    font = material.get("font") if isinstance(material, dict) else None
+    return font if isinstance(font, str) and font in FONTS else ""
+
+
+def shown_font(preset: str, font: str) -> str:
+    """The font worn: the student's choice, else the preset's own, else Sans."""
+    return font or PRESET_LOOK.get(preset, {}).get("font") or "sans"
+
+
+def read_accent(preferences: object) -> str:
+    """The saved accent name; anything this build does not know is Same as preset."""
+    value = preferences.get("accent") if isinstance(preferences, dict) else None
+    return value if isinstance(value, str) and value in ACCENTS else "default"
+
+
+def accented(
+    colours: dict[str, str], accent: str, preset: str, mode: str, contrast_name: str
+) -> dict[str, str]:
+    """`colours` with the accent's primary roles over the preset's. Same as preset, High contrast and a
+    name this build does not know leave them as they are."""
+    seed = ACCENT_SEEDS.get(accent)
+    if seed is None or preset in ACCENT_LOCKED:
+        return colours
+    level = 1.0 if contrast_name == "high" else 0.0
+    tone = flexweek_engine.material_scheme(seed, "Tonal Spot", mode == "dark", level)
+    found = dict(colours)
+    for role in ("primary", "onPrimary", "primaryContainer", "onPrimaryContainer", "inversePrimary"):
+        found[role] = tone[role]
+    found["secondaryContainer"] = mix(tone["primary"], found["surfaceContainer"], 0.16)
+    found["onSecondaryContainer"] = found["onSurface"]
+    return found
+
+
 def theme_object(
-    colours: dict[str, str], density: str, reduce_motion: bool, high_contrast: bool
+    colours: dict[str, str],
+    density: str,
+    reduce_motion: bool,
+    high_contrast: bool,
+    chips_accent: bool = False,
 ) -> dict[str, object]:
     """One map for every control: the Material roles, the ink aliases, and the three shell flags."""
     theme: dict[str, object] = {role: colours[role] for role in THEME_ROLES}
@@ -307,7 +396,7 @@ def theme_object(
     theme["reduceMotion"] = reduce_motion
     theme["highContrast"] = high_contrast
 
-    mode = "dark" if colours.get("surface") == B3A3["surface"]["dark"] else "light"
+    mode = "dark" if luminance(colours.get("surface", "#ffffff")) < 0.18 else "light"
     card = colours.get("surfaceContainer", "#ffffff" if mode == "light" else "#14171c")
     page = colours.get("surface", "#eef1f5" if mode == "light" else "#0b0d10")
     edge = colours.get("outlineVariant", "#e5e9f0" if mode == "light" else "#252a33")
@@ -329,6 +418,13 @@ def theme_object(
         }
         for cat in SIX_CLASSES
     }
+    if chips_accent:
+        # "Use the accent on category chips": every category wears the accent.
+        accent_fill = mix(colours["primary"], card, 0.14 if mode == "light" else 0.24)
+        theme["classes"] = {
+            cat: {"bar": colours["primary"], "fill": accent_fill, "ink": paint_for_category(cat, mode)[1]}
+            for cat in SIX_CLASSES
+        }
     return theme
 
 
@@ -355,6 +451,8 @@ HOUR_RANGE = (36, 90)
 PAD_RANGE = (4, 24)
 SHADOW_RANGE = (0, 3)
 MOTION_SPEEDS = ("Slower", "Normal", "Faster", "Off")
+# Motion speed times the level's own pace: Slower takes half as long again, Faster 0.6 as long.
+MOTION_SPEED_PACE = {"Slower": 1.5, "Faster": 0.6}
 BLOCK_STYLES = ("Edge", "Filled", "Outline")
 HOUR_LINES = ("None", "Faint", "Clear")
 CATEGORY_KEYS = ("school", "sports", "study", "homework")
@@ -515,12 +613,25 @@ def advanced_overrides(advanced: dict[str, Any]) -> dict[str, Any]:
     return changed
 
 
+LOOK_TIERS = ("simple", "more", "all")
+
+
+def read_look_tier(stored: object) -> str:
+    """How many Look controls the Advanced page shows on this computer: simple, more or all. An empty string
+    means nobody chose yet, so the page starts on simple (or on all after a setup that read as power)."""
+    material = stored.get("material") if isinstance(stored, dict) else None
+    tier = material.get("lookTier") if isinstance(material, dict) else None
+    return tier if isinstance(tier, str) and tier in LOOK_TIERS else ""
+
+
 def pack_material(
     choice: dict[str, str],
     advanced: dict[str, Any],
     shortcuts: bool,
     letters: bool,
     saved: list[dict[str, Any]],
+    font: str = "",
+    tier: str = "",
 ) -> dict[str, Any]:
     """The `material` object written into the look file."""
     body: dict[str, Any] = {
@@ -534,6 +645,10 @@ def pack_material(
     }
     if saved:
         body["saved"] = saved
+    if font in FONTS:
+        body["font"] = font
+    if tier in LOOK_TIERS:
+        body["lookTier"] = tier
     return body
 
 
@@ -572,12 +687,21 @@ def hour_row_px(density: str, advanced: dict[str, Any]) -> int:
     return base
 
 
-def dress_theme(theme: dict[str, Any], advanced: dict[str, Any]) -> dict[str, Any]:
-    """The theme object plus the advanced dials that actually differ from the components' own values."""
+def dress_theme(
+    theme: dict[str, Any], advanced: dict[str, Any], preset: str = "", font: str = ""
+) -> dict[str, Any]:
+    """The theme object plus the advanced dials that actually differ from the components' own values,
+    and the font. A preset's own font and corner are only defaults: the student's choice wins."""
     dressed = dict(theme)
     over = advanced_overrides(advanced)
+    body, heading = FONT_FAMILIES[shown_font(preset, font)]
+    dressed["fontFamily"] = body
+    dressed["headingFamily"] = heading
+    preset_corner = PRESET_LOOK.get(preset, {}).get("corner")
     if "corner" in over:
         dressed["corner"] = over["corner"]
+    elif preset_corner is not None:
+        dressed["corner"] = preset_corner
     if "scale" in over:
         dressed["typeScale"] = over["scale"]
     if "shadow" in over:

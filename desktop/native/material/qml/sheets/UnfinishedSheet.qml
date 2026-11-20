@@ -36,6 +36,9 @@ SheetFrame {
             height: words.implicitHeight + actions.height + 28
             radius: 12
             color: pal.surfaceContainerLow
+            // The same edge as a choice card: the sheet and the row share a fill in some looks.
+            border.width: 1
+            border.color: pal.outlineVariant
             Column {
                 id: words
                 x: 12
@@ -68,6 +71,18 @@ SheetFrame {
                 anchors.topMargin: 8
                 height: 40
                 spacing: 8
+                Button {
+                    objectName: "focusUnfinished-" + modelData.id
+                    visible: modelData.focusable
+                    theme: root.theme
+                    density: root.density
+                    reduceMotion: root.reduceMotion
+                    highContrast: root.highContrast
+                    kind: "text"
+                    text: "Start focus"
+                    accessName: "Start focus on " + modelData.title
+                    onClicked: root.sheets.startFocusOn(modelData.id)
+                }
                 Button {
                     objectName: "planUnfinished-" + modelData.id
                     visible: modelData.plannable

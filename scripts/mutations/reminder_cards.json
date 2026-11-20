@@ -1,0 +1,23 @@
+[
+ {
+  "file": "desktop/native/kept_alerts.py",
+  "name": "a snoozed reminder comes back at the wrong time",
+  "old": "                card[\"until\"] = reminder_snooze_until(self._minute(), reminder_start_min(key))\n",
+  "new": "                card[\"until\"] = self._minute() + 10\n",
+  "test": "desktop/tests/settings/test_reminder_cards.py::test_snooze_hides_the_card_and_it_comes_back_five_minutes_later"
+ },
+ {
+  "file": "desktop/native/kept_alerts.py",
+  "name": "a reminder card stays after its block starts",
+  "old": "            if not reminder_stays(reminder_start_min(card[\"key\"]), now):\n",
+  "new": "            if False:\n",
+  "test": "desktop/tests/settings/test_reminder_cards.py::test_the_card_stays_until_the_block_starts_then_starts_now_takes_over"
+ },
+ {
+  "file": "desktop/native/kept_alerts.py",
+  "name": "a moved block keeps its reminder card",
+  "old": "            block = rows.get(card[\"key\"])\n",
+  "new": "            block = rows.get(card[\"key\"]) or {\"title\": card[\"name\"]}\n",
+  "test": "desktop/tests/settings/test_reminder_cards.py::test_moving_the_block_drops_its_card"
+ }
+]

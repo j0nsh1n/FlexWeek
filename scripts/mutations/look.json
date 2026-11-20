@@ -1,26 +1,5 @@
 [
  {
-  "file": "desktop/native/hours/canvas.py",
-  "name": "a block leaves out its length though it has room",
-  "old": "        lambda cut, most=title_lines: stack(most, tuple(part for part in (times, length) if part), cut),\n",
-  "new": "",
-  "test": "desktop/tests/week/test_block_words_on_the_week.py::test_a_block_says_the_most_it_can_without_cutting_a_word_or_ending_a_line_in_a_dot"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "dark looks' rules in the plain hairline",
-  "old": "table.setdefault(\"rule\", table[\"hairline_strong\" if axis == \"dark\" else \"hairline\"])",
-  "new": "table.setdefault(\"rule\", table[\"hairline\"])",
-  "test": "desktop/tests/week/test_the_hours_grid.py::test_each_look_names_its_hour_rule"
- },
- {
-  "file": "desktop/native/hours/canvas.py",
-  "name": "the now line without its time",
-  "old": "        painter.setFont(font)\n        painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, words)\n",
-  "new": "        painter.setFont(font)\n",
-  "test": "desktop/tests/week/test_the_hours_grid.py::test_the_now_line_carries_the_time_on_a_pill_once"
- },
- {
   "file": "desktop/native/widgets.py",
   "name": "time boxes in proportional figures",
   "old": "        if isinstance(target, QTimeEdit):\n",
@@ -35,41 +14,6 @@
   "test": "desktop/tests/settings/test_dialog_margins.py::test_a_dialogs_content_sits_24_px_in_from_its_edges"
  },
  {
-  "file": "desktop/native/look.py",
-  "name": "cards padded 8 px",
-  "old": "DENSITY_PAD = {\"comfortable\": 16, \"compact\": 8}\n",
-  "new": "DENSITY_PAD = {\"comfortable\": 8, \"compact\": 4}\n",
-  "test": "desktop/tests/settings/test_look_stylesheet.py::test_cards_are_padded_16_or_8_and_controls_keep_their_size"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "controls grow with the cards",
-  "old": "    pad = CONTROL_PAD[knobs[\"density\"]]\n",
-  "new": "    pad = DENSITY_PAD[knobs[\"density\"]]\n",
-  "test": "desktop/tests/settings/test_look_stylesheet.py::test_cards_are_padded_16_or_8_and_controls_keep_their_size"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "pale fills on a dark look",
-  "old": "    return _sunk(tone, palette[\"panel\"]), mark\n",
-  "new": "    return info[\"color\"], mark\n",
-  "test": "desktop/tests/settings/test_look_readability.py::test_a_filled_block_on_a_dark_look_is_its_colour_sunk_into_the_panel_with_light_ink"
- },
- {
-  "file": "desktop/native/hours/classic.py",
-  "name": "today's name not marked",
-  "old": "                week.day_name(day), str(week.date_of(day).day), homework_minutes(week, day), day == today,\n",
-  "new": "                week.day_name(day), str(week.date_of(day).day), homework_minutes(week, day), False,\n",
-  "test": "desktop/tests/settings/test_look_blocks.py::test_todays_name_above_the_week_is_marked_and_no_other"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "the system's sans before Inter",
-  "old": "    \"sans\": \"Inter, Noto Sans, DejaVu Sans, sans-serif\",",
-  "new": "    \"sans\": \"Noto Sans, DejaVu Sans, sans-serif\",",
-  "test": "desktop/tests/settings/test_look_stylesheet.py::test_the_app_asks_for_its_own_inter_first_and_the_system_sans_after"
- },
- {
   "file": "desktop/native/fonts.py",
   "name": "the fonts looked for in the wrong folder",
   "old": "FONT_DIR = Path(__file__).resolve().parents[1] / \"assets\" / \"fonts\"\n",
@@ -82,89 +26,5 @@
   "old": "    --include-data-dir=\"$ROOT/desktop/assets=desktop/assets\" \\\n",
   "new": "",
   "test": "desktop/tests/updater/test_packaged_app_contents.py::test_both_builds_ship_the_icon_and_the_fonts_where_the_app_looks_for_them"
- },
- {
-  "file": "desktop/native/hours/canvas.py",
-  "name": "Day washed as well as Week",
-  "old": "self.painter.track(painter, track, week and track.day == self.today)",
-  "new": "self.painter.track(painter, track, track.day == self.today)",
-  "test": "desktop/tests/week/test_the_hours_grid.py::test_today_is_washed_on_a_week_and_not_at_all_on_a_day"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "High contrast's rules at full white",
-  "old": "        rule=\"#666666\",\n",
-  "new": "",
-  "test": "desktop/tests/week/test_the_hours_grid.py::test_each_look_names_its_hour_rule"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "the setup cards lifted with the accent",
-  "old": "    lift = mix(palette[\"text\"], palette[\"panel\"], 0.04)",
-  "new": "    lift = mix(palette[\"accent\"], palette[\"panel\"], 0.08)",
-  "test": "desktop/tests/settings/test_design_tokens.py::test_the_accent_is_never_a_page_card_or_wash[Light-layered-default]"
- },
- {
-  "file": "desktop/native/layouts/registry.py",
-  "name": "Match my look's cards in the accent",
-  "old": "    card = surface if contrast(surface, page) >= 1.02 else mix(palette[\"text\"], page, 0.05)",
-  "new": "    card = mix(palette[\"accent\"], surface, 0.10)",
-  "test": "desktop/tests/settings/test_design_tokens.py::test_the_accent_is_never_a_page_card_or_wash[Light-layered-default]"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "the default accent teal again",
-  "old": "    \"default\": {\"dark\": (\"#7fa8ff\", DARK_INK), \"light\": (\"#3d6fc4\", LIGHT_INK)},",
-  "new": "    \"default\": {\"dark\": (\"#7fa8ff\", DARK_INK), \"light\": (\"#0e7490\", LIGHT_INK)},",
-  "test": "desktop/tests/settings/test_look_palettes.py::test_every_look_but_high_contrast_wears_flexweeks_blue_by_default"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "a swatch replaces High contrast's yellow",
-  "old": "OWN_ACCENT = (\"high-contrast\", \"bento-indigo\", \"retro-teal\", \"flight-deck\", \"timeline-paper\")\n",
-  "new": "OWN_ACCENT = (\"bento-indigo\", \"retro-teal\", \"flight-deck\", \"timeline-paper\")\n",
-  "test": "desktop/tests/settings/test_look_palettes.py::test_an_accent_always_changes_the_accent"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "System on Slate and Nocturne again",
-  "old": "        return \"dark-frost\" if system_dark else \"light-frost\"",
-  "new": "        return \"nocturne\" if system_dark else \"slate\"",
-  "test": "desktop/tests/settings/test_look_choices.py::test_system_follows_the_device_between_light_and_dark"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "soft corners 8 on everything again",
-  "old": "    \"soft\": (RADIUS_CONTROL, RADIUS_CARD),\n",
-  "new": "    \"soft\": (8, 8),\n",
-  "test": "desktop/tests/settings/test_look_stylesheet.py::test_soft_corners_are_6_on_controls_and_10_on_cards"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "the tray's edge red again",
-  "old": "border-left: 4px solid {category_paint('assignments', palette)[1]};",
-  "new": "border-left: 4px solid #ef4444;",
-  "test": "desktop/tests/settings/test_look_stylesheet.py::test_a_tray_chip_is_edged_in_homeworks_colour_not_in_red"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "The default accent too pale to see over a block",
-  "old": "    \"default\": {\"dark\": (\"#7fa8ff\", DARK_INK), \"light\": (\"#3d6fc4\", LIGHT_INK)},\n",
-  "new": "    \"default\": {\"dark\": (\"#7fa8ff\", DARK_INK), \"light\": (\"#8fb0e8\", LIGHT_INK)},\n",
-  "test": "desktop/tests/settings/test_look_palettes.py::test_every_look_but_high_contrast_wears_flexweeks_blue_by_default"
- },
- {
-  "file": "desktop/native/look.py",
-  "name": "a stray declaration after the week's title breaks the whole stylesheet",
-  "old": "        f\"QLabel#weekTitle {{ font-size: {pt['title']}; font-weight: {WEIGHT_STRONG}; \"\n        f\"color: {palette['text']}; }}\"\n",
-  "new": "        f\"QLabel#weekTitle {{ font-size: {pt['title']}; font-weight: {WEIGHT_STRONG}; \"\n        f\"color: {palette['text']}; }}\"\n        f'border-bottom: 2px solid {palette[\"accent\"]}; border-radius: 0; }}'\n",
-  "test": "desktop/tests/settings/test_design_tokens.py::test_every_stylesheet_is_whole_rules_that_qt_can_parse"
- },
- {
-  "file": "desktop/native/hours/canvas.py",
-  "name": "one line kept a pixel clear of a block's top again",
-  "old": "        tight = QRectF(room.left(), max(rect.top(), visible.top(), room.top() - TEXT_TOP), room.width(), 0)\n",
-  "new": "        tight = QRectF(room.left(), max(rect.top() + 1, visible.top() + 1, room.top() - TEXT_TOP + 1), room.width(), 0)\n",
-  "test": "desktop/tests/week/test_block_words_on_the_week.py::test_a_half_hour_in_high_contrast_says_its_name_on_the_week"
  }
 ]

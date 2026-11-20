@@ -97,6 +97,31 @@ def test_a_done_block_keeps_its_done_day_and_category(tmp_path: Path) -> None:
         assert loaded["category"] == "assignments"
 
 
+def test_a_weekly_times_until_date_survives_a_save_and_a_bad_one_is_refused(tmp_path: Path) -> None:
+    with TestClient(create_app(tmp_path / "week.db", "http://testserver"), headers=WRITE) as client:
+        register(client, "alice")
+        guitar = {
+            "id": "weekly-3f2a9c01",
+            "title": "Guitar",
+            "kind": "locked",
+            "duration_min": 60,
+            "days": [1, 3],
+            "start": "17:00",
+            "until": "2026-12-31",
+        }
+        put = client.put("/api/week", json={"week_start": OLD_WEEK, "blocks": [guitar], "revision": 0})
+        assert put.status_code == 200, put.text
+        loaded = client.get(f"/api/week?week_start={OLD_WEEK}").json()["blocks"]
+        assert [(block["id"], block.get("until")) for block in loaded] == [("weekly-3f2a9c01", "2026-12-31")]
+        bad = client.put(
+            "/api/week",
+            json={"week_start": OLD_WEEK, "blocks": [{**guitar, "until": "31/12/2026"}], "revision": 1},
+        )
+        assert bad.status_code == 422
+        kept = client.get(f"/api/week?week_start={OLD_WEEK}").json()["blocks"]
+        assert kept[0]["until"] == "2026-12-31"
+
+
 def test_focus_and_pomodoro_fields_survive_a_save_and_a_bad_link_or_overlap_is_refused(
     tmp_path: Path,
 ) -> None:

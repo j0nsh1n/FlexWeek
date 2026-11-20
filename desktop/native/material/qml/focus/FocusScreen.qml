@@ -24,7 +24,7 @@ FocusScope {
     Accessible.name: "Focus"
     Behavior on opacity {
         NumberAnimation {
-            duration: root.reduceMotion ? 0 : 300
+            duration: Motion.fade(300, root.reduceMotion)
             easing.type: Easing.BezierSpline
             easing.bezierCurve: [0.2, 0, 0, 1, 1, 1]
         }

@@ -401,8 +401,7 @@ class WeekBridge(QObject):
             return
         asked, self._said_plan = self._said_plan, 0.0
         if time.monotonic() - asked < PLAN_WINDOW_S:
-            # Nothing was changed, so there is nothing to undo; UNDO would take back an earlier change.
-            self._note(message, action="")
+            # The window puts the words on the snackbar, with no Undo and keeping an Undo already there.
             self.planFinished.emit()
 
     @Slot(str)
@@ -739,6 +738,12 @@ class WeekBridge(QObject):
     def canPlan(self) -> bool:
         """Whether Plan my homework has anything to place, listed as a card or not."""
         return self._can_plan
+
+    @Property(str, notify=homeworkChanged)
+    def planLabel(self) -> str:
+        """The plan button's words: a student who places homework by hand asks for ideas, so Suggest times."""
+        prefs = self._window.session.preferences or {}  # type: ignore[attr-defined]
+        return "Suggest times" if prefs.get("planning_style") == "manual" else "Plan my homework"
 
     @Property(bool, notify=homeworkChanged)
     def allTimed(self) -> bool:

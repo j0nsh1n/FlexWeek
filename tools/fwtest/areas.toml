@@ -176,7 +176,7 @@ paths = ["desktop/tests/setup/", "desktop/tests/pictures/screens_setup.py"]
 areas = ["setup"]
 
 [[rule]]
-paths = ["desktop/tests/account/", "desktop/tests/pictures/screens_account.py"]
+paths = ["desktop/tests/account/"]
 areas = ["account"]
 
 [[rule]]
@@ -215,16 +215,15 @@ paths = [
   "desktop/__init__.py", "desktop/main.py", "desktop/assets/",
   "desktop/native/__init__.py", "desktop/native/__main__.py",
   "desktop/native/window.py", "desktop/native/controller.py", "desktop/native/widgets.py",
+  "desktop/native/kept_alerts.py",
   "desktop/native/look.py", "desktop/native/tokens.py", "desktop/native/weekmodel.py",
   "desktop/native/calendar.py", "desktop/native/settings.py", "desktop/native/fonts.py",
-  "desktop/native/fields.py", "desktop/native/motion.py", "desktop/native/menus.py",
-  "desktop/native/feel.py", "desktop/native/icons.py", "desktop/native/client.py",
-  "desktop/native/wire.py", "desktop/native/history.py", "desktop/native/elevation.py",
+  "desktop/native/fields.py", "desktop/native/motion.py",
+  "desktop/native/client.py",
+  "desktop/native/wire.py", "desktop/native/history.py",
   "desktop/native/files.py", "desktop/native/collector.py",
-  "desktop/native/layouts/__init__.py", "desktop/native/layouts/base.py",
-  "desktop/native/layouts/registry.py",
-  "desktop/native/hours/__init__.py", "desktop/native/hours/canvas.py",
-  "desktop/native/hours/geometry.py",
+  "desktop/native/layout_choice.py",
+  "desktop/native/hours/__init__.py", "desktop/native/hours/geometry.py",
   "desktop/native/material/__init__.py", "desktop/native/material/bridge.py",
   "desktop/native/material/theme.py", "desktop/native/material/host.py",
   "desktop/native/material/tokens.json", "desktop/native/material/bridge_rows.py",
@@ -234,24 +233,6 @@ paths = [
 everything = true
 
 # --- Week: the hours grid, its designs and the Week screen.
-[[rule]]
-paths = [
-  "desktop/native/hours/classic.py", "desktop/native/hours/chips.py",
-  "desktop/native/layouts/bento.py", "desktop/native/layouts/clay.py",
-  "desktop/native/layouts/mission.py", "desktop/native/layouts/retro.py",
-  "desktop/native/layouts/timeline.py", "desktop/native/layouts/views.py",
-  "desktop/native/layouts/empty.py",
-]
-areas = ["week", "day"]
-
-[[rule]]
-paths = ["desktop/native/hours/zoom.py", "desktop/native/hours/hand.py"]
-areas = ["week", "day", "month"]
-
-[[rule]]
-paths = ["desktop/native/hours/rail.py"]
-areas = ["week", "planner"]
-
 [[rule]]
 paths = ["desktop/native/material/bridge_week.py", "desktop/native/material/qml/week/"]
 areas = ["week"]
@@ -269,16 +250,13 @@ paths = [
 areas = ["day"]
 
 [[rule]]
-paths = [
-  "desktop/native/layouts/one_thing.py", "desktop/native/layouts/dial.py",
-  "desktop/native/material/bridge_myday.py",
-]
+paths = ["desktop/native/material/bridge_myday.py"]
 areas = ["myday", "day"]
 
 # --- Month.
 [[rule]]
 paths = [
-  "desktop/native/hours/month.py", "desktop/native/material/bridge_month.py",
+  "desktop/native/material/bridge_month.py",
   "desktop/native/material/qml/month/",
 ]
 areas = ["month"]
@@ -286,20 +264,62 @@ areas = ["month"]
 # --- Focus.
 [[rule]]
 paths = [
-  "desktop/native/focus.py", "desktop/native/focus_screen.py", "desktop/native/pomodoro.py",
-  "desktop/native/ambient.py", "desktop/native/ring.py", "desktop/native/sound.py",
+  "desktop/native/focus.py", "desktop/native/pomodoro.py",
+  "desktop/native/ambient.py", "desktop/native/sound.py",
   "desktop/native/tones.py", "desktop/native/spotify.py",
   "desktop/native/material/bridge_focus.py", "desktop/native/material/focus_visible.py",
   "desktop/native/material/qml/focus/",
 ]
 areas = ["focus"]
 
-# --- Settings and the look editor.
+# Moved out of the Widgets files for Material in 1.5.0 (step 1 and later).
+[[rule]]
+paths = ["desktop/native/hours/scale.py"]
+areas = ["week", "day", "month"]
+
+[[rule]]
+paths = ["desktop/native/hours/month_cells.py"]
+areas = ["month", "week", "sheets", "planner", "account"]
+
+[[rule]]
+paths = ["desktop/native/hours/words.py", "desktop/native/material/sheet_preview.py"]
+areas = ["week", "sheets"]
+
+[[rule]]
+paths = ["desktop/native/material/bridge_alarms.py"]
+areas = ["settings", "sheets", "week"]
+
+[[rule]]
+paths = ["desktop/native/material/bridge_hours.py"]
+areas = ["settings"]
+
+# Settings' words also fill Help, About, Update, restore points, account transfers, sync status and the
+# pairing row: shared plumbing, so it selects every area.
+[[rule]]
+paths = ["desktop/native/settings_copy.py"]
+everything = true
+
+[[rule]]
+paths = ["desktop/native/material/bridge_info.py"]
+areas = ["sheets"]
+
+[[rule]]
+paths = ["desktop/native/material/bridge_manage.py", "desktop/native/account_copy.py"]
+areas = ["account", "sheets"]
+
+[[rule]]
+paths = ["desktop/native/sheet_rules.py"]
+areas = ["sheets", "settings", "week"]
+
+# The drawing fallback and the Animations levels reach every screen.
+[[rule]]
+paths = ["desktop/native/cpu_drawing.py", "desktop/native/motion_level.py"]
+everything = true
+
+# --- Settings.
 [[rule]]
 paths = [
-  "desktop/native/custom_look.py", "desktop/native/look_editor.py",
-  "desktop/native/look_preview.py", "desktop/native/style_preview.py",
-  "desktop/native/previews.py", "desktop/native/layouts/dialog.py",
+  "desktop/native/custom_look.py",
   "desktop/native/autostart.py", "desktop/native/remind.py",
   "desktop/native/material/bridge_settings.py", "desktop/native/material/dynamic_color.py",
   "desktop/native/material/qml/settings/",
@@ -309,7 +329,7 @@ areas = ["settings"]
 # --- Sheets: every form, dialog and sheet.
 [[rule]]
 paths = [
-  "desktop/native/reuse.py", "desktop/native/work_windows.py", "desktop/native/command_bar.py",
+  "desktop/native/reuse.py", "desktop/native/work_windows.py",
   "desktop/native/material/bridge_sheets.py", "desktop/native/material/sheet_block.py",
   "desktop/native/material/sheet_homework.py", "desktop/native/material/qml/sheets/",
 ]
@@ -317,7 +337,7 @@ areas = ["sheets"]
 
 # --- Setup.
 [[rule]]
-paths = ["desktop/native/setup.py", "desktop/native/material/qml/setup/"]
+paths = ["desktop/native/setup_steps.py", "desktop/native/material/qml/setup/"]
 areas = ["setup"]
 
 # --- Account and sync.

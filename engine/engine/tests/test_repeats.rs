@@ -3,9 +3,10 @@
 //! Dates are real: Monday 9 November 2026 is the open week, 16 and 23 November are later weeks.
 
 use flexweek_engine::repeats::{
-    Intent, Kept, NEW_NEEDS_ALL, NOTHING_LEFT, RULE, apply_to_week, edit_intent, edited_weeks_line,
-    intents_between, kept_notice, leaves_week, one_day_note, own_changes, parse_intent, patched,
-    pieces_after_replace, restated_copy, restated_version, this_week_line, three_way,
+    Intent, Kept, NEW_NEEDS_ALL, NOTHING_LEFT, RULE, UNTIL_TOO_EARLY, apply_to_week, edit_intent,
+    edited_weeks_line, intents_between, kept_notice, leaves_week, one_day_note, own_changes,
+    parse_intent, patched, pieces_after_replace, restated_copy, restated_version, this_week_line,
+    three_way,
 };
 use serde_json::{Value, json};
 
@@ -237,7 +238,7 @@ fn school_hours_in_a_week_with_wednesday_skipped_keeps_wednesday_in_the_repeat()
     let edited = with(school(), json!({"duration_min": 360}));
     let change = edit_intent("school", OPEN_WEEK, Some(&school()), Some(&edited)).unwrap();
     let (shown, repeats) =
-        apply_to_week(&week, &[school()], std::slice::from_ref(&change)).unwrap();
+        apply_to_week(&week, &[school()], std::slice::from_ref(&change), OPEN_WEEK).unwrap();
     assert_eq!(repeats, vec![with(school(), json!({"duration_min": 360}))]);
     assert_eq!(
         shown,
@@ -247,7 +248,7 @@ fn school_hours_in_a_week_with_wednesday_skipped_keeps_wednesday_in_the_repeat()
         ]
     );
     // The store's own pass over the saved open week then changes nothing.
-    let (again, _) = apply_to_week(&shown, &[school()], &[change]).unwrap();
+    let (again, _) = apply_to_week(&shown, &[school()], &[change], OPEN_WEEK).unwrap();
     assert_eq!(again, shown);
 }
 
@@ -257,7 +258,7 @@ fn setup_again_keeps_school_deleted_for_this_week_only() {
     let gone = with(school(), json!({"missed_days": [0, 1, 2, 3, 4]}));
     let edited = with(school(), json!({"start": "08:00", "duration_min": 435}));
     let change = edit_intent("school", OPEN_WEEK, Some(&school()), Some(&edited)).unwrap();
-    let (shown, _) = apply_to_week(&[gone], &[school()], &[change]).unwrap();
+    let (shown, _) = apply_to_week(&[gone], &[school()], &[change], OPEN_WEEK).unwrap();
     assert_eq!(shown[0]["missed_days"], json!([0, 1, 2, 3, 4]));
     assert_eq!(shown[0]["start"], json!("08:00"));
 }
@@ -268,8 +269,13 @@ fn a_new_repeat_shows_in_the_open_week_and_a_stopped_one_leaves_it() {
                        "duration_min": 45, "days": [1]});
     let add = edit_intent("activity-2", OPEN_WEEK, None, Some(&piano)).unwrap();
     let stop = edit_intent("activity-1", OPEN_WEEK, Some(&soccer()), None).unwrap();
-    let (shown, repeats) =
-        apply_to_week(&[school(), soccer()], &[school(), soccer()], &[add, stop]).unwrap();
+    let (shown, repeats) = apply_to_week(
+        &[school(), soccer()],
+        &[school(), soccer()],
+        &[add, stop],
+        OPEN_WEEK,
+    )
+    .unwrap();
     let ids: Vec<&str> = shown.iter().map(|b| b["id"].as_str().unwrap()).collect();
     assert_eq!(ids, vec!["school", "activity-2"]);
     assert_eq!(repeats.len(), 2);
@@ -493,4 +499,167 @@ fn the_question_names_the_edited_weeks_by_their_dates() {
                 .to_string()
         )
     );
+}
+
+// --- weekly fixed times the student made (#118) ----------------------------------------------------
+
+#[test]
+fn a_weekly_fixed_time_is_a_repeat_and_any_other_hand_made_block_is_not() {
+    use flexweek_engine::desk::grid::{is_setup_block, is_standing_block};
+    let weekly = json!({"id": "weekly-3f2a9c01", "title": "Guitar"});
+    assert!(is_standing_block(&weekly).unwrap());
+    assert!(
+        !is_setup_block(&weekly).unwrap(),
+        "Setup still makes and stops only its own"
+    );
+    assert!(is_standing_block(&school()).unwrap() && is_standing_block(&soccer()).unwrap());
+    assert!(!is_standing_block(&gym()).unwrap());
+    let new = json!({"id": "weekly-3f2a9c01", "scope": "from", "from_date": OPEN_WEEK,
+                     "set": {"title": "Guitar", "start": "17:00", "duration_min": 60}, "add_days": [1]});
+    assert_eq!(
+        patched(None, &intent(new)).unwrap(),
+        Some(
+            json!({"id": "weekly-3f2a9c01", "kind": "locked", "title": "Guitar", "start": "17:00",
+                    "duration_min": 60, "days": [1]})
+        )
+    );
+}
+
+#[test]
+fn a_day_of_a_weekly_time_changed_by_hand_says_how_to_change_every_week() {
+    let guitar = json!({"id": "weekly-3f2a9c01", "title": "Guitar", "kind": "locked", "start": "17:00",
+                        "duration_min": 60, "days": [1, 3]});
+    assert_eq!(
+        one_day_note(&guitar, 3, true).unwrap().as_deref(),
+        Some(
+            "Only this Thursday changed. To change every week, open it and choose This week and later."
+        )
+    );
+    assert_eq!(one_day_note(&gym(), 2, true).unwrap(), None);
+}
+
+#[test]
+fn a_change_sets_until_clears_it_with_an_empty_date_and_cannot_end_before_it_starts() {
+    let guitar = json!({"id": "weekly-3f2a9c01", "kind": "locked", "title": "Guitar", "start": "17:00",
+                        "duration_min": 60, "days": [1, 3]});
+    let set = |until: Value| json!({"id": "weekly-3f2a9c01", "scope": "from", "from_date": OPEN_WEEK, "set": {"until": until}});
+    let ended = patched(Some(&guitar), &intent(set(json!("2026-11-24"))))
+        .unwrap()
+        .unwrap();
+    assert_eq!(ended["until"], json!("2026-11-24"));
+    let open_ended = patched(Some(&ended), &intent(set(json!(""))))
+        .unwrap()
+        .unwrap();
+    assert!(
+        open_ended.get("until").is_none(),
+        "an empty Until takes the end away"
+    );
+    assert_eq!(
+        patched(Some(&guitar), &intent(set(json!("2026-11-08")))),
+        Err(UNTIL_TOO_EARLY.to_string())
+    );
+    // A form that leaves Until as the repeat has it sends nothing for it.
+    assert_eq!(
+        edit_intent("weekly-3f2a9c01", OPEN_WEEK, Some(&ended), Some(&ended)),
+        None
+    );
+    // The sheet shows Until, so a form sent without one took it off, and the repeat has no end again.
+    let cleared = edit_intent("weekly-3f2a9c01", OPEN_WEEK, Some(&ended), Some(&guitar)).unwrap();
+    assert!(
+        patched(Some(&ended), &cleared)
+            .unwrap()
+            .unwrap()
+            .get("until")
+            .is_none(),
+        "a form without Until clears it"
+    );
+    // School's form has no Until and School never has one: nothing changes.
+    assert_eq!(
+        edit_intent("school", OPEN_WEEK, Some(&school()), Some(&school())),
+        None
+    );
+}
+
+#[test]
+fn moving_until_later_or_clearing_it_brings_back_the_days_it_hid_in_a_week_that_starts_midweek() {
+    // Guitar on Thursday and Saturday, ending Friday 13 Nov. The week on screen starts Wednesday 11 Nov,
+    // so its days count from Wednesday: Thursday is day 1, Saturday day 3. Until hid Saturday.
+    let shown_start = "2026-11-11";
+    let ended = json!({"id": "weekly-3f2a9c01", "title": "Guitar", "kind": "locked", "start": "17:00",
+                       "duration_min": 60, "days": [3, 5], "until": "2026-11-13"});
+    let on_screen = json!({"id": "weekly-3f2a9c01", "title": "Guitar", "kind": "locked", "start": "17:00",
+                           "duration_min": 60, "days": [1], "until": "2026-11-13"});
+    let later = with(ended.clone(), json!({"until": "2026-12-31"}));
+    let mut no_end = ended.clone();
+    no_end.as_object_mut().unwrap().shift_remove("until");
+    for edited in [later, no_end] {
+        let intent =
+            edit_intent("weekly-3f2a9c01", shown_start, Some(&ended), Some(&edited)).unwrap();
+        let (week, _) = flexweek_engine::shown::apply_repeats_to_shown_week(
+            shown_start,
+            std::slice::from_ref(&on_screen),
+            std::slice::from_ref(&ended),
+            &[intent],
+        )
+        .unwrap();
+        assert_eq!(week.len(), 1);
+        assert_eq!(
+            week[0]["days"],
+            json!([1, 3]),
+            "Saturday is back on the week on screen"
+        );
+    }
+    // A change that keeps Until shows only the days Until leaves, though they were put back to compare:
+    // a new title on the Wednesday week still shows Thursday alone.
+    let renamed = with(ended.clone(), json!({"title": "Bass"}));
+    let intent = edit_intent("weekly-3f2a9c01", shown_start, Some(&ended), Some(&renamed)).unwrap();
+    let (week, _) = flexweek_engine::shown::apply_repeats_to_shown_week(
+        shown_start,
+        std::slice::from_ref(&on_screen),
+        std::slice::from_ref(&ended),
+        &[intent],
+    )
+    .unwrap();
+    assert_eq!(
+        (week[0]["title"].clone(), week[0]["days"].clone()),
+        (json!("Bass"), json!([1]))
+    );
+    // A Monday week counts from its own Monday: the same change there.
+    let monday_copy = with(ended.clone(), json!({"days": [3]}));
+    let intent = edit_intent(
+        "weekly-3f2a9c01",
+        OPEN_WEEK,
+        Some(&ended),
+        Some(&with(ended.clone(), json!({"until": "2026-12-31"}))),
+    )
+    .unwrap();
+    let (week, _) = apply_to_week(
+        &[monday_copy],
+        std::slice::from_ref(&ended),
+        &[intent],
+        OPEN_WEEK,
+    )
+    .unwrap();
+    assert_eq!(week[0]["days"], json!([3, 5]));
+    // Reviewer's nit: a new weekly time added from a week its Until cuts shows only the days it leaves.
+    let made = edit_intent("weekly-3f2a9c01", OPEN_WEEK, None, Some(&ended)).unwrap();
+    let (week, _) = apply_to_week(&[], &[], &[made], OPEN_WEEK).unwrap();
+    assert_eq!(week[0]["days"], json!([3]));
+    // Reviewer's Monday case: a new title while Until still ends Friday 13 Nov shows Thursday only.
+    let monday_copy = with(ended.clone(), json!({"days": [3]}));
+    let intent = edit_intent(
+        "weekly-3f2a9c01",
+        OPEN_WEEK,
+        Some(&ended),
+        Some(&with(ended.clone(), json!({"title": "Bass"}))),
+    )
+    .unwrap();
+    let (week, _) = apply_to_week(
+        &[monday_copy],
+        std::slice::from_ref(&ended),
+        &[intent],
+        OPEN_WEEK,
+    )
+    .unwrap();
+    assert_eq!(week[0]["days"], json!([3]));
 }

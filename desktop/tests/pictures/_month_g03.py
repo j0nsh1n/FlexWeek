@@ -11,12 +11,13 @@ from datetime import datetime, timedelta
 from PySide6.QtWidgets import QAbstractButton, QApplication
 
 from desktop.native.window import NativeWindow
+from desktop.tests.material_support import material_showing
 from desktop.tests.pictures.screen import Screen
 from desktop.tests.waiting import wait_until
 
 SOURCES = (
     "desktop/native/hours/month.py",
-    "desktop/native/layouts/base.py",
+    "desktop/native/hours/scale.py",
     "desktop/native/window.py",
     "backend/month.py",
 )
@@ -67,7 +68,7 @@ def _fill(window: NativeWindow) -> None:
 
 def _open_month(window: NativeWindow) -> None:
     session = window.session
-    if window._stack.currentWidget().objectName() == "materialPage":
+    if material_showing(window):
         window._material_page.bridge.showPage("month")
     else:
         window.findChild(QAbstractButton, "viewMonth").click()
@@ -88,28 +89,10 @@ def grid(window: NativeWindow) -> object:
     return None
 
 
-def grid_tight(window: NativeWindow) -> object:
-    """With the plan and Unfinished panels open the Widgets month is squeezed to fit its view."""
-    _month(window)
-    window.month_grid.set_tight(True)
-    QApplication.processEvents()
-    return None
 
 
-def date_drawer(window: NativeWindow) -> object:
-    """Under 1150 px the date pane is a drawer over the right of the grid; open on Saturday."""
-    window.resize(1100, 760)
-    _month(window)
-    window.month_grid._date_chosen("2026-11-07")
-    QApplication.processEvents()
-    return None
 
 
-def study_time_widgets(window: NativeWindow) -> object:
-    _month(window)
-    window.month_grid.pane.load_switch.setChecked(True)
-    QApplication.processEvents()
-    return None
 
 
 def study_time_material(window: NativeWindow) -> object:
@@ -146,40 +129,6 @@ SCREENS: list[Screen] = [
             "At Large text a chip takes two lines, keeps its time and whole words, and fits inside its "
             "date. "
             "Sunday never sits under the scroll bar when the month scrolls."
-        ),
-    ),
-    Screen(
-        id="month.grid_tight",
-        area="month",
-        prepare=grid_tight,
-        sources=SOURCES,
-        checks=(
-            "At 1024 x 640 with the panels open all five week rows fit the view, the last row ends inside "
-            "it and no scroll bar shows. Every row is at least the tight row height: its number and one "
-            "chip. A busy date shows one chip and counts the rest; the chip and the count both lie "
-            "inside the date and the count does not cover the chip. With room for one line only, the "
-            "count is written by the number, above the chip."
-        ),
-    ),
-    Screen(
-        id="month.date_drawer",
-        area="month",
-        prepare=date_drawer,
-        sources=SOURCES,
-        checks=(
-            "Under 1150 px wide the date pane is a drawer on the right edge of the grid, exactly 300 px "
-            "wide, as tall as the grid below the warning line, with Close visible; it covers the "
-            "right of the grid only while open."
-        ),
-    ),
-    Screen(
-        id="month.study_time_widgets",
-        area="month",
-        prepare=study_time_widgets,
-        sources=SOURCES,
-        checks=(
-            "With Show study time per date on, dates with homework show a thin bar for planned time and "
-            "a stronger one for completed time, in proportion to the 3-hour cap."
         ),
     ),
     Screen(

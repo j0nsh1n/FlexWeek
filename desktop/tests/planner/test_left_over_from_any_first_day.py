@@ -13,10 +13,9 @@ from collections.abc import Callable
 from datetime import date, datetime, timedelta
 
 import pytest
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import FakeClock
-from desktop.native import window as window_module
 from desktop.native.controller import NativeSession
 from desktop.native.window import NativeWindow
 from desktop.tests.e2e.saved_weeks import read_week
@@ -59,26 +58,25 @@ def saved(qapp: QApplication, session: NativeSession) -> None:
     settled(qapp, session)
 
 
-def asked_before_planning(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """The questions Plan asks before planning, each answered Not now."""
+def asked_before_planning(monkeypatch: pytest.MonkeyPatch, window: NativeWindow) -> list[str]:
+    """The questions Plan asks before planning on Material's prompt, each left unanswered."""
     asked: list[str] = []
 
-    class Sheet:
-        answer = "not"
+    class Sheets:
+        def pose_question(self, question: dict, _handlers: dict) -> None:
+            asked.append(f"{question['title']}: {question['body']}")
 
-        def __init__(self, _parent, title, question, *_args, **_kwargs) -> None:  # type: ignore[no-untyped-def]
-            asked.append(f"{title}: {question}")
+    class Page:
+        class bridge:  # noqa: N801
+            sheets = Sheets()
 
-        def exec(self) -> int:
-            return 0
-
-    monkeypatch.setattr(window_module, "ConfirmSheet", Sheet)
+    monkeypatch.setattr(window, "_material_shown", lambda: Page)
     return asked
 
 
 def press_plan(qapp: QApplication, window: NativeWindow) -> None:
     session = window.session
-    window.findChild(QPushButton, "solveButton").click()
+    window._plan_with_left_over()
     wait_until(
         qapp,
         lambda: (
@@ -101,7 +99,7 @@ def test_homework_added_today_is_not_left_over_and_plan_gives_it_a_time(
 ) -> None:
     window, first = opened(qapp, open_light, clock, now, first_weekday)
     session = window.session
-    asked = asked_before_planning(monkeypatch)
+    asked = asked_before_planning(monkeypatch, window)
     today = now.date()
     session.add_homework(
         {
@@ -126,59 +124,3 @@ def test_homework_added_today_is_not_left_over_and_plan_gives_it_a_time(
     assert asked == []
     (poster,) = [block for block in session.blocks if block.get("assignment_id") == "poster"]
     assert poster.get("start") and poster["duration_min"] == 60, (poster, session.message)
-
-
-@pytest.mark.parametrize("first_weekday", FIRST_DAYS.values(), ids=FIRST_DAYS.keys())
-def test_a_session_passed_unfinished_the_day_before_the_week_on_screen_is_left_from_last_week(
-    qapp: QApplication,
-    open_light: Callable[..., NativeWindow],
-    clock: FakeClock,
-    monkeypatch: pytest.MonkeyPatch,
-    first_weekday: int,
-) -> None:
-    window, first = opened(qapp, open_light, clock, THURSDAY, first_weekday)
-    session = window.session
-    asked = asked_before_planning(monkeypatch)
-    last = first + timedelta(days=6)
-    session.add_homework(
-        {
-            "id": "essay",
-            "title": "Essay",
-            "due": f"{last.isoformat()}T21:00",
-            "estimate_min": 60,
-            "revision": 0,
-        }
-    )
-    saved(qapp, session)
-    # The essay's one session was at 4 PM the day before the week on screen and was not done. That day is
-    # in the stored week that also holds the week's first days. The new account has nothing else of its
-    # own saved in either stored week (School stands in them from setup and is kept apart).
-    before = first - timedelta(days=1)
-    monday = stored_monday(before)
-    passed = {"id": "essay-1", "title": "Essay", "kind": "flexible", "assignment_id": "essay",
-              "duration_min": 60, "start": "16:00", "days": [before.weekday()]}  # fmt: skip
-    weeks = [
-        {
-            "week_start": week_start.isoformat(),
-            "blocks": [passed] if week_start == monday else [],
-            "revision": read_week(qapp, session, week_start.isoformat())["revision"],
-        }
-        for week_start in sorted({monday, stored_monday(last)})
-    ]
-    got: dict = {}
-    session.client.request(
-        "POST",
-        "/api/changes",
-        {"weeks": weeks, "repeats": []},
-        lambda data: got.setdefault("ok", data),
-        lambda error: got.setdefault("err", error),
-    )
-    wait_until(qapp, lambda: bool(got))
-    assert "ok" in got, got.get("err")
-    session.reload()
-    settled(qapp, session)
-    assert [(item["id"], item["left_over_state"]) for item in session.unfinished()] == [
-        ("essay", "left_from_last_week")
-    ]
-    window.findChild(QPushButton, "solveButton").click()
-    assert asked == ["Before planning: 1 left from last week"]

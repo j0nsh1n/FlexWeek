@@ -12,6 +12,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
 from desktop.native.material.bridge_month import read_cells  # noqa: E402
+from desktop.native.weekmodel import build_week  # noqa: E402
 from desktop.tests.month.support_month_bridge import (  # noqa: E402, F401
     FakeSession,
     chips,
@@ -99,6 +100,41 @@ def test_chips_use_the_24_hour_clock(week_start) -> None:
 def words_and_kinds(found: list[dict]) -> list[dict]:
     """A chip's words and kind; its accent colour is checked with the Month strip tests."""
     return [{"text": chip["text"], "kind": chip["kind"]} for chip in found]
+
+
+def test_the_open_week_is_read_from_what_the_student_has_now_not_from_the_reply(week_start) -> None:
+    """A date in the open week lists the blocks the student has now, saved or not; a date in any other
+    week lists what the month reply says is on it."""
+    reply = snapshot(
+        "2026-11",
+        {
+            "2026-11-05": {
+                "in_month": True,
+                "blocks": [{"id": "essay-1", "title": "History essay", "start": "19:00", "duration_min": 60}],
+            },
+            "2026-11-12": {
+                "in_month": True,
+                "blocks": [{"id": "piano", "title": "Piano", "start": "18:00", "duration_min": 45}],
+            },
+        },
+    )
+    session = FakeSession("2026-11", reply, clock_24h=True)
+    session.week_start = "2026-11-02"
+    # The student moved the essay to 20:15 and has not saved; the reply still says 19:00.
+    unsaved = {
+        "id": "essay-1",
+        "title": "History essay",
+        "kind": "flexible",
+        "category": "homework",
+        "start": "20:15",
+        "duration_min": 60,
+        "days": [3],
+    }
+    week = build_week("2026-11-02", [unsaved], {}, None)
+    session.built_week = lambda: week  # type: ignore[method-assign]
+    rows, _ = read_cells(session)
+    assert [chip["text"] for chip in chips(rows, "2026-11-05")] == ["20:15 History essay"]
+    assert [chip["text"] for chip in chips(rows, "2026-11-12")] == ["18:00 Piano"]
 
 
 def test_a_deadline_on_a_date_that_has_gone_says_overdue(week_start) -> None:

@@ -12,7 +12,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QApplication
 
 from desktop.native import fields
-from desktop.native.setup import HOMEWORK, WEEK
+from desktop.native.setup_steps import HOMEWORK, WEEK
 from desktop.tests.account.support import (
     LightLaunches,
     account,
@@ -36,7 +36,6 @@ def test_the_week_page_lists_every_day_and_keeps_a_wednesday_start(
     bridge = account(window)
     create(qapp, window, "wednesday_student")
     through_recovery(qapp, window)
-    bridge.setupNext()
     assert bridge.setupStep == WEEK
     wait_until(qapp, lambda: bool(named(window, "setupWeekStart")))
     choice = named(window, "setupWeekStart")[0]

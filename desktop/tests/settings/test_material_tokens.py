@@ -82,7 +82,9 @@ EXPECTED_CLASSES = {
 def test_slate_is_the_default_preset_and_listed_first() -> None:
     assert DEFAULT_PRESET == "Slate"
     assert PRESETS[0] == "Slate"
-    assert PRESETS == ("Slate", "Blue", "Sea", "Forest", "Gold", "Rose", "Plum")
+    assert PRESETS[:7] == ("Slate", "Blue", "Sea", "Forest", "Gold", "Rose", "Plum")
+    # High contrast, Paper, Ink and Terminal follow (step 4a); their own file is test_material_new_presets.py.
+    assert PRESETS[7:] == ("High contrast", "Paper", "Ink", "Terminal")
     assert read_material_choice(None)["preset"] == "Slate"
     assert read_material_choice({})["preset"] == "Slate"
     # A saved "Blue" still loads as Blue
@@ -90,7 +92,8 @@ def test_slate_is_the_default_preset_and_listed_first() -> None:
 
 
 def test_every_preset_has_the_b3a3_page_card_edge_text_and_muted() -> None:
-    for preset in PRESETS:
+    # The four old looks carry their own surfaces instead (test_material_new_presets.py).
+    for preset in PRESETS[:7]:
         for mode in ("light", "dark"):
             s = scheme(preset, mode, "std")
             for role, expected_val in EXPECTED_NEUTRALS[mode].items():
@@ -106,7 +109,7 @@ def test_slate_takes_the_b3a3_accent_and_nav_tint() -> None:
 
 def test_high_contrast_darkens_only_the_muted_text() -> None:
     expected_muted = {"light": "#334155", "dark": "#c4c8d0"}
-    for preset in PRESETS:
+    for preset in PRESETS[:7]:
         for mode in ("light", "dark"):
             std = scheme(preset, mode, "std")
             high = scheme(preset, mode, "high")
@@ -187,7 +190,7 @@ def test_material_fonts_are_inter_and_roboto_flex_is_gone() -> None:
     assert "Inter-Regular.ttf" in m3font_text
     assert "Inter-Medium.ttf" in m3font_text
     assert "Inter-SemiBold.ttf" in m3font_text
-    assert 'family: regular.name !== "" ? regular.name : "Inter"' in m3font_text
+    assert 'regular.name !== "" ? regular.name : "Inter"' in m3font_text
     assert "Roboto Flex" not in m3font_text
     assert "RobotoFlex" not in m3font_text
 

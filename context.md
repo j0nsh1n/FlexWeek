@@ -1,16 +1,18 @@
 # context.md — FlexWeek
 
 ## Current State (2026-11-17)
-- Branch `release/1.4.0`: the 1.4.0 version bump from main 5788750e (#115-#136 since 1.3.0: week start on any
-  day, the planner leftovers and missed sessions, School changes across weeks, Material drag and menus). The Android 1.4.0 app is built from main, without PR #137. Done time is the larger of focus minutes and minutes ticked done
-  (`plan::done_time`), taken off in every count.
+- Branch `feat/material-only` (1.5.0, from main 69467feb): the desktop offers only Material 3 and Material gets its
+  own Qt Quick window. Plan: `~/.flexweek-ui-harness/scratch/material-only/plan.md` (Jonathan approved 2026-11-17;
+  Hack Club certificate first, done: README #139 merged, gallery PR hackclub/capitol#82 open). Step 0 measured: Material
+  hosted in a QQuickWidget animates and draws 62.5 times a second on a 360 Hz screen, a QQuickView 359.7; off screen
+  (every test and picture) Qt Quick already draws with the Software backend. Done time is the larger of focus
+  minutes and minutes ticked done (`plan::done_time`), taken off in every count.
 - PR #137 (`fix/phone-1.4.0`, draft): the phone's 20 fixes, phone edits stamped when made, set-aside sync records
   retried, the layout B restyle and Report a problem (phone and desktop, hidden until the form link is set). Review 1
   FIX-PASS; its fixes are not done yet. Not in 1.4.0.
-- Latest release: v1.3.0, published 2026-11-10 from main d61235ee (PR #111, the version bump). The Linux tarball and
-  the Android APK were built on this computer (`scripts/build-linux-local.sh` in an Ubuntu 24.04 container; the APK
-  signed with the 1.2.0 key); the AppImage and the Windows installers came from the tagged "Release packages" run.
-  The previous release is v1.2.0 (2026-10-27).
+- Latest release: v1.4.0, published 2026-11-17 from main 2dd91027 (PR #138), all ten files with checked checksums;
+  the Android 1.4.0 app was built here from main without PR #137, signed with the same key as 1.3.0. The previous
+  release is v1.3.0 (2026-11-10).
 - Developer build `1.3.0.202611171825` (main 5788750) is `dev`; older builds stay as `dev-<commit>` pre-releases
   (`dev-18dee2e` the newest of them). GitHub publishes them; the Linux tarball can also be built here.
 - In 1.3.0 since 1.2.0: FIX-SPEC 1.3 (#67-#76), the J lanes (Material Week zoom, Day hours, Month study fill, Look
@@ -104,32 +106,18 @@ preview. Recorded `operation_id` values make a retried write return the first re
   `FLEXWEEK_MCP_TEST_CLOCK_FILE` so a test can move a running helper's clock. The release build does not contain it.
 
 ## Session Handoff
-- 2026-11-17, branch `release/1.4.0`, PR #138: 1.4.0 cut from main 5788750e without the phone work (Jonathan: "get
-  the 1.4.0 release besides mobile going", then "Both": an Android 1.4.0 from main ships too). Next: merge #138 on a
-  passed review and green checks, tag v1.4.0, "Release packages" with the tag (eight files), the APK built from the
-  tag here (`scratch/android-inspect/android-build.sh release`), checksums, publish latest.
-  `fix/planner-leftovers` merged as #136 (5788750e). The phone work is draft PR #137 (`fix/phone-1.4.0`); its review 1
-  fixes (scratch/android-inspect/review1/VERDICT.md) are not done.
-- 2026-11-15, branch `fix/planner-spread-and-left-over`, PR #135. Sonnet built it in two rounds; the lead took it over after Sol failed both (d6e49bee and the mutation-pattern fix after). Next: GitHub checks and Sol's check of the CodeRabbit round on PR #135, then merge and a developer build with #134 and #135. #134 merged as 90f02c94 after its GitHub-only failure (the Retro look leaking into later tests' dialogs) was fixed in the tests' conftest.
-- 2026-11-14, branch `feat/setup-change-asks-about-edited-weeks`, local only. Fix round 2 is in. Local CI passed on the second pass (ci2/summary.txt). Next: review. Nothing pushed.
-- 2026-11-12, branch `fix/replan-moves-missed-sessions` (#126) with `fix/planner-counts-minutes` (#125) merged in,
-  local only. A missed session's minutes are counted through `this_weeks_part` against the saved week
-  (`missed_minutes` takes `saved_week`), the desktop passes `_assignments_basis` to the solve request and to every
-  count, and every count of minutes still needed reads the week with missed sessions stripped (`_open_week`). The
-  "needs a time" count reads at `screen_point`, as `missed_block_ids` does, so a week that is over agrees with the
-  missed sessions. Next: review of the merged branch.
-  Fix round (2026-11-12): in a week that is over the missed minutes are `missed_min` on the needed items and are
-  said as "missed" (status line, rail list, Material drawer); `remaining_for` and `minutes_left_for` read
-  `_open_week()`. Open: Plan in the next week does not place last week's missed hour (`already_placed_earlier`);
-  the "Plan into this week" offer does.
-- 2026-11-12, branch `fix/planner-counts-minutes` from main d7afedfe, local only. Done: a homework's time still
-  needed is counted in minutes everywhere it is counted (engine `planning::time_still_needed_parts`,
-  `uncovered_homework_minutes`); counts are exact minutes, and only what can be placed is rounded down to a
-  quarter hour (Plan's rest session, a paste, a "Spread over days" share's `left`); the Plan notice, status
-  line, Material drawer and More count name the minutes that have no time. Later weeks are read as the server's `planned_min` less the sessions of `saved_week` (the week that number was read with),
-  which the desktop, the phone and the helper all pass; the desktop keeps the numbers it holds paired with that
-  week after a failed Undo or Redo and an Undo of a delete (cases in `engine/engine/tests/test_minutes_count.rs`;
-  redesign notes in `~/.flexweek-ui-harness/scratch/round2-fix2/planner-minutes/redesign/`). Not built: how
-  the app asks the student what to do with such a remainder (options in
-  `~/.flexweek-ui-harness/scratch/round2-fix2/planner-minutes/ASK-OPTIONS.md`, owner's pick pending). Next:
-  review of this branch and the owner's pick.
+- 2026-11-18 AFK run, branch `feat/material-only` (head 79a80b10, local only): steps 1-7 of the Material-only plan,
+  step 8 in part (command bar and Widgets focus screen deleted), Material Settings parity with the High contrast,
+  Paper, Ink and Terminal presets, alarms and a ring screen, keys and week tools, Help/About/Update/Account/Copies of
+  this week as Material sheets, the B2 choice-card dialogs with stacking, the CPU drawing fallback, CHANGELOG.
+  Whole desktop suite at 79a80b10: 5598 passed, 1 skipped. Waiting on Jonathan: who does steps 9-10 (the rest of the
+  Widgets UI in window.py) and #118's rebuild; the setup and Look-controls mockups
+  (`~/.flexweek-ui-harness/scratch/afk-2026-11-18/mockups/`). Phone PR #137: review-1 fixes done and main merged in
+  locally (`fix/phone-1.4.0`, abe76dd2), not pushed; its reviewer is his pick. Run log:
+  `~/.flexweek-ui-harness/scratch/afk-2026-11-18/plan.md`.
+- 2026-11-17, branch `feat/material-only` (worktree `~/.worktrees/flexweek-1.5.0`): 1.5.0 started after the Hack Club
+  steps (README #139 merged, gallery PR hackclub/capitol#82 opened by Jonathan). Next: step 1 of the plan (move the
+  shared non-UI code out of the Widgets files, with a test that fails if `material/**` imports Widgets code). Also in
+  1.5.0: PR #137's review-1 fixes, #118's weekly fixed times and staying reminders rebuilt on main (GitHub keeps the
+  old code as `refs/pull/118/head`), the dialog fix Jonathan picked (B2 cards with stacking,
+  `scratch/visual-bugs/list.md`). Branches besides main: `fix/phone-1.4.0`, `feat/material-only`.

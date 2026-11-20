@@ -17,7 +17,7 @@ from PySide6.QtTest import QTest
 
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import named, pump, qml, visuals
+from desktop.tests.material_support import named, pump, qml, quick_of, type_text, visuals
 from desktop.tests.sheets.support_material_sheets import (
     add_homework,
     block_named,
@@ -33,10 +33,6 @@ from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp, settled  # noqa: F401
 
 SHIFT = Qt.KeyboardModifier.ShiftModifier
-
-
-def quick_of(window: NativeWindow):
-    return window._material_page._quick
 
 
 def finished(window: NativeWindow, done: bool) -> bool:
@@ -62,7 +58,8 @@ def drawer_card(qapp, window: NativeWindow, root: QObject) -> QObject:
 
 def undo_notice(root: QObject) -> QObject | None:
     for item in named(root, "sheetNotice") + named(root, "materialSnackbar"):
-        if item.property("visible") and item.property("actionText") == "UNDO":
+        shown = str(item.property("actionText"))
+        if item.property("visible") and (shown == "UNDO" or shown.startswith("Undo ")):
             return item
     return None
 
@@ -186,7 +183,7 @@ def test_editing_the_title_from_a_block_saves_and_undo_reverts_it(qapp, window: 
     pump(qapp)
     title_input.selectAll()
     pump(qapp)
-    QTest.keyClicks(quick_of(window), "History essay, edited")
+    type_text(window, "History essay, edited")
     pump(qapp)
     assert sheets.form["title"] == "History essay, edited"
     next_btn = named(root, "homeworkNext")[0]

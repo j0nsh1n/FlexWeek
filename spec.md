@@ -727,9 +727,12 @@ nothing loops.
     explanations, and the desktop's Qt-free logic (`desk/`). No files, clock,
     network or database; it takes them as arguments.
   - `engine/store`. SQLite: schema, start-up migrations, transactions, password
-    hashing, sessions and throttling. The only code that writes the database;
-    the desktop may open it read-only to notice another program's changes and
-    to check for a linked phone.
+    hashing, sessions and throttling. It does almost all database writes; the
+    sync crate (`engine/sync`) also writes what a paired device sends through
+    its own connection, and the Android bindings (`engine/ffi`) save the
+    phone's preferences through theirs. The desktop opens the database only
+    read-only, to notice another program's changes and to check for a linked
+    phone.
   - `engine/py`. The `flexweek_engine` module that Python imports.
   - `engine/mcp`. The `flexweek-mcp` binary (from 1.1): a Model Context
     Protocol server over stdio, built on the Rust SDK `rmcp` (pinned

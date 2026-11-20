@@ -161,8 +161,8 @@ fn apply_tx(
             Recall::Missing => {}
         }
     }
-    if let Some(label) = &input.snapshot_label {
-        create_restore_point(
+    let point = if let Some(label) = &input.snapshot_label {
+        Some(create_restore_point(
             conn,
             user_id,
             &clock.restore_token,
@@ -170,8 +170,10 @@ fn apply_tx(
             &clock.now,
             &[],
             MAX_RESTORE_POINTS,
-        )?;
-    }
+        )?)
+    } else {
+        None
+    };
     let assignments = apply_assignments(conn, user_id, &input.assignments)?;
     let mut weeks = apply_weeks(conn, user_id, &input.weeks)?;
     let repeats = match &input.repeats {
@@ -194,6 +196,12 @@ fn apply_tx(
         && let Some(object) = result.as_object_mut()
     {
         object.insert("repeats".into(), outcome.to_value());
+    }
+    // The point made before this save, so its notice's Undo can put it back (as backend/app.py answers).
+    if let Some(point) = point
+        && let Some(object) = result.as_object_mut()
+    {
+        object.insert("restore_point".into(), point);
     }
     if let Some(operation_id) = &input.operation_id {
         remember_operation(

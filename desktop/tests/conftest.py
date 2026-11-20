@@ -71,6 +71,16 @@ def no_error_is_lost_inside_a_qt_slot(request: pytest.FixtureRequest) -> Iterato
 
 
 @pytest.fixture(autouse=True)
+def no_test_starts_a_new_copy_of_the_app(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A graphics failure starts FlexWeek again from sys.orig_argv, which under pytest is pytest itself.
+    No test may really do that; the ones that care patch it again and look at the request."""
+    if importlib.util.find_spec("PySide6") is not None:
+        from desktop.native import cpu_drawing
+
+        monkeypatch.setattr(cpu_drawing, "start_new_copy", lambda *, cpu: None)
+
+
+@pytest.fixture(autouse=True)
 def the_pointer_finds_windows_past_the_screens_edge(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Qt's offscreen screen is 800 by 800, and QApplication.widgetAt finds nothing past its edge: with
     the rail on the left, Thursday and Friday of a 1280 pixel window lay past it, and a drag there
@@ -98,29 +108,61 @@ def the_pointer_finds_windows_past_the_screens_edge(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.fixture(autouse=True)
-def no_window_is_left_showing() -> Iterator[None]:
+def no_window_is_left_showing(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Hidden windows still hold their widget trees, pictures and timers through signal connections.
-    Delete Python-owned windows made by the test; keep module fixtures and Qt's internal windows."""
+    Delete Python-owned windows made by the test; keep module fixtures and Qt's internal windows.
+    The app window is a controller that owns Material's own Qt Quick window, so it is no top-level widget:
+    the controllers made by the test are closed and deleted too, then the Qt Quick windows."""
     if importlib.util.find_spec("PySide6") is None:
         yield
         return
     from PySide6.QtCore import QEvent
+    from PySide6.QtGui import QGuiApplication
     from PySide6.QtWidgets import QApplication
     from shiboken6 import getCppPointer, isValid, ownedByPython
 
+    from desktop.native.window import NativeWindow
+
+    made: list[NativeWindow] = []
+    original = NativeWindow.__init__
+
+    def remembering(self: NativeWindow, *args: object, **kwargs: object) -> None:
+        made.append(self)
+        original(self, *args, **kwargs)
+
+    monkeypatch.setattr(NativeWindow, "__init__", remembering)
     before = (
         {getCppPointer(window)[0] for window in QApplication.topLevelWidgets()}
+        if QApplication.instance() is not None else set()
+    )
+    before_windows = (
+        {getCppPointer(window)[0] for window in QGuiApplication.topLevelWindows()}
         if QApplication.instance() is not None else set()
     )
     yield
     if QApplication.instance() is None:
         return
+    for controller in made:
+        if isValid(controller):
+            controller.hide()
+            if ownedByPython(controller):
+                controller.close()
     for window in QApplication.topLevelWidgets():
         if isValid(window) and getCppPointer(window)[0] not in before:
             window.hide()
             if ownedByPython(window):
                 window.close()
                 window.deleteLater()
+    for window in QGuiApplication.topLevelWindows():
+        if isValid(window) and getCppPointer(window)[0] not in before_windows:
+            window.hide()
+            if ownedByPython(window):
+                window.close()
+                window.deleteLater()
+    for controller in made:
+        if isValid(controller) and ownedByPython(controller):
+            controller.deleteLater()
+    made.clear()
     QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     QApplication.processEvents()
 
@@ -226,34 +268,6 @@ def forget_this_computer() -> None:
         (folder / name).unlink(missing_ok=True)
     # The 12- or 24-hour clock is one setting for the whole app, held in memory.
     set_clock_24h(True)
-
-
-def _the_look_the_windows_last_wore() -> Iterator[None]:
-    if importlib.util.find_spec("PySide6") is None:
-        yield
-        return
-    from desktop.native import feel
-
-    before = feel.current()
-    yield
-    feel.set_current(before)
-
-
-@pytest.fixture(autouse=True)
-def a_test_does_not_change_the_look_dialogs_open_in() -> Iterator[None]:
-    """A window sets the feel (feel.set_current) that every dialog opened after it is dressed in, and
-    nothing clears it when the window closes. A test that opened a Retro window left Retro's field
-    face (VT323) on the time boxes of a later test's dialogs, whose parent was a bare QWidget: the box
-    was narrower than its text and the click at the end of it missed, on whichever worker the two
-    tests shared. What a test set is put back when it ends."""
-    yield from _the_look_the_windows_last_wore()
-
-
-@pytest.fixture(autouse=True, scope="module")
-def a_file_does_not_change_the_look_dialogs_open_in() -> Iterator[None]:
-    """The same for a window a module fixture holds: it outlives each test, so the per-test fixture
-    above keeps its feel, and this one puts back what it set when the file ends."""
-    yield from _the_look_the_windows_last_wore()
 
 
 @pytest.fixture(autouse=True)

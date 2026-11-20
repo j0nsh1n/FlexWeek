@@ -542,12 +542,13 @@ def a_week_start(value: str) -> str:
     return value
 
 
-# Setup's School and up to eight activities.
-MAX_STANDING = 9
-# One Setup run can stop every activity and add as many new ones.
+# School, Setup's activities and weekly fixed times together; the engine holds the number (#118).
+MAX_STANDING = int(flexweek_engine.MAX_REPEATS)
+# One save can stop every repeat and add as many new ones.
 MAX_REPEAT_CHANGES = 2 * MAX_STANDING
 STANDING_RULE = (
-    "Only School and Setup's activities stand in every week, each with a start time and an id of its own"
+    "Only School, Setup's activities and weekly fixed times stand in every week, each with a start time and "
+    "an id of its own"
 )
 
 
@@ -558,7 +559,8 @@ class StandingRow(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(min_length=1, max_length=80)
     from_week: str
-    position: int = Field(ge=0, le=MAX_STANDING)
+    # A new repeat takes the place after the ones standing, so the 200th is at 199.
+    position: int = Field(ge=0, le=MAX_STANDING - 1)
     body: TimeBlock | None
 
     _from_week = field_validator("from_week")(a_week_start)
@@ -685,7 +687,7 @@ class Preferences(BaseModel):
     end_chime: bool = Field(default=False, exclude_if=lambda value: value is False)
     tray_notifications: bool = Field(default=True, exclude_if=lambda value: value is True)
     start_at_login: bool = Field(default=False, exclude_if=lambda value: value is False)
-    preferred_view: Literal["week", "day"] | None = Field(
+    preferred_view: Literal["week", "day", "month", "myday"] | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
     sidebar_collapsed: bool = Field(default=False, exclude_if=lambda value: value is False)
@@ -886,6 +888,10 @@ class TransferSnapshot(BaseModel):
             for block in week.blocks:
                 if block.assignment_id and block.assignment_id not in owned:
                     raise ValueError("assignment_id must name an assignment in this snapshot")
+        if self.standing:
+            rows = json.dumps([row.model_dump(mode="json") for row in self.standing])
+            if int(flexweek_engine.standing_most_at_once(rows)) > MAX_STANDING:
+                raise ValueError(f"a file can hold at most {MAX_STANDING} repeating blocks standing at once")
         return self
 
 
@@ -1513,8 +1519,9 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
                 remembered = recall_operation(db, account["id"], batch.operation_id, digest_value)
                 if remembered is not None:
                     return remembered
+            point: dict | None = None
             if batch.snapshot_label is not None:
-                insert_restore_point(db, account["id"], batch.snapshot_label)
+                point = insert_restore_point(db, account["id"], batch.snapshot_label)
             # A week on screen from another day than Monday is checked against its stored weeks as they
             # were before anything in this save changed them.
             before: dict[str, int] = {}
@@ -1602,6 +1609,9 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             result: dict = {"weeks": week_results, "assignments": assignment_results}
             if repeats is not None:
                 result["repeats"] = repeats
+            if point is not None:
+                # The point made before this save, so its notice's Undo can put it back.
+                result["restore_point"] = point
             if batch.operation_id is not None:
                 remember_operation(db, account["id"], batch.operation_id, digest_value, result)
         return result

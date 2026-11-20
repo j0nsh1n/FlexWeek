@@ -376,6 +376,25 @@ pub fn snooze_until(now_ms: i64) -> i64 {
     now_ms + ALARM_SNOOZE_MS
 }
 
+/// The minute of the day the block a reminder key names starts. The key is the one `reminder_key`
+/// made, so its last part is the start as "HH:MM". Minutes of the local day, as the reminder poll
+/// reads the clock, so a day the clocks change does not move it.
+pub fn reminder_start_min(key: &str) -> EngineResult<i64> {
+    let start = key.rsplit('|').next().unwrap_or("");
+    crate::time::hhmm_to_minutes(start)
+}
+
+/// A reminder kept on screen stays until the minute its block starts; no timer ends it before then.
+pub fn reminder_stays(start_min: i64, now_min: i64) -> bool {
+    now_min < start_min
+}
+
+/// When a snoozed reminder comes back: the alarm's snooze on, but never after the block starts. A
+/// snooze that would end later comes back at the start, where the "starts now" notice takes over.
+pub fn reminder_snooze_until(now_min: i64, start_min: i64) -> i64 {
+    (now_min + ALARM_SNOOZE_MIN).min(start_min)
+}
+
 /// `now_ms / 1000.0`: the seconds the local clock is asked about.
 pub fn seconds_of(now_ms: i64) -> f64 {
     now_ms as f64 / 1000.0

@@ -1,7 +1,7 @@
 # ruff: noqa: F811
 """Which kind each Material button is. The rule is one filled button per screen (the student's answer),
 so nothing is left outlined, each screen and each settings prompt has at most one filled button, and the
-Widgets styles control on the Look page is a plain text button.
+Look page has no Widgets styles control.
 
 These read the QML source and the prompts' button lists, not pixels, so every screen and every prompt is
 covered however it is reached. What a filled button looks like is judged on the pictures.
@@ -80,15 +80,11 @@ def test_each_screen_has_at_most_one_filled_button() -> None:
     assert re.search(r'objectName: "focusFinished"[\s\S]*?kind: "tonal"', focus_text)
 
 
-def test_widgets_styles_is_a_text_button_and_look_has_at_most_one_filled() -> None:
-    """Look's Widgets styles control is kind text; the Look page keeps at most one filled button."""
+def test_look_has_no_widgets_styles_control_and_at_most_one_filled() -> None:
+    """The Look page has no way to the Widgets styles; it keeps at most one filled button."""
     look_text = LOOK.read_text(encoding="utf-8")
-    use = re.search(
-        r'objectName:\s*"useWidgets"[\s\S]*?kind:\s*"([^"]+)"',
-        look_text,
-    )
-    assert use is not None
-    assert use.group(1) == "text"
+    assert "useWidgets" not in look_text
+    assert "Widgets" not in look_text
     filled = re.findall(r'kind:\s*"filled"', look_text)
     assert len(filled) <= 1
 

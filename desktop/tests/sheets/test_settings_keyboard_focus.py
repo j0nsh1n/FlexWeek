@@ -9,15 +9,13 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QEvent, QPointF, Qt
-from PySide6.QtGui import QKeyEvent
+from PySide6.QtCore import QPointF, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QPushButton
+from PySide6.QtWidgets import QApplication
 
-from desktop.native.settings import AccountDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import named, pump, qml
+from desktop.tests.material_support import named, pump, qml, quick_of, quick_window_of
 from desktop.tests.sheets.support_settings_keys import open_settings, panel
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
@@ -65,44 +63,33 @@ def test_advanced_settings_row_shows_the_ring_and_scrolls_into_view_on_tab(
 def test_escape_closes_manage_account_and_returns_focus(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Manage account is a Material sheet over Settings."""
     root = open_settings(qapp, window, "computer")
-    quick = window._material_page._quick
+    quick = quick_of(window)
     account_rows = named(root, "row_account")
     assert account_rows, "row_account not found"
     account_row = account_rows[0]
     account_row.forceActiveFocus()
     pump(qapp)
-    assert quick.quickWindow().activeFocusItem() is account_row
+    assert quick_window_of(window).activeFocusItem() is account_row
 
-    seen: dict[str, AccountDialog] = {}
-
-    def run(dialog: AccountDialog) -> int:
-        """Shown for real, then Esc pressed on it, as the student does."""
-        dialog.show()
-        wait_until(qapp, dialog.isVisible)
-        seen["dialog"] = dialog
-        assert dialog.findChild(QPushButton, "deleteAccount") is not None
-        assert dialog.findChild(QPushButton, "accountClose") is not None
-        escape = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier)
-        dialog.keyPressEvent(escape)
-        return dialog.result()
-
-    monkeypatch.setattr(AccountDialog, "exec", run)
+    sheets = window._material_page.bridge.sheets
     window._open_account()
-    pump(qapp)
-
-    dialog = seen["dialog"]
-    assert not dialog.isVisible()
-    assert dialog.result() == QDialog.DialogCode.Rejected
+    pump(qapp, 40)
+    assert sheets.kind == "account"
+    assert named(root, "deleteAccount") and named(root, "accountClose")
+    QTest.keyClick(quick, Qt.Key.Key_Escape)
+    pump(qapp, 40)
+    assert sheets.kind == ""
     # Focus returned to the QML opener
-    assert quick.quickWindow().activeFocusItem() is account_row
+    assert quick_window_of(window).activeFocusItem() is account_row
 
 
 def test_escape_closes_advanced_settings_and_returns_focus_to_its_row(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root = open_settings(qapp, window, "look")
-    quick = window._material_page._quick
+    quick = quick_of(window)
     advanced_rows = named(root, "openAdvanced")
     assert advanced_rows, "openAdvanced not found"
     advanced_row = advanced_rows[0]
@@ -122,4 +109,4 @@ def test_escape_closes_advanced_settings_and_returns_focus_to_its_row(
     pump(qapp)
 
     assert settings_panel._page == "sections"
-    assert quick.quickWindow().activeFocusItem() is advanced_row
+    assert quick_window_of(window).activeFocusItem() is advanced_row

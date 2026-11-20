@@ -10,6 +10,10 @@ Item {
     readonly property var panel: Ui.settings
     readonly property bool wide: !Ui.phone && width >= 900
     readonly property bool prompting: !!root.st.prompt
+    // Simple, More or All: which controls show. A tier only hides controls, it never moves a value.
+    readonly property string tier: root.st.tier || "simple"
+    readonly property bool showMore: root.tier === "more" || root.tier === "all"
+    readonly property bool showAll: root.tier === "all"
 
     M3Palette { id: palette; theme: Ui.theme }
 
@@ -78,12 +82,29 @@ Item {
                     x: 16
                     y: 12
                     width: parent.width - 32
-                    text: "Layered on the " + (root.st.draftPreset || "") + " preset, " + (root.st.draftMode || "")
-                          + ". Basic settings stay in Look."
+                    text: "Based on the " + (root.st.draftPreset || "") + " preset. Done applies what you change here."
                     color: palette.inkPrimaryContainer
                     font.family: M3Font.family
                     font.pixelSize: M3Font.px(14)
                     wrapMode: Text.WordWrap
+                }
+            }
+            Item {
+                objectName: "lookTierBar"
+                width: parent.width
+                height: tierSwitch.height + 8
+                SegmentedButton {
+                    id: tierSwitch
+                    objectName: "lookTier"
+                    theme: Ui.theme
+                    density: Ui.density
+                    reduceMotion: Ui.reduceMotion
+                    highContrast: Ui.highContrast
+                    accessName: "How many look controls to show"
+                    choices: [{ value: "simple", label: "Simple" }, { value: "more", label: "More" },
+                              { value: "all", label: "All" }]
+                    current: root.tier
+                    onSelected: (value) => root.panel.setLookTier(value)
                 }
             }
             Item {
@@ -98,6 +119,60 @@ Item {
             }
 
             Group {
+                objectName: "tierSimple"
+                GroupHeader { title: "Everyday look" }
+                PresetRow {
+                    objectName: "row_preset"
+                    subtitle: "Colours for the whole app."
+                    swatches: root.st.swatches || []
+                    current: root.st.draftPreset || ""
+                    onChosen: (name) => root.panel.setDraftPreset(name)
+                }
+                ChoiceRow {
+                    key: "draftMode"; title: "Mode"
+                    subtitle: root.st.draftOneMode === "dark"
+                        ? "This preset is a dark look, so it stays dark."
+                        : (root.st.draftOneMode === "light"
+                            ? "This preset is a light look, so it stays light."
+                            : "Follow this device, or choose.")
+                    choices: [
+                        { label: "Auto", value: "system", enabled: !root.st.draftOneMode },
+                        { label: "Light", value: "light", enabled: !root.st.draftOneMode || root.st.draftOneMode === "light" },
+                        { label: "Dark", value: "dark", enabled: !root.st.draftOneMode || root.st.draftOneMode === "dark" }
+                    ]
+                    current: root.st.draftOneMode ? root.st.draftOneMode : (root.st.draftMode || "")
+                    onChosen: (v) => root.panel.setDraftMode(v)
+                }
+                ChoiceRow {
+                    key: "cornerShape"; title: "Corner shape"; subtitle: "Blocks, cards and buttons."
+                    choices: [{ label: "Sharp", value: "sharp" }, { label: "Rounded", value: "rounded" },
+                              { label: "Pill", value: "pill" }]
+                    current: root.st.cornerShape || ""
+                    onChosen: (v) => root.panel.setCornerShape(v)
+                }
+                ChoiceRow {
+                    key: "block"; title: "Block style"; subtitle: "How an event is drawn."
+                    choices: [{ label: "Edge", value: "Edge" }, { label: "Filled", value: "Filled" }, { label: "Outline", value: "Outline" }]
+                    current: root.st.block || "Edge"
+                    onChosen: (v) => root.panel.setBlock(v)
+                }
+                ChoiceRow {
+                    key: "rowSize"; title: "Row size"; subtitle: "Compact fits more hours on the screen."
+                    choices: [{ label: "Comfortable", value: "comfortable" }, { label: "Compact", value: "compact" }]
+                    current: root.st.draftDensity || "comfortable"
+                    onChosen: (v) => root.panel.setDraftDensity(v)
+                }
+                ChoiceRow {
+                    key: "textSize"; title: "Text size"; subtitle: "Scale text and rows."
+                    choices: [{ label: "Small", value: "small" }, { label: "Normal", value: "normal" },
+                              { label: "Large", value: "large" }, { label: "Larger", value: "larger" }]
+                    current: root.st.textSize || "normal"
+                    onChosen: (v) => root.panel.setDraftTextSize(v)
+                }
+            }
+            Group {
+                objectName: "tierMoreShape"
+                visible: root.showMore
                 GroupHeader { title: "Shape"; resetKey: "shape"; onReset: root.panel.resetGroup("shape") }
                 SliderRow {
                     key: "corner"; title: "Corner radius"; unit: " px"
@@ -106,6 +181,7 @@ Item {
                 }
             }
             Group {
+                visible: root.showMore
                 GroupHeader { title: "Density"; resetKey: "density"; onReset: root.panel.resetGroup("density") }
                 SliderRow {
                     key: "hour"; title: "Hour row height"; unit: " px"
@@ -124,6 +200,7 @@ Item {
                 }
             }
             Group {
+                visible: root.showMore
                 GroupHeader { title: "Type"; resetKey: "type"; onReset: root.panel.resetGroup("type") }
                 SliderRow {
                     key: "scale"; title: "Text scale"; unit: "×"; decimals: 2
@@ -132,6 +209,7 @@ Item {
                 }
             }
             Group {
+                visible: root.showMore
                 GroupHeader { title: "Motion"; resetKey: "motion"; onReset: root.panel.resetGroup("motion") }
                 ChoiceRow {
                     key: "motionSpeed"; title: "Speed"; subtitle: "How fast things move."
@@ -142,6 +220,7 @@ Item {
                 }
             }
             Group {
+                visible: root.showMore
                 GroupHeader { title: "Depth"; resetKey: "depth"; onReset: root.panel.resetGroup("depth") }
                 SliderRow {
                     key: "shadow"; title: "Shadow strength"
@@ -150,13 +229,8 @@ Item {
                 }
             }
             Group {
+                visible: root.showMore
                 GroupHeader { title: "Calendar"; resetKey: "calendar"; onReset: root.panel.resetGroup("calendar") }
-                ChoiceRow {
-                    key: "block"; title: "Block style"; subtitle: "How an event is drawn."
-                    choices: [{ label: "Edge", value: "Edge" }, { label: "Filled", value: "Filled" }, { label: "Outline", value: "Outline" }]
-                    current: root.st.block || "Edge"
-                    onChosen: (v) => root.panel.setBlock(v)
-                }
                 ChoiceRow {
                     key: "lines"; title: "Hour lines"; subtitle: "The rules across the week."
                     choices: [{ label: "None", value: "None" }, { label: "Faint", value: "Faint" }, { label: "Clear", value: "Clear" }]
@@ -178,6 +252,18 @@ Item {
                     isOn: !!root.st.lengths
                     onFlipped: (v) => root.panel.setLengths(v)
                 }
+                ToggleRow {
+                    key: "showWeekends"; title: "Show weekends"
+                    visible: !!root.st.showWeekendsRow
+                    subtitle: "Saturday and Sunday in the week. Applies at once."
+                    isOn: !!root.st.showWeekends
+                    onFlipped: (v) => root.panel.setShowWeekends(v)
+                }
+            }
+            Group {
+                objectName: "tierAllColours"
+                visible: root.showAll
+                GroupHeader { title: "Colour codes" }
                 ColorRow {
                     key: "now"; title: "Now line"; value: root.st.now || ""; fallback: Ui.theme.primary || "#425e91"
                     onEdited: (v) => root.panel.setNow(v)
@@ -201,6 +287,7 @@ Item {
             }
             Group {
                 objectName: "readability"
+                visible: root.showAll
                 GroupHeader { title: "Readability" }
                 SettingsRow {
                     objectName: "row_readable"

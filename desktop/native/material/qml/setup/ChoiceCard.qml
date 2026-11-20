@@ -11,6 +11,8 @@ Item {
     property bool highContrast: false
     property string title: ""
     property string note: ""
+    // A short label under the title, such as Recommended.
+    property string tag: ""
     property bool selected: false
     property string accessName: ""
     signal chosen()
@@ -30,7 +32,7 @@ Item {
         border.width: root.selected ? 2 : (root.highContrast ? 1.5 : 1)
         border.color: root.selected ? palette.primary : palette.outlineVariant
         Behavior on color {
-            ColorAnimation { duration: root.reduceMotion ? 0 : 200 }
+            ColorAnimation { duration: Motion.fade(200, root.reduceMotion) }
         }
     }
     M3StateLayer {
@@ -86,6 +88,22 @@ Item {
             font.family: M3Font.family
             font.pixelSize: M3Font.px(16)
             font.weight: 500
+        }
+        Rectangle {
+            visible: root.tag !== ""
+            width: tagText.implicitWidth + 16
+            height: M3Font.px(20)
+            radius: height / 2
+            color: root.selected ? palette.surface : palette.primaryContainer
+            Text {
+                id: tagText
+                anchors.centerIn: parent
+                text: root.tag
+                color: root.selected ? palette.inkSecondaryContainer : palette.inkPrimaryContainer
+                font.family: M3Font.family
+                font.pixelSize: M3Font.px(12)
+                font.weight: 500
+            }
         }
         Text {
             visible: root.note !== ""

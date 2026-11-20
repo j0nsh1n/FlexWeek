@@ -18,9 +18,9 @@ from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.tests.day.support_material_window import qapp  # noqa: E402, F401
+from desktop.tests.material_support import quick_of  # noqa: E402
 from desktop.tests.test_material_account_setup import (  # noqa: E402
     Launches,
-    account,
     create,
     look_file,
     through_recovery,
@@ -37,10 +37,8 @@ def test_setup_wizard_school_row_format(qapp: QApplication, tmp_path: Path) -> N
         win = made.launch()
         win.resize(1280, 800)
         account_pump(qapp, 10)
-        bridge = account(win)
         create(qapp, win, "audit_student")
         through_recovery(qapp, win)
-        bridge.setupNext()  # Style -> Week
         account_pump(qapp, 10)
 
         start_inputs = account_named(win, "setupSchoolStartInput")
@@ -55,7 +53,7 @@ def test_setup_wizard_school_row_format(qapp: QApplication, tmp_path: Path) -> N
         end_input.forceActiveFocus()
         account_pump(qapp, 5)
         end_input.setProperty("text", "14:45")
-        QTest.keyClick(win._material_page._quick, Qt.Key.Key_Return)
+        QTest.keyClick(quick_of(win), Qt.Key.Key_Return)
         account_pump(qapp, 10)
 
         end_text = str(end_input.property("text"))

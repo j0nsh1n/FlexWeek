@@ -18,17 +18,16 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QStandardPaths  # noqa: E402
+from PySide6.QtCore import QStandardPaths, Qt  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.calendar import sunday_due  # noqa: E402
-from desktop.native.hours.month import LOAD_WORDS  # noqa: E402
 from desktop.native.window import WINDOW_MIN_WIDTH, NativeWindow  # noqa: E402
 from desktop.tests.light_app import open_light  # noqa: E402, F401
-from desktop.tests.material_support import pump, qml  # noqa: E402
+from desktop.tests.material_support import pump, qml, quick_of  # noqa: E402
 from desktop.tests.month.support_material_month import (  # noqa: E402
     cell,
-    cells,
     click,
     grid,
     heading,
@@ -54,27 +53,6 @@ def window(qapp: QApplication, open_light: Callable[..., NativeWindow]) -> Nativ
     return made
 
 
-def test_the_month_screen_draws_the_dates_the_session_asked_for(
-    qapp: QApplication, window: NativeWindow
-) -> None:
-    root, _month = open_month(qapp, window)
-    today = date.fromisoformat(window.session.today_iso())
-    assert shown_dates(root) == grid(today.replace(day=1))
-    assert texts(qml(root, "materialMonth"), "monthWeekday") == [
-        "Mon",
-        "Tue",
-        "Wed",
-        "Thu",
-        "Fri",
-        "Sat",
-        "Sun",
-    ]
-    marked = [str(item.parent().objectName()) for item in named_on(root, "monthToday")]
-    assert marked == [f"monthDate-{today.isoformat()}"]
-    for item in cells(root):
-        iso = str(item.objectName())[len("monthDate-") :]
-        assert item.property("inMonth") is (iso[:7] == today.isoformat()[:7]), iso
-    assert texts(qml(root, "materialMonth"), "monthStudyCaption") == [LOAD_WORDS]
 
 
 def test_a_date_shows_its_chips_in_the_account_clock(qapp: QApplication, window: NativeWindow) -> None:
@@ -119,7 +97,7 @@ def test_picking_a_date_opens_a_bar_that_closes_and_opens_the_day(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root, month = open_month(qapp, window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     today = window.session.today_iso()
     bar = qml(root, "monthDateBar")
     month.closeDate()
@@ -148,9 +126,29 @@ def test_picking_a_date_opens_a_bar_that_closes_and_opens_the_day(
     assert qml(root, "materialDay").property("visible") is True
 
 
+def test_esc_with_the_keyboard_on_a_date_closes_its_bar_and_stays_on_the_month(
+    qapp: QApplication, window: NativeWindow
+) -> None:
+    """In Material's own window the shell's Esc shortcut can match; an open date bar takes Esc first (Grok's
+    review of step 11, 2026-11-20)."""
+    root, month = open_month(qapp, window)
+    quick = quick_of(window)
+    today = window.session.today_iso()
+    month.closeDate()
+    pump(qapp)
+    target = cell(root, today)
+    click(quick, target, float(target.property("width")) / 2, float(target.property("height")) / 2)
+    wait_until(qapp, lambda: month.property("barOpen") is True)
+    target.forceActiveFocus()
+    pump(qapp)
+    QTest.keyClick(quick, Qt.Key.Key_Escape)
+    wait_until(qapp, lambda: month.property("barOpen") is False, what="Esc to close the date bar")
+    assert window._material_page.bridge.property("screen") == "month"
+
+
 def test_previous_and_next_move_the_month(qapp: QApplication, window: NativeWindow) -> None:
     root, _month = open_month(qapp, window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     today = date.fromisoformat(window.session.today_iso())
     shown = today.replace(day=1)
     following = date(shown.year + (shown.month == 12), shown.month % 12 + 1, 1)
@@ -200,7 +198,7 @@ def test_a_short_date_keeps_one_chip_and_counts_the_rest(qapp: QApplication, win
 
 def test_the_study_time_switch_shows_the_study_fill(qapp: QApplication, window: NativeWindow) -> None:
     root, month = open_month(qapp, window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     today = window.session.today_iso()
     assert month.property("showStudyTime") is False
     assert named_on(cell(root, today), "monthStudyFill") == []

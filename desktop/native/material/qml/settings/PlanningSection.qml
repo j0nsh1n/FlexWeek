@@ -6,7 +6,6 @@ SectionPage {
     objectName: "planningSection"
     readonly property var st: Ui.st
     readonly property var panel: Ui.settings
-    readonly property bool any: !!(st.showWeekendFree || st.showBuffer || st.showUrgent || st.showSplit || st.showCutoff || st.showDragStep)
 
     Group {
         // Kept on this computer, so it is always offered.
@@ -24,7 +23,42 @@ SectionPage {
         }
     }
     Group {
-        visible: page.any
+        visible: !!(page.st.showOpenOn || page.st.showPlanningStyle)
+        GroupHeader { title: "Starting out" }
+        ChoiceRow {
+            key: "openOn"
+            visible: !!page.st.showOpenOn
+            title: "Open on"
+            subtitle: "The screen FlexWeek starts on when you sign in."
+            choices: page.st.openOnChoices || []
+            current: page.st.openOn || "week"
+            onChosen: (value) => page.panel.setOpenOn(value)
+        }
+        PickRow {
+            key: "planningStyle"
+            fieldWidth: 320
+            visible: !!page.st.showPlanningStyle
+            title: "Planning style"
+            subtitle: "When new homework gets a time."
+            choices: page.st.planningStyleChoices || []
+            current: page.st.planningStyle || "suggest"
+            onChosen: (value) => page.panel.setPlanningStyle(value)
+        }
+        NoteRow {
+            key: "planningStyleNote"
+            visible: !!page.st.showPlanningStyle
+            text: {
+                const rows = page.st.planningStyleChoices || []
+                for (let i = 0; i < rows.length; i++)
+                    if (rows[i].value === page.st.planningStyle)
+                        return rows[i].note
+                return ""
+            }
+        }
+    }
+    Group {
+        visible: !!(page.st.showWeekendFree || page.st.showBuffer || page.st.showUrgent || page.st.showSplit)
+        GroupHeader { title: "How homework is planned" }
         ToggleRow {
             key: "weekendFree"
             visible: !!page.st.showWeekendFree
@@ -58,6 +92,9 @@ SectionPage {
             isOn: !!page.st.split
             onFlipped: (value) => page.panel.setSplit(value)
         }
+    }
+    Group {
+        GroupHeader { title: "Study hours" }
         ChoiceRow {
             key: "cutoff"
             visible: !!page.st.showCutoff
@@ -67,6 +104,15 @@ SectionPage {
             current: page.st.cutoff || ""
             onChosen: (value) => page.panel.setCutoff(value)
         }
+        StudyHoursEditor {}
+    }
+    Group {
+        GroupHeader { title: "School hours" }
+        SchoolHoursEditor {}
+    }
+    Group {
+        visible: !!page.st.showDragStep
+        GroupHeader { title: "Dragging" }
         ChoiceRow {
             key: "dragStep"
             visible: !!page.st.showDragStep

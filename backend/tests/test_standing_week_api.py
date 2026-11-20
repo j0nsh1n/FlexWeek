@@ -198,6 +198,49 @@ def test_an_export_carries_the_standing_week_to_another_account(database: Path, 
     assert [b["id"] for b in week(alice, WEEK_AFTER)["blocks"]] == ["school"]
 
 
+def test_more_repeats_than_setup_makes_export_and_import_whole(database: Path, alice: TestClient) -> None:
+    """Weekly fixed times (#118) join School and Setup's activities in the repeats; the export used to stop at
+    nine places, so the tenth repeat made an account that could not be exported or brought back."""
+    weekly = [
+        {"id": f"weekly-{n:04}", "title": f"Practice {n}", "kind": "locked", "category": "extra",
+         "start": "07:00", "duration_min": 30, "days": [n % 7]}
+        for n in range(12)
+    ]
+    set_up(alice, SCHOOL, *weekly)
+    snapshot = alice.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()
+    assert len(snapshot["standing"]) == 13
+    alice.post("/api/auth/logout", headers=WRITE)
+    alice.post("/api/auth/register", json={"username": "bea", "password": PASSWORD}, headers=WRITE)
+    imported = import_snapshot(alice, snapshot)
+    assert imported.status_code == 200, imported.text
+    shown = {b["id"] for b in week(alice, NEXT_WEEK)["blocks"]}
+    assert shown == {"school", *(block["id"] for block in weekly)}
+
+
+def test_an_import_with_more_than_two_hundred_repeats_at_once_is_refused(alice: TestClient) -> None:
+    set_up(alice, SCHOOL)
+    snapshot = alice.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()
+    [school] = snapshot["standing"]
+    rows = [
+        {**school, "id": f"weekly-{n:04}", "position": n, "body": {**school["body"], "id": f"weekly-{n:04}"}}
+        for n in range(200)
+    ]
+
+    def preview(standing: list[dict]) -> int:
+        body = {"snapshot": {**snapshot, "standing": standing}}
+        return alice.post("/api/account-import/preview", json=body, headers=WRITE).status_code
+
+    assert preview([school, *rows[1:]]) == 200  # 200 at once is the limit itself
+    assert preview([school, *rows]) == 422
+    # One that stops makes room for one that starts the same week.
+    stopped = {**rows[0], "from_week": NEXT_WEEK, "body": None}
+    starts = {**rows[1], "id": "weekly-0200", "from_week": NEXT_WEEK, "body": {**school["body"], "id": "weekly-0200"}}
+    assert preview([*rows, stopped, starts]) == 200
+    assert preview([*rows, starts]) == 422
+    # The 200th repeat takes place 199; a 201st place is refused.
+    assert preview([{**school, "position": 200}]) == 422
+
+
 def test_an_export_from_before_the_standing_week_builds_one_on_import(alice: TestClient) -> None:
     save(alice, SETUP_WEEK, [SCHOOL, SOCCER, GYM])
     snapshot = alice.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()

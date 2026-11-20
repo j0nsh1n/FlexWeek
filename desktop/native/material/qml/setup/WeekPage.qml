@@ -4,7 +4,8 @@ import components 1.0
 import "../account"
 import "../sheets"
 
-// Clock, week start, school, sports and jobs, and the evening cutoff.
+// School hours: a card for the usual school days, and one that opens the detailed controls: the clock, the
+// week start, school days and times, sports and jobs, and the evening cutoff.
 Column {
     id: page
     objectName: "setupWeekPage"
@@ -18,223 +19,249 @@ Column {
 
     M3Palette { id: m3Palette; theme: page.theme }
 
-    SectionTitle { theme: page.theme; text: "Clock" }
-    ChipRow {
-        width: parent.width
-        theme: page.theme
-        density: page.density
-        reduceMotion: page.reduceMotion
-        highContrast: page.highContrast
-        prefix: "setupClock"
-        accessPrefix: "Clock: "
-        choices: [{value: "12", label: "12-hour clock (4:00 PM)"}, {value: "24", label: "24-hour clock (16:00)"}]
-        current: bridge && bridge.clock24 ? "24" : "12"
-        onPicked: (value) => page.bridge.setClock24(value === "24")
-    }
-
-    SectionTitle { theme: page.theme; text: "Week starts on" }
-    PickerField {
-        objectName: "setupWeekStart"
-        width: Math.min(parent.width, 240)
-        theme: page.theme
-        density: page.density
-        reduceMotion: page.reduceMotion
-        highContrast: page.highContrast
-        accessName: "Week starts on"
-        options: [{value: "monday", label: "Monday"}, {value: "tuesday", label: "Tuesday"},
-            {value: "wednesday", label: "Wednesday"}, {value: "thursday", label: "Thursday"},
-            {value: "friday", label: "Friday"}, {value: "saturday", label: "Saturday"},
-            {value: "sunday", label: "Sunday"}]
-        value: bridge ? bridge.weekStart : "monday"
-        onPicked: (value) => page.bridge.setWeekStart(value)
-    }
-
-    SectionTitle { theme: page.theme; text: "School" }
-    DayChips {
-        width: parent.width
-        theme: page.theme
-        density: page.density
-        reduceMotion: page.reduceMotion
-        highContrast: page.highContrast
-        prefix: "setupSchoolDay"
-        accessPrefix: "School on "
-        names: bridge ? bridge.dayNames : []
-        days: bridge ? bridge.schoolDays : []
-        onToggled: (day) => page.bridge.toggleSchoolDay(day)
-    }
-    Row {
-        spacing: 12
-        AccountField {
-            objectName: "setupSchoolStart"
-            width: 132
-            theme: page.theme
-            density: page.density
-            reduceMotion: page.reduceMotion
-            highContrast: page.highContrast
-            ground: m3Palette.surface
-            label: "Starts"
-            accessName: "School starts"
-            text: bridge ? bridge.schoolStart : ""
-            onCommitted: (value) => page.bridge.setSchoolStart(value)
-        }
-        AccountField {
-            objectName: "setupSchoolEnd"
-            width: 132
-            theme: page.theme
-            density: page.density
-            reduceMotion: page.reduceMotion
-            highContrast: page.highContrast
-            ground: m3Palette.surface
-            label: "Ends"
-            accessName: "School ends"
-            text: bridge ? bridge.schoolEnd : ""
-            onCommitted: (value) => page.bridge.setSchoolEnd(value)
-        }
-    }
-    HelpText {
-        objectName: "setupSchoolHint"
-        theme: page.theme
-        width: parent.width
-        visible: bridge ? bridge.schoolHint : false
-        text: "No school days picked means no school on the calendar."
-    }
-    HelpText {
-        objectName: "setupThisWeek"
-        theme: page.theme
-        width: parent.width
-        visible: text.length > 0
-        text: bridge ? bridge.thisWeek : ""
-    }
-
-    SectionTitle { theme: page.theme; text: "Sports, clubs and jobs" }
     Repeater {
-        model: bridge ? bridge.activitiesModel : null
-        Rectangle {
-            id: activity
-            required property var row
-            required property int index
+        model: bridge ? bridge.schoolCards : []
+        ChoiceCard {
+            required property var modelData
             width: page.width
-            implicitHeight: inner.implicitHeight + 32
-            height: implicitHeight
-            radius: 16
-            color: m3Palette.surfaceContainerLow
-            border.width: page.highContrast ? 1.5 : 1
-            border.color: m3Palette.outlineVariant
-            Column {
-                id: inner
-                x: 16
-                y: 16
-                width: parent.width - 32
-                spacing: 12
-                Row {
-                    width: parent.width
+            objectName: "setupSchool-" + modelData.value
+            theme: page.theme
+            density: page.density
+            reduceMotion: page.reduceMotion
+            highContrast: page.highContrast
+            title: modelData.title
+            note: modelData.note
+            tag: modelData.tag
+            selected: modelData.selected
+            onChosen: page.bridge.setSchoolPreset(modelData.value)
+        }
+    }
+
+    Column {
+        id: details
+        objectName: "setupWeekDetails"
+        visible: bridge ? bridge.power : false
+        width: parent.width
+        spacing: 12
+
+        SectionTitle { theme: page.theme; text: "Clock" }
+        ChipRow {
+            width: parent.width
+            theme: page.theme
+            density: page.density
+            reduceMotion: page.reduceMotion
+            highContrast: page.highContrast
+            prefix: "setupClock"
+            accessPrefix: "Clock: "
+            choices: [{value: "12", label: "12-hour clock (4:00 PM)"}, {value: "24", label: "24-hour clock (16:00)"}]
+            current: bridge && bridge.clock24 ? "24" : "12"
+            onPicked: (value) => page.bridge.setClock24(value === "24")
+        }
+
+        SectionTitle { theme: page.theme; text: "Week starts on" }
+        PickerField {
+            objectName: "setupWeekStart"
+            width: Math.min(parent.width, 240)
+            theme: page.theme
+            density: page.density
+            reduceMotion: page.reduceMotion
+            highContrast: page.highContrast
+            accessName: "Week starts on"
+            options: [{value: "monday", label: "Monday"}, {value: "tuesday", label: "Tuesday"},
+                {value: "wednesday", label: "Wednesday"}, {value: "thursday", label: "Thursday"},
+                {value: "friday", label: "Friday"}, {value: "saturday", label: "Saturday"},
+                {value: "sunday", label: "Sunday"}]
+            value: bridge ? bridge.weekStart : "monday"
+            onPicked: (value) => page.bridge.setWeekStart(value)
+        }
+
+        SectionTitle { theme: page.theme; text: "School" }
+        DayChips {
+            width: parent.width
+            theme: page.theme
+            density: page.density
+            reduceMotion: page.reduceMotion
+            highContrast: page.highContrast
+            prefix: "setupSchoolDay"
+            accessPrefix: "School on "
+            names: bridge ? bridge.dayNames : []
+            days: bridge ? bridge.schoolDays : []
+            onToggled: (day) => page.bridge.toggleSchoolDay(day)
+        }
+        Row {
+            spacing: 12
+            AccountField {
+                objectName: "setupSchoolStart"
+                width: 132
+                theme: page.theme
+                density: page.density
+                reduceMotion: page.reduceMotion
+                highContrast: page.highContrast
+                ground: m3Palette.surface
+                label: "Starts"
+                accessName: "School starts"
+                text: bridge ? bridge.schoolStart : ""
+                onCommitted: (value) => page.bridge.setSchoolStart(value)
+            }
+            AccountField {
+                objectName: "setupSchoolEnd"
+                width: 132
+                theme: page.theme
+                density: page.density
+                reduceMotion: page.reduceMotion
+                highContrast: page.highContrast
+                ground: m3Palette.surface
+                label: "Ends"
+                accessName: "School ends"
+                text: bridge ? bridge.schoolEnd : ""
+                onCommitted: (value) => page.bridge.setSchoolEnd(value)
+            }
+        }
+        HelpText {
+            objectName: "setupSchoolHint"
+            theme: page.theme
+            width: parent.width
+            visible: bridge ? bridge.schoolHint : false
+            text: "No school days picked means no school on the calendar."
+        }
+        HelpText {
+            objectName: "setupThisWeek"
+            theme: page.theme
+            width: parent.width
+            visible: text.length > 0
+            text: bridge ? bridge.thisWeek : ""
+        }
+
+        SectionTitle { theme: page.theme; text: "Sports, clubs and jobs" }
+        Repeater {
+            model: bridge ? bridge.activitiesModel : null
+            Rectangle {
+                id: activity
+                required property var row
+                required property int index
+                width: page.width
+                implicitHeight: inner.implicitHeight + 32
+                height: implicitHeight
+                radius: 16
+                color: m3Palette.surfaceContainerLow
+                border.width: page.highContrast ? 1.5 : 1
+                border.color: m3Palette.outlineVariant
+                Column {
+                    id: inner
+                    x: 16
+                    y: 16
+                    width: parent.width - 32
                     spacing: 12
-                    AccountField {
-                        objectName: "setupActivityName" + activity.index
-                        width: parent.width - removeButton.width - 12
-                        theme: page.theme
-                        density: page.density
-                        reduceMotion: page.reduceMotion
-                        highContrast: page.highContrast
-                        label: "Name"
-                        accessName: "Activity name"
-                        placeholder: "Soccer, band, a job…"
-                        text: activity.row.title
-                        onEdited: (value) => page.bridge.setActivityTitle(activity.index, value)
+                    Row {
+                        width: parent.width
+                        spacing: 12
+                        AccountField {
+                            objectName: "setupActivityName" + activity.index
+                            width: parent.width - removeButton.width - 12
+                            theme: page.theme
+                            density: page.density
+                            reduceMotion: page.reduceMotion
+                            highContrast: page.highContrast
+                            label: "Name"
+                            accessName: "Activity name"
+                            placeholder: "Soccer, band, a job…"
+                            text: activity.row.title
+                            onEdited: (value) => page.bridge.setActivityTitle(activity.index, value)
+                        }
+                        Button {
+                            id: removeButton
+                            objectName: "setupActivityRemove" + activity.index
+                            y: 8
+                            theme: page.theme
+                            density: page.density
+                            reduceMotion: page.reduceMotion
+                            highContrast: page.highContrast
+                            kind: "text"
+                            text: "Remove"
+                            accessName: "Remove this activity"
+                            onClicked: page.bridge.removeActivity(activity.index)
+                        }
                     }
-                    Button {
-                        id: removeButton
-                        objectName: "setupActivityRemove" + activity.index
-                        y: 8
+                    DayChips {
+                        width: parent.width
                         theme: page.theme
                         density: page.density
                         reduceMotion: page.reduceMotion
                         highContrast: page.highContrast
-                        kind: "text"
-                        text: "Remove"
-                        accessName: "Remove this activity"
-                        onClicked: page.bridge.removeActivity(activity.index)
+                        prefix: "setupActivityDay" + activity.index + "-"
+                        accessPrefix: "Activity on "
+                        names: page.bridge.dayNames
+                        days: activity.row.days
+                        onToggled: (day) => page.bridge.toggleActivityDay(activity.index, day)
                     }
-                }
-                DayChips {
-                    width: parent.width
-                    theme: page.theme
-                    density: page.density
-                    reduceMotion: page.reduceMotion
-                    highContrast: page.highContrast
-                    prefix: "setupActivityDay" + activity.index + "-"
-                    accessPrefix: "Activity on "
-                    names: page.bridge.dayNames
-                    days: activity.row.days
-                    onToggled: (day) => page.bridge.toggleActivityDay(activity.index, day)
-                }
-                Flow {
-                    width: parent.width
-                    spacing: 12
-                    AccountField {
-                        objectName: "setupActivityStart" + activity.index
-                        width: 132
-                        theme: page.theme
-                        density: page.density
-                        reduceMotion: page.reduceMotion
-                        highContrast: page.highContrast
-                        label: "Starts"
-                        accessName: "Activity starts"
-                        text: activity.row.start
-                        onCommitted: (value) => page.bridge.setActivityStart(activity.index, value)
-                    }
-                    AccountField {
-                        objectName: "setupActivityEnd" + activity.index
-                        width: 132
-                        theme: page.theme
-                        density: page.density
-                        reduceMotion: page.reduceMotion
-                        highContrast: page.highContrast
-                        label: "Ends"
-                        accessName: "Activity ends"
-                        text: activity.row.end
-                        onCommitted: (value) => page.bridge.setActivityEnd(activity.index, value)
-                    }
-                    SegmentedButton {
-                        objectName: "setupActivityCategory" + activity.index
-                        theme: page.theme
-                        density: page.density
-                        reduceMotion: page.reduceMotion
-                        highContrast: page.highContrast
-                        accessName: "Sports or Activity"
-                        choices: [{value: "extra", label: "Activity"}, {value: "exercise", label: "Sports"}]
-                        current: activity.row.category
-                        onSelected: (value) => page.bridge.setActivityCategory(activity.index, value)
+                    Flow {
+                        width: parent.width
+                        spacing: 12
+                        AccountField {
+                            objectName: "setupActivityStart" + activity.index
+                            width: 132
+                            theme: page.theme
+                            density: page.density
+                            reduceMotion: page.reduceMotion
+                            highContrast: page.highContrast
+                            label: "Starts"
+                            accessName: "Activity starts"
+                            text: activity.row.start
+                            onCommitted: (value) => page.bridge.setActivityStart(activity.index, value)
+                        }
+                        AccountField {
+                            objectName: "setupActivityEnd" + activity.index
+                            width: 132
+                            theme: page.theme
+                            density: page.density
+                            reduceMotion: page.reduceMotion
+                            highContrast: page.highContrast
+                            label: "Ends"
+                            accessName: "Activity ends"
+                            text: activity.row.end
+                            onCommitted: (value) => page.bridge.setActivityEnd(activity.index, value)
+                        }
+                        SegmentedButton {
+                            objectName: "setupActivityCategory" + activity.index
+                            theme: page.theme
+                            density: page.density
+                            reduceMotion: page.reduceMotion
+                            highContrast: page.highContrast
+                            accessName: "Sports or Activity"
+                            choices: [{value: "extra", label: "Activity"}, {value: "exercise", label: "Sports"}]
+                            current: activity.row.category
+                            onSelected: (value) => page.bridge.setActivityCategory(activity.index, value)
+                        }
                     }
                 }
             }
         }
-    }
-    Button {
-        objectName: "setupAddActivity"
-        visible: bridge ? bridge.canAddActivity : false
-        theme: page.theme
-        density: page.density
-        reduceMotion: page.reduceMotion
-        highContrast: page.highContrast
-        kind: "text"
-        icon: "add"
-        text: "Add a sport, club or job"
-        onClicked: page.bridge.addActivity()
-    }
+        Button {
+            objectName: "setupAddActivity"
+            visible: bridge ? bridge.canAddActivity : false
+            theme: page.theme
+            density: page.density
+            reduceMotion: page.reduceMotion
+            highContrast: page.highContrast
+            kind: "text"
+            icon: "add"
+            text: "Add a sport, club or job"
+            onClicked: page.bridge.addActivity()
+        }
 
-    SectionTitle { theme: page.theme; text: "Bedtime" }
-    HelpText { theme: page.theme; width: parent.width; text: "No homework after" }
-    ChipRow {
-        width: parent.width
-        theme: page.theme
-        density: page.density
-        reduceMotion: page.reduceMotion
-        highContrast: page.highContrast
-        prefix: "setupCutoff"
-        accessPrefix: "No homework after "
-        choices: bridge ? bridge.cutoffChoices : []
-        current: bridge ? bridge.cutoff : ""
-        onPicked: (value) => page.bridge.setCutoff(value)
+        SectionTitle { theme: page.theme; text: "Bedtime" }
+        HelpText { theme: page.theme; width: parent.width; text: "No homework after" }
+        ChipRow {
+            width: parent.width
+            theme: page.theme
+            density: page.density
+            reduceMotion: page.reduceMotion
+            highContrast: page.highContrast
+            prefix: "setupCutoff"
+            accessPrefix: "No homework after "
+            choices: bridge ? bridge.cutoffChoices : []
+            current: bridge ? bridge.cutoff : ""
+            onPicked: (value) => page.bridge.setCutoff(value)
+        }
     }
 }

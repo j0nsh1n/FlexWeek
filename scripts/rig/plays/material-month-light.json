@@ -1,7 +1,7 @@
 {
   "setup": {
     "seed": "rig",
-    "look": "light-frost",
+    "mode": "light",
     "clock": "2026-11-05T15:40",
     "size": [
       1280,
@@ -10,18 +10,6 @@
     "clock_24h": false
   },
   "steps": [
-    {
-      "click": "settingsGear"
-    },
-    {
-      "wait": 600
-    },
-    {
-      "click": "chooseMaterial"
-    },
-    {
-      "wait": 1000
-    },
     {
       "see": "materialRail"
     },
@@ -120,18 +108,6 @@
     },
     {
       "shot": "material-month-light-day"
-    },
-    {
-      "click": "navSettings"
-    },
-    {
-      "click": "useWidgets"
-    },
-    {
-      "wait": 800
-    },
-    {
-      "see": "Math worksheet"
     }
   ]
 }

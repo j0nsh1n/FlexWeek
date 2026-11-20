@@ -37,6 +37,7 @@ from desktop.native.calendar import (
     hand_move,
     is_series,
     is_setup_block,
+    is_standing_block,
     local_stamp,
     monday_of,
     month_anchor_date,
@@ -83,6 +84,7 @@ from desktop.native.focus import (
 from desktop.native.history import capture_step, join_step, mark_stale, push_step
 from desktop.native.hours.geometry import drag_step
 from desktop.native.kept import KeptSession
+from desktop.native.kept_alerts import KeptReminders
 from desktop.native.look import pack_axis, sanitize_look
 from desktop.native.pomodoro import inflate_for_solve, split_solved
 from desktop.native.remind import (
@@ -92,6 +94,7 @@ from desktop.native.remind import (
     due_songs,
     reminder_lead_min,
     snooze_until,
+    todays_starts,
 )
 from desktop.native.reuse import (
     MAX_WEEK_BLOCKS,
@@ -352,6 +355,9 @@ class NativeSession(QObject):
     # A change to School or an activity from this week on reached later weeks that kept a change of
     # their own: the server's words for which and what, to show without blocking.
     repeats_kept = Signal(str)
+    # A save that made a restore point first, or made a weekly time that doubles a hand-made copy in
+    # later weeks: the point's id ("" for none) and the weeks' starts, oldest first.
+    save_answered = Signal(str, list)
     plan_conflicts = Signal(list)
     planned = Signal(str)
     focus_changed = Signal()
@@ -473,6 +479,12 @@ class NativeSession(QObject):
         self._credits_waiting: list[tuple[dict, int, bool]] = []
         self._record_history = True
         self.fired_reminders: set[str] = set()
+        self.last_save_refused = False
+        # Reminders kept on screen as cards; they follow the clock and any edit to today's blocks.
+        self.reminder_cards = KeptReminders(
+            self.todays_reminder_blocks, lambda: self._clock()["minute"], self.fired_reminders.discard, self
+        )
+        self.week_changed.connect(self.reminder_cards.sync)
         self.fired_alarms: set[str] = set()
         self.snoozed_alarms: dict[str, int] = {}
         self.last_alarm_check: int | None = None
@@ -639,6 +651,7 @@ class NativeSession(QObject):
         self._reset_focus(persist=False)
         self._held_alerts.clear()
         self.fired_reminders.clear()
+        self.reminder_cards.clear()
         self.fired_alarms.clear()
         self.snoozed_alarms.clear()
         self.last_alarm_check = None
@@ -1293,6 +1306,14 @@ class NativeSession(QObject):
         ensure(ready)
         return True
 
+    def pairing_status(self) -> dict | None:
+        """The open pairing code's state, tries left and expiry, or None with no running service."""
+        found = self._sync_service()
+        if found is None:
+            return None
+        _host, service, _user_id = found
+        return service.pair_status()
+
     def end_pairing(self, done: Callable[[Any, Exception | None], None]) -> bool:
         """Close the open pairing code. False with no host, service or account."""
         found = self._sync_service()
@@ -1609,8 +1630,14 @@ class NativeSession(QObject):
         week. Setup showed the repeats, so a block it leaves out stops and what this week changed
         itself stays this week's. Anything the student added another way stays where it is.
         `edited` is keep (later weeks keep their own edits), replace, or from_today."""
+        self.change_repeats(self.setup_repeats(blocks), "setting up your week", edited=edited)
+
+    def setup_repeats(self, blocks: list[dict]) -> list[dict]:
+        """The repeats after Setup: School and the activities as its page has them, and every weekly fixed
+        time the student made as it stands. Setup does not list those, so leaving them out would stop them."""
         made = [TimeBlock.model_validate(block).model_dump(mode="json") for block in blocks]
-        self.change_repeats(made, "setting up your week", edited=edited)
+        weekly = [deepcopy(item) for item in self.repeats if str(item.get("id", "")).startswith("weekly-")]
+        return made + weekly
 
     def change_repeats(self, after: list[dict], label: str, edited: str = "keep") -> None:
         """The repeats become `after` from this week on: the open week changes now by the rule the
@@ -1728,7 +1755,7 @@ class NativeSession(QObject):
         blocks = [
             item
             for item in source.get("blocks") or []
-            if item.get("kind") == "locked" and item.get("start") and not is_setup_block(item)
+            if item.get("kind") == "locked" and item.get("start") and not is_standing_block(item)
         ]
         if not blocks:
             return None
@@ -2210,15 +2237,22 @@ class NativeSession(QObject):
         return True
 
     def delete_block(
-        self, block_id: str, *, scope: str = "series", day: int | None = None, every_week: bool = False
+        self,
+        block_id: str,
+        *,
+        scope: str = "series",
+        day: int | None = None,
+        every_week: bool = False,
+        label: str | None = None,
     ) -> None:
         """Delete a block. School or an activity from Setup stands in every week, so taking it out of
         this week alone keeps it here missed on every day, or the standing week would bring it back;
-        `every_week` takes it out of the standing week too."""
+        `every_week` takes it out of the standing week too. `label` names the Undo step when the delete
+        is part of a larger change."""
         block = next((item for item in self.blocks if item["id"] == block_id), None)
         if block is None:
             return
-        setup = is_setup_block(block)
+        setup = is_standing_block(block)
         family = block_family(block_id)
         if block.get("assignment_id") or scope != "occurrence":
             # School split at a week's seam is School on each side: all of it goes together.
@@ -2239,7 +2273,7 @@ class NativeSession(QObject):
                 self.blocks = [*self.blocks, *missed]
         if self.selected_block_id == block_id:
             self.select_block(None, None)
-        self._touch("deleting " + block["title"])
+        self._touch(label or "deleting " + block["title"])
 
     def delete_selected(self) -> bool:
         if self.selected_block_id is None:
@@ -2401,6 +2435,7 @@ class NativeSession(QObject):
             return
         # This save's change joins the Undo step before it, as automatic planning does after an add.
         self._join_step = join
+        self.last_save_refused = False
         if status is not None:
             self._save_status = status
         if self.pending_save is None:
@@ -2647,6 +2682,10 @@ class NativeSession(QObject):
             kept = (data.get("repeats") or {}).get("notice")
             if kept:
                 self.repeats_kept.emit(kept)
+            point_id = str((data.get("restore_point") or {}).get("id") or "")
+            doubled = list((data.get("repeats") or {}).get("doubled_weeks") or [])
+            if point_id or doubled:
+                self.save_answered.emit(point_id, doubled)
             if planned:
                 self.planned.emit(self.message)
             if self.first_weekday:
@@ -2705,6 +2744,9 @@ class NativeSession(QObject):
                 self._attempts.pop(self._move_attempt, None)
                 self._move_attempt = None
             self._save_status = None
+            # A save the server read and refused (not a lost connection or another window's change) will be
+            # refused again as it is: `drop_refused_save` lets a sheet take it back and try a corrected one.
+            self.last_save_refused = error.status not in (0, 409)
             if error.status == 0:
                 self._say(
                     "Not saved: FlexWeek can't be reached. Your changes are still here. Choose Retry save."
@@ -2731,6 +2773,18 @@ class NativeSession(QObject):
     def retry_save(self) -> None:
         if self.pending_save is not None and not self.conflict:
             self.save()
+
+    def drop_refused_save(self) -> None:
+        """A save the server refused (the repeat limit, say) is taken back: nothing of it is sent again, and
+        the open week is read again as it is saved."""
+        if not self.last_save_refused or self.pending_save is None:
+            return
+        self.pending_save = None
+        self.dirty = False
+        self.dirty_assignments.clear()
+        self._repeat_send = None
+        self._repeat_ack = None
+        self.load_week(self.week_start, discard=True)
 
     def solve(
         self,
@@ -4607,6 +4661,14 @@ class NativeSession(QObject):
             return self._reminder_blocks, self._reminder_trace
         return None
 
+    def todays_reminder_blocks(self) -> dict[str, dict] | None:
+        """Today's blocks by reminder key, or None while today's week is not known here."""
+        clock = self._clock()
+        source = self._today_reminder_source(monday_of(clock["iso"]))
+        if source is None:
+            return None
+        return {key: block for block, _day, _start, key in todays_starts(source[0], source[1], clock["iso"])}
+
     def _due_block_alerts(
         self, blocks: list[dict], trace: dict | None, clock: dict, prefs: dict
     ) -> tuple[list[dict], list[dict]]:
@@ -4647,7 +4709,9 @@ class NativeSession(QObject):
         )
         for item in due:
             self.fired_reminders.add(item["key"])
-            notices.append({"title": item["title"], "body": item["body"], "kind": "reminder"})
+            notices.append(
+                {"title": item["title"], "body": item["body"], "kind": "reminder", "key": item["key"]}
+            )
         songs = due_songs(
             blocks=blocks,
             trace=trace,
@@ -4710,6 +4774,8 @@ class NativeSession(QObject):
         notices: list[dict] = []
         songs: list[dict] = []
         prefs = self.preferences or {}
+        # Before the due check: a card whose block starts now frees its key, so "starts now" comes this tick.
+        self.reminder_cards.sync()
         if prefs.get("reminders_enabled"):
             today_monday = monday_of(clock["iso"])
             source = self._today_reminder_source(today_monday)
@@ -5013,6 +5079,10 @@ class NativeSession(QObject):
             ok,
             err,
         )
+
+    def undo_to_restore_point(self, point_id: str) -> None:
+        """A notice's Undo for a change from this week on: read the point, then put it back."""
+        self.preview_restore_point(point_id, lambda: self.apply_restore_point(point_id))
 
     def apply_restore_point(self, point_id: str) -> None:
         preview = self.restore_preview

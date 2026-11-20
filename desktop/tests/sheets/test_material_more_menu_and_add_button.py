@@ -15,26 +15,22 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QWidget  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from desktop.native.window import WEEK_LIST_NAME, NativeWindow  # noqa: E402
+from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_window import material_window, qapp  # noqa: E402, F401
-from desktop.tests.material_support import named, pump, qml, show_material  # noqa: E402
+from desktop.tests.material_support import (  # noqa: E402
+    focus_quick,
+    named,
+    pump,
+    qml,
+    quick_of,
+    quick_window_of,
+    show_material,
+)
 
 
-def _menu_labels(menu: QWidget) -> list[str]:
-    labels: list[str] = []
-    for action in menu.actions():
-        if action.isSeparator() or not action.isVisible():
-            continue
-        labels.append(action.text().split("\t", 1)[0])
-        inner = action.menu()
-        if inner is not None:
-            labels.extend(_menu_labels(inner))
-    return labels
-
-
-def test_material_more_lists_the_planning_actions_and_leaves_the_widgets_menu_alone(
+def test_material_more_lists_the_planning_actions(
     qapp: QApplication, material_window: NativeWindow
 ) -> None:
     window = material_window
@@ -54,20 +50,16 @@ def test_material_more_lists_the_planning_actions_and_leaves_the_widgets_menu_al
         "Routines",
         "Quick focus",
         "Replan all my homework",
+        "Copy day",
+        "Copy last week's fixed times",
+        "Copies of this week",
+        "Reload this week",
         "Help",
         "About FlexWeek",
+        "Account",
         "Sign out",
     ]
     bridge.sheets.closeMore()
-    window._use_widgets_styles()
-    pump(qapp)
-    window.more_menu.popup(window.more_button.mapToGlobal(window.more_button.rect().bottomLeft()))
-    pump(qapp)
-    try:
-        assert "Unfinished" in _menu_labels(window.more_menu)
-        assert WEEK_LIST_NAME in _menu_labels(window.more_menu)
-    finally:
-        window.more_menu.close()
 
 
 def test_the_add_button_opens_homework_from_the_keyboard(
@@ -80,16 +72,16 @@ def test_the_add_button_opens_homework_from_the_keyboard(
     assert fab.property("activeFocusOnTab") is True
     sheets = window._material_page.bridge.sheets
     window.activateWindow()
-    quick = window._material_page._quick
-    quick.setFocus()
+    quick = quick_of(window)
+    focus_quick(window)
     fab.forceActiveFocus()
     pump(qapp)
 
     QTest.keyClick(quick, Qt.Key.Key_Space)
     pump(qapp)
-    if sheets.kind != "homework":
-        QTest.keyClick(quick, Qt.Key.Key_Return)
-        pump(qapp)
+    # The Add button asks which; Add homework is the first row.
+    QTest.keyClick(quick, Qt.Key.Key_Return)
+    pump(qapp)
 
     assert sheets.kind == "homework"
     assert named(root, "sheetTitle")[0].property("text") == "Add homework"
@@ -97,4 +89,4 @@ def test_the_add_button_opens_homework_from_the_keyboard(
     QTest.keyClick(quick, Qt.Key.Key_Escape)
     pump(qapp)
     assert sheets.kind == ""
-    assert quick.quickWindow().activeFocusItem() is fab
+    assert quick_window_of(window).activeFocusItem() is fab

@@ -1,1 +1,1 @@
-"""Material 3, a whole-window surface beside the Qt Widgets styles."""
+"""Material 3, the one whole-window surface of the app."""

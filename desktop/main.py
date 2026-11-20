@@ -62,16 +62,17 @@ try:
     from PySide6.QtCore import QStandardPaths, QTimer
     from PySide6.QtGui import QIcon, QImage
     from PySide6.QtNetwork import QLocalSocket
-    from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
+    from PySide6.QtWidgets import QApplication, QMessageBox
 
     import backend
     from desktop.native.calendar import sunday_due
     from desktop.native.collector import WindowThreadCollector
+    from desktop.native.cpu_drawing import apply_saved as apply_saved_cpu_drawing
     from desktop.native.devices import SyncHost
     from desktop.native.fonts import load_fonts
     from desktop.native.kept import KeptSession
-    from desktop.native.setup import DONE as SETUP_DONE
     from desktop.native.updater import collect_stale_downloads
+    from desktop.native.version import VERSION
     from desktop.native.window import NativeWindow
     from desktop.origin import configured_origin
     from desktop.server import LocalServer
@@ -143,16 +144,18 @@ def painted_colors(image: QImage, step: int = 8) -> int:
 
 
 def material_state(window: NativeWindow) -> tuple[str, int]:
-    """Whether the Material window, not the Widgets fallback, is the one on screen.
+    """Whether Material's Qt Quick window, not the draw-error page, is the one on screen.
 
-    "fallback" means this build gave up on Material; "waiting" means it is not drawn yet.
+    "fallback" means this build gave up on Material; "waiting" means the window is not visible, not built
+    or not drawn yet. "shown" needs the window visible, its shell built, and what `grabWindow` drew to
+    hold PAINTED_MIN_COLORS colours.
     """
-    if window._material_gave_up or window._material_failed:
+    if window._material_gave_up:
         return "fallback", 0
-    page = window._material_page
-    if page is None or not page._ready or window._stack.currentWidget() is not page:
+    page = window._material_current()
+    if page is None or not page._ready or page.root is None or not page.isVisible():
         return "waiting", 0
-    colors = painted_colors(page._quick.grabFramebuffer())
+    colors = painted_colors(page.grabWindow())
     return ("shown" if colors >= PAINTED_MIN_COLORS else "waiting"), colors
 
 
@@ -175,8 +178,6 @@ class NativeSmoke:
         self._stage = "first screen"
         self._material_ok = False
         self._material_colors = 0
-        # The saved style belongs to the computer, not to this run: it is put back before the quit.
-        self._style_before = window._surface
         self._verdict: tuple[bool, str] | None = None
         self._poll = QTimer(window)
         self._poll.setInterval(SMOKE_POLL_MS)
@@ -193,46 +194,44 @@ class NativeSmoke:
         window = self._window
         if not window.isVisible():
             return
-        page = window._stack.currentWidget().objectName() if window._stack.currentWidget() else ""
+        face = window._face()
+        page = face.objectName() if face is not None else ""
+        bridge = window._account_bridge()
+        phase = bridge.phase if bridge is not None else ""
         if not self._walk:
-            if page == "authPage":
+            if page == "materialPage" and phase == "sign-in":
                 self._finish(True, "first screen shown")
             return
         if self._stage == "first screen":
-            if page != "authPage":
+            if page != "materialPage" or phase != "sign-in":
                 return
             username = "smoke_" + secrets.token_hex(6)
             password = secrets.token_urlsafe(18)
-            window.username.setText(username)
-            window.password.setText(password)
-            create = window.findChild(QPushButton, "createAccount")
-            if create is None:
-                self._finish(False, "create account control missing")
-                return
-            create.click()
+            bridge.showCreate()
+            bridge.setUsername(username)
+            bridge.setPassword(password)
+            bridge.submit()
             self._stage = "recovery codes"
             return
         if self._stage == "recovery codes":
-            if page != "recoveryPage":
+            if phase != "recovery" or len(bridge.codes) != 8:
                 return
-            codes = [line for line in window.recovery_list.text().splitlines() if line.strip()]
-            if len(codes) != 8:
+            bridge.setRecoveryAck(True)
+            if not bridge.recoveryReady:
                 return
-            window.recovery_ack.setChecked(True)
-            window.recovery_continue.click()
+            bridge.finishRecovery()
             self._stage = "setup"
             return
         if self._stage == "setup":
-            # One page per poll, each skipped, so every page of setup is drawn in the build under test.
-            if page == "setupPage":
-                setup = window.setup_page
-                (setup.next if setup.step == SETUP_DONE else setup.skip).click()
+            # Every page of setup is skipped at once; the pages themselves are drawn by the tests.
+            if phase == "setup":
+                bridge.setupSkipAll()
                 return
-            if page == "weekPage":
+            if phase == "app":
                 self._stage = "week"
             return
         if self._stage == "week":
-            if page != "weekPage" or window.session.account is None or window.session.busy:
+            if phase != "app" or window.session.account is None or window.session.busy:
                 return
             if window._setup_prefs or window._setup_week:
                 return
@@ -262,14 +261,17 @@ class NativeSmoke:
             return
         if self._stage == "saved week":
             session = window.session
-            if session.busy or session.revision < 1:
+            # A week that starts on another day than Monday spans two stored weeks, one revision each; the
+            # save bumps the one that holds the new blocks.
+            revision = session.revision
+            saved = max(revision) if isinstance(revision, list) else revision
+            if session.busy or saved < 1:
                 return
             if not any(block.get("id") == "soccer" for block in session.blocks):
                 self._finish(False, "window blank after setup Solve")
                 return
             self._facts_colors = painted_colors(window.grab().toImage())
-            # The release is for Material too: switch to it and require the Material window itself.
-            window._back_to_material()
+            # The release must show the Material window itself, not the draw-error page.
             self._stage = "material window"
             return
         if self._stage == "material window":
@@ -278,29 +280,11 @@ class NativeSmoke:
                 return
             self._material_colors = colors
             if state == "fallback":
-                self._verdict = (False, "Material 3 did not open: the fallback is showing")
+                self._verdict = (False, "Material 3 did not open: the draw-error page is showing")
             else:
                 self._material_ok = True
                 self._verdict = (True, SMOKE_PASSED)
-            self._restore_style()
-            self._stage = "style restore"
-            return
-        if self._stage == "style restore" and self._verdict is not None and self._style_restored(page):
             self._finish(*self._verdict)
-
-    def _restore_style(self) -> None:
-        window = self._window
-        if window._surface == self._style_before:
-            return
-        if self._style_before == "material":
-            window._back_to_material()
-        else:
-            window._use_widgets_styles()
-
-    def _style_restored(self, page: str) -> bool:
-        if self._window._surface != self._style_before:
-            return False
-        return self._style_before != "widgets" or page == "weekPage"
 
     def _finish(self, ok: bool, stage: str) -> None:
         if self._done:
@@ -308,7 +292,6 @@ class NativeSmoke:
         self._done = True
         self._poll.stop()
         window = self._window
-        self._restore_style()
         facts = {
             "ok": ok and (self._material_ok or not self._walk),
             "stage": stage,
@@ -335,6 +318,9 @@ def main(argv: list[str] | None = None) -> int:
     collector = WindowThreadCollector(app)  # noqa: F841 - the app keeps it as a child
     app.setApplicationName("FlexWeek")
     app.setDesktopFileName(DESKTOP_FILE_NAME)
+    if report is None:
+        # Qt Quick reads its backend when the first Material window is made, so this is early enough.
+        apply_saved_cpu_drawing(Path(profile_root()) / "flexweek-look.json", VERSION)
     load_fonts()
     collect_stale_downloads()
 

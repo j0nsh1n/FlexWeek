@@ -23,6 +23,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.material.bridge_week import overlapped
 from desktop.native.window import NativeWindow
+from desktop.tests.material_support import quick_of
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material import (
     NOW_DAY,
@@ -296,7 +297,7 @@ def test_a_squeezed_block_too_short_for_the_circle_hides_it_and_the_menu_still_f
         assert finish.property("activeFocusOnTab") is False
         assert reading.property("activeFocusOnTab") is True
 
-        quick = window._material_page._quick
+        quick = quick_of(window)
         reading.forceActiveFocus()
         _pump(qapp)
         for _ in range(3):
@@ -347,7 +348,7 @@ def test_in_day_both_blocks_that_share_time_open_and_take_tab_in_time_order(
     _bridge(window).showPage("day")
     _pump(qapp, 6)
     sheets = window._material_page.bridge.sheets
-    quick = window._material_page._quick
+    quick = quick_of(window)
     try:
         day = _qml(root, "materialDay")
         _qml(day, "dayScroller").setProperty("contentY", 15 * float(day.property("row")))

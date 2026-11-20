@@ -12,7 +12,7 @@ use chrono::{Datelike, NaiveDate};
 use serde_json::{Map, Value, json};
 
 use crate::desk::calendar::{DAY_FULL, SETUP_SCHOOL_ID};
-use crate::desk::grid::is_setup_block;
+use crate::desk::grid::{WEEKLY_PREFIX, is_standing_block};
 use crate::desk::pydate::from_iso;
 use crate::error::EngineResult;
 use crate::shown::family_id;
@@ -20,7 +20,9 @@ use crate::time::{hhmm_to_minutes, is_calendar_date, monday_of};
 use crate::validate::time_block;
 
 /// The fields a change may set. Everything else a repeat holds stays as it was made.
-pub const PATCH_FIELDS: [&str; 4] = ["title", "category", "start", "duration_min"];
+pub const PATCH_FIELDS: [&str; 5] = ["title", "category", "start", "duration_min", "until"];
+/// Fields a new repeat may leave out: a category, and an end date (#118).
+const OPTIONAL_FIELDS: [&str; 2] = ["category", "until"];
 /// Fields that say which block and when, never compared or patched as a value.
 const SHAPE_FIELDS: [&str; 3] = ["id", "days", "missed_days"];
 const INTENT_FIELDS: [&str; 10] = [
@@ -54,10 +56,17 @@ const MONTHS_FULL: [&str; 12] = [
 ];
 const MAX_KEPT_SAID: usize = 3;
 
-pub const RULE: &str = "A change to a repeating block names School or a Setup activity, a from_date \
-written YYYY-MM-DD, and only title, category, start and duration_min to set";
+pub const RULE: &str = "A change to a repeating block names School, a Setup activity or a weekly fixed \
+time, a from_date written YYYY-MM-DD, and only title, category, start, duration_min and until to set";
 pub const NOTHING_LEFT: &str =
     "That change leaves no day, so nothing changed. Use stop to take it off the calendar.";
+/// The most repeats one account holds at once: School, Setup's activities and weekly fixed times together
+/// (Jonathan, 2026-11-20). An export keeps each repeat's place in a list the backend bounds by it.
+pub const MAX_REPEATS: usize = 200;
+pub const REPEATS_FULL: &str = "FlexWeek keeps at most 200 weekly blocks (School, activities and weekly \
+                                fixed times) in one account. Stop one before adding another.";
+/// A change whose Until comes before the day the change starts would end the repeat before it begins.
+pub const UNTIL_TOO_EARLY: &str = "Until can't be before the day this change starts.";
 pub const NEW_NEEDS_ALL: &str =
     "A new repeating block needs a title, a start, a length and at least one day";
 
@@ -212,7 +221,7 @@ pub fn parse_intent(value: &Value) -> Result<Intent, String> {
         .and_then(Value::as_str)
         .filter(|id| !id.is_empty() && id.chars().count() <= 80)
         .ok_or_else(|| RULE.to_string())?;
-    if !is_setup_block(&json!({"id": id})).map_err(|err| err.message)? {
+    if !is_standing_block(&json!({"id": id})).map_err(|err| err.message)? {
         return Err(RULE.into());
     }
     if map.get("scope").and_then(Value::as_str) != Some("from") {
@@ -334,7 +343,7 @@ pub fn patched(base: Option<&Value>, intent: &Intent) -> Result<Option<Value>, S
         None => {
             if PATCH_FIELDS
                 .iter()
-                .any(|field| *field != "category" && !intent.set.contains_key(*field))
+                .any(|field| !OPTIONAL_FIELDS.contains(field) && !intent.set.contains_key(*field))
                 || intent.add_days.is_empty()
             {
                 return Err(NEW_NEEDS_ALL.into());
@@ -347,6 +356,11 @@ pub fn patched(base: Option<&Value>, intent: &Intent) -> Result<Option<Value>, S
     };
     fields.shift_remove("missed_days");
     for (key, value) in &intent.set {
+        // An empty Until takes the end date away: the repeat stands with no end again.
+        if key == "until" && (value.is_null() || value.as_str() == Some("")) {
+            fields.shift_remove(key);
+            continue;
+        }
         fields.insert(key.clone(), value.clone());
     }
     let mut days: Vec<i64> = base.map(days_of).unwrap_or_default();
@@ -361,6 +375,13 @@ pub fn patched(base: Option<&Value>, intent: &Intent) -> Result<Option<Value>, S
         return Err(NOTHING_LEFT.into());
     }
     fields.insert("days".into(), json!(days));
+    if fields
+        .get("until")
+        .and_then(Value::as_str)
+        .is_some_and(|until| until < intent.from_date.as_str())
+    {
+        return Err(UNTIL_TOO_EARLY.into());
+    }
     let checked = time_block(&body)?;
     if checked.kind != "locked" || checked.start.is_none() {
         return Err(RULE.into());
@@ -591,6 +612,14 @@ pub fn edit_intent(
             intent.set.insert(field.into(), value.clone());
         }
     }
+    // Every form that edits a weekly time shows its Until, so one sent without it took the end date off.
+    // School and Setup's activities never carry one, so their forms change nothing here.
+    let had_until = repeat
+        .and_then(|repeat| repeat.get("until"))
+        .is_some_and(|until| until.as_str().is_some_and(|until| !until.is_empty()));
+    if had_until && edited.get("until").is_none_or(Value::is_null) {
+        intent.set.insert("until".into(), Value::Null);
+    }
     intent.add_days = after_days
         .iter()
         .copied()
@@ -634,10 +663,32 @@ pub fn intents_between(before: &[Value], after: &[Value], from_date: &str) -> Ve
 /// repeats as they stand in it afterwards. `blocks` is the week as shown (repeats merged in) and
 /// `repeats` the repeats standing in it before; the client calls this for the week it has open so
 /// its Undo step holds the change, and the store's own pass over that week then changes nothing.
+/// `week_start` is the Monday the blocks' days count from: a shown week is cut at each repeat's Until,
+/// and the days it cut are put back before the change is compared, as the store does.
 pub fn apply_to_week(
     blocks: &[Value],
     repeats: &[Value],
     intents: &[Intent],
+    week_start: &str,
+) -> Result<(Vec<Value>, Vec<Value>), String> {
+    apply_to_week_with(
+        blocks,
+        repeats,
+        intents,
+        |copy, repeat| crate::standing::uncut_copy(copy, Some(repeat), week_start),
+        |copy| crate::standing::cut_at_until(copy, week_start),
+    )
+}
+
+/// `apply_to_week`, with `uncut` putting back the days a repeat's Until hid from a copy for the compare,
+/// and `cut` cutting the changed copy at its Until again for the week as shown (None: no day left). Both
+/// count the week's own dates, which for a week on screen are not a Monday's.
+pub(crate) fn apply_to_week_with(
+    blocks: &[Value],
+    repeats: &[Value],
+    intents: &[Intent],
+    uncut: impl Fn(&Value, &Value) -> EngineResult<Value>,
+    cut: impl Fn(&Value) -> EngineResult<Option<Value>>,
 ) -> Result<(Vec<Value>, Vec<Value>), String> {
     let mut blocks = blocks.to_vec();
     let mut repeats = repeats.to_vec();
@@ -663,15 +714,30 @@ pub fn apply_to_week(
             .filter(|at| id_of(&blocks[*at]).map(family_id) == Some(intent.id.as_str()))
             .collect();
         if held.is_empty() {
-            if let (None, Some(new)) = (old.as_ref(), new.as_ref()) {
-                blocks.push(new.clone());
+            // A new repeat shows only the days its Until leaves in this week.
+            if let (None, Some(new)) = (old.as_ref(), new.as_ref())
+                && let Some(shown) = cut(new).map_err(|error| error.message)?
+            {
+                blocks.push(shown);
             }
             continue;
         }
-        let pieces: Vec<Value> = held.iter().map(|at| blocks[*at].clone()).collect();
+        // A day the old Until hid is not a day this week took out (the store does the same).
+        let pieces: Vec<Value> = held
+            .iter()
+            .map(|at| match old.as_ref() {
+                Some(old) => uncut(&blocks[*at], old).map_err(|error| error.message),
+                None => Ok(blocks[*at].clone()),
+            })
+            .collect::<Result<_, _>>()?;
         let restated = restated_pieces(old.as_ref(), new.as_ref(), &pieces, &intent.id);
         for (at, copy) in held.into_iter().zip(restated).rev() {
-            match copy {
+            // The days put back for the compare are not shown while the new Until still hides them.
+            let shown = match copy {
+                Some(copy) => cut(&copy).map_err(|error| error.message)?,
+                None => None,
+            };
+            match shown {
                 Some(copy) => blocks[at] = copy,
                 None => {
                     blocks.remove(at);
@@ -764,7 +830,7 @@ pub fn own_changes(copy: &Value, repeat: &Value, week: &[Value], h24: bool) -> V
                 && if piece {
                     days_of(block).contains(&day)
                 } else {
-                    !is_setup_block(block).unwrap_or(true)
+                    !is_standing_block(block).unwrap_or(true)
                         && title_of(block) == title_of(copy)
                         && days_of(block) == vec![day]
                 }
@@ -945,13 +1011,16 @@ pub fn edited_weeks_line(weeks: &[String], titles: &[String]) -> EngineResult<Op
 /// and where the whole series is changed. None for a block that does not repeat. `school_hours` is
 /// whether the look offers School hours; otherwise every repeat is changed in Setup.
 pub fn one_day_note(block: &Value, day: i64, school_hours: bool) -> EngineResult<Option<String>> {
-    if !is_setup_block(block)? {
+    if !is_standing_block(block)? {
         return Ok(None);
     }
     let Some(name) = usize::try_from(day).ok().and_then(|day| DAY_FULL.get(day)) else {
         return Ok(None);
     };
-    let place = if school_hours && id_of(block).map(family_id) == Some(SETUP_SCHOOL_ID) {
+    let family = id_of(block).map(family_id);
+    let place = if family.is_some_and(|id| id.starts_with(WEEKLY_PREFIX)) {
+        "open it and choose This week and later"
+    } else if school_hours && family == Some(SETUP_SCHOOL_ID) {
         "open School hours"
     } else {
         "run setup again from Settings"

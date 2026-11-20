@@ -495,16 +495,24 @@ fn a_restore_point_is_taken_before_the_edit() {
     if let Some(object) = edited.as_object_mut() {
         object.insert("title".into(), json!("New"));
     }
+    let mut answer = apply_shown(&conn, user_id, &input).unwrap();
+    // The answer names the point it made, so the save's Undo can put it back.
+    let point = answer
+        .as_object_mut()
+        .and_then(|object| object.shift_remove("restore_point"))
+        .expect("the answer names its restore point");
+    assert_eq!(point["id"], json!("rp-abcdabcd"));
+    assert_eq!(point["label"], json!("Before edit"));
     assert_eq!(
-        apply_shown(&conn, user_id, &input),
-        Ok(json!({
+        answer,
+        json!({
             "assignments": [{
                 "assignment": edited,
                 "id": "essay",
                 "revision": 2
             }],
             "weeks": []
-        })),
+        }),
         "app.py:1302 the edit after the snapshot still saves"
     );
     assert_eq!(

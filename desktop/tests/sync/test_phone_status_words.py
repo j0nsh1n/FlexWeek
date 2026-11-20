@@ -1,15 +1,12 @@
-"""The words Settings > Devices and the sync status use: when a phone last synced, what the sync
-status is, the pairing sheet's countdown and problems, the clock warning and the relay sentence."""
+"""The words Settings > This computer and the sync status use: when a phone last synced, what the sync
+status is, the pairing code's countdown and problems, the clock warning and the relay sentence."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from PySide6.QtWidgets import QApplication, QLabel
-
-from desktop.native.devices import (
+from desktop.native.settings_copy import (
     RELAY_SENTENCE,
-    DevicesPanel,
     clock_warning_words,
     countdown_words,
     pair_problem,
@@ -39,7 +36,9 @@ def test_a_failed_call_stays_a_problem_until_one_call_works() -> None:
     assert sync_state({**quiet, "last_sync_ms": 5, "last_error": "could not reach"}, True) == "problem"
 
 
-def test_the_pairing_sheet_says_its_countdown_tries_and_problems_in_plain_words() -> None:
+
+
+def test_the_pairing_code_says_its_countdown_tries_and_problems_in_plain_words() -> None:
     assert countdown_words(299) == "Code works for 4:59"
     assert countdown_words(60) == "Code works for 1:00"
     assert tries_words(1) == "1 try left"
@@ -60,19 +59,3 @@ def test_the_relay_sentence_is_the_agreed_one() -> None:
         "When your computer isn't on the same Wi-Fi, FlexWeek uses a public relay run by n0. "
         "It sees that two devices are talking, not what they send."
     )
-
-
-def test_the_devices_card_shows_and_clears_the_clock_warning(qapp: QApplication) -> None:
-    panel = DevicesPanel(None, lambda: 1)
-    warning = panel.findChild(QLabel, "clockWarning")
-    assert warning is not None and warning.isHidden()
-
-    panel._synced(
-        [("phone-a", {"clock_skewed": 1}, None), ("phone-b", {"clock_skewed": 2}, None)],
-        None,
-    )
-    assert warning.text() == "Your phone's clock looks wrong. 3 changes were held back."
-    assert not warning.isHidden()
-
-    panel._synced([("phone-a", {"clock_skewed": 0}, None)], None)
-    assert warning.isHidden()

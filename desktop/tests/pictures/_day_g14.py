@@ -5,23 +5,10 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QApplication
 
-from desktop.native.layouts.registry import sanitize_layout
 from desktop.native.window import NativeWindow
 from desktop.tests.material_support import pump as pump_material
 from desktop.tests.material_support import show_material
 from desktop.tests.pictures.screen import Screen
-from desktop.tests.week.support_bar_pictures import idle, pump, text_size
-
-
-def _timeline_day_at_large_text(window: NativeWindow) -> None:
-    text_size(window, "large")
-    window._layout = sanitize_layout({"main": "timeline", "day": "one"})
-    window._day_mode = True
-    window._on_week()
-    window.resize(1150, 768)
-    idle(window)
-    pump(6)
-    return None
 
 
 def _material_day_rows(window: NativeWindow) -> None:
@@ -32,23 +19,6 @@ def _material_day_rows(window: NativeWindow) -> None:
 
 
 SCREENS: list[Screen] = [
-    Screen(
-        id="day.top_bar_timeline_large_text",
-        area="day",
-        prepare=_timeline_day_at_large_text,
-        checks=(
-            "At 1150 px with Large text on Timeline's day, the top bar is one row (a wrapped bar ate about "
-            "55 px and pushed the Due chips off screen): Plan sits above the foot of the title, Plan reads "
-            "Plan my homework, Plan homework or Plan, More reads More or only its icon, and no button on "
-            "the bar is cut."
-        ),
-        sources=(
-            "desktop/native/window.py",
-            "desktop/native/layouts/timeline.py",
-            "desktop/native/widgets.py",
-        ),
-        styles=("timeline",),
-    ),
     Screen(
         id="day.material_larger_text_rows",
         area="day",

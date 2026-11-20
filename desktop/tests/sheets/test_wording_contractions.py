@@ -14,11 +14,8 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication
 
-from desktop.native.settings import HELP_PLANNING, HELP_SCREENS
-from desktop.native.widgets import PlanReview
-from desktop.native.window import PLAN_TIP
+from desktop.native.settings_copy import HELP_PLANNING, HELP_SCREENS
 from desktop.tests.window_support import qapp  # noqa: F401
 
 NATIVE = Path(__file__).resolve().parents[2] / "native"
@@ -169,32 +166,8 @@ def test_help_for_planning_and_the_day_screen_use_contractions() -> None:
     )
 
 
-def test_the_plan_buttons_tip_uses_a_contraction() -> None:
-    assert PLAN_TIP == (
-        "Find a time for homework that has none, around your fixed times and before it's due. Homework "
-        "that already has a time keeps it."
-    )
 
 
-def test_a_fair_share_row_is_a_sentence(qapp: QApplication) -> None:  # noqa: F811
-    trace = {
-        "placed": [],
-        "unplaced": [],
-        "moves": [],
-        "explanations": [],
-        "shares": [
-            {
-                "title": "Science project",
-                "this_week_min": 60,
-                "left_min": 60,
-                "due": "2026-10-13",
-            }
-        ],
-    }
-    assert PlanReview().rows_for(trace, {}, WEEK) == [
-        "Science project (due Tue 13 Oct): 1 h planned this week. FlexWeek saves the other 1 h "
-        "for next week so this week isn't overloaded. Press Plan next week to place it."
-    ]
 
 
 def test_thats_in_the_past_is_not_used_anywhere_in_native() -> None:

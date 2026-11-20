@@ -17,7 +17,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_window import material_window, qapp  # noqa: E402, F401
-from desktop.tests.material_support import pump, qml, show_material  # noqa: E402
+from desktop.tests.material_support import material_showing, pump, qml, show_material  # noqa: E402
 
 
 def test_focus_back_returns_to_material(qapp: QApplication, material_window: NativeWindow) -> None:
@@ -27,13 +27,13 @@ def test_focus_back_returns_to_material(qapp: QApplication, material_window: Nat
     pump(qapp)
     focus = window._material_page.bridge.focus
 
-    assert window._stack.currentWidget().objectName() == "materialPage"
+    assert material_showing(window)
     assert focus.open
     assert qml(root, "materialFocus").property("visible") is True
     focus.back()
     pump(qapp)
     assert not focus.open
-    assert window._stack.currentWidget().objectName() == "materialPage"
+    assert material_showing(window)
 
 
 def test_a_refresh_with_focus_open_keeps_focus_and_the_plan_prompt(
@@ -50,9 +50,8 @@ def test_a_refresh_with_focus_open_keeps_focus_and_the_plan_prompt(
     pump(qapp)
 
     focus = window._material_page.bridge.focus
-    assert window._stack.currentWidget().objectName() == "materialPage"
+    assert material_showing(window)
     assert focus.open
-    assert window.plan_review.isHidden()
     assert window.session._fresh_plan is True
     focus.back()
     pump(qapp)

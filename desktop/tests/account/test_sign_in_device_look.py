@@ -1,6 +1,5 @@
 """The screens shown before sign-in wear the computer's own look, plus the text size and High contrast
-the last student left, and nothing else; signing in puts the account's own look back. What the page looks
-like in each case is in the sign-in screens (desktop/tests/pictures/screens_account_signin.py)."""
+the last student left, and nothing else; signing in puts the account's own look back."""
 
 # ruff: noqa: F811  (pytest fixtures imported by name)
 
@@ -12,23 +11,20 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtGui import QColor, QGuiApplication, QPalette
-
 from desktop.native.look import sanitize_look
-from desktop.native.window import ENTRY_PAGES, NativeWindow
+from desktop.native.window import NativeWindow
 from desktop.tests.account.support_signin import (  # noqa: F401
     LARGE,
     LARGE_HIGH_CONTRAST,
-    MODES,
     Computer,
     computer,
-    go,
     page,
     pump,
     signed_out,
     system_dark,
 )
 from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.logic_support import card_phase
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import PASSWORD, USERNAME, look_file, qapp  # noqa: F401
 
@@ -42,13 +38,12 @@ def sign_out_from_a_pastel_account(qapp, window: NativeWindow) -> None:
     pump()
     assert window._worn_look() is window._look, "the account wears its own look"
     window.session.logout()
-    wait_until(qapp, lambda: page(window) == "authPage" and not window.session.busy)
+    wait_until(qapp, lambda: card_phase(window) == "sign-in" and not window.session.busy)
     pump()
 
 
 def test_after_sign_out_the_page_is_the_devices_look_not_the_last_accounts(qapp, window) -> None:
     sign_out_from_a_pastel_account(qapp, window)
-    assert window._look_inputs() == ("system", system_dark(), "default")
     assert window._worn_look() == sanitize_look(None)
     assert window._look["preset"] == "pastel", "the account's own look is still kept for its next sign-in"
 
@@ -60,39 +55,19 @@ def test_after_a_restart_the_page_is_the_devices_look_despite_a_stored_pastel(
     look_file().write_text(json.dumps({"preset": "pastel", "knobs": {}}) + "\n")
     launched = computer.launch(keep_look_file=True)
     assert launched._look["preset"] == "pastel", "the stored look was read"
-    assert launched._look_inputs() == ("system", system_dark(), "default")
     assert launched._worn_look() == sanitize_look(None)
-
-
-def test_a_dark_computer_gets_the_dark_variant_of_the_sign_in_page_and_light_goes_back_to_light(
-    qapp, signed_out: NativeWindow
-) -> None:
-    window = signed_out
-    original = QGuiApplication.palette()
-    dark = QPalette(original)
-    dark.setColor(QPalette.ColorRole.Window, QColor("#202124"))
-    QGuiApplication.setPalette(dark)
-    try:
-        assert window._look_inputs() == ("system", True, "default")
-    finally:
-        QGuiApplication.setPalette(original)
-    was_dark = original.color(QPalette.ColorRole.Window).lightness() < 128
-    assert window._look_inputs() == ("system", was_dark, "default")
 
 
 def test_signing_in_puts_the_accounts_own_look_back_on(qapp, window) -> None:
     sign_out_from_a_pastel_account(qapp, window)
     assert window._wears_carried_look(), "signed out: the computer's look"
-    window.username.setText(USERNAME)
-    window.password.setText(PASSWORD)
-    window.sign_in_button.click()
+    bridge = window._account_bridge()
+    bridge.setUsername(USERNAME)
+    bridge.setPassword(PASSWORD)
+    bridge.submit()
     wait_until(
         qapp,
-        lambda: (
-            window.session.account is not None
-            and not window.session.busy
-            and page(window) not in ENTRY_PAGES
-        ),
+        lambda: window.session.account is not None and not window.session.busy and bridge.phase == "app",
     )
     pump()
     assert not window._wears_carried_look(), "signed in: the account's look"
@@ -111,9 +86,10 @@ def test_signing_out_from_large_text_and_high_contrast_leaves_the_card_large_and
     computer.create_account(w, "carry_one")
     computer.wear(w, LARGE_HIGH_CONTRAST)
     computer.sign_out(w)
-    for mode in MODES:
-        go(w, mode)
-        assert w._worn_look() == sanitize_look(LARGE_HIGH_CONTRAST), mode
+    for show in ("showSignIn", "showCreate", "showReset"):
+        getattr(w._account_bridge(), show)()
+        pump()
+        assert w._worn_look() == sanitize_look(LARGE_HIGH_CONTRAST), show
 
 
 def test_text_size_alone_is_carried_without_high_contrast(qapp, computer: Computer) -> None:
@@ -133,7 +109,6 @@ def test_a_colour_pack_an_accent_and_a_style_are_not_carried(qapp, computer: Com
     w._apply_appearance()
     computer.sign_out(w)
     assert w._worn_look() == sanitize_look({"preset": "default", "knobs": {"text": "large"}})
-    assert w._look_inputs() == ("system", system_dark(), "default")
     assert json.loads(computer.kept.look.read_text()).keys() == {"account", "text", "contrast"}
 
 
@@ -141,7 +116,6 @@ def test_a_fresh_computer_shows_the_default_look(qapp, computer: Computer) -> No
     w = computer.launch()
     assert computer.kept.carried_look() is None
     assert w._worn_look() == sanitize_look(None)
-    assert w._look_inputs() == ("system", system_dark(), "default")
 
 
 def test_a_look_change_while_signed_in_is_carried_at_once(qapp, computer: Computer) -> None:
@@ -194,10 +168,5 @@ def test_after_sign_in_the_week_wears_the_accounts_look_not_the_carried_one(
     computer.sign_out(first)
     computer.kept.carry_look("someone-else", "large", True)
     w = computer.relaunch(first)
-    w.username.setText("carry_nine")
-    w.password.setText(PASSWORD)
-    w.sign_in_button.click()
-    wait_until(qapp, lambda: page(w) == "weekPage" and not w.session.busy)
-    pump()
-    assert w._look_inputs()[2] == (w.session.preferences or {}).get("accent", "default")
+    computer.sign_in(w, "carry_nine")
     assert w._worn_look() is w._look

@@ -22,7 +22,6 @@ from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from desktop.native.hours.zoom import NOW_MARGIN  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_day import (  # noqa: E402
     bridge_of,
@@ -31,11 +30,15 @@ from desktop.tests.day.support_material_day import (  # noqa: E402
     seed_thursday,
 )
 from desktop.tests.light_app import open_light  # noqa: E402, F401
-from desktop.tests.material_support import pump, qml  # noqa: E402
+from desktop.tests.material_support import focus_quick, pump, qml, quick_of  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.window_support import qapp, settled  # noqa: E402, F401
 
 NOW_MINUTE = 19 * 60
+
+
+# Minutes of the day kept above now when the hours open on it (HoursPane.qml, `45 / 60 * root.row`).
+NOW_MARGIN = 45
 
 
 @pytest.fixture()
@@ -66,8 +69,8 @@ def test_it_opens_scrolled_so_nineteen_is_near_the_top(qapp: QApplication, windo
     assert abs((now_y - content_y) - above) < 2
     assert int(bridge_of(window).property("day").property("openingMinute")) == NOW_MINUTE
 
-    quick = window._material_page._quick
-    quick.setFocus()
+    quick = quick_of(window)
+    focus_quick(window)
     pump(qapp)
     QTest.keyClick(quick, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
     pump(qapp)

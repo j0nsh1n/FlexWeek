@@ -14,6 +14,7 @@ from backend.tests.fake_clock import FakeClock
 from desktop.native.calendar import monday_of
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import account, open_light, open_light_window  # noqa: F401
+from desktop.tests.material_support import page_showing
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import free, look_file, qapp, server, signed_out, window  # noqa: F401
 
@@ -22,7 +23,7 @@ def seen(opened: NativeWindow) -> dict:
     session = opened.session
     look = json.loads(look_file().read_text(encoding="utf-8")) if look_file().exists() else None
     return {
-        "page": opened._stack.currentWidget().objectName(),
+        "page": page_showing(opened),
         "username": (session.account or {}).get("username"),
         "preferences": session.preferences,
         "blocks": session.blocks,
@@ -33,7 +34,6 @@ def seen(opened: NativeWindow) -> dict:
         "keep signed in": session.keep_signed_in,
         "kept": session.kept,
         "dirty or busy": (session.dirty, session.busy),
-        "toast": (opened.toast.isVisible(), opened.toast.text()),
         "look": opened._look,
         "layout": opened._layout,
         "surface": opened._surface,

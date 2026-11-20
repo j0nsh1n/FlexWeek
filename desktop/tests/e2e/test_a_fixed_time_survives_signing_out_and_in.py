@@ -6,12 +6,13 @@ from __future__ import annotations
 
 import contextlib
 
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.server import LocalServer
 from desktop.tests.e2e.account_sessions import HASHING_WAIT, soccer, table_text
-from desktop.tests.logic_support import past_setup
+from desktop.tests.logic_support import past_recovery, past_setup, sign_in, sign_up
+from desktop.tests.material_support import material_showing
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import PASSWORD, free, qapp, server, signed_out  # noqa: F401
 
@@ -20,12 +21,8 @@ def test_a_saved_fixed_time_survives_signing_out_and_in(
     qapp: QApplication, server: LocalServer, signed_out: NativeWindow
 ) -> None:
     first = signed_out
-    first.username.setText("alice")
-    first.password.setText(PASSWORD)
-    first.findChild(QPushButton, "createAccount").click()
-    wait_until(qapp, lambda: first._stack.currentWidget().objectName() == "recoveryPage", HASHING_WAIT)
-    first.recovery_ack.setChecked(True)
-    first.recovery_continue.click()
+    sign_up(qapp, first, "alice", PASSWORD)
+    past_recovery(qapp, first)
     past_setup(qapp, first)
     first.session.add_block(soccer())
     first.session.save()
@@ -36,10 +33,8 @@ def test_a_saved_fixed_time_survives_signing_out_and_in(
 
     second = NativeWindow(server.origin)
     try:
-        second.username.setText("alice")
-        second.password.setText(PASSWORD)
-        second.findChild(QPushButton, "signIn").click()
-        wait_until(qapp, lambda: second._stack.currentWidget().objectName() == "weekPage", HASHING_WAIT)
+        sign_in(qapp, second, "alice", PASSWORD)
+        wait_until(qapp, lambda: material_showing(second), HASHING_WAIT)
         assert second.session.revision == 1
         assert "Soccer" in table_text(second)
     finally:

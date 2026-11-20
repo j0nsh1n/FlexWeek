@@ -18,7 +18,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.tests.focus.support_focus_screen import material_focus_window  # noqa: F401
-from desktop.tests.material_support import pump, qml, show_material
+from desktop.tests.material_support import pump, qml, quick_of, quick_window_of, show_material
 from desktop.tests.window_support import look_file, qapp  # noqa: F401
 
 
@@ -39,7 +39,7 @@ def test_the_number_keys_stay_put_while_focus_covers_the_window_and_work_after(
     window = material_focus_window
     root, focus = open_focus(qapp, window)
     bridge = window._material_page.bridge
-    quick = window._material_page._quick
+    quick = quick_of(window)
     bridge.showPage("week")
     root.forceActiveFocus()
     pump(qapp)
@@ -64,7 +64,7 @@ def test_f_opens_the_screen_from_day(qapp: QApplication, material_focus_window: 
     window._material_page.bridge.showPage("day")
     root.forceActiveFocus()
     pump(qapp)
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_F)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_F)
     pump(qapp)
     assert focus.open
     assert qml(root, "materialFocus").property("visible") is True
@@ -74,7 +74,7 @@ def test_f_opens_the_screen_from_day(qapp: QApplication, material_focus_window: 
 def test_escape_on_the_screen_goes_back(qapp: QApplication, material_focus_window: NativeWindow) -> None:
     window = material_focus_window
     root, focus = open_focus(qapp, window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     qml(root, "materialFocus").forceActiveFocus()
     pump(qapp)
     QTest.keyClick(quick, Qt.Key.Key_Escape)
@@ -87,7 +87,7 @@ def test_escape_on_a_running_timer_goes_back_and_the_timer_keeps_running(
 ) -> None:
     window = material_focus_window
     root, focus = open_focus(qapp, window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     asked: list[bool] = []
     focus.endRequested.connect(lambda: asked.append(True))
     focus.begin()
@@ -105,7 +105,7 @@ def test_escape_on_the_end_dialog_keeps_the_session_going(
 ) -> None:
     window = material_focus_window
     root, focus = open_focus(qapp, window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     asked: list[bool] = []
     focus.endRequested.connect(lambda: asked.append(True))
     focus.begin()
@@ -130,8 +130,11 @@ def _lineage(item: QObject | None) -> list[str]:
     return out
 
 
-def _tab_leaks(qapp: QApplication, quick, extra: str | None = None) -> list[tuple[int, list[str]]]:
-    scene = quick.quickWindow()
+def _tab_leaks(
+    qapp: QApplication, window: NativeWindow, extra: str | None = None
+) -> list[tuple[int, list[str]]]:
+    quick = quick_of(window)
+    scene = quick_window_of(window)
     leaks: list[tuple[int, list[str]]] = []
     for index in range(12):
         QTest.keyClick(quick, Qt.Key.Key_Tab)
@@ -149,21 +152,21 @@ def test_focus_keeps_tab_inside_ready_running_paused_and_end(
 ) -> None:
     window = material_focus_window
     root, focus = open_focus(qapp, window)
-    quick = window._material_page._quick
-    scene = quick.quickWindow()
+    quick = quick_of(window)
+    scene = quick_window_of(window)
     qml(root, "materialFocus").forceActiveFocus()
     pump(qapp)
-    assert not _tab_leaks(qapp, quick)
+    assert not _tab_leaks(qapp, window)
     focus.begin()
     pump(qapp)
     qml(root, "focusPause").forceActiveFocus()
     pump(qapp)
-    assert not _tab_leaks(qapp, quick)
+    assert not _tab_leaks(qapp, window)
     focus.togglePause()
     pump(qapp)
     qml(root, "focusPause").forceActiveFocus()
     pump(qapp)
-    assert not _tab_leaks(qapp, quick)
+    assert not _tab_leaks(qapp, window)
     focus.togglePause()
     focus.finish()
     pump(qapp)
@@ -171,7 +174,7 @@ def test_focus_keeps_tab_inside_ready_running_paused_and_end(
     assert dialog.property("open") is True
     qml(root, "dialogDismiss").forceActiveFocus()
     pump(qapp)
-    assert not _tab_leaks(qapp, quick, extra="focusEndDialog")
+    assert not _tab_leaks(qapp, window, extra="focusEndDialog")
     QTest.keyClick(quick, Qt.Key.Key_Space)
     pump(qapp)
     assert dialog.property("open") is False

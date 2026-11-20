@@ -12,14 +12,15 @@ import pytest
 from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QObject, QPoint, QPointF, Qt
 from PySide6.QtGui import QGuiApplication, QWheelEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import CLOCK
+from desktop.native.material.bridge_sheets import SheetsBridge
+from desktop.native.material.sheet_preview import PreviewDraft
 from desktop.native.weekmodel import set_clock_24h
-from desktop.native.widgets import PreviewDialog
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import open_light  # noqa: F401
-from desktop.tests.material_support import faded_in
+from desktop.tests.material_support import faded_in, grab, material_showing, quick_of, quick_window_of
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_drag import qapp, settled  # noqa: F401
 from desktop.tests.window_support import look_file
@@ -75,14 +76,13 @@ def _show_material(qapp: QApplication, window: NativeWindow) -> QObject:
     """Put Material on screen on the account's week."""
     window._surface = "material"
     window._material_gave_up = False
-    window._material_failed = ""
+    window._cpu_drawing_version = ""
     window.resize(1280, 800)
     window._on_week()
     _pump(qapp)
-    quick = window._material_page._quick
-    quick.grabFramebuffer()
+    grab(window)
     _pump(qapp)
-    assert window._stack.currentWidget().objectName() == "materialPage"
+    assert material_showing(window)
     root = window._material_page.root
     assert root is not None
     faded_in(qapp, root)
@@ -141,14 +141,14 @@ def _block_named(root: QObject, title: str) -> QObject:
 
 def _click(window: NativeWindow, item: QObject, dx: int = 0, dy: int = 0) -> None:
     """A real left click on a QML item through the Quick widget, as the pointer does it."""
-    quick = window._material_page._quick
+    quick = quick_of(window)
     point = _centre(window._material_page.root, item) + QPoint(dx, dy)
     QTest.mouseClick(quick, Qt.MouseButton.LeftButton, pos=point)
     _pump(QApplication.instance())
 
 
 def _drag(window: NativeWindow, item: QObject, to: QPoint) -> None:
-    quick = window._material_page._quick
+    quick = quick_of(window)
     start = _centre(window._material_page.root, item)
     app = QApplication.instance()
     QTest.mousePress(quick, Qt.MouseButton.LeftButton, pos=start)
@@ -198,7 +198,7 @@ def _settle(qapp: QApplication, window: NativeWindow) -> None:
 
 
 def _drag_pos(window: NativeWindow, start: QPoint, to: QPoint) -> None:
-    quick = window._material_page._quick
+    quick = quick_of(window)
     app = QApplication.instance()
     QTest.mousePress(quick, Qt.MouseButton.LeftButton, pos=start)
     _pump(app, 4)
@@ -223,7 +223,7 @@ def _slot_menu(root: QObject) -> list[str]:
 def _choose(window: NativeWindow, root: QObject, label: str) -> None:
     """Pick a menu entry with the keys, as a student on the keyboard would."""
     labels = _slot_menu(root)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     for _ in range(labels.index(label)):
         QTest.keyClick(quick, Qt.Key.Key_Down)
     QTest.keyClick(quick, Qt.Key.Key_Return)
@@ -327,7 +327,7 @@ def test_a_drag_shorter_than_a_quarter_hour_opens_nothing(qapp: QApplication, wi
     grid.setProperty("contentY", 0.0)
     _pump(qapp)
     week = _qml(root, "materialWeek")
-    quick = window._material_page._quick
+    quick = quick_of(window)
     # Sideways inside the Saturday column: past the drag threshold, but both ends snap to 09:00.
     start = hours_item.mapToScene(QPointF(gutter + saturday * day_width + 8, 9 * row + 2)).toPoint()
     QTest.mousePress(quick, Qt.MouseButton.LeftButton, pos=start)
@@ -348,7 +348,7 @@ def test_a_drag_shorter_than_a_quarter_hour_opens_nothing(qapp: QApplication, wi
 def _click_at(window: NativeWindow, hours_item: QObject, x: float, y: float) -> None:
     spot = hours_item.mapToScene(QPointF(x, y))
     QTest.mouseClick(
-        window._material_page._quick, Qt.MouseButton.LeftButton, pos=QPoint(int(spot.x()), int(spot.y()))
+        quick_of(window), Qt.MouseButton.LeftButton, pos=QPoint(int(spot.x()), int(spot.y()))
     )
     _pump(QApplication.instance(), 4)
 
@@ -365,7 +365,7 @@ def test_a_click_on_empty_saturday_11_offers_homework_or_fixed_time_and_opens_ne
 
     assert _slot_menu(root) == ["Add homework here", "Add fixed time here"]
     assert window._material_page.bridge.sheets.kind == ""
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Escape)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Escape)
     _pump(qapp, 4)
     assert _slot_menu(root) == []
     assert window._material_page.bridge.sheets.kind == ""
@@ -493,7 +493,7 @@ def test_undo_on_the_snackbar_over_free_time_opens_no_add_menu(
             break
     assert _empty_time_under(root, hours_item, undo), "no free time under the snackbar"
 
-    QTest.mouseClick(window._material_page._quick, Qt.MouseButton.LeftButton, pos=undo.toPoint())
+    QTest.mouseClick(quick_of(window), Qt.MouseButton.LeftButton, pos=undo.toPoint())
     _pump(qapp, 4)
 
     session = window.session
@@ -515,7 +515,7 @@ def test_a_click_inside_an_open_sheet_over_free_time_opens_no_add_menu(
     inside = card.mapToScene(QPointF(card.property("width") - 6, card.property("height") - 6))
     assert _empty_time_under(root, hours_item, inside), "no free time under the sheet"
 
-    QTest.mouseClick(window._material_page._quick, Qt.MouseButton.LeftButton, pos=inside.toPoint())
+    QTest.mouseClick(quick_of(window), Qt.MouseButton.LeftButton, pos=inside.toPoint())
     _pump(qapp, 4)
 
     assert _slot_menu(root) == []
@@ -541,7 +541,7 @@ def test_escape_on_the_add_menu_gives_the_focus_back_to_the_grid(
     root = _reset(window, qapp)
     hours_item = _open_slot_menu(window, root)
 
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Escape)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Escape)
     _pump(qapp, 4)
 
     assert _slot_menu(root) == []
@@ -580,7 +580,7 @@ def test_clicking_a_drawer_card_while_the_add_menu_is_open_opens_the_card_with_t
     sheets = window._material_page.bridge.sheets
     assert _slot_menu(root) == []
     assert (sheets.kind, sheets.form["heading"]) == ("homework", "Edit homework")
-    focused = window._material_page._quick.quickWindow().activeFocusItem()
+    focused = quick_window_of(window).activeFocusItem()
     assert focused is not None and _qml(root, "sheetCard").isAncestorOf(focused)
 
 
@@ -641,7 +641,7 @@ def test_dragging_an_existing_block_or_card_does_not_open_add(
     _settle(qapp, window)
     _block_named(root, "History essay").forceActiveFocus()
     _pump(qapp)
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Return)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Return)
     _pump(qapp, 6)
     assert sheets.kind == "homework"
     sheets.forceClose()
@@ -677,7 +677,7 @@ def test_escape_during_a_drag_cancels_it(qapp: QApplication, window: NativeWindo
     start = QPoint(int(p1.x()), int(p1.y()))
     to = QPoint(int(p2.x()), int(p2.y()))
 
-    quick = window._material_page._quick
+    quick = quick_of(window)
     app = QApplication.instance()
     QTest.mousePress(quick, Qt.MouseButton.LeftButton, pos=start)
     _pump(app, 4)
@@ -695,7 +695,7 @@ def test_escape_during_a_drag_cancels_it(qapp: QApplication, window: NativeWindo
         ghost = _named(root, "rangeGhost")[0]
         assert ghost.property("visible") is True
 
-        QTest.keyClick(window, Qt.Key.Key_Escape)
+        QTest.keyClick(quick_of(window), Qt.Key.Key_Escape)
         _pump(app, 2)
 
         assert week.property("dragRangeActive") is False
@@ -721,8 +721,8 @@ def test_the_mouse_wheel_still_scrolls_the_grid(qapp: QApplication, window: Nati
     initial_y = float(grid.property("contentY"))
     assert initial_y == 100.0
 
-    quick = window._material_page._quick
-    win = quick.quickWindow()
+    quick = quick_of(window)
+    win = quick_window_of(window)
     centre = QPointF(quick.width() / 2, quick.height() / 2)
     event = QWheelEvent(
         centre,
@@ -751,7 +751,7 @@ SCHOOL_MINUTES = 390
 def _right_click_at(window: NativeWindow, hours_item: QObject, x: float, y: float) -> None:
     spot = hours_item.mapToScene(QPointF(x, y))
     QTest.mouseClick(
-        window._material_page._quick, Qt.MouseButton.RightButton, pos=QPoint(int(spot.x()), int(spot.y()))
+        quick_of(window), Qt.MouseButton.RightButton, pos=QPoint(int(spot.x()), int(spot.y()))
     )
     _pump(QApplication.instance(), 4)
 
@@ -775,11 +775,10 @@ def _preview_rows(monkeypatch: pytest.MonkeyPatch) -> list[list[dict]]:
     """The paste preview, turned away: what it was asked to show is what these tests read."""
     seen: list[list[dict]] = []
 
-    def look(dialog: PreviewDialog) -> int:
-        seen.append(dialog.rows())
-        return int(QDialog.DialogCode.Rejected)
+    def look(_sheets: object, draft: PreviewDraft) -> None:
+        seen.append(draft.rows)
 
-    monkeypatch.setattr(PreviewDialog, "exec", look)
+    monkeypatch.setattr(SheetsBridge, "open_preview", look)
     return seen
 
 
@@ -799,7 +798,7 @@ def test_paste_here_is_offered_while_something_is_copied_and_not_before_or_after
     window.session.copy_block("school", 0)
     root = _saturday_menu(qapp, window, how)
     assert _slot_menu(root) == PASTE
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Escape)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Escape)
     _pump(qapp, 4)
     window.session.clipboard = None
     hours_item, row, gutter, day_width, saturday = _grid_geometry(root, window)
@@ -905,7 +904,7 @@ def test_paste_here_is_not_offered_while_a_save_is_under_way(
 ) -> None:
     """The plain look greys Paste while the week is saving; Material's menu leaves the row out."""
     root = _saturday_menu(qapp, window, "right-click")
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Escape)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Escape)
     _pump(qapp, 4)
     window.session.copy_block("school", 0)
     hours_item, row, gutter, day_width, saturday = _grid_geometry(root, window)
@@ -914,7 +913,7 @@ def test_paste_here_is_not_offered_while_a_save_is_under_way(
     try:
         _ask_menu(window, hours_item, "right-click", *spot)
         assert _slot_menu(root) == ADD_ONLY
-        QTest.keyClick(window._material_page._quick, Qt.Key.Key_Escape)
+        QTest.keyClick(quick_of(window), Qt.Key.Key_Escape)
         _pump(qapp, 4)
     finally:
         window.session.busy = False
@@ -980,7 +979,7 @@ def test_escape_on_a_menu_with_paste_here_pastes_nothing(
     window.session.copy_block("school", 0)
     seen = _preview_rows(monkeypatch)
     root = _saturday_menu(qapp, window, "right-click")
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Escape)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Escape)
     _pump(qapp, 4)
     assert _slot_menu(root) == []
     assert seen == []

@@ -83,16 +83,13 @@ def test_both_builds_ship_the_icon_and_the_fonts_where_the_app_looks_for_them() 
     assert (sounds / "soft-rain-loop.mp3").is_file()
     assert (sounds / "lofi-hip-hop-loop.ogg").is_file()
     fonts = ROOT / "desktop/assets/fonts"
-    for family in ("Inter", "Newsreader", "JetBrainsMono", "PixelifySans"):
+    for family in ("Inter", "Newsreader", "JetBrainsMono"):
         for face in ("Regular", "Medium", "SemiBold", "Bold"):
             assert (fonts / f"{family}-{face}.ttf").is_file(), (family, face)
-    assert (fonts / "VT323-Regular.ttf").is_file()
     for licence in (
         "LICENSE.txt",
         "Newsreader-OFL.txt",
         "JetBrainsMono-OFL.txt",
-        "PixelifySans-OFL.txt",
-        "VT323-OFL.txt",
     ):
         assert "SIL Open Font License" in (fonts / licence).read_text(encoding="utf-8"), licence
 

@@ -331,6 +331,14 @@ Item {
             scroller.contentY = Math.min(Math.max(0, scroller.contentHeight - scroller.height), itemY + itemHeight - scroller.height + 8)
     }
 
+    // A new text size changes the row height. The student's place is a time of day, so the same time stays at
+    // the top: the Widgets week kept it, and the grid does not jump back to now. A zoom places itself.
+    property real lastRow: 0
+    onRowChanged: {
+        if (lastRow > 0 && root.row > 0 && !root.zooming && scroller.contentHeight > 0)
+            scroller.contentY = Math.max(0, scroller.contentY * root.row / lastRow)
+        lastRow = root.row
+    }
     property string revealedKey: ""
     // Today was pressed: show the line once this week has it, however the grid was scrolled before.
     property bool nowAsked: false
@@ -343,7 +351,7 @@ Item {
         var view = scroller.height
         if (!bridge || view < 40 || bridge.nowDay < 0)
             return
-        var key = bridge.nowDay + ":" + (bridge.week ? bridge.week.columns : 7) + ":" + root.typeScale + ":" + root.density
+        var key = bridge.nowDay + ":" + (bridge.week ? bridge.week.columns : 7) + ":" + root.density
         if (revealedKey === key && !nowAsked)
             return
         revealedKey = key
@@ -416,6 +424,81 @@ Item {
         }
     }
 
+    // The keyboard stays on the week through a rebuild (Plan, Undo, redo, a drop). The blocks are rebuilt when the
+    // week changes, and the one holding the keyboard goes with them: the keyboard goes to the block with the same
+    // id, or to the grid when that block is gone, and never to nothing. `keptBlockId` is the block it was on,
+    // empty when it was on the grid itself.
+    property string keptBlockId: ""
+    property bool keyboardOnWeek: false
+
+    function blockOf(item) {
+        while (item) {
+            if (item.objectName === "weekBlock")
+                return item
+            item = item.parentItem
+        }
+        return null
+    }
+
+    function insideGrid(item) {
+        while (item) {
+            if (item === scroller)
+                return true
+            item = item.parentItem
+        }
+        return false
+    }
+
+    // Put the keyboard on the block `blockId`, else on the grid.
+    function focusWeek(blockId) {
+        if (blockId) {
+            for (var at = 0; at < hours.children.length; at++) {
+                var child = hours.children[at]
+                if (child.objectName === "weekBlock" && child.blockId === blockId) {
+                    child.forceActiveFocus()
+                    return
+                }
+            }
+        }
+        hours.forceActiveFocus()
+    }
+
+    function followKeyboard(item) {
+        var window = root.Window.window
+        if (!window || root.passive)
+            return
+        var block = blockOf(item)
+        if (block) {
+            keptBlockId = block.blockId
+            keyboardOnWeek = true
+        } else if (insideGrid(item)) {
+            keptBlockId = ""
+            keyboardOnWeek = true
+        } else if (item === null || item === window.contentItem) {
+            if (keyboardOnWeek)
+                Qt.callLater(root.restoreKeyboard)
+        } else {
+            keyboardOnWeek = false
+        }
+    }
+
+    function restoreKeyboard() {
+        var window = root.Window.window
+        if (!keyboardOnWeek || !root.visible || !window)
+            return
+        var now = window.activeFocusItem
+        if (now && now !== window.contentItem)
+            return
+        focusWeek(keptBlockId)
+    }
+
+    Connections {
+        target: root.passive ? null : root.Window.window
+        function onActiveFocusItemChanged() {
+            root.followKeyboard(root.Window.window.activeFocusItem)
+        }
+    }
+
     ZoomPill {
         id: zoomPill
         visible: root.showPill && !root.phone && !root.passive
@@ -481,6 +564,7 @@ Item {
 
         WheelHandler {
             acceptedModifiers: Qt.ControlModifier
+            acceptedDevices: PointerDevice.AllDevices
             onWheel: (event) => {
                 if (root.passive || !root.bridge || !root.bridge.zoomBy)
                     return
@@ -839,6 +923,10 @@ Item {
                     homework: model.homework
                     onToggled: if (root.bridge && root.bridge.week) root.bridge.week.toggleDone(model.assignmentId)
                     onOpened: if (root.bridge && root.bridge.sheets) root.bridge.sheets.editBlock(model.blockId, model.day)
+                    onCopyAsked: if (root.bridge && root.bridge.week) root.bridge.week.copyBlock(model.blockId, model.day)
+                    onDuplicateAsked: if (root.bridge && root.bridge.week) root.bridge.week.duplicateBlock(model.blockId, model.day)
+                    onDeleteAsked: root.askDelete({ blockId: model.blockId, assignmentId: model.assignmentId,
+                                                    day: model.day, homework: model.homework })
                     onMenuAsked: (mx, my) => root.openBlockMenu(blockCell, {
                         blockId: model.blockId,
                         assignmentId: model.assignmentId,
@@ -961,6 +1049,18 @@ Item {
         blockMenu.forceActiveFocus()
     }
 
+    // Delete from the block's menu or the Delete key: the same question either way.
+    function askDelete(target) {
+        if (!root.bridge || !root.bridge.sheets)
+            return
+        if (!target.homework)
+            root.bridge.sheets.askDeleteBlock(target.blockId, target.day)
+        else if (root.bridge.sheets.askDeleteHomework)
+            root.bridge.sheets.askDeleteHomework(target.assignmentId)
+        else
+            root.bridge.sheets.askDeleteUnfinished(target.assignmentId)
+    }
+
     function closeBlockMenu(giveFocusBack) {
         slotDay = -1
         menuMode = "block"
@@ -1057,14 +1157,7 @@ Item {
                     if (root.bridge.week)
                         root.bridge.week.toggleDone(target.assignmentId)
                 } else if (label === "Delete") {
-                    if (root.bridge.sheets) {
-                        if (!target.homework)
-                            root.bridge.sheets.askDeleteBlock(target.blockId, target.day)
-                        else if (root.bridge.sheets.askDeleteHomework)
-                            root.bridge.sheets.askDeleteHomework(target.assignmentId)
-                        else
-                            root.bridge.sheets.askDeleteUnfinished(target.assignmentId)
-                    }
+                    root.askDelete(target)
                 }
             }
             onDismissed: {
@@ -1091,6 +1184,7 @@ Item {
     }
 
     Component.onCompleted: {
+        lastRow = root.row
         if (root.followOpening)
             Qt.callLater(function() {
                 if (typeof root.revealOpening === "function")

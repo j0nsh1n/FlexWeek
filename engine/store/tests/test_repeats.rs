@@ -175,7 +175,7 @@ fn change_from_open_week(
             edit_intent(id, week, repeat, body.as_ref())
         })
         .collect();
-    let (blocks, _) = apply_to_week(&open, &repeats, &intents).unwrap();
+    let (blocks, _) = apply_to_week(&open, &repeats, &intents, week).unwrap();
     let values = intents.iter().map(|intent| intent.to_value()).collect();
     run(
         conn,
@@ -1305,4 +1305,356 @@ fn a_stop_names_a_later_weeks_own_edit_and_except_edited_keeps_it() {
         Some(("17:00".to_string(), vec![1, 3]))
     );
     assert_eq!(soccer_at(&conn, user_id, WEEK_AFTER), None);
+}
+
+// --- weekly fixed times the student made (#118) ----------------------------------------------------
+
+fn guitar() -> Value {
+    json!({"category": "extra", "days": [1], "duration_min": 60, "id": "weekly-3f2a9c01",
+           "kind": "locked", "start": "17:00", "title": "Guitar"})
+}
+
+#[test]
+fn a_weekly_time_made_from_the_open_week_shows_in_every_later_week_and_no_earlier_one() {
+    let (conn, user_id) = account("weekly_from_open_week", false);
+    set_up(&conn, user_id);
+    change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[("weekly-3f2a9c01", Some(guitar()))],
+    );
+    for week in [OPEN_WEEK, NEXT_WEEK, WEEK_AFTER, LAST_WEEK] {
+        let shows = shown(&conn, user_id, week);
+        let made = block(&shows, "weekly-3f2a9c01").unwrap_or_else(|| panic!("Guitar in {week}"));
+        assert_eq!(
+            (made["title"].clone(), made["days"].clone()),
+            (json!("Guitar"), json!([1])),
+            "{week}"
+        );
+    }
+    assert!(block(&shown(&conn, user_id, SETUP_WEEK), "weekly-3f2a9c01").is_none());
+}
+
+#[test]
+fn a_weekly_time_moved_this_week_and_later_keeps_earlier_weeks_and_a_later_weeks_own_change() {
+    let (conn, user_id) = account("weekly_moved_later", false);
+    set_up(&conn, user_id);
+    change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[("weekly-3f2a9c01", Some(guitar()))],
+    );
+    // The week of 23 November moves its own Guitar to 18:00.
+    let mut own = shown(&conn, user_id, WEEK_AFTER);
+    for item in &mut own {
+        if item["id"] == json!("weekly-3f2a9c01") {
+            item["start"] = json!("18:00");
+        }
+    }
+    save_week_as(&conn, user_id, WEEK_AFTER, own);
+    // From 16 November on, Guitar is on Thursday instead.
+    change_from_open_week(
+        &conn,
+        user_id,
+        NEXT_WEEK,
+        &[(
+            "weekly-3f2a9c01",
+            Some(with(guitar(), json!({"days": [3]}))),
+        )],
+    );
+    let days = |week: &str| {
+        block(&shown(&conn, user_id, week), "weekly-3f2a9c01").unwrap()["days"].clone()
+    };
+    assert_eq!(days(OPEN_WEEK), json!([1]));
+    assert_eq!(days(NEXT_WEEK), json!([3]));
+    assert_eq!(days(LAST_WEEK), json!([3]));
+    let kept = shown(&conn, user_id, WEEK_AFTER);
+    assert_eq!(
+        block(&kept, "weekly-3f2a9c01").unwrap()["start"],
+        json!("18:00")
+    );
+}
+
+#[test]
+fn a_weekly_time_stopped_this_week_and_later_leaves_earlier_weeks() {
+    let (conn, user_id) = account("weekly_stopped", false);
+    set_up(&conn, user_id);
+    change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[("weekly-3f2a9c01", Some(guitar()))],
+    );
+    change_from_open_week(&conn, user_id, WEEK_AFTER, &[("weekly-3f2a9c01", None)]);
+    assert!(block(&shown(&conn, user_id, NEXT_WEEK), "weekly-3f2a9c01").is_some());
+    assert!(block(&shown(&conn, user_id, WEEK_AFTER), "weekly-3f2a9c01").is_none());
+    assert!(block(&shown(&conn, user_id, LAST_WEEK), "weekly-3f2a9c01").is_none());
+}
+
+// --- Until: the last day a weekly time stands (#118) --------------------------------------------------
+
+/// Guitar on Tuesday and Thursday, from the open week, until Tuesday 24 November.
+fn guitar_until_24th(conn: &Connection, user_id: i64) {
+    let body = with(guitar(), json!({"days": [1, 3], "until": "2026-11-24"}));
+    change_from_open_week(conn, user_id, OPEN_WEEK, &[("weekly-3f2a9c01", Some(body))]);
+}
+
+fn guitar_days(conn: &Connection, user_id: i64, week: &str) -> Option<Value> {
+    block(&shown(conn, user_id, week), "weekly-3f2a9c01").map(|guitar| guitar["days"].clone())
+}
+
+#[test]
+fn until_inside_a_week_shows_the_days_up_to_it_and_none_after() {
+    let (conn, user_id) = account("until_inside_a_week", false);
+    set_up(&conn, user_id);
+    guitar_until_24th(&conn, user_id);
+    assert_eq!(guitar_days(&conn, user_id, NEXT_WEEK), Some(json!([1, 3])));
+    assert_eq!(
+        guitar_days(&conn, user_id, WEEK_AFTER),
+        Some(json!([1])),
+        "Thursday 26th is after Until"
+    );
+    assert_eq!(guitar_days(&conn, user_id, LAST_WEEK), None);
+}
+
+#[test]
+fn moving_until_later_shows_the_cut_days_again_even_in_a_week_saved_while_cut() {
+    let (conn, user_id) = account("until_moved_later", false);
+    set_up(&conn, user_id);
+    guitar_until_24th(&conn, user_id);
+    // The student saves the week of 23 November as it shows: Guitar on Tuesday only.
+    let as_shown = shown(&conn, user_id, WEEK_AFTER);
+    save_week_as(&conn, user_id, WEEK_AFTER, as_shown);
+    let later = with(guitar(), json!({"days": [1, 3], "until": "2026-12-31"}));
+    change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[("weekly-3f2a9c01", Some(later))],
+    );
+    assert_eq!(guitar_days(&conn, user_id, WEEK_AFTER), Some(json!([1, 3])));
+    assert_eq!(guitar_days(&conn, user_id, LAST_WEEK), Some(json!([1, 3])));
+}
+
+#[test]
+fn a_day_deleted_by_hand_in_a_cut_week_stays_deleted_when_until_moves() {
+    let (conn, user_id) = account("until_with_own_delete", false);
+    set_up(&conn, user_id);
+    guitar_until_24th(&conn, user_id);
+    // The week of 23 November takes Tuesday out for that week only.
+    let mut own = shown(&conn, user_id, WEEK_AFTER);
+    for item in &mut own {
+        if item["id"] == json!("weekly-3f2a9c01") {
+            item["missed_days"] = json!([1]);
+        }
+    }
+    save_week_as(&conn, user_id, WEEK_AFTER, own);
+    let later = with(guitar(), json!({"days": [1, 3], "until": "2026-12-31"}));
+    change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[("weekly-3f2a9c01", Some(later))],
+    );
+    let week = shown(&conn, user_id, WEEK_AFTER);
+    let guitar = block(&week, "weekly-3f2a9c01").expect("Guitar that week");
+    assert_eq!(guitar["days"], json!([1, 3]), "Thursday comes back");
+    assert_eq!(
+        guitar["missed_days"],
+        json!([1]),
+        "the Tuesday taken out stays out"
+    );
+}
+
+#[test]
+fn moving_until_later_from_the_week_it_cuts_shows_the_cut_day_there_too() {
+    let (conn, user_id) = account("until_moved_from_cut_week", false);
+    set_up(&conn, user_id);
+    guitar_until_24th(&conn, user_id);
+    // The student is on the week of 23 November, where Guitar shows Tuesday only, and moves Until on.
+    let later = with(guitar(), json!({"days": [1, 3], "until": "2026-12-31"}));
+    change_from_open_week(
+        &conn,
+        user_id,
+        WEEK_AFTER,
+        &[("weekly-3f2a9c01", Some(later))],
+    );
+    assert_eq!(guitar_days(&conn, user_id, WEEK_AFTER), Some(json!([1, 3])));
+    assert_eq!(guitar_days(&conn, user_id, LAST_WEEK), Some(json!([1, 3])));
+}
+
+// --- the repeat limit and weeks that hold a weekly time by hand (#118) -------------------------------
+
+fn weekly(n: usize) -> Value {
+    json!({"category": "extra", "days": [2], "duration_min": 30, "id": format!("weekly-{n:04}"),
+           "kind": "locked", "start": "07:00", "title": format!("Practice {n}")})
+}
+
+#[test]
+fn an_account_holds_two_hundred_repeats_and_the_next_is_refused_with_a_sentence() {
+    let (conn, user_id) = account("repeat_limit", false);
+    set_up(&conn, user_id); // School and Soccer
+    let more: Vec<Value> = (0..198)
+        .map(|n| {
+            edit_intent(&format!("weekly-{n:04}"), OPEN_WEEK, None, Some(&weekly(n)))
+                .unwrap()
+                .to_value()
+        })
+        .collect();
+    run(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(more), &conn, user_id),
+    );
+    assert_eq!(
+        standing_blocks(&conn, user_id, OPEN_WEEK).unwrap().len(),
+        200
+    );
+    let one_more = edit_intent("weekly-0198", OPEN_WEEK, None, Some(&weekly(198)))
+        .unwrap()
+        .to_value();
+    match apply(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(vec![one_more]), &conn, user_id),
+        &clock(),
+    ) {
+        Err(ApplyFailure::Refused { message, .. }) => assert_eq!(
+            message,
+            "FlexWeek keeps at most 200 weekly blocks (School, activities and weekly fixed times) in one \
+             account. Stop one before adding another."
+        ),
+        other => panic!("the 201st repeat was not refused: {other:?}"),
+    }
+    // A change to one that already stands is not a new one.
+    let moved = with(weekly(5), json!({"start": "07:30"}));
+    let edit = edit_intent("weekly-0005", OPEN_WEEK, Some(&weekly(5)), Some(&moved))
+        .unwrap()
+        .to_value();
+    run(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(vec![edit]), &conn, user_id),
+    );
+}
+
+fn refused_as_full(conn: &rusqlite::Connection, user_id: i64, intent: Value) -> bool {
+    matches!(
+        apply(conn, user_id, &batch(Vec::new(), Some(vec![intent]), conn, user_id), &clock()),
+        Err(ApplyFailure::Refused { message, .. }) if message.starts_with("FlexWeek keeps at most 200")
+    )
+}
+
+#[test]
+fn a_repeat_started_again_or_from_an_earlier_week_cannot_take_an_account_past_two_hundred() {
+    const NEXT_WEEK: &str = "2026-11-16";
+    // Reviewer's first case: 200 stand, one stops, another takes its place, then the stopped one starts
+    // again. That would be 201 standing at once.
+    let (conn, user_id) = account("repeat_limit_restart", false);
+    set_up(&conn, user_id); // School and Soccer
+    let made = |week: &str, from: usize, to: usize| -> Vec<Value> {
+        (from..to)
+            .map(|n| {
+                edit_intent(&format!("weekly-{n:04}"), week, None, Some(&weekly(n)))
+                    .unwrap()
+                    .to_value()
+            })
+            .collect()
+    };
+    run(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(made(OPEN_WEEK, 0, 198)), &conn, user_id),
+    );
+    let stop = edit_intent("weekly-0000", OPEN_WEEK, Some(&weekly(0)), None)
+        .unwrap()
+        .to_value();
+    run(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(vec![stop]), &conn, user_id),
+    );
+    run(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(made(OPEN_WEEK, 198, 199)), &conn, user_id),
+    );
+    assert_eq!(
+        standing_blocks(&conn, user_id, NEXT_WEEK).unwrap().len(),
+        200
+    );
+    let again = edit_intent("weekly-0000", NEXT_WEEK, None, Some(&weekly(0)))
+        .unwrap()
+        .to_value();
+    assert!(
+        refused_as_full(&conn, user_id, again),
+        "a stopped repeat started again is the 201st"
+    );
+    assert_eq!(
+        standing_blocks(&conn, user_id, NEXT_WEEK).unwrap().len(),
+        200
+    );
+
+    // Reviewer's second case: 200 that start next week, then one more from this week. Next week would
+    // hold 201.
+    let (conn, user_id) = account("repeat_limit_earlier", false);
+    set_up(&conn, user_id);
+    run(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(made(NEXT_WEEK, 0, 198)), &conn, user_id),
+    );
+    assert_eq!(
+        standing_blocks(&conn, user_id, NEXT_WEEK).unwrap().len(),
+        200
+    );
+    let earlier = edit_intent("weekly-0198", OPEN_WEEK, None, Some(&weekly(198)))
+        .unwrap()
+        .to_value();
+    assert!(
+        refused_as_full(&conn, user_id, earlier),
+        "one from an earlier week is the 201st next week"
+    );
+    // With room, a stopped repeat may start again.
+    let stop = edit_intent("weekly-0001", NEXT_WEEK, Some(&weekly(1)), None)
+        .unwrap()
+        .to_value();
+    run(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(vec![stop]), &conn, user_id),
+    );
+    let again = edit_intent("weekly-0001", "2026-11-23", None, Some(&weekly(1)))
+        .unwrap()
+        .to_value();
+    assert!(!refused_as_full(&conn, user_id, again));
+}
+
+#[test]
+fn a_new_weekly_time_names_the_later_weeks_that_already_hold_it_by_hand_and_removes_nothing() {
+    let (conn, user_id) = account("weekly_doubles", false);
+    set_up(&conn, user_id);
+    // The week of 23 November already has a Guitar the student added by hand on Tuesday.
+    let mut by_hand = shown(&conn, user_id, WEEK_AFTER);
+    by_hand.push(with(
+        guitar(),
+        json!({"id": "c0ffee00-0000-4000-8000-000000000001"}),
+    ));
+    save_week_as(&conn, user_id, WEEK_AFTER, by_hand);
+    let answer = change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[("weekly-3f2a9c01", Some(guitar()))],
+    );
+    assert_eq!(answer["repeats"]["doubled_weeks"], json!([WEEK_AFTER]));
+    let week = shown(&conn, user_id, WEEK_AFTER);
+    let guitars = week
+        .iter()
+        .filter(|block| block["title"] == json!("Guitar"))
+        .count();
+    assert_eq!(guitars, 2, "both stay; the student deletes the extra one");
+    assert!(answer["repeats"]["doubled_weeks"].as_array().is_some());
 }

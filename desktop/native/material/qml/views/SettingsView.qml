@@ -112,9 +112,26 @@ Item {
         onDismissed: root.panel.answerPreset("cancel")
     }
 
+    Prompt {
+        objectName: "removePhonePrompt"
+        theme: Ui.theme
+        density: Ui.density
+        reduceMotion: Ui.reduceMotion
+        highContrast: Ui.highContrast
+        open: !!root.st.askRemove
+        title: "Remove " + (root.st.removeName || "this phone") + "?"
+        body: "The phone keeps what it has and gets nothing new from this computer. To link it again, pair it once more."
+        buttons: [
+            { label: "Keep phone", value: "keep", kind: "text" },
+            { label: "Remove phone", value: "remove", kind: "filled" }
+        ]
+        onPicked: (value, text) => root.panel.answerRemovePhone(value)
+        onDismissed: root.panel.answerRemovePhone("keep")
+    }
+
     Snackbar {
         objectName: "settingsNotice"
-        visible: root.shownNotice !== "" && !root.st.prompt && !root.st.askPreset
+        visible: root.shownNotice !== "" && !root.st.prompt && !root.st.askPreset && !root.st.askRemove
         z: 10
         message: root.shownNotice
         actionText: ""

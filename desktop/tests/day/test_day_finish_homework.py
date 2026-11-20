@@ -50,7 +50,8 @@ def test_finishing_homework_moves_it_to_done_and_undo_brings_it_back(
     pump(qapp)
     assert day.property("leftLine") == "1 thing left today"
     assert [row["title"] for row in rows_of(day.property("upNext"))] == ["History essay"]
-    assert bridge.property("snackText") == ""
+    assert bridge.property("snackText").startswith("Undid"), "Undo says what it did"
+    assert bridge.property("snackAction") == ""
 
 
 def test_finishing_homework_waits_while_a_save_is_pending(qapp: QApplication, window: NativeWindow) -> None:

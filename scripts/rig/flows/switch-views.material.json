@@ -1,7 +1,7 @@
 {
  "setup": {
   "seed": "rig",
-  "look": "light-frost",
+  "mode": "light",
   "size": [
    1280,
    800
@@ -9,18 +9,6 @@
   "clock_24h": false
  },
  "steps": [
-  {
-   "click": "settingsGear"
-  },
-  {
-   "wait": 600
-  },
-  {
-   "click": "chooseMaterial"
-  },
-  {
-   "wait": 1000
-  },
   {
    "see": "materialRail"
   },
@@ -46,7 +34,7 @@
    "click": "navWeek"
   },
   {
-   "see": "School"
+   "see": "Soccer"
   },
   {
    "shot": "week"

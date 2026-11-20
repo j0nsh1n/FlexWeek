@@ -1,7 +1,7 @@
 {
   "setup": {
     "seed": "rig",
-    "look": "light-frost",
+    "mode": "light",
     "size": [
       1280,
       800
@@ -9,18 +9,6 @@
     "clock_24h": false
   },
   "steps": [
-    {
-      "click": "settingsGear"
-    },
-    {
-      "wait": 600
-    },
-    {
-      "click": "chooseMaterial"
-    },
-    {
-      "wait": 1000
-    },
     {
       "see": "materialRail"
     },
@@ -163,16 +151,7 @@
       "wait": 400
     },
     {
-      "see": "useWidgets"
-    },
-    {
-      "click": "useWidgets"
-    },
-    {
-      "wait": 800
-    },
-    {
-      "see": "Math worksheet"
+      "see": "materialSettings"
     }
   ]
 }

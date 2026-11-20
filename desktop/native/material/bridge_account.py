@@ -12,10 +12,8 @@ from __future__ import annotations
 
 import logging
 from copy import deepcopy
-from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 from PySide6.QtCore import (
     Property,
@@ -31,9 +29,21 @@ from PySide6.QtCore import (
 )
 from PySide6.QtWidgets import QApplication
 
-from backend import clock as wall_clock
 from backend.models import valid_spotify_url
 from backend.slots import hhmm_to_minutes, minutes_to_hhmm
+from desktop.native.account_copy import (
+    CREATE_HEADING,
+    CREATE_NOTE,
+    RECOVERY_COPY,
+    RECOVERY_FILE,
+    RECOVERY_KEEP,
+    RECOVERY_SAID_MS,
+    RECOVERY_SAVE,
+    RECOVERY_WAIT,
+    RESET_HEADING,
+    RESET_NOTE,
+    SIGN_IN_HEADING,
+)
 from desktop.native.calendar import (
     DAY_FULL,
     DAYS,
@@ -43,6 +53,7 @@ from desktop.native.calendar import (
     weekday_order,
 )
 from desktop.native.client import (
+    PASSWORD_LENGTH_HINT,
     SESSION_ENDED,
     SIGN_IN_AGAIN,
     SIGN_IN_WHY,
@@ -56,29 +67,15 @@ from desktop.native.client import (
     sign_up_problem,
 )
 from desktop.native.fields import (
-    QUICK_LENGTHS,
     WEEK_STARTS,
     read_clock,
     save_week_starts_on,
     week_starts_on,
 )
 from desktop.native.hours.geometry import drag_step
-from desktop.native.layouts.registry import (
-    DESIGN_LOOKS,
-    LAYOUTS,
-    layouts_for,
-    options_for,
-    sanitize_layout,
-)
-from desktop.native.look import (
-    KNOB_VALUE_LABELS,
-    LOOK_KNOBS,
-    effective_look,
-    parse_look_menu_token,
-    sanitize_look,
-)
+from desktop.native.material.theme import ONE_MODE
 from desktop.native.remind import reminder_lead_min
-from desktop.native.settings import (
+from desktop.native.settings_copy import (
     ALARM_TONE_LABELS,
     DRAG_STEP_CHOICES,
     DRAG_STEP_QUESTION,
@@ -86,69 +83,42 @@ from desktop.native.settings import (
     SPORT_FALLBACK,
     SPOTIFY_TONE_NOTE,
 )
-from desktop.native.setup import (
-    COLOURS,
-    DONE,
+from desktop.native.setup_steps import (
     FINISH_LABEL,
-    FIRST,
     HOMEWORK,
-    LOOK,
-    LOOK_STEPS,
+    LOOK_MODE_CARDS,
+    MATERIAL_LAST,
+    MATERIAL_NOTES,
+    MATERIAL_RAIL,
+    MATERIAL_TITLES,
     MAX_ACTIVITIES,
-    MAX_FIRST_HOMEWORK,
     NEXT_LABEL,
-    NOTES,
-    OWN_LOOK_LABEL,
-    RAIL,
     RAIL_STATES,
+    REMINDER_LEADS,
     REMINDERS,
+    ROW_SIZE_CARDS,
+    SCHOOL_CARDS,
+    SCHOOL_CUSTOM_NOTE,
+    SCHOOL_CUSTOM_TITLE,
+    SCHOOL_DAYS_CARD,
     SKIP_ALL_LABEL,
     SKIP_STEP_LABEL,
-    STYLE,
-    STYLES,
-    TITLES,
+    SOUND_CARD_TITLE,
+    STUDY_CARDS,
     WEEK,
-    Style,
     activity_category_for,
     days_label,
-    next_school_day,
     span_label,
-    style_layout,
-    style_look,
 )
+from desktop.native.sheet_rules import CUTOFFS
 from desktop.native.tones import FALLBACK, RECIPES
 from desktop.native.weekmodel import end_after_start_words, hhmm_text, set_clock_24h
-from desktop.native.widgets import CUTOFFS, DUE_BY_HINT
-from desktop.native.window import (
-    CREATE_HEADING,
-    CREATE_NOTE,
-    PASSWORD_LENGTH_HINT,
-    RECOVERY_COPY,
-    RECOVERY_FILE,
-    RECOVERY_KEEP,
-    RECOVERY_SAID_MS,
-    RECOVERY_SAVE,
-    RECOVERY_WAIT,
-    RESET_HEADING,
-    RESET_NOTE,
-    SIGN_IN_HEADING,
-)
 from desktop.native.work_windows import MAX_WORK_WINDOWS, PRESETS, PRESETS_NOTE
 
 log = logging.getLogger("flexweek.material")
 
-# The four shipped styles, plus Material 3. The widgets list is unchanged.
-# Material 3 uses the classic light pack, so Next keeps a light week and the
-# saved surface stays Material.
-MATERIAL_STYLE = Style(
-    "material",
-    "Material 3",
-    "The Material week",
-    "classic",
-    "pack:light-frost",
-    "light-frost",
-)
-MATERIAL_STYLES = (MATERIAL_STYLE, *STYLES)
+# Three steps: Material has no style page (Material 3 is the only style) and no first-homework or Done page.
+RAIL_STEPS = MATERIAL_RAIL
 RECOVERY_HEADING = "Save these recovery codes"
 RECOVERY_NOTE = (
     "They are the only way to reset your password. FlexWeek can't email you. "
@@ -178,6 +148,11 @@ def _clock(text: str, *, end: bool = False) -> str | None:
     return minutes_to_hhmm(minute) if minute < 1440 else "23:59"
 
 
+def _hour_label(hour: int) -> str:
+    """An hour on the preview's side: 8 AM, or 08:00 on the 24-hour clock."""
+    return hhmm_text(f"{hour:02d}:00").replace(":00 ", " ")
+
+
 def _blank_activity() -> dict[str, Any]:
     return {
         # Kept for the life of the row, so removing another activity never renumbers this one.
@@ -188,17 +163,6 @@ def _blank_activity() -> dict[str, Any]:
         "end": "17:00",
         "category": "extra",
         "touched": False,
-    }
-
-
-def _blank_homework(due: str) -> dict[str, Any]:
-    return {
-        "title": "",
-        "minutes": 60,
-        "due": due,
-        "due_touched": False,
-        "timed": False,
-        "time": "09:00",
     }
 
 
@@ -248,14 +212,8 @@ class Table(QAbstractListModel):
 
 # model name -> the list property it follows
 TABLES = {
-    "stylesModel": "styles",
-    "mainsModel": "mains",
-    "knobsModel": "knobRows",
-    "dayLayoutsModel": "dayLayouts",
     "activitiesModel": "activities",
     "workModel": "workWindows",
-    "homeworkModel": "homeworkRows",
-    "summaryModel": "summaryRows",
     "railModel": "rail",
 }
 
@@ -288,22 +246,22 @@ class AccountBridge(QObject):
         self._said.setInterval(RECOVERY_SAID_MS)
         self._said.timeout.connect(self._reset_recovery_labels)
         self._ask: dict = {}
+        self._ask_handlers: dict[str, Any] | None = None
         self._edited_done = None
         self._state: Any = None
-        self._step = STYLE
-        self._furthest = STYLE
-        self._own_look = False
-        self._style_key = "material"
-        self._style_tokens: dict[str, str] = {}
-        self._pack = "system"
-        self._look = sanitize_look(None)
-        self._layout = sanitize_layout(None)
-        self._entered = (self._pack, deepcopy(self._look), deepcopy(self._layout))
+        self._step = WEEK
+        self._furthest = WEEK
         self._clock_24h = False
         self._week_start = "monday"
         self._school_days = [0, 1, 2, 3, 4]
         self._school_start = "08:00"
-        self._school_end = "14:30"
+        self._school_end = "15:00"
+        self._school_custom = False
+        self._study_custom = False
+        self._sound_open = False
+        self._settings: Any = None
+        self._look_opened: dict[str, str] = {}
+        self._look_touched = False
         self._activities: list[dict[str, Any]] = [_blank_activity()]
         self._week_opened: tuple = ()
         self._cutoff = ""
@@ -315,8 +273,6 @@ class AccountBridge(QObject):
         self._lead = reminder_lead_min(None)
         self._tone = FALLBACK
         self._spotify = ""
-        self._homework: list[dict[str, Any]] = [_blank_homework(next_school_day([0, 1, 2, 3, 4]))]
-        self._made: dict[str, str] = {}
         self._problem_text = ""
         self._test_result = ""
         self._skip_open = False
@@ -324,9 +280,6 @@ class AccountBridge(QObject):
         self._skip_confirm = ""
         self._skip_dismiss = ""
         self._skip_dismiss_keeps = False
-        self._summary: list[dict[str, str]] = []
-        # The surface the student picked on the style page, written when setup ends.
-        self._surface_pick: str | None = None
         self._tables = {name: Table(self) for name in TABLES}
         # Before QML's own handlers, so a binding that reads a table sees the new rows.
         self.changed.connect(self._sync_tables)
@@ -342,18 +295,6 @@ class AccountBridge(QObject):
     @property
     def setup_step(self) -> int:
         return self._step
-
-    def apply_surface(self) -> None:
-        """Make the style picked in setup the window's surface. Material stays unless a standard style won."""
-        pick = self._surface_pick
-        self._surface_pick = None
-        window = self._window
-        if pick is None or pick == window._surface:  # type: ignore[attr-defined]
-            return
-        window._surface = pick  # type: ignore[attr-defined]
-        window._save_look()  # type: ignore[attr-defined]
-        if pick == "widgets":
-            window._week_keys(True)  # type: ignore[attr-defined]
 
     # Sign-in
 
@@ -479,7 +420,13 @@ class AccountBridge(QObject):
 
     @Slot()
     def saveCodes(self) -> None:  # noqa: N802 — QML slot
-        path = self._window._choose_recovery_file()  # type: ignore[attr-defined]
+        """Save: the sheet says what the file is first, then the system's file dialog picks where it goes."""
+        self.pose_question(
+            self._window.recovery_file_question(),  # type: ignore[attr-defined]
+            {"choose": lambda: self._write_codes(self._window._pick_recovery_file())},  # type: ignore[attr-defined]
+        )
+
+    def _write_codes(self, path: str) -> None:
         if not path:
             return
         try:
@@ -514,102 +461,32 @@ class AccountBridge(QObject):
     def open_setup(self, state: Any, step: int) -> None:
         """Fill setup from this account's own state. A previous account's rows are not kept."""
         self._state = deepcopy(state)
-        self._pack = str(state.pack)
-        self._look = sanitize_look(state.look)
-        self._layout = sanitize_layout(state.layout)
-        self._entered = (self._pack, deepcopy(self._look), deepcopy(self._layout))
-        self._own_look = step in (LOOK, COLOURS)
-        self._style_tokens = {}
         self._load_fields()
-        self._step = step if step in range(DONE + 1) else STYLE
+        # A step before School hours is from the removed style pages. One past Look and alerts is from the
+        # older five-step setup, which ended on First homework and Done: it resumes on the last step.
+        self._step = WEEK if step < WEEK else min(step, MATERIAL_LAST)
         self._furthest = self._step
         self._problem_text = ""
         self._test_result = ""
         self._skip_open = False
-        self._made = {}
-        if self._step == STYLE and state.first_run:
-            self._style_key = MATERIAL_STYLE.key
-        else:
-            matched = self._matching_style()
-            self._style_key = matched or (MATERIAL_STYLE.key if state.first_run else "plain")
+        self._look_opened = self._look_choice()
+        self._look_touched = False
         self._phase = "setup"
-        if self._step == STYLE:
-            self._apply_style(self._style_key, preview=True)
-        else:
-            self._apply_clock()
-        if self._step == DONE:
-            self._summary = self._build_summary()
+        self._apply_clock()
         self.changed.emit()
 
-    @Slot(str)
-    def chooseStyle(self, key: str) -> None:  # noqa: N802 — QML slot
-        if self._style(key) is None:
-            return
-        self._apply_style(key, preview=True)
-        self.changed.emit()
-
-    @Slot()
-    def chooseOwnLook(self) -> None:  # noqa: N802 — QML slot
-        self._own_look = True
-        self._surface_pick = "widgets"
-        self._leave(LOOK, keep=False)
-
-    @Slot(str)
-    def chooseMain(self, layout_id: str) -> None:  # noqa: N802 — QML slot
-        if layout_id not in DESIGN_LOOKS:
-            return
-        options = deepcopy(self._layout["options"])
-        if "look" not in options.get(layout_id, {}):
-            options[layout_id] = {**options.get(layout_id, {}), "look": DESIGN_LOOKS[layout_id][0][0]}
-        self._layout = sanitize_layout({**self._layout, "main": layout_id, "options": options})
-        self._preview()
-        self.changed.emit()
-
-    @Slot(str)
-    def chooseColour(self, token: str) -> None:  # noqa: N802 — QML slot
-        main = self._layout["main"]
-        options = deepcopy(self._layout["options"])
-        options[main] = {**options.get(main, {}), "look": token}
-        parsed = parse_look_menu_token(token)
-        if parsed is not None and parsed[0] == "pack":
-            self._pack = parsed[1]
-        self._layout = sanitize_layout({**self._layout, "options": options})
-        self._preview()
-        self.changed.emit()
-
-    @Slot(str, str)
-    def chooseKnob(self, knob: str, value: str) -> None:  # noqa: N802 — QML slot
-        if knob not in {"text", "density", "font", "depth"} or value not in LOOK_KNOBS[knob]:
-            return
-        knobs = dict(sanitize_look(self._look)["knobs"])
-        knobs[knob] = value
-        if knob == "density" and self._layout["main"] == "timeline":
-            options = deepcopy(self._layout["options"])
-            options.setdefault("timeline", {})["density"] = value or "comfortable"
-            self._layout = sanitize_layout({**self._layout, "options": options})
-        self._look = sanitize_look({"preset": "default", "knobs": knobs})
-        self._preview()
-        self.changed.emit()
-
-    @Slot(str)
-    def chooseDay(self, layout_id: str) -> None:  # noqa: N802 — QML slot
-        self._layout = sanitize_layout({**self._layout, "day": layout_id})
-        self._preview()
-        self.changed.emit()
+    def use_settings(self, settings: Any) -> None:
+        """The Settings bridge, which setup's look cards write through, so setup and Settings agree."""
+        self._settings = settings
 
     @Slot(int)
     def toggleSchoolDay(self, day: int) -> None:  # noqa: N802 — QML slot
-        previous = next_school_day(self._school_days)
         days = set(self._school_days)
         if day in days:
             days.discard(day)
         elif 0 <= day <= 6:
             days.add(day)
         self._school_days = sorted(days)
-        nxt = next_school_day(self._school_days)
-        for row in self._homework:
-            if not row["due_touched"] and row["due"] == previous:
-                row["due"] = nxt
         self.changed.emit()
 
     @Slot(str)
@@ -815,57 +692,95 @@ class AccountBridge(QObject):
         self._test_result = said
         self.changed.emit()
 
+    # The cards. A card is one answer: it sets the fields the old page's controls set, and the detailed
+    # controls (shown while `power` is on) change the same fields.
+
+    @Slot(str)
+    def setSchoolPreset(self, key: str) -> None:  # noqa: N802 — QML slot
+        if key == "custom":
+            self._school_custom = True
+        else:
+            card = next((item for item in SCHOOL_CARDS if item[0] == key), None)
+            if card is None:
+                return
+            self._school_custom = False
+            self._school_days = list(SCHOOL_DAYS_CARD)
+            self._school_start, self._school_end = card[1], card[2]
+        self.changed.emit()
+
+    @Slot(str)
+    def setStudyPreset(self, key: str) -> None:  # noqa: N802 — QML slot
+        if key == "custom":
+            self._study_custom = True
+            self.changed.emit()
+            return
+        card = next((item for item in STUDY_CARDS if item[0] == key), None)
+        if card is None:
+            return
+        self._study_custom = False
+        self._windows = []
+        if card[1] is not None:
+            for label, days, start, end in PRESETS:
+                if label == card[1]:
+                    self._windows.append({"days": list(days), "start": start, "end": end})
+        self.changed.emit()
+
+    @Slot(str)
+    def setReminderChoice(self, value: str) -> None:  # noqa: N802 — QML slot
+        if value == "off":
+            self._reminders = False
+        elif value == "current":
+            self._reminders = True
+        elif value.isdigit() and int(value) in REMINDER_LEADS:
+            self._reminders = True
+            self._lead = int(value)
+        else:
+            return
+        self.changed.emit()
+
+    @Slot(bool)
+    def setSoundOpen(self, on: bool) -> None:  # noqa: N802 — QML slot
+        self._sound_open = bool(on)
+        self.changed.emit()
+
     @Slot()
-    def addHomeworkRow(self) -> None:  # noqa: N802 — QML slot
-        if len(self._homework) >= MAX_FIRST_HOMEWORK:
-            return
-        self._homework.append(_blank_homework(next_school_day(self._school_days)))
+    def useDefaultSound(self) -> None:  # noqa: N802 — QML slot
+        self._tone = FALLBACK
+        self._sound_open = False
+        self._test_result = ""
         self.changed.emit()
 
-    @Slot(int)
-    def removeHomeworkRow(self, index: int) -> None:  # noqa: N802 — QML slot
-        if not 0 <= index < len(self._homework):
+    @Slot(str)
+    def setLookPreset(self, name: str) -> None:  # noqa: N802 — QML slot
+        self._apply_look(preset=name)
+
+    @Slot(str)
+    def setLookMode(self, mode: str) -> None:  # noqa: N802 — QML slot
+        self._apply_look(mode=mode)
+
+    @Slot(str)
+    def setLookDensity(self, density: str) -> None:  # noqa: N802 — QML slot
+        self._apply_look(density=density)
+
+    def _look_choice(self) -> dict[str, str]:
+        if self._settings is None:
+            return {}
+        choice = self._settings._choice
+        return {key: choice[key] for key in ("preset", "mode", "density")}
+
+    def _apply_look(self, **parts: str) -> None:
+        """A look card applies at once, as in Settings, so the whole window shows the look being picked.
+        Skipping the step puts the look it opened with back."""
+        if self._settings is None:
             return
-        self._homework.pop(index)
-        if not self._homework:
-            self._homework.append(_blank_homework(next_school_day(self._school_days)))
+        self._look_touched = True
+        self._settings.apply_setup_look(**parts)
         self.changed.emit()
 
-    @Slot(int, str)
-    def setHomeworkTitle(self, index: int, value: str) -> None:  # noqa: N802 — QML slot
-        row = self._row(self._homework, index)
-        if row is not None:
-            row["title"] = value
-            self.changed.emit()
-
-    @Slot(int, int)
-    def setHomeworkMinutes(self, index: int, minutes: int) -> None:  # noqa: N802 — QML slot
-        row = self._row(self._homework, index)
-        if row is not None:
-            row["minutes"] = max(15, min(600, int(minutes)))
-            self.changed.emit()
-
-    @Slot(int, str)
-    def setHomeworkDue(self, index: int, value: str) -> None:  # noqa: N802 — QML slot
-        row = self._row(self._homework, index)
-        if row is not None:
-            row["due"] = value
-            row["due_touched"] = True
-            self.changed.emit()
-
-    @Slot(int, bool)
-    def setHomeworkTimed(self, index: int, on: bool) -> None:  # noqa: N802 — QML slot
-        row = self._row(self._homework, index)
-        if row is not None:
-            row["timed"] = bool(on)
-            self.changed.emit()
-
-    @Slot(int, str)
-    def setHomeworkTime(self, index: int, value: str) -> None:  # noqa: N802 — QML slot
-        row = self._row(self._homework, index)
-        if row is not None:
-            row["time"] = _clock(value) or row["time"]
-            self.changed.emit()
+    def _restore_look(self) -> None:
+        if self._look_touched and self._settings is not None and self._look_opened:
+            self._settings.apply_setup_look(**self._look_opened)
+        self._look_touched = False
 
     def pose_edited(self, ask: dict, done) -> None:
         """The edited-weeks question over setup. `done` is called with the answer, or None to cancel."""
@@ -877,12 +792,32 @@ class AccountBridge(QObject):
     def ask(self) -> dict:
         return self._ask
 
+    def pose_question(self, question: dict, handlers: dict[str, Any]) -> None:
+        """A question over the account screens (the recovery codes' file). Each answer runs its handler;
+        Cancel and Esc run none."""
+        self._ask = dict(question)
+        self._ask_handlers = handlers
+        self.changed.emit()
+
     @Slot(str)
     def answer(self, choice: str) -> None:
+        if self._ask_handlers is not None:
+            handlers, self._ask_handlers = self._ask_handlers, None
+            self._ask = {}
+            self.changed.emit()
+            run = handlers.get(choice)
+            if run is not None:
+                run()
+            return
         self._finish_edited(choice if choice in ("keep", "replace", "from_today") else None)
 
     @Slot()
     def closeSheet(self) -> None:  # noqa: N802 — QML name
+        if self._ask_handlers is not None:
+            self._ask_handlers = None
+            self._ask = {}
+            self.changed.emit()
+            return
         self._finish_edited(None)
 
     def _finish_edited(self, choice: str | None) -> None:
@@ -896,19 +831,20 @@ class AccountBridge(QObject):
 
     @Slot()
     def setupNext(self) -> None:  # noqa: N802 — QML slot
-        if self._step == DONE:
-            self._window._finish_setup()  # type: ignore[attr-defined]
+        if self._step == MATERIAL_LAST:
+            self._finish(keep=True)
             return
         self._leave(self._after(), keep=True)
 
     @Slot()
     def setupBack(self) -> None:  # noqa: N802 — QML slot
-        if self._step != STYLE:
+        if self._step != WEEK:
             self._leave(self._before(), keep=False)
 
     @Slot()
     def setupSkip(self) -> None:  # noqa: N802 — QML slot
-        if self._step == DONE:
+        if self._step == MATERIAL_LAST:
+            self._finish(keep=False)
             return
         if self._step == WEEK:
             names = self._kept_on_week()
@@ -919,28 +855,22 @@ class AccountBridge(QObject):
 
     @Slot()
     def setupSkipAll(self) -> None:  # noqa: N802 — QML slot
-        if self._step in LOOK_STEPS:
-            self._restore_entered()
-            self._preview()
-        elif self._step == WEEK:
+        if self._step == WEEK:
             self._clock_24h = (self._state.preferences.get("clock_24h") is True) if self._state else False
             self._apply_clock()
+        self._restore_look()
         self._window._finish_setup()  # type: ignore[attr-defined]
 
     @Slot(int)
     def setupJump(self, step: int) -> None:  # noqa: N802 — QML slot
-        if step == self._step:
-            return
-        if step > self._furthest and step != DONE:
-            return
-        if step == DONE and self._furthest < DONE:
+        if step == self._step or step > self._furthest:
             return
         self._leave(step, keep=step > self._step)
 
     @Slot(int, result=int)
     def stepFor(self, index: int) -> int:  # noqa: N802 — QML slot
         """The first step of the rail's `index`th entry."""
-        return RAIL[index][1][0] if 0 <= index < len(RAIL) else STYLE
+        return RAIL_STEPS[index][1][0] if 0 <= index < len(RAIL_STEPS) else WEEK
 
     @Slot(str)
     def answerSkip(self, choice: str) -> None:  # noqa: N802 — QML slot
@@ -963,7 +893,7 @@ class AccountBridge(QObject):
         if self._phase == "recovery":
             return RECOVERY_HEADING
         if self._phase == "setup":
-            return TITLES[self._step]
+            return MATERIAL_TITLES[self._step]
         return {
             "sign-in": SIGN_IN_HEADING,
             "create": CREATE_HEADING,
@@ -979,7 +909,7 @@ class AccountBridge(QObject):
         if self._phase == "reset":
             return RESET_NOTE
         if self._phase == "setup":
-            return NOTES[self._step]
+            return MATERIAL_NOTES[self._step]
         return ""
 
     @Property(str, notify=changed)
@@ -1023,36 +953,12 @@ class AccountBridge(QObject):
         return self._status
 
     @Property(QObject, constant=True)
-    def stylesModel(self) -> QObject:  # noqa: N802 — QML name
-        return self._tables["stylesModel"]
-
-    @Property(QObject, constant=True)
-    def mainsModel(self) -> QObject:  # noqa: N802 — QML name
-        return self._tables["mainsModel"]
-
-    @Property(QObject, constant=True)
-    def knobsModel(self) -> QObject:  # noqa: N802 — QML name
-        return self._tables["knobsModel"]
-
-    @Property(QObject, constant=True)
-    def dayLayoutsModel(self) -> QObject:  # noqa: N802 — QML name
-        return self._tables["dayLayoutsModel"]
-
-    @Property(QObject, constant=True)
     def activitiesModel(self) -> QObject:  # noqa: N802 — QML name
         return self._tables["activitiesModel"]
 
     @Property(QObject, constant=True)
     def workModel(self) -> QObject:  # noqa: N802 — QML name
         return self._tables["workModel"]
-
-    @Property(QObject, constant=True)
-    def homeworkModel(self) -> QObject:  # noqa: N802 — QML name
-        return self._tables["homeworkModel"]
-
-    @Property(QObject, constant=True)
-    def summaryModel(self) -> QObject:  # noqa: N802 — QML name
-        return self._tables["summaryModel"]
 
     @Property(QObject, constant=True)
     def railModel(self) -> QObject:  # noqa: N802 — QML name
@@ -1136,15 +1042,20 @@ class AccountBridge(QObject):
 
     @Property(str, notify=changed)
     def nextLabel(self) -> str:  # noqa: N802 — QML name
-        return FINISH_LABEL if self._step == DONE else NEXT_LABEL
+        return FINISH_LABEL if self._step == MATERIAL_LAST else NEXT_LABEL
 
     @Property(bool, notify=changed)
     def backVisible(self) -> bool:  # noqa: N802 — QML name
-        return self._phase == "setup" and self._step != STYLE
+        return self._phase == "setup" and self._step != WEEK
 
     @Property(bool, notify=changed)
     def skipVisible(self) -> bool:  # noqa: N802 — QML name
-        return self._phase == "setup" and self._step != DONE
+        return self._phase == "setup"
+
+    @Property(bool, notify=changed)
+    def skipStepVisible(self) -> bool:  # noqa: N802 — QML name
+        """Skip this step needs a next step to go to; on the last one Skip setup does the same."""
+        return self._phase == "setup" and self._step != MATERIAL_LAST
 
     @Property(str, constant=True)
     def skipLabel(self) -> str:  # noqa: N802 — QML name
@@ -1158,10 +1069,6 @@ class AccountBridge(QObject):
     def backLabel(self) -> str:  # noqa: N802 — QML name
         return "Back"
 
-    @Property(str, constant=True)
-    def ownLookLabel(self) -> str:  # noqa: N802 — QML name
-        return OWN_LOOK_LABEL
-
     @Property(str, notify=changed)
     def setupProblem(self) -> str:  # noqa: N802 — QML name
         return self._problem_text
@@ -1169,9 +1076,9 @@ class AccountBridge(QObject):
     @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
     def rail(self) -> list:
         rows = []
-        for index, (name, steps) in enumerate(RAIL):
+        for index, (name, steps) in enumerate(RAIL_STEPS):
             current = self._step in steps
-            done = max(steps) < self._step or (self._furthest >= DONE and steps[0] != DONE)
+            done = max(steps) < self._step
             state = "current" if current else "finished" if done else "pending"
             where = RAIL_STATES[{"current": "current", "finished": "finished", "pending": "pending"}[state]]
             rows.append(
@@ -1183,74 +1090,6 @@ class AccountBridge(QObject):
                 }
             )
         return rows
-
-    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
-    def styles(self) -> list:
-        return [
-            {
-                "key": style.key,
-                "name": style.name,
-                "note": style.note,
-                "selected": style.key == self._style_key and not self._own_look,
-            }
-            for style in MATERIAL_STYLES
-        ]
-
-    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
-    def mains(self) -> list:
-        return [
-            {
-                "id": spec.id,
-                "label": spec.label,
-                "note": spec.summary,
-                "selected": spec.id == self._layout["main"],
-            }
-            for spec in layouts_for("plan")
-        ]
-
-    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
-    def colours(self) -> list:
-        main = self._layout["main"]
-        current = options_for(self._layout, main).get("look")
-        rows = [
-            {"value": value, "label": label, "selected": value == current}
-            for value, label in (*DESIGN_LOOKS[main], ("your", "Your look"))
-        ]
-        return rows
-
-    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
-    def knobRows(self) -> list:  # noqa: N802 — QML name
-        knobs = effective_look(self._look)
-        labels = (("text", "Text size"), ("density", "Spacing"), ("font", "Font"), ("depth", "Shadows"))
-        rows = []
-        for key, label in labels:
-            rows.append(
-                {
-                    "key": key,
-                    "label": label,
-                    "choices": [
-                        {
-                            "value": value,
-                            "label": KNOB_VALUE_LABELS.get(value, value.title()),
-                            "selected": knobs.get(key) == value,
-                        }
-                        for value in LOOK_KNOBS[key]
-                    ],
-                }
-            )
-        return rows
-
-    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
-    def dayLayouts(self) -> list:  # noqa: N802 — QML name
-        return [
-            {
-                "id": spec.id,
-                "label": spec.label,
-                "note": spec.summary,
-                "selected": spec.id == self._layout["day"],
-            }
-            for spec in layouts_for("day")
-        ]
 
     @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
     def schoolDays(self) -> list:  # noqa: N802 — QML name
@@ -1413,50 +1252,6 @@ class AccountBridge(QObject):
     def spotifyPlaceholder(self) -> str:  # noqa: N802 — QML name
         return SPOTIFY_PLACEHOLDER
 
-    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
-    def homeworkRows(self) -> list:  # noqa: N802 — QML name
-        return [
-            {
-                "title": row["title"],
-                "minutes": row["minutes"],
-                "due": row["due"],
-                "timed": row["timed"],
-                "time": hhmm_text(row["time"]),
-            }
-            for row in self._homework
-        ]
-
-    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
-    def dueChoices(self) -> list:  # noqa: N802 — QML name
-        """The next two weeks as buttons, and any later date a row already holds."""
-        today = wall_clock.today()
-        days = [today + timedelta(days=ahead) for ahead in range(0, 14)]
-        known = {day.isoformat() for day in days}
-        extra = sorted({row["due"] for row in self._homework} - known)
-        rows = [{"value": day.isoformat(), "label": day.strftime("%a %-d %b")} for day in days]
-        for iso in extra:
-            try:
-                rows.append({"value": iso, "label": date.fromisoformat(iso).strftime("%a %-d %b")})
-            except ValueError:
-                continue
-        return rows
-
-    @Property("QVariantList", constant=True)  # type: ignore[arg-type]
-    def lengthChoices(self) -> list:  # noqa: N802 — QML name
-        return [{"value": minutes, "label": f"{minutes} min"} for minutes in QUICK_LENGTHS]
-
-    @Property(bool, notify=changed)
-    def canAddHomework(self) -> bool:  # noqa: N802 — QML name
-        return len(self._homework) < MAX_FIRST_HOMEWORK
-
-    @Property(str, constant=True)
-    def dueHint(self) -> str:  # noqa: N802 — QML name
-        return DUE_BY_HINT
-
-    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
-    def summaryRows(self) -> list:  # noqa: N802 — QML name
-        return list(self._summary)
-
     @Property(bool, notify=changed)
     def skipOpen(self) -> bool:  # noqa: N802 — QML name
         return self._skip_open
@@ -1480,6 +1275,313 @@ class AccountBridge(QObject):
     @Property(str, constant=True)
     def recoveryFile(self) -> str:  # noqa: N802 — QML name
         return RECOVERY_FILE
+
+    # What the cards show and the preview draws
+
+    def _school_card_for_fields(self) -> str:
+        for key, start, end, _note, _tag in SCHOOL_CARDS:
+            if (
+                self._school_days == SCHOOL_DAYS_CARD
+                and self._school_start == start
+                and self._school_end == end
+            ):
+                return key
+        return "custom"
+
+    def _school_card(self) -> str:
+        return "custom" if self._school_custom else self._school_card_for_fields()
+
+    def _study_card_for_fields(self) -> str:
+        if not self._windows:
+            return "anytime"
+        if len(self._windows) == 1:
+            row = self._windows[0]
+            for key, preset, _note, _tag in STUDY_CARDS:
+                for label, days, start, end in PRESETS:
+                    if (
+                        label == preset
+                        and not row.get("subject")
+                        and list(row.get("days") or []) == list(days)
+                        and (row.get("start"), row.get("end")) == (start, end)
+                    ):
+                        return key
+        return "custom"
+
+    def _study_card(self) -> str:
+        return "custom" if self._study_custom else self._study_card_for_fields()
+
+    def _power(self) -> bool:
+        """The detailed controls show only after a card that means them was picked."""
+        return self._school_card() == "custom" or self._study_card() == "custom" or self._sound_open
+
+    def _reminder_card(self) -> str:
+        if not self._reminders:
+            return "off"
+        return str(self._lead) if self._lead in REMINDER_LEADS else "current"
+
+    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
+    def schoolCards(self) -> list:  # noqa: N802 — QML name
+        picked = self._school_card()
+        rows = [
+            {
+                "value": key,
+                "title": f"Mon–Fri · {hhmm_text(start)} to {hhmm_text(end)}",
+                "note": note,
+                "tag": tag,
+                "selected": picked == key,
+            }
+            for key, start, end, note, tag in SCHOOL_CARDS
+        ]
+        rows.append(
+            {
+                "value": "custom",
+                "title": SCHOOL_CUSTOM_TITLE,
+                "note": SCHOOL_CUSTOM_NOTE,
+                "tag": "More options",
+                "selected": picked == "custom",
+            }
+        )
+        return rows
+
+    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
+    def studyCards(self) -> list:  # noqa: N802 — QML name
+        picked = self._study_card()
+        titles = {"anytime": "Any open time", "custom": "Custom study hours and drag step…"}
+        for label, _days, start, end in PRESETS:
+            titles[{"After school": "after_school", "Evenings": "evenings"}.get(label, "")] = (
+                f"{label} ({hhmm_text(start)}–{hhmm_text(end)})"
+            )
+        return [
+            {"value": key, "title": titles[key], "note": note, "tag": tag, "selected": picked == key}
+            for key, _preset, note, tag in STUDY_CARDS
+        ]
+
+    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
+    def reminderCards(self) -> list:  # noqa: N802 — QML name
+        picked = self._reminder_card()
+        rows = [
+            {
+                "value": str(lead),
+                "title": f"{lead} minutes before",
+                "note": "",
+                "tag": "Default" if lead == reminder_lead_min(None) else "",
+            }
+            for lead in REMINDER_LEADS
+        ]
+        if picked == "current":
+            words = f"{self._lead} minutes before" if self._lead else "When a block starts"
+            rows.insert(0, {"value": "current", "title": words, "note": "", "tag": "Now"})
+        rows.append({"value": "off", "title": "No reminders", "note": "I'll check my week myself", "tag": ""})
+        return [{**row, "selected": row["value"] == picked} for row in rows]
+
+    @Property(bool, notify=changed)
+    def power(self) -> bool:
+        return self._power()
+
+    @Property(bool, notify=changed)
+    def soundOpen(self) -> bool:  # noqa: N802 — QML name
+        return self._sound_open
+
+    @Property(str, constant=True)
+    def soundCardTitle(self) -> str:  # noqa: N802 — QML name
+        return SOUND_CARD_TITLE
+
+    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
+    def lookPresets(self) -> list:  # noqa: N802 — QML name
+        return list(self._settings.state.get("swatches") or []) if self._settings is not None else []
+
+    @Property(str, notify=changed)
+    def lookPreset(self) -> str:  # noqa: N802 — QML name
+        return self._look_choice().get("preset", "")
+
+    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
+    def lookModes(self) -> list:  # noqa: N802 — QML name
+        choice = self._look_choice()
+        one = ONE_MODE.get(choice.get("preset", ""))
+        picked = one or choice.get("mode", "system")
+        return [
+            {
+                "value": value,
+                "title": title,
+                "note": note,
+                "selected": picked == value,
+                "enabled": not one or one == value,
+            }
+            for value, title, note in LOOK_MODE_CARDS
+        ]
+
+    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
+    def rowSizes(self) -> list:  # noqa: N802 — QML name
+        picked = self._look_choice().get("density", "comfortable")
+        return [
+            {"value": value, "title": title, "note": note, "selected": picked == value}
+            for value, title, note in ROW_SIZE_CARDS
+        ]
+
+    def _fixed_times(self) -> list[dict[str, Any]]:
+        """Each school block, sport or job the student entered, as the preview draws it."""
+        rows: list[dict[str, Any]] = []
+        minutes = _minutes(self._school_start, self._school_end)
+        if self._school_days and minutes > 0:
+            rows.append(
+                {
+                    "title": "School",
+                    "category": "class",
+                    "days": list(self._school_days),
+                    "start": self._school_start,
+                    "end": self._school_end,
+                }
+            )
+        for row in self._activities:
+            if row["days"] and _minutes(row["start"], row["end"]) > 0:
+                title = row["title"].strip() or SPORT_FALLBACK
+                rows.append(
+                    {
+                        "title": title,
+                        "category": row["category"],
+                        "days": list(row["days"]),
+                        "start": row["start"],
+                        "end": row["end"],
+                    }
+                )
+        return rows
+
+    def _study_times(self) -> list[dict[str, Any]]:
+        rows = []
+        for row in self._windows:
+            start, end = str(row.get("start") or ""), str(row.get("end") or "")
+            if row.get("days") and start and end and _minutes(start, end) > 0:
+                subject = row.get("subject")
+                rows.append(
+                    {
+                        "title": f"Study: {subject}" if subject else "Study hours",
+                        "category": "study",
+                        "days": list(row["days"]),
+                        "start": start,
+                        "end": end,
+                    }
+                )
+        return rows
+
+    def _preview(self) -> dict[str, Any]:
+        """The week as far as the student has said it: school and fixed times from the first step, study
+        hours from the second. Nothing else is drawn."""
+        groups = self._fixed_times()
+        if self._step >= HOMEWORK:
+            groups += self._study_times()
+        used = {day for group in groups for day in group["days"]}
+        order = [row["day"] for row in self.dayNames]
+        shown = [day for day in order if day in used or day < 5]
+        blocks: list[dict[str, Any]] = []
+        for group in groups:
+            for day in group["days"]:
+                begin, finish = hhmm_to_minutes(group["start"]), hhmm_to_minutes(group["end"])
+                blocks.append(
+                    {
+                        "column": shown.index(day),
+                        "title": group["title"],
+                        "category": group["category"],
+                        "detail": span_label(group["start"], finish - begin),
+                        "start": begin,
+                        "end": finish,
+                        "lane": 0,
+                        "lanes": 1,
+                    }
+                )
+        self._lanes(blocks)
+        if blocks:
+            first = min(item["start"] for item in blocks) // 60
+            last = -(-max(item["end"] for item in blocks) // 60)
+        else:
+            first, last = 8, 16
+        first = max(0, min(first, 24 - 6))
+        last = min(24, max(last, first + 6))
+        return {
+            "days": [{"day": day, "short": DAYS[day]} for day in shown],
+            "blocks": blocks,
+            "from": first,
+            "to": last,
+            "hours": [{"hour": hour, "label": _hour_label(hour)} for hour in range(first, last)],
+        }
+
+    @staticmethod
+    def _lanes(blocks: list[dict[str, Any]]) -> None:
+        """Blocks that overlap on one day sit side by side, each in its own lane."""
+        by_column: dict[int, list[dict[str, Any]]] = {}
+        for item in blocks:
+            by_column.setdefault(item["column"], []).append(item)
+        for column in by_column.values():
+            column.sort(key=lambda item: (item["start"], item["end"]))
+            cluster: list[dict[str, Any]] = []
+            ends: list[int] = []
+            for item in column:
+                if cluster and item["start"] >= max(ends):
+                    for member in cluster:
+                        member["lanes"] = len(ends)
+                    cluster, ends = [], []
+                lane = next((at for at, end in enumerate(ends) if end <= item["start"]), len(ends))
+                if lane == len(ends):
+                    ends.append(item["end"])
+                else:
+                    ends[lane] = item["end"]
+                item["lane"] = lane
+                cluster.append(item)
+            for member in cluster:
+                member["lanes"] = len(ends)
+
+    @Property("QVariantMap", notify=changed)  # type: ignore[arg-type]
+    def preview(self) -> dict:
+        return self._preview()
+
+    @Property(str, notify=changed)
+    def previewNote(self) -> str:  # noqa: N802 — QML name
+        if not self._fixed_times() and not (self._step >= HOMEWORK and self._study_times()):
+            return "Nothing to show yet. What you pick appears here."
+        words = ["your school hours"] if self._school_days else []
+        if any(row["category"] != "class" for row in self._fixed_times()):
+            words.append("sports and jobs")
+        if self._step >= HOMEWORK and self._study_times():
+            words.append("study hours")
+        joined = ", ".join(words[:-1]) + " and " + words[-1] if len(words) > 1 else words[0]
+        return f"Showing {joined}"
+
+    @Property("QVariantList", notify=changed)  # type: ignore[arg-type]
+    def chosenSoFar(self) -> list:  # noqa: N802 — QML name
+        """What is picked so far, one line each, for the card under the preview."""
+        parts = []
+        minutes = _minutes(self._school_start, self._school_end)
+        if self._school_days and minutes > 0:
+            parts.append(f"{days_label(self._school_days)} {span_label(self._school_start, minutes)}")
+        else:
+            parts.append("no school")
+        count = len(self._fixed_times()) - (1 if self._school_days and minutes > 0 else 0)
+        if count:
+            parts.append(f"{count} sport, club or job" + ("" if count == 1 else "s"))
+        if self._cutoff:
+            parts.append(f"no homework after {hhmm_text(self._cutoff)}")
+        rows = ["School hours: " + " · ".join(parts)]
+        if self._step >= HOMEWORK:
+            label = next(
+                (text for value, text, _note in PLANNING_STYLES if value == self._planning),
+                PLANNING_STYLES[1][1],
+            )
+            study = (
+                "homework at any open time"
+                if not self._windows
+                else f"{len(self._windows)} study time" + ("" if len(self._windows) == 1 else "s")
+            )
+            rows.append(f"Homework: {label} · {study}")
+        if self._step >= REMINDERS:
+            lead = f"{self._lead} min before things start" if self._reminders else "no reminders"
+            choice = self._look_choice()
+            mode = {"system": "same as this computer", "light": "light", "dark": "dark"}.get(
+                ONE_MODE.get(choice.get("preset", "")) or choice.get("mode", "system"), ""
+            )
+            rows.append(f"Reminders: {lead}")
+            rows.append(
+                f"Look: {choice.get('preset', '')}, {mode}, {choice.get('density', 'comfortable')} rows"
+            )
+        return rows
 
     def table(self, name: str) -> Table:
         return self._tables[name]
@@ -1563,55 +1665,8 @@ class AccountBridge(QObject):
         self._save_label = RECOVERY_SAVE
         self.changed.emit()
 
-    def _style(self, key: str) -> Style | None:
-        return next((style for style in MATERIAL_STYLES if style.key == key), None)
-
-    def _matching_style(self) -> str | None:
-        from desktop.native.setup import matching_style
-
-        return matching_style(self._pack, self._look, self._layout)
-
-    def _apply_style(self, key: str, *, preview: bool) -> None:
-        style = self._style(key)
-        if style is None:
-            return
-        self._style_key = style.key
-        self._own_look = False
-        self._pack = style.pack
-        self._look = style_look(style)
-        self._layout = style_layout(style, self._layout)
-        token = self._style_tokens.get(style.main) or style.colour or DESIGN_LOOKS[style.main][0][0]
-        self._style_tokens[style.main] = token
-        self._layout["options"][style.main]["look"] = token
-        self._layout = sanitize_layout(self._layout)
-        if preview:
-            self._preview()
-
-    def _preview(self) -> None:
-        """Dress the window in the look being tried, then republish Material.
-
-        The saved surface is not changed. A standard style still stores its own
-        pack for the day the student switches back to the widgets styles.
-        """
-        self._window._preview_setup_look(  # type: ignore[attr-defined]
-            {"pack": self._pack, "look": deepcopy(self._look), "layout": deepcopy(self._layout)}
-        )
-        page = getattr(self._window, "_material_page", None)
-        if page is None or not getattr(page, "_ready", False):
-            return
-        try:
-            page.publish()
-        except Exception as error:
-            log.warning("Material 3 could not be re-dressed: %s", error)
-
     def _apply_clock(self) -> None:
         set_clock_24h(self._clock_24h)
-
-    def _restore_entered(self) -> None:
-        pack, look, layout = self._entered
-        self._pack = pack
-        self._look = deepcopy(look)
-        self._layout = deepcopy(layout)
 
     def _load_fields(self) -> None:
         prefs = dict(self._state.preferences)
@@ -1629,7 +1684,8 @@ class AccountBridge(QObject):
         else:
             self._school_days = [0, 1, 2, 3, 4]
             self._school_start = "08:00"
-            self._school_end = "14:30"
+            self._school_end = "15:00"
+        self._school_custom = self._school_card_for_fields() == "custom"
         self._activities = []
         for block in blocks:
             if is_setup_block(block) and block.get("id") != SETUP_SCHOOL_ID and block.get("start"):
@@ -1648,20 +1704,24 @@ class AccountBridge(QObject):
                 )
         if not self._activities:
             self._activities.append(_blank_activity())
+        self._school_custom = self._school_custom or any(row["days"] for row in self._activities)
         self._week_opened = self._week_fingerprint()
         cutoff = prefs.get("day_cutoff")
         self._cutoff = cutoff if isinstance(cutoff, str) else ""
+        self._school_custom = self._school_custom or bool(self._cutoff)
         self._saved_cutoff = self._cutoff
         planning = prefs.get("planning_style") or "suggest"
         self._planning = planning if planning in {item[0] for item in PLANNING_STYLES} else "suggest"
         self._drag = drag_step(prefs.get("drag_step_min"))
         self._windows = [dict(row) for row in (prefs.get("work_windows") or [])]
+        self._study_custom = self._study_card_for_fields() == "custom"
         self._reminders = prefs.get("reminders_enabled", True) is not False
         self._lead = reminder_lead_min(None if self._state.first_run else prefs)
         tone = str(prefs.get("alarm_tone") or FALLBACK)
         self._tone = tone if tone in RECIPES or tone == "spotify" else FALLBACK
         self._spotify = str(prefs.get("default_spotify_url") or "")
-        self._homework = [_blank_homework(next_school_day(self._school_days))]
+        # The alarm sound stays tucked away while it is the default and no link is saved.
+        self._sound_open = self._tone != FALLBACK or bool(self._spotify)
         self._apply_clock()
 
     def _week_fingerprint(self) -> tuple:
@@ -1705,10 +1765,6 @@ class AccountBridge(QObject):
             return None
 
     def _answer(self) -> dict | None:
-        if self._step == STYLE:
-            self._apply_style(self._style_key, preview=False)
-        if self._step in LOOK_STEPS:
-            return {"pack": self._pack, "look": deepcopy(self._look), "layout": deepcopy(self._layout)}
         if self._step == WEEK:
             return {
                 "blocks": self._week_blocks(),
@@ -1729,9 +1785,6 @@ class AccountBridge(QObject):
                 "alarm_tone": self._tone,
                 "default_spotify_url": self._spotify_link() or prefs.get("default_spotify_url"),
             }
-        if self._step == FIRST:
-            homework = self._first_homework()
-            return {"homework": homework} if homework else None
         return None
 
     def _week_blocks(self) -> list[dict]:
@@ -1766,43 +1819,37 @@ class AccountBridge(QObject):
             )
         return blocks
 
-    def _first_homework(self) -> list[dict]:
-        made = []
-        for row in self._homework:
-            title = row["title"].strip()
-            if not title:
-                continue
-            due = f"{row['due']}T{row['time']}" if row["timed"] else row["due"]
-            item = {
-                "id": self._made.get(title) or str(uuid4()),
-                "title": title,
-                "estimate_min": int(row["minutes"]),
-                "due": due,
-                "revision": 0,
-            }
-            self._made[title] = item["id"]
-            made.append(item)
-        return made
-
     def _absorb(self, answer: dict) -> None:
         if self._state is None:
             return
-        if self._step in LOOK_STEPS:
-            self._state.pack = answer["pack"]
-            self._state.look = deepcopy(answer["look"])
-            self._state.layout = deepcopy(answer["layout"])
-            self._entered = (self._pack, deepcopy(self._look), deepcopy(self._layout))
-        elif self._step == WEEK:
+        if self._step == WEEK:
             kept = [block for block in self._state.blocks if not is_setup_block(block)]
             self._state.blocks = kept + deepcopy(answer["blocks"])
             self._state.preferences["day_cutoff"] = answer["day_cutoff"]
             self._state.preferences["clock_24h"] = answer["clock_24h"]
         elif self._step in (HOMEWORK, REMINDERS):
             self._state.preferences.update(deepcopy(answer))
-        elif self._step == FIRST:
-            for item in answer["homework"]:
-                if item["title"] not in self._state.homework:
-                    self._state.homework.append(item["title"])
+
+    def _finish(self, *, keep: bool) -> None:
+        """The last step ends setup: kept, its answer is saved and a power reading seeds the Look tier;
+        skipped, the look it opened with comes back."""
+        answer = None
+        if keep:
+            problem = self._problem()
+            if problem:
+                self._problem_text = problem
+                self._skip_open = False
+                self.changed.emit()
+                return
+            answer = self._answer()
+            self._absorb(answer)
+            self._look_touched = False
+            if self._power() and self._settings is not None:
+                self._settings.seed_look_tier("all")
+        else:
+            self._restore_look()
+        self._window._setup_step_left(self._step, self._step, answer)  # type: ignore[attr-defined]
+        self._window._finish_setup()  # type: ignore[attr-defined]
 
     def _leave(self, destination: int, *, keep: bool) -> None:
         answer = None
@@ -1814,8 +1861,6 @@ class AccountBridge(QObject):
                 self.changed.emit()
                 return
             answer = self._answer()
-            if self._step == STYLE and not self._own_look:
-                self._surface_pick = "material" if self._style_key == MATERIAL_STYLE.key else "widgets"
             if self._step == WEEK and answer is not None:
                 # Cancel stays on this page: nothing typed is kept, and the week-start file is not
                 # written, until the student answers.
@@ -1824,9 +1869,6 @@ class AccountBridge(QObject):
                     return
                 answer["edited"] = choice
                 save_week_starts_on(self._week_start)
-        elif self._step in LOOK_STEPS and destination not in LOOK_STEPS:
-            self._restore_entered()
-            self._preview()
         elif self._step == WEEK:
             self._clock_24h = (self._state.preferences.get("clock_24h") is True) if self._state else False
             self._apply_clock()
@@ -1836,28 +1878,18 @@ class AccountBridge(QObject):
         self._show(destination)
 
     def _show(self, step: int) -> None:
-        if step in LOOK_STEPS and self._step not in LOOK_STEPS:
-            self._entered = (self._pack, deepcopy(self._look), deepcopy(self._layout))
         self._step = step
         self._furthest = max(self._furthest, step)
         self._problem_text = ""
         self._skip_open = False
-        if step == STYLE and self._style_key:
-            self._apply_style(self._style_key, preview=True)
         self._apply_clock()
-        if step == DONE:
-            self._summary = self._build_summary()
         self.changed.emit()
 
     def _after(self) -> int:
-        if self._step == STYLE:
-            return WEEK
-        return min(self._step + 1, DONE)
+        return min(self._step + 1, MATERIAL_LAST)
 
     def _before(self) -> int:
-        if self._step == WEEK:
-            return COLOURS if self._own_look else STYLE
-        return max(self._step - 1, STYLE)
+        return max(self._step - 1, WEEK)
 
     def _open_skip(self, names: list[str]) -> None:
         what = " and ".join(names)
@@ -1880,60 +1912,6 @@ class AccountBridge(QObject):
             return
         self._windows.append(window)
         self.changed.emit()
-
-    def _build_summary(self) -> list[dict[str, str]]:
-        if self._state is None:
-            return []
-        state = self._state
-        if self._style_key == MATERIAL_STYLE.key and not self._own_look:
-            look = MATERIAL_STYLE.name
-        else:
-            main = state.layout["main"]
-            spec = LAYOUTS[main]
-            selected = options_for(state.layout, main).get("look")
-            colour_name = next(
-                (label for value, label in DESIGN_LOOKS[main] if value == selected), "Your look"
-            )
-            text = effective_look(state.look)["text"]
-            look = f"{spec.label} in {colour_name}"
-            if text != "normal":
-                look += f", {text} text"
-        week_parts = []
-        for block in state.blocks:
-            if is_setup_block(block) and block.get("start"):
-                when = span_label(block["start"], block["duration_min"])
-                week_parts.append(f"{block['title']} {days_label(block['days'])} {when}")
-        cutoff = state.preferences.get("day_cutoff")
-        if cutoff:
-            week_parts.append(f"no homework after {hhmm_text(cutoff)}")
-        prefs = state.preferences
-        chosen = prefs.get("planning_style") or "suggest"
-        planning = next(
-            (label for value, label, _note in PLANNING_STYLES if value == chosen),
-            PLANNING_STYLES[1][1],
-        )
-        windows = prefs.get("work_windows") or []
-        if windows:
-            shown = [
-                f"{days_label(item['days'])} {hhmm_text(item['start'])}–{hhmm_text(item['end'])}"
-                for item in windows[:2]
-            ]
-            planning += " · homework only " + ", ".join(shown)
-            if len(windows) > 2:
-                planning += f" and {len(windows) - 2} more"
-        else:
-            planning += " · homework can be planned at any time of day"
-        planning += f" · a drag moves {drag_step(prefs.get('drag_step_min'))} minutes at a time"
-        tone = str(prefs.get("alarm_tone") or FALLBACK)
-        sound = "Spotify" if tone == "spotify" else tone.title()
-        if prefs.get("reminders_enabled", True) is not False:
-            reminders = f"{reminder_lead_min(prefs)} min before things start · {sound}"
-        else:
-            reminders = f"Off · alarms ring {sound}"
-        homework = " · ".join(state.homework) or "None yet"
-        values = (look, " · ".join(week_parts) or "Nothing fixed yet", planning, reminders, homework)
-        names = [name for name, _steps in RAIL[:-1]]
-        return [{"name": name, "value": value} for name, value in zip(names, values, strict=True)]
 
     @staticmethod
     def _row(rows: list, index: int) -> dict | None:

@@ -5,6 +5,61 @@ All notable changes to FlexWeek are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- When FlexWeek cannot draw its window at all, the error page offers a new version when one is found ("FlexWeek 1.5.1 is ready" with Update now), with the same download and install as the update sheet.
+- Material Settings has every setting the other styles had. Alerts: the reminder sound and tone with a test play, a Spotify link, volume, the end chime, tray notices, letting reminders through Do not disturb, and muting alerts while a focus session runs. Focus: Short, Standard, Long or Custom timer lengths, with a slider for each length under Custom, splitting long homework into focus sessions, and marking homework finished when its session ends. Planning: Study hours and School hours, which you can change any time. Look: an accent colour on top of the preset ("Same as preset" by default) and a font choice (Sans, Serif or Mono).
+- Material Settings: Open on (Week, Day, Month or My day, the screen FlexWeek starts on after you sign in) and Planning style (plan it for me, suggest a time, or I'll drag it) are in Planning; Animations (Off, Reduce, Normal, More) is in Look and replaces the Reduce motion switch, so a saved More or Off is no longer overwritten.
+- Material Settings > This computer lists each linked phone with when it last synced and a Remove button that asks first, plus Sync now, the sync status, the clock warning, the sync problem line and the relay note. Alerts shows the reminder limits and the Spotify block-start note, and the reminder time takes any minute from 0 to 120.
+- Material: the Add button asks Add homework or Add fixed time, a failed save offers Retry save in the top bar and the message, and Ctrl+Shift+L opens the week as a list.
+- High contrast, Paper, Ink and Terminal are Material colour presets.
+- Alarms in Material: add, edit and delete them under Settings → Alerts, and a Material screen with Dismiss and Snooze when one rings.
+- Material keys: Ctrl+N starts a new homework, F1 opens Help, and Ctrl+C, Ctrl+D and Delete copy, duplicate and delete the block that has keyboard focus (Delete asks first and can be undone). None of them act while you are typing.
+- More → Planning in Material has Copy day, Copy last week's fixed times, Reload this week, Copies of this week and, when you have set a link, Open Spotify link.
+
+- Setup is three steps of multiple-choice cards, with your week drawn beside them as you pick: School hours, Study hours, and Look & alerts. Cards for the usual school days, when homework may be planned, how long before things start to remind you, the colour preset, light or dark, and row size. The detailed controls (sports and jobs, the clock, the week start, the evening cutoff, the drag step, hours for each day, the alarm sound and Spotify link) show only after you pick a card that means them, such as "Different times, sports, or a job…". The week only shows what you have picked.
+- Settings > Look > Advanced settings has a Simple, More and All switch: Simple is the preset, mode, corner shape, block style, row size and text size; More adds the layout and grid dials; All adds the colour codes and the readability check. Switching never changes a value, the choice is kept on this computer, and it starts on All after a setup where you opened the detailed controls.
+
+### Changed
+- In My day's Up next and Done lists, free time shows a sofa instead of the clock that exercise and activities use.
+- Setup no longer asks for first homework or ends on a summary page; the last step has Open my week. Setup that was left on one of those pages resumes on Look & alerts.
+- The default school hours in setup are Mon-Fri 8:00 AM to 3:00 PM (they were 8:00 AM to 2:30 PM).
+- A new School made in Settings starts at 8:00 AM to 3:00 PM, the same as setup, instead of 8:00 AM to 2:30 PM.
+- The recovery codes page says "Turn on “I have saved these codes” to continue." under the switch.
+- FlexWeek's desktop app has one style, Material 3. Every start opens it, including for anyone who had picked another style; setup starts at Your week.
+- Help, About, Update, the Sign out question, Manage account and Copies of this week open as Material sheets.
+- Deleting one day of School or an activity, and the question about edited weeks, show their choices as cards: the choice you can undo is picked first, each card says what it keeps and whether it can be undone, and Delete or Save confirms the picked one. Up and Down move the pick, Enter confirms and Esc cancels.
+- If FlexWeek cannot draw with the graphics card, it starts again drawing without it and says so once, instead of switching to another style. If that fails too, a page says what happened, with Quit and Try again.
+- The Focus page's single 25/5 switch is replaced by the timer choice; a saved 25/5 timer shows as Custom.
+- In Material, the notice at the bottom of the window says what Copy, Copy day, Undo, Redo, Reload this week, a refused action ("Select a block before copying it."), Plan with nothing to place, a commitment that lands over planned homework ("Find a new time"), a reminder, and School hours saved for every week each say. Its Undo button reads "Undo 8" with a thin line along the bottom that shrinks as the time runs out (no moving line with Animations Off or Reduce, and the number still counts), the notice is read out once to a screen reader, and its clock waits while the window is hidden, minimised or not in front, or while the pointer or keyboard is on it.
+- In Material, Plan's question about overdue or left-over homework is a Material question, Paste and Duplicate show their preview in a Material sheet (untick a row, change its day, start or minutes, then choose Paste or Duplicate; the line above says "Nothing changes until you choose Paste."), and Save on the recovery codes asks first, in a Material question, what the file is.
+- In Material, a reminder you asked to keep on screen shows once, in a strip with a Got it button, and Plan's button reads Suggest times when you place homework by hand.
+- In Material, replacing a running focus timer asks on a Material question (Keep current timer or Replace timer); in a question with choice cards, a choice that cannot be undone is marked in red when picked and only then is the confirm button red; a long notice wraps inside the window; and after Plan or an Undo the keyboard returns to the screen you are on.
+- In Material, the answers that delete something or cannot be taken back (Delete, This week and later, Replace week, Restore, Discard, Sign out) are drawn in the error colour in every question and sheet, in light and dark.
+
+### Fixed
+- Ctrl+scroll zooms the Week and Day hours again on KDE Plasma's Wayland, where the mouse is reported as a touchpad.
+- In Material's Paste and Duplicate preview and the Unfinished list, each row has a thin edge like the choice cards, so its fields no longer look out of line with the sheet.
+- In Material, Duplicate's preview is titled Preview duplicate, and a pasted or duplicated row at a taken time says both will show one slightly over the other, as the week draws them.
+- In Material, a reminder strip moves up above a notice that grew to several lines, so Got it stays reachable; the notice's Undo gives the keyboard back to the block it came from.
+- In Material's Edited weeks question, All weeks and From today on, which cannot be undone, are red when picked.
+- In the Terminal look, the notice's Undo text is darker so it reads at 4.6 to 1.
+- In Material's dark theme, the "Ctrl+Z" hint on the notice's Undo is easier to read.
+- In Material's questions and sheets, the title, the words, the choice cards and the fields all start at the same left edge.
+- Week as a list in Material says each block's length and "Placed by Plan" for homework Plan placed, and "Fixed time" for fixed blocks, as the earlier styles' list did.
+- In Material, a new text size keeps the same time at the top of the Week instead of scrolling back to now.
+- In Material, the keyboard stays on the week after Plan, Undo, redo and dropping a block (on the block you acted on when it is still there), instead of landing on the notice or on nothing. The notice's Undo is still a Tab away.
+- When a deadline passes while FlexWeek is open, Material's overdue row and its words update at once.
+- The Unfinished sheet has a Start focus button on overdue and left-over homework, as the earlier styles' list did.
+- Week as a list says when a block is overdue (with the day it was due), left from last week, or pinned.
+- My day's card and ring count homework due tonight that has no time yet and name it, instead of calling the day free.
+- Animations and Motion speed now change what moves: Off has no animation, Reduce keeps short fades and moves nothing, More is slower and travels further than Normal, and Look > Advanced > Motion speed (Slower, Normal, Faster) stretches or shortens every duration. Before, More moved like Normal and Off like Reduce, and the speed was saved but did nothing.
+- A dialog's buttons no longer run out of the dialog when they do not fit side by side (for example deleting one day of School at Large text); they stack one per line.
+- Copies of this week shows how many weeks each copy holds, instead of "0 weeks", and says "1 week" for one.
+
+### Removed
+- The Widgets styles and their designs (Today's app, Timeline, Mission control, Bento, Retro desktop, Clay deck, Day dial, One thing) can no longer be chosen, and the switch between them and Material 3 is gone.
+- The Ctrl+K command bar and the older focus screen.
+
 ## [1.4.0] - 2026-11-17
 
 ### Added

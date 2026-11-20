@@ -24,7 +24,6 @@ pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QLabel, QPushButton
 
 from backend.tests.fake_clock import CLOCK
-from desktop.native.window import NONE_UNFINISHED
 from desktop.tests.grid_support import (  # noqa: F401
     qapp,
     server,
@@ -64,12 +63,6 @@ def left_in_week_one(qapp, window) -> tuple[str, str]:
     return week1, week2
 
 
-def more_unfinished_row(window) -> tuple[bool, str]:
-    window._sync_more_menu()
-    for action, button in window._more_pairs:
-        if button.objectName() == "unfinishedOpen":
-            return action.isEnabled(), action.text()
-    raise AssertionError("More has no Unfinished row")
 
 
 def lab_sessions(window) -> list[dict]:
@@ -97,10 +90,6 @@ def hide_the_panel(qapp, window) -> None:
         settled(qapp, window)
 
 
-def test_more_counts_the_session_left_in_last_week(qapp, window) -> None:
-    left_in_week_one(qapp, window)
-    enabled, words = more_unfinished_row(window)
-    assert enabled and NONE_UNFINISHED not in words and "1" in words, words
 
 
 def test_plan_never_moves_last_weeks_session_on_its_own(qapp, window) -> None:
@@ -129,38 +118,3 @@ def test_plan_them_places_it_in_week_two_before_wednesday(qapp, window) -> None:
     settled(qapp, window)
     placed = [b for b in lab_sessions(window) if b.get("start")]
     assert placed and all(b["days"][0] < WEDNESDAY or b["days"] == [WEDNESDAY] for b in placed), placed
-
-
-def test_i_did_these_marks_it_done_more_shows_none_and_plan_places_nothing(qapp, window) -> None:
-    left_in_week_one(qapp, window)
-    plan(qapp, window)
-    hide_the_panel(qapp, window)
-    button = visible_button(window, FINISHED)
-    assert button is not None, f"no {FINISHED}"
-    button.click()
-    settled(qapp, window)
-    enabled, words = more_unfinished_row(window)
-    assert not enabled and NONE_UNFINISHED in words
-    plan(qapp, window)
-    assert [b for b in lab_sessions(window) if b.get("start")] == []
-
-
-def test_overdue_unfinished_is_asked_with_the_session_clock(qapp, window, monkeypatch) -> None:
-    """Every call the window makes to overdue_unfinished passes the session's own time."""
-    import desktop.native.window as window_module
-
-    left_in_week_one(qapp, window)
-    real = window_module.overdue_unfinished
-    asked: list = []
-
-    def spy(items, now=None):
-        asked.append(now)
-        return real(items, now)
-
-    monkeypatch.setattr(window_module, "overdue_unfinished", spy)
-    window._sync_more_menu()
-    window.session.week_changed.emit()
-    qapp.processEvents()
-    session_now = datetime.fromtimestamp(window.session.now_ms() / 1000)
-    assert asked, "the window never asked"
-    assert all(now is not None and abs((now - session_now).total_seconds()) < 60 for now in asked), asked

@@ -17,6 +17,8 @@ FocusScope {
     default property alias content: body.data
     property alias leading: leadingRow.data
     property alias trailing: trailingRow.data
+    // True when the footer's buttons do not fit side by side; they then stack, one per line.
+    property bool stacked: false
     signal closeRequested()
 
     anchors.fill: parent
@@ -52,6 +54,11 @@ FocusScope {
         return item
     }
 
+    // A sheet that is only read (Help) scrolls with the arrow and page keys.
+    function scrollBy(dy) {
+        scroller.contentY = Math.max(0, Math.min(scroller.contentHeight - scroller.height, scroller.contentY + dy))
+    }
+
     function focusFirst() {
         var start = focusTarget(initialFocus)
         if (start && start.visible && start.enabled) {
@@ -68,8 +75,11 @@ FocusScope {
     Rectangle {
         id: scrim
         anchors.fill: parent
+        objectName: "sheetScrim"
         color: "#000000"
-        opacity: 0.32
+        // In dark a card and the page are close greys, so the page is dimmed harder, which also separates
+        // a question from the sheet it sits over (both are this frame, each with its own scrim).
+        opacity: pal.dark ? 0.6 : 0.32
         TapHandler {
             id: scrimTap
             // A picker's list is a non-modal popup, so a tap on it also reaches the scrim. A row can hang
@@ -108,8 +118,8 @@ FocusScope {
             height: 28
             color: parent.color
         }
-        border.width: root.highContrast ? 1.5 : 0
-        border.color: pal.outline
+        border.width: root.highContrast ? 1.5 : (pal.dark ? 1 : 0)
+        border.color: root.highContrast ? pal.outline : pal.outlineVariant
         // Takes the clicks so the scrim's tap handler does not see them.
         TapHandler { }
 
@@ -138,14 +148,39 @@ FocusScope {
         Flickable {
             id: scroller
             objectName: "sheetBody"
-            x: root.margin
+            // Four wider each side than the text column: the ring of a focused field sits 4px outside
+            // it, and the title, the body, the cards and the fields all start at the margin.
+            x: root.margin - 4
             y: titleText.y + titleText.height + 16
-            width: card.width - 2 * root.margin
+            width: card.width - 2 * root.margin + 8
             height: card.height - y - 16 - footer.height - 24
             contentWidth: width
             contentHeight: body.implicitHeight
             clip: true
             boundsBehavior: Flickable.StopAtBounds
+            // A sheet taller than the window scrolls; the bar in the card's margin, always shown while
+            // there is more below, is how a student sees there is more to reach.
+            ScrollBar.vertical: ScrollBar {
+                id: scrollCue
+                objectName: "sheetScrollBar"
+                parent: scroller.parent
+                x: scroller.x + scroller.width + 4
+                y: scroller.y
+                height: scroller.height
+                width: 8
+                policy: scroller.contentHeight > scroller.height + 1 ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
+                interactive: true
+                contentItem: Rectangle {
+                    implicitWidth: 6
+                    radius: 3
+                    color: root.highContrast ? pal.outline : pal.inkMuted
+                    opacity: scrollCue.pressed ? 0.9 : 0.6
+                }
+                background: Rectangle {
+                    radius: 3
+                    color: pal.surfaceContainerHighest
+                }
+            }
             // The ring of a focused field sits 4px outside it; the padding keeps it from being cut.
             Column {
                 id: body
@@ -156,13 +191,56 @@ FocusScope {
         }
         Item {
             id: footer
+            objectName: "sheetFooter"
             x: root.margin
             width: card.width - 2 * root.margin
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 24
-            height: 40
-            Row { id: leadingRow; anchors.left: parent.left; spacing: 8 }
-            Row { id: trailingRow; anchors.right: parent.right; spacing: 8 }
+            height: root.stacked ? trailingRow.y + trailingRow.height : 40
+            // Hidden until the first fit has run, so the sheet never shows one frame of buttons laid side
+            // by side that are about to stack (the fit waits a turn for the buttons' widths).
+            property bool fitted: false
+            opacity: fitted ? 1 : 0
+            function natural(grid) {
+                var total = 0
+                var count = 0
+                for (var i = 0; i < grid.children.length; i++) {
+                    var kid = grid.children[i]
+                    var wide = kid.implicitWidth > 0 ? kid.implicitWidth : kid.width
+                    if (!kid.visible || !(wide > 0))
+                        continue
+                    total += wide
+                    count++
+                }
+                return count > 0 ? total + 8 * (count - 1) : 0
+            }
+            function fit() {
+                var lead = natural(leadingRow)
+                var trail = natural(trailingRow)
+                root.stacked = lead + trail + (lead > 0 && trail > 0 ? 8 : 0) > footer.width
+                fitted = true
+            }
+            onWidthChanged: Qt.callLater(fit)
+            Component.onCompleted: Qt.callLater(fit)
+            // One row while the buttons fit. When they do not, one column, right-aligned, in the order
+            // they are written: Cancel on top and the main choice at the bottom.
+            Grid {
+                id: leadingRow
+                x: root.stacked ? footer.width - width : 0
+                columns: root.stacked ? 1 : 100
+                horizontalItemAlignment: Grid.AlignRight
+                spacing: 8
+                onChildrenChanged: Qt.callLater(footer.fit)
+            }
+            Grid {
+                id: trailingRow
+                x: footer.width - width
+                y: root.stacked && leadingRow.height > 0 ? leadingRow.height + 8 : 0
+                columns: root.stacked ? 1 : 100
+                horizontalItemAlignment: Grid.AlignRight
+                spacing: 8
+                onChildrenChanged: Qt.callLater(footer.fit)
+            }
         }
     }
 

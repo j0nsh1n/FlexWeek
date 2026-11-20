@@ -16,15 +16,15 @@ import pytest
 from PySide6.QtCore import QObject, QPoint, QPointF, QRect, QRectF, Qt
 from PySide6.QtGui import QFont, QFontMetricsF, QPainter
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication
 
 from backend.tests.fake_clock import CLOCK
 from desktop.native.calendar import sunday_due
-from desktop.native.layouts.registry import sanitize_layout
+from desktop.native.layout_choice import sanitize_layout
 from desktop.native.weekmodel import set_clock_24h
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import LightWindows
-from desktop.tests.material_support import faded_in
+from desktop.tests.material_support import faded_in, grab, material_showing, quick_of
 from desktop.tests.window_support import look_file, settled
 
 WIDTH = 1280
@@ -108,18 +108,6 @@ def pump(qapp: QApplication, count: int = 5) -> None:
         qapp.processEvents()
 
 
-def use_clock(qapp: QApplication, window: NativeWindow, twenty_four: bool) -> None:
-    """Chooses the clock the way Settings does, so every surface redraws its times."""
-    window.session.preferences = {**(window.session.preferences or {}), "clock_24h": twenty_four}
-    window._sync_chrome()
-    pump(qapp)
-
-
-def chips(window: NativeWindow) -> list[QPushButton]:
-    found = window.rail.findChildren(QPushButton)
-    return [chip for chip in found if chip.property("tray") and chip.isVisible()]
-
-
 # -- the Material week -----------------------------------------------------
 
 
@@ -132,16 +120,13 @@ def _show_material(qapp: QApplication, window: NativeWindow) -> QObject:
     """Put Material on screen. A refresh must not do this while Settings is open, so leave Settings first."""
     window._surface = "material"
     window._material_gave_up = False
-    window._material_failed = ""
-    if window._settings is not None and window._stack.currentWidget() is window._settings:
-        window._close_settings(save=False)
+    window._cpu_drawing_version = ""
     window.resize(1280, 800)
     window._on_week()
     _pump(qapp)
-    quick = window._material_page._quick
-    quick.grabFramebuffer()
+    grab(window)
     _pump(qapp)
-    assert window._stack.currentWidget().objectName() == "materialPage"
+    assert material_showing(window)
     root = window._material_page.root
     assert root is not None
     faded_in(qapp, root)
@@ -317,14 +302,14 @@ def _centre(root: QObject, item: QObject) -> QPoint:
 
 def _click(window: NativeWindow, item: QObject, dx: int = 0, dy: int = 0) -> None:
     """A real left click on a QML item through the Quick widget, as the pointer does it."""
-    quick = window._material_page._quick
+    quick = quick_of(window)
     point = _centre(window._material_page.root, item) + QPoint(dx, dy)
     QTest.mouseClick(quick, Qt.MouseButton.LeftButton, pos=point)
     _pump(QApplication.instance())
 
 
 def _drag(window: NativeWindow, item: QObject, to: QPoint) -> None:
-    quick = window._material_page._quick
+    quick = quick_of(window)
     start = _centre(window._material_page.root, item)
     app = QApplication.instance()
     QTest.mousePress(quick, Qt.MouseButton.LeftButton, pos=start)

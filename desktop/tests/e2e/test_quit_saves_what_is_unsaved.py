@@ -40,15 +40,6 @@ def leaving(window: NativeWindow, monkeypatch: pytest.MonkeyPatch) -> Leaving:
     return gone
 
 
-def test_quit_saves_a_preference_that_has_not_reached_the_server(
-    qapp: QApplication, window: NativeWindow, leaving: Leaving
-) -> None:
-    """Quit before the 600 ms timer fired used to drop the change."""
-    window._open_settings()
-    window._settings.work.setValue(45)
-    window.quit_app()
-    wait_until(qapp, lambda: bool(leaving.calls))
-    assert window.session.preferences["timer_work_min"] == 45
 
 
 def test_quit_waits_for_a_week_save_that_failed_and_is_being_retried(

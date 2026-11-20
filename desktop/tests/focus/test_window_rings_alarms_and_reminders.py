@@ -8,7 +8,6 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QTimer  # noqa: E402
 from PySide6.QtGui import QDesktopServices  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -66,9 +65,12 @@ def test_a_spotify_alarm_falls_back_to_a_tone_when_the_link_will_not_open(
 
 def test_answering_an_alarm_stops_the_noise(qapp: QApplication, window: NativeWindow) -> None:
     window._bell = RingRecorder()
-    QTimer.singleShot(0, lambda: window._alarm_dialog and window._alarm_dialog.accept())
     window._on_alarm({"id": "a1", "name": "Practice", "time": "07:00", "sound": "low"})
+    ring = window._material_page.bridge.property("ring")
+    assert ring.property("open") is True
     assert [tone for tone, _volume in window._bell.started] == ["low"]
+    assert window._bell.ringing is True
+    ring.dismiss()
     assert window._bell.ringing is False
     assert window._bell.stops >= 1
 

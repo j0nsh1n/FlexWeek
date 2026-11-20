@@ -6,7 +6,7 @@
 //! unless `every_week` stands the change from this week on, as the app's School hours do.
 
 use flexweek_engine::desk::calendar::{FLEX_CATEGORIES, LOCKED_CATEGORIES};
-use flexweek_engine::desk::grid::{apply_block_edit, is_setup_block, past_problem, span_clash};
+use flexweek_engine::desk::grid::{apply_block_edit, is_standing_block, past_problem, span_clash};
 use flexweek_engine::desk::weekmodel::clock_text;
 use flexweek_engine::repeats::{apply_to_week, edit_intent};
 use flexweek_engine::shown::family_id;
@@ -28,8 +28,7 @@ use crate::session;
 
 const FLEXIBLE: &str = "Use the homework editor for flexible work.";
 const NOT_IN_WEEK: &str = "That block is not in this week, so nothing changed.";
-const NOT_STANDING: &str =
-    "Only School and Setup's activities stand in every week, so every_week does not apply.";
+const NOT_STANDING: &str = "Only School, Setup's activities and weekly fixed times stand in every week, so every_week does not apply.";
 const DAYS_RULE_MONDAY: &str =
     "days must name at least one day, 0 (Monday) to 6 (Sunday), once each";
 const DAYS_RULE_SHOWN: &str =
@@ -544,7 +543,7 @@ fn perform_edit(app: &crate::App, args: &EditArgs) -> Result<Value, String> {
     if original["kind"] != json!("locked") {
         return Err(FLEXIBLE.into());
     }
-    let setup = is_setup_block(&original).map_err(|err| err.message)?;
+    let setup = is_standing_block(&original).map_err(|err| err.message)?;
     let every_week = args.every_week.unwrap_or(false);
     if every_week && (!setup || occurrence) {
         return Err(NOT_STANDING.into());
@@ -810,7 +809,12 @@ fn every_week_input(
     let Some(intent) = edit_intent(family, &args.week_start, Some(&repeat), Some(&wanted)) else {
         return Ok(input);
     };
-    let (week, _) = apply_to_week(blocks, &repeats, std::slice::from_ref(&intent))?;
+    let (week, _) = apply_to_week(
+        blocks,
+        &repeats,
+        std::slice::from_ref(&intent),
+        &args.week_start,
+    )?;
     input.weeks[0].blocks = week;
     input.repeats = Some(vec![intent.to_value()]);
     Ok(input)
@@ -865,7 +869,13 @@ fn every_week_shown_input(
         let own_end = own_end_of(repeat, args, start_min, end_min)?;
         let wanted = apply_repeat_fields(repeat, args, offset, start_min, own_end, false)?;
         if let Some(intent) = edit_intent(family, first, Some(repeat), Some(&wanted)) {
-            apply_to_week(first_blocks, &repeats_first, std::slice::from_ref(&intent))?.0
+            apply_to_week(
+                first_blocks,
+                &repeats_first,
+                std::slice::from_ref(&intent),
+                first,
+            )?
+            .0
         } else {
             first_blocks.to_vec()
         }
@@ -881,6 +891,7 @@ fn every_week_shown_input(
                 second_blocks,
                 &repeats_second,
                 std::slice::from_ref(&intent),
+                second,
             )?
             .0;
             (updated, Some(vec![intent_val]))

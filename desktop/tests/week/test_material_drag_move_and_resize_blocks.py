@@ -23,7 +23,7 @@ from PySide6.QtTest import QTest  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402,F401
-from desktop.tests.material_support import named, pump, qml  # noqa: E402
+from desktop.tests.material_support import named, pump, qml, quick_of, quick_window_of  # noqa: E402
 from desktop.tests.sheets.support_material_sheets import bridge, material_week, week_monday  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.week.support_material import _pref  # noqa: E402
@@ -32,10 +32,6 @@ from desktop.tests.window_support import qapp, settled  # noqa: E402,F401
 THURSDAY = 3
 FRIDAY = 4
 ROW = 56
-
-
-def quick_of(window: NativeWindow):
-    return window._material_page._quick
 
 
 def seed_club(qapp, window: NativeWindow, start: str = "16:00") -> None:
@@ -80,7 +76,23 @@ def on_screen(
             any(str(label.property("text")) == title for label in named(blk, "title"))
             for blk in named(page, "weekBlock")
         ))
-    return block_on(page, title)
+    block = block_on(page, title)
+    in_view(qapp, block)
+    return block
+
+
+def in_view(qapp, block: QObject) -> None:
+    """Scroll the hours so the block shows with room around it for a drag. Where the hours open depends on the
+    clock and on earlier scrolling; a drag that starts below the window reaches nothing (CI, 2026-11-19)."""
+    flick = block.parentItem()
+    while flick is not None and flick.property("contentHeight") is None:
+        flick = flick.parentItem()
+    assert flick is not None, "the block is not in a scrolling list"
+    top = block.mapToItem(flick.property("contentItem"), QPointF(0, 0)).y()
+    room = 120
+    limit = max(0.0, float(flick.property("contentHeight")) - float(flick.height()))
+    flick.setProperty("contentY", min(max(0.0, top - room), limit))
+    pump(qapp, 4)
 
 
 def page_of(window: NativeWindow, screen: str) -> QObject:
@@ -107,10 +119,35 @@ def hold_and_move(qapp, window: NativeWindow, start: QPoint, to: QPoint) -> None
 
 
 def drag(qapp, window: NativeWindow, start: QPoint, to: QPoint) -> None:
+    before = [dict(block) for block in window.session.blocks]
     hold_and_move(qapp, window, start, to)
     QTest.mouseRelease(quick_of(window), Qt.MouseButton.LeftButton, pos=to)
     pump(qapp, 10)
     settled(qapp, window)
+    if window.session.blocks == before and start != to:
+        # Drags that changed nothing failed now and then on CI only (2026-11-19). Printed output shows only
+        # for a failing test, so this says why the next time it happens.
+        print(why_nothing_moved(window, start))
+
+
+def why_nothing_moved(window: NativeWindow, at: QPoint) -> str:
+    """What was in the way of a drag at `at`: the item under it, the sheet, the focus, the sizes."""
+    quick = quick_of(window)
+    root = window._material_page.root
+    chain: list[str] = []
+    item = root
+    while item is not None:
+        chain.append(f"{type(item).__name__}:{item.objectName() or '-'}")
+        local = item.mapFromScene(QPointF(at))
+        item = item.childAt(local.x(), local.y())
+    focus = quick_window_of(window).activeFocusItem()
+    sheets = window._material_page.bridge.sheets
+    return (
+        f"drag changed nothing at {at.x()},{at.y()}: under the pointer {' > '.join(chain)}; "
+        f"sheet {sheets.property('kind')!r}; focus {focus.objectName() if focus is not None else None!r}; "
+        f"window {window.width()}x{window.height()}, quick {quick.width()}x{quick.height()}, "
+        f"root {root.width():.0f}x{root.height():.0f}"
+    )
 
 
 def body_of(block: QObject) -> QPoint:

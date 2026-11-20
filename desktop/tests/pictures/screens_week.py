@@ -7,7 +7,6 @@ from desktop.tests.pictures import (
     week_drag,
     week_hand,
     week_material,
-    week_painter,
     week_pastnext,
     week_typing,
     week_weekview,
@@ -16,7 +15,6 @@ from desktop.tests.pictures import (
 from desktop.tests.pictures.screen import Screen
 
 SCREENS: list[Screen] = [
-    *week_painter.SCREENS,
     *week_hand.SCREENS,
     *week_zoom.SCREENS,
     *week_drag.SCREENS,

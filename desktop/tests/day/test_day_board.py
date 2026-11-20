@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 from collections.abc import Iterator
 from datetime import date, datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -22,6 +23,7 @@ from PySide6.QtCore import QObject, QStandardPaths  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from backend.tests.fake_clock import CLOCK, START  # noqa: E402
+from desktop.native.material import day_board
 from desktop.native.material.bridge_day import DayBridge  # noqa: E402
 from desktop.native.material.day_board import board_for, read_flag  # noqa: E402
 from desktop.native.weekmodel import Occurrence, set_clock_24h  # noqa: E402
@@ -116,6 +118,20 @@ def test_each_kind_of_row_wears_its_icon() -> None:
     set_clock_24h(True)
     board = board_for(day, minute=9 * 60, when="future", nudges=True, dim=True, mode="light", on=TODAY)
     assert [row.icon for row in board.up_next] == ["school", "schedule", "edit_note"]
+
+
+def test_free_time_wears_the_sofa_not_the_activity_clock() -> None:
+    """Jonathan, 2026-11-19 (picked from mockups): free time gets the sofa (weekend), so it does not look like
+    exercise or an activity, which keep the clock."""
+    day = [
+        _block("Free time", *SOCCER, category="free"),
+        _block("Club", *ESSAY, category="extra"),
+    ]
+    set_clock_24h(True)
+    board = board_for(day, minute=9 * 60, when="future", nudges=True, dim=True, mode="light", on=TODAY)
+    assert [row.icon for row in board.up_next] == ["weekend", "schedule"]
+    icons = Path(day_board.__file__).parent / "qml" / "icons"
+    assert (icons / "weekend.svg").is_file(), "the sofa icon ships with the Material icons"
 
 
 def test_pinned_shows_in_the_row_note() -> None:

@@ -761,6 +761,17 @@ pub fn next_action_for(
 }
 
 /// School or a Setup activity, or a piece of one split off at a week's seam.
+/// The id prefix of a fixed time the student made repeat every week (#118). School and Setup's activities
+/// repeat by their own ids.
+pub const WEEKLY_PREFIX: &str = "weekly-";
+
+/// Whether a block stands in every week: School, Setup's activities, or a weekly fixed time the student
+/// made. Setup itself still makes and stops only its own (`is_setup_block`).
+pub fn is_standing_block(block: &Value) -> EngineResult<bool> {
+    let id = py_str(&or_default(get(block, "id")?, json!("")));
+    Ok(is_setup_block(block)? || crate::shown::family_id(&id).starts_with(WEEKLY_PREFIX))
+}
+
 pub fn is_setup_block(block: &Value) -> EngineResult<bool> {
     let id = py_str(&or_default(get(block, "id")?, json!("")));
     let id = crate::shown::family_id(&id);

@@ -17,15 +17,15 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
+from PySide6.QtCore import QTimer  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from desktop.native import window as window_module  # noqa: E402
-from desktop.native.setup import WEEK  # noqa: E402
-from desktop.native.widgets import ConfirmSheet, SchoolHoursDialog  # noqa: E402
+from desktop.native.setup_steps import WEEK  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402,F401
 from desktop.tests.sheets.support_material_sheets import bridge, material_week, snack  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
+from desktop.tests.week.support_school_hours import school_hours as school_hours_form  # noqa: E402
 from desktop.tests.week.test_standing_week import (  # noqa: E402,F401
     JOB,
     SCHOOL,
@@ -58,20 +58,16 @@ def school_of(session) -> tuple[list[int], str, int, list[int]]:
 def school_hours(
     qapp: QApplication, window: NativeWindow, monkeypatch: pytest.MonkeyPatch, end_minutes: int
 ) -> dict:
-    """Run School hours the way the student does: it opens on what the window gives it, the end is
-    moved, and it is accepted. Returns what the form showed."""
-    seen: dict = {}
-
-    def run(dialog: SchoolHoursDialog) -> QDialog.DialogCode:
-        seen["days"] = dialog.days.days()
-        seen["span"] = dialog.times.span()
-        seen["line"] = dialog.this_week.text() if not dialog.this_week.isHidden() else None
-        dialog.times.end.set_minutes(end_minutes)
-        dialog.accept()
-        return QDialog.DialogCode.Accepted
-
-    monkeypatch.setattr(window_module.SchoolHoursDialog, "exec", run)
-    window._school_hours()
+    """Change School's end from this week on, as Settings does. Returns what Setup's week page shows for
+    School before the change: the usual days and span, and the line naming this week's own changes."""
+    state = window._setup_state(first_run=False)
+    usual = next(item for item in state.blocks if item["id"] == "school")
+    seen = {
+        "days": list(usual["days"]),
+        "span": (usual["start"], usual["duration_min"]),
+        "line": state.this_week or None,
+    }
+    school_hours_form(window, end_minutes)
     wait_until(qapp, lambda: not window.session.busy and not window.session.dirty)
     settled(qapp, window)
     return seen
@@ -111,30 +107,6 @@ def test_undo_after_school_hours_takes_back_this_weeks_part_only(
     assert school_of(session) == ([0, 1, 2, 3, 4], "08:30", 360, [])
 
 
-def test_p2_a_later_weeks_skipped_wednesday_stays_and_the_toast_names_that_week(
-    qapp, window, after_setup, monkeypatch
-) -> None:
-    # The change reaches a week that has its own edit, so it asks. Except edited is today's behaviour.
-    def keep(sheet: ConfirmSheet) -> int:
-        sheet.buttons["keep"].click()
-        return 0
-
-    monkeypatch.setattr(ConfirmSheet, "exec", keep)
-    session = after_setup
-    go_to(qapp, session, WEEK_AFTER)
-    session.delete_block("school", scope="occurrence", day=WEDNESDAY)
-    save_and_settle(qapp, session)
-    go_to(qapp, session, NEXT_WEEK)
-    school_hours(qapp, window, monkeypatch, 14 * 60 + 30)
-    wait_until(qapp, lambda: "keeps its own change" in window.toast.text())
-    assert window.toast.text() == (
-        "School changed from this week on. The week of 16 Nov keeps its own change: no School on Wednesday."
-    )
-    assert not window.toast.button.isVisible()
-    go_to(qapp, session, WEEK_AFTER)
-    assert school_of(session) == ([0, 1, 3, 4], "08:30", 360, [])
-
-
 def test_item7_setup_again_shows_the_usual_week_and_keeps_school_deleted_this_week_only(
     qapp, window, after_setup
 ) -> None:
@@ -166,10 +138,10 @@ def test_item10_removing_the_first_activity_in_setup_leaves_the_second_with_its_
 
     go_to(qapp, session, NEXT_WEEK)
     window._open_setup(WEEK, first_run=False)
-    setup = window.setup_page
-    assert [row.name.text() for row in setup.activities] == ["Soccer", "Saturday job"]
-    setup._remove_activity(setup.activities[0])
-    blocks = setup.week_blocks()
+    setup = window._account_bridge()
+    assert [row["title"] for row in setup._activities] == ["Soccer", "Saturday job"]
+    setup.removeActivity(0)
+    blocks = setup._week_blocks()
     assert [item["id"] for item in blocks] == ["school", "activity-2"]
     session.set_setup_blocks(blocks)
     save_and_settle(qapp, session)
@@ -178,44 +150,6 @@ def test_item10_removing_the_first_activity_in_setup_leaves_the_second_with_its_
     job = block(session, "activity-2")
     assert job is not None and (job["title"], job["missed_days"]) == ("Saturday job", [5])
     assert block(session, "activity-1") is None
-
-
-def test_dragging_one_day_of_school_says_only_that_day_changed_and_undo_takes_it_back(
-    qapp, window, after_setup
-) -> None:
-    session = after_setup
-    go_to(qapp, session, NEXT_WEEK)
-    window._move_block("school", WEDNESDAY, WEDNESDAY, 10 * 60, 12 * 60)
-    wait_until(qapp, lambda: "Only this" in window.toast.text())
-    assert window.toast.text().endswith(
-        "Only this Wednesday changed. To change every week, open School hours."
-    )
-    assert window.toast.button.text().startswith("Undo")
-    assert school_of(session)[0] == [0, 1, 3, 4]
-    moved = [item for item in session.blocks if item["title"] == "School" and item["days"] == [WEDNESDAY]]
-    assert [(item["start"], item["duration_min"]) for item in moved] == [("10:00", 120)]
-    session.undo()
-    wait_until(qapp, lambda: not session.busy and not session.dirty)
-    assert school_of(session) == ([0, 1, 2, 3, 4], "08:30", 405, [])
-    # Moved again and left: the week after still has its usual Wednesday. (Going to another week
-    # ends this week's Undo, so this comes after it.)
-    window._move_block("school", WEDNESDAY, WEDNESDAY, 10 * 60, 12 * 60)
-    wait_until(qapp, lambda: not session.busy and not session.dirty)
-    go_to(qapp, session, WEEK_AFTER)
-    assert school_of(session) == ([0, 1, 2, 3, 4], "08:30", 405, [])
-
-
-def test_resizing_one_day_of_an_activity_points_to_setup(qapp, window, after_setup) -> None:
-    session = after_setup
-    go_to(qapp, session, NEXT_WEEK)
-    window._move_block("activity-1", 3, 3, 16 * 60, 18 * 60)
-    wait_until(qapp, lambda: "Only this" in window.toast.text())
-    assert window.toast.text().endswith(
-        "Only this Thursday changed. To change every week, run setup again from Settings."
-    )
-    go_to(qapp, session, WEEK_AFTER)
-    soccer = block(session, "activity-1")
-    assert soccer is not None and (soccer["days"], soccer["duration_min"]) == ([1, 3], 90)
 
 
 def material_with_school_repeating(qapp, window: NativeWindow):
@@ -272,3 +206,86 @@ def test_material_setup_shows_this_weeks_own_change(qapp, window) -> None:
     account = bridge(window).property("account")
     assert account.property("schoolDays") == [0, 1, 2, 3, 4]
     assert account.property("thisWeek") == "This week: no School on Friday."
+
+
+def answer_edited(window: NativeWindow, choice: str, seen: dict | None = None) -> None:
+    """Answer the edited-weeks question on Material's prompt when it comes up, noting what it asked."""
+    sheets = window._material_page.bridge.sheets
+    tries = {"n": 0}
+
+    def poll() -> None:
+        tries["n"] += 1
+        ask = dict(sheets.ask)
+        if ask.get("id") != "edited-weeks":
+            if tries["n"] < 400:
+                QTimer.singleShot(5, poll)
+            return
+        if seen is not None:
+            seen["body"] = ask["body"]
+            seen["answers"] = [
+                (a["id"], a["label"], a["kind"], bool(a.get("default"))) for a in ask["answers"]
+            ]
+        sheets.answer(choice)
+
+    QTimer.singleShot(0, poll)
+
+
+def test_p2_a_later_weeks_skipped_wednesday_stays_and_the_snackbar_names_that_week(
+    qapp, window, after_setup, monkeypatch
+) -> None:
+    # The change reaches a week that has its own edit, so it asks. Except edited is today's behaviour.
+    material_week(qapp, window)
+    session = after_setup
+    go_to(qapp, session, WEEK_AFTER)
+    session.delete_block("school", scope="occurrence", day=WEDNESDAY)
+    save_and_settle(qapp, session)
+    go_to(qapp, session, NEXT_WEEK)
+    answer_edited(window, "keep")
+    school_hours(qapp, window, monkeypatch, 14 * 60 + 30)
+    wait_until(qapp, lambda: "keeps its own change" in snack(window))
+    assert snack(window) == (
+        "School changed from this week on. The week of 16 Nov keeps its own change: no School on Wednesday."
+    )
+    assert str(bridge(window).property("snackAction")) == "", "later weeks have no Undo"
+
+
+def test_material_dragging_one_day_of_school_says_only_that_day_changed_and_undo_takes_it_back(
+    qapp, window, after_setup
+) -> None:
+    session = after_setup
+    go_to(qapp, session, NEXT_WEEK)
+    usual = school_of(session)
+    material_week(qapp, window)
+    this_week = school_of(session)
+    week = bridge(window).property("week")
+    week.moveBlock("school", WEDNESDAY, WEDNESDAY, 10 * 60, 12 * 60)
+    wait_until(qapp, lambda: "Only this" in snack(window))
+    assert snack(window).endswith(
+        "Only this Wednesday changed. To change every week, run setup again from Settings."
+    )
+    assert str(bridge(window).property("snackAction")) == "UNDO"
+    assert school_of(session)[0] == [0, 1, 3, 4]
+    moved = [item for item in session.blocks if item["title"] == "School" and item["days"] == [WEDNESDAY]]
+    assert [(item["start"], item["duration_min"]) for item in moved] == [("10:00", 120)]
+    session.undo()
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    assert school_of(session) == this_week
+    # Moved again and left: the week after still has its usual Wednesday (the seed did not touch it).
+    week.moveBlock("school", WEDNESDAY, WEDNESDAY, 10 * 60, 12 * 60)
+    wait_until(qapp, lambda: not session.busy and not session.dirty)
+    go_to(qapp, session, WEEK_AFTER)
+    assert school_of(session) == usual
+
+
+def test_material_resizing_one_day_of_an_activity_points_to_setup(qapp, window, after_setup) -> None:
+    session = after_setup
+    go_to(qapp, session, NEXT_WEEK)
+    material_week(qapp, window)
+    bridge(window).property("week").moveBlock("activity-1", 3, 3, 16 * 60, 18 * 60)
+    wait_until(qapp, lambda: "Only this" in snack(window))
+    assert snack(window).endswith(
+        "Only this Thursday changed. To change every week, run setup again from Settings."
+    )
+    go_to(qapp, session, WEEK_AFTER)
+    soccer = block(session, "activity-1")
+    assert soccer is not None and (soccer["days"], soccer["duration_min"]) == ([1, 3], 90)

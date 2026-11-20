@@ -66,20 +66,6 @@ pub fn run(extra: &[String], python: Option<&Path>) -> u8 {
     unsafe {
         std::env::remove_var("FLEXWEEK_RIG_KEEP");
     }
-    if lists_only(&drive_args) {
-        let mut drive_cmd = vec![
-            python.to_string_lossy().into_owned(),
-            drive.to_string_lossy().into_owned(),
-        ];
-        drive_cmd.extend(drive_args);
-        return match session.run_in(&drive_cmd, None, &checkout) {
-            Ok(code) => code,
-            Err(error) => {
-                eprintln!("rig driver failed: {error}");
-                1
-            }
-        };
-    }
     let exe = match std::env::current_exe() {
         Ok(path) => path,
         Err(error) => {
@@ -149,11 +135,6 @@ fn split_server(args: &[String]) -> Result<(String, Vec<String>), String> {
         return Err(format!("Unknown server '{server}'"));
     }
     Ok((server, rest))
-}
-
-/// `--list` only prints the scenario names. It does not need a hidden session.
-fn lists_only(args: &[String]) -> bool {
-    args.iter().any(|arg| arg == "--list")
 }
 
 /// A rig run always stops the hidden session. `fwtest rig` removes
@@ -245,12 +226,15 @@ mod tests {
         let (server, rest) = split_server(&[
             "--server".to_string(),
             "xvfb".to_string(),
-            "--design".to_string(),
-            "classic".to_string(),
+            "--play".to_string(),
+            "scripts/rig/plays/material-day-light.json".to_string(),
         ])
         .unwrap();
         assert_eq!(server, "xvfb");
-        assert_eq!(rest, ["--design", "classic"]);
+        assert_eq!(
+            rest,
+            ["--play", "scripts/rig/plays/material-day-light.json"]
+        );
         let error = split_server(&["--server".to_string(), "weston".to_string()]).unwrap_err();
         assert_eq!(error, "Unknown server 'weston'");
     }

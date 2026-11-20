@@ -111,7 +111,14 @@ Item {
             case "late": return late
             case "unfinished": return unfinished
             case "weekList": return weekList
+            case "preview": return preview
             case "routines": return routines
+            case "alarm": return alarm
+            case "help": return help
+            case "about": return about
+            case "update": return update
+            case "account": return account
+            case "restore": return restore
             }
             return null
         }
@@ -121,12 +128,20 @@ Item {
     Component { id: late; LateSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: unfinished; UnfinishedSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: weekList; WeekListSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
+    Component { id: preview; PreviewSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
+    Component { id: alarm; AlarmSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
+    Component { id: help; HelpSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
+    Component { id: about; AboutSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
+    Component { id: update; UpdateSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
+    Component { id: account; AccountSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
+    Component { id: restore; RestoreSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
     Component { id: routines; RoutinesSheet { sheets: root.sheets; theme: root.theme; density: root.density; reduceMotion: root.reduceMotion; highContrast: root.highContrast; phone: root.phone } }
 
     Loader {
         id: prompt
         anchors.fill: parent
-        z: 2
+        // Above the notice bar (z 3): a question dims and blocks everything behind it, Undo included.
+        z: 4
         active: root.asking
         sourceComponent: askDialog
     }
@@ -159,13 +174,14 @@ Item {
     Shortcut {
         sequence: "Escape"
         context: Qt.WindowShortcut
-        enabled: root.active
+        enabled: root.active && !(root.bridge && root.bridge.ring && root.bridge.ring.open)
         onActivated: root.menu ? root.sheets.closeMore() : root.sheets.escapeSheet()
     }
 
     Snackbar {
         id: notice
         objectName: "sheetNotice"
+        maxWidth: Math.max(240, root.width - 48)
         visible: root.sheets !== null && root.sheets.notice !== ""
         z: 3
         message: root.sheets ? root.sheets.notice : ""

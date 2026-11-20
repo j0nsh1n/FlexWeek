@@ -10,6 +10,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import date, datetime, timedelta
 from typing import Any
+from uuid import uuid4
 
 from pydantic import ValidationError
 
@@ -18,18 +19,21 @@ from backend.models import TimeBlock, WeekRequest
 from backend.slots import hhmm_to_minutes
 from desktop.native.calendar import (
     CATEGORIES,
+    block_family,
     date_for_day,
     day_full_names,
+    day_short,
     is_series,
     is_setup_block,
+    is_standing_block,
     monday_of,
     past_problem,
     span_clash,
+    until_problem,
 )
 from desktop.native.hours.geometry import DEFAULT_DRAG_STEP, drag_step
 from desktop.native.remind import clock_parts
-from desktop.native.weekmodel import clock_text, end_after_start_words, length_label
-from desktop.native.widgets import (
+from desktop.native.sheet_rules import (
     BLOCK_PROBLEMS,
     REPEAT_NOTE,
     _block_problem,
@@ -45,10 +49,12 @@ from desktop.native.widgets import (
     short_day_name,
     turn_days_keeping_weekdays,
 )
+from desktop.native.weekmodel import clock_text, end_after_start_words, length_label
 
 STEPS = ("What", "When", "Category")
 PROMPTS = ("What is it?", "When is it?", "What category is it?")
 DAY_END = 24 * 60
+WEEKLY_PREFIX = "weekly-"
 
 
 def _clock(minute: int) -> str:
@@ -102,10 +108,22 @@ class BlockDraft:
             self.series_days = list(self.days)
             self.days = [occurrence_day] if occurrence_day is not None else self.days
         self.missed = occurrence_day in (original.get("missed_days") or [])
+        # A fixed time the student made repeat is a standing row: its Until and the switch come from the
+        # repeat in the session, never from the week's copy.
+        self.standing = self.existing and is_standing_block(original)
+        self.family = block_family(original["id"]) if self.existing else ""
+        self.show_repeat = not (self.existing and is_setup_block(original))
+        self.weekly = self.standing and self.family.startswith(WEEKLY_PREFIX)
+        self.repeat: dict | None = None
+        self.until: str | None = None
+        if self.weekly:
+            self.repeat = deepcopy(next((r for r in session.repeats if r["id"] == self.family), None))
+            self.until = (self.repeat or {}).get("until") or None
         self.moved = ""
         self.title_problem = ""
         self.days_problem = ""
         self.time_problem = ""
+        self.until_problem_text = ""
         self.error = ""
         self._opened_as = self._picture()
         # The open week the day numbers count from.
@@ -161,6 +179,8 @@ class BlockDraft:
             self.category,
             self.scope,
             self.missed,
+            self.weekly,
+            self.until,
         )
 
     def dirty(self) -> bool:
@@ -189,6 +209,14 @@ class BlockDraft:
             self._set_scope("occurrence" if value == "occurrence" else "series")
         elif name == "missed":
             self.missed = bool(value)
+        elif name == "repeat" and self.show_repeat:
+            self.weekly = bool(value)
+            self.until_problem_text = ""
+            if not self.weekly:
+                self.until = None
+        elif name == "until" and self.weekly:
+            self.until = str(value) or None
+            self.until_problem_text = ""
 
     def toggle_day(self, day: int) -> None:
         if self.scope == "occurrence" and self.occurrence_day is not None:
@@ -281,6 +309,10 @@ class BlockDraft:
                 return False
             if not self.days:
                 self.days_problem = BLOCK_PROBLEMS["days"]
+                return False
+            problem = self._until_problem(self._series_days_now())
+            if problem:
+                self.until_problem_text = problem
                 return False
         self.step += 1
         return False
@@ -379,7 +411,108 @@ class BlockDraft:
             else:
                 self.error = message
             return None
+        problem = self._until_problem(made["days"])
+        if problem:
+            self.until_problem_text = problem
+            self.step = 1 if self.step is not None else None
+            return None
         return made
+
+    def _until_problem(self, days: list[int]) -> str:
+        """The sentence for an Until the repeat cannot use, from the engine. None with the switch off."""
+        if not (self.weekly and self.until):
+            return ""
+        week = self.session.week_start
+        if not isinstance(week, str):
+            return ""
+        probe = {"id": "weekly-probe", "days": sorted(days), "until": self.until}
+        return until_problem(probe, week, wall_clock.today().isoformat()) or ""
+
+    # What saving means -------------------------------------------------------------------
+
+    def _week_to_monday(self, days: list[int]) -> list[int]:
+        """Repeats count their days from Monday; the open week counts from its first day."""
+        first = int(getattr(self.session, "first_weekday", 0) or 0)
+        return sorted((first + day) % 7 for day in days)
+
+    def _changed_fields(self) -> set[str]:
+        """What the student changed on the sheet since it opened, by the names the repeat uses."""
+        opened = self._opened_as
+        title, days, start, end, category, _scope, missed, weekly, until = opened
+        changed = set()
+        if self.title.strip() != title.strip():
+            changed.add("title")
+        if tuple(self.days) != tuple(days):
+            changed.add("days")
+        if self.start != start:
+            changed.add("start")
+        if self.end != end:
+            changed.add("end")
+        if self.category != category:
+            changed.add("category")
+        if self.missed != missed:
+            changed.add("missed")
+        if self.weekly != weekly:
+            changed.add("weekly")
+        if self.until != until:
+            changed.add("until")
+        return changed
+
+    def _repeat_body(self, made: dict, base: dict | None, changed: set[str]) -> dict:
+        """The repeat as it stands from this week on. A new one takes every field of the sheet; an edited
+        one starts from the repeat the session holds, never from the week's copy, and takes only what the
+        student changed."""
+        if base is None:
+            body = deepcopy(made)
+            body.pop("missed_days", None)
+            body["days"] = self._week_to_monday(self.days)
+            body["id"] = WEEKLY_PREFIX + (str(made["id"]) if self.existing else str(uuid4()))
+        else:
+            body = deepcopy(base)
+            if "title" in changed:
+                body["title"] = made["title"]
+            if "days" in changed:
+                # Only the days the student ticked or unticked change: the week's copy may lack days its
+                # Until (or this week's own edit) hid, and those stay as the repeat has them.
+                opened = set(self._week_to_monday(list(self._opened_as[1])))
+                now = set(self._week_to_monday(self.days))
+                body["days"] = sorted((set(body.get("days") or []) - (opened - now)) | (now - opened))
+            if "start" in changed or "end" in changed:
+                body["start"] = made["start"]
+                body["duration_min"] = made["duration_min"]
+            if "category" in changed:
+                body["category"] = made["category"]
+        if self.until:
+            body["until"] = self.until
+        else:
+            body.pop("until", None)
+        return TimeBlock.model_validate(body).model_dump(mode="json")
+
+    def save_plan(self, made: dict) -> dict:
+        """How this save goes. `kind` is plain (today's path), add (a new repeat), make (this fixed time
+        becomes a repeat), later (the repeat changes from this week on), ask (this week only, or this
+        week and later), or stop (the repeat ends after this week). `repeat` is the body for add, make
+        and later; `changed` says what the student changed."""
+        changed = self._changed_fields()
+        if not self.show_repeat:
+            return {"kind": "plain", "changed": changed}
+        if not self.existing:
+            if not self.weekly:
+                return {"kind": "plain", "changed": changed}
+            return {"kind": "add", "repeat": self._repeat_body(made, None, changed), "changed": changed}
+        if not self.weekly:
+            return {"kind": "stop" if self.standing else "plain", "changed": changed}
+        if not self.standing:
+            return {"kind": "make", "repeat": self._repeat_body(made, None, changed), "changed": changed}
+        if self.repeat is None:
+            return {"kind": "plain", "changed": changed}
+        if self.scope == "occurrence" and self.occurrence_day is not None:
+            # One day is this week only; the switch and Until are not shown there.
+            return {"kind": "plain", "changed": changed}
+        body = self._repeat_body(made, self.repeat, changed)
+        if changed <= {"weekly", "until"}:
+            return {"kind": "later", "repeat": body, "changed": changed}
+        return {"kind": "ask", "repeat": body, "changed": changed}
 
     def recover_missed(self) -> bool:
         return (
@@ -406,17 +539,41 @@ class BlockDraft:
         else:
             days = day_range_and_words(self.original.get("days") or [], self._week())
             question = f"Delete {name} on every {days} this week?"
-        if is_setup_block(self.original):
+        if is_standing_block(self.original):
             answers = [{"id": "stay", "label": "Cancel", "kind": "text"}]
+            cards = []
             if occurrence:
                 answers.append({"id": "day", "label": "This day only", "kind": "tonal"})
+                cards.append(
+                    {
+                        "id": "day",
+                        "title": f"Just {day_name} {stamp.day} {stamp.strftime('%b')}",
+                        "line": f"Other days this week and other weeks keep {name}. You can undo this.",
+                    }
+                )
             answers.append({"id": "week", "label": "This week only", "kind": "tonal"})
-            answers.append({"id": "every", "label": "This week and later", "kind": "filled"})
+            answers.append({"id": "every", "label": "This week and later", "kind": "danger"})
+            cards.append(
+                {
+                    "id": "week",
+                    "title": "This week only",
+                    "line": f"Other weeks keep {name}. You can undo this.",
+                }
+            )
+            cards.append(
+                {
+                    "id": "every",
+                    "title": "This week and every week after",
+                    "line": f"Earlier weeks keep {name}. Undo also takes back anything changed after it.",
+                }
+            )
             return {
                 "id": "delete-block",
                 "title": f"Delete {name}?",
-                "body": question + " Earlier weeks keep it. This week and later can't be undone.",
+                "body": "",
                 "answers": answers,
+                "cards": cards,
+                "confirm": "Delete",
             }
         return {
             "id": "delete-block",
@@ -424,8 +581,35 @@ class BlockDraft:
             "body": question + " You can undo this.",
             "answers": [
                 {"id": "stay", "label": "Cancel", "kind": "text"},
-                {"id": "delete", "label": "Delete", "kind": "filled"},
+                {"id": "delete", "label": "Delete", "kind": "danger"},
             ],
+        }
+
+    def save_question(self) -> dict:
+        """What a change to a weekly fixed time asks: this week only, or this week and later."""
+        name = self.title.strip() or self.original.get("title") or "this fixed time"
+        return {
+            "id": "block-save",
+            "title": f"Change {name}?",
+            "body": "",
+            "answers": [
+                {"id": "stay", "label": "Cancel", "kind": "text"},
+                {"id": "week", "label": "This week only", "kind": "tonal"},
+                {"id": "later", "label": "This week and later", "kind": "tonal"},
+            ],
+            "cards": [
+                {
+                    "id": "week",
+                    "title": "This week only",
+                    "line": f"Other weeks keep {name} as it was.",
+                },
+                {
+                    "id": "later",
+                    "title": "This week and every week after",
+                    "line": f"Earlier weeks keep {name} as it was.",
+                },
+            ],
+            "confirm": "Save",
         }
 
     # What the sheet shows ---------------------------------------------------------------
@@ -440,6 +624,19 @@ class BlockDraft:
             {"value": "occurrence", "label": "This day only"},
             {"value": "series", "label": f"Every {day_range_and_words(days, self._week())}"},
         ]
+
+    def _series_days_now(self) -> list[int]:
+        return (
+            self.series_days if self.scope == "occurrence" and self.series_days is not None else self.days
+        )
+
+    def _until_label(self) -> str:
+        if not self.until:
+            return "No end"
+        try:
+            return day_short(self.until, wall_clock.today())
+        except (ValueError, TypeError):
+            return self.until
 
     def _week(self) -> str:
         """The first day of the open week, whose days a block's `days` count; "" with none."""
@@ -536,6 +733,13 @@ class BlockDraft:
                 if self.occurrence_day is None
                 else f"I missed it on {full_day_name(self._week(), self.occurrence_day)}"
             ),
+            # A one-day sheet changes that day only; the repeat is changed from the whole series.
+            "showRepeat": self.show_repeat and not locked,
+            "repeat": self.weekly,
+            "until": self.until or "",
+            "untilLabel": self._until_label(),
+            "todayIso": wall_clock.today().isoformat(),
+            "untilProblem": self.until_problem_text or self._until_problem(self._series_days_now()),
             "error": self.error,
             "canBack": bool(step),
             "primary": "Add" if step is not None and step >= 2 else ("Save" if self.existing else "Next"),

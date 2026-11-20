@@ -1,46 +1,49 @@
-"""The rig's --option flag and where its runs are kept."""
+"""The rig's command line (only --play, --out and the hidden --child are left) and its hidden session."""
 
 from __future__ import annotations
+
+import argparse
+import json
 
 import pytest
 
 from scripts.rig import drive
 
 
-def test_option_is_checked_against_the_designs_own_options():
-    assert drive.parse_options("bento", ["hero=today", "corners=square"]) == {
-        "hero": "today",
-        "corners": "square",
-    }
-    assert drive.parse_options("bento", []) == {}
-
-
 @pytest.mark.parametrize(
-    ("design", "pair", "says"),
+    "flag",
     [
-        ("bento", "size=big", "hero: week, today"),
-        ("bento", "hero=tomorrow", "week, today"),
-        ("bento", "hero", "not key=value"),
-        ("classic", "hero=today", "options: look:"),
-        (None, "hero=today", "needs --design"),
+        ["--design", "classic"],
+        ["--tab", "day"],
+        ["--scenario", "x"],
+        ["--option", "look=your"],
+        ["--list"],
     ],
 )
-def test_bad_option_names_what_is_valid(design, pair, says):
+def test_the_widgets_flags_are_refused(flag, monkeypatch, capsys):
+    # The Widgets interface is gone, so its flags are not options any more; argparse exits with 2.
+    monkeypatch.setattr("sys.argv", ["drive.py", "--play", "p.json", *flag])
     with pytest.raises(SystemExit) as refused:
-        drive.parse_options(design, [pair])
-    assert says in str(refused.value)
+        drive.main()
+    assert refused.value.code == 2
+    assert "unrecognized arguments" in capsys.readouterr().err
 
 
-def test_runs_go_where_the_environment_says_and_only_the_newest_three_stay(tmp_path, monkeypatch):
-    monkeypatch.setenv("FLEXWEEK_RIG_RUNS", str(tmp_path))
-    folder = drive.default_runs_folder("abc-1")
-    assert folder == tmp_path / "abc-1"
-    names = [f"20260929-10000{n}-{n}" for n in range(5)]
-    for name in names:
-        (folder / name).mkdir(parents=True)
-    (folder / "notes").mkdir()
-    drive.prune_runs(folder)
-    assert sorted(item.name for item in folder.iterdir()) == [*names[2:], "notes"]
+def test_without_a_play_the_rig_stops_and_names_the_flag(monkeypatch, capsys):
+    monkeypatch.setattr("sys.argv", ["drive.py"])
+    with pytest.raises(SystemExit) as refused:
+        drive.main()
+    assert refused.value.code == 2
+    assert "--play" in capsys.readouterr().err
+
+
+def test_a_play_that_asks_for_a_removed_setup_key_is_refused(tmp_path):
+    for key, value in (("design", "classic"), ("look", "light-frost")):
+        path = tmp_path / f"{key}.json"
+        path.write_text(json.dumps({"setup": {key: value}, "steps": []}))
+        with pytest.raises(SystemExit) as refused:
+            drive.check_play(argparse.Namespace(play=str(path)))
+        assert f"setup {key}: is not a setup key" in str(refused.value)
 
 
 def _session(monkeypatch, display, bus="unix:path=/private"):
@@ -138,59 +141,6 @@ def test_drive_keeps_an_empty_caller_bus_when_the_live_one_changes(monkeypatch):
     assert drive.session_from_fwtest() == (":71", "unix:path=/private", "abc-1")
 
 
-def test_a_run_that_stops_before_the_last_scenario_is_a_failure():
-    plan = [
-        ("timeline", "week", "week-move-day"),
-        ("timeline", "week", "week-resize-top"),
-        ("timeline", "week", "week-create"),
-    ]
-    results = [
-        {"design": "timeline", "tab": "week", "scenario": "week-move-day", "result": "PASS"},
-        {"design": "timeline", "tab": "week", "scenario": "week-resize-top", "result": "PASS"},
-    ]
-    line, code, payload = drive.report_run(plan, results, finished=False, stopped_in="week-create")
-    assert code == 1
-    assert "passed" not in line.lower()
-    assert "STOPPED" in line and "week-create" in line
-    skipped = [item for item in payload if item["result"] == "SKIPPED"]
-    assert skipped == [{"design": "timeline", "tab": "week", "scenario": "week-create", "result": "SKIPPED"}]
-
-
-def test_a_python_error_from_the_app_is_a_failure():
-    plan = [("timeline", "week", "week-beside")]
-    results = [{"design": "timeline", "tab": "week", "scenario": "week-beside", "result": "PASS"}]
-    line, code, payload = drive.report_run(
-        plan, results, finished=True, python_error="KeyError: 'block_edge'", stopped_in="week-beside"
-    )
-    assert code == 1
-    assert "passed" not in line.lower()
-    assert "STOPPED" in line and "week-beside" in line
-    assert "KeyError" in line
-    assert payload == results
-
-
-def test_a_finished_run_with_a_failed_scenario_counts_it_and_is_not_called_stopped():
-    plan = [("bento", "week", "week-move-day"), ("bento", "week", "week-create")]
-    results = [
-        {"design": "bento", "tab": "week", "scenario": "week-move-day", "result": "PASS"},
-        {"design": "bento", "tab": "week", "scenario": "week-create", "result": "FAIL"},
-    ]
-    line, code, payload = drive.report_run(plan, results, finished=True)
-    assert code == 1
-    assert line == "1/2 passed, 1 failed."
-    assert payload == results
-
-
-def test_a_finished_run_where_every_scenario_passed_still_says_passed():
-    plan = [("bento", "week", "week-move-day")]
-    results = [{"design": "bento", "tab": "week", "scenario": "week-move-day", "result": "PASS"}]
-    line, code, payload = drive.report_run(plan, results, finished=True)
-    assert code == 0
-    assert line == "1/1 passed."
-    assert payload == results
-
-
-
 def test_the_rig_forgets_the_look_an_earlier_run_left_behind():
     from pathlib import Path
 
@@ -222,7 +172,7 @@ def test_the_rig_forgets_the_first_day_of_the_week_an_earlier_run_left_behind():
     assert fields.week_starts_on() == "monday"
 
 
-def test_material_new_forgets_an_earlier_kept_session_and_saves_the_surface():
+def test_every_seed_starts_on_material_in_the_mode_the_play_asks_without_an_earlier_kept_session():
     import json
 
     from PySide6.QtCore import QStandardPaths
@@ -231,9 +181,10 @@ def test_material_new_forgets_an_earlier_kept_session_and_saves_the_surface():
     kept = drive.kept_session_path()
     kept.parent.mkdir(parents=True, exist_ok=True)
     kept.write_text('{"token": "stale"}')
-    look = drive.write_material_new_look("dark")
-    assert not kept.exists()
+    look = drive.write_material_look("dark")
     assert json.loads(look.read_text()) == {"surface": "material", "material": {"mode": "dark"}}
+    # The run's server is new, so a token kept by the run before would only 401 at sign-up.
+    assert not kept.exists()
 
 
 def test_the_rig_forgets_the_carried_look_an_earlier_run_left_behind():
@@ -251,50 +202,3 @@ def test_the_rig_forgets_the_carried_look_an_earlier_run_left_behind():
     assert kept.carried_look() is None
     drive.clean_look_file()
     assert not kept.look.exists()
-
-
-def test_undo_countdown_reads_the_held_clock():
-    import os
-
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QApplication, QWidget
-
-    from desktop.native.widgets import ACTION_TOAST_MS, Toast
-
-    app = QApplication.instance() or QApplication(["flexweek-undo-clock-test"])
-    held = {"now": 10_000_000}
-    host = QWidget()
-    host.resize(400, 200)
-    toast = Toast(host, host)
-    toast.motion = "off"
-    toast.clock_ms = lambda: held["now"]
-    toast._window_unavailable = lambda: False
-    host.show()
-    toast.show_message("Moved History essay to Fri 18:00.", "Undo", lambda: None)
-    app.processEvents()
-    toast._paused = False
-    toast._pointer = False
-    toast._keys = False
-    start = (ACTION_TOAST_MS + 999) // 1000
-    assert toast.isVisible()
-    assert toast.button.isVisible()
-    assert toast.button.text() == f"Undo · {start} s"
-    assert toast._left_ms() == ACTION_TOAST_MS
-    held["now"] += 5_000
-    assert toast._left_ms() == ACTION_TOAST_MS - 5_000
-    toast.sync_progress()
-    assert toast.button.text() == f"Undo · {start - 5} s"
-    held["now"] += ACTION_TOAST_MS
-    assert toast._left_ms() == 0
-    toast.sync_progress()
-    assert toast.isHidden() or not toast.button.isVisible()
-    host.removeEventFilter(toast)
-    toast.hide()
-    host.hide()
-    # This test sits outside the desktop conftest, which frees windows after each test. The toast and
-    # its host keep each other alive in a reference cycle, and the collector would otherwise free them
-    # during a later test on this worker.
-    from PySide6.QtCore import QEvent
-
-    host.deleteLater()
-    app.sendPostedEvents(None, QEvent.Type.DeferredDelete)

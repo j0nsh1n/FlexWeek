@@ -16,11 +16,23 @@ Item {
     readonly property string density: bridge ? bridge.density : "comfortable"
     readonly property bool reduceMotion: bridge ? bridge.reduceMotion : false
     readonly property bool highContrast: bridge ? bridge.highContrast : false
-    readonly property int enterMs: reduceMotion ? 0 : 300
+    readonly property int enterMs: Motion.fade(300, false)
+    Binding { target: Motion; property: "pace"; value: root.bridge ? root.bridge.motionPace : 1 }
+    Binding { target: Motion; property: "reach"; value: root.bridge ? root.bridge.motionReach : 1 }
     Binding {
         target: M3Font
         property: "scale"
         value: root.theme && root.theme.typeScale ? root.theme.typeScale : 1
+    }
+    Binding {
+        target: M3Font
+        property: "bodyName"
+        value: root.theme && root.theme.fontFamily ? root.theme.fontFamily : "Inter"
+    }
+    Binding {
+        target: M3Font
+        property: "headingName"
+        value: root.theme && root.theme.headingFamily ? root.theme.headingFamily : "Inter"
     }
     Binding {
         target: WeekStart
@@ -40,8 +52,10 @@ Item {
     readonly property bool gridHeld: bridge !== undefined && bridge !== null
         && ((bridge.screen === "week" && (weekView.menuOpen || weekView.handing))
             || (bridge.screen === "day" && (dayView.menuOpen || dayView.handing)))
+    // An alarm is ringing: Material's ring screen is over everything.
+    readonly property bool ringOpen: bridge !== undefined && bridge !== null && bridge.ring !== undefined && bridge.ring.open
     readonly property bool modalActive: typing || focusOpen || accountLayer.active || settingsPromptOpen
-        || widgetsDialogOpen || datePicker.open || gridHeld
+        || widgetsDialogOpen || datePicker.open || gridHeld || ringOpen || addMenu.open
 
     function _field(item) {
         while (item) {
@@ -67,6 +81,20 @@ Item {
         item.forceActiveFocus()
     }
 
+    // After Plan, an Undo, a redo or the notice's Undo the keyboard returns to the screen the student
+    // is on: the block acted on when it still exists, else the screen itself, never the stage.
+    // "kept" means the block the keyboard was on before it left the hours (the notice's Undo).
+    function keyboardBackToScreen(blockId) {
+        if (!bridge)
+            return
+        if (bridge.screen === "week")
+            weekView.focusWeek(blockId === "kept" ? weekView.keptBlockId() : blockId)
+        else if (bridge.screen === "day")
+            dayView.focusDay(blockId === "kept" ? dayView.keptBlockId() : blockId)
+        else
+            title.forceActiveFocus()
+    }
+
     // T: today in the view you are on (Week, Day, Month); My day and Settings open Day, which opens on today.
     function goToday() {
         if (bridge.screen === "week")
@@ -87,6 +115,14 @@ Item {
             direction > 0 ? bridge.day.nextDay() : bridge.day.previousDay()
         else if (bridge.screen === "month")
             direction > 0 ? bridge.month.nextMonth() : bridge.month.previousMonth()
+    }
+
+    function toggleAddMenu(fab) {
+        addMenu.fab = fab
+        addMenu.cursor = 0
+        addMenu.open = !addMenu.open
+        if (addMenu.open)
+            addMenu.forceActiveFocus()
     }
 
     // The letter keys, behind Letter keys. True when `key` is one of them and did its work.
@@ -210,8 +246,8 @@ Item {
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
                 icon: "add"
-                accessName: "Add homework"
-                onClicked: bridge.addHomework()
+                accessName: "Add"
+                onClicked: root.toggleAddMenu(railFab)
             }
 
             NavDestination {
@@ -309,7 +345,7 @@ Item {
                     anchors.right: tools.left
                     text: bridge.title
                     color: root.theme.onSurface
-                    font.family: M3Font.family
+                    font.family: M3Font.heading
                     font.pixelSize: M3Font.px(22)
                     font.weight: 500
                     elide: Text.ElideRight
@@ -440,6 +476,21 @@ Item {
                         icon: "calendar_month"
                         accessName: "Month"
                         onClicked: bridge.showPage("month")
+                    }
+
+                    Button {
+                        objectName: "materialRetrySave"
+                        visible: bridge.retryShown
+                        enabled: bridge.retryEnabled && !root.settingsPromptOpen
+                        anchors.verticalCenter: parent.verticalCenter
+                        theme: root.theme
+                        density: root.density
+                        reduceMotion: root.reduceMotion
+                        highContrast: root.highContrast
+                        kind: "tonal"
+                        text: "Retry save"
+                        accessName: "Retry save"
+                        onClicked: bridge.retrySave()
                     }
 
                     IconButton {
@@ -626,8 +677,45 @@ Item {
                 reduceMotion: root.reduceMotion
                 highContrast: root.highContrast
                 icon: "add"
-                accessName: "Add homework"
-                onClicked: bridge.addHomework()
+                accessName: "Add"
+                onClicked: root.toggleAddMenu(phoneFab)
+            }
+
+            // Add homework or Add fixed time, from the Add button on every screen.
+            Menu {
+                id: addMenu
+                objectName: "addMenu"
+                open: false
+                z: 4
+                accessName: "Add"
+                property Item fab: null
+                entries: [
+                    { label: "Add homework", icon: "add" },
+                    { label: "Add fixed time", icon: "schedule" }
+                ]
+                x: root.phone ? parent.width - width - 16 : 88
+                y: {
+                    if (!fab)
+                        return 0
+                    var spot = fab.mapToItem(parent, 0, 0)
+                    return root.phone ? Math.max(8, spot.y - height - 8) : spot.y + fab.height + 8
+                }
+                theme: root.theme
+                density: root.density
+                reduceMotion: root.reduceMotion
+                highContrast: root.highContrast
+                onChosen: (index, label) => {
+                    var fabItem = addMenu.fab
+                    open = false
+                    if (fabItem)
+                        fabItem.forceActiveFocus()
+                    if (index === 0)
+                        bridge.addHomework()
+                    else
+                        bridge.addFixedTime()
+                }
+                onDismissed: if (fab) fab.forceActiveFocus()
+                onActiveFocusChanged: if (!activeFocus && open) open = false
             }
 
             // Go to date: a month under the Week or Month title.
@@ -652,14 +740,109 @@ Item {
                 onScreenShownChanged: open = false
             }
 
+            Rectangle {
+                id: alertStrip
+                objectName: "materialAlertStrip"
+                visible: bridge.alertText !== ""
+                z: 3
+                // Above the snackbar, so it never covers the day names or the top bar.
+                // Just above the notice while it shows (it grows with wrapped lines), else where the notice sits.
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: (root.phone ? 96 : 24)
+                    + (materialSnackbar.visible ? materialSnackbar.height + 12 : 48 + 12)
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.min(parent.width - 32, 560)
+                height: stripRow.implicitHeight + 24
+                radius: 12
+                color: stripPalette.secondaryContainer
+                border.width: 1
+                border.color: stripPalette.outlineVariant
+                M3Palette { id: stripPalette; theme: root.theme }
+                Row {
+                    id: stripRow
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.margins: 16
+                    spacing: 12
+                    Text {
+                        id: stripText
+                        objectName: "alertStripText"
+                        width: parent.width - gotIt.width - parent.spacing
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: bridge.alertText
+                        color: stripPalette.inkSecondaryContainer
+                        font.family: M3Font.family
+                        font.pixelSize: M3Font.px(14)
+                        wrapMode: Text.WordWrap
+                        Accessible.role: Accessible.StaticText
+                        Accessible.name: text
+                    }
+                    Button {
+                        id: gotIt
+                        objectName: "alertStripDismiss"
+                        anchors.verticalCenter: parent.verticalCenter
+                        theme: root.theme
+                        density: root.density
+                        reduceMotion: root.reduceMotion
+                        highContrast: root.highContrast
+                        kind: "filled"
+                        text: "Got it"
+                        accessName: "Got it"
+                        onClicked: bridge.dismissAlert()
+                    }
+                }
+            }
+
+            // Reminders kept on screen, newest on top, above the focus strip and the notices. On a computer
+            // they sit in the bottom right corner, so the days and hours they remind about stay in view.
+            Column {
+                id: reminderCards
+                objectName: "materialReminderCards"
+                z: 3
+                visible: cardRepeater.count > 0
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: (root.phone ? 96 : 16)
+                    + (materialSnackbar.visible ? materialSnackbar.height + 12 : 0)
+                    + (bridge.sheets && bridge.sheets.notice ? 64 + 12 : 0)
+                    + (alertStrip.visible ? alertStrip.height + 12 : 0)
+                // Centred on a phone; on a computer 16 px in from the right edge.
+                x: root.phone ? (parent.width - width) / 2 : parent.width - width - 16
+                spacing: 12
+                Repeater {
+                    id: cardRepeater
+                    model: bridge.reminderCards
+                    ReminderCard {
+                        required property var modelData
+                        objectName: "reminderCard"
+                        maxWidth: root.phone ? reminderCards.parent.width - 32 : 288
+                        theme: root.theme
+                        density: root.density
+                        reduceMotion: root.reduceMotion
+                        highContrast: root.highContrast
+                        title: modelData.title
+                        body: modelData.body
+                        onSnoozed: bridge.snoozeReminder(modelData.key)
+                        onClosed: bridge.closeReminder(modelData.key)
+                    }
+                }
+            }
+
             Snackbar {
                 id: materialSnackbar
+                // Never wider than the page; long or several-line notices wrap and the bar grows.
+                maxWidth: Math.max(240, parent.width - 48)
                 objectName: "materialSnackbar"
                 visible: bridge.snackText !== ""
                 z: 3
                 message: bridge.snackText
-                actionText: bridge.snackAction
-                onActionClicked: if (bridge.snackAction !== "") bridge.undo()
+                // Undo shows the seconds left; a screen reader says "UNDO" and no number.
+                actionText: bridge.snackAction === "UNDO" ? "Undo " + bridge.snackSeconds : bridge.snackAction
+                accessActionText: bridge.snackAction
+                fraction: bridge.snackFraction
+                onActionClicked: if (bridge.snackAction !== "") bridge.snackActed()
+                // Undo pressed by keyboard: the keyboard returns to the week it undid, not to nothing.
+                onFocusReleased: root.keyboardBackToScreen("kept")
                 onPauseRequested: if (bridge) bridge.pauseSnack()
                 onResumeRequested: if (bridge) bridge.resumeSnack()
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -675,11 +858,9 @@ Item {
                 target: bridge && bridge.week ? bridge.week : null
                 function onPlanFinished() {
                     Qt.callLater(function() {
-                        if (weekView.drawer && weekView.drawer.count === 0) {
-                            materialSnackbar.forceActiveFocus()
-                        } else if (weekView.drawer && weekView.drawer.count > 0 && weekView.drawer.planButton) {
-                            weekView.drawer.planButton.forceActiveFocus()
-                        }
+                        // The week, not the snackbar or Plan: its Undo is a Tab away, and Ctrl+Z works from
+                        // the week. Plan places several blocks, so no single one takes the keyboard.
+                        root.keyboardBackToScreen("")
                     })
                 }
             }
@@ -699,6 +880,18 @@ Item {
     SheetHost {
         id: sheetHost
         z: 30
+        bridge: root.bridge
+        theme: root.theme
+        density: root.density
+        reduceMotion: root.reduceMotion
+        highContrast: root.highContrast
+        phone: root.phone
+        onRestoreFocus: root.focusDestination()
+    }
+
+    RingScreen {
+        id: ringScreen
+        z: 40
         bridge: root.bridge
         theme: root.theme
         density: root.density
@@ -773,6 +966,19 @@ Item {
         enabled: !modalActive
         onActivated: bridge.redo()
     }
+    // New homework and Help, as in the plain look. Not in a field, a sheet, Focus or sign-in (modalActive).
+    Shortcut {
+        sequence: "Ctrl+N"
+        context: Qt.WindowShortcut
+        enabled: !modalActive && bridge.screen !== "settings"
+        onActivated: bridge.addHomework()
+    }
+    Shortcut {
+        sequence: "F1"
+        context: Qt.WindowShortcut
+        enabled: !modalActive
+        onActivated: bridge.openHelp()
+    }
     // Quick focus, the same as the Quick focus row in More. A Ctrl chord, so neither Settings switch
     // touches it. Ctrl+F is left free for search.
     Shortcut {
@@ -780,6 +986,13 @@ Item {
         context: Qt.WindowShortcut
         enabled: !modalActive
         onActivated: bridge.focus.show()
+    }
+    // The week as a list, the same as More's row. The Widgets key of the same name is off while Material shows.
+    Shortcut {
+        sequence: "Ctrl+Shift+L"
+        context: Qt.WindowShortcut
+        enabled: !modalActive
+        onActivated: bridge.openWeekList()
     }
     Shortcut {
         sequence: "Ctrl+="
@@ -808,11 +1021,13 @@ Item {
     Shortcut {
         sequence: "Escape"
         context: Qt.WindowShortcut
-        // An open Week or Day menu takes its own Escape, so it can close and give the focus back.
-        enabled: !accountLayer.active && !focusOverlay.ending && !sheetHost.active && !settingsPromptOpen
-                 && !widgetsDialogOpen && !datePicker.open
+        // An open Week or Day menu and Month's date bar take their own Escape, so they can close and give the
+        // focus back.
+        enabled: !accountLayer.active && !focusOverlay.ending && !sheetHost.active && !settingsPromptOpen && !ringOpen
+                 && !widgetsDialogOpen && !datePicker.open && !addMenu.open
                  && !(bridge.screen === "week" && (weekView.menuOpen || weekView.handing))
                  && !(bridge.screen === "day" && (dayView.menuOpen || dayView.handing))
+                 && !(bridge.screen === "month" && bridge.month && bridge.month.barOpen)
         onActivated: {
             if (bridge && bridge.settingsBridge && bridge.settingsBridge.page === "advanced")
                 bridge.settingsBridge.closeAdvanced()

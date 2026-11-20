@@ -5,7 +5,7 @@ were lost. (A stopped server is what the light app cannot give: its backend runs
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.server import LocalServer
@@ -19,12 +19,13 @@ def test_sign_in_says_when_flexweek_cannot_be_reached(
     window.session.logout()
     wait_until(qapp, lambda: window.session.account is None and not window.session.busy)
     server.stop()
-    window.username.setText(USERNAME)
-    window.password.setText(PASSWORD)
+    bridge = window._account_bridge()
     window.session._say("")
-    window.findChild(QPushButton, "signIn").click()
-    wait_until(qapp, lambda: not window.session.busy and bool(window.auth_status.text()))
-    assert window.auth_status.text() == (
+    bridge.setUsername(USERNAME)
+    bridge.setPassword(PASSWORD)
+    bridge.submit()
+    wait_until(qapp, lambda: not window.session.busy and bool(bridge.statusLine))
+    assert bridge.statusLine == (
         "FlexWeek can't reach its server. Close FlexWeek, open it again, then sign in."
     )
     assert window.session.account is None
