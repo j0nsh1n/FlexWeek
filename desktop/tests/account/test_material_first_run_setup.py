@@ -35,7 +35,7 @@ from desktop.tests.account.support import (
     skip_setup,
     through_recovery,
 )
-from desktop.tests.material_support import focus_quick, host_has_focus, quick_of, quick_window_of
+from desktop.tests.material_support import host_has_focus, quick_of, quick_window_of
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import look_file, qapp  # noqa: F401
 
@@ -254,7 +254,6 @@ def test_setup_focus_and_tab_ownership_stays_on_visible_material_controls(
     # Window focus ownership: Material quick surface owns keyboard focus; Widgets setup is not opened
     quick = quick_of(window)
     assert quick is not None
-    focus_quick(window)
     assert host_has_focus(window)
 
     # Active focus item in Quick scene belongs to Material setup

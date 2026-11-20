@@ -1757,7 +1757,9 @@ class NativeWindow(QObject):
         url = self.session.spotify_url(alarm.get("spotify_url"))
         if self._ring_on_material(alarm, url):
             return
-        dialog = AlarmRingDialog(None, alarm, url)
+        # Only when Material is not on screen: the draw-error window stands in, and the alarm opens over it.
+        face = self._face()
+        dialog = AlarmRingDialog(face if isinstance(face, QWidget) else None, alarm, url)
         self._alarm_dialog = dialog
         self._ring(alarm, url)
         try:
