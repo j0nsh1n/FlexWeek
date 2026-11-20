@@ -564,6 +564,7 @@ Item {
 
         WheelHandler {
             acceptedModifiers: Qt.ControlModifier
+            acceptedDevices: PointerDevice.AllDevices
             onWheel: (event) => {
                 if (root.passive || !root.bridge || !root.bridge.zoomBy)
                     return

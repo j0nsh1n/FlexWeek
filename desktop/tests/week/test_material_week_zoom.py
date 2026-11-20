@@ -220,6 +220,20 @@ def test_ctrl_wheel_over_the_grid_zooms_about_the_pointer_and_plain_wheel_does_n
     assert row_of(window) == held
 
 
+def test_ctrl_wheel_from_a_pointer_wayland_calls_a_touchpad_still_zooms(
+    qapp: QApplication, material: NativeWindow
+) -> None:
+    """On KDE Plasma's Wayland, Qt lists the mouse as a touchpad; Ctrl+wheel did nothing there (Jonathan,
+    2026-11-20). Week and Day share the hours pane, so this covers both."""
+    window = material
+    root = week_on_screen(qapp, window)
+    scroller = qml(root, "weekScroller")
+    at = scroller.mapToScene(QPointF(68.0 + 40.0, 120.0))
+    wheel(quick_of(window), at, 1, device=support_zoom.touchpad())
+    pump(qapp)
+    assert row_of(window) == 72
+
+
 def test_the_pill_plus_zooms_in_and_minus_is_disabled_at_the_smallest_level(
     qapp: QApplication, material: NativeWindow
 ) -> None:

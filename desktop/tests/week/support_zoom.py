@@ -23,7 +23,7 @@ from PySide6.QtCore import (  # noqa: E402
     QStandardPaths,
     Qt,
 )
-from PySide6.QtGui import QWheelEvent  # noqa: E402
+from PySide6.QtGui import QInputDevice, QPointingDevice, QWheelEvent  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
@@ -108,8 +108,25 @@ def settle(qapp: QApplication) -> None:
 
 
 
-def wheel(widget: QWidget, at: QPointF, notches: float, ctrl: bool = True) -> None:
+def touchpad() -> QPointingDevice:
+    """What Qt on Wayland reports a mouse as when the compositor lists one pointer: a touchpad (KDE Plasma,
+    2026-11-20). A wheel handler that takes only mice ignores its wheel."""
+    return QPointingDevice(
+        "wayland pointer",
+        9001,
+        QInputDevice.DeviceType.TouchPad,
+        QPointingDevice.PointerType.Finger,
+        QInputDevice.Capability.Position | QInputDevice.Capability.Scroll,
+        1,
+        0,
+    )
+
+
+def wheel(
+    widget: QWidget, at: QPointF, notches: float, ctrl: bool = True, device: QPointingDevice | None = None
+) -> None:
     modifiers = Qt.KeyboardModifier.ControlModifier if ctrl else Qt.KeyboardModifier.NoModifier
+    extra = () if device is None else (Qt.MouseEventSource.MouseEventNotSynthesized, device)
     event = QWheelEvent(
         at,
         QPointF(widget.mapToGlobal(at.toPoint())),
@@ -119,6 +136,7 @@ def wheel(widget: QWidget, at: QPointF, notches: float, ctrl: bool = True) -> No
         modifiers,
         Qt.ScrollPhase.NoScrollPhase,
         False,
+        *extra,
     )
     QApplication.sendEvent(widget, event)
 

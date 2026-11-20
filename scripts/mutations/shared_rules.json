@@ -320,5 +320,12 @@
   "old": "                else if (index === 0 && root.firstButton === null)\n",
   "new": "                else if (index === 1 && root.firstButton === null)\n",
   "test": "desktop/tests/sheets/test_material_enter_is_the_safe_answer.py::test_enter_on_discard_your_changes_keeps_editing"
+ },
+ {
+  "file": "desktop/native/material/qml/hours/HoursPane.qml",
+  "name": "Ctrl+wheel zoom ignores a pointer Wayland calls a touchpad",
+  "old": "            acceptedDevices: PointerDevice.AllDevices\n",
+  "new": "",
+  "test": "desktop/tests/week/test_material_week_zoom.py::test_ctrl_wheel_from_a_pointer_wayland_calls_a_touchpad_still_zooms"
  }
 ]
