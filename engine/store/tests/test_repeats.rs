@@ -1484,3 +1484,85 @@ fn moving_until_later_from_the_week_it_cuts_shows_the_cut_day_there_too() {
     assert_eq!(guitar_days(&conn, user_id, WEEK_AFTER), Some(json!([1, 3])));
     assert_eq!(guitar_days(&conn, user_id, LAST_WEEK), Some(json!([1, 3])));
 }
+
+// --- the repeat limit and weeks that hold a weekly time by hand (#118) -------------------------------
+
+fn weekly(n: usize) -> Value {
+    json!({"category": "extra", "days": [2], "duration_min": 30, "id": format!("weekly-{n:04}"),
+           "kind": "locked", "start": "07:00", "title": format!("Practice {n}")})
+}
+
+#[test]
+fn an_account_holds_two_hundred_repeats_and_the_next_is_refused_with_a_sentence() {
+    let (conn, user_id) = account("repeat_limit", false);
+    set_up(&conn, user_id); // School and Soccer
+    let more: Vec<Value> = (0..198)
+        .map(|n| {
+            edit_intent(&format!("weekly-{n:04}"), OPEN_WEEK, None, Some(&weekly(n)))
+                .unwrap()
+                .to_value()
+        })
+        .collect();
+    run(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(more), &conn, user_id),
+    );
+    assert_eq!(
+        standing_blocks(&conn, user_id, OPEN_WEEK).unwrap().len(),
+        200
+    );
+    let one_more = edit_intent("weekly-0198", OPEN_WEEK, None, Some(&weekly(198)))
+        .unwrap()
+        .to_value();
+    match apply(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(vec![one_more]), &conn, user_id),
+        &clock(),
+    ) {
+        Err(ApplyFailure::Refused { message, .. }) => assert_eq!(
+            message,
+            "FlexWeek keeps at most 200 weekly blocks (School, activities and weekly fixed times) in one \
+             account. Stop one before adding another."
+        ),
+        other => panic!("the 201st repeat was not refused: {other:?}"),
+    }
+    // A change to one that already stands is not a new one.
+    let moved = with(weekly(5), json!({"start": "07:30"}));
+    let edit = edit_intent("weekly-0005", OPEN_WEEK, Some(&weekly(5)), Some(&moved))
+        .unwrap()
+        .to_value();
+    run(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(vec![edit]), &conn, user_id),
+    );
+}
+
+#[test]
+fn a_new_weekly_time_names_the_later_weeks_that_already_hold_it_by_hand_and_removes_nothing() {
+    let (conn, user_id) = account("weekly_doubles", false);
+    set_up(&conn, user_id);
+    // The week of 23 November already has a Guitar the student added by hand on Tuesday.
+    let mut by_hand = shown(&conn, user_id, WEEK_AFTER);
+    by_hand.push(with(
+        guitar(),
+        json!({"id": "c0ffee00-0000-4000-8000-000000000001"}),
+    ));
+    save_week_as(&conn, user_id, WEEK_AFTER, by_hand);
+    let answer = change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[("weekly-3f2a9c01", Some(guitar()))],
+    );
+    assert_eq!(answer["repeats"]["doubled_weeks"], json!([WEEK_AFTER]));
+    let week = shown(&conn, user_id, WEEK_AFTER);
+    let guitars = week
+        .iter()
+        .filter(|block| block["title"] == json!("Guitar"))
+        .count();
+    assert_eq!(guitars, 2, "both stay; the student deletes the extra one");
+    assert!(answer["repeats"]["doubled_weeks"].as_array().is_some());
+}

@@ -110,6 +110,39 @@ pub fn uncut_copy(copy: &Value, repeat: Option<&Value>, week_start: &str) -> Eng
     Ok(out)
 }
 
+/// Whether a week's own blocks (`stored`, of the week starting `week_start`) already hold a hand-made copy
+/// of the weekly time `repeat` makes: a locked block that is not a repeat, with the same name, start and
+/// length on a day the repeat (cut at its Until) also has. The week would then show it twice.
+pub fn twin_in_week(repeat: &Value, week_start: &str, stored: &[Value]) -> EngineResult<bool> {
+    let Some(repeat) = cut_at_until(repeat, week_start)? else {
+        return Ok(false);
+    };
+    let text = |block: &Value, key: &str| {
+        block
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .to_lowercase()
+    };
+    let days = days_of(&repeat);
+    for copy in stored {
+        if copy.get("kind").and_then(Value::as_str) != Some("locked")
+            || crate::desk::grid::is_standing_block(copy)?
+            || text(copy, "start").is_empty()
+            || text(copy, "start") != text(&repeat, "start")
+            || copy.get("duration_min") != repeat.get("duration_min")
+            || text(copy, "title") != text(&repeat, "title")
+        {
+            continue;
+        }
+        if days_of(copy).iter().any(|day| days.contains(day)) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// `with_standing` for the week starting `week_start`, each block cut at its Until date.
 pub fn shown_with_standing(
     stored: &[Value],
