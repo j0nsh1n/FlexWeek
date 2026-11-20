@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import pump, qml
+from desktop.tests.material_support import pump, qml, quick_window_of
 from desktop.tests.week.support_material_page import fresh_material
 
 
@@ -32,7 +32,7 @@ def test_after_focus_mode_ends_focus_returns_to_the_control_that_started_it(
     # Material
     root = fresh_material(qapp, window)
     bridge = window._material_page.bridge
-    scene = window._material_page._quick.quickWindow()
+    scene = quick_window_of(window)
 
     control = qml(root, "toggleWeekends")
     control.forceActiveFocus()
@@ -55,7 +55,7 @@ def test_focus_mode_return_when_origin_is_deleted_falls_back_without_error(
     # Material
     root = fresh_material(qapp, window)
     bridge = window._material_page.bridge
-    scene = window._material_page._quick.quickWindow()
+    scene = quick_window_of(window)
 
     origin = QQuickItem(root)
     origin.setObjectName("tempFocusTarget")

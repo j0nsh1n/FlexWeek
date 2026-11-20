@@ -17,6 +17,7 @@ from PySide6.QtCore import QObject, QPoint, Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
+from desktop.tests.material_support import quick_of, quick_window_of  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.week.support_material import (  # noqa: E402
     _block_named,
@@ -43,12 +44,12 @@ CTRL = Qt.KeyboardModifier.ControlModifier
 
 
 def _press(window, key: Qt.Key, modifiers: Qt.KeyboardModifier = Qt.KeyboardModifier.NoModifier) -> None:
-    QTest.keyClick(window._material_page._quick, key, modifiers)
+    QTest.keyClick(quick_of(window), key, modifiers)
     _pump(QApplication.instance(), 10)
 
 
 def _focus(window) -> QObject | None:
-    return window._material_page._quick.quickWindow().activeFocusItem()
+    return quick_window_of(window).activeFocusItem()
 
 
 def _on_the_week(window) -> bool:

@@ -21,6 +21,7 @@ if importlib.util.find_spec("PySide6") is not None:
     from desktop.native.client import _error
     from desktop.native.controller import NativeSession
     from desktop.server import LocalServer
+    from desktop.tests.material_support import page_showing
     from desktop.tests.waiting import wait_until  # noqa: F401
 
 PASSWORD = "a-long-test-password"
@@ -95,7 +96,7 @@ def past_setup(qapp: QApplication, window: object) -> None:
     saved, since a save still in flight turns the test's own save away."""
 
     def on(name: str) -> bool:
-        return window._stack.currentWidget().objectName() == name  # type: ignore[attr-defined]
+        return page_showing(window) == name  # type: ignore[arg-type]
 
     def in_setup() -> bool:
         bridge = window._account_bridge()  # type: ignore[attr-defined]

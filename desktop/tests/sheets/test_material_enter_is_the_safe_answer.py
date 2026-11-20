@@ -17,7 +17,7 @@ from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
-from desktop.tests.material_support import pump  # noqa: E402
+from desktop.tests.material_support import pump, quick_of  # noqa: E402
 from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: E402,F401
     open_light,
     qapp,
@@ -30,7 +30,7 @@ from desktop.tests.sheets.support_soccer import soccer  # noqa: E402
 
 
 def _press_enter(qapp: QApplication, shell: NativeWindow) -> None:
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Return)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Return)
     pump(qapp, 30)
 
 

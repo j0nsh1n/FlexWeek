@@ -31,7 +31,7 @@ from desktop.native.settings_copy import (
 from desktop.native.version import VERSION
 from desktop.native.window import SIGN_OUT_QUESTION, NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import named, pump, show_material
+from desktop.tests.material_support import focus_quick, named, pump, quick_of, quick_window_of, show_material
 from desktop.tests.window_support import look_file, qapp  # noqa: F401
 
 NOTES = "## What changed\n- Material 3 is the one look.\n- Fewer pop-ups.\n\nMore detail below."
@@ -44,9 +44,9 @@ def _sheets(window: NativeWindow):
 
 def _material(qapp: QApplication, window: NativeWindow) -> tuple[QObject, object]:
     root = show_material(qapp, window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     window.activateWindow()
-    quick.setFocus()
+    focus_quick(window)
     pump(qapp)
     return root, quick
 
@@ -61,8 +61,8 @@ def _text(root: QObject, name: str) -> str:
     return str(_one(root, name).property("text"))
 
 
-def _focused(quick) -> str:
-    item = quick.quickWindow().activeFocusItem()
+def _focused(window: NativeWindow) -> str:
+    item = quick_window_of(window).activeFocusItem()
     return "" if item is None else str(item.objectName())
 
 
@@ -111,10 +111,10 @@ def test_f1_opens_help_and_esc_closes_it_and_the_keyboard_goes_back(
     pump(qapp)
     _press(quick, Qt.Key.Key_F1)
     assert _sheets(window).property("kind") == "help"
-    assert _focused(quick) == "helpClose", "the keyboard starts on Close"
+    assert _focused(window) == "helpClose", "the keyboard starts on Close"
     _press(quick, Qt.Key.Key_Escape)
     assert _sheets(window).property("kind") == ""
-    assert quick.quickWindow().activeFocusItem() is fab
+    assert quick_window_of(window).activeFocusItem() is fab
 
 
 def test_help_closes_from_its_close_button_and_scrolls_from_the_keyboard(
@@ -224,10 +224,10 @@ def test_about_closes_with_esc_and_the_keyboard_goes_back(qapp: QApplication, wi
     pump(qapp)
     _sheets(window).openAbout()
     pump(qapp, 40)
-    assert _focused(quick) == "aboutClose"
+    assert _focused(window) == "aboutClose"
     _press(quick, Qt.Key.Key_Escape)
     assert _sheets(window).property("kind") == ""
-    assert quick.quickWindow().activeFocusItem() is fab
+    assert quick_window_of(window).activeFocusItem() is fab
 
 
 
@@ -265,7 +265,7 @@ def test_an_update_found_shows_a_material_sheet_with_what_changed(
     wanted = "What changed\n•  Material 3 is the one look.\n•  Fewer pop-ups.\nMore detail below."
     assert _text(root, "updateNotes") == wanted
     assert _text(root, "updateNotes") == first_lines(NOTES)
-    assert _focused(quick) == "updateInstall"
+    assert _focused(window) == "updateInstall"
 
 
 def test_update_now_starts_the_download_and_shows_progress_and_problems(
@@ -403,7 +403,7 @@ def test_sign_out_asks_in_a_material_prompt_with_the_same_words(
     assert ask["body"] == SIGN_OUT_QUESTION.format(where="this computer")
     assert [(a["label"]) for a in ask["answers"]] == ["Cancel", "Sign out"]
     assert _text(root, "sheetTitle") == "Sign out"
-    assert _focused(quick) == "prompt_stay", "Cancel is the default, so Enter by habit changes nothing"
+    assert _focused(window) == "prompt_stay", "Cancel is the default, so Enter by habit changes nothing"
 
 
 def test_sign_out_says_in_full_where_the_week_lives(
@@ -466,7 +466,7 @@ def test_cancel_and_esc_keep_the_student_signed_in_and_the_keyboard_goes_back(
     _press(quick, Qt.Key.Key_Escape)
     assert dict(_sheets(window).property("ask")) == {}
     assert out == []
-    assert quick.quickWindow().activeFocusItem() is fab
+    assert quick_window_of(window).activeFocusItem() is fab
 
 
 

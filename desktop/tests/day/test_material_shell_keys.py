@@ -19,14 +19,21 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_window import material_window, qapp  # noqa: E402, F401
-from desktop.tests.material_support import named, pump, qml, show_material  # noqa: E402
+from desktop.tests.material_support import (  # noqa: E402
+    focus_quick,
+    named,
+    pump,
+    qml,
+    quick_of,
+    show_material,
+)
 from desktop.tests.waiting import wait_until  # noqa: E402
 
 
 def _press_item(qapp: QApplication, window: NativeWindow, item: QObject) -> None:
     centre = item.mapToScene(QPointF(item.width() / 2, item.height() / 2))
     QTest.mouseClick(
-        window._material_page._quick,
+        quick_of(window),
         Qt.MouseButton.LeftButton,
         Qt.KeyboardModifier.NoModifier,
         QPoint(int(centre.x()), int(centre.y())),
@@ -40,7 +47,7 @@ def test_number_keys_open_each_screen_and_escape_returns_focus(
     """1-5 leave the week for Day, Month, My day, and Settings, and Esc focuses that destination."""
     root = show_material(qapp, material_window)
     bridge = material_window._material_page.bridge
-    quick = material_window._material_page._quick
+    quick = quick_of(material_window)
     assert bridge.property("screen") == "week"
     root.forceActiveFocus()
     pump(qapp)
@@ -83,8 +90,8 @@ def test_ctrl_s_saves_when_the_material_shell_is_focused(
     heard: list[bool] = []
     monkeypatch.setattr(material_window.session, "save", lambda: heard.append(True))
     material_window.session.dirty = True
-    quick = material_window._material_page._quick
-    quick.setFocus()
+    quick = quick_of(material_window)
+    focus_quick(material_window)
     pump(qapp)
 
     QTest.keyClick(quick, Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)
@@ -102,7 +109,7 @@ def test_rings_follow_the_last_input_in_the_real_window(
     sheets = material_window._material_page.bridge.sheets
     _press_item(qapp, material_window, named(root, "materialFab")[0])
     # The Add button asks which: Return takes the first, Add homework.
-    QTest.keyClick(material_window._material_page._quick, Qt.Key.Key_Return)
+    QTest.keyClick(quick_of(material_window), Qt.Key.Key_Return)
     pump(qapp)
 
     # Title marks focus with its own border (Material 3), so it has no ring to show.
@@ -121,7 +128,7 @@ def test_rings_follow_the_last_input_in_the_real_window(
     sheets.forceClose()
     pump(qapp)
     _press_item(qapp, material_window, week)
-    QTest.keyClick(material_window._material_page._quick, Qt.Key.Key_Escape)
+    QTest.keyClick(quick_of(material_window), Qt.Key.Key_Escape)
     pump(qapp)
     assert week.property("activeFocus") is True
     assert named(week, "focusRing")[0].property("shown") is True

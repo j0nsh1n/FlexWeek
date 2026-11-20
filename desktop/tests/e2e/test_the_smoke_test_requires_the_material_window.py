@@ -19,7 +19,7 @@ from desktop import main as app_main
 from desktop.main import PAINTED_MIN_COLORS, SMOKE_PASSED, NativeSmoke, material_state
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import faded_in
+from desktop.tests.material_support import faded_in, grab
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
 
@@ -87,7 +87,7 @@ def test_material_state_tells_the_window_from_the_draw_error(
     pump(qapp)
     page = window._material_page
     assert page is not None and page.root is not None
-    page._quick.grabFramebuffer()
+    grab(window)
     pump(qapp)
     faded_in(qapp, page.root)
     state, colors = material_state(window)

@@ -16,7 +16,7 @@ from PySide6.QtCore import QPoint, Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from desktop.tests.material_support import named, pump  # noqa: E402
+from desktop.tests.material_support import focus_quick, named, pump, quick_of  # noqa: E402
 from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: E402,F401
     open_light,
     qapp,
@@ -46,14 +46,14 @@ def type_title(sheets, text: str) -> None:
 
 
 def press_escape(shell) -> None:
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Escape)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Escape)
     pump(QApplication.instance(), 30)
 
 
 @pytest.fixture()
 def focused(shell, sheets):
     shell.activateWindow()
-    shell._material_page._quick.setFocus()
+    focus_quick(shell)
     pump(QApplication.instance(), 20)
     return sheets
 
@@ -93,7 +93,7 @@ def test_ctrl_n_and_the_c_key_reopen_the_kept_homework(qapp, shell, focused, key
     if key == Qt.Key.Key_C:
         _look(shell, letters=True)
     modifiers = Qt.KeyboardModifier.ControlModifier if key == Qt.Key.Key_N else Qt.KeyboardModifier.NoModifier
-    QTest.keyClick(shell._material_page._quick, key, modifiers)
+    QTest.keyClick(quick_of(shell), key, modifiers)
     pump(QApplication.instance(), 30)
     assert sheets.kind == "homework"
     assert title_now(sheets) == "Piano lesson"
@@ -132,7 +132,7 @@ def test_the_cancel_button_asks_while_something_is_typed(qapp, shell, focused, k
     pump(QApplication.instance(), 40)
     button = named(root, CANCEL[kind])[0]
     centre = button.mapToScene(button.boundingRect().center()).toPoint()
-    quick = shell._material_page._quick
+    quick = quick_of(shell)
     QTest.mouseClick(quick, Qt.MouseButton.LeftButton, pos=QPoint(centre.x(), centre.y()))
     wait_until(None, lambda: sheets.ask.get("id") == "discard", what="the Discard question")
     assert sheets.kind == kind
@@ -144,7 +144,7 @@ def test_a_tap_on_the_dim_area_still_asks(qapp, shell, focused, kind: str) -> No
     open_add(sheets, kind)
     type_title(sheets, "Piano lesson")
     pump(QApplication.instance(), 40)
-    QTest.mouseClick(shell._material_page._quick, Qt.MouseButton.LeftButton, pos=QPoint(10, 10))
+    QTest.mouseClick(quick_of(shell), Qt.MouseButton.LeftButton, pos=QPoint(10, 10))
     wait_until(None, lambda: sheets.ask.get("id") == "discard", what="the Discard question")
 
 

@@ -22,7 +22,15 @@ from desktop.tests.focus.support_focus_screen import (  # noqa: F401
     settled,
     start,
 )
-from desktop.tests.material_support import pump, qml, show_material
+from desktop.tests.material_support import (
+    host_has_focus,
+    material_showing,
+    pump,
+    qml,
+    quick_of,
+    quick_window_of,
+    show_material,
+)
 from desktop.tests.window_support import qapp  # noqa: F401
 
 
@@ -42,7 +50,7 @@ def test_the_screen_opens_ready_and_start_runs_the_sessions_own_30_minute_timer(
 ) -> None:
     window = material_focus_window
     root, focus = open_focus(qapp, window)
-    assert focus.open and window._stack.currentWidget().objectName() == "materialPage"
+    assert focus.open and material_showing(window)
     assert text_of(root, "focusPhase") == "Ready when you are"
     assert text_of(root, "focusTitle") == "Quick focus"
     assert text_of(root, "focusTime") == "30:00"
@@ -268,7 +276,7 @@ def test_keep_current_timer_leaves_my_day_as_it_was_with_the_card_on_that_timer(
 
 def _press_escape(window: NativeWindow) -> None:
     """The real keyboard path: Esc to Material's window, where the question has the keyboard."""
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Escape)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Escape)
     pump(QApplication.instance(), 20)
 
 
@@ -296,7 +304,7 @@ def test_escape_closes_the_replace_timer_question_and_changes_nothing(
     assert not focus.open
     assert bridge.screen == "myday"
     assert text_of(root, "myDayStartFocus") == "Back to Physics"
-    assert QApplication.focusWidget() is window._material_page._quick, "focus went back to the page"
+    assert host_has_focus(window), "focus went back to the page"
 
 
 def test_after_escape_closes_the_replace_timer_question_focus_is_back_on_the_button_that_opened_it(
@@ -308,7 +316,7 @@ def test_after_escape_closes_the_replace_timer_question_focus_is_back_on_the_but
     root = show_material(qapp, window)
     bridge = window._material_page.bridge
     focus = bridge.focus
-    scene = window._material_page._quick.quickWindow()
+    scene = quick_window_of(window)
     window.start_material_focus(first["id"], first["days"][0])
     pump(qapp)
     focus.hide()

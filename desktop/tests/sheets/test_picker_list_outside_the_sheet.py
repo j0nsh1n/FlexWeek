@@ -19,7 +19,13 @@ from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
-from desktop.tests.material_support import pump, show_material, visuals  # noqa: E402
+from desktop.tests.material_support import (  # noqa: E402
+    pump,
+    quick_of,
+    quick_window_of,
+    show_material,
+    visuals,
+)
 from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: E402,F401
     DISCARD,
     find_named,
@@ -34,7 +40,7 @@ ROW = 44
 
 
 def _scene(shell: NativeWindow) -> QObject:
-    return shell._material_page._quick.quickWindow().contentItem()
+    return quick_window_of(shell).contentItem()
 
 
 def _open_due_list(qapp: QApplication, shell: NativeWindow, sheets, height: int) -> tuple[QObject, QObject]:
@@ -44,10 +50,10 @@ def _open_due_list(qapp: QApplication, shell: NativeWindow, sheets, height: int)
     sheets.openHomework()
     sheets.setText("title", "Essay")
     pump(qapp, 40)
-    root = shell._material_page._quick.rootObject()
+    root = quick_of(shell).rootObject()
     find_named(root, "homeworkDue").forceActiveFocus()
     pump(qapp)
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Space)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Space)
     pump(qapp, 10)
     lists = [item for item in visuals(_scene(shell)) if str(item.objectName()) == "pickerList"]
     assert lists, "the due list did not open"
@@ -57,7 +63,7 @@ def _open_due_list(qapp: QApplication, shell: NativeWindow, sheets, height: int)
 def _tap(shell: NativeWindow, spot: QPoint) -> None:
     """A real left tap. The pointer arrives first, as it does on a screen: a row takes a tap only once the
     pointer has been over it."""
-    quick = shell._material_page._quick
+    quick = quick_of(shell)
     QTest.mouseMove(quick, spot)
     pump(QApplication.instance(), 5)
     QTest.mousePress(quick, Qt.MouseButton.LeftButton, pos=spot)
@@ -116,7 +122,7 @@ def test_tapping_a_row_that_hangs_outside_the_card_picks_it_and_keeps_the_sheet(
 def test_esc_with_a_list_open_closes_only_the_list(qapp: QApplication, shell: NativeWindow, sheets) -> None:
     show_material(qapp, shell)
     _card, picker = _open_due_list(qapp, shell, sheets, 560)
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Escape)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Escape)
     pump(qapp, 20)
     wait_until(qapp, lambda: not _is_shown(picker), what="the list to close")
     assert sheets.kind == "homework"

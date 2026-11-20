@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.calendar import sunday_due
 from desktop.native.window import NativeWindow
-from desktop.tests.material_support import faded_in
+from desktop.tests.material_support import faded_in, grab, material_showing, quick_of
 from desktop.tests.window_support import look_file, settled
 
 
@@ -31,10 +31,9 @@ def _show_material(qapp: QApplication, window: NativeWindow) -> QObject:
     window.resize(1280, 800)
     window._on_week()
     _pump(qapp)
-    quick = window._material_page._quick
-    quick.grabFramebuffer()
+    grab(window)
     _pump(qapp)
-    assert window._stack.currentWidget().objectName() == "materialPage"
+    assert material_showing(window)
     root = window._material_page.root
     assert root is not None
     faded_in(qapp, root)
@@ -84,7 +83,7 @@ def _click(qapp: QApplication, window: NativeWindow, item: QObject) -> None:
     _flick_to(item)
     _pump(qapp, 5)
     centre = item.mapToScene(QPointF(item.width() / 2, item.height() / 2))
-    quick = window._material_page._quick
+    quick = quick_of(window)
     QTest.mouseClick(
         quick,
         Qt.MouseButton.LeftButton,

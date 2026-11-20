@@ -10,6 +10,7 @@ pytest.importorskip("PySide6")
 
 
 from desktop.tests.grid_support import PIANO, WEDNESDAY, hold_clock
+from desktop.tests.material_support import quick_of
 from desktop.tests.week.support_material import (
     _bridge,
     _click,
@@ -102,8 +103,8 @@ def test_the_snackbar_sits_inside_the_window_clear_of_the_rail_and_its_undo_take
     top_left = bar.mapToScene(bar.boundingRect().topLeft())
     bottom_right = bar.mapToScene(bar.boundingRect().bottomRight())
     assert top_left.x() >= rail.mapToScene(rail.boundingRect().bottomRight()).x(), "clear of the rail"
-    assert top_left.y() >= 0 and bottom_right.y() <= window._material_page._quick.height(), height
-    assert bottom_right.x() <= window._material_page._quick.width()
+    assert top_left.y() >= 0 and bottom_right.y() <= quick_of(window).height(), height
+    assert bottom_right.x() <= quick_of(window).width()
     _click(window, bar, dx=int(bar.property("width")) // 2 - 30)
     settled(qapp, window)
     assert _snack(window) != PLACED_WORDS, "its Undo takes a click and the notice goes"

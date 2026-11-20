@@ -36,7 +36,7 @@ from desktop.tests.day.support_material_day import (  # noqa: E402
     seed_thursday,
 )
 from desktop.tests.light_app import open_light  # noqa: E402, F401
-from desktop.tests.material_support import named, pump, qml, visuals  # noqa: E402
+from desktop.tests.material_support import named, pump, qml, quick_of, visuals  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.window_support import qapp, settled  # noqa: E402, F401
 
@@ -212,7 +212,7 @@ def test_every_day_block_opens_from_a_click_tab_and_enter_and_space_toggles_home
     root = open_day_page(qapp, window)
     day = day_item(root)
     sheets = bridge_of(window).property("sheets")
-    quick = window._material_page._quick
+    quick = quick_of(window)
     blocks = blocks_by_title(day)
     school = blocks["School"]
     soccer = blocks["Soccer"]

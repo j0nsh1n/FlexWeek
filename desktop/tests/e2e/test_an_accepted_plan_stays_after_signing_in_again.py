@@ -21,6 +21,7 @@ from desktop.tests.e2e.account_sessions import (  # noqa: F401
     table_text,
 )
 from desktop.tests.logic_support import past_recovery, past_setup, sign_in, sign_up
+from desktop.tests.material_support import material_showing
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp  # noqa: F401
 
@@ -117,7 +118,7 @@ def test_an_accepted_plan_is_on_the_grid_after_closing_and_signing_in(
     wait_until(
         qapp,
         lambda: (
-            second._stack.currentWidget().objectName() == "materialPage"
+            material_showing(second)
             and not second.session.busy
             and len(second.session.assignments) >= 2
         ),

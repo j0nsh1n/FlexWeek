@@ -17,7 +17,7 @@ from PySide6.QtTest import QTest
 
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import named, pump, qml, visuals
+from desktop.tests.material_support import named, pump, qml, quick_of, visuals
 from desktop.tests.sheets.support_material_sheets import (
     add_homework,
     block_named,
@@ -33,10 +33,6 @@ from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import qapp, settled  # noqa: F401
 
 SHIFT = Qt.KeyboardModifier.ShiftModifier
-
-
-def quick_of(window: NativeWindow):
-    return window._material_page._quick
 
 
 def finished(window: NativeWindow, done: bool) -> bool:

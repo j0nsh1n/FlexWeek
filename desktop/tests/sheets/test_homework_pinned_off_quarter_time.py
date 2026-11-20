@@ -21,7 +21,7 @@ from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
-from desktop.tests.material_support import pump  # noqa: E402
+from desktop.tests.material_support import pump, quick_of  # noqa: E402
 from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: E402,F401
     find_named,
     open_light,
@@ -63,7 +63,7 @@ def test_the_pinned_time_field_shows_the_pin_and_lists_it_in_order(
     assert [item["label"] for item in form["pinnedTimeOptions"]].count("18:55") == 1
     values = [item["value"] for item in form["pinnedTimeOptions"]]
     assert values == sorted(values)
-    root = shell._material_page._quick.rootObject()
+    root = quick_of(shell).rootObject()
     assert find_named(root, "homeworkWhenTime").property("shown") == "18:55"
 
 
@@ -71,10 +71,10 @@ def test_down_from_the_off_quarter_pin_goes_to_the_next_time_not_to_midnight(
     qapp: QApplication, shell: NativeWindow, sheets
 ) -> None:
     _open_edit(qapp, shell, sheets)
-    root = shell._material_page._quick.rootObject()
+    root = quick_of(shell).rootObject()
     find_named(root, "homeworkWhenTime").forceActiveFocus()
     pump(qapp)
-    QTest.keyClick(shell._material_page._quick, Qt.Key.Key_Down)
+    QTest.keyClick(quick_of(shell), Qt.Key.Key_Down)
     pump(qapp, 8)
     assert sheets.form["whenTime"] == "19:00"
     sheets.forceClose()

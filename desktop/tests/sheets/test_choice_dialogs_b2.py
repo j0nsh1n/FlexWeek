@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import named, pump, visuals
+from desktop.tests.material_support import named, pump, quick_of, visuals
 from desktop.tests.sheets.support_prompt_walk import bridge_sheets as sheets_of
 from desktop.tests.sheets.support_prompt_walk import prompt_item, week_with_school
 from desktop.tests.window_support import qapp  # noqa: F401
@@ -24,7 +24,7 @@ LINE = "Changing School times also changes 2 other weeks."
 
 
 def keys(window: NativeWindow, *pressed: Qt.Key) -> None:
-    quick = window._material_page._quick
+    quick = quick_of(window)
     for key in pressed:
         QTest.keyClick(quick, key)
         pump(QApplication.instance(), 20)

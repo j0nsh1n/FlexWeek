@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import named, pump, visuals
+from desktop.tests.material_support import named, pump, quick_of, quick_window_of, visuals
 from desktop.tests.sheets.support_prompt_walk import bridge_sheets as sheets_of
 from desktop.tests.sheets.support_prompt_walk import prompt_item, week_with_school
 from desktop.tests.window_support import qapp  # noqa: F401
@@ -73,13 +73,13 @@ def test_this_week_and_later_is_the_red_card_and_delete_is_red_only_while_it_is_
     error = every.property("accent")
     primary = _card(prompt, "day").property("accent")
     assert error != primary, "the destructive card has its own accent"
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Down)
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Down)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Down)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Down)
     pump(qapp, 20)
     assert every.property("picked") is True
     assert confirm_kind() == "danger"
     assert QQmlProperty.read(every, "border.color") == error
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Up)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Up)
     pump(qapp, 20)
     assert confirm_kind() == "filled"
 
@@ -128,9 +128,9 @@ def test_after_the_notices_undo_on_day_the_keyboard_is_on_the_day(qapp, window: 
     (bar,) = [item for item in named(page.root, "materialSnackbar") if item.property("visible")]
     bar.forceActiveFocus()
     pump(qapp)
-    QTest.keyClick(page._quick, Qt.Key.Key_Return)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Return)
     pump(QApplication.instance(), 60)
-    item = page._quick.quickWindow().activeFocusItem()
+    item = quick_window_of(window).activeFocusItem()
     names = []
     while item is not None:
         names.append(str(item.objectName()))
@@ -139,7 +139,7 @@ def test_after_the_notices_undo_on_day_the_keyboard_is_on_the_day(qapp, window: 
 
 
 def _focus_chain(window: NativeWindow) -> list[str]:
-    item = window._material_page._quick.quickWindow().activeFocusItem()
+    item = quick_window_of(window).activeFocusItem()
     names = []
     while item is not None:
         names.append(str(item.objectName()) + ":" + str(item.property("title") or ""))
@@ -159,7 +159,7 @@ def test_the_notices_undo_gives_the_keyboard_back_to_the_block_it_left(qapp, win
     (bar,) = [item for item in named(page.root, "materialSnackbar") if item.property("visible")]
     bar.forceActiveFocus()
     pump(qapp)
-    QTest.keyClick(page._quick, Qt.Key.Key_Return)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Return)
     pump(QApplication.instance(), 60)
     assert "weekBlock:School" in _focus_chain(window), " < ".join(_focus_chain(window))
 

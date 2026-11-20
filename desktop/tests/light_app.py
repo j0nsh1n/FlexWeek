@@ -26,6 +26,7 @@ from desktop.native.client import NativeClient
 from desktop.native.kept import KeptSession
 from desktop.native.window import NativeWindow
 from desktop.tests.logic_support import past_recovery, past_setup, sign_up
+from desktop.tests.material_support import page_showing
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import PASSWORD, USERNAME, free, look_file, still
 
@@ -210,7 +211,7 @@ def open_light_window(
         wait_until(
             qapp,
             lambda: (
-                opened._stack.currentWidget().objectName() in {"weekPage", "materialPage"}
+                page_showing(opened) in {"weekPage", "materialPage"}
                 and session.preferences is not None
                 and not session.busy
                 and not getattr(session.client, "pending", 0)

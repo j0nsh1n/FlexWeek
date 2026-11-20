@@ -20,16 +20,12 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import window  # noqa: E402,F401
-from desktop.tests.material_support import pump, qml, visuals  # noqa: E402
+from desktop.tests.material_support import pump, qml, quick_of, visuals  # noqa: E402
 from desktop.tests.sheets.support_material_sheets import bridge, click, material_week  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.window_support import qapp, settled  # noqa: E402,F401
 
 FIRST_WEEK = "2026-11-02"
-
-
-def quick_of(window: NativeWindow):
-    return window._material_page._quick
 
 
 def picker_of(root: QObject) -> QObject:

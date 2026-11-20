@@ -21,7 +21,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 from desktop.native.settings_copy import help_keys  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_window import material_window, qapp  # noqa: E402, F401
-from desktop.tests.material_support import named, pump, show_material  # noqa: E402
+from desktop.tests.material_support import named, pump, quick_of, show_material  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
 
 CTRL = Qt.KeyboardModifier.ControlModifier
@@ -42,7 +42,7 @@ def _focused_school(qapp: QApplication, window: NativeWindow) -> QObject:
 
 def test_ctrl_n_opens_new_homework(qapp: QApplication, material_window: NativeWindow) -> None:
     root = show_material(qapp, material_window)
-    quick = material_window._material_page._quick
+    quick = quick_of(material_window)
     sheets = material_window._material_page.bridge.sheets
     root.forceActiveFocus()
     pump(qapp)
@@ -55,7 +55,7 @@ def test_ctrl_n_does_nothing_while_typing_or_in_settings(
     qapp: QApplication, material_window: NativeWindow
 ) -> None:
     root = show_material(qapp, material_window)
-    quick = material_window._material_page._quick
+    quick = quick_of(material_window)
     bridge = material_window._material_page.bridge
     sheets = bridge.sheets
     # A fixed time's sheet is open and its field has the keys: a second Ctrl+N must not replace it.
@@ -83,7 +83,7 @@ def test_f1_opens_help(
     monkeypatch.setattr(material_window, "_open_help", lambda: heard.append("help"))
     root.forceActiveFocus()
     pump(qapp)
-    QTest.keyClick(material_window._material_page._quick, Qt.Key.Key_F1)
+    QTest.keyClick(quick_of(material_window), Qt.Key.Key_F1)
     pump(qapp)
     assert heard == ["help"]
 
@@ -97,7 +97,7 @@ def test_f1_does_nothing_while_typing(
     sheets = material_window._material_page.bridge.sheets
     sheets.openHomework()
     pump(qapp)
-    QTest.keyClick(material_window._material_page._quick, Qt.Key.Key_F1)
+    QTest.keyClick(quick_of(material_window), Qt.Key.Key_F1)
     pump(qapp)
     assert heard == []
 
@@ -106,7 +106,7 @@ def test_ctrl_c_copies_the_focused_block(qapp: QApplication, material_window: Na
     _focused_school(qapp, material_window)
     session = material_window.session
     assert session.clipboard is None
-    QTest.keyClick(material_window._material_page._quick, Qt.Key.Key_C, CTRL)
+    QTest.keyClick(quick_of(material_window), Qt.Key.Key_C, CTRL)
     pump(qapp)
     assert session.clipboard is not None
     assert session.clipboard["kind"] == "block"
@@ -121,7 +121,7 @@ def test_ctrl_d_previews_a_copy_of_the_focused_block(
     monkeypatch.setattr(
         material_window, "_show_preview", lambda title, words, rows, **kw: seen.append({"rows": rows, **kw})
     )
-    QTest.keyClick(material_window._material_page._quick, Qt.Key.Key_D, CTRL)
+    QTest.keyClick(quick_of(material_window), Qt.Key.Key_D, CTRL)
     pump(qapp)
     assert len(seen) == 1
     assert seen[0]["label"] == "duplicating School"
@@ -135,7 +135,7 @@ def test_delete_asks_first_then_deletes_with_undo(qapp: QApplication, material_w
     session = material_window.session
     sheets = material_window._material_page.bridge.sheets
     before = [dict(item) for item in session.blocks if item["id"] == "school"]
-    QTest.keyClick(material_window._material_page._quick, Qt.Key.Key_Delete)
+    QTest.keyClick(quick_of(material_window), Qt.Key.Key_Delete)
     pump(qapp)
     assert sheets.ask["id"] == "delete-block"
     assert any(item["id"] == "school" for item in session.blocks)
@@ -143,7 +143,7 @@ def test_delete_asks_first_then_deletes_with_undo(qapp: QApplication, material_w
     pump(qapp)
     assert any(item["id"] == "school" for item in session.blocks)
     assert block.property("activeFocus") is True, "Cancel gives the keyboard back to the block"
-    QTest.keyClick(material_window._material_page._quick, Qt.Key.Key_Delete)
+    QTest.keyClick(quick_of(material_window), Qt.Key.Key_Delete)
     pump(qapp)
     sheets.answer("day")
     # School comes from Setup, so the question is the one its menu asks: Monday's copy of it, this day only.
@@ -159,7 +159,7 @@ def test_delete_is_held_while_a_save_is_running(qapp: QApplication, material_win
     _focused_school(qapp, material_window)
     session = material_window.session
     sheets = material_window._material_page.bridge.sheets
-    QTest.keyClick(material_window._material_page._quick, Qt.Key.Key_Delete)
+    QTest.keyClick(quick_of(material_window), Qt.Key.Key_Delete)
     pump(qapp)
     session.busy = True
     try:
@@ -180,7 +180,7 @@ def test_block_keys_do_nothing_with_no_block_focused(
     monkeypatch.setattr(material_window, "_show_preview", lambda *a, **kw: seen.append(a))
     root.forceActiveFocus()
     pump(qapp)
-    quick = material_window._material_page._quick
+    quick = quick_of(material_window)
     for key, mods in (
         (Qt.Key.Key_C, CTRL),
         (Qt.Key.Key_D, CTRL),
@@ -202,7 +202,7 @@ def test_block_keys_do_nothing_while_typing(qapp: QApplication, material_window:
     sheets.openHomework()
     pump(qapp)
     assert block.property("activeFocus") is False
-    quick = material_window._material_page._quick
+    quick = quick_of(material_window)
     QTest.keyClick(quick, Qt.Key.Key_C, CTRL)
     QTest.keyClick(quick, Qt.Key.Key_Delete)
     pump(qapp)
@@ -223,7 +223,7 @@ def test_help_lists_the_new_keys_in_material() -> None:
 
 def test_ctrl_shift_l_opens_the_week_as_a_list(qapp: QApplication, material_window: NativeWindow) -> None:
     root = show_material(qapp, material_window)
-    quick = material_window._material_page._quick
+    quick = quick_of(material_window)
     sheets = material_window._material_page.bridge.sheets
     root.forceActiveFocus()
     pump(qapp)
@@ -236,7 +236,7 @@ def test_ctrl_shift_l_does_nothing_while_a_sheet_is_open(
     qapp: QApplication, material_window: NativeWindow
 ) -> None:
     root = show_material(qapp, material_window)
-    quick = material_window._material_page._quick
+    quick = quick_of(material_window)
     sheets = material_window._material_page.bridge.sheets
     root.forceActiveFocus()
     sheets.openHomework()

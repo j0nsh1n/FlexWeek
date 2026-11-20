@@ -34,7 +34,7 @@ from backend.tests.fake_clock import CLOCK  # noqa: E402
 from desktop.native import motion  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.light_app import LightWindows  # noqa: E402
-from desktop.tests.material_support import faded_in  # noqa: E402
+from desktop.tests.material_support import faded_in, grab, material_showing, quick_of  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402, F401
 
 DESIGNS = ("classic",)
@@ -201,10 +201,9 @@ def show_material(qapp: QApplication, window: NativeWindow) -> QObject:
     window.resize(1280, 800)
     window._on_week()
     pump(qapp)
-    quick = window._material_page._quick
-    quick.grabFramebuffer()
+    grab(window)
     pump(qapp)
-    assert window._stack.currentWidget().objectName() == "materialPage"
+    assert material_showing(window)
     root = window._material_page.root
     assert root is not None
     faded_in(qapp, root)
@@ -246,7 +245,7 @@ def block_named(root: QObject, title: str) -> QObject:
 
 def click_item(window: NativeWindow, item: QObject) -> None:
     """A real left click on a QML item through the Quick widget, as the pointer does it."""
-    quick = window._material_page._quick
+    quick = quick_of(window)
     spot = item.mapToScene(item.boundingRect().center())
     QTest.mouseClick(quick, Qt.MouseButton.LeftButton, pos=QPoint(int(spot.x()), int(spot.y())))
     pump(QApplication.instance())

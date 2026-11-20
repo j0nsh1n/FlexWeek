@@ -20,7 +20,7 @@ from desktop.native.material import bridge as bridge_module
 from desktop.native.material import bridge_sheets as bridge_sheets_module
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import pump, qml
+from desktop.tests.material_support import pump, qml, quick_of, quick_window_of
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material_page import fresh_material
 
@@ -154,7 +154,7 @@ def test_after_plan_focus_is_on_the_week_or_the_plan_button(
 ) -> None:
     root = fresh_material(qapp, window)
     bridge = window._material_page.bridge
-    scene = window._material_page._quick.quickWindow()
+    scene = quick_window_of(window)
 
     # Not placed yet, so the drawer's count is above zero
     add_homework(qapp, window, "plan_task", "Math assignment")
@@ -308,7 +308,7 @@ def test_replacing_held_toast_keeps_timer_paused_until_resumed(
 def test_a_notice_shown_again_under_a_still_pointer_waits(qapp: QApplication, window: NativeWindow) -> None:
     """Hover a notice, dismiss it, show the next without moving the pointer: it must not count down."""
     root = fresh_material(qapp, window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     sheets = window._material_page.bridge.sheets
     sheets._say("Hover old", undo=True)
     pump(qapp, 10)

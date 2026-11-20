@@ -430,6 +430,7 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
 
     from backend import clock as wall_clock
     from desktop.tests.logic_support import card_phase, past_setup, wait_until
+    from desktop.tests.material_support import material_showing
 
     out.mkdir(parents=True, exist_ok=True)
     log_file = (out / "log.txt").open("w", buffering=1)
@@ -496,7 +497,7 @@ def run_play(app, window, session, server, out: Path, play: Play, seed_week, pyt
             session.set_view("week")
             window._on_week()
             # Material is the only page: a play that cannot reach it fails here, not at its first click.
-            wait_until(app, lambda: window._stack.currentWidget().objectName() == "materialPage", 20)
+            wait_until(app, lambda: material_showing(window), 20)
             settled = time.monotonic() + 1.0
             wait_until(app, lambda: time.monotonic() >= settled, 5)
         # A hidden desktop starts with no active window, and a menu opened from one that is not active

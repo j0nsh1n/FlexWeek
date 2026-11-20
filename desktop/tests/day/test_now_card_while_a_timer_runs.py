@@ -28,7 +28,14 @@ from desktop.native.calendar import sunday_due  # noqa: E402
 from desktop.native.window import NativeWindow  # noqa: E402
 from desktop.tests.day.support_material_day import click, root_bridge, seed_thursday  # noqa: E402
 from desktop.tests.light_app import open_light  # noqa: E402, F401
-from desktop.tests.material_support import pump, qml, show_material  # noqa: E402
+from desktop.tests.material_support import (  # noqa: E402
+    host_has_focus,
+    pump,
+    qml,
+    quick_of,
+    quick_window_of,
+    show_material,
+)
 from desktop.tests.waiting import wait_until  # noqa: E402
 from desktop.tests.window_support import qapp, settled  # noqa: E402, F401
 
@@ -230,7 +237,7 @@ def test_mark_finished_from_the_keyboard_leaves_focus_on_a_visible_button(
     session = window.session
     root = show_material(qapp, window)
     bridge = root_bridge(root)
-    scene = window._material_page._quick.quickWindow()
+    scene = quick_window_of(window)
     _run_out(qapp, window, root)
     _add_bystander(qapp, window)
     bridge.showPage("myday")
@@ -238,7 +245,7 @@ def test_mark_finished_from_the_keyboard_leaves_focus_on_a_visible_button(
     qml(root, "myDayMarkFinished").forceActiveFocus()
     pump(qapp)
     assert scene.activeFocusItem().objectName() == "myDayMarkFinished"
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Space)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Space)
     settled(qapp, window)
     pump(qapp)
     assert session.focus is None
@@ -254,7 +261,7 @@ def test_mark_finished_on_the_days_last_homework_hides_the_card_and_focus_moves_
     session = window.session
     root = show_material(qapp, window)
     bridge = root_bridge(root)
-    scene = window._material_page._quick.quickWindow()
+    scene = quick_window_of(window)
     _run_out(qapp, window, root)
     homework = session.focus["assignmentId"]
     for page in ("myday", "day"):
@@ -264,7 +271,7 @@ def test_mark_finished_on_the_days_last_homework_hides_the_card_and_focus_moves_
         qml(root, scope + "MarkFinished").forceActiveFocus()
         pump(qapp)
         assert scene.activeFocusItem().objectName() == scope + "MarkFinished"
-        QTest.keyClick(window._material_page._quick, Qt.Key.Key_Space)
+        QTest.keyClick(quick_of(window), Qt.Key.Key_Space)
         settled(qapp, window)
         pump(qapp)
         assert session.focus is None
@@ -282,7 +289,7 @@ def test_ok_on_a_finished_session_hides_the_card_and_focus_moves_to_something_vi
     session = window.session
     root = show_material(qapp, window)
     bridge = root_bridge(root)
-    scene = window._material_page._quick.quickWindow()
+    scene = quick_window_of(window)
     _run_out(qapp, window, root)
     homework = session.focus["assignmentId"]
     session.complete_homework(homework, True)
@@ -293,7 +300,7 @@ def test_ok_on_a_finished_session_hides_the_card_and_focus_moves_to_something_vi
         qml(root, scope + "StartFocus").forceActiveFocus()
         pump(qapp)
         assert scene.activeFocusItem().objectName() == scope + "StartFocus"
-        QTest.keyClick(window._material_page._quick, Qt.Key.Key_Space)
+        QTest.keyClick(quick_of(window), Qt.Key.Key_Space)
         settled(qapp, window)
         pump(qapp)
         assert session.focus is None
@@ -356,7 +363,7 @@ def test_clicking_the_now_cards_button_puts_keyboard_focus_on_it(
     opens hands focus back to it, not to the rail button the student used before."""
     root = show_material(qapp, window)
     bridge = root_bridge(root)
-    scene = window._material_page._quick.quickWindow()
+    scene = quick_window_of(window)
     monkeypatch.setattr(window.session, "start_focus", lambda *_a, **_k: False)
     bridge.showPage("myday")
     pump(qapp)
@@ -365,7 +372,7 @@ def test_clicking_the_now_cards_button_puts_keyboard_focus_on_it(
     assert scene.activeFocusItem().objectName() == "navDay"
     button = qml(root, "myDayStartFocus")
     centre = button.mapToScene(QPointF(button.width() / 2, button.height() / 2)).toPoint()
-    QTest.mouseClick(window._material_page._quick, Qt.MouseButton.LeftButton, pos=centre)
+    QTest.mouseClick(quick_of(window), Qt.MouseButton.LeftButton, pos=centre)
     pump(qapp)
     assert scene.activeFocusItem().objectName() == "myDayStartFocus"
 
@@ -373,7 +380,7 @@ def test_clicking_the_now_cards_button_puts_keyboard_focus_on_it(
 def _press(
     window: NativeWindow, key: Qt.Key, modifier: Qt.KeyboardModifier = Qt.KeyboardModifier.NoModifier
 ) -> None:
-    QTest.keyClick(window._material_page._quick, key, modifier)
+    QTest.keyClick(quick_of(window), key, modifier)
     pump(QApplication.instance())
 
 
@@ -394,7 +401,7 @@ def _finish_the_last_homework_as_the_reviewer_did(
     assert _card(root, scope) == ("History essay", "Session finished", "Start again")
     if keyboard:
         _press(window, Qt.Key.Key_Backtab, Qt.KeyboardModifier.ShiftModifier)
-        scene = window._material_page._quick.quickWindow()
+        scene = quick_window_of(window)
         assert scene.activeFocusItem().objectName() == scope + "MarkFinished"
         _press(window, Qt.Key.Key_Space)
     else:
@@ -424,9 +431,9 @@ def test_when_the_now_card_goes_away_holding_focus_focus_goes_to_the_page_headin
     root_bridge(root).showPage(page)
     settled(qapp, window)
     pump(qapp)
-    scene = window._material_page._quick.quickWindow()
+    scene = quick_window_of(window)
     _finish_the_last_homework_as_the_reviewer_did(qapp, window, root, scope, keyboard=keyboard)
-    assert QApplication.focusWidget() is window._material_page._quick
+    assert host_has_focus(window)
     held = scene.activeFocusItem()
     assert held is not None, "keyboard focus is nowhere"
     chain = []

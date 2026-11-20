@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QApplication
 from desktop.native.window import NativeWindow
 from desktop.tests.day.support_layouts_window import SPOTIFY_TRACK, RingRecorder
 from desktop.tests.light_app import window  # noqa: F401
+from desktop.tests.material_support import quick_of
 from desktop.tests.settings.support_material_settings import (
     _bridge,
     _click,
@@ -378,7 +379,7 @@ def test_escape_and_enter_dismiss_as_the_dialog_does(
 ) -> None:
     _open_settings(qapp, window, "alerts")
     _rig(window, monkeypatch)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     ring = _bridge(window).ring
     for key in (Qt.Key.Key_Escape, Qt.Key.Key_Return):
         _ring(window, {"id": f"k{int(key)}", "name": "Keys", "time": "07:00", "sound": "low"})

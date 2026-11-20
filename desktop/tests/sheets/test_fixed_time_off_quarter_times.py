@@ -21,7 +21,7 @@ from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from desktop.native.window import NativeWindow  # noqa: E402
-from desktop.tests.material_support import pump  # noqa: E402
+from desktop.tests.material_support import pump, quick_of  # noqa: E402
 from desktop.tests.sheets.support_material_sheet_fixtures import (  # noqa: E402,F401
     find_named,
     open_light,
@@ -104,7 +104,7 @@ def test_the_field_shows_the_blocks_own_start_and_end(
 ) -> None:
     _clock_style(shell, True)
     _open_club(qapp, shell, sheets)
-    root = shell._material_page._quick.rootObject()
+    root = quick_of(shell).rootObject()
     assert find_named(root, "blockStart").property("shown") == "16:55"
     assert find_named(root, "blockEnd").property("shown") == "18:25"
 
@@ -124,10 +124,10 @@ def test_save_without_touching_the_times_keeps_them_exactly(
 
 
 def _press_on(qapp: QApplication, shell: NativeWindow, field_name: str, key) -> None:
-    root = shell._material_page._quick.rootObject()
+    root = quick_of(shell).rootObject()
     find_named(root, field_name).forceActiveFocus()
     pump(qapp)
-    QTest.keyClick(shell._material_page._quick, key)
+    QTest.keyClick(quick_of(shell), key)
     pump(qapp, 8)
 
 

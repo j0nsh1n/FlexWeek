@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QApplication
 
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import window  # noqa: F401
-from desktop.tests.material_support import pump, qml, show_material
+from desktop.tests.material_support import pump, qml, quick_of, show_material
 from desktop.tests.sheets.support_material_sheets import click
 from desktop.tests.window_support import qapp  # noqa: F401
 
@@ -42,7 +42,7 @@ def test_add_fixed_time_opens_the_fixed_time_sheet(
     qapp: QApplication, window: NativeWindow, screen: str
 ) -> None:
     _root, _menu = _open_menu(qapp, window, screen)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     QTest.keyClick(quick, Qt.Key.Key_Down)
     QTest.keyClick(quick, Qt.Key.Key_Return)
     pump(qapp, 20)
@@ -55,7 +55,7 @@ def test_add_homework_from_the_menu_opens_the_homework_sheet(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     _root, menu = _open_menu(qapp, window, "week")
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Return)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Return)
     pump(qapp, 20)
     assert window._material_page.bridge.sheets.kind == "homework"
     assert menu.property("open") is False
@@ -65,7 +65,7 @@ def test_esc_closes_the_menu_and_the_keyboard_goes_back_to_the_button(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root, menu = _open_menu(qapp, window, "week")
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Escape)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Escape)
     pump(qapp)
     assert menu.property("open") is False
     assert window._material_page.bridge.sheets.kind == ""

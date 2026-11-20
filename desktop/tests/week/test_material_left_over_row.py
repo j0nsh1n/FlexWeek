@@ -7,6 +7,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 
+from desktop.tests.material_support import quick_of
 from desktop.tests.planner.support import left_in_week_one, overdue_this_week
 from desktop.tests.waiting import wait_until
 from desktop.tests.week.support_material import (
@@ -103,11 +104,11 @@ def test_the_two_buttons_are_reached_by_tab_and_pressed_by_the_keyboard(qapp, wi
 
     plan.forceActiveFocus()
     _pump(qapp)
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Tab)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Tab)
     _pump(qapp)
     assert done.property("activeFocus") is True
 
-    QTest.keyClick(window._material_page._quick, Qt.Key.Key_Return)
+    QTest.keyClick(quick_of(window), Qt.Key.Key_Return)
     wait_until(
         qapp,
         lambda: not window.session.busy and bool(window.session.assignments["lab"].get("completed")),

@@ -21,6 +21,7 @@ from desktop.native.look import sanitize_look
 from desktop.native.window import NativeWindow
 from desktop.tests.light_app import ORIGIN, InProcessApi, _client_for, _close
 from desktop.tests.logic_support import card_phase, past_recovery, past_setup, sign_up
+from desktop.tests.material_support import page_showing
 from desktop.tests.waiting import wait_until
 from desktop.tests.window_support import PASSWORD, look_file, qapp  # noqa: F401
 
@@ -34,7 +35,7 @@ def pump() -> None:
 
 
 def page(window: NativeWindow) -> str:
-    return window._stack.currentWidget().objectName()
+    return page_showing(window)
 
 
 def system_dark() -> bool:

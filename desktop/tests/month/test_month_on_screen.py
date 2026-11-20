@@ -24,7 +24,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 from desktop.native.calendar import sunday_due  # noqa: E402
 from desktop.native.window import WINDOW_MIN_WIDTH, NativeWindow  # noqa: E402
 from desktop.tests.light_app import open_light  # noqa: E402, F401
-from desktop.tests.material_support import pump, qml  # noqa: E402
+from desktop.tests.material_support import pump, qml, quick_of  # noqa: E402
 from desktop.tests.month.support_material_month import (  # noqa: E402
     cell,
     click,
@@ -96,7 +96,7 @@ def test_picking_a_date_opens_a_bar_that_closes_and_opens_the_day(
     qapp: QApplication, window: NativeWindow
 ) -> None:
     root, month = open_month(qapp, window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     today = window.session.today_iso()
     bar = qml(root, "monthDateBar")
     month.closeDate()
@@ -127,7 +127,7 @@ def test_picking_a_date_opens_a_bar_that_closes_and_opens_the_day(
 
 def test_previous_and_next_move_the_month(qapp: QApplication, window: NativeWindow) -> None:
     root, _month = open_month(qapp, window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     today = date.fromisoformat(window.session.today_iso())
     shown = today.replace(day=1)
     following = date(shown.year + (shown.month == 12), shown.month % 12 + 1, 1)
@@ -177,7 +177,7 @@ def test_a_short_date_keeps_one_chip_and_counts_the_rest(qapp: QApplication, win
 
 def test_the_study_time_switch_shows_the_study_fill(qapp: QApplication, window: NativeWindow) -> None:
     root, month = open_month(qapp, window)
-    quick = window._material_page._quick
+    quick = quick_of(window)
     today = window.session.today_iso()
     assert month.property("showStudyTime") is False
     assert named_on(cell(root, today), "monthStudyFill") == []
