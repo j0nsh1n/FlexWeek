@@ -135,7 +135,7 @@
  {
   "file": "desktop/native/sheet_rules.py",
   "name": "the repeat note words change",
-  "old": "REPEAT_NOTE = \"Pick more days to repeat it.\"\n",
+  "old": "REPEAT_NOTE = \"Pick every day it happens.\"\n",
   "new": "REPEAT_NOTE = \"Pick days.\"\n",
   "test": "desktop/tests/sheets/test_material_block_sheet_rules.py::test_a_new_fixed_time_says_to_pick_more_days_to_repeat_it"
  },
