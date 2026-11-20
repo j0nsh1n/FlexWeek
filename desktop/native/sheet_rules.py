@@ -177,7 +177,7 @@ HOMEWORK_PROBLEMS = {
 }
 HOMEWORK_REFUSED = "Check the homework details and try again."
 
-REPEAT_NOTE = "Pick more days to repeat it."
+REPEAT_NOTE = "Pick every day it happens."
 
 LATE_WAIT = "Press Preview first to see what moves."
 

@@ -502,11 +502,12 @@ class BlockDraft:
             return {"kind": "make", "repeat": self._repeat_body(made, None, changed), "changed": changed}
         if self.repeat is None:
             return {"kind": "plain", "changed": changed}
+        if self.scope == "occurrence" and self.occurrence_day is not None:
+            # One day is this week only; the switch and Until are not shown there.
+            return {"kind": "plain", "changed": changed}
         body = self._repeat_body(made, self.repeat, changed)
         if changed <= {"weekly", "until"}:
             return {"kind": "later", "repeat": body, "changed": changed}
-        if self.scope == "occurrence" and self.occurrence_day is not None:
-            return {"kind": "plain", "changed": changed}
         return {"kind": "ask", "repeat": body, "changed": changed}
 
     def recover_missed(self) -> bool:
@@ -728,7 +729,8 @@ class BlockDraft:
                 if self.occurrence_day is None
                 else f"I missed it on {full_day_name(self._week(), self.occurrence_day)}"
             ),
-            "showRepeat": self.show_repeat,
+            # A one-day sheet changes that day only; the repeat is changed from the whole series.
+            "showRepeat": self.show_repeat and not locked,
             "repeat": self.weekly,
             "until": self.until or "",
             "untilLabel": self._until_label(),

@@ -35,7 +35,7 @@ from desktop.tests.sheets.support_prompt_walk import footer_buttons, prompt_item
 from desktop.tests.sheets.support_soccer import soccer  # noqa: E402
 from desktop.tests.waiting import wait_until  # noqa: E402
 
-REPEAT_NOTE = "Pick more days to repeat it."
+REPEAT_NOTE = "Pick every day it happens."
 SERIES_NOTE = "Changes apply to every selected day in this series."
 
 

@@ -56,9 +56,14 @@ def test_setups_own_block_has_no_switch_and_a_plain_fixed_time_has_one(qapp, she
     shell.session.add_block(soccer())
     shell.session.save()
     settle(qapp, shell)
-    sheets.editBlock("soccer", 1)
+    sheets.editBlock("soccer", -1)
     pump(qapp, 20)
     assert _visible(shell, "blockRepeat")
+    sheets.forceClose()
+    # Opened from one day, the sheet changes that day only, so the repeat's switch is not offered.
+    sheets.editBlock("soccer", 1)
+    pump(qapp, 20)
+    assert not _visible(shell, "blockRepeat")
     sheets.forceClose()
 
 

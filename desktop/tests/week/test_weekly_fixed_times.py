@@ -208,6 +208,7 @@ def test_a_change_to_one_day_asks_nothing_and_leaves_the_other_days_and_weeks(qa
     repeat = _add_weekly(qapp, week, sheets, days=(FRIDAY, 5))
     _edit(sheets, repeat["id"], FRIDAY)
     assert sheets.form["scope"] == "occurrence"
+    assert sheets.form["showRepeat"] is False, "a one-day sheet does not offer the repeat's switch or Until"
     sheets.setText("start", "18:00")
     sheets.next()
     assert sheets.ask == {}, "a one-day change is this week only, with no question"

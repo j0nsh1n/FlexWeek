@@ -190,16 +190,27 @@ SheetFrame {
             visible: !!root.f.showRepeat
             width: parent.width
             spacing: 4
-            SettingsRow {
+            // Lined up with the fields above and below: the label at their left edge, the switch at their right.
+            Item {
                 width: parent.width
-                theme: root.theme
-                density: root.density
-                reduceMotion: root.reduceMotion
-                highContrast: root.highContrast
-                title: "Repeats every week"
-                accessName: "Repeats every week"
+                height: Math.max(48, repeatSwitch.height)
+                Text {
+                    anchors.left: parent.left
+                    anchors.right: repeatSwitch.left
+                    anchors.rightMargin: 16
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Repeats every week"
+                    color: pal.inkSurface
+                    font.family: M3Font.family
+                    font.pixelSize: M3Font.px(16)
+                    font.weight: 500
+                    elide: Text.ElideRight
+                }
                 Switch {
+                    id: repeatSwitch
                     objectName: "blockRepeat"
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
                     theme: root.theme
                     density: root.density
                     reduceMotion: root.reduceMotion
