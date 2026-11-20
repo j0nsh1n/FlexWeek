@@ -37,6 +37,7 @@ from desktop.native.calendar import (
     hand_move,
     is_series,
     is_setup_block,
+    is_standing_block,
     local_stamp,
     monday_of,
     month_anchor_date,
@@ -354,6 +355,9 @@ class NativeSession(QObject):
     # A change to School or an activity from this week on reached later weeks that kept a change of
     # their own: the server's words for which and what, to show without blocking.
     repeats_kept = Signal(str)
+    # A save that made a restore point first, or made a weekly time that doubles a hand-made copy in
+    # later weeks: the point's id ("" for none) and the weeks' starts, oldest first.
+    save_answered = Signal(str, list)
     plan_conflicts = Signal(list)
     planned = Signal(str)
     focus_changed = Signal()
@@ -1625,8 +1629,14 @@ class NativeSession(QObject):
         week. Setup showed the repeats, so a block it leaves out stops and what this week changed
         itself stays this week's. Anything the student added another way stays where it is.
         `edited` is keep (later weeks keep their own edits), replace, or from_today."""
+        self.change_repeats(self.setup_repeats(blocks), "setting up your week", edited=edited)
+
+    def setup_repeats(self, blocks: list[dict]) -> list[dict]:
+        """The repeats after Setup: School and the activities as its page has them, and every weekly fixed
+        time the student made as it stands. Setup does not list those, so leaving them out would stop them."""
         made = [TimeBlock.model_validate(block).model_dump(mode="json") for block in blocks]
-        self.change_repeats(made, "setting up your week", edited=edited)
+        weekly = [deepcopy(item) for item in self.repeats if str(item.get("id", "")).startswith("weekly-")]
+        return made + weekly
 
     def change_repeats(self, after: list[dict], label: str, edited: str = "keep") -> None:
         """The repeats become `after` from this week on: the open week changes now by the rule the
@@ -2234,7 +2244,7 @@ class NativeSession(QObject):
         block = next((item for item in self.blocks if item["id"] == block_id), None)
         if block is None:
             return
-        setup = is_setup_block(block)
+        setup = is_standing_block(block)
         family = block_family(block_id)
         if block.get("assignment_id") or scope != "occurrence":
             # School split at a week's seam is School on each side: all of it goes together.
@@ -2663,6 +2673,10 @@ class NativeSession(QObject):
             kept = (data.get("repeats") or {}).get("notice")
             if kept:
                 self.repeats_kept.emit(kept)
+            point_id = str((data.get("restore_point") or {}).get("id") or "")
+            doubled = list((data.get("repeats") or {}).get("doubled_weeks") or [])
+            if point_id or doubled:
+                self.save_answered.emit(point_id, doubled)
             if planned:
                 self.planned.emit(self.message)
             if self.first_weekday:
@@ -5041,6 +5055,10 @@ class NativeSession(QObject):
             ok,
             err,
         )
+
+    def undo_to_restore_point(self, point_id: str) -> None:
+        """A notice's Undo for a change from this week on: read the point, then put it back."""
+        self.preview_restore_point(point_id, lambda: self.apply_restore_point(point_id))
 
     def apply_restore_point(self, point_id: str) -> None:
         preview = self.restore_preview

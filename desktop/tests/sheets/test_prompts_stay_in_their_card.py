@@ -55,6 +55,8 @@ WALKED = {
     "before-planning",
     "replace-focus",
     "recovery-file",
+    "block-save",
+    "doubled-weeks",
 }
 
 
@@ -85,6 +87,29 @@ def alarm_question() -> dict:
     }
 
 
+def block_save(window: NativeWindow, put) -> None:
+    """What a change to a weekly fixed time asks, with a long name."""
+    from desktop.native.material.sheet_block import BlockDraft
+
+    name = "Guitar lesson with the long name of a teacher"
+    school = next(item for item in window.session.blocks if item["id"] == "school")
+    draft = BlockDraft(window.session, {**school, "title": name})
+    put(draft.save_question())()
+
+
+def doubled_question() -> dict:
+    """What a save that doubles a hand-made copy shows: three weeks named and a count of the rest."""
+    from datetime import date
+
+    weeks = ["2026-11-16", "2026-11-23", "2026-11-30", "2026-12-07", "2026-12-14"]
+    return {
+        "id": "doubled-weeks",
+        "title": "Guitar is already in later weeks",
+        "body": bridge_sheets.doubled_words("Guitar", weeks, date(2026, 11, 5)),
+        "answers": [{"id": "ok", "label": "OK", "kind": "tonal"}],
+    }
+
+
 def poses(window: NativeWindow) -> list[tuple[str, object]]:
     sheets = sheets_of(window)
 
@@ -111,6 +136,8 @@ def poses(window: NativeWindow) -> list[tuple[str, object]]:
         ("before-planning", put(NativeWindow.before_planning_question("2 overdue, 1 left from last week"))),
         ("replace-focus", put(NativeWindow.replace_focus_question("Biology reading", "Chemistry worksheet"))),
         ("recovery-file", put(NativeWindow.recovery_file_question())),
+        ("block-save", lambda: block_save(window, put)),
+        ("doubled-weeks", put(doubled_question())),
         ("four-plain-answers", put(FOUR_ANSWERS)),
         ("edited-weeks", lambda: sheets.pose_edited(NativeWindow._edited_ask(EDITED_LINE), lambda _a: None)),
     ]

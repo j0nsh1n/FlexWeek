@@ -13,6 +13,7 @@ from typing import Any
 from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices
 
+from backend import clock as wall_clock
 from backend.slots import DAY_END_MIN, SLOT_MIN, hhmm_to_minutes
 from desktop.native.calendar import (
     DAY_FULL,
@@ -21,7 +22,7 @@ from desktop.native.calendar import (
     block_family,
     day_full_names,
     day_names,
-    is_setup_block,
+    is_standing_block,
     routine_on_week,
     sunday_due,
 )
@@ -44,6 +45,7 @@ from desktop.native.reuse import (
     LATE_MINUTES,
     late_from_start,
     late_locked_line,
+    restore_point_label,
     running_late_refusal,
 )
 from desktop.native.sheet_rules import (
@@ -62,6 +64,8 @@ NOTHING_UNFINISHED = "None left"
 NOTICE_MS = 10000
 WAIT_SAVE = "Saving your last change… Save will work in a moment."
 WAIT_DELETE = "Saving your last change… Delete will work in a moment."
+UNDO_ALSO = "Undo also takes back anything changed after it."
+MAX_NAMED_WEEKS = 3
 DISCARD = {
     "id": "discard",
     "title": "Discard your changes?",
@@ -71,6 +75,31 @@ DISCARD = {
         {"id": "discard", "label": "Discard", "kind": "danger"},
     ],
 }
+
+
+def doubled_words(name: str, weeks: list[str], today: date) -> str:
+    """Where a new weekly time sits twice: at most three weeks named, then "and N more"."""
+
+    def label(week: str) -> str:
+        day = date.fromisoformat(week)
+        text = f"{day.day} {day.strftime('%b')}"
+        return text if day.year == today.year else f"{text} {day.year}"
+
+    named = [label(week) for week in weeks[:MAX_NAMED_WEEKS]]
+    more = len(weeks) - MAX_NAMED_WEEKS
+    if more > 0:
+        listed = ", ".join(named) + f" and {more} more"
+    elif len(named) > 1:
+        listed = ", ".join(named[:-1]) + f" and {named[-1]}"
+    else:
+        listed = named[0]
+    one = len(weeks) == 1
+    return (
+        f"{name} also sits on its own in the {'week' if one else 'weeks'} of {listed}, so it shows twice "
+        f"there. Delete the extra one in {'that week' if one else 'those weeks'} if you don't want both."
+    )
+
+
 # The More menu, in one place: id, words, icon.
 MORE_ROWS = (
     ("heading", "Planning"),
@@ -112,6 +141,14 @@ class SheetsBridge(QObject):
         self._drag_range_active = False
         self._notice = ""
         self._notice_undo = False
+        # A change from this week on: the notice waits for the restore point the save makes, which its Undo
+        # puts back. `_saving_repeat` is the words while the save is in flight (the sheet stays open until
+        # it answers), `_restore_words` the words of a notice still waiting for its point.
+        self._notice_restore = ""
+        self._saving_repeat = ""
+        self._restore_words = ""
+        self._doubled_name = ""
+        self._doubled_waiting: list[str] | None = None
         self._homework: HomeworkDraft | None = None
         self._block: BlockDraft | None = None
         self._alarm: AlarmDraft | None = None
@@ -167,6 +204,9 @@ class SheetsBridge(QObject):
         if session is not None:
             session.status.connect(self._on_status)
             session.save_finished.connect(self._on_saved)
+            answered = getattr(session, "save_answered", None)
+            if answered is not None:
+                answered.connect(self._on_save_answered)
             busy = getattr(session, "busy_changed", None)
             if busy is not None:
                 busy.connect(self._on_busy)
@@ -600,6 +640,57 @@ class SheetsBridge(QObject):
         if made is None:
             self._publish()
             return
+        plan = draft.save_plan(made)
+        if plan["kind"] == "ask":
+            self._ask = draft.save_question()
+            self._publish()
+            return
+        if plan["kind"] != "plain":
+            self._save_repeat(draft, made, plan)
+            return
+        self._save_week_copy(draft, made)
+
+    def _answer_save(self, choice: str) -> None:
+        """The answer to "Change <name>?": this week's copy alone, or the repeat from this week on."""
+        draft = self._block
+        if draft is None or self._session is None:
+            return
+        made = draft.candidate()
+        if made is None:
+            self._publish()
+            return
+        if choice == "later":
+            self._save_repeat(draft, made, draft.save_plan(made))
+        else:
+            self._save_week_copy(draft, made)
+
+    def _save_repeat(self, draft: BlockDraft, made: dict, plan: dict) -> None:
+        """A change to a weekly fixed time from this week on, through the repeats the session holds. The
+        save makes a restore point first; the sheet stays until the store has answered, so a refusal (the
+        200 limit) shows on it."""
+        session = self._session
+        kind, body, name = plan["kind"], plan.get("repeat"), made["title"]
+        repeats = session.repeats
+        if kind in ("add", "make"):
+            after = [*repeats, body]
+        elif kind in ("later", "ask"):
+            after = [body if item["id"] == body["id"] else item for item in repeats]
+        else:
+            after = [item for item in repeats if item["id"] != draft.family]
+        if not self._window._apply_standing(after, f"changing {name}"):  # type: ignore[attr-defined]
+            return
+        if kind == "make":
+            session.delete_block(draft.original["id"], scope="series")
+        elif kind == "stop":
+            alone = {key: value for key, value in made.items() if key != "until"}
+            alone["id"] = draft.family[len("weekly-") :]
+            session.add_block(alone, scope="series")
+        self._saving_repeat = f"Changed {name} from this week on. {UNDO_ALSO}"
+        self._doubled_name = name
+        session.save(snapshot_label=restore_point_label(f"Before changing {name}"))
+
+    def _save_week_copy(self, draft: BlockDraft, made: dict) -> None:
+        session = self._session
         before = {item["id"] for item in session.blocks}
         session.add_block(made, scope=draft.scope, day=draft.occurrence_day)
         day = draft.occurrence_day
@@ -695,6 +786,9 @@ class SheetsBridge(QObject):
         elif asked == "delete-block" and choice in ("delete", "day", "week", "every"):
             self._delete_block(choice)
             return
+        elif asked == "block-save" and choice in ("week", "later"):
+            self._answer_save(choice)
+            return
         elif asked == "delete-alarm" and choice == "delete":
             self._delete_alarm()
             return
@@ -731,14 +825,16 @@ class SheetsBridge(QObject):
             scope = "series"
         every_week = choice == "every"
         day = draft.occurrence_day
-        if every_week and is_setup_block(block):
+        if every_week and is_standing_block(block):
             family = block_family(block["id"])
             after = [item for item in session.repeats if item["id"] != family]
             if not self._window._apply_standing(after, f"deleting {title}"):  # type: ignore[attr-defined]
                 return
-            session.save()
+            session.save(snapshot_label=restore_point_label(f"Before deleting {title}"))
             self._close()
-            self._say(f"Deleted {title} from this week and every week after.")
+            words = f"Deleted {title} from this week and every week after. {UNDO_ALSO}"
+            self._say(words)
+            self._restore_words = words
             return
         session.delete_block(block["id"], scope=scope, day=day, every_week=every_week)
         session.save()
@@ -1008,7 +1104,16 @@ class SheetsBridge(QObject):
         if self._kind in ("homework", "block"):
             self._publish()
 
-    def _on_saved(self, stored: bool, _said: str) -> None:
+    def _on_saved(self, stored: bool, said: str) -> None:
+        words, self._saving_repeat = self._saving_repeat, ""
+        if words:
+            if stored:
+                self._close()
+                self._say(words)
+                self._restore_words = words
+            elif self._block is not None:
+                self._block.error = said
+                self._publish()
         if self._kind in ("homework", "block"):
             self._publish()
         waiting = self._late_waiting
@@ -1687,9 +1792,39 @@ class SheetsBridge(QObject):
 
     # Notice -----------------------------------------------------------------------------
 
+    def _on_save_answered(self, point_id: str, doubled: list) -> None:
+        """The store's answer to a save: the restore point it made, which gives the notice its Undo, and the
+        weeks where the new weekly time doubles one made by hand."""
+        words = self._restore_words
+        if point_id and words and self._notice == words:
+            self._notice_restore = point_id
+            self._notice_undo = True
+            self._restore_words = ""
+            self.changed.emit()
+        if doubled:
+            self._doubled_waiting = [str(week) for week in doubled]
+            self._show_doubled()
+
+    def _show_doubled(self) -> None:
+        """The doubled-weeks prompt, once no other question is up; it never replaces one."""
+        weeks = self._doubled_waiting
+        if weeks is None or self._ask:
+            return
+        self._doubled_waiting = None
+        name = self._doubled_name or "This fixed time"
+        self._ask = {
+            "id": "doubled-weeks",
+            "title": f"{name} is already in later weeks",
+            "body": doubled_words(name, weeks, wall_clock.today()),
+            "answers": [{"id": "ok", "label": "OK", "kind": "tonal"}],
+        }
+        self.changed.emit()
+
     def _say(self, text: str, *, undo: bool = False) -> None:
         self._notice = text
         self._notice_undo = undo
+        self._notice_restore = ""
+        self._restore_words = ""
         self._remaining_ms = NOTICE_MS
         if not text:
             self._timer.stop()
@@ -1724,6 +1859,8 @@ class SheetsBridge(QObject):
         if self._notice:
             self._notice = ""
             self._notice_undo = False
+            self._notice_restore = ""
+            self._restore_words = ""
             self._timer.stop()
             self._paused = False
             self._held = False
@@ -1732,7 +1869,10 @@ class SheetsBridge(QObject):
     @Slot()
     def undoNotice(self) -> None:
         if self._notice_undo and self._session is not None:
-            self._session.undo()
+            if self._notice_restore:
+                self._session.undo_to_restore_point(self._notice_restore)
+            else:
+                self._session.undo()
         self.dismissNotice()
 
     # The form ---------------------------------------------------------------------------
@@ -1791,3 +1931,4 @@ class SheetsBridge(QObject):
         self._noted = note
         self.changed.emit()
         self._show_waiting_update()
+        self._show_doubled()

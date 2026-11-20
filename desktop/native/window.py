@@ -978,7 +978,7 @@ class NativeWindow(QObject):
                 self._save_look()
                 updates["theme_pack"] = answer["pack"]
             if "blocks" in answer:
-                standing = answer["blocks"]
+                standing = self.session.setup_repeats(answer["blocks"])
                 updates["day_cutoff"] = answer["day_cutoff"]
                 save_week = True
             if "homework" in answer:

@@ -4,7 +4,7 @@ later", says what went, offers Undo only where Undo can work, and does nothing w
 # ruff: noqa: F811  (pytest fixtures imported by name)
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
@@ -63,13 +63,28 @@ def test_this_week_only_keeps_soccer_here_missed_on_every_day_and_undo_brings_it
     assert not _soccer(soccer_week).get("missed_days")
 
 
-def test_this_week_and_later_takes_soccer_out_and_says_so_with_no_undo(qapp, soccer_week, sheets) -> None:
+def test_this_week_and_later_takes_soccer_out_and_undo_puts_it_back_with_the_week_after(
+    qapp, soccer_week, sheets
+) -> None:
+    session = soccer_week.session
     sheets.askDeleteBlock("activity-1", -1)
     sheets.answer("every")
+    assert sheets.notice.startswith("Deleted Soccer from this week and every week after.")
     _settled(qapp, soccer_week)
+    wait_until(qapp, lambda: sheets.noticeUndo)
     assert _soccer(soccer_week) is None
-    assert sheets.notice == "Deleted Soccer from this week and every week after."
-    assert sheets.noticeUndo is False, "the irreversible deletion has no Undo"
+    assert sheets.notice == (
+        "Deleted Soccer from this week and every week after. Undo also takes back anything changed after it."
+    )
+    assert sheets.noticeUndo is True
+    sheets.undoNotice()
+    wait_until(qapp, lambda: _soccer(soccer_week) is not None)
+    _settled(qapp, soccer_week)
+    later = (date.fromisoformat(session.week_start) + timedelta(days=7)).isoformat()
+    session.load_week(later)
+    wait_until(qapp, lambda: session.week_start == later and not session.busy)
+    pump(qapp, 10)
+    assert _soccer(soccer_week) is not None, "the week after has Soccer again"
 
 
 def test_cancel_deletes_nothing(qapp, soccer_week, sheets) -> None:
