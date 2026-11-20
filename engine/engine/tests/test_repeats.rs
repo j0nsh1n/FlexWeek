@@ -3,9 +3,10 @@
 //! Dates are real: Monday 9 November 2026 is the open week, 16 and 23 November are later weeks.
 
 use flexweek_engine::repeats::{
-    Intent, Kept, NEW_NEEDS_ALL, NOTHING_LEFT, RULE, apply_to_week, edit_intent, edited_weeks_line,
-    intents_between, kept_notice, leaves_week, one_day_note, own_changes, parse_intent, patched,
-    pieces_after_replace, restated_copy, restated_version, this_week_line, three_way,
+    Intent, Kept, NEW_NEEDS_ALL, NOTHING_LEFT, RULE, UNTIL_TOO_EARLY, apply_to_week, edit_intent,
+    edited_weeks_line, intents_between, kept_notice, leaves_week, one_day_note, own_changes,
+    parse_intent, patched, pieces_after_replace, restated_copy, restated_version, this_week_line,
+    three_way,
 };
 use serde_json::{Value, json};
 
@@ -530,4 +531,31 @@ fn a_day_of_a_weekly_time_changed_by_hand_says_how_to_change_every_week() {
         )
     );
     assert_eq!(one_day_note(&gym(), 2, true).unwrap(), None);
+}
+
+#[test]
+fn a_change_sets_until_clears_it_with_an_empty_date_and_cannot_end_before_it_starts() {
+    let guitar = json!({"id": "weekly-3f2a9c01", "kind": "locked", "title": "Guitar", "start": "17:00",
+                        "duration_min": 60, "days": [1, 3]});
+    let set = |until: Value| json!({"id": "weekly-3f2a9c01", "scope": "from", "from_date": OPEN_WEEK, "set": {"until": until}});
+    let ended = patched(Some(&guitar), &intent(set(json!("2026-11-24"))))
+        .unwrap()
+        .unwrap();
+    assert_eq!(ended["until"], json!("2026-11-24"));
+    let open_ended = patched(Some(&ended), &intent(set(json!(""))))
+        .unwrap()
+        .unwrap();
+    assert!(
+        open_ended.get("until").is_none(),
+        "an empty Until takes the end away"
+    );
+    assert_eq!(
+        patched(Some(&guitar), &intent(set(json!("2026-11-08")))),
+        Err(UNTIL_TOO_EARLY.to_string())
+    );
+    // A form that leaves Until as the repeat has it sends nothing for it.
+    assert_eq!(
+        edit_intent("weekly-3f2a9c01", OPEN_WEEK, Some(&ended), Some(&ended)),
+        None
+    );
 }

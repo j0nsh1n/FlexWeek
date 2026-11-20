@@ -443,6 +443,15 @@ fn calendar_setup_block(block: &str) -> PyResult<bool> {
 }
 
 #[pyfunction]
+fn blocks_until_problem(block: &str, week_start: &str, today: &str) -> PyResult<Option<String>> {
+    let block = parse(block)?;
+    guard(|| {
+        ::flexweek_engine::desk::blocks::until_problem(&block, week_start, today)
+            .map_err(crate::raise)
+    })
+}
+
+#[pyfunction]
 fn calendar_standing_block(block: &str) -> PyResult<bool> {
     let block = parse(block)?;
     guard(|| grid::is_standing_block(&block).map_err(crate::raise))
@@ -1951,6 +1960,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         calendar_next_action,
         calendar_setup_block,
         calendar_standing_block,
+        blocks_until_problem,
         calendar_block_family,
         calendar_span_problem,
         calendar_past_problem,

@@ -2,9 +2,12 @@
 
 use serde_json::{Map, Value, json};
 
+use super::datetext::day_short;
+use super::pydate::from_iso;
 use super::{grid, planning};
+use crate::EngineResult;
 use crate::model;
-use crate::stored::truthy;
+use crate::stored::{add_days, truthy};
 
 pub struct BlockDeletion {
     pub blocks: Vec<Value>,
@@ -174,4 +177,35 @@ fn overdue_ids(
         }
     }
     Ok(ids)
+}
+
+/// Why a weekly block's Until cannot be saved from the week starting `week_start` (a Monday), or None
+/// when it can (a block with no Until included). The first day is the earliest day the block holds in
+/// that week; `today` only decides whether the date in the sentence carries a year.
+pub fn until_problem(block: &Value, week_start: &str, today: &str) -> EngineResult<Option<String>> {
+    let Some(until) = block
+        .get("until")
+        .and_then(Value::as_str)
+        .filter(|text| !text.is_empty())
+    else {
+        return Ok(None);
+    };
+    let Ok(until) = from_iso(until) else {
+        return Ok(Some("Until isn't a date we can read.".to_string()));
+    };
+    let Some(first) = block
+        .get("days")
+        .and_then(Value::as_array)
+        .and_then(|days| days.iter().filter_map(Value::as_i64).min())
+    else {
+        return Ok(None);
+    };
+    let first = add_days(from_iso(week_start)?, first)?;
+    if until >= first {
+        return Ok(None);
+    }
+    Ok(Some(format!(
+        "Until can't be before the first day, {}.",
+        day_short(first, from_iso(today)?)
+    )))
 }

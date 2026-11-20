@@ -5,10 +5,11 @@
 
 use std::collections::HashSet;
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::EngineResult;
 use crate::desk::grid::is_setup_block;
+use crate::desk::pydate::from_iso;
 use crate::repeats::days_of;
 use crate::shown::family_id;
 
@@ -37,6 +38,91 @@ pub fn with_standing(stored: &[Value], standing: &[Value]) -> Vec<Value> {
             .cloned(),
     );
     week
+}
+
+/// A block as the week starting `week_start` (a Monday) shows it under its Until date (#118): only the
+/// days up to that date, with its missed days among them. None when no day is left. A block with no
+/// `until` is shown as it is. Nothing is stored cut: a week's copy keeps every day, and moving Until
+/// later shows them again.
+pub fn cut_at_until(block: &Value, week_start: &str) -> EngineResult<Option<Value>> {
+    let Some(until) = block
+        .get("until")
+        .and_then(Value::as_str)
+        .filter(|text| !text.is_empty())
+    else {
+        return Ok(Some(block.clone()));
+    };
+    let last = (from_iso(until)? - from_iso(week_start)?).num_days();
+    let days: Vec<i64> = days_of(block)
+        .into_iter()
+        .filter(|day| *day <= last)
+        .collect();
+    if days.is_empty() {
+        return Ok(None);
+    }
+    let mut out = block.clone();
+    out["days"] = json!(days);
+    if let Some(fields) = out.as_object_mut() {
+        let missed: Vec<i64> = fields
+            .get("missed_days")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_i64)
+                    .filter(|day| *day <= last)
+                    .collect()
+            })
+            .unwrap_or_default();
+        if missed.is_empty() {
+            fields.shift_remove("missed_days");
+        } else {
+            fields.insert("missed_days".into(), json!(missed));
+        }
+    }
+    Ok(Some(out))
+}
+
+/// A week's copy of a repeat with the days the repeat's Until (`repeat`, as it stood for that week) cut
+/// away put back. A copy saved while cut holds only the days the week showed; the student never saw the
+/// others, so they are not days the week took out, and a change to the repeat (Until moved later) must
+/// not read them as such.
+pub fn uncut_copy(copy: &Value, repeat: Option<&Value>, week_start: &str) -> EngineResult<Value> {
+    let Some(repeat) = repeat else {
+        return Ok(copy.clone());
+    };
+    let shown = cut_at_until(repeat, week_start)?
+        .map(|block| days_of(&block))
+        .unwrap_or_default();
+    let mut days = days_of(copy);
+    let before = days.len();
+    for day in days_of(repeat) {
+        if !shown.contains(&day) && !days.contains(&day) {
+            days.push(day);
+        }
+    }
+    if days.len() == before {
+        return Ok(copy.clone());
+    }
+    days.sort_unstable();
+    let mut out = copy.clone();
+    out["days"] = json!(days);
+    Ok(out)
+}
+
+/// `with_standing` for the week starting `week_start`, each block cut at its Until date.
+pub fn shown_with_standing(
+    stored: &[Value],
+    standing: &[Value],
+    week_start: &str,
+) -> EngineResult<Vec<Value>> {
+    let mut week = Vec::new();
+    for block in with_standing(stored, standing) {
+        if let Some(shown) = cut_at_until(&block, week_start)? {
+            week.push(shown);
+        }
+    }
+    Ok(week)
 }
 
 /// An account from before the standing week: its Setup blocks are those of the newest saved week that

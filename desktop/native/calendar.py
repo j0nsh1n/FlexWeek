@@ -407,6 +407,11 @@ def is_setup_block(block: dict) -> bool:
     return bool(flexweek_engine.calendar_setup_block(json.dumps(block)))
 
 
+def until_problem(block: dict, week_start: str, today: str) -> str | None:
+    """Why a weekly block's Until cannot be saved from the week starting `week_start`, or None."""
+    return flexweek_engine.blocks_until_problem(json.dumps(block), week_start, today)
+
+
 def is_standing_block(block: dict) -> bool:
     """School, Setup's activities, or a fixed time the student made repeat every week."""
     return bool(flexweek_engine.calendar_standing_block(json.dumps(block)))

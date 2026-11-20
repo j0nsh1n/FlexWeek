@@ -11,6 +11,7 @@ use flexweek_engine::shown::{
     compose_shown_week, family_id, replaced_repeat_on_shown_week, shown_parts, split_shown_week,
 };
 use flexweek_engine::snapshot::canonical;
+use flexweek_engine::standing::uncut_copy;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 
@@ -481,7 +482,10 @@ fn enact(
             }
             let mut updated = stored.clone();
             if was != now || intent.edited != Edited::Keep {
-                let copies: Vec<Value> = pieces.iter().map(|at| stored[*at].clone()).collect();
+                let copies: Vec<Value> = pieces
+                    .iter()
+                    .map(|at| uncut_copy(&stored[*at], was, &week_start))
+                    .collect::<Result<_, _>>()?;
                 let restated = if intent.edited == Edited::Keep {
                     restated_pieces(was, now, &copies, &intent.id)
                 } else {

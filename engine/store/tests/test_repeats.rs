@@ -1392,3 +1392,95 @@ fn a_weekly_time_stopped_this_week_and_later_leaves_earlier_weeks() {
     assert!(block(&shown(&conn, user_id, WEEK_AFTER), "weekly-3f2a9c01").is_none());
     assert!(block(&shown(&conn, user_id, LAST_WEEK), "weekly-3f2a9c01").is_none());
 }
+
+// --- Until: the last day a weekly time stands (#118) --------------------------------------------------
+
+/// Guitar on Tuesday and Thursday, from the open week, until Tuesday 24 November.
+fn guitar_until_24th(conn: &Connection, user_id: i64) {
+    let body = with(guitar(), json!({"days": [1, 3], "until": "2026-11-24"}));
+    change_from_open_week(conn, user_id, OPEN_WEEK, &[("weekly-3f2a9c01", Some(body))]);
+}
+
+fn guitar_days(conn: &Connection, user_id: i64, week: &str) -> Option<Value> {
+    block(&shown(conn, user_id, week), "weekly-3f2a9c01").map(|guitar| guitar["days"].clone())
+}
+
+#[test]
+fn until_inside_a_week_shows_the_days_up_to_it_and_none_after() {
+    let (conn, user_id) = account("until_inside_a_week", false);
+    set_up(&conn, user_id);
+    guitar_until_24th(&conn, user_id);
+    assert_eq!(guitar_days(&conn, user_id, NEXT_WEEK), Some(json!([1, 3])));
+    assert_eq!(
+        guitar_days(&conn, user_id, WEEK_AFTER),
+        Some(json!([1])),
+        "Thursday 26th is after Until"
+    );
+    assert_eq!(guitar_days(&conn, user_id, LAST_WEEK), None);
+}
+
+#[test]
+fn moving_until_later_shows_the_cut_days_again_even_in_a_week_saved_while_cut() {
+    let (conn, user_id) = account("until_moved_later", false);
+    set_up(&conn, user_id);
+    guitar_until_24th(&conn, user_id);
+    // The student saves the week of 23 November as it shows: Guitar on Tuesday only.
+    let as_shown = shown(&conn, user_id, WEEK_AFTER);
+    save_week_as(&conn, user_id, WEEK_AFTER, as_shown);
+    let later = with(guitar(), json!({"days": [1, 3], "until": "2026-12-31"}));
+    change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[("weekly-3f2a9c01", Some(later))],
+    );
+    assert_eq!(guitar_days(&conn, user_id, WEEK_AFTER), Some(json!([1, 3])));
+    assert_eq!(guitar_days(&conn, user_id, LAST_WEEK), Some(json!([1, 3])));
+}
+
+#[test]
+fn a_day_deleted_by_hand_in_a_cut_week_stays_deleted_when_until_moves() {
+    let (conn, user_id) = account("until_with_own_delete", false);
+    set_up(&conn, user_id);
+    guitar_until_24th(&conn, user_id);
+    // The week of 23 November takes Tuesday out for that week only.
+    let mut own = shown(&conn, user_id, WEEK_AFTER);
+    for item in &mut own {
+        if item["id"] == json!("weekly-3f2a9c01") {
+            item["missed_days"] = json!([1]);
+        }
+    }
+    save_week_as(&conn, user_id, WEEK_AFTER, own);
+    let later = with(guitar(), json!({"days": [1, 3], "until": "2026-12-31"}));
+    change_from_open_week(
+        &conn,
+        user_id,
+        OPEN_WEEK,
+        &[("weekly-3f2a9c01", Some(later))],
+    );
+    let week = shown(&conn, user_id, WEEK_AFTER);
+    let guitar = block(&week, "weekly-3f2a9c01").expect("Guitar that week");
+    assert_eq!(guitar["days"], json!([1, 3]), "Thursday comes back");
+    assert_eq!(
+        guitar["missed_days"],
+        json!([1]),
+        "the Tuesday taken out stays out"
+    );
+}
+
+#[test]
+fn moving_until_later_from_the_week_it_cuts_shows_the_cut_day_there_too() {
+    let (conn, user_id) = account("until_moved_from_cut_week", false);
+    set_up(&conn, user_id);
+    guitar_until_24th(&conn, user_id);
+    // The student is on the week of 23 November, where Guitar shows Tuesday only, and moves Until on.
+    let later = with(guitar(), json!({"days": [1, 3], "until": "2026-12-31"}));
+    change_from_open_week(
+        &conn,
+        user_id,
+        WEEK_AFTER,
+        &[("weekly-3f2a9c01", Some(later))],
+    );
+    assert_eq!(guitar_days(&conn, user_id, WEEK_AFTER), Some(json!([1, 3])));
+    assert_eq!(guitar_days(&conn, user_id, LAST_WEEK), Some(json!([1, 3])));
+}

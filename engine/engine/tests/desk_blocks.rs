@@ -2,7 +2,7 @@
 //! `grid.rs` `delete_occurrence`. School or a Setup activity taken out of this week alone stays
 //! in it missed on every day, or the standing week would bring it back; every week takes it out.
 
-use flexweek_engine::desk::blocks::{BlockDeletion, delete_block, mark_block_done};
+use flexweek_engine::desk::blocks::{BlockDeletion, delete_block, mark_block_done, until_problem};
 use serde_json::{Map, Value, json};
 
 const WEEK: &str = "2026-10-19";
@@ -312,5 +312,40 @@ fn marking_a_missing_block_is_refused() {
         missing,
         Err("block was not found".to_string()),
         "agenda.rs 346 refuses an id that is not in the week"
+    );
+}
+
+// Until (#118): the last day a weekly time stands cannot come before the first day it holds that week.
+#[test]
+fn until_cannot_be_before_the_first_day_of_the_week_it_is_saved_from() {
+    let guitar = |until: Value| json!({"id": "weekly-1", "days": [1, 3], "until": until});
+    // The week of Monday 23 November 2026: Guitar's first day is Tuesday 24 November.
+    let week = "2026-11-23";
+    assert_eq!(
+        until_problem(&guitar(json!("2026-11-23")), week, "2026-11-20")
+            .unwrap()
+            .as_deref(),
+        Some("Until can't be before the first day, Tue 24 Nov.")
+    );
+    assert_eq!(
+        until_problem(&guitar(json!("2026-11-24")), week, "2026-11-20").unwrap(),
+        None
+    );
+    assert_eq!(
+        until_problem(&json!({"id": "weekly-1", "days": [1]}), week, "2026-11-20").unwrap(),
+        None
+    );
+    assert_eq!(
+        until_problem(&guitar(json!("24/11/2026")), week, "2026-11-20")
+            .unwrap()
+            .as_deref(),
+        Some("Until isn't a date we can read.")
+    );
+    // Seen in another year, the date says its year.
+    assert_eq!(
+        until_problem(&guitar(json!("2026-11-23")), week, "2025-12-01")
+            .unwrap()
+            .as_deref(),
+        Some("Until can't be before the first day, Tue 24 Nov 2026.")
     );
 }

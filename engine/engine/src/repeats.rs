@@ -20,7 +20,9 @@ use crate::time::{hhmm_to_minutes, is_calendar_date, monday_of};
 use crate::validate::time_block;
 
 /// The fields a change may set. Everything else a repeat holds stays as it was made.
-pub const PATCH_FIELDS: [&str; 4] = ["title", "category", "start", "duration_min"];
+pub const PATCH_FIELDS: [&str; 5] = ["title", "category", "start", "duration_min", "until"];
+/// Fields a new repeat may leave out: a category, and an end date (#118).
+const OPTIONAL_FIELDS: [&str; 2] = ["category", "until"];
 /// Fields that say which block and when, never compared or patched as a value.
 const SHAPE_FIELDS: [&str; 3] = ["id", "days", "missed_days"];
 const INTENT_FIELDS: [&str; 10] = [
@@ -58,6 +60,8 @@ pub const RULE: &str = "A change to a repeating block names School or a Setup ac
 written YYYY-MM-DD, and only title, category, start and duration_min to set";
 pub const NOTHING_LEFT: &str =
     "That change leaves no day, so nothing changed. Use stop to take it off the calendar.";
+/// A change whose Until comes before the day the change starts would end the repeat before it begins.
+pub const UNTIL_TOO_EARLY: &str = "Until can't be before the day this change starts.";
 pub const NEW_NEEDS_ALL: &str =
     "A new repeating block needs a title, a start, a length and at least one day";
 
@@ -334,7 +338,7 @@ pub fn patched(base: Option<&Value>, intent: &Intent) -> Result<Option<Value>, S
         None => {
             if PATCH_FIELDS
                 .iter()
-                .any(|field| *field != "category" && !intent.set.contains_key(*field))
+                .any(|field| !OPTIONAL_FIELDS.contains(field) && !intent.set.contains_key(*field))
                 || intent.add_days.is_empty()
             {
                 return Err(NEW_NEEDS_ALL.into());
@@ -347,6 +351,11 @@ pub fn patched(base: Option<&Value>, intent: &Intent) -> Result<Option<Value>, S
     };
     fields.shift_remove("missed_days");
     for (key, value) in &intent.set {
+        // An empty Until takes the end date away: the repeat stands with no end again.
+        if key == "until" && (value.is_null() || value.as_str() == Some("")) {
+            fields.shift_remove(key);
+            continue;
+        }
         fields.insert(key.clone(), value.clone());
     }
     let mut days: Vec<i64> = base.map(days_of).unwrap_or_default();
@@ -361,6 +370,13 @@ pub fn patched(base: Option<&Value>, intent: &Intent) -> Result<Option<Value>, S
         return Err(NOTHING_LEFT.into());
     }
     fields.insert("days".into(), json!(days));
+    if fields
+        .get("until")
+        .and_then(Value::as_str)
+        .is_some_and(|until| until < intent.from_date.as_str())
+    {
+        return Err(UNTIL_TOO_EARLY.into());
+    }
     let checked = time_block(&body)?;
     if checked.kind != "locked" || checked.start.is_none() {
         return Err(RULE.into());

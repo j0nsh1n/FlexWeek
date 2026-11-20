@@ -2,7 +2,7 @@
 //! body stops that block from its week on, so weeks before a change keep what stood then.
 
 use flexweek_engine::snapshot::canonical;
-use flexweek_engine::standing::{derive_standing, standing_body, with_standing};
+use flexweek_engine::standing::{derive_standing, shown_with_standing, standing_body};
 use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 
@@ -63,7 +63,8 @@ pub fn week_with_standing(
 ) -> StoreResult<String> {
     let stored = parse_list(blocks)?;
     let standing = standing_blocks(conn, user_id, week_start)?;
-    Ok(canonical(&Value::Array(with_standing(&stored, &standing))))
+    let shown = shown_with_standing(&stored, &standing, week_start).map_err(StoreError::from)?;
+    Ok(canonical(&Value::Array(shown)))
 }
 
 fn insert_row(
