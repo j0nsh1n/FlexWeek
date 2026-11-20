@@ -217,6 +217,30 @@ def test_more_repeats_than_setup_makes_export_and_import_whole(database: Path, a
     assert shown == {"school", *(block["id"] for block in weekly)}
 
 
+def test_an_import_with_more_than_two_hundred_repeats_at_once_is_refused(alice: TestClient) -> None:
+    set_up(alice, SCHOOL)
+    snapshot = alice.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()
+    [school] = snapshot["standing"]
+    rows = [
+        {**school, "id": f"weekly-{n:04}", "position": n, "body": {**school["body"], "id": f"weekly-{n:04}"}}
+        for n in range(200)
+    ]
+
+    def preview(standing: list[dict]) -> int:
+        body = {"snapshot": {**snapshot, "standing": standing}}
+        return alice.post("/api/account-import/preview", json=body, headers=WRITE).status_code
+
+    assert preview([school, *rows[1:]]) == 200  # 200 at once is the limit itself
+    assert preview([school, *rows]) == 422
+    # One that stops makes room for one that starts the same week.
+    stopped = {**rows[0], "from_week": NEXT_WEEK, "body": None}
+    starts = {**rows[1], "id": "weekly-0200", "from_week": NEXT_WEEK, "body": {**school["body"], "id": "weekly-0200"}}
+    assert preview([*rows, stopped, starts]) == 200
+    assert preview([*rows, starts]) == 422
+    # The 200th repeat takes place 199; a 201st place is refused.
+    assert preview([{**school, "position": 200}]) == 422
+
+
 def test_an_export_from_before_the_standing_week_builds_one_on_import(alice: TestClient) -> None:
     save(alice, SETUP_WEEK, [SCHOOL, SOCCER, GYM])
     snapshot = alice.post("/api/account-export", json={"password": PASSWORD}, headers=WRITE).json()

@@ -80,6 +80,27 @@ fn parse(text: &str) -> StoreResult<Value> {
 /// One repeat's rows, oldest first: the Monday each holds from and its body (None for a stop).
 type Versions = Vec<(String, Option<Value>)>;
 
+/// How many repeats other than `id` stand in the week of `week` or start standing in a later week: a
+/// repeat starting here would stand beside all of them at some point, so this is what the limit counts.
+fn others_standing_from(
+    conn: &Connection,
+    user_id: i64,
+    week: &str,
+    id: &str,
+) -> StoreResult<usize> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(DISTINCT s.id) FROM standing_blocks s
+        WHERE s.user_id = ?1 AND s.id != ?3 AND s.body IS NOT NULL
+            AND (s.from_week > ?2 OR s.from_week = (
+                SELECT MAX(t.from_week) FROM standing_blocks t
+                WHERE t.user_id = s.user_id AND t.id = s.id AND t.from_week <= ?2
+            ))",
+        params![user_id, week, id],
+        |row| row.get(0),
+    )?;
+    Ok(usize::try_from(count).unwrap_or(usize::MAX))
+}
+
 fn versions(conn: &Connection, user_id: i64, id: &str) -> StoreResult<(Versions, Option<i64>)> {
     let mut stmt = conn.prepare(
         "SELECT from_week, position, body FROM standing_blocks WHERE user_id = ?1 AND id = ?2
@@ -359,19 +380,21 @@ fn enact(
         if new_here == base {
             continue;
         }
-        // A repeat new to the account counts against the limit, and a new weekly time that a later week
-        // already holds by hand is named for that week.
+        // A repeat that starts standing here (new, or started again after a stop) counts against the
+        // limit, and a new weekly time that a later week already holds by hand is named for that week.
+        if base.is_none()
+            && new_here.is_some()
+            && others_standing_from(conn, user_id, &week, &intent.id)? >= MAX_REPEATS
+        {
+            return Err(RepeatsFailure::Refused(REPEATS_FULL.into()));
+        }
         if old.is_empty()
+            && intent.id.starts_with(WEEKLY_PREFIX)
             && let Some(made) = &new_here
         {
-            if crate::standing_blocks(conn, user_id, &week)?.len() >= MAX_REPEATS {
-                return Err(RepeatsFailure::Refused(REPEATS_FULL.into()));
-            }
-            if intent.id.starts_with(WEEKLY_PREFIX) {
-                for week_start in doubled_weeks(conn, user_id, &week, made)? {
-                    if !outcome.doubled_weeks.contains(&week_start) {
-                        outcome.doubled_weeks.push(week_start);
-                    }
+            for week_start in doubled_weeks(conn, user_id, &week, made)? {
+                if !outcome.doubled_weeks.contains(&week_start) {
+                    outcome.doubled_weeks.push(week_start);
                 }
             }
         }

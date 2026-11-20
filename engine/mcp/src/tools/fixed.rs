@@ -809,7 +809,12 @@ fn every_week_input(
     let Some(intent) = edit_intent(family, &args.week_start, Some(&repeat), Some(&wanted)) else {
         return Ok(input);
     };
-    let (week, _) = apply_to_week(blocks, &repeats, std::slice::from_ref(&intent))?;
+    let (week, _) = apply_to_week(
+        blocks,
+        &repeats,
+        std::slice::from_ref(&intent),
+        &args.week_start,
+    )?;
     input.weeks[0].blocks = week;
     input.repeats = Some(vec![intent.to_value()]);
     Ok(input)
@@ -864,7 +869,13 @@ fn every_week_shown_input(
         let own_end = own_end_of(repeat, args, start_min, end_min)?;
         let wanted = apply_repeat_fields(repeat, args, offset, start_min, own_end, false)?;
         if let Some(intent) = edit_intent(family, first, Some(repeat), Some(&wanted)) {
-            apply_to_week(first_blocks, &repeats_first, std::slice::from_ref(&intent))?.0
+            apply_to_week(
+                first_blocks,
+                &repeats_first,
+                std::slice::from_ref(&intent),
+                first,
+            )?
+            .0
         } else {
             first_blocks.to_vec()
         }
@@ -880,6 +891,7 @@ fn every_week_shown_input(
                 second_blocks,
                 &repeats_second,
                 std::slice::from_ref(&intent),
+                second,
             )?
             .0;
             (updated, Some(vec![intent_val]))

@@ -3,7 +3,7 @@
 //! `sport`, `activity-N`), the same in every week and on every device, so a week that holds a block
 //! with that id holds its own version of it for that week.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use serde_json::{Value, json};
 
@@ -214,4 +214,40 @@ pub fn derive_standing(
         }
     }
     Ok(newest)
+}
+
+/// The most repeats a list of standing rows (`id`, `from_week`, `body`; a null body stops) holds in any
+/// one week: for each week a row starts, the ids whose latest row from that week or earlier has a body.
+/// An import whose rows hold more than `repeats::MAX_REPEATS` at once is refused.
+pub fn most_standing_at_once(rows: &[Value]) -> usize {
+    let text = |row: &Value, key: &str| {
+        row.get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
+    let mut weeks: Vec<String> = rows.iter().map(|row| text(row, "from_week")).collect();
+    weeks.sort_unstable();
+    weeks.dedup();
+    weeks
+        .iter()
+        .map(|week| {
+            let mut latest: HashMap<String, (String, bool)> = HashMap::new();
+            for row in rows {
+                let from = text(row, "from_week");
+                if &from > week {
+                    continue;
+                }
+                let live = !row.get("body").is_none_or(Value::is_null);
+                let entry = latest
+                    .entry(text(row, "id"))
+                    .or_insert((from.clone(), live));
+                if from >= entry.0 {
+                    *entry = (from, live);
+                }
+            }
+            latest.values().filter(|(_, live)| *live).count()
+        })
+        .max()
+        .unwrap_or(0)
 }

@@ -559,7 +559,8 @@ class StandingRow(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(min_length=1, max_length=80)
     from_week: str
-    position: int = Field(ge=0, le=MAX_STANDING)
+    # A new repeat takes the place after the ones standing, so the 200th is at 199.
+    position: int = Field(ge=0, le=MAX_STANDING - 1)
     body: TimeBlock | None
 
     _from_week = field_validator("from_week")(a_week_start)
@@ -887,6 +888,10 @@ class TransferSnapshot(BaseModel):
             for block in week.blocks:
                 if block.assignment_id and block.assignment_id not in owned:
                     raise ValueError("assignment_id must name an assignment in this snapshot")
+        if self.standing:
+            rows = json.dumps([row.model_dump(mode="json") for row in self.standing])
+            if int(flexweek_engine.standing_most_at_once(rows)) > MAX_STANDING:
+                raise ValueError(f"a file can hold at most {MAX_STANDING} repeating blocks standing at once")
         return self
 
 

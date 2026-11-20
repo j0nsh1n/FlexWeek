@@ -458,6 +458,12 @@ fn calendar_standing_block(block: &str) -> PyResult<bool> {
 }
 
 #[pyfunction]
+fn standing_most_at_once(rows: &str) -> PyResult<usize> {
+    let rows = objects(rows)?;
+    guard(|| Ok(::flexweek_engine::standing::most_standing_at_once(&rows)))
+}
+
+#[pyfunction]
 fn calendar_block_family(id: &str) -> PyResult<String> {
     guard(|| Ok(::flexweek_engine::shown::family_id(id).to_string()))
 }
@@ -1960,6 +1966,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         calendar_next_action,
         calendar_setup_block,
         calendar_standing_block,
+        standing_most_at_once,
         blocks_until_problem,
         calendar_block_family,
         calendar_span_problem,

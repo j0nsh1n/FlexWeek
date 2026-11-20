@@ -6,11 +6,13 @@ Monday 16 November."""
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 
+import flexweek_engine  # type: ignore[import-untyped]
 import pytest
 from fastapi.testclient import TestClient
 
@@ -356,3 +358,27 @@ def test_a_shown_week_is_read_in_one_transaction_so_a_commit_between_reads_canno
     shown = week(alice, WED)
     assert outcome, "the commit was tried between the reads"
     assert shown["revision"] == [part["revision"] for part in shown["stored"]]
+
+
+def test_until_moved_later_from_a_wednesday_week_brings_back_the_day_it_hid(alice: TestClient) -> None:
+    # Reviewer's case: Guitar on Thursday and Saturday ends Friday 13 Nov, so the week on screen from
+    # Wednesday 11 shows Thursday only. Until moved to the end of December from that week on: Saturday 14
+    # is back on screen, in its stored week and in every later week.
+    guitar = {"title": "Guitar", "start": "17:00", "duration_min": 60, "until": "2026-11-13"}
+    made = [{"id": "weekly-3f2a9c01", "scope": "from", "from_date": "2026-11-02", "set": guitar,
+             "add_days": [3, 5]}]  # fmt: skip
+    post(alice, {"weeks": [], "repeats": made})
+    shown = week(alice, WED)
+    assert days_of(shown["blocks"]) == {"weekly-3f2a9c01": [1]}
+    later = [{"id": "weekly-3f2a9c01", "scope": "from", "from_date": WED, "set": {"until": "2026-12-31"}}]
+    # The client changes the week on screen by the engine's rule, as the desktop does, and saves it.
+    blocks, _ = flexweek_engine.repeat_apply_to_week(
+        json.dumps(shown["blocks"]), json.dumps(shown["repeats"]), json.dumps(later), WED
+    )
+    assert days_of(json.loads(blocks)) == {"weekly-3f2a9c01": [1, 3]}
+    save(alice, WED, json.loads(blocks), shown["revision"], repeats=later)
+    assert days_of(week(alice, WED)["blocks"]) == {"weekly-3f2a9c01": [1, 3]}
+    assert days_of(week(alice, FIRST)["blocks"]) == {"weekly-3f2a9c01": [3, 5]}
+    assert days_of(week(alice, SECOND)["blocks"]) == {"weekly-3f2a9c01": [3, 5]}
+    assert days_of(week(alice, "2026-12-28")["blocks"]) == {"weekly-3f2a9c01": [3]}
+    assert week(alice, "2027-01-04")["blocks"] == []

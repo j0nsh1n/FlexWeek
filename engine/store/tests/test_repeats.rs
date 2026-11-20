@@ -175,7 +175,7 @@ fn change_from_open_week(
             edit_intent(id, week, repeat, body.as_ref())
         })
         .collect();
-    let (blocks, _) = apply_to_week(&open, &repeats, &intents).unwrap();
+    let (blocks, _) = apply_to_week(&open, &repeats, &intents, week).unwrap();
     let values = intents.iter().map(|intent| intent.to_value()).collect();
     run(
         conn,
@@ -1538,6 +1538,98 @@ fn an_account_holds_two_hundred_repeats_and_the_next_is_refused_with_a_sentence(
         user_id,
         &batch(Vec::new(), Some(vec![edit]), &conn, user_id),
     );
+}
+
+fn refused_as_full(conn: &rusqlite::Connection, user_id: i64, intent: Value) -> bool {
+    matches!(
+        apply(conn, user_id, &batch(Vec::new(), Some(vec![intent]), conn, user_id), &clock()),
+        Err(ApplyFailure::Refused { message, .. }) if message.starts_with("FlexWeek keeps at most 200")
+    )
+}
+
+#[test]
+fn a_repeat_started_again_or_from_an_earlier_week_cannot_take_an_account_past_two_hundred() {
+    const NEXT_WEEK: &str = "2026-11-16";
+    // Reviewer's first case: 200 stand, one stops, another takes its place, then the stopped one starts
+    // again. That would be 201 standing at once.
+    let (conn, user_id) = account("repeat_limit_restart", false);
+    set_up(&conn, user_id); // School and Soccer
+    let made = |week: &str, from: usize, to: usize| -> Vec<Value> {
+        (from..to)
+            .map(|n| {
+                edit_intent(&format!("weekly-{n:04}"), week, None, Some(&weekly(n)))
+                    .unwrap()
+                    .to_value()
+            })
+            .collect()
+    };
+    run(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(made(OPEN_WEEK, 0, 198)), &conn, user_id),
+    );
+    let stop = edit_intent("weekly-0000", OPEN_WEEK, Some(&weekly(0)), None)
+        .unwrap()
+        .to_value();
+    run(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(vec![stop]), &conn, user_id),
+    );
+    run(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(made(OPEN_WEEK, 198, 199)), &conn, user_id),
+    );
+    assert_eq!(
+        standing_blocks(&conn, user_id, NEXT_WEEK).unwrap().len(),
+        200
+    );
+    let again = edit_intent("weekly-0000", NEXT_WEEK, None, Some(&weekly(0)))
+        .unwrap()
+        .to_value();
+    assert!(
+        refused_as_full(&conn, user_id, again),
+        "a stopped repeat started again is the 201st"
+    );
+    assert_eq!(
+        standing_blocks(&conn, user_id, NEXT_WEEK).unwrap().len(),
+        200
+    );
+
+    // Reviewer's second case: 200 that start next week, then one more from this week. Next week would
+    // hold 201.
+    let (conn, user_id) = account("repeat_limit_earlier", false);
+    set_up(&conn, user_id);
+    run(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(made(NEXT_WEEK, 0, 198)), &conn, user_id),
+    );
+    assert_eq!(
+        standing_blocks(&conn, user_id, NEXT_WEEK).unwrap().len(),
+        200
+    );
+    let earlier = edit_intent("weekly-0198", OPEN_WEEK, None, Some(&weekly(198)))
+        .unwrap()
+        .to_value();
+    assert!(
+        refused_as_full(&conn, user_id, earlier),
+        "one from an earlier week is the 201st next week"
+    );
+    // With room, a stopped repeat may start again.
+    let stop = edit_intent("weekly-0001", NEXT_WEEK, Some(&weekly(1)), None)
+        .unwrap()
+        .to_value();
+    run(
+        &conn,
+        user_id,
+        &batch(Vec::new(), Some(vec![stop]), &conn, user_id),
+    );
+    let again = edit_intent("weekly-0001", "2026-11-23", None, Some(&weekly(1)))
+        .unwrap()
+        .to_value();
+    assert!(!refused_as_full(&conn, user_id, again));
 }
 
 #[test]

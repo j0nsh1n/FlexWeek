@@ -495,7 +495,7 @@ fn perform_delete(app: &crate::App, args: &DeleteArgs) -> Result<Value, String> 
             .map_err(|err| err.message)?;
         let second_after_repeat =
             if let Some(intent) = edit_intent(family, &second, repeat.as_ref(), None) {
-                apply_to_week(&second_blocks, &repeats, &[intent])?.0
+                apply_to_week(&second_blocks, &repeats, &[intent], &second)?.0
             } else {
                 second_blocks.clone()
             };

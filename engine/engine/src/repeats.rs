@@ -56,8 +56,8 @@ const MONTHS_FULL: [&str; 12] = [
 ];
 const MAX_KEPT_SAID: usize = 3;
 
-pub const RULE: &str = "A change to a repeating block names School or a Setup activity, a from_date \
-written YYYY-MM-DD, and only title, category, start and duration_min to set";
+pub const RULE: &str = "A change to a repeating block names School, a Setup activity or a weekly fixed \
+time, a from_date written YYYY-MM-DD, and only title, category, start, duration_min and until to set";
 pub const NOTHING_LEFT: &str =
     "That change leaves no day, so nothing changed. Use stop to take it off the calendar.";
 /// The most repeats one account holds at once: School, Setup's activities and weekly fixed times together
@@ -663,10 +663,26 @@ pub fn intents_between(before: &[Value], after: &[Value], from_date: &str) -> Ve
 /// repeats as they stand in it afterwards. `blocks` is the week as shown (repeats merged in) and
 /// `repeats` the repeats standing in it before; the client calls this for the week it has open so
 /// its Undo step holds the change, and the store's own pass over that week then changes nothing.
+/// `week_start` is the Monday the blocks' days count from: a shown week is cut at each repeat's Until,
+/// and the days it cut are put back before the change is compared, as the store does.
 pub fn apply_to_week(
     blocks: &[Value],
     repeats: &[Value],
     intents: &[Intent],
+    week_start: &str,
+) -> Result<(Vec<Value>, Vec<Value>), String> {
+    apply_to_week_with(blocks, repeats, intents, |copy, repeat| {
+        crate::standing::uncut_copy(copy, Some(repeat), week_start)
+    })
+}
+
+/// `apply_to_week`, with `uncut` putting back the days a repeat's Until hid from a copy (for a week
+/// whose days do not count from a Monday).
+pub(crate) fn apply_to_week_with(
+    blocks: &[Value],
+    repeats: &[Value],
+    intents: &[Intent],
+    uncut: impl Fn(&Value, &Value) -> EngineResult<Value>,
 ) -> Result<(Vec<Value>, Vec<Value>), String> {
     let mut blocks = blocks.to_vec();
     let mut repeats = repeats.to_vec();
@@ -697,7 +713,14 @@ pub fn apply_to_week(
             }
             continue;
         }
-        let pieces: Vec<Value> = held.iter().map(|at| blocks[*at].clone()).collect();
+        // A day the old Until hid is not a day this week took out (the store does the same).
+        let pieces: Vec<Value> = held
+            .iter()
+            .map(|at| match old.as_ref() {
+                Some(old) => uncut(&blocks[*at], old).map_err(|error| error.message),
+                None => Ok(blocks[*at].clone()),
+            })
+            .collect::<Result<_, _>>()?;
         let restated = restated_pieces(old.as_ref(), new.as_ref(), &pieces, &intent.id);
         for (at, copy) in held.into_iter().zip(restated).rev() {
             match copy {
