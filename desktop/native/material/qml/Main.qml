@@ -806,9 +806,8 @@ Item {
                     + (materialSnackbar.visible ? materialSnackbar.height + 12 : 0)
                     + (bridge.sheets && bridge.sheets.notice ? 64 + 12 : 0)
                     + (alertStrip.visible ? alertStrip.height + 12 : 0)
-                anchors.right: root.phone ? undefined : parent.right
-                anchors.rightMargin: 16
-                anchors.horizontalCenter: root.phone ? parent.horizontalCenter : undefined
+                // Centred on a phone; on a computer 16 px in from the right edge.
+                x: root.phone ? (parent.width - width) / 2 : parent.width - width - 16
                 spacing: 12
                 Repeater {
                     id: cardRepeater
@@ -816,7 +815,7 @@ Item {
                     ReminderCard {
                         required property var modelData
                         objectName: "reminderCard"
-                        maxWidth: root.phone ? reminderCards.parent.width - 32 : 320
+                        maxWidth: root.phone ? reminderCards.parent.width - 32 : 288
                         theme: root.theme
                         density: root.density
                         reduceMotion: root.reduceMotion
