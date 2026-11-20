@@ -304,6 +304,20 @@ fn write_real(tx: &Connection, user_id: i64, record: &Record) -> SyncResult<()> 
     Ok(())
 }
 
+/// Rows no retry can change: another account's record, and a write the database refused. Everything else
+/// was set aside for the sender's clock or an older app, which a later try can fix.
+const NOT_RETRYABLE: &str =
+    "reason <> 'account identity differs' AND reason NOT LIKE 'could not be saved:%'";
+
+/// How many set-aside records a retry could still fix; the phone's notice counts these only.
+pub fn retryable_held(conn: &Connection, user_id: i64) -> SyncResult<i64> {
+    Ok(conn.query_row(
+        &format!("SELECT COUNT(*) FROM sync_quarantine WHERE user_id = ?1 AND {NOT_RETRYABLE}"),
+        [user_id],
+        |row| row.get(0),
+    )?)
+}
+
 fn quarantine(
     tx: &Transaction<'_>,
     user_id: i64,
@@ -315,8 +329,65 @@ fn quarantine(
     Ok(())
 }
 
+/// Tries again the records this device set aside. One held back because its sender's clock looked
+/// more than a day ahead, or because this app was older than the sender's, applies once that is no
+/// longer so; one that a newer edit has since replaced is dropped. Returns how many are still set aside.
+pub fn retry_quarantine(conn: &mut Connection, user_id: i64, now_ms: i64) -> SyncResult<usize> {
+    retry_quarantine_report(conn, user_id, now_ms)?;
+    Ok(usize::try_from(retryable_held(conn, user_id)?).unwrap_or(0))
+}
+
+/// Same retry, returning what it applied so the caller can count it. The apply and the removal of the
+/// retried rows are one transaction: a crash between them cannot leave the old rows beside new copies.
+pub fn retry_quarantine_report(
+    conn: &mut Connection,
+    user_id: i64,
+    now_ms: i64,
+) -> SyncResult<ApplyReport> {
+    let held: Vec<(i64, String)> = conn
+        .prepare(&format!(
+            "SELECT id, body FROM sync_quarantine WHERE user_id = ?1 AND {NOT_RETRYABLE} ORDER BY id"
+        ))?
+        .query_map([user_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    if held.is_empty() {
+        return Ok(ApplyReport::default());
+    }
+    let mut records = Vec::new();
+    for (_, body) in &held {
+        // A row that is not even a record can never apply; it goes with the retried ones.
+        if let Ok(record) = serde_json::from_str::<Value>(body)
+            .map_err(|error| SyncError::Invalid(error.to_string()))
+            .and_then(|value| Record::from_value(&value))
+        {
+            records.push(record);
+        }
+    }
+    let batch = Batch {
+        account_uuid: crate::account_uuid(conn, user_id)?,
+        from_device: String::new(),
+        records,
+        next_since: 0,
+        more: false,
+    };
+    let mut tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    // Whatever still fails is set aside again as a new row, so the old rows go first.
+    for (id, _) in &held {
+        tx.execute("DELETE FROM sync_quarantine WHERE id = ?1", [id])?;
+    }
+    let report = apply_in(&mut tx, &batch, now_ms)?;
+    tx.commit()?;
+    Ok(report)
+}
+
 pub fn apply_batch(conn: &mut Connection, batch: &Batch, now_ms: i64) -> SyncResult<ApplyReport> {
     let mut tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    let report = apply_in(&mut tx, batch, now_ms)?;
+    tx.commit()?;
+    Ok(report)
+}
+
+fn apply_in(tx: &mut Transaction<'_>, batch: &Batch, now_ms: i64) -> SyncResult<ApplyReport> {
     let mut report = ApplyReport::default();
     let mut user_id: Option<i64> = tx
         .query_row(
@@ -326,7 +397,7 @@ pub fn apply_batch(conn: &mut Connection, batch: &Batch, now_ms: i64) -> SyncRes
         )
         .optional()?;
     if let Some(id) = user_id {
-        crate::scan::scan_in(&tx, id, now_ms)?;
+        crate::scan::scan_in(tx, id, now_ms)?;
     }
     if user_id.is_none() {
         let account = batch
@@ -373,7 +444,7 @@ pub fn apply_batch(conn: &mut Connection, batch: &Batch, now_ms: i64) -> SyncRes
             bad(record)
         };
         if let Some(reason) = reason {
-            quarantine(&tx, id, record, reason, now_ms)?;
+            quarantine(tx, id, record, reason, now_ms)?;
             report.quarantined += 1;
             if future {
                 report.clock_skewed += 1;
@@ -386,7 +457,7 @@ pub fn apply_batch(conn: &mut Connection, batch: &Batch, now_ms: i64) -> SyncRes
                 .as_ref()
                 .is_some_and(|body| body["account_uuid"] != batch.account_uuid)
         {
-            quarantine(&tx, id, record, "account identity differs", now_ms)?;
+            quarantine(tx, id, record, "account identity differs", now_ms)?;
             report.quarantined += 1;
             continue;
         }
@@ -409,7 +480,13 @@ pub fn apply_batch(conn: &mut Connection, batch: &Batch, now_ms: i64) -> SyncRes
             Err(error) => {
                 savepoint.rollback()?;
                 drop(savepoint);
-                quarantine(&tx, id, record, &error.to_string(), now_ms)?;
+                quarantine(
+                    tx,
+                    id,
+                    record,
+                    &format!("could not be saved: {error}"),
+                    now_ms,
+                )?;
                 report.quarantined += 1;
                 continue;
             }
@@ -425,6 +502,5 @@ pub fn apply_batch(conn: &mut Connection, batch: &Batch, now_ms: i64) -> SyncRes
         params![hlc_last, seq_last],
     )?;
     report.user_id = Some(id);
-    tx.commit()?;
     Ok(report)
 }

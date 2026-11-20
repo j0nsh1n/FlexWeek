@@ -272,7 +272,7 @@ fn credit_with_revision(
     remember_operation(&db, user, op_id, &payload)?;
     db.execute_batch("COMMIT").map_err(failure)?;
     drop(db);
-    week.host.data_changed("assignments".into());
+    week.local_change("assignments");
     Ok(json!({"ok":true,"assignment":credited}).to_string())
 }
 
@@ -496,6 +496,60 @@ mod tests {
         assert_eq!(
             body["focus_sessions"], 1,
             "restoring the same expired phase credits one session"
+        );
+    }
+
+    #[test]
+    fn an_offline_phone_edit_keeps_the_time_it_was_made() {
+        use crate::core::tests_support::TestHost;
+        use std::sync::atomic::{AtomicI64, Ordering};
+        use std::sync::{Arc, Mutex};
+        const EDIT_MS: i64 = 1_792_000_000_000;
+        let (base, path) = open_at("stamp-offline", "2026-10-12T10:00:00");
+        homework(&base, "history", "History essay");
+        let user = base.user_id.unwrap();
+        {
+            let db = base.db.lock().unwrap();
+            let _ = db.execute_batch("COMMIT");
+            flexweek_sync::migrate(&db).unwrap();
+            flexweek_sync::set_device(&db, "phone", "phone").unwrap();
+            flexweek_sync::set_account(&db, user, "stamp-account").unwrap();
+        }
+        let host = Arc::new(TestHost {
+            local: "2026-10-12T10:00:00".into(),
+            now: AtomicI64::new(EDIT_MS),
+            events: Mutex::new(Vec::new()),
+        });
+        let phone = FlexWeek {
+            db: Mutex::new(flexweek_store::open_connection(&path).unwrap()),
+            user_id: Some(user),
+            device_name: "phone".into(),
+            host: host.clone(),
+            sync: Box::new(crate::sync_api::NativeSync::new(
+                &path,
+                "phone",
+                host.clone(),
+                Some(user),
+            )),
+            previews: Mutex::new(std::collections::HashMap::new()),
+        };
+        credit(&phone, "history", 30, "stamp-offline").unwrap();
+        // The computer is off at school; the phone next reaches it eight hours later and scans then.
+        let later = EDIT_MS + 8 * 3_600_000;
+        host.now.store(later, Ordering::SeqCst);
+        let mut db = flexweek_store::open_connection(&path).unwrap();
+        flexweek_sync::scan(&mut db, user, later).unwrap();
+        let hlc: i64 = db
+            .query_row(
+                "SELECT hlc FROM sync_record WHERE entity = 'assignment' AND key = 'history'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            hlc >> 16,
+            EDIT_MS,
+            "the phone's edit carries the time it was made, not the time of the next sync"
         );
     }
 

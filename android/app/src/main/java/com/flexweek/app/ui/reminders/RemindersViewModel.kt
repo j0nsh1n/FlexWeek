@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Context
 import com.flexweek.app.core.FlexWeekCore
+import com.flexweek.app.core.SyncWords
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CancellationException
@@ -21,8 +22,14 @@ data class RemindersUiState(
     val deviceName: String = "Joo's laptop",
     val pairedAt: String = "8 Oct",
     val reachable: Boolean = true,
+    val paired: Boolean = true,
+    val lastSync: String = "",
     val syncing: Boolean = false,
     val problem: String? = null,
+    // What Android says now about notifications: the Reminders switch shows this, not a saved wish.
+    val notificationsAllowed: Boolean = false,
+    // True after a Sync now that worked, so the Your computer card can say so under the button.
+    val syncedJustNow: Boolean = false,
 )
 
 private data class ReminderSettings(
@@ -31,38 +38,64 @@ private data class ReminderSettings(
     val deviceName: String,
     val pairedAt: String,
     val reachable: Boolean,
+    val paired: Boolean,
+    val lastSync: String,
 )
 
 interface ReminderPrefs {
-    var permissionBannerDismissed: Boolean
+    /** When the student last chose "Not now" (epoch ms), 0 for never. */
+    var permissionBannerDismissedAt: Long
+    var notificationAsked: Boolean
 }
 
 class SharedPreferenceReminderPrefs(context: Context) : ReminderPrefs {
     private val prefs = context.getSharedPreferences("flexweek_reminders", Context.MODE_PRIVATE)
 
-    override var permissionBannerDismissed: Boolean
-        get() = prefs.getBoolean("permission_banner_dismissed", false)
-        set(value) { prefs.edit().putBoolean("permission_banner_dismissed", value).apply() }
+    override var permissionBannerDismissedAt: Long
+        get() = prefs.getLong("permission_banner_dismissed_at", 0L)
+        set(value) { prefs.edit().putLong("permission_banner_dismissed_at", value).apply() }
+    override var notificationAsked: Boolean
+        get() = prefs.getBoolean("notification_asked", false)
+        set(value) { prefs.edit().putBoolean("notification_asked", value).apply() }
 }
 
 class InMemoryReminderPrefs : ReminderPrefs {
-    override var permissionBannerDismissed: Boolean = false
+    override var permissionBannerDismissedAt: Long = 0L
+    override var notificationAsked: Boolean = false
 }
 
 class RemindersViewModel(
     private val core: FlexWeekCore,
     private val prefs: ReminderPrefs = InMemoryReminderPrefs(),
     private val workerDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val permissions: SystemPermissions = UnknownPermissions,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
     constructor(core: FlexWeekCore, workerDispatcher: CoroutineDispatcher) :
         this(core, InMemoryReminderPrefs(), workerDispatcher)
 
-    var state by mutableStateOf(RemindersUiState(showPermissionBanner = !prefs.permissionBannerDismissed))
+    var state by mutableStateOf(
+        RemindersUiState(showPermissionBanner = bannerShown(), notificationsAllowed = permissions.notificationsAllowed()),
+    )
         private set
 
     init {
         reload()
     }
+
+    private fun bannerShown() =
+        PermissionBanner.show(permissions.notificationsAllowed(), prefs.permissionBannerDismissedAt, clock())
+
+    /** Asks Android again (on return from a system screen): the banner and the exact switch follow the answer. */
+    fun refreshPermissions() {
+        state = state.copy(showPermissionBanner = bannerShown(), notificationsAllowed = permissions.notificationsAllowed())
+        reload()
+    }
+
+    val notificationAsked: Boolean
+        get() = prefs.notificationAsked
+
+    fun markNotificationAsked() { prefs.notificationAsked = true }
 
     fun reload() {
         if (core !is com.flexweek.app.core.FakeFlexWeekCore) {
@@ -74,6 +107,8 @@ class RemindersViewModel(
                     deviceName = refreshed.deviceName,
                     pairedAt = refreshed.pairedAt,
                     reachable = refreshed.reachable,
+                    paired = refreshed.paired,
+                    lastSync = refreshed.lastSync,
                 )
             }
             return
@@ -85,10 +120,12 @@ class RemindersViewModel(
         val settings = JSONObject(core.settingsForPhone())
         return ReminderSettings(
             leadMinutes = settings.getInt("lead_minutes"),
-            exactReminders = settings.getBoolean("exact_reminders"),
+            exactReminders = settings.getBoolean("exact_reminders") && permissions.canScheduleExact(),
             deviceName = settings.getString("device_name"),
             pairedAt = settings.getString("paired_at"),
             reachable = settings.getBoolean("reachable"),
+            paired = settings.optBoolean("paired", true),
+            lastSync = settings.optString("last_sync", ""),
         )
     }
 
@@ -99,6 +136,8 @@ class RemindersViewModel(
             deviceName = refreshed.deviceName,
             pairedAt = refreshed.pairedAt,
             reachable = refreshed.reachable,
+            paired = refreshed.paired,
+            lastSync = refreshed.lastSync,
         )
     }
 
@@ -119,7 +158,7 @@ class RemindersViewModel(
 
     fun toggleExact(onRequestExactSetting: () -> Unit = {}) {
         val next = !state.exactReminders
-        if (next) {
+        if (next && !permissions.canScheduleExact()) {
             onRequestExactSetting()
         }
         if (core !is com.flexweek.app.core.FakeFlexWeekCore) {
@@ -137,15 +176,15 @@ class RemindersViewModel(
     }
 
     fun showPostPairBanner() {
-        state = state.copy(showPermissionBanner = true)
+        state = state.copy(showPermissionBanner = !permissions.notificationsAllowed())
     }
 
     fun allowNotifications() {
-        state = state.copy(showPermissionBanner = false)
+        state = state.copy(showPermissionBanner = false, notificationsAllowed = true)
     }
 
     fun dismissPermissionBanner() {
-        prefs.permissionBannerDismissed = true
+        prefs.permissionBannerDismissedAt = clock()
         state = state.copy(showPermissionBanner = false)
     }
 
@@ -155,10 +194,12 @@ class RemindersViewModel(
 
     fun syncNow() {
         if (state.syncing) return
-        state = state.copy(syncing = true, problem = null)
+        state = state.copy(syncing = true, problem = null, syncedJustNow = false)
         viewModelScope.launch {
-            withContext(workerDispatcher) { core.syncOnce(45_000) }
-            state = state.copy(syncing = false)
+            val answer = JSONObject(withContext(workerDispatcher) { core.syncOnce(45_000) })
+            val failure = if (answer.optBoolean("ok", true)) null
+            else SyncWords.syncProblem(answer.optString("kind"), answer.optString("error"))
+            state = state.copy(syncing = false, problem = failure, syncedJustNow = failure == null)
             reload()
         }
     }

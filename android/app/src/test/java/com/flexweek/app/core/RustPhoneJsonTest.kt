@@ -93,6 +93,13 @@ class RustPhoneJsonTest {
         assertEquals("Mon 4 PM", result.lines.first().right)
     }
 
+    @Test fun planPlacedLineSaysTheTimeOnceAndTheLengthApart() {
+        val raw = File("src/test/resources/phone/plan-open-thursday.json").readText()
+        val line = V2Json.parsePlanRecord(RustPhoneJson.plan(raw)).lines.first()
+        assertEquals("1 h", line.detail)
+        assertEquals("the time is only on the right", false, (line.detail + line.title).contains("16:00"))
+    }
+
     @Test fun planNotPlacedLineCarriesTheRealReason() {
         val raw = File("src/test/resources/phone/plan-not-placed.json").readText()
         val preview = JSONObject(raw)
@@ -104,5 +111,32 @@ class RustPhoneJsonTest {
         val saved = JSONObject(File("src/test/resources/phone/homework-save.json").readText())
         assertEquals("History essay", saved.getString("title"))
         assertEquals("2026-10-23T23:59", saved.getString("due"))
+    }
+
+    @Test fun aBlockThatEndsAtMidnightReadsAsTwelveAM() {
+        assertEquals("12:00 AM", RustPhoneJson.time("24:00"))
+        val raw = JSONObject(agenda())
+        raw.getJSONArray("rows").getJSONObject(0).put("start", "22:00").put("end", "24:00").put("duration_min", 120)
+        val state = TodayJson.parse(RustPhoneJson.today(raw.toString(), "2026-10-08", sync))
+        assertEquals("10:00 PM–12:00 AM · 2 h", (state.rows.single() as AgendaRow.Now).whenLine)
+    }
+}
+
+class PlanRefusalTest {
+    @Test fun nothingToPlaceIsAnErrorWithTheEnginesMessageNotAnEmptySheet() {
+        val raw = """{"week_start":"2026-10-05","placed":[],"not_placed":[],"moves":[],"explanations":[],"applied_preview":"","message":"This week is over, so nothing was planned. Plan this week or a later one."}"""
+        val answer = JSONObject(RustPhoneJson.plan(raw))
+        assertFalse(answer.getBoolean("ok"))
+        assertEquals("This week is over, so nothing was planned. Plan this week or a later one.", answer.getString("error"))
+    }
+
+    @Test fun nothingToPlaceWithNoMessageStillSaysSo() {
+        val raw = """{"week_start":"2026-10-05","placed":[],"not_placed":[],"applied_preview":"","message":""}"""
+        assertEquals(RustPhoneJson.NOTHING_TO_PLAN, JSONObject(RustPhoneJson.plan(raw)).getString("error"))
+    }
+
+    @Test fun theEnginesRefusalReadsWithoutTheExceptionPrefix() {
+        val error = com.flexweek.app.bindings.FfiException.Failure("preview was not found")
+        assertEquals("preview was not found", RustPhoneJson.ffiText(error))
     }
 }

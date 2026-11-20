@@ -1,5 +1,9 @@
 package com.flexweek.app.ui.reminders
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -7,12 +11,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -20,14 +33,19 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.flexweek.app.ui.components.SyncLineBar
-import com.flexweek.app.model.SyncLine
-import com.flexweek.app.ui.pair.DESKTOP_PAIR_PATH
 import com.flexweek.app.BuildConfig
+import com.flexweek.app.R
+import com.flexweek.app.model.SyncLine
+import com.flexweek.app.ui.components.SyncLineBar
+import com.flexweek.app.ui.pair.DESKTOP_PAIR_PATH
+import com.flexweek.app.ui.theme.syncOkColor
 import com.flexweek.app.update.UpdateState
 import com.flexweek.app.update.UpdateWords
 
@@ -41,6 +59,7 @@ fun RemindersScreen(
     onToggleExact: () -> Unit,
     onSyncNow: () -> Unit,
     onUnpair: () -> Unit,
+    onReportProblem: () -> Unit = {},
     updateState: UpdateState = UpdateState.Idle,
     updateDaily: Boolean = true,
     onCheckUpdates: () -> Unit = {},
@@ -62,9 +81,9 @@ fun RemindersScreen(
                 "1. Download and check the update.\n2. Allow FlexWeek to install updates if Android asks.\n3. Android shows its own Install button.",
                 style = MaterialTheme.typography.bodyLarge,
             )
-            Row {
-                TextButton(onClick = onUpdateSteps, modifier = Modifier.height(48.dp)) { Text("Back") }
-                TextButton(onClick = onUpdateLater, modifier = Modifier.height(48.dp)) { Text("Later") }
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onUpdateSteps, modifier = Modifier.heightIn(min = 48.dp)) { Text("Back") }
+                TextButton(onClick = onUpdateLater, modifier = Modifier.heightIn(min = 48.dp)) { Text("Later") }
             }
         }
         return
@@ -83,158 +102,249 @@ fun RemindersScreen(
             if (state.showPermissionBanner) {
                 Surface(
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    shape = RoundedCornerShape(12.dp),
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 ) {
-                    Column(Modifier.padding(14.dp)) {
+                    Column(Modifier.padding(16.dp)) {
                         Text(
                             "Let FlexWeek send notifications so it can tell you when to start homework.",
                             style = MaterialTheme.typography.bodyMedium,
                         )
-                        Row(Modifier.padding(top = 8.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = onAllowNotifications, modifier = Modifier.height(48.dp)) {
-                                Text("Allow")
-                            }
-                            TextButton(onClick = onDismissPermissionBanner, modifier = Modifier.height(48.dp)) { Text("Not now") }
+                        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = onDismissPermissionBanner, modifier = Modifier.heightIn(min = 48.dp)) { Text("Not now") }
+                            Button(onClick = onAllowNotifications, modifier = Modifier.heightIn(min = 48.dp)) { Text("Allow") }
                         }
                     }
                 }
             }
-            Text("Updates", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
-            SettingRow("Check once a day", "Look when you open the app.", trailing = {
-                Switch(checked = updateDaily, onCheckedChange = onUpdateDaily,
-                    modifier = Modifier.semantics { contentDescription = "Check once a day" })
-            })
-            when (val update = updateState) {
-                is UpdateState.Available -> {
-                    Text("FlexWeek ${update.offer.version} is ready.")
-                    if (update.offer.size != null) Text("${update.offer.size / (1024 * 1024)} MB")
-                    update.offer.notes.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                    Row {
-                        Button(onClick = onDownloadUpdate, modifier = Modifier.height(48.dp)) { Text("Download and install") }
-                        TextButton(onClick = onUpdateSteps, modifier = Modifier.height(48.dp)) { Text("See the steps") }
-                    }
-                    update.message?.let { Text(it) }
-                }
-                is UpdateState.NeedsPermission -> {
-                    Text("To install FlexWeek, allow this app to install updates.")
-                    Button(onClick = onUpdatePermission) { Text("Open the setting") }
-                    TextButton(onClick = onUpdateLater) { Text("Later") }
-                }
-                is UpdateState.Downloading -> {
-                    if (update.total > 0) LinearProgressIndicator(
-                        progress = { update.received.toFloat() / update.total.toFloat() },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    Text(UpdateWords.downloading(update.received, update.total))
-                }
-                is UpdateState.Verifying -> Text("Checking the downloaded file…")
-                is UpdateState.Failed -> Text(update.reason)
-                UpdateState.Checking -> Text("Checking for updates…")
-                UpdateState.UpToDate -> Text(UpdateWords.latest(BuildConfig.VERSION_NAME))
-                else -> Unit
-            }
-            TextButton(onClick = onCheckUpdates, enabled = updateState !is UpdateState.Checking) { Text("Check now") }
+
+            Heading("This phone")
             SettingRow(
-                title = "Remind me before homework",
-                subtitle = "The same lead time as your computer uses.",
+                icon = R.drawable.ic_notifications,
+                title = "Reminders",
+                subtitle = if (state.notificationsAllowed) "Allowed" else "Not allowed. Switch on to let FlexWeek send them.",
                 trailing = {
-                    LeadPicker(state.leadMinutes, onLeadChange)
+                    Switch(
+                        checked = state.notificationsAllowed,
+                        onCheckedChange = { onAllowNotifications() },
+                        modifier = Modifier.semantics { contentDescription = "Reminders" },
+                    )
                 },
             )
+            SettingRow(icon = R.drawable.ic_alarm, title = "Remind me before homework", subtitle = null)
+            LeadPicker(state.leadMinutes, onLeadChange)
             SettingRow(
-                title = "Exact reminders",
-                subtitle =
-                    "Android turns exact alarms off for new apps. Without it a reminder or the end of a focus session may come up to 5 minutes late.",
+                icon = R.drawable.ic_timer,
+                title = "On-time reminders",
+                subtitle = "Android may send them up to 5 min late unless you allow this",
                 trailing = {
                     Switch(
                         checked = state.exactReminders,
                         onCheckedChange = { onToggleExact() },
-                        modifier = Modifier.semantics { contentDescription = "Exact reminders" },
+                        modifier = Modifier.semantics { contentDescription = "On-time reminders" },
                     )
                 },
             )
-            SettingRow(
-                title = "Sound",
-                subtitle = "Chime, as on your computer. Alarm sounds stay on the computer.",
-            )
-            Text(
-                "What a reminder looks like",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 18.dp, bottom = 6.dp),
-            )
-            Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            ) {
                 Column(Modifier.padding(14.dp)) {
-                    Text("FlexWeek · now", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("History essay starts in ${state.leadMinutes} min", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
-                    Text("7:00 PM · 1 h · then free until 10 PM", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("What a reminder looks like", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(ReminderSample.TITLE, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+                    Text(ReminderSample.body(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Text(
-                "Devices",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 18.dp, bottom = 6.dp),
+
+            Heading("Your computer")
+            ComputerCard(state, onSyncNow, onUnpair)
+
+            Heading("Help")
+            if (FeedbackForm.available()) {
+                SettingRow(
+                    icon = R.drawable.ic_bug_report,
+                    title = "Report a problem",
+                    subtitle = "Opens a short form with your app version filled in",
+                    onClick = onReportProblem,
+                    trailing = { Icon(painterResource(R.drawable.ic_open_in_new), null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                )
+            }
+            UpdatesBlock(
+                updateState, updateDaily, onCheckUpdates, onDownloadUpdate, onUpdateDaily, onUpdateLater, onUpdateSteps, onUpdatePermission,
             )
-            SettingRow(
-                title = state.deviceName,
-                subtitle = "Paired ${state.pairedAt} · ${if (state.reachable) "on the same Wi‑Fi" else "not reachable now"}",
-                trailing = {
-                    TextButton(onClick = onUnpair, enabled = !state.syncing, modifier = Modifier.height(48.dp)) { Text("Unpair") }
-                },
-            )
-            Text(
-                "Add another device from the computer: $DESKTOP_PAIR_PATH.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
-            Button(
-                onClick = onSyncNow,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp).height(48.dp),
-                enabled = !state.syncing,
-            ) {
-                Text(if (state.syncing) "Syncing…" else "Sync now")
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun Heading(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 22.dp, bottom = 4.dp),
+        maxLines = 1,
+    )
+}
+
+@Composable
+private fun ComputerCard(state: RemindersUiState, onSyncNow: () -> Unit, onUnpair: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(painterResource(R.drawable.ic_computer), null, Modifier.padding(end = 12.dp))
+                Text(DeviceWords.title(state), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            Row(Modifier.padding(top = 4.dp, start = 36.dp), verticalAlignment = Alignment.Top) {
+                if (state.paired) {
+                    Box(
+                        Modifier.padding(top = 6.dp, end = 8.dp).size(8.dp).clip(CircleShape)
+                            .background(if (state.reachable) syncOkColor() else MaterialTheme.colorScheme.onSurfaceVariant),
+                    )
+                }
+                Text(DeviceWords.line(state), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (!state.paired) {
+                Text(
+                    "Pair from the computer: $DESKTOP_PAIR_PATH.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp, start = 36.dp),
+                )
+            }
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (state.paired) {
+                    FilledTonalButton(onClick = onSyncNow, enabled = !state.syncing, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Icon(painterResource(R.drawable.ic_sync), null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (state.syncing) "Syncing…" else "Sync now", maxLines = 1, softWrap = false)
+                    }
+                }
+                // With no computer linked this is still the one way back to the pairing screen.
+                TextButton(onClick = onUnpair, enabled = !state.syncing, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(if (state.paired) "Unpair" else "Pair again", maxLines = 1, softWrap = false)
+                }
+            }
+            val result = state.problem ?: if (state.syncedJustNow) "Synced just now" else null
+            result?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (state.problem != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
             }
         }
     }
 }
 
 @Composable
+private fun UpdatesBlock(
+    updateState: UpdateState,
+    updateDaily: Boolean,
+    onCheckUpdates: () -> Unit,
+    onDownloadUpdate: () -> Unit,
+    onUpdateDaily: (Boolean) -> Unit,
+    onUpdateLater: () -> Unit,
+    onUpdateSteps: () -> Unit,
+    onUpdatePermission: () -> Unit,
+) {
+    SettingRow(
+        icon = R.drawable.ic_system_update,
+        title = "Updates",
+        subtitle = "FlexWeek ${BuildConfig.VERSION_NAME}" + if (updateDaily) " · checks once a day" else "",
+        trailing = {
+            Switch(
+                checked = updateDaily,
+                onCheckedChange = onUpdateDaily,
+                modifier = Modifier.semantics { contentDescription = "Check once a day" },
+            )
+        },
+    )
+    Column(Modifier.padding(start = 40.dp)) {
+        when (val update = updateState) {
+            is UpdateState.Available -> {
+                Text("FlexWeek ${update.offer.version} is ready.")
+                if (update.offer.size != null) Text("${update.offer.size / (1024 * 1024)} MB", style = MaterialTheme.typography.bodyMedium)
+                update.offer.notes.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onUpdateSteps, modifier = Modifier.heightIn(min = 48.dp)) { Text("See the steps", maxLines = 1) }
+                    Button(onClick = onDownloadUpdate, modifier = Modifier.heightIn(min = 48.dp)) { Text("Download and install", maxLines = 1) }
+                }
+                update.message?.let { Text(it) }
+            }
+            is UpdateState.NeedsPermission -> {
+                Text("To install FlexWeek, allow this app to install updates.")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onUpdateLater, modifier = Modifier.heightIn(min = 48.dp)) { Text("Later") }
+                    Button(onClick = onUpdatePermission, modifier = Modifier.heightIn(min = 48.dp)) { Text("Open the setting") }
+                }
+            }
+            is UpdateState.Downloading -> {
+                if (update.total > 0) LinearProgressIndicator(
+                    progress = { update.received.toFloat() / update.total.toFloat() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Text(UpdateWords.downloading(update.received, update.total))
+            }
+            is UpdateState.Verifying -> Text("Checking the downloaded file…")
+            is UpdateState.Failed -> Text(update.reason, color = MaterialTheme.colorScheme.error)
+            UpdateState.Checking -> Text("Checking for updates…")
+            UpdateState.UpToDate -> Text(UpdateWords.latest(BuildConfig.VERSION_NAME), style = MaterialTheme.typography.bodyMedium)
+            else -> Unit
+        }
+        TextButton(onClick = onCheckUpdates, enabled = updateState !is UpdateState.Checking, modifier = Modifier.heightIn(min = 48.dp)) { Text("Check now") }
+    }
+}
+
+@Composable
 private fun SettingRow(
+    icon: Int,
     title: String,
-    subtitle: String,
+    subtitle: String?,
+    onClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
 ) {
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
+            .then(if (onClick != null) Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick) else Modifier)
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Icon(painterResource(icon), null, Modifier.padding(end = 16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Column(Modifier.weight(1f)) {
-            Text(title, fontWeight = FontWeight.Medium)
-            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
-        trailing?.invoke()
+        if (trailing != null) {
+            Spacer(Modifier.width(12.dp))
+            trailing()
+        }
     }
 }
 
 @Composable
 private fun LeadPicker(selected: Int, onSelect: (Int) -> Unit) {
-    Row {
-        listOf(5, 10, 15).forEach { min ->
-            TextButton(onClick = { onSelect(min) }, modifier = Modifier.height(48.dp)) {
-                Text(
-                    "$min min",
-                    fontWeight = if (selected == min) FontWeight.SemiBold else FontWeight.Normal,
-                )
-            }
+    val options = listOf(5, 10, 15)
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(start = 40.dp)) {
+        options.forEachIndexed { i, min ->
+            SegmentedButton(
+                selected = selected == min,
+                onClick = { onSelect(min) },
+                shape = SegmentedButtonDefaults.itemShape(i, options.size),
+                label = { Text("$min min", maxLines = 1, softWrap = false) },
+            )
         }
     }
 }

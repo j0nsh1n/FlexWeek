@@ -12,7 +12,7 @@ import java.security.SecureRandom
 import java.time.LocalDate
 import java.time.LocalDateTime
 import com.flexweek.app.model.DueDate
-import java.util.concurrent.ConcurrentHashMap
+import com.flexweek.app.model.FocusJson
 
 private const val UNREADABLE = "FlexWeek could not read its own answer. Nothing was changed."
 
@@ -21,9 +21,8 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
     private val main = Handler(Looper.getMainLooper())
     private val localSettings = context.getSharedPreferences("phone-settings", Context.MODE_PRIVATE)
     private lateinit var native: FlexWeek
-    private var selected: String? = null
-    private data class Completion(val assignment: String?, val week: String, val day: Int)
-    private val completions = ConcurrentHashMap<String, Completion>()
+    private val selection = DaySelection { LocalDate.parse(currentDate()) }
+    private val ticks = RowTicks { week, id, day, done, opId -> native.setBlockDone(week, id, day.toLong(), done, opId) }
     private val host = object : Host {
         private val random = SecureRandom()
         override fun nowUnixMs(): Long = System.currentTimeMillis()
@@ -38,44 +37,31 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
         if (saved != "null") {
             if (!isPaired()) localSettings.edit().remove("focus-state").apply()
             else {
-                val restored = JSONObject(native.focusRestore(saved))
-                val persisted = restored.opt("persist")
-                if (persisted == null || persisted == JSONObject.NULL) localSettings.edit().remove("focus-state").apply()
-                else localSettings.edit().putString("focus-state", persisted.toString()).apply()
+                val kept = FocusRestore.keep(saved) { native.focusRestore(it) }
+                if (kept == null) localSettings.edit().remove("focus-state").apply()
+                else localSettings.edit().putString("focus-state", kept).apply()
             }
         }
         com.flexweek.app.system.FocusRuntime.update(appContext, focusState())
     }
 
     override fun engineVersion(): String = native.engineVersion()
-    override fun selectedDate(): String = selected ?: currentDate()
+    override fun selectedDate(): String = selection.date().toString()
     override fun selectDay(index: Int) {
         require(index in 0..6)
-        selected = LocalDate.parse(currentWeekStart()).plusDays(index.toLong()).toString()
+        selection.select(LocalDate.parse(currentWeekStart()).plusDays(index.toLong()))
     }
 
     override fun today(date: String, nowMinute: Int): String {
         val raw = native.today(date, nowMinute.toLong())
-        val root = JSONObject(raw)
-        val rows = root.getJSONArray("rows")
-        for (i in 0 until rows.length()) {
-            val row = rows.getJSONObject(i)
-            completions[row.getString("id")] = Completion(
-                if (row.isNull("assignment_id")) null else row.getString("assignment_id"),
-                root.getString("week_start"), root.getInt("day"),
-            )
-        }
+        ticks.remember(raw)
         return RustPhoneJson.today(raw, currentDate(), syncStatus())
     }
 
     override fun setBlockDone(weekStart: String, blockId: String, dayIndex: Int, done: Boolean, opId: String) =
         native.setBlockDone(weekStart, blockId, dayIndex.toLong(), done, opId)
 
-    override fun setHomeworkDone(id: String, done: Boolean, opId: String) {
-        val target = completions[id] ?: error("Homework row is no longer available. Open the day again.")
-        if (target.assignment != null) native.setHomeworkDone(target.assignment, done, opId)
-        else native.setBlockDone(target.week, id, target.day.toLong(), done, opId)
-    }
+    override fun setHomeworkDone(id: String, done: Boolean, opId: String) = ticks.mark(id, done, opId)
 
     override fun upcomingReminders(fromLocal: String, hours: Int): String = JSONArray().also { items ->
         native.upcomingReminders(fromLocal.take(19), hours.toUInt()).forEach { reminder ->
@@ -84,23 +70,22 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
         }
     }.toString()
 
-    override fun settingsForPhone(): String {
-        val settings = JSONObject(native.settingsForPhone())
-        val sync = JSONObject(syncStatus())
-        return settings.put("lead_minutes", settings.getInt("reminder_lead_min"))
-            .put("exact_reminders", localSettings.getBoolean("exact-reminders", false))
-            .put("device_name", sync.optString("peer_name", "Your computer"))
-            .put("paired_at", RustPhoneJson.pairedDate(sync.optString("paired_at", "")))
-            .put("reachable", sync.optString("state") != "unreachable").toString()
-    }
+    override fun settingsForPhone(): String =
+        RustPhoneJson.phoneSettings(native.settingsForPhone(), syncStatus(), localSettings.getBoolean("exact-reminders", false))
 
     override fun setLeadMinutes(minutes: Int) = native.setReminderLead(minutes.toLong())
     override fun setExactReminders(on: Boolean) {
         localSettings.edit().putBoolean("exact-reminders", on).apply()
         onDataChanged("phone_settings")
     }
-    override fun syncStatus(): String = RustPhoneJson.sync(native.syncStatus())
-    override fun syncOnce(deadlineMs: Long): String = native.syncOnce(deadlineMs)
+    override fun syncStatus(): String =
+        RustPhoneJson.sync(native.syncStatus(), errorKind = localSettings.getString("sync-error-kind", null))
+    override fun syncOnce(deadlineMs: Long): String {
+        val answer = native.syncOnce(deadlineMs)
+        val kept = SyncWords.kindToRemember(answer, localSettings.getString("sync-error-kind", null))
+        localSettings.edit().apply { if (kept == null) remove("sync-error-kind") else putString("sync-error-kind", kept) }.apply()
+        return answer
+    }
     override fun pairWithCode(code: String): String = native.pairWithCode(code)
     override fun pairFromQr(text: String): String = native.pairFromQr(text)
     override fun cancelSync() { native.cancelSync() }
@@ -111,9 +96,9 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
     override fun isPaired(): Boolean = JSONObject(syncStatus()).optBoolean("has_account")
 
     private fun result(call: () -> String): String = try {
-        JSONObject(call()).put("ok", true).toString()
+        JSONObject(call()).also { if (!it.has("ok")) it.put("ok", true) }.toString()
     } catch (error: FfiException) {
-        JSONObject().put("ok", false).put("error", error.message).toString()
+        JSONObject().put("ok", false).put("error", RustPhoneJson.ffiText(error)).toString()
     } catch (error: org.json.JSONException) {
         // An answer the phone cannot read once crashed the app as soon as Running late opened.
         JSONObject().put("ok", false).put("error", UNREADABLE).toString()
@@ -157,14 +142,30 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
         answer.toString()
     }
 
-    override fun focusFinish(): String = result {
-        val answer = native.focusFinish(focusState())
-        localSettings.edit().remove("focus-state").apply()
-        com.flexweek.app.system.FocusRuntime.update(appContext, "null")
-        answer
+    override fun focusFinish(): String = try {
+        // Ending early keeps the whole minutes worked, as the End question says and the computer does.
+        FocusEnd.run(
+            credit = {
+                FocusJson.earlyCredit(focusState(), System.currentTimeMillis())?.let {
+                    native.creditFocus(it.assignmentId, it.minutes.toLong(), it.operation)
+                }
+            },
+            finish = { native.focusFinish(focusState()) },
+            clearSavedTimer = {
+                localSettings.edit().remove("focus-state").apply()
+                com.flexweek.app.system.FocusRuntime.update(appContext, "null")
+            },
+            refusalText = { (it as? FfiException)?.let(RustPhoneJson::ffiText) ?: UNREADABLE },
+        )
+    } catch (error: FfiException) {
+        JSONObject().put("ok", false).put("error", RustPhoneJson.ffiText(error)).toString()
+    } catch (error: org.json.JSONException) {
+        JSONObject().put("ok", false).put("error", UNREADABLE).toString()
     }
 
     override fun focusComplete(): String {
+        // The end alarm can fire after the timer was paused; a paused timer has not run to its end.
+        if (FocusGuard.isPaused(focusState())) return "{}"
         // No saved timer is the text "null", which JSONObject() throws on, outside result's error wrapper.
         val state = runCatching { JSONObject(focusState()) }.getOrNull() ?: return "{}"
         if (state.isNull("assignmentId")) return "{}"
@@ -179,7 +180,7 @@ class RealFlexWeekCore(context: Context, private val onDataChanged: (String) -> 
         }
     }
 
-    override fun focusAdvance(completed: Boolean): String = result {
+    override fun focusAdvance(completed: Boolean): String = FocusGuard.holdIfPaused(focusState(), completed) ?: result {
         val answer = JSONObject(native.focusAdvance(focusState(), completed))
         val persisted = answer.opt("persist")
         if (persisted == null || persisted == JSONObject.NULL) localSettings.edit().remove("focus-state").apply()

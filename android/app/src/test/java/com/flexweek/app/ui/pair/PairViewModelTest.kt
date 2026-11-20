@@ -42,7 +42,7 @@ class PairViewModelTest {
         val vm = PairViewModel(core, dispatcher) {}
         vm.pairFromTypedCode("00000000")
         assertEquals(
-            "That code didn't match. Codes last 5 minutes; ask your computer for a new one.",
+            "That code didn't match. Check the digits on your computer.",
             vm.uiState.value.problem,
         )
     }

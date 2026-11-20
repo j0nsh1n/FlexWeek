@@ -7,12 +7,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlanRecordViewModelTest {
+    @get:org.junit.Rule val main = com.flexweek.app.testing.MainThreadRule()
+
     private val core = FakeFlexWeekCore()
 
     @Test
     fun loadPlanBuildsRecordSheet() {
         var accepted = false
-        val vm = PlanRecordViewModel(core, onAccepted = { accepted = true }, onDismiss = {})
+        val vm = PlanRecordViewModel(core, onAccepted = { accepted = true }, onDismiss = {}, workerDispatcher = main.dispatcher)
         assertNotNull(vm.record)
         assertTrue(vm.record!!.summary.startsWith("Placed"))
         vm.accept()
@@ -22,7 +24,7 @@ class PlanRecordViewModelTest {
     @Test
     fun acceptReturnsPlacedIds() {
         var ids: List<String>? = null
-        val vm = PlanRecordViewModel(core, onAccepted = { ids = it }, onDismiss = {})
+        val vm = PlanRecordViewModel(core, onAccepted = { ids = it }, onDismiss = {}, workerDispatcher = main.dispatcher)
         vm.accept()
         assertNotNull(ids)
         assertTrue(ids!!.isNotEmpty())
@@ -31,7 +33,7 @@ class PlanRecordViewModelTest {
     @Test
     fun undoDismissesWithoutAccepting() {
         var dismissed = false
-        val vm = PlanRecordViewModel(core, onAccepted = {}, onDismiss = { dismissed = true })
+        val vm = PlanRecordViewModel(core, onAccepted = {}, onDismiss = { dismissed = true }, workerDispatcher = main.dispatcher)
         vm.undo()
         assertEquals(true, dismissed)
     }

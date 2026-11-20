@@ -19,8 +19,8 @@ use super::protocol::{
 use super::service::Ctx;
 use super::{NetError, NetResult, SyncSummary, blocking, open_db};
 use crate::{
-    Batch, Peer, SyncError, acknowledge_pull, acknowledge_push, apply_batch, export_since,
-    list_peers, revoke_peer, scan,
+    ApplyReport, Batch, Peer, SyncError, acknowledge_pull, acknowledge_push, apply_batch,
+    export_since, list_peers, revoke_peer, scan,
 };
 
 const IDLE_MS: u64 = 60_000;
@@ -51,15 +51,19 @@ pub(crate) fn scan_and_export(
     since: i64,
     requester_device: &str,
     limit: usize,
-) -> NetResult<Batch> {
+) -> NetResult<(Batch, ApplyReport)> {
+    // Records set aside on an earlier sync get another try first, so an app update or a corrected
+    // clock lets them in without anyone editing them again.
+    let retried = crate::retry_quarantine_report(conn, user_id, now_ms)?;
     scan(conn, user_id, now_ms)?;
-    match export_since(conn, user_id, since, requester_device, limit) {
+    let batch = match export_since(conn, user_id, since, requester_device, limit) {
         Err(SyncError::Invalid(message)) if message == "record changed since last scan" => {
             scan(conn, user_id, now_ms)?;
-            Ok(export_since(conn, user_id, since, requester_device, limit)?)
+            export_since(conn, user_id, since, requester_device, limit)?
         }
-        other => Ok(other?),
-    }
+        other => other?,
+    };
+    Ok((batch, retried))
 }
 
 pub(crate) fn touch_peer(conn: &Db, user_id: i64, device_id: &str, now_ms: i64) -> NetResult<()> {
@@ -202,16 +206,17 @@ fn serve(ctx: &Ctx, remote: &str, request: &Value) -> NetResult<Value> {
             acknowledge_pull(&conn, user_id, &peer.device_id, push.next_since)?;
             acknowledge_push(&conn, user_id, &peer.device_id, since)?;
             touch_peer(&conn, user_id, &peer.device_id, now)?;
-            let batch =
+            let (batch, retried) =
                 scan_and_export(&mut conn, user_id, now, since, &peer.device_id, BATCH_LIMIT)?;
-            if report.applied > 0 {
+            let applied = report.applied + retried.applied;
+            if applied > 0 {
                 ctx.generation.fetch_add(1, Ordering::Relaxed);
             }
             Ok(json!({
                 "ok": true,
                 "ack_through": push.next_since,
                 "batch": batch.to_value(),
-                "applied": report.applied,
+                "applied": applied,
                 "quarantined": report.quarantined,
             }))
         }
@@ -329,7 +334,7 @@ async fn rounds(
                 .find(|p| p.device_id == peer_id && !p.revoked)
                 .ok_or(NetError::NotPaired)?;
             let now = clock();
-            let push = scan_and_export(
+            let (push, retried) = scan_and_export(
                 &mut conn,
                 user_id,
                 now,
@@ -352,10 +357,10 @@ async fn rounds(
                 "since": cursors.pulled_seq,
                 "push": push.to_value(),
             });
-            Ok((request, (push, cursors)))
+            Ok((request, (push, cursors, retried)))
         })
         .await?;
-        let (push, cursors) = push;
+        let (push, cursors, retried) = push;
         let response = exchange(connection, &request).await?;
         if response.get("ok").and_then(Value::as_bool) != Some(true) {
             let code = response
@@ -403,12 +408,12 @@ async fn rounds(
             Ok(report)
         })
         .await?;
-        if report.applied > 0 {
+        if report.applied + retried.applied > 0 {
             ctx.generation.fetch_add(1, Ordering::Relaxed);
         }
         summary.sent += push.records.len();
         summary.received += batch.records.len();
-        summary.applied += report.applied;
+        summary.applied += report.applied + retried.applied;
         summary.quarantined += report.quarantined;
         summary.clock_skewed += report.clock_skewed;
         summary.exchanges += 1;

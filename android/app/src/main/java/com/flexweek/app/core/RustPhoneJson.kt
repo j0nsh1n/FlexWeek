@@ -13,7 +13,11 @@ internal object RustPhoneJson {
     private val timeFormat = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
     private val dayFormat = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.ENGLISH)
 
-    fun time(value: String): String = LocalTime.parse(value).format(timeFormat)
+    // The engine's "24:00" (a block that ends at midnight) is not an ISO time, so read hour and minute by hand.
+    fun time(value: String): String {
+        val (hour, minute) = value.split(":").map(String::toInt)
+        return LocalTime.of(hour % 24, minute).format(timeFormat)
+    }
 
     fun length(minutes: Long): String {
         if (minutes < 60) return "$minutes min"
@@ -79,6 +83,8 @@ internal object RustPhoneJson {
             item.put("due_label", if (item.isNull("due")) "" else LocalDate.parse(item.getString("due").take(10))
                 .format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)))
         }
+        // Dates, not weekday numbers: last Wednesday is not today even when today is a Wednesday.
+        root.put("selected_is_today", selected == current)
         root.put("selected_day", selected.dayOfWeek.value - 1)
         root.put("today_index", current.dayOfWeek.value - 1)
         root.put("day_title", if (selected == current) "Today" else selected.dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH))
@@ -88,7 +94,7 @@ internal object RustPhoneJson {
         return root.toString()
     }
 
-    fun sync(raw: String, zone: ZoneId = ZoneId.systemDefault()): String {
+    fun sync(raw: String, zone: ZoneId = ZoneId.systemDefault(), errorKind: String? = null): String {
         if (!raw.startsWith("{")) return JSONObject().put("paired", false)
             .put("state", "unreachable").put("line", "No computer linked. Your week is saved here.").toString()
         val root = JSONObject(raw)
@@ -96,7 +102,30 @@ internal object RustPhoneJson {
             val at = Instant.ofEpochMilli(root.getLong("last_sync_ms")).atZone(zone).format(timeFormat)
             root.put("line", "Your computer isn't reachable. Showing what synced at $at.")
         }
+        // A failure that is not "the computer is off" says what it is, so the student does not wait for a computer
+        // that is already on.
+        if (root.optString("state") == "unreachable" && root.optBoolean("paired") && errorKind != null && !SyncWords.isOff(errorKind)) {
+            root.put("line", if (SyncWords.needsUpdate(errorKind)) SyncWords.NEEDS_UPDATE else SyncWords.OTHER)
+        }
         return root.toString()
+    }
+
+    /**
+     * Settings' view of the computer, built from the same sync answer as the top line so the two cannot
+     * disagree: "paired" is the answer's own flag, not a guess from the name or the date.
+     */
+    fun phoneSettings(settingsRaw: String, syncRaw: String, exactReminders: Boolean, zone: ZoneId = ZoneId.systemDefault()): String {
+        val settings = JSONObject(settingsRaw)
+        val sync = JSONObject(syncRaw)
+        val lastSync = if (sync.isNull("last_sync_ms") || !sync.has("last_sync_ms")) ""
+        else Instant.ofEpochMilli(sync.getLong("last_sync_ms")).atZone(zone).format(timeFormat)
+        return settings.put("lead_minutes", settings.getInt("reminder_lead_min"))
+            .put("exact_reminders", exactReminders)
+            .put("device_name", sync.optString("peer_name", "Your computer"))
+            .put("paired_at", pairedDate(sync.optString("paired_at", ""), zone))
+            .put("paired", sync.optBoolean("paired"))
+            .put("last_sync", lastSync)
+            .put("reachable", sync.optString("state") != "unreachable").toString()
     }
 
     fun pairedDate(raw: String, zone: ZoneId = ZoneId.systemDefault()): String {
@@ -127,8 +156,21 @@ internal object RustPhoneJson {
         return root.toString()
     }
 
+    const val NOTHING_TO_PLAN = "Nothing is waiting for a time right now."
+
+    /** The engine's own sentence from a refused call; its exception text is "details=...". */
+    fun ffiText(error: com.flexweek.app.bindings.FfiException): String =
+        (error as? com.flexweek.app.bindings.FfiException.Failure)?.details ?: error.message ?: UNREADABLE_ERROR
+
+    private const val UNREADABLE_ERROR = "FlexWeek could not finish that. Nothing was changed."
+
     fun plan(raw: String): String {
         val root = JSONObject(raw)
+        // With nothing to place (or a week that is over) the engine saves no preview and says why in "message".
+        if (root.optString("applied_preview").isBlank()) {
+            return JSONObject().put("ok", false)
+                .put("error", root.optString("message").ifBlank { NOTHING_TO_PLAN }).toString()
+        }
         val placed = root.getJSONArray("placed")
         val waiting = root.getJSONArray("not_placed")
         val lines = JSONArray()
@@ -136,7 +178,8 @@ internal object RustPhoneJson {
             val block = placed.getJSONObject(i)
             val day = block.getJSONArray("days").getInt(0)
             lines.put(JSONObject().put("title", block.getString("title"))
-                .put("detail", "${block.optString("start")} · ${block.optInt("duration_min")} min")
+                // The time is on the right already; saying it again here (as "16:00") showed it twice.
+                .put("detail", length(block.optLong("duration_min")))
                 .put("right", TimeLabel.dayAndTime(day, block.getString("start"))))
         }
         for (i in 0 until waiting.length()) {
@@ -151,6 +194,17 @@ internal object RustPhoneJson {
 
     fun late(raw: String, minutes: Int): String {
         val root = JSONObject(raw)
+        val moves = root.getJSONArray("moves")
+        for (i in 0 until moves.length()) {
+            val move = moves.getJSONObject(i)
+            // "from 4 PM to 4:30 PM": the engine's detail only said where it moved from.
+            if (move.optString("from_start").isNotBlank() && move.optString("to_start").isNotBlank()) {
+                move.put("detail", TimeLabel.lateDetail(
+                    if (move.isNull("from_day")) null else move.getInt("from_day"), move.getString("from_start"),
+                    if (move.isNull("to_day")) null else move.getInt("to_day"), move.getString("to_start"),
+                ))
+            }
+        }
         return root.put("ok", true).put("preview_id", root.getString("applied_preview"))
             .put("minutes", minutes).toString()
     }

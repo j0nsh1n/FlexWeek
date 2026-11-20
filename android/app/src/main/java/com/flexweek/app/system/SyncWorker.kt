@@ -1,6 +1,11 @@
 package com.flexweek.app.system
 
 import android.content.Context
+import android.content.pm.ServiceInfo
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import androidx.work.ForegroundInfo
+import com.flexweek.app.R
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.flexweek.app.FlexWeekApp
@@ -14,6 +19,20 @@ class SyncWorker(
     context: Context,
     params: WorkerParameters,
 ) : CoroutineWorker(context, params) {
+    // Android 11 and older run expedited work as a foreground service and ask for this; without it the job fails.
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val notification = NotificationCompat.Builder(applicationContext, FlexWeekApp.CHANNEL_SYNC)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(applicationContext.getString(R.string.channel_sync))
+            .setOngoing(true)
+            .build()
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ForegroundInfo(FOREGROUND_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            ForegroundInfo(FOREGROUND_ID, notification)
+        }
+    }
+
     override suspend fun doWork(): Result {
         val app = applicationContext as FlexWeekApp
         val core = app.awaitCore() ?: return Result.retry()
@@ -45,6 +64,8 @@ class SyncWorker(
     }
 
     companion object {
-        const val SYNC_DEADLINE_MS = 10_000L
+        // The desktop gives a whole sync 45 s; 10 s ended slow relay syncs as "unreachable".
+        const val SYNC_DEADLINE_MS = 45_000L
+        const val FOREGROUND_ID = 78125
     }
 }

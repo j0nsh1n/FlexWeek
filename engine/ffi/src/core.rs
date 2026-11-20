@@ -226,7 +226,7 @@ impl FlexWeek {
         )
         .map_err(failure)?;
         drop(db);
-        self.host.data_changed("preferences".into());
+        self.local_change("preferences");
         Ok(())
     }
 
@@ -309,6 +309,12 @@ impl FlexWeek {
 }
 
 impl FlexWeek {
+    /// Every edit made on this phone ends here: stamp it first, then tell the app (which starts a sync).
+    pub(crate) fn local_change(&self, scope: &str) {
+        self.sync.stamp_local_edits();
+        self.host.data_changed(scope.into());
+    }
+
     pub(crate) fn account_id(&self) -> Option<i64> {
         self.sync.account_id().or(self.user_id)
     }

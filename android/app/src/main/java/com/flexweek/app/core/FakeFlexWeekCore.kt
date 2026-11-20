@@ -211,6 +211,7 @@ class FakeFlexWeekCore : FlexWeekCore {
         if (digits != DemoSchedule.VALID_PAIR_CODE) {
             return jsonString {
                 put("ok", false)
+                put("kind", "wrong_code")
                 put("error", "mismatch")
             }
         }
@@ -472,6 +473,20 @@ class FakeFlexWeekCore : FlexWeekCore {
                 put("day", day)
                 put("date", java.time.LocalDate.parse(weekStart).plusDays(day.toLong()).toString())
                 put("names", JSONArray(names))
+                put("sessions", JSONArray().also { list ->
+                    blocks.filter { it.dayIndex == day && it.category != "school" }.sortedBy { it.startMinute }.forEach { b ->
+                        list.put(jsonObject {
+                            put("start", b.startMinute); put("minutes", b.lengthMinutes); put("title", b.title)
+                            put("category", if (b.homework) "homework" else b.category); put("done", isDone(b))
+                        })
+                    }
+                    noTime.filter { it.dueDayIndex == day }.forEach { n ->
+                        list.put(jsonObject {
+                            put("start", JSONObject.NULL); put("minutes", 0); put("title", "${n.title} due")
+                            put("category", "homework"); put("done", false)
+                        })
+                    }
+                })
                 put("minutes", homework.sumOf { it.lengthMinutes })
                 put("heavy", homework.sumOf { it.lengthMinutes } > heavyThresholdMinutes)
                 put("unplaced", JSONArray(noTime.filter { it.dueDayIndex == day }.map { it.title }))

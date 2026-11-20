@@ -17,6 +17,9 @@ pub(crate) trait SyncApi: Send + Sync {
     fn cancel_sync(&self) -> String;
     fn unlink(&self) -> String;
     fn join_from_pairing(&self, payload: &str) -> String;
+    /// Stamp this device's edits now, so each carries the time it was made rather than the time of
+    /// the next sync that reaches the computer.
+    fn stamp_local_edits(&self) {}
 }
 
 pub(crate) struct NativeSync {
@@ -84,6 +87,18 @@ impl NativeSync {
             .collect())
     }
 
+    /// Records from the computer this phone set aside (an older app or a clock far off); each sync
+    /// tries them again.
+    fn held_back(&self) -> i64 {
+        let Some(user_id) = self.account_id() else {
+            return 0;
+        };
+        flexweek_store::open_connection(&self.db_path)
+            .ok()
+            .and_then(|db| flexweek_sync::retryable_held(&db, user_id).ok())
+            .unwrap_or(0)
+    }
+
     fn paired(&self, result: Result<PairedHost, NetError>) -> String {
         match result {
             Ok(paired) => {
@@ -145,8 +160,27 @@ impl SyncApi for NativeSync {
         } else {
             ("synced", "Not synced yet".into())
         };
+        let held_back = self.held_back();
+        let line = if state == "synced" && held_back > 0 {
+            let changes = if held_back == 1 {
+                "1 change"
+            } else {
+                "changes"
+            };
+            let count = if held_back == 1 {
+                String::new()
+            } else {
+                format!("{held_back} ")
+            };
+            format!(
+                "{line}. {count}{changes} from your computer could not be used yet: update FlexWeek on this phone and check its date and time."
+            )
+        } else {
+            line
+        };
         json!({
             "paired": peer.is_some(), "state": state, "line": line, "last_sync_ms": last,
+            "held_back": held_back,
             "has_account": self.account_id().is_some(),
             "peer_name": peer.map(|peer| peer.name.as_str()).unwrap_or("Your computer"),
             "paired_at": peer.map(|peer| peer.paired_at.as_str()).unwrap_or(""),
@@ -222,6 +256,32 @@ impl SyncApi for NativeSync {
     }
     fn join_from_pairing(&self, payload: &str) -> String {
         self.pair_from_qr(payload)
+    }
+    fn stamp_local_edits(&self) {
+        let Some(user_id) = self.account_id() else {
+            return;
+        };
+        let Ok(mut db) = flexweek_store::open_connection(&self.db_path) else {
+            return;
+        };
+        let paired: bool = db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='sync_account')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false)
+            && db
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM sync_account WHERE user_id = ?1)",
+                    [user_id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+        if paired {
+            // A failed stamp loses nothing: the next sync scans again, only with a later time.
+            let _ = flexweek_sync::scan(&mut db, user_id, self.host.now_unix_ms());
+        }
     }
 }
 
@@ -326,6 +386,34 @@ mod tests {
         desktop_db.execute_batch("COMMIT").unwrap();
         let synced: Value = serde_json::from_str(&phone.sync_once(15_000)).unwrap();
         assert_eq!(synced["ok"], true, "{synced}");
+        let healthy: Value = serde_json::from_str(&phone.sync_status()).unwrap();
+        assert_eq!(healthy["held_back"], 0);
+        let ahead = flexweek_sync::Record {
+            entity: "assignment".into(),
+            key: "ahead".into(),
+            body: Some(
+                serde_json::json!({"id":"ahead","title":"Ahead","due":"2026-10-14T21:00","estimate_min":60}),
+            ),
+            hlc: (1_792_000_000_000_i64 + 3 * 86_400_000) << 16,
+            device_id: "desk".into(),
+            seq: 99,
+        };
+        flexweek_store::open_connection(&phone_path)
+            .unwrap()
+            .execute(
+                "INSERT INTO sync_quarantine(user_id, entity, key, reason, body, at) VALUES (?1, 'assignment', 'ahead', 'clock is more than 24 hours ahead', ?2, '0')",
+                rusqlite::params![user, ahead.to_value().to_string()],
+            )
+            .unwrap();
+        let held: Value = serde_json::from_str(&phone.sync_status()).unwrap();
+        assert_eq!(held["held_back"], 1, "{held}");
+        assert!(
+            held["line"]
+                .as_str()
+                .unwrap()
+                .contains("1 change from your computer could not be used yet"),
+            "{held}"
+        );
         let day: Value =
             serde_json::from_str(&phone.today("2026-10-13".into(), 15 * 60 + 40).unwrap()).unwrap();
         assert_eq!(day["rows"][0]["title"], "History essay");

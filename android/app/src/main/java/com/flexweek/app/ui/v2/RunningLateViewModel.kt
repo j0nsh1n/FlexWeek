@@ -5,6 +5,11 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.flexweek.app.core.FlexWeekCore
 import com.flexweek.app.core.newOpId
 import com.flexweek.app.model.RunningLatePreview
@@ -15,7 +20,10 @@ class RunningLateViewModel(
     private val core: FlexWeekCore,
     private val onAccepted: () -> Unit,
     private val onDismiss: () -> Unit,
+    private val workerDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
+    // Each slider step asks the planner; an answer that comes back after a newer step was asked is dropped.
+    private var latestRequest = 0
     var minutes by mutableIntStateOf(30)
         private set
 
@@ -36,14 +44,19 @@ class RunningLateViewModel(
     }
 
     private fun loadPreview() {
-        val raw = core.runningLate(core.currentDayIndex(), minutes, newOpId())
-        val root = JSONObject(raw)
-        if (root.optBoolean("ok", false)) {
-            preview = V2Json.parseRunningLate(raw)
-            error = null
-        } else {
-            preview = null
-            error = root.optString("error").ifBlank { "Running late could not look at your day." }
+        val request = ++latestRequest
+        val asked = minutes
+        viewModelScope.launch {
+            val raw = withContext(workerDispatcher) { core.runningLate(core.currentDayIndex(), asked, newOpId()) }
+            if (request != latestRequest) return@launch
+            val root = JSONObject(raw)
+            if (root.optBoolean("ok", false)) {
+                preview = V2Json.parseRunningLate(raw)
+                error = null
+            } else {
+                preview = null
+                error = root.optString("error").ifBlank { "Running late could not look at your day." }
+            }
         }
     }
 
@@ -55,10 +68,12 @@ class RunningLateViewModel(
 
     fun accept() {
         val id = preview?.previewId ?: return
-        val raw = core.acceptRunningLate(id, newOpId())
-        if (JSONObject(raw).optBoolean("ok", false)) {
+        viewModelScope.launch {
+            val answer = JSONObject(withContext(workerDispatcher) { core.acceptRunningLate(id, newOpId()) })
+            // Either way the preview is spent: accepted, or stale because the week changed under it.
             preview = null
-            onAccepted()
+            if (answer.optBoolean("ok", false)) onAccepted()
+            else error = answer.optString("error").ifBlank { "Running late could not move that. Try again." }
         }
     }
 }

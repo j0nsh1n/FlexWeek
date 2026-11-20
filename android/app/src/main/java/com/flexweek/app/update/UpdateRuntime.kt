@@ -49,7 +49,7 @@ interface UpdateInstaller {
     fun validApk(file: File, version: String): Boolean
     fun install(file: File): Boolean
 }
-interface UpdatePrefs { var checkDaily: Boolean; var lastChecked: Long? }
+interface UpdatePrefs { var checkDaily: Boolean; var lastChecked: Long?; var lastFailedAttempt: Long? }
 interface UpdateRules {
     fun due(enabled: Boolean, lastChecked: Long?, now: Long): Boolean
     fun offered(json: String, installed: String): OfferedUpdate?
@@ -186,9 +186,14 @@ class SharedPreferenceUpdatePrefs(private val prefs: SharedPreferences) : Update
     override var lastChecked: Long?
         get() = if (prefs.contains("last_checked")) prefs.getLong("last_checked", 0) else null
         set(value) { prefs.edit().apply { if (value == null) remove("last_checked") else putLong("last_checked", value) }.apply() }
+    override var lastFailedAttempt: Long?
+        get() = if (prefs.contains("last_failed_attempt")) prefs.getLong("last_failed_attempt", 0) else null
+        set(value) { prefs.edit().apply { if (value == null) remove("last_failed_attempt") else putLong("last_failed_attempt", value) }.apply() }
 }
 
-class PackageUpdateInstaller(private val context: Context) : UpdateInstaller {
+// A ViewModel outlives the Activity it was first made with; holding that Activity leaked it at every rotation.
+class PackageUpdateInstaller(context: Context) : UpdateInstaller {
+    private val context: Context = context.applicationContext
     override fun canInstall() = context.packageManager.canRequestPackageInstalls()
     override fun validApk(file: File, version: String): Boolean {
         return try {
@@ -222,13 +227,17 @@ class UpdateViewModel(private val installedVersion: String, private val source: 
     fun start() {
         // Returning from Android's Install dialog resumes the app; a check then would drop the install's result.
         if (state.value.let { it is UpdateState.Downloading || it is UpdateState.Verifying || it is UpdateState.NeedsPermission || it is UpdateState.Installing }) return
+        // A failed check does not use up the day, but it waits an hour so a dead network or GitHub's rate limit is not hit on every resume.
+        val lastFailure = prefs.lastFailedAttempt
+        if (lastFailure != null && now() - lastFailure in 0 until RETRY_AFTER_FAILURE_MS) return
         if (rules.due(prefs.checkDaily, prefs.lastChecked, now())) check(false)
     }
     fun checkNow() = check(true)
+    private companion object { const val RETRY_AFTER_FAILURE_MS = 60L * 60 * 1000 }
     private fun check(loud: Boolean) {
         if (busy) return
         busy = true; state.value = UpdateState.Checking
-        viewModelScope.launch { try { val found = withContext(worker) { lookup() }; state.value = found ?: if (loud) UpdateState.Failed("Could not check for updates.") else UpdateState.Idle } finally { prefs.lastChecked = now(); busy = false } }
+        viewModelScope.launch { try { val found = withContext(worker) { lookup() }; if (found != null) { prefs.lastChecked = now(); prefs.lastFailedAttempt = null } else prefs.lastFailedAttempt = now(); state.value = found ?: if (loud) UpdateState.Failed("Could not check for updates.") else UpdateState.Idle } finally { busy = false } }
     }
     private suspend fun lookup(): UpdateState? {
         val json = source.get("https://api.github.com/repos/j0nsh1n/FlexWeek/releases/latest")

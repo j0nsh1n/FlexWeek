@@ -277,3 +277,100 @@ fn sync_all_visits_every_paired_device() {
         "{results:?}"
     );
 }
+
+fn hold(conn: &rusqlite::Connection, key: &str) {
+    let body = flexweek_sync::Record {
+        entity: "assignment".into(),
+        key: key.into(),
+        body: Some(assignment(key, "Held", "")),
+        hlc: 1 << 16,
+        device_id: "elsewhere".into(),
+        seq: 1,
+    }
+    .to_value()
+    .to_string();
+    conn.execute(
+        "INSERT INTO sync_quarantine(user_id, entity, key, reason, body, at) VALUES (1, 'assignment', ?1, 'clock is more than 24 hours ahead', ?2, '0')",
+        rusqlite::params![key, body],
+    )
+    .unwrap();
+}
+
+#[test]
+fn records_the_desktop_retries_count_as_a_change_from_the_phone() {
+    let desktop = device("desktop", true);
+    let phone = device("phone", false);
+    let desktop_id = pair(&desktop, &phone);
+    phone.service.sync_once(&desktop_id, 20_000).unwrap();
+    hold(&desktop.db(), "h1");
+    let before = desktop.service.generation();
+    phone.service.sync_once(&desktop_id, 20_000).unwrap();
+    assert!(get_assignment(&desktop.db(), "h1").is_some());
+    assert_eq!(
+        desktop.service.generation(),
+        before + 1,
+        "the desktop names the phone when a retried record lands"
+    );
+}
+
+#[test]
+fn records_the_phone_retries_count_in_its_summary_and_generation() {
+    let desktop = device("desktop", true);
+    let phone = device("phone", false);
+    let desktop_id = pair(&desktop, &phone);
+    phone.service.sync_once(&desktop_id, 20_000).unwrap();
+    hold(&phone.db(), "h2");
+    let before = phone.service.generation();
+    let summary = phone.service.sync_once(&desktop_id, 20_000).unwrap();
+    assert!(get_assignment(&phone.db(), "h2").is_some());
+    assert_eq!(summary.applied, 1, "{summary:?}");
+    assert_eq!(phone.service.generation(), before + 1);
+}
+
+#[test]
+fn a_record_held_again_on_retry_is_not_counted_as_newly_set_aside() {
+    let desktop = device("desktop", true);
+    let phone = device("phone", false);
+    let desktop_id = pair(&desktop, &phone);
+    phone.service.sync_once(&desktop_id, 20_000).unwrap();
+    // Still more than a day ahead at every retry, so it is set aside again each time.
+    let ahead_ms = i64::try_from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis(),
+    )
+    .unwrap()
+        + 3 * 24 * 60 * 60 * 1000;
+    let body = flexweek_sync::Record {
+        entity: "assignment".into(),
+        key: "ahead".into(),
+        body: Some(assignment("ahead", "Ahead", "")),
+        hlc: ahead_ms << 16,
+        device_id: "elsewhere".into(),
+        seq: 1,
+    }
+    .to_value()
+    .to_string();
+    phone
+        .db()
+        .execute(
+            "INSERT INTO sync_quarantine(user_id, entity, key, reason, body, at) VALUES (1, 'assignment', 'ahead', 'clock is more than 24 hours ahead', ?1, '0')",
+            rusqlite::params![body],
+        )
+        .unwrap();
+    for _ in 0..2 {
+        let summary = phone.service.sync_once(&desktop_id, 20_000).unwrap();
+        assert_eq!(summary.quarantined, 0, "{summary:?}");
+    }
+    assert!(get_assignment(&phone.db(), "ahead").is_none());
+    let held: i64 = phone
+        .db()
+        .query_row(
+            "SELECT COUNT(*) FROM sync_quarantine WHERE key = 'ahead'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(held, 1, "still set aside, once");
+}

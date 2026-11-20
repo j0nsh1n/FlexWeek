@@ -369,7 +369,7 @@ pub(crate) fn set_block_done(
     }
     db.execute_batch("COMMIT").map_err(failure)?;
     drop(db);
-    week.host.data_changed("week".into());
+    week.local_change("week");
     Ok(())
 }
 
@@ -469,7 +469,7 @@ pub(crate) fn set_homework_done(
     }
     db.execute_batch("COMMIT").map_err(failure)?;
     drop(db);
-    week.host.data_changed("homework".into());
+    week.local_change("homework");
     Ok(())
 }
 

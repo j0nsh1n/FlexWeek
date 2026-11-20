@@ -5,8 +5,10 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.layout.Box
@@ -14,7 +16,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -33,8 +45,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.flexweek.app.model.SyncLine
 import com.flexweek.app.ui.pair.PairScreen
 import com.flexweek.app.ui.pair.PairViewModel
+import com.flexweek.app.ui.nav.BackStep
+import com.flexweek.app.ui.nav.BackSteps
 import com.flexweek.app.ui.nav.MainTab
 import com.flexweek.app.ui.nav.MainTabs
+import com.flexweek.app.ui.reminders.AndroidPermissions
+import com.flexweek.app.ui.reminders.NotificationAsk
 import com.flexweek.app.ui.reminders.RemindersScreen
 import com.flexweek.app.ui.reminders.RemindersViewModel
 import com.flexweek.app.ui.reminders.SharedPreferenceReminderPrefs
@@ -42,7 +58,7 @@ import com.flexweek.app.ui.theme.FlexWeekTheme
 import com.flexweek.app.ui.today.TodayScreen
 import com.flexweek.app.ui.today.TodayV2Extras
 import com.flexweek.app.ui.today.TodayViewModel
-import com.flexweek.app.ui.v2.AddHomeworkSheet
+import com.flexweek.app.ui.v2.AddHomeworkScreen
 import com.flexweek.app.ui.v2.AddHomeworkViewModel
 import com.flexweek.app.ui.v2.PlanRecordSheet
 import com.flexweek.app.ui.v2.PlanRecordViewModel
@@ -55,6 +71,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import com.flexweek.app.system.SyncRefresh
 import com.flexweek.app.system.syncWhileForeground
 import com.flexweek.app.system.widget.WidgetRuntime
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -70,6 +87,8 @@ import com.flexweek.app.update.UpdateState
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Edge to edge with the status and navigation bar icons dark on light and light on dark.
+        enableEdgeToEdge()
         val app = application as FlexWeekApp
         val tweaks = ScreenshotTweaks.fromIntent(intent)
         setContent {
@@ -169,7 +188,7 @@ private enum class ActiveSheet {
 @Composable
 private fun StartupScreen(problem: String?) {
     Surface(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().padding(24.dp)) {
+        Box(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp)) {
             Text(problem ?: "Opening FlexWeek…", style = MaterialTheme.typography.bodyLarge)
         }
     }
@@ -183,12 +202,15 @@ private fun FlexWeekRoot(
     activity: ComponentActivity,
 ) {
     val demo = core is com.flexweek.app.core.FakeFlexWeekCore
-    var paired by remember { mutableStateOf(initiallyPaired || (demo && tweaks.prePaired)) }
-    var pairingRequested by remember { mutableStateOf(false) }
+    // Saved, so a rotation keeps them; Unpair also tells the app (see below) so the next start agrees.
+    var paired by rememberSaveable { mutableStateOf(initiallyPaired || (demo && tweaks.prePaired)) }
+    var pairingRequested by rememberSaveable { mutableStateOf(false) }
     // Survives rotation so a second pair screen cannot start while the first pairing is still running.
     var pairEpoch by rememberSaveable { mutableIntStateOf(0) }
     var pendingNotifPrompt by remember { mutableStateOf(false) }
-    var tab by remember {
+    // One Add draft is kept over a rotation and emptied when the sheet closes.
+    val addDraft = remember { arrayOfNulls<AddHomeworkViewModel>(1) }
+    var tab by rememberSaveable {
         mutableStateOf(
             when (tweaks.startScreen) {
                 ScreenshotTweaks.StartScreen.Reminders -> MainTab.Settings
@@ -197,7 +219,7 @@ private fun FlexWeekRoot(
             },
         )
     }
-    var sheet by remember {
+    var sheet by rememberSaveable {
         mutableStateOf(
             when (tweaks.openSheet) {
                 ScreenshotTweaks.V2Sheet.Add -> ActiveSheet.Add
@@ -219,22 +241,27 @@ private fun FlexWeekRoot(
         LaunchedEffect(pairState.paired) {
             if (pairState.paired) {
                 paired = true
+                (activity.application as? FlexWeekApp)?.setPaired(true)
                 pairingRequested = false
                 pendingNotifPrompt = true
             }
         }
-        PairScreen(
-            state = pairState,
-            onShowCode = vm::showCodeEntry,
-            onShowQr = vm::showQr,
-            onCodeChange = vm::onCodeChange,
-            onPair = vm::submitPair,
-        )
+        Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+            PairScreen(
+                state = pairState,
+                onShowCode = vm::showCodeEntry,
+                onShowQr = vm::showQr,
+                onCodeChange = vm::onCodeChange,
+                onPair = vm::submitPair,
+            )
+        }
         return
     }
     val todayVm = viewModel { TodayViewModel(core) }
-    val remindersVm = viewModel { RemindersViewModel(core, SharedPreferenceReminderPrefs(activity)) }
-    val updateVm = viewModel { UpdateViewModel(BuildConfig.VERSION_NAME, HttpUpdateSource(), PackageUpdateInstaller(activity), SharedPreferenceUpdatePrefs(activity), activity.filesDir.resolve("updates")) }
+    val remindersVm = viewModel {
+        RemindersViewModel(core, SharedPreferenceReminderPrefs(activity), permissions = AndroidPermissions(activity))
+    }
+    val updateVm = viewModel { UpdateViewModel(BuildConfig.VERSION_NAME, HttpUpdateSource(), PackageUpdateInstaller(activity.applicationContext), SharedPreferenceUpdatePrefs(activity), activity.filesDir.resolve("updates")) }
     val updateState by updateVm.state
     DisposableEffect(updateVm) {
         com.flexweek.app.update.UpdateInstallReceiver.onResult = updateVm::onInstallResult
@@ -247,17 +274,19 @@ private fun FlexWeekRoot(
             if (event == Lifecycle.Event.ON_CREATE || event == Lifecycle.Event.ON_RESUME) {
                 updateVm.onResumed()
                 updateVm.onResumeCheck()
+                // The student may have just come back from Android's notification or alarm screen.
+                if (event == Lifecycle.Event.ON_RESUME) remindersVm.refreshPermissions()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    val weekVm = viewModel { WeekViewModel(core) }
     LaunchedEffect(core, lifecycleOwner) {
         if (!demo) {
+            val refresh = SyncRefresh(todayVm::tick, remindersVm::reload, weekVm::refresh) { WidgetRuntime.refreshAsync(activity) }
             syncWhileForeground(core, lifecycleOwner.lifecycle) {
-                todayVm.tick(java.time.LocalTime.now().let { it.hour * 60 + it.minute })
-                remindersVm.reload()
-                WidgetRuntime.refreshAsync(activity)
+                refresh.afterSync(java.time.LocalTime.now().let { it.hour * 60 + it.minute })
             }
         }
     }
@@ -276,29 +305,54 @@ private fun FlexWeekRoot(
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             remindersVm.onNotificationPermissionResult(granted)
         }
-    val weekVm = viewModel { WeekViewModel(core) }
     val syncLine = remindersVm.state.problem?.let { SyncLine("unreachable", it) } ?: todayVm.uiState.syncLine
     val closeSheet: () -> Unit = {
+        if (sheet == ActiveSheet.Add) addDraft[0]?.reset()
         sheet = ActiveSheet.None
         todayVm.refreshAgenda()
         weekVm.refresh()
     }
+    BackHandler(enabled = BackSteps.next(sheet != ActiveSheet.None, tab) != BackStep.Leave) {
+        when (BackSteps.next(sheet != ActiveSheet.None, tab)) {
+            BackStep.CloseSheet -> {
+                if (sheet == ActiveSheet.Add) addDraft[0]?.reset()
+                sheet = ActiveSheet.None
+            }
+            BackStep.GoToToday -> tab = MainTab.Today
+            BackStep.Leave -> Unit
+        }
+    }
+    Box(Modifier.fillMaxSize()) {
     Scaffold(
         bottomBar = {
-            NavigationBar(Modifier.height(64.dp)) {
+            // The full-screen Add form covers the tabs, as in layout B.
+            if (sheet != ActiveSheet.Add) NavigationBar {
                 MainTabs.releaseTabs.forEach { item ->
                     NavigationBarItem(
                         selected = tab == item,
                         onClick = { tab = item },
-                        icon = { Text(item.icon) },
-                        label = { Text(item.label) },
+                        icon = {
+                            Icon(
+                                painterResource(if (tab == item) item.selectedIcon else item.icon),
+                                contentDescription = null,
+                            )
+                        },
+                        label = { Text(item.label, maxLines = 1) },
                     )
                 }
             }
         },
         floatingActionButton = {
             if (sheet == ActiveSheet.None && MainTabs.addAvailable(tab)) {
-                Button(onClick = { sheet = ActiveSheet.Add }, modifier = Modifier.height(56.dp)) { Text("+ Add") }
+                ExtendedFloatingActionButton(
+                    onClick = { sheet = ActiveSheet.Add },
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ) {
+                    Icon(painterResource(R.drawable.ic_add), contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add")
+                }
             }
         },
     ) { padding ->
@@ -334,9 +388,6 @@ private fun FlexWeekRoot(
                             onEndSession = todayVm::endFocus,
                             lateEnabled = true,
                             v2Extras = TodayV2Extras(
-                                        // Add is the frame's button on every tab now.
-                                        showFab = false,
-                                        onAdd = { sheet = ActiveSheet.Add },
                                         onPlan = {
                                             sheet = ActiveSheet.Plan
                                         },
@@ -346,7 +397,13 @@ private fun FlexWeekRoot(
                         weekVm.let { vm ->
                             WeekScreen(
                                 state = vm.state,
+                                today = vm.today,
+                                isCurrentWeek = vm.weekOffset == 0,
                                 syncLine = syncLine,
+                                problem = vm.problem,
+                                onPreviousWeek = vm::previousWeek,
+                                onNextWeek = vm::nextWeek,
+                                onThisWeek = vm::thisWeek,
                                 onOpenDay = { day ->
                                     todayVm.selectDay(day)
                                     tab = MainTab.Today
@@ -358,10 +415,19 @@ private fun FlexWeekRoot(
                             syncLine = syncLine,
                             state = remindersVm.state,
                             onAllowNotifications = {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                val canAskAgain = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                    activity.shouldShowRequestPermissionRationale(android.Manifest.permission.POST_NOTIFICATIONS)
+                                val ask = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                    NotificationAsk.next(remindersVm.notificationAsked, canAskAgain) == NotificationAsk.Step.Ask
+                                if (ask) {
+                                    remindersVm.markNotificationAsked()
                                     notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                                 } else {
-                                    remindersVm.allowNotifications()
+                                    // Android will not show its question again: its own notification switch is the way.
+                                    activity.startActivity(
+                                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                            .putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName),
+                                    )
                                 }
                             },
                             onDismissPermissionBanner = remindersVm::dismissPermissionBanner,
@@ -371,16 +437,25 @@ private fun FlexWeekRoot(
                             onToggleExact = {
                                 remindersVm.toggleExact {
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                        activity.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
+                                        activity.startActivity(
+                                            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, android.net.Uri.parse("package:${activity.packageName}")),
+                                        )
                                     }
                                 }
                             },
                             onSyncNow = {
                                 remindersVm.syncNow()
                             },
+                            onReportProblem = {
+                                val device = com.flexweek.app.ui.reminders.FeedbackForm.device(Build.MANUFACTURER, Build.MODEL, Build.VERSION.RELEASE)
+                                val url = com.flexweek.app.ui.reminders.FeedbackForm.url(BuildConfig.VERSION_NAME, device)
+                                runCatching { activity.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+                            },
                             onUnpair = {
                                 remindersVm.unpair {
                                     pairEpoch += 1
+                                    paired = false
+                                    (activity.application as? FlexWeekApp)?.setPaired(false)
                                     pairingRequested = true
                                 }
                             },
@@ -401,29 +476,6 @@ private fun FlexWeekRoot(
                         )
                 }
             }
-            if (sheet == ActiveSheet.Add) {
-                val addVm =
-                    remember {
-                        AddHomeworkViewModel(core) { message ->
-                            todayVm.showMessage(message)
-                            closeSheet()
-                        }
-                    }
-                AddHomeworkSheet(
-                    draft = addVm.draft,
-                    recentTitles = addVm.recentTitles,
-                    stepProblem = addVm.stepProblem,
-                    onTitleChange = addVm::onTitleChange,
-                    onDuePick = addVm::onDuePick,
-                    onWhenMode = addVm::onWhenMode,
-                    onEstimate = addVm::onEstimate,
-                    onSessions = addVm::onSessions,
-                    onStepJump = addVm::goToStep,
-                    onBack = addVm::back,
-                    onNext = addVm::nextOrSave,
-                    onCancel = closeSheet,
-                )
-            }
             if (sheet == ActiveSheet.Plan) {
                 val planVm =
                     remember(sheet) {
@@ -437,10 +489,16 @@ private fun FlexWeekRoot(
                     PlanRecordSheet(record, onUndo = planVm::undo, onAccept = planVm::accept)
                 } ?: planVm.error?.let { err ->
                     SheetScrim({ sheet = ActiveSheet.None }) {
-                        Surface(shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)) {
-                            Column(Modifier.padding(16.dp)) {
+                        Surface(
+                            Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        ) {
+                            Column(Modifier.navigationBarsPadding().padding(24.dp)) {
                                 Text(err, color = MaterialTheme.colorScheme.error)
-                                TextButton(onClick = { sheet = ActiveSheet.None }) { Text("Close") }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                    Button(onClick = { sheet = ActiveSheet.None }) { Text("Close") }
+                                }
                             }
                         }
                     }
@@ -468,5 +526,28 @@ private fun FlexWeekRoot(
                 }
             }
         }
+    }
+    if (sheet == ActiveSheet.Add) {
+        // A ViewModel keeps the half-typed draft over a rotation; the callback is rebound each time.
+        val addVm = viewModel(key = "add-homework") { AddHomeworkViewModel(core) {} }
+        addDraft[0] = addVm
+        addVm.onSaved = { message ->
+            todayVm.showMessage(message)
+            closeSheet()
+        }
+        AddHomeworkScreen(
+            draft = addVm.draft,
+            recentTitles = addVm.recentTitles,
+            problem = addVm.problem,
+            onTitleChange = addVm::onTitleChange,
+            onDuePick = addVm::onDuePick,
+            onEstimate = addVm::onEstimate,
+            onOtherLength = addVm::onOtherLength,
+            onOtherMinutes = addVm::onOtherMinutes,
+            onSessions = addVm::onSessions,
+            onSave = addVm::save,
+            onClose = closeSheet,
+        )
+    }
     }
 }
