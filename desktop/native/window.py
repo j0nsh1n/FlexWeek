@@ -1724,6 +1724,10 @@ class NativeWindow(QObject):
                 own = str(focus[0].get("tone") or FALLBACK)
                 self._bell.once(own if tone is None else short, prefs.get("alert_volume", 80))
         tray = self._tray_icon if self._tray_icon is not None and self._tray_icon.supportsMessages() else None
+        # A tray message is gone in eight seconds and a machine may suppress it outright. With no pop-ups
+        # to rely on, or "Leave reminders on screen" on, a reminder sits in the window as a card until
+        # its block starts or the student deals with it.
+        keeps = tray is None or bool(prefs.get("reminder_dnd_override"))
         reminders = []
         for notice in notices:
             title = notice.get("title") or "FlexWeek"
@@ -1732,22 +1736,22 @@ class NativeWindow(QObject):
             if tray is not None:
                 tray.showMessage(title, body, QSystemTrayIcon.MessageIcon.Information, 8000)
             if notice.get("kind") == "reminder":
-                reminders.append(words)
+                if not (keeps and self.session.reminder_cards.add(notice)):
+                    reminders.append(words)
             elif tray is None:
                 self.session._say(words)
-        kept = bool(notices) and bool(prefs.get("reminder_dnd_override"))
         if reminders:
             # A desktop can hide a tray message, and FlexWeek cannot tell that it did, so the window
             # says it as well, wherever the student is.
             self._reminder_said = "; ".join(reminders)
             snack = self._snack_bridge()
-            if snack is not None and not kept:
-                # A reminder kept on screen is said once, by Material's strip with its Got it.
+            if snack is not None:
                 self._say_in_snack(snack, self._reminder_said)
-        if kept:
-            # A tray message is gone in eight seconds and a machine may suppress it outright. This
-            # one sits in the window until it is dealt with, which is what the setting promises.
-            self.alert_strip.add(notices)
+        if prefs.get("reminder_dnd_override"):
+            # Reminders are cards; any other notice (focus) still sits in the strip with its Got it.
+            others = [notice for notice in notices if notice.get("kind") != "reminder"]
+            if others:
+                self.alert_strip.add(others)
 
     def _on_alarm(self, alarm: object) -> None:
         if not isinstance(alarm, dict):

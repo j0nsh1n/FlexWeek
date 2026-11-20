@@ -794,6 +794,37 @@ Item {
                 }
             }
 
+            // Reminders kept on screen, newest on top, above the focus strip and the snackbar.
+            Column {
+                id: reminderCards
+                objectName: "materialReminderCards"
+                z: 3
+                visible: cardRepeater.count > 0
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: (root.phone ? 96 : 24)
+                    + (materialSnackbar.visible ? materialSnackbar.height + 12 : 48 + 12)
+                    + (alertStrip.visible ? alertStrip.height + 12 : 0)
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 12
+                Repeater {
+                    id: cardRepeater
+                    model: bridge.reminderCards
+                    ReminderCard {
+                        required property var modelData
+                        objectName: "reminderCard"
+                        maxWidth: reminderCards.parent.width - 32
+                        theme: root.theme
+                        density: root.density
+                        reduceMotion: root.reduceMotion
+                        highContrast: root.highContrast
+                        title: modelData.title
+                        body: modelData.body
+                        onSnoozed: bridge.snoozeReminder(modelData.key)
+                        onClosed: bridge.closeReminder(modelData.key)
+                    }
+                }
+            }
+
             Snackbar {
                 id: materialSnackbar
                 // Never wider than the page; long or several-line notices wrap and the bar grows.
