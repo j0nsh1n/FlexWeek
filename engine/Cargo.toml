@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["engine", "store", "py", "sync", "ffi", "uniffi-bindgen", "mcp"]
+members = [
+    "engine", "store", "py", "sync", "ffi", "uniffi-bindgen", "mcp",
+    "service", "app", "platform", "testkit",
+]
 
 [workspace.package]
 edition = "2024"

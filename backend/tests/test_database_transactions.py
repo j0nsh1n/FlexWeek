@@ -14,31 +14,6 @@ import pytest
 from backend.storage import connect, initialize, throttle
 
 
-def test_a_register_that_fails_part_way_leaves_no_account(tmp_path, monkeypatch):
-    from fastapi.testclient import TestClient
-
-    import backend.app as app_module
-
-    path = tmp_path / "accounts.db"
-    app = app_module.create_app(database=path, origin="http://testserver")
-
-    def boom(*args, **kwargs):
-        raise RuntimeError("recovery codes failed")
-
-    monkeypatch.setattr(app_module, "replace_recovery_codes", boom)
-    with TestClient(app, raise_server_exceptions=False) as client:
-        response = client.post(
-            "/api/auth/register",
-            json={"username": "ada", "password": "a-long-test-password"},
-            headers={"Origin": "http://testserver", "X-FlexWeek-Request": "1"},
-        )
-    assert response.status_code == 500, response.text
-    check = sqlite3.connect(path)
-    assert check.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0, "a user row was left behind"
-    assert check.execute("SELECT COUNT(*) FROM preferences").fetchone()[0] == 0
-    check.close()
-
-
 def test_a_failed_later_write_rolls_the_earlier_ones_back(tmp_path: Path) -> None:
     path = tmp_path / "reg.db"
     with connect(path) as db:

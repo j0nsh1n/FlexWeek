@@ -869,7 +869,7 @@ bare Python, so runs queue behind each other and leave nothing running.
 `.github/workflows/verify.yml` runs on every push and pull request (Python 3.14, Rust stable, `contents: read`) and
 is the gate: everything runs there except pictures. An `engine` job builds the engine wheel and fwtest once;
 `verify-python`, `desktop`, `rig` and `mutate-python` install them. `verify-python` runs `fwtest gate --backend-only`
-(lint, types, mutation patterns, backend tests, diff checks). `desktop` runs every test file under `desktop/tests`,
+(lint, types, mutation patterns, the port ledger, backend tests, diff checks). `desktop` runs every test file under `desktop/tests`,
 `scripts/rig` and `scripts/pictures` offscreen over four shards, and leaves out the opt-in regression suites
 (regress184 and regress190, which run only with `FLEXWEEK_REGRESS=1`); a test still running after 300 s prints every
 thread's stack. `verify-engine` runs the harness's and the engine's cargo checks. `rig` runs the real-pointer rig for
@@ -907,13 +907,24 @@ The commands it runs, each of which must exit 0:
   `rustup` installs as stable; the crate uses the 2024 edition.
 - The engine in `engine/` (Rust approved for it on 2026-09-30) has its own
   checks, run from `engine/`, each of which must exit 0: `cargo fmt --check`,
-  `cargo clippy --workspace -- -D warnings` and `cargo test --workspace`.
+  `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`.
   The workspace includes the sync crate (`engine/sync`), the Android
   bindings (`engine/ffi`) and the MCP server (`engine/mcp`, approved
   2026-10-19). The MCP server's tests start the built `flexweek-mcp` over
   stdio against a temporary database made by the store and check each tool,
   the session rules, that a retried write lands once and that a write
   reaches the sync ledger.
+- The 2.0.0 desktop crates (Rust approved for the rewrite on 2026-11-21) are members of the engine
+  workspace and covered by its checks: `engine/service` (the account and save rules `backend/app.py`'s
+  routes hold), `engine/app` (the session and each screen's state; no window toolkit),
+  `engine/platform` (the operating-system pieces) and `engine/testkit` (test support). New desktop logic
+  is written in these crates, not in Python. Only `engine/platform` reads the clock: the other three
+  carry a `clippy.toml` that refuses `SystemTime::now`, `Instant::now`, `chrono::Local::now` and
+  `chrono::Utc::now` and the other ways of reading the clock, so their tests set the time. A Python
+  test file (`test_*.py` or `*_test.py` under `backend/tests/`, `desktop/tests/`, `scripts/rig/` or
+  `scripts/pictures/`) is deleted only with a row in
+  `tools/fwtest/port-ledger.toml` naming the Rust tests that replace it and how they were seen to
+  fail; `fwtest gate` refuses a deleted one without a row.
 - Android (approved for 1.0.0): from `android/`, `./gradlew testDebugUnitTest`
   must exit 0. It needs the JDK and Android SDK on the machine.
   The Python suites need the module built into the checkout's `.venv` first,

@@ -15,10 +15,10 @@
   },
   {
     "name": "the server turns Reduce away",
-    "file": "backend/app.py",
-    "old": "    motion: Literal[\"off\", \"normal\", \"extra\", \"reduce\"] | None = Field(",
-    "new": "    motion: Literal[\"off\", \"normal\", \"extra\"] | None = Field(",
-    "test": "backend/tests/test_appearance_preferences.py::test_reduce_motion_is_kept_and_an_unknown_level_is_rejected"
+    "file": "engine/service/src/preferences.rs",
+    "old": "        one_of(v, \"motion\", &[\"off\", \"normal\", \"extra\", \"reduce\"])",
+    "new": "        one_of(v, \"motion\", &[\"off\", \"normal\", \"extra\"])",
+    "test": "cargo:flexweek-service:preferences_parity:every_generated_preference_set_is_read_as_pydantic_reads_it"
   },
   {
     "name": "a plan's words are toasted before its Undo again",

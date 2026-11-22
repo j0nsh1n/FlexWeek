@@ -55,22 +55,3 @@ def split_plan(
     return json.loads(
         flexweek_engine.split_plan(duration_min, work_min, break_min, long_break_min, cadence)
     )
-
-
-def preview_split(
-    *,
-    duration_min: int | None,
-    timer_work_min: int,
-    timer_break_min: int,
-    timer_long_break_min: int,
-    timer_long_break_every: int,
-) -> dict[str, object]:
-    return json.loads(
-        flexweek_engine.preview_split(
-            duration_min,
-            timer_work_min,
-            timer_break_min,
-            timer_long_break_min,
-            timer_long_break_every,
-        )
-    )

@@ -4,15 +4,15 @@ import re
 import secrets
 import sqlite3
 from contextlib import asynccontextmanager
-from datetime import date, timedelta
 from pathlib import Path
 from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 
 import flexweek_engine  # type: ignore[import-untyped]
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from flexweek_engine import ServiceRefusal  # type: ignore[import-untyped]
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -21,12 +21,10 @@ from backend.assignments import (
     done_minutes_by_id,
     held_dates_by_id,
     planned_minutes_by_id,
-    planned_minutes_from_day,
     prepare_solve,
 )
 from backend.availability import fold_study_windows, spread_sessions
-from backend.comfort import REMINDER_LIMITS, TIMER_PRESETS, preview_split
-from backend.day import build_day
+from backend.comfort import REMINDER_LIMITS, TIMER_PRESETS
 from backend.limits import MAX_BODY
 from backend.models import (
     Assignment,
@@ -39,18 +37,13 @@ from backend.models import (
     TimeBlock,
     WeekRequest,
     WorkWindow,
-    due_sort_key,
     valid_naive_stamp,
     valid_spotify_url,
 )
-from backend.month import build_month
 from backend.recovery import (
-    RECOVERY_CODE_COUNT,
-    generate_recovery_codes,
     hash_recovery_code,
-    recovery_code_matches,
 )
-from backend.restore import canonical, diff_snapshots, diff_transfer, state_token
+from backend.restore import canonical, diff_transfer, state_token
 from backend.slots import DAY_END_MIN, SLOT_MIN
 from backend.solver import reschedule_after_miss, reschedule_running_late, solve
 from backend.storage import (
@@ -58,12 +51,7 @@ from backend.storage import (
     Row,
     connect,
     cookie_age,
-    create_session,
-    delete_account,
-    digest,
     initialize,
-    new_preferences,
-    password_hash,
     password_matches,
     throttle,
 )
@@ -73,11 +61,7 @@ from backend.weeks import (
     compose_shown_week,
     current_week_start,
     is_calendar_date,
-    is_month_label,
     is_week_start,
-    monday_of,
-    month_grid,
-    parse_month,
     repeat_changes_from_shown_week,
     rules_on_shown_week,
     shown_week_parts,
@@ -95,9 +79,6 @@ ASSIGNMENT_LIMIT = "An account holds at most 1000 assignments"
 WEEK_CONFLICT = "This week changed in another window. Reload before saving."
 ROUTINE_CONFLICT = "This routine changed in another window. Reload before saving."
 ROUTINE_LIMIT = "An account holds at most 50 routines"
-ROUTINE_UNKNOWN = "Routine not found"
-RESTORE_UNKNOWN = "Restore point not found"
-RESTORE_STALE = "This preview is out of date. Refresh it before restoring."
 IMPORT_STALE = "This preview is out of date. Refresh it before importing."
 RECOVER_WRONG = "Incorrect username or recovery code"
 PASSWORD_WRONG = "Incorrect password"
@@ -108,6 +89,8 @@ OPERATION_CONFLICT = "This operation was already used with different data."
 MAX_ASSIGNMENTS = 1000
 MAX_ROUTINES = 50
 MAX_RESTORE_POINTS = 20
+# The answer for each kind of refusal the Rust service gives (flexweek_service::Refusal).
+REFUSAL_STATUS = {"invalid": 422, "unauthorized": 401, "not_found": 404, "conflict": 409, "too_many": 429}
 MAX_OPERATIONS = 100
 
 
@@ -299,20 +282,6 @@ def save_shown_week(
         save_week_row(db, user_id, stored_start, dump_blocks(rewrite_blocks(incoming, owned)), revision)
 
 
-def month_weeks(
-    db: Connection, user_id: int, month: str, first_weekday: int = 0
-) -> list[tuple[str, list[dict]]]:
-    """Every saved week, with the weeks the month's grid shows as the student sees them."""
-    saved = dict(db.list_account_weeks(user_id))
-    first, last = parse_month(month)
-    grid_start, grid_end = month_grid(first, last, first_weekday)
-    monday = date.fromisoformat(monday_of(grid_start.isoformat()))
-    while monday <= grid_end:
-        saved.setdefault(monday.isoformat(), "[]")
-        monday += timedelta(days=7)
-    return [(start, week_with_standing(db, user_id, start, text)) for start, text in saved.items()]
-
-
 def assignment_view(body: dict, revision: int, planned: int, done: int = 0) -> dict:
     view: dict = json.loads(flexweek_engine.assignment_view(json.dumps(body), revision, planned, done))
     return view
@@ -399,16 +368,6 @@ def remember_operation(
     db.remember_operation(user_id, operation_id, digest_value, canonical(response), MAX_OPERATIONS)
 
 
-def restore_point_view(row: Row) -> dict:
-    return {
-        "id": row["id"],
-        "label": row["label"],
-        "created_at": row["created_at"],
-        "weeks": row["weeks_count"],
-        "assignments": row["assignments_count"],
-    }
-
-
 def insert_restore_point(db: Connection, user_id: int, label: str, keep_ids: set[str] | None = None) -> dict:
     created: dict = json.loads(
         db.create_restore_point(
@@ -473,15 +432,6 @@ def upsert_routine(db: Connection, user_id: int, routine: Routine) -> dict:
     if status == "limit":
         raise HTTPException(422, ROUTINE_LIMIT)
     return routine_view(json.loads(payload))
-
-
-def delete_routine(db: Connection, user_id: int, routine_id: str, revision: int) -> dict:
-    status = db.delete_routine(user_id, routine_id, revision)
-    if status == "missing":
-        raise HTTPException(404, ROUTINE_UNKNOWN)
-    if status == "conflict":
-        raise HTTPException(409, ROUTINE_CONFLICT)
-    return {"id": routine_id}
 
 
 class Credentials(BaseModel):
@@ -593,25 +543,6 @@ class ChangesRequest(BaseModel):
 class RepeatPreviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     repeats: list[dict] = Field(max_length=MAX_REPEAT_CHANGES)
-
-
-class RestoreCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    label: str = Field(min_length=1, max_length=80)
-    operation_id: str = Field(min_length=1, max_length=80)
-
-    @field_validator("label")
-    @classmethod
-    def label_is_not_blank(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("label required")
-        return value
-
-
-class RestoreApply(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    state_token: str = Field(min_length=1, max_length=128)
-    operation_id: str = Field(min_length=1, max_length=80)
 
 
 class AlarmPreference(BaseModel):
@@ -955,22 +886,6 @@ def apply_transfer(db: Connection, user_id: int, snapshot: TransferSnapshot) -> 
     }
 
 
-class TimerSplitRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    duration_min: int | None = Field(default=None, ge=15, le=7140)
-    timer_work_min: int = Field(ge=1, le=180)
-    timer_break_min: int = Field(ge=1, le=60)
-    timer_long_break_min: int = Field(ge=1, le=120)
-    timer_long_break_every: int = Field(ge=2, le=12)
-
-    @field_validator("duration_min")
-    @classmethod
-    def duration_is_on_the_grid(cls, value: int | None) -> int | None:
-        if value is not None and value % 15:
-            raise ValueError("duration_min must be a multiple of 15")
-        return value
-
-
 def encode_availability(preferences: Preferences) -> str:
     return json.dumps(
         {
@@ -1160,18 +1075,39 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             {"detail": "Storage unavailable. Your changes were not saved; retry shortly."}, status_code=503
         )
 
+    store_path = str(path)
+
+    def refused(error: ServiceRefusal) -> HTTPException:
+        kind, words = error.args
+        headers = {"Retry-After": "300"} if kind == "too_many" else None
+        return HTTPException(REFUSAL_STATUS[kind], words, headers=headers)
+
+    def asked(request: Request) -> tuple[str, int]:
+        return (request.client.host if request.client else "unknown"), int(wall_clock.seconds())
+
+    # Account export still checks these itself; it moves to the service with the export slice.
+    def deny_if_throttled(request: Request, username: str) -> None:
+        address = request.client.host if request.client else "unknown"
+        if not throttle(path, address, username):
+            raise HTTPException(429, TOO_MANY_TRIES, headers={"Retry-After": "300"})
+
+    def require_password(db: Connection, user_id: int, password: str) -> None:
+        # Called inside the caller's transaction so a password rotated by another
+        # session between the check and the write cannot still authorize the write.
+        stored = db.password_hash_of(user_id)
+        if stored is None or not password_matches(password, stored):
+            raise HTTPException(401, PASSWORD_WRONG)
+
     def user(request: Request) -> dict:
-        token = request.cookies.get(COOKIE, "")
-        now = int(wall_clock.seconds())
-        token_hash = digest(token)
-        with connect(path) as db:
-            found = db.session_user(token_hash, now)
-            ended = found is None and db.session_expired(token_hash, now)
-        if found is None:
-            raise HTTPException(401, SESSION_ENDED if ended else "Please sign in")
-        expected = request.headers.get("X-FlexWeek-Account")
-        if expected is not None and expected != str(found[0]):
-            raise HTTPException(401, "Account changed. Please sign in again.")
+        try:
+            found = flexweek_engine.service_signed_in(
+                store_path,
+                request.cookies.get(COOKIE, ""),
+                int(wall_clock.seconds()),
+                request.headers.get("X-FlexWeek-Account"),
+            )
+        except ServiceRefusal as error:
+            raise refused(error) from None
         return {"id": found[0], "username": found[1]}
 
     def session_response(response: Response, token: str, keep: bool = False) -> None:
@@ -1186,41 +1122,17 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         )
 
     def authenticate(data: Credentials, request: Request, response: Response, register: bool) -> dict:
-        address = request.client.host if request.client else "unknown"
-        if not throttle(path, address, data.username):
-            raise HTTPException(429, TOO_MANY_TRIES, headers={"Retry-After": "300"})
-        codes: list[str] | None = None
-        if register:
-            encoded = password_hash(data.password)
-            codes = generate_recovery_codes()
-            try:
-                with connect(path) as db:
-                    user_id = db.insert_user(data.username, encoded)
-                    new_preferences(db, user_id)
-                    replace_recovery_codes(db, user_id, codes)
-                    token = create_session(db, user_id, data.keep)
-            except sqlite3.IntegrityError as exc:
-                raise HTTPException(409, "Username unavailable") from exc
-        else:
-            with connect(path) as db:
-                found = db.find_user(data.username)
-            encoded = found[2] if found else password_hash("missing-account-password", "00" * 16)
-            matched = password_matches(data.password, encoded)
-            if not found or not matched:
-                raise HTTPException(401, "Incorrect username or password")
-            user_id = found[0]
-            with connect(path) as db:
-                # scrypt ran outside the lock; a recovery or password change may have rotated the
-                # hash and signed every session out meanwhile, so the session is only opened if the
-                # hash just checked is still the account's, in the same write transaction.
-                db.begin_immediate()
-                if db.password_hash_of(user_id) != encoded:
-                    raise HTTPException(401, "Incorrect username or password")
-                token = create_session(db, user_id, data.keep)
-        with connect(path) as db:
-            db.delete_session(digest(request.cookies.get(COOKIE, "")))
+        address, now = asked(request)
+        signing = flexweek_engine.service_register if register else flexweek_engine.service_login
+        try:
+            previous = request.cookies.get(COOKIE, "")
+            user_id, username, token, codes = signing(
+                store_path, address, now, data.username, data.password, data.keep, previous
+            )
+        except ServiceRefusal as error:
+            raise refused(error) from None
         session_response(response, token, data.keep)
-        result = {"id": user_id, "username": data.username}
+        result: dict = {"id": user_id, "username": username}
         if codes is not None:
             result["recovery_codes"] = codes
         return result
@@ -1239,83 +1151,63 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.post("/api/auth/logout", status_code=204)
     def logout(request: Request, response: Response) -> None:
-        if request.headers.get("X-FlexWeek-Account") is not None:
-            user(request)
-        with connect(path) as db:
-            db.delete_session(digest(request.cookies.get(COOKIE, "")))
+        try:
+            flexweek_engine.service_logout(
+                store_path,
+                request.cookies.get(COOKIE, ""),
+                int(wall_clock.seconds()),
+                request.headers.get("X-FlexWeek-Account"),
+            )
+        except ServiceRefusal as error:
+            raise refused(error) from None
         response.delete_cookie(COOKIE, path="/", httponly=True, secure=secure, samesite="strict")
-
-    def deny_if_throttled(request: Request, username: str) -> None:
-        address = request.client.host if request.client else "unknown"
-        if not throttle(path, address, username):
-            raise HTTPException(429, TOO_MANY_TRIES, headers={"Retry-After": "300"})
-
-    def require_password(db: Connection, user_id: int, password: str) -> None:
-        # Called inside the caller's transaction so a password rotated by another
-        # session between the check and the write cannot still authorize the write.
-        stored = db.password_hash_of(user_id)
-        if stored is None or not password_matches(password, stored):
-            raise HTTPException(401, PASSWORD_WRONG)
 
     @app.post("/api/auth/recover")
     def recover(data: RecoverRequest, request: Request, response: Response) -> dict:
-        deny_if_throttled(request, data.username)
-        dummy = hash_recovery_code("missing-recovery-code")
-        # scrypt runs before the write lock is taken, like register.
-        new_hash = password_hash(data.password)
-        with connect(path) as db:
-            db.begin_immediate()
-            found = db.find_user(data.username)
-            hashes = db.recovery_hashes(found[0]) if found is not None else []
-            real = set(hashes)
-            padded = list(hashes)
-            while len(padded) < RECOVERY_CODE_COUNT:
-                padded.append(dummy)
-            matched = None
-            for stored in padded:
-                if recovery_code_matches(data.code, stored):
-                    matched = stored
-            if found is None or matched is None or matched not in real:
-                raise HTTPException(401, RECOVER_WRONG)
-            db.use_recovery_code(found[0], matched)
-            db.rotate_password(found[0], new_hash)
-            token = create_session(db, found[0], data.keep)
-            user_id = found[0]
-            username = found[1]
+        address, now = asked(request)
+        try:
+            user_id, username, token, _ = flexweek_engine.service_recover(
+                store_path, address, now, data.username, data.code, data.password, data.keep
+            )
+        except ServiceRefusal as error:
+            raise refused(error) from None
         session_response(response, token, data.keep)
         return {"id": user_id, "username": username}
 
     @app.get("/api/auth/recovery-status")
     def recovery_status(account: Annotated[dict, Depends(user)]) -> dict:
-        with connect(path) as db:
-            remaining = db.count_recovery_codes(account["id"])
-        return {"remaining": remaining}
+        return {"remaining": flexweek_engine.service_recovery_codes_left(store_path, account["id"])}
 
     @app.post("/api/auth/recovery-codes")
     def refresh_recovery_codes(
         data: PasswordConfirm, request: Request, account: Annotated[dict, Depends(user)]
     ) -> dict:
-        deny_if_throttled(request, account["username"])
-        codes = generate_recovery_codes()
-        with connect(path) as db:
-            db.begin_immediate()
-            require_password(db, account["id"], data.password)
-            replace_recovery_codes(db, account["id"], codes)
+        address, now = asked(request)
+        try:
+            codes = flexweek_engine.service_renew_recovery_codes(
+                store_path, address, now, account["id"], account["username"], data.password
+            )
+        except ServiceRefusal as error:
+            raise refused(error) from None
         return {"recovery_codes": codes, "remaining": len(codes)}
 
     @app.post("/api/auth/password")
     def change_password(
         data: PasswordChange, request: Request, response: Response, account: Annotated[dict, Depends(user)]
     ) -> dict:
-        deny_if_throttled(request, account["username"])
-        new_hash = password_hash(data.new_password)
-        with connect(path) as db:
-            db.begin_immediate()
-            require_password(db, account["id"], data.current_password)
-            if data.new_password == data.current_password:
-                raise HTTPException(422, PASSWORD_SAME)
-            db.rotate_password(account["id"], new_hash)
-            token = create_session(db, account["id"])
+        address, now = asked(request)
+        try:
+            token = flexweek_engine.service_change_password(
+                store_path,
+                address,
+                now,
+                account["id"],
+                account["username"],
+                data.current_password,
+                data.new_password,
+            )
+        except ServiceRefusal as error:
+            raise refused(error) from None
         session_response(response, token)
         return {"id": account["id"], "username": account["username"]}
 
@@ -1323,73 +1215,37 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
     def remove_account(
         data: PasswordConfirm, request: Request, response: Response, account: Annotated[dict, Depends(user)]
     ) -> None:
-        deny_if_throttled(request, account["username"])
-        with connect(path) as db:
-            db.begin_immediate()
-            require_password(db, account["id"], data.password)
-            delete_account(db, account["id"])
+        address, now = asked(request)
+        try:
+            flexweek_engine.service_delete_account(
+                store_path, address, now, account["id"], account["username"], data.password
+            )
+        except ServiceRefusal as error:
+            raise refused(error) from None
         response.delete_cookie(COOKIE, path="/", httponly=True, secure=secure, samesite="strict")
+
+    def served(call, *args) -> dict:  # type: ignore[no-untyped-def]
+        """One read from the Rust service; a refusal is its answer with Python's sentence."""
+        try:
+            answer: dict = json.loads(call(store_path, *args))
+        except ServiceRefusal as error:
+            raise refused(error) from None
+        return answer
 
     @app.get("/api/week")
     def get_week(account: Annotated[dict, Depends(user)], week_start: str | None = None) -> dict:
         start = week_start if week_start is not None else current_week_start()
-        parts = shown_parts_of(start)
-        if parts is not None:
-            with connect(path) as db:
-                # Both stored weeks and their parts come from one snapshot: a commit between the reads
-                # would pair blocks of one revision with `stored` of another.
-                db.begin()
-                return shown_week_view(db, account["id"], start, parts)
-        if not is_week_start(start):
-            raise HTTPException(422, WEEK_START_RULE)
-        with connect(path) as db:
-            row = db.read_week(account["id"], start)
-            blocks = week_with_standing(db, account["id"], start, row[0] if row else None)
-            owned = load_assignment_bodies(
-                db,
-                account["id"],
-                {block["assignment_id"] for block in blocks if block.get("assignment_id")},
-            )
-            repeats = json.loads(db.standing_blocks(account["id"], start))
-        # A week nobody has saved yet is empty, not missing: the client needs no create-then-fetch.
-        answer = {
-            "week_start": start,
-            "blocks": rewrite_stored_blocks(blocks, owned),
-            "revision": row[1] if row else 0,
-        }
-        if repeats:
-            # School and the activities as they stand that week, for the forms that change every week;
-            # `blocks` is what the week shows, its own changes included. Absent when nothing repeats.
-            answer["repeats"] = repeats
-        return answer
+        return served(flexweek_engine.service_read_week, account["id"], start)
 
     @app.get("/api/weeks")
     def get_weeks(account: Annotated[dict, Depends(user)]) -> dict:
-        with connect(path) as db:
-            weeks = db.week_starts(account["id"])
-        return {"weeks": weeks}
+        return served(flexweek_engine.service_list_weeks, account["id"])
 
     @app.get("/api/day")
     def get_day(account: Annotated[dict, Depends(user)], date: str | None = None) -> dict:
-        if date is None or not is_calendar_date(date):
+        if date is None:
             raise HTTPException(422, DATE_RULE)
-        week_start = monday_of(date)
-        with connect(path) as db:
-            blocks = week_with_standing(
-                db, account["id"], week_start, db.week_blocks(account["id"], week_start)
-            )
-            owned = load_assignment_bodies(
-                db,
-                account["id"],
-                {block["assignment_id"] for block in blocks if block.get("assignment_id")},
-            )
-            assignment_rows = [
-                (json.loads(body), int(revision)) for body, revision in db.assignment_bodies(account["id"])
-            ]
-            weeks = list_account_weeks(db, account["id"])
-        return build_day(
-            date, week_start, rewrite_stored_blocks(blocks, owned), assignment_rows, weeks, naive_now()
-        )
+        return served(flexweek_engine.service_day, account["id"], date, naive_now())
 
     @app.get("/api/month")
     def get_month(
@@ -1398,14 +1254,9 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         first_day: Annotated[int, Query(ge=0, le=6)] = 0,
     ) -> dict:
         """`first_day` is the day the rows start on (0 Monday to 6 Sunday), as the computer shows it."""
-        if month is None or not is_month_label(month):
+        if month is None:
             raise HTTPException(422, MONTH_RULE)
-        with connect(path) as db:
-            assignment_rows = [
-                (json.loads(body), int(revision)) for body, revision in db.assignment_bodies(account["id"])
-            ]
-            weeks = month_weeks(db, account["id"], month, first_day)
-        return build_month(month, assignment_rows, weeks, first_day, naive_now())
+        return served(flexweek_engine.service_month, account["id"], month, first_day, naive_now())
 
     @app.put("/api/week")
     def put_week(week: SavedWeek, account: Annotated[dict, Depends(user)]) -> dict:
@@ -1424,35 +1275,10 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         week_start: str | None = None,
         include_completed: bool = False,
     ) -> dict:
-        if week_start is None or not (is_week_start(week_start) or is_calendar_date(week_start)):
+        if week_start is None:
             raise HTTPException(422, WEEK_START_RULE)
-        with connect(path) as db:
-            rows = db.list_assignment_rows(account["id"])
-            weeks = list_account_weeks(db, account["id"])
-        if is_week_start(week_start):
-            planned_by_id = planned_minutes_by_id(weeks, week_start, naive_now())
-        else:
-            # A week on screen from another day: the minutes from its first day on.
-            planned_by_id = planned_minutes_from_day(weeks, week_start, naive_now())
-        done_by_id = done_minutes_by_id(weeks)
-        session_weeks_by_id: dict[str, set[str]] = {}
-        for saved_week, blocks in weeks:
-            for block in blocks:
-                assignment_id = block.get("assignment_id")
-                if assignment_id:
-                    session_weeks_by_id.setdefault(assignment_id, set()).add(saved_week)
-        items = []
-        for row_id, row_body, row_revision in rows:
-            body = json.loads(row_body)
-            if body["completed"] and not include_completed:
-                continue
-            item = assignment_view(
-                body, row_revision, planned_by_id.get(row_id, 0), done_by_id.get(row_id, 0)
-            )
-            item["session_weeks"] = sorted(session_weeks_by_id.get(row_id, set()))
-            items.append(item)
-        items.sort(key=lambda item: due_sort_key(item["due"], item["id"]))
-        return {"assignments": items}
+        listed = flexweek_engine.service_homework
+        return served(listed, account["id"], week_start, include_completed, naive_now())
 
     @app.put("/api/assignments/{assignment_id}")
     def put_assignment(
@@ -1501,9 +1327,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
     ) -> dict:
         if revision is None:
             raise HTTPException(422, "revision is required")
-        with connect(path) as db:
-            db.begin_immediate()
-            return delete_assignment(db, account["id"], assignment_id, revision)
+        return served(flexweek_engine.service_delete_homework, account["id"], assignment_id, revision)
 
     @app.post("/api/repeat-edits")
     def post_repeat_edits(body: RepeatPreviewRequest, account: Annotated[dict, Depends(user)]) -> dict:
@@ -1618,21 +1442,15 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.get("/api/preferences")
     def get_preferences(account: Annotated[dict, Depends(user)]) -> dict:
-        with connect(path) as db:
-            raw = db.preference_row(account["id"])
-        assert raw is not None
-        return preferences_from_row(json.loads(raw))
+        return served(flexweek_engine.service_read_preferences, account["id"])
 
     @app.put("/api/preferences")
-    def put_preferences(preferences: Preferences, account: Annotated[dict, Depends(user)]) -> dict:
-        with connect(path) as db:
-            return write_preferences(db, account["id"], preferences)
+    def put_preferences(given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]) -> dict:
+        return served(flexweek_engine.service_write_preferences, account["id"], json.dumps(given))
 
     @app.get("/api/routines")
     def get_routines(account: Annotated[dict, Depends(user)]) -> dict:
-        with connect(path) as db:
-            rows = json.loads(db.list_routines(account["id"]))
-        return {"routines": [routine_view(row) for row in rows]}
+        return served(flexweek_engine.service_routines, account["id"])
 
     @app.put("/api/routines/{routine_id}")
     def put_routine(routine_id: str, payload: Routine, account: Annotated[dict, Depends(user)]) -> dict:
@@ -1651,17 +1469,8 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
     ) -> dict:
         if revision is None:
             raise HTTPException(422, "revision is required")
-        digest_value = payload_digest({"id": routine_id, "revision": revision, "op": "delete"})
-        with connect(path) as db:
-            db.begin_immediate()
-            if operation_id is not None:
-                remembered = recall_operation(db, account["id"], operation_id, digest_value)
-                if remembered is not None:
-                    return remembered
-            result = delete_routine(db, account["id"], routine_id, revision)
-            if operation_id is not None:
-                remember_operation(db, account["id"], operation_id, digest_value, result)
-        return result
+        deleting = flexweek_engine.service_delete_routine
+        return served(deleting, account["id"], routine_id, revision, operation_id)
 
     @app.get("/api/storage-info")
     def get_storage_info(account: Annotated[dict, Depends(user)]) -> dict:
@@ -1743,76 +1552,35 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.post("/api/timer-split-preview")
     def post_timer_split_preview(
-        payload: TimerSplitRequest, _account: Annotated[dict, Depends(user)]
+        given: Annotated[dict, Body()], _account: Annotated[dict, Depends(user)]
     ) -> dict:
-        return preview_split(
-            duration_min=payload.duration_min,
-            timer_work_min=payload.timer_work_min,
-            timer_break_min=payload.timer_break_min,
-            timer_long_break_min=payload.timer_long_break_min,
-            timer_long_break_every=payload.timer_long_break_every,
-        )
+        try:
+            answer: dict = json.loads(flexweek_engine.service_split_preview(json.dumps(given)))
+        except ServiceRefusal as error:
+            raise refused(error) from None
+        return answer
 
     @app.get("/api/restore-points")
     def get_restore_points(account: Annotated[dict, Depends(user)]) -> dict:
-        with connect(path) as db:
-            rows = json.loads(db.list_restore_points(account["id"]))
-        return {"restore_points": [restore_point_view(row) for row in rows]}
+        return served(flexweek_engine.service_restore_points, account["id"])
 
     @app.post("/api/restore-points")
-    def post_restore_point(payload: RestoreCreate, account: Annotated[dict, Depends(user)]) -> dict:
-        digest_value = payload_digest(payload.model_dump())
-        with connect(path) as db:
-            db.begin_immediate()
-            remembered = recall_operation(db, account["id"], payload.operation_id, digest_value)
-            if remembered is not None:
-                return remembered
-            result = insert_restore_point(db, account["id"], payload.label)
-            remember_operation(db, account["id"], payload.operation_id, digest_value, result)
-        return result
+    def post_restore_point(given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]) -> dict:
+        made = flexweek_engine.service_create_restore_point
+        return served(made, account["id"], json.dumps(given), secrets.token_hex(8), naive_now())
 
     @app.get("/api/restore-points/{point_id}/preview")
     def preview_restore_point(point_id: str, account: Annotated[dict, Depends(user)]) -> dict:
-        with connect(path) as db:
-            row = db.restore_point_body(account["id"], point_id)
-            if row is None:
-                raise HTTPException(404, RESTORE_UNKNOWN)
-            current = capture_account(db, account["id"])
-        stored = json.loads(row[1])
-        return {
-            "id": row[0],
-            "state_token": state_token(current),
-            "changes": diff_snapshots(current, stored),
-        }
+        return served(flexweek_engine.service_restore_preview, account["id"], point_id)
 
     @app.post("/api/restore-points/{point_id}/restore")
     def restore_restore_point(
-        point_id: str, payload: RestoreApply, account: Annotated[dict, Depends(user)]
+        point_id: str, given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]
     ) -> dict:
-        digest_value = payload_digest({"id": point_id, **payload.model_dump()})
-        with connect(path) as db:
-            db.begin_immediate()
-            remembered = recall_operation(db, account["id"], payload.operation_id, digest_value)
-            if remembered is not None:
-                return remembered
-            row = db.restore_point_body(account["id"], point_id)
-            if row is None:
-                raise HTTPException(404, RESTORE_UNKNOWN)
-            current = capture_account(db, account["id"])
-            if payload.state_token != state_token(current):
-                raise HTTPException(409, RESTORE_STALE)
-            stored = json.loads(row[1])
-            stamp = naive_now()
-            recovery = insert_restore_point(
-                db, account["id"], f"Before restore — {stamp}", keep_ids={point_id}
-            )
-            replaced = replace_account(db, account["id"], stored)
-            # A point made before 0.19.0 has no standing week, so the current one stays.
-            if "standing" in stored:
-                db.replace_standing(account["id"], json.dumps(stored["standing"]))
-            result = {"id": point_id, "recovery_id": recovery["id"], **replaced}
-            remember_operation(db, account["id"], payload.operation_id, digest_value, result)
-        return result
+        restored = flexweek_engine.service_restore
+        return served(
+            restored, account["id"], point_id, json.dumps(given), secrets.token_hex(8), naive_now()
+        )
 
     @app.post("/api/solve")
     def post_solve(week: SolveRequest, account: Annotated[dict, Depends(user)]) -> dict:

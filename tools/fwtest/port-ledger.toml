@@ -1,0 +1,136 @@
+# The port ledger (2.0.0, Rust approved 2026-11-21). A Python test file (test_*.py or *_test.py
+# under backend/tests/, desktop/tests/, scripts/rig/ or scripts/pictures/) is deleted only with a row
+# here naming the Rust tests that replace it and how they were seen to fail (the rule broken by hand,
+# or the mutation case that turned them red). `fwtest gate` refuses a deleted Python test file without
+# a row, and a deleted ledger.
+#
+# [[port]]
+# python = "desktop/tests/week/test_week_zoom.py"
+# rust = ["flexweek-app::week::zoom_keeps_the_top_time"]
+# red = "zoom's clamp removed by hand: zoom_keeps_the_top_time failed"
+
+[[port]]
+python = "backend/tests/test_sign_in_during_a_password_change.py"
+rust = [
+    "flexweek-service::accounts::tests::a_sign_in_checked_against_the_old_password_gets_no_session_after_a_change",
+    "flexweek-service::accounts::tests::a_sign_in_checked_against_the_old_password_gets_no_session_after_a_recovery",
+]
+red = "dropping login's password re-check under the write lock fails both (2026-11-22)"
+
+[[port]]
+python = "backend/tests/test_appearance_preferences.py"
+rust = [
+    "flexweek-service::appearance_preferences::a_new_account_answers_the_defaults_without_the_appearance_or_setup_fields",
+    "flexweek-service::appearance_preferences::an_older_app_saving_only_the_basics_still_gets_no_appearance_fields",
+    "flexweek-service::appearance_preferences::an_unknown_field_an_accent_outside_the_set_and_an_unknown_motion_are_refused",
+    "flexweek-service::appearance_preferences::appearance_fields_are_kept_and_going_back_to_the_defaults_drops_them",
+    "flexweek-service::appearance_preferences::normal_motion_chosen_on_purpose_and_reduce_motion_are_kept",
+    "flexweek-service::appearance_preferences::a_theme_pack_keeps_the_theme_on_its_own_light_or_dark_side",
+    "flexweek-service::appearance_preferences::the_alarm_tone_planning_style_time_step_and_setup_progress_are_kept",
+    "flexweek-service::appearance_preferences::a_chosen_5_minute_step_is_kept_and_15_stays_off_the_answer",
+    "flexweek-service::appearance_preferences::a_setup_preference_outside_its_values_is_refused",
+    "flexweek-service::appearance_preferences::the_clock_is_12_hour_unless_chosen_and_a_value_that_is_not_true_or_false_is_refused",
+]
+red = "mutation case motion.json 'the server turns Reduce away' fails the reduce-motion test; the theme-pack axis check removed fails the pack test; a 12-hour clock put on the answer fails four (2026-11-22)"
+
+[[port]]
+python = "backend/tests/test_focus_audio.py"
+rust = [
+    "flexweek-service::focus_audio_preferences::off_stays_off_the_answer_and_a_chosen_sound_is_kept",
+    "flexweek-service::focus_audio_preferences::each_ambient_sound_is_kept",
+    "flexweek-service::focus_audio_preferences::the_focus_rules_default_to_mute_on_and_complete_off_and_a_choice_is_kept",
+]
+red = "a chosen mute-off left off the answer fails the focus-rules test (2026-11-22)"
+
+[[port]]
+python = "backend/tests/test_weekend_preferences.py"
+rust = [
+    "flexweek-service::weekend_preferences::weekends_are_kept_in_their_column_and_a_refused_write_keeps_the_choice",
+    "flexweek-service::weekend_preferences::a_weekend_value_left_in_the_comfort_settings_does_not_override_the_column",
+    "flexweek-service::weekend_preferences::the_column_hides_weekends_even_when_the_comfort_settings_say_otherwise",
+]
+red = "show_weekends always written as 1 to its column fails the round-trip test (2026-11-22)"
+
+[[port]]
+python = "backend/tests/test_reminders_default.py"
+rust = [
+    "flexweek-service::reminders_default::a_new_account_has_reminders_on",
+    "flexweek-service::reminders_default::a_preferences_save_without_the_switch_leaves_reminders_on",
+    "flexweek-service::reminders_default::accounts_from_0_14_are_turned_on_once_and_a_later_choice_stands",
+    "flexweek-service::reminders_default::an_account_made_after_the_update_is_never_turned_on_again",
+]
+red = "the 0.15 migration run on every open fails the two upgrade tests; a new account's row made with reminders off fails the new-account tests (2026-11-22)"
+
+[[port]]
+python = "backend/tests/test_day_endpoint.py"
+rust = [
+    "flexweek-service::day_view::an_empty_day_asks_to_add_and_has_the_whole_day_free",
+    "flexweek-service::day_view::school_and_a_finished_session_leave_the_rest_of_the_day_free",
+    "flexweek-service::day_view::due_tomorrow_asks_to_plan_and_due_in_three_days_does_not",
+    "flexweek-service::day_view::a_placed_unfinished_session_is_the_next_thing_to_start",
+    "flexweek-service::day_view::overdue_open_homework_is_due_soon",
+    "flexweek-service::day_view::a_malformed_or_out_of_range_date_is_refused",
+    "flexweek-service::day_view::the_first_calendar_dates_use_the_single_lower_edge_week",
+    "flexweek-service::day_view::a_day_does_not_show_another_accounts_week",
+    "flexweek-service::day_view::a_finished_session_counts_only_on_the_day_it_was_finished",
+    "flexweek-service::day_view::a_finished_session_with_no_named_day_counts_nowhere",
+    "flexweek-service::day_view::an_unfinished_session_is_offered_on_every_day_it_could_go",
+    "flexweek-service::day_view::only_homework_with_a_time_counts_as_planned",
+    "flexweek-service::day_view::a_due_with_no_time_sorts_after_a_morning_due_the_same_day",
+    "flexweek-service::day_view::work_finished_without_a_time_still_counts_as_planned_that_day",
+    "flexweek-service::day_view::due_soon_counts_a_session_still_ahead_in_an_earlier_week_and_not_one_that_passed",
+]
+red = "build_day showing a finished session on every candidate day fails two; due soon reaching three days ahead fails the due-tomorrow test (2026-11-22). The route-only checks stay in Python: signed out (test_every_private_route_answers_401_without_a_session) and no date (test_the_day_answer_needs_a_date)"
+
+[[port]]
+python = "backend/tests/test_month_endpoint.py"
+rust = [
+    "flexweek-service::month_view::an_empty_september_is_a_five_week_grid",
+    "flexweek-service::month_view::a_school_week_fills_only_that_monday_to_friday",
+    "flexweek-service::month_view::open_homework_due_in_the_month_is_a_deadline_not_a_project",
+    "flexweek-service::month_view::notes_make_the_same_homework_a_project",
+    "flexweek-service::month_view::two_placed_session_dates_make_a_project_without_notes",
+    "flexweek-service::month_view::a_finished_session_counts_only_on_its_finished_day",
+    "flexweek-service::month_view::open_work_with_several_possible_days_is_unscheduled",
+    "flexweek-service::month_view::a_session_with_one_possible_day_and_no_time_is_unscheduled",
+    "flexweek-service::month_view::a_planned_session_is_scheduled_work_on_its_day",
+    "flexweek-service::month_view::overdue_open_homework_is_not_a_deadline_of_the_month",
+    "flexweek-service::month_view::a_finished_deadline_stays_on_its_date",
+    "flexweek-service::month_view::finished_homework_due_before_the_grid_is_not_overdue",
+    "flexweek-service::month_view::timer_work_chunks_count_as_sessions_and_breaks_as_fixed_blocks",
+    "flexweek-service::month_view::a_month_label_that_is_not_ascii_yyyy_mm_in_range_is_refused",
+    "flexweek-service::month_view::a_first_day_past_sunday_is_refused",
+    "flexweek-service::month_view::a_month_does_not_show_another_accounts_work",
+    "flexweek-service::month_view::january_2000_starts_its_grid_on_the_first",
+    "flexweek-service::month_view::december_2099_ends_its_grid_on_the_31st",
+    "flexweek-service::month_view::a_deadline_with_no_time_sorts_after_a_morning_one_on_the_same_date",
+    "flexweek-service::month_view::blank_notes_do_not_make_a_deadline_a_project",
+    "flexweek-service::month_view::a_repeating_block_shows_on_each_of_its_dates_with_the_same_id",
+    "flexweek-service::month_view::pinned_homework_shows_with_its_homework_id",
+    "flexweek-service::month_view::blocks_on_a_date_are_in_start_then_title_order",
+    "flexweek-service::month_view::a_block_on_the_last_sunday_and_one_on_the_next_months_first_monday_stay_on_their_dates",
+    "flexweek-service::month_view::a_busy_month_stays_a_compact_read",
+    "flexweek-service::month_view::rows_start_on_the_first_day_asked_for_and_carry_their_weeks",
+]
+red = "blank notes counted as notes, chips ordered by start alone, and two session dates no longer a project each fail their test (2026-11-22). The route-only checks stay in Python: signed out (test_every_private_route_answers_401_without_a_session), no month and a first day of -1 or 7 (test_the_month_answer_needs_a_month_and_a_first_day_from_monday_to_sunday)"
+
+[[port]]
+python = "backend/tests/test_session_lifetime.py"
+rust = [
+    "flexweek-service::session_lifetime::a_ticked_session_is_stored_for_thirty_days_and_an_unticked_one_for_seven",
+    "flexweek-service::session_lifetime::a_ticked_session_is_open_on_day_29_and_ended_on_day_31",
+    "flexweek-service::session_lifetime::an_unticked_session_left_alone_has_ended_on_day_8",
+    "flexweek-service::session_lifetime::an_unticked_session_used_on_day_6_is_still_open_on_day_12",
+    "flexweek-service::session_lifetime::a_session_row_with_no_length_is_renewed_for_seven_days",
+    "flexweek-service::session_lifetime::a_session_row_with_no_length_left_alone_has_ended_on_day_8",
+    "flexweek-service::accounts::a_wrong_password_and_an_unknown_name_get_the_same_words",
+]
+red = "no renewal on use fails the day-12 test; a row with no length renewed for thirty days fails the renewed-for-seven test (the Python original could not see that break: it never used the session) (2026-11-22). The cookie's age is the route's: test_the_cookie_lasts_as_long_as_the_stored_session in test_session_cookie_and_request_checks.py, red with the cookie always a week"
+
+[[port]]
+python = "backend/tests/test_delete_account.py"
+rust = [
+    "flexweek-service::delete_account::deleting_an_account_removes_all_of_its_rows_and_only_its_rows",
+    "flexweek-service::delete_account::deleting_asks_for_the_accounts_own_password_and_frees_the_name_for_an_empty_account",
+]
+red = "routines left out of the store's account tables fails both (the user row cannot go); deleting every account's rows fails both (2026-11-22). The route's own answers (401 for a wrong password, 204, the cookie ending) moved to test_deleting_the_account_answers_204_and_its_cookie_stops_working in test_session_cookie_and_request_checks.py, red with the status set to 200"

@@ -39,6 +39,7 @@ fwtest mutate [SPEC.json ...] [--case NAME] [--engine-build COMMAND] [--no-engin
 fwtest rig [--server kwin|xvfb|auto] [ARGS FOR scripts/rig/drive.py ...]
 fwtest run [--timeout SECONDS] [--touched [--base REF | --paths-from FILE]] -- COMMAND [ARGS ...]
 fwtest flaky [--log FILE]
+fwtest upgrade --old OLD.tar.gz --new NEW.tar.gz --home HOME --expect SEEDED.json --work DIR
 fwtest pictures render|compare|page|annotate|clips ...
 fwtest clean
 ```
@@ -49,8 +50,12 @@ fwtest clean
   skipping any value of all zeroes. Before the Python behavior step, the gate checks every case in
   `scripts/mutations/` that its `old` text occurs exactly once and that its `test` exists (a Python
   `path::function`, or a Rust `cargo:` test in an `engine/**/tests/` file). A miss fails the gate
-  before any tests run. pytest gets `-n N` where N is `--workers`, or half the cores
-  and at least 2. It prints `VERIFIED: Backend and desktop. Packaged binaries and other platforms
+  before any tests run. It then checks the port ledger (2.0.0, Rust approved 2026-11-21): a Python test
+  file (`test_*.py` or `*_test.py` under `backend/tests/`, `desktop/tests/`, `scripts/rig/` or
+  `scripts/pictures/`) that exists where the branch left the diff base and is no longer tracked here
+  needs a row in `tools/fwtest/port-ledger.toml` naming the Rust tests that replace it (`rust`) and how
+  they were seen to fail (`red`); a deleted file without one, or a deleted ledger, fails the gate. pytest gets `-n N`
+  where N is `--workers`, or half the cores and at least 2. It prints `VERIFIED: Backend and desktop. Packaged binaries and other platforms
   need separate checks.` (or `VERIFIED: Backend.` with `--backend-only`) only when every step
   passed, as `verify.py` does. The per-step timeout is 2400 seconds; the desktop suite takes about
   15 minutes on 3 workers. pytest also gets `--junitxml` and `-o junit_family=xunit1`, so a failed
@@ -101,6 +106,20 @@ fwtest clean
 - `flaky` summarises the flaky-test log: one entry per test, most often logged first, then the most
   recent, with the last date, commit, where it ran and the first line of how it failed. `--log`
   reads another file, for example a log downloaded from a CI run.
+- `upgrade` is the Linux tarball row of the 2.0.0 upgrade test. It checks both tarballs against the
+  `.sha256` beside them, unpacks the old one into `DIR/install` (refusing one not laid out as
+  `FlexWeek/app/FlexWeek`), then swaps in the new one as 1.x's updater does (`desktop/native/updater.py`,
+  `_swap_tree` and `_safe_extract`: refuse an install holding `flexweek.db` or a parent this process can't
+  write to, unpack beside it, refuse a link that points outside, take the first folder in directory
+  order, move the old one aside, move the new one in, put the old one back if that fails, tidy up). It
+  starts the new `FlexWeek` launcher with `--upgrade-check` and `HOME` set to `HOME` (no `XDG_DATA_HOME`
+  or `XDG_CONFIG_HOME`), and compares the report with `SEEDED.json`, which must give every one of
+  `data_dir`, `username`, `weeks`, `homework`, `routines`, `restore_points`, `standing_blocks`, `phones`,
+  `alarms`, `week_starts_on`, `device_key`, `look_preset`, `look_keys` and `login_command`; it also needs the kept
+  sign-in found and the install's shape: the launcher, `app/FlexWeek` and `app/flexweek-mcp` present,
+  nothing left beside it. Counts are compared, not the rows themselves. It prints one `FAIL:`
+  line per difference and exits 1, or `PASS:` and 0. It runs no Python and no job, so it does not run
+  `clean` first. Seeding `HOME` is not part of it.
 - `pictures` draws the Material app's screens, compares two drawings, records Material flows as clips,
   asks a reviewer and builds the review page. See [Pictures](#pictures).
 - `clean` stops every process recorded by a job that is no longer running. It also stops a hidden
@@ -216,7 +235,7 @@ the log cannot name the tests that shared its worker.
 |---|---|---|
 | `engine` | builds the engine wheel and fwtest once | 1 |
 | `verify-engine` | fwtest's and the engine's `cargo fmt --check`, `clippy -D warnings`, `cargo test` | 1 |
-| `verify-python` | `fwtest gate --backend-only`: lint, types, mutation patterns, backend tests, diff checks | 1 |
+| `verify-python` | `fwtest gate --backend-only`: lint, types, mutation patterns, the port ledger, backend tests, diff checks | 1 |
 | `desktop` | every test file under `desktop/tests` and `scripts/rig`, offscreen, through `fwtest run` | 4 |
 | `rig` | the real-pointer rig playing Material, Day (`material-day-light.json`) and Week (`material-light.json`), under Xvfb; a step that is NOT DONE fails the job | 2 |
 | `mutate` | the mutation cases under `engine/` (pull requests and by hand) | 4 |

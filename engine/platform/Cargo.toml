@@ -1,0 +1,10 @@
+[package]
+name = "flexweek-platform"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+flexweek-store = { path = "../store" }
+serde_json = "1.0.145"

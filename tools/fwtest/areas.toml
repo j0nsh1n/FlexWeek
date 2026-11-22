@@ -111,7 +111,16 @@ cargo = { dir = "tools/fwtest", packages = ["fwtest"] }
 name = "engine"
 cargo = { dir = "engine", packages = [
   "flexweek-engine", "flexweek-store", "flexweek-py", "flexweek-sync", "flexweek-ffi",
-  "flexweek-mcp", "uniffi-bindgen",
+  "flexweek-mcp", "uniffi-bindgen", "flexweek-service", "flexweek-app", "flexweek-platform",
+  "flexweek-testkit",
+] }
+
+# The 2.0.0 desktop crates (Rust approved 2026-11-21): the server's rules, the app core, the
+# operating-system pieces and test support.
+[[area]]
+name = "engine-desktop"
+cargo = { dir = "engine", packages = [
+  "flexweek-service", "flexweek-app", "flexweek-platform", "flexweek-testkit",
 ] }
 
 [[area]]
@@ -423,6 +432,15 @@ areas = ["engine-ffi"]
 [[rule]]
 paths = ["engine/tools/", "engine/clippy.toml"]
 areas = ["engine"]
+
+# The assistant helper finds the data folder and the kept sign-in through flexweek-platform.
+[[rule]]
+paths = ["engine/platform/"]
+areas = ["engine-desktop", "engine-mcp", "updater"]
+
+[[rule]]
+paths = ["engine/service/", "engine/app/", "engine/testkit/"]
+areas = ["engine-desktop"]
 
 # --- The rig and the harness.
 [[rule]]

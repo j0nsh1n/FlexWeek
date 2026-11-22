@@ -1,4 +1,5 @@
-//! Read assembly the HTTP routes still do in Python (`month_weeks`, the day, the homework list).
+//! Read assembly for the Month and homework-list answers (the service crate serves both; the assistant
+//! helper reads them too).
 //!
 //! `rewrite_stored_blocks` is called with an identity normalizer. The pydantic pass that fills
 //! TimeBlock defaults is a later slice and lives in the engine, which this lane does not change.
@@ -9,6 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use flexweek_engine::model::due_sort_key;
 use flexweek_engine::plan::{
     Moment, build_day, build_month_from, done_minutes_by_id, planned_minutes_by_id,
+    planned_minutes_from_day,
 };
 use flexweek_engine::time::{
     is_calendar_date, is_month_label, is_week_start, monday_of, month_grid_from, parse_month,
@@ -120,12 +122,17 @@ pub fn homework_list(
     include_completed: bool,
     now: Option<Moment>,
 ) -> StoreResult<Value> {
-    if !is_week_start(week_start) {
+    if !(is_week_start(week_start) || is_calendar_date(week_start)) {
         return Err(StoreError::Date(WEEK_START_RULE.into()));
     }
     let rows = list_assignment_rows(conn, user_id)?;
     let weeks = raw_weeks(conn, user_id)?;
-    let planned = planned_minutes_by_id(&weeks, week_start, now);
+    // A week on screen from another day than Monday counts the minutes from its first day on.
+    let planned = if is_week_start(week_start) {
+        planned_minutes_by_id(&weeks, week_start, now)
+    } else {
+        planned_minutes_from_day(&weeks, week_start, now)?
+    };
     let done = done_minutes_by_id(&weeks);
     let mut session_weeks: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for (saved_week, blocks) in &weeks {

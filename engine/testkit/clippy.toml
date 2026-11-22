@@ -1,0 +1,16 @@
+# Clippy reads this file before engine/clippy.toml, so it repeats that file's rules and adds the clock
+# rule: this crate takes the time as an argument, so a test can set it (2.0.0 plan, section 4).
+disallowed-methods = [
+    { path = "serde_json::Map::remove", reason = "with preserve_order it moves the last key into the gap; Python's dict.pop keeps the order, as shift_remove does", allow-invalid = true },
+    { path = "serde_json::Map::remove_entry", reason = "with preserve_order it moves the last key into the gap; use shift_remove_entry", allow-invalid = true },
+    { path = "serde_json::Map::swap_remove", reason = "moves the last key into the gap; Python's dict.pop keeps the order, as shift_remove does", allow-invalid = true },
+    { path = "std::time::SystemTime::now", reason = "take the time as an argument; only flexweek-platform reads the clock" },
+    { path = "std::time::Instant::now", reason = "take the time as an argument; only flexweek-platform reads the clock" },
+    { path = "chrono::Local::now", reason = "take the time as an argument; only flexweek-platform reads the clock", allow-invalid = true },
+    { path = "chrono::Utc::now", reason = "take the time as an argument; only flexweek-platform reads the clock", allow-invalid = true },
+    { path = "std::time::SystemTime::elapsed", reason = "reads the clock; take the time as an argument" },
+    { path = "std::time::Instant::elapsed", reason = "reads the clock; take the time as an argument" },
+    { path = "chrono::Local::today", reason = "reads the clock; take the time as an argument", allow-invalid = true },
+    { path = "chrono::Utc::today", reason = "reads the clock; take the time as an argument", allow-invalid = true },
+    { path = "tokio::time::Instant::now", reason = "reads the clock; take the time as an argument", allow-invalid = true },
+]

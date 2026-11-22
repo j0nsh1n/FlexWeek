@@ -828,6 +828,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
 
 [[package]]
+name = "flexweek-app"
+version = "0.1.0"
+dependencies = [
+ "flexweek-platform",
+ "flexweek-store",
+ "rusqlite",
+ "serde_json",
+]
+
+[[package]]
 name = "flexweek-engine"
 version = "0.1.0"
 dependencies = [
@@ -859,6 +869,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "flexweek-engine",
+ "flexweek-platform",
  "flexweek-store",
  "flexweek-sync",
  "rmcp",
@@ -868,15 +879,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "flexweek-platform"
+version = "0.1.0"
+dependencies = [
+ "flexweek-store",
+ "serde_json",
+]
+
+[[package]]
 name = "flexweek-py"
 version = "0.1.0"
 dependencies = [
  "flexweek-engine",
+ "flexweek-service",
  "flexweek-store",
  "flexweek-sync",
  "pyo3",
  "rusqlite",
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "flexweek-service"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "flexweek-engine",
+ "flexweek-store",
+ "flexweek-testkit",
+ "rusqlite",
  "serde_json",
 ]
 
@@ -906,6 +938,16 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "tokio",
+]
+
+[[package]]
+name = "flexweek-testkit"
+version = "0.1.0"
+dependencies = [
+ "flexweek-service",
+ "flexweek-store",
+ "rusqlite",
+ "serde_json",
 ]
 
 [[package]]

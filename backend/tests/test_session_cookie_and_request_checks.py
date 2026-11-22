@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Iterator
+from http.cookies import SimpleCookie
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.app import create_app
+from backend.storage import connect, digest
 from backend.tests.account_support import (
     PASSWORD,
     REPLACEMENT,
@@ -66,6 +68,25 @@ def test_the_session_cookie_is_http_only_strict_and_lasts_a_week_over_http(clien
     assert attrs["path"] == "/"
     assert attrs["max-age"] == str(7 * 24 * 60 * 60)
     assert "secure" not in attrs
+
+
+@pytest.mark.parametrize(("endpoint", "keep", "days"), [("register", False, 7), ("login", False, 7), ("login", True, 30)])
+def test_the_cookie_lasts_as_long_as_the_stored_session(
+    client: TestClient, database: Path, clock, endpoint: str, keep: bool, days: int
+) -> None:
+    """Moved here from test_session_lifetime.py, whose other checks are Rust tests now."""
+    opened_at = int(clock())
+    response = register(client, "alice")
+    if endpoint == "login":
+        login = {"username": "alice", "password": PASSWORD, "keep": keep}
+        response = client.post("/api/auth/login", json=login, headers=WRITE)
+    assert response.status_code in (200, 201), response.text
+    cookie = SimpleCookie()
+    cookie.load(response.headers["set-cookie"])
+    token = cookie["flexweek_session"].value
+    with connect(database) as db:
+        expires = db.execute("SELECT expires FROM sessions WHERE token_hash = ?", (digest(token),)).fetchone()[0]
+    assert int(cookie["flexweek_session"]["max-age"]) == expires - opened_at == days * 24 * 60 * 60
 
 
 def test_the_session_cookie_is_secure_over_https(tmp_path: Path) -> None:
@@ -129,6 +150,37 @@ def test_every_private_route_answers_401_without_a_session(client: TestClient) -
     assert client.put("/api/preferences", json=preferences("slate"), headers=WRITE).status_code == 401
     forged = {"Cookie": "flexweek_session=forged-token"}
     assert client.get("/api/auth/me", headers=forged).status_code == 401
+
+
+def test_the_day_answer_needs_a_date(alice: TestClient) -> None:
+    """The route refuses a request with no date before asking the service (moved here from
+    test_day_endpoint.py, whose other checks are Rust tests now)."""
+    missing = alice.get("/api/day")
+    assert (missing.status_code, missing.json()) == (
+        422,
+        {"detail": "date must be YYYY-MM-DD between 2000-01-01 and 2099-12-31"},
+    )
+
+
+def test_the_month_answer_needs_a_month_and_a_first_day_from_monday_to_sunday(alice: TestClient) -> None:
+    """The route's own checks, before it asks the service (moved here from test_month_endpoint.py, whose
+    other checks are Rust tests now)."""
+    missing = alice.get("/api/month")
+    assert (missing.status_code, missing.json()) == (
+        422,
+        {"detail": "month must be YYYY-MM between 2000-01 and 2099-12"},
+    )
+    assert alice.get("/api/month?month=2026-12&first_day=-1").status_code == 422
+    assert alice.get("/api/month?month=2026-12&first_day=7").status_code == 422
+
+
+def test_deleting_the_account_answers_204_and_its_cookie_stops_working(alice: TestClient) -> None:
+    """The route's answer (moved here from test_delete_account.py, whose other checks are Rust tests now)."""
+    wrong = alice.request("DELETE", "/api/auth/account", json={"password": "not-the-password"}, headers=WRITE)
+    assert (wrong.status_code, wrong.json()) == (401, {"detail": "Incorrect password"})
+    removed = alice.request("DELETE", "/api/auth/account", json={"password": PASSWORD}, headers=WRITE)
+    assert removed.status_code == 204, removed.text
+    assert alice.get("/api/auth/me").status_code == 401
 
 
 def test_private_answers_are_marked_not_to_be_cached(alice: TestClient) -> None:

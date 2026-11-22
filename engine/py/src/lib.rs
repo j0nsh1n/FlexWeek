@@ -17,6 +17,7 @@ mod desk_rest;
 mod material;
 mod more;
 mod rest;
+mod service;
 mod sync;
 
 pub(crate) fn raise(err: EngineError) -> PyErr {
@@ -353,6 +354,7 @@ fn flexweek_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     material::add(m)?;
     more::add(m)?;
     rest::add(m)?;
+    service::add(m)?;
     db::add(m)?;
     desk::add(m)?;
     desk_rest::add(m)?;

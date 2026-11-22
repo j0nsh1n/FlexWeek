@@ -1,0 +1,20 @@
+[package]
+name = "flexweek-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+# The name the 1.x updater and installers look for (upgrade.md section 3).
+name = "FlexWeek"
+path = "src/main.rs"
+
+[dependencies]
+flexweek-platform = { path = "../platform" }
+flexweek-store = { path = "../store" }
+rusqlite = { version = "0.37.0", features = ["bundled"] }
+serde_json = "1.0.145"
+
+[dev-dependencies]
+rusqlite = { version = "0.37.0", features = ["bundled"] }
