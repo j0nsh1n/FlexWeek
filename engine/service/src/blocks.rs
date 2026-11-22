@@ -11,9 +11,9 @@ use serde_json::{Map, Number, Value};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BlockRefused(pub String);
 
-type Checked<T> = Result<T, BlockRefused>;
+pub(crate) type Checked<T> = Result<T, BlockRefused>;
 
-fn refuse<T>(why: impl Into<String>) -> Checked<T> {
+pub(crate) fn refuse<T>(why: impl Into<String>) -> Checked<T> {
     Err(BlockRefused(why.into()))
 }
 
@@ -45,7 +45,7 @@ fn int_from_text(text: &str) -> Option<i128> {
     Some(if negative { -value } else { value })
 }
 
-fn whole_number(value: &Value) -> Option<i128> {
+pub(crate) fn whole_number(value: &Value) -> Option<i128> {
     match value {
         Value::Bool(flag) => Some(i128::from(*flag)),
         Value::Number(number) => {
@@ -69,7 +69,7 @@ fn whole_number(value: &Value) -> Option<i128> {
     }
 }
 
-fn int_field(value: &Value, name: &str, low: i128, high: i128) -> Checked<i64> {
+pub(crate) fn int_field(value: &Value, name: &str, low: i128, high: i128) -> Checked<i64> {
     match whole_number(value) {
         Some(int) if (low..=high).contains(&int) => Ok(int as i64),
         _ => refuse(format!(
@@ -78,7 +78,7 @@ fn int_field(value: &Value, name: &str, low: i128, high: i128) -> Checked<i64> {
     }
 }
 
-fn bool_field(value: &Value, name: &str) -> Checked<bool> {
+pub(crate) fn bool_field(value: &Value, name: &str) -> Checked<bool> {
     let read = match value {
         Value::Bool(flag) => Some(*flag),
         Value::Number(number) => match number.as_f64() {
@@ -96,14 +96,14 @@ fn bool_field(value: &Value, name: &str) -> Checked<bool> {
     read.map_or_else(|| refuse(format!("{name} must be true or false")), Ok)
 }
 
-fn text_field(value: &Value, name: &str, low: usize, high: usize) -> Checked<String> {
+pub(crate) fn text_field(value: &Value, name: &str, low: usize, high: usize) -> Checked<String> {
     match value {
         Value::String(text) if (low..=high).contains(&text.chars().count()) => Ok(text.clone()),
         _ => refuse(format!("{name} must be text of {low} to {high} characters")),
     }
 }
 
-fn optional<T>(
+pub(crate) fn optional<T>(
     value: Option<&Value>,
     read: impl FnOnce(&Value) -> Checked<T>,
 ) -> Checked<Option<T>> {
@@ -114,7 +114,7 @@ fn optional<T>(
 }
 
 /// A field with a default that cannot be empty: missing takes the default, but null is refused.
-fn defaulted<T>(
+pub(crate) fn defaulted<T>(
     value: Option<&Value>,
     default: T,
     read: impl FnOnce(&Value) -> Checked<T>,
@@ -125,7 +125,7 @@ fn defaulted<T>(
     }
 }
 
-fn one_of(value: &Value, name: &str, allowed: &[&str]) -> Checked<String> {
+pub(crate) fn one_of(value: &Value, name: &str, allowed: &[&str]) -> Checked<String> {
     match value {
         Value::String(text) if allowed.contains(&text.as_str()) => Ok(text.clone()),
         _ => refuse(format!("{name} must be one of {}", allowed.join(", "))),
