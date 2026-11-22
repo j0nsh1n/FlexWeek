@@ -83,7 +83,6 @@ ASSIGNMENT_LIMIT = "An account holds at most 1000 assignments"
 WEEK_CONFLICT = "This week changed in another window. Reload before saving."
 ROUTINE_CONFLICT = "This routine changed in another window. Reload before saving."
 ROUTINE_LIMIT = "An account holds at most 50 routines"
-ROUTINE_UNKNOWN = "Routine not found"
 RESTORE_UNKNOWN = "Restore point not found"
 RESTORE_STALE = "This preview is out of date. Refresh it before restoring."
 IMPORT_STALE = "This preview is out of date. Refresh it before importing."
@@ -97,7 +96,7 @@ MAX_ASSIGNMENTS = 1000
 MAX_ROUTINES = 50
 MAX_RESTORE_POINTS = 20
 # The answer for each kind of refusal the Rust service gives (flexweek_service::Refusal).
-REFUSAL_STATUS = {"invalid": 422, "unauthorized": 401, "conflict": 409, "too_many": 429}
+REFUSAL_STATUS = {"invalid": 422, "unauthorized": 401, "not_found": 404, "conflict": 409, "too_many": 429}
 MAX_OPERATIONS = 100
 
 
@@ -389,16 +388,6 @@ def remember_operation(
     db.remember_operation(user_id, operation_id, digest_value, canonical(response), MAX_OPERATIONS)
 
 
-def restore_point_view(row: Row) -> dict:
-    return {
-        "id": row["id"],
-        "label": row["label"],
-        "created_at": row["created_at"],
-        "weeks": row["weeks_count"],
-        "assignments": row["assignments_count"],
-    }
-
-
 def insert_restore_point(db: Connection, user_id: int, label: str, keep_ids: set[str] | None = None) -> dict:
     created: dict = json.loads(
         db.create_restore_point(
@@ -463,15 +452,6 @@ def upsert_routine(db: Connection, user_id: int, routine: Routine) -> dict:
     if status == "limit":
         raise HTTPException(422, ROUTINE_LIMIT)
     return routine_view(json.loads(payload))
-
-
-def delete_routine(db: Connection, user_id: int, routine_id: str, revision: int) -> dict:
-    status = db.delete_routine(user_id, routine_id, revision)
-    if status == "missing":
-        raise HTTPException(404, ROUTINE_UNKNOWN)
-    if status == "conflict":
-        raise HTTPException(409, ROUTINE_CONFLICT)
-    return {"id": routine_id}
 
 
 class Credentials(BaseModel):
@@ -583,19 +563,6 @@ class ChangesRequest(BaseModel):
 class RepeatPreviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     repeats: list[dict] = Field(max_length=MAX_REPEAT_CHANGES)
-
-
-class RestoreCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    label: str = Field(min_length=1, max_length=80)
-    operation_id: str = Field(min_length=1, max_length=80)
-
-    @field_validator("label")
-    @classmethod
-    def label_is_not_blank(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("label required")
-        return value
 
 
 class RestoreApply(BaseModel):
@@ -1402,9 +1369,7 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
     ) -> dict:
         if revision is None:
             raise HTTPException(422, "revision is required")
-        with connect(path) as db:
-            db.begin_immediate()
-            return delete_assignment(db, account["id"], assignment_id, revision)
+        return served(flexweek_engine.service_delete_homework, account["id"], assignment_id, revision)
 
     @app.post("/api/repeat-edits")
     def post_repeat_edits(body: RepeatPreviewRequest, account: Annotated[dict, Depends(user)]) -> dict:
@@ -1546,17 +1511,8 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
     ) -> dict:
         if revision is None:
             raise HTTPException(422, "revision is required")
-        digest_value = payload_digest({"id": routine_id, "revision": revision, "op": "delete"})
-        with connect(path) as db:
-            db.begin_immediate()
-            if operation_id is not None:
-                remembered = recall_operation(db, account["id"], operation_id, digest_value)
-                if remembered is not None:
-                    return remembered
-            result = delete_routine(db, account["id"], routine_id, revision)
-            if operation_id is not None:
-                remember_operation(db, account["id"], operation_id, digest_value, result)
-        return result
+        deleting = flexweek_engine.service_delete_routine
+        return served(deleting, account["id"], routine_id, revision, operation_id)
 
     @app.get("/api/storage-info")
     def get_storage_info(account: Annotated[dict, Depends(user)]) -> dict:
@@ -1653,16 +1609,9 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         return served(flexweek_engine.service_restore_points, account["id"])
 
     @app.post("/api/restore-points")
-    def post_restore_point(payload: RestoreCreate, account: Annotated[dict, Depends(user)]) -> dict:
-        digest_value = payload_digest(payload.model_dump())
-        with connect(path) as db:
-            db.begin_immediate()
-            remembered = recall_operation(db, account["id"], payload.operation_id, digest_value)
-            if remembered is not None:
-                return remembered
-            result = insert_restore_point(db, account["id"], payload.label)
-            remember_operation(db, account["id"], payload.operation_id, digest_value, result)
-        return result
+    def post_restore_point(given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]) -> dict:
+        made = flexweek_engine.service_create_restore_point
+        return served(made, account["id"], json.dumps(given), secrets.token_hex(8), naive_now())
 
     @app.get("/api/restore-points/{point_id}/preview")
     def preview_restore_point(point_id: str, account: Annotated[dict, Depends(user)]) -> dict:

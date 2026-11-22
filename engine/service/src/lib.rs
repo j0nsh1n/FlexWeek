@@ -10,15 +10,18 @@ use flexweek_store::{Connection, StoreError};
 pub mod accounts;
 pub mod blocks;
 pub mod preferences;
+pub mod records;
 pub mod views;
 pub mod weeks;
 
 /// A refusal the student is told about, with the words they see. The caller turns its kind into an
-/// answer: `Invalid` 422, `Unauthorized` 401, `Conflict` 409, `TooMany` 429 (retry after 300 s).
+/// answer: `Invalid` 422, `Unauthorized` 401, `NotFound` 404, `Conflict` 409, `TooMany` 429 (retry
+/// after 300 s).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Refusal {
     Invalid(String),
     Unauthorized(String),
+    NotFound(String),
     Conflict(String),
     TooMany(String),
 }
@@ -28,6 +31,7 @@ impl Refusal {
         match self {
             Self::Invalid(words)
             | Self::Unauthorized(words)
+            | Self::NotFound(words)
             | Self::Conflict(words)
             | Self::TooMany(words) => words,
         }

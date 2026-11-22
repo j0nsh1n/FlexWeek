@@ -5,11 +5,11 @@
 use std::path::Path;
 
 use flexweek_service::accounts::{self, Account, Asker, Entropy, SignedIn};
-use flexweek_service::{Refusal, ServiceError, preferences, views, weeks};
+use flexweek_service::{Refusal, ServiceError, preferences, records, views, weeks};
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyRuntimeError};
 use pyo3::prelude::*;
-use pyo3::types::PyModule;
+use pyo3::types::{PyInt, PyModule};
 use serde_json::Value;
 
 use crate::guard;
@@ -22,6 +22,7 @@ fn service_py(py: Python<'_>, error: ServiceError) -> PyErr {
             let kind = match &refusal {
                 Refusal::Invalid(_) => "invalid",
                 Refusal::Unauthorized(_) => "unauthorized",
+                Refusal::NotFound(_) => "not_found",
                 Refusal::Conflict(_) => "conflict",
                 Refusal::TooMany(_) => "too_many",
             };
@@ -409,6 +410,66 @@ fn service_write_preferences(
     })
 }
 
+#[pyfunction]
+fn service_create_restore_point(
+    py: Python<'_>,
+    path: &str,
+    user_id: i64,
+    given: &str,
+    token: &str,
+    now: &str,
+) -> PyResult<String> {
+    guard(|| {
+        let given: Value = serde_json::from_str(given)
+            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        json_text(
+            py,
+            records::create_restore_point(Path::new(path), user_id, &given, token, now),
+        )
+    })
+}
+
+/// A revision as the store reads it: one past 64 bits can match no stored revision.
+fn in_range(revision: &Bound<'_, PyInt>) -> Option<i64> {
+    revision.extract::<i64>().ok()
+}
+
+#[pyfunction]
+#[pyo3(signature = (path, user_id, routine_id, revision, operation_id=None))]
+fn service_delete_routine(
+    py: Python<'_>,
+    path: &str,
+    user_id: i64,
+    routine_id: &str,
+    revision: &Bound<'_, PyInt>,
+    operation_id: Option<&str>,
+) -> PyResult<String> {
+    let revision = in_range(revision);
+    guard(|| {
+        json_text(
+            py,
+            records::delete_routine(Path::new(path), user_id, routine_id, revision, operation_id),
+        )
+    })
+}
+
+#[pyfunction]
+fn service_delete_homework(
+    py: Python<'_>,
+    path: &str,
+    user_id: i64,
+    id: &str,
+    revision: &Bound<'_, PyInt>,
+) -> PyResult<String> {
+    let revision = in_range(revision);
+    guard(|| {
+        json_text(
+            py,
+            records::delete_homework(Path::new(path), user_id, id, revision),
+        )
+    })
+}
+
 pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("ServiceRefusal", module.py().get_type::<ServiceRefusal>())?;
     crate::export!(
@@ -431,6 +492,9 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         service_restore_points,
         service_read_preferences,
         service_write_preferences,
+        service_create_restore_point,
+        service_delete_routine,
+        service_delete_homework,
     );
     Ok(())
 }
