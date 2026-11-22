@@ -294,3 +294,72 @@ fn an_install_whose_folder_cannot_be_written_is_left_alone_with_the_updaters_wor
         "old program"
     );
 }
+
+/// A gzipped tarball whose members are written with the raw names and link targets given, so a test can
+/// make the archives a release must never contain.
+fn crafted(at: &Path, entries: &[(&str, tar::EntryType, &str)]) -> PathBuf {
+    let out = at.join("crafted.tar.gz");
+    let file = std::fs::File::create(&out).unwrap();
+    let mut builder = tar::Builder::new(flate2::write::GzEncoder::new(
+        file,
+        flate2::Compression::default(),
+    ));
+    for (name, kind, link) in entries {
+        let mut header = tar::Header::new_old();
+        header.as_old_mut().name[..name.len()].copy_from_slice(name.as_bytes());
+        header.as_old_mut().linkname[..link.len()].copy_from_slice(link.as_bytes());
+        header.set_entry_type(*kind);
+        header.set_mode(0o755);
+        let body: &[u8] = if kind.is_file() { b"new program" } else { b"" };
+        header.set_size(body.len() as u64);
+        header.set_cksum();
+        builder.append(&header, body).unwrap();
+    }
+    builder.into_inner().unwrap().finish().unwrap();
+    out
+}
+
+#[test]
+fn an_absolute_member_or_a_hard_link_out_of_the_folder_is_refused_before_anything_is_written() {
+    use tar::EntryType;
+    for (case, entries) in [
+        (
+            "absolute",
+            vec![("/tmp/fwtest-absolute-member", EntryType::Regular, "")],
+        ),
+        (
+            "hard link",
+            vec![
+                ("Packaged/app/FlexWeek", EntryType::Regular, ""),
+                (
+                    "Packaged/app/escape",
+                    EntryType::Link,
+                    "../../../../etc/passwd",
+                ),
+            ],
+        ),
+        (
+            "climbs out",
+            vec![("Packaged/../../outside", EntryType::Regular, "")],
+        ),
+    ] {
+        let dir = scratch(&format!("crafted-{}", case.replace(' ', "-")));
+        let root = installed(&dir.0);
+        let archive = crafted(&dir.0, &entries);
+        let refused = swap_tree(&root, &archive).unwrap_err();
+        assert!(refused.contains("outside the folder"), "{case}: {refused}");
+        assert_eq!(
+            std::fs::read_to_string(root.join("app/FlexWeek")).unwrap(),
+            "old program",
+            "{case}"
+        );
+        assert!(
+            !dir.0.join("opt/FlexWeek.update").exists(),
+            "{case}: staging was left"
+        );
+        assert!(
+            !Path::new("/tmp/fwtest-absolute-member").exists(),
+            "{case}: an absolute member was written"
+        );
+    }
+}

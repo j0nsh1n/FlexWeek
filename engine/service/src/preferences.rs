@@ -96,6 +96,12 @@ fn minutes(text: &str) -> i64 {
     clock_to_minutes(text).unwrap_or(-1)
 }
 
+/// The minute of the day `HH:MM` names, read as Python's pattern and `int()` read it; None when it is not
+/// `HH:MM`.
+pub(crate) fn grid_minutes(text: &str) -> Option<i64> {
+    hhmm(text).then(|| minutes(text))
+}
+
 /// A start on the 15-minute grid, as GridWindow and WorkWindow read it.
 fn grid_start(value: &Value) -> Checked<String> {
     let start = text_field(value, "start", 5, 5)?;
@@ -113,11 +119,15 @@ fn grid_start(value: &Value) -> Checked<String> {
 fn grid_window(fields: Fields<'_>) -> Checked<(Vec<i64>, String, i64)> {
     let days = unique_days(required(fields, "days")?, "days")?;
     let start = grid_start(required(fields, "start")?)?;
+    // Both bounds before narrowing: a negative past 64 bits must not wrap into a positive length.
     let duration = match whole_number(required(fields, "duration_min")?) {
-        Some(minutes) if minutes <= 7140 => minutes as i64,
+        Some(minutes) if (1..=7140).contains(&minutes) => minutes as i64,
+        Some(minutes) if minutes <= 7140 => {
+            return refuse("duration_min must be a positive multiple of 15");
+        }
         _ => return refuse("duration_min must be a whole number up to 7140"),
     };
-    if duration <= 0 || !on_slot(duration) {
+    if !on_slot(duration) {
         return refuse("duration_min must be a positive multiple of 15");
     }
     if !span_fits_day(minutes(&start), duration) {
@@ -137,7 +147,7 @@ fn trimmed_subject(value: Option<&Value>) -> Checked<Option<String>> {
     Ok(Some(trimmed))
 }
 
-fn study_window(value: &Value) -> Checked<Value> {
+pub(crate) fn study_window(value: &Value) -> Checked<Value> {
     let fields = object(
         value,
         "a study window",
@@ -155,7 +165,7 @@ fn study_window(value: &Value) -> Checked<Value> {
     Ok(Value::Object(out))
 }
 
-fn work_window(value: &Value) -> Checked<Value> {
+pub(crate) fn work_window(value: &Value) -> Checked<Value> {
     let fields = object(
         value,
         "a study hours window",
@@ -185,7 +195,7 @@ fn work_window(value: &Value) -> Checked<Value> {
     Ok(Value::Object(out))
 }
 
-fn protected_window(value: &Value) -> Checked<Value> {
+pub(crate) fn protected_window(value: &Value) -> Checked<Value> {
     let fields = object(
         value,
         "a protected window",
@@ -860,5 +870,20 @@ mod tests {
             checked >= 400,
             "only {checked} accepted cases carry stored columns"
         );
+    }
+
+    #[test]
+    fn a_negative_length_past_64_bits_is_refused_not_wrapped() {
+        // -(2**64) + 30 would read as 30 if it were narrowed before its lower bound was checked.
+        for duration in [
+            serde_json::json!(-18_446_744_073_709_551_586_i128),
+            serde_json::json!("-18446744073709551586"),
+        ] {
+            let given = serde_json::json!({
+                "theme": "system",
+                "protected": [{ "days": [0], "start": "09:00", "duration_min": duration, "kind": "meal" }],
+            });
+            assert!(check_preferences(&given).is_err(), "{given}");
+        }
     }
 }

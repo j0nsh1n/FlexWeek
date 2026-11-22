@@ -21,6 +21,8 @@ pub const ASSIGNMENT_LIMIT: &str = "An account holds at most 1000 assignments";
 pub const WEEK_CONFLICT: &str = "This week changed in another window. Reload before saving.";
 const MAX_ASSIGNMENTS: i64 = 1000;
 const REVISION_MAX: i128 = (1 << 53) - 1;
+/// How many repeat edits one request may carry, as `backend/app.py`'s `MAX_REPEAT_CHANGES`.
+const MAX_REPEAT_CHANGES: usize = 2 * flexweek_engine::repeats::MAX_REPEATS;
 
 /// A week save as `SavedWeek` reads it: (Monday, blocks as written, revision).
 pub fn check_saved_week(given: &Value) -> Checked<(String, Vec<Value>, i64)> {
@@ -146,4 +148,33 @@ pub fn save_week(path: &Path, user_id: i64, given: &Value) -> ServiceResult<Valu
         })?;
         Ok(json!({ "week_start": week_start, "blocks": shown, "revision": revision }))
     })
+}
+
+/// The later weeks a set of repeat edits would reach that have their own edit, as
+/// `POST /api/repeat-edits` answers from `{"repeats": [...]}`: nothing is written.
+pub fn preview_repeat_edits(path: &Path, user_id: i64, given: &Value) -> ServiceResult<Value> {
+    let Value::Object(fields) = given else {
+        return Err(invalid());
+    };
+    let repeats = match fields.get("repeats") {
+        Some(Value::Array(items))
+            if fields.len() == 1
+                && items.len() <= MAX_REPEAT_CHANGES
+                && items.iter().all(Value::is_object) =>
+        {
+            Value::Array(items.clone())
+        }
+        _ => return Err(invalid()),
+    };
+    let intents = flexweek_engine::repeats::parse_intents(&repeats)
+        .map_err(|why| ServiceError::from(Refusal::Invalid(why)))?;
+    let found = with_db(path, |conn| {
+        store::preview_edited_weeks(conn, user_id, &intents).map_err(|failure| match failure {
+            store::RepeatsFailure::Refused(why) => Refusal::Invalid(why).into(),
+            store::RepeatsFailure::Store(error) => error.into(),
+        })
+    })?;
+    // The route answered the canonical text read back, so its keys come out sorted.
+    let text = canonical(&found);
+    Ok(serde_json::from_str(&text).map_err(|error| StoreError::Json { text, error })?)
 }

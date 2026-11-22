@@ -957,5 +957,16 @@ fn a_sign_up_whose_randomness_fails_makes_no_account() {
         })
         .unwrap();
         assert_eq!(accounts, 0, "{part}: an account was saved");
+        for table in ["preferences", "recovery_codes", "sessions"] {
+            let rows: i64 = with_db(&db.path, |conn| {
+                Ok(conn
+                    .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                        row.get(0)
+                    })
+                    .unwrap())
+            })
+            .unwrap();
+            assert_eq!(rows, 0, "{part}: {table} kept a row");
+        }
     }
 }

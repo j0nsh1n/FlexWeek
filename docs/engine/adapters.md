@@ -47,7 +47,6 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | availability | spread_sessions | ADAPTER | One engine call (`spread_sessions_around`, with the days the homework's timed sessions sit on); the session text is decoded and the remainder is returned beside it. |
 | comfort | snap_minutes | ADAPTER | One `snap_minutes_wide` call. Integers f64 holds exactly keep `plan::snap_minutes`; past 2^53 the engine uses Python's formula. |
 | comfort | split_plan | ADAPTER | One engine call, JSON decoded. |
-| comfort | preview_split | ADAPTER | One engine call, JSON decoded. |
 | day | is_work_session | ADAPTER | Encodes the block, one call, `bool` of the result. |
 | day | build_day | ADAPTER | Encodes rows and weeks, one call, then pydantic on sessions and locked blocks. |
 | explain | sentence | ADAPTER | Looks up engine copy cached at import, so an unknown code stays a `KeyError`. |
@@ -56,7 +55,6 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | recovery | recovery_code_matches | ADAPTER | One engine call. ASCII comparison and the non-ASCII `TypeError` live in the engine. |
 | restore | canonical | ADAPTER | Encodes the value, one call. |
 | restore | state_token | ADAPTER | Encodes the snapshot, one call. |
-| restore | diff_snapshots | ADAPTER | Encodes both snapshots, one call, JSON decoded. |
 | restore | diff_transfer | ADAPTER | Encodes both snapshots, one call, JSON decoded. |
 | solver | _clock | STAYS | Reads `time.perf_counter`. A budget test patches that clock. |
 | solver | _clock.elapsed | STAYS | Nested in `_clock`. Turns later readings of the same clock into milliseconds. |
@@ -146,7 +144,7 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 
 `backend/app.py` is the HTTP layer: routes, dependencies, status codes, the pydantic request and response models, and the mapping of an engine status onto an HTTP error stay in Python. The rows below are the helper functions whose decisions moved into the engine (`engine/store/src/rules.rs`); `test_app_helpers_keep_no_engine_logic` checks them with the same rule as the modules above. Route handlers are not checked.
 
-`post_changes` passes a batch's `repeats` to `db.apply_repeat_intents` (`flexweek_store::apply_repeat_intents`, the function `changes::apply` calls too) and maps its refusal onto a 422; it decides nothing about repeats. `POST /api/repeat-edits` passes the same list to `db.preview_edited_weeks` (`flexweek_store::preview_edited_weeks`) and maps its refusal the same way; that call only lists the later weeks that have their own edit. `GET /api/week` reads them with `db.standing_blocks`.
+`post_changes` passes a batch's `repeats` to `db.apply_repeat_intents` (`flexweek_store::apply_repeat_intents`, the function `changes::apply` calls too) and maps its refusal onto a 422; it decides nothing about repeats. `POST /api/repeat-edits` is one call to the Rust service (`service_repeat_edits`), which checks the list and asks `flexweek_store::preview_edited_weeks` for the later weeks that have their own edit. `GET /api/week` reads them with `db.standing_blocks`.
 
 | Module | Function | Class | Reason |
 | --- | --- | --- | --- |
@@ -160,11 +158,9 @@ The desktop tables use the same three classes. Those modules live in `desktop/na
 | app | payload_digest | ADAPTER | One engine call; the engine hashes the canonical text. |
 | app | insert_restore_point | ADAPTER | One connection call. Python reads `secrets` and the clock and passes both in; the engine names the point, counts, snapshots, protects and prunes. |
 | app | preferences_from_row | ADAPTER | One engine call fills every default; `Preferences` is the pydantic check. |
-| app | validate_windows | ADAPTER | The pydantic check the engine calls for each window list. |
-| app | solve_availability | ADAPTER | One engine call splits the stored text, folds an older row's study windows into the work windows and builds the occupancy; Python revalidates each list first. |
 | app | naive_now | STAYS | Reads the clock. |
 
-`upsert_assignment`, `delete_assignment`, `save_week_row`, `upsert_routine`, and `delete_routine` are not in the table and the test does not check them. Each makes one store call and turns the status it gets back into an HTTP error (409, 422, 404) by comparing it with a status word. The store decides the status; the comparison only picks the error. None of the five holds a rule beyond that mapping: the revision check, the cap, and the identical-body shortcut are all in the store.
+`upsert_assignment`, `delete_assignment`, and `save_week_row` are not in the table and the test does not check them. Each makes one store call and turns the status it gets back into an HTTP error (409, 422, 404) by comparing it with a status word. The store decides the status; the comparison only picks the error. None of the three holds a rule beyond that mapping: the revision check, the cap, and the identical-body shortcut are all in the store.
 
 ## Desktop
 

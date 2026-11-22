@@ -17,21 +17,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from backend import clock as wall_clock
-from backend.assignments import (
-    done_minutes_by_id,
-    held_dates_by_id,
-    planned_minutes_by_id,
-    prepare_solve,
-)
-from backend.availability import fold_study_windows, spread_sessions
+from backend.availability import fold_study_windows
 from backend.comfort import REMINDER_LIMITS, TIMER_PRESETS
 from backend.limits import MAX_BODY
 from backend.models import (
     AssignmentContent,
     ProtectedWindow,
     Routine,
-    SolveRequest,
-    SpreadRequest,
     StudyWindow,
     TimeBlock,
     WeekRequest,
@@ -39,12 +31,8 @@ from backend.models import (
     valid_naive_stamp,
     valid_spotify_url,
 )
-from backend.recovery import (
-    hash_recovery_code,
-)
 from backend.restore import canonical, diff_transfer, state_token
 from backend.slots import DAY_END_MIN, SLOT_MIN
-from backend.solver import reschedule_after_miss, reschedule_running_late, solve
 from backend.storage import (
     Connection,
     Row,
@@ -56,13 +44,11 @@ from backend.storage import (
 )
 from backend.transfer import TRANSFER_TOO_LARGE, transfer_fits
 from backend.weeks import (
-    availability_on_shown_week,
     compose_shown_week,
     current_week_start,
     is_calendar_date,
     is_week_start,
     repeat_changes_from_shown_week,
-    rules_on_shown_week,
     shown_week_parts,
     split_shown_week,
 )
@@ -76,17 +62,11 @@ ASSIGNMENT_UNKNOWN = "assignment_id must name an assignment of this account"
 ASSIGNMENT_CONFLICT = "This assignment changed in another window. Reload before saving."
 ASSIGNMENT_LIMIT = "An account holds at most 1000 assignments"
 WEEK_CONFLICT = "This week changed in another window. Reload before saving."
-ROUTINE_CONFLICT = "This routine changed in another window. Reload before saving."
-ROUTINE_LIMIT = "An account holds at most 50 routines"
 IMPORT_STALE = "This preview is out of date. Refresh it before importing."
-RECOVER_WRONG = "Incorrect username or recovery code"
 PASSWORD_WRONG = "Incorrect password"
 TOO_MANY_TRIES = "Too many tries. Wait 5 minutes, then try again."
-SESSION_ENDED = "Your session ended. Sign in again."
-PASSWORD_SAME = "New password must be different"
 OPERATION_CONFLICT = "This operation was already used with different data."
 MAX_ASSIGNMENTS = 1000
-MAX_ROUTINES = 50
 MAX_RESTORE_POINTS = 20
 # The answer for each kind of refusal the Rust service gives (flexweek_service::Refusal).
 REFUSAL_STATUS = {"invalid": 422, "unauthorized": 401, "not_found": 404, "conflict": 409, "too_many": 429}
@@ -243,15 +223,6 @@ def apply_repeats(db: Connection, user_id: int, changes: list[dict]) -> dict:
     return applied
 
 
-def preview_repeats(db: Connection, user_id: int, changes: list[dict]) -> dict:
-    """The later weeks `changes` would reach that have their own edit, without writing."""
-    try:
-        found: dict = json.loads(db.preview_edited_weeks(user_id, json.dumps(changes)))
-    except ValueError as error:
-        raise HTTPException(422, str(error)) from error
-    return found
-
-
 def save_shown_week(
     db: Connection, user_id: int, week: ChangedWeek, parts: tuple[str, str, int], before: dict[str, int]
 ) -> None:
@@ -402,10 +373,6 @@ def replace_account(db: Connection, user_id: int, snapshot: dict) -> dict:
     }
 
 
-def replace_recovery_codes(db: Connection, user_id: int, codes: list[str]) -> None:
-    db.replace_recovery_codes(user_id, [hash_recovery_code(code) for code in codes])
-
-
 def encode_routine(routine: Routine) -> str:
     return canonical([block.model_dump() for block in routine.blocks])
 
@@ -419,18 +386,6 @@ def routine_view(row: Row) -> dict:
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
-
-
-def upsert_routine(db: Connection, user_id: int, routine: Routine) -> dict:
-    encoded = encode_routine(routine)
-    status, payload = db.save_routine(
-        user_id, routine.id, routine.name, encoded, routine.revision, naive_now(), MAX_ROUTINES
-    )
-    if status == "conflict":
-        raise HTTPException(409, ROUTINE_CONFLICT)
-    if status == "limit":
-        raise HTTPException(422, ROUTINE_LIMIT)
-    return routine_view(json.loads(payload))
 
 
 class Credentials(BaseModel):
@@ -537,11 +492,6 @@ class ChangesRequest(BaseModel):
     # Changes to School and Setup's activities as the student meant them, from a date on. The engine
     # checks each (`flexweek_engine.repeats`); a refusal is a 422 with its sentence.
     repeats: list[dict] | None = Field(default=None, max_length=MAX_REPEAT_CHANGES)
-
-
-class RepeatPreviewRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    repeats: list[dict] = Field(max_length=MAX_REPEAT_CHANGES)
 
 
 class AlarmPreference(BaseModel):
@@ -1001,23 +951,6 @@ def write_preferences(db: Connection, user_id: int, preferences: Preferences) ->
     return preferences.model_dump()
 
 
-WINDOW_MODELS: dict[str, type[BaseModel]] = {
-    "protected": ProtectedWindow,
-    "study": StudyWindow,
-    "work": WorkWindow,
-}
-
-
-def validate_windows(kind: str, text: str) -> str:
-    model = WINDOW_MODELS[kind]
-    return json.dumps([model.model_validate(item).model_dump() for item in json.loads(text)])
-
-
-def solve_availability(stored: str | None) -> tuple[list[int], list[WorkWindow]]:
-    occupancy, work = flexweek_engine.solve_availability(stored, validate_windows)
-    return list(occupancy), [WorkWindow.model_validate(item) for item in json.loads(work)]
-
-
 def create_app(database: Path | None = None, origin: str | None = None) -> FastAPI:
     path = database or Path(os.environ.get("FLEXWEEK_DATABASE", str(ROOT / "var" / "flexweek.db")))
     public_origin = (origin or os.environ.get("FLEXWEEK_ORIGIN", "http://127.0.0.1:8000")).rstrip("/")
@@ -1223,6 +1156,19 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             raise refused(error) from None
         response.delete_cookie(COOKIE, path="/", httponly=True, secure=secure, samesite="strict")
 
+    async def sent_json(request: Request) -> str:
+        """The body as the client sent it, for the service to read: re-writing the parsed copy would turn a
+        number too large for a float into `Infinity`, which is not JSON. The routes keep their parsed `given`
+        so FastAPI still answers a body that is not a JSON object as before."""
+        body = await request.body()
+        try:
+            # Decoded as json.loads decodes bytes (UTF-8, -16 or -32), so the service reads what FastAPI read.
+            text = body.decode(json.detect_encoding(body), "surrogatepass")
+            text.encode("utf-8")
+        except UnicodeError:
+            return ""
+        return text
+
     def served(call, *args) -> dict:  # type: ignore[no-untyped-def]
         """One read from the Rust service; a refusal is its answer with Python's sentence."""
         try:
@@ -1258,8 +1204,12 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         return served(flexweek_engine.service_month, account["id"], month, first_day, naive_now())
 
     @app.put("/api/week")
-    def put_week(given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]) -> dict:
-        return served(flexweek_engine.service_save_week, account["id"], json.dumps(given))
+    def put_week(
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
+    ) -> dict:
+        return served(flexweek_engine.service_save_week, account["id"], sent)
 
     @app.get("/api/assignments")
     def get_assignments(
@@ -1274,40 +1224,23 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.put("/api/assignments/{assignment_id}")
     def put_assignment(
-        assignment_id: str, given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]
+        assignment_id: str,
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
     ) -> dict:
         saved = flexweek_engine.service_save_homework
-        return served(saved, account["id"], assignment_id, json.dumps(given))
+        return served(saved, account["id"], assignment_id, sent)
 
     @app.post("/api/assignments/{assignment_id}/spread")
     def post_spread(
-        assignment_id: str, payload: SpreadRequest, account: Annotated[dict, Depends(user)]
+        assignment_id: str,
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
     ) -> dict:
-        with connect(path) as db:
-            stored = db.assignment_body(account["id"], assignment_id)
-            if stored is None:
-                raise HTTPException(404, "Assignment not found")
-            weeks = list_account_weeks(db, account["id"])
-        body = json.loads(stored)
-        if body["completed"]:
-            raise HTTPException(422, "completed assignments cannot be spread")
-        planned = planned_minutes_by_id(weeks, "2000-01-01").get(assignment_id, 0)
-        sessions, remaining = spread_sessions(
-            estimate_min=int(body["estimate_min"]),
-            focus_minutes=int(body["focus_minutes"]),
-            done_min=done_minutes_by_id(weeks).get(assignment_id, 0),
-            planned_min=planned,
-            due=body["due"],
-            session_min=payload.session_min,
-            from_date=payload.from_date,
-            held_dates=held_dates_by_id(weeks, "2000-01-01").get(assignment_id, []),
-        )
-        return {
-            "assignment_id": assignment_id,
-            "session_min": payload.session_min,
-            "remaining_min": remaining,
-            "sessions": sessions,
-        }
+        preview = flexweek_engine.service_spread_preview
+        return served(preview, account["id"], assignment_id, sent)
 
     @app.delete("/api/assignments/{assignment_id}")
     def remove_assignment(
@@ -1318,9 +1251,12 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         return served(flexweek_engine.service_delete_homework, account["id"], assignment_id, revision)
 
     @app.post("/api/repeat-edits")
-    def post_repeat_edits(body: RepeatPreviewRequest, account: Annotated[dict, Depends(user)]) -> dict:
-        with connect(path) as db:
-            return preview_repeats(db, account["id"], body.repeats)
+    def post_repeat_edits(
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
+    ) -> dict:
+        return served(flexweek_engine.service_repeat_edits, account["id"], sent)
 
     @app.post("/api/changes")
     def post_changes(batch: ChangesRequest, account: Annotated[dict, Depends(user)]) -> dict:
@@ -1433,20 +1369,26 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         return served(flexweek_engine.service_read_preferences, account["id"])
 
     @app.put("/api/preferences")
-    def put_preferences(given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]) -> dict:
-        return served(flexweek_engine.service_write_preferences, account["id"], json.dumps(given))
+    def put_preferences(
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
+    ) -> dict:
+        return served(flexweek_engine.service_write_preferences, account["id"], sent)
 
     @app.get("/api/routines")
     def get_routines(account: Annotated[dict, Depends(user)]) -> dict:
         return served(flexweek_engine.service_routines, account["id"])
 
     @app.put("/api/routines/{routine_id}")
-    def put_routine(routine_id: str, payload: Routine, account: Annotated[dict, Depends(user)]) -> dict:
-        if payload.id != routine_id:
-            raise HTTPException(422, "routine id in the path and body must match")
-        with connect(path) as db:
-            db.begin_immediate()
-            return upsert_routine(db, account["id"], payload)
+    def put_routine(
+        routine_id: str,
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
+    ) -> dict:
+        saved = flexweek_engine.service_save_routine
+        return served(saved, account["id"], routine_id, sent, naive_now())
 
     @app.delete("/api/routines/{routine_id}")
     def remove_routine(
@@ -1540,10 +1482,12 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.post("/api/timer-split-preview")
     def post_timer_split_preview(
-        given: Annotated[dict, Body()], _account: Annotated[dict, Depends(user)]
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        _account: Annotated[dict, Depends(user)],
     ) -> dict:
         try:
-            answer: dict = json.loads(flexweek_engine.service_split_preview(json.dumps(given)))
+            answer: dict = json.loads(flexweek_engine.service_split_preview(sent))
         except ServiceRefusal as error:
             raise refused(error) from None
         return answer
@@ -1553,9 +1497,13 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         return served(flexweek_engine.service_restore_points, account["id"])
 
     @app.post("/api/restore-points")
-    def post_restore_point(given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]) -> dict:
+    def post_restore_point(
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
+    ) -> dict:
         made = flexweek_engine.service_create_restore_point
-        return served(made, account["id"], json.dumps(given), secrets.token_hex(8), naive_now())
+        return served(made, account["id"], sent, secrets.token_hex(8), naive_now())
 
     @app.get("/api/restore-points/{point_id}/preview")
     def preview_restore_point(point_id: str, account: Annotated[dict, Depends(user)]) -> dict:
@@ -1563,71 +1511,23 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.post("/api/restore-points/{point_id}/restore")
     def restore_restore_point(
-        point_id: str, given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]
+        point_id: str,
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
     ) -> dict:
         restored = flexweek_engine.service_restore
         return served(
-            restored, account["id"], point_id, json.dumps(given), secrets.token_hex(8), naive_now()
+            restored, account["id"], point_id, sent, secrets.token_hex(8), naive_now()
         )
 
     @app.post("/api/solve")
-    def post_solve(week: SolveRequest, account: Annotated[dict, Depends(user)]) -> dict:
-        ids = assignment_ids_of(week.blocks)
-        with connect(path) as db:
-            owned = require_own_assignments(db, account["id"], ids) if ids else {}
-            availability = db.availability_json(account["id"])
-            stored_prefs = db.preference_row(account["id"])
-        plan_rules = json.loads(stored_prefs) if stored_prefs else None
-        extra_occ, work_windows = solve_availability(availability)
-        if week.week_start is not None and shown_parts_of(week.week_start) is not None:
-            # A week on screen from another day than Monday: each weekday's hours and the weekend go on
-            # the days that weekday falls on.
-            stored_work = json.dumps([window.model_dump(mode="json") for window in work_windows])
-            extra_occ, moved = availability_on_shown_week(week.week_start, extra_occ, stored_work)
-            work_windows = [WorkWindow.model_validate(item) for item in json.loads(moved)]
-            plan_rules = rules_on_shown_week(week.week_start, plan_rules)
-        blocks = week.blocks
-        extra_deadlines = None
-        extra_slack = None
-        if ids:
-            if week.week_start is None:
-                raise HTTPException(422, "week_start is required when a block has assignment_id")
-            blocks, extra_deadlines, extra_slack = prepare_solve(week.blocks, week.week_start, owned)
-        if week.recover is not None:
-            return reschedule_after_miss(
-                blocks,
-                week.recover.missed_block_id,
-                week.recover.missed_day,
-                week.recover.previous_placed,
-                deadlines=extra_deadlines,
-                slack_deadlines=extra_slack,
-                extra_occ=extra_occ,
-                work_windows=work_windows,
-                plan_rules=plan_rules,
-            ).model_dump()
-        if week.running_late is not None:
-            return reschedule_running_late(
-                blocks,
-                week.running_late.day,
-                week.running_late.minutes,
-                week.running_late.from_start,
-                week.running_late.previous_placed,
-                deadlines=extra_deadlines,
-                slack_deadlines=extra_slack,
-                extra_occ=extra_occ,
-                work_windows=work_windows,
-                now_floor=week.running_late.now_floor,
-                plan_rules=plan_rules,
-            ).model_dump()
-        return solve(
-            blocks,
-            deadlines=extra_deadlines,
-            slack_deadlines=extra_slack,
-            extra_occ=extra_occ,
-            work_windows=work_windows,
-            now_floor=week.now_floor,
-            plan_rules=plan_rules,
-        ).model_dump()
+    def post_solve(
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
+    ) -> dict:
+        return served(flexweek_engine.service_plan, account["id"], sent)
 
     @app.get("/api/health")
     def health() -> dict[str, bool]:

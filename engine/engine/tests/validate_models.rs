@@ -159,9 +159,18 @@ fn time_block_rules_match_models_py() {
             message: "String should have at most 32 characters",
         },
         Case {
+            name: "models.py:130 a length too large to store is still over 7140",
+            value: with(
+                base.clone(),
+                "duration_min",
+                json!(10_000_000_000_000_000_000_u128),
+            ),
+            message: "Input should be less than or equal to 7140",
+        },
+        Case {
             name: "models.py:143 completed is a boolean",
             value: with(base.clone(), "completed", json!("maybe")),
-            message: "Input should be a valid boolean",
+            message: "Input should be a valid boolean, unable to interpret input",
         },
         Case {
             name: "models.py:147 completed_day is at least 0",
@@ -408,6 +417,15 @@ fn assignment_rules_match_models_py() {
         Case {
             name: "models.py:294 a zero estimate is refused",
             value: with(base.clone(), "estimate_min", json!(0)),
+            message: "estimate_min must be a positive multiple of 15",
+        },
+        Case {
+            name: "models.py:294 a negative estimate too large to store is not positive",
+            value: with(
+                base.clone(),
+                "estimate_min",
+                json!(-18_446_744_073_709_551_616_i128),
+            ),
             message: "estimate_min must be a positive multiple of 15",
         },
         Case {

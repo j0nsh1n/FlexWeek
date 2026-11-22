@@ -11,6 +11,7 @@ pub mod accounts;
 pub mod blocks;
 pub mod comfort;
 pub mod homework_saves;
+pub mod plans;
 pub mod preferences;
 pub mod records;
 pub mod views;
