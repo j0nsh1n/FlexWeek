@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use fwtest::upgrade::{problems, swap_tree};
+use fwtest::upgrade::{problems, put_in_place, swap_tree};
 use serde_json::json;
 
 struct Scratch(PathBuf);
@@ -94,40 +94,177 @@ fn an_install_that_holds_the_data_is_not_replaced() {
     );
 }
 
+fn seeded() -> serde_json::Value {
+    json!({
+        "data_dir": "/home/s/.local/share/FlexWeek", "username": "ana", "weeks": 1, "homework": 2,
+        "routines": 2, "restore_points": 1, "standing_blocks": 3, "phones": 1, "alarms": 2,
+        "week_starts_on": "sunday", "device_key": true, "look_preset": "plum",
+        "login_command": "/opt/FlexWeek/FlexWeek",
+    })
+}
+
+/// The report a new program gives when it found everything `seeded` says.
+fn found_all() -> serde_json::Value {
+    let seed = seeded();
+    json!({
+        "kept_session": true,
+        "data_dir": seed["data_dir"], "week_starts_on": seed["week_starts_on"],
+        "device_key": seed["device_key"], "look_preset": seed["look_preset"],
+        "login_command": seed["login_command"],
+        "account": {
+            "username": "ana", "weeks": 1, "homework": 2, "routines": 2, "restore_points": 1,
+            "standing_blocks": 3, "phones": 1, "alarms": 2,
+        },
+    })
+}
+
 #[test]
 fn the_comparison_names_each_thing_the_new_program_lost() {
     let dir = scratch("compare");
     let root = installed(&dir.0);
-    let report = json!({
-        "kept_session": false,
-        "data_dir": "/home/s/.local/share/FlexWeek",
-        "account": { "username": "ana", "weeks": 1, "homework": 2, "alarms": 0 },
-        "week_starts_on": "monday",
-    });
-    let expect = json!({
-        "data_dir": "/home/s/.local/share/FlexWeek",
-        "username": "ana",
-        "weeks": 1,
-        "homework": 2,
-        "alarms": 2,
-        "week_starts_on": "sunday",
-    });
-    let found = problems(&root, &report, &expect);
+    write(&root.join("app/flexweek-mcp"), "helper");
+    assert!(problems(&root, &found_all(), &seeded()).is_empty());
+    for (place, name, lost) in [
+        ("account", "routines", json!(0)),
+        ("account", "restore_points", json!(0)),
+        ("account", "standing_blocks", json!(0)),
+        ("account", "phones", json!(0)),
+        ("account", "alarms", json!(0)),
+        ("account", "weeks", json!(0)),
+        ("account", "homework", json!(0)),
+        ("account", "username", json!(null)),
+        ("top", "device_key", json!(false)),
+        ("top", "look_preset", json!(null)),
+        ("top", "login_command", json!(null)),
+        ("top", "week_starts_on", json!("monday")),
+        ("top", "data_dir", json!("/elsewhere")),
+    ] {
+        let mut report = found_all();
+        let field = if place == "account" {
+            &mut report["account"][name]
+        } else {
+            &mut report[name]
+        };
+        *field = lost.clone();
+        let found = problems(&root, &report, &seeded());
+        assert_eq!(
+            found,
+            vec![format!(
+                "{name}: seeded {}, the new program found {lost}",
+                seeded()[name]
+            )],
+            "losing {name}"
+        );
+    }
+}
+
+#[test]
+fn a_seed_file_that_leaves_a_value_out_fails_and_so_does_a_missing_helper_or_sign_in() {
+    let dir = scratch("seed-gaps");
+    let root = installed(&dir.0);
+    let mut short = seeded();
+    short.as_object_mut().unwrap().remove("phones");
+    let mut report = found_all();
+    report["kept_session"] = json!(false);
     assert_eq!(
-        found,
+        problems(&root, &report, &short),
         vec![
             "the updated install has no app/flexweek-mcp".to_string(),
             "the kept sign-in was not found".to_string(),
-            "alarms: seeded 2, the new program found 0".to_string(),
-            "week_starts_on: seeded \"sunday\", the new program found \"monday\"".to_string(),
+            "the seed file does not say what phones should be".to_string(),
         ]
     );
-    write(&root.join("app/flexweek-mcp"), "helper");
-    let whole = json!({
-        "kept_session": true,
-        "data_dir": "/home/s/.local/share/FlexWeek",
-        "account": { "username": "ana", "weeks": 1, "homework": 2, "alarms": 2 },
-        "week_starts_on": "sunday",
-    });
-    assert!(problems(&root, &whole, &expect).is_empty());
+}
+
+#[test]
+fn the_first_folder_in_directory_order_is_installed_not_the_first_by_name() {
+    let dir = scratch("order");
+    let root = installed(&dir.0);
+    let staging = dir.0.join("opt/FlexWeek.update");
+    for name in ["B", "A", "C"] {
+        write(&staging.join(name).join("app/FlexWeek"), name);
+    }
+    let first = std::fs::read_dir(&staging)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| path.is_dir())
+        .unwrap();
+    let wanted = first.file_name().unwrap().to_string_lossy().into_owned();
+    put_in_place(&root, &staging).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(root.join("app/FlexWeek")).unwrap(),
+        wanted
+    );
+}
+
+#[test]
+fn a_release_with_a_link_out_of_its_folder_is_refused_and_the_install_kept() {
+    let dir = scratch("link");
+    let root = installed(&dir.0);
+    let stage = dir.0.join("stage-link/Packaged/app");
+    std::fs::create_dir_all(&stage).unwrap();
+    std::os::unix::fs::symlink("../../../../../../etc/passwd", stage.join("FlexWeek")).unwrap();
+    let out = dir.0.join("link.tar.gz");
+    assert!(
+        Command::new("tar")
+            .arg("-C")
+            .arg(dir.0.join("stage-link"))
+            .arg("-czf")
+            .arg(&out)
+            .arg("Packaged")
+            .status()
+            .unwrap()
+            .success()
+    );
+    let refused = swap_tree(&root, &out).unwrap_err();
+    assert!(refused.contains("links outside the folder"), "{refused}");
+    assert_eq!(
+        std::fs::read_to_string(root.join("app/FlexWeek")).unwrap(),
+        "old program"
+    );
+    assert!(
+        !dir.0.join("opt/FlexWeek.update").exists(),
+        "staging was left"
+    );
+}
+
+#[test]
+fn a_broken_tarball_leaves_the_install_and_no_staging_folder() {
+    let dir = scratch("broken");
+    let root = installed(&dir.0);
+    let bad = dir.0.join("broken.tar.gz");
+    std::fs::write(&bad, b"not a tarball").unwrap();
+    let refused = swap_tree(&root, &bad).unwrap_err();
+    assert!(
+        refused.starts_with("The update could not be put in place:"),
+        "{refused}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("app/FlexWeek")).unwrap(),
+        "old program"
+    );
+    assert!(
+        !dir.0.join("opt/FlexWeek.update").exists(),
+        "staging was left"
+    );
+}
+
+/// The new folder cannot be moved into place (its folder is read-only), so the install moved aside is
+/// moved back, as `_swap_tree` does.
+#[test]
+fn when_the_new_folder_cannot_be_moved_in_the_old_install_is_put_back() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = scratch("rollback");
+    let root = installed(&dir.0);
+    let staging = dir.0.join("opt/FlexWeek.update");
+    write(&staging.join("Packaged/app/FlexWeek"), "new program");
+    std::fs::set_permissions(&staging, std::fs::Permissions::from_mode(0o555)).unwrap();
+    let refused = put_in_place(&root, &staging);
+    std::fs::set_permissions(&staging, std::fs::Permissions::from_mode(0o755)).ok();
+    assert!(refused.is_err(), "the move should have failed");
+    assert_eq!(
+        std::fs::read_to_string(root.join("app/FlexWeek")).unwrap(),
+        "old program"
+    );
+    assert!(!dir.0.join("opt/FlexWeek.old").exists());
 }

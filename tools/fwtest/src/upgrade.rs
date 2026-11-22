@@ -67,8 +67,79 @@ fn bundle_root(program: &Path) -> PathBuf {
     parent.to_path_buf()
 }
 
-/// `_swap_tree`, step by step: refuse an install that holds the data, unpack beside it, take the first
-/// folder in the archive, move the install aside, move the new one into its place, then tidy up.
+fn could_not(why: impl std::fmt::Display) -> String {
+    format!("The update could not be put in place: {why}")
+}
+
+/// `_safe_extract`'s rule, checked on what was unpacked: no link may point outside the folder. (GNU tar
+/// already refuses member names that climb out with `..` or start at `/`.)
+fn links_stay_inside(folder: &Path) -> Result<(), String> {
+    let root = folder.canonicalize().map_err(|error| error.to_string())?;
+    let mut waiting = vec![root.clone()];
+    while let Some(dir) = waiting.pop() {
+        for entry in std::fs::read_dir(&dir).map_err(|error| error.to_string())? {
+            let path = entry.map_err(|error| error.to_string())?.path();
+            let kind = std::fs::symlink_metadata(&path).map_err(|error| error.to_string())?;
+            if kind.file_type().is_symlink() {
+                let target = std::fs::read_link(&path).map_err(|error| error.to_string())?;
+                let mut resolved = path.parent().unwrap_or(&root).to_path_buf();
+                for part in target.components() {
+                    match part {
+                        std::path::Component::RootDir => resolved = PathBuf::from("/"),
+                        std::path::Component::ParentDir => {
+                            resolved.pop();
+                        }
+                        std::path::Component::Normal(name) => resolved.push(name),
+                        _ => {}
+                    }
+                }
+                if !resolved.starts_with(&root) {
+                    let name = path.strip_prefix(&root).unwrap_or(&path);
+                    return Err(format!("{} links outside the folder", name.display()));
+                }
+            } else if kind.is_dir() {
+                waiting.push(path);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The swap itself, once the new release is unpacked in `staging`: the first folder there in directory
+/// order (as `iterdir` gives it, unsorted), or `staging` itself; the install moved aside, the new one moved
+/// into its place, the old one put back if that fails.
+pub fn put_in_place(root: &Path, staging: &Path) -> Result<(), String> {
+    let parent = root.parent().ok_or("the install has no parent folder")?;
+    let name = root
+        .file_name()
+        .ok_or("the install has no name")?
+        .to_string_lossy();
+    let previous = parent.join(format!("{name}.old"));
+    let mut unpacked = staging.to_path_buf();
+    for entry in std::fs::read_dir(staging).map_err(could_not)? {
+        let path = entry.map_err(could_not)?.path();
+        if path.is_dir() {
+            unpacked = path;
+            break;
+        }
+    }
+    let _ = std::fs::remove_dir_all(&previous);
+    let moved = std::fs::rename(root, &previous).and_then(|()| std::fs::rename(&unpacked, root));
+    if let Err(error) = moved {
+        let _ = std::fs::remove_dir_all(staging);
+        if !root.exists() && previous.exists() {
+            let _ = std::fs::rename(&previous, root);
+        }
+        return Err(could_not(error));
+    }
+    let _ = std::fs::remove_dir_all(staging);
+    let _ = std::fs::remove_dir_all(&previous);
+    Ok(())
+}
+
+/// `_swap_tree`: refuse an install that holds the data or whose folder cannot be written, unpack beside it
+/// (refusing links that leave the folder), then swap. A failure before the swap leaves the install as it was
+/// and no staging folder behind.
 pub fn swap_tree(root: &Path, tarball: &Path) -> Result<(), String> {
     if root.join("flexweek.db").exists() {
         return Err(format!(
@@ -77,37 +148,53 @@ pub fn swap_tree(root: &Path, tarball: &Path) -> Result<(), String> {
         ));
     }
     let parent = root.parent().ok_or("the install has no parent folder")?;
+    if std::fs::metadata(parent).map_or(true, |found| found.permissions().readonly()) {
+        return Err(format!(
+            "{} can't be written, so the update was not applied.",
+            parent.display()
+        ));
+    }
     let name = root
         .file_name()
         .ok_or("the install has no name")?
         .to_string_lossy();
     let staging = parent.join(format!("{name}.update"));
-    let previous = parent.join(format!("{name}.old"));
     let _ = std::fs::remove_dir_all(&staging);
-    unpack(tarball, &staging)?;
-    let mut folders: Vec<PathBuf> = std::fs::read_dir(&staging)
-        .map_err(|error| error.to_string())?
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|path| path.is_dir())
-        .collect();
-    folders.sort();
-    let unpacked = folders
-        .into_iter()
-        .next()
-        .unwrap_or_else(|| staging.clone());
-    let _ = std::fs::remove_dir_all(&previous);
-    let moved = std::fs::rename(root, &previous).and_then(|()| std::fs::rename(&unpacked, root));
-    if let Err(error) = moved {
+    if let Err(why) = unpack(tarball, &staging).and_then(|()| links_stay_inside(&staging)) {
         let _ = std::fs::remove_dir_all(&staging);
-        if !root.exists() && previous.exists() {
-            let _ = std::fs::rename(&previous, root);
-        }
-        return Err(format!("The update could not be put in place: {error}"));
+        return Err(could_not(why));
     }
-    let _ = std::fs::remove_dir_all(&staging);
-    let _ = std::fs::remove_dir_all(&previous);
-    Ok(())
+    put_in_place(root, &staging)
 }
+
+/// What the report holds about the account the kept sign-in opens.
+const ACCOUNT: &[&str] = &[
+    "username",
+    "weeks",
+    "homework",
+    "routines",
+    "restore_points",
+    "standing_blocks",
+    "phones",
+    "alarms",
+];
+
+/// Every value of the report that is compared with the seed file, which must say each one.
+pub const COMPARED: &[&str] = &[
+    "data_dir",
+    "username",
+    "weeks",
+    "homework",
+    "routines",
+    "restore_points",
+    "standing_blocks",
+    "phones",
+    "alarms",
+    "week_starts_on",
+    "device_key",
+    "look_preset",
+    "login_command",
+];
 
 /// What the new program's report must say about the seeded data, and the install's shape after the
 /// swap. Each problem is one line.
@@ -127,18 +214,17 @@ pub fn problems(root: &Path, report: &Value, expect: &Value) -> Vec<String> {
     if report["kept_session"] != Value::Bool(true) {
         found.push("the kept sign-in was not found".into());
     }
-    let pairs = [
-        ("data_dir", &report["data_dir"]),
-        ("username", &report["account"]["username"]),
-        ("weeks", &report["account"]["weeks"]),
-        ("homework", &report["account"]["homework"]),
-        ("alarms", &report["account"]["alarms"]),
-        ("week_starts_on", &report["week_starts_on"]),
-    ];
-    for (name, got) in pairs {
-        if let Some(wanted) = expect.get(name)
-            && got != wanted
-        {
+    for name in COMPARED {
+        let Some(wanted) = expect.get(*name) else {
+            found.push(format!("the seed file does not say what {name} should be"));
+            continue;
+        };
+        let got = if ACCOUNT.contains(name) {
+            &report["account"][*name]
+        } else {
+            &report[*name]
+        };
+        if got != wanted {
             found.push(format!(
                 "{name}: seeded {wanted}, the new program found {got}"
             ));
@@ -183,7 +269,10 @@ fn attempt(task: &Upgrade) -> Result<Vec<String>, String> {
 pub fn upgrade(task: &Upgrade) -> ExitCode {
     match attempt(task) {
         Ok(found) if found.is_empty() => {
-            println!("PASS: the update kept everything that was seeded");
+            println!(
+                "PASS: the new program found each seeded value ({}) and the kept sign-in",
+                COMPARED.join(", ")
+            );
             ExitCode::OK
         }
         Ok(found) => {
