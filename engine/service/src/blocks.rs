@@ -17,10 +17,10 @@ pub(crate) fn refuse<T>(why: impl Into<String>) -> Checked<T> {
     Err(BlockRefused(why.into()))
 }
 
-/// Python's `int(text)` after pydantic strips the text and any ".0" ending: a sign, then digits with
-/// single underscores between them.
+/// Python's `int(text)` after pydantic strips the text (any Unicode space) and any ".0" ending: a sign,
+/// then digits with single underscores between them, leading zeros ignored however many there are.
 fn int_from_text(text: &str) -> Option<i128> {
-    let trimmed = text.trim_matches(|c: char| c.is_ascii_whitespace());
+    let trimmed = text.trim();
     let body = match trimmed.split_once('.') {
         Some((whole, zeros)) if !zeros.is_empty() && zeros.chars().all(|c| c == '0') => whole,
         Some(_) => return None,
@@ -41,7 +41,12 @@ fn int_from_text(text: &str) -> Option<i128> {
     if !plain.chars().all(|c| c.is_ascii_digit()) {
         return None;
     }
-    let value: i128 = plain.parse().ok()?;
+    let significant = plain.trim_start_matches('0');
+    let value: i128 = if significant.is_empty() {
+        0
+    } else {
+        significant.parse().ok()?
+    };
     Some(if negative { -value } else { value })
 }
 

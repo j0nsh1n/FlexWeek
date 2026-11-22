@@ -86,6 +86,18 @@ def case() -> dict:
 
 cases = []
 seen = set()
+# Fixed cases for rules the random ones can miss: pydantic trims any Unicode space around a number and
+# ignores leading zeros however many there are (Grok's review, 2026-11-22).
+for text in ["\u00a030", "\u200330", "\u300030", " \t30\u00a0", "30\u2028", "0" * 40 + "15", "0" * 40, "3e1"]:
+    fixed = {"id": "a", "title": "Guitar", "kind": "locked", "duration_min": text, "days": [0]}
+    seen.add(json.dumps(fixed, sort_keys=True))
+    try:
+        cases.append({"input": fixed, "written": TimeBlock.model_validate(fixed).model_dump()})
+    except Exception:
+        cases.append({"input": fixed, "written": None})
+fixed_days = {"id": "a", "title": "Guitar", "kind": "locked", "duration_min": 30, "days": ["\u00a00"]}
+seen.add(json.dumps(fixed_days, sort_keys=True))
+cases.append({"input": fixed_days, "written": TimeBlock.model_validate(fixed_days).model_dump()})
 while len(cases) < int(sys.argv[2]):
     block = case()
     key = json.dumps(block, sort_keys=True)
