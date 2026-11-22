@@ -1,0 +1,4685 @@
+{
+ "sql": "PRAGMA foreign_keys=OFF;\nBEGIN TRANSACTION;\nCREATE TABLE users (\n                id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE,\n                password_hash TEXT NOT NULL\n            );\nCREATE TABLE sessions (\n                token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id),\n                expires INTEGER NOT NULL,\n                lifetime INTEGER\n            );\nCREATE TABLE weeks (\n        user_id INTEGER NOT NULL REFERENCES users(id), week_start TEXT NOT NULL,\n        blocks TEXT NOT NULL DEFAULT '[]', revision INTEGER NOT NULL DEFAULT 0,\n        PRIMARY KEY (user_id, week_start)\n    );\nCREATE TABLE assignments (\n        user_id INTEGER NOT NULL REFERENCES users(id), id TEXT NOT NULL,\n        body TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0,\n        PRIMARY KEY (user_id, id)\n    );\nCREATE TABLE routines (\n        user_id INTEGER NOT NULL REFERENCES users(id), id TEXT NOT NULL,\n        name TEXT NOT NULL, body TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0,\n        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,\n        PRIMARY KEY (user_id, id)\n    );\nCREATE TABLE restore_points (\n        seq INTEGER PRIMARY KEY AUTOINCREMENT,\n        user_id INTEGER NOT NULL REFERENCES users(id),\n        id TEXT NOT NULL,\n        label TEXT NOT NULL,\n        created_at TEXT NOT NULL,\n        weeks_count INTEGER NOT NULL,\n        assignments_count INTEGER NOT NULL,\n        body TEXT NOT NULL,\n        UNIQUE(user_id, id)\n    );\nCREATE TABLE operations (\n        seq INTEGER PRIMARY KEY AUTOINCREMENT,\n        user_id INTEGER NOT NULL REFERENCES users(id),\n        operation_id TEXT NOT NULL,\n        payload_hash TEXT NOT NULL,\n        response TEXT NOT NULL,\n        UNIQUE(user_id, operation_id)\n    );\nCREATE TABLE preferences (\n        user_id INTEGER PRIMARY KEY REFERENCES users(id),\n        theme TEXT NOT NULL DEFAULT 'system' CHECK(theme IN ('system', 'slate', 'nocturne')),\n        reminders_enabled INTEGER NOT NULL DEFAULT 1\n            CHECK(reminders_enabled IN (0, 1)),\n        reminder_lead_min INTEGER NOT NULL DEFAULT 5\n            CHECK(reminder_lead_min >= 0 AND reminder_lead_min <= 120),\n        reminder_sound INTEGER NOT NULL DEFAULT 1\n            CHECK(reminder_sound IN (0, 1)),\n        reminder_dnd_override INTEGER NOT NULL DEFAULT 0\n            CHECK(reminder_dnd_override IN (0, 1)),\n        timer_work_min INTEGER NOT NULL DEFAULT 30,\n        timer_break_min INTEGER NOT NULL DEFAULT 15,\n        timer_long_break_min INTEGER NOT NULL DEFAULT 30,\n        timer_long_break_every INTEGER NOT NULL DEFAULT 4,\n        auto_split_pomodoro INTEGER NOT NULL DEFAULT 0\n            CHECK(auto_split_pomodoro IN (0, 1)),\n        weekend_homework_free INTEGER NOT NULL DEFAULT 0\n            CHECK(weekend_homework_free IN (0, 1)),\n        buffer_min INTEGER NOT NULL DEFAULT 15\n            CHECK(buffer_min IN (0, 15, 30)),\n        urgent_first INTEGER NOT NULL DEFAULT 1\n            CHECK(urgent_first IN (0, 1)),\n        split_long_tasks INTEGER NOT NULL DEFAULT 0\n            CHECK(split_long_tasks IN (0, 1)),\n        show_weekends INTEGER NOT NULL DEFAULT 1\n            CHECK(show_weekends IN (0, 1)),\n        planner_settings_chosen INTEGER NOT NULL DEFAULT 0\n            CHECK(planner_settings_chosen IN (0, 1)),\n        default_spotify_url TEXT,\n        alarms_json TEXT NOT NULL DEFAULT '[]',\n        availability_json TEXT NOT NULL DEFAULT '{}',\n        comfort_json TEXT NOT NULL DEFAULT '{}',\n        prefs_version INTEGER NOT NULL DEFAULT 0\n    );\nCREATE TABLE recovery_codes (\n        user_id INTEGER NOT NULL REFERENCES users(id),\n        code_hash TEXT NOT NULL,\n        PRIMARY KEY (user_id, code_hash)\n    );\nCREATE TABLE standing_blocks (\n        user_id INTEGER NOT NULL REFERENCES users(id),\n        id TEXT NOT NULL,\n        from_week TEXT NOT NULL,\n        position INTEGER NOT NULL DEFAULT 0,\n        body TEXT,\n        PRIMARY KEY (user_id, id, from_week)\n    );\nCREATE TABLE auth_attempts (\n                key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL\n            );\nINSERT INTO \"assignments\" VALUES(2,'hw-essay','{\"category\":null,\"completed\":false,\"completed_at\":null,\"course\":null,\"due\":\"2026-11-12T23:59\",\"energy\":\"low\",\"estimate_min\":120,\"focus_minutes\":0,\"focus_sessions\":0,\"id\":\"hw-essay\",\"priority\":2,\"spotify_url\":null,\"title\":\"Hw Essay\"}',1);\nINSERT INTO \"assignments\" VALUES(2,'hw-maths','{\"category\":null,\"completed\":false,\"completed_at\":null,\"course\":null,\"due\":\"2026-11-19\",\"energy\":\"low\",\"estimate_min\":90,\"focus_minutes\":0,\"focus_sessions\":0,\"id\":\"hw-maths\",\"priority\":2,\"spotify_url\":null,\"title\":\"Hw Maths\"}',1);\nINSERT INTO \"preferences\" VALUES(1,'system',1,5,1,0,30,15,30,4,0,0,15,1,0,1,0,NULL,'[]','{}','{}',5);\nINSERT INTO \"preferences\" VALUES(2,'system',1,5,1,0,30,15,30,4,0,0,15,1,0,1,0,NULL,'[]','{}','{}',5);\nINSERT INTO \"standing_blocks\" VALUES(2,'school','2026-11-02',0,'{\"category\":\"class\",\"days\":[0,1,2,3,4],\"duration_min\":405,\"id\":\"school\",\"kind\":\"locked\",\"start\":\"08:30\",\"title\":\"School\"}');\nINSERT INTO \"users\" VALUES(1,'bob','scrypt$32768$8$3$f0219e193ac6a6a973662bd1b8f26e76$4bc2925e13a8352f5267e1a96cb0cff02fbc26a282716ca8edaf7bc5ca8f9881');\nINSERT INTO \"users\" VALUES(2,'alice','scrypt$32768$8$3$682b70434fd5e437ef77414440fc77e2$d8b9db06c616c235b6ac7cad8fb28eb64fecbbeab6764369867de57a8232ae53');\nINSERT INTO \"weeks\" VALUES(1,'2026-11-09','[{\"course\":null,\"days\":[0],\"duration_min\":60,\"earliest\":null,\"energy\":\"medium\",\"id\":\"bob-only\",\"kind\":\"locked\",\"latest\":null,\"priority\":3,\"start\":\"10:00\",\"title\":\"Bob-Only\"}]',1);\nINSERT INTO \"weeks\" VALUES(2,'2026-11-09','[{\"course\":null,\"days\":[1,3],\"duration_min\":60,\"earliest\":null,\"energy\":\"medium\",\"id\":\"guitar\",\"kind\":\"locked\",\"latest\":null,\"priority\":3,\"start\":\"17:00\",\"title\":\"Guitar\"},{\"course\":null,\"days\":[0,1,2,3,4,5,6],\"duration_min\":60,\"earliest\":null,\"energy\":\"medium\",\"id\":\"dinner\",\"kind\":\"locked\",\"latest\":null,\"priority\":3,\"start\":\"18:30\",\"title\":\"Dinner\"},{\"assignment_id\":\"hw-essay\",\"course\":null,\"days\":[2],\"duration_min\":60,\"earliest\":null,\"energy\":\"low\",\"id\":\"s1\",\"kind\":\"flexible\",\"latest\":null,\"priority\":2,\"start\":\"19:00\",\"title\":\"Hw Essay\"},{\"assignment_id\":\"hw-essay\",\"course\":null,\"days\":[0,1,2,3],\"duration_min\":60,\"earliest\":null,\"energy\":\"low\",\"id\":\"s2\",\"kind\":\"flexible\",\"latest\":null,\"priority\":2,\"start\":null,\"title\":\"Hw Essay\"},{\"category\":\"extra\",\"completed\":true,\"course\":null,\"days\":[4],\"duration_min\":60,\"earliest\":null,\"energy\":\"medium\",\"id\":\"done\",\"kind\":\"locked\",\"latest\":null,\"priority\":3,\"start\":\"15:00\",\"title\":\"Done\"}]',1);\nINSERT INTO \"weeks\" VALUES(2,'2026-11-16','[{\"course\":null,\"days\":[0,4],\"duration_min\":60,\"earliest\":null,\"energy\":\"medium\",\"id\":\"chess\",\"kind\":\"locked\",\"latest\":null,\"missed_days\":[0],\"priority\":3,\"start\":\"16:00\",\"title\":\"Chess\"},{\"assignment_id\":\"hw-maths\",\"course\":null,\"days\":[1],\"duration_min\":60,\"earliest\":null,\"energy\":\"low\",\"id\":\"s3\",\"kind\":\"flexible\",\"latest\":null,\"priority\":2,\"start\":\"20:00\",\"title\":\"Hw Maths\"},{\"category\":\"class\",\"course\":null,\"days\":[0,1],\"duration_min\":405,\"earliest\":null,\"energy\":\"medium\",\"id\":\"school\",\"kind\":\"locked\",\"latest\":null,\"priority\":3,\"start\":\"08:30\",\"title\":\"School\"},{\"course\":null,\"days\":[4],\"duration_min\":60,\"earliest\":null,\"energy\":\"medium\",\"id\":\"swim\",\"kind\":\"locked\",\"latest\":null,\"priority\":3,\"start\":\"07:00\",\"title\":\"Swim\"}]',2);\nINSERT INTO \"weeks\" VALUES(2,'2026-11-23','[{\"category\":\"class\",\"course\":null,\"days\":[2,3,4],\"duration_min\":405,\"earliest\":null,\"energy\":\"medium\",\"id\":\"school\",\"kind\":\"locked\",\"latest\":null,\"priority\":3,\"start\":\"08:30\",\"title\":\"School\"},{\"course\":null,\"days\":[0],\"duration_min\":60,\"earliest\":null,\"energy\":\"medium\",\"id\":\"swim\",\"kind\":\"locked\",\"latest\":null,\"priority\":3,\"start\":\"07:00\",\"title\":\"Swim\"}]',1);\nCOMMIT;",
+ "bob_id": 1,
+ "weeks": {
+  "user_id": 2,
+  "answer": {
+   "weeks": [
+    "2026-11-09",
+    "2026-11-16",
+    "2026-11-23"
+   ]
+  }
+ },
+ "cases": [
+  {
+   "user_id": 2,
+   "week_start": "2026-11-02",
+   "answer": {
+    "week_start": "2026-11-02",
+    "blocks": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ],
+    "revision": 0,
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-09",
+   "answer": {
+    "week_start": "2026-11-09",
+    "blocks": [
+     {
+      "course": null,
+      "days": [
+       1,
+       3
+      ],
+      "duration_min": 60,
+      "earliest": null,
+      "energy": "medium",
+      "id": "guitar",
+      "kind": "locked",
+      "latest": null,
+      "priority": 3,
+      "start": "17:00",
+      "title": "Guitar"
+     },
+     {
+      "course": null,
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "duration_min": 60,
+      "earliest": null,
+      "energy": "medium",
+      "id": "dinner",
+      "kind": "locked",
+      "latest": null,
+      "priority": 3,
+      "start": "18:30",
+      "title": "Dinner"
+     },
+     {
+      "id": "s1",
+      "title": "Hw Essay",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       2
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": "19:00",
+      "course": null,
+      "assignment_id": "hw-essay"
+     },
+     {
+      "id": "s2",
+      "title": "Hw Essay",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       0,
+       1,
+       2,
+       3
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": null,
+      "course": null,
+      "assignment_id": "hw-essay"
+     },
+     {
+      "category": "extra",
+      "completed": true,
+      "course": null,
+      "days": [
+       4
+      ],
+      "duration_min": 60,
+      "earliest": null,
+      "energy": "medium",
+      "id": "done",
+      "kind": "locked",
+      "latest": null,
+      "priority": 3,
+      "start": "15:00",
+      "title": "Done"
+     },
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ],
+    "revision": 1,
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-16",
+   "answer": {
+    "week_start": "2026-11-16",
+    "blocks": [
+     {
+      "course": null,
+      "days": [
+       0,
+       4
+      ],
+      "duration_min": 60,
+      "earliest": null,
+      "energy": "medium",
+      "id": "chess",
+      "kind": "locked",
+      "latest": null,
+      "missed_days": [
+       0
+      ],
+      "priority": 3,
+      "start": "16:00",
+      "title": "Chess"
+     },
+     {
+      "id": "s3",
+      "title": "Hw Maths",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       1
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": "20:00",
+      "course": null,
+      "assignment_id": "hw-maths"
+     },
+     {
+      "category": "class",
+      "course": null,
+      "days": [
+       0,
+       1
+      ],
+      "duration_min": 405,
+      "earliest": null,
+      "energy": "medium",
+      "id": "school",
+      "kind": "locked",
+      "latest": null,
+      "priority": 3,
+      "start": "08:30",
+      "title": "School"
+     },
+     {
+      "course": null,
+      "days": [
+       4
+      ],
+      "duration_min": 60,
+      "earliest": null,
+      "energy": "medium",
+      "id": "swim",
+      "kind": "locked",
+      "latest": null,
+      "priority": 3,
+      "start": "07:00",
+      "title": "Swim"
+     }
+    ],
+    "revision": 2,
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-23",
+   "answer": {
+    "week_start": "2026-11-23",
+    "blocks": [
+     {
+      "category": "class",
+      "course": null,
+      "days": [
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "earliest": null,
+      "energy": "medium",
+      "id": "school",
+      "kind": "locked",
+      "latest": null,
+      "priority": 3,
+      "start": "08:30",
+      "title": "School"
+     },
+     {
+      "course": null,
+      "days": [
+       0
+      ],
+      "duration_min": 60,
+      "earliest": null,
+      "energy": "medium",
+      "id": "swim",
+      "kind": "locked",
+      "latest": null,
+      "priority": 3,
+      "start": "07:00",
+      "title": "Swim"
+     }
+    ],
+    "revision": 1,
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-01",
+   "answer": {
+    "week_start": "2026-11-01",
+    "blocks": [
+     {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "duration_min": 405,
+      "days": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "08:30",
+      "course": null,
+      "category": "class"
+     }
+    ],
+    "revision": [
+     0,
+     0
+    ],
+    "stored": [
+     {
+      "week_start": "2026-10-26",
+      "blocks": [],
+      "revision": 0
+     },
+     {
+      "week_start": "2026-11-02",
+      "blocks": [],
+      "revision": 0
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-03",
+   "answer": {
+    "week_start": "2026-11-03",
+    "blocks": [
+     {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "duration_min": 405,
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "08:30",
+      "course": null,
+      "category": "class"
+     },
+     {
+      "id": "dinner",
+      "title": "Dinner",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "18:30",
+      "course": null
+     },
+     {
+      "id": "s2",
+      "title": "Hw Essay",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": null,
+      "course": null,
+      "assignment_id": "hw-essay"
+     }
+    ],
+    "revision": [
+     0,
+     1
+    ],
+    "stored": [
+     {
+      "week_start": "2026-11-02",
+      "blocks": [],
+      "revision": 0
+     },
+     {
+      "week_start": "2026-11-09",
+      "blocks": [
+       {
+        "id": "guitar",
+        "title": "Guitar",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         1,
+         3
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "17:00",
+        "course": null
+       },
+       {
+        "id": "dinner",
+        "title": "Dinner",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "18:30",
+        "course": null
+       },
+       {
+        "id": "s1",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         2
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "19:00",
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "s2",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": null,
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "done",
+        "title": "Done",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "15:00",
+        "course": null,
+        "category": "extra",
+        "completed": true
+       }
+      ],
+      "revision": 1
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-04",
+   "answer": {
+    "week_start": "2026-11-04",
+    "blocks": [
+     {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "duration_min": 405,
+      "days": [
+       0,
+       1,
+       2,
+       5,
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "08:30",
+      "course": null,
+      "category": "class"
+     },
+     {
+      "id": "guitar",
+      "title": "Guitar",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "17:00",
+      "course": null
+     },
+     {
+      "id": "dinner",
+      "title": "Dinner",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       5,
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "18:30",
+      "course": null
+     },
+     {
+      "id": "s2",
+      "title": "Hw Essay",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": null,
+      "course": null,
+      "assignment_id": "hw-essay"
+     }
+    ],
+    "revision": [
+     0,
+     1
+    ],
+    "stored": [
+     {
+      "week_start": "2026-11-02",
+      "blocks": [],
+      "revision": 0
+     },
+     {
+      "week_start": "2026-11-09",
+      "blocks": [
+       {
+        "id": "guitar",
+        "title": "Guitar",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         1,
+         3
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "17:00",
+        "course": null
+       },
+       {
+        "id": "dinner",
+        "title": "Dinner",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "18:30",
+        "course": null
+       },
+       {
+        "id": "s1",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         2
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "19:00",
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "s2",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": null,
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "done",
+        "title": "Done",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "15:00",
+        "course": null,
+        "category": "extra",
+        "completed": true
+       }
+      ],
+      "revision": 1
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-05",
+   "answer": {
+    "week_start": "2026-11-05",
+    "blocks": [
+     {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "duration_min": 405,
+      "days": [
+       0,
+       1,
+       4,
+       5,
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "08:30",
+      "course": null,
+      "category": "class"
+     },
+     {
+      "id": "guitar",
+      "title": "Guitar",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       5
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "17:00",
+      "course": null
+     },
+     {
+      "id": "dinner",
+      "title": "Dinner",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       4,
+       5,
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "18:30",
+      "course": null
+     },
+     {
+      "id": "s1",
+      "title": "Hw Essay",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       6
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": "19:00",
+      "course": null,
+      "assignment_id": "hw-essay"
+     },
+     {
+      "id": "s2",
+      "title": "Hw Essay",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": null,
+      "course": null,
+      "assignment_id": "hw-essay"
+     }
+    ],
+    "revision": [
+     0,
+     1
+    ],
+    "stored": [
+     {
+      "week_start": "2026-11-02",
+      "blocks": [],
+      "revision": 0
+     },
+     {
+      "week_start": "2026-11-09",
+      "blocks": [
+       {
+        "id": "guitar",
+        "title": "Guitar",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         1,
+         3
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "17:00",
+        "course": null
+       },
+       {
+        "id": "dinner",
+        "title": "Dinner",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "18:30",
+        "course": null
+       },
+       {
+        "id": "s1",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         2
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "19:00",
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "s2",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": null,
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "done",
+        "title": "Done",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "15:00",
+        "course": null,
+        "category": "extra",
+        "completed": true
+       }
+      ],
+      "revision": 1
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-06",
+   "answer": {
+    "week_start": "2026-11-06",
+    "blocks": [
+     {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "duration_min": 405,
+      "days": [
+       0,
+       3,
+       4,
+       5,
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "08:30",
+      "course": null,
+      "category": "class"
+     },
+     {
+      "id": "guitar",
+      "title": "Guitar",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       4,
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "17:00",
+      "course": null
+     },
+     {
+      "id": "dinner",
+      "title": "Dinner",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       3,
+       4,
+       5,
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "18:30",
+      "course": null
+     },
+     {
+      "id": "s1",
+      "title": "Hw Essay",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       5
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": "19:00",
+      "course": null,
+      "assignment_id": "hw-essay"
+     },
+     {
+      "id": "s2",
+      "title": "Hw Essay",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": null,
+      "course": null,
+      "assignment_id": "hw-essay"
+     }
+    ],
+    "revision": [
+     0,
+     1
+    ],
+    "stored": [
+     {
+      "week_start": "2026-11-02",
+      "blocks": [],
+      "revision": 0
+     },
+     {
+      "week_start": "2026-11-09",
+      "blocks": [
+       {
+        "id": "guitar",
+        "title": "Guitar",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         1,
+         3
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "17:00",
+        "course": null
+       },
+       {
+        "id": "dinner",
+        "title": "Dinner",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "18:30",
+        "course": null
+       },
+       {
+        "id": "s1",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         2
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "19:00",
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "s2",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": null,
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "done",
+        "title": "Done",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "15:00",
+        "course": null,
+        "category": "extra",
+        "completed": true
+       }
+      ],
+      "revision": 1
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-07",
+   "answer": {
+    "week_start": "2026-11-07",
+    "blocks": [
+     {
+      "id": "guitar",
+      "title": "Guitar",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       3,
+       5
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "17:00",
+      "course": null
+     },
+     {
+      "id": "dinner",
+      "title": "Dinner",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "18:30",
+      "course": null
+     },
+     {
+      "id": "s1",
+      "title": "Hw Essay",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       4
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": "19:00",
+      "course": null,
+      "assignment_id": "hw-essay"
+     },
+     {
+      "id": "s2",
+      "title": "Hw Essay",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": null,
+      "course": null,
+      "assignment_id": "hw-essay"
+     },
+     {
+      "id": "done",
+      "title": "Done",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "15:00",
+      "course": null,
+      "category": "extra",
+      "completed": true
+     },
+     {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "duration_min": 405,
+      "days": [
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "08:30",
+      "course": null,
+      "category": "class"
+     }
+    ],
+    "revision": [
+     0,
+     1
+    ],
+    "stored": [
+     {
+      "week_start": "2026-11-02",
+      "blocks": [],
+      "revision": 0
+     },
+     {
+      "week_start": "2026-11-09",
+      "blocks": [
+       {
+        "id": "guitar",
+        "title": "Guitar",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         1,
+         3
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "17:00",
+        "course": null
+       },
+       {
+        "id": "dinner",
+        "title": "Dinner",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "18:30",
+        "course": null
+       },
+       {
+        "id": "s1",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         2
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "19:00",
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "s2",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": null,
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "done",
+        "title": "Done",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "15:00",
+        "course": null,
+        "category": "extra",
+        "completed": true
+       }
+      ],
+      "revision": 1
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-08",
+   "answer": {
+    "week_start": "2026-11-08",
+    "blocks": [
+     {
+      "id": "guitar",
+      "title": "Guitar",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       2,
+       4
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "17:00",
+      "course": null
+     },
+     {
+      "id": "dinner",
+      "title": "Dinner",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "18:30",
+      "course": null
+     },
+     {
+      "id": "s1",
+      "title": "Hw Essay",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       3
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": "19:00",
+      "course": null,
+      "assignment_id": "hw-essay"
+     },
+     {
+      "id": "s2",
+      "title": "Hw Essay",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": null,
+      "course": null,
+      "assignment_id": "hw-essay"
+     },
+     {
+      "id": "done",
+      "title": "Done",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       5
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "15:00",
+      "course": null,
+      "category": "extra",
+      "completed": true
+     },
+     {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "duration_min": 405,
+      "days": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "08:30",
+      "course": null,
+      "category": "class"
+     }
+    ],
+    "revision": [
+     0,
+     1
+    ],
+    "stored": [
+     {
+      "week_start": "2026-11-02",
+      "blocks": [],
+      "revision": 0
+     },
+     {
+      "week_start": "2026-11-09",
+      "blocks": [
+       {
+        "id": "guitar",
+        "title": "Guitar",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         1,
+         3
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "17:00",
+        "course": null
+       },
+       {
+        "id": "dinner",
+        "title": "Dinner",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "18:30",
+        "course": null
+       },
+       {
+        "id": "s1",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         2
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "19:00",
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "s2",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": null,
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "done",
+        "title": "Done",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "15:00",
+        "course": null,
+        "category": "extra",
+        "completed": true
+       }
+      ],
+      "revision": 1
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-10",
+   "answer": {
+    "week_start": "2026-11-10",
+    "blocks": [
+     {
+      "id": "guitar",
+      "title": "Guitar",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       0,
+       2
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "17:00",
+      "course": null
+     },
+     {
+      "id": "dinner",
+      "title": "Dinner",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "18:30",
+      "course": null
+     },
+     {
+      "id": "s1",
+      "title": "Hw Essay",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       1
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": "19:00",
+      "course": null,
+      "assignment_id": "hw-essay"
+     },
+     {
+      "id": "s2",
+      "title": "Hw Essay",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       0,
+       1,
+       2
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": null,
+      "course": null,
+      "assignment_id": "hw-essay"
+     },
+     {
+      "id": "done",
+      "title": "Done",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       3
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "15:00",
+      "course": null,
+      "category": "extra",
+      "completed": true
+     },
+     {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "duration_min": 405,
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "08:30",
+      "course": null,
+      "category": "class"
+     },
+     {
+      "id": "chess",
+      "title": "Chess",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "16:00",
+      "course": null,
+      "missed_days": [
+       6
+      ]
+     }
+    ],
+    "revision": [
+     1,
+     2
+    ],
+    "stored": [
+     {
+      "week_start": "2026-11-09",
+      "blocks": [
+       {
+        "id": "guitar",
+        "title": "Guitar",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         1,
+         3
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "17:00",
+        "course": null
+       },
+       {
+        "id": "dinner",
+        "title": "Dinner",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "18:30",
+        "course": null
+       },
+       {
+        "id": "s1",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         2
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "19:00",
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "s2",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": null,
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "done",
+        "title": "Done",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "15:00",
+        "course": null,
+        "category": "extra",
+        "completed": true
+       }
+      ],
+      "revision": 1
+     },
+     {
+      "week_start": "2026-11-16",
+      "blocks": [
+       {
+        "id": "chess",
+        "title": "Chess",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "16:00",
+        "course": null,
+        "missed_days": [
+         0
+        ]
+       },
+       {
+        "id": "s3",
+        "title": "Hw Maths",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         1
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "20:00",
+        "course": null,
+        "assignment_id": "hw-maths"
+       },
+       {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 405,
+        "days": [
+         0,
+         1
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "08:30",
+        "course": null,
+        "category": "class"
+       },
+       {
+        "id": "swim",
+        "title": "Swim",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "07:00",
+        "course": null
+       }
+      ],
+      "revision": 2
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-11",
+   "answer": {
+    "week_start": "2026-11-11",
+    "blocks": [
+     {
+      "id": "guitar",
+      "title": "Guitar",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       1
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "17:00",
+      "course": null
+     },
+     {
+      "id": "dinner",
+      "title": "Dinner",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "18:30",
+      "course": null
+     },
+     {
+      "id": "s1",
+      "title": "Hw Essay",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       0
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": "19:00",
+      "course": null,
+      "assignment_id": "hw-essay"
+     },
+     {
+      "id": "s2",
+      "title": "Hw Essay",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       0,
+       1
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": null,
+      "course": null,
+      "assignment_id": "hw-essay"
+     },
+     {
+      "id": "done",
+      "title": "Done",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       2
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "15:00",
+      "course": null,
+      "category": "extra",
+      "completed": true
+     },
+     {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "duration_min": 405,
+      "days": [
+       0,
+       1,
+       2,
+       5,
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "08:30",
+      "course": null,
+      "category": "class"
+     },
+     {
+      "id": "chess",
+      "title": "Chess",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       5
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "16:00",
+      "course": null,
+      "missed_days": [
+       5
+      ]
+     },
+     {
+      "id": "s3",
+      "title": "Hw Maths",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       6
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": "20:00",
+      "course": null,
+      "assignment_id": "hw-maths"
+     }
+    ],
+    "revision": [
+     1,
+     2
+    ],
+    "stored": [
+     {
+      "week_start": "2026-11-09",
+      "blocks": [
+       {
+        "id": "guitar",
+        "title": "Guitar",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         1,
+         3
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "17:00",
+        "course": null
+       },
+       {
+        "id": "dinner",
+        "title": "Dinner",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "18:30",
+        "course": null
+       },
+       {
+        "id": "s1",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         2
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "19:00",
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "s2",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": null,
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "done",
+        "title": "Done",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "15:00",
+        "course": null,
+        "category": "extra",
+        "completed": true
+       }
+      ],
+      "revision": 1
+     },
+     {
+      "week_start": "2026-11-16",
+      "blocks": [
+       {
+        "id": "chess",
+        "title": "Chess",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "16:00",
+        "course": null,
+        "missed_days": [
+         0
+        ]
+       },
+       {
+        "id": "s3",
+        "title": "Hw Maths",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         1
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "20:00",
+        "course": null,
+        "assignment_id": "hw-maths"
+       },
+       {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 405,
+        "days": [
+         0,
+         1
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "08:30",
+        "course": null,
+        "category": "class"
+       },
+       {
+        "id": "swim",
+        "title": "Swim",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "07:00",
+        "course": null
+       }
+      ],
+      "revision": 2
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-12",
+   "answer": {
+    "week_start": "2026-11-12",
+    "blocks": [
+     {
+      "id": "guitar",
+      "title": "Guitar",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       0
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "17:00",
+      "course": null
+     },
+     {
+      "id": "dinner",
+      "title": "Dinner",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       0,
+       1,
+       2,
+       3
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "18:30",
+      "course": null
+     },
+     {
+      "id": "s2",
+      "title": "Hw Essay",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       0
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": null,
+      "course": null,
+      "assignment_id": "hw-essay"
+     },
+     {
+      "id": "done",
+      "title": "Done",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       1
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "15:00",
+      "course": null,
+      "category": "extra",
+      "completed": true
+     },
+     {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "duration_min": 405,
+      "days": [
+       0,
+       1,
+       4,
+       5
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "08:30",
+      "course": null,
+      "category": "class"
+     },
+     {
+      "id": "chess",
+      "title": "Chess",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       4
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "16:00",
+      "course": null,
+      "missed_days": [
+       4
+      ]
+     },
+     {
+      "id": "s3",
+      "title": "Hw Maths",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       5
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": "20:00",
+      "course": null,
+      "assignment_id": "hw-maths"
+     }
+    ],
+    "revision": [
+     1,
+     2
+    ],
+    "stored": [
+     {
+      "week_start": "2026-11-09",
+      "blocks": [
+       {
+        "id": "guitar",
+        "title": "Guitar",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         1,
+         3
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "17:00",
+        "course": null
+       },
+       {
+        "id": "dinner",
+        "title": "Dinner",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "18:30",
+        "course": null
+       },
+       {
+        "id": "s1",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         2
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "19:00",
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "s2",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": null,
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "done",
+        "title": "Done",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "15:00",
+        "course": null,
+        "category": "extra",
+        "completed": true
+       }
+      ],
+      "revision": 1
+     },
+     {
+      "week_start": "2026-11-16",
+      "blocks": [
+       {
+        "id": "chess",
+        "title": "Chess",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "16:00",
+        "course": null,
+        "missed_days": [
+         0
+        ]
+       },
+       {
+        "id": "s3",
+        "title": "Hw Maths",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         1
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "20:00",
+        "course": null,
+        "assignment_id": "hw-maths"
+       },
+       {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 405,
+        "days": [
+         0,
+         1
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "08:30",
+        "course": null,
+        "category": "class"
+       },
+       {
+        "id": "swim",
+        "title": "Swim",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "07:00",
+        "course": null
+       }
+      ],
+      "revision": 2
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-13",
+   "answer": {
+    "week_start": "2026-11-13",
+    "blocks": [
+     {
+      "id": "dinner",
+      "title": "Dinner",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       0,
+       1,
+       2
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "18:30",
+      "course": null
+     },
+     {
+      "id": "done",
+      "title": "Done",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       0
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "15:00",
+      "course": null,
+      "category": "extra",
+      "completed": true
+     },
+     {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "duration_min": 405,
+      "days": [
+       0,
+       3,
+       4
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "08:30",
+      "course": null,
+      "category": "class"
+     },
+     {
+      "id": "chess",
+      "title": "Chess",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       3
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "16:00",
+      "course": null,
+      "missed_days": [
+       3
+      ]
+     },
+     {
+      "id": "s3",
+      "title": "Hw Maths",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       4
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": "20:00",
+      "course": null,
+      "assignment_id": "hw-maths"
+     }
+    ],
+    "revision": [
+     1,
+     2
+    ],
+    "stored": [
+     {
+      "week_start": "2026-11-09",
+      "blocks": [
+       {
+        "id": "guitar",
+        "title": "Guitar",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         1,
+         3
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "17:00",
+        "course": null
+       },
+       {
+        "id": "dinner",
+        "title": "Dinner",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "18:30",
+        "course": null
+       },
+       {
+        "id": "s1",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         2
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "19:00",
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "s2",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": null,
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "done",
+        "title": "Done",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "15:00",
+        "course": null,
+        "category": "extra",
+        "completed": true
+       }
+      ],
+      "revision": 1
+     },
+     {
+      "week_start": "2026-11-16",
+      "blocks": [
+       {
+        "id": "chess",
+        "title": "Chess",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "16:00",
+        "course": null,
+        "missed_days": [
+         0
+        ]
+       },
+       {
+        "id": "s3",
+        "title": "Hw Maths",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         1
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "20:00",
+        "course": null,
+        "assignment_id": "hw-maths"
+       },
+       {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 405,
+        "days": [
+         0,
+         1
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "08:30",
+        "course": null,
+        "category": "class"
+       },
+       {
+        "id": "swim",
+        "title": "Swim",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "07:00",
+        "course": null
+       }
+      ],
+      "revision": 2
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-14",
+   "answer": {
+    "week_start": "2026-11-14",
+    "blocks": [
+     {
+      "id": "dinner",
+      "title": "Dinner",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       0,
+       1
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "18:30",
+      "course": null
+     },
+     {
+      "id": "chess",
+      "title": "Chess",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       2,
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "16:00",
+      "course": null,
+      "missed_days": [
+       2
+      ]
+     },
+     {
+      "id": "s3",
+      "title": "Hw Maths",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       3
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": "20:00",
+      "course": null,
+      "assignment_id": "hw-maths"
+     },
+     {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "duration_min": 405,
+      "days": [
+       2,
+       3
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "08:30",
+      "course": null,
+      "category": "class"
+     },
+     {
+      "id": "swim",
+      "title": "Swim",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "07:00",
+      "course": null
+     }
+    ],
+    "revision": [
+     1,
+     2
+    ],
+    "stored": [
+     {
+      "week_start": "2026-11-09",
+      "blocks": [
+       {
+        "id": "guitar",
+        "title": "Guitar",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         1,
+         3
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "17:00",
+        "course": null
+       },
+       {
+        "id": "dinner",
+        "title": "Dinner",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "18:30",
+        "course": null
+       },
+       {
+        "id": "s1",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         2
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "19:00",
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "s2",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": null,
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "done",
+        "title": "Done",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "15:00",
+        "course": null,
+        "category": "extra",
+        "completed": true
+       }
+      ],
+      "revision": 1
+     },
+     {
+      "week_start": "2026-11-16",
+      "blocks": [
+       {
+        "id": "chess",
+        "title": "Chess",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "16:00",
+        "course": null,
+        "missed_days": [
+         0
+        ]
+       },
+       {
+        "id": "s3",
+        "title": "Hw Maths",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         1
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "20:00",
+        "course": null,
+        "assignment_id": "hw-maths"
+       },
+       {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 405,
+        "days": [
+         0,
+         1
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "08:30",
+        "course": null,
+        "category": "class"
+       },
+       {
+        "id": "swim",
+        "title": "Swim",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "07:00",
+        "course": null
+       }
+      ],
+      "revision": 2
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-15",
+   "answer": {
+    "week_start": "2026-11-15",
+    "blocks": [
+     {
+      "id": "dinner",
+      "title": "Dinner",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       0
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "18:30",
+      "course": null
+     },
+     {
+      "id": "chess",
+      "title": "Chess",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       1,
+       5
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "16:00",
+      "course": null,
+      "missed_days": [
+       1
+      ]
+     },
+     {
+      "id": "s3",
+      "title": "Hw Maths",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       2
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": "20:00",
+      "course": null,
+      "assignment_id": "hw-maths"
+     },
+     {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "duration_min": 405,
+      "days": [
+       1,
+       2
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "08:30",
+      "course": null,
+      "category": "class"
+     },
+     {
+      "id": "swim",
+      "title": "Swim",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       5
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "07:00",
+      "course": null
+     }
+    ],
+    "revision": [
+     1,
+     2
+    ],
+    "stored": [
+     {
+      "week_start": "2026-11-09",
+      "blocks": [
+       {
+        "id": "guitar",
+        "title": "Guitar",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         1,
+         3
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "17:00",
+        "course": null
+       },
+       {
+        "id": "dinner",
+        "title": "Dinner",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "18:30",
+        "course": null
+       },
+       {
+        "id": "s1",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         2
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "19:00",
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "s2",
+        "title": "Hw Essay",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         0,
+         1,
+         2,
+         3
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": null,
+        "course": null,
+        "assignment_id": "hw-essay"
+       },
+       {
+        "id": "done",
+        "title": "Done",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "15:00",
+        "course": null,
+        "category": "extra",
+        "completed": true
+       }
+      ],
+      "revision": 1
+     },
+     {
+      "week_start": "2026-11-16",
+      "blocks": [
+       {
+        "id": "chess",
+        "title": "Chess",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "16:00",
+        "course": null,
+        "missed_days": [
+         0
+        ]
+       },
+       {
+        "id": "s3",
+        "title": "Hw Maths",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         1
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "20:00",
+        "course": null,
+        "assignment_id": "hw-maths"
+       },
+       {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 405,
+        "days": [
+         0,
+         1
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "08:30",
+        "course": null,
+        "category": "class"
+       },
+       {
+        "id": "swim",
+        "title": "Swim",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "07:00",
+        "course": null
+       }
+      ],
+      "revision": 2
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-17",
+   "answer": {
+    "week_start": "2026-11-17",
+    "blocks": [
+     {
+      "id": "chess",
+      "title": "Chess",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       3
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "16:00",
+      "course": null
+     },
+     {
+      "id": "s3",
+      "title": "Hw Maths",
+      "kind": "flexible",
+      "duration_min": 60,
+      "days": [
+       0
+      ],
+      "priority": 2,
+      "energy": "low",
+      "earliest": null,
+      "latest": null,
+      "start": "20:00",
+      "course": null,
+      "assignment_id": "hw-maths"
+     },
+     {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "duration_min": 405,
+      "days": [
+       0
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "08:30",
+      "course": null,
+      "category": "class"
+     },
+     {
+      "id": "swim",
+      "title": "Swim",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       3,
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "07:00",
+      "course": null
+     }
+    ],
+    "revision": [
+     2,
+     1
+    ],
+    "stored": [
+     {
+      "week_start": "2026-11-16",
+      "blocks": [
+       {
+        "id": "chess",
+        "title": "Chess",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "16:00",
+        "course": null,
+        "missed_days": [
+         0
+        ]
+       },
+       {
+        "id": "s3",
+        "title": "Hw Maths",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         1
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "20:00",
+        "course": null,
+        "assignment_id": "hw-maths"
+       },
+       {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 405,
+        "days": [
+         0,
+         1
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "08:30",
+        "course": null,
+        "category": "class"
+       },
+       {
+        "id": "swim",
+        "title": "Swim",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "07:00",
+        "course": null
+       }
+      ],
+      "revision": 2
+     },
+     {
+      "week_start": "2026-11-23",
+      "blocks": [
+       {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 405,
+        "days": [
+         2,
+         3,
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "08:30",
+        "course": null,
+        "category": "class"
+       },
+       {
+        "id": "swim",
+        "title": "Swim",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "07:00",
+        "course": null
+       }
+      ],
+      "revision": 1
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-18",
+   "answer": {
+    "week_start": "2026-11-18",
+    "blocks": [
+     {
+      "id": "chess",
+      "title": "Chess",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       2
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "16:00",
+      "course": null
+     },
+     {
+      "id": "swim",
+      "title": "Swim",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       2,
+       5
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "07:00",
+      "course": null
+     }
+    ],
+    "revision": [
+     2,
+     1
+    ],
+    "stored": [
+     {
+      "week_start": "2026-11-16",
+      "blocks": [
+       {
+        "id": "chess",
+        "title": "Chess",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "16:00",
+        "course": null,
+        "missed_days": [
+         0
+        ]
+       },
+       {
+        "id": "s3",
+        "title": "Hw Maths",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         1
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "20:00",
+        "course": null,
+        "assignment_id": "hw-maths"
+       },
+       {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 405,
+        "days": [
+         0,
+         1
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "08:30",
+        "course": null,
+        "category": "class"
+       },
+       {
+        "id": "swim",
+        "title": "Swim",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "07:00",
+        "course": null
+       }
+      ],
+      "revision": 2
+     },
+     {
+      "week_start": "2026-11-23",
+      "blocks": [
+       {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 405,
+        "days": [
+         2,
+         3,
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "08:30",
+        "course": null,
+        "category": "class"
+       },
+       {
+        "id": "swim",
+        "title": "Swim",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "07:00",
+        "course": null
+       }
+      ],
+      "revision": 1
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-19",
+   "answer": {
+    "week_start": "2026-11-19",
+    "blocks": [
+     {
+      "id": "chess",
+      "title": "Chess",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       1
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "16:00",
+      "course": null
+     },
+     {
+      "id": "swim",
+      "title": "Swim",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       1,
+       4
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "07:00",
+      "course": null
+     },
+     {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "duration_min": 405,
+      "days": [
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "08:30",
+      "course": null,
+      "category": "class"
+     }
+    ],
+    "revision": [
+     2,
+     1
+    ],
+    "stored": [
+     {
+      "week_start": "2026-11-16",
+      "blocks": [
+       {
+        "id": "chess",
+        "title": "Chess",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "16:00",
+        "course": null,
+        "missed_days": [
+         0
+        ]
+       },
+       {
+        "id": "s3",
+        "title": "Hw Maths",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         1
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "20:00",
+        "course": null,
+        "assignment_id": "hw-maths"
+       },
+       {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 405,
+        "days": [
+         0,
+         1
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "08:30",
+        "course": null,
+        "category": "class"
+       },
+       {
+        "id": "swim",
+        "title": "Swim",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "07:00",
+        "course": null
+       }
+      ],
+      "revision": 2
+     },
+     {
+      "week_start": "2026-11-23",
+      "blocks": [
+       {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 405,
+        "days": [
+         2,
+         3,
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "08:30",
+        "course": null,
+        "category": "class"
+       },
+       {
+        "id": "swim",
+        "title": "Swim",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "07:00",
+        "course": null
+       }
+      ],
+      "revision": 1
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-20",
+   "answer": {
+    "week_start": "2026-11-20",
+    "blocks": [
+     {
+      "id": "chess",
+      "title": "Chess",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       0
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "16:00",
+      "course": null
+     },
+     {
+      "id": "swim",
+      "title": "Swim",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       0,
+       3
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "07:00",
+      "course": null
+     },
+     {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "duration_min": 405,
+      "days": [
+       5,
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "08:30",
+      "course": null,
+      "category": "class"
+     }
+    ],
+    "revision": [
+     2,
+     1
+    ],
+    "stored": [
+     {
+      "week_start": "2026-11-16",
+      "blocks": [
+       {
+        "id": "chess",
+        "title": "Chess",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "16:00",
+        "course": null,
+        "missed_days": [
+         0
+        ]
+       },
+       {
+        "id": "s3",
+        "title": "Hw Maths",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         1
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "20:00",
+        "course": null,
+        "assignment_id": "hw-maths"
+       },
+       {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 405,
+        "days": [
+         0,
+         1
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "08:30",
+        "course": null,
+        "category": "class"
+       },
+       {
+        "id": "swim",
+        "title": "Swim",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "07:00",
+        "course": null
+       }
+      ],
+      "revision": 2
+     },
+     {
+      "week_start": "2026-11-23",
+      "blocks": [
+       {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 405,
+        "days": [
+         2,
+         3,
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "08:30",
+        "course": null,
+        "category": "class"
+       },
+       {
+        "id": "swim",
+        "title": "Swim",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "07:00",
+        "course": null
+       }
+      ],
+      "revision": 1
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-21",
+   "answer": {
+    "week_start": "2026-11-21",
+    "blocks": [
+     {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "duration_min": 405,
+      "days": [
+       4,
+       5,
+       6
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "08:30",
+      "course": null,
+      "category": "class"
+     },
+     {
+      "id": "swim",
+      "title": "Swim",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       2
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "07:00",
+      "course": null
+     }
+    ],
+    "revision": [
+     2,
+     1
+    ],
+    "stored": [
+     {
+      "week_start": "2026-11-16",
+      "blocks": [
+       {
+        "id": "chess",
+        "title": "Chess",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "16:00",
+        "course": null,
+        "missed_days": [
+         0
+        ]
+       },
+       {
+        "id": "s3",
+        "title": "Hw Maths",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         1
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "20:00",
+        "course": null,
+        "assignment_id": "hw-maths"
+       },
+       {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 405,
+        "days": [
+         0,
+         1
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "08:30",
+        "course": null,
+        "category": "class"
+       },
+       {
+        "id": "swim",
+        "title": "Swim",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "07:00",
+        "course": null
+       }
+      ],
+      "revision": 2
+     },
+     {
+      "week_start": "2026-11-23",
+      "blocks": [
+       {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 405,
+        "days": [
+         2,
+         3,
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "08:30",
+        "course": null,
+        "category": "class"
+       },
+       {
+        "id": "swim",
+        "title": "Swim",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "07:00",
+        "course": null
+       }
+      ],
+      "revision": 1
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-11-22",
+   "answer": {
+    "week_start": "2026-11-22",
+    "blocks": [
+     {
+      "id": "school",
+      "title": "School",
+      "kind": "locked",
+      "duration_min": 405,
+      "days": [
+       3,
+       4,
+       5
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "08:30",
+      "course": null,
+      "category": "class"
+     },
+     {
+      "id": "swim",
+      "title": "Swim",
+      "kind": "locked",
+      "duration_min": 60,
+      "days": [
+       1
+      ],
+      "priority": 3,
+      "energy": "medium",
+      "earliest": null,
+      "latest": null,
+      "start": "07:00",
+      "course": null
+     }
+    ],
+    "revision": [
+     2,
+     1
+    ],
+    "stored": [
+     {
+      "week_start": "2026-11-16",
+      "blocks": [
+       {
+        "id": "chess",
+        "title": "Chess",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0,
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "16:00",
+        "course": null,
+        "missed_days": [
+         0
+        ]
+       },
+       {
+        "id": "s3",
+        "title": "Hw Maths",
+        "kind": "flexible",
+        "duration_min": 60,
+        "days": [
+         1
+        ],
+        "priority": 2,
+        "energy": "low",
+        "earliest": null,
+        "latest": null,
+        "start": "20:00",
+        "course": null,
+        "assignment_id": "hw-maths"
+       },
+       {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 405,
+        "days": [
+         0,
+         1
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "08:30",
+        "course": null,
+        "category": "class"
+       },
+       {
+        "id": "swim",
+        "title": "Swim",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "07:00",
+        "course": null
+       }
+      ],
+      "revision": 2
+     },
+     {
+      "week_start": "2026-11-23",
+      "blocks": [
+       {
+        "id": "school",
+        "title": "School",
+        "kind": "locked",
+        "duration_min": 405,
+        "days": [
+         2,
+         3,
+         4
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "08:30",
+        "course": null,
+        "category": "class"
+       },
+       {
+        "id": "swim",
+        "title": "Swim",
+        "kind": "locked",
+        "duration_min": 60,
+        "days": [
+         0
+        ],
+        "priority": 3,
+        "energy": "medium",
+        "earliest": null,
+        "latest": null,
+        "start": "07:00",
+        "course": null
+       }
+      ],
+      "revision": 1
+     }
+    ],
+    "repeats": [
+     {
+      "category": "class",
+      "days": [
+       0,
+       1,
+       2,
+       3,
+       4
+      ],
+      "duration_min": 405,
+      "id": "school",
+      "kind": "locked",
+      "start": "08:30",
+      "title": "School"
+     }
+    ]
+   }
+  },
+  {
+   "user_id": 2,
+   "week_start": "2026-13-40",
+   "status": 422,
+   "detail": "week_start must be a Monday from 2000-01-03 through 2099-12-28, or 1999-12-27"
+  }
+ ]
+}

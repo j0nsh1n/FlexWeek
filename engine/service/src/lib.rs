@@ -9,6 +9,7 @@ use flexweek_store::{Connection, StoreError};
 
 pub mod accounts;
 pub mod blocks;
+pub mod weeks;
 
 /// A refusal the student is told about, with the words they see. The caller turns its kind into an
 /// answer: `Invalid` 422, `Unauthorized` 401, `Conflict` 409, `TooMany` 429 (retry after 300 s).
@@ -36,6 +37,8 @@ pub enum ServiceError {
     Refused(Refusal),
     /// The store failed; the caller answers as it does for any storage error.
     Store(StoreError),
+    /// Stored data the rules no longer accept (Python answers these with a server error).
+    Broken(String),
 }
 
 pub type ServiceResult<T> = Result<T, ServiceError>;
