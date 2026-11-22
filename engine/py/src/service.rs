@@ -35,13 +35,14 @@ fn service_py(py: Python<'_>, error: ServiceError) -> PyErr {
     }
 }
 
-/// Python's `secrets`, so tokens, salts and codes are made exactly as the routes made them.
-struct Secrets<'py> {
-    module: Bound<'py, PyModule>,
+/// Python's `secrets`, so tokens, salts and codes are made exactly as the routes made them. The service
+/// runs without the GIL; each draw takes it back only while it asks Python.
+struct Secrets {
+    module: Py<PyModule>,
     failed: Option<PyErr>,
 }
 
-impl Secrets<'_> {
+impl Secrets {
     /// Keeps Python's own error for the caller and stops the account change, which then saves nothing.
     fn fail(&mut self, error: PyErr) -> ServiceError {
         self.failed.get_or_insert(error);
@@ -49,15 +50,17 @@ impl Secrets<'_> {
     }
 
     fn text(&mut self, name: &str, size: usize) -> ServiceResult<String> {
-        let made = self
-            .module
-            .call_method1(name, (size,))
-            .and_then(|value| value.extract::<String>());
+        let made = Python::attach(|py| {
+            self.module
+                .bind(py)
+                .call_method1(name, (size,))
+                .and_then(|value| value.extract::<String>())
+        });
         made.map_err(|error| self.fail(error))
     }
 }
 
-impl Entropy for Secrets<'_> {
+impl Entropy for Secrets {
     fn session_token(&mut self) -> ServiceResult<String> {
         self.text("token_urlsafe", 32)
     }
@@ -65,10 +68,12 @@ impl Entropy for Secrets<'_> {
         self.text("token_hex", 16)
     }
     fn code_bytes(&mut self) -> ServiceResult<[u8; 8]> {
-        let made = self
-            .module
-            .call_method1("token_bytes", (8,))
-            .and_then(|value| value.extract::<Vec<u8>>());
+        let made = Python::attach(|py| {
+            self.module
+                .bind(py)
+                .call_method1("token_bytes", (8,))
+                .and_then(|value| value.extract::<Vec<u8>>())
+        });
         match made {
             Ok(bytes) => bytes.try_into().map_err(|bytes: Vec<u8>| {
                 let wrong = PyRuntimeError::new_err(format!(
@@ -82,15 +87,29 @@ impl Entropy for Secrets<'_> {
     }
 }
 
-fn with_secrets<T>(
+/// Runs one service call without the GIL, as the routes' own store calls wait on the database and hash
+/// passwords without it: holding it there would stop every other Python thread, including one that holds
+/// the write lock this call waits for.
+fn served<T: Send>(py: Python<'_>, work: impl FnOnce() -> ServiceResult<T> + Send) -> PyResult<T> {
+    py.detach(work).map_err(|error| service_py(py, error))
+}
+
+fn served_json(
     py: Python<'_>,
-    work: impl FnOnce(&mut Secrets<'_>) -> Result<T, ServiceError>,
+    work: impl FnOnce() -> ServiceResult<Value> + Send,
+) -> PyResult<String> {
+    served(py, work).map(|value| value.to_string())
+}
+
+fn with_secrets<T: Send>(
+    py: Python<'_>,
+    work: impl FnOnce(&mut Secrets) -> Result<T, ServiceError> + Send,
 ) -> PyResult<T> {
     let mut secrets = Secrets {
-        module: py.import("secrets")?,
+        module: py.import("secrets")?.unbind(),
         failed: None,
     };
-    let outcome = work(&mut secrets);
+    let outcome = py.detach(|| work(&mut secrets));
     if let Some(error) = secrets.failed {
         return Err(error);
     }
@@ -111,12 +130,6 @@ fn account(user_id: i64, username: &str) -> Account {
         id: user_id,
         username: username.to_string(),
     }
-}
-
-fn json_text(py: Python<'_>, result: Result<Value, ServiceError>) -> PyResult<String> {
-    result
-        .map(|value| value.to_string())
-        .map_err(|error| service_py(py, error))
 }
 
 /// (id, username, token, recovery codes or None).
@@ -187,9 +200,10 @@ fn service_signed_in(
     expected_id: Option<&str>,
 ) -> PyResult<(i64, String)> {
     guard(|| {
-        accounts::signed_in(Path::new(path), token, now, expected_id)
-            .map(|found| (found.id, found.username))
-            .map_err(|error| service_py(py, error))
+        served(py, || {
+            accounts::signed_in(Path::new(path), token, now, expected_id)
+        })
+        .map(|found| (found.id, found.username))
     })
 }
 
@@ -203,8 +217,9 @@ fn service_logout(
     expected_id: Option<&str>,
 ) -> PyResult<()> {
     guard(|| {
-        accounts::logout(Path::new(path), token, now, expected_id)
-            .map_err(|error| service_py(py, error))
+        served(py, || {
+            accounts::logout(Path::new(path), token, now, expected_id)
+        })
     })
 }
 
@@ -239,8 +254,9 @@ fn service_recover(
 #[pyfunction]
 fn service_recovery_codes_left(py: Python<'_>, path: &str, user_id: i64) -> PyResult<i64> {
     guard(|| {
-        accounts::recovery_codes_left(Path::new(path), user_id)
-            .map_err(|error| service_py(py, error))
+        served(py, || {
+            accounts::recovery_codes_left(Path::new(path), user_id)
+        })
     })
 }
 
@@ -305,13 +321,14 @@ fn service_delete_account(
     password: &str,
 ) -> PyResult<()> {
     guard(|| {
-        accounts::delete_account(
-            Path::new(path),
-            Asker { address, now },
-            &account(user_id, username),
-            password,
-        )
-        .map_err(|error| service_py(py, error))
+        served(py, || {
+            accounts::delete_account(
+                Path::new(path),
+                Asker { address, now },
+                &account(user_id, username),
+                password,
+            )
+        })
     })
 }
 
@@ -322,12 +339,16 @@ fn service_read_week(
     user_id: i64,
     week_start: &str,
 ) -> PyResult<String> {
-    guard(|| json_text(py, weeks::read_week(Path::new(path), user_id, week_start)))
+    guard(|| {
+        served_json(py, || {
+            weeks::read_week(Path::new(path), user_id, week_start)
+        })
+    })
 }
 
 #[pyfunction]
 fn service_list_weeks(py: Python<'_>, path: &str, user_id: i64) -> PyResult<String> {
-    guard(|| json_text(py, weeks::list_weeks(Path::new(path), user_id)))
+    guard(|| served_json(py, || weeks::list_weeks(Path::new(path), user_id)))
 }
 
 fn moment(now: &str) -> PyResult<::flexweek_engine::plan::Moment> {
@@ -342,7 +363,10 @@ fn service_day(
     date: &str,
     now: &str,
 ) -> PyResult<String> {
-    guard(|| json_text(py, views::day(Path::new(path), user_id, date, moment(now)?)))
+    guard(|| {
+        let now = moment(now)?;
+        served_json(py, || views::day(Path::new(path), user_id, date, now))
+    })
 }
 
 #[pyfunction]
@@ -355,10 +379,10 @@ fn service_month(
     now: &str,
 ) -> PyResult<String> {
     guard(|| {
-        json_text(
-            py,
-            views::month(Path::new(path), user_id, month, first_day, moment(now)?),
-        )
+        let now = moment(now)?;
+        served_json(py, || {
+            views::month(Path::new(path), user_id, month, first_day, now)
+        })
     })
 }
 
@@ -372,32 +396,30 @@ fn service_homework(
     now: &str,
 ) -> PyResult<String> {
     guard(|| {
-        json_text(
-            py,
-            views::homework(
-                Path::new(path),
-                user_id,
-                week_start,
-                include_completed,
-                moment(now)?,
-            ),
-        )
+        let now = moment(now)?;
+        served_json(py, || {
+            views::homework(Path::new(path), user_id, week_start, include_completed, now)
+        })
     })
 }
 
 #[pyfunction]
 fn service_routines(py: Python<'_>, path: &str, user_id: i64) -> PyResult<String> {
-    guard(|| json_text(py, views::routines(Path::new(path), user_id)))
+    guard(|| served_json(py, || views::routines(Path::new(path), user_id)))
 }
 
 #[pyfunction]
 fn service_restore_points(py: Python<'_>, path: &str, user_id: i64) -> PyResult<String> {
-    guard(|| json_text(py, views::restore_points(Path::new(path), user_id)))
+    guard(|| served_json(py, || views::restore_points(Path::new(path), user_id)))
 }
 
 #[pyfunction]
 fn service_read_preferences(py: Python<'_>, path: &str, user_id: i64) -> PyResult<String> {
-    guard(|| json_text(py, preferences::read_preferences(Path::new(path), user_id)))
+    guard(|| {
+        served_json(py, || {
+            preferences::read_preferences(Path::new(path), user_id)
+        })
+    })
 }
 
 /// `given` is the request body as JSON text; the service checks it.
@@ -411,10 +433,9 @@ fn service_write_preferences(
     guard(|| {
         let given: Value = serde_json::from_str(given)
             .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
-        json_text(
-            py,
-            preferences::write_preferences(Path::new(path), user_id, &given),
-        )
+        served_json(py, || {
+            preferences::write_preferences(Path::new(path), user_id, &given)
+        })
     })
 }
 
@@ -424,7 +445,7 @@ fn service_split_preview(py: Python<'_>, given: &str) -> PyResult<String> {
     guard(|| {
         let given: Value = serde_json::from_str(given)
             .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
-        json_text(py, comfort::split_preview(&given))
+        served_json(py, || comfort::split_preview(&given))
     })
 }
 
@@ -440,10 +461,9 @@ fn service_create_restore_point(
     guard(|| {
         let given: Value = serde_json::from_str(given)
             .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
-        json_text(
-            py,
-            records::create_restore_point(Path::new(path), user_id, &given, token, now),
-        )
+        served_json(py, || {
+            records::create_restore_point(Path::new(path), user_id, &given, token, now)
+        })
     })
 }
 
@@ -455,10 +475,9 @@ fn service_restore_preview(
     point_id: &str,
 ) -> PyResult<String> {
     guard(|| {
-        json_text(
-            py,
-            records::restore_preview(Path::new(path), user_id, point_id),
-        )
+        served_json(py, || {
+            records::restore_preview(Path::new(path), user_id, point_id)
+        })
     })
 }
 
@@ -476,10 +495,9 @@ fn service_restore(
     guard(|| {
         let given: Value = serde_json::from_str(given)
             .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
-        json_text(
-            py,
-            records::restore(Path::new(path), user_id, point_id, &given, token, now),
-        )
+        served_json(py, || {
+            records::restore(Path::new(path), user_id, point_id, &given, token, now)
+        })
     })
 }
 
@@ -500,10 +518,9 @@ fn service_delete_routine(
 ) -> PyResult<String> {
     let revision = in_range(revision);
     guard(|| {
-        json_text(
-            py,
-            records::delete_routine(Path::new(path), user_id, routine_id, revision, operation_id),
-        )
+        served_json(py, || {
+            records::delete_routine(Path::new(path), user_id, routine_id, revision, operation_id)
+        })
     })
 }
 
@@ -517,10 +534,9 @@ fn service_delete_homework(
 ) -> PyResult<String> {
     let revision = in_range(revision);
     guard(|| {
-        json_text(
-            py,
-            records::delete_homework(Path::new(path), user_id, id, revision),
-        )
+        served_json(py, || {
+            records::delete_homework(Path::new(path), user_id, id, revision)
+        })
     })
 }
 
