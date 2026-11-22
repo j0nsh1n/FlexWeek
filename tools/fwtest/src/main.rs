@@ -113,6 +113,25 @@ enum Command {
         #[command(flatten)]
         change: ChangeArgs,
     },
+    /// Update a 1.x Linux tarball install to a new tarball the way 1.x's updater does, then check
+    /// that the new program finds the seeded data.
+    Upgrade {
+        /// The old release's tarball, with its .sha256 beside it.
+        #[arg(long)]
+        old: std::path::PathBuf,
+        /// The new tarball, with its .sha256 beside it.
+        #[arg(long)]
+        new: std::path::PathBuf,
+        /// The HOME the old release's data was seeded in.
+        #[arg(long)]
+        home: std::path::PathBuf,
+        /// What was seeded (JSON: data_dir, username, weeks, homework, alarms, week_starts_on).
+        #[arg(long)]
+        expect: std::path::PathBuf,
+        /// Folder for the install and the report.
+        #[arg(long)]
+        work: std::path::PathBuf,
+    },
     /// Summarise the flaky-test log, most frequent first.
     Flaky {
         /// Log file. Overrides FWTEST_FLAKY_LOG and the scratch folder's log.
@@ -184,6 +203,22 @@ fn main() {
             }
         },
         Command::Select { change } => fwtest::select::run(&change.change()),
+        Command::Upgrade {
+            old,
+            new,
+            home,
+            expect,
+            work,
+        } => {
+            fwtest::upgrade::upgrade(&fwtest::upgrade::Upgrade {
+                old,
+                new,
+                home,
+                expect,
+                work,
+            })
+            .0
+        }
         Command::Flaky { log } => fwtest::flaky::run(log.as_deref()),
     };
     std::process::exit(i32::from(code));

@@ -39,6 +39,7 @@ fwtest mutate [SPEC.json ...] [--case NAME] [--engine-build COMMAND] [--no-engin
 fwtest rig [--server kwin|xvfb|auto] [ARGS FOR scripts/rig/drive.py ...]
 fwtest run [--timeout SECONDS] [--touched [--base REF | --paths-from FILE]] -- COMMAND [ARGS ...]
 fwtest flaky [--log FILE]
+fwtest upgrade --old OLD.tar.gz --new NEW.tar.gz --home HOME --expect SEEDED.json --work DIR
 fwtest pictures render|compare|page|annotate|clips ...
 fwtest clean
 ```
@@ -105,6 +106,17 @@ fwtest clean
 - `flaky` summarises the flaky-test log: one entry per test, most often logged first, then the most
   recent, with the last date, commit, where it ran and the first line of how it failed. `--log`
   reads another file, for example a log downloaded from a CI run.
+- `upgrade` is the Linux tarball row of the 2.0.0 upgrade test. It checks both tarballs against the
+  `.sha256` beside them, unpacks the old one into `DIR/install` (refusing one not laid out as
+  `FlexWeek/app/FlexWeek`), then swaps in the new one exactly as 1.x's updater does
+  (`desktop/native/updater.py`, `_swap_tree`: refuse an install holding `flexweek.db`, unpack beside it,
+  take the first folder, move the old one aside, move the new one in, tidy up). It starts the new
+  `FlexWeek` launcher with `--upgrade-check` and `HOME` set to `HOME` (no `XDG_DATA_HOME` or
+  `XDG_CONFIG_HOME`), and compares the report with `SEEDED.json` (`data_dir`, `username`, `weeks`,
+  `homework`, `alarms`, `week_starts_on`, each checked when present) and with the install's shape: the
+  launcher, `app/FlexWeek` and `app/flexweek-mcp` present, nothing left beside it. It prints one `FAIL:`
+  line per difference and exits 1, or `PASS:` and 0. It runs no Python and no job, so it does not run
+  `clean` first. Seeding `HOME` is not part of it.
 - `pictures` draws the Material app's screens, compares two drawings, records Material flows as clips,
   asks a reviewer and builds the review page. See [Pictures](#pictures).
 - `clean` stops every process recorded by a job that is no longer running. It also stops a hidden

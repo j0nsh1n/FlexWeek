@@ -17,6 +17,7 @@ pub mod rig;
 pub mod select;
 pub mod select_run;
 pub mod state;
+pub mod upgrade;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ExitCode(pub u8);
