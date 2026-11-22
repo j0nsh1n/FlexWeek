@@ -113,3 +113,16 @@ rust = [
     "flexweek-service::month_view::rows_start_on_the_first_day_asked_for_and_carry_their_weeks",
 ]
 red = "blank notes counted as notes, chips ordered by start alone, and two session dates no longer a project each fail their test (2026-11-22). The route-only checks stay in Python: signed out (test_every_private_route_answers_401_without_a_session), no month and a first day of -1 or 7 (test_the_month_answer_needs_a_month_and_a_first_day_from_monday_to_sunday)"
+
+[[port]]
+python = "backend/tests/test_session_lifetime.py"
+rust = [
+    "flexweek-service::session_lifetime::a_ticked_session_is_stored_for_thirty_days_and_an_unticked_one_for_seven",
+    "flexweek-service::session_lifetime::a_ticked_session_is_open_on_day_29_and_ended_on_day_31",
+    "flexweek-service::session_lifetime::an_unticked_session_left_alone_has_ended_on_day_8",
+    "flexweek-service::session_lifetime::an_unticked_session_used_on_day_6_is_still_open_on_day_12",
+    "flexweek-service::session_lifetime::a_session_row_with_no_length_is_renewed_for_seven_days",
+    "flexweek-service::session_lifetime::a_session_row_with_no_length_left_alone_has_ended_on_day_8",
+    "flexweek-service::accounts::a_wrong_password_and_an_unknown_name_get_the_same_words",
+]
+red = "no renewal on use fails the day-12 test; a row with no length renewed for thirty days fails the renewed-for-seven test (the Python original could not see that break: it never used the session) (2026-11-22). The cookie's age is the route's: test_the_cookie_lasts_as_long_as_the_stored_session in test_session_cookie_and_request_checks.py, red with the cookie always a week"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Iterator
+from http.cookies import SimpleCookie
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.app import create_app
+from backend.storage import connect, digest
 from backend.tests.account_support import (
     PASSWORD,
     REPLACEMENT,
@@ -66,6 +68,25 @@ def test_the_session_cookie_is_http_only_strict_and_lasts_a_week_over_http(clien
     assert attrs["path"] == "/"
     assert attrs["max-age"] == str(7 * 24 * 60 * 60)
     assert "secure" not in attrs
+
+
+@pytest.mark.parametrize(("endpoint", "keep", "days"), [("register", False, 7), ("login", False, 7), ("login", True, 30)])
+def test_the_cookie_lasts_as_long_as_the_stored_session(
+    client: TestClient, database: Path, clock, endpoint: str, keep: bool, days: int
+) -> None:
+    """Moved here from test_session_lifetime.py, whose other checks are Rust tests now."""
+    opened_at = int(clock())
+    response = register(client, "alice")
+    if endpoint == "login":
+        login = {"username": "alice", "password": PASSWORD, "keep": keep}
+        response = client.post("/api/auth/login", json=login, headers=WRITE)
+    assert response.status_code in (200, 201), response.text
+    cookie = SimpleCookie()
+    cookie.load(response.headers["set-cookie"])
+    token = cookie["flexweek_session"].value
+    with connect(database) as db:
+        expires = db.execute("SELECT expires FROM sessions WHERE token_hash = ?", (digest(token),)).fetchone()[0]
+    assert int(cookie["flexweek_session"]["max-age"]) == expires - opened_at == days * 24 * 60 * 60
 
 
 def test_the_session_cookie_is_secure_over_https(tmp_path: Path) -> None:
