@@ -1259,15 +1259,8 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         return served(flexweek_engine.service_month, account["id"], month, first_day, naive_now())
 
     @app.put("/api/week")
-    def put_week(week: SavedWeek, account: Annotated[dict, Depends(user)]) -> dict:
-        with connect(path) as db:
-            db.begin_immediate()
-            incoming = adopt_legacy_deadlines(db, account["id"], week.week_start, week.blocks)
-            owned = require_own_assignments(db, account["id"], assignment_ids_of(incoming))
-            blocks = dump_blocks(rewrite_blocks(incoming, owned))
-            stored_blocks, revision = save_week_row(db, account["id"], week.week_start, blocks, week.revision)
-            stored_blocks = week_with_standing(db, account["id"], week.week_start, json.dumps(stored_blocks))
-        return {"week_start": week.week_start, "blocks": stored_blocks, "revision": revision}
+    def put_week(given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]) -> dict:
+        return served(flexweek_engine.service_save_week, account["id"], json.dumps(given))
 
     @app.get("/api/assignments")
     def get_assignments(

@@ -160,7 +160,7 @@ pub fn week_request(value: &Value) -> Result<WeekRequest, String> {
 pub fn assignment_content(value: &Value) -> Result<AssignmentContent, String> {
     let map = object(value, "AssignmentContent")?;
     let title = req_str(map, "title", 1, 80)?;
-    if title.trim().is_empty() {
+    if python_strip(&title).is_empty() {
         return Err("title required".into());
     }
     let item = AssignmentContent {
@@ -415,13 +415,14 @@ fn week_rules(blocks: &[TimeBlock]) -> Result<(), String> {
         ids.push(block.id.as_str());
     }
     for block in blocks {
-        if block.title.trim().is_empty() || has_dup(&block.days) {
+        if python_strip(&block.title).is_empty() || has_dup(&block.days) {
             return Err("title and unique days required".into());
         }
         if block.kind == "locked" && block.start.as_deref().unwrap_or("").is_empty() {
             return Err("locked blocks need a start".into());
         }
-        if let Some(start) = &block.start {
+        // An empty start or bound is "not set", as Python's truthiness reads it.
+        if let Some(start) = block.start.as_deref().filter(|start| !start.is_empty()) {
             let Some(minutes) = hhmm_minutes(start) else {
                 return Err("invalid start time".into());
             };
@@ -429,7 +430,11 @@ fn week_rules(blocks: &[TimeBlock]) -> Result<(), String> {
                 return Err("block must fit between 00:00 and 24:00".into());
             }
         }
-        for bound in [&block.earliest, &block.latest].into_iter().flatten() {
+        for bound in [&block.earliest, &block.latest]
+            .into_iter()
+            .flatten()
+            .filter(|bound| !bound.is_empty())
+        {
             if !is_deadline(bound) {
                 return Err("invalid deadline or earliest time".into());
             }
@@ -613,7 +618,7 @@ fn routine_blocks(map: &Map<String, Value>) -> Result<Vec<RoutineBlock>, String>
 fn routine_block(value: &Value) -> Result<RoutineBlock, String> {
     let map = object(value, "RoutineBlock")?;
     let title = req_str(map, "title", 1, 80)?;
-    if title.trim().is_empty() {
+    if python_strip(&title).is_empty() {
         return Err("title required".into());
     }
     let start = req_str(map, "start", 1, 80)?;
@@ -1043,24 +1048,31 @@ fn has_dup_str(ids: &[&str]) -> bool {
         .any(|(index, id)| ids[..index].contains(id))
 }
 
+/// `(?:[01]\d|2[0-3]):[0-5]\d` matched against all of `value`, then read with `int()`: the bracketed
+/// ranges are ASCII, `\d` is any Unicode decimal digit, as in Python's `re`.
 fn hhmm_minutes(value: &str) -> Option<i64> {
-    let bytes = value.as_bytes();
-    if bytes.len() != 5 || bytes[2] != b':' {
+    let chars: Vec<char> = value.chars().collect();
+    if chars.len() != 5 || chars[2] != ':' {
         return None;
     }
-    if !bytes
-        .iter()
-        .enumerate()
-        .all(|(index, byte)| index == 2 || byte.is_ascii_digit())
-    {
+    let digit = |ch: char| crate::time::decimal_digit(ch).map(i64::from);
+    let tens = match chars[0] {
+        '0' => 0,
+        '1' => 1,
+        '2' if ('0'..='3').contains(&chars[1]) => 2,
+        _ => return None,
+    };
+    let hour = tens * 10 + digit(chars[1])?;
+    if !('0'..='5').contains(&chars[3]) {
         return None;
     }
-    let hour: i64 = value[0..2].parse().ok()?;
-    let minute: i64 = value[3..5].parse().ok()?;
-    if hour > 23 || minute > 59 {
-        return None;
-    }
+    let minute = digit(chars[3])? * 10 + digit(chars[4])?;
     Some(hour * 60 + minute)
+}
+
+/// Python's `str.strip()` with no argument: Unicode white space and the four separator controls.
+fn python_strip(text: &str) -> &str {
+    text.trim_matches(|ch: char| ch.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&ch))
 }
 
 fn is_deadline(value: &str) -> bool {
