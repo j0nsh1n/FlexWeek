@@ -5,7 +5,7 @@ import secrets
 import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
 import flexweek_engine  # type: ignore[import-untyped]
@@ -23,29 +23,21 @@ from backend.limits import MAX_BODY
 from backend.models import (
     AssignmentContent,
     ProtectedWindow,
-    Routine,
     StudyWindow,
     TimeBlock,
-    WeekRequest,
     WorkWindow,
-    valid_naive_stamp,
     valid_spotify_url,
 )
-from backend.restore import canonical, diff_transfer, state_token
 from backend.slots import DAY_END_MIN, SLOT_MIN
 from backend.storage import (
     Connection,
-    Row,
-    connect,
     cookie_age,
     initialize,
     password_matches,
     throttle,
 )
-from backend.transfer import TRANSFER_TOO_LARGE, transfer_fits
 from backend.weeks import (
     current_week_start,
-    is_week_start,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -54,18 +46,19 @@ WEEK_START_RULE = "week_start must be a Monday from 2000-01-03 through 2099-12-2
 DATE_RULE = "date must be YYYY-MM-DD between 2000-01-01 and 2099-12-31"
 MONTH_RULE = "month must be YYYY-MM between 2000-01 and 2099-12"
 ASSIGNMENT_UNKNOWN = "assignment_id must name an assignment of this account"
-ASSIGNMENT_CONFLICT = "This assignment changed in another window. Reload before saving."
 ASSIGNMENT_LIMIT = "An account holds at most 1000 assignments"
-WEEK_CONFLICT = "This week changed in another window. Reload before saving."
-IMPORT_STALE = "This preview is out of date. Refresh it before importing."
 PASSWORD_WRONG = "Incorrect password"
 TOO_MANY_TRIES = "Too many tries. Wait 5 minutes, then try again."
-OPERATION_CONFLICT = "This operation was already used with different data."
 MAX_ASSIGNMENTS = 1000
-MAX_RESTORE_POINTS = 20
 # The answer for each kind of refusal the Rust service gives (flexweek_service::Refusal).
-REFUSAL_STATUS = {"invalid": 422, "unauthorized": 401, "not_found": 404, "conflict": 409, "too_many": 429}
-MAX_OPERATIONS = 100
+REFUSAL_STATUS = {
+    "invalid": 422,
+    "unauthorized": 401,
+    "not_found": 404,
+    "conflict": 409,
+    "too_many": 429,
+    "too_large": 413,
+}
 
 
 def encode_assignment(content: AssignmentContent) -> str:
@@ -123,10 +116,6 @@ def rewrite_stored_blocks(blocks: list[dict], assignments: dict[str, dict]) -> l
     return loaded
 
 
-def dump_blocks(blocks: list[TimeBlock]) -> list[dict]:
-    return [block.model_dump() for block in blocks]
-
-
 def list_account_weeks(db: Connection, user_id: int) -> list[tuple[str, list[dict]]]:
     rows = db.list_account_weeks(user_id)
     return [(row[0], json.loads(row[1])) for row in rows]
@@ -138,11 +127,6 @@ def week_with_standing(db: Connection, user_id: int, week_start: str, stored: st
     return merged
 
 
-def stored_revision(db: Connection, user_id: int, week_start: str) -> int:
-    row = db.read_week(user_id, week_start)
-    return row[1] if row else 0
-
-
 def assignment_view(body: dict, revision: int, planned: int, done: int = 0) -> dict:
     view: dict = json.loads(flexweek_engine.assignment_view(json.dumps(body), revision, planned, done))
     return view
@@ -150,93 +134,6 @@ def assignment_view(body: dict, revision: int, planned: int, done: int = 0) -> d
 
 def naive_now() -> str:
     return wall_clock.now().strftime("%Y-%m-%dT%H:%M")
-
-
-def payload_digest(value: object) -> str:
-    return flexweek_engine.payload_digest(value)
-
-
-def capture_account(db: Connection, user_id: int) -> dict:
-    raw = json.loads(db.capture_account(user_id))
-    return {
-        "weeks": [
-            {
-                "week_start": row["week_start"],
-                "blocks": json.loads(row["blocks"]),
-                "revision": row["revision"],
-            }
-            for row in raw["weeks"]
-        ],
-        "assignments": [
-            {"id": row["id"], "body": json.loads(row["body"]), "revision": row["revision"]}
-            for row in raw["assignments"]
-        ],
-    }
-
-
-def recall_operation(db: Connection, user_id: int, operation_id: str, digest_value: str) -> dict | None:
-    status, payload = db.recall_operation(user_id, operation_id, digest_value)
-    if status == "missing":
-        return None
-    if status == "conflict":
-        raise HTTPException(409, OPERATION_CONFLICT)
-    return json.loads(payload)
-
-
-def remember_operation(
-    db: Connection, user_id: int, operation_id: str, digest_value: str, response: dict
-) -> None:
-    db.remember_operation(user_id, operation_id, digest_value, canonical(response), MAX_OPERATIONS)
-
-
-def insert_restore_point(db: Connection, user_id: int, label: str, keep_ids: set[str] | None = None) -> dict:
-    created: dict = json.loads(
-        db.create_restore_point(
-            user_id,
-            secrets.token_hex(8),
-            label,
-            naive_now(),
-            list(keep_ids or ()),
-            MAX_RESTORE_POINTS,
-        )
-    )
-    return created
-
-
-def replace_account(db: Connection, user_id: int, snapshot: dict) -> dict:
-    weeks = [
-        (week["week_start"], canonical(week["blocks"]), int(week["revision"]))
-        for week in snapshot["weeks"]
-    ]
-    assignments = [
-        (item["id"], canonical(item["body"]), int(item["revision"])) for item in snapshot["assignments"]
-    ]
-    try:
-        db.replace_account(user_id, weeks, assignments)
-    except ValueError as error:
-        # The store refuses a week that repeats a block id and says which one.
-        raise HTTPException(422, str(error)) from error
-    return {
-        "weeks": [{"week_start": start, "revision": revision} for start, _blocks, revision in weeks],
-        "assignments": [
-            {"id": item_id, "revision": revision} for item_id, _body, revision in assignments
-        ],
-    }
-
-
-def encode_routine(routine: Routine) -> str:
-    return canonical([block.model_dump() for block in routine.blocks])
-
-
-def routine_view(row: Row) -> dict:
-    return {
-        "id": row["id"],
-        "name": row["name"],
-        "blocks": json.loads(row["body"]),
-        "revision": row["revision"],
-        "created_at": row["created_at"],
-        "updated_at": row["updated_at"],
-    }
 
 
 class Credentials(BaseModel):
@@ -251,52 +148,8 @@ class Credentials(BaseModel):
         return value.lower()
 
 
-class SavedWeek(WeekRequest):
-    model_config = ConfigDict(extra="forbid")
-    week_start: str
-    revision: int = Field(ge=0, le=2**53 - 1)
-
-    @field_validator("week_start")
-    @classmethod
-    def week_start_is_a_monday(cls, value: str) -> str:
-        if not is_week_start(value):
-            raise ValueError(WEEK_START_RULE)
-        return value
-
-
-def a_week_start(value: str) -> str:
-    if not is_week_start(value):
-        raise ValueError(WEEK_START_RULE)
-    return value
-
-
 # School, Setup's activities and weekly fixed times together; the engine holds the number (#118).
-MAX_STANDING = int(flexweek_engine.MAX_REPEATS)
 # One save can stop every repeat and add as many new ones.
-STANDING_RULE = (
-    "Only School, Setup's activities and weekly fixed times stand in every week, each with a start time and "
-    "an id of its own"
-)
-
-
-class StandingRow(BaseModel):
-    """One row of the standing week in an export: a block standing from `from_week` on, or, with no body,
-    stopping there."""
-
-    model_config = ConfigDict(extra="forbid")
-    id: str = Field(min_length=1, max_length=80)
-    from_week: str
-    # A new repeat takes the place after the ones standing, so the 200th is at 199.
-    position: int = Field(ge=0, le=MAX_STANDING - 1)
-    body: TimeBlock | None
-
-    _from_week = field_validator("from_week")(a_week_start)
-
-    @model_validator(mode="after")
-    def body_is_the_rows_block(self) -> StandingRow:
-        if self.body is not None and (self.body.id != self.id or self.body.kind != "locked"):
-            raise ValueError(STANDING_RULE)
-        return self
 
 
 class AlarmPreference(BaseModel):
@@ -503,257 +356,6 @@ class RecoverRequest(BaseModel):
     @classmethod
     def normalize(cls, value: str) -> str:
         return value.lower()
-
-
-class TransferAssignment(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    id: str = Field(min_length=1, max_length=80)
-    body: AssignmentContent
-    revision: int = Field(ge=0, le=2**53 - 1)
-
-    @model_validator(mode="after")
-    def assignment_ids_match(self) -> TransferAssignment:
-        if self.id != self.body.id:
-            raise ValueError("assignment id and body.id must match")
-        return self
-
-
-class TransferRoutine(Routine):
-    created_at: str
-    updated_at: str
-
-    _stamps = field_validator("created_at", "updated_at")(valid_naive_stamp)
-
-
-class TransferSnapshot(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    format: Literal[3]
-    exported_at: str
-    username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_]+$")
-    weeks: list[SavedWeek]
-    assignments: list[TransferAssignment] = Field(max_length=1000)
-    preferences: Preferences
-    routines: list[TransferRoutine] = Field(max_length=50)
-    # None in a file from before 0.19.0: the import builds the standing week from its weeks.
-    standing: list[StandingRow] | None = Field(default=None, max_length=5000)
-
-    _exported_at = field_validator("exported_at")(valid_naive_stamp)
-
-    @model_validator(mode="before")
-    @classmethod
-    def clock_of_an_older_export(cls, data: object) -> object:
-        """Before 0.18.5 a 24-hour clock was left out of the file, and 12-hour is the new default.
-        The export writes the clock whichever it is, so a file without one is from before."""
-        if (
-            isinstance(data, dict)
-            and isinstance(data.get("preferences"), dict)
-            and "clock_24h" not in data["preferences"]
-        ):
-            data = {**data, "preferences": {**data["preferences"], "clock_24h": True}}
-        return data
-
-    @field_validator("username")
-    @classmethod
-    def normalize_username(cls, value: str) -> str:
-        return value.lower()
-
-    @model_validator(mode="after")
-    def snapshot_refs_are_consistent(self) -> TransferSnapshot:
-        starts = [week.week_start for week in self.weeks]
-        if len(set(starts)) != len(starts):
-            raise ValueError("week_start values must be unique")
-        assignment_ids = [item.id for item in self.assignments]
-        if len(set(assignment_ids)) != len(assignment_ids):
-            raise ValueError("assignment ids must be unique")
-        routine_ids = [item.id for item in self.routines]
-        if len(set(routine_ids)) != len(routine_ids):
-            raise ValueError("routine ids must be unique")
-        owned = set(assignment_ids)
-        for week in self.weeks:
-            for block in week.blocks:
-                if block.assignment_id and block.assignment_id not in owned:
-                    raise ValueError("assignment_id must name an assignment in this snapshot")
-        if self.standing:
-            rows = json.dumps([row.model_dump(mode="json") for row in self.standing])
-            if int(flexweek_engine.standing_most_at_once(rows)) > MAX_STANDING:
-                raise ValueError(f"a file can hold at most {MAX_STANDING} repeating blocks standing at once")
-        return self
-
-
-class TransferPreviewRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    snapshot: TransferSnapshot
-
-
-class TransferApplyRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    snapshot: TransferSnapshot
-    state_token: str = Field(min_length=1, max_length=128)
-    operation_id: str = Field(min_length=1, max_length=80)
-
-
-def apply_transfer(db: Connection, user_id: int, snapshot: TransferSnapshot) -> dict:
-    write_preferences(db, user_id, snapshot.preferences)
-    db.replace_routines(
-        user_id,
-        json.dumps(
-            [
-                {
-                    "id": routine.id,
-                    "name": routine.name,
-                    "body": encode_routine(routine),
-                    "revision": routine.revision,
-                    "created_at": routine.created_at,
-                    "updated_at": routine.updated_at,
-                }
-                for routine in snapshot.routines
-            ]
-        ),
-    )
-    db.replace_standing(
-        user_id, json.dumps([row.model_dump() for row in snapshot.standing or []])
-    )
-    replaced = replace_account(
-        db,
-        user_id,
-        {
-            "weeks": [
-                {
-                    "week_start": week.week_start,
-                    "blocks": dump_blocks(week.blocks),
-                    "revision": week.revision,
-                }
-                for week in snapshot.weeks
-            ],
-            "assignments": [
-                {"id": item.id, "body": item.body.model_dump(), "revision": item.revision}
-                for item in snapshot.assignments
-            ],
-        },
-    )
-    if snapshot.standing is None:
-        db.adopt_standing(user_id)
-    return {
-        **replaced,
-        "preferences": snapshot.preferences.model_dump(),
-        "routines": [item.model_dump() for item in snapshot.routines],
-    }
-
-
-def encode_availability(preferences: Preferences) -> str:
-    return json.dumps(
-        {
-            "protected": [window.model_dump() for window in preferences.protected],
-            "work_windows": [window.model_dump() for window in preferences.work_windows],
-            "day_cutoff": preferences.day_cutoff,
-        },
-        separators=(",", ":"),
-    )
-
-
-def encode_comfort(preferences: Preferences) -> str:
-    comfort: dict[str, Any] = {
-        "alert_volume": preferences.alert_volume,
-        "end_chime": preferences.end_chime,
-        "tray_notifications": preferences.tray_notifications,
-        "start_at_login": preferences.start_at_login,
-        "preferred_view": preferences.preferred_view,
-        "sidebar_collapsed": preferences.sidebar_collapsed,
-        "sidebar_width_px": preferences.sidebar_width_px,
-        "theme_pack": preferences.theme_pack,
-        "accent": preferences.accent,
-        "accent_chips": preferences.accent_chips,
-        "motion": preferences.motion,
-        "alarm_tone": preferences.alarm_tone,
-        "planning_style": preferences.planning_style,
-        "drag_step_min": preferences.drag_step_min,
-        "clock_24h": preferences.clock_24h,
-        "setup": preferences.setup.model_dump() if preferences.setup is not None else None,
-    }
-    if preferences.focus_audio != "off":
-        comfort["focus_audio"] = preferences.focus_audio
-    if not preferences.focus_auto_mute:
-        comfort["focus_auto_mute"] = False
-    if preferences.focus_auto_complete:
-        comfort["focus_auto_complete"] = True
-    return json.dumps(comfort, separators=(",", ":"))
-
-
-_FOCUS_AUDIO = frozenset({"off", "rain", "lo-fi", "white-noise", "spotify"})
-_FOCUS_FLAGS = ("focus_auto_mute", "focus_auto_complete")
-
-
-def _stored_focus_extras(row: Row) -> dict[str, Any]:
-    """The engine's preference reader drops comfort keys it does not know. The focus audio choice
-    and the two focus rules are those, so they are put back here. Defaults are not stored."""
-    raw = dict(row).get("comfort_json")
-    if not isinstance(raw, str) or not raw:
-        return {}
-    try:
-        comfort = json.loads(raw)
-    except json.JSONDecodeError:
-        return {}
-    if not isinstance(comfort, dict):
-        return {}
-    extras: dict[str, Any] = {}
-    audio = comfort.get("focus_audio")
-    if audio in _FOCUS_AUDIO and audio != "off":
-        extras["focus_audio"] = str(audio)
-    for name in _FOCUS_FLAGS:
-        if isinstance(comfort.get(name), bool):
-            extras[name] = comfort[name]
-    return extras
-
-
-def preferences_from_row(row: Row) -> dict:
-    fields = json.loads(flexweek_engine.preferences_fields(json.dumps(dict(row))))
-    fields.update(_stored_focus_extras(row))
-    return Preferences(**fields).model_dump()
-
-
-def capture_transfer(db: Connection, user_id: int) -> dict:
-    snapshot = capture_account(db, user_id)
-    raw = db.preference_row(user_id)
-    assert raw is not None
-    routines = [routine_view(row) for row in json.loads(db.list_routines(user_id))]
-    return {
-        **snapshot,
-        "preferences": preferences_from_row(json.loads(raw)),
-        "routines": routines,
-        "standing": json.loads(db.standing_rows(user_id)),
-    }
-
-
-def write_preferences(db: Connection, user_id: int, preferences: Preferences) -> dict:
-    db.write_preferences(
-        user_id,
-        json.dumps(
-            {
-                "theme": preferences.theme,
-                "reminders_enabled": int(preferences.reminders_enabled),
-                "reminder_lead_min": preferences.reminder_lead_min,
-                "reminder_sound": int(preferences.reminder_sound),
-                "reminder_dnd_override": int(preferences.reminder_dnd_override),
-                "timer_work_min": preferences.timer_work_min,
-                "timer_break_min": preferences.timer_break_min,
-                "timer_long_break_min": preferences.timer_long_break_min,
-                "timer_long_break_every": preferences.timer_long_break_every,
-                "auto_split_pomodoro": int(preferences.auto_split_pomodoro),
-                "weekend_homework_free": int(preferences.weekend_homework_free),
-                "buffer_min": preferences.buffer_min,
-                "urgent_first": int(preferences.urgent_first),
-                "split_long_tasks": int(preferences.split_long_tasks),
-                "show_weekends": int(preferences.show_weekends),
-                "default_spotify_url": preferences.default_spotify_url,
-                "alarms_json": json.dumps(
-                    [alarm.model_dump() for alarm in preferences.alarms], separators=(",", ":")
-                ),
-                "availability_json": encode_availability(preferences),
-                "comfort_json": encode_comfort(preferences),
-            }
-        ),
-    )
-    return preferences.model_dump()
 
 
 def create_app(database: Path | None = None, origin: str | None = None) -> FastAPI:
@@ -1127,58 +729,31 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.post("/api/account-export")
     def export_account(
-        data: PasswordConfirm, request: Request, account: Annotated[dict, Depends(user)]
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        request: Request,
+        account: Annotated[dict, Depends(user)],
     ) -> dict:
-        deny_if_throttled(request, account["username"])
-        with connect(path) as db:
-            db.begin()
-            require_password(db, account["id"], data.password)
-            payload = {
-                "format": 3,
-                "exported_at": naive_now(),
-                "username": account["username"],
-                **capture_transfer(db, account["id"]),
-            }
-        # A stored 12-hour clock is left off the wire, but the file says it, as the snapshot's
-        # validator reads a missing clock as an export from before 0.18.5.
-        payload["preferences"].setdefault("clock_24h", False)
-        snapshot = TransferSnapshot.model_validate(payload).model_dump()
-        snapshot["preferences"].setdefault("clock_24h", False)
-        if not transfer_fits(snapshot):
-            raise HTTPException(413, TRANSFER_TOO_LARGE)
-        return snapshot
+        address, now = asked(request)
+        exported = flexweek_engine.service_export_account
+        return served(exported, address, now, account["id"], account["username"], sent, naive_now())
 
     @app.post("/api/account-import/preview")
     def preview_account_import(
-        payload: TransferPreviewRequest, account: Annotated[dict, Depends(user)]
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
     ) -> dict:
-        incoming = payload.snapshot.model_dump()
-        with connect(path) as db:
-            current = capture_transfer(db, account["id"])
-        return {
-            "state_token": state_token({"current": current, "incoming": incoming}),
-            "source_username": payload.snapshot.username,
-            "changes": diff_transfer(current, incoming),
-        }
+        return served(flexweek_engine.service_import_preview, account["id"], sent)
 
     @app.post("/api/account-import")
-    def apply_account_import(payload: TransferApplyRequest, account: Annotated[dict, Depends(user)]) -> dict:
-        incoming = payload.snapshot.model_dump()
-        digest_value = payload_digest(payload.model_dump())
-        with connect(path) as db:
-            db.begin_immediate()
-            remembered = recall_operation(db, account["id"], payload.operation_id, digest_value)
-            if remembered is not None:
-                return remembered
-            current = capture_transfer(db, account["id"])
-            if payload.state_token != state_token({"current": current, "incoming": incoming}):
-                raise HTTPException(409, IMPORT_STALE)
-            stamp = naive_now()
-            recovery = insert_restore_point(db, account["id"], f"Before import — {stamp}")
-            replaced = apply_transfer(db, account["id"], payload.snapshot)
-            result = {"recovery_id": recovery["id"], **replaced}
-            remember_operation(db, account["id"], payload.operation_id, digest_value, result)
-        return result
+    def apply_account_import(
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
+    ) -> dict:
+        imported = flexweek_engine.service_import_account
+        return served(imported, account["id"], sent, secrets.token_hex(8), naive_now())
 
     @app.get("/api/timer-presets")
     def get_timer_presets(_account: Annotated[dict, Depends(user)]) -> dict:

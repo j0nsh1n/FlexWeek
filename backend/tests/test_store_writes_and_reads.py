@@ -11,7 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend.app import create_app, replace_account
+from backend.app import create_app
 from backend.models import Routine
 from backend.storage import connect, initialize
 from backend.tests.account_support import PASSWORD, WRITE, school
@@ -209,9 +209,9 @@ def test_replacing_an_account_that_fails_after_its_deletes_leaves_the_account_as
             (WEEK_A,),
         )
         db.insert_assignment(1, "old", '{"id":"old"}')
-    twice = {"week_start": WEEK_B, "blocks": [], "revision": 1}
+    twice = (WEEK_B, "[]", 1)
     with pytest.raises(sqlite3.IntegrityError), connect(path) as db:
-        replace_account(db, 1, {"weeks": [twice, twice], "assignments": []})
+        db.replace_account(1, [twice, twice], [])
     with connect(path) as db:
         weeks = db.execute("SELECT week_start, blocks, revision FROM weeks WHERE user_id = 1").fetchall()
         assert [(row["week_start"], row["blocks"], row["revision"]) for row in weeks] == [

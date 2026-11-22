@@ -1,19 +1,29 @@
 //! Account export and import (Settings > Export my account, and Import), as `backend/app.py`'s
 //! `POST /api/account-export`, `POST /api/account-import/preview` and `POST /api/account-import` do them.
-//! This part reads a backup file as `TransferSnapshot` reads it.
+//! A backup file is read as `TransferSnapshot` reads it.
 
 use std::collections::BTreeSet;
+use std::path::Path;
 
 use flexweek_engine::model::valid_naive_stamp;
 use flexweek_engine::repeats::MAX_REPEATS;
+use flexweek_engine::snapshot::{canonical, diff_transfer, state_token, transfer_fits};
 use flexweek_engine::standing::most_standing_at_once;
 use flexweek_engine::time::is_week_start;
 use flexweek_engine::validate::{assignment_content, routine, time_block, whole_number};
+use flexweek_store::{self as store, Connection, StoreError};
 use serde_json::{Map, Value, json};
 
+use crate::accounts::{Account, Asker, INVALID_INPUT, require_password, throttled};
 use crate::blocks::{BlockRefused, Checked, refuse};
-use crate::preferences::check_preferences;
+use crate::preferences::{check_preferences, preferences_on, store_preferences};
+use crate::records::{captured, recall, remember};
 use crate::week_saves::check_saved_week;
+use crate::{Refusal, ServiceError, ServiceResult, with_db};
+
+pub const IMPORT_STALE: &str = "This preview is out of date. Refresh it before importing.";
+pub const TRANSFER_TOO_LARGE: &str = "This account is larger than the 256 KiB transfer limit.";
+const MAX_RESTORE_POINTS: i64 = 20;
 
 const REVISION_MAX: i128 = (1 << 53) - 1;
 const MAX_TRANSFER_ASSIGNMENTS: usize = 1000;
@@ -274,4 +284,292 @@ pub fn check_transfer(given: &Value) -> Checked<Value> {
         "routines": routines,
         "standing": standing,
     }))
+}
+
+fn invalid() -> ServiceError {
+    Refusal::Invalid(INVALID_INPUT.to_string()).into()
+}
+
+fn parsed(text: &str) -> ServiceResult<Value> {
+    serde_json::from_str(text).map_err(|error| {
+        StoreError::Json {
+            text: text.to_string(),
+            error,
+        }
+        .into()
+    })
+}
+
+/// The account as a backup file holds it (before the file's own fields): weeks, homework, preferences,
+/// routines and the standing week, as `capture_transfer` gives them.
+fn capture_transfer(conn: &Connection, user_id: i64) -> ServiceResult<Value> {
+    let mut snapshot = captured(conn, user_id)?;
+    let routines = store::routine_list(conn, user_id)?["routines"].take();
+    let standing = parsed(&store::standing_rows(conn, user_id)?)?;
+    if let Some(fields) = snapshot.as_object_mut() {
+        fields.insert("preferences".into(), preferences_on(conn, user_id)?);
+        fields.insert("routines".into(), routines);
+        fields.insert("standing".into(), standing);
+    }
+    Ok(snapshot)
+}
+
+/// A stored 12-hour clock is left off the preferences answer, but a backup file says it: a file without
+/// one reads as an export from before 0.18.5.
+fn with_clock(snapshot: &mut Value) {
+    if let Some(preferences) = snapshot["preferences"].as_object_mut()
+        && !preferences.contains_key("clock_24h")
+    {
+        preferences.insert("clock_24h".into(), Value::Bool(false));
+    }
+}
+
+/// The account as a backup file, as `POST /api/account-export` answers `{"password"}`: the password is
+/// asked again (and counted as a try), and a file too large to import elsewhere is refused.
+pub fn export_account(
+    path: &Path,
+    asker: Asker<'_>,
+    account: &Account,
+    given: &Value,
+    now: &str,
+) -> ServiceResult<Value> {
+    let password = match given {
+        Value::Object(fields) if fields.len() == 1 => match fields.get("password") {
+            Some(Value::String(password)) if (12..=128).contains(&password.chars().count()) => {
+                password.clone()
+            }
+            _ => return Err(invalid()),
+        },
+        _ => return Err(invalid()),
+    };
+    throttled(path, asker, &account.username)?;
+    let captured = with_db(path, |conn| {
+        store::begin(conn)?;
+        require_password(conn, account.id, &password)?;
+        capture_transfer(conn, account.id)
+    })?;
+    let mut payload = json!({
+        "format": 3,
+        "exported_at": now,
+        "username": account.username,
+    });
+    if let (Some(fields), Value::Object(captured)) = (payload.as_object_mut(), captured) {
+        fields.extend(captured);
+    }
+    with_clock(&mut payload);
+    let mut snapshot = check_transfer(&payload).map_err(|refused| {
+        ServiceError::Broken(format!(
+            "the account no longer reads as a backup file: {}",
+            refused.0
+        ))
+    })?;
+    with_clock(&mut snapshot);
+    if !transfer_fits(&snapshot) {
+        return Err(Refusal::TooLarge(TRANSFER_TOO_LARGE.to_string()).into());
+    }
+    Ok(snapshot)
+}
+
+/// `{"snapshot": ...}` read as `TransferPreviewRequest`: the file as read.
+fn previewed(given: &Value) -> ServiceResult<Value> {
+    match given {
+        Value::Object(fields) if fields.len() == 1 => match fields.get("snapshot") {
+            Some(snapshot) => check_transfer(snapshot).map_err(|_| invalid()),
+            None => Err(invalid()),
+        },
+        _ => Err(invalid()),
+    }
+}
+
+/// What importing the file would change, as `POST /api/account-import/preview` answers it, with the token
+/// that names the account and the file it compared.
+pub fn import_preview(path: &Path, user_id: i64, given: &Value) -> ServiceResult<Value> {
+    let incoming = previewed(given)?;
+    let current = with_db(path, |conn| capture_transfer(conn, user_id))?;
+    Ok(json!({
+        "state_token": state_token(&json!({ "current": current, "incoming": incoming })),
+        "source_username": incoming["username"],
+        "changes": diff_transfer(&current, &incoming),
+    }))
+}
+
+/// `{"snapshot", "state_token", "operation_id"}` read as `TransferApplyRequest`, written as `model_dump()`.
+fn import_request(given: &Value) -> Checked<Value> {
+    let fields = object(given, "an import")?;
+    only(
+        fields,
+        &["snapshot", "state_token", "operation_id"],
+        "an import",
+    )?;
+    let snapshot = check_transfer(required(fields, "snapshot")?)?;
+    let token = text(required(fields, "state_token")?, "state_token", 1, 128)?;
+    let operation_id = text(required(fields, "operation_id")?, "operation_id", 1, 80)?;
+    Ok(json!({ "snapshot": snapshot, "state_token": token, "operation_id": operation_id }))
+}
+
+/// The account replaced by the file, inside the caller's transaction, as `apply_transfer` does it.
+fn apply_transfer(conn: &Connection, user_id: i64, snapshot: &Value) -> ServiceResult<Value> {
+    store_preferences(conn, user_id, &snapshot["preferences"])?;
+    let empty = Vec::new();
+    let routines = snapshot["routines"].as_array().unwrap_or(&empty);
+    let rows: Vec<Value> = routines
+        .iter()
+        .map(|routine| {
+            json!({
+                "id": routine["id"],
+                "name": routine["name"],
+                "body": canonical(&routine["blocks"]),
+                "revision": routine["revision"],
+                "created_at": routine["created_at"],
+                "updated_at": routine["updated_at"],
+            })
+        })
+        .collect();
+    store::replace_routines(conn, user_id, &Value::Array(rows).to_string())?;
+    let standing = match &snapshot["standing"] {
+        Value::Null => Value::Array(Vec::new()),
+        rows => rows.clone(),
+    };
+    store::replace_standing(conn, user_id, &standing.to_string())?;
+    let field = |item: &Value, name: &str| item[name].as_str().unwrap_or_default().to_string();
+    let revision = |item: &Value| item["revision"].as_i64().unwrap_or_default();
+    let weeks: Vec<(String, String, i64)> = snapshot["weeks"]
+        .as_array()
+        .unwrap_or(&empty)
+        .iter()
+        .map(|week| {
+            (
+                field(week, "week_start"),
+                canonical(&week["blocks"]),
+                revision(week),
+            )
+        })
+        .collect();
+    let assignments: Vec<(String, String, i64)> = snapshot["assignments"]
+        .as_array()
+        .unwrap_or(&empty)
+        .iter()
+        .map(|item| (field(item, "id"), canonical(&item["body"]), revision(item)))
+        .collect();
+    match store::replace_account(conn, user_id, &weeks, &assignments) {
+        Ok(()) => {}
+        Err(error @ StoreError::RepeatedBlockId(_)) => {
+            return Err(Refusal::Invalid(error.to_string()).into());
+        }
+        Err(error) => return Err(error.into()),
+    }
+    if snapshot["standing"].is_null() {
+        store::adopt_standing(conn, user_id)?;
+    }
+    Ok(json!({
+        "weeks": weeks.iter().map(|(start, _, revision)| json!({ "week_start": start, "revision": revision }))
+            .collect::<Vec<_>>(),
+        "assignments": assignments.iter().map(|(id, _, revision)| json!({ "id": id, "revision": revision }))
+            .collect::<Vec<_>>(),
+        "preferences": snapshot["preferences"],
+        "routines": snapshot["routines"],
+    }))
+}
+
+/// Replaces the account with the file, as `POST /api/account-import` does: only when the account is still
+/// as the preview saw it, after a restore point named `token` made at `now`, and once per operation id.
+pub fn import_account(
+    path: &Path,
+    user_id: i64,
+    given: &Value,
+    token: &str,
+    now: &str,
+) -> ServiceResult<Value> {
+    let request = import_request(given).map_err(|_| invalid())?;
+    let digest = store::payload_digest(&request);
+    let operation_id = request["operation_id"].as_str().unwrap_or_default();
+    let incoming = &request["snapshot"];
+    with_db(path, |conn| {
+        store::begin_immediate(conn)?;
+        if let Some(first) = recall(conn, user_id, operation_id, &digest)? {
+            return Ok(first);
+        }
+        let current = capture_transfer(conn, user_id)?;
+        if request["state_token"]
+            != state_token(&json!({ "current": current, "incoming": incoming })).as_str()
+        {
+            return Err(Refusal::Conflict(IMPORT_STALE.to_string()).into());
+        }
+        let recovery = store::create_restore_point(
+            conn,
+            user_id,
+            token,
+            &format!("Before import — {now}"),
+            now,
+            &[],
+            MAX_RESTORE_POINTS,
+        )?;
+        let replaced = apply_transfer(conn, user_id, incoming)?;
+        let mut result = json!({ "recovery_id": recovery["id"] });
+        if let (Some(fields), Value::Object(replaced)) = (result.as_object_mut(), replaced) {
+            fields.extend(replaced);
+        }
+        remember(conn, user_id, operation_id, &digest, &result)?;
+        Ok(result)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flexweek_testkit::TestDb;
+
+    /// The store's guard, for a file whose doubled block id got past the file check: the import is refused
+    /// in the student's words and the account keeps its week. Moved from
+    /// backend/tests/test_week_repeated_block_id.py, which reached it by patching the app's code.
+    #[test]
+    fn a_file_whose_week_reaches_the_store_with_a_doubled_id_is_refused_in_words_and_changes_nothing()
+     {
+        let db = TestDb::new("transfer-doubled");
+        let user = db.account("alice");
+        let school = json!({
+            "id": "school", "title": "School", "kind": "locked", "duration_min": 390,
+            "days": [0, 1, 2, 3, 4], "start": "08:00", "category": "School",
+        });
+        with_db(&db.path, |conn| {
+            Ok(store::save_week(
+                conn,
+                user,
+                "2026-09-14",
+                &json!([school]).to_string(),
+                0,
+            )?)
+        })
+        .unwrap();
+        let snapshot = json!({
+            "weeks": [{ "week_start": "2026-09-14", "blocks": [school, school], "revision": 1 }],
+            "assignments": [], "routines": [], "standing": [],
+            "preferences": preferences_on_new(&db, user),
+        });
+        let (refused, rows) = with_db(&db.path, |conn| {
+            store::begin_immediate(conn)?;
+            let refused = apply_transfer(conn, user, &snapshot);
+            let rows: String = conn
+                .query_row(
+                    "SELECT blocks FROM weeks WHERE user_id = ?1",
+                    [user],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            Ok((refused, rows))
+        })
+        .unwrap();
+        match refused {
+            Err(ServiceError::Refused(Refusal::Invalid(words))) => assert_eq!(
+                words,
+                r#"Two blocks in this week share the id "school". Each block needs its own id."#
+            ),
+            other => panic!("not refused in words: {other:?}"),
+        }
+        assert_eq!(rows, json!([school]).to_string());
+    }
+
+    fn preferences_on_new(db: &TestDb, user: i64) -> Value {
+        with_db(&db.path, |conn| preferences_on(conn, user)).unwrap()
+    }
 }
