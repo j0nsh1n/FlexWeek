@@ -33,8 +33,6 @@ from backend.storage import (
     Connection,
     cookie_age,
     initialize,
-    password_matches,
-    throttle,
 )
 from backend.weeks import (
     current_week_start,
@@ -47,7 +45,6 @@ DATE_RULE = "date must be YYYY-MM-DD between 2000-01-01 and 2099-12-31"
 MONTH_RULE = "month must be YYYY-MM between 2000-01 and 2099-12"
 ASSIGNMENT_UNKNOWN = "assignment_id must name an assignment of this account"
 ASSIGNMENT_LIMIT = "An account holds at most 1000 assignments"
-PASSWORD_WRONG = "Incorrect password"
 TOO_MANY_TRIES = "Too many tries. Wait 5 minutes, then try again."
 MAX_ASSIGNMENTS = 1000
 # The answer for each kind of refusal the Rust service gives (flexweek_service::Refusal).
@@ -423,19 +420,6 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     def asked(request: Request) -> tuple[str, int]:
         return (request.client.host if request.client else "unknown"), int(wall_clock.seconds())
-
-    # Account export still checks these itself; it moves to the service with the export slice.
-    def deny_if_throttled(request: Request, username: str) -> None:
-        address = request.client.host if request.client else "unknown"
-        if not throttle(path, address, username):
-            raise HTTPException(429, TOO_MANY_TRIES, headers={"Retry-After": "300"})
-
-    def require_password(db: Connection, user_id: int, password: str) -> None:
-        # Called inside the caller's transaction so a password rotated by another
-        # session between the check and the write cannot still authorize the write.
-        stored = db.password_hash_of(user_id)
-        if stored is None or not password_matches(password, stored):
-            raise HTTPException(401, PASSWORD_WRONG)
 
     def user(request: Request) -> dict:
         try:

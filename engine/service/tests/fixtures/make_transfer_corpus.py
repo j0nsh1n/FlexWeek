@@ -12,13 +12,18 @@ import json
 import random
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
+from backend import clock
 from backend.app import TransferSnapshot, create_app
 from backend.tests.account_support import PASSWORD, WRITE
 
+# The export stamps the file with the time: a fixed clock keeps the corpus the same on every run.
+clock.now = lambda: datetime(2026, 11, 22, 10, 0)  # type: ignore[assignment]
 rng = random.Random(20261124)
 CASES = json.loads(Path("engine/store/tests/fixtures/repeat_cases.json").read_text())
 
@@ -161,7 +166,7 @@ def case() -> object:
 def written(item: object) -> dict:
     try:
         return {"input": item, "written": TransferSnapshot.model_validate(item).model_dump()}
-    except Exception:
+    except ValidationError:
         return {"input": item, "written": None}
 
 
