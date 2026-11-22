@@ -16,3 +16,19 @@ rust = [
     "flexweek-service::accounts::tests::a_sign_in_checked_against_the_old_password_gets_no_session_after_a_recovery",
 ]
 red = "dropping login's password re-check under the write lock fails both (2026-11-22)"
+
+[[port]]
+python = "backend/tests/test_appearance_preferences.py"
+rust = [
+    "flexweek-service::appearance_preferences::a_new_account_answers_the_defaults_without_the_appearance_or_setup_fields",
+    "flexweek-service::appearance_preferences::an_older_app_saving_only_the_basics_still_gets_no_appearance_fields",
+    "flexweek-service::appearance_preferences::an_unknown_field_an_accent_outside_the_set_and_an_unknown_motion_are_refused",
+    "flexweek-service::appearance_preferences::appearance_fields_are_kept_and_going_back_to_the_defaults_drops_them",
+    "flexweek-service::appearance_preferences::normal_motion_chosen_on_purpose_and_reduce_motion_are_kept",
+    "flexweek-service::appearance_preferences::a_theme_pack_keeps_the_theme_on_its_own_light_or_dark_side",
+    "flexweek-service::appearance_preferences::the_alarm_tone_planning_style_time_step_and_setup_progress_are_kept",
+    "flexweek-service::appearance_preferences::a_chosen_5_minute_step_is_kept_and_15_stays_off_the_answer",
+    "flexweek-service::appearance_preferences::a_setup_preference_outside_its_values_is_refused",
+    "flexweek-service::appearance_preferences::the_clock_is_12_hour_unless_chosen_and_a_value_that_is_not_true_or_false_is_refused",
+]
+red = "mutation case motion.json 'the server turns Reduce away' fails the reduce-motion test; the theme-pack axis check removed fails the pack test; a 12-hour clock put on the answer fails four (2026-11-22)"
