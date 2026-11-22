@@ -131,6 +131,16 @@ def test_every_private_route_answers_401_without_a_session(client: TestClient) -
     assert client.get("/api/auth/me", headers=forged).status_code == 401
 
 
+def test_the_day_answer_needs_a_date(alice: TestClient) -> None:
+    """The route refuses a request with no date before asking the service (moved here from
+    test_day_endpoint.py, whose other checks are Rust tests now)."""
+    missing = alice.get("/api/day")
+    assert (missing.status_code, missing.json()) == (
+        422,
+        {"detail": "date must be YYYY-MM-DD between 2000-01-01 and 2099-12-31"},
+    )
+
+
 def test_private_answers_are_marked_not_to_be_cached(alice: TestClient) -> None:
     response = alice.get("/api/week")
     assert response.headers["cache-control"] == "no-store"
