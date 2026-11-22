@@ -541,9 +541,10 @@ fn required_due(map: &Map<String, Value>) -> Result<String, String> {
 fn estimate_of(map: &Map<String, Value>) -> Result<i64, String> {
     let estimate = match map.get("estimate_min") {
         None => return Err("Field required".into()),
-        Some(value) => as_i64(value)?,
+        Some(value) => as_int(value)?,
     };
     int_bounds(estimate, None, None, Some(model::ESTIMATE_MAX_MIN))?;
+    let estimate = stored_int(estimate)?;
     if estimate <= 0 || estimate % 15 != 0 {
         return Err("estimate_min must be a positive multiple of 15".into());
     }
@@ -872,10 +873,11 @@ pub fn yes_or_no(value: &Value) -> Option<bool> {
     }
 }
 
-fn as_i64(value: &Value) -> Result<i64, String> {
+/// A whole number as pydantic reads it, before the field's bounds: the bounds are checked on the full
+/// value, so one too large to store is refused with the field's own sentence, as pydantic refuses it.
+fn as_int(value: &Value) -> Result<i128, String> {
     match whole_number(value) {
-        Some(int) => i64::try_from(int)
-            .map_err(|_| format!("Input should be less than or equal to {JS_INT_MAX}")),
+        Some(int) => Ok(int),
         None if value.as_f64().is_some_and(|float| float.fract() != 0.0) => {
             Err("Input should be a valid integer, got a number with a fractional part".into())
         }
@@ -883,19 +885,32 @@ fn as_i64(value: &Value) -> Result<i64, String> {
     }
 }
 
-fn int_bounds(value: i64, gt: Option<i64>, ge: Option<i64>, le: Option<i64>) -> Result<(), String> {
+/// The checked number as stored; a field with no upper bound stops at the largest JSON-safe whole number.
+fn stored_int(int: i128) -> Result<i64, String> {
+    i64::try_from(int)
+        .ok()
+        .filter(|int| int.abs() <= JS_INT_MAX)
+        .ok_or_else(|| format!("Input should be less than or equal to {JS_INT_MAX}"))
+}
+
+fn int_bounds(
+    value: i128,
+    gt: Option<i64>,
+    ge: Option<i64>,
+    le: Option<i64>,
+) -> Result<(), String> {
     if let Some(gt) = gt
-        && value <= gt
+        && value <= i128::from(gt)
     {
         return Err(format!("Input should be greater than {gt}"));
     }
     if let Some(ge) = ge
-        && value < ge
+        && value < i128::from(ge)
     {
         return Err(format!("Input should be greater than or equal to {ge}"));
     }
     if let Some(le) = le
-        && value > le
+        && value > i128::from(le)
     {
         return Err(format!("Input should be less than or equal to {le}"));
     }
@@ -912,9 +927,9 @@ fn req_bounded_int(
     match map.get(key) {
         None => Err("Field required".into()),
         Some(value) => {
-            let int = as_i64(value)?;
+            let int = as_int(value)?;
             int_bounds(int, gt, ge, le)?;
-            Ok(int)
+            stored_int(int)
         }
     }
 }
@@ -930,9 +945,9 @@ fn int_default(
     match map.get(key) {
         None => Ok(default),
         Some(value) => {
-            let int = as_i64(value)?;
+            let int = as_int(value)?;
             int_bounds(int, gt, ge, le)?;
-            Ok(int)
+            stored_int(int)
         }
     }
 }
@@ -946,9 +961,9 @@ fn opt_int(
     match map.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(value) => {
-            let int = as_i64(value)?;
+            let int = as_int(value)?;
             int_bounds(int, None, ge, le)?;
-            Ok(Some(int))
+            stored_int(int).map(Some)
         }
     }
 }
@@ -959,7 +974,8 @@ fn int_list(value: &Value, min: Option<usize>, max: Option<usize>) -> Result<Vec
     };
     let mut numbers = Vec::with_capacity(items.len());
     for item in items {
-        numbers.push(as_i64(item)?);
+        // A number too large to store still reads as out of range, as the day rules say.
+        numbers.push(i64::try_from(as_int(item)?).unwrap_or(i64::MAX));
     }
     list_bounds(numbers.len(), min, max)?;
     Ok(numbers)
@@ -968,7 +984,11 @@ fn int_list(value: &Value, min: Option<usize>, max: Option<usize>) -> Result<Vec
 fn bool_default(map: &Map<String, Value>, key: &str, default: bool) -> Result<bool, String> {
     match map.get(key) {
         None => Ok(default),
-        Some(value) => yes_or_no(value).ok_or_else(|| "Input should be a valid boolean".into()),
+        Some(value) => yes_or_no(value).ok_or_else(|| match value {
+            // pydantic's sentence for text it cannot read as true or false.
+            Value::String(_) => "Input should be a valid boolean, unable to interpret input".into(),
+            _ => "Input should be a valid boolean".into(),
+        }),
     }
 }
 

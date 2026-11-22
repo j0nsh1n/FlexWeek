@@ -159,9 +159,18 @@ fn time_block_rules_match_models_py() {
             message: "String should have at most 32 characters",
         },
         Case {
+            name: "models.py:130 a length too large to store is still over 7140",
+            value: with(
+                base.clone(),
+                "duration_min",
+                json!(10_000_000_000_000_000_000_u128),
+            ),
+            message: "Input should be less than or equal to 7140",
+        },
+        Case {
             name: "models.py:143 completed is a boolean",
             value: with(base.clone(), "completed", json!("maybe")),
-            message: "Input should be a valid boolean",
+            message: "Input should be a valid boolean, unable to interpret input",
         },
         Case {
             name: "models.py:147 completed_day is at least 0",
