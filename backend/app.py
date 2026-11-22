@@ -31,9 +31,6 @@ from backend.models import (
     valid_naive_stamp,
     valid_spotify_url,
 )
-from backend.recovery import (
-    hash_recovery_code,
-)
 from backend.restore import canonical, diff_transfer, state_token
 from backend.slots import DAY_END_MIN, SLOT_MIN
 from backend.storage import (
@@ -66,11 +63,8 @@ ASSIGNMENT_CONFLICT = "This assignment changed in another window. Reload before 
 ASSIGNMENT_LIMIT = "An account holds at most 1000 assignments"
 WEEK_CONFLICT = "This week changed in another window. Reload before saving."
 IMPORT_STALE = "This preview is out of date. Refresh it before importing."
-RECOVER_WRONG = "Incorrect username or recovery code"
 PASSWORD_WRONG = "Incorrect password"
 TOO_MANY_TRIES = "Too many tries. Wait 5 minutes, then try again."
-SESSION_ENDED = "Your session ended. Sign in again."
-PASSWORD_SAME = "New password must be different"
 OPERATION_CONFLICT = "This operation was already used with different data."
 MAX_ASSIGNMENTS = 1000
 MAX_RESTORE_POINTS = 20
@@ -377,10 +371,6 @@ def replace_account(db: Connection, user_id: int, snapshot: dict) -> dict:
             {"id": item_id, "revision": revision} for item_id, _body, revision in assignments
         ],
     }
-
-
-def replace_recovery_codes(db: Connection, user_id: int, codes: list[str]) -> None:
-    db.replace_recovery_codes(user_id, [hash_recovery_code(code) for code in codes])
 
 
 def encode_routine(routine: Routine) -> str:

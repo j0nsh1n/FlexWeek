@@ -96,16 +96,17 @@ fn throttled(path: &Path, asker: Asker<'_>, username: &str) -> ServiceResult<()>
     }
 }
 
+/// A new session from a token drawn before the write lock was taken: drawing asks Python, and taking
+/// Python's lock while holding the database's could stall a thread that waits on the database with it.
 fn open_session(
     conn: &Connection,
-    entropy: &mut dyn Entropy,
+    token: &str,
     user_id: i64,
     now: i64,
     keep: bool,
 ) -> ServiceResult<String> {
-    let token = entropy.session_token()?;
-    store::open_session(conn, &token, user_id, now, keep)?;
-    Ok(token)
+    store::open_session(conn, token, user_id, now, keep)?;
+    Ok(token.to_string())
 }
 
 pub fn generate_recovery_codes(entropy: &mut dyn Entropy) -> ServiceResult<Vec<String>> {
@@ -151,11 +152,12 @@ pub fn register(
     throttled(path, asker, username)?;
     let encoded = store::password_hash(password, &entropy.salt()?)?;
     let codes = generate_recovery_codes(entropy)?;
+    let drawn = entropy.session_token()?;
     let created = with_db(path, |conn| {
         let user_id = store::insert_user(conn, username, &encoded)?;
         store::insert_preferences(conn, user_id, store::PREFS_VERSION)?;
         store_recovery_codes(conn, user_id, &codes)?;
-        let token = open_session(conn, entropy, user_id, asker.now, keep)?;
+        let token = open_session(conn, &drawn, user_id, asker.now, keep)?;
         Ok((user_id, token))
     })
     .map_err(|error| {
@@ -222,6 +224,7 @@ fn login_between(
         return Err(Refusal::Unauthorized(SIGN_IN_WRONG.to_string()).into());
     };
     between();
+    let drawn = entropy.session_token()?;
     let token = with_db(path, |conn| {
         // The hash was checked outside the lock; a recovery or new password may have replaced it and
         // signed every session out meanwhile, so the session opens only if it is still the account's.
@@ -229,7 +232,7 @@ fn login_between(
         if store::password_hash_of(conn, user_id)?.as_deref() != Some(encoded.as_str()) {
             return Err(Refusal::Unauthorized(SIGN_IN_WRONG.to_string()).into());
         }
-        open_session(conn, entropy, user_id, asker.now, keep)
+        open_session(conn, &drawn, user_id, asker.now, keep)
     })?;
     end_previous_session(path, previous_token)?;
     Ok(SignedIn {
@@ -309,6 +312,7 @@ pub fn recover(
     throttled(path, asker, username)?;
     let dummy = hash_recovery_code("missing-recovery-code");
     let new_hash = store::password_hash(new_password, &entropy.salt()?)?;
+    let drawn = entropy.session_token()?;
     let (account, token) = with_db(path, |conn| {
         store::begin_immediate(conn)?;
         let found = store::find_user(conn, username)?;
@@ -334,7 +338,7 @@ pub fn recover(
         }
         store::use_recovery_code(conn, user_id, &matched)?;
         store::rotate_password(conn, user_id, &new_hash)?;
-        let token = open_session(conn, entropy, user_id, asker.now, keep)?;
+        let token = open_session(conn, &drawn, user_id, asker.now, keep)?;
         Ok((
             Account {
                 id: user_id,
@@ -387,6 +391,7 @@ pub fn change_password(
     let new = checked_password(new)?;
     throttled(path, asker, &account.username)?;
     let new_hash = store::password_hash(new, &entropy.salt()?)?;
+    let drawn = entropy.session_token()?;
     with_db(path, |conn| {
         store::begin_immediate(conn)?;
         require_password(conn, account.id, current)?;
@@ -394,7 +399,7 @@ pub fn change_password(
             return Err(Refusal::Invalid(PASSWORD_SAME.to_string()).into());
         }
         store::rotate_password(conn, account.id, &new_hash)?;
-        open_session(conn, entropy, account.id, asker.now, false)
+        open_session(conn, &drawn, account.id, asker.now, false)
     })
 }
 
@@ -469,6 +474,7 @@ mod tests {
         .unwrap();
         let code = made.recovery_codes.clone().unwrap()[0].clone();
         let mut other = Counting(1000);
+        let mut survivor = None;
         let refused = login_between(
             &path,
             at,
@@ -477,7 +483,9 @@ mod tests {
             false,
             "",
             || {
-                recover(&path, at, &mut other, "ana", &code, "a new password", false).unwrap();
+                let signed =
+                    recover(&path, at, &mut other, "ana", &code, "a new password", false).unwrap();
+                survivor = Some(signed.token);
             },
         );
         assert!(
@@ -488,6 +496,11 @@ mod tests {
             sessions(&path),
             1,
             "only the recovery's own session may stand"
+        );
+        let survivor = survivor.expect("the recovery ran");
+        assert!(
+            signed_in(&path, &survivor, at.now + 1, None).is_ok(),
+            "the recovery's own session does not work"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -518,6 +531,7 @@ mod tests {
         .unwrap();
         let before = sessions(&path);
         let mut other = Counting(1000);
+        let mut survivor = None;
         let refused = login_between(
             &path,
             at,
@@ -526,7 +540,7 @@ mod tests {
             false,
             "",
             || {
-                change_password(
+                let token = change_password(
                     &path,
                     at,
                     &mut other,
@@ -535,6 +549,7 @@ mod tests {
                     "a new password",
                 )
                 .unwrap();
+                survivor = Some(token);
             },
         );
         assert!(
@@ -543,6 +558,11 @@ mod tests {
         );
         // The change ended every session and opened one; the late sign-in added none.
         assert_eq!(sessions(&path), 1, "sessions before the change: {before}");
+        let survivor = survivor.expect("the change ran");
+        assert!(
+            signed_in(&path, &survivor, at.now + 1, None).is_ok(),
+            "the change's own session does not work"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
