@@ -50,3 +50,13 @@ rust = [
     "flexweek-service::weekend_preferences::the_column_hides_weekends_even_when_the_comfort_settings_say_otherwise",
 ]
 red = "show_weekends always written as 1 to its column fails the round-trip test (2026-11-22)"
+
+[[port]]
+python = "backend/tests/test_reminders_default.py"
+rust = [
+    "flexweek-service::reminders_default::a_new_account_has_reminders_on",
+    "flexweek-service::reminders_default::a_preferences_save_without_the_switch_leaves_reminders_on",
+    "flexweek-service::reminders_default::accounts_from_0_14_are_turned_on_once_and_a_later_choice_stands",
+    "flexweek-service::reminders_default::an_account_made_after_the_update_is_never_turned_on_again",
+]
+red = "the 0.15 migration run on every open fails the two upgrade tests; a new account's row made with reminders off fails the new-account tests (2026-11-22)"
