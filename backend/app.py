@@ -236,15 +236,6 @@ def apply_repeats(db: Connection, user_id: int, changes: list[dict]) -> dict:
     return applied
 
 
-def preview_repeats(db: Connection, user_id: int, changes: list[dict]) -> dict:
-    """The later weeks `changes` would reach that have their own edit, without writing."""
-    try:
-        found: dict = json.loads(db.preview_edited_weeks(user_id, json.dumps(changes)))
-    except ValueError as error:
-        raise HTTPException(422, str(error)) from error
-    return found
-
-
 def save_shown_week(
     db: Connection, user_id: int, week: ChangedWeek, parts: tuple[str, str, int], before: dict[str, int]
 ) -> None:
@@ -518,11 +509,6 @@ class ChangesRequest(BaseModel):
     # Changes to School and Setup's activities as the student meant them, from a date on. The engine
     # checks each (`flexweek_engine.repeats`); a refusal is a 422 with its sentence.
     repeats: list[dict] | None = Field(default=None, max_length=MAX_REPEAT_CHANGES)
-
-
-class RepeatPreviewRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    repeats: list[dict] = Field(max_length=MAX_REPEAT_CHANGES)
 
 
 class AlarmPreference(BaseModel):
@@ -1276,9 +1262,8 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         return served(flexweek_engine.service_delete_homework, account["id"], assignment_id, revision)
 
     @app.post("/api/repeat-edits")
-    def post_repeat_edits(body: RepeatPreviewRequest, account: Annotated[dict, Depends(user)]) -> dict:
-        with connect(path) as db:
-            return preview_repeats(db, account["id"], body.repeats)
+    def post_repeat_edits(given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]) -> dict:
+        return served(flexweek_engine.service_repeat_edits, account["id"], json.dumps(given))
 
     @app.post("/api/changes")
     def post_changes(batch: ChangesRequest, account: Annotated[dict, Depends(user)]) -> dict:
