@@ -24,7 +24,7 @@ from backend.assignments import (
     prepare_solve,
 )
 from backend.availability import fold_study_windows, spread_sessions
-from backend.comfort import REMINDER_LIMITS, TIMER_PRESETS, preview_split
+from backend.comfort import REMINDER_LIMITS, TIMER_PRESETS
 from backend.limits import MAX_BODY
 from backend.models import (
     Assignment,
@@ -894,22 +894,6 @@ def apply_transfer(db: Connection, user_id: int, snapshot: TransferSnapshot) -> 
     }
 
 
-class TimerSplitRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    duration_min: int | None = Field(default=None, ge=15, le=7140)
-    timer_work_min: int = Field(ge=1, le=180)
-    timer_break_min: int = Field(ge=1, le=60)
-    timer_long_break_min: int = Field(ge=1, le=120)
-    timer_long_break_every: int = Field(ge=2, le=12)
-
-    @field_validator("duration_min")
-    @classmethod
-    def duration_is_on_the_grid(cls, value: int | None) -> int | None:
-        if value is not None and value % 15:
-            raise ValueError("duration_min must be a multiple of 15")
-        return value
-
-
 def encode_availability(preferences: Preferences) -> str:
     return json.dumps(
         {
@@ -1576,15 +1560,13 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.post("/api/timer-split-preview")
     def post_timer_split_preview(
-        payload: TimerSplitRequest, _account: Annotated[dict, Depends(user)]
+        given: Annotated[dict, Body()], _account: Annotated[dict, Depends(user)]
     ) -> dict:
-        return preview_split(
-            duration_min=payload.duration_min,
-            timer_work_min=payload.timer_work_min,
-            timer_break_min=payload.timer_break_min,
-            timer_long_break_min=payload.timer_long_break_min,
-            timer_long_break_every=payload.timer_long_break_every,
-        )
+        try:
+            answer: dict = json.loads(flexweek_engine.service_split_preview(json.dumps(given)))
+        except ServiceRefusal as error:
+            raise refused(error) from None
+        return answer
 
     @app.get("/api/restore-points")
     def get_restore_points(account: Annotated[dict, Depends(user)]) -> dict:

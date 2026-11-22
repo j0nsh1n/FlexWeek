@@ -5,7 +5,9 @@
 use std::path::Path;
 
 use flexweek_service::accounts::{self, Account, Asker, Entropy, SignedIn};
-use flexweek_service::{Refusal, ServiceError, ServiceResult, preferences, records, views, weeks};
+use flexweek_service::{
+    Refusal, ServiceError, ServiceResult, comfort, preferences, records, views, weeks,
+};
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyRuntimeError};
 use pyo3::prelude::*;
@@ -416,6 +418,16 @@ fn service_write_preferences(
     })
 }
 
+/// `given` is the request body as JSON text; the service checks it.
+#[pyfunction]
+fn service_split_preview(py: Python<'_>, given: &str) -> PyResult<String> {
+    guard(|| {
+        let given: Value = serde_json::from_str(given)
+            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        json_text(py, comfort::split_preview(&given))
+    })
+}
+
 #[pyfunction]
 fn service_create_restore_point(
     py: Python<'_>,
@@ -498,6 +510,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         service_restore_points,
         service_read_preferences,
         service_write_preferences,
+        service_split_preview,
         service_create_restore_point,
         service_delete_routine,
         service_delete_homework,
