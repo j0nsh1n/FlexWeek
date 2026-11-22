@@ -18,12 +18,9 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from backend import clock as wall_clock
 from backend.assignments import (
-    done_minutes_by_id,
-    held_dates_by_id,
-    planned_minutes_by_id,
     prepare_solve,
 )
-from backend.availability import fold_study_windows, spread_sessions
+from backend.availability import fold_study_windows
 from backend.comfort import REMINDER_LIMITS, TIMER_PRESETS
 from backend.limits import MAX_BODY
 from backend.models import (
@@ -31,7 +28,6 @@ from backend.models import (
     ProtectedWindow,
     Routine,
     SolveRequest,
-    SpreadRequest,
     StudyWindow,
     TimeBlock,
     WeekRequest,
@@ -1266,33 +1262,10 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.post("/api/assignments/{assignment_id}/spread")
     def post_spread(
-        assignment_id: str, payload: SpreadRequest, account: Annotated[dict, Depends(user)]
+        assignment_id: str, given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]
     ) -> dict:
-        with connect(path) as db:
-            stored = db.assignment_body(account["id"], assignment_id)
-            if stored is None:
-                raise HTTPException(404, "Assignment not found")
-            weeks = list_account_weeks(db, account["id"])
-        body = json.loads(stored)
-        if body["completed"]:
-            raise HTTPException(422, "completed assignments cannot be spread")
-        planned = planned_minutes_by_id(weeks, "2000-01-01").get(assignment_id, 0)
-        sessions, remaining = spread_sessions(
-            estimate_min=int(body["estimate_min"]),
-            focus_minutes=int(body["focus_minutes"]),
-            done_min=done_minutes_by_id(weeks).get(assignment_id, 0),
-            planned_min=planned,
-            due=body["due"],
-            session_min=payload.session_min,
-            from_date=payload.from_date,
-            held_dates=held_dates_by_id(weeks, "2000-01-01").get(assignment_id, []),
-        )
-        return {
-            "assignment_id": assignment_id,
-            "session_min": payload.session_min,
-            "remaining_min": remaining,
-            "sessions": sessions,
-        }
+        preview = flexweek_engine.service_spread_preview
+        return served(preview, account["id"], assignment_id, json.dumps(given))
 
     @app.delete("/api/assignments/{assignment_id}")
     def remove_assignment(

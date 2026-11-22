@@ -5,6 +5,7 @@
 
 use std::path::Path;
 
+use flexweek_engine::plan;
 use flexweek_engine::snapshot::canonical;
 use flexweek_engine::validate::{assignment_content, whole_number};
 use flexweek_store::{self as store, AssignmentSave};
@@ -74,4 +75,72 @@ pub fn save_homework_up_to(
             }
         }
     })
+}
+
+pub const SPREAD_DONE: &str = "completed assignments cannot be spread";
+
+/// A "spread it out" request as `SpreadRequest` reads it: (session length, first day).
+pub fn check_spread(given: &Value) -> Checked<(i64, String)> {
+    let Value::Object(fields) = given else {
+        return refuse("a spread request must be an object");
+    };
+    if let Some(extra) = fields
+        .keys()
+        .find(|key| !["session_min", "from_date"].contains(&key.as_str()))
+    {
+        return refuse(format!("a spread request does not take {extra}"));
+    }
+    let minutes = match fields.get("session_min").and_then(whole_number) {
+        Some(minutes) if (15..=180).contains(&minutes) && minutes % 15 == 0 => minutes as i64,
+        _ => return refuse("session_min must be a multiple of 15 from 15 to 180"),
+    };
+    let from = match fields.get("from_date") {
+        Some(Value::String(day)) if flexweek_engine::time::is_calendar_date(day) => day.clone(),
+        _ => return refuse("from_date must be YYYY-MM-DD between 2000-01-01 and 2099-12-31"),
+    };
+    Ok((minutes, from))
+}
+
+/// The sessions "spread it out" would add for the homework `id`, as `POST /api/assignments/{id}/spread`
+/// answers: nothing is saved.
+pub fn spread_preview(path: &Path, user_id: i64, id: &str, given: &Value) -> ServiceResult<Value> {
+    let (session_min, from_date) = check_spread(given)
+        .map_err(|_| crate::ServiceError::from(Refusal::Invalid(INVALID_INPUT.to_string())))?;
+    let (body, weeks) = with_db(path, |conn| {
+        let Some(body) = store::assignment_body(conn, user_id, id)? else {
+            return Err(Refusal::NotFound(crate::records::HOMEWORK_UNKNOWN.to_string()).into());
+        };
+        let mut weeks = Vec::new();
+        for (start, text) in store::list_account_weeks(conn, user_id)? {
+            weeks.push((start, crate::weeks::parsed(&text)?));
+        }
+        Ok((body, weeks))
+    })?;
+    let body: Value = serde_json::from_str(&body).map_err(|error| store::StoreError::Json {
+        text: body.clone(),
+        error,
+    })?;
+    if body["completed"].as_bool().unwrap_or(false) {
+        return Err(Refusal::Invalid(SPREAD_DONE.to_string()).into());
+    }
+    let number = |name: &str| body[name].as_i64().unwrap_or(0);
+    let planned = plan::planned_minutes_by_id(&weeks, "2000-01-01", None);
+    let done = plan::done_minutes_by_id(&weeks);
+    let held = plan::held_dates_by_id(&weeks, "2000-01-01");
+    let (sessions, remaining) = plan::spread_sessions_around(
+        number("estimate_min"),
+        number("focus_minutes"),
+        done.get(id).copied().unwrap_or(0),
+        planned.get(id).copied().unwrap_or(0),
+        body["due"].as_str().unwrap_or(""),
+        session_min,
+        &from_date,
+        held.get(id).map(Vec::as_slice).unwrap_or(&[]),
+    )?;
+    Ok(serde_json::json!({
+        "assignment_id": id,
+        "session_min": session_min,
+        "remaining_min": remaining,
+        "sessions": sessions,
+    }))
 }
