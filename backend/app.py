@@ -1162,9 +1162,12 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         so FastAPI still answers a body that is not a JSON object as before."""
         body = await request.body()
         try:
-            return body.decode("utf-8")
-        except UnicodeDecodeError:
+            # Decoded as json.loads decodes bytes (UTF-8, -16 or -32), so the service reads what FastAPI read.
+            text = body.decode(json.detect_encoding(body), "surrogatepass")
+            text.encode("utf-8")
+        except UnicodeError:
             return ""
+        return text
 
     def served(call, *args) -> dict:  # type: ignore[no-untyped-def]
         """One read from the Rust service; a refusal is its answer with Python's sentence."""

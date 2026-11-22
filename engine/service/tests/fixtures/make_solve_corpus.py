@@ -86,7 +86,11 @@ def shaped(item: dict, blocks: list[dict]) -> None:
     elif rule == "pomodoro":
         blocks.append(block(len(blocks), kind="flexible", pomodoro_parent_id=first["id"]))
     else:
-        previous = [block(20 + i) for i in range(101)]
+        # Valid placements on either side of the cap of 100, against a missed block that exists.
+        previous = [{"id": f"p{i}", "title": "Work", "kind": "flexible", "duration_min": 30, "days": [i % 5]}
+                    for i in range(rng.choice([100, 101]))]  # fmt: skip
+        first.update(kind="locked", start="08:00")
+        first.pop("assignment_id", None)
         item.pop("running_late", None)
         item["recover"] = {"missed_block_id": first["id"], "missed_day": first["days"][0],
                            "previous_placed": previous}  # fmt: skip

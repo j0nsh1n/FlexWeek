@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Iterator
 from http.cookies import SimpleCookie
@@ -206,6 +207,15 @@ def test_a_number_too_large_for_a_float_is_refused_not_a_server_error(
         422,
         {"detail": "Invalid input. Check field lengths, times and required values."},
     )
+
+
+@pytest.mark.parametrize("encoding", ["utf-16", "utf-32-le", "utf-8-sig"])
+def test_a_body_in_another_json_encoding_is_read_as_python_reads_it(alice: TestClient, encoding: str) -> None:
+    """Python's JSON reader takes UTF-16 and UTF-32 bytes too; the service gets the same object."""
+    chosen = {**alice.get("/api/preferences").json(), "theme": "nocturne"}
+    body = json.dumps(chosen).encode(encoding)
+    sent = alice.put("/api/preferences", content=body, headers={**WRITE, "Content-Type": "application/json"})
+    assert (sent.status_code, sent.json()["theme"]) == (200, "nocturne"), sent.text
 
 
 def test_private_answers_are_marked_not_to_be_cached(alice: TestClient) -> None:
