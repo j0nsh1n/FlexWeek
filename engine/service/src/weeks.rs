@@ -17,7 +17,7 @@ use crate::{Refusal, ServiceError, ServiceResult, with_db};
 pub const WEEK_START_RULE: &str =
     "week_start must be a Monday from 2000-01-03 through 2099-12-28, or 1999-12-27";
 
-fn parsed(text: &str) -> ServiceResult<Vec<Value>> {
+pub(crate) fn parsed(text: &str) -> ServiceResult<Vec<Value>> {
     serde_json::from_str(text).map_err(|error| {
         store::StoreError::Json {
             text: text.to_string(),
@@ -27,7 +27,7 @@ fn parsed(text: &str) -> ServiceResult<Vec<Value>> {
     })
 }
 
-fn homework_of(
+pub(crate) fn homework_of(
     conn: &Connection,
     user_id: i64,
     blocks: &[Value],
@@ -59,7 +59,10 @@ fn broken(refused: BlockRefused) -> ServiceError {
 }
 
 /// Sessions brought up to date from their homework, each written as a block is written.
-fn rewritten(blocks: Vec<Value>, owned: &Map<String, Value>) -> ServiceResult<Vec<Value>> {
+pub(crate) fn rewritten(
+    blocks: Vec<Value>,
+    owned: &Map<String, Value>,
+) -> ServiceResult<Vec<Value>> {
     store::rewrite_stored_blocks(
         &Value::Array(blocks),
         &Value::Object(owned.clone()),

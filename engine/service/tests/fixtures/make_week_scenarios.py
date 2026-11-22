@@ -66,6 +66,13 @@ def seed_alice(client: TestClient) -> None:
     ok(client.post("/api/changes", json={"weeks": [], "repeats": SCHOOL}, headers=WRITE))
     homework(client, "hw-essay", "2026-11-12T23:59", 120)
     homework(client, "hw-maths", "2026-11-19", 90)
+    homework(client, "hw-done", "2026-11-06", 30)
+    done = ok(client.get("/api/assignments?week_start=2026-11-02&include_completed=true"))["assignments"]
+    finished = next(item for item in done if item["id"] == "hw-done")
+    body = {key: finished[key] for key in ("id", "title", "course", "category", "priority", "energy",
+                                           "spotify_url", "due", "estimate_min", "focus_minutes", "focus_sessions")}
+    body.update(completed=True, completed_at="2026-11-04T18:00", revision=finished["revision"])
+    ok(client.put("/api/assignments/hw-done", json=body, headers=WRITE))
     first = [
         fixed("guitar", "17:00", [1, 3]),
         fixed("dinner", "18:30", [0, 1, 2, 3, 4, 5, 6]),
@@ -109,6 +116,7 @@ def main(out: Path) -> None:
             cases.append({"user_id": alice["id"], "week_start": "2026-13-40", "status": refused.status_code,
                           "detail": refused.json()["detail"]})  # fmt: skip
             weeks = {"user_id": alice["id"], "answer": ok(client.get("/api/weeks"))}
+            views = _views(client, alice["id"], starts)
         plain = sqlite3.connect(db)
         try:
             # Objects in the order SQLite made them (a trigger names a table made before it), then rows.
@@ -122,9 +130,26 @@ def main(out: Path) -> None:
             sql = "\n".join(["PRAGMA foreign_keys=OFF;", "BEGIN TRANSACTION;", *made, *rows, "COMMIT;"])
         finally:
             plain.close()
-    fixture = {"sql": sql, "bob_id": bob["id"], "weeks": weeks, "cases": cases}
+    fixture = {"sql": sql, "bob_id": bob["id"], "weeks": weeks, "cases": cases, "views": views}
     out.write_text(json.dumps(fixture, indent=1) + "\n")
     print(f"{len(cases)} week answers, {len(sql)} characters of SQL")
+
+
+def _views(client: TestClient, user_id: int, starts: list[str]) -> dict:
+    """Day for every date of November, Month from each first day, homework for every week start."""
+    from datetime import date, timedelta
+
+    days = [(date(2026, 11, 1) + timedelta(days=n)).isoformat() for n in range(30)]
+    return {
+        "user_id": user_id,
+        "now": "2026-11-05T19:00",
+        "day": [{"date": d, "answer": ok(client.get(f"/api/day?date={d}"))} for d in days],
+        "month": [{"month": "2026-11", "first_day": f, "answer": ok(client.get(f"/api/month?month=2026-11&first_day={f}"))}
+                  for f in range(7)],
+        "homework": [{"week_start": w, "include_completed": c,
+                      "answer": ok(client.get(f"/api/assignments?week_start={w}&include_completed={str(c).lower()}"))}
+                     for w in starts for c in (False, True)],
+    }
 
 
 def _days_after(monday: str) -> list[str]:

@@ -9,6 +9,7 @@ use flexweek_store::{Connection, StoreError};
 
 pub mod accounts;
 pub mod blocks;
+pub mod views;
 pub mod weeks;
 
 /// A refusal the student is told about, with the words they see. The caller turns its kind into an

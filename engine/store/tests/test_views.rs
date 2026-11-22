@@ -142,15 +142,20 @@ fn a_bad_date_week_or_month_is_refused_with_the_route_sentence() {
         MONTH_RULE,
         "a bad month must be refused with the month rule"
     );
-    let homework = homework_list(&conn, user, "2026-10-20", false, None);
+    // As GET /api/assignments: any calendar date is a week on screen; only a non-date is refused.
+    let homework = homework_list(&conn, user, "2026-10-32", false, None);
     assert!(
         homework.is_err(),
-        "homework must refuse a week that is not a Monday"
+        "homework must refuse a date that does not exist"
     );
     assert_eq!(
         homework.expect_err("asserted").to_string(),
         WEEK_START_RULE,
-        "homework must refuse a week that is not a Monday"
+        "homework must refuse a date that does not exist with the week rule"
+    );
+    assert!(
+        homework_list(&conn, user, "2026-10-20", false, None).is_ok(),
+        "a week on screen from a Tuesday is a week like any other"
     );
 }
 
