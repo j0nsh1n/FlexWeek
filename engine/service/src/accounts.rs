@@ -20,6 +20,40 @@ pub const USERNAME_TAKEN: &str = "Username unavailable";
 pub const SESSION_ENDED: &str = "Your session ended. Sign in again.";
 pub const PLEASE_SIGN_IN: &str = "Please sign in";
 pub const ACCOUNT_CHANGED: &str = "Account changed. Please sign in again.";
+/// The one sentence every bad request gets, so a refused password is never echoed back.
+pub const INVALID_INPUT: &str = "Invalid input. Check field lengths, times and required values.";
+
+fn invalid() -> crate::ServiceError {
+    Refusal::Invalid(INVALID_INPUT.to_string()).into()
+}
+
+/// A username as the account keeps it: 3 to 32 letters, digits or underscores, lowercased.
+pub fn checked_username(raw: &str) -> ServiceResult<String> {
+    let well_formed = (3..=32).contains(&raw.chars().count())
+        && raw.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+    if well_formed {
+        Ok(raw.to_ascii_lowercase())
+    } else {
+        Err(invalid())
+    }
+}
+
+/// A password of 12 to 128 characters.
+pub fn checked_password(raw: &str) -> ServiceResult<&str> {
+    if (12..=128).contains(&raw.chars().count()) {
+        Ok(raw)
+    } else {
+        Err(invalid())
+    }
+}
+
+fn checked_code(raw: &str) -> ServiceResult<&str> {
+    if (8..=64).contains(&raw.chars().count()) {
+        Ok(raw)
+    } else {
+        Err(invalid())
+    }
+}
 
 /// The randomness an account change needs. The caller supplies it, so tests can fix it.
 pub trait Entropy {
@@ -28,7 +62,7 @@ pub trait Entropy {
     /// A password salt: 16 random bytes as 32 lowercase hex digits.
     fn salt(&mut self) -> String;
     /// Eight random bytes for one recovery code.
-    fn code_bytes(&mut self) -> Vec<u8>;
+    fn code_bytes(&mut self) -> [u8; 8];
 }
 
 /// Where a request came from and when, for the throttle and the session.
@@ -94,7 +128,7 @@ fn is_unique_violation(error: &StoreError) -> bool {
     matches!(
         error,
         StoreError::Sqlite(rusqlite::Error::SqliteFailure(failure, _))
-            if failure.code == rusqlite::ErrorCode::ConstraintViolation
+            if failure.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE
     )
 }
 
@@ -108,6 +142,8 @@ pub fn register(
     keep: bool,
     previous_token: &str,
 ) -> ServiceResult<SignedIn> {
+    let username = &checked_username(username)?;
+    let password = checked_password(password)?;
     throttled(path, asker, username)?;
     let encoded = store::password_hash(password, &entropy.salt())?;
     let codes = generate_recovery_codes(entropy);
@@ -146,6 +182,8 @@ pub fn login(
     keep: bool,
     previous_token: &str,
 ) -> ServiceResult<SignedIn> {
+    let username = &checked_username(username)?;
+    let password = checked_password(password)?;
     throttled(path, asker, username)?;
     let found = with_db(path, |conn| Ok(store::find_user(conn, username)?))?;
     let encoded = match &found {
@@ -153,7 +191,7 @@ pub fn login(
         None => store::password_hash("missing-account-password", &"00".repeat(16))?,
     };
     let matched = store::password_matches_index(password, &encoded)?;
-    let Some((user_id, _, _)) = found.filter(|_| matched) else {
+    let Some((user_id, name, _)) = found.filter(|_| matched) else {
         return Err(Refusal::Unauthorized(SIGN_IN_WRONG.to_string()).into());
     };
     let token = with_db(path, |conn| {
@@ -169,7 +207,7 @@ pub fn login(
     Ok(SignedIn {
         account: Account {
             id: user_id,
-            username: username.to_string(),
+            username: name,
         },
         token,
         keep,
@@ -207,7 +245,12 @@ pub fn signed_in(
     Ok(Account { id, username })
 }
 
-pub fn logout(path: &Path, token: &str) -> ServiceResult<()> {
+/// Sign out. When the window says which account it showed, a session of another account is left
+/// alone and refused, so an old window cannot sign out the account now open.
+pub fn logout(path: &Path, token: &str, now: i64, expected_id: Option<&str>) -> ServiceResult<()> {
+    if expected_id.is_some() {
+        signed_in(path, token, now, expected_id)?;
+    }
     end_previous_session(path, token)
 }
 
@@ -232,6 +275,9 @@ pub fn recover(
     new_password: &str,
     keep: bool,
 ) -> ServiceResult<SignedIn> {
+    let username = &checked_username(username)?;
+    let code = checked_code(code)?;
+    let new_password = checked_password(new_password)?;
     throttled(path, asker, username)?;
     let dummy = hash_recovery_code("missing-recovery-code");
     let new_hash = store::password_hash(new_password, &entropy.salt())?;
@@ -289,6 +335,7 @@ pub fn renew_recovery_codes(
     account: &Account,
     password: &str,
 ) -> ServiceResult<Vec<String>> {
+    let password = checked_password(password)?;
     throttled(path, asker, &account.username)?;
     let codes = generate_recovery_codes(entropy);
     with_db(path, |conn| {
@@ -308,6 +355,8 @@ pub fn change_password(
     current: &str,
     new: &str,
 ) -> ServiceResult<String> {
+    let current = checked_password(current)?;
+    let new = checked_password(new)?;
     throttled(path, asker, &account.username)?;
     let new_hash = store::password_hash(new, &entropy.salt())?;
     with_db(path, |conn| {
@@ -328,6 +377,7 @@ pub fn delete_account(
     account: &Account,
     password: &str,
 ) -> ServiceResult<()> {
+    let password = checked_password(password)?;
     throttled(path, asker, &account.username)?;
     with_db(path, |conn| {
         store::begin_immediate(conn)?;

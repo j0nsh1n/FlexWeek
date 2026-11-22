@@ -85,3 +85,61 @@ fn a_deleted_python_test_needs_a_ledger_row() {
 
     let _ = fs::remove_dir_all(&repo);
 }
+
+fn repo_with_two_tests() -> PathBuf {
+    let repo = scratch();
+    git(&repo, &["init", "-q", "-b", "main"]);
+    write(
+        &repo,
+        "desktop/tests/week/test_week_zoom.py",
+        "def test_x():\n    pass\n",
+    );
+    write(
+        &repo,
+        "scripts/rig/test_drive.py",
+        "def test_y():\n    pass\n",
+    );
+    write(&repo, LEDGER_PATH, "port = []\n");
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-q", "-m", "base"]);
+    repo
+}
+
+#[test]
+fn deleting_the_ledger_itself_fails() {
+    let repo = repo_with_two_tests();
+    fs::remove_file(repo.join(LEDGER_PATH)).unwrap();
+    let refused = check(&repo, "main").unwrap_err();
+    assert!(refused.contains("was deleted"), "{refused}");
+    let _ = fs::remove_dir_all(&repo);
+}
+
+#[test]
+fn a_rig_test_counts_and_a_file_dropped_from_git_counts_as_deleted() {
+    let repo = repo_with_two_tests();
+    git(&repo, &["checkout", "-q", "-b", "port"]);
+    git(
+        &repo,
+        &["rm", "-q", "--cached", "scripts/rig/test_drive.py"],
+    );
+    let refused = check(&repo, "main").unwrap_err();
+    assert!(refused.contains("scripts/rig/test_drive.py"), "{refused}");
+    let _ = fs::remove_dir_all(&repo);
+}
+
+#[test]
+fn a_test_added_on_the_base_after_the_branch_left_is_not_counted() {
+    let repo = repo_with_two_tests();
+    git(&repo, &["checkout", "-q", "-b", "port"]);
+    git(&repo, &["checkout", "-q", "main"]);
+    write(
+        &repo,
+        "desktop/tests/week/test_later.py",
+        "def test_z():\n    pass\n",
+    );
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-q", "-m", "later on main"]);
+    git(&repo, &["checkout", "-q", "port"]);
+    assert!(check(&repo, "main").is_ok());
+    let _ = fs::remove_dir_all(&repo);
+}

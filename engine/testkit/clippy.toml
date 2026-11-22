@@ -8,4 +8,9 @@ disallowed-methods = [
     { path = "std::time::Instant::now", reason = "take the time as an argument; only flexweek-platform reads the clock" },
     { path = "chrono::Local::now", reason = "take the time as an argument; only flexweek-platform reads the clock", allow-invalid = true },
     { path = "chrono::Utc::now", reason = "take the time as an argument; only flexweek-platform reads the clock", allow-invalid = true },
+    { path = "std::time::SystemTime::elapsed", reason = "reads the clock; take the time as an argument" },
+    { path = "std::time::Instant::elapsed", reason = "reads the clock; take the time as an argument" },
+    { path = "chrono::Local::today", reason = "reads the clock; take the time as an argument", allow-invalid = true },
+    { path = "chrono::Utc::today", reason = "reads the clock; take the time as an argument", allow-invalid = true },
+    { path = "tokio::time::Instant::now", reason = "reads the clock; take the time as an argument", allow-invalid = true },
 ]

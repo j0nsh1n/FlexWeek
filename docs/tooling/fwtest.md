@@ -50,10 +50,11 @@ fwtest clean
   `scripts/mutations/` that its `old` text occurs exactly once and that its `test` exists (a Python
   `path::function`, or a Rust `cargo:` test in an `engine/**/tests/` file). A miss fails the gate
   before any tests run. It then checks the port ledger (2.0.0, Rust approved 2026-11-21): a Python test
-  file under `desktop/tests/` or `backend/tests/` that exists on the diff base and is gone from the working
-  tree needs a row in `tools/fwtest/port-ledger.toml` naming the Rust tests that replace it (`rust`) and how
-  they were seen to fail (`red`); a deleted file without one fails the gate. pytest gets `-n N` where N is `--workers`, or half the cores
-  and at least 2. It prints `VERIFIED: Backend and desktop. Packaged binaries and other platforms
+  file (`test_*.py` or `*_test.py` under `backend/tests/`, `desktop/tests/`, `scripts/rig/` or
+  `scripts/pictures/`) that exists where the branch left the diff base and is no longer tracked here
+  needs a row in `tools/fwtest/port-ledger.toml` naming the Rust tests that replace it (`rust`) and how
+  they were seen to fail (`red`); a deleted file without one, or a deleted ledger, fails the gate. pytest gets `-n N`
+  where N is `--workers`, or half the cores and at least 2. It prints `VERIFIED: Backend and desktop. Packaged binaries and other platforms
   need separate checks.` (or `VERIFIED: Backend.` with `--backend-only`) only when every step
   passed, as `verify.py` does. The per-step timeout is 2400 seconds; the desktop suite takes about
   15 minutes on 3 workers. pytest also gets `--junitxml` and `-o junit_family=xunit1`, so a failed

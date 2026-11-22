@@ -1,7 +1,8 @@
-# The port ledger (2.0.0, Rust approved 2026-11-21). A Python test file under desktop/tests/ or
-# backend/tests/ is deleted only with a row here naming the Rust tests that replace it and how they
-# were seen to fail (the rule broken by hand, or the mutation case that turned them red). `fwtest gate`
-# refuses a deleted Python test file without a row.
+# The port ledger (2.0.0, Rust approved 2026-11-21). A Python test file (test_*.py or *_test.py
+# under backend/tests/, desktop/tests/, scripts/rig/ or scripts/pictures/) is deleted only with a row
+# here naming the Rust tests that replace it and how they were seen to fail (the rule broken by hand,
+# or the mutation case that turned them red). `fwtest gate` refuses a deleted Python test file without
+# a row, and a deleted ledger.
 #
 # [[port]]
 # python = "desktop/tests/week/test_week_zoom.py"

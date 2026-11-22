@@ -117,7 +117,7 @@ jobs:
         run: cargo fmt --check
       - name: engine lint
         working-directory: engine
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
       - name: engine tests
         working-directory: engine
         run: cargo test --workspace
