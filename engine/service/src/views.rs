@@ -119,3 +119,13 @@ pub fn homework(
     })
     .map_err(refused_date)
 }
+
+/// The account's routines, as `GET /api/routines` lists them.
+pub fn routines(path: &Path, user_id: i64) -> ServiceResult<Value> {
+    with_db(path, |conn| Ok(store::routine_list(conn, user_id)?))
+}
+
+/// The account's restore points, newest first, as `GET /api/restore-points` lists them.
+pub fn restore_points(path: &Path, user_id: i64) -> ServiceResult<Value> {
+    with_db(path, |conn| Ok(store::restore_point_list(conn, user_id)?))
+}

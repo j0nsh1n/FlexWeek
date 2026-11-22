@@ -1,12 +1,13 @@
 //! Day, Month and the homework list against `GET /api/day`, `/api/month` and `/api/assignments` on the
 //! same Python-seeded database as the week test (fixtures/make_week_scenarios.py): every day of
 //! November 2026, the month from each of the seven first days, and the homework list for every week
-//! start with and without finished homework, all at the fixtures' clock (Thursday 5 Nov, 19:00).
+//! start with and without finished homework, the routines and the restore points, all at the fixtures'
+//! clock (Thursday 5 Nov, 19:00).
 
 use std::path::PathBuf;
 
 use chrono::NaiveDate;
-use flexweek_service::views::{day, homework, month};
+use flexweek_service::views::{day, homework, month, restore_points, routines};
 use serde_json::Value;
 
 fn setup(name: &str) -> (Value, PathBuf, PathBuf) {
@@ -77,6 +78,18 @@ fn every_day_month_and_homework_list_reads_as_python_answered_it() {
             got => wrong.push(format!(
                 "homework {start} {all}\n  python: {}\n  rust:   {got:?}",
                 case["answer"]
+            )),
+        }
+    }
+    for (name, got) in [
+        ("routines", routines(&path, user)),
+        ("restore_points", restore_points(&path, user)),
+    ] {
+        match got {
+            Ok(got) if same(&got, &views[name]) => {}
+            got => wrong.push(format!(
+                "{name}\n  python: {}\n  rust:   {got:?}",
+                views[name]
             )),
         }
     }

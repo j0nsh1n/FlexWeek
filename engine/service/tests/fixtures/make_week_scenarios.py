@@ -69,8 +69,9 @@ def seed_alice(client: TestClient) -> None:
     homework(client, "hw-done", "2026-11-06", 30)
     done = ok(client.get("/api/assignments?week_start=2026-11-02&include_completed=true"))["assignments"]
     finished = next(item for item in done if item["id"] == "hw-done")
-    body = {key: finished[key] for key in ("id", "title", "course", "category", "priority", "energy",
-                                           "spotify_url", "due", "estimate_min", "focus_minutes", "focus_sessions")}
+    kept = ("id", "title", "course", "category", "priority", "energy", "spotify_url", "due", "estimate_min",
+            "focus_minutes", "focus_sessions")  # fmt: skip
+    body = {key: finished[key] for key in kept}
     body.update(completed=True, completed_at="2026-11-04T18:00", revision=finished["revision"])
     ok(client.put("/api/assignments/hw-done", json=body, headers=WRITE))
     first = [
@@ -83,6 +84,11 @@ def seed_alice(client: TestClient) -> None:
     save(client, "2026-11-09", first, 0)
     second = [fixed("chess", "16:00", [0, 4], missed_days=[0]), session("s3", "hw-maths", [1], "20:00")]
     save(client, "2026-11-16", second, 0)
+    run = {"template_id": "t1", "title": "Run", "days": [0, 2], "start": "07:00", "duration_min": 30}
+    ok(client.put("/api/routines/r1", json={"id": "r1", "name": "Morning", "revision": 0, "blocks": [run]},
+                  headers=WRITE))  # fmt: skip
+    point = {"label": "Before the trip", "operation_id": "op-1"}
+    ok(client.post("/api/restore-points", json=point, headers=WRITE))
     # A week from Wednesday saved as one: it splits back into the two stored weeks it covers.
     shown = ok(client.get("/api/week?week_start=2026-11-18"))
     blocks = [block for block in shown["blocks"] if block["id"] != "school"]
@@ -140,15 +146,22 @@ def _views(client: TestClient, user_id: int, starts: list[str]) -> dict:
     from datetime import date, timedelta
 
     days = [(date(2026, 11, 1) + timedelta(days=n)).isoformat() for n in range(30)]
+    def month(first: int) -> dict:
+        answer = ok(client.get(f"/api/month?month=2026-11&first_day={first}"))
+        return {"month": "2026-11", "first_day": first, "answer": answer}
+
+    def listed(start: str, done: bool) -> dict:
+        answer = ok(client.get(f"/api/assignments?week_start={start}&include_completed={str(done).lower()}"))
+        return {"week_start": start, "include_completed": done, "answer": answer}
+
     return {
         "user_id": user_id,
         "now": "2026-11-05T19:00",
         "day": [{"date": d, "answer": ok(client.get(f"/api/day?date={d}"))} for d in days],
-        "month": [{"month": "2026-11", "first_day": f, "answer": ok(client.get(f"/api/month?month=2026-11&first_day={f}"))}
-                  for f in range(7)],
-        "homework": [{"week_start": w, "include_completed": c,
-                      "answer": ok(client.get(f"/api/assignments?week_start={w}&include_completed={str(c).lower()}"))}
-                     for w in starts for c in (False, True)],
+        "month": [month(first) for first in range(7)],
+        "routines": ok(client.get("/api/routines")),
+        "restore_points": ok(client.get("/api/restore-points")),
+        "homework": [listed(start, done) for start in starts for done in (False, True)],
     }
 
 
