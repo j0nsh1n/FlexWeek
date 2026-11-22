@@ -55,14 +55,15 @@ fn checked_code(raw: &str) -> ServiceResult<&str> {
     }
 }
 
-/// The randomness an account change needs. The caller supplies it, so tests can fix it.
+/// The randomness an account change needs. The caller supplies it, so tests can fix it. A source that
+/// fails answers Err, and the change stops there and saves nothing.
 pub trait Entropy {
     /// A new session token: 32 random bytes as URL-safe base64 without padding.
-    fn session_token(&mut self) -> String;
+    fn session_token(&mut self) -> ServiceResult<String>;
     /// A password salt: 16 random bytes as 32 lowercase hex digits.
-    fn salt(&mut self) -> String;
+    fn salt(&mut self) -> ServiceResult<String>;
     /// Eight random bytes for one recovery code.
-    fn code_bytes(&mut self) -> [u8; 8];
+    fn code_bytes(&mut self) -> ServiceResult<[u8; 8]>;
 }
 
 /// Where a request came from and when, for the throttle and the session.
@@ -102,20 +103,20 @@ fn open_session(
     now: i64,
     keep: bool,
 ) -> ServiceResult<String> {
-    let token = entropy.session_token();
+    let token = entropy.session_token()?;
     store::open_session(conn, &token, user_id, now, keep)?;
     Ok(token)
 }
 
-pub fn generate_recovery_codes(entropy: &mut dyn Entropy) -> Vec<String> {
+pub fn generate_recovery_codes(entropy: &mut dyn Entropy) -> ServiceResult<Vec<String>> {
     let mut seen = BTreeSet::new();
     let mut codes = Vec::with_capacity(RECOVERY_CODE_COUNT);
     while codes.len() < RECOVERY_CODE_COUNT {
-        if let Some(code) = accept_recovery_draw(&entropy.code_bytes(), &mut seen) {
+        if let Some(code) = accept_recovery_draw(&entropy.code_bytes()?, &mut seen) {
             codes.push(code);
         }
     }
-    codes
+    Ok(codes)
 }
 
 fn store_recovery_codes(conn: &Connection, user_id: i64, codes: &[String]) -> ServiceResult<()> {
@@ -148,8 +149,8 @@ pub fn register(
     let username = &checked_username(username)?;
     let password = checked_password(password)?;
     throttled(path, asker, username)?;
-    let encoded = store::password_hash(password, &entropy.salt())?;
-    let codes = generate_recovery_codes(entropy);
+    let encoded = store::password_hash(password, &entropy.salt()?)?;
+    let codes = generate_recovery_codes(entropy)?;
     let created = with_db(path, |conn| {
         let user_id = store::insert_user(conn, username, &encoded)?;
         store::insert_preferences(conn, user_id, store::PREFS_VERSION)?;
@@ -307,7 +308,7 @@ pub fn recover(
     let new_password = checked_password(new_password)?;
     throttled(path, asker, username)?;
     let dummy = hash_recovery_code("missing-recovery-code");
-    let new_hash = store::password_hash(new_password, &entropy.salt())?;
+    let new_hash = store::password_hash(new_password, &entropy.salt()?)?;
     let (account, token) = with_db(path, |conn| {
         store::begin_immediate(conn)?;
         let found = store::find_user(conn, username)?;
@@ -364,7 +365,7 @@ pub fn renew_recovery_codes(
 ) -> ServiceResult<Vec<String>> {
     let password = checked_password(password)?;
     throttled(path, asker, &account.username)?;
-    let codes = generate_recovery_codes(entropy);
+    let codes = generate_recovery_codes(entropy)?;
     with_db(path, |conn| {
         store::begin_immediate(conn)?;
         require_password(conn, account.id, password)?;
@@ -385,7 +386,7 @@ pub fn change_password(
     let current = checked_password(current)?;
     let new = checked_password(new)?;
     throttled(path, asker, &account.username)?;
-    let new_hash = store::password_hash(new, &entropy.salt())?;
+    let new_hash = store::password_hash(new, &entropy.salt()?)?;
     with_db(path, |conn| {
         store::begin_immediate(conn)?;
         require_password(conn, account.id, current)?;
@@ -420,17 +421,17 @@ mod tests {
     struct Counting(u64);
 
     impl Entropy for Counting {
-        fn session_token(&mut self) -> String {
+        fn session_token(&mut self) -> ServiceResult<String> {
             self.0 += 1;
-            format!("token-{:040}", self.0)
+            Ok(format!("token-{:040}", self.0))
         }
-        fn salt(&mut self) -> String {
+        fn salt(&mut self) -> ServiceResult<String> {
             self.0 += 1;
-            format!("{:032x}", self.0)
+            Ok(format!("{:032x}", self.0))
         }
-        fn code_bytes(&mut self) -> [u8; 8] {
+        fn code_bytes(&mut self) -> ServiceResult<[u8; 8]> {
             self.0 += 1;
-            self.0.to_be_bytes()
+            Ok(self.0.to_be_bytes())
         }
     }
 

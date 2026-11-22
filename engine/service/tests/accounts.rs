@@ -9,7 +9,7 @@ use flexweek_service::accounts::{
     PLEASE_SIGN_IN, RECOVER_WRONG, RECOVERY_CODE_COUNT, SESSION_ENDED, SIGN_IN_WRONG,
     TOO_MANY_TRIES, USERNAME_TAKEN,
 };
-use flexweek_service::{Refusal, ServiceError, with_db};
+use flexweek_service::{Refusal, ServiceError, ServiceResult, with_db};
 
 const NOW: i64 = 1_793_000_000;
 
@@ -17,17 +17,17 @@ const NOW: i64 = 1_793_000_000;
 struct Counting(u64);
 
 impl Entropy for Counting {
-    fn session_token(&mut self) -> String {
+    fn session_token(&mut self) -> ServiceResult<String> {
         self.0 += 1;
-        format!("token-{:040}", self.0)
+        Ok(format!("token-{:040}", self.0))
     }
-    fn salt(&mut self) -> String {
+    fn salt(&mut self) -> ServiceResult<String> {
         self.0 += 1;
-        format!("{:032x}", self.0)
+        Ok(format!("{:032x}", self.0))
     }
-    fn code_bytes(&mut self) -> [u8; 8] {
+    fn code_bytes(&mut self) -> ServiceResult<[u8; 8]> {
         self.0 += 1;
-        self.0.to_be_bytes()
+        Ok(self.0.to_be_bytes())
     }
 }
 
@@ -924,4 +924,55 @@ fn a_sign_up_that_fails_part_way_leaves_no_account() {
         (0, 0, 0),
         "a half-made account was left behind"
     );
+}
+
+/// A source of randomness that breaks at one of its three draws.
+struct Breaks(&'static str, Counting);
+
+impl Entropy for Breaks {
+    fn session_token(&mut self) -> ServiceResult<String> {
+        if self.0 == "token" {
+            return Err(ServiceError::Broken("no token".into()));
+        }
+        self.1.session_token()
+    }
+    fn salt(&mut self) -> ServiceResult<String> {
+        if self.0 == "salt" {
+            return Err(ServiceError::Broken("no salt".into()));
+        }
+        self.1.salt()
+    }
+    fn code_bytes(&mut self) -> ServiceResult<[u8; 8]> {
+        if self.0 == "code" {
+            return Err(ServiceError::Broken("no code".into()));
+        }
+        self.1.code_bytes()
+    }
+}
+
+#[test]
+fn a_sign_up_whose_randomness_fails_makes_no_account() {
+    for part in ["token", "salt", "code"] {
+        let db = fresh(&format!("breaks-{part}"));
+        let made = accounts::register(
+            &db.path,
+            at(NOW),
+            &mut Breaks(part, Counting(0)),
+            "ana",
+            "correct horse 1",
+            false,
+            "",
+        );
+        assert!(
+            matches!(made, Err(ServiceError::Broken(_))),
+            "{part}: {made:?}"
+        );
+        let accounts: i64 = with_db(&db.path, |conn| {
+            Ok(conn
+                .query_row("SELECT count(*) FROM users", [], |row| row.get(0))
+                .unwrap())
+        })
+        .unwrap();
+        assert_eq!(accounts, 0, "{part}: an account was saved");
+    }
 }

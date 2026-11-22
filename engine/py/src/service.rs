@@ -5,7 +5,7 @@
 use std::path::Path;
 
 use flexweek_service::accounts::{self, Account, Asker, Entropy, SignedIn};
-use flexweek_service::{Refusal, ServiceError, preferences, records, views, weeks};
+use flexweek_service::{Refusal, ServiceError, ServiceResult, preferences, records, views, weeks};
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyRuntimeError};
 use pyo3::prelude::*;
@@ -40,36 +40,42 @@ struct Secrets<'py> {
 }
 
 impl Secrets<'_> {
-    fn text(&mut self, name: &str, size: usize) -> String {
+    /// Keeps Python's own error for the caller and stops the account change, which then saves nothing.
+    fn fail(&mut self, error: PyErr) -> ServiceError {
+        self.failed.get_or_insert(error);
+        ServiceError::Broken("Python's secrets module failed".into())
+    }
+
+    fn text(&mut self, name: &str, size: usize) -> ServiceResult<String> {
         let made = self
             .module
             .call_method1(name, (size,))
             .and_then(|value| value.extract::<String>());
-        made.unwrap_or_else(|error| {
-            self.failed.get_or_insert(error);
-            String::new()
-        })
+        made.map_err(|error| self.fail(error))
     }
 }
 
 impl Entropy for Secrets<'_> {
-    fn session_token(&mut self) -> String {
+    fn session_token(&mut self) -> ServiceResult<String> {
         self.text("token_urlsafe", 32)
     }
-    fn salt(&mut self) -> String {
+    fn salt(&mut self) -> ServiceResult<String> {
         self.text("token_hex", 16)
     }
-    fn code_bytes(&mut self) -> [u8; 8] {
+    fn code_bytes(&mut self) -> ServiceResult<[u8; 8]> {
         let made = self
             .module
             .call_method1("token_bytes", (8,))
             .and_then(|value| value.extract::<Vec<u8>>());
         match made {
-            Ok(bytes) => bytes.try_into().unwrap_or([0; 8]),
-            Err(error) => {
-                self.failed.get_or_insert(error);
-                [0; 8]
-            }
+            Ok(bytes) => bytes.try_into().map_err(|bytes: Vec<u8>| {
+                let wrong = PyRuntimeError::new_err(format!(
+                    "secrets.token_bytes(8) gave {} bytes",
+                    bytes.len()
+                ));
+                self.fail(wrong)
+            }),
+            Err(error) => Err(self.fail(error)),
         }
     }
 }

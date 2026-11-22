@@ -344,3 +344,16 @@ def test_a_password_check_reads_the_signed_in_accounts_own_password(app: FastAPI
     assert sign_in(browser(app, clients), "bob", PASSWORD_B).status_code == 401
     assert sign_in(browser(app, clients), "bob", REPLACEMENT).status_code == 200
     assert sign_in(browser(app, clients), "alice", PASSWORD_A).status_code == 200
+
+
+def test_a_short_random_draw_stops_the_sign_up_and_saves_nothing(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import secrets
+
+    monkeypatch.setattr(secrets, "token_bytes", lambda size: b"\x00" * (size - 1))
+    with pytest.raises(RuntimeError, match="gave 7 bytes"):
+        client.post("/api/auth/register", json={"username": "alice", "password": PASSWORD}, headers=WRITE)
+    monkeypatch.undo()
+    again = client.post("/api/auth/register", json={"username": "alice", "password": PASSWORD}, headers=WRITE)
+    assert again.status_code == 201, again.text

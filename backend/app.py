@@ -4,7 +4,6 @@ import re
 import secrets
 import sqlite3
 from contextlib import asynccontextmanager
-from datetime import date, timedelta
 from pathlib import Path
 from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
@@ -63,9 +62,6 @@ from backend.weeks import (
     current_week_start,
     is_calendar_date,
     is_week_start,
-    monday_of,
-    month_grid,
-    parse_month,
     repeat_changes_from_shown_week,
     rules_on_shown_week,
     shown_week_parts,
@@ -286,20 +282,6 @@ def save_shown_week(
         incoming = adopt_legacy_deadlines(db, user_id, stored_start, blocks)
         owned = require_own_assignments(db, user_id, assignment_ids_of(incoming))
         save_week_row(db, user_id, stored_start, dump_blocks(rewrite_blocks(incoming, owned)), revision)
-
-
-def month_weeks(
-    db: Connection, user_id: int, month: str, first_weekday: int = 0
-) -> list[tuple[str, list[dict]]]:
-    """Every saved week, with the weeks the month's grid shows as the student sees them."""
-    saved = dict(db.list_account_weeks(user_id))
-    first, last = parse_month(month)
-    grid_start, grid_end = month_grid(first, last, first_weekday)
-    monday = date.fromisoformat(monday_of(grid_start.isoformat()))
-    while monday <= grid_end:
-        saved.setdefault(monday.isoformat(), "[]")
-        monday += timedelta(days=7)
-    return [(start, week_with_standing(db, user_id, start, text)) for start, text in saved.items()]
 
 
 def assignment_view(body: dict, revision: int, planned: int, done: int = 0) -> dict:

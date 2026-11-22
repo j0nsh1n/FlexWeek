@@ -1,4 +1,5 @@
-//! Read assembly the HTTP routes still do in Python (`month_weeks`, the day, the homework list).
+//! Read assembly for the Month and homework-list answers (the service crate serves both; the assistant
+//! helper reads them too).
 //!
 //! `rewrite_stored_blocks` is called with an identity normalizer. The pydantic pass that fills
 //! TimeBlock defaults is a later slice and lives in the engine, which this lane does not change.

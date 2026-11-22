@@ -150,6 +150,30 @@ for time in ["07:00", "x07:00y", "07:00x", "107:00", "7:00", "24:00"]:
     fixed = {"theme": "system", "alarms": [{"id": "a1", "name": "Wake", "time": time, "days": [2, 0]}]}
     seen.add(json.dumps(fixed, sort_keys=True))
     cases.append(written(fixed))
+# Python's \d is any Unicode decimal digit: Arabic-Indic, Devanagari and fullwidth digits in every time.
+UNICODE_TIMES = ["\u0660\u0667:\u0663\u0660", "0\u0967:30", "\uff10\uff17:\uff10\uff10", "1\u0660:00",
+                 "\u0662\u0663:00", "07:\u0665\u0669", "\u0667:00"]  # fmt: skip
+for time in UNICODE_TIMES:
+    for fixed in (
+        {"theme": "system", "alarms": [{"id": "a1", "name": "Wake", "time": "x" + time, "days": [1]}]},
+        {"theme": "system", "day_cutoff": time},
+        {"theme": "system", "protected": [{"days": [1], "start": time, "duration_min": 30, "kind": "meal"}]},
+        {"theme": "system", "work_windows": [{"days": [1], "start": "09:00", "end": time}]},
+        {"theme": "system", "study_windows": [{"days": [2], "start": time, "duration_min": 60}]},
+    ):
+        cases.append(written(fixed))
+STAMPS = ["\uff12\uff10\uff12\uff16-11-05T19:00",
+          "2026-\u0661\u0661-05T19:00:3\u0660", "2026-11-05T19:\u0966\u0966"]
+for stamp in STAMPS:
+    cases.append(written({"theme": "system", "setup": {"version": 1, "finished_at": stamp}}))
+# `data.pop("study_windows") or []`: falsy study hours are ignored, and so is a falsy work list beside them.
+STUDY = [{"days": [2], "start": "16:00", "duration_min": 60}]
+for falsy in [None, False, 0, 0.0, "", [], {}, True, 1, "x", {"a": 1}]:
+    cases.append(written({"theme": "system", "study_windows": falsy}))
+    cases.append(written({"theme": "system", "study_windows": STUDY, "work_windows": falsy}))
+    cases.append(written({"theme": "system", "work_windows": falsy}))
+for fixed_case in cases:
+    seen.add(json.dumps(fixed_case["input"], sort_keys=True))
 while len(cases) < int(sys.argv[2]):
     prefs = case()
     key = json.dumps(prefs, sort_keys=True)

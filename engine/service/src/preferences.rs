@@ -8,7 +8,9 @@ use std::collections::BTreeSet;
 
 use flexweek_engine::model::valid_spotify_url;
 use flexweek_engine::plan::fold_study_windows;
-use flexweek_engine::time::{clock_to_minutes, on_slot, span_fits_day, start_fits_day};
+use flexweek_engine::time::{
+    clock_to_minutes, decimal_digit, on_slot, span_fits_day, start_fits_day,
+};
 use serde_json::{Map, Value};
 
 use crate::blocks::{
@@ -58,16 +60,36 @@ fn unique_days(value: &Value, name: &str) -> Checked<Vec<i64>> {
     Ok(days)
 }
 
+/// Python's `\d`: any Unicode decimal digit, which `int()` then reads.
+fn digit(ch: char) -> bool {
+    decimal_digit(ch).is_some()
+}
+
+/// `(?:[01]\d|2[0-3]):[0-5]\d` matched against all of `text`: the bracketed ranges are ASCII, `\d` is
+/// any Unicode decimal digit, as in Python's and pydantic's patterns.
 fn hhmm(text: &str) -> bool {
-    let bytes = text.as_bytes();
-    bytes.len() == 5
-        && bytes[2] == b':'
-        && matches!(
-            (bytes[0], bytes[1]),
-            (b'0' | b'1', b'0'..=b'9') | (b'2', b'0'..=b'3')
-        )
-        && matches!(bytes[3], b'0'..=b'5')
-        && bytes[4].is_ascii_digit()
+    let chars: Vec<char> = text.chars().collect();
+    chars.len() == 5
+        && chars[2] == ':'
+        && match chars[0] {
+            '0' | '1' => digit(chars[1]),
+            '2' => ('0'..='3').contains(&chars[1]),
+            _ => false,
+        }
+        && ('0'..='5').contains(&chars[3])
+        && digit(chars[4])
+}
+
+/// Python's truthiness for a JSON value: `value or []` keeps only a truthy one.
+fn truthy(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::Bool(flag) => *flag,
+        Value::Number(number) => number.as_f64().is_some_and(|n| n != 0.0),
+        Value::String(text) => !text.is_empty(),
+        Value::Array(items) => !items.is_empty(),
+        Value::Object(fields) => !fields.is_empty(),
+    }
 }
 
 fn minutes(text: &str) -> i64 {
@@ -216,9 +238,10 @@ fn alarm(value: &Value) -> Checked<Value> {
     let name = text_field(required(fields, "name")?, "name", 1, 80)?;
     let time = text_field(required(fields, "time")?, "time", 0, usize::MAX)?;
     // pydantic's pattern is searched for anywhere in the text, not matched against all of it.
-    if !time
-        .char_indices()
-        .any(|(at, _)| time.get(at..at + 5).is_some_and(hhmm))
+    let chars: Vec<char> = time.chars().collect();
+    if !chars
+        .windows(5)
+        .any(|window| hhmm(&window.iter().collect::<String>()))
     {
         return refuse("time must hold HH:MM");
     }
@@ -261,20 +284,20 @@ fn setup(value: &Value) -> Checked<Value> {
         text_field(v, "finished_at", 0, 32)
     })?;
     if let Some(stamp) = &finished_at {
-        let bytes = stamp.as_bytes();
-        let digits =
-            |range: std::ops::Range<usize>| range.into_iter().all(|at| bytes[at].is_ascii_digit());
-        let minute_form = bytes.len() == 16;
-        let second_form = bytes.len() == 19 && bytes[16] == b':' && digits(17..19);
+        // \d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})? with Python's Unicode \d.
+        let chars: Vec<char> = stamp.chars().collect();
+        let digits = |range: std::ops::Range<usize>| range.into_iter().all(|at| digit(chars[at]));
+        let minute_form = chars.len() == 16;
+        let second_form = chars.len() == 19 && chars[16] == ':' && digits(17..19);
         let ok = (minute_form || second_form)
             && digits(0..4)
-            && bytes[4] == b'-'
+            && chars[4] == '-'
             && digits(5..7)
-            && bytes[7] == b'-'
+            && chars[7] == '-'
             && digits(8..10)
-            && bytes[10] == b'T'
+            && chars[10] == 'T'
             && digits(11..13)
-            && bytes[13] == b':'
+            && chars[13] == ':'
             && digits(14..16);
         if !ok {
             return refuse("finished_at must be YYYY-MM-DDTHH:MM");
@@ -369,8 +392,9 @@ pub fn check_preferences(value: &Value) -> Checked<Value> {
     let mut input = given.clone();
     // Older clients and export files send preferred study hours; they join Study hours first.
     if let Some(study) = input.shift_remove("study_windows") {
+        // `data.pop("study_windows") or []`: anything falsy is no study hours.
         let study = match study {
-            Value::Null => Vec::new(),
+            falsy if !truthy(&falsy) => Vec::new(),
             Value::Array(items) => items
                 .iter()
                 .map(study_window)
@@ -379,7 +403,8 @@ pub fn check_preferences(value: &Value) -> Checked<Value> {
         };
         if !study.is_empty() {
             let work = match input.get("work_windows") {
-                None | Some(Value::Null) => Vec::new(),
+                None => Vec::new(),
+                Some(falsy) if !truthy(falsy) => Vec::new(),
                 Some(Value::Array(items)) => {
                     items.iter().map(work_window).collect::<Checked<Vec<_>>>()?
                 }
