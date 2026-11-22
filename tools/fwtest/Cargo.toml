@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+# Reading a release archive to check each member before unpacking, as 1.x's updater does (2.0.0 plan
+# D7 lists both as approved candidates).
+flate2 = "=1.1.11"
+tar = "=0.4.46"
 clap = { version = "4.5.40", features = ["derive"] }
 nix = { version = "0.29.0", features = ["fs", "signal"] }
 png = "0.18.1"

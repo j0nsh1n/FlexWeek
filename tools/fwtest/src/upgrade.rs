@@ -45,14 +45,65 @@ fn checked(tarball: &Path) -> Result<(), String> {
     .map_err(|why| format!("{}: checksum does not match ({why})", tarball.display()))
 }
 
+/// `path` joined onto `folder` and tidied without touching the disk (`.` dropped, `..` steps back), as
+/// `Path.resolve()` sees a folder that has nothing in it yet.
+fn lexically(folder: &Path, path: &Path) -> PathBuf {
+    let mut resolved = folder.to_path_buf();
+    for part in path.components() {
+        match part {
+            std::path::Component::RootDir => resolved = PathBuf::from("/"),
+            std::path::Component::ParentDir => {
+                resolved.pop();
+            }
+            std::path::Component::Normal(name) => resolved.push(name),
+            _ => {}
+        }
+    }
+    resolved
+}
+
+fn gzip_archive(
+    tarball: &Path,
+) -> Result<tar::Archive<flate2::read::GzDecoder<std::fs::File>>, String> {
+    let file = std::fs::File::open(tarball).map_err(|error| error.to_string())?;
+    Ok(tar::Archive::new(flate2::read::GzDecoder::new(file)))
+}
+
+/// `_safe_extract`: every member is looked at before anything is written; one whose path leaves the
+/// folder (an absolute name included) or a symbolic or hard link that points outside it refuses the
+/// whole archive.
 fn unpack(tarball: &Path, into: &Path) -> Result<(), String> {
     std::fs::create_dir_all(into).map_err(|error| format!("{}: {error}", into.display()))?;
-    run(Command::new("tar")
-        .arg("-xzf")
-        .arg(tarball)
-        .arg("--no-same-owner")
-        .arg("-C")
-        .arg(into))
+    let root = into.canonicalize().map_err(|error| error.to_string())?;
+    let mut archive = gzip_archive(tarball)?;
+    for entry in archive.entries().map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let name = entry
+            .path()
+            .map_err(|error| error.to_string())?
+            .into_owned();
+        let target = lexically(&root, &name);
+        if !target.starts_with(&root) {
+            return Err(format!(
+                "{} would be written outside the folder",
+                name.display()
+            ));
+        }
+        let kind = entry.header().entry_type();
+        if kind.is_symlink() || kind.is_hard_link() {
+            let link = entry
+                .link_name()
+                .map_err(|error| error.to_string())?
+                .unwrap_or_default();
+            let parent = target.parent().unwrap_or(&root);
+            if !lexically(parent, &link).starts_with(&root) {
+                return Err(format!("{} links outside the folder", name.display()));
+            }
+        }
+    }
+    gzip_archive(tarball)?
+        .unpack(&root)
+        .map_err(|error| error.to_string())
 }
 
 /// The install's top folder as the updater finds it from the running program (`bundle_root`).
@@ -69,40 +120,6 @@ fn bundle_root(program: &Path) -> PathBuf {
 
 fn could_not(why: impl std::fmt::Display) -> String {
     format!("The update could not be put in place: {why}")
-}
-
-/// `_safe_extract`'s rule, checked on what was unpacked: no link may point outside the folder. (GNU tar
-/// already refuses member names that climb out with `..` or start at `/`.)
-fn links_stay_inside(folder: &Path) -> Result<(), String> {
-    let root = folder.canonicalize().map_err(|error| error.to_string())?;
-    let mut waiting = vec![root.clone()];
-    while let Some(dir) = waiting.pop() {
-        for entry in std::fs::read_dir(&dir).map_err(|error| error.to_string())? {
-            let path = entry.map_err(|error| error.to_string())?.path();
-            let kind = std::fs::symlink_metadata(&path).map_err(|error| error.to_string())?;
-            if kind.file_type().is_symlink() {
-                let target = std::fs::read_link(&path).map_err(|error| error.to_string())?;
-                let mut resolved = path.parent().unwrap_or(&root).to_path_buf();
-                for part in target.components() {
-                    match part {
-                        std::path::Component::RootDir => resolved = PathBuf::from("/"),
-                        std::path::Component::ParentDir => {
-                            resolved.pop();
-                        }
-                        std::path::Component::Normal(name) => resolved.push(name),
-                        _ => {}
-                    }
-                }
-                if !resolved.starts_with(&root) {
-                    let name = path.strip_prefix(&root).unwrap_or(&path);
-                    return Err(format!("{} links outside the folder", name.display()));
-                }
-            } else if kind.is_dir() {
-                waiting.push(path);
-            }
-        }
-    }
-    Ok(())
 }
 
 /// The swap itself, once the new release is unpacked in `staging`: the first folder there in directory
@@ -138,7 +155,7 @@ pub fn put_in_place(root: &Path, staging: &Path) -> Result<(), String> {
 }
 
 /// `_swap_tree`: refuse an install that holds the data or whose folder cannot be written, unpack beside it
-/// (refusing links that leave the folder), then swap. A failure before the swap leaves the install as it was
+/// (refusing members and links that leave the folder, before anything is written), then swap. A failure before the swap leaves the install as it was
 /// and no staging folder behind.
 pub fn swap_tree(root: &Path, tarball: &Path) -> Result<(), String> {
     if root.join("flexweek.db").exists() {
@@ -161,7 +178,7 @@ pub fn swap_tree(root: &Path, tarball: &Path) -> Result<(), String> {
         .to_string_lossy();
     let staging = parent.join(format!("{name}.update"));
     let _ = std::fs::remove_dir_all(&staging);
-    if let Err(why) = unpack(tarball, &staging).and_then(|()| links_stay_inside(&staging)) {
+    if let Err(why) = unpack(tarball, &staging) {
         let _ = std::fs::remove_dir_all(&staging);
         return Err(could_not(why));
     }
@@ -208,8 +225,9 @@ pub fn problems(root: &Path, report: &Value, expect: &Value) -> Vec<String> {
         }
     }
     let parent = root.parent().unwrap_or(Path::new("."));
-    for left in ["FlexWeek.update", "FlexWeek.old"] {
-        if parent.join(left).exists() {
+    let name = root.file_name().unwrap_or_default().to_string_lossy();
+    for left in [format!("{name}.update"), format!("{name}.old")] {
+        if parent.join(&left).exists() {
             found.push(format!("{left} was left beside the install"));
         }
     }

@@ -110,8 +110,9 @@ fwtest clean
   `.sha256` beside them, unpacks the old one into `DIR/install` (refusing one not laid out as
   `FlexWeek/app/FlexWeek`), then swaps in the new one as 1.x's updater does (`desktop/native/updater.py`,
   `_swap_tree` and `_safe_extract`: refuse an install holding `flexweek.db` or a parent this process can't
-  write to, unpack beside it, refuse a link that points outside, take the first folder in directory
-  order, move the old one aside, move the new one in, put the old one back if that fails, tidy up). It
+  write to, check every member before writing anything (a path that leaves the folder, an absolute one
+  included, or a symbolic or hard link pointing outside refuses the archive), unpack beside it, take the
+  first folder in directory order, move the old one aside, move the new one in, put the old one back if that fails, tidy up). It
   starts the new `FlexWeek` launcher with `--upgrade-check` and `HOME` set to `HOME` (no `XDG_DATA_HOME`
   or `XDG_CONFIG_HOME`), and compares the report with `SEEDED.json`, which must give every one of
   `data_dir`, `username`, `weeks`, `homework`, `routines`, `restore_points`, `standing_blocks`, `phones`,
