@@ -6,3 +6,10 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+flexweek-platform = { path = "../platform" }
+flexweek-store = { path = "../store" }
+rusqlite = { version = "0.37.0", features = ["bundled"] }
+serde_json = "1.0.145"
+
+[dev-dependencies]
+rusqlite = { version = "0.37.0", features = ["bundled"] }

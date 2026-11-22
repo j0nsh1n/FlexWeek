@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 chrono = { version = "=0.4.45", default-features = false, features = ["clock", "std"] }
 flexweek-engine = { path = "../engine" }
+flexweek-platform = { path = "../platform" }
 flexweek-store = { path = "../store" }
 rmcp = { version = "=3.5.1", default-features = false, features = ["server", "macros", "schemars", "transport-io"] }
 serde = { version = "1", features = ["derive"] }

@@ -433,8 +433,13 @@ areas = ["engine-ffi"]
 paths = ["engine/tools/", "engine/clippy.toml"]
 areas = ["engine"]
 
+# The assistant helper finds the data folder and the kept sign-in through flexweek-platform.
 [[rule]]
-paths = ["engine/service/", "engine/app/", "engine/platform/", "engine/testkit/"]
+paths = ["engine/platform/"]
+areas = ["engine-desktop", "engine-mcp", "updater"]
+
+[[rule]]
+paths = ["engine/service/", "engine/app/", "engine/testkit/"]
 areas = ["engine-desktop"]
 
 # --- The rig and the harness.
