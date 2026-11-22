@@ -1166,6 +1166,16 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
             raise refused(error) from None
         response.delete_cookie(COOKIE, path="/", httponly=True, secure=secure, samesite="strict")
 
+    async def sent_json(request: Request) -> str:
+        """The body as the client sent it, for the service to read: re-writing the parsed copy would turn a
+        number too large for a float into `Infinity`, which is not JSON. The routes keep their parsed `given`
+        so FastAPI still answers a body that is not a JSON object as before."""
+        body = await request.body()
+        try:
+            return body.decode("utf-8")
+        except UnicodeDecodeError:
+            return ""
+
     def served(call, *args) -> dict:  # type: ignore[no-untyped-def]
         """One read from the Rust service; a refusal is its answer with Python's sentence."""
         try:
@@ -1201,8 +1211,12 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         return served(flexweek_engine.service_month, account["id"], month, first_day, naive_now())
 
     @app.put("/api/week")
-    def put_week(given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]) -> dict:
-        return served(flexweek_engine.service_save_week, account["id"], json.dumps(given))
+    def put_week(
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
+    ) -> dict:
+        return served(flexweek_engine.service_save_week, account["id"], sent)
 
     @app.get("/api/assignments")
     def get_assignments(
@@ -1217,17 +1231,23 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.put("/api/assignments/{assignment_id}")
     def put_assignment(
-        assignment_id: str, given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]
+        assignment_id: str,
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
     ) -> dict:
         saved = flexweek_engine.service_save_homework
-        return served(saved, account["id"], assignment_id, json.dumps(given))
+        return served(saved, account["id"], assignment_id, sent)
 
     @app.post("/api/assignments/{assignment_id}/spread")
     def post_spread(
-        assignment_id: str, given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]
+        assignment_id: str,
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
     ) -> dict:
         preview = flexweek_engine.service_spread_preview
-        return served(preview, account["id"], assignment_id, json.dumps(given))
+        return served(preview, account["id"], assignment_id, sent)
 
     @app.delete("/api/assignments/{assignment_id}")
     def remove_assignment(
@@ -1238,8 +1258,12 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         return served(flexweek_engine.service_delete_homework, account["id"], assignment_id, revision)
 
     @app.post("/api/repeat-edits")
-    def post_repeat_edits(given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]) -> dict:
-        return served(flexweek_engine.service_repeat_edits, account["id"], json.dumps(given))
+    def post_repeat_edits(
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
+    ) -> dict:
+        return served(flexweek_engine.service_repeat_edits, account["id"], sent)
 
     @app.post("/api/changes")
     def post_changes(batch: ChangesRequest, account: Annotated[dict, Depends(user)]) -> dict:
@@ -1352,8 +1376,12 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         return served(flexweek_engine.service_read_preferences, account["id"])
 
     @app.put("/api/preferences")
-    def put_preferences(given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]) -> dict:
-        return served(flexweek_engine.service_write_preferences, account["id"], json.dumps(given))
+    def put_preferences(
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
+    ) -> dict:
+        return served(flexweek_engine.service_write_preferences, account["id"], sent)
 
     @app.get("/api/routines")
     def get_routines(account: Annotated[dict, Depends(user)]) -> dict:
@@ -1361,10 +1389,13 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.put("/api/routines/{routine_id}")
     def put_routine(
-        routine_id: str, given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]
+        routine_id: str,
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
     ) -> dict:
         saved = flexweek_engine.service_save_routine
-        return served(saved, account["id"], routine_id, json.dumps(given), naive_now())
+        return served(saved, account["id"], routine_id, sent, naive_now())
 
     @app.delete("/api/routines/{routine_id}")
     def remove_routine(
@@ -1458,10 +1489,12 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.post("/api/timer-split-preview")
     def post_timer_split_preview(
-        given: Annotated[dict, Body()], _account: Annotated[dict, Depends(user)]
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        _account: Annotated[dict, Depends(user)],
     ) -> dict:
         try:
-            answer: dict = json.loads(flexweek_engine.service_split_preview(json.dumps(given)))
+            answer: dict = json.loads(flexweek_engine.service_split_preview(sent))
         except ServiceRefusal as error:
             raise refused(error) from None
         return answer
@@ -1471,9 +1504,13 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         return served(flexweek_engine.service_restore_points, account["id"])
 
     @app.post("/api/restore-points")
-    def post_restore_point(given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]) -> dict:
+    def post_restore_point(
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
+    ) -> dict:
         made = flexweek_engine.service_create_restore_point
-        return served(made, account["id"], json.dumps(given), secrets.token_hex(8), naive_now())
+        return served(made, account["id"], sent, secrets.token_hex(8), naive_now())
 
     @app.get("/api/restore-points/{point_id}/preview")
     def preview_restore_point(point_id: str, account: Annotated[dict, Depends(user)]) -> dict:
@@ -1481,16 +1518,23 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.post("/api/restore-points/{point_id}/restore")
     def restore_restore_point(
-        point_id: str, given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]
+        point_id: str,
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
     ) -> dict:
         restored = flexweek_engine.service_restore
         return served(
-            restored, account["id"], point_id, json.dumps(given), secrets.token_hex(8), naive_now()
+            restored, account["id"], point_id, sent, secrets.token_hex(8), naive_now()
         )
 
     @app.post("/api/solve")
-    def post_solve(given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]) -> dict:
-        return served(flexweek_engine.service_plan, account["id"], json.dumps(given))
+    def post_solve(
+        given: Annotated[dict, Body()],
+        sent: Annotated[str, Depends(sent_json)],
+        account: Annotated[dict, Depends(user)],
+    ) -> dict:
+        return served(flexweek_engine.service_plan, account["id"], sent)
 
     @app.get("/api/health")
     def health() -> dict[str, bool]:

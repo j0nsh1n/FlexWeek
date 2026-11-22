@@ -117,6 +117,13 @@ fn with_secrets<T: Send>(
     outcome.map_err(|error| service_py(py, error))
 }
 
+/// The request body as the client sent it. Text that is not JSON is the one refusal every bad request
+/// gets, as FastAPI's own check answered it.
+fn sent_body(given: &str) -> PyResult<Value> {
+    serde_json::from_str(given)
+        .map_err(|_| ServiceRefusal::new_err(("invalid", accounts::INVALID_INPUT.to_string())))
+}
+
 fn signed_in_tuple(signed: SignedIn) -> (i64, String, String, Option<Vec<String>>) {
     (
         signed.account.id,
@@ -432,8 +439,7 @@ fn service_write_preferences(
     given: &str,
 ) -> PyResult<String> {
     guard(|| {
-        let given: Value = serde_json::from_str(given)
-            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        let given = sent_body(given)?;
         served_json(py, || {
             preferences::write_preferences(Path::new(path), user_id, &given)
         })
@@ -450,8 +456,7 @@ fn service_spread_preview(
     given: &str,
 ) -> PyResult<String> {
     guard(|| {
-        let given: Value = serde_json::from_str(given)
-            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        let given = sent_body(given)?;
         served_json(py, || {
             homework_saves::spread_preview(Path::new(path), user_id, id, &given)
         })
@@ -469,8 +474,7 @@ fn service_save_routine(
     now: &str,
 ) -> PyResult<String> {
     guard(|| {
-        let given: Value = serde_json::from_str(given)
-            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        let given = sent_body(given)?;
         served_json(py, || {
             records::save_routine(Path::new(path), user_id, id, &given, now)
         })
@@ -487,8 +491,7 @@ fn service_save_homework(
     given: &str,
 ) -> PyResult<String> {
     guard(|| {
-        let given: Value = serde_json::from_str(given)
-            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        let given = sent_body(given)?;
         served_json(py, || {
             homework_saves::save_homework(Path::new(path), user_id, id, &given)
         })
@@ -500,8 +503,7 @@ fn service_save_homework(
 #[pyfunction]
 fn service_plan(py: Python<'_>, path: &str, user_id: i64, given: &str) -> PyResult<String> {
     guard(|| {
-        let given: Value = serde_json::from_str(given)
-            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        let given = sent_body(given)?;
         let started = std::time::Instant::now();
         served_json(py, || {
             let elapsed = || started.elapsed().as_secs_f64() * 1000.0;
@@ -514,8 +516,7 @@ fn service_plan(py: Python<'_>, path: &str, user_id: i64, given: &str) -> PyResu
 #[pyfunction]
 fn service_repeat_edits(py: Python<'_>, path: &str, user_id: i64, given: &str) -> PyResult<String> {
     guard(|| {
-        let given: Value = serde_json::from_str(given)
-            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        let given = sent_body(given)?;
         served_json(py, || {
             week_saves::preview_repeat_edits(Path::new(path), user_id, &given)
         })
@@ -526,8 +527,7 @@ fn service_repeat_edits(py: Python<'_>, path: &str, user_id: i64, given: &str) -
 #[pyfunction]
 fn service_save_week(py: Python<'_>, path: &str, user_id: i64, given: &str) -> PyResult<String> {
     guard(|| {
-        let given: Value = serde_json::from_str(given)
-            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        let given = sent_body(given)?;
         served_json(py, || {
             week_saves::save_week(Path::new(path), user_id, &given)
         })
@@ -538,8 +538,7 @@ fn service_save_week(py: Python<'_>, path: &str, user_id: i64, given: &str) -> P
 #[pyfunction]
 fn service_split_preview(py: Python<'_>, given: &str) -> PyResult<String> {
     guard(|| {
-        let given: Value = serde_json::from_str(given)
-            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        let given = sent_body(given)?;
         served_json(py, || comfort::split_preview(&given))
     })
 }
@@ -554,8 +553,7 @@ fn service_create_restore_point(
     now: &str,
 ) -> PyResult<String> {
     guard(|| {
-        let given: Value = serde_json::from_str(given)
-            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        let given = sent_body(given)?;
         served_json(py, || {
             records::create_restore_point(Path::new(path), user_id, &given, token, now)
         })
@@ -588,8 +586,7 @@ fn service_restore(
     now: &str,
 ) -> PyResult<String> {
     guard(|| {
-        let given: Value = serde_json::from_str(given)
-            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        let given = sent_body(given)?;
         served_json(py, || {
             records::restore(Path::new(path), user_id, point_id, &given, token, now)
         })

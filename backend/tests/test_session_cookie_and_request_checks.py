@@ -183,6 +183,31 @@ def test_deleting_the_account_answers_204_and_its_cookie_stops_working(alice: Te
     assert alice.get("/api/auth/me").status_code == 401
 
 
+@pytest.mark.parametrize(
+    ("method", "route"),
+    [
+        ("PUT", "/api/preferences"),
+        ("PUT", "/api/week"),
+        ("PUT", "/api/assignments/hw1"),
+        ("PUT", "/api/routines/r-1"),
+        ("POST", "/api/solve"),
+        ("POST", "/api/timer-split-preview"),
+        ("POST", "/api/restore-points"),
+        ("POST", "/api/repeat-edits"),
+    ],
+)
+def test_a_number_too_large_for_a_float_is_refused_not_a_server_error(
+    alice: TestClient, method: str, route: str
+) -> None:
+    """JSON allows 1e309; Python reads it as infinity, which is not JSON when written again."""
+    body = b'{"revision": 1e309, "duration_min": 1e309, "label": 1e309, "repeats": 1e309, "blocks": 1e309}'
+    sent = alice.request(method, route, content=body, headers={**WRITE, "Content-Type": "application/json"})
+    assert (sent.status_code, sent.json()) == (
+        422,
+        {"detail": "Invalid input. Check field lengths, times and required values."},
+    )
+
+
 def test_private_answers_are_marked_not_to_be_cached(alice: TestClient) -> None:
     response = alice.get("/api/week")
     assert response.headers["cache-control"] == "no-store"

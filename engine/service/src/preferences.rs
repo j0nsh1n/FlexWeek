@@ -119,11 +119,15 @@ fn grid_start(value: &Value) -> Checked<String> {
 fn grid_window(fields: Fields<'_>) -> Checked<(Vec<i64>, String, i64)> {
     let days = unique_days(required(fields, "days")?, "days")?;
     let start = grid_start(required(fields, "start")?)?;
+    // Both bounds before narrowing: a negative past 64 bits must not wrap into a positive length.
     let duration = match whole_number(required(fields, "duration_min")?) {
-        Some(minutes) if minutes <= 7140 => minutes as i64,
+        Some(minutes) if (1..=7140).contains(&minutes) => minutes as i64,
+        Some(minutes) if minutes <= 7140 => {
+            return refuse("duration_min must be a positive multiple of 15");
+        }
         _ => return refuse("duration_min must be a whole number up to 7140"),
     };
-    if duration <= 0 || !on_slot(duration) {
+    if !on_slot(duration) {
         return refuse("duration_min must be a positive multiple of 15");
     }
     if !span_fits_day(minutes(&start), duration) {
@@ -866,5 +870,20 @@ mod tests {
             checked >= 400,
             "only {checked} accepted cases carry stored columns"
         );
+    }
+
+    #[test]
+    fn a_negative_length_past_64_bits_is_refused_not_wrapped() {
+        // -(2**64) + 30 would read as 30 if it were narrowed before its lower bound was checked.
+        for duration in [
+            serde_json::json!(-18_446_744_073_709_551_586_i128),
+            serde_json::json!("-18446744073709551586"),
+        ] {
+            let given = serde_json::json!({
+                "theme": "system",
+                "protected": [{ "days": [0], "start": "09:00", "duration_min": duration, "kind": "meal" }],
+            });
+            assert!(check_preferences(&given).is_err(), "{given}");
+        }
     }
 }
