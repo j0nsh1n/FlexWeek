@@ -141,6 +141,18 @@ def test_the_day_answer_needs_a_date(alice: TestClient) -> None:
     )
 
 
+def test_the_month_answer_needs_a_month_and_a_first_day_from_monday_to_sunday(alice: TestClient) -> None:
+    """The route's own checks, before it asks the service (moved here from test_month_endpoint.py, whose
+    other checks are Rust tests now)."""
+    missing = alice.get("/api/month")
+    assert (missing.status_code, missing.json()) == (
+        422,
+        {"detail": "month must be YYYY-MM between 2000-01 and 2099-12"},
+    )
+    assert alice.get("/api/month?month=2026-12&first_day=-1").status_code == 422
+    assert alice.get("/api/month?month=2026-12&first_day=7").status_code == 422
+
+
 def test_private_answers_are_marked_not_to_be_cached(alice: TestClient) -> None:
     response = alice.get("/api/week")
     assert response.headers["cache-control"] == "no-store"

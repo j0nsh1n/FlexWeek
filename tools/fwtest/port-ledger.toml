@@ -81,3 +81,35 @@ rust = [
     "flexweek-service::day_view::due_soon_counts_a_session_still_ahead_in_an_earlier_week_and_not_one_that_passed",
 ]
 red = "build_day showing a finished session on every candidate day fails two; due soon reaching three days ahead fails the due-tomorrow test (2026-11-22). The route-only checks stay in Python: signed out (test_every_private_route_answers_401_without_a_session) and no date (test_the_day_answer_needs_a_date)"
+
+[[port]]
+python = "backend/tests/test_month_endpoint.py"
+rust = [
+    "flexweek-service::month_view::an_empty_september_is_a_five_week_grid",
+    "flexweek-service::month_view::a_school_week_fills_only_that_monday_to_friday",
+    "flexweek-service::month_view::open_homework_due_in_the_month_is_a_deadline_not_a_project",
+    "flexweek-service::month_view::notes_make_the_same_homework_a_project",
+    "flexweek-service::month_view::two_placed_session_dates_make_a_project_without_notes",
+    "flexweek-service::month_view::a_finished_session_counts_only_on_its_finished_day",
+    "flexweek-service::month_view::open_work_with_several_possible_days_is_unscheduled",
+    "flexweek-service::month_view::a_session_with_one_possible_day_and_no_time_is_unscheduled",
+    "flexweek-service::month_view::a_planned_session_is_scheduled_work_on_its_day",
+    "flexweek-service::month_view::overdue_open_homework_is_not_a_deadline_of_the_month",
+    "flexweek-service::month_view::a_finished_deadline_stays_on_its_date",
+    "flexweek-service::month_view::finished_homework_due_before_the_grid_is_not_overdue",
+    "flexweek-service::month_view::timer_work_chunks_count_as_sessions_and_breaks_as_fixed_blocks",
+    "flexweek-service::month_view::a_month_label_that_is_not_ascii_yyyy_mm_in_range_is_refused",
+    "flexweek-service::month_view::a_first_day_past_sunday_is_refused",
+    "flexweek-service::month_view::a_month_does_not_show_another_accounts_work",
+    "flexweek-service::month_view::january_2000_starts_its_grid_on_the_first",
+    "flexweek-service::month_view::december_2099_ends_its_grid_on_the_31st",
+    "flexweek-service::month_view::a_deadline_with_no_time_sorts_after_a_morning_one_on_the_same_date",
+    "flexweek-service::month_view::blank_notes_do_not_make_a_deadline_a_project",
+    "flexweek-service::month_view::a_repeating_block_shows_on_each_of_its_dates_with_the_same_id",
+    "flexweek-service::month_view::pinned_homework_shows_with_its_homework_id",
+    "flexweek-service::month_view::blocks_on_a_date_are_in_start_then_title_order",
+    "flexweek-service::month_view::a_block_on_the_last_sunday_and_one_on_the_next_months_first_monday_stay_on_their_dates",
+    "flexweek-service::month_view::a_busy_month_stays_a_compact_read",
+    "flexweek-service::month_view::rows_start_on_the_first_day_asked_for_and_carry_their_weeks",
+]
+red = "blank notes counted as notes, chips ordered by start alone, and two session dates no longer a project each fail their test (2026-11-22). The route-only checks stay in Python: signed out (test_every_private_route_answers_401_without_a_session), no month and a first day of -1 or 7 (test_the_month_answer_needs_a_month_and_a_first_day_from_monday_to_sunday)"
