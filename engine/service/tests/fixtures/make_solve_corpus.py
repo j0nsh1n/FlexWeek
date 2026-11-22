@@ -58,7 +58,38 @@ def case() -> object:
         item["running_late"] = {"day": 0, "minutes": 30, "from_start": "16:00", "previous_placed": []}
     if rng.random() < 0.05:
         item["unknown"] = 1
+    if blocks and rng.random() < 0.3:
+        shaped(item, blocks)
     return item
+
+
+def shaped(item: dict, blocks: list[dict]) -> None:
+    """One of WeekRequest's block-list rules, or a missed day, on an otherwise ordinary request."""
+    first = blocks[0]
+    rule = rng.choice(["missed", "missed", "duplicate", "no-start", "bound", "pomodoro", "too-many"])
+    if rule == "missed":
+        # A missed day already marked, a day the block is not on, or a missed day on a flexible block.
+        first["missed_days"] = rng.choice([[first["days"][0]], [6], [first["days"][0], first["days"][0]], []])
+        if rng.random() < 0.5 and first["kind"] == "locked":
+            item.pop("running_late", None)
+            item["recover"] = {"missed_block_id": first["id"], "missed_day": first["days"][0],
+                               "previous_placed": []}  # fmt: skip
+    elif rule == "duplicate":
+        blocks.append(dict(first))
+    elif rule == "no-start":
+        first["kind"] = "locked"
+        first.pop("start", None)
+        first.pop("assignment_id", None)
+    elif rule == "bound":
+        bound = rng.choice(["Monday 09:00", "09:00", "Funday 09:00", "24:00", "", "monday 09:00"])
+        first[rng.choice(["earliest", "latest"])] = bound
+    elif rule == "pomodoro":
+        blocks.append(block(len(blocks), kind="flexible", pomodoro_parent_id=first["id"]))
+    else:
+        previous = [block(20 + i) for i in range(101)]
+        item.pop("running_late", None)
+        item["recover"] = {"missed_block_id": first["id"], "missed_day": first["days"][0],
+                           "previous_placed": previous}  # fmt: skip
 
 
 def written(item: object) -> dict:

@@ -498,16 +498,17 @@ fn service_save_homework(
     })
 }
 
-/// `given` is the request body as JSON text; the service checks it. The planner's 150 ms budget runs from
-/// when this call starts.
+/// `given` is the request body as JSON text; the service checks it.
 #[pyfunction]
 fn service_plan(py: Python<'_>, path: &str, user_id: i64, given: &str) -> PyResult<String> {
     guard(|| {
         let given = sent_body(given)?;
-        let started = std::time::Instant::now();
+        let start_clock = || -> plans::Stopwatch {
+            let started = std::time::Instant::now();
+            Box::new(move || started.elapsed().as_secs_f64() * 1000.0)
+        };
         served_json(py, || {
-            let elapsed = || started.elapsed().as_secs_f64() * 1000.0;
-            plans::plan(Path::new(path), user_id, &given, &elapsed)
+            plans::plan(Path::new(path), user_id, &given, &start_clock)
         })
     })
 }

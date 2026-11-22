@@ -544,11 +544,11 @@ fn estimate_of(map: &Map<String, Value>) -> Result<i64, String> {
         Some(value) => as_int(value)?,
     };
     int_bounds(estimate, None, None, Some(model::ESTIMATE_MAX_MIN))?;
-    let estimate = stored_int(estimate)?;
+    // On the full value, as pydantic's validator sees it: a negative too large to store is not positive.
     if estimate <= 0 || estimate % 15 != 0 {
         return Err("estimate_min must be a positive multiple of 15".into());
     }
-    Ok(estimate)
+    stored_int(estimate)
 }
 
 fn completed_at_of(map: &Map<String, Value>) -> Result<Option<String>, String> {

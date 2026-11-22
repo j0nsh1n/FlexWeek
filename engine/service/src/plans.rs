@@ -161,7 +161,7 @@ fn late_of(value: &Value) -> Checked<Late> {
     let on_grid = crate::preferences::grid_minutes(&from_start)
         .is_some_and(|at| flexweek_engine::time::start_fits_day(at) && at % 15 == 0);
     if !on_grid {
-        return refuse("from_start must be on the 00:00-24:00 grid");
+        return refuse("from_start must be on the 00:00–24:00 grid");
     }
     let previous_placed = previous_of(fields.get("previous_placed"))?;
     let now_floor = floor_of(fields.get("now_floor"))?;
@@ -295,13 +295,16 @@ fn engine_blocks(blocks: &[Value]) -> ServiceResult<Vec<solver::TimeBlock>> {
         .collect()
 }
 
-/// Plans the week from the Plan request, as `POST /api/solve` answers; `elapsed_ms` is how long the
-/// request has run so far, for the planner's 150 ms budget. Nothing is saved.
+/// A clock that starts when it is made and answers the milliseconds since.
+pub type Stopwatch = Box<dyn Fn() -> f64>;
+
+/// Plans the week from the Plan request, as `POST /api/solve` answers; `start_clock` starts the planner's
+/// 150 ms budget. Nothing is saved.
 pub fn plan(
     path: &Path,
     user_id: i64,
     given: &Value,
-    elapsed_ms: &dyn Fn() -> f64,
+    start_clock: &dyn Fn() -> Stopwatch,
 ) -> ServiceResult<Value> {
     let request = check_plan_request(given).map_err(|_| invalid())?;
     let ids: Vec<String> = request
@@ -410,6 +413,10 @@ pub fn plan(
         .as_ref()
         .map(solver::plan_rules_from_value)
         .unwrap_or_default();
+    // The 150 ms budget is the search's own, as the app's clock started at the engine call: checking the
+    // request and reading the account do not spend it.
+    let stopwatch = start_clock();
+    let elapsed_ms: &dyn Fn() -> f64 = &*stopwatch;
     let trace = if let Some(recover) = &request.recover {
         solver::reschedule_after_miss(
             &planned,

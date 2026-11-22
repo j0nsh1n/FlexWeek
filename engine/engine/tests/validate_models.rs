@@ -420,6 +420,15 @@ fn assignment_rules_match_models_py() {
             message: "estimate_min must be a positive multiple of 15",
         },
         Case {
+            name: "models.py:294 a negative estimate too large to store is not positive",
+            value: with(
+                base.clone(),
+                "estimate_min",
+                json!(-18_446_744_073_709_551_616_i128),
+            ),
+            message: "estimate_min must be a positive multiple of 15",
+        },
+        Case {
             name: "models.py:67 due is a date or a stamp with no seconds",
             value: with(base.clone(), "due", json!("2026-10-23T21:00:00")),
             message: "must be YYYY-MM-DD or YYYY-MM-DDTHH:MM with no seconds or timezone",
