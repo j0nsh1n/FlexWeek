@@ -38,6 +38,25 @@ pub fn default_session_file(data_dir: &Path, database: &Path, database_was_set: 
     data_dir.join("signed-in").join(format!("{instance}.json"))
 }
 
+/// Where XDG keeps this user's login entries' folder (`autostart` inside it), as the desktop finds it
+/// (`desktop/native/autostart.py`): `XDG_CONFIG_HOME` when set and not empty, otherwise `~/.config`.
+pub fn config_dir() -> PathBuf {
+    config_dir_from(
+        std::env::var_os("HOME"),
+        std::env::var_os("XDG_CONFIG_HOME"),
+    )
+}
+
+pub fn config_dir_from(
+    home: Option<std::ffi::OsString>,
+    xdg_config_home: Option<std::ffi::OsString>,
+) -> PathBuf {
+    match xdg_config_home.filter(|value| !value.is_empty()) {
+        Some(config) => PathBuf::from(config),
+        None => PathBuf::from(home.unwrap_or_else(|| ".".into())).join(".config"),
+    }
+}
+
 /// The data folder for this user, from `HOME` and `XDG_DATA_HOME`.
 pub fn default_data_dir() -> PathBuf {
     data_dir_from(std::env::var_os("HOME"), std::env::var_os("XDG_DATA_HOME"))
@@ -74,7 +93,7 @@ mod tests {
     use std::ffi::OsString;
     use std::path::PathBuf;
 
-    use super::data_dir_from;
+    use super::{config_dir_from, data_dir_from};
 
     fn home() -> Option<OsString> {
         Some(OsString::from("/home/student"))
@@ -122,6 +141,23 @@ mod tests {
             data_dir_from(home(), None),
             PathBuf::from("/home/student/.local/share/FlexWeek"),
             "the default when XDG_DATA_HOME is unset"
+        );
+    }
+
+    #[test]
+    fn the_login_entry_folder_follows_xdg_config_home_as_the_desktop_reads_it() {
+        assert_eq!(
+            config_dir_from(home(), Some(OsString::from("rel/config"))),
+            PathBuf::from("rel/config"),
+            "Python's os.environ.get takes any value that is not empty"
+        );
+        assert_eq!(
+            config_dir_from(home(), Some(OsString::new())),
+            PathBuf::from("/home/student/.config")
+        );
+        assert_eq!(
+            config_dir_from(home(), None),
+            PathBuf::from("/home/student/.config")
         );
     }
 }
