@@ -891,6 +891,11 @@ dependencies = [
 [[package]]
 name = "flexweek-service"
 version = "0.1.0"
+dependencies = [
+ "flexweek-engine",
+ "flexweek-store",
+ "rusqlite",
+]
 
 [[package]]
 name = "flexweek-store"
