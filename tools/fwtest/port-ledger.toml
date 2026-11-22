@@ -32,3 +32,21 @@ rust = [
     "flexweek-service::appearance_preferences::the_clock_is_12_hour_unless_chosen_and_a_value_that_is_not_true_or_false_is_refused",
 ]
 red = "mutation case motion.json 'the server turns Reduce away' fails the reduce-motion test; the theme-pack axis check removed fails the pack test; a 12-hour clock put on the answer fails four (2026-11-22)"
+
+[[port]]
+python = "backend/tests/test_focus_audio.py"
+rust = [
+    "flexweek-service::focus_audio_preferences::off_stays_off_the_answer_and_a_chosen_sound_is_kept",
+    "flexweek-service::focus_audio_preferences::each_ambient_sound_is_kept",
+    "flexweek-service::focus_audio_preferences::the_focus_rules_default_to_mute_on_and_complete_off_and_a_choice_is_kept",
+]
+red = "a chosen mute-off left off the answer fails the focus-rules test (2026-11-22)"
+
+[[port]]
+python = "backend/tests/test_weekend_preferences.py"
+rust = [
+    "flexweek-service::weekend_preferences::weekends_are_kept_in_their_column_and_a_refused_write_keeps_the_choice",
+    "flexweek-service::weekend_preferences::a_weekend_value_left_in_the_comfort_settings_does_not_override_the_column",
+    "flexweek-service::weekend_preferences::the_column_hides_weekends_even_when_the_comfort_settings_say_otherwise",
+]
+red = "show_weekends always written as 1 to its column fails the round-trip test (2026-11-22)"
