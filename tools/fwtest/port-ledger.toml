@@ -126,3 +126,11 @@ rust = [
     "flexweek-service::accounts::a_wrong_password_and_an_unknown_name_get_the_same_words",
 ]
 red = "no renewal on use fails the day-12 test; a row with no length renewed for thirty days fails the renewed-for-seven test (the Python original could not see that break: it never used the session) (2026-11-22). The cookie's age is the route's: test_the_cookie_lasts_as_long_as_the_stored_session in test_session_cookie_and_request_checks.py, red with the cookie always a week"
+
+[[port]]
+python = "backend/tests/test_delete_account.py"
+rust = [
+    "flexweek-service::delete_account::deleting_an_account_removes_all_of_its_rows_and_only_its_rows",
+    "flexweek-service::delete_account::deleting_asks_for_the_accounts_own_password_and_frees_the_name_for_an_empty_account",
+]
+red = "routines left out of the store's account tables fails both (the user row cannot go); deleting every account's rows fails both (2026-11-22). The route's own answers (401 for a wrong password, 204, the cookie ending) moved to test_deleting_the_account_answers_204_and_its_cookie_stops_working in test_session_cookie_and_request_checks.py, red with the status set to 200"

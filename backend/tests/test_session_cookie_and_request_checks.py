@@ -174,6 +174,15 @@ def test_the_month_answer_needs_a_month_and_a_first_day_from_monday_to_sunday(al
     assert alice.get("/api/month?month=2026-12&first_day=7").status_code == 422
 
 
+def test_deleting_the_account_answers_204_and_its_cookie_stops_working(alice: TestClient) -> None:
+    """The route's answer (moved here from test_delete_account.py, whose other checks are Rust tests now)."""
+    wrong = alice.request("DELETE", "/api/auth/account", json={"password": "not-the-password"}, headers=WRITE)
+    assert (wrong.status_code, wrong.json()) == (401, {"detail": "Incorrect password"})
+    removed = alice.request("DELETE", "/api/auth/account", json={"password": PASSWORD}, headers=WRITE)
+    assert removed.status_code == 204, removed.text
+    assert alice.get("/api/auth/me").status_code == 401
+
+
 def test_private_answers_are_marked_not_to_be_cached(alice: TestClient) -> None:
     response = alice.get("/api/week")
     assert response.headers["cache-control"] == "no-store"
