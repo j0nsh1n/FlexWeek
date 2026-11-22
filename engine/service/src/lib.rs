@@ -9,6 +9,7 @@ use flexweek_store::{Connection, StoreError};
 
 pub mod accounts;
 pub mod blocks;
+pub mod changes;
 pub mod comfort;
 pub mod homework_saves;
 pub mod plans;

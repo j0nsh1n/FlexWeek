@@ -58,23 +58,31 @@ pub fn save_homework_up_to(
     if content["id"] != id {
         return Err(Refusal::Invalid(ID_MISMATCH.to_string()).into());
     }
-    let encoded = canonical(&content);
     with_db(path, |conn| {
         store::begin_immediate(conn)?;
-        match store::save_assignment(conn, user_id, id, &encoded, revision, limit)? {
-            AssignmentSave::Conflict => {
-                Err(Refusal::Conflict(ASSIGNMENT_CONFLICT.to_string()).into())
-            }
-            AssignmentSave::OverLimit => Err(Refusal::Invalid(ASSIGNMENT_LIMIT.to_string()).into()),
-            AssignmentSave::Ready(stored) => {
-                let mut answer = content.clone();
-                if let Value::Object(fields) = &mut answer {
-                    fields.insert("revision".into(), Value::from(stored));
-                }
-                Ok(answer)
-            }
+        let stored = write_homework(conn, user_id, id, &content, revision, limit)?;
+        let mut answer = content.clone();
+        if let Value::Object(fields) = &mut answer {
+            fields.insert("revision".into(), Value::from(stored));
         }
+        Ok(answer)
     })
+}
+
+/// A checked homework written inside the caller's transaction at `revision`; answers its new revision.
+pub(crate) fn write_homework(
+    conn: &store::Connection,
+    user_id: i64,
+    id: &str,
+    content: &Value,
+    revision: i64,
+    limit: i64,
+) -> ServiceResult<i64> {
+    match store::save_assignment(conn, user_id, id, &canonical(content), revision, limit)? {
+        AssignmentSave::Conflict => Err(Refusal::Conflict(ASSIGNMENT_CONFLICT.to_string()).into()),
+        AssignmentSave::OverLimit => Err(Refusal::Invalid(ASSIGNMENT_LIMIT.to_string()).into()),
+        AssignmentSave::Ready(stored) => Ok(stored),
+    }
 }
 
 pub const SPREAD_DONE: &str = "completed assignments cannot be spread";

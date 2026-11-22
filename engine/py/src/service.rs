@@ -6,8 +6,8 @@ use std::path::Path;
 
 use flexweek_service::accounts::{self, Account, Asker, Entropy, SignedIn};
 use flexweek_service::{
-    Refusal, ServiceError, ServiceResult, comfort, homework_saves, plans, preferences, records,
-    views, week_saves, weeks,
+    Refusal, ServiceError, ServiceResult, changes, comfort, homework_saves, plans, preferences,
+    records, views, week_saves, weeks,
 };
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyRuntimeError};
@@ -594,6 +594,25 @@ fn service_restore(
     })
 }
 
+/// `given` is the request body as JSON text; the service checks it. `token` names the restore point a save
+/// may ask for, made at `now`.
+#[pyfunction]
+fn service_changes(
+    py: Python<'_>,
+    path: &str,
+    user_id: i64,
+    given: &str,
+    token: &str,
+    now: &str,
+) -> PyResult<String> {
+    guard(|| {
+        let given = sent_body(given)?;
+        served_json(py, || {
+            changes::apply_changes(Path::new(path), user_id, &given, token, now)
+        })
+    })
+}
+
 /// A revision as the store reads it: one past 64 bits can match no stored revision.
 fn in_range(revision: &Bound<'_, PyInt>) -> Option<i64> {
     revision.extract::<i64>().ok()
@@ -664,6 +683,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         service_plan,
         service_restore_preview,
         service_restore,
+        service_changes,
         service_create_restore_point,
         service_delete_routine,
         service_delete_homework,

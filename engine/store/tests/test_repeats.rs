@@ -502,7 +502,7 @@ fn summary(week: &[Value]) -> Value {
     Value::Object(out)
 }
 
-/// The cases the backend's `post_changes` runs too (`backend/tests/test_repeat_intents_api.py`), so
+/// The cases the app's `POST /api/changes` runs too (`backend/tests/test_repeat_intents_api.py`), so
 /// the two save handlers cannot drift apart unnoticed.
 #[test]
 fn shared_cases_give_the_answers_worked_out_for_both_save_handlers() {

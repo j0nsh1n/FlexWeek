@@ -1,4 +1,4 @@
-//! `post_changes` (`backend/app.py:1292-1358`) through `changes::apply`.
+//! The assistant's batch save (`changes::apply`), which keeps the app's `POST /api/changes` rules.
 mod common;
 
 use common::scratch;

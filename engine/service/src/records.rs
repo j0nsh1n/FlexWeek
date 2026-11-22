@@ -155,21 +155,29 @@ pub fn delete_homework(
 ) -> ServiceResult<Value> {
     with_db(path, |conn| {
         store::begin_immediate(conn)?;
-        match store::delete_assignment(conn, user_id, id, revision)? {
-            AssignmentDelete::Missing => {
-                Err(Refusal::NotFound(HOMEWORK_UNKNOWN.to_string()).into())
-            }
-            AssignmentDelete::Conflict => {
-                Err(Refusal::Conflict(HOMEWORK_CONFLICT.to_string()).into())
-            }
-            AssignmentDelete::Deleted(text) => Ok(serde_json::from_str(&text).map_err(
-                |error| store::StoreError::Json {
+        remove_homework(conn, user_id, id, revision)
+    })
+}
+
+/// `delete_homework` inside the caller's transaction.
+pub(crate) fn remove_homework(
+    conn: &Connection,
+    user_id: i64,
+    id: &str,
+    revision: Option<i64>,
+) -> ServiceResult<Value> {
+    match store::delete_assignment(conn, user_id, id, revision)? {
+        AssignmentDelete::Missing => Err(Refusal::NotFound(HOMEWORK_UNKNOWN.to_string()).into()),
+        AssignmentDelete::Conflict => Err(Refusal::Conflict(HOMEWORK_CONFLICT.to_string()).into()),
+        AssignmentDelete::Deleted(text) => {
+            Ok(
+                serde_json::from_str(&text).map_err(|error| store::StoreError::Json {
                     text: text.clone(),
                     error,
-                },
-            )?),
+                })?,
+            )
         }
-    })
+    }
 }
 
 fn parsed(text: &str) -> ServiceResult<Value> {

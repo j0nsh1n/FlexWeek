@@ -1,4 +1,5 @@
-//! `post_changes` (`backend/app.py`). The batch commits in one `BEGIN IMMEDIATE` or not at all.
+//! The assistant's batch save, as the app's `POST /api/changes` (`flexweek_service::changes`) saves one. The
+//! batch commits in one `BEGIN IMMEDIATE` or not at all.
 
 use flexweek_engine::repeats::parse_intents;
 use flexweek_engine::snapshot::canonical;

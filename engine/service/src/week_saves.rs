@@ -60,7 +60,7 @@ fn invalid() -> ServiceError {
 }
 
 /// Every block written out again, as the route's `TimeBlock.model_validate` does after each step.
-fn written(blocks: Vec<Value>) -> ServiceResult<Vec<Value>> {
+pub(crate) fn written(blocks: Vec<Value>) -> ServiceResult<Vec<Value>> {
     blocks
         .iter()
         .map(|block| {
@@ -83,59 +83,7 @@ pub fn save_week(path: &Path, user_id: i64, given: &Value) -> ServiceResult<Valu
     let (week_start, blocks, revision) = check_saved_week(given).map_err(|_| invalid())?;
     with_db(path, |conn| {
         store::begin_immediate(conn)?;
-        let adopted = store::adopt_legacy_deadlines(
-            conn,
-            user_id,
-            &week_start,
-            &Value::Array(blocks),
-            MAX_ASSIGNMENTS,
-            encode_new_homework,
-        )
-        .map_err(|relay| match relay {
-            Relay::Store(error) => ServiceError::from(error),
-            Relay::Caller(why) => ServiceError::Broken(format!("a deadline's homework: {why}")),
-        })?;
-        let incoming = match adopted {
-            Adopted::OverLimit => {
-                return Err(Refusal::Invalid(ASSIGNMENT_LIMIT.to_string()).into());
-            }
-            Adopted::Blocks(blocks) => written(blocks)?,
-        };
-        let ids: Vec<String> = incoming
-            .iter()
-            .filter_map(|block| block.get("assignment_id").and_then(Value::as_str))
-            .filter(|id| !id.is_empty())
-            .map(str::to_string)
-            .collect::<std::collections::BTreeSet<_>>()
-            .into_iter()
-            .collect();
-        let (owned, rows) = store::own_assignment_rows(conn, user_id, &ids)?;
-        if !owned {
-            return Err(Refusal::Invalid(ASSIGNMENT_UNKNOWN.to_string()).into());
-        }
-        let mut homework = Map::new();
-        for (id, body, _) in rows {
-            let body: Value = serde_json::from_str(&body).map_err(|error| StoreError::Json {
-                text: body.clone(),
-                error,
-            })?;
-            homework.insert(id, body);
-        }
-        let rewritten = store::rewrite_blocks(&Value::Array(incoming), &Value::Object(homework))
-            .map_err(StoreError::Engine)?;
-        let blocks = written(rewritten)?;
-        let encoded = canonical(&Value::Array(blocks.clone()));
-        let saved = match store::save_week(conn, user_id, &week_start, &encoded, revision) {
-            Ok(saved) => saved,
-            Err(error @ StoreError::RepeatedBlockId(_)) => {
-                return Err(Refusal::Invalid(error.to_string()).into());
-            }
-            Err(error) => return Err(error.into()),
-        };
-        let revision = match saved {
-            WeekSave::Ready(revision) => revision,
-            WeekSave::Conflict => return Err(Refusal::Conflict(WEEK_CONFLICT.to_string()).into()),
-        };
+        let (blocks, revision) = write_week(conn, user_id, &week_start, blocks, revision)?;
         let shown = store::week_with_standing(
             conn,
             user_id,
@@ -148,6 +96,71 @@ pub fn save_week(path: &Path, user_id: i64, given: &Value) -> ServiceResult<Valu
         })?;
         Ok(json!({ "week_start": week_start, "blocks": shown, "revision": revision }))
     })
+}
+
+/// One stored week written inside the caller's transaction, as the app's routes write it: old-style deadline
+/// blocks become homework, the week may only name this account's homework, sessions take their homework's
+/// title and colours, and the row is written at `revision`. Answers the blocks as stored and the new revision.
+pub(crate) fn write_week(
+    conn: &store::Connection,
+    user_id: i64,
+    week_start: &str,
+    blocks: Vec<Value>,
+    revision: i64,
+) -> ServiceResult<(Vec<Value>, i64)> {
+    let adopted = store::adopt_legacy_deadlines(
+        conn,
+        user_id,
+        week_start,
+        &Value::Array(blocks),
+        MAX_ASSIGNMENTS,
+        encode_new_homework,
+    )
+    .map_err(|relay| match relay {
+        Relay::Store(error) => ServiceError::from(error),
+        Relay::Caller(why) => ServiceError::Broken(format!("a deadline's homework: {why}")),
+    })?;
+    let incoming = match adopted {
+        Adopted::OverLimit => {
+            return Err(Refusal::Invalid(ASSIGNMENT_LIMIT.to_string()).into());
+        }
+        Adopted::Blocks(blocks) => written(blocks)?,
+    };
+    let ids: Vec<String> = incoming
+        .iter()
+        .filter_map(|block| block.get("assignment_id").and_then(Value::as_str))
+        .filter(|id| !id.is_empty())
+        .map(str::to_string)
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let (owned, rows) = store::own_assignment_rows(conn, user_id, &ids)?;
+    if !owned {
+        return Err(Refusal::Invalid(ASSIGNMENT_UNKNOWN.to_string()).into());
+    }
+    let mut homework = Map::new();
+    for (id, body, _) in rows {
+        let body: Value = serde_json::from_str(&body).map_err(|error| StoreError::Json {
+            text: body.clone(),
+            error,
+        })?;
+        homework.insert(id, body);
+    }
+    let rewritten = store::rewrite_blocks(&Value::Array(incoming), &Value::Object(homework))
+        .map_err(StoreError::Engine)?;
+    let blocks = written(rewritten)?;
+    let encoded = canonical(&Value::Array(blocks.clone()));
+    let saved = match store::save_week(conn, user_id, week_start, &encoded, revision) {
+        Ok(saved) => saved,
+        Err(error @ StoreError::RepeatedBlockId(_)) => {
+            return Err(Refusal::Invalid(error.to_string()).into());
+        }
+        Err(error) => return Err(error.into()),
+    };
+    match saved {
+        WeekSave::Ready(revision) => Ok((blocks, revision)),
+        WeekSave::Conflict => Err(Refusal::Conflict(WEEK_CONFLICT.to_string()).into()),
+    }
 }
 
 /// The later weeks a set of repeat edits would reach that have their own edit, as
@@ -177,4 +190,44 @@ pub fn preview_repeat_edits(path: &Path, user_id: i64, given: &Value) -> Service
     // The route answered the canonical text read back, so its keys come out sorted.
     let text = canonical(&found);
     Ok(serde_json::from_str(&text).map_err(|error| StoreError::Json { text, error })?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flexweek_testkit::TestDb;
+
+    fn school(title: &str) -> Value {
+        json!({
+            "id": "school", "title": title, "kind": "locked", "duration_min": 390,
+            "days": [0, 1, 2, 3, 4], "start": "08:00", "category": "School",
+        })
+    }
+
+    /// The store's guard, for a week whose doubled id gets past the request check (a week on screen split
+    /// back into its stored weeks): the save is refused in the student's words and nothing is written.
+    #[test]
+    fn a_week_that_reaches_the_store_with_a_doubled_id_is_refused_in_words_and_writes_nothing() {
+        let db = TestDb::new("doubled-id");
+        let user = db.account("alice");
+        let blocks = written(vec![school("School"), school("School again")]).unwrap();
+        let refused = with_db(&db.path, |conn| {
+            store::begin_immediate(conn)?;
+            write_week(conn, user, "2026-09-14", blocks, 0)
+        });
+        match refused {
+            Err(ServiceError::Refused(Refusal::Invalid(words))) => assert_eq!(
+                words,
+                r#"Two blocks in this week share the id "school". Each block needs its own id."#
+            ),
+            other => panic!("not refused in words: {other:?}"),
+        }
+        let rows: i64 = with_db(&db.path, |conn| {
+            Ok(conn
+                .query_row("SELECT count(*) FROM weeks", [], |row| row.get(0))
+                .unwrap())
+        })
+        .unwrap();
+        assert_eq!(rows, 0);
+    }
 }

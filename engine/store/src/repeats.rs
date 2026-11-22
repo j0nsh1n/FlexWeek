@@ -1,6 +1,6 @@
 //! Changes to repeating blocks as the student meant them (`flexweek_engine::repeats`), on today's
 //! storage: a standing row per repeat and the Monday it holds from, and a copy in each saved week.
-//! Both save handlers (`changes::apply` and the backend's `post_changes`) come here, so a change is
+//! Both save handlers (`changes::apply` and the service's `changes::apply_changes`) come here, so a change is
 //! applied one way whoever sends it.
 
 use flexweek_engine::desk::grid::WEEKLY_PREFIX;
