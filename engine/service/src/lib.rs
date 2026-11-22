@@ -15,6 +15,7 @@ pub mod homework_saves;
 pub mod plans;
 pub mod preferences;
 pub mod records;
+pub mod transfer;
 pub mod views;
 pub mod week_saves;
 pub mod weeks;
