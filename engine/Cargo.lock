@@ -880,6 +880,7 @@ name = "flexweek-py"
 version = "0.1.0"
 dependencies = [
  "flexweek-engine",
+ "flexweek-service",
  "flexweek-store",
  "flexweek-sync",
  "pyo3",

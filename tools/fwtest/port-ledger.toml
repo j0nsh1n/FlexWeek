@@ -9,4 +9,10 @@
 # rust = ["flexweek-app::week::zoom_keeps_the_top_time"]
 # red = "zoom's clamp removed by hand: zoom_keeps_the_top_time failed"
 
-port = []
+[[port]]
+python = "backend/tests/test_sign_in_during_a_password_change.py"
+rust = [
+    "flexweek-service::accounts::tests::a_sign_in_checked_against_the_old_password_gets_no_session_after_a_change",
+    "flexweek-service::accounts::tests::a_sign_in_checked_against_the_old_password_gets_no_session_after_a_recovery",
+]
+red = "dropping login's password re-check under the write lock fails both (2026-11-22)"

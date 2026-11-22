@@ -1,0 +1,411 @@
+//! The 2.0.0 service crate's account rules and reads, for `backend/app.py`'s routes while they still
+//! run in Python: each route decodes its request, calls one of these, and turns a `ServiceRefusal`
+//! (kind, words) into its answer. Store errors keep the exceptions the routes already answer.
+
+use std::path::Path;
+
+use flexweek_service::accounts::{self, Account, Asker, Entropy, SignedIn};
+use flexweek_service::{Refusal, ServiceError, views, weeks};
+use pyo3::create_exception;
+use pyo3::exceptions::{PyException, PyRuntimeError};
+use pyo3::prelude::*;
+use pyo3::types::PyModule;
+use serde_json::Value;
+
+use crate::guard;
+
+create_exception!(flexweek_engine, ServiceRefusal, PyException);
+
+fn service_py(py: Python<'_>, error: ServiceError) -> PyErr {
+    match error {
+        ServiceError::Refused(refusal) => {
+            let kind = match &refusal {
+                Refusal::Invalid(_) => "invalid",
+                Refusal::Unauthorized(_) => "unauthorized",
+                Refusal::Conflict(_) => "conflict",
+                Refusal::TooMany(_) => "too_many",
+            };
+            ServiceRefusal::new_err((kind, refusal.words().to_string()))
+        }
+        ServiceError::Store(error) => crate::rest::store_py(py, error),
+        ServiceError::Broken(why) => PyRuntimeError::new_err(why),
+    }
+}
+
+/// Python's `secrets`, so tokens, salts and codes are made exactly as the routes made them.
+struct Secrets<'py> {
+    module: Bound<'py, PyModule>,
+    failed: Option<PyErr>,
+}
+
+impl Secrets<'_> {
+    fn text(&mut self, name: &str, size: usize) -> String {
+        let made = self
+            .module
+            .call_method1(name, (size,))
+            .and_then(|value| value.extract::<String>());
+        made.unwrap_or_else(|error| {
+            self.failed.get_or_insert(error);
+            String::new()
+        })
+    }
+}
+
+impl Entropy for Secrets<'_> {
+    fn session_token(&mut self) -> String {
+        self.text("token_urlsafe", 32)
+    }
+    fn salt(&mut self) -> String {
+        self.text("token_hex", 16)
+    }
+    fn code_bytes(&mut self) -> [u8; 8] {
+        let made = self
+            .module
+            .call_method1("token_bytes", (8,))
+            .and_then(|value| value.extract::<Vec<u8>>());
+        match made {
+            Ok(bytes) => bytes.try_into().unwrap_or([0; 8]),
+            Err(error) => {
+                self.failed.get_or_insert(error);
+                [0; 8]
+            }
+        }
+    }
+}
+
+fn with_secrets<T>(
+    py: Python<'_>,
+    work: impl FnOnce(&mut Secrets<'_>) -> Result<T, ServiceError>,
+) -> PyResult<T> {
+    let mut secrets = Secrets {
+        module: py.import("secrets")?,
+        failed: None,
+    };
+    let outcome = work(&mut secrets);
+    if let Some(error) = secrets.failed {
+        return Err(error);
+    }
+    outcome.map_err(|error| service_py(py, error))
+}
+
+fn signed_in_tuple(signed: SignedIn) -> (i64, String, String, Option<Vec<String>>) {
+    (
+        signed.account.id,
+        signed.account.username,
+        signed.token,
+        signed.recovery_codes,
+    )
+}
+
+fn account(user_id: i64, username: &str) -> Account {
+    Account {
+        id: user_id,
+        username: username.to_string(),
+    }
+}
+
+fn json_text(py: Python<'_>, result: Result<Value, ServiceError>) -> PyResult<String> {
+    result
+        .map(|value| value.to_string())
+        .map_err(|error| service_py(py, error))
+}
+
+/// (id, username, token, recovery codes or None).
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn service_register(
+    py: Python<'_>,
+    path: &str,
+    address: &str,
+    now: i64,
+    username: &str,
+    password: &str,
+    keep: bool,
+    previous_token: &str,
+) -> PyResult<(i64, String, String, Option<Vec<String>>)> {
+    guard(|| {
+        with_secrets(py, |secrets| {
+            accounts::register(
+                Path::new(path),
+                Asker { address, now },
+                secrets,
+                username,
+                password,
+                keep,
+                previous_token,
+            )
+        })
+        .map(signed_in_tuple)
+    })
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn service_login(
+    py: Python<'_>,
+    path: &str,
+    address: &str,
+    now: i64,
+    username: &str,
+    password: &str,
+    keep: bool,
+    previous_token: &str,
+) -> PyResult<(i64, String, String, Option<Vec<String>>)> {
+    guard(|| {
+        with_secrets(py, |secrets| {
+            accounts::login(
+                Path::new(path),
+                Asker { address, now },
+                secrets,
+                username,
+                password,
+                keep,
+                previous_token,
+            )
+        })
+        .map(signed_in_tuple)
+    })
+}
+
+/// (id, username) of the session, refused when it ended or belongs to another account than `expected_id`.
+#[pyfunction]
+#[pyo3(signature = (path, token, now, expected_id=None))]
+fn service_signed_in(
+    py: Python<'_>,
+    path: &str,
+    token: &str,
+    now: i64,
+    expected_id: Option<&str>,
+) -> PyResult<(i64, String)> {
+    guard(|| {
+        accounts::signed_in(Path::new(path), token, now, expected_id)
+            .map(|found| (found.id, found.username))
+            .map_err(|error| service_py(py, error))
+    })
+}
+
+#[pyfunction]
+#[pyo3(signature = (path, token, now, expected_id=None))]
+fn service_logout(
+    py: Python<'_>,
+    path: &str,
+    token: &str,
+    now: i64,
+    expected_id: Option<&str>,
+) -> PyResult<()> {
+    guard(|| {
+        accounts::logout(Path::new(path), token, now, expected_id)
+            .map_err(|error| service_py(py, error))
+    })
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn service_recover(
+    py: Python<'_>,
+    path: &str,
+    address: &str,
+    now: i64,
+    username: &str,
+    code: &str,
+    new_password: &str,
+    keep: bool,
+) -> PyResult<(i64, String, String, Option<Vec<String>>)> {
+    guard(|| {
+        with_secrets(py, |secrets| {
+            accounts::recover(
+                Path::new(path),
+                Asker { address, now },
+                secrets,
+                username,
+                code,
+                new_password,
+                keep,
+            )
+        })
+        .map(signed_in_tuple)
+    })
+}
+
+#[pyfunction]
+fn service_recovery_codes_left(py: Python<'_>, path: &str, user_id: i64) -> PyResult<i64> {
+    guard(|| {
+        accounts::recovery_codes_left(Path::new(path), user_id)
+            .map_err(|error| service_py(py, error))
+    })
+}
+
+#[pyfunction]
+fn service_renew_recovery_codes(
+    py: Python<'_>,
+    path: &str,
+    address: &str,
+    now: i64,
+    user_id: i64,
+    username: &str,
+    password: &str,
+) -> PyResult<Vec<String>> {
+    guard(|| {
+        with_secrets(py, |secrets| {
+            accounts::renew_recovery_codes(
+                Path::new(path),
+                Asker { address, now },
+                secrets,
+                &account(user_id, username),
+                password,
+            )
+        })
+    })
+}
+
+/// The new session token.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn service_change_password(
+    py: Python<'_>,
+    path: &str,
+    address: &str,
+    now: i64,
+    user_id: i64,
+    username: &str,
+    current: &str,
+    new: &str,
+) -> PyResult<String> {
+    guard(|| {
+        with_secrets(py, |secrets| {
+            accounts::change_password(
+                Path::new(path),
+                Asker { address, now },
+                secrets,
+                &account(user_id, username),
+                current,
+                new,
+            )
+        })
+    })
+}
+
+#[pyfunction]
+fn service_delete_account(
+    py: Python<'_>,
+    path: &str,
+    address: &str,
+    now: i64,
+    user_id: i64,
+    username: &str,
+    password: &str,
+) -> PyResult<()> {
+    guard(|| {
+        accounts::delete_account(
+            Path::new(path),
+            Asker { address, now },
+            &account(user_id, username),
+            password,
+        )
+        .map_err(|error| service_py(py, error))
+    })
+}
+
+#[pyfunction]
+fn service_read_week(
+    py: Python<'_>,
+    path: &str,
+    user_id: i64,
+    week_start: &str,
+) -> PyResult<String> {
+    guard(|| json_text(py, weeks::read_week(Path::new(path), user_id, week_start)))
+}
+
+#[pyfunction]
+fn service_list_weeks(py: Python<'_>, path: &str, user_id: i64) -> PyResult<String> {
+    guard(|| json_text(py, weeks::list_weeks(Path::new(path), user_id)))
+}
+
+fn moment(now: &str) -> PyResult<::flexweek_engine::plan::Moment> {
+    ::flexweek_engine::plan::parse_moment(now).map_err(crate::raise)
+}
+
+#[pyfunction]
+fn service_day(
+    py: Python<'_>,
+    path: &str,
+    user_id: i64,
+    date: &str,
+    now: &str,
+) -> PyResult<String> {
+    guard(|| json_text(py, views::day(Path::new(path), user_id, date, moment(now)?)))
+}
+
+#[pyfunction]
+fn service_month(
+    py: Python<'_>,
+    path: &str,
+    user_id: i64,
+    month: &str,
+    first_day: u32,
+    now: &str,
+) -> PyResult<String> {
+    guard(|| {
+        json_text(
+            py,
+            views::month(Path::new(path), user_id, month, first_day, moment(now)?),
+        )
+    })
+}
+
+#[pyfunction]
+fn service_homework(
+    py: Python<'_>,
+    path: &str,
+    user_id: i64,
+    week_start: &str,
+    include_completed: bool,
+    now: &str,
+) -> PyResult<String> {
+    guard(|| {
+        json_text(
+            py,
+            views::homework(
+                Path::new(path),
+                user_id,
+                week_start,
+                include_completed,
+                moment(now)?,
+            ),
+        )
+    })
+}
+
+#[pyfunction]
+fn service_routines(py: Python<'_>, path: &str, user_id: i64) -> PyResult<String> {
+    guard(|| json_text(py, views::routines(Path::new(path), user_id)))
+}
+
+#[pyfunction]
+fn service_restore_points(py: Python<'_>, path: &str, user_id: i64) -> PyResult<String> {
+    guard(|| json_text(py, views::restore_points(Path::new(path), user_id)))
+}
+
+pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add("ServiceRefusal", module.py().get_type::<ServiceRefusal>())?;
+    crate::export!(
+        module,
+        service_register,
+        service_login,
+        service_signed_in,
+        service_logout,
+        service_recover,
+        service_recovery_codes_left,
+        service_renew_recovery_codes,
+        service_change_password,
+        service_delete_account,
+        service_read_week,
+        service_list_weeks,
+        service_day,
+        service_month,
+        service_homework,
+        service_routines,
+        service_restore_points,
+    );
+    Ok(())
+}

@@ -8,7 +8,7 @@ use std::path::Path;
 use flexweek_engine::snapshot::{accept_recovery_draw, hash_recovery_code, recovery_code_matches};
 use flexweek_store::{self as store, Connection, StoreError};
 
-use crate::{Refusal, ServiceResult, with_db};
+use crate::{Refusal, ServiceError, ServiceResult, with_db};
 
 pub const RECOVERY_CODE_COUNT: usize = 8;
 pub const TOO_MANY_TRIES: &str = "Too many tries. Wait 5 minutes, then try again.";
@@ -124,11 +124,14 @@ fn store_recovery_codes(conn: &Connection, user_id: i64, codes: &[String]) -> Se
     Ok(())
 }
 
-fn is_unique_violation(error: &StoreError) -> bool {
+/// Any constraint failure while the account is made. The route answered every one of them (a name
+/// taken, or a write refused by the database) with "Username unavailable", and the service keeps that
+/// answer until the wording is changed on purpose.
+fn is_constraint_violation(error: &ServiceError) -> bool {
     matches!(
         error,
-        StoreError::Sqlite(rusqlite::Error::SqliteFailure(failure, _))
-            if failure.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE
+        ServiceError::Store(StoreError::Sqlite(rusqlite::Error::SqliteFailure(failure, _)))
+            if failure.code == rusqlite::ErrorCode::ConstraintViolation
     )
 }
 
@@ -148,17 +151,18 @@ pub fn register(
     let encoded = store::password_hash(password, &entropy.salt())?;
     let codes = generate_recovery_codes(entropy);
     let created = with_db(path, |conn| {
-        let user_id = match store::insert_user(conn, username, &encoded) {
-            Ok(id) => id,
-            Err(error) if is_unique_violation(&error) => {
-                return Err(Refusal::Conflict(USERNAME_TAKEN.to_string()).into());
-            }
-            Err(error) => return Err(error.into()),
-        };
+        let user_id = store::insert_user(conn, username, &encoded)?;
         store::insert_preferences(conn, user_id, store::PREFS_VERSION)?;
         store_recovery_codes(conn, user_id, &codes)?;
         let token = open_session(conn, entropy, user_id, asker.now, keep)?;
         Ok((user_id, token))
+    })
+    .map_err(|error| {
+        if is_constraint_violation(&error) {
+            Refusal::Conflict(USERNAME_TAKEN.to_string()).into()
+        } else {
+            error
+        }
     })?;
     end_previous_session(path, previous_token)?;
     Ok(SignedIn {
@@ -182,6 +186,28 @@ pub fn login(
     keep: bool,
     previous_token: &str,
 ) -> ServiceResult<SignedIn> {
+    login_between(
+        path,
+        asker,
+        entropy,
+        (username, password),
+        keep,
+        previous_token,
+        || {},
+    )
+}
+
+/// `login`, running `between` after the password check and before the session opens, so a test can
+/// put a recovery or a new password exactly there.
+fn login_between(
+    path: &Path,
+    asker: Asker<'_>,
+    entropy: &mut dyn Entropy,
+    (username, password): (&str, &str),
+    keep: bool,
+    previous_token: &str,
+    between: impl FnOnce(),
+) -> ServiceResult<SignedIn> {
     let username = &checked_username(username)?;
     let password = checked_password(password)?;
     throttled(path, asker, username)?;
@@ -194,6 +220,7 @@ pub fn login(
     let Some((user_id, name, _)) = found.filter(|_| matched) else {
         return Err(Refusal::Unauthorized(SIGN_IN_WRONG.to_string()).into());
     };
+    between();
     let token = with_db(path, |conn| {
         // The hash was checked outside the lock; a recovery or new password may have replaced it and
         // signed every session out meanwhile, so the session opens only if it is still the account's.
@@ -384,4 +411,137 @@ pub fn delete_account(
         require_password(conn, account.id, password)?;
         Ok(store::delete_account(conn, account.id)?)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Counting(u64);
+
+    impl Entropy for Counting {
+        fn session_token(&mut self) -> String {
+            self.0 += 1;
+            format!("token-{:040}", self.0)
+        }
+        fn salt(&mut self) -> String {
+            self.0 += 1;
+            format!("{:032x}", self.0)
+        }
+        fn code_bytes(&mut self) -> [u8; 8] {
+            self.0 += 1;
+            self.0.to_be_bytes()
+        }
+    }
+
+    fn sessions(path: &Path) -> i64 {
+        with_db(path, |conn| {
+            Ok(conn
+                .query_row("SELECT count(*) FROM sessions", [], |row| row.get(0))
+                .map_err(StoreError::Sqlite)?)
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn a_sign_in_checked_against_the_old_password_gets_no_session_after_a_recovery() {
+        let dir =
+            std::env::temp_dir().join(format!("flexweek-race-recover-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("race.db");
+        store::initialize(&path, "2026-11-16").unwrap();
+        let mut entropy = Counting(0);
+        let at = Asker {
+            address: "127.0.0.1",
+            now: 1_793_000_000,
+        };
+        let made = register(
+            &path,
+            at,
+            &mut entropy,
+            "ana",
+            "the old password",
+            false,
+            "",
+        )
+        .unwrap();
+        let code = made.recovery_codes.clone().unwrap()[0].clone();
+        let mut other = Counting(1000);
+        let refused = login_between(
+            &path,
+            at,
+            &mut entropy,
+            ("ana", "the old password"),
+            false,
+            "",
+            || {
+                recover(&path, at, &mut other, "ana", &code, "a new password", false).unwrap();
+            },
+        );
+        assert!(
+            matches!(refused, Err(ServiceError::Refused(Refusal::Unauthorized(ref words))) if words == SIGN_IN_WRONG),
+            "{refused:?}"
+        );
+        assert_eq!(
+            sessions(&path),
+            1,
+            "only the recovery's own session may stand"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A sign-in checked against the old password must not outlive a new password set between the
+    /// check and the session (the Python test patched the route's password check to force this).
+    #[test]
+    fn a_sign_in_checked_against_the_old_password_gets_no_session_after_a_change() {
+        let dir = std::env::temp_dir().join(format!("flexweek-race-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("race.db");
+        store::initialize(&path, "2026-11-16").unwrap();
+        let mut entropy = Counting(0);
+        let at = Asker {
+            address: "127.0.0.1",
+            now: 1_793_000_000,
+        };
+        let made = register(
+            &path,
+            at,
+            &mut entropy,
+            "ana",
+            "the old password",
+            false,
+            "",
+        )
+        .unwrap();
+        let before = sessions(&path);
+        let mut other = Counting(1000);
+        let refused = login_between(
+            &path,
+            at,
+            &mut entropy,
+            ("ana", "the old password"),
+            false,
+            "",
+            || {
+                change_password(
+                    &path,
+                    at,
+                    &mut other,
+                    &made.account,
+                    "the old password",
+                    "a new password",
+                )
+                .unwrap();
+            },
+        );
+        assert!(
+            matches!(refused, Err(ServiceError::Refused(Refusal::Unauthorized(ref words))) if words == SIGN_IN_WRONG),
+            "{refused:?}"
+        );
+        // The change ended every session and opened one; the late sign-in added none.
+        assert_eq!(sessions(&path), 1, "sessions before the change: {before}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

@@ -889,3 +889,39 @@ fn the_password_gated_actions_wait_five_minutes_after_ten_tries() {
         );
     }
 }
+
+#[test]
+fn a_sign_up_that_fails_part_way_leaves_no_account() {
+    // The database refuses the recovery codes: nothing of the account may stay, and the student is told
+    // the name is unavailable, as the route always said for a refused write during sign-up.
+    let db = fresh("part-way");
+    let mut entropy = Counting(0);
+    with_db(&db.path, |conn| {
+        conn.execute_batch(
+            "CREATE TRIGGER refuse_codes BEFORE INSERT ON recovery_codes
+             BEGIN SELECT RAISE(ABORT, 'simulated write failure'); END",
+        )
+        .map_err(flexweek_store::StoreError::Sqlite)?;
+        Ok(())
+    })
+    .unwrap();
+    let failed = accounts::register(&db.path, at(NOW), &mut entropy, "ana", PW, false, "");
+    assert_eq!(
+        refusal(failed),
+        Refusal::Conflict(USERNAME_TAKEN.to_string())
+    );
+    let left = with_db(&db.path, |conn| {
+        let count = |table: &str| -> rusqlite::Result<i64> {
+            conn.query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })
+        };
+        Ok((count("users"), count("preferences"), count("sessions")))
+    })
+    .unwrap();
+    assert_eq!(
+        (left.0.unwrap(), left.1.unwrap(), left.2.unwrap()),
+        (0, 0, 0),
+        "a half-made account was left behind"
+    );
+}

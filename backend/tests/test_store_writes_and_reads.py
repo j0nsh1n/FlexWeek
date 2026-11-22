@@ -166,10 +166,10 @@ def test_the_reply_to_a_batch_of_changes_lists_each_changed_week_before_its_revi
     assert f'"changed_weeks":[{{"week_start":"{WEEK_B}","revision":2}}]' in batch.text
 
 
-def test_listing_routines_and_preferences_reads_through_the_store_not_raw_sql(
+def test_reading_preferences_goes_through_the_store_not_raw_sql(
     alice: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    assert alice.put("/api/routines/r1", json=routine_body(), headers=WRITE).status_code == 200
+    # Routines are read by the Rust service now (flexweek_service::views::routines, the store's list).
     calls: list[tuple[str, tuple]] = []
 
     class Spy:
@@ -191,16 +191,13 @@ def test_listing_routines_and_preferences_reads_through_the_store_not_raw_sql(
             yield Spy(db)
 
     monkeypatch.setattr(app, "connect", spied)
-    routines = alice.get("/api/routines")
     preferences = alice.get("/api/preferences")
-    assert routines.status_code == preferences.status_code == 200
-    assert [item["id"] for item in routines.json()["routines"]] == ["r1"]
+    assert preferences.status_code == 200
     assert preferences.json()["theme"] == "system"
     names = [name for name, _args in calls]
-    assert "list_routines" in names
     assert "preference_row" in names
     statements = [args[0] for name, args in calls if name == "execute"]
-    assert not [text for text in statements if "routines" in text or "preferences" in text]
+    assert not [text for text in statements if "preferences" in text]
 
 
 def test_a_write_is_undone_when_a_later_write_in_the_same_connection_fails(tmp_path: Path) -> None:
