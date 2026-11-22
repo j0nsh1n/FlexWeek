@@ -5,6 +5,7 @@
 
 use std::path::PathBuf;
 
+use flexweek_service::accounts::INVALID_INPUT;
 use flexweek_service::preferences::{read_preferences, write_preferences};
 use flexweek_service::{Refusal, ServiceError, with_db};
 use serde_json::{Map, Value, json};
@@ -68,7 +69,8 @@ fn write(db: &Db, given: &Value) -> Value {
 
 fn refused(db: &Db, given: &Value) {
     match write_preferences(&db.path, db.user, given) {
-        Err(ServiceError::Refused(Refusal::Invalid(_))) => {}
+        // One sentence for every bad save, which never repeats what was sent.
+        Err(ServiceError::Refused(Refusal::Invalid(words))) => assert_eq!(words, INVALID_INPUT),
         other => panic!("{given} was not refused: {other:?}"),
     }
 }

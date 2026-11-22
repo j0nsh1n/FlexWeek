@@ -109,13 +109,13 @@ fwtest clean
 - `upgrade` is the Linux tarball row of the 2.0.0 upgrade test. It checks both tarballs against the
   `.sha256` beside them, unpacks the old one into `DIR/install` (refusing one not laid out as
   `FlexWeek/app/FlexWeek`), then swaps in the new one as 1.x's updater does (`desktop/native/updater.py`,
-  `_swap_tree` and `_safe_extract`: refuse an install holding `flexweek.db` or a parent that can't be
-  written, unpack beside it, refuse a link that points outside, take the first folder in directory
+  `_swap_tree` and `_safe_extract`: refuse an install holding `flexweek.db` or a parent this process can't
+  write to, unpack beside it, refuse a link that points outside, take the first folder in directory
   order, move the old one aside, move the new one in, put the old one back if that fails, tidy up). It
   starts the new `FlexWeek` launcher with `--upgrade-check` and `HOME` set to `HOME` (no `XDG_DATA_HOME`
   or `XDG_CONFIG_HOME`), and compares the report with `SEEDED.json`, which must give every one of
   `data_dir`, `username`, `weeks`, `homework`, `routines`, `restore_points`, `standing_blocks`, `phones`,
-  `alarms`, `week_starts_on`, `device_key`, `look_preset` and `login_command`; it also needs the kept
+  `alarms`, `week_starts_on`, `device_key`, `look_preset`, `look_keys` and `login_command`; it also needs the kept
   sign-in found and the install's shape: the launcher, `app/FlexWeek` and `app/flexweek-mcp` present,
   nothing left beside it. Counts are compared, not the rows themselves. It prints one `FAIL:`
   line per difference and exits 1, or `PASS:` and 0. It runs no Python and no job, so it does not run

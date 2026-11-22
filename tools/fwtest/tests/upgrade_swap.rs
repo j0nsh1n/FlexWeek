@@ -99,6 +99,7 @@ fn seeded() -> serde_json::Value {
         "data_dir": "/home/s/.local/share/FlexWeek", "username": "ana", "weeks": 1, "homework": 2,
         "routines": 2, "restore_points": 1, "standing_blocks": 3, "phones": 1, "alarms": 2,
         "week_starts_on": "sunday", "device_key": true, "look_preset": "plum",
+        "look_keys": ["material", "zoom"],
         "login_command": "/opt/FlexWeek/FlexWeek",
     })
 }
@@ -110,6 +111,7 @@ fn found_all() -> serde_json::Value {
         "kept_session": true,
         "data_dir": seed["data_dir"], "week_starts_on": seed["week_starts_on"],
         "device_key": seed["device_key"], "look_preset": seed["look_preset"],
+        "look_keys": seed["look_keys"],
         "login_command": seed["login_command"],
         "account": {
             "username": "ana", "weeks": 1, "homework": 2, "routines": 2, "restore_points": 1,
@@ -135,6 +137,7 @@ fn the_comparison_names_each_thing_the_new_program_lost() {
         ("account", "username", json!(null)),
         ("top", "device_key", json!(false)),
         ("top", "look_preset", json!(null)),
+        ("top", "look_keys", json!(["material"])),
         ("top", "login_command", json!(null)),
         ("top", "week_starts_on", json!("monday")),
         ("top", "data_dir", json!("/elsewhere")),
@@ -267,4 +270,27 @@ fn when_the_new_folder_cannot_be_moved_in_the_old_install_is_put_back() {
         "old program"
     );
     assert!(!dir.0.join("opt/FlexWeek.old").exists());
+}
+
+#[test]
+fn an_install_whose_folder_cannot_be_written_is_left_alone_with_the_updaters_words() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = scratch("unwritable");
+    let root = installed(&dir.0);
+    let new = tarball(&dir.0, "Packaged", &[("app/FlexWeek", "new program")]);
+    let opt = dir.0.join("opt");
+    std::fs::set_permissions(&opt, std::fs::Permissions::from_mode(0o555)).unwrap();
+    let refused = swap_tree(&root, &new);
+    std::fs::set_permissions(&opt, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(
+        refused.unwrap_err(),
+        format!(
+            "{} can't be written, so the update was not applied.",
+            opt.display()
+        )
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("app/FlexWeek")).unwrap(),
+        "old program"
+    );
 }

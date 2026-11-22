@@ -148,7 +148,8 @@ pub fn swap_tree(root: &Path, tarball: &Path) -> Result<(), String> {
         ));
     }
     let parent = root.parent().ok_or("the install has no parent folder")?;
-    if std::fs::metadata(parent).map_or(true, |found| found.permissions().readonly()) {
+    // os.access(parent, W_OK): whether this process may write there, not only the mode bits.
+    if nix::unistd::access(parent, nix::unistd::AccessFlags::W_OK).is_err() {
         return Err(format!(
             "{} can't be written, so the update was not applied.",
             parent.display()
@@ -193,6 +194,7 @@ pub const COMPARED: &[&str] = &[
     "week_starts_on",
     "device_key",
     "look_preset",
+    "look_keys",
     "login_command",
 ];
 
