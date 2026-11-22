@@ -27,7 +27,6 @@ from backend.availability import fold_study_windows, spread_sessions
 from backend.comfort import REMINDER_LIMITS, TIMER_PRESETS
 from backend.limits import MAX_BODY
 from backend.models import (
-    Assignment,
     AssignmentContent,
     ProtectedWindow,
     Routine,
@@ -1259,15 +1258,8 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         return served(flexweek_engine.service_month, account["id"], month, first_day, naive_now())
 
     @app.put("/api/week")
-    def put_week(week: SavedWeek, account: Annotated[dict, Depends(user)]) -> dict:
-        with connect(path) as db:
-            db.begin_immediate()
-            incoming = adopt_legacy_deadlines(db, account["id"], week.week_start, week.blocks)
-            owned = require_own_assignments(db, account["id"], assignment_ids_of(incoming))
-            blocks = dump_blocks(rewrite_blocks(incoming, owned))
-            stored_blocks, revision = save_week_row(db, account["id"], week.week_start, blocks, week.revision)
-            stored_blocks = week_with_standing(db, account["id"], week.week_start, json.dumps(stored_blocks))
-        return {"week_start": week.week_start, "blocks": stored_blocks, "revision": revision}
+    def put_week(given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]) -> dict:
+        return served(flexweek_engine.service_save_week, account["id"], json.dumps(given))
 
     @app.get("/api/assignments")
     def get_assignments(
@@ -1282,14 +1274,10 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
 
     @app.put("/api/assignments/{assignment_id}")
     def put_assignment(
-        assignment_id: str, payload: Assignment, account: Annotated[dict, Depends(user)]
+        assignment_id: str, given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]
     ) -> dict:
-        if payload.id != assignment_id:
-            raise HTTPException(422, "assignment id in the path and body must match")
-        content = AssignmentContent.model_validate(payload.model_dump(exclude={"revision"}))
-        with connect(path) as db:
-            db.begin_immediate()
-            return upsert_assignment(db, account["id"], content, payload.revision)
+        saved = flexweek_engine.service_save_homework
+        return served(saved, account["id"], assignment_id, json.dumps(given))
 
     @app.post("/api/assignments/{assignment_id}/spread")
     def post_spread(

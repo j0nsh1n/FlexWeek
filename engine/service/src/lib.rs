@@ -10,9 +10,11 @@ use flexweek_store::{Connection, StoreError};
 pub mod accounts;
 pub mod blocks;
 pub mod comfort;
+pub mod homework_saves;
 pub mod preferences;
 pub mod records;
 pub mod views;
+pub mod week_saves;
 pub mod weeks;
 
 /// A refusal the student is told about, with the words they see. The caller turns its kind into an

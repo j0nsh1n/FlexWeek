@@ -1,5 +1,8 @@
 //! `backend/models.py` `TimeBlock`, `WeekRequest`, `AssignmentContent` and `Routine`.
-//! Refusal words are the pydantic 2.13 field sentences and the `ValueError` text in that file.
+//! Refusal words are the pydantic 2.13 field sentences and the `ValueError` text in that file. Values are
+//! read as pydantic's lax mode reads them (the text " 30" or 30.0 for a whole number, "no" for false), so
+//! the desktop's saves and the assistant's accept the same blocks (Jonathan, 2026-11-22: one rule, the
+//! desktop's). The block parity test holds it to pydantic.
 
 use serde_json::{Map, Value};
 
@@ -157,7 +160,7 @@ pub fn week_request(value: &Value) -> Result<WeekRequest, String> {
 pub fn assignment_content(value: &Value) -> Result<AssignmentContent, String> {
     let map = object(value, "AssignmentContent")?;
     let title = req_str(map, "title", 1, 80)?;
-    if title.trim().is_empty() {
+    if python_strip(&title).is_empty() {
         return Err("title required".into());
     }
     let item = AssignmentContent {
@@ -265,7 +268,6 @@ impl TimeBlock {
         if !self.missed_days.is_empty() {
             put_ints(&mut map, "missed_days", &self.missed_days);
         }
-        put_some_str(&mut map, "until", &self.until);
         put_some_str(&mut map, "spotify_url", &self.spotify_url);
         if self.focus_sessions != 0 {
             put_i64(&mut map, "focus_sessions", self.focus_sessions);
@@ -288,6 +290,7 @@ impl TimeBlock {
             put_bool(&mut map, "keep_whole", true);
         }
         put_some_str(&mut map, "assignment_id", &self.assignment_id);
+        put_some_str(&mut map, "until", &self.until);
         Value::Object(map)
     }
 }
@@ -412,13 +415,14 @@ fn week_rules(blocks: &[TimeBlock]) -> Result<(), String> {
         ids.push(block.id.as_str());
     }
     for block in blocks {
-        if block.title.trim().is_empty() || has_dup(&block.days) {
+        if python_strip(&block.title).is_empty() || has_dup(&block.days) {
             return Err("title and unique days required".into());
         }
         if block.kind == "locked" && block.start.as_deref().unwrap_or("").is_empty() {
             return Err("locked blocks need a start".into());
         }
-        if let Some(start) = &block.start {
+        // An empty start or bound is "not set", as Python's truthiness reads it.
+        if let Some(start) = block.start.as_deref().filter(|start| !start.is_empty()) {
             let Some(minutes) = hhmm_minutes(start) else {
                 return Err("invalid start time".into());
             };
@@ -426,7 +430,11 @@ fn week_rules(blocks: &[TimeBlock]) -> Result<(), String> {
                 return Err("block must fit between 00:00 and 24:00".into());
             }
         }
-        for bound in [&block.earliest, &block.latest].into_iter().flatten() {
+        for bound in [&block.earliest, &block.latest]
+            .into_iter()
+            .flatten()
+            .filter(|bound| !bound.is_empty())
+        {
             if !is_deadline(bound) {
                 return Err("invalid deadline or earliest time".into());
             }
@@ -459,14 +467,12 @@ fn days_of(map: &Map<String, Value>, key: &str, unique: bool) -> Result<Vec<i64>
     Ok(days)
 }
 
-/// The last day a weekly repeat stands, written `YYYY-MM-DD`. Empty means no end, as unset does.
+/// The last day a weekly repeat stands, written `YYYY-MM-DD`; unset means no end. An empty one is refused,
+/// as the desktop's save refuses it (repeat edits turn an emptied Until into unset before this check).
 fn until_of(map: &Map<String, Value>) -> Result<Option<String>, String> {
     let Some(text) = opt_str(map, "until", 10)? else {
         return Ok(None);
     };
-    if text.is_empty() {
-        return Ok(None);
-    }
     if text.len() != 10 || !crate::time::is_calendar_date(&text) {
         return Err("until must be a date written YYYY-MM-DD".into());
     }
@@ -521,7 +527,7 @@ fn completed_at_of(map: &Map<String, Value>) -> Result<Option<String>, String> {
 
 fn notes_of(map: &Map<String, Value>) -> Result<String, String> {
     match map.get("notes") {
-        None | Some(Value::Null) => Ok(String::new()),
+        None => Ok(String::new()),
         Some(Value::String(text)) => {
             string_bounds(text, 0, 4000)?;
             Ok(text.clone())
@@ -612,7 +618,7 @@ fn routine_blocks(map: &Map<String, Value>) -> Result<Vec<RoutineBlock>, String>
 fn routine_block(value: &Value) -> Result<RoutineBlock, String> {
     let map = object(value, "RoutineBlock")?;
     let title = req_str(map, "title", 1, 80)?;
-    if title.trim().is_empty() {
+    if python_strip(&title).is_empty() {
         return Err("title required".into());
     }
     let start = req_str(map, "start", 1, 80)?;
@@ -756,19 +762,92 @@ fn list_bounds(len: usize, min: Option<usize>, max: Option<usize>) -> Result<(),
     Ok(())
 }
 
-fn as_i64(value: &Value) -> Result<i64, String> {
-    let Some(number) = value.as_number() else {
-        return Err("Input should be a valid integer".into());
+/// Python's `int(text)` after pydantic strips the text (any Unicode space) and any ".0" ending: a sign,
+/// then digits with single underscores between them, leading zeros ignored however many there are.
+fn int_from_text(text: &str) -> Option<i128> {
+    let trimmed = text.trim();
+    let body = match trimmed.split_once('.') {
+        Some((whole, zeros)) if !zeros.is_empty() && zeros.chars().all(|c| c == '0') => whole,
+        Some(_) => return None,
+        None => trimmed,
     };
-    if let Some(int) = number.as_i64() {
-        return Ok(int);
+    let (negative, digits) = match body.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, body.strip_prefix('+').unwrap_or(body)),
+    };
+    if digits.is_empty()
+        || digits.starts_with('_')
+        || digits.ends_with('_')
+        || digits.contains("__")
+    {
+        return None;
     }
-    if number.as_u64().is_some() {
-        return Err(format!(
-            "Input should be less than or equal to {JS_INT_MAX}"
-        ));
+    let plain: String = digits.chars().filter(|c| *c != '_').collect();
+    if !plain.chars().all(|c| c.is_ascii_digit()) {
+        return None;
     }
-    Err("Input should be a valid integer, got a number with a fractional part".into())
+    let significant = plain.trim_start_matches('0');
+    let value: i128 = if significant.is_empty() {
+        0
+    } else {
+        significant.parse().ok()?
+    };
+    Some(if negative { -value } else { value })
+}
+
+/// A whole number as pydantic's lax `int` reads it: true and false, a number with nothing after the
+/// point, or text that `int()` reads. None for anything else.
+pub fn whole_number(value: &Value) -> Option<i128> {
+    match value {
+        Value::Bool(flag) => Some(i128::from(*flag)),
+        Value::Number(number) => {
+            if let Some(int) = number.as_i64() {
+                return Some(i128::from(int));
+            }
+            if let Some(int) = number.as_u64() {
+                return Some(i128::from(int));
+            }
+            // Text form: arbitrary precision keeps huge integers and floats as written.
+            let text = number.to_string();
+            if let Some(int) = int_from_text(&text).filter(|_| !text.contains(['e', 'E'])) {
+                return Some(int);
+            }
+            let float = number.as_f64()?;
+            (float.is_finite() && float.fract() == 0.0 && float.abs() < 9.2e18)
+                .then_some(float as i128)
+        }
+        Value::String(text) => int_from_text(text),
+        _ => None,
+    }
+}
+
+/// True or false as pydantic's lax `bool` reads it: the booleans, 0 and 1, and the words it knows.
+pub fn yes_or_no(value: &Value) -> Option<bool> {
+    match value {
+        Value::Bool(flag) => Some(*flag),
+        Value::Number(number) => match number.as_f64() {
+            Some(0.0) => Some(false),
+            Some(1.0) => Some(true),
+            _ => None,
+        },
+        Value::String(text) => match text.to_ascii_lowercase().as_str() {
+            "0" | "off" | "f" | "false" | "n" | "no" => Some(false),
+            "1" | "on" | "t" | "true" | "y" | "yes" => Some(true),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn as_i64(value: &Value) -> Result<i64, String> {
+    match whole_number(value) {
+        Some(int) => i64::try_from(int)
+            .map_err(|_| format!("Input should be less than or equal to {JS_INT_MAX}")),
+        None if value.as_f64().is_some_and(|float| float.fract() != 0.0) => {
+            Err("Input should be a valid integer, got a number with a fractional part".into())
+        }
+        None => Err("Input should be a valid integer".into()),
+    }
 }
 
 fn int_bounds(value: i64, gt: Option<i64>, ge: Option<i64>, le: Option<i64>) -> Result<(), String> {
@@ -856,8 +935,7 @@ fn int_list(value: &Value, min: Option<usize>, max: Option<usize>) -> Result<Vec
 fn bool_default(map: &Map<String, Value>, key: &str, default: bool) -> Result<bool, String> {
     match map.get(key) {
         None => Ok(default),
-        Some(Value::Bool(value)) => Ok(*value),
-        Some(_) => Err("Input should be a valid boolean".into()),
+        Some(value) => yes_or_no(value).ok_or_else(|| "Input should be a valid boolean".into()),
     }
 }
 
@@ -880,16 +958,14 @@ fn literal_i64(value: &Value, options: &[i64]) -> Result<i64, String> {
             .map(|number| number.to_string())
             .collect::<Vec<_>>(),
     );
-    let Ok(int) = value
-        .as_i64()
-        .ok_or_else(|| format!("Input should be {expected}"))
-    else {
-        return Err(format!("Input should be {expected}"));
+    // A literal number takes true for 1 and 1.0 for 1, as pydantic does, but never text.
+    let read = match value {
+        Value::Bool(_) | Value::Number(_) => whole_number(value),
+        _ => None,
     };
-    if options.contains(&int) {
-        Ok(int)
-    } else {
-        Err(format!("Input should be {expected}"))
+    match read.and_then(|int| i64::try_from(int).ok()) {
+        Some(int) if options.contains(&int) => Ok(int),
+        _ => Err(format!("Input should be {expected}")),
     }
 }
 
@@ -972,24 +1048,31 @@ fn has_dup_str(ids: &[&str]) -> bool {
         .any(|(index, id)| ids[..index].contains(id))
 }
 
+/// `(?:[01]\d|2[0-3]):[0-5]\d` matched against all of `value`, then read with `int()`: the bracketed
+/// ranges are ASCII, `\d` is any Unicode decimal digit, as in Python's `re`.
 fn hhmm_minutes(value: &str) -> Option<i64> {
-    let bytes = value.as_bytes();
-    if bytes.len() != 5 || bytes[2] != b':' {
+    let chars: Vec<char> = value.chars().collect();
+    if chars.len() != 5 || chars[2] != ':' {
         return None;
     }
-    if !bytes
-        .iter()
-        .enumerate()
-        .all(|(index, byte)| index == 2 || byte.is_ascii_digit())
-    {
+    let digit = |ch: char| crate::time::decimal_digit(ch).map(i64::from);
+    let tens = match chars[0] {
+        '0' => 0,
+        '1' => 1,
+        '2' if ('0'..='3').contains(&chars[1]) => 2,
+        _ => return None,
+    };
+    let hour = tens * 10 + digit(chars[1])?;
+    if !('0'..='5').contains(&chars[3]) {
         return None;
     }
-    let hour: i64 = value[0..2].parse().ok()?;
-    let minute: i64 = value[3..5].parse().ok()?;
-    if hour > 23 || minute > 59 {
-        return None;
-    }
+    let minute = digit(chars[3])? * 10 + digit(chars[4])?;
     Some(hour * 60 + minute)
+}
+
+/// Python's `str.strip()` with no argument: Unicode white space and the four separator controls.
+fn python_strip(text: &str) -> &str {
+    text.trim_matches(|ch: char| ch.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&ch))
 }
 
 fn is_deadline(value: &str) -> bool {
