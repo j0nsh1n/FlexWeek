@@ -49,7 +49,10 @@ fwtest clean
   skipping any value of all zeroes. Before the Python behavior step, the gate checks every case in
   `scripts/mutations/` that its `old` text occurs exactly once and that its `test` exists (a Python
   `path::function`, or a Rust `cargo:` test in an `engine/**/tests/` file). A miss fails the gate
-  before any tests run. pytest gets `-n N` where N is `--workers`, or half the cores
+  before any tests run. It then checks the port ledger (2.0.0, Rust approved 2026-11-21): a Python test
+  file under `desktop/tests/` or `backend/tests/` that exists on the diff base and is gone from the working
+  tree needs a row in `tools/fwtest/port-ledger.toml` naming the Rust tests that replace it (`rust`) and how
+  they were seen to fail (`red`); a deleted file without one fails the gate. pytest gets `-n N` where N is `--workers`, or half the cores
   and at least 2. It prints `VERIFIED: Backend and desktop. Packaged binaries and other platforms
   need separate checks.` (or `VERIFIED: Backend.` with `--backend-only`) only when every step
   passed, as `verify.py` does. The per-step timeout is 2400 seconds; the desktop suite takes about
@@ -216,7 +219,7 @@ the log cannot name the tests that shared its worker.
 |---|---|---|
 | `engine` | builds the engine wheel and fwtest once | 1 |
 | `verify-engine` | fwtest's and the engine's `cargo fmt --check`, `clippy -D warnings`, `cargo test` | 1 |
-| `verify-python` | `fwtest gate --backend-only`: lint, types, mutation patterns, backend tests, diff checks | 1 |
+| `verify-python` | `fwtest gate --backend-only`: lint, types, mutation patterns, the port ledger, backend tests, diff checks | 1 |
 | `desktop` | every test file under `desktop/tests` and `scripts/rig`, offscreen, through `fwtest run` | 4 |
 | `rig` | the real-pointer rig playing Material, Day (`material-day-light.json`) and Week (`material-light.json`), under Xvfb; a step that is NOT DONE fails the job | 2 |
 | `mutate` | the mutation cases under `engine/` (pull requests and by hand) | 4 |

@@ -828,6 +828,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
 
 [[package]]
+name = "flexweek-app"
+version = "0.1.0"
+
+[[package]]
 name = "flexweek-engine"
 version = "0.1.0"
 dependencies = [
@@ -868,6 +872,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "flexweek-platform"
+version = "0.1.0"
+
+[[package]]
 name = "flexweek-py"
 version = "0.1.0"
 dependencies = [
@@ -879,6 +887,10 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "flexweek-service"
+version = "0.1.0"
 
 [[package]]
 name = "flexweek-store"
@@ -907,6 +919,10 @@ dependencies = [
  "sha2 0.10.9",
  "tokio",
 ]
+
+[[package]]
+name = "flexweek-testkit"
+version = "0.1.0"
 
 [[package]]
 name = "fnv"

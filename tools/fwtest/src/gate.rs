@@ -160,6 +160,11 @@ pub fn run(
                 let _ = std::fs::remove_dir_all(&report_dir);
                 return 1;
             }
+            if let Err(message) = crate::ledger::check(&checkout, &base) {
+                eprintln!("FAILED: Port ledger:\n{message}");
+                let _ = std::fs::remove_dir_all(&report_dir);
+                return 1;
+            }
         }
         println!("\n{name}");
         let _ = std::io::Write::flush(&mut std::io::stdout());

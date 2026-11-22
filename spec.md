@@ -914,6 +914,15 @@ The commands it runs, each of which must exit 0:
   stdio against a temporary database made by the store and check each tool,
   the session rules, that a retried write lands once and that a write
   reaches the sync ledger.
+- The 2.0.0 desktop crates (Rust approved for the rewrite on 2026-11-21) are members of the engine
+  workspace and covered by its checks: `engine/service` (the account and save rules `backend/app.py`'s
+  routes hold), `engine/app` (the session and each screen's state; no window toolkit),
+  `engine/platform` (the operating-system pieces) and `engine/testkit` (test support). New desktop logic
+  is written in these crates, not in Python. Only `engine/platform` reads the clock: the other three
+  carry a `clippy.toml` that refuses `SystemTime::now`, `Instant::now`, `chrono::Local::now` and
+  `chrono::Utc::now`, so their tests set the time. A Python test file is deleted only with a row in
+  `tools/fwtest/port-ledger.toml` naming the Rust tests that replace it and how they were seen to
+  fail; `fwtest gate` refuses a deleted one without a row.
 - Android (approved for 1.0.0): from `android/`, `./gradlew testDebugUnitTest`
   must exit 0. It needs the JDK and Android SDK on the machine.
   The Python suites need the module built into the checkout's `.venv` first,

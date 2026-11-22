@@ -8,6 +8,7 @@ pub mod gate;
 pub mod hidden;
 pub mod identity;
 pub mod job;
+pub mod ledger;
 pub mod mutate;
 pub mod pictures;
 pub mod queue;
