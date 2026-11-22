@@ -160,7 +160,7 @@ fn time_block_rules_match_models_py() {
         },
         Case {
             name: "models.py:143 completed is a boolean",
-            value: with(base.clone(), "completed", json!("yes")),
+            value: with(base.clone(), "completed", json!("maybe")),
             message: "Input should be a valid boolean",
         },
         Case {
