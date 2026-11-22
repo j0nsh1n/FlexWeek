@@ -895,6 +895,7 @@ dependencies = [
  "flexweek-engine",
  "flexweek-store",
  "rusqlite",
+ "serde_json",
 ]
 
 [[package]]

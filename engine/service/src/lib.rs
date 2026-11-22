@@ -8,6 +8,7 @@ use std::path::Path;
 use flexweek_store::{Connection, StoreError};
 
 pub mod accounts;
+pub mod blocks;
 
 /// A refusal the student is told about, with the words they see. The caller turns its kind into an
 /// answer: `Invalid` 422, `Unauthorized` 401, `Conflict` 409, `TooMany` 429 (retry after 300 s).
