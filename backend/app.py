@@ -76,8 +76,6 @@ ASSIGNMENT_UNKNOWN = "assignment_id must name an assignment of this account"
 ASSIGNMENT_CONFLICT = "This assignment changed in another window. Reload before saving."
 ASSIGNMENT_LIMIT = "An account holds at most 1000 assignments"
 WEEK_CONFLICT = "This week changed in another window. Reload before saving."
-ROUTINE_CONFLICT = "This routine changed in another window. Reload before saving."
-ROUTINE_LIMIT = "An account holds at most 50 routines"
 IMPORT_STALE = "This preview is out of date. Refresh it before importing."
 RECOVER_WRONG = "Incorrect username or recovery code"
 PASSWORD_WRONG = "Incorrect password"
@@ -86,7 +84,6 @@ SESSION_ENDED = "Your session ended. Sign in again."
 PASSWORD_SAME = "New password must be different"
 OPERATION_CONFLICT = "This operation was already used with different data."
 MAX_ASSIGNMENTS = 1000
-MAX_ROUTINES = 50
 MAX_RESTORE_POINTS = 20
 # The answer for each kind of refusal the Rust service gives (flexweek_service::Refusal).
 REFUSAL_STATUS = {"invalid": 422, "unauthorized": 401, "not_found": 404, "conflict": 409, "too_many": 429}
@@ -419,18 +416,6 @@ def routine_view(row: Row) -> dict:
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
-
-
-def upsert_routine(db: Connection, user_id: int, routine: Routine) -> dict:
-    encoded = encode_routine(routine)
-    status, payload = db.save_routine(
-        user_id, routine.id, routine.name, encoded, routine.revision, naive_now(), MAX_ROUTINES
-    )
-    if status == "conflict":
-        raise HTTPException(409, ROUTINE_CONFLICT)
-    if status == "limit":
-        raise HTTPException(422, ROUTINE_LIMIT)
-    return routine_view(json.loads(payload))
 
 
 class Credentials(BaseModel):
@@ -1441,12 +1426,11 @@ def create_app(database: Path | None = None, origin: str | None = None) -> FastA
         return served(flexweek_engine.service_routines, account["id"])
 
     @app.put("/api/routines/{routine_id}")
-    def put_routine(routine_id: str, payload: Routine, account: Annotated[dict, Depends(user)]) -> dict:
-        if payload.id != routine_id:
-            raise HTTPException(422, "routine id in the path and body must match")
-        with connect(path) as db:
-            db.begin_immediate()
-            return upsert_routine(db, account["id"], payload)
+    def put_routine(
+        routine_id: str, given: Annotated[dict, Body()], account: Annotated[dict, Depends(user)]
+    ) -> dict:
+        saved = flexweek_engine.service_save_routine
+        return served(saved, account["id"], routine_id, json.dumps(given), naive_now())
 
     @app.delete("/api/routines/{routine_id}")
     def remove_routine(

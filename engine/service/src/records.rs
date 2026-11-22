@@ -322,3 +322,61 @@ pub fn restore(
         Ok(answer)
     })
 }
+
+pub const ROUTINE_LIMIT: &str = "An account holds at most 50 routines";
+pub const ROUTINE_ID_MISMATCH: &str = "routine id in the path and body must match";
+const MAX_ROUTINES: i64 = 50;
+
+/// Saves the routine `id` from the request body, as `PUT /api/routines/{id}` does: checked as `Routine`
+/// checks it, its blocks written with keys sorted and non-ASCII escaped, refused when made from an old
+/// revision, at most 50 per account; `now` is the time it is stamped with. The answer is the routine as the
+/// Routines screen lists it.
+pub fn save_routine(
+    path: &Path,
+    user_id: i64,
+    id: &str,
+    given: &Value,
+    now: &str,
+) -> ServiceResult<Value> {
+    let checked = flexweek_engine::validate::routine(given).map_err(|_| invalid())?;
+    if checked.id != id {
+        return Err(Refusal::Invalid(ROUTINE_ID_MISMATCH.to_string()).into());
+    }
+    let blocks: Vec<Value> = checked
+        .blocks
+        .iter()
+        .map(|block| block.to_value())
+        .collect();
+    let body = canonical(&Value::Array(blocks));
+    with_db(path, |conn| {
+        store::begin_immediate(conn)?;
+        let write = store::RoutineWrite {
+            id,
+            name: &checked.name,
+            body: &body,
+            revision: checked.revision,
+            stamp: now,
+            max_count: MAX_ROUTINES,
+        };
+        match store::save_routine(conn, user_id, write)? {
+            store::RoutineSave::Conflict => {
+                Err(Refusal::Conflict(ROUTINE_CONFLICT.to_string()).into())
+            }
+            store::RoutineSave::OverLimit => {
+                Err(Refusal::Invalid(ROUTINE_LIMIT.to_string()).into())
+            }
+            store::RoutineSave::Stored(row) => {
+                let row = parsed(&row)?;
+                let blocks = parsed(row["body"].as_str().unwrap_or("[]"))?;
+                Ok(json!({
+                    "id": row["id"],
+                    "name": row["name"],
+                    "blocks": blocks,
+                    "revision": row["revision"],
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                }))
+            }
+        }
+    })
+}

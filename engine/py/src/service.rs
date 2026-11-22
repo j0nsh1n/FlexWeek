@@ -442,6 +442,25 @@ fn service_write_preferences(
 
 /// `given` is the request body as JSON text; the service checks it.
 #[pyfunction]
+fn service_save_routine(
+    py: Python<'_>,
+    path: &str,
+    user_id: i64,
+    id: &str,
+    given: &str,
+    now: &str,
+) -> PyResult<String> {
+    guard(|| {
+        let given: Value = serde_json::from_str(given)
+            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        served_json(py, || {
+            records::save_routine(Path::new(path), user_id, id, &given, now)
+        })
+    })
+}
+
+/// `given` is the request body as JSON text; the service checks it.
+#[pyfunction]
 fn service_save_homework(
     py: Python<'_>,
     path: &str,
@@ -596,6 +615,7 @@ pub fn add(module: &Bound<'_, PyModule>) -> PyResult<()> {
         service_split_preview,
         service_save_week,
         service_save_homework,
+        service_save_routine,
         service_restore_preview,
         service_restore,
         service_create_restore_point,

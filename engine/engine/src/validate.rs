@@ -225,7 +225,7 @@ pub fn assignment_content(value: &Value) -> Result<AssignmentContent, String> {
 pub fn routine(value: &Value) -> Result<Routine, String> {
     let map = object(value, "Routine")?;
     let name = req_str(map, "name", 1, 80)?;
-    if name.trim().is_empty() {
+    if python_strip(&name).is_empty() {
         return Err("name required".into());
     }
     let blocks = routine_blocks(map)?;
@@ -291,6 +291,39 @@ impl TimeBlock {
         }
         put_some_str(&mut map, "assignment_id", &self.assignment_id);
         put_some_str(&mut map, "until", &self.until);
+        Value::Object(map)
+    }
+}
+
+impl RoutineBlock {
+    /// The block as `RoutineBlock.model_dump()` writes it: every field, in the model's order.
+    pub fn to_value(&self) -> Value {
+        let mut map = Map::new();
+        put_str(&mut map, "template_id", &self.template_id);
+        put_str(&mut map, "title", &self.title);
+        put_ints(&mut map, "days", &self.days);
+        put_str(&mut map, "start", &self.start);
+        put_i64(&mut map, "duration_min", self.duration_min);
+        put_null_str(&mut map, "category", &self.category);
+        put_null_str(&mut map, "course", &self.course);
+        put_i64(&mut map, "priority", self.priority);
+        put_str(&mut map, "energy", &self.energy);
+        put_null_str(&mut map, "spotify_url", &self.spotify_url);
+        Value::Object(map)
+    }
+}
+
+impl Routine {
+    /// The routine as `Routine.model_dump()` writes it.
+    pub fn to_value(&self) -> Value {
+        let mut map = Map::new();
+        put_str(&mut map, "id", &self.id);
+        put_str(&mut map, "name", &self.name);
+        map.insert(
+            "blocks".into(),
+            Value::Array(self.blocks.iter().map(RoutineBlock::to_value).collect()),
+        );
+        put_i64(&mut map, "revision", self.revision);
         Value::Object(map)
     }
 }
