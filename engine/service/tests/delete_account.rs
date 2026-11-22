@@ -2,12 +2,11 @@
 //! has and no other account's, ends its sessions, and frees the name for a new, empty account. The Rust
 //! twins of backend/tests/test_delete_account.py.
 
-use std::path::PathBuf;
-
 use flexweek_engine::plan::parse_moment;
-use flexweek_service::accounts::{self, Asker, Entropy, PASSWORD_WRONG, SIGN_IN_WRONG, SignedIn};
-use flexweek_service::{Refusal, ServiceError, ServiceResult, records, views, weeks, with_db};
+use flexweek_service::accounts::{self, Asker, PASSWORD_WRONG, SIGN_IN_WRONG, SignedIn};
+use flexweek_service::{Refusal, ServiceError, records, views, weeks, with_db};
 use flexweek_store::RoutineWrite;
+use flexweek_testkit::{Counting, TestDb};
 use serde_json::json;
 
 const NOW: i64 = 1_793_000_000;
@@ -15,41 +14,10 @@ const WEEK: &str = "2026-09-14";
 const ANA_PASSWORD: &str = "ana-long-password";
 const BEN_PASSWORD: &str = "ben-long-password";
 
-struct Counting(u64);
-
-impl Entropy for Counting {
-    fn session_token(&mut self) -> ServiceResult<String> {
-        self.0 += 1;
-        Ok(format!("token-{:040}", self.0))
-    }
-    fn salt(&mut self) -> ServiceResult<String> {
-        self.0 += 1;
-        Ok(format!("{:032x}", self.0))
-    }
-    fn code_bytes(&mut self) -> ServiceResult<[u8; 8]> {
-        self.0 += 1;
-        Ok(self.0.to_be_bytes())
-    }
-}
-
-struct Db {
-    dir: PathBuf,
-    path: PathBuf,
-}
-
-impl Drop for Db {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
-    }
-}
+type Db = TestDb;
 
 fn fresh(name: &str) -> Db {
-    let dir = std::env::temp_dir().join(format!("flexweek-delete-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("delete.db");
-    flexweek_store::initialize(&path, "2026-11-16").unwrap();
-    Db { dir, path }
+    TestDb::new(name)
 }
 
 fn at() -> Asker<'static> {

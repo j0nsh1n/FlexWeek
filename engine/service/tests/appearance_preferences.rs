@@ -7,38 +7,28 @@ use std::path::PathBuf;
 
 use flexweek_service::accounts::INVALID_INPUT;
 use flexweek_service::preferences::{read_preferences, write_preferences};
-use flexweek_service::{Refusal, ServiceError, with_db};
+use flexweek_service::{Refusal, ServiceError};
+use flexweek_testkit::TestDb;
 use serde_json::{Map, Value, json};
 
 const APPEARANCE: [&str; 4] = ["theme_pack", "accent", "accent_chips", "motion"];
 const SETUP: [&str; 4] = ["alarm_tone", "planning_style", "drag_step_min", "setup"];
 
+/// A database with one account, made as sign-up makes it; the folder goes when the test ends.
 struct Db {
-    dir: PathBuf,
     path: PathBuf,
     user: i64,
+    _folder: TestDb,
 }
 
-impl Drop for Db {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
-    }
-}
-
-/// A database with one account, made as sign-up makes it (its preferences row at today's version).
 fn fresh(name: &str) -> Db {
-    let dir = std::env::temp_dir().join(format!("flexweek-looks-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("looks.db");
-    flexweek_store::initialize(&path, "2026-11-16").unwrap();
-    let user = with_db(&path, |conn| {
-        let user = flexweek_store::insert_user(conn, "alice", "hash")?;
-        flexweek_store::insert_preferences(conn, user, flexweek_store::PREFS_VERSION)?;
-        Ok(user)
-    })
-    .unwrap();
-    Db { dir, path, user }
+    let folder = TestDb::new(name);
+    let user = folder.account("alice");
+    Db {
+        path: folder.path.clone(),
+        user,
+        _folder: folder,
+    }
 }
 
 /// What a new account's preferences answer holds.

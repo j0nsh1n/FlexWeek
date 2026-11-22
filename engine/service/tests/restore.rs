@@ -5,40 +5,22 @@
 //! of backend/tests/test_restore_points.py's restore-point tests (its `/api/changes` tests wait for that
 //! route to move).
 
-use std::path::PathBuf;
-
 use flexweek_service::records::{self, RESTORE_STALE, RESTORE_UNKNOWN};
 use flexweek_service::{Refusal, ServiceError, views, weeks, with_db};
+use flexweek_testkit::TestDb;
 use serde_json::{Value, json};
 
 const WEEK: &str = "2026-09-14";
 const NOW: &str = "2026-09-15T18:30";
 
-struct Db {
-    dir: PathBuf,
-    path: PathBuf,
-}
-
-impl Drop for Db {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
-    }
-}
+type Db = TestDb;
 
 fn fresh(name: &str) -> Db {
-    let dir = std::env::temp_dir().join(format!("flexweek-restore-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("restore.db");
-    flexweek_store::initialize(&path, WEEK).unwrap();
-    Db { dir, path }
+    TestDb::new(name)
 }
 
 fn account(db: &Db, name: &str) -> i64 {
-    with_db(&db.path, |conn| {
-        Ok(flexweek_store::insert_user(conn, name, "hash")?)
-    })
-    .unwrap()
+    db.account(name)
 }
 
 fn school(title: &str) -> Value {

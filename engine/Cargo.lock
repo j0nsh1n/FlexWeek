@@ -907,6 +907,7 @@ dependencies = [
  "chrono",
  "flexweek-engine",
  "flexweek-store",
+ "flexweek-testkit",
  "rusqlite",
  "serde_json",
 ]
@@ -942,6 +943,12 @@ dependencies = [
 [[package]]
 name = "flexweek-testkit"
 version = "0.1.0"
+dependencies = [
+ "flexweek-service",
+ "flexweek-store",
+ "rusqlite",
+ "serde_json",
+]
 
 [[package]]
 name = "fnv"

@@ -4,13 +4,12 @@
 //! of backend/tests/test_day_endpoint.py (its signed-out check stays with the routes, in
 //! test_session_cookie_and_request_checks.py).
 
-use std::path::PathBuf;
-
 use flexweek_engine::plan::{Moment, parse_moment};
 use flexweek_service::blocks::check_block;
 use flexweek_service::views::{self, DATE_RULE};
 use flexweek_service::{Refusal, ServiceError, with_db};
-use serde_json::{Map, Value, json};
+use flexweek_testkit::{TestDb, merged};
+use serde_json::{Value, json};
 
 const DAY: &str = "2026-09-15";
 const WEEK: &str = "2026-09-14";
@@ -19,39 +18,14 @@ fn now() -> Moment {
     parse_moment("2026-11-05T19:00").unwrap()
 }
 
-struct Db {
-    dir: PathBuf,
-    path: PathBuf,
-}
-
-impl Drop for Db {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
-    }
-}
+type Db = TestDb;
 
 fn fresh(name: &str) -> Db {
-    let dir = std::env::temp_dir().join(format!("flexweek-day-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("day.db");
-    flexweek_store::initialize(&path, "2026-11-02").unwrap();
-    Db { dir, path }
+    TestDb::new(name)
 }
 
 fn account(db: &Db, name: &str) -> i64 {
-    with_db(&db.path, |conn| {
-        let user = flexweek_store::insert_user(conn, name, "hash")?;
-        flexweek_store::insert_preferences(conn, user, flexweek_store::PREFS_VERSION)?;
-        Ok(user)
-    })
-    .unwrap()
-}
-
-fn merged(base: Value, changes: Value) -> Value {
-    let mut out: Map<String, Value> = base.as_object().unwrap().clone();
-    out.extend(changes.as_object().unwrap().clone());
-    Value::Object(out)
+    db.account(name)
 }
 
 /// A homework body as a save writes it.

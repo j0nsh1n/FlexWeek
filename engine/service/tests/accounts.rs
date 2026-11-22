@@ -10,26 +10,9 @@ use flexweek_service::accounts::{
     TOO_MANY_TRIES, USERNAME_TAKEN,
 };
 use flexweek_service::{Refusal, ServiceError, ServiceResult, with_db};
+use flexweek_testkit::Counting;
 
 const NOW: i64 = 1_793_000_000;
-
-/// Counts up, so every token, salt and code is new and a test can predict nothing else.
-struct Counting(u64);
-
-impl Entropy for Counting {
-    fn session_token(&mut self) -> ServiceResult<String> {
-        self.0 += 1;
-        Ok(format!("token-{:040}", self.0))
-    }
-    fn salt(&mut self) -> ServiceResult<String> {
-        self.0 += 1;
-        Ok(format!("{:032x}", self.0))
-    }
-    fn code_bytes(&mut self) -> ServiceResult<[u8; 8]> {
-        self.0 += 1;
-        Ok(self.0.to_be_bytes())
-    }
-}
 
 struct Db {
     dir: PathBuf,

@@ -5,45 +5,19 @@
 use std::path::{Path, PathBuf};
 
 use flexweek_engine::model::valid_spotify_url;
-use flexweek_service::accounts::{self, Asker, Entropy};
+use flexweek_service::accounts::{self, Asker};
 use flexweek_service::preferences::{read_preferences, write_preferences};
-use flexweek_service::{Refusal, ServiceError, ServiceResult};
+use flexweek_service::{Refusal, ServiceError};
+use flexweek_testkit::{Counting, TestDb};
 use serde_json::{Map, Value, json};
 
 const NOW: i64 = 1_793_000_000;
 const WEEK: &str = "2026-11-16";
 
-struct Counting(u64);
-
-impl Entropy for Counting {
-    fn session_token(&mut self) -> ServiceResult<String> {
-        self.0 += 1;
-        Ok(format!("token-{:040}", self.0))
-    }
-    fn salt(&mut self) -> ServiceResult<String> {
-        self.0 += 1;
-        Ok(format!("{:032x}", self.0))
-    }
-    fn code_bytes(&mut self) -> ServiceResult<[u8; 8]> {
-        self.0 += 1;
-        Ok(self.0.to_be_bytes())
-    }
-}
-
-struct Folder(PathBuf);
-
-impl Drop for Folder {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn folder(name: &str) -> (Folder, PathBuf) {
-    let dir = std::env::temp_dir().join(format!("flexweek-timer-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("prefs.db");
-    (Folder(dir), path)
+fn folder(name: &str) -> (TestDb, PathBuf) {
+    let folder = TestDb::empty(name);
+    let path = folder.path.clone();
+    (folder, path)
 }
 
 fn sign_up(path: &Path, name: &str) -> i64 {
@@ -66,7 +40,7 @@ fn sign_up(path: &Path, name: &str) -> i64 {
 }
 
 /// A new database with one account, as sign-up makes it.
-fn account(name: &str) -> (Folder, PathBuf, i64) {
+fn account(name: &str) -> (TestDb, PathBuf, i64) {
     let (keep, path) = folder(name);
     flexweek_store::initialize(&path, WEEK).unwrap();
     let user = sign_up(&path, "alice");

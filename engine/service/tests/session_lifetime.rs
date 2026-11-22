@@ -4,30 +4,14 @@
 
 use std::path::PathBuf;
 
-use flexweek_service::accounts::{self, Asker, Entropy, SESSION_ENDED, SignedIn};
-use flexweek_service::{Refusal, ServiceError, ServiceResult, with_db};
+use flexweek_service::accounts::{self, Asker, SESSION_ENDED, SignedIn};
+use flexweek_service::{Refusal, ServiceError, with_db};
 use flexweek_store::{SESSION_SECONDS, SESSION_SECONDS_KEEP};
+use flexweek_testkit::Counting;
 
 const NOW: i64 = 1_793_000_000;
 const DAY: i64 = 24 * 60 * 60;
 const PASSWORD: &str = "a-long-test-password";
-
-struct Counting(u64);
-
-impl Entropy for Counting {
-    fn session_token(&mut self) -> ServiceResult<String> {
-        self.0 += 1;
-        Ok(format!("token-{:040}", self.0))
-    }
-    fn salt(&mut self) -> ServiceResult<String> {
-        self.0 += 1;
-        Ok(format!("{:032x}", self.0))
-    }
-    fn code_bytes(&mut self) -> ServiceResult<[u8; 8]> {
-        self.0 += 1;
-        Ok(self.0.to_be_bytes())
-    }
-}
 
 struct Db {
     dir: PathBuf,
